@@ -15,9 +15,11 @@
 package com.starrocks.sql.optimizer.rule.tree.lazymaterialize;
 
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.VirtualColumnRegistry;
 import com.starrocks.common.Pair;
+import com.starrocks.sql.ast.IndexDef;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
@@ -31,6 +33,8 @@ import com.starrocks.type.IntegerType;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 public class OlapScanLazyMaterializationSupport implements LazyMaterializationSupport {
     private static final String SOURCE_ID = "_source_id_";
@@ -49,10 +53,28 @@ public class OlapScanLazyMaterializationSupport implements LazyMaterializationSu
     public ColumnRefSet predicateUsedColumns(PhysicalScanOperator scanOperator) {
         PhysicalOlapScanOperator op = (PhysicalOlapScanOperator) scanOperator;
         ScalarOperator predicate = op.getPredicate();
+        ColumnRefSet usedColumns = new ColumnRefSet();
         if (predicate != null) {
-            return op.getPredicate().getUsedColumns();
+            usedColumns.union(op.getPredicate().getUsedColumns());
         }
-        return new ColumnRefSet();
+        if (!op.getPrunedPartitionPredicates().isEmpty()) {
+            for (ScalarOperator conjunct : op.getPrunedPartitionPredicates()) {
+                usedColumns.union(conjunct.getUsedColumns());
+            }
+        }
+        if (op.getVectorSearchOptions().isEnableUseANN()) {
+            OlapTable table = (OlapTable) op.getTable();
+            Set<ColumnId> vectorIndexColumnIds = table.getIndexes().stream()
+                    .filter(idx -> idx.getIndexType() == IndexDef.IndexType.VECTOR)
+                    .flatMap(idx -> idx.getColumns().stream())
+                    .collect(Collectors.toSet());
+            for (Map.Entry<ColumnRefOperator, Column> entry : op.getColRefToColumnMetaMap().entrySet()) {
+                if (vectorIndexColumnIds.contains(entry.getValue().getColumnId())) {
+                    usedColumns.union(entry.getKey());
+                }
+            }
+        }
+        return usedColumns;
     }
 
     @Override

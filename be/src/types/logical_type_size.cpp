@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "column/type_traits.h"
+#include "column/runtime_type_traits.h"
 #include "types/logical_type.h"
 #include "types/logical_type_infra.h"
 

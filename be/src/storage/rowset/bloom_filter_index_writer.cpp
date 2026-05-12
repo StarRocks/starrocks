@@ -49,7 +49,7 @@
 #include "storage/type_info_allocator_adapter.h"
 #include "storage/types.h"
 #include "types/logical_type.h"
-#include "types/type_traits.h"
+#include "types/storage_type_traits.h"
 #include "util/bloom_filter.h" // for BloomFilterOptions, BloomFilter
 
 namespace starrocks {
@@ -78,10 +78,9 @@ constexpr bool is_int128() {
 }
 
 template <LogicalType type>
-inline typename CppTypeTraits<type>::CppType get_value(const typename CppTypeTraits<type>::CppType* v,
-                                                       const TypeInfoPtr& type_info,
-                                                       const TypeInfoAllocator* allocator) {
-    using CppType = typename CppTypeTraits<type>::CppType;
+inline StorageCppType<type> get_value(const StorageCppType<type>* v, const TypeInfoPtr& type_info,
+                                      const TypeInfoAllocator* allocator) {
+    using CppType = StorageCppType<type>;
     if constexpr (is_slice_type<type>()) {
         CppType new_value;
         type_info->deep_copy(&new_value, v, allocator);
@@ -92,8 +91,8 @@ inline typename CppTypeTraits<type>::CppType get_value(const typename CppTypeTra
 }
 
 template <LogicalType type>
-inline void update_bf(BloomFilter* bf, const typename CppTypeTraits<type>::CppType& v) {
-    using CppType = typename CppTypeTraits<type>::CppType;
+inline void update_bf(BloomFilter* bf, const StorageCppType<type>& v) {
+    using CppType = StorageCppType<type>;
     if constexpr (is_slice_type<type>()) {
         const auto* s = reinterpret_cast<const Slice*>(&v);
         bf->add_bytes(s->data, s->size);
@@ -106,12 +105,12 @@ inline void update_bf(BloomFilter* bf, const typename CppTypeTraits<type>::CppTy
 // high cardinality key columns and none-agg value columns for high selectivity and storage
 // efficiency.
 // This builder builds a bloom filter page by every data page, with a page id index.
-// Meanswhile, It adds an ordinal index to load bloom filter index according to requirement.
+// Meanwhile, it adds an ordinal index to load bloom filter index according to requirement.
 //
 template <LogicalType field_type>
 class OriginalBloomFilterIndexWriterImpl : public BloomFilterIndexWriter {
 public:
-    using CppType = typename CppTypeTraits<field_type>::CppType;
+    using CppType = StorageCppType<field_type>;
     using ValueDict = typename BloomFilterTraits<CppType>::ValueDict;
 
     explicit OriginalBloomFilterIndexWriterImpl(const BloomFilterOptions& bf_options, TypeInfoPtr typeinfo)
@@ -194,7 +193,7 @@ private:
 template <LogicalType field_type, typename Enable = void>
 class NgramBloomFilterIndexWriterImpl : public OriginalBloomFilterIndexWriterImpl<field_type> {
 public:
-    using CppType = typename CppTypeTraits<field_type>::CppType;
+    using CppType = StorageCppType<field_type>;
     using OriginalBloomFilterIndexWriterImpl<field_type>::_values;
 
     explicit NgramBloomFilterIndexWriterImpl(const BloomFilterOptions& bf_options, TypeInfoPtr typeinfo)
@@ -207,7 +206,7 @@ template <LogicalType field_type>
 class NgramBloomFilterIndexWriterImpl<field_type, std::enable_if_t<is_slice_type<field_type>()>>
         : public OriginalBloomFilterIndexWriterImpl<field_type> {
 public:
-    using CppType = typename CppTypeTraits<field_type>::CppType;
+    using CppType = StorageCppType<field_type>;
     using OriginalBloomFilterIndexWriterImpl<field_type>::_values;
     explicit NgramBloomFilterIndexWriterImpl(const BloomFilterOptions& bf_options, TypeInfoPtr typeinfo)
             : OriginalBloomFilterIndexWriterImpl<field_type>(bf_options, std::move(typeinfo)) {}

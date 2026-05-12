@@ -18,8 +18,20 @@ set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/serde")
 set(EXECUTABLE_OUTPUT_PATH "${BUILD_DIR}/src/serde")
 
 ADD_BE_LIB(Serde
-        encode_context.cpp
         column_array_serde.cpp
+        encode_context.cpp
         compress_strategy.cpp
         protobuf_serde.cpp
+        )
+
+target_link_libraries(Serde PUBLIC
+        RuntimeCore
+        ChunkCore
+        ColumnCore
+        TypesCore
+        Common
+        Base
+        Gutil
+        StarRocksGen
+        streamvbyte
         )

@@ -367,4 +367,41 @@ TEST_F(MergeIteratorTest, mask_merge_boundary_test) {
     }
 }
 
+TEST_F(MergeIteratorTest, mask_merge_exhausted_iterator) {
+    std::vector<int32_t> v1{1, 2}; // Only 2 elements
+    std::vector<int32_t> v2{10, 11};
+    auto sub1 = std::make_shared<VectorChunkIterator>(_schema, COL_INT(v1));
+    auto sub2 = std::make_shared<VectorChunkIterator>(_schema, COL_INT(v2));
+
+    std::vector<RowSourceMask> source_masks;
+    // Request 3 elements from source 0, but it only has 2 elements.
+    // This matches the exhausted iterator scenario that caused nullptr dereference.
+    std::vector<uint16_t> expected_sources{0, 0, 0, 1, 1};
+    for (unsigned short expected_source : expected_sources) {
+        source_masks.emplace_back(RowSourceMask(expected_source, false));
+    }
+    RowSourceMaskBuffer mask_buffer(0, config::storage_root_path);
+    mask_buffer.write(source_masks);
+    mask_buffer.flush();
+    mask_buffer.flip_to_read();
+    source_masks.clear();
+
+    auto iter = new_mask_merge_iterator(std::vector<ChunkIteratorPtr>{sub1, sub2}, &mask_buffer);
+    ASSERT_TRUE(iter->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS).ok());
+
+    ChunkPtr chunk = ChunkHelper::new_chunk(iter->schema(), config::vector_chunk_size);
+    Status st;
+    while (true) {
+        chunk->reset();
+        st = iter->get_next(chunk.get(), &source_masks);
+        if (!st.ok()) {
+            break;
+        }
+    }
+    // Should return InternalError instead of crashing
+    ASSERT_FALSE(st.ok());
+    ASSERT_TRUE(st.is_internal_error());
+    ASSERT_TRUE(st.message().find("child iterator is exhausted") != std::string::npos);
+}
+
 } // namespace starrocks

@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include "common/statusor.h"
 #include "exec/aggregate/aggregate_base_node.h"
 
 // Distinct means this node handle distinct or group by no aggregate function query.
@@ -24,11 +25,12 @@ public:
     DistinctBlockingNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs)
             : AggregateBaseNode(pool, tnode, descs) {}
 
-    pipeline::OpFactories decompose_to_pipeline(pipeline::PipelineBuilderContext* context) override;
+    StatusOr<pipeline::OpFactories> decompose_to_pipeline(pipeline::PipelineBuilderContext* context) override;
 
 private:
     template <class AggFactory, class SourceFactory, class SinkFactory>
-    pipeline::OpFactories _decompose_to_pipeline(pipeline::OpFactories& ops_with_sink,
-                                                 pipeline::PipelineBuilderContext* context, bool per_bucket_optimize);
+    StatusOr<pipeline::OpFactories> _decompose_to_pipeline(pipeline::OpFactories& ops_with_sink,
+                                                           pipeline::PipelineBuilderContext* context,
+                                                           bool per_bucket_optimize);
 };
 } // namespace starrocks

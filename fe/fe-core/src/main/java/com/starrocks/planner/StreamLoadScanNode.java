@@ -39,7 +39,9 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.FunctionSet;
+import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
+import com.starrocks.sql.ast.KeysType;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.CsvFormat;
@@ -64,6 +66,7 @@ import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.TBrokerRangeDesc;
 import com.starrocks.thrift.TBrokerScanRange;
 import com.starrocks.thrift.TBrokerScanRangeParams;
+import com.starrocks.thrift.TEnvelopeType;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TFileFormatType;
 import com.starrocks.thrift.TFileScanNode;
@@ -207,6 +210,13 @@ public class StreamLoadScanNode extends LoadScanNode {
 
     // Called from init, construct source tuple information
     private void initParams() throws StarRocksException {
+        if (streamLoadInfo.getEnvelope() == TEnvelopeType.DEBEZIUM
+                && dstTable instanceof OlapTable
+                && ((OlapTable) dstTable).getKeysType() != KeysType.PRIMARY_KEYS) {
+            throw new StarRocksException(
+                    "envelope=debezium is only supported on PRIMARY KEY tables");
+        }
+
         TBrokerScanRangeParams params = new TBrokerScanRangeParams();
         paramCreateContext.params = params;
 
@@ -392,6 +402,9 @@ public class StreamLoadScanNode extends LoadScanNode {
                     rangeDesc.setJson_root(streamLoadInfo.getJsonRoot());
                 }
                 rangeDesc.setStrip_outer_array(streamLoadInfo.isStripOuterArray());
+            }
+            if (streamLoadInfo.getEnvelope() != TEnvelopeType.NONE) {
+                rangeDesc.setEnvelope(streamLoadInfo.getEnvelope());
             }
             if (rangeDesc.format_type == TFileFormatType.FORMAT_AVRO) {
                 if (!streamLoadInfo.getJsonPaths().isEmpty()) {

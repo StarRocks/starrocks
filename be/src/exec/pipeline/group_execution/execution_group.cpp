@@ -17,11 +17,14 @@
 #include <cstddef>
 
 #include "common/logging.h"
+#include "common/thread/priority_thread_pool.hpp"
+#include "exec/pipeline/fragment_context.h"
+#include "exec/pipeline/pipeline.h"
 #include "exec/pipeline/pipeline_driver_executor.h"
 #include "exec/pipeline/pipeline_fwd.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
-#include "util/priority_thread_pool.hpp"
+#include "runtime/runtime_state.h"
 
 namespace starrocks::pipeline {
 // clang-format off
@@ -34,6 +37,16 @@ concept DriverPtrCallable = std::invocable<T, const DriverPtr&> &&
 void ExecutionGroup::clear_all_drivers(Pipelines& pipelines) {
     for (auto& pipeline : pipelines) {
         pipeline->clear_drivers();
+    }
+}
+
+void ExecutionGroup::count_down_pipeline(RuntimeState* state) {
+    // Cache the member before performing the atomic increment.
+    // This ensures we won't dereference `this` after another thread may
+    // have deleted the object.
+    size_t num_pipelines = _num_pipelines;
+    if (++_num_finished_pipelines == num_pipelines) {
+        state->fragment_ctx()->count_down_execution_group();
     }
 }
 
@@ -74,7 +87,8 @@ size_t ExecutionGroup::total_active_driver_size() {
 
 void ExecutionGroup::prepare_active_drivers_parallel(RuntimeState* state,
                                                      std::shared_ptr<DriverPrepareSyncContext> sync_ctx) {
-    auto pipeline_prepare_pool = state->exec_env()->pipeline_prepare_pool();
+    auto* query_execution_services = state->query_execution_services();
+    auto pipeline_prepare_pool = query_execution_services->execution->pipeline_prepare_pool;
 
     for_each_active_driver(_pipelines, [&](const DriverPtr& driver) {
         // since prepare is async, we must hold the runtime state ptr

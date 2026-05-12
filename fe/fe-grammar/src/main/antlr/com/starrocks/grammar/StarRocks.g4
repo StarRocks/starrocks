@@ -994,6 +994,7 @@ alterClause
     | dropColumnClause
     | addPartitionColumnClause
     | dropPartitionColumnClause
+    | replacePartitionColumnClause
     | modifyColumnCommentClause
     | modifyColumnClause
     | columnRenameClause
@@ -1155,6 +1156,10 @@ dropColumnClause
 
 dropPartitionColumnClause
     : DROP PARTITION COLUMN expressionList
+    ;
+
+replacePartitionColumnClause
+    : REPLACE PARTITION COLUMN oldPartitionExpr=expression WITH newPartitionExpr=expression
     ;
 
 modifyColumnClause
@@ -1895,6 +1900,7 @@ revokePrivilegeStatement
 showGrantsStatement
     : SHOW GRANTS showPredicateClauses
     | SHOW GRANTS FOR USER? user showPredicateClauses
+    | SHOW GRANTS FOR CURRENT_USER ('(' ')')? showPredicateClauses
     | SHOW GRANTS FOR EXTERNAL GROUP identifierOrString showPredicateClauses
     | SHOW GRANTS FOR ROLE identifierOrString showPredicateClauses
     ;
@@ -2438,7 +2444,7 @@ limitElement
 querySpecification
     : SELECT setQuantifier? selectItem (',' selectItem)*
       fromClause
-      ((WHERE where=expression)? (GROUP BY groupingElement)? (HAVING having=expression)?
+      ((WHERE where=expression)? (GROUP BY (groupByAll=ALL | groupingElement))? (HAVING having=expression)?
        (QUALIFY qualifyFunction=selectItem comparisonOperator limit=INTEGER_VALUE)?)
     ;
 
@@ -2459,7 +2465,7 @@ groupingSet
     ;
 
 commonTableExpression
-    : name=identifier (columnAliases)? AS '(' queryRelation ')'
+    : name=identifier (columnAliases)? AS '(' queryRelation ')' bracketHint?
     ;
 
 setQuantifier
@@ -3042,8 +3048,7 @@ alterModifyDefaultBuckets
 
 refreshSchemeDesc
     : REFRESH (IMMEDIATE | DEFERRED)? (ASYNC
-    | ASYNC (START '(' string ')')? EVERY '(' interval ')'
-    | INCREMENTAL
+    | (ASYNC | SCHEDULE) (START '(' string ')')? EVERY '(' interval ')'
     | MANUAL)
     ;
 
@@ -3310,7 +3315,7 @@ nonReserved
     | TRIM_SPACE
     | TRIGGERS | TRUNCATE | TYPE | TYPES
     | UNBOUNDED | UNCOMMITTED | UNSET | UNINSTALL | USAGE | USER | USERS | UNLOCK
-    | VALUE | VARBINARY | VARIABLES | VIEW | VIEWS | VERBOSE | VERSION | VOLUME | VOLUMES
+    | VALUE | VARBINARY | VARIABLES | VARIANT | VIEW | VIEWS | VERBOSE | VERSION | VOLUME | VOLUMES
     | WARNINGS | WEEK | WHITELIST | WORK | WRITE  | WAREHOUSE | WAREHOUSES
     | YEAR
     | DOTDOTDOT | NGRAMBF | VECTOR

@@ -14,9 +14,12 @@
 
 package com.starrocks.http.rest.transaction;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.TabletInvertedIndex;
+import com.starrocks.catalog.TabletMeta;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.http.BaseRequest;
 import com.starrocks.http.BaseResponse;
@@ -37,8 +40,13 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 import static com.starrocks.catalog.FunctionSet.HOST_NAME;
 import static com.starrocks.transaction.TransactionState.LoadJobSourceType.BYPASS_WRITE;
@@ -135,6 +143,7 @@ public class BypassWriteTransactionHandler implements TransactionOperationHandle
         TransactionResult result = new TransactionResult();
         switch (txnStatus) {
             case PREPARE:
+                registerLoadedIndexes(txnState, committedTablets);
                 GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().prepareTransaction(
                         dbId, txnId, preparedTimeoutMs, committedTablets, failedTablets,
                         new MiniLoadTxnCommitAttachment(), timeoutMillis);
@@ -225,6 +234,38 @@ public class BypassWriteTransactionHandler implements TransactionOperationHandle
 
         throw new StarRocksException(String.format(
                 "Transaction found by label %s isn't created in %s scenario.", label, BYPASS_WRITE.name()));
+    }
+
+    @VisibleForTesting
+    static void registerLoadedIndexes(TransactionState txnState, List<TabletCommitInfo> committedTablets) {
+        if (committedTablets == null || committedTablets.isEmpty()) {
+            return;
+        }
+        TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
+        List<Long> tabletIds = committedTablets.stream()
+                .map(TabletCommitInfo::getTabletId).collect(Collectors.toList());
+        List<TabletMeta> tabletMetaList = invertedIndex.getTabletMetaList(tabletIds);
+
+        // Group tablet index IDs by (tableId, partitionId)
+        Map<Long, Map<Long, Set<Long>>> tablePartitionIndexIds = new HashMap<>();
+        for (TabletMeta meta : tabletMetaList) {
+            if (meta == TabletInvertedIndex.NOT_EXIST_TABLET_META) {
+                continue;
+            }
+            tablePartitionIndexIds
+                    .computeIfAbsent(meta.getTableId(), k -> new HashMap<>())
+                    .computeIfAbsent(meta.getPhysicalPartitionId(), k -> new HashSet<>())
+                    .add(meta.getIndexId());
+        }
+
+        for (Map.Entry<Long, Map<Long, Set<Long>>> tableEntry : tablePartitionIndexIds.entrySet()) {
+            long tableId = tableEntry.getKey();
+            for (Map.Entry<Long, Set<Long>> partEntry : tableEntry.getValue().entrySet()) {
+                long partitionId = partEntry.getKey();
+                List<Long> indexIds = new ArrayList<>(partEntry.getValue());
+                txnState.addPartitionLoadedIndexes(tableId, partitionId, indexIds);
+            }
+        }
     }
 
 }

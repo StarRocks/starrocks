@@ -25,6 +25,7 @@
 #include "column/column.h"
 #include "column/vectorized_fwd.h"
 #include "common/global_types.h"
+#include "common/runtime_profile.h"
 #include "exec/pipeline/fetch_sink_operator.h"
 #include "exec/pipeline/fetch_task.h"
 #include "exec/pipeline/lookup_request.h"
@@ -77,7 +78,7 @@ public:
 
     ~FetchProcessor() = default;
 
-    Status prepare(RuntimeState* state, RuntimeProfile* runtime_profile);
+    Status prepare(RuntimeState* state, std::shared_ptr<RuntimeProfile>& runtime_profile);
 
     void close() {}
     bool need_input() const;
@@ -119,8 +120,8 @@ private:
     }
 
     const int32_t _target_node_id;
-    const phmap::flat_hash_map<TupleId, RowPositionDescriptor*>& _row_pos_descs;
-    const phmap::flat_hash_map<SlotId, SlotDescriptor*>& _slot_id_to_desc;
+    const phmap::flat_hash_map<TupleId, RowPositionDescriptor*> _row_pos_descs;
+    const phmap::flat_hash_map<SlotId, SlotDescriptor*> _slot_id_to_desc;
     const std::shared_ptr<StarRocksNodesInfo> _nodes_info;
     int32_t _local_be_id = 0;
 
@@ -137,6 +138,8 @@ private:
 
     std::atomic_bool _is_sink_complete = false;
     std::atomic_bool _is_source_finishing = false;
+
+    std::shared_ptr<RuntimeProfile> _runtime_profile;
 
     RuntimeProfile::Counter* _build_row_id_chunk_timer = nullptr;
     RuntimeProfile::Counter* _gen_fetch_tasks_timer = nullptr;

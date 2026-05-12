@@ -28,6 +28,7 @@ public class GlobalLateMaterializationIcebergTest extends ConnectorPlanTestBase 
 
         FeConstants.runningUnitTest = true;
         connectContext.getSessionVariable().setEnableGlobalLateMaterialization(true);
+        connectContext.getSessionVariable().setEnableGlobalLateMaterializationCostBased(false);
         connectContext.getSessionVariable().setCboCTERuseRatio(0);
     }
 
@@ -377,6 +378,35 @@ public class GlobalLateMaterializationIcebergTest extends ConnectorPlanTestBase 
         } finally {
             sv.setGlobalLateMaterializeMaxLimit(prevMaxLimit);
             sv.setGlobalLateMaterializeMaxFetchOps(prevMaxFetchOps);
+        }
+    }
+
+    @Test
+    public void testCostBasedGlm() throws Exception {
+        final SessionVariable sv = connectContext.getSessionVariable();
+        try {
+            sv.setEnableGlobalLateMaterializationCostBased(true);
+            String plan;
+
+            // ORDER BY LIMIT → trigger activates; data/date are STRING → GLM applies
+            plan = getFragmentPlan("select * from iceberg0.unpartitioned_db.t0 order by id limit 10");
+            assertContains(plan, "FETCH");
+
+            // ORDER BY LIMIT → trigger activates; c1/c2 are INT (≤2 numeric deferred) → GLM skipped
+            plan = getFragmentPlan("select * from iceberg0.unpartitioned_db.t_numeric order by id limit 10");
+            assertNotContains(plan, "FETCH");
+
+            // JOIN + LIMIT → trigger activates; data/date are STRING → GLM applies
+            plan = getFragmentPlan("select * from iceberg0.unpartitioned_db.t0 t0 " +
+                    "join iceberg0.partitioned_db.t1 t1 on t0.id = t1.id limit 10");
+            assertContains(plan, "FETCH");
+
+            // Simple LIMIT (no ORDER BY, no JOIN) → trigger does NOT activate → GLM skipped entirely
+            plan = getFragmentPlan("select * from iceberg0.unpartitioned_db.t0 limit 10");
+            assertNotContains(plan, "FETCH");
+
+        } finally {
+            sv.setEnableGlobalLateMaterializationCostBased(false);
         }
     }
 

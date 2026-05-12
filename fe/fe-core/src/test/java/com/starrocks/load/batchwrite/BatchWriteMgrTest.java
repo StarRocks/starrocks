@@ -20,6 +20,7 @@ import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.proc.ProcResult;
 import com.starrocks.load.streamload.StreamLoadKvParams;
 import com.starrocks.server.WarehouseManager;
+import com.starrocks.sql.ast.LoadStmt;
 import com.starrocks.sql.ast.warehouse.cngroup.AlterCnGroupStmt;
 import com.starrocks.sql.ast.warehouse.cngroup.CreateCnGroupStmt;
 import com.starrocks.sql.ast.warehouse.cngroup.DropCnGroupStmt;
@@ -42,6 +43,7 @@ import java.util.concurrent.ConcurrentHashMap;
 
 import static com.starrocks.load.streamload.StreamLoadHttpHeader.HTTP_BATCH_WRITE_INTERVAL_MS;
 import static com.starrocks.load.streamload.StreamLoadHttpHeader.HTTP_BATCH_WRITE_PARALLEL;
+import static com.starrocks.load.streamload.StreamLoadHttpHeader.HTTP_ENVELOPE;
 import static com.starrocks.load.streamload.StreamLoadHttpHeader.HTTP_FORMAT;
 import static com.starrocks.load.streamload.StreamLoadHttpHeader.HTTP_WAREHOUSE;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -129,6 +131,51 @@ public class BatchWriteMgrTest extends BatchWriteTestBase {
                 tableId4, params, UserIdentity.ROOT, allNodes.get(0).getId(), allNodes.get(0).getHost());
         assertTrue(result2.isOk());
         assertEquals(result1.getValue(), result2.getValue());
+        assertEquals(1, batchWriteMgr.numJobs());
+    }
+
+    @Test
+    public void testRequestLoadRejectsDebeziumOnNonPrimaryKeyTable() {
+        StreamLoadKvParams params = new StreamLoadKvParams(new HashMap<>() {{
+                put(HTTP_FORMAT, "json");
+                put(HTTP_ENVELOPE, LoadStmt.ENVELOPE_DEBEZIUM);
+                put(HTTP_BATCH_WRITE_INTERVAL_MS, "100000");
+                put(HTTP_BATCH_WRITE_PARALLEL, "4");
+            }});
+        RequestLoadResult result = batchWriteMgr.requestLoad(
+                tableId4, params, UserIdentity.ROOT, allNodes.get(0).getId(), allNodes.get(0).getHost());
+        assertFalse(result.isOk());
+        assertEquals(TStatusCode.INVALID_ARGUMENT, result.getStatus().getStatus_code());
+        assertEquals(List.of("envelope=debezium is only supported on PRIMARY KEY tables"),
+                result.getStatus().getError_msgs());
+        assertEquals(0, batchWriteMgr.numJobs());
+    }
+
+    @Test
+    public void testRequestLoadAllowsDebeziumOnPrimaryKeyTable() throws Exception {
+        String pkTableName = "batch_write_load_tbl_pk";
+        starRocksAssert.useDatabase(DB_NAME_2).withTable(
+                "CREATE TABLE IF NOT EXISTS `" + pkTableName + "` (\n"
+                        + "  `c0` INT NOT NULL,\n"
+                        + "  `c1` STRING\n"
+                        + ") ENGINE=OLAP\n"
+                        + "PRIMARY KEY(`c0`)\n"
+                        + "DISTRIBUTED BY HASH(`c0`) BUCKETS 3\n"
+                        + "PROPERTIES (\n"
+                        + "\"replication_num\" = \"1\"\n"
+                        + ");");
+
+        StreamLoadKvParams params = new StreamLoadKvParams(new HashMap<>() {{
+                put(HTTP_FORMAT, "json");
+                put(HTTP_ENVELOPE, LoadStmt.ENVELOPE_DEBEZIUM);
+                put(HTTP_BATCH_WRITE_INTERVAL_MS, "100000");
+                put(HTTP_BATCH_WRITE_PARALLEL, "4");
+            }});
+        RequestLoadResult result = batchWriteMgr.requestLoad(
+                new TableId(DB_NAME_2, pkTableName), params, UserIdentity.ROOT,
+                allNodes.get(0).getId(), allNodes.get(0).getHost());
+        assertTrue(result.isOk());
+        assertNotNull(result.getValue());
         assertEquals(1, batchWriteMgr.numJobs());
     }
 

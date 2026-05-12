@@ -405,7 +405,7 @@ While a query is running, you can check which resource group the query has hit f
 After a query has completed, you can view the resource group that the query matched by checking the `ResourceGroup` field in the **fe.audit.log** file on the FE node.
 
 - If the query is not under the management of resource groups, the column value is an empty string `""`.
-- If the query is under the management of resource groups but doesn't match any classifier, the column value is an empty string `""`. But this query is assigned to the default resource group `default_wg`.
+- If the query is under the management of resource groups but doesn't match any classifier, it will be assigned to the default resource group `default_wg`.
 
 ### Monitoring resource groups
 

@@ -2,6 +2,9 @@
 set enable_global_late_materialization = true;
 -- result:
 -- !result
+set enable_global_late_materialization_cost_based = false;
+-- result:
+-- !result
 set cbo_cte_reuse_rate_v2 = 0;
 -- result:
 -- !result

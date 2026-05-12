@@ -195,4 +195,21 @@ public class FileTableTest {
         Assertions.assertEquals(tTableDescriptor.getFileTable().getHive_column_names(), "col1,col2,col3");
         Assertions.assertEquals(tTableDescriptor.getFileTable().getHive_column_types(), "int#int#string");
     }
+
+    @Test
+    public void testBinaryExternalTableKeepsHiveBinaryType() throws Exception {
+        String createTableSql =
+                "create external table if not exists db.file_tbl_binary (col1 int, col2 binary) engine=file properties " +
+                        "(\"path\"=\"hdfs://127.0.0.1:10000/hive/\", \"format\"=\"avro\")";
+        CreateTableStmt
+                createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createTableSql, connectContext);
+        com.starrocks.catalog.Table table = createTable(createTableStmt);
+
+        Assertions.assertTrue(table instanceof FileTable);
+        FileTable fileTable = (FileTable) table;
+        List<DescriptorTable.ReferencedPartitionInfo> partitions = new ArrayList<>();
+        TTableDescriptor tTableDescriptor = fileTable.toThrift(partitions);
+
+        Assertions.assertEquals("int#binary", tTableDescriptor.getFileTable().getHive_column_types());
+    }
 }

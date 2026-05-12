@@ -23,8 +23,6 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.PhysicalPartition;
-import com.starrocks.sql.ast.expression.Expr;
-import com.starrocks.sql.common.PCellSortedSet;
 import org.apache.commons.lang.NotImplementedException;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -50,19 +48,6 @@ public class OlapPartitionTraits extends DefaultTraits {
     @Override
     public boolean isSupportPCTRefresh() {
         return true;
-    }
-
-    @Override
-    public PCellSortedSet getPartitionKeyRange(Column partitionColumn, Expr partitionExpr) {
-        if (!((OlapTable) table).getPartitionInfo().isRangePartition()) {
-            throw new IllegalArgumentException("Must be range partitioned table");
-        }
-        return ((OlapTable) table).getRangePartitionMap();
-    }
-
-    @Override
-    public PCellSortedSet getPartitionCells(List<Column> partitionColumns) {
-        return ((OlapTable) table).getPartitionCells(Optional.of(partitionColumns));
     }
 
     @Override

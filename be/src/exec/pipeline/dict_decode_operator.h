@@ -16,7 +16,7 @@
 
 #include "common/global_types.h"
 #include "exec/olap_common.h"
-#include "exec/pipeline/operator.h"
+#include "exec/pipeline/operator_factory.h"
 #include "runtime/global_dict/decoder.h"
 #include "runtime/global_dict/parser.h"
 

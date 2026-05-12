@@ -21,7 +21,7 @@
 #include "column/column_viewer.h"
 #include "column/nullable_column.h"
 #include "column/vectorized_fwd.h"
-#include "common/config.h"
+#include "common/config_exec_flow_fwd.h"
 #include "common/statusor.h"
 #include "exprs/cast_expr.h"
 #include "exprs/clone_expr.h"
@@ -127,7 +127,17 @@ Status JDBCScanner::_init_jdbc_scan_context(RuntimeState* state) {
     LOCAL_REF_GUARD_ENV(env, passwd);
     jstring sql = env->NewStringUTF(_scan_ctx.sql.c_str());
     LOCAL_REF_GUARD_ENV(env, sql);
-    jstring query_time_zone = env->NewStringUTF(state->timezone().c_str());
+    // could be deleted, only for compatibilty
+    bool needs_query_time_zone = false;
+    for (SlotDescriptor* slot_desc : _slot_descs) {
+        auto type = slot_desc->type().type;
+        if (type == TYPE_DATETIME || type == TYPE_TIME) {
+            needs_query_time_zone = true;
+            break;
+        }
+    }
+    const std::string& query_time_zone_str = needs_query_time_zone ? state->timezone() : "";
+    jstring query_time_zone = env->NewStringUTF(query_time_zone_str.c_str());
     LOCAL_REF_GUARD_ENV(env, query_time_zone);
     int statement_fetch_size = state->chunk_size();
     int connection_pool_size = config::jdbc_connection_pool_size;
@@ -194,7 +204,7 @@ Status JDBCScanner::_init_jdbc_scanner() {
 
     auto jdbc_scanner_cls = env->FindClass(JDBC_SCANNER_CLASS_NAME);
     _jdbc_scanner_cls = std::make_unique<JVMClass>(env->NewGlobalRef(jdbc_scanner_cls));
-    LOCAL_REF_GUARD_ENV(env, jdbc_scanner);
+    LOCAL_REF_GUARD_ENV(env, jdbc_scanner_cls);
 
     DCHECK(_jdbc_scanner_cls != nullptr);
     // init jmethod

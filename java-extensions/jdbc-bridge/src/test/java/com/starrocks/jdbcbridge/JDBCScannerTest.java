@@ -25,6 +25,7 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.ResultSetMetaData;
+import java.sql.Time;
 import java.sql.Timestamp;
 import java.time.ZoneId;
 import java.time.ZoneOffset;
@@ -39,6 +40,34 @@ public class JDBCScannerTest {
         setResultColumnClassNames(scanner, List.of("java.lang.String"));
 
         Assertions.assertFalse(invokeShouldConvertOracleTemporalStringColumn(scanner, 0));
+    }
+
+    @Test
+    public void testPostgresTimeWithTimezoneTypeNameDetected() throws Exception {
+        JDBCScanner scanner = createScanner("org.postgresql.Driver", "Asia/Shanghai", 1);
+        Assertions.assertTrue(invokeIsPostgresTimeWithTimezoneTypeName(scanner, "timetz"));
+        Assertions.assertTrue(invokeIsPostgresTimeWithTimezoneTypeName(scanner, "time with time zone"));
+        Assertions.assertFalse(invokeIsPostgresTimeWithTimezoneTypeName(scanner, "timestamptz"));
+        Assertions.assertFalse(invokeIsPostgresTimeWithTimezoneTypeName(scanner, "timestamp with time zone"));
+        Assertions.assertFalse(invokeIsPostgresTimeWithTimezoneTypeName(scanner, "TIMESTAMPTZ(6)"));
+    }
+
+    @Test
+    public void testPostgresTemporalWithTimezoneDetectDoesNotAffectOtherDrivers() throws Exception {
+        JDBCScanner oracleScanner = createScanner("oracle.jdbc.driver.OracleDriver", "Asia/Shanghai", 1);
+        Assertions.assertFalse(invokeIsPostgresTimeWithTimezoneTypeName(oracleScanner, "timetz"));
+
+        JDBCScanner mysqlScanner = createScanner("com.mysql.jdbc.Driver", "Asia/Shanghai", 1);
+        Assertions.assertFalse(invokeIsPostgresTimeWithTimezoneTypeName(mysqlScanner, "timestamptz"));
+    }
+
+    @Test
+    public void testPostgresTimestampWithTimezoneTypeNameDetected() throws Exception {
+        JDBCScanner scanner = createScanner("org.postgresql.Driver", "Asia/Shanghai", 1);
+        Assertions.assertTrue(invokeIsPostgresTimestampWithTimezoneTypeName(scanner, "timestamptz"));
+        Assertions.assertTrue(invokeIsPostgresTimestampWithTimezoneTypeName(scanner, "timestamp with time zone"));
+        Assertions.assertTrue(invokeIsPostgresTimestampWithTimezoneTypeName(scanner, "TIMESTAMPTZ(6)"));
+        Assertions.assertFalse(invokeIsPostgresTimestampWithTimezoneTypeName(scanner, "timestamp"));
     }
 
     @Test
@@ -256,6 +285,62 @@ public class JDBCScannerTest {
         Assertions.assertEquals("2026-03-12 17:30:15.123456", ((String[]) chunk.get(0))[0]);
     }
 
+    @Test
+    public void testGetNextChunkConvertsPostgresTimestampWithTimezoneByQueryTimeZone() throws Exception {
+        JDBCScanner scanner = createScanner("org.postgresql.Driver", "Asia/Shanghai", 1);
+        setField(scanner, "resultSetMetaData", singleColumnMetaData());
+        List<Object[]> chunk = new ArrayList<>();
+        chunk.add(new Timestamp[1]);
+        setField(scanner, "resultChunk", chunk);
+        setResultColumnClassNames(scanner, List.of("java.sql.Timestamp"));
+        setField(scanner, "postgresTimestampWithTimezoneColumns", List.of(true));
+
+        // Use epoch millis for 2026-03-12 09:30:15 UTC to make test timezone-independent
+        long epochMillis = java.time.Instant.parse("2026-03-12T09:30:15Z").toEpochMilli();
+        Timestamp sourceTimestamp = new Timestamp(epochMillis);
+        ResultSet rs = proxy(ResultSet.class, (method, args) -> {
+            if ("getObject".equals(method.getName())) {
+                return sourceTimestamp;
+            }
+            return defaultValue(method);
+        });
+        setField(scanner, "resultSet", rs);
+
+        chunk = scanner.getNextChunk();
+        // 2026-03-12 09:30:15 UTC -> 2026-03-12 17:30:15 Asia/Shanghai (+08:00)
+        Assertions.assertEquals(Timestamp.valueOf("2026-03-12 17:30:15"), ((Timestamp[]) chunk.get(0))[0]);
+    }
+
+    @Test
+    public void testGetNextChunkConvertsPostgresTimeWithTimezoneByQueryTimeZone() throws Exception {
+        JDBCScanner scanner = createScanner("org.postgresql.Driver", "Asia/Shanghai", 1);
+        setField(scanner, "resultSetMetaData", singleColumnMetaData());
+        List<Object[]> chunk = new ArrayList<>();
+        chunk.add(new Time[1]);
+        setField(scanner, "resultChunk", chunk);
+        setResultColumnClassNames(scanner, List.of("java.sql.Time"));
+        setField(scanner, "postgresTimeWithTimezoneColumns", List.of(true));
+
+        // Use epoch millis for 06:30:15.789 UTC to test sub-second precision preservation
+        long epochMillis = java.time.Instant.parse("1970-01-01T06:30:15.789Z").toEpochMilli();
+        Time sourceTime = new Time(epochMillis);
+        ResultSet rs = proxy(ResultSet.class, (method, args) -> {
+            if ("getObject".equals(method.getName())) {
+                return sourceTime;
+            }
+            return defaultValue(method);
+        });
+        setField(scanner, "resultSet", rs);
+
+        chunk = scanner.getNextChunk();
+        // 06:30:15.789 UTC -> 14:30:15.789 Asia/Shanghai (+08:00)
+        Time result = ((Time[]) chunk.get(0))[0];
+        long expectedMillis = java.time.Instant.parse("1970-01-01T06:30:15.789Z").toEpochMilli()
+                + java.util.TimeZone.getTimeZone("Asia/Shanghai").getOffset(epochMillis)
+                - java.util.TimeZone.getDefault().getOffset(epochMillis);
+        Assertions.assertEquals(expectedMillis, result.getTime());
+    }
+
     private JDBCScanner createScanner(String driverClassName, String queryTimeZone, int fetchSize) {
         JDBCScanContext scanContext = new JDBCScanContext();
         scanContext.setDriverClassName(driverClassName);
@@ -353,6 +438,20 @@ public class JDBCScannerTest {
         Method method = JDBCScanner.class.getDeclaredMethod("shouldConvertOracleTemporalStringColumn", int.class);
         method.setAccessible(true);
         return (boolean) method.invoke(scanner, columnIndex);
+    }
+
+    private boolean invokeIsPostgresTimeWithTimezoneTypeName(JDBCScanner scanner, String typeName)
+            throws Exception {
+        Method method = JDBCScanner.class.getDeclaredMethod("isPostgresTimeWithTimezoneTypeName", String.class);
+        method.setAccessible(true);
+        return (boolean) method.invoke(scanner, typeName);
+    }
+
+    private boolean invokeIsPostgresTimestampWithTimezoneTypeName(JDBCScanner scanner, String typeName)
+            throws Exception {
+        Method method = JDBCScanner.class.getDeclaredMethod("isPostgresTimestampWithTimezoneTypeName", String.class);
+        method.setAccessible(true);
+        return (boolean) method.invoke(scanner, typeName);
     }
 
     private String invokeConvertOracleTemporalValueToString(JDBCScanner scanner, int columnIndex, Object resultObject)

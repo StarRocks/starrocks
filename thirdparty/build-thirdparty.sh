@@ -152,13 +152,9 @@ fi
 
 eval set -- "${OPTS}"
 
-KERNEL="$(uname -s)"
-
-if [[ "${KERNEL}" == 'Darwin' ]]; then
-    PARALLEL="$(($(sysctl -n hw.logicalcpu) / 4 + 1))"
-else
-    PARALLEL="$(($(nproc) / 4 + 1))"
-fi
+# PARALLEL precedence: -j arg (set later in the case loop) > env var > auto-detect.
+# vars.sh (sourced above) already resolves env var > auto-detect via
+# `PARALLEL=${PARALLEL:-$default_parallel}`, so do not overwrite it here.
 
 HELP=0
 CLEAN=0
@@ -392,7 +388,7 @@ build_thrift() {
     --prefix=$TP_INSTALL_DIR --docdir=$TP_INSTALL_DIR/doc --enable-static --disable-shared --disable-tests \
     --disable-tutorial --without-qt4 --without-qt5 --without-csharp --without-erlang --without-nodejs \
     --without-lua --without-perl --without-php --without-php_extension --without-dart --without-ruby \
-    --without-haskell --without-go --without-haxe --without-d --without-python -without-java -without-rs --with-cpp \
+    --without-haskell --without-go --without-haxe --without-d --without-python -without-java -without-rs --without-cl --with-cpp \
     --with-libevent=$TP_INSTALL_DIR --with-boost=$TP_INSTALL_DIR --with-openssl=$TP_INSTALL_DIR
 
     if [ -f compiler/cpp/thrifty.hh ];then
@@ -883,6 +879,7 @@ build_arrow() {
     export ARROW_ZLIB_URL=${TP_SOURCE_DIR}/${ZLIB_NAME}
     export ARROW_FLATBUFFERS_URL=${TP_SOURCE_DIR}/${FLATBUFFERS_NAME}
     export ARROW_ZSTD_URL=${TP_SOURCE_DIR}/${ZSTD_NAME}
+    export ARROW_THRIFT_URL=${TP_SOURCE_DIR}/${THRIFT_NAME}
     export LDFLAGS="-L${TP_LIB_DIR} -static-libstdc++ -static-libgcc"
     if [[ "$THIRD_PARTY_BUILD_WITH_AVX2" == "OFF" ]] ; then
         # https://github.com/apache/arrow/blob/main/cpp/cmake_modules/DefineOptions.cmake#L179
@@ -932,7 +929,8 @@ build_arrow() {
     -DARROW_FLIGHT_SQL=ON \
     -DCMAKE_PREFIX_PATH=${TP_INSTALL_DIR} \
     -G "${CMAKE_GENERATOR}" \
-    -DThrift_ROOT=$TP_INSTALL_DIR/ ..
+    -DThrift_ROOT=$TP_INSTALL_DIR/ \
+    -Dthrift_SOURCE=SYSTEM ..
 
     ${BUILD_SYSTEM} -j$PARALLEL
     ${BUILD_SYSTEM} install
@@ -1317,14 +1315,18 @@ build_benchmark() {
     mkdir -p $BUILD_DIR
     cd $BUILD_DIR
     rm -rf CMakeCache.txt CMakeFiles/
-    # https://github.com/google/benchmark/issues/773
+    # benchmark 1.9.5 switched CXX feature checks to HAVE_* cache variables.
+    # Force the POSIX regex backend to avoid CentOS7 try_run failures when the
+    # probe binaries pick up the system libstdc++ instead of the toolchain one.
     cmake -DBENCHMARK_DOWNLOAD_DEPENDENCIES=OFF \
           -DBENCHMARK_ENABLE_GTEST_TESTS=OFF \
+          -DBENCHMARK_INSTALL_DOCS=OFF \
+          -DBENCHMARK_INSTALL_TOOLS=OFF \
           -DCMAKE_INSTALL_PREFIX=$TP_INSTALL_DIR \
           -DCMAKE_INSTALL_LIBDIR=lib64 \
-          -DRUN_HAVE_STD_REGEX=0 \
-          -DRUN_HAVE_POSIX_REGEX=0 \
-          -DCOMPILE_HAVE_GNU_POSIX_REGEX=0 \
+          -DHAVE_STD_REGEX=0 \
+          -DHAVE_GNU_POSIX_REGEX=0 \
+          -DHAVE_POSIX_REGEX=1 \
           -DCMAKE_BUILD_TYPE=Release ../
     ${BUILD_SYSTEM} -j$PARALLEL
     ${BUILD_SYSTEM} install

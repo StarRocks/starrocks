@@ -144,6 +144,7 @@ protected:
                                                                             TQueryGlobals(), ExecEnv::GetInstance()));
         _runtime_state = _fragment_context->runtime_state();
         _runtime_state->set_fragment_ctx(_fragment_context);
+        _runtime_state->set_fragment_dict_state(_fragment_context->dict_state());
     }
 
     void TearDown() override {}

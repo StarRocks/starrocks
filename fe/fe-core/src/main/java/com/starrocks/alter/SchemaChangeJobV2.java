@@ -72,9 +72,6 @@ import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
-import com.starrocks.planner.DescriptorTable;
-import com.starrocks.planner.SlotDescriptor;
-import com.starrocks.planner.TupleDescriptor;
 import com.starrocks.planner.expression.ExprToThrift;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
@@ -663,24 +660,11 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
                     Map<Integer, TExpr> mcExprs = new HashMap<>();
                     TAlterTabletMaterializedColumnReq generatedColumnReq = new TAlterTabletMaterializedColumnReq();
                     if (hasNewGeneratedColumn) {
-                        DescriptorTable descTbl = new DescriptorTable();
-                        TupleDescriptor tupleDesc = descTbl.createTupleDescriptor();
-                        Map<String, SlotDescriptor> slotDescByName = new HashMap<>();
-
-                        /*
-                         * The expression substitution is needed here, because all slotRefs in
-                         * GeneratedColumnExpr are still is unAnalyzed. slotRefs get isAnalyzed == true
-                         * if it is init by SlotDescriptor. The slot information will be used by be to indentify
-                         * the column location in a chunk.
-                         */
-                        for (Column col : tbl.getFullSchema()) {
-                            SlotDescriptor slotDesc = descTbl.addSlotDescriptor(tupleDesc);
-                            slotDesc.setType(col.getType());
-                            slotDesc.setColumn(new Column(col));
-                            slotDesc.setIsMaterialized(true);
-                            slotDesc.setIsNullable(col.isAllowNull());
-
-                            slotDescByName.put(col.getName(), slotDesc);
+                        // Build slotId mapping from fullSchema (slot ids = positional index)
+                        Map<String, Integer> slotIdByName = Maps.newHashMap();
+                        for (int i = 0; i < tbl.getFullSchema().size(); i++) {
+                            Column col = tbl.getFullSchema().get(i);
+                            slotIdByName.put(col.getName(), i);
                         }
 
                         for (Column generatedColumn : diffGeneratedColumnSchema) {
@@ -688,16 +672,14 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
                             List<Expr> outputExprs = Lists.newArrayList();
 
                             for (Column col : tbl.getBaseSchema()) {
-                                SlotDescriptor slotDesc = slotDescByName.get(col.getName());
-
-                                if (slotDesc == null) {
+                                Integer slotId = slotIdByName.get(col.getName());
+                                if (slotId == null) {
                                     throw new AlterCancelException("Expression for generated column can not find " +
                                             "the ref column");
                                 }
 
-                                SlotRef slotRef = new SlotRef(slotDesc);
-                                slotRef.setColumnName(col.getName());
-                                outputExprs.add(slotRef);
+                                outputExprs.add(SlotRef.createAnalyzed(slotId,
+                                        col.getName(), col.getType(), col.isAllowNull()));
                             }
 
                             TableName tableName = new TableName(db.getFullName(), tbl.getName());

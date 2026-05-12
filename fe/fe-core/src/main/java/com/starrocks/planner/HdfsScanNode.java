@@ -202,6 +202,8 @@ public class HdfsScanNode extends ScanNode {
         if (columnAccessPaths != null && !columnAccessPaths.isEmpty()) {
             tHdfsScanNode.setColumn_access_paths(columnAccessPathToThrift());
         }
+
+        setConnectorCatalogType(msg);
     }
 
     public static void appendDataCacheOptionsInExplain(StringBuilder output, String prefix, DataCacheOptions dataCacheOptions) {
@@ -304,5 +306,11 @@ public class HdfsScanNode extends ScanNode {
     @Override
     public void setScanSampleStrategy(RemoteFilesSampleStrategy strategy) {
         scanRangeSource.setSampleStrategy(strategy);
+    }
+
+    @Override
+    public void prepareRetry() {
+        reachLimit = false;
+        this.scanRangeSource.reset();
     }
 }

@@ -27,6 +27,7 @@
 #include "cctz/time_zone.h"
 #include "column/array_column.h"
 #include "column/vectorized_fwd.h"
+#include "common/stack_util.h"
 #include "exprs/cast_expr.h"
 #include "exprs/literal.h"
 #include "formats/orc/orc_mapping.h"
@@ -38,7 +39,6 @@
 #include "runtime/runtime_filter.h"
 #include "runtime/runtime_state_helper.h"
 #include "types/logical_type.h"
-#include "util/stack_util.h"
 
 namespace starrocks {
 

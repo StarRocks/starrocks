@@ -37,7 +37,7 @@ public:
 protected:
     void SetUp() override {
         _mem_tracker = std::make_unique<MemTracker>(-1);
-        _load_channel_mgr = std::make_unique<LoadChannelMgr>();
+        _load_channel_mgr = std::make_unique<LoadChannelMgr>(nullptr);
         _node_id = 100;
         _db_id = 100;
         _table_id = 101;

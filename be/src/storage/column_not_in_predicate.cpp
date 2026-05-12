@@ -18,6 +18,7 @@
 #include "base/string/string_parser.hpp"
 #include "column/column.h"
 #include "column/nullable_column.h"
+#include "column/raw_data_visitor.h"
 #include "gutil/casts.h"
 #include "olap_type_infra.h"
 #include "storage/column_predicate.h"
@@ -28,7 +29,8 @@ namespace starrocks {
 
 template <LogicalType field_type>
 class ColumnNotInPredicate final : public ColumnPredicate {
-    using ValueType = typename CppTypeTraits<field_type>::CppType;
+    using ValueType = StorageCppType<field_type>;
+    static_assert(!lt_is_string_or_binary<field_type>, "ColumnNotInPredicate does not support string/binary types");
 
 public:
     ColumnNotInPredicate(const TypeInfoPtr& type_info, ColumnId id, const std::vector<std::string>& strs)
@@ -40,8 +42,10 @@ public:
     ~ColumnNotInPredicate() override = default;
 
     template <typename Op>
-    inline void t_evaluate(const Column* column, uint8_t* sel, uint16_t from, uint16_t to) const {
-        auto* v = reinterpret_cast<const ValueType*>(column->raw_data());
+    Status t_evaluate(const Column* column, uint8_t* sel, uint16_t from, uint16_t to) const {
+        RawDataVisitor visitor;
+        RETURN_IF_ERROR(column->accept(&visitor));
+        const auto* v = reinterpret_cast<const ValueType*>(visitor.result());
         if (!column->has_null()) {
             for (size_t i = from; i < to; i++) {
                 sel[i] = Op::apply(sel[i], (uint8_t)(!_values.contains(v[i])));
@@ -52,25 +56,25 @@ public:
                 sel[i] = Op::apply(sel[i], (uint8_t)(!null_data[i] && !_values.contains(v[i])));
             }
         }
+        return Status::OK();
     }
 
     Status evaluate(const Column* column, uint8_t* selection, uint16_t from, uint16_t to) const override {
-        t_evaluate<ColumnPredicateAssignOp>(column, selection, from, to);
-        return Status::OK();
+        return t_evaluate<ColumnPredicateAssignOp>(column, selection, from, to);
     }
 
     Status evaluate_and(const Column* column, uint8_t* selection, uint16_t from, uint16_t to) const override {
-        t_evaluate<ColumnPredicateAndOp>(column, selection, from, to);
-        return Status::OK();
+        return t_evaluate<ColumnPredicateAndOp>(column, selection, from, to);
     }
 
     Status evaluate_or(const Column* column, uint8_t* selection, uint16_t from, uint16_t to) const override {
-        t_evaluate<ColumnPredicateOrOp>(column, selection, from, to);
-        return Status::OK();
+        return t_evaluate<ColumnPredicateOrOp>(column, selection, from, to);
     }
 
     StatusOr<uint16_t> evaluate_branchless(const Column* column, uint16_t* sel, uint16_t sel_size) const override {
-        auto* v = reinterpret_cast<const ValueType*>(column->raw_data());
+        RawDataVisitor visitor;
+        RETURN_IF_ERROR(column->accept(&visitor));
+        const auto* v = reinterpret_cast<const ValueType*>(visitor.result());
 
         uint16_t new_size = 0;
         if (!column->has_null()) {
@@ -354,25 +358,25 @@ ColumnPredicate* new_column_not_in_predicate(const TypeInfoPtr& type_info, Colum
         return new ColumnNotInPredicate<TYPE_DECIMALV2>(type_info, id, strs);
     case TYPE_DECIMAL32: {
         const auto scale = type_info->scale();
-        using SetType = ItemHashSet<CppTypeTraits<TYPE_DECIMAL32>::CppType>;
+        using SetType = ItemHashSet<StorageCppType<TYPE_DECIMAL32>>;
         SetType values = predicate_internal::strings_to_decimal_set<TYPE_DECIMAL32>(scale, strs);
         return new ColumnNotInPredicate<TYPE_DECIMAL32>(type_info, id, std::move(values));
     }
     case TYPE_DECIMAL64: {
         const auto scale = type_info->scale();
-        using SetType = ItemHashSet<CppTypeTraits<TYPE_DECIMAL64>::CppType>;
+        using SetType = ItemHashSet<StorageCppType<TYPE_DECIMAL64>>;
         SetType values = predicate_internal::strings_to_decimal_set<TYPE_DECIMAL64>(scale, strs);
         return new ColumnNotInPredicate<TYPE_DECIMAL64>(type_info, id, std::move(values));
     }
     case TYPE_DECIMAL128: {
         const auto scale = type_info->scale();
-        using SetType = ItemHashSet<CppTypeTraits<TYPE_DECIMAL128>::CppType>;
+        using SetType = ItemHashSet<StorageCppType<TYPE_DECIMAL128>>;
         SetType values = predicate_internal::strings_to_decimal_set<TYPE_DECIMAL128>(scale, strs);
         return new ColumnNotInPredicate<TYPE_DECIMAL128>(type_info, id, std::move(values));
     }
     case TYPE_DECIMAL256: {
         const auto scale = type_info->scale();
-        using SetType = ItemHashSet<CppTypeTraits<TYPE_DECIMAL256>::CppType>;
+        using SetType = ItemHashSet<StorageCppType<TYPE_DECIMAL256>>;
         SetType values = predicate_internal::strings_to_decimal_set<TYPE_DECIMAL256>(scale, strs);
         return new ColumnNotInPredicate<TYPE_DECIMAL256>(type_info, id, std::move(values));
     }
@@ -433,7 +437,7 @@ ColumnPredicate* new_column_not_in_predicate_from_datum(const TypeInfoPtr& type_
                     }
                     return new BinaryColumnNotInPredicate<LT>(type_info, id, std::move(strings));
                 } else {
-                    using SetType = ItemHashSet<typename CppTypeTraits<LT>::CppType>;
+                    using SetType = ItemHashSet<StorageCppType<LT>>;
                     SetType value_set = predicate_internal::datums_to_set<LT>(operands);
                     return new ColumnNotInPredicate<LT>(type_info, id, std::move(value_set));
                 }

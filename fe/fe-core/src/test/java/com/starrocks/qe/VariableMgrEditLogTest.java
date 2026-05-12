@@ -47,7 +47,6 @@ public class VariableMgrEditLogTest {
         // Get VariableMgr instance from GlobalStateMgr
         masterVariableMgr = GlobalStateMgr.getCurrentState().getVariableMgr();
     }
-
     @AfterEach
     public void tearDown() {
         UtFrameUtils.tearDownForPersisTest();
@@ -259,5 +258,5 @@ public class VariableMgrEditLogTest {
                     "Unexpected exception message: " + message);
         }
     }
-}
 
+}

@@ -19,14 +19,16 @@
 
 #include "common/config_ingest_fwd.h"
 #include "common/config_scan_io_fwd.h"
+#include "common/thread/priority_thread_pool.hpp"
 #include "common/thread/threadpool.h"
+#include "exec/pipeline/exec_node_pipeline_adapter.h"
+#include "exec/pipeline/fragment_context.h"
+#include "exec/pipeline/query_context.h"
 #include "exec/pipeline/scan/chunk_buffer_limiter.h"
 #include "exec/pipeline/scan/connector_scan_operator.h"
-#include "exec/stream/scan/stream_scan_operator.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
 #include "runtime/global_dict/parser.h"
-#include "util/priority_thread_pool.hpp"
 
 namespace starrocks {
 
@@ -38,6 +40,11 @@ ConnectorScanNode::ConnectorScanNode(ObjectPool* pool, const TPlanNode& tnode, c
     _name = "connector_scan";
     auto c = connector::ConnectorManager::default_instance()->get(tnode.connector_scan_node.connector_name);
     _connector_type = c->connector_type();
+    if (tnode.connector_scan_node.__isset.catalog_type) {
+        _catalog_type = tnode.connector_scan_node.catalog_type;
+    }
+    // else: leave _catalog_type empty. During rolling upgrades (old FE -> new BE),
+    // catalog_type is not set — skip catalog metrics rather than guess wrong values.
     _data_source_provider = c->create_data_source_provider(this, tnode);
 }
 
@@ -121,14 +128,16 @@ int ConnectorScanNode::_estimate_max_concurrent_chunks() const {
     return capacity;
 }
 
-pipeline::OpFactories ConnectorScanNode::decompose_to_pipeline(pipeline::PipelineBuilderContext* context) {
+StatusOr<pipeline::OpFactories> ConnectorScanNode::decompose_to_pipeline(pipeline::PipelineBuilderContext* context) {
     auto exec_group = context->find_exec_group_by_plan_node_id(_id);
     context->set_current_execution_group(exec_group);
 
+    if (_data_source_provider->stream_data_source()) {
+        return Status::NotSupported("Legacy incremental MV maintenance is no longer supported");
+    }
+
     size_t dop = context->dop_of_source_operator(id());
     std::shared_ptr<pipeline::ConnectorScanOperatorFactory> scan_op = nullptr;
-    bool stream_data_source = _data_source_provider->stream_data_source();
-    bool is_stream_pipeline = context->is_stream_pipeline();
 
     // we do estimated here is because we have peeked all scang ranges and gather more infomration
     // so only here we can make more accurate decision.
@@ -141,12 +150,8 @@ pipeline::OpFactories ConnectorScanNode::decompose_to_pipeline(pipeline::Pipelin
             max_buffer_capacity, default_buffer_capacity, int64_t(_scan_mem_limit * kChunkBufferMemRatio),
             runtime_state()->chunk_size());
 
-    scan_op = !stream_data_source
-                      ? std::make_shared<pipeline::ConnectorScanOperatorFactory>(
-                                context->next_operator_id(), this, runtime_state(), dop, std::move(buffer_limiter))
-                      : std::make_shared<pipeline::StreamScanOperatorFactory>(
-                                context->next_operator_id(), this, runtime_state(), dop, std::move(buffer_limiter),
-                                is_stream_pipeline);
+    scan_op = std::make_shared<pipeline::ConnectorScanOperatorFactory>(context->next_operator_id(), this,
+                                                                       runtime_state(), dop, std::move(buffer_limiter));
 
     // order matters. we will use scan mem limit to limit chunk source mem bytes.
     scan_op->set_mem_share_arb(_mem_share_arb);
@@ -156,7 +161,7 @@ pipeline::OpFactories ConnectorScanNode::decompose_to_pipeline(pipeline::Pipelin
                                         _estimated_scan_row_bytes * runtime_state()->chunk_size());
 
     auto&& rc_rf_probe_collector = std::make_shared<RcRfProbeCollector>(1, std::move(this->runtime_filter_collector()));
-    this->init_runtime_filter_for_operator(scan_op.get(), context, rc_rf_probe_collector);
+    pipeline::init_runtime_filter_for_operator(*this, scan_op.get(), context, rc_rf_probe_collector);
 
     auto operators = pipeline::decompose_scan_node_to_pipeline(scan_op, this, context);
 
@@ -405,7 +410,8 @@ bool ConnectorScanNode::_submit_scanner(ConnectorScanner* scanner, bool blockabl
         return _submit_streaming_load_scanner(scanner, blockable);
     }
 
-    auto* thread_pool = runtime_state()->exec_env()->thread_pool();
+    auto* query_execution_services = runtime_state()->query_execution_services();
+    auto* thread_pool = query_execution_services->execution->thread_pool;
     int delta = static_cast<int>(!scanner->keep_priority());
     int32_t num_submit = _scanner_submit_count.fetch_add(delta, std::memory_order_relaxed);
 
@@ -432,7 +438,8 @@ bool ConnectorScanNode::_submit_streaming_load_scanner(ConnectorScanner* scanner
 #ifdef BE_TEST
     _use_stream_load_thread_pool = true;
 #endif
-    ThreadPool* thread_pool = runtime_state()->exec_env()->streaming_load_thread_pool();
+    auto* query_execution_services = runtime_state()->query_execution_services();
+    ThreadPool* thread_pool = query_execution_services->execution->streaming_load_thread_pool;
     _running_threads.fetch_add(1, std::memory_order_release);
     // Assume the thread pool is large enough, so there is no need to set the priority
     Status status = thread_pool->submit_func([this, scanner] { _scanner_thread(scanner); });

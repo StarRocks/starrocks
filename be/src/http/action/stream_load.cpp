@@ -46,8 +46,6 @@
 #include <rapidjson/prettywriter.h>
 #include <thrift/protocol/TDebugProtocol.h>
 
-#include "agent/master_info.h"
-#include "base/metrics.h"
 #include "base/string/string_parser.hpp"
 #include "base/time/time.h"
 #include "base/uid_util.h"
@@ -56,6 +54,7 @@
 #include "common/config_ingest_fwd.h"
 #include "common/logging.h"
 #include "common/process_exit.h"
+#include "common/system/master_info.h"
 #include "common/util/debug_util.h"
 #include "common/utils.h"
 #include "gen_cpp/FrontendService.h"
@@ -75,23 +74,17 @@
 #include "runtime/fragment_mgr.h"
 #include "runtime/load_path_mgr.h"
 #include "runtime/plan_fragment_executor.h"
-#include "runtime/starrocks_metrics.h"
 #include "runtime/stream_load/load_stream_mgr.h"
 #include "runtime/stream_load/stream_load_context.h"
 #include "runtime/stream_load/stream_load_executor.h"
+#include "runtime/stream_load/stream_load_metrics.h"
 #include "runtime/stream_load/stream_load_pipe.h"
+#include "runtime/thrift_rpc_helper.h"
 #include "simdjson.h"
 #include "util/byte_buffer.h"
-#include "util/global_metrics_registry.h"
 #include "util/json_util.h"
-#include "util/thrift_rpc_helper.h"
 
 namespace starrocks {
-
-METRIC_DEFINE_INT_COUNTER(streaming_load_requests_total, MetricUnit::REQUESTS);
-METRIC_DEFINE_INT_COUNTER(streaming_load_bytes, MetricUnit::BYTES);
-METRIC_DEFINE_INT_COUNTER(streaming_load_duration_ms, MetricUnit::MILLISECONDS);
-METRIC_DEFINE_INT_GAUGE(streaming_load_current_processing, MetricUnit::REQUESTS);
 
 #ifdef BE_TEST
 TStreamLoadPutResult k_stream_load_put_result;
@@ -135,15 +128,7 @@ static Status stream_load_put_internal(const TStreamLoadPutRequest& request, int
                                        TStreamLoadPutResult* result);
 
 StreamLoadAction::StreamLoadAction(ExecEnv* exec_env, ConcurrentLimiter* limiter)
-        : _exec_env(exec_env), _http_concurrent_limiter(limiter) {
-    GlobalMetricsRegistry::instance()->metrics()->register_metric("streaming_load_requests_total",
-                                                                  &streaming_load_requests_total);
-    GlobalMetricsRegistry::instance()->metrics()->register_metric("streaming_load_bytes", &streaming_load_bytes);
-    GlobalMetricsRegistry::instance()->metrics()->register_metric("streaming_load_duration_ms",
-                                                                  &streaming_load_duration_ms);
-    GlobalMetricsRegistry::instance()->metrics()->register_metric("streaming_load_current_processing",
-                                                                  &streaming_load_current_processing);
-}
+        : _exec_env(exec_env), _http_concurrent_limiter(limiter) {}
 
 StreamLoadAction::~StreamLoadAction() = default;
 
@@ -184,9 +169,10 @@ void StreamLoadAction::handle(HttpRequest* req) {
     _send_reply(req, str);
 
     // update statstics
-    streaming_load_requests_total.increment(1);
-    streaming_load_duration_ms.increment(ctx->load_cost_nanos / 1000000);
-    streaming_load_bytes.increment(ctx->receive_bytes);
+    auto* metrics = StreamLoadMetrics::instance();
+    metrics->streaming_load_requests_total.increment(1);
+    metrics->streaming_load_duration_ms.increment(ctx->load_cost_nanos / 1000000);
+    metrics->streaming_load_bytes.increment(ctx->receive_bytes);
 }
 
 Status StreamLoadAction::_handle(StreamLoadContext* ctx) {
@@ -228,7 +214,7 @@ Status StreamLoadAction::_handle_batch_write(starrocks::HttpRequest* http_req, S
 }
 
 int StreamLoadAction::on_header(HttpRequest* req) {
-    auto* ctx = new StreamLoadContext(_exec_env, &streaming_load_current_processing);
+    auto* ctx = new StreamLoadContext(_exec_env, &StreamLoadMetrics::instance()->streaming_load_current_processing);
     ctx->ref();
     req->set_handler_ctx(ctx);
 
@@ -594,6 +580,14 @@ Status StreamLoadAction::_process_put(HttpRequest* http_req, StreamLoadContext* 
         }
     } else {
         request.__set_strip_outer_array(false);
+    }
+    if (!http_req->header(HTTP_ENVELOPE).empty()) {
+        auto envelope_str = http_req->header(HTTP_ENVELOPE);
+        if (boost::iequals(envelope_str, "debezium")) {
+            request.__set_envelope(TEnvelopeType::DEBEZIUM);
+        } else if (!boost::iequals(envelope_str, "none")) {
+            return Status::InvalidArgument(fmt::format("Unknown envelope type: {}", envelope_str));
+        }
     }
     if (!http_req->header(HTTP_PARTIAL_UPDATE).empty()) {
         if (boost::iequals(http_req->header(HTTP_PARTIAL_UPDATE), "false")) {

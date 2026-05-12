@@ -14,13 +14,13 @@
 
 #include "exec/schema_scanner/schema_be_metrics_scanner.h"
 
-#include "agent/master_info.h"
 #include "base/metrics.h"
-#include "exec/schema_scanner/schema_helper.h"
+#include "common/system/master_info.h"
+#include "exec/schema_scanner/schema_column_filler.h"
 #include "gutil/strings/substitute.h"
-#include "runtime/starrocks_metrics.h"
+#include "runtime/exec_env.h"
+#include "runtime/runtime_state.h"
 #include "types/logical_type.h"
-#include "util/global_metrics_registry.h"
 
 namespace starrocks {
 
@@ -72,7 +72,9 @@ Status SchemaBeMetricsScanner::start(RuntimeState* state) {
     _be_id = o_id.has_value() ? o_id.value() : -1;
     _infos.clear();
     SchemaCoreMetricsVisitor visitor(_infos);
-    GlobalMetricsRegistry::instance()->metrics()->collect(&visitor);
+    if (auto* metrics = state->exec_env()->metrics(); metrics != nullptr) {
+        metrics->collect(&visitor);
+    }
     _cur_idx = 0;
     return Status::OK();
 }

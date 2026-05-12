@@ -21,6 +21,7 @@
 #include "exec/chunks_sorter_topn.h"
 #include "exprs/expr_executor.h"
 #include "exprs/expr_factory.h"
+#include "runtime/runtime_state.h"
 
 namespace starrocks::pipeline {
 

@@ -70,7 +70,7 @@ ALTER MATERIALIZED VIEW lo_mv1 RENAME lo_mv1_new_name;
 Example 2: Alter the refresh interval of the materialized view.
 
 ```SQL
-ALTER MATERIALIZED VIEW lo_mv2 REFRESH ASYNC EVERY(INTERVAL 1 DAY);
+ALTER MATERIALIZED VIEW lo_mv2 REFRESH SCHEDULE EVERY(INTERVAL 1 DAY);
 ```
 
 Example 3: Alter the timeout duration for the materialized view refresh tasks to 1 hour (default).

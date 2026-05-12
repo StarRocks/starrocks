@@ -244,6 +244,21 @@ StatusOr<std::unique_ptr<ColumnIterator>> SegmentMetaCollecter::_new_dcg_column_
     return nullptr;
 }
 
+StatusOr<const TabletColumn*> SegmentMetaCollecter::_get_tablet_column(ColumnId cid) const {
+    const auto& schema = _params->tablet_schema;
+    RETURN_IF(cid >= schema->num_columns(), Status::InvalidArgument("Invalid cid: " + std::to_string(cid)));
+    return &schema->column(cid);
+}
+
+StatusOr<ColumnReader*> SegmentMetaCollecter::_get_column_reader(ColumnId cid) const {
+    ASSIGN_OR_RETURN(const TabletColumn* tablet_column, _get_tablet_column(cid));
+    return const_cast<ColumnReader*>(_segment->column_with_uid(tablet_column->unique_id()));
+}
+
+bool SegmentMetaCollecter::_is_missing_default_column(const TabletColumn& column) const {
+    return !column.is_extended() && _segment->is_default_column(column);
+}
+
 Status SegmentMetaCollecter::_init_return_column_iterators() {
     ASSIGN_OR_RETURN(auto fs, FileSystemFactory::CreateSharedFromString(_segment->file_name()));
     RandomAccessFileOptions ropts;
@@ -254,16 +269,17 @@ Status SegmentMetaCollecter::_init_return_column_iterators() {
 
     auto max_cid = _params->cids.empty() ? 0 : *std::max_element(_params->cids.begin(), _params->cids.end());
     _column_iterators.resize(max_cid + 1);
+    _is_default_value_column_by_cid.assign(max_cid + 1, false);
     for (int i = 0; i < _params->fields.size(); i++) {
         if (_params->read_page[i]) {
             auto cid = _params->cids[i];
             if (_column_iterators[cid] == nullptr) {
+                ASSIGN_OR_RETURN(const TabletColumn* col, _get_tablet_column(cid));
                 ColumnIteratorOptions iter_opts;
-                const TabletColumn& col = _params->tablet_schema->column(cid);
                 std::string dcg_filename;
                 FileEncryptionInfo dcg_encryption_info;
                 ASSIGN_OR_RETURN(auto col_iter,
-                                 _new_dcg_column_iterator(col, &dcg_filename, &dcg_encryption_info, nullptr));
+                                 _new_dcg_column_iterator(*col, &dcg_filename, &dcg_encryption_info, nullptr));
                 if (col_iter != nullptr) {
                     // Find the column in delta column group
                     _column_iterators[cid] = std::move(col_iter);
@@ -274,7 +290,9 @@ Status SegmentMetaCollecter::_init_return_column_iterators() {
                     iter_opts.read_file = dcg_file.get();
                     _column_files[cid] = std::move(dcg_file);
                 } else {
-                    ASSIGN_OR_RETURN(_column_iterators[cid], _segment->new_column_iterator_or_default(col, nullptr));
+                    bool is_default_column = _is_missing_default_column(*col);
+                    ASSIGN_OR_RETURN(_column_iterators[cid], _segment->new_column_iterator_or_default(*col, nullptr));
+                    _is_default_value_column_by_cid[cid] = is_default_column;
                     iter_opts.read_file = _read_file.get();
                 }
                 iter_opts.check_dict_encoding = true;
@@ -293,11 +311,11 @@ Status SegmentMetaCollecter::collect(std::vector<Column*>* dsts) {
     }
 
     for (size_t i = 0; i < _params->fields.size(); i++) {
-        auto tablet_column = _params->tablet_schema->column(_params->cids[i]);
+        ASSIGN_OR_RETURN(const TabletColumn* tablet_column, _get_tablet_column(_params->cids[i]));
         auto field_name = _params->fields[i];
         auto field_type = _params->field_type[i];
-        if (tablet_column.is_virtual_column()) {
-            RETURN_IF_ERROR(_collect_virtual(field_name, tablet_column.name(), (*dsts)[i], field_type));
+        if (tablet_column->is_virtual_column()) {
+            RETURN_IF_ERROR(_collect_virtual(field_name, tablet_column->name(), (*dsts)[i], field_type));
         } else {
             RETURN_IF_ERROR(_collect(field_name, _params->cids[i], (*dsts)[i], field_type));
         }
@@ -378,13 +396,18 @@ std::string append_read_name(const ColumnReader* col_reader) {
 }
 
 Status SegmentMetaCollecter::_collect_flat_json(ColumnId cid, Column* column) {
-    const ColumnReader* col_reader = _segment->column(cid);
-    if (col_reader == nullptr) {
-        return Status::NotFound("don't found column");
+    ASSIGN_OR_RETURN(const TabletColumn* tablet_column, _get_tablet_column(cid));
+    if (!is_semi_type(tablet_column->type())) {
+        return Status::InternalError("column type mismatch");
     }
 
-    if (!is_semi_type(col_reader->column_type())) {
-        return Status::InternalError("column type mismatch");
+    ASSIGN_OR_RETURN(auto col_reader, _get_column_reader(cid));
+    if (col_reader == nullptr) {
+        if (_is_missing_default_column(*tablet_column)) {
+            column->append_datum(DatumArray());
+            return Status::OK();
+        }
+        return Status::NotFound("column not found");
     }
 
     if (col_reader->sub_readers() == nullptr || col_reader->sub_readers()->size() < 1) {
@@ -406,18 +429,16 @@ Status SegmentMetaCollecter::_collect_flat_json(ColumnId cid, Column* column) {
 
 // collect dict
 Status SegmentMetaCollecter::_collect_dict(ColumnId cid, Column* column, LogicalType type) {
-    if (!_column_iterators[cid]) {
+    ASSIGN_OR_RETURN(const TabletColumn* tablet_column, _get_tablet_column(cid));
+    if (cid >= _column_iterators.size() || !_column_iterators[cid]) {
         return Status::InvalidArgument("Invalid Collect Params.");
     }
-    auto& schema = _params->tablet_schema;
-    RETURN_IF(cid < 0 || cid >= schema->num_columns(), Status::InvalidArgument("Invalid cid: " + std::to_string(cid)));
-    auto& tablet_column = schema->column(cid);
-    if (tablet_column.type() == TYPE_VARCHAR || tablet_column.type() == TYPE_ARRAY) {
+    if (tablet_column->type() == TYPE_VARCHAR || tablet_column->type() == TYPE_ARRAY) {
         RETURN_IF_ERROR(_collect_dict_for_column(_column_iterators[cid].get(), cid, column));
-    } else if (tablet_column.type() == TYPE_JSON) {
+    } else if (tablet_column->type() == TYPE_JSON) {
         RETURN_IF_ERROR(_collect_dict_for_flatjson(cid, column));
     } else {
-        return Status::InvalidArgument("unsupported column type: " + type_to_string(tablet_column.type()));
+        return Status::InvalidArgument("unsupported column type: " + type_to_string(tablet_column->type()));
     }
     return {};
 }
@@ -425,10 +446,10 @@ Status SegmentMetaCollecter::_collect_dict(ColumnId cid, Column* column, Logical
 Status SegmentMetaCollecter::_collect_dict_for_column(ColumnIterator* column_iter, ColumnId cid, Column* column) {
     std::vector<Slice> words;
     if (!column_iter->all_page_dict_encoded()) {
-        auto& tablet_column = _params->tablet_schema->column(cid);
+        ASSIGN_OR_RETURN(const TabletColumn* tablet_column, _get_tablet_column(cid));
         // For JSON data, the schema may be heterogeneous, meaning that some segments might not contain the dictionary column,
         // but a global dictionary could still be present and usable.
-        if (!tablet_column.is_extended()) {
+        if (!tablet_column->is_extended()) {
             return Status::GlobalDictError("no global dict");
         } else {
             return Status::OK();
@@ -475,12 +496,18 @@ Status SegmentMetaCollecter::_collect_dict_for_column(ColumnIterator* column_ite
 }
 
 Status SegmentMetaCollecter::_collect_dict_for_flatjson(ColumnId cid, Column* column) {
-    auto& tablet_column = _segment->tablet_schema().column(cid);
-    if (tablet_column.type() != TYPE_JSON) {
+    ASSIGN_OR_RETURN(const TabletColumn* tablet_column, _get_tablet_column(cid));
+    if (tablet_column->type() != TYPE_JSON) {
         return Status::InvalidArgument("not a flat json column");
     }
-    auto column_reader = _segment->column(cid);
-    RETURN_IF(column_reader == nullptr, Status::NotFound(fmt::format("column not found: {}", tablet_column.name())));
+    ASSIGN_OR_RETURN(auto column_reader, _get_column_reader(cid));
+    if (column_reader == nullptr) {
+        if (_is_missing_default_column(*tablet_column)) {
+            return Status::OK();
+        }
+        return Status::NotFound(fmt::format("column not found: {}", tablet_column->name()));
+    }
+    RETURN_IF(column_reader->sub_readers() == nullptr, Status::OK());
 
     auto& sub_readers = *column_reader->sub_readers();
     for (auto& sub_reader : sub_readers) {
@@ -513,14 +540,46 @@ Status SegmentMetaCollecter::_collect_min(ColumnId cid, Column* column, LogicalT
     return __collect_max_or_min<false>(cid, column, type);
 }
 
+Status SegmentMetaCollecter::_append_default_column_value(ColumnId cid, Column* column) {
+    ASSIGN_OR_RETURN(const TabletColumn* tablet_column, _get_tablet_column(cid));
+    if (_segment->num_rows() == 0) {
+        column->append_nulls(1);
+        return Status::OK();
+    }
+    if (!tablet_column->has_default_value()) {
+        column->append_nulls(1);
+        return Status::OK();
+    }
+
+    ASSIGN_OR_RETURN(auto column_iter, _segment->new_column_iterator_or_default(*tablet_column, nullptr));
+    ColumnIteratorOptions iter_opts;
+    RETURN_IF_ERROR(column_iter->init(iter_opts));
+
+    size_t n = 1;
+    return column_iter->next_batch(&n, column);
+}
+
+Status SegmentMetaCollecter::_collect_count_for_default_column(ColumnId cid, Column* column) {
+    ASSIGN_OR_RETURN(const TabletColumn* tablet_column, _get_tablet_column(cid));
+    if (!tablet_column->has_default_value() && !tablet_column->is_nullable()) {
+        return Status::InternalError(
+                fmt::format("invalid nonexistent column({}) without default value.", tablet_column->name()));
+    }
+
+    bool is_null_default = !tablet_column->has_default_value();
+    column->append_datum(int64_t(is_null_default ? 0 : _segment->num_rows()));
+    return Status::OK();
+}
+
 template <bool is_max>
 Status SegmentMetaCollecter::__collect_max_or_min(ColumnId cid, Column* column, LogicalType type) {
-    if (cid >= _segment->num_columns()) {
-        return Status::NotFound("");
+    ASSIGN_OR_RETURN(const TabletColumn* tablet_column, _get_tablet_column(cid));
+    ASSIGN_OR_RETURN(auto col_reader, _get_column_reader(cid));
+    if (col_reader == nullptr && _is_missing_default_column(*tablet_column)) {
+        return _append_default_column_value(cid, column);
     }
-    ColumnReader* col_reader = const_cast<ColumnReader*>(_segment->column(cid));
     if (col_reader == nullptr || col_reader->segment_zone_map() == nullptr) {
-        return Status::NotFound("");
+        return Status::NotFound("segment zone map not found");
     }
     if (col_reader->column_type() != type) {
         return Status::InternalError("column type mismatch");
@@ -554,8 +613,12 @@ Status SegmentMetaCollecter::_collect_rows(Column* column, LogicalType type) {
 }
 
 Status SegmentMetaCollecter::_collect_count(ColumnId cid, Column* column, LogicalType type) {
-    if (!_column_iterators[cid]) {
-        return Status::InvalidArgument("Invalid Collect Params.");
+    ASSIGN_OR_RETURN(const TabletColumn* tablet_column, _get_tablet_column(cid));
+    if (cid < _is_default_value_column_by_cid.size() && _is_default_value_column_by_cid[cid]) {
+        return _collect_count_for_default_column(cid, column);
+    }
+    if (cid >= _column_iterators.size() || !_column_iterators[cid]) {
+        return Status::InvalidArgument(fmt::format("Invalid Collect Params. column: {}", tablet_column->name()));
     }
 
     uint32_t num_rows = _segment->num_rows();
@@ -568,8 +631,15 @@ Status SegmentMetaCollecter::_collect_count(ColumnId cid, Column* column, Logica
 }
 
 Status SegmentMetaCollecter::_collect_column_size(ColumnId cid, Column* column, LogicalType type) {
-    ColumnReader* col_reader = const_cast<ColumnReader*>(_segment->column(cid));
-    RETURN_IF(col_reader == nullptr, Status::NotFound("column not found: " + std::to_string(cid)));
+    ASSIGN_OR_RETURN(const TabletColumn* tablet_column, _get_tablet_column(cid));
+    ASSIGN_OR_RETURN(auto col_reader, _get_column_reader(cid));
+    if (col_reader == nullptr) {
+        if (_is_missing_default_column(*tablet_column)) {
+            column->append_datum(int64_t(0));
+            return Status::OK();
+        }
+        return Status::NotFound("column not found: " + std::to_string(cid));
+    }
 
     size_t total_mem_footprint = _collect_column_size_recursive(col_reader);
     column->append_datum(int64_t(total_mem_footprint));
@@ -578,8 +648,15 @@ Status SegmentMetaCollecter::_collect_column_size(ColumnId cid, Column* column, 
 
 Status SegmentMetaCollecter::_collect_column_compressed_size(ColumnId cid, Column* column, LogicalType type) {
     // Compressed size estimation: sum of data page sizes via ordinal index ranges
-    ColumnReader* col_reader = const_cast<ColumnReader*>(_segment->column(cid));
-    RETURN_IF(col_reader == nullptr, Status::NotFound("column not found: " + std::to_string(cid)));
+    ASSIGN_OR_RETURN(const TabletColumn* tablet_column, _get_tablet_column(cid));
+    ASSIGN_OR_RETURN(auto col_reader, _get_column_reader(cid));
+    if (col_reader == nullptr) {
+        if (_is_missing_default_column(*tablet_column)) {
+            column->append_datum(int64_t(0));
+            return Status::OK();
+        }
+        return Status::NotFound("column not found: " + std::to_string(cid));
+    }
 
     int64_t total = _collect_column_compressed_size_recursive(col_reader);
     column->append_datum(total);

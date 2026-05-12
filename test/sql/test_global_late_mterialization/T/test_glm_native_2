@@ -2,6 +2,7 @@
 -- case from FE UT GlobalLateMaterializeNativeTest and GlobalLateMaterializationIcebergTest
 
 set enable_global_late_materialization = true;
+set enable_global_late_materialization_cost_based = false;
 set cbo_cte_reuse_rate_v2 = 0;
 
 CREATE TABLE `t0` (

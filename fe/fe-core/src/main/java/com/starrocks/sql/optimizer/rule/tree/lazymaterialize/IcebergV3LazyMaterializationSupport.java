@@ -34,13 +34,24 @@ public class IcebergV3LazyMaterializationSupport implements LazyMaterializationS
     private static final String ROW_SOURCE_ID = "_row_source_id";
     private static final String SCAN_RANGE_ID = "_scan_range_id";
     private static final String ROW_ID = "_row_id";
+    private static final String LAST_UPDATED_SEQUENCE_NUMBER = "_last_updated_sequence_number";
 
     @Override
     public boolean supports(PhysicalScanOperator scanOperator) {
-        PhysicalIcebergScanOperator spec = (PhysicalIcebergScanOperator) scanOperator;
         IcebergTable scanTable = (IcebergTable) scanOperator.getTable();
 
-        return scanTable.isParquetFormat() && scanTable.getFormatVersion() >= 3;
+        if (!scanTable.isParquetFormat() || scanTable.getFormatVersion() < 3) {
+            return false;
+        }
+
+        // Iceberg V3 GLM uses _row_id as part of its internal row-position protocol for fetch/lookup.
+        // If the scan already exposes row lineage columns, they can conflict with these internal locator columns,
+        // so skip GLM for the whole scan.
+        if (scanOperator.getColRefToColumnMetaMap().values().stream()
+                .anyMatch(column -> isRowLineageColumn(column.getName()))) {
+            return false;
+        }
+        return true;
     }
 
     @Override
@@ -109,5 +120,9 @@ public class IcebergV3LazyMaterializationSupport implements LazyMaterializationS
         return result;
     }
 
+    private boolean isRowLineageColumn(String columnName) {
+        return columnName.equalsIgnoreCase(ROW_ID)
+                || columnName.equalsIgnoreCase(LAST_UPDATED_SEQUENCE_NUMBER);
+    }
 
 }

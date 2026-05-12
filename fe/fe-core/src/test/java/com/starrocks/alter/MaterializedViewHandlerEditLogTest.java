@@ -41,7 +41,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
 import com.starrocks.sql.ast.AddRollupClause;
 import com.starrocks.sql.ast.AlterClause;
-import com.starrocks.sql.ast.CreateMaterializedViewStmt;
+import com.starrocks.sql.ast.CreateSyncMVStmt;
 import com.starrocks.sql.ast.DropMaterializedViewStmt;
 import com.starrocks.sql.ast.DropRollupClause;
 import com.starrocks.sql.ast.KeysType;
@@ -112,7 +112,7 @@ public class MaterializedViewHandlerEditLogTest {
     @Test
     public void testProcessCreateMaterializedViewEditLog() throws Exception {
         String sql = "create materialized view mv1 as select k1, sum(v1) from " + TABLE_NAME + " group by k1";
-        CreateMaterializedViewStmt stmt = (CreateMaterializedViewStmt) UtFrameUtils
+        CreateSyncMVStmt stmt = (CreateSyncMVStmt) UtFrameUtils
                 .parseStmtWithNewParser(sql, connectContext);
 
         MaterializedViewHandler handler = new MaterializedViewHandler();
@@ -128,7 +128,7 @@ public class MaterializedViewHandlerEditLogTest {
     @Test
     public void testProcessCreateMaterializedViewEditLogException() throws Exception {
         String sql = "create materialized view mv2 as select k1, sum(v1) from " + TABLE_NAME + " group by k1";
-        CreateMaterializedViewStmt stmt = (CreateMaterializedViewStmt) UtFrameUtils
+        CreateSyncMVStmt stmt = (CreateSyncMVStmt) UtFrameUtils
                 .parseStmtWithNewParser(sql, connectContext);
 
         MaterializedViewHandler handler = new MaterializedViewHandler();

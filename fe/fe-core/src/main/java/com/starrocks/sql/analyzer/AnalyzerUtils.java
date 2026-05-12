@@ -145,6 +145,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -806,6 +807,25 @@ public class AnalyzerUtils {
         return tableRelations;
     }
 
+    public static void prohibitTimeTravelQuery(StatementBase statementBase, String operation) {
+        for (TableRelation tableRelation : collectTableRelations(statementBase)) {
+            if (tableRelation.getQueryPeriod() == null && Strings.isNullOrEmpty(tableRelation.getQueryPeriodString())) {
+                continue;
+            }
+
+            String tableName = tableRelation.getResolveTableName() != null
+                    ? tableRelation.getResolveTableName().toSql()
+                    : tableRelation.getName().toSql();
+            String queryPeriod = Strings.nullToEmpty(tableRelation.getQueryPeriodString()).trim();
+            if (queryPeriod.isEmpty()) {
+                throw new SemanticException("Do not support %s with time travel clause on table %s",
+                        operation, tableName);
+            }
+            throw new SemanticException("Do not support %s with time travel clause `%s` on table %s",
+                    operation, queryPeriod, tableName);
+        }
+    }
+
     public static List<ViewRelation> collectViewRelations(StatementBase statementBase) {
         List<ViewRelation> viewRelations = Lists.newArrayList();
         new AnalyzerUtils.ViewRelationsCollector(viewRelations).visit(statementBase);
@@ -813,9 +833,33 @@ public class AnalyzerUtils {
     }
 
     public static Map<TableName, Relation> collectAllTableAndViewRelations(ParseNode parseNode) {
-        Map<TableName, Relation> allTableAndViewRelations = Maps.newHashMap();
+        if (parseNode == null) {
+            return Collections.emptyMap();
+        }
+        Map<TableName, Relation> allTableAndViewRelations = new LinkedHashMap<>();
         new TableAndViewRelationsCollector(allTableAndViewRelations).visit(parseNode);
         return allTableAndViewRelations;
+    }
+
+    public static List<String> collectAllTableAndViewRelationNamesForAudit(ParseNode parseNode) {
+        Map<TableName, Relation> allTableAndViewRelations = collectAllTableAndViewRelations(parseNode);
+        List<String> relationNames = new ArrayList<>(allTableAndViewRelations.size());
+        for (TableName tableName : allTableAndViewRelations.keySet()) {
+            relationNames.add(formatTableNameForAudit(tableName));
+        }
+        return relationNames;
+    }
+
+    static String formatTableNameForAudit(TableName tableName) {
+        StringBuilder stringBuilder = new StringBuilder();
+        if (tableName.getCatalog() != null) {
+            stringBuilder.append(tableName.getCatalog()).append(".");
+        }
+        if (tableName.getDb() != null) {
+            stringBuilder.append(tableName.getDb()).append(".");
+        }
+        stringBuilder.append(tableName.getTbl());
+        return stringBuilder.toString();
     }
 
     public static List<FileTableFunctionRelation> collectFileTableFunctionRelation(StatementBase statementBase) {
@@ -888,6 +932,31 @@ public class AnalyzerUtils {
         Map<TableName, Table> tables = Maps.newHashMap();
         new AnalyzerUtils.ConnectorTableAndViewCollector(tables).visit(statementBase);
         return tables;
+    }
+
+    public static Map<TableName, Table> collectAllConnectorTableAndViewWithViewDefinition(
+            QueryStatement queryStatement) {
+        Map<TableName, Table> tables = Maps.newHashMap();
+        collectAllConnectorTableAndViewWithViewDefinition(queryStatement, tables);
+        return tables;
+    }
+
+    private static void collectAllConnectorTableAndViewWithViewDefinition(
+            QueryStatement queryStatement, Map<TableName, Table> tables) {
+        Map<TableName, Table> tableNameTableMap = collectAllConnectorTableAndView(queryStatement);
+        for (Map.Entry<TableName, Table> entry : tableNameTableMap.entrySet()) {
+            Table table = entry.getValue();
+            if (table == null || table.isView()) {
+                continue;
+            }
+            tables.put(entry.getKey(), table);
+        }
+
+        Set<ViewRelation> viewRelationSet = Sets.newHashSet(collectViewRelations(queryStatement));
+        for (ViewRelation viewRelation : viewRelationSet) {
+            collectAllConnectorTableAndViewWithViewDefinition(viewRelation.getQueryStatement(), tables);
+            tables.put(viewRelation.getName(), viewRelation.getView());
+        }
     }
 
     private static class TableAndViewCollector extends TableCollector {

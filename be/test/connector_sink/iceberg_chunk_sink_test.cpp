@@ -25,12 +25,14 @@
 #include "base/testutil/scoped_updater.h"
 #include "base/utility/defer_op.h"
 #include "base/utility/integer_util.h"
+#include "column/chunk_extra_data.h"
 #include "common/config_connector_sink_fwd.h"
 #include "connector/connector_chunk_sink.h"
 #include "connector/sink_memory_manager.h"
 #include "exec/pipeline/fragment_context.h"
 #include "formats/file_writer.h"
 #include "formats/utils.h"
+#include "runtime/exec_env.h"
 
 namespace starrocks::connector {
 namespace {
@@ -48,6 +50,9 @@ protected:
         _fragment_context = std::make_shared<pipeline::FragmentContext>();
         _fragment_context->set_runtime_state(std::make_shared<RuntimeState>());
         _runtime_state = _fragment_context->runtime_state();
+        auto* exec_env = ExecEnv::GetInstance();
+        _runtime_state->set_exec_env(exec_env);
+        _runtime_state->set_query_execution_services(&exec_env->query_execution_services());
     }
 
     void TearDown() override {}

@@ -75,7 +75,7 @@ public:
         auto col0 = chunk->get_column_raw_ptr_by_index(0);
         auto col1 = chunk->get_column_raw_ptr_by_index(1);
         auto col2 = chunk->get_column_raw_ptr_by_index(2);
-        for (long key : keys) {
+        for (int64_t key : keys) {
             col0->append_datum(Datum(key));
             col1->append_datum(Datum((int16_t)(key % 100 + 1)));
             col2->append_datum(Datum((int32_t)(key % 1000 + 2)));
@@ -150,7 +150,7 @@ public:
         auto chunk = ChunkHelper::new_chunk(schema, keys.size());
         EXPECT_TRUE(2 == chunk->num_columns());
         auto cols = chunk->mutable_columns();
-        for (long key : keys) {
+        for (int64_t key : keys) {
             cols[0]->append_datum(Datum(key));
             cols[1]->append_datum(Datum((int16_t)(key % 100 + 3)));
         }

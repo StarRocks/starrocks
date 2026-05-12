@@ -104,14 +104,18 @@ enum TExecNodePhase {
 // what to do when hitting a debug point (TQueryOptions.DEBUG_ACTION)
 enum TDebugAction {
   WAIT,
-  FAIL
+  FAIL,
+  BLOCK_SOURCE_OPERATOR,
+  BLOCK_SINK_OPERATOR
 }
 
 struct TKeyRange {
-  1: required i64 begin_key
-  2: required i64 end_key
+  1: optional i64 begin_key
+  2: optional i64 end_key
   3: required Types.TPrimitiveType column_type
   4: required string column_name
+  5: optional list<Exprs.TExpr> list_values
+  6: optional bool has_null
 }
 
 // The information contained in subclasses of ScanNode captured in two separate
@@ -161,6 +165,12 @@ enum TFileFormatType {
     FORMAT_AVRO = 11,
 }
 
+// CDC envelope format for JSON data
+enum TEnvelopeType {
+    NONE = 0,
+    DEBEZIUM = 1,
+}
+
 // One broker range information.
 struct TBrokerRangeDesc {
     1: required Types.TFileType file_type
@@ -185,6 +195,8 @@ struct TBrokerRangeDesc {
     12: optional string jsonpaths
     13: optional string json_root
     14: optional Types.TCompressionType compression_type
+    // CDC envelope format
+    15: optional TEnvelopeType envelope
 }
 
 enum TObjectStoreType {
@@ -666,6 +678,8 @@ struct TOlapScanNode {
   55: optional i32 next_uniq_id
 
   56: optional bool enable_global_late_materialization
+
+  57: optional list<Exprs.TExpr> partition_conjuncts
 }
 
 struct TJDBCScanNode {
@@ -716,6 +730,10 @@ struct TLakeScanNode {
   46: optional i32 next_uniq_id
 
   56: optional bool enable_global_late_materialization
+
+  57: optional TVectorSearchOptions vector_search_options
+
+  60: optional list<Exprs.TExpr> partition_conjuncts
 }
 
 struct TEqJoinCondition {
@@ -1350,6 +1368,7 @@ struct TConnectorScanNode {
   1: optional string connector_name
   // // Scan node for hdfs
   // 2: optional THdfsScanNode hdfs_scan_node
+  3: optional string catalog_type
 }
 
 // binlog meta column names

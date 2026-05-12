@@ -19,6 +19,7 @@ ADD_BE_LIB(ColumnCore
         array_view_column.cpp
         map_column.cpp
         struct_column.cpp
+        raw_buffer.cpp
         column.cpp
         column_filter_range.cpp
         column_visitor.cpp
@@ -36,9 +37,11 @@ ADD_BE_LIB(ColumnCore
         decimalv3_column.cpp
         json_column.cpp
         adaptive_nullable_column.cpp
+        append_with_mask.cpp
         column_helper.cpp
+        column_helper_time.cpp
         datum_convert.cpp
-        type_traits.cpp
+        runtime_type_traits.cpp
         column_viewer.cpp
         column_view/column_view_base.cpp
         column_view/column_view_helper.cpp
@@ -53,17 +56,11 @@ ADD_BE_LIB(ChunkCore
         field.cpp
         schema.cpp
         chunk.cpp
-)
-
-ADD_BE_LIB(Column
         chunk_extra_data.cpp
-        column_access_path.cpp
         chunk_slice.cpp
-        column_helper_time.cpp
-        append_with_mask.cpp
+        column_access_path.cpp
         datum_tuple.cpp
-        stream_chunk.cpp
+        segmented_chunk.cpp
 )
 
 target_link_libraries(ChunkCore PUBLIC ColumnCore)
-target_link_libraries(Column PUBLIC ColumnCore ChunkCore)

@@ -54,6 +54,9 @@ protected:
         fragment_id.lo = 0;
         _runtime_state =
                 std::make_shared<RuntimeState>(fragment_id, query_options, query_globals, ExecEnv::GetInstance());
+        auto* exec_env = ExecEnv::GetInstance();
+        _runtime_state->set_exec_env(exec_env);
+        _runtime_state->set_query_execution_services(&exec_env->query_execution_services());
         // Initialize mem trackers for the runtime state
         _runtime_state->init_instance_mem_tracker();
 

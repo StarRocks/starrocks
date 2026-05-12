@@ -75,8 +75,7 @@ Status OlapMetaScanNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eo
     return Status::OK();
 }
 
-std::vector<std::shared_ptr<pipeline::OperatorFactory>> OlapMetaScanNode::decompose_to_pipeline(
-        pipeline::PipelineBuilderContext* context) {
+StatusOr<pipeline::OpFactories> OlapMetaScanNode::decompose_to_pipeline(pipeline::PipelineBuilderContext* context) {
     auto exec_group = context->find_exec_group_by_plan_node_id(_id);
     context->set_current_execution_group(exec_group);
     auto* morsel_queue_factory = context->morsel_queue_factory_of_source_operator(id());

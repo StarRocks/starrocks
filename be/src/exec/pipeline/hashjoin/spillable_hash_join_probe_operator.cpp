@@ -23,9 +23,12 @@
 #include "common/config_exec_flow_fwd.h"
 #include "common/runtime_profile.h"
 #include "exec/hash_joiner.h"
+#include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/hashjoin/hash_join_probe_operator.h"
 #include "exec/pipeline/hashjoin/hash_joiner_factory.h"
+#include "exec/pipeline/query_context.h"
 #include "exec/spill/executor.h"
+#include "exec/spill/operator_mem_resource_manager.h"
 #include "exec/spill/partition.h"
 #include "exec/spill/spill_components.h"
 #include "exec/spill/spiller.h"
@@ -88,8 +91,8 @@ bool SpillableHashJoinProbeOperator::has_output() const {
     }
 
     if (_processing_partitions.empty()) {
-        as_mutable()->_acquire_next_partitions();
-        _update_status(as_mutable()->_load_all_partition_build_side(runtime_state()));
+        as_mutable()->_acquire_next_partitions(get_factory()->runtime_state());
+        _update_status(as_mutable()->_load_all_partition_build_side(get_factory()->runtime_state()));
         return false;
     }
 
@@ -122,8 +125,9 @@ bool SpillableHashJoinProbeOperator::has_output() const {
             } else if (!_current_reader[i]->has_restore_task()) {
                 // if trigger_restore returns error, should record this status and return it in pull_chunk
                 _update_status(_current_reader[i]->trigger_restore(
-                        runtime_state(), TRACKER_WITH_SPILLER_RES_GUARD(runtime_state(), _probe_spiller,
-                                                                        std::weak_ptr(_current_reader[i]))));
+                        get_factory()->runtime_state(),
+                        TRACKER_WITH_SPILLER_RES_GUARD(get_factory()->runtime_state(), _probe_spiller,
+                                                       std::weak_ptr(_current_reader[i]))));
                 if (!_status().ok()) {
                     return true;
                 }
@@ -152,8 +156,8 @@ bool SpillableHashJoinProbeOperator::need_input() const {
     }
 
     if (_processing_partitions.empty()) {
-        as_mutable()->_acquire_next_partitions();
-        _update_status(as_mutable()->_load_all_partition_build_side(runtime_state()));
+        as_mutable()->_acquire_next_partitions(get_factory()->runtime_state());
+        _update_status(as_mutable()->_load_all_partition_build_side(get_factory()->runtime_state()));
         return false;
     }
 
@@ -501,7 +505,7 @@ bool SpillableHashJoinProbeOperator::spilled() const {
     return _join_builder->spiller()->spilled();
 }
 
-void SpillableHashJoinProbeOperator::_acquire_next_partitions() {
+void SpillableHashJoinProbeOperator::_acquire_next_partitions(RuntimeState* state) {
     // get all spill partition
     if (_build_partitions.empty()) {
         _join_builder->spiller()->get_all_partitions(&_build_partitions);
@@ -514,14 +518,14 @@ void SpillableHashJoinProbeOperator::_acquire_next_partitions() {
     }
 
     size_t bytes_usage = 0;
-    size_t avaliable_bytes =
-            std::min<size_t>(_mem_resource_manager.operator_avaliable_memory_bytes(),
+    size_t available_bytes =
+            std::min<size_t>(spill::OperatorMemoryResourceManager::compute_available_memory_bytes(*state),
                              static_cast<size_t>(_spill_hash_join_probe_op_max_bytes / _degree_of_parallelism));
     // process the partition in memory firstly
     if (_processing_partitions.empty()) {
         for (auto partition : _build_partitions) {
             if (partition->in_mem && !_processed_partitions.count(partition->partition_id)) {
-                if ((partition->mem_size + bytes_usage < avaliable_bytes || _processing_partitions.empty()) &&
+                if ((partition->mem_size + bytes_usage < available_bytes || _processing_partitions.empty()) &&
                     std::find(_processing_partitions.begin(), _processing_partitions.end(), partition) ==
                             _processing_partitions.end()) {
                     _processing_partitions.emplace_back(partition);
@@ -537,7 +541,7 @@ void SpillableHashJoinProbeOperator::_acquire_next_partitions() {
     if (_processing_partitions.empty()) {
         for (const auto* partition : _build_partitions) {
             if (!partition->in_mem && !_processed_partitions.count(partition->partition_id)) {
-                if ((partition->bytes + bytes_usage < avaliable_bytes || _processing_partitions.empty()) &&
+                if ((partition->bytes + bytes_usage < available_bytes || _processing_partitions.empty()) &&
                     std::find(_processing_partitions.begin(), _processing_partitions.end(), partition) ==
                             _processing_partitions.end()) {
                     _processing_partitions.emplace_back(partition);

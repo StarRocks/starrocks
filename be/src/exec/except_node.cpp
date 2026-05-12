@@ -15,6 +15,7 @@
 #include "exec/except_node.h"
 
 #include "column/column_helper.h"
+#include "exec/pipeline/exec_node_pipeline_adapter.h"
 #include "exec/pipeline/limit_operator.h"
 #include "exec/pipeline/pipeline_builder.h"
 #include "exec/pipeline/set/except_build_sink_operator.h"
@@ -80,7 +81,7 @@ void ExceptNode::close(RuntimeState* state) {
     ExecNode::close(state);
 }
 
-pipeline::OpFactories ExceptNode::decompose_to_pipeline(pipeline::PipelineBuilderContext* context) {
+StatusOr<pipeline::OpFactories> ExceptNode::decompose_to_pipeline(pipeline::PipelineBuilderContext* context) {
     using namespace pipeline;
 
     const auto num_operators_generated = _children.size() + 1;
@@ -90,7 +91,7 @@ pipeline::OpFactories ExceptNode::decompose_to_pipeline(pipeline::PipelineBuilde
             std::make_shared<ExceptPartitionContextFactory>(_tuple_id, _children.size() - 1);
 
     // Use the first child to build the hast table by ExceptBuildSinkOperator.
-    OpFactories ops_with_except_build_sink = child(0)->decompose_to_pipeline(context);
+    ASSIGN_OR_RETURN(auto ops_with_except_build_sink, child(0)->decompose_to_pipeline(context));
 
     if (_local_partition_by_exprs.empty()) {
         ops_with_except_build_sink = context->maybe_interpolate_local_shuffle_exchange(
@@ -103,14 +104,15 @@ pipeline::OpFactories ExceptNode::decompose_to_pipeline(pipeline::PipelineBuilde
     ops_with_except_build_sink.emplace_back(std::make_shared<ExceptBuildSinkOperatorFactory>(
             context->next_operator_id(), id(), except_partition_ctx_factory, _child_expr_lists[0]));
     // Initialize OperatorFactory's fields involving runtime filters.
-    this->init_runtime_filter_for_operator(ops_with_except_build_sink.back().get(), context, rc_rf_probe_collector);
+    pipeline::init_runtime_filter_for_operator(*this, ops_with_except_build_sink.back().get(), context,
+                                               rc_rf_probe_collector);
     context->add_pipeline(ops_with_except_build_sink);
     context->push_dependent_pipeline(context->last_pipeline());
     DeferOp pop_dependent_pipeline([context]() { context->pop_dependent_pipeline(); });
 
     // Use the rest children to erase keys from the hash table by ExceptProbeSinkOperator.
     for (size_t i = 1; i < _children.size(); i++) {
-        OpFactories ops_with_except_probe_sink = child(i)->decompose_to_pipeline(context);
+        ASSIGN_OR_RETURN(auto ops_with_except_probe_sink, child(i)->decompose_to_pipeline(context));
         if (_local_partition_by_exprs.empty()) {
             ops_with_except_probe_sink = context->maybe_interpolate_local_shuffle_exchange(
                     runtime_state(), id(), ops_with_except_probe_sink, _child_expr_lists[i]);
@@ -121,7 +123,8 @@ pipeline::OpFactories ExceptNode::decompose_to_pipeline(pipeline::PipelineBuilde
         ops_with_except_probe_sink.emplace_back(std::make_shared<ExceptProbeSinkOperatorFactory>(
                 context->next_operator_id(), id(), except_partition_ctx_factory, _child_expr_lists[i], i - 1));
         // Initialize OperatorFactory's fields involving runtime filters.
-        this->init_runtime_filter_for_operator(ops_with_except_probe_sink.back().get(), context, rc_rf_probe_collector);
+        pipeline::init_runtime_filter_for_operator(*this, ops_with_except_probe_sink.back().get(), context,
+                                                   rc_rf_probe_collector);
         context->add_pipeline(ops_with_except_probe_sink);
     }
 
@@ -130,7 +133,7 @@ pipeline::OpFactories ExceptNode::decompose_to_pipeline(pipeline::PipelineBuilde
     auto except_output_source = std::make_shared<ExceptOutputSourceOperatorFactory>(
             context->next_operator_id(), id(), except_partition_ctx_factory, _children.size() - 1);
     // Initialize OperatorFactory's fields involving runtime filters.
-    this->init_runtime_filter_for_operator(except_output_source.get(), context, rc_rf_probe_collector);
+    pipeline::init_runtime_filter_for_operator(*this, except_output_source.get(), context, rc_rf_probe_collector);
     context->inherit_upstream_source_properties(except_output_source.get(),
                                                 context->source_operator(ops_with_except_build_sink));
     ops_with_except_output_source.emplace_back(std::move(except_output_source));

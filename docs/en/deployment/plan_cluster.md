@@ -2,13 +2,13 @@
 displayed_sidebar: docs
 ---
 
-# Plan StarRocks cluster
+# Plan StarRocks Cluster
 
 This topic describes how to plan resources for your StarRocks cluster in production from the perspectives of node count, CPU core count, memory size, and storage size.
 
 ## Node count
 
-StarRocks mainly consists of two types of components: FE nodes and BE nodes. Each node must be deployed separately on a physical or virtual machine.
+StarRocks mainly consists of two types of components: FE nodes and BE/CN nodes. Each node must be deployed separately on a physical or virtual machine.
 
 ### FE node count
 
@@ -22,7 +22,7 @@ If your application generates highly concurrent query requests, you can add Obse
 
 ### BE node count
 
-BE nodes are responsible for data storage and SQL execution.
+BE nodes are responsible for data storage and SQL execution in **shared-nothing** clusters.
 
 In production, we recommend you deploy at least **THREE** BE nodes in your StarRocks cluster to ensure high data reliability and service availability. A high-availability cluster of BEs is automatically formed when at least three BE nodes are deployed and added to your StarRocks cluster. The failure of one BE node will not affect the overall availability of the BE services.
 
@@ -30,15 +30,15 @@ You can increase the number of BE nodes to enable your StarRocks cluster to proc
 
 ### CN node count
 
-CN nodes are optional components of StarRocks, and are only responsible for SQL execution.
+CN nodes are responsible for data caching and SQL execution in **shared-data** clusters.
 
-You can increase the number of CN nodes to elastically scale compute resources without changing the data distribution in your StarRocks cluster.
+You can increase the number of CN nodes to elastically scale compute resources in your StarRocks cluster.
 
 ## CPU and memory
 
 Usually, the FE service does not consume a lot of CPU and memory resources. We recommend allocating 8 CPU cores and 16 GB RAM to each FE node.
 
-Unlike the FE service, the BE service can be significantly CPU- and memory-intensive if your application works with highly concurrent or complex queries on a large dataset. Therefore, we recommend allocating 16 CPU cores and 64 GB RAM to each BE node.
+Unlike the FE service, the BE/CN service can be significantly CPU- and memory-intensive if your application works with highly concurrent or complex queries on a large dataset. Therefore, we recommend allocating 16 CPU cores and 64 GB RAM to each BE/CN node.
 
 ## Storage capacity
 
@@ -85,3 +85,9 @@ If the BE storage space runs out as your raw data grows, you can supplement it b
 - Add cloud storage
 
   If your StarRocks cluster is deployed on cloud, you can scale up your cloud storage on demand. For detailed instructions, contact your cloud provider.
+
+### CN storage
+
+Raw data in shared-data clusters is stored in remote storage. You can scale the storage space whenever needed.
+
+The local disk for a CN node is used to cache hot data for query acceleration. You can estimate the local disk space based on the hot data size of your daily business scenario.

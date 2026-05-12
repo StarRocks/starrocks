@@ -2,6 +2,9 @@
 set enable_global_late_materialization = true;
 -- result:
 -- !result
+set enable_global_late_materialization_cost_based = false;
+-- result:
+-- !result
 CREATE TABLE tablepk (pkkey int, pkvalue int) PRIMARY KEY(pkkey);
 -- result:
 -- !result

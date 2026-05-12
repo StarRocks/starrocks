@@ -43,7 +43,7 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.sql.ast.AggregateType;
-import com.starrocks.sql.ast.CreateMaterializedViewStmt;
+import com.starrocks.sql.ast.CreateSyncMVStmt;
 import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.MVColumnItem;
 import com.starrocks.type.IntegerType;
@@ -57,7 +57,7 @@ import java.util.List;
 
 public class MaterializedViewHandlerTest {
     @Test
-    public void testDifferentBaseTable(@Injectable CreateMaterializedViewStmt createMaterializedViewStmt,
+    public void testDifferentBaseTable(@Injectable CreateSyncMVStmt createMaterializedViewStmt,
                                        @Injectable Database db,
                                        @Injectable OlapTable olapTable) {
         new Expectations() {
@@ -79,7 +79,7 @@ public class MaterializedViewHandlerTest {
     }
 
     @Test
-    public void testNotNormalTable(@Injectable CreateMaterializedViewStmt createMaterializedViewStmt,
+    public void testNotNormalTable(@Injectable CreateSyncMVStmt createMaterializedViewStmt,
                                    @Injectable Database db,
                                    @Injectable OlapTable olapTable) {
         final String baseIndexName = "t1";
@@ -104,7 +104,7 @@ public class MaterializedViewHandlerTest {
     }
 
     @Test
-    public void testErrorBaseIndexName(@Injectable CreateMaterializedViewStmt createMaterializedViewStmt,
+    public void testErrorBaseIndexName(@Injectable CreateSyncMVStmt createMaterializedViewStmt,
                                        @Injectable Database db,
                                        @Injectable OlapTable olapTable) {
         final String baseIndexName = "t1";
@@ -131,7 +131,7 @@ public class MaterializedViewHandlerTest {
     }
 
     @Test
-    public void testRollupReplica(@Injectable CreateMaterializedViewStmt createMaterializedViewStmt,
+    public void testRollupReplica(@Injectable CreateSyncMVStmt createMaterializedViewStmt,
                                   @Injectable Database db,
                                   @Injectable OlapTable olapTable,
                                   @Injectable PhysicalPartition partition,
@@ -169,7 +169,7 @@ public class MaterializedViewHandlerTest {
     }
 
     @Test
-    public void testDuplicateMVName(@Injectable CreateMaterializedViewStmt createMaterializedViewStmt,
+    public void testDuplicateMVName(@Injectable CreateSyncMVStmt createMaterializedViewStmt,
                                     @Injectable OlapTable olapTable, @Injectable Database db) {
         final String mvName = "mv1";
         new Expectations() {
@@ -191,7 +191,7 @@ public class MaterializedViewHandlerTest {
     }
 
     @Test
-    public void testInvalidAggregateType(@Injectable CreateMaterializedViewStmt createMaterializedViewStmt,
+    public void testInvalidAggregateType(@Injectable CreateSyncMVStmt createMaterializedViewStmt,
                                          @Injectable OlapTable olapTable, @Injectable Database db) {
         final String mvName = "mv1";
         final String mvColumName = "mv_sum_k1";
@@ -224,7 +224,7 @@ public class MaterializedViewHandlerTest {
     }
 
     @Test
-    public void testInvalidKeysType(@Injectable CreateMaterializedViewStmt createMaterializedViewStmt,
+    public void testInvalidKeysType(@Injectable CreateSyncMVStmt createMaterializedViewStmt,
                                     @Injectable OlapTable olapTable, @Injectable Database db) {
         new Expectations() {
             {
@@ -246,7 +246,7 @@ public class MaterializedViewHandlerTest {
     }
 
     @Test
-    public void testDuplicateTable(@Injectable CreateMaterializedViewStmt createMaterializedViewStmt,
+    public void testDuplicateTable(@Injectable CreateSyncMVStmt createMaterializedViewStmt,
                                    @Injectable OlapTable olapTable, @Injectable Database db) {
         final String mvName = "mv1";
         final String columnName1 = "k1";
@@ -288,7 +288,7 @@ public class MaterializedViewHandlerTest {
     }
 
     @Test
-    public void checkInvalidPartitionKeyMV(@Injectable CreateMaterializedViewStmt createMaterializedViewStmt,
+    public void checkInvalidPartitionKeyMV(@Injectable CreateSyncMVStmt createMaterializedViewStmt,
                                            @Injectable OlapTable olapTable, @Injectable Database db) {
         final String mvName = "mv1";
         final String columnName1 = "k1";

@@ -25,16 +25,13 @@ import com.starrocks.catalog.NullablePartitionKey;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.connector.ConnectorMetadatRequestContext;
+import com.starrocks.connector.ConnectorMetadataRequestContext;
 import com.starrocks.connector.ConnectorPartitionTraits;
 import com.starrocks.connector.PartitionInfo;
-import com.starrocks.connector.PartitionUtil;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.LiteralExpr;
 import com.starrocks.sql.ast.expression.LiteralExprFactory;
 import com.starrocks.sql.ast.expression.NullLiteral;
-import com.starrocks.sql.common.PCellSortedSet;
 import com.starrocks.type.Type;
 import org.apache.commons.lang.NotImplementedException;
 
@@ -90,7 +87,7 @@ public abstract class DefaultTraits extends ConnectorPartitionTraits {
             return Lists.newArrayList(table.getName());
         }
 
-        ConnectorMetadatRequestContext requestContext = new ConnectorMetadatRequestContext();
+        ConnectorMetadataRequestContext requestContext = new ConnectorMetadataRequestContext();
         requestContext.setQueryMVRewrite(this.isQueryMVRewrite());
         return GlobalStateMgr.getCurrentState().getMetadataMgr().listPartitionNames(
                 table.getCatalogName(), getCatalogDBName(), getTableName(), requestContext);
@@ -99,18 +96,6 @@ public abstract class DefaultTraits extends ConnectorPartitionTraits {
     @Override
     public List<Column> getPartitionColumns() {
         return table.getPartitionColumns();
-    }
-
-    @Override
-    public PCellSortedSet getPartitionKeyRange(Column partitionColumn, Expr partitionExpr)
-            throws AnalysisException {
-        return PartitionUtil.getRangePartitionMapOfExternalTable(
-                table, partitionColumn, getPartitionNames(), partitionExpr);
-    }
-
-    @Override
-    public PCellSortedSet getPartitionCells(List<Column> partitionColumns) throws AnalysisException {
-        return PartitionUtil.getMVPartitionToCells(table, partitionColumns, getPartitionNames());
     }
 
     @Override
@@ -179,22 +164,28 @@ public abstract class DefaultTraits extends ConnectorPartitionTraits {
 
                 if (table.getType() == Table.TableType.ICEBERG) {
                     long basePartitionVersion = basePartitionInfo.getVersion();
-                    long basePartitionModifiedTime = basePartitionInfo.getLastRefreshTime();
                     long latestPartitionVersion = latestPartition.getVersion();
-                    long latestPartitionModifiedTime = latestPartition.getModifiedTime();
                     long normalizedBasePartitionModifiedTime =
-                            normalizeIcebergModifiedTimeToMicros(basePartitionModifiedTime);
+                            normalizeIcebergModifiedTimeToMicros(basePartitionInfo.getLastRefreshTime());
                     long normalizedLatestPartitionModifiedTime =
-                            normalizeIcebergModifiedTimeToMicros(latestPartitionModifiedTime);
-                    if (basePartitionVersion == -1 || basePartitionVersion == basePartitionModifiedTime) {
-                        // 1. for historical iceberg mv, the version is the modified time
-                        if (normalizedLatestPartitionModifiedTime >= 0
-                                && normalizedLatestPartitionModifiedTime != normalizedBasePartitionModifiedTime) {
+                            normalizeIcebergModifiedTimeToMicros(latestPartition.getModifiedTime());
+                    if (normalizedLatestPartitionModifiedTime > 0) {
+                        // last_updated_at is available: use modifiedTime as the primary signal.
+                        // Covers both live-snapshot partitions and historical MVs whose basePartitionVersion
+                        // was stored as a timestamp.
+                        if (normalizedLatestPartitionModifiedTime != normalizedBasePartitionModifiedTime) {
                             result.add(basePartitionName);
                         }
                     } else {
-                        // 2. for new iceberg mv, the version is the snapshot sequence number
-                        if (latestPartitionVersion >= 0 && latestPartitionVersion != basePartitionVersion) {
+                        // last_updated_at is null: the partition's snapshot has been GC'd.
+                        // Historical MVs stored basePartitionVersion as a millisecond timestamp (~10^12),
+                        // which is always larger than Integer.MAX_VALUE. Stats fingerprints are in [0, 2^31-1].
+                        // If basePartitionVersion looks like a timestamp, skip the comparison to avoid a
+                        // spurious refresh — we have no reliable signal to compare against.
+                        boolean isLegacyTimestampVersion = basePartitionVersion == -1
+                                || basePartitionVersion > Integer.MAX_VALUE;
+                        if (!isLegacyTimestampVersion && latestPartitionVersion >= 0
+                                && latestPartitionVersion != basePartitionVersion) {
                             result.add(basePartitionName);
                         }
                     }

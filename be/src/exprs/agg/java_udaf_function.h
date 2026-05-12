@@ -106,10 +106,13 @@ public:
         auto* udaf_ctx = get_java_udaf_context(ctx);
         DCHECK(udaf_ctx != nullptr);
         jvalue val = udaf_ctx->_func->finalize(this->data(state).handle);
-        auto st = append_jvalue(ctx->get_return_type(), udaf_ctx->finalize->method_desc[0].is_box, to, val);
+        // STRUCT-bearing return types route through append_jvalue's STRUCT path with the
+        // cached UdfTypeDesc supplying formal record class info per nested STRUCT slot.
+        auto st = append_jvalue(ctx->get_return_type(), udaf_ctx->ctx->finalize->method_desc[0].is_box, to, val,
+                                ctx->error_if_overflow(), udaf_ctx->ctx->finalize_return_type_desc.handle());
         SET_FUNCTION_CONTEXT_ERR(st, ctx);
         RETURN_IF_UNLIKELY(!st.ok(), (void)0);
-        release_jvalue(udaf_ctx->finalize->method_desc[0].is_box, val);
+        release_jvalue(udaf_ctx->ctx->finalize->method_desc[0].is_box, val);
     }
 
     void convert_to_serialize_format(FunctionContext* ctx, const Columns& src, size_t batch_size,
@@ -119,7 +122,8 @@ public:
         auto* udf_ctxs = get_java_udaf_context(ctx);
         // 1 convert input as state
         // 1.1 create state list
-        auto rets = helper.batch_call(ctx, udf_ctxs->handle.handle(), udf_ctxs->create->method.handle(), batch_size);
+        auto rets =
+                helper.batch_call(ctx, udf_ctxs->handle.handle(), udf_ctxs->ctx->create->method.handle(), batch_size);
         RETURN_IF_UNLIKELY_NULL(rets, (void)0);
         // 1.2 convert input as input array
         int num_cols = ctx->get_num_args();
@@ -137,17 +141,22 @@ public:
         for (int i = 0; i < src.size(); ++i) {
             raw_input_ptrs[i] = src[i].get();
         }
-        auto st =
-                JavaDataTypeConverter::convert_to_boxed_array(ctx, raw_input_ptrs.data(), num_cols, batch_size, &args);
+        std::vector<jobject> arg_type_descs;
+        arg_type_descs.reserve(udf_ctxs->ctx->update_arg_type_descs.size());
+        for (const auto& gref : udf_ctxs->ctx->update_arg_type_descs) {
+            arg_type_descs.emplace_back(gref.handle());
+        }
+        auto st = JavaDataTypeConverter::convert_to_boxed_array(ctx, raw_input_ptrs.data(), num_cols, batch_size, &args,
+                                                                &arg_type_descs);
         SET_FUNCTION_CONTEXT_ERR(st, ctx);
         RETURN_IF_UNLIKELY(!st.ok(), (void)0);
 
         // 2 batch call update
-        helper.batch_update_state(ctx, udf_ctxs->handle.handle(), udf_ctxs->update->method.handle(), args.data(),
+        helper.batch_update_state(ctx, udf_ctxs->handle.handle(), udf_ctxs->ctx->update->method.handle(), args.data(),
                                   args.size());
         // 3 get serialize size
         auto serialize_szs =
-                (jintArray)helper.int_batch_call(ctx, rets, udf_ctxs->serialize_size->method.handle(), batch_size);
+                (jintArray)helper.int_batch_call(ctx, rets, udf_ctxs->ctx->serialize_size->method.handle(), batch_size);
         RETURN_IF_UNLIKELY_NULL(serialize_szs, (void)0);
         LOCAL_REF_GUARD_ENV(env, serialize_szs);
 
@@ -164,7 +173,7 @@ public:
         RETURN_IF_UNLIKELY_NULL(buffer_array, (void)0);
         LOCAL_REF_GUARD_ENV(env, buffer_array);
         jobject state_and_buffer[2] = {rets, buffer_array};
-        helper.batch_update_state(ctx, udf_ctxs->handle.handle(), udf_ctxs->serialize->method.handle(),
+        helper.batch_update_state(ctx, udf_ctxs->handle.handle(), udf_ctxs->ctx->serialize->method.handle(),
                                   state_and_buffer, 2);
 
         // 5 ready
@@ -204,6 +213,18 @@ public:
 
     // batch interface
 
+    // Snapshot the per-arg UdfTypeDesc handles cached on the shared context. Slots whose
+    // SQL subtree contains no STRUCT are stored as null-handle entries; the boxer falls
+    // back to JavaArrayConverter for those subtrees.
+    static std::vector<jobject> _collect_update_arg_type_descs(JavaUDAFUniqueContext* udf_ctxs) {
+        std::vector<jobject> out;
+        out.reserve(udf_ctxs->ctx->update_arg_type_descs.size());
+        for (const auto& gref : udf_ctxs->ctx->update_arg_type_descs) {
+            out.emplace_back(gref.handle());
+        }
+        return out;
+    }
+
     void update_batch(FunctionContext* ctx, size_t batch_size, size_t state_offset, const Column** columns,
                       AggDataPtr* states) const override {
         auto& helper = JVMFunctionHelper::getInstance();
@@ -217,10 +238,12 @@ public:
         {
             auto states_arr = JavaDataTypeConverter::convert_to_states(ctx, states, state_offset, batch_size);
             RETURN_IF_UNLIKELY_NULL(states_arr, (void)0);
-            auto st = JavaDataTypeConverter::convert_to_boxed_array(ctx, columns, num_cols, batch_size, &args);
+            auto arg_type_descs = _collect_update_arg_type_descs(udf_ctxs);
+            auto st = JavaDataTypeConverter::convert_to_boxed_array(ctx, columns, num_cols, batch_size, &args,
+                                                                    &arg_type_descs);
             SET_FUNCTION_CONTEXT_ERR(st, ctx);
             RETURN_IF_UNLIKELY(!st.ok(), (void)0);
-            helper.batch_update(ctx, udf_ctxs->handle.handle(), udf_ctxs->update->method.handle(), states_arr,
+            helper.batch_update(ctx, udf_ctxs->handle.handle(), udf_ctxs->ctx->update->method.handle(), states_arr,
                                 args.data(), args.size());
         }
     }
@@ -238,10 +261,12 @@ public:
             auto states_arr = JavaDataTypeConverter::convert_to_states_with_filter(ctx, states, state_offset,
                                                                                    filter.data(), batch_size);
             RETURN_IF_UNLIKELY_NULL(states_arr, (void)0);
-            auto st = JavaDataTypeConverter::convert_to_boxed_array(ctx, columns, num_cols, batch_size, &args);
+            auto arg_type_descs = _collect_update_arg_type_descs(udf_ctxs);
+            auto st = JavaDataTypeConverter::convert_to_boxed_array(ctx, columns, num_cols, batch_size, &args,
+                                                                    &arg_type_descs);
             SET_FUNCTION_CONTEXT_ERR(st, ctx);
             RETURN_IF_UNLIKELY(!st.ok(), (void)0);
-            helper.batch_update_if_not_null(ctx, udf_ctxs->handle.handle(), udf_ctxs->update->method.handle(),
+            helper.batch_update_if_not_null(ctx, udf_ctxs->handle.handle(), udf_ctxs->ctx->update->method.handle(),
                                             states_arr, args.data(), args.size());
         }
     }
@@ -257,7 +282,9 @@ public:
         env->PushLocalFrame(num_cols * 3 + 1);
         auto defer = DeferOp([env = env]() { env->PopLocalFrame(nullptr); });
         {
-            auto st = JavaDataTypeConverter::convert_to_boxed_array(ctx, columns, num_cols, batch_size, &args);
+            auto arg_type_descs = _collect_update_arg_type_descs(udf_ctxs);
+            auto st = JavaDataTypeConverter::convert_to_boxed_array(ctx, columns, num_cols, batch_size, &args,
+                                                                    &arg_type_descs);
             SET_FUNCTION_CONTEXT_ERR(st, ctx);
             RETURN_IF_UNLIKELY(!st.ok(), (void)0);
 
@@ -314,7 +341,7 @@ public:
         };
         auto merger = [&](jobject state_array, jobject buffer_array) {
             jobject state_and_buffer[2] = {state_array, buffer_array};
-            helper.batch_update_state(ctx, udf_ctxs->handle.handle(), udf_ctxs->merge->method.handle(),
+            helper.batch_update_state(ctx, udf_ctxs->handle.handle(), udf_ctxs->ctx->merge->method.handle(),
                                       state_and_buffer, 2);
         };
         _merge_batch_process(ctx, std::move(provider), std::move(merger), column, 0, batch_size);
@@ -334,7 +361,7 @@ public:
         };
         auto merger = [&](jobject state_array, jobject buffer_array) {
             jobject state_and_buffer[] = {buffer_array};
-            helper.batch_update_if_not_null(ctx, udf_ctxs->handle.handle(), udf_ctxs->merge->method.handle(),
+            helper.batch_update_if_not_null(ctx, udf_ctxs->handle.handle(), udf_ctxs->ctx->merge->method.handle(),
                                             state_array, state_and_buffer, 1);
         };
         _merge_batch_process(ctx, std::move(provider), std::move(merger), column, 0, batch_size);
@@ -354,7 +381,7 @@ public:
         };
         auto merger = [&](jobject state_array, jobject buffer_array) {
             jobject state_and_buffer[2] = {state_array, buffer_array};
-            helper.batch_update_state(ctx, udf_ctxs->handle.handle(), udf_ctxs->merge->method.handle(),
+            helper.batch_update_state(ctx, udf_ctxs->handle.handle(), udf_ctxs->ctx->merge->method.handle(),
                                       state_and_buffer, 2);
         };
         _merge_batch_process(ctx, std::move(provider), std::move(merger), column, start, size);
@@ -386,8 +413,8 @@ public:
         LOCAL_REF_GUARD_ENV(env, state_array);
 
         // step 2 serialize size
-        auto serialize_szs = (jintArray)helper.int_batch_call(ctx, state_array,
-                                                              udf_ctxs->serialize_size->method.handle(), batch_size);
+        auto serialize_szs = (jintArray)helper.int_batch_call(
+                ctx, state_array, udf_ctxs->ctx->serialize_size->method.handle(), batch_size);
         RETURN_IF_UNLIKELY_NULL(serialize_szs, (void)0);
         LOCAL_REF_GUARD_ENV(env, serialize_szs);
 
@@ -404,7 +431,7 @@ public:
         auto buffer_array = helper.create_object_array(udf_ctxs->buffer->handle(), batch_size);
         LOCAL_REF_GUARD_ENV(env, buffer_array);
         jobject state_and_buffer[2] = {state_array, buffer_array};
-        helper.batch_update_state(ctx, udf_ctxs->handle.handle(), udf_ctxs->serialize->method.handle(),
+        helper.batch_update_state(ctx, udf_ctxs->handle.handle(), udf_ctxs->ctx->serialize->method.handle(),
                                   state_and_buffer, 2);
 
         int offsets = 0;
@@ -443,19 +470,38 @@ public:
         // 2. batch call finalize
         CHECK(to->empty());
         // 3. get result from column
-        auto res = helper.batch_call(ctx, udf_ctxs->handle.handle(), udf_ctxs->finalize->method.handle(), &state_array,
-                                     1, batch_size);
+        auto res = helper.batch_call(ctx, udf_ctxs->handle.handle(), udf_ctxs->ctx->finalize->method.handle(),
+                                     &state_array, 1, batch_size);
         RETURN_IF_UNLIKELY_NULL(res, (void)0);
         LOCAL_REF_GUARD_ENV(env, res);
 
-        LogicalType type = udf_ctxs->finalize->method_desc[0].type;
+        // Use the SQL return type's logical type/scale rather than the Java-parsed method
+        // descriptor type. For DECIMAL, method_desc[0].type is a coarse BigDecimal sentinel;
+        // the true precision/scale lives on the UDAF's declared return type.
+        const auto& return_type = ctx->get_return_type();
+        jobject return_desc = udf_ctxs->ctx->finalize_return_type_desc.handle();
+        auto write_result = [&](Column* col) {
+            if (return_desc != nullptr) {
+                // STRUCT subtree in the return: route through the unified Java writeResult,
+                // which walks the UdfTypeDesc tree and drains records / lists / maps /
+                // scalars into the native column tree.
+                auto st = helper.write_result(res, static_cast<int>(batch_size), reinterpret_cast<jlong>(col),
+                                              return_desc, ctx->error_if_overflow());
+                SET_FUNCTION_CONTEXT_ERR(st, ctx);
+                return;
+            }
+            // The unified writer dispatches DECIMAL types internally; precision/scale
+            // and the overflow flag are ignored for non-DECIMAL slots.
+            helper.get_result_from_boxed_array(ctx, return_type.type, col, res, batch_size, return_type.precision,
+                                               return_type.scale, ctx->error_if_overflow());
+        };
         // For nullable inputs, our UDAF does not produce nullable results
         if (!to->is_nullable()) {
             MutableColumnPtr wrapper = const_cast<Column*>(to)->as_mutable_ptr();
             auto output = NullableColumn::create(std::move(wrapper), NullColumn::create());
-            helper.get_result_from_boxed_array(ctx, type, output.get(), res, batch_size);
+            write_result(output.get());
         } else {
-            helper.get_result_from_boxed_array(ctx, type, to, res, batch_size);
+            write_result(to);
             (void)ColumnHelper::update_nested_has_null(to);
             down_cast<NullableColumn*>(to)->update_has_null();
         }

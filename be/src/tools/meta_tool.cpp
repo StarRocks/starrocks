@@ -39,6 +39,7 @@
 #include <thrift/transport/TBufferTransports.h>
 #include <thrift/transport/TSocket.h>
 
+#include <cinttypes>
 #include <fstream>
 #include <iostream>
 #include <set>
@@ -51,6 +52,7 @@
 #include "common/config_exec_fwd.h"
 #include "common/config_storage_fwd.h"
 #include "common/configbase.h"
+#include "common/metrics/process_metrics_registry.h"
 #include "common/status.h"
 #include "common/util/debug_util.h"
 #include "fs/fs.h"
@@ -93,7 +95,6 @@
 #include "storage/tablet_meta.h"
 #include "storage/tablet_meta_manager.h"
 #include "storage/zone_map_detail.h"
-#include "util/global_metrics_registry.h"
 
 using starrocks::DataDir;
 using starrocks::KVStore;
@@ -120,11 +121,12 @@ using starrocks::ColumnIndexTypePB;
 using starrocks::OrdinalIndexReader;
 
 DEFINE_string(root_path, "", "storage root path");
-DEFINE_string(operation, "",
-              "valid operation: get_meta, flag, load_meta, delete_meta, delete_rowset_meta, get_persistent_index_meta, "
-              "delete_persistent_index_meta, show_meta, check_table_meta_consistency, print_lake_metadata, "
-              "print_lake_bundle_metadata, print_lake_txn_log, print_lake_schema, dump_zonemap, "
-              "dump_lake_persistent_index_sst, dump_page_footer");
+DEFINE_string(
+        operation, "",
+        "valid operation: get_meta, flag, load_meta, delete_meta, delete_rowset_meta, get_persistent_index_meta, "
+        "delete_persistent_index_meta, show_meta, check_table_meta_consistency, print_lake_metadata, "
+        "print_lake_bundle_metadata, print_lake_txn_log, print_lake_combined_txn_log, print_lake_schema, dump_zonemap, "
+        "dump_lake_persistent_index_sst, dump_page_footer");
 DEFINE_int64(tablet_id, 0, "tablet_id for tablet meta");
 DEFINE_string(tablet_uid, "", "tablet_uid for tablet meta");
 DEFINE_int64(table_id, 0, "table id for table meta");
@@ -211,6 +213,8 @@ std::string get_usage(const std::string& progname) {
       cat <tablet_meta_file.meta> | {progname} --operation=print_lake_bundle_metadata
     print_lake_txn_log:
       cat <tablet_transaction_log_file.log> | {progname} --operation=print_lake_txn_log
+    print_lake_combined_txn_log:
+      cat <combined_txn_log_file.log> | {progname} --operation=print_lake_combined_txn_log
     print_lake_schema:
       cat <tablet_schema_file> | {progname} --operation=print_lake_schema
     lake_datafile_gc:
@@ -606,9 +610,10 @@ void list_meta(DataDir* data_dir) {
            "pending_rowset_meta_bytes");
     for (auto& e : stats.tablets) {
         auto& st = e.second;
-        printf("%8ld %8ld %18zu %4zu %16zu %8zu %18zu %6zu %18lu %18lu %26lu\n", st.table_id, st.tablet_id,
-               st.tablet_meta_bytes, st.log_count, st.log_meta_bytes, st.delvec_count, st.delvec_meta_bytes,
-               st.rowset_count, st.rowset_meta_bytes, st.pending_rowset_count, st.pending_rowset_meta_bytes);
+        printf("%8" PRId64 " %8" PRId64 " %18zu %4zu %16zu %8zu %18zu %6zu %18zu %18zu %26zu\n",
+               static_cast<int64_t>(st.table_id), static_cast<int64_t>(st.tablet_id), st.tablet_meta_bytes,
+               st.log_count, st.log_meta_bytes, st.delvec_count, st.delvec_meta_bytes, st.rowset_count,
+               st.rowset_meta_bytes, st.pending_rowset_count, st.pending_rowset_meta_bytes);
     }
     printf("  Total KV: %zu Bytes: %zu Tablets: %zu (PK: %zu Other: %zu) Error: %zu\n", stats.total_count,
            stats.total_meta_bytes, stats.tablets.size(), stats.update_tablet_count, stats.tablet_count,
@@ -1250,7 +1255,7 @@ Status SegmentDump::_output_short_key_string(const std::vector<ColItem>& cols, s
 #define M(logical_type)                                                                                   \
     case logical_type: {                                                                                  \
         Datum data;                                                                                       \
-        data.set<TypeTraits<logical_type>::CppType>(*(TypeTraits<logical_type>::CppType*)(tmp_mem));      \
+        data.set<StorageCppType<logical_type>>(*(StorageCppType<logical_type>*)(tmp_mem));                \
         result->append(" key");                                                                           \
         result->append(std::to_string(idx));                                                              \
         result->append("(");                                                                              \
@@ -1702,7 +1707,9 @@ int meta_tool_main(int argc, char** argv) {
     }
     starrocks::date::init_date_cache();
     starrocks::config::disable_storage_page_cache = true;
-    starrocks::register_mem_chunk_allocator_metrics(starrocks::GlobalMetricsRegistry::instance()->metrics());
+    // Metric singletons keep registry back-pointers, so the process registry must outlive shutdown.
+    static auto* process_metrics_registry = new starrocks::ProcessMetricsRegistry("starrocks_be");
+    starrocks::register_mem_chunk_allocator_metrics(process_metrics_registry->root_registry());
 
     if (empty_args || FLAGS_operation.empty()) {
         show_usage();
@@ -1995,6 +2002,21 @@ int meta_tool_main(int argc, char** argv) {
         std::string json;
         std::string error;
         if (!json2pb::ProtoMessageToJson(txn_log, &json, options, &error)) {
+            std::cerr << "Fail to convert protobuf to json: " << error << '\n';
+            return -1;
+        }
+        std::cout << json << '\n';
+    } else if (FLAGS_operation == "print_lake_combined_txn_log") {
+        starrocks::CombinedTxnLogPB combined_txn_log;
+        if (!combined_txn_log.ParseFromIstream(&std::cin)) {
+            std::cerr << "Fail to parse combined txn log\n";
+            return -1;
+        }
+        json2pb::Pb2JsonOptions options;
+        options.pretty_json = true;
+        std::string json;
+        std::string error;
+        if (!json2pb::ProtoMessageToJson(combined_txn_log, &json, options, &error)) {
             std::cerr << "Fail to convert protobuf to json: " << error << '\n';
             return -1;
         }

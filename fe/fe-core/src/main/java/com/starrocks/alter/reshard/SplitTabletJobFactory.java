@@ -15,6 +15,10 @@
 package com.starrocks.alter.reshard;
 
 import com.google.common.base.Preconditions;
+import com.starrocks.catalog.ColocateRange;
+import com.starrocks.catalog.ColocateRangeMgr;
+import com.starrocks.catalog.ColocateRangeUtils;
+import com.starrocks.catalog.ColocateTableIndex;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndex.IndexExtState;
@@ -25,6 +29,7 @@ import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
+import com.starrocks.catalog.Tuple;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.concurrent.lock.AutoCloseableLock;
 import com.starrocks.common.util.concurrent.lock.LockType;
@@ -74,6 +79,15 @@ public class SplitTabletJobFactory implements TabletReshardJobFactory {
         if (!table.isRangeDistribution()) {
             throw new StarRocksException("Unsupported distribution type " + table.getDefaultDistributionInfo().getType()
                     + " in table " + db.getFullName() + '.' + table.getName());
+        }
+
+        // Block re-split while any peer GroupId is unstable: range-colocate group membership is
+        // shared across DBs, so a still-unaligned split would compound the unaligned state.
+        ColocateTableIndex colocateTableIndex = GlobalStateMgr.getCurrentState().getColocateTableIndex();
+        ColocateTableIndex.GroupId myGroupId = colocateTableIndex.getRangeColocateGroupId(table.getId());
+        if (myGroupId != null && colocateTableIndex.isAnyGroupWithSameGrpIdUnstable(myGroupId.grpId)) {
+            throw new StarRocksException("Cannot split tablets for range-colocate group "
+                    + myGroupId.grpId + ": group is unstable; wait for alignment to complete before retrying");
         }
 
         Map<Long, ReshardingPhysicalPartition> reshardingPhysicalPartitions = createReshardingPhysicalPartitions();
@@ -295,14 +309,50 @@ public class SplitTabletJobFactory implements TabletReshardJobFactory {
 
     private void createNewShards(Map<Long, ReshardingPhysicalPartition> reshardingPhysicalPartitions)
             throws StarRocksException {
+        ColocateTableIndex colocateTableIndex = GlobalStateMgr.getCurrentState().getColocateTableIndex();
+        ColocateTableIndex.GroupId groupId = colocateTableIndex.getRangeColocateGroupId(table.getId());
+        // Snapshot colocate ranges once: createShards inside the loop only reads the same
+        // grpId, and the ranges list is stable for the duration of this DDL (the unstable
+        // guard above blocks concurrent splits).
+        List<ColocateRange> colocateRanges = groupId == null ? null
+                : colocateTableIndex.getColocateRangeMgr().getColocateRanges(groupId.grpId);
+        int colocateColumnCount = groupId == null ? 0
+                : colocateTableIndex.getGroupSchema(groupId).getColocateColumnCount();
+
         for (ReshardingPhysicalPartition reshardingPhysicalPartition : reshardingPhysicalPartitions.values()) {
             long physicalPartitionId = reshardingPhysicalPartition.getPhysicalPartitionId();
+            PhysicalPartition physicalPartition = table.getPhysicalPartition(physicalPartitionId);
             for (ReshardingMaterializedIndex reshardingIndex : reshardingPhysicalPartition
                     .getReshardingIndexes().values()) {
                 MaterializedIndex newIndex = reshardingIndex.getMaterializedIndex();
+                MaterializedIndex oldIndex = physicalPartition == null
+                        ? null
+                        : physicalPartition.getIndex(reshardingIndex.getMaterializedIndexId());
                 Map<Long, List<Long>> oldToNewTabletIds = new HashMap<>();
+                Map<Long, List<Long>> oldShardIdToGroupIds = new HashMap<>();
                 for (ReshardingTablet reshardingTablet : reshardingIndex.getReshardingTablets()) {
-                    oldToNewTabletIds.put(reshardingTablet.getFirstOldTabletId(), reshardingTablet.getNewTabletIds());
+                    long oldTabletId = reshardingTablet.getFirstOldTabletId();
+                    oldToNewTabletIds.put(oldTabletId, reshardingTablet.getNewTabletIds());
+                    List<Long> groupIds = new ArrayList<>(2);
+                    groupIds.add(newIndex.getShardGroupId()); // SPREAD group is unchanged
+                    if (colocateRanges != null) {
+                        // Range-colocate invariant (P1): every tablet of a range-colocate table
+                        // has a TabletRange. Fail fast rather than fall back to prefix=null,
+                        // which would silently route new shards into the first ColocateRange's
+                        // PACK group — wrong once the group has multiple ranges.
+                        Preconditions.checkState(oldIndex != null,
+                                "Missing old MaterializedIndex for range-colocate split");
+                        Tablet oldTablet = oldIndex.getTablet(oldTabletId);
+                        Preconditions.checkState(oldTablet != null && oldTablet.getRange() != null,
+                                "Old tablet %s in range-colocate group has no TabletRange", oldTabletId);
+                        Tuple prefix = ColocateRangeUtils.extractColocatePrefix(
+                                oldTablet.getRange().getRange(), colocateColumnCount);
+                        int idx = ColocateRangeMgr.indexOf(colocateRanges, prefix);
+                        Preconditions.checkState(idx >= 0,
+                                "Old tablet %s has no covering ColocateRange", oldTabletId);
+                        groupIds.add(colocateRanges.get(idx).getShardGroupId());
+                    }
+                    oldShardIdToGroupIds.put(oldTabletId, groupIds);
                 }
 
                 Map<String, String> properties = new HashMap<>();
@@ -311,10 +361,10 @@ public class SplitTabletJobFactory implements TabletReshardJobFactory {
                 properties.put(LakeTablet.PROPERTY_KEY_INDEX_ID, Long.toString(newIndex.getId()));
 
                 GlobalStateMgr.getCurrentState().getStarOSAgent().createShardsForSplit(
+                        oldShardIdToGroupIds,
                         oldToNewTabletIds,
                         table.getPartitionFilePathInfo(physicalPartitionId),
                         table.getPartitionFileCacheInfo(physicalPartitionId),
-                        newIndex.getShardGroupId(),
                         properties, WarehouseManager.DEFAULT_RESOURCE);
             }
         }

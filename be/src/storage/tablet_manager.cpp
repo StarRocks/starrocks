@@ -41,7 +41,9 @@
 #include <ctime>
 #include <memory>
 
+#include "base/format.h"
 #include "base/path/path_util.h"
+#include "base/testutil/sync_point.h"
 #include "common/config_compaction_fwd.h"
 #include "common/config_storage_fwd.h"
 #include "exec/schema_scanner/schema_be_tablets_scanner.h"
@@ -49,7 +51,6 @@
 #include "fs/fs_util.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/current_thread.h"
-#include "runtime/starrocks_metrics.h"
 #include "storage/compaction_manager.h"
 #include "storage/data_dir.h"
 #include "storage/olap_common.h"
@@ -59,6 +60,7 @@
 #include "storage/rowset/rowset_writer_context.h"
 #include "storage/snapshot_manager.h"
 #include "storage/storage_engine.h"
+#include "storage/storage_metrics.h"
 #include "storage/tablet.h"
 #include "storage/tablet_meta.h"
 #include "storage/tablet_meta_manager.h"
@@ -84,8 +86,10 @@ static void get_shutdown_tablets(std::ostream& os, void*) {
 
 bvar::PassiveStatus<std::string> g_shutdown_tablets("starrocks_shutdown_tablets", get_shutdown_tablets, nullptr);
 
-TabletManager::TabletManager(int64_t tablet_map_lock_shard_size)
-        : _tablets_shards(tablet_map_lock_shard_size), _tablets_shards_mask(tablet_map_lock_shard_size - 1) {
+TabletManager::TabletManager(int64_t tablet_map_lock_shard_size, TableMetricsManager* table_metrics_mgr)
+        : _tablets_shards(tablet_map_lock_shard_size),
+          _table_metrics_mgr(table_metrics_mgr),
+          _tablets_shards_mask(tablet_map_lock_shard_size - 1) {
     CHECK_GT(_tablets_shards.size(), 0) << "tablets shard count greater than 0";
     CHECK_EQ(_tablets_shards.size() & _tablets_shards_mask, 0) << "tablets shard count must be power of two";
 }
@@ -183,7 +187,7 @@ Status TabletManager::_update_tablet_map_and_partition_info(const TabletSharedPt
 }
 
 Status TabletManager::create_tablet(const TCreateTabletReq& request, std::vector<DataDir*> stores) {
-    StarRocksMetrics::instance()->create_tablet_requests_total.increment(1);
+    StorageMetrics::instance()->create_tablet_requests_total.increment(1);
 
     int64_t tablet_id = request.tablet_id;
     int32_t schema_hash = request.tablet_schema.schema_hash;
@@ -222,7 +226,7 @@ Status TabletManager::create_tablet(const TCreateTabletReq& request, std::vector
     if (tablet != nullptr && tablet->tablet_state() != TABLET_SHUTDOWN) {
         return Status::OK();
     } else if (tablet != nullptr) {
-        StarRocksMetrics::instance()->create_tablet_requests_failed.increment(1);
+        StorageMetrics::instance()->create_tablet_requests_failed.increment(1);
         DCHECK_EQ(TABLET_SHUTDOWN, tablet->tablet_state());
         return Status::InternalError("tablet still resident in shutdown queue");
     }
@@ -238,7 +242,7 @@ Status TabletManager::create_tablet(const TCreateTabletReq& request, std::vector
                          << "new_tablet_id=" << tablet_id << " new_schema_hash=" << schema_hash
                          << " base_tablet_id=" << request.base_tablet_id
                          << " base_schema_hash=" << request.base_schema_hash;
-            StarRocksMetrics::instance()->create_tablet_requests_failed.increment(1);
+            StorageMetrics::instance()->create_tablet_requests_failed.increment(1);
             return Status::InternalError("base tablet not exist");
         }
         // If we are doing schema-change, we should use the same data dir
@@ -253,7 +257,7 @@ Status TabletManager::create_tablet(const TCreateTabletReq& request, std::vector
                                               base_tablet.get(), stores);
     if (tablet == nullptr) {
         LOG(WARNING) << "Fail to create tablet " << request.tablet_id;
-        StarRocksMetrics::instance()->create_tablet_requests_failed.increment(1);
+        StorageMetrics::instance()->create_tablet_requests_failed.increment(1);
         return Status::InternalError("fail to create tablet");
     }
 
@@ -370,7 +374,7 @@ TabletSharedPtr TabletManager::_create_tablet_meta_and_dir_unlocked(const TCreat
             continue;
         }
 
-        TabletSharedPtr new_tablet = Tablet::create_tablet_from_meta(tablet_meta, data_dir);
+        TabletSharedPtr new_tablet = Tablet::create_tablet_from_meta(tablet_meta, data_dir, _table_metrics_mgr);
         st = fs::create_directories(new_tablet->schema_hash_path());
         if (!st.ok()) {
             LOG(WARNING) << "Fail to create " << new_tablet->schema_hash_path() << ": " << st.to_string();
@@ -401,7 +405,7 @@ Status TabletManager::drop_tablet(TTabletId tablet_id, TabletDropFlag flag) {
     TabletSharedPtr dropped_tablet = nullptr;
     {
         std::unique_lock wlock(_get_tablets_shard_lock(tablet_id));
-        StarRocksMetrics::instance()->drop_tablet_requests_total.increment(1);
+        StorageMetrics::instance()->drop_tablet_requests_total.increment(1);
 
         if (flag != kDeleteFiles && flag != kMoveFilesToTrash && flag != kKeepMetaAndFiles) {
             return Status::InvalidArgument(fmt::format("invalid TabletDropFlag {}", (int)flag));
@@ -784,9 +788,9 @@ TabletSharedPtr TabletManager::find_best_tablet_to_compaction(CompactionType com
         // TODO(lingbin): Remove 'max' from metric name, it would be misunderstood as the
         // biggest in history(like peak), but it is really just the value at current moment.
         if (compaction_type == CompactionType::BASE_COMPACTION) {
-            StarRocksMetrics::instance()->tablet_base_max_compaction_score.set_value(highest_score);
+            StorageMetrics::instance()->tablet_base_max_compaction_score.set_value(highest_score);
         } else {
-            StarRocksMetrics::instance()->tablet_cumulative_max_compaction_score.set_value(highest_score);
+            StorageMetrics::instance()->tablet_cumulative_max_compaction_score.set_value(highest_score);
         }
     }
     return best_tablet;
@@ -885,7 +889,7 @@ TabletSharedPtr TabletManager::find_best_tablet_to_do_update_compaction(DataDir*
         VLOG(2) << "Found the best tablet to compact. "
                 << "compaction_type=update"
                 << " tablet_id=" << best_tablet->tablet_id() << " highest_score=" << highest_score;
-        StarRocksMetrics::instance()->tablet_update_max_compaction_score.set_value(highest_score);
+        StorageMetrics::instance()->tablet_update_max_compaction_score.set_value(highest_score);
     }
     return best_tablet;
 }
@@ -921,7 +925,7 @@ Status TabletManager::load_tablet_from_meta(DataDir* data_dir, TTabletId tablet_
         tablet_meta->set_tablet_state(TABLET_RUNNING);
     }
 
-    TabletSharedPtr tablet = Tablet::create_tablet_from_meta(tablet_meta, data_dir);
+    TabletSharedPtr tablet = Tablet::create_tablet_from_meta(tablet_meta, data_dir, _table_metrics_mgr);
     if (tablet == nullptr) {
         LOG(WARNING) << "Fail to load tablet_id=" << tablet_id;
         return Status::InternalError("Fail to create tablet");
@@ -1007,7 +1011,7 @@ Status TabletManager::load_tablet_from_dir(DataDir* store, TTabletId tablet_id, 
 }
 
 Status TabletManager::report_tablet_info(TTabletInfo* tablet_info) {
-    StarRocksMetrics::instance()->report_tablet_requests_total.increment(1);
+    StorageMetrics::instance()->report_tablet_requests_total.increment(1);
 
     TabletSharedPtr tablet = get_tablet(tablet_info->tablet_id, false);
     if (tablet == nullptr) {
@@ -1034,7 +1038,7 @@ Status TabletManager::report_all_tablets_info(std::map<TTabletId, TTablet>* tabl
         LOG(INFO) << "Found " << expire_txn_map.size() << " expired tablet transactions";
     }
 
-    StarRocksMetrics::instance()->report_all_tablets_requests_total.increment(1);
+    StorageMetrics::instance()->report_all_tablets_requests_total.increment(1);
 
     size_t max_tablet_rowset_num = 0;
     TTabletId max_tablet_id = 0;
@@ -1067,7 +1071,7 @@ Status TabletManager::report_all_tablets_info(std::map<TTabletId, TTablet>* tabl
     LOG(INFO) << "Report all " << tablets_info->size() << " tablets info"
               << ". max_tablet_rowset_num:" << max_tablet_rowset_num << ", tablet_id:" << max_tablet_id
               << ", cost:" << MonotonicMillis() - start_ms << "ms";
-    StarRocksMetrics::instance()->max_tablet_rowset_num.set_value(max_tablet_rowset_num);
+    StorageMetrics::instance()->max_tablet_rowset_num.set_value(max_tablet_rowset_num);
     return Status::OK();
 }
 
@@ -1185,6 +1189,8 @@ Status TabletManager::start_trash_sweep() {
     for (const auto& info : tablets_redundant_to_check) {
         sweep_shutdown_tablet(info, finished_tablets_redundant);
     }
+
+    TEST_SYNC_POINT("TabletManager::start_trash_sweep:1");
 
     if (!finished_tablets.empty() || !finished_tablets_redundant.empty()) {
         std::unique_lock l(_shutdown_tablets_lock);
@@ -1567,7 +1573,7 @@ Status TabletManager::_create_tablet_meta_unlocked(const TCreateTabletReq& reque
 }
 
 Status TabletManager::_drop_tablet_unlocked(TTabletId tablet_id, TabletDropFlag flag) {
-    StarRocksMetrics::instance()->drop_tablet_requests_total.increment(1);
+    StorageMetrics::instance()->drop_tablet_requests_total.increment(1);
 
     if (flag != kMoveFilesToTrash && flag != kKeepMetaAndFiles) {
         return Status::InvalidArgument(fmt::format("invalid TabletDropFlag {}", (int)flag));
@@ -1811,7 +1817,7 @@ Status TabletManager::create_tablet_from_meta_snapshot(DataDir* store, TTabletId
         return Status::InternalError("tablet state is shutdown");
     }
     // DO NOT access tablet->updates() until tablet has been init()-ed.
-    TabletSharedPtr tablet = Tablet::create_tablet_from_meta(tablet_meta, store);
+    TabletSharedPtr tablet = Tablet::create_tablet_from_meta(tablet_meta, store, _table_metrics_mgr);
     if (tablet == nullptr) {
         LOG(WARNING) << "Fail to load tablet " << tablet_id;
         return Status::InternalError("Fail to create tablet");
@@ -1906,10 +1912,28 @@ void TabletManager::_add_shutdown_tablet_unlocked(int64_t tablet_id, DroppedTabl
     auto iter = _shutdown_tablets.find(tablet_id);
     if (iter != _shutdown_tablets.end()) {
         if ((iter->second).tablet != nullptr) {
-            // just try to remove the tablet meta. if failed, it will be removed in sweep_shutdown_tablet
-            auto st = _remove_tablet_meta((iter->second).tablet);
-            if (!st.ok()) {
-                LOG(WARNING) << "Fail to remove previous table meta, id: " << tablet_id << " status: " << st;
+            // Re-check the on-disk meta before destructive cleanup. During rapid re-migration
+            // a stale shutdown entry may still exist after ownership has already moved to a
+            // newer tablet instance on the same path. For PK tablets, _remove_tablet_meta()
+            // can clear rowset meta by tablet_id, so running it from the stale entry would
+            // wipe the new tablet's metadata. When uid/state no longer matches, leave this
+            // entry to the normal shutdown queues instead of eagerly clearing meta here.
+            auto& tablet = (iter->second).tablet;
+            TabletMeta tablet_meta;
+            Status st = TabletMetaManager::get_tablet_meta(tablet->data_dir(), tablet->tablet_id(),
+                                                           tablet->schema_hash(), &tablet_meta);
+            if (st.ok() &&
+                (tablet_meta.tablet_uid() != tablet->tablet_uid() || tablet_meta.tablet_state() != TABLET_SHUTDOWN)) {
+                LOG(INFO) << "Skip removing stale shutdown tablet meta due to "
+                          << (tablet_meta.tablet_uid() != tablet->tablet_uid() ? "uid mismatch" : "state mismatch")
+                          << ". tablet_id=" << tablet->tablet_id() << ", path=" << tablet->data_dir()->path()
+                          << ", state=" << tablet_meta.tablet_state();
+            } else {
+                // just try to remove the tablet meta. if failed, it will be removed in sweep_shutdown_tablet
+                st = _remove_tablet_meta(tablet);
+                if (!st.ok()) {
+                    LOG(WARNING) << "Fail to remove previous tablet meta, id: " << tablet_id << " status: " << st;
+                }
             }
         }
         auto drop_info_redundant = iter->second;
@@ -1921,3 +1945,9 @@ void TabletManager::_add_shutdown_tablet_unlocked(int64_t tablet_id, DroppedTabl
 }
 
 } // end namespace starrocks
+
+auto fmt::formatter<starrocks::TabletDropFlag>::format(const starrocks::TabletDropFlag value, format_context& ctx) const
+        -> format_context::iterator {
+    return formatter<std::underlying_type_t<starrocks::TabletDropFlag>>::format(
+            starrocks::enum_to_underlying_type(value), ctx);
+}

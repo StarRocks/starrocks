@@ -113,12 +113,6 @@ public:
 
     virtual bool is_struct() const { return false; }
 
-    virtual const uint8_t* raw_data() const = 0;
-
-    virtual uint8_t* mutable_raw_data() = 0;
-
-    virtual const uint8_t* continuous_data() const { return raw_data(); }
-
     // Return number of values in column.
     virtual size_t size() const = 0;
 

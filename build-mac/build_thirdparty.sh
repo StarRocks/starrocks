@@ -8,6 +8,15 @@
 
 set -euo pipefail
 
+# build_be.sh sources env_macos.sh before calling us, which exports a
+# batch of CMake behavior-control vars intended for the BE build only.
+# They leak into thirdparty subprocesses and break bundled cmake logic
+# (e.g. velocypack's TargetArch.cmake rejects CMAKE_OSX_ARCHITECTURES=arm64).
+# Unset at entry so running via build_be.sh matches running standalone.
+unset CMAKE_OSX_ARCHITECTURES CMAKE_BUILD_TARGET_ARCH \
+      CMAKE_GENERATOR CMAKE_FIND_LIBRARY_SUFFIXES \
+      BUILD_SHARED_LIBS CMAKE_BUILD_TYPE MAKEFLAGS
+
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
 ROOT_DIR="$(dirname "$SCRIPT_DIR")"
 THIRDPARTY_DIR="${ROOT_DIR}/thirdparty"
@@ -218,7 +227,7 @@ GFLAGS_VERSION="2.2.2"
 GLOG_VERSION="0.7.1"
 PROTOBUF_VERSION="3.14.0"
 BOOST_VERSION="1.86.0"
-THRIFT_VERSION="0.20.0"
+THRIFT_VERSION="0.22.0"
 LEVELDB_VERSION="1.20"
 BRPC_VERSION="1.9.0"
 ROCKSDB_VERSION="6.22.1"
@@ -234,10 +243,10 @@ BOOST_SOURCE="boost_1_86_0"
 BOOST_MD5SUM="2575e74ffc3ef1cd0babac2c1ee8bdb5"
 
 # Thrift
-THRIFT_DOWNLOAD="http://archive.apache.org/dist/thrift/0.20.0/thrift-0.20.0.tar.gz"
-THRIFT_NAME="thrift-0.20.0.tar.gz"
-THRIFT_SOURCE="thrift-0.20.0"
-THRIFT_MD5SUM="aadebde599e1f5235acd3c730721b873"
+THRIFT_DOWNLOAD="https://archive.apache.org/dist/thrift/0.22.0/thrift-0.22.0.tar.gz"
+THRIFT_NAME="thrift-0.22.0.tar.gz"
+THRIFT_SOURCE="thrift-0.22.0"
+THRIFT_MD5SUM="29f4ef82e6ebc336c69ef4f26fb4d2a1"
 
 # datasketches-cpp
 DATASKETCHES_VERSION="4.0.0"

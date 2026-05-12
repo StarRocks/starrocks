@@ -45,9 +45,25 @@ public class DataSkew {
         SKEWED_MCV
     }
 
-    public record SkewInfo(SkewType type, Optional<List<Pair<String, Long>>> maybeMcvs) {
+    public enum AdditionalInfo {
+        NONE,
+        UNKNOWN_STATS,
+        INACCURATE_ROW_COUNT,
+        NO_HISTOGRAM,
+        NO_MCV
+    }
+
+    public record SkewInfo(SkewType type, AdditionalInfo additionalInfo, Optional<List<Pair<String, Long>>> maybeMcvs) {
         public SkewInfo(SkewType type) {
-            this(type, Optional.empty());
+            this(type, AdditionalInfo.NONE, Optional.empty());
+        }
+
+        public SkewInfo(SkewType type, AdditionalInfo additionalInfo) {
+            this(type, additionalInfo, Optional.empty());
+        }
+
+        public SkewInfo(SkewType type, Optional<List<Pair<String, Long>>> maybeMcvs) {
+            this(type, AdditionalInfo.NONE, maybeMcvs);
         }
 
         public boolean isSkewed() {
@@ -65,36 +81,51 @@ public class DataSkew {
         }
     }
 
-    private record McvSkewInfo(boolean skewed, Optional<Double> mcvSkewFactor, Optional<List<Pair<String, Long>>> mcvs) {
+    private record McvSkewInfo(boolean skewed, Optional<Double> mcvSkewFactor, Optional<List<Pair<String, Long>>> mcvs,
+                               AdditionalInfo additionalInfo) {
         public McvSkewInfo(boolean skewed) {
-            this(skewed, Optional.empty(), Optional.empty());
+            this(skewed, Optional.empty(), Optional.empty(), AdditionalInfo.NONE);
         }
+
+        public McvSkewInfo(boolean skewed, AdditionalInfo additionalInfo) {
+            this(skewed, Optional.empty(), Optional.empty(), additionalInfo);
+        }
+
+        public McvSkewInfo(boolean skewed, Optional<Double> mcvSkewFactor, Optional<List<Pair<String, Long>>> mcvs) {
+            this(skewed, mcvSkewFactor, mcvs, AdditionalInfo.NONE);
+        }
+
     }
 
     private static McvSkewInfo getMcvSkewInfo(@NotNull Statistics statistics, @NotNull ColumnStatistic columnStatistic,
                                               Thresholds thresholds) {
         final var rowCount = statistics.getOutputRowCount();
         final var histogram = columnStatistic.getHistogram();
-        if (histogram != null) {
-            final var mcv = histogram.getMCV();
 
-            if (mcv != null) {
-                int mcvLimit = Math.min(thresholds.mcvLimit, mcv.size());
-                List<Pair<String, Long>> mcvs = Lists.newArrayList();
-                mcv.entrySet().stream()
-                        .sorted(Map.Entry.comparingByValue(Comparator.reverseOrder())) //
-                        .limit(mcvLimit)
-                        .forEach(entry -> {
-                            mcvs.add(Pair.create(entry.getKey(), entry.getValue()));
-                        });
+        if (histogram == null) {
+            return new McvSkewInfo(false, AdditionalInfo.NO_HISTOGRAM);
+        }
 
-                long rowCountOfMcvs = mcvs.stream().mapToLong(pair -> pair.second).sum();
-                final var mcvSkewFactor = rowCountOfMcvs / rowCount;
+        final var mcv = histogram.getMCV();
 
-                if (mcvSkewFactor > thresholds.relativeRowThreshold) {
-                    return new McvSkewInfo(true, Optional.of(mcvSkewFactor), Optional.of(mcvs));
-                }
-            }
+        if (mcv == null) {
+            return new McvSkewInfo(false, AdditionalInfo.NO_MCV);
+        }
+
+        int mcvLimit = Math.min(thresholds.mcvLimit, mcv.size());
+        List<Pair<String, Long>> mcvs = Lists.newArrayList();
+        mcv.entrySet().stream()
+                .sorted(Map.Entry.comparingByValue(Comparator.reverseOrder())) //
+                .limit(mcvLimit)
+                .forEach(entry -> {
+                    mcvs.add(Pair.create(entry.getKey(), entry.getValue()));
+                });
+
+        long rowCountOfMcvs = mcvs.stream().mapToLong(pair -> pair.second).sum();
+        final var mcvSkewFactor = rowCountOfMcvs / rowCount;
+
+        if (mcvSkewFactor > thresholds.relativeRowThreshold) {
+            return new McvSkewInfo(true, Optional.of(mcvSkewFactor), Optional.of(mcvs));
         }
 
         return new McvSkewInfo(false);
@@ -129,7 +160,7 @@ public class DataSkew {
                                              Thresholds thresholds) {
         if (statistics.isTableRowCountMayInaccurate() || statistics.getOutputRowCount() < 1) {
             // Without sufficient information we can not make a decision.
-            return new SkewInfo(SkewType.NOT_SKEWED);
+            return new SkewInfo(SkewType.NOT_SKEWED, AdditionalInfo.INACCURATE_ROW_COUNT);
         }
 
         final var nullSkewInfo = getNullSkewInfo(columnStatistic, thresholds);
@@ -140,16 +171,20 @@ public class DataSkew {
             if (nullSkewInfo.nullSkewFactor.get() >= mcvSkewInfo.mcvSkewFactor.get()) {
                 return new SkewInfo(SkewType.SKEWED_NULL);
             } else {
-                return new SkewInfo(SkewType.SKEWED_MCV, mcvSkewInfo.mcvs);
+                return new SkewInfo(SkewType.SKEWED_MCV, mcvSkewInfo.additionalInfo, mcvSkewInfo.mcvs);
             }
         } else if (nullSkewInfo.skewed) {
             return new SkewInfo(SkewType.SKEWED_NULL);
         } else if (mcvSkewInfo.skewed) {
-            return new SkewInfo(SkewType.SKEWED_MCV, mcvSkewInfo.mcvs);
+            return new SkewInfo(SkewType.SKEWED_MCV, mcvSkewInfo.additionalInfo, mcvSkewInfo.mcvs);
+        }
+
+        if (columnStatistic.isUnknown()) {
+            return new SkewInfo(SkewType.NOT_SKEWED, AdditionalInfo.UNKNOWN_STATS);
         }
 
         // Can not deduce skew.
-        return new SkewInfo(SkewType.NOT_SKEWED);
+        return new SkewInfo(SkewType.NOT_SKEWED, mcvSkewInfo.additionalInfo);
     }
 
     public static SkewCandidates getSkewCandidates(@NotNull Statistics statistics,

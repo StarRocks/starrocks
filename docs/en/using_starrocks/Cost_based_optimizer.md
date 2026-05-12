@@ -212,7 +212,7 @@ The following table describes the default settings. If you need to modify them, 
 | statistic_auto_collect_max_predicate_column_size_on_sample_strategy | INT    | 16       | When the Auto Full Collection task hits the sampled collection policy, if the table has an unusually large number of Predicate Columns and exceeds this configuration item, the task will not switch to full collection of the Predicate Columns, but maintains  to be the sampled collection of all columns. This configuration item controls the maximum value of Predicate Column for this behavior. |
 | statistic_auto_collect_predicate_columns_threshold | INT     | 32       | If the number of columns in the table exceeds this configuration during automatic collection, only the column statistics for the Predicate Column will be collected. |
 | statistic_predicate_columns_persist_interval_sec   | LONG    | 60       | The interval at which FE synchronize and persists statistics of Predicate Column. |
-| statistic_predicate_columns_ttl_hours       | LONG    | 24       | The elimination time of the Predicate Column statistics cached in FE. |
+| statistic_predicate_columns_ttl_hours       | LONG    | 24       | The TTL in hours for Predicate Column entries in FE; vacuum removes older data. A negative value disables vacuum. |
 | enable_predicate_columns_collection         | BOOLEAN | TRUE     | Whether to enable predicate columns collection. If disabled, predicate columns will not be recorded during query optimization. |
 | enable_manual_collect_array_ndv             | BOOLEAN | FALSE        | Whether to enable manual collection for the NDV information of the ARRAY type. |
 | enable_auto_collect_array_ndv               | BOOLEAN | FALSE        | Whether to enable automatic collection for the NDV information of the ARRAY type. |
@@ -250,7 +250,7 @@ Parameter description:
   - `PREDICATE COLUMNS`: Collect statistics from only Predicate Columns. Supported since v3.5.0.
   - `MULTIPLE COLUMNS`: Collects joint statistics from the specified multiple columns. Currently, only manual synchronous collection of multiple columns is supported. The number of columns for manual statistics collection cannot exceed `statistics_max_multi_column_combined_num`, the default value is `10`. Supported since v3.5.0.
 
-- [WITH SYNC | ASYNC MODE]: whether to run the manual collection task in synchronous or asynchronous mode. Synchronous collection is used by default if you do not specify this parameter.
+- `WITH SYNC | ASYNC MODE`: whether to run the manual collection task in synchronous or asynchronous mode. Synchronous collection is used by default if you do not specify this parameter.
 
 - `PROPERTIES`: custom parameters. If `PROPERTIES` is not specified, the default settings in the `fe.conf` file are used. The properties that are actually used can be viewed via the `Properties` column in the output of SHOW ANALYZE STATUS.
 
@@ -318,7 +318,7 @@ Parameter description:
 
 - `col_name`: columns from which to collect statistics. Separate multiple columns with commas (`,`). If this parameter is not specified, the entire table is collected. This parameter is required for histograms.
 
-- [WITH SYNC | ASYNC MODE]: whether to run the manual collection task in synchronous or asynchronous mode. Synchronous collection is used by default if you not specify this parameter.
+- `WITH SYNC | ASYNC MODE`: whether to run the manual collection task in synchronous or asynchronous mode. Synchronous collection is used by default if you not specify this parameter.
 
 - `WITH N BUCKETS`: `N` is the number of buckets for histogram collection. If not specified, the default value in `fe.conf` is used.
 
@@ -645,7 +645,7 @@ The task ID for a manual collection task can be obtained from SHOW ANALYZE STATU
 
 ## Collect statistics of external tables
 
-Since v3.2.0, StarRocks supports collecting statistics of Hive, Iceberg, and Hudi tables. The syntax is similar to collecting StarRocks internal tables. **However, only manual full collection, manual histogram collection (since v3.2.7), and automatic full collection are supported. Sampled collection is not supported.** Since v3.3.0, StarRocks supports collecting statistics of Delta Lake tables and statistics of sub-fields in STRUCT. Since v3.4.0, StarRocks supports automatic statistics collection via query-triggered ANALYZE tasks.
+Since v3.2.0, StarRocks supports collecting statistics of Hive, Iceberg, and Hudi tables. The syntax is similar to collecting StarRocks internal tables. **However, only manual full collection, manual histogram collection (since v3.2.7), and automatic full collection are supported.** Since v3.3.0, StarRocks supports collecting statistics of Delta Lake tables and statistics of sub-fields in STRUCT. Since v3.4.0, StarRocks supports automatic statistics collection via query-triggered ANALYZE tasks. Since v3.4.0, StarRocks also supports manual sampled collection (`ANALYZE TABLE ... SAMPLE`) for external tables. Histogram collection is currently only supported on Hive external tables.
 
 The collected statistics are stored in the `external_column_statistics` table of the `_statistics_` in the `default_catalog`. They are not stored in Hive Metastore and cannot be shared by other search engines. You can query data from the `default_catalog._statistics_.external_column_statistics` table to verify whether statistics are collected for a Hive/Iceberg/Hudi table.
 
@@ -674,7 +674,7 @@ partition_name:
 The following limits apply when you collect statistics for external tables:
 
 - You can collect statistics of only Hive, Iceberg, Hudi, and Delta Lake (Since v3.3.0) tables.
-- Only manual full collection, manual histogram collection (since v3.2.7), and automatic full collection are supported. Sampled collection is not supported.
+- Only manual full collection, manual histogram collection (since v3.2.7), automatic full collection, query-triggered collection (since v3.4.0), and manual sampled collection (since v3.4.0) are supported. Histogram collection is only supported on Hive external tables.
 - For the system to automatically collect full statistics, you must create an Analyze job, which is different from collecting statistics of StarRocks internal tables where the system does this in the background by default.
 - For automatic collection tasks:
   - You can only collect statistics of a specific table. You cannot collect statistics of all tables in a database or statistics of all databases in an external catalog.

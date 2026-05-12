@@ -22,8 +22,6 @@
 #include "common/config_exec_fwd.h"
 #include "common/logging.h"
 #include "exec/hdfs_scanner/hdfs_scanner.h"
-#include "exprs/binary_predicate.h"
-#include "exprs/expr_context.h"
 #include "exprs/expr_executor.h"
 #include "exprs/expr_factory.h"
 #include "formats/parquet/column_chunk_reader.h"
@@ -32,7 +30,6 @@
 #include "formats/parquet/page_reader.h"
 #include "formats/parquet/parquet_ut_base.h"
 #include "fs/fs.h"
-#include "gen_cpp/Exprs_types.h"
 #include "gen_cpp/Types_types.h"
 #include "parquet_test_util/util.h"
 #include "runtime/descriptor_helper.h"
@@ -890,7 +887,7 @@ TEST_F(IcebergSchemaEvolutionTest, TestWithoutFieldId) {
     TupleDescriptor* tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
     Utils::make_column_info_vector(tuple_desc, &ctx->materialized_columns);
     ctx->slot_descs = tuple_desc->slots();
-    ctx->scan_range = (_create_scan_range(add_struct_subfield_file_path));
+    ctx->scan_range = (_create_scan_range(no_field_id_file_path));
     // --------------finish init context---------------
 
     Status status = file_reader->init(ctx);

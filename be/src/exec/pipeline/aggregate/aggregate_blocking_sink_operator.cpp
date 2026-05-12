@@ -24,6 +24,7 @@
 #include "common/status.h"
 #include "exec/agg_runtime_filter_builder.h"
 #include "runtime/current_thread.h"
+#include "runtime/runtime_filter_worker.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks::pipeline {

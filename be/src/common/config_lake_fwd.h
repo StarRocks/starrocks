@@ -20,9 +20,6 @@
 #include "common/configbase.h"
 
 namespace starrocks::config {
-// The count of threads for lake tablet metadata fetch operations (get_tablet_stats, get_tablet_metadatas).
-CONF_mInt32(lake_metadata_fetch_thread_count, "3");
-
 // The lake replication slow log threshold
 CONF_mInt64(lake_replication_slow_log_ms, "30000");
 
@@ -31,6 +28,10 @@ CONF_mInt64(lake_replication_read_buffer_size, "16777216"); // 16MB
 
 // Maximum retry count for non-segment file copy during lake-to-lake replication
 CONF_mInt32(lake_replication_max_file_copy_retry, "3");
+
+// Minimum number of files required to enable parallel copy in lake-to-lake replication.
+// Set to 0 to force disable parallel copy.
+CONF_mInt32(lake_replication_parallel_copy_min_file_count, "2");
 
 // Enable segment metadata filter for lake tables.
 // When enabled, segments whose sort key range does not intersect with query predicates will be skipped.
@@ -70,8 +71,6 @@ CONF_mInt64(experimental_lake_wait_per_delete_ms, "0");
 
 CONF_mInt64(lake_publish_version_slow_log_ms, "1000");
 
-CONF_mBool(lake_enable_publish_version_trace_log, "false");
-
 CONF_mString(lake_vacuum_retry_pattern, "*request rate*");
 
 CONF_mInt64(lake_vacuum_retry_max_attempts, "5");
@@ -79,6 +78,12 @@ CONF_mInt64(lake_vacuum_retry_max_attempts, "5");
 CONF_mInt64(lake_vacuum_retry_min_delay_ms, "100");
 
 CONF_mInt64(lake_max_garbage_version_distance, "100");
+
+// Enable cleanup of orphan delvec entries during compaction.
+// Orphan delvecs are leaked metadata entries from a historical bug that reference
+// non-existent segments and prevent delvec file garbage collection.
+// Turn this on after upgrade to clean up existing orphans, then turn it off once done.
+CONF_mBool(lake_enable_orphan_delvec_cleanup_on_compaction, "false");
 
 CONF_mBool(enable_strict_delvec_crc_check, "true");
 
@@ -88,6 +93,9 @@ CONF_mBool(lake_clear_corrupted_cache_meta, "true");
 // if set to true, CACHE SELECT will only read file, save CPU time
 // if set to false, CACHE SELECT will behave like SELECT
 CONF_mBool(lake_cache_select_in_physical_way, "true");
+
+// The count of threads for lake tablet metadata fetch operations (get_tablet_stats, get_tablet_metadatas).
+CONF_mInt32(lake_metadata_fetch_thread_count, "3");
 
 // Experimental internal switch: whether to enable lake capture_tablet_and_rowsets for query cache stale entries.
 // This config is temporary and may be removed after the related lake capture implementation is fixed.

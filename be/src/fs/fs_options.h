@@ -20,7 +20,6 @@
 
 namespace starrocks {
 
-struct ResultFileOptions;
 class TExportSink;
 class TUploadReq;
 class TDownloadReq;
@@ -28,15 +27,15 @@ class TDownloadReq;
 struct FSOptions {
 private:
     FSOptions(const TBrokerScanRangeParams* scan_range_params, const TExportSink* export_sink,
-              const ResultFileOptions* result_file_options, const TUploadReq* upload, const TDownloadReq* download,
-              const TCloudConfiguration* cloud_configuration,
+              const THdfsProperties* hdfs_properties, int hdfs_write_buffer_size_kb, const TUploadReq* upload,
+              const TDownloadReq* download, const TCloudConfiguration* cloud_configuration,
               std::unordered_map<std::string, std::string> fs_options = {});
 
 public:
     FSOptions();
     FSOptions(const TBrokerScanRangeParams* scan_range_params);
     FSOptions(const TExportSink* export_sink);
-    FSOptions(const ResultFileOptions* result_file_options);
+    FSOptions(const THdfsProperties* hdfs_properties, int hdfs_write_buffer_size_kb = 0);
     FSOptions(const TUploadReq* upload);
     FSOptions(const TDownloadReq* download);
     FSOptions(const TCloudConfiguration* cloud_configuration);
@@ -44,10 +43,11 @@ public:
 
     const TBrokerScanRangeParams* scan_range_params;
     const TExportSink* export_sink;
-    const ResultFileOptions* result_file_options;
+    const THdfsProperties* hdfs_properties;
     const TUploadReq* upload;
     const TDownloadReq* download;
     const TCloudConfiguration* cloud_configuration;
+    int hdfs_write_buffer_size_kb;
     const std::unordered_map<std::string, std::string> _fs_options;
 
     static constexpr const char* FS_S3_ENDPOINT = "fs.s3a.endpoint";

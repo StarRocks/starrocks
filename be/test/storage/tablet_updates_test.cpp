@@ -77,7 +77,7 @@ static ssize_t read_and_compare(const ChunkIteratorPtr& iter, const vector<int64
     auto chunk = ChunkHelper::new_chunk(iter->schema(), 100);
     auto full_chunk = ChunkHelper::new_chunk(iter->schema(), keys.size());
     auto cols = full_chunk->mutable_columns();
-    for (long key : keys) {
+    for (int64_t key : keys) {
         cols[0]->append_datum(Datum(key));
         cols[1]->append_datum(Datum((int16_t)(key % 100 + 1)));
         cols[2]->append_datum(Datum((int32_t)(key % 1000 + 2)));
@@ -177,7 +177,7 @@ ssize_t read_tablet_and_compare_schema_changed(const TabletSharedPtr& tablet, in
     }
     auto full_chunk = ChunkHelper::new_chunk(iter->schema(), keys.size());
     auto cols = full_chunk->mutable_columns();
-    for (long key : keys) {
+    for (int64_t key : keys) {
         cols[0]->append_datum(Datum((int64_t)key));
         cols[1]->append_datum(Datum((int16_t)(key % 100 + 1)));
         auto v = std::to_string((int64_t)(key % 1000 + 2));
@@ -213,7 +213,7 @@ ssize_t read_tablet_and_compare_schema_changed_sort_key1(const TabletSharedPtr& 
     const auto nkeys = keys.size();
     auto full_chunk = ChunkHelper::new_chunk(iter->schema(), nkeys);
     auto cols = full_chunk->mutable_columns();
-    for (long key : keys) {
+    for (int64_t key : keys) {
         cols[0]->append_datum(Datum((int64_t)(nkeys - 1 - key)));
         cols[1]->append_datum(Datum((int16_t)key));
         cols[2]->append_datum(Datum((int32_t)(nkeys - 1 - key)));
@@ -248,7 +248,7 @@ ssize_t read_tablet_and_compare_schema_changed_sort_key2(const TabletSharedPtr& 
     const auto nkeys = keys.size();
     auto full_chunk = ChunkHelper::new_chunk(iter->schema(), nkeys);
     auto cols = full_chunk->mutable_columns();
-    for (long key : keys) {
+    for (int64_t key : keys) {
         cols[0]->append_datum(Datum((int64_t)key));
         cols[1]->append_datum(Datum((int16_t)(nkeys - 1 - key)));
         cols[2]->append_datum(Datum((int32_t)key));

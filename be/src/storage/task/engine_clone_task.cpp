@@ -42,7 +42,6 @@
 
 #include "agent/agent_common.h"
 #include "agent/finish_task.h"
-#include "agent/master_info.h"
 #include "agent/task_signatures_manager.h"
 #include "base/network/network_util.h"
 #include "base/string/string_parser.hpp"
@@ -52,6 +51,7 @@
 #include "common/config_storage_fwd.h"
 #include "common/status.h"
 #include "common/system/backend_options.h"
+#include "common/system/master_info.h"
 #include "engine_storage_migration_task.h"
 #include "fs/fs.h"
 #include "gen_cpp/BackendService.h"
@@ -63,11 +63,11 @@
 #include "runtime/client_cache.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
+#include "runtime/thrift_rpc_helper.h"
 #include "storage/rowset/rowset.h"
 #include "storage/rowset/rowset_factory.h"
 #include "storage/snapshot_manager.h"
 #include "storage/tablet_updates.h"
-#include "util/thrift_rpc_helper.h"
 
 using std::set;
 using std::stringstream;

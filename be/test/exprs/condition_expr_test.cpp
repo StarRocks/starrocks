@@ -22,7 +22,7 @@
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
 #include "column/fixed_length_column.h"
-#include "column/type_traits.h"
+#include "column/runtime_type_traits.h"
 #include "column/vectorized_fwd.h"
 #include "exprs/expr_factory.h"
 #include "exprs/mock_vectorized_expr.h"

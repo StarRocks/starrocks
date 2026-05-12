@@ -15,6 +15,7 @@
 #include "storage/update_compaction_state.h"
 
 #include "common/config_exec_fwd.h"
+#include "common/stack_util.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/current_thread.h"
 #include "storage/chunk_helper.h"
@@ -22,7 +23,6 @@
 #include "storage/rowset/rowset.h"
 #include "storage/storage_engine.h"
 #include "storage/update_manager.h"
-#include "util/stack_util.h"
 
 namespace starrocks {
 
@@ -125,7 +125,6 @@ Status CompactionState::_load_segments(Rowset* rowset, uint32_t segment_id) {
         RETURN_ERROR_IF_FALSE(col->size() == num_rows, "read segment: iter rows != num rows");
     }
     dest = std::move(col);
-    TRY_CATCH_BAD_ALLOC(dest->raw_data());
     _memory_usage += dest->memory_usage();
     tracker->consume(dest->memory_usage());
 

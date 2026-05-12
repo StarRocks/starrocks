@@ -21,6 +21,8 @@
 #include "column/vectorized_fwd.h"
 #include "common/object_pool.h"
 #include "common/statusor.h"
+#include "exec/pipeline/exec_node_pipeline_adapter.h"
+#include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/limit_operator.h"
 #include "exec/pipeline/nljoin/nljoin_build_operator.h"
 #include "exec/pipeline/nljoin/nljoin_context.h"
@@ -29,13 +31,13 @@
 #include "exec/pipeline/nljoin/spillable_nljoin_probe_operator.h"
 #include "exec/pipeline/operator.h"
 #include "exec/pipeline/pipeline_builder.h"
+#include "exec/runtime_filter/runtime_filter_helper.h"
 #include "exprs/expr_context.h"
 #include "exprs/expr_executor.h"
 #include "exprs/expr_factory.h"
 #include "exprs/literal.h"
 #include "gen_cpp/PlanNodes_types.h"
 #include "glog/logging.h"
-#include "runtime/runtime_filter/runtime_filter_helper.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks {
@@ -133,12 +135,11 @@ StatusOr<std::list<ExprContext*>> CrossJoinNode::rewrite_runtime_filter(
 }
 
 template <class BuildFactory, class ProbeFactory>
-std::vector<std::shared_ptr<pipeline::OperatorFactory>> CrossJoinNode::_decompose_to_pipeline(
-        pipeline::PipelineBuilderContext* context) {
+StatusOr<pipeline::OpFactories> CrossJoinNode::_decompose_to_pipeline(pipeline::PipelineBuilderContext* context) {
     using namespace pipeline;
 
     // step 0: construct pipeline end with cross join right operator.
-    OpFactories right_ops = _children[1]->decompose_to_pipeline(context);
+    ASSIGN_OR_RETURN(auto right_ops, _children[1]->decompose_to_pipeline(context));
 
     // define a runtime filter holder
     context->fragment_context()->runtime_filter_hub()->add_holder(_id);
@@ -165,21 +166,21 @@ std::vector<std::shared_ptr<pipeline::OperatorFactory>> CrossJoinNode::_decompos
     // cross_join_right as sink operator
     auto right_factory = std::make_shared<BuildFactory>(context->next_operator_id(), id(), cross_join_context);
     // Initialize OperatorFactory's fields involving runtime filters.
-    this->init_runtime_filter_for_operator(right_factory.get(), context, rc_rf_probe_collector);
+    pipeline::init_runtime_filter_for_operator(*this, right_factory.get(), context, rc_rf_probe_collector);
 
     right_ops.emplace_back(std::move(right_factory));
     context->add_pipeline(right_ops);
     context->push_dependent_pipeline(context->last_pipeline());
     DeferOp pop_dependent_pipeline([context]() { context->pop_dependent_pipeline(); });
 
-    OpFactories left_ops = _children[0]->decompose_to_pipeline(context);
+    ASSIGN_OR_RETURN(auto left_ops, _children[0]->decompose_to_pipeline(context));
     // communication with CrossJoinRight through shared_data.
     auto left_factory = std::make_shared<ProbeFactory>(
             context->next_operator_id(), id(), _row_descriptor, child(0)->row_desc(), child(1)->row_desc(),
             _sql_join_conjuncts, std::move(_join_conjuncts), std::move(_conjunct_ctxs), std::move(_common_expr_ctxs),
             std::move(cross_join_context), _join_op);
     // Initialize OperatorFactory's fields involving runtime filters.
-    this->init_runtime_filter_for_operator(left_factory.get(), context, rc_rf_probe_collector);
+    pipeline::init_runtime_filter_for_operator(*this, left_factory.get(), context, rc_rf_probe_collector);
     if (!context->is_colocate_group()) {
         left_ops = context->maybe_interpolate_local_adpative_passthrough_exchange(runtime_state(), id(), left_ops,
                                                                                   context->degree_of_parallelism());
@@ -196,14 +197,14 @@ std::vector<std::shared_ptr<pipeline::OperatorFactory>> CrossJoinNode::_decompos
     }
 
     if constexpr (std::is_same_v<BuildFactory, SpillableNLJoinBuildOperatorFactory>) {
-        may_add_chunk_accumulate_operator(left_ops, context, id());
+        pipeline::may_add_chunk_accumulate_operator(left_ops, context, id());
     }
 
     // return as the following pipeline
     return left_ops;
 }
 
-pipeline::OpFactories CrossJoinNode::decompose_to_pipeline(pipeline::PipelineBuilderContext* context) {
+StatusOr<pipeline::OpFactories> CrossJoinNode::decompose_to_pipeline(pipeline::PipelineBuilderContext* context) {
     using namespace pipeline;
 
     if (runtime_state()->enable_spill() && runtime_state()->enable_nl_join_spill() && _join_op == TJoinOp::CROSS_JOIN) {

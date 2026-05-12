@@ -19,10 +19,10 @@
 #include "common/status.h"
 
 namespace starrocks {
-
+class TCloudConfiguration;
 class DownloadUtil {
 public:
-    static Status download(const std::string& url, const std::string& target_file,
-                           const std::string& expected_checksum);
+    static Status download(const std::string& url, const std::string& target_file, const std::string& expected_checksum,
+                           const TCloudConfiguration& cloud_configuration);
 };
 } // namespace starrocks

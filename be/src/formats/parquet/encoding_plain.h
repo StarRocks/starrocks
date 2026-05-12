@@ -26,6 +26,7 @@
 #include "column/column.h"
 #include "column/column_helper.h"
 #include "column/nullable_column.h"
+#include "column/raw_data_visitor.h"
 #include "column/vectorized_fwd.h"
 #include "common/status.h"
 #include "formats/parquet/encoding.h"
@@ -248,7 +249,8 @@ public:
         }
 
         // fill bytes data
-        max_size = std::max(BitUtil::next_power_of_two(max_size), 8L);
+        max_size = std::max<decltype(max_size)>(static_cast<decltype(max_size)>(BitUtil::next_power_of_two(max_size)),
+                                                static_cast<decltype(max_size)>(8));
         if (datas[read_count - 1] - _data.data + max_size <= _data.size) {
             binary_column->append_bytes_overflow(datas, lengths, read_count, max_size);
             DCHECK_EQ(binary_column->get_bytes().size(), binary_column->get_offset().back());
@@ -301,7 +303,9 @@ public:
             CHECK_DECODING_BOUND
             bool ret = false;
             // when last slices offset + max_size > _data.size, there is overflow on reading
-            max_size = std::max(BitUtil::next_power_of_two(max_size), 8L);
+            max_size =
+                    std::max<decltype(max_size)>(static_cast<decltype(max_size)>(BitUtil::next_power_of_two(max_size)),
+                                                 static_cast<decltype(max_size)>(8));
             if (slices[count - 1].data - _data.data + max_size <= _data.size) {
                 ret = ColumnHelper::get_binary_column(dst)->append_strings_overflow(slices, num_decoded, max_size);
             } else {
@@ -375,7 +379,9 @@ public:
     Status next_batch(size_t count, ColumnContentType content_type, Column* dst, const FilterData* filter) override {
         auto original_size = dst->size();
         dst->resize(original_size + count);
-        auto num_unpacked_values = unpack_batch(count, dst->mutable_raw_data() + original_size);
+        MutableRawDataVisitor visitor;
+        RETURN_IF_ERROR(dst->accept_mutable(&visitor));
+        auto num_unpacked_values = unpack_batch(count, visitor.result() + original_size);
         if (num_unpacked_values < count) {
             return Status::InternalError(strings::Substitute(
                     "going to read out-of-bounds data, count=$0,num_unpacked_values=$1", count, num_unpacked_values));

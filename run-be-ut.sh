@@ -69,6 +69,7 @@ Usage: $0 <options>
      --use-staros                   DEPRECATED. an alias of --enable-shared-data option
      --without-debug-symbol-split   split debug symbol out of the test binary to accelerate the speed
                                     of loading binary into memory and start execution.
+     --without-tenann               build without tenann (vector index library); default is ON on Linux
      -j                             build parallel
 
   Eg.
@@ -121,6 +122,7 @@ OPTS=$(${GETOPT_BIN} \
   -l 'without-java-ext' \
   -l 'without-debug-symbol-split' \
   -l 'without-java-ext' \
+  -l 'without-tenann' \
   -o 'j:' \
   -l 'help' \
   -l 'run' \
@@ -150,11 +152,16 @@ fi
 WITH_DEBUG_SYMBOL_SPLIT=ON
 BUILD_JAVA_EXT=ON
 BUILD_TARGET=
+if starrocks_is_darwin; then
+    WITH_TENANN=OFF
+else
+    WITH_TENANN=ON
+fi
 if [[ -z ${WITH_DYNAMIC} ]]; then
     WITH_DYNAMIC=OFF
 fi
-if [[ -z ${THIN_ACHIEVE} ]]; then
-    THIN_ACHIEVE=ON
+if [[ -z ${THIN_ARCHIVE} ]]; then
+    THIN_ARCHIVE=$(starrocks_default_ut_thin_archive)
 fi
 while true; do
     case "$1" in
@@ -174,6 +181,7 @@ while true; do
         --build-target) BUILD_TARGET=$2; shift 2;;
         --without-debug-symbol-split) WITH_DEBUG_SYMBOL_SPLIT=OFF; shift ;;
         --without-java-ext) BUILD_JAVA_EXT=OFF; shift ;;
+        --without-tenann) WITH_TENANN=OFF; shift ;;
         -j) PARALLEL=$2; shift 2 ;;
         --) shift ;  break ;;
         *) echo "Internal error" ; exit 1 ;;
@@ -220,13 +228,14 @@ fi
 
 CMAKE_BUILD_DIR=${CMAKE_BUILD_PREFIX}/ut_build_${CMAKE_BUILD_TYPE}
 if [ ${CLEAN} -eq 1 ]; then
-    rm ${CMAKE_BUILD_DIR} -rf
-    rm ${STARROCKS_HOME}/be/output/ -rf
+    rm -rf ${CMAKE_BUILD_DIR}
+    rm -rf ${STARROCKS_HOME}/be/output/
 fi
 
 if [ ! -d ${CMAKE_BUILD_DIR} ]; then
     mkdir -p ${CMAKE_BUILD_DIR}
 fi
+starrocks_reset_stale_darwin_cmake_cache "${CMAKE_BUILD_DIR}"
 
 source ${STARROCKS_HOME}/bin/common.sh
 
@@ -276,10 +285,11 @@ ${CMAKE_CMD}  -G "${CMAKE_GENERATOR}" \
             -DSTARLET_INSTALL_DIR=${STARLET_INSTALL_DIR}          \
             -DWITH_GCOV=${WITH_GCOV} \
             -DWITH_STARCACHE=${WITH_STARCACHE} \
+            -DWITH_TENANN=${WITH_TENANN} \
             -DSTARROCKS_JIT_ENABLE=${ENABLE_JIT} \
             -DWITH_RELATIVE_SRC_PATH=OFF \
             -DENABLE_MULTI_DYNAMIC_LIBS=${WITH_DYNAMIC} \
-            -DTHIN_ARCHIVE=${THIN_ACHIEVE} \
+            -DTHIN_ARCHIVE=${THIN_ARCHIVE} \
             -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
             ${STARROCKS_HOME}/be
 
@@ -419,12 +429,7 @@ if [ -d ${STARROCKS_TEST_BINARY_DIR}/util/test_data ]; then
 fi
 cp -r ${STARROCKS_HOME}/be/test/util/test_data ${STARROCKS_TEST_BINARY_DIR}/util/
 
-test_files=`find ${STARROCKS_TEST_BINARY_DIR} -type f -perm -111 -name "*test" \
-    | grep -v starrocks_test \
-    | grep -v starrocks_dw_test \
-    | grep -v bench_test \
-    | grep -v builtin_functions_fuzzy_test \
-    | grep -e "$TEST_MODULE" `
+test_files=$(starrocks_collect_test_binaries "${STARROCKS_TEST_BINARY_DIR}" "${TEST_MODULE}")
 
 echo "[INFO] gtest_filter: $TEST_NAME"
 

@@ -16,13 +16,13 @@
 
 namespace starrocks {
 
-Status InvertedIndexIterator::read_from_inverted_index(const std::string& column_name, const void* query_value,
+Status InvertedIndexIterator::read_from_inverted_index(const std::string_view column_name, const void* query_value,
                                                        InvertedIndexQueryType query_type, roaring::Roaring* bit_map) {
     RETURN_IF_ERROR(_reader->query(_stats, column_name, query_value, query_type, bit_map));
     return Status::OK();
 }
 
-Status InvertedIndexIterator::read_null(const std::string& column_name, roaring::Roaring* bit_map) {
+Status InvertedIndexIterator::read_null(const std::string_view column_name, roaring::Roaring* bit_map) {
     RETURN_IF_ERROR(_reader->query_null(_stats, column_name, bit_map));
     return Status::OK();
 }

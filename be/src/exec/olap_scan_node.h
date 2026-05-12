@@ -22,10 +22,12 @@
 
 #include "column/chunk.h"
 #include "column/column_access_path.h"
+#include "common/statusor.h"
 #include "exec/olap_common.h"
 #include "exec/olap_scan_prepare.h"
 #include "exec/scan_node.h"
 #include "exec/tablet_scanner.h"
+#include "exprs/expr_context.h"
 #include "runtime/global_dict/parser.h"
 
 namespace starrocks {
@@ -79,8 +81,7 @@ public:
 
     Status set_scan_range(const TInternalScanRange& range);
 
-    std::vector<std::shared_ptr<pipeline::OperatorFactory>> decompose_to_pipeline(
-            pipeline::PipelineBuilderContext* context) override;
+    StatusOr<pipeline::OpFactories> decompose_to_pipeline(pipeline::PipelineBuilderContext* context) override;
 
     const TOlapScanNode& thrift_olap_scan_node() const { return _olap_scan_node; }
 
@@ -210,6 +211,8 @@ private:
     std::optional<bool> _partition_order_hint;
 
     std::vector<ExprContext*> _bucket_exprs;
+
+    std::vector<ExprContext*> _partition_exprs;
 
     // profile
     RuntimeProfile* _scan_profile = nullptr;

@@ -447,6 +447,25 @@ vectorized_functions = [
     # returns NULL for NULL input and never produces a non-null BOOLEAN value.
     [30461, 'raise_error', True, False, 'BOOLEAN', ['VARCHAR'], 'StringFunctions::raise_error'],
 
+    # HTTP Request function - HTTP/HTTPS request scalar function with Named Parameters
+    # http_request(url, method, body, headers, timeout_ms, ssl_verify, username, password)
+    [30470, 'http_request', True, False, 'VARCHAR',
+     ['VARCHAR', 'VARCHAR', 'VARCHAR', 'VARCHAR', 'INT', 'BOOLEAN', 'VARCHAR', 'VARCHAR'],
+     'HttpRequestFunctions::http_request',
+     'HttpRequestFunctions::http_request_prepare', 'HttpRequestFunctions::http_request_close',
+     {
+         'named_args': [
+             {'name': 'url'},
+             {'name': 'method', 'default': 'GET'},
+             {'name': 'body', 'default': ''},
+             {'name': 'headers', 'default': '{}'},
+             {'name': 'timeout_ms', 'default': 30000},
+             {'name': 'ssl_verify', 'default': True},
+             {'name': 'username', 'default': ''},
+             {'name': 'password', 'default': ''}
+         ]
+     }],
+
     # Binary Functions
     # to_binary
     [30600, 'to_binary', True, True, 'VARBINARY', ['VARCHAR', 'VARCHAR'], 'BinaryFunctions::to_binary',
@@ -842,6 +861,28 @@ vectorized_functions = [
     [100024, 'encode_sort_key', True, False, 'VARBINARY', ['ANY_ELEMENT', '...'], 'UtilityFunctions::encode_sort_key'],
     [100025, 'uuid_v7', True, False, 'VARCHAR', [], "UtilityFunctions::uuid_v7"],
     [100026, 'uuid_v7_numeric', True, False, 'LARGEINT', [], "UtilityFunctions::uuid_v7_numeric"],
+
+    # materialize: identity function that acts as an optimization barrier.
+    # Returns the input unchanged but is opaque to the FE optimizer,
+    # preventing constant folding, partition pruning, and other rewrites.
+    [100030, 'materialize', True, False, 'BOOLEAN', ['BOOLEAN'], "UtilityFunctions::materialize"],
+    [100031, 'materialize', True, False, 'TINYINT', ['TINYINT'], "UtilityFunctions::materialize"],
+    [100032, 'materialize', True, False, 'SMALLINT', ['SMALLINT'], "UtilityFunctions::materialize"],
+    [100033, 'materialize', True, False, 'INT', ['INT'], "UtilityFunctions::materialize"],
+    [100034, 'materialize', True, False, 'BIGINT', ['BIGINT'], "UtilityFunctions::materialize"],
+    [100035, 'materialize', True, False, 'LARGEINT', ['LARGEINT'], "UtilityFunctions::materialize"],
+    [100036, 'materialize', True, False, 'FLOAT', ['FLOAT'], "UtilityFunctions::materialize"],
+    [100037, 'materialize', True, False, 'DOUBLE', ['DOUBLE'], "UtilityFunctions::materialize"],
+    [100038, 'materialize', True, False, 'VARCHAR', ['VARCHAR'], "UtilityFunctions::materialize"],
+    [100039, 'materialize', True, False, 'DATE', ['DATE'], "UtilityFunctions::materialize"],
+    [100040, 'materialize', True, False, 'DATETIME', ['DATETIME'], "UtilityFunctions::materialize"],
+    [100041, 'materialize', True, False, 'DECIMALV2', ['DECIMALV2'], "UtilityFunctions::materialize"],
+    [100042, 'materialize', True, False, 'DECIMAL32', ['DECIMAL32'], "UtilityFunctions::materialize"],
+    [100043, 'materialize', True, False, 'DECIMAL64', ['DECIMAL64'], "UtilityFunctions::materialize"],
+    [100044, 'materialize', True, False, 'DECIMAL128', ['DECIMAL128'], "UtilityFunctions::materialize"],
+    [100045, 'materialize', True, False, 'DECIMAL256', ['DECIMAL256'], "UtilityFunctions::materialize"],
+    [100046, 'materialize', True, False, 'JSON', ['JSON'], "UtilityFunctions::materialize"],
+    [100047, 'materialize', True, False, 'VARBINARY', ['VARBINARY'], "UtilityFunctions::materialize"],
 
     # json string function
     [110022, "get_json_int", False, False, "BIGINT", ["VARCHAR", "VARCHAR"], "JsonFunctions::get_json_bigint",

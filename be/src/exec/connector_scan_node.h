@@ -18,6 +18,7 @@
 #include <memory>
 
 #include "column/vectorized_fwd.h"
+#include "common/statusor.h"
 #include "connector/connector.h"
 #include "exec/scan_node.h"
 #include "fs/fs.h"
@@ -46,11 +47,11 @@ public:
     bool accept_empty_scan_ranges() const override;
 
     // for pipline APIs
-    std::vector<std::shared_ptr<pipeline::OperatorFactory>> decompose_to_pipeline(
-            pipeline::PipelineBuilderContext* context) override;
+    StatusOr<pipeline::OpFactories> decompose_to_pipeline(pipeline::PipelineBuilderContext* context) override;
 
     connector::DataSourceProvider* data_source_provider() { return _data_source_provider.get(); }
     connector::ConnectorType connector_type() { return _connector_type; }
+    const std::string& catalog_type() const { return _catalog_type; }
     bool always_shared_scan() const override;
 
 #ifdef BE_TEST
@@ -140,6 +141,7 @@ private:
     // pipeline fields and methods.
     connector::DataSourceProviderPtr _data_source_provider = nullptr;
     connector::ConnectorType _connector_type;
+    std::string _catalog_type;
     void _estimate_scan_row_bytes();
     void _estimate_data_source_mem_bytes();
     int _estimate_max_concurrent_chunks() const;

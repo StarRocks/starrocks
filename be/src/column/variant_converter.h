@@ -18,7 +18,7 @@
 
 #include "base/statusor.h"
 #include "column/column_builder.h"
-#include "column/type_traits.h"
+#include "column/runtime_type_traits.h"
 #include "types/date_value.h"
 #include "types/logical_type.h"
 #include "types/time_types.h"

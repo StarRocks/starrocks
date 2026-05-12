@@ -18,6 +18,8 @@
 
 #include "base/string/string_parser.hpp"
 #include "column/column.h" // Column
+#include "column/column_helper.h"
+#include "column/raw_data_visitor.h"
 #include "common/object_pool.h"
 #include "olap_type_infra.h"
 #include "storage/column_predicate.h"
@@ -43,29 +45,28 @@ class BloomFilter;
 namespace starrocks {
 
 template <LogicalType field_type>
-using GeEval = std::greater_equal<typename CppTypeTraits<field_type>::CppType>;
+using GeEval = std::greater_equal<StorageCppType<field_type>>;
 
 template <LogicalType field_type>
-using GtEval = std::greater<typename CppTypeTraits<field_type>::CppType>;
+using GtEval = std::greater<StorageCppType<field_type>>;
 
 template <LogicalType field_type>
-using LeEval = std::less_equal<typename CppTypeTraits<field_type>::CppType>;
+using LeEval = std::less_equal<StorageCppType<field_type>>;
 
 template <LogicalType field_type>
-using LtEval = std::less<typename CppTypeTraits<field_type>::CppType>;
+using LtEval = std::less<StorageCppType<field_type>>;
 
 template <LogicalType field_type>
-using EqEval = std::equal_to<typename CppTypeTraits<field_type>::CppType>;
+using EqEval = std::equal_to<StorageCppType<field_type>>;
 
 template <LogicalType field_type>
-using NeEval = std::not_equal_to<typename CppTypeTraits<field_type>::CppType>;
+using NeEval = std::not_equal_to<StorageCppType<field_type>>;
 
 template <LogicalType field_type, template <LogicalType> typename Predicate, typename ColumnPredicateBuilder>
 static Status predicate_convert_to(Predicate<field_type> const& input_predicate,
-                                   typename CppTypeTraits<field_type>::CppType const& value,
+                                   StorageCppType<field_type> const& value,
                                    ColumnPredicateBuilder column_predicate_builder, const ColumnPredicate** output,
                                    const TypeInfoPtr& target_type_info, ObjectPool* obj_pool) {
-    using ValueType = typename CppTypeTraits<field_type>::CppType;
     const auto to_type = target_type_info->type();
     if (to_type == field_type) {
         *output = &input_predicate;
@@ -200,10 +201,10 @@ static ColumnPredicate* new_column_predicate(const TypeInfoPtr& type_info, Colum
     const auto type = type_info->type();
     return field_type_dispatch_column_predicate(
             type, static_cast<ColumnPredicate*>(nullptr), [&]<LogicalType LT>() -> ColumnPredicate* {
-                using CppType = typename CppTypeTraits<LT>::CppType;
+                using CppType = StorageCppType<LT>;
                 // ColumnRangeBuilder treats TINYINT and BOOLEAN as INT.
                 constexpr auto MappingLogicalType = LT == TYPE_TINYINT || LT == TYPE_BOOLEAN ? TYPE_INT : LT;
-                using MappingCppType = typename CppTypeTraits<MappingLogicalType>::CppType;
+                using MappingCppType = StorageCppType<MappingLogicalType>;
 
                 if constexpr (lt_is_string<LT>) {
                     return new BinaryPredicate<LT>(type_info, id, operand.get_slice());
@@ -217,7 +218,8 @@ static ColumnPredicate* new_column_predicate(const TypeInfoPtr& type_info, Colum
 // Base class for column predicate
 template <LogicalType field_type, class Eval>
 class ColumnPredicateCmpBase : public ColumnPredicate {
-    using ValueType = typename CppTypeTraits<field_type>::CppType;
+    using ValueType = StorageCppType<field_type>;
+    static_assert(!lt_is_string_or_binary<field_type>, "ColumnPredicateCmpBase does not support string/binary types");
 
 public:
     ColumnPredicateCmpBase(PredicateType predicate, const TypeInfoPtr& type_info, ColumnId id, ValueType value)
@@ -226,8 +228,10 @@ public:
     ~ColumnPredicateCmpBase() override = default;
 
     template <typename Op>
-    inline void t_evaluate(const Column* column, uint8_t* selection, uint16_t from, uint16_t to) const {
-        auto* v = reinterpret_cast<const ValueType*>(column->raw_data());
+    Status t_evaluate(const Column* column, uint8_t* selection, uint16_t from, uint16_t to) const {
+        RawDataVisitor visitor;
+        RETURN_IF_ERROR(column->accept(&visitor));
+        const auto* v = reinterpret_cast<const ValueType*>(visitor.result());
         auto* sel = selection;
         auto eval = Eval();
         if (!column->has_null()) {
@@ -241,21 +245,19 @@ public:
                 sel[i] = Op::apply(sel[i], (uint8_t)((!is_null[i]) & eval(v[i], _value)));
             }
         }
+        return Status::OK();
     }
 
     Status evaluate(const Column* column, uint8_t* selection, uint16_t from, uint16_t to) const override {
-        t_evaluate<ColumnPredicateAssignOp>(column, selection, from, to);
-        return Status::OK();
+        return t_evaluate<ColumnPredicateAssignOp>(column, selection, from, to);
     }
 
     Status evaluate_and(const Column* column, uint8_t* selection, uint16_t from, uint16_t to) const override {
-        t_evaluate<ColumnPredicateAndOp>(column, selection, from, to);
-        return Status::OK();
+        return t_evaluate<ColumnPredicateAndOp>(column, selection, from, to);
     }
 
     Status evaluate_or(const Column* column, uint8_t* selection, uint16_t from, uint16_t to) const override {
-        t_evaluate<ColumnPredicateOrOp>(column, selection, from, to);
-        return Status::OK();
+        return t_evaluate<ColumnPredicateOrOp>(column, selection, from, to);
     }
 
     PredicateType type() const override { return _predicate; }
@@ -280,7 +282,7 @@ protected:
 template <LogicalType field_type>
 class ColumnGePredicate final : public ColumnPredicateCmpBase<field_type, GeEval<field_type>> {
 public:
-    using ValueType = typename CppTypeTraits<field_type>::CppType;
+    using ValueType = StorageCppType<field_type>;
     using Base = ColumnPredicateCmpBase<field_type, GeEval<field_type>>;
 
     ColumnGePredicate(const TypeInfoPtr& type_info, ColumnId id, ValueType value)
@@ -330,7 +332,7 @@ public:
 template <LogicalType field_type>
 class ColumnGtPredicate final : public ColumnPredicateCmpBase<field_type, GtEval<field_type>> {
 public:
-    using ValueType = typename CppTypeTraits<field_type>::CppType;
+    using ValueType = StorageCppType<field_type>;
     using Base = ColumnPredicateCmpBase<field_type, GtEval<field_type>>;
 
     ColumnGtPredicate(const TypeInfoPtr& type_info, ColumnId id, ValueType value)
@@ -380,7 +382,7 @@ public:
 template <LogicalType field_type>
 class ColumnLePredicate final : public ColumnPredicateCmpBase<field_type, LeEval<field_type>> {
 public:
-    using ValueType = typename CppTypeTraits<field_type>::CppType;
+    using ValueType = StorageCppType<field_type>;
     using Base = ColumnPredicateCmpBase<field_type, LeEval<field_type>>;
 
     ColumnLePredicate(const TypeInfoPtr& type_info, ColumnId id, ValueType value)
@@ -431,7 +433,7 @@ public:
 template <LogicalType field_type>
 class ColumnLtPredicate final : public ColumnPredicateCmpBase<field_type, LtEval<field_type>> {
 public:
-    using ValueType = typename CppTypeTraits<field_type>::CppType;
+    using ValueType = StorageCppType<field_type>;
     using Base = ColumnPredicateCmpBase<field_type, LtEval<field_type>>;
 
     ColumnLtPredicate(const TypeInfoPtr& type_info, ColumnId id, ValueType value)
@@ -482,7 +484,7 @@ public:
 template <LogicalType field_type>
 class ColumnEqPredicate final : public ColumnPredicateCmpBase<field_type, EqEval<field_type>> {
 public:
-    using ValueType = typename CppTypeTraits<field_type>::CppType;
+    using ValueType = StorageCppType<field_type>;
     using Base = ColumnPredicateCmpBase<field_type, EqEval<field_type>>;
 
     ColumnEqPredicate(const TypeInfoPtr& type_info, ColumnId id, ValueType value)
@@ -545,7 +547,7 @@ public:
 template <LogicalType field_type>
 class ColumnNePredicate final : public ColumnPredicateCmpBase<field_type, NeEval<field_type>> {
 public:
-    using ValueType = typename CppTypeTraits<field_type>::CppType;
+    using ValueType = StorageCppType<field_type>;
     using Base = ColumnPredicateCmpBase<field_type, NeEval<field_type>>;
 
     ColumnNePredicate(const TypeInfoPtr& type_info, ColumnId id, ValueType value)
@@ -590,6 +592,7 @@ public:
 // Base class for binary column predicate
 template <LogicalType field_type, class Eval>
 class BinaryColumnPredicateCmpBase : public ColumnPredicate {
+    static_assert(lt_is_string_or_binary<field_type>, "BinaryColumnPredicateCmpBase only supports string/binary types");
     using ValueType = Slice;
 
 public:
@@ -603,8 +606,8 @@ public:
     ~BinaryColumnPredicateCmpBase() override = default;
 
     template <typename Op>
-    inline void t_evaluate(const Column* column, uint8_t* selection, uint16_t from, uint16_t to) const {
-        auto* v = reinterpret_cast<const ValueType*>(column->raw_data());
+    void t_evaluate(const Column* column, uint8_t* selection, uint16_t from, uint16_t to) const {
+        const auto& v = GetStorageContainer<field_type>::get_data(column);
         auto* sel = selection;
         auto eval = Eval();
         if (!column->has_null()) {
@@ -1151,6 +1154,9 @@ std::ostream& operator<<(std::ostream& os, PredicateType p) {
         break;
     case PredicateType::kPlaceHolder:
         os << "placeholder";
+        break;
+    case PredicateType::kGinFallback:
+        os << "gin_fallback";
         break;
     default:
         CHECK(false) << "unknown predicate " << p;

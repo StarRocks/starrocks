@@ -14,6 +14,7 @@
 
 #include "util/memory_lock.h"
 
+#if defined(__linux__)
 #include <link.h>
 #include <sys/mman.h>
 #include <unistd.h>
@@ -27,7 +28,7 @@
 
 #include "common/config_diagnostic_fwd.h"
 #include "common/logging.h"
-#include "runtime/starrocks_metrics.h"
+#include "runtime/runtime_metrics.h"
 
 static inline uintptr_t page_align_down(uintptr_t addr, size_t page) {
     return addr & ~(page - 1);
@@ -48,7 +49,7 @@ static void lock_segment(const char* module_name, void* start, void* end) {
     } else {
         VLOG_FILE << "mlock success for " << module_name << " " << seg_start << "-" << seg_end << " (" << seg_len
                   << " bytes)";
-        starrocks::StarRocksMetrics::instance()->exec_runtime_memory_size.increment(seg_len);
+        starrocks::RuntimeMetrics::instance()->exec_runtime_memory_size.increment(seg_len);
     }
 }
 
@@ -97,3 +98,13 @@ void mlock_modules() {
 }
 
 } // namespace starrocks
+#else
+namespace starrocks {
+
+void mlock_modules() {
+    // Linux uses dl_iterate_phdr() from <link.h> to find executable segments.
+    // Other platforms do not build that implementation here, so keep this a no-op.
+}
+
+} // namespace starrocks
+#endif

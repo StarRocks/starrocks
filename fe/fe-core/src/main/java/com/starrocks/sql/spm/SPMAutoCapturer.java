@@ -20,7 +20,7 @@ import com.google.common.collect.Maps;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableName;
 import com.starrocks.common.AuditLog;
-import com.starrocks.common.util.FrontendDaemon;
+import com.starrocks.common.util.LeaderDaemon;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.GlobalVariable;
 import com.starrocks.server.GlobalStateMgr;
@@ -42,7 +42,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.regex.Pattern;
 
-public class SPMAutoCapturer extends FrontendDaemon {
+public class SPMAutoCapturer extends LeaderDaemon {
     private static final Logger LOG = LogManager.getLogger(SPMAutoCapturer.class);
 
     private LocalDateTime lastWorkTime =
@@ -51,16 +51,22 @@ public class SPMAutoCapturer extends FrontendDaemon {
     private ConnectContext connect;
 
     public SPMAutoCapturer() {
-        super("spm-auto-capturer");
+        super("spm-auto-capturer", GlobalVariable.spmCaptureIntervalSeconds * 1000L);
     }
 
     @Override
-    public long getInterval() {
-        return GlobalVariable.spmCaptureIntervalSeconds * 100;
+    protected synchronized void onStopped() {
+        // The captured ConnectContext is leader-session-only (it carries leader-side query
+        // execution state). Drop it so the next activation rebuilds a fresh context and the
+        // demoted FE does not retain references into leader-only state.
+        connect = null;
     }
 
     @Override
-    protected void runAfterCatalogReady() {
+    protected void runAfterLeaseValid() {
+        // Pick up runtime changes to spm_capture_interval_seconds so operators can retune the
+        // pace without restarting the leader.
+        setInterval(GlobalVariable.spmCaptureIntervalSeconds * 1000L);
         if (!GlobalVariable.enableSPMCapture) {
             return;
         }

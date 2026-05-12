@@ -17,7 +17,7 @@
 #include <type_traits>
 
 #include "column/array_column.h"
-#include "column/type_traits.h"
+#include "column/runtime_type_traits.h"
 #include "gutil/strings/fastmem.h"
 #include "types/logical_type.h"
 
@@ -36,8 +36,13 @@ struct AggDataTypeTraits<lt, FixedLengthLTGuard<lt>> {
     static void assign_value(ColumnType* column, size_t row, const RefType& ref) { column->get_data()[row] = ref; }
 
     static void append_value(ColumnType* column, const ValueType& value) { column->append(value); }
+    static void append_values(Column* column, const ValueType& value, size_t count) {
+        down_cast<ColumnType*>(column)->append_value_multiple_times(&value, count);
+    }
 
-    static RefType get_row_ref(const ColumnType& column, size_t row) { return column.immutable_data()[row]; }
+    static RefType get_row_ref(const Column& column, size_t row) {
+        return down_cast<const ColumnType&>(column).immutable_data()[row];
+    }
     static RefType get_ref(const ValueType& value) { return value; }
 
     static void update_max(ValueType& current, const RefType& input) { current = std::max<ValueType>(current, input); }
@@ -66,9 +71,23 @@ struct AggDataTypeTraits<lt, ObjectFamilyLTGuard<lt>> {
     static void assign_value(ColumnType* column, size_t row, const ValueType& ref) { *column->get_object(row) = ref; }
 
     static void append_value(ColumnType* column, const ValueType& value) { column->append(&value); }
+
+    static void append_values(Column* column, const ValueType& value, size_t count) {
+        if (count == 0) {
+            return;
+        }
+        auto* col = down_cast<ColumnType*>(column);
+        col->reserve(col->size() + count);
+        for (size_t i = 0; i < count; ++i) {
+            col->append(&value);
+        }
+    }
+
     static RefType get_ref(const ValueType& value) { return &value; }
 
-    static const RefType get_row_ref(const ColumnType& column, size_t row) { return column.get_object(row); }
+    static const RefType get_row_ref(const Column& column, size_t row) {
+        return down_cast<const ColumnType&>(column).get_object(row);
+    }
 
     static void update_max(ValueType& current, const RefType& input) { current = std::max<ValueType>(current, *input); }
 
@@ -89,10 +108,10 @@ struct AggDataTypeTraits<lt, ArrayGuard<lt>> {
     using ValueType = typename ColumnType::MutablePtr;
 
     struct RefType {
-        const ColumnType* column;
+        const Column* column;
         const size_t row;
 
-        RefType(const ColumnType* c, size_t r) : column(c), row(r) {}
+        RefType(const Column* c, size_t r) : column(c), row(r) {}
     };
 
     static void assign_value(ValueType& value, const RefType& ref) {
@@ -103,8 +122,12 @@ struct AggDataTypeTraits<lt, ArrayGuard<lt>> {
     static void append_value(ColumnType* column, const ValueType& value) {
         column->append_datum(value->get(0).template get<CppType>());
     }
+    static void append_values(Column* column, const ValueType& value, size_t count) {
+        Datum d(value->get(0).template get<CppType>());
+        column->append_value_multiple_times(&d, count);
+    }
 
-    static RefType get_row_ref(const ColumnType& column, size_t row) { return RefType(&column, row); }
+    static RefType get_row_ref(const Column& column, size_t row) { return RefType(&column, row); }
 
     static bool is_equal(const ValueType& lhs, const ValueType& rhs) {
         return lhs->get(0).template get<CppType>() == rhs->get(0).template get<CppType>();
@@ -118,6 +141,7 @@ struct AggDataTypeTraits<lt, ArrayGuard<lt>> {
 template <LogicalType lt>
 struct AggDataTypeTraits<lt, StringOrBinaryGuard<lt>> {
     using ColumnType = RunTimeColumnType<lt>;
+    using LargeColumnType = RunTimeLargeColumnType<lt>;
     using ValueType = Buffer<uint8_t>;
     using RefType = Slice;
 
@@ -130,7 +154,22 @@ struct AggDataTypeTraits<lt, StringOrBinaryGuard<lt>> {
         column->append(Slice(value.data(), value.size()));
     }
 
-    static RefType get_row_ref(const ColumnType& column, size_t row) { return column.get_slice(row); }
+    static void append_values(Column* column, const ValueType& value, size_t count) {
+        if (UNLIKELY(column->is_large_binary())) {
+            Slice slice(value.data(), value.size());
+            down_cast<LargeColumnType*>(column)->append_value_multiple_times(&slice, count);
+        } else {
+            Slice slice(value.data(), value.size());
+            down_cast<ColumnType*>(column)->append_value_multiple_times(&slice, count);
+        }
+    }
+
+    static RefType get_row_ref(const Column& column, size_t row) {
+        if (UNLIKELY(column.is_large_binary())) {
+            return down_cast<const LargeColumnType&>(column).get_slice(row);
+        }
+        return down_cast<const ColumnType&>(column).get_slice(row);
+    }
 
     static RefType get_ref(const ValueType& value) { return Slice(value.data(), value.size()); }
 

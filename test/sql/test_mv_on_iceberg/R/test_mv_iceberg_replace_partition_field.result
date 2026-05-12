@@ -1,0 +1,116 @@
+-- name: test_mv_iceberg_replace_partition_field
+function: create_iceberg_catalog("mv_iceberg_${uuid0}", "${iceberg_sql_test_catalog_type}")
+-- result:
+None
+-- !result
+set catalog mv_iceberg_${uuid0};
+-- result:
+-- !result
+create database mv_ice_db_${uuid0};
+-- result:
+-- !result
+use mv_ice_db_${uuid0};
+-- result:
+-- !result
+CREATE TABLE t1 (id int, dt date, val int)
+PARTITION BY (dt);
+-- result:
+-- !result
+INSERT INTO t1 VALUES
+  (1, '2024-01-03', 10),
+  (2, '2024-01-15', 20),
+  (3, '2024-02-05', 30);
+-- result:
+-- !result
+set catalog default_catalog;
+-- result:
+-- !result
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+set new_planner_optimize_timeout=10000;
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW test_mv1
+PARTITION BY dt
+REFRESH DEFERRED MANUAL
+PROPERTIES ("replication_num" = "1")
+AS SELECT id, dt, val FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1;
+-- result:
+-- !result
+[UC]REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+-- result:
+[REGEX].+
+-- !result
+SELECT IS_ACTIVE FROM information_schema.materialized_views
+  WHERE table_name = 'test_mv1' AND table_schema = 'db_${uuid0}';
+-- result:
+true
+-- !result
+SELECT count(*) FROM test_mv1;
+-- result:
+3
+-- !result
+SELECT id, dt, val FROM test_mv1 ORDER BY id;
+-- result:
+1	2024-01-03	10
+2	2024-01-15	20
+3	2024-02-05	30
+-- !result
+function: print_hit_materialized_view("SELECT id, dt, val FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 ORDER BY id", "test_mv1")
+-- result:
+True
+-- !result
+alter table mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 replace partition column dt with month(dt);
+-- result:
+-- !result
+show create table mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1;
+-- result:
+[REGEX](?s)t1\s+CREATE TABLE `t1` \(.*\)\s*PARTITION BY month\(`dt`\).*
+-- !result
+INSERT INTO mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 VALUES
+  (4, '2024-03-10', 40),
+  (5, '2024-03-25', 50);
+-- result:
+-- !result
+SELECT IS_ACTIVE FROM information_schema.materialized_views
+  WHERE table_name = 'test_mv1' AND table_schema = 'db_${uuid0}';
+-- result:
+true
+-- !result
+[UC]REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+-- result:
+[REGEX]E: \(1064, '.*base Iceberg table t1 has undergone partition evolution \(2 partition specs\), which is not supported.*'\)
+-- !result
+[UC]SELECT count(*) FROM test_mv1;
+-- result:
+3
+-- !result
+[UC]SELECT id, dt, val FROM test_mv1 ORDER BY id;
+-- result:
+1	2024-01-03	10
+2	2024-01-15	20
+3	2024-02-05	30
+-- !result
+function: print_hit_materialized_view("SELECT id, dt, val FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 ORDER BY id", "test_mv1")
+-- result:
+False
+-- !result
+drop materialized view test_mv1;
+-- result:
+-- !result
+drop table mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 force;
+-- result:
+-- !result
+drop database default_catalog.db_${uuid0} force;
+-- result:
+-- !result
+drop database mv_iceberg_${uuid0}.mv_ice_db_${uuid0} force;
+-- result:
+-- !result
+drop catalog mv_iceberg_${uuid0};
+-- result:
+-- !result

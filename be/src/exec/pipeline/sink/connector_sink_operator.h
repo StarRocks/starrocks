@@ -21,7 +21,7 @@
 #include "connector/sink_memory_manager.h"
 #include "connector/utils.h"
 #include "exec/pipeline/fragment_context.h"
-#include "exec/pipeline/operator.h"
+#include "exec/pipeline/operator_factory.h"
 #include "fs/fs.h"
 
 namespace starrocks::pipeline {

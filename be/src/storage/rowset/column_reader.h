@@ -39,6 +39,7 @@
 #include <memory>
 #include <utility>
 
+#include "base/concurrency/once.h"
 #include "common/statusor.h"
 #include "gen_cpp/segment.pb.h"
 #include "storage/index/inverted/inverted_index_iterator.h"
@@ -53,7 +54,6 @@
 #include "storage/rowset/segment.h"
 #include "storage/rowset/zone_map_index.h"
 #include "types/datum.h"
-#include "util/once.h"
 
 namespace starrocks {
 
@@ -258,7 +258,7 @@ private:
     // the meta in ColumnReader takes up a lot of memory,
     // and now the content that is not needed in Meta is not saved to ColumnReader
     LogicalType _column_type = TYPE_UNKNOWN;
-    LogicalType _column_child_type = TYPE_UNKNOWN;
+    [[maybe_unused]] LogicalType _column_child_type = TYPE_UNKNOWN;
     int32_t _column_length = 0; // Original column length from segment footer
     PagePointer _dict_page_pointer;
     uint64_t _total_mem_footprint = 0;

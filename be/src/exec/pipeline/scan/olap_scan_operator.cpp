@@ -62,7 +62,7 @@ OlapScanOperator::OlapScanOperator(OperatorFactory* factory, int32_t id, int32_t
 }
 
 OlapScanOperator::~OlapScanOperator() {
-    auto* state = runtime_state();
+    auto* state = get_factory()->runtime_state();
     if (state == nullptr) {
         return;
     }

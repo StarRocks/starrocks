@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include "common/statusor.h"
 #include "exec/pipeline_node.h"
 #include "exec/sort_exec_exprs.h"
 
@@ -36,14 +37,14 @@ public:
 
     void close(RuntimeState* state) override;
 
-    std::vector<std::shared_ptr<pipeline::OperatorFactory>> decompose_to_pipeline(
-            pipeline::PipelineBuilderContext* context) override;
+    StatusOr<pipeline::OpFactories> decompose_to_pipeline(pipeline::PipelineBuilderContext* context) override;
 
 private:
     template <class ContextFactory, class SinkFactory, class SourceFactory>
-    std::vector<std::shared_ptr<pipeline::OperatorFactory>> _decompose_to_pipeline(
-            pipeline::PipelineBuilderContext* context, bool is_partition_topn, bool is_partition_skewed,
-            bool is_merging, bool enable_parallel_merge, bool is_per_pipeline);
+    StatusOr<pipeline::OpFactories> _decompose_to_pipeline(pipeline::PipelineBuilderContext* context,
+                                                           bool is_partition_topn, bool is_partition_skewed,
+                                                           bool is_merging, bool enable_parallel_merge,
+                                                           bool is_per_pipeline);
 
     const TPlanNode& _tnode;
 

@@ -227,6 +227,9 @@ ADD PARTITION COLUMN partition_expr [, partition_expr ...];
 
 ALTER TABLE [catalog.][database.]table_name
 DROP PARTITION COLUMN partition_expr [, partition_expr ...];
+
+ALTER TABLE [catalog.][database.]table_name
+REPLACE PARTITION COLUMN old_partition_expr WITH new_partition_expr;
 ```
 
 Supported `partition_expr` formats:
@@ -247,6 +250,13 @@ ADD PARTITION COLUMN month(sale_date), bucket(customer_id, 10);
 ```SQL
 ALTER TABLE sales_data
 DROP PARTITION COLUMN day(sale_date);
+```
+
+- **Replace partition column:**
+
+```SQL
+ALTER TABLE sales_data
+REPLACE PARTITION COLUMN day(sale_date) WITH month(sale_date);
 ```
 
 ## DROP TABLE

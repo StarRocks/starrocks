@@ -1,0 +1,123 @@
+-- name: test_ivm_with_iceberg_multi_refresh_tvr_advance
+create external catalog mv_iceberg_${uuid0}
+properties
+(
+    "type" = "iceberg",
+    "iceberg.catalog.type" = "hive",
+    "hive.metastore.uris" = "${iceberg_catalog_hive_metastore_uris}"
+);
+-- result:
+-- !result
+set catalog mv_iceberg_${uuid0};
+-- result:
+-- !result
+create database mv_ice_db_${uuid0};
+-- result:
+-- !result
+use mv_ice_db_${uuid0};
+-- result:
+-- !result
+create table t_multi (k int, v bigint);
+-- result:
+-- !result
+insert into t_multi values (1, 10), (2, 20);
+-- result:
+-- !result
+set catalog default_catalog;
+-- result:
+-- !result
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW test_mv_multi
+REFRESH DEFERRED MANUAL
+properties
+(
+    "refresh_mode" = "incremental"
+)
+AS SELECT k, v FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t_multi;
+-- result:
+-- !result
+[UC]REFRESH MATERIALIZED VIEW test_mv_multi WITH SYNC MODE;
+SELECT count(*) FROM test_mv_multi;
+-- result:
+2
+-- !result
+[UC]EXPLAIN REFRESH MATERIALIZED VIEW test_mv_multi;
+SELECT @@enable_ivm_refresh;
+-- result:
+0
+-- !result
+SELECT @@tvr_target_mvid;
+-- result:
+-- !result
+insert into mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t_multi values (3, 30);
+-- result:
+-- !result
+[UC]REFRESH MATERIALIZED VIEW test_mv_multi WITH SYNC MODE;
+SELECT count(*) FROM test_mv_multi;
+-- result:
+3
+-- !result
+insert into mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t_multi values (4, 40);
+-- result:
+-- !result
+[UC]REFRESH MATERIALIZED VIEW test_mv_multi WITH SYNC MODE;
+SELECT count(*) FROM test_mv_multi;
+-- result:
+4
+-- !result
+insert into mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t_multi values (5, 50);
+-- result:
+-- !result
+[UC]REFRESH MATERIALIZED VIEW test_mv_multi WITH SYNC MODE;
+SELECT count(*) FROM test_mv_multi;
+-- result:
+5
+-- !result
+insert into mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t_multi values (6, 60), (7, 70);
+-- result:
+-- !result
+[UC]REFRESH MATERIALIZED VIEW test_mv_multi WITH SYNC MODE;
+SELECT count(*) FROM test_mv_multi;
+-- result:
+7
+-- !result
+SELECT k, v FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t_multi ORDER BY k, v;
+-- result:
+1	10
+2	20
+3	30
+4	40
+5	50
+6	60
+7	70
+-- !result
+SELECT k, v FROM test_mv_multi ORDER BY k, v;
+-- result:
+1	10
+2	20
+3	30
+4	40
+5	50
+6	60
+7	70
+-- !result
+drop materialized view test_mv_multi;
+-- result:
+-- !result
+drop table mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t_multi force;
+-- result:
+-- !result
+drop database mv_iceberg_${uuid0}.mv_ice_db_${uuid0} force;
+-- result:
+-- !result
+drop database db_${uuid0} force;
+-- result:
+-- !result
+drop catalog mv_iceberg_${uuid0};
+-- result:
+-- !result

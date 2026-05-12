@@ -21,10 +21,15 @@
 
 namespace starrocks {
 
+static MemTracker* process_mem_tracker_provider() {
+    return GlobalEnv::GetInstance()->process_mem_tracker();
+}
+
 void ensure_global_env() {
     if (!GlobalEnv::is_init()) {
         auto env = GlobalEnv::GetInstance();
         env->_process_mem_tracker = std::make_shared<MemTracker>(-1, "allocator_bench_root");
+        CurrentThread::set_mem_tracker_source(&GlobalEnv::is_init, process_mem_tracker_provider);
         env->_is_init = true;
     }
 }
@@ -39,6 +44,20 @@ static MemTracker* shared_tracker() {
 static MemTracker* shared_unlimited_tracker() {
     static MemTracker root_tracker(-1, "mem_tracker_bench_unlimited_root");
     return &root_tracker;
+}
+
+// 3-level hierarchy: process -> pool -> query (reflects real usage)
+static MemTracker* shared_hierarchy_3level_leaf() {
+    static MemTracker process_tracker(1LL << 30, "bench_process");
+    static MemTracker pool_tracker(512LL << 20, "bench_pool", &process_tracker);
+    static MemTracker query_tracker(256LL << 20, "bench_query", &pool_tracker);
+    return &query_tracker;
+}
+
+// Shared parent for contention benchmarks — each thread creates its own child.
+static MemTracker* shared_contention_parent() {
+    static MemTracker parent_tracker(1LL << 30, "bench_contention_parent");
+    return &parent_tracker;
 }
 
 constexpr int64_t kBytesPerOp = 256;
@@ -126,6 +145,130 @@ static void BM_current_thread_try_mem_consume_without_cache(benchmark::State& st
             kOpsPerIteration, benchmark::Counter::kIsIterationInvariantRate | benchmark::Counter::kInvert);
 }
 
+// ---- New benchmarks: consume()/release() path (the actual hot path) ----
+
+// Benchmark consume/release on single-level tracker (baseline for CAS overhead)
+static void BM_memtracker_consume(benchmark::State& state) {
+    MemTracker* tracker = shared_tracker();
+    if (state.thread_index == 0) {
+        tracker->set(0);
+    }
+
+    for (auto _ : state) {
+        for (int i = 0; i < kOpsPerIteration; ++i) {
+            tracker->consume(kBytesPerOp);
+            tracker->release(kBytesPerOp);
+        }
+    }
+
+    const double ops = static_cast<double>(state.iterations()) * kOpsPerIteration;
+    state.SetItemsProcessed(static_cast<int64_t>(ops));
+    state.counters["s_per_op"] = benchmark::Counter(
+            kOpsPerIteration, benchmark::Counter::kIsIterationInvariantRate | benchmark::Counter::kInvert);
+}
+
+// ---- New benchmarks: multi-level hierarchy ----
+
+// consume/release on 3-level hierarchy (process -> pool -> query)
+static void BM_memtracker_consume_hierarchy_3level(benchmark::State& state) {
+    MemTracker* tracker = shared_hierarchy_3level_leaf();
+    if (state.thread_index == 0) {
+        tracker->set(0);
+        tracker->parent()->set(0);
+        tracker->parent()->parent()->set(0);
+    }
+
+    for (auto _ : state) {
+        for (int i = 0; i < kOpsPerIteration; ++i) {
+            tracker->consume(kBytesPerOp);
+            tracker->release(kBytesPerOp);
+        }
+    }
+
+    const double ops = static_cast<double>(state.iterations()) * kOpsPerIteration;
+    state.SetItemsProcessed(static_cast<int64_t>(ops));
+    state.counters["s_per_op"] = benchmark::Counter(
+            kOpsPerIteration, benchmark::Counter::kIsIterationInvariantRate | benchmark::Counter::kInvert);
+}
+
+// try_consume/release on 3-level hierarchy
+static void BM_memtracker_try_consume_hierarchy_3level(benchmark::State& state) {
+    MemTracker* tracker = shared_hierarchy_3level_leaf();
+    if (state.thread_index == 0) {
+        tracker->set(0);
+        tracker->parent()->set(0);
+        tracker->parent()->parent()->set(0);
+    }
+
+    for (auto _ : state) {
+        for (int i = 0; i < kOpsPerIteration; ++i) {
+            auto* failed = tracker->try_consume(kBytesPerOp);
+            DCHECK(failed == nullptr);
+            tracker->release(kBytesPerOp);
+        }
+    }
+
+    const double ops = static_cast<double>(state.iterations()) * kOpsPerIteration;
+    state.SetItemsProcessed(static_cast<int64_t>(ops));
+    state.counters["s_per_op"] = benchmark::Counter(
+            kOpsPerIteration, benchmark::Counter::kIsIterationInvariantRate | benchmark::Counter::kInvert);
+}
+
+// ---- New benchmark: shared parent contention ----
+
+// Multiple threads each with their own child tracker, all rolling up to a shared parent.
+// This is the real contention pattern: N queries sharing the query_pool tracker.
+static void BM_memtracker_shared_parent_contention(benchmark::State& state) {
+    MemTracker* parent = shared_contention_parent();
+    // Each thread creates its own child tracker.
+    thread_local std::unique_ptr<MemTracker> tl_child;
+    if (!tl_child || tl_child->parent() != parent) {
+        tl_child = std::make_unique<MemTracker>(-1, "bench_child_" + std::to_string(state.thread_index), parent);
+    }
+
+    if (state.thread_index == 0) {
+        parent->set(0);
+    }
+    tl_child->set(0);
+
+    for (auto _ : state) {
+        for (int i = 0; i < kOpsPerIteration; ++i) {
+            tl_child->consume(kBytesPerOp);
+            tl_child->release(kBytesPerOp);
+        }
+    }
+
+    const double ops = static_cast<double>(state.iterations()) * kOpsPerIteration;
+    state.SetItemsProcessed(static_cast<int64_t>(ops));
+    state.counters["s_per_op"] = benchmark::Counter(
+            kOpsPerIteration, benchmark::Counter::kIsIterationInvariantRate | benchmark::Counter::kInvert);
+}
+
+// ---- New benchmark: peak-stable scenario (CAS skip validation) ----
+
+// Pre-establish a high peak, then do consume/release pairs below it.
+// Measures the benefit of skipping the CAS loop when value < peak.
+static void BM_memtracker_consume_peak_stable(benchmark::State& state) {
+    MemTracker* tracker = shared_tracker();
+    if (state.thread_index == 0) {
+        // Establish a high peak, then reset current to 0
+        tracker->set(static_cast<int64_t>(kBytesPerOp) * kOpsPerIteration);
+        tracker->set(0);
+    }
+
+    for (auto _ : state) {
+        for (int i = 0; i < kOpsPerIteration; ++i) {
+            tracker->consume(kBytesPerOp);
+            tracker->release(kBytesPerOp);
+        }
+    }
+
+    const double ops = static_cast<double>(state.iterations()) * kOpsPerIteration;
+    state.SetItemsProcessed(static_cast<int64_t>(ops));
+    state.counters["s_per_op"] = benchmark::Counter(
+            kOpsPerIteration, benchmark::Counter::kIsIterationInvariantRate | benchmark::Counter::kInvert);
+}
+
 static void process_args(benchmark::internal::Benchmark* b) {
     std::vector<int> threads_list = {1, 2, 4, 8, 16, 32, 64};
 
@@ -138,6 +281,11 @@ BENCHMARK(BM_memtracker_try_consume)->Apply(process_args);
 BENCHMARK(BM_memtracker_try_consume_unlimited)->Apply(process_args);
 BENCHMARK(BM_current_thread_try_mem_consume_with_cache)->Apply(process_args);
 BENCHMARK(BM_current_thread_try_mem_consume_without_cache)->Apply(process_args);
+BENCHMARK(BM_memtracker_consume)->Apply(process_args);
+BENCHMARK(BM_memtracker_consume_hierarchy_3level)->Apply(process_args);
+BENCHMARK(BM_memtracker_try_consume_hierarchy_3level)->Apply(process_args);
+BENCHMARK(BM_memtracker_shared_parent_contention)->Apply(process_args);
+BENCHMARK(BM_memtracker_consume_peak_stable)->Apply(process_args);
 
 } // namespace starrocks
 int main(int argc, char** argv) {

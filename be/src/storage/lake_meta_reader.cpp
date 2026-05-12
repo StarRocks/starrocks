@@ -20,7 +20,6 @@
 #include "column/column_helper.h"
 #include "common/status.h"
 #include "exec/pipeline/fragment_context.h"
-#include "runtime/exec_env.h"
 #include "runtime/global_dict/config.h"
 #include "storage/lake/column_mode_partial_update_handler.h"
 #include "storage/lake/meta_file.h"
@@ -39,7 +38,8 @@ LakeMetaReader::~LakeMetaReader() = default;
 Status LakeMetaReader::init(const LakeMetaReaderParams& read_params) {
     _params = read_params;
 
-    lake::TabletManager* tablet_manager = ExecEnv::GetInstance()->lake_tablet_manager();
+    auto* tablet_manager = read_params.tablet_manager;
+    RETURN_IF(tablet_manager == nullptr, Status::InternalError("lake tablet manager is not initialized"));
     ASSIGN_OR_RETURN(auto tablet, tablet_manager->get_tablet(read_params.tablet_id, read_params.version.second));
 
     TabletSchemaCSPtr base_schema;

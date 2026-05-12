@@ -14,10 +14,16 @@
 
 #include "storage/index/vector/vector_index_writer.h"
 
+#include <cmath>
+
+#include "column/nullable_column.h"
+#include "column/raw_data_visitor.h"
 #include "common/config_vector_index_fwd.h"
 #include "common/runtime_profile.h"
 #include "fs/fs_util.h"
-#include "runtime/starrocks_metrics.h"
+#include "gutil/strings/substitute.h"
+#include "storage/index/index_descriptor.h"
+#include "storage/index/vector/vector_index_file_writer.h"
 
 namespace starrocks {
 
@@ -31,6 +37,8 @@ VectorIndexWriter::VectorIndexWriter(std::shared_ptr<TabletIndex> tablet_index, 
     DCHECK(_is_element_nullable);
 }
 
+VectorIndexWriter::~VectorIndexWriter() = default;
+
 void VectorIndexWriter::create(const std::shared_ptr<TabletIndex>& tablet_index,
                                const std::string& vector_index_file_path, bool is_element_nullable,
                                std::unique_ptr<VectorIndexWriter>* res) {
@@ -38,12 +46,26 @@ void VectorIndexWriter::create(const std::shared_ptr<TabletIndex>& tablet_index,
 }
 
 Status VectorIndexWriter::init() {
-    auto index_type_iter = _tablet_index->common_properties().find("index_type");
-    if (index_type_iter->second != "ivfpq") {
-        _start_vector_index_build_threshold = 0;
-        return Status::OK();
+    // Step 1: enforce minimum threshold by algorithm type.
+    // IVFPQ requires training points >= nlist. If the input is below this,
+    // faiss will throw, so we floor the threshold at nlist to skip the build
+    // rather than crash. Other algorithms (HNSW etc.) keep the default
+    // threshold from config so callers that want "build immediately" must
+    // explicitly request it via index_build_threshold below.
+    auto index_type_it = _tablet_index->common_properties().find("index_type");
+    if (index_type_it != _tablet_index->common_properties().end()) {
+        std::string index_type = index_type_it->second;
+        std::transform(index_type.begin(), index_type.end(), index_type.begin(), ::tolower);
+        if (index_type == "ivfpq") {
+            auto nlist_it = _tablet_index->index_properties().find("nlist");
+            if (nlist_it != _tablet_index->index_properties().end()) {
+                auto nlist = static_cast<uint32_t>(std::atoi(nlist_it->second.c_str()));
+                _start_vector_index_build_threshold = std::max(_start_vector_index_build_threshold, nlist);
+            }
+        }
     }
 
+    // Step 2: user-specified property has final control over threshold.
     auto find_result = _tablet_index->common_properties().find("index_build_threshold");
     if (find_result != _tablet_index->common_properties().end()) {
         _start_vector_index_build_threshold = std::atoi(find_result->second.c_str());
@@ -52,6 +74,11 @@ Status VectorIndexWriter::init() {
 }
 
 Status VectorIndexWriter::append(const Column& src) {
+    DCHECK(src.is_array());
+
+    // Input validation is performed by ArrayColumnWriter::append before this
+    // method is reached, so the writer trusts the data and skips re-checking.
+
     int64_t duration = 0;
     {
         SCOPED_RAW_TIMER(&duration);
@@ -92,13 +119,18 @@ Status VectorIndexWriter::finish(uint64_t* index_size) {
         if (_index_builder.get() != nullptr) {
             // flush with index
             RETURN_IF_ERROR(_index_builder->flush());
+            RETURN_IF_ERROR(_index_builder->close());
         } else {
-            // flush with empty mark
-            RETURN_IF_ERROR(VectorIndexBuilder::flush_empty(_vector_index_file_path));
+            // Threshold not met: skip file generation entirely. Readers fall back
+            // to brute-force scan via NotFound; vacuum won't see any vector_index_id
+            // recorded in segment_meta because has_vector_index_written() stays
+            // false (standalone_index_size remained 0), so no phantom .vi paths
+            // are advertised downstream.
+            return Status::OK();
         }
         if (index_size) {
-            ASSIGN_OR_RETURN(auto file_ptr, fs::new_random_access_file(_vector_index_file_path))
-            ASSIGN_OR_RETURN(auto index_file_size, file_ptr->get_size())
+            ASSIGN_OR_RETURN(auto file_ptr, fs::new_random_access_file(_vector_index_file_path));
+            ASSIGN_OR_RETURN(auto index_file_size, file_ptr->get_size());
             *index_size += index_file_size;
         }
     }
@@ -116,10 +148,23 @@ uint64_t VectorIndexWriter::estimate_buffer_size() const {
 
 Status VectorIndexWriter::_prepare_index_builder() {
     ASSIGN_OR_RETURN(auto index_builder_type,
-                     VectorIndexBuilderFactory::get_index_builder_type_from_config(_tablet_index))
-    ASSIGN_OR_RETURN(_index_builder,
-                     VectorIndexBuilderFactory::create_index_builder(_tablet_index, _vector_index_file_path,
-                                                                     index_builder_type, _is_element_nullable));
+                     VectorIndexBuilderFactory::get_index_builder_type_from_config(_tablet_index));
+    const int omp_threads = std::max(1, static_cast<int>(config::config_vector_index_build_concurrency));
+#ifdef WITH_TENANN
+    // Create VectorIndexFileWriter to support remote FS (S3/HDFS) in shared-data mode.
+    // TenANN doesn't understand staros:// scheme, so we create a WritableFile through
+    // StarRocks FS and bridge it to tenann via VectorIndexFileWriter.
+    ASSIGN_OR_RETURN(auto wfile, fs::new_writable_file(_vector_index_file_path));
+    auto file_writer = std::make_unique<VectorIndexFileWriter>(std::move(wfile));
+    ASSIGN_OR_RETURN(_index_builder, VectorIndexBuilderFactory::create_index_builder(
+                                             _tablet_index, _vector_index_file_path, index_builder_type,
+                                             _is_element_nullable, omp_threads, file_writer.get()));
+    _file_writer_holder = std::move(file_writer);
+#else
+    ASSIGN_OR_RETURN(_index_builder, VectorIndexBuilderFactory::create_index_builder(
+                                             _tablet_index, _vector_index_file_path, index_builder_type,
+                                             _is_element_nullable, omp_threads));
+#endif
     RETURN_IF_ERROR(_index_builder->init());
 
     if (_buffer_column != nullptr) {
@@ -132,6 +177,58 @@ Status VectorIndexWriter::_prepare_index_builder() {
 Status VectorIndexWriter::_append_data(const Column& src, size_t offset) {
     DCHECK(src.is_array());
     RETURN_IF_ERROR(_index_builder->add(src, offset));
+    return Status::OK();
+}
+
+// Mirrors the original valid_input_vector<is_input_normalized> in
+// tenann_index_builder.cpp byte-for-byte; the only structural change is that
+// the compile-time template parameter becomes a runtime argument. Behavior
+// parity is intentional — this lifts the same validation up so it runs from
+// every caller (writer below threshold, async build task) instead of only
+// when TenAnnIndexBuilderProxy::add is reached.
+Status validate_vector_index_input(const ArrayColumn& array_col, size_t dim, bool is_input_normalized) {
+    if (array_col.empty()) {
+        return Status::OK();
+    }
+
+    const size_t num_rows = array_col.size();
+    const auto& offsets = array_col.offsets().immutable_data();
+    RawDataVisitor rv;
+    RETURN_IF_ERROR(array_col.elements().accept(&rv));
+    const auto* nums = reinterpret_cast<const float*>(rv.result());
+
+    // Element column is nullable for vector-indexed array columns; the null
+    // mask is only consumed when normalization is checked, but we extract it
+    // unconditionally to mirror the original control flow.
+    const auto& nullable_elements = down_cast<const NullableColumn&>(array_col.elements());
+    const uint8_t* is_element_nulls = nullable_elements.null_column_ref().raw_data();
+
+    for (size_t i = 0; i < num_rows; i++) {
+        const size_t input_dim = offsets[i + 1] - offsets[i];
+
+        if (input_dim != dim) {
+            return Status::InvalidArgument(
+                    strings::Substitute("The dimensions of the vector written are inconsistent, index dim is "
+                                        "$0 but data dim is $1",
+                                        dim, input_dim));
+        }
+
+        if (is_input_normalized) {
+            double sum = 0;
+            for (size_t j = 0; j < input_dim; j++) {
+                const size_t offset = offsets[i] + j;
+                if (!is_element_nulls[offset]) {
+                    sum += nums[offset] * nums[offset];
+                }
+            }
+            if (std::abs(sum - 1) > 1e-3) {
+                return Status::InvalidArgument(
+                        "The input vector is not normalized but `metric_type` is cosine_similarity and "
+                        "`is_vector_normed` is true");
+            }
+        }
+    }
+
     return Status::OK();
 }
 

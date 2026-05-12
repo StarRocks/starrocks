@@ -21,6 +21,7 @@
 #include <boost/tokenizer.hpp>
 #include <memory>
 
+#include "base/format.h"
 #include "column/column_viewer.h"
 #include "common/compiler_util.h"
 #include "common/status.h"
@@ -340,3 +341,9 @@ StatusOr<JsonPath*> JsonPath::relativize(const JsonPath* other, JsonPath* output
 }
 
 } // namespace starrocks
+
+auto fmt::formatter<starrocks::ArraySelectorType>::format(const starrocks::ArraySelectorType value,
+                                                          format_context& ctx) const -> format_context::iterator {
+    return formatter<std::underlying_type_t<starrocks::ArraySelectorType>>::format(
+            starrocks::enum_to_underlying_type(value), ctx);
+}

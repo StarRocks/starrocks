@@ -15,6 +15,7 @@
 #pragma once
 
 #include "analytor.h"
+#include "common/statusor.h"
 #include "exec/pipeline_node.h"
 #include "exprs/agg/aggregate_factory.h"
 #include "exprs/expr.h"
@@ -34,7 +35,7 @@ public:
     Status init(const TPlanNode& tnode, RuntimeState* state = nullptr) override;
     void close(RuntimeState* state) override;
 
-    pipeline::OpFactories decompose_to_pipeline(pipeline::PipelineBuilderContext* context) override;
+    StatusOr<pipeline::OpFactories> decompose_to_pipeline(pipeline::PipelineBuilderContext* context) override;
 
 private:
     const TPlanNode _tnode;

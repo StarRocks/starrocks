@@ -16,6 +16,7 @@
 
 #include "base/phmap/phmap.h"
 #include "common/global_types.h"
+#include "common/statusor.h"
 #include "exec/pipeline_node.h"
 #include "runtime/descriptors.h"
 
@@ -33,8 +34,7 @@ public:
 
     void close(RuntimeState* state) override;
 
-    std::vector<std::shared_ptr<pipeline::OperatorFactory>> decompose_to_pipeline(
-            pipeline::PipelineBuilderContext* context) override;
+    StatusOr<pipeline::OpFactories> decompose_to_pipeline(pipeline::PipelineBuilderContext* context) override;
 
     void set_num_fetchers(int32_t num_fetchers) { _num_peer_fetchers = num_fetchers; }
 

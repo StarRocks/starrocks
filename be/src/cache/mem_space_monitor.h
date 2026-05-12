@@ -15,13 +15,17 @@
 #pragma once
 
 #include <atomic>
-
-#include "cache/datacache.h"
+#include <thread>
 
 namespace starrocks {
+
+class DataCache;
+class MemTracker;
+
 class MemSpaceMonitor {
 public:
-    MemSpaceMonitor(DataCache* datacache) : _datacache(datacache) {}
+    MemSpaceMonitor(DataCache* datacache, MemTracker* process_mem_tracker)
+            : _datacache(datacache), _process_mem_tracker(process_mem_tracker) {}
 
     void start();
     void stop();
@@ -31,6 +35,7 @@ private:
     void _evict_datacache(int64_t bytes_to_dec);
 
     DataCache* _datacache = nullptr;
+    MemTracker* _process_mem_tracker = nullptr;
     std::thread _adjust_datacache_thread;
     std::atomic<bool> _stopped = false;
 };

@@ -37,6 +37,7 @@ set(EXPR_CORE_FILES
   cast_expr_map.cpp
   chunk_predicate_evaluator.cpp
   column_ref.cpp
+  column_access_path_resolver.cpp
   compound_predicate.cpp
   condition_expr.cpp
   encryption_functions.cpp
@@ -127,6 +128,7 @@ set(EXPR_FILES
   dictionary_get_expr.cpp
   ngram.cpp
   ai_functions.cpp
+  http_request_functions.cpp
 )
 
 if(STARROCKS_JIT_ENABLE)

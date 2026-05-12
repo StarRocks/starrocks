@@ -206,7 +206,7 @@ void RuntimeProfile::update(const std::vector<TRuntimeProfileNode>& nodes, int* 
 
     if (!is_node_old) {
         std::lock_guard<std::mutex> l(_info_strings_lock);
-        const InfoStrings& info_strings = node.info_strings;
+        const auto& info_strings = node.info_strings;
         for (const std::string& key : node.info_strings_display_order) {
             // Look for existing info strings and update in place. If there
             // are new strings, add them to the end of the display order.
@@ -408,27 +408,37 @@ void RuntimeProfile::get_all_children(std::vector<RuntimeProfile*>* children) {
     }
 }
 
-void RuntimeProfile::add_info_string(const std::string& key, const std::string& value) {
+void RuntimeProfile::add_info_string(std::string_view key, std::string_view value) {
     std::lock_guard<std::mutex> l(_info_strings_lock);
     auto it = _info_strings.find(key);
 
     if (it == _info_strings.end()) {
         _info_strings.emplace(key, value);
-        _info_strings_display_order.push_back(key);
+        _info_strings_display_order.push_back(std::string(key));
     } else {
         it->second = value;
     }
 }
 
-std::string* RuntimeProfile::get_info_string(const std::string& key) {
+void RuntimeProfile::add_info_string_if_not_exists(std::string_view key, std::string_view value) {
     std::lock_guard<std::mutex> l(_info_strings_lock);
     auto it = _info_strings.find(key);
 
     if (it == _info_strings.end()) {
-        return nullptr;
+        _info_strings.emplace(key, value);
+        _info_strings_display_order.push_back(std::string(key));
+    }
+}
+
+std::optional<std::string> RuntimeProfile::get_info_string(std::string_view key) {
+    std::lock_guard<std::mutex> l(_info_strings_lock);
+    auto it = _info_strings.find(key);
+
+    if (it == _info_strings.end()) {
+        return std::nullopt;
     }
 
-    return &it->second;
+    return std::string(it->second);
 }
 
 void RuntimeProfile::copy_all_info_strings_from(RuntimeProfile* src_profile) {
@@ -439,10 +449,10 @@ void RuntimeProfile::copy_all_info_strings_from(RuntimeProfile* src_profile) {
 
     std::lock_guard<std::mutex> l(src_profile->_info_strings_lock);
     for (const auto& [key, value] : src_profile->_info_strings) {
-        const std::string* exist_ptr = get_info_string(key);
-        if (exist_ptr == nullptr) {
+        const auto info = get_info_string(key);
+        if (!info.has_value()) {
             add_info_string(key, value);
-        } else if (value != *exist_ptr) {
+        } else if (value != *info) {
             std::string original_key = key;
             if (size_t pos; (pos = key.find("__DUP(")) != std::string::npos) {
                 original_key = key.substr(0, pos);
@@ -454,7 +464,7 @@ void RuntimeProfile::copy_all_info_strings_from(RuntimeProfile* src_profile) {
                 previous_offset = offset;
                 offset += step;
                 const std::string indexed_key = strings::Substitute("$0__DUP($1)", original_key, offset);
-                if (get_info_string(indexed_key) == nullptr) {
+                if (!get_info_string(indexed_key).has_value()) {
                     if (step == 1) {
                         add_info_string(indexed_key, value);
                         break;
@@ -815,18 +825,25 @@ void RuntimeProfile::to_thrift(std::vector<TRuntimeProfileNode>* nodes) {
         counter.__set_value(iter_counter->value());
         counter.__set_type(iter_counter->type());
         counter.__set_strategy(iter_counter->strategy());
-        if (iter_counter->_min_value.has_value()) {
-            counter.__set_min_value(iter_counter->_min_value.value());
+        std::optional<int64_t> min_value;
+        std::optional<int64_t> max_value;
+        {
+            std::lock_guard<std::mutex> l(_counter_lock);
+            min_value = iter_counter->_min_value;
+            max_value = iter_counter->_max_value;
         }
-        if (iter_counter->_max_value.has_value()) {
-            counter.__set_max_value(iter_counter->_max_value.value());
+        if (min_value.has_value()) {
+            counter.__set_min_value(min_value.value());
+        }
+        if (max_value.has_value()) {
+            counter.__set_max_value(max_value.value());
         }
         node.counters.push_back(counter);
     }
 
     {
         std::lock_guard<std::mutex> l(_info_strings_lock);
-        node.info_strings = _info_strings;
+        node.info_strings.insert(_info_strings.begin(), _info_strings.end());
         node.info_strings_display_order = _info_strings_display_order;
     }
 

@@ -43,6 +43,7 @@
 #include "column/binary_column.h"
 #include "column/column_helper.h"
 #include "column/nullable_column.h"
+#include "column/raw_data_visitor.h"
 #include "common/logging.h"
 #include "gutil/casts.h"
 #include "gutil/strings/substitute.h" // for Substitute
@@ -248,8 +249,10 @@ Status BinaryDictPageDecoder<Type>::next_batch(const SparseRange<>& range, Colum
 
     RETURN_IF_ERROR(_data_page_decoder->next_batch(range, _vec_code_buf.get()));
     size_t nread = _vec_code_buf->size();
-    using cast_type = CppTypeTraits<TYPE_INT>::CppType;
-    const auto* codewords = reinterpret_cast<const cast_type*>(_vec_code_buf->raw_data());
+    using cast_type = StorageCppType<TYPE_INT>;
+    RawDataVisitor visitor;
+    RETURN_IF_ERROR(_vec_code_buf->accept(&visitor));
+    const auto* codewords = reinterpret_cast<const cast_type*>(visitor.result());
 
     static_assert(sizeof(Slice) == sizeof(int128_t));
     auto slices_data = std::make_unique_for_overwrite<uint8_t[]>(nread * sizeof(Slice));
@@ -354,8 +357,10 @@ Status BinaryDictPageDecoder<Type>::next_batch_with_filter(
         return Status::OK();
     }
 
-    using cast_type = CppTypeTraits<TYPE_INT>::CppType;
-    const auto* codewords = reinterpret_cast<const cast_type*>(_vec_code_buf->raw_data());
+    using cast_type = StorageCppType<TYPE_INT>;
+    RawDataVisitor visitor;
+    RETURN_IF_ERROR(_vec_code_buf->accept(&visitor));
+    const auto* codewords = reinterpret_cast<const cast_type*>(visitor.result());
 
     // Step 3: Update selection based on dictionary selection and collect matching slices
     std::vector<Slice> selected_slices;
@@ -407,8 +412,10 @@ Status BinaryDictPageDecoder<Type>::read_by_rowids(const ordinal_t first_ordinal
         *count = 0;
         return Status::OK();
     }
-    using cast_type = CppTypeTraits<TYPE_INT>::CppType;
-    const auto* codewords = reinterpret_cast<const cast_type*>(_vec_code_buf->raw_data());
+    using cast_type = StorageCppType<TYPE_INT>;
+    RawDataVisitor visitor;
+    RETURN_IF_ERROR(_vec_code_buf->accept(&visitor));
+    const auto* codewords = reinterpret_cast<const cast_type*>(visitor.result());
     auto slices_data = std::make_unique_for_overwrite<uint8_t[]>(read_count * sizeof(Slice));
     Slice* slices = reinterpret_cast<Slice*>(slices_data.get());
     if constexpr (Type == TYPE_CHAR) {

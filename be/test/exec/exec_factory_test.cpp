@@ -127,17 +127,24 @@ TEST_F(ExecFactoryTest, test_unsupported_node_type) {
     ASSERT_NE(st.message().find("Vectorized engine not support node"), std::string::npos);
 }
 
-TEST_F(ExecFactoryTest, test_stream_scan_invalid_source_type) {
+TEST_F(ExecFactoryTest, test_stream_scan_node_rejected) {
     TPlanNode tnode = make_base_plan_node(TPlanNodeType::STREAM_SCAN_NODE);
-    TStreamScanNode stream_scan_node;
-    stream_scan_node.__set_source_type(static_cast<StreamSourceType::type>(-1));
-    tnode.__set_stream_scan_node(stream_scan_node);
 
     ExecNode* node = nullptr;
     Status st = ExecFactory::create_vectorized_node(&_runtime_state, &_object_pool, tnode, *_desc_tbl, &node);
     ASSERT_ERROR(st);
-    ASSERT_TRUE(st.is_internal_error());
-    ASSERT_NE(st.message().find("Stream scan node does not support source type"), std::string::npos);
+    ASSERT_TRUE(st.is_not_supported());
+    ASSERT_NE(st.message().find("Legacy incremental MV maintenance is no longer supported"), std::string::npos);
+}
+
+TEST_F(ExecFactoryTest, test_stream_agg_node_rejected) {
+    TPlanNode tnode = make_base_plan_node(TPlanNodeType::STREAM_AGG_NODE);
+
+    ExecNode* node = nullptr;
+    Status st = ExecFactory::create_vectorized_node(&_runtime_state, &_object_pool, tnode, *_desc_tbl, &node);
+    ASSERT_ERROR(st);
+    ASSERT_TRUE(st.is_not_supported());
+    ASSERT_NE(st.message().find("Legacy incremental MV maintenance is no longer supported"), std::string::npos);
 }
 
 TEST_F(ExecFactoryTest, test_create_tree_empty_plan) {

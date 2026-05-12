@@ -19,6 +19,8 @@ import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MvPlanContext;
 import com.starrocks.catalog.PaimonTable;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.analyzer.mv.MVPartitionCheckContext;
+import com.starrocks.sql.analyzer.mv.PaimonTablePartitionHandler;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.optimizer.MaterializedViewOptimizer;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
@@ -60,8 +62,7 @@ public class MaterializedViewAnalyzerWithPaimonTest {
 
     @Test
     public void testMaterializedAnalyPaimonTable(@Mocked SlotRef slotRef, @Mocked PaimonTable table) {
-        MaterializedViewAnalyzer.MaterializedViewAnalyzerVisitor materializedViewAnalyzerVisitor =
-                new MaterializedViewAnalyzer.MaterializedViewAnalyzerVisitor();
+        PaimonTablePartitionHandler handler = new PaimonTablePartitionHandler();
 
         new MockUp<MaterializedViewOptimizer>() {
             @Mock
@@ -75,15 +76,22 @@ public class MaterializedViewAnalyzerWithPaimonTest {
 
         {
             // test check partition column can not be found
+            Column dtColumn = new Column("dt", DateType.DATE);
             boolean checkSuccess = false;
             new Expectations() {
                 {
                     table.isUnPartitioned();
                     result = false;
+
+                    table.getPartitionColumns();
+                    result = Lists.newArrayList(dtColumn);
+
+                    slotRef.getColumnName();
+                    result = "other_col";
                 }
             };
             try {
-                materializedViewAnalyzerVisitor.checkPartitionColumnWithBasePaimonTable(slotRef, table);
+                handler.checkPartitionColumn(new MVPartitionCheckContext(null, null, slotRef, table));
                 checkSuccess = true;
             } catch (Exception e) {
                 Assertions.assertTrue(e.getMessage().contains("Materialized view partition column in partition exp " +
@@ -95,24 +103,22 @@ public class MaterializedViewAnalyzerWithPaimonTest {
 
         {
             // test check successfully
+            Column dtColumn = new Column("dt", DateType.DATE);
             boolean checkSuccess = false;
             new Expectations() {
                 {
                     table.isUnPartitioned();
                     result = false;
 
-                    table.getPartitionColumnNames();
-                    result = Lists.newArrayList("dt");
+                    table.getPartitionColumns();
+                    result = Lists.newArrayList(dtColumn);
 
                     slotRef.getColumnName();
                     result = "dt";
-
-                    table.getColumn("dt");
-                    result = new Column("dt", DateType.DATE);
                 }
             };
             try {
-                materializedViewAnalyzerVisitor.checkPartitionColumnWithBasePaimonTable(slotRef, table);
+                handler.checkPartitionColumn(new MVPartitionCheckContext(null, null, slotRef, table));
                 checkSuccess = true;
             } catch (Exception e) {
             }
@@ -120,7 +126,7 @@ public class MaterializedViewAnalyzerWithPaimonTest {
         }
 
         {
-            //test paimon table is unparitioned
+            //test paimon table is unpartitioned
             new Expectations() {
                 {
                     table.isUnPartitioned();
@@ -130,7 +136,7 @@ public class MaterializedViewAnalyzerWithPaimonTest {
 
             boolean checkSuccess = false;
             try {
-                materializedViewAnalyzerVisitor.checkPartitionColumnWithBasePaimonTable(slotRef, table);
+                handler.checkPartitionColumn(new MVPartitionCheckContext(null, null, slotRef, table));
             } catch (Exception e) {
                 Assertions.assertTrue(e.getMessage().contains("Materialized view partition column in partition exp " +
                                 "must be base table partition column"),

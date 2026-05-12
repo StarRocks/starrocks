@@ -4746,14 +4746,14 @@ TEST_F(TimeFunctionsTest, secToTimeTest) {
     {
         auto int_value = ColumnHelper::create_column(TypeDescriptor(TYPE_BIGINT), false);
 
-        int_value->append_datum(0L);
-        int_value->append_datum(1L);
-        int_value->append_datum(60L);
-        int_value->append_datum(3600L);
-        int_value->append_datum(36000L);
-        int_value->append_datum(86399L);
-        int_value->append_datum(3024000L);
-        int_value->append_datum(4000000L);
+        int_value->append_datum(Datum(int64_t(0)));
+        int_value->append_datum(Datum(int64_t(1)));
+        int_value->append_datum(Datum(int64_t(60)));
+        int_value->append_datum(Datum(int64_t(3600)));
+        int_value->append_datum(Datum(int64_t(36000)));
+        int_value->append_datum(Datum(int64_t(86399)));
+        int_value->append_datum(Datum(int64_t(3024000)));
+        int_value->append_datum(Datum(int64_t(4000000)));
 
         Columns columns;
         columns.emplace_back(int_value);
@@ -4774,14 +4774,14 @@ TEST_F(TimeFunctionsTest, secToTimeTest) {
     {
         auto int_value = ColumnHelper::create_column(TypeDescriptor(TYPE_BIGINT), false);
 
-        int_value->append_datum(-0L);
-        int_value->append_datum(-1L);
-        int_value->append_datum(-60L);
-        int_value->append_datum(-3600L);
-        int_value->append_datum(-36000L);
-        int_value->append_datum(-86399L);
-        int_value->append_datum(-3024000L);
-        int_value->append_datum(-4000000L);
+        int_value->append_datum(Datum(int64_t(0)));
+        int_value->append_datum(Datum(int64_t(-1)));
+        int_value->append_datum(Datum(int64_t(-60)));
+        int_value->append_datum(Datum(int64_t(-3600)));
+        int_value->append_datum(Datum(int64_t(-36000)));
+        int_value->append_datum(Datum(int64_t(-86399)));
+        int_value->append_datum(Datum(int64_t(-3024000)));
+        int_value->append_datum(Datum(int64_t(-4000000)));
 
         Columns columns;
         columns.emplace_back(int_value);

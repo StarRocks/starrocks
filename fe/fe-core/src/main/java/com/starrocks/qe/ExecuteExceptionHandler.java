@@ -15,7 +15,7 @@
 package com.starrocks.qe;
 
 import com.google.common.collect.ImmutableSet;
-import com.starrocks.catalog.HiveTable;
+import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.InternalErrorCode;
 import com.starrocks.common.Pair;
@@ -29,7 +29,10 @@ import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.exception.GlobalDictNotMatchException;
 import com.starrocks.connector.exception.RemoteFileNotFoundException;
 import com.starrocks.connector.statistics.ConnectorTableColumnKey;
+import com.starrocks.planner.DeltaLakeScanNode;
 import com.starrocks.planner.HdfsScanNode;
+import com.starrocks.planner.HudiScanNode;
+import com.starrocks.planner.IcebergScanNode;
 import com.starrocks.planner.ScanNode;
 import com.starrocks.planner.SlotId;
 import com.starrocks.rpc.RpcException;
@@ -215,24 +218,42 @@ public class ExecuteExceptionHandler {
         List<ScanNode> scanNodes = context.execPlan.getScanNodes();
         boolean existExternalCatalog = false;
         for (ScanNode scanNode : scanNodes) {
+            Table table = null;
             if (scanNode instanceof HdfsScanNode) {
-                HiveTable hiveTable = ((HdfsScanNode) scanNode).getHiveTable();
-                String catalogName = hiveTable.getCatalogName();
-                if (CatalogMgr.isExternalCatalog(catalogName)) {
-                    existExternalCatalog = true;
-                    ConnectorMetadata metadata = GlobalStateMgr.getCurrentState().getMetadataMgr()
-                            .getOptionalMetadata(hiveTable.getCatalogName()).get();
-                    // refresh catalog level metadata cache
-                    metadata.refreshTable(hiveTable.getCatalogDBName(), hiveTable, new ArrayList<>(), true);
-                    // clear query level metadata cache
-                    metadata.clear();
-                }
+                table = ((HdfsScanNode) scanNode).getHiveTable();
+            } else if (scanNode instanceof IcebergScanNode) {
+                table = ((IcebergScanNode) scanNode).getIcebergTable();
+            } else if (scanNode instanceof DeltaLakeScanNode) {
+                table = ((DeltaLakeScanNode) scanNode).getDeltaLakeTable();
+            } else if (scanNode instanceof HudiScanNode) {
+                table = ((HudiScanNode) scanNode).getHudiTable();
+            }
+            if (table != null) {
+                existExternalCatalog |= refreshExternalTableIfNeeded(table);
             }
         }
         if (!existExternalCatalog) {
             throw e;
         }
         Tracers.record(Tracers.Module.EXTERNAL, "HMS.RETRY", String.valueOf(context.retryTime + 1));
+    }
+
+    /**
+     * Refreshes the connector metadata cache for an external catalog table.
+     * Returns true if the table belongs to an external catalog and was refreshed.
+     */
+    private static boolean refreshExternalTableIfNeeded(Table table) {
+        String catalogName = table.getCatalogName();
+        if (!CatalogMgr.isExternalCatalog(catalogName)) {
+            return false;
+        }
+        ConnectorMetadata metadata = GlobalStateMgr.getCurrentState().getMetadataMgr()
+                .getOptionalMetadata(catalogName).get();
+        // refresh catalog level metadata cache
+        metadata.refreshTable(table.getCatalogDBName(), table, new ArrayList<>(), true);
+        // clear query level metadata cache
+        metadata.clear();
+        return true;
     }
 
     private static void tryTriggerRefreshDictAsync(GlobalDictNotMatchException e, RetryContext context) {
@@ -333,6 +354,13 @@ public class ExecuteExceptionHandler {
             this.execPlan = execPlan;
             this.connectContext = connectContext;
             this.parsedStmt = parsedStmt;
+        }
+
+        public void prepareRetry() {
+            List<ScanNode> scanNodes = execPlan.getScanNodes();
+            for (ScanNode scanNode : scanNodes) {
+                scanNode.prepareRetry();
+            }
         }
 
         public ExecPlan getExecPlan() {

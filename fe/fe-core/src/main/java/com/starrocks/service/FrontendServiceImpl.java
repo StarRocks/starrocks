@@ -41,6 +41,7 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Multimap;
 import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
+import com.starrocks.alter.AlterJobV2;
 import com.starrocks.authentication.AuthenticationException;
 import com.starrocks.authentication.AuthenticationHandler;
 import com.starrocks.authentication.AuthenticationMgr;
@@ -52,10 +53,12 @@ import com.starrocks.catalog.CatalogUtils;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ExpressionRangePartitionInfo;
+import com.starrocks.catalog.FlatJsonConfig;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.ListPartitionInfo;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
+import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
@@ -64,6 +67,7 @@ import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Replica;
+import com.starrocks.catalog.SchemaInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableName;
 import com.starrocks.catalog.Tablet;
@@ -95,6 +99,7 @@ import com.starrocks.common.DuplicatedRequestException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.IdGenerator;
 import com.starrocks.common.LabelAlreadyUsedException;
+import com.starrocks.common.MaterializedViewExceptions;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.PatternMatcher;
 import com.starrocks.common.StarRocksException;
@@ -187,7 +192,6 @@ import com.starrocks.system.Frontend;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.FrontendService;
 import com.starrocks.thrift.FrontendServiceVersion;
-import com.starrocks.thrift.MVTaskType;
 import com.starrocks.thrift.TAbortRemoteTxnRequest;
 import com.starrocks.thrift.TAbortRemoteTxnResponse;
 import com.starrocks.thrift.TAllocateAutoIncrementIdParam;
@@ -198,10 +202,13 @@ import com.starrocks.thrift.TAuthInfo;
 import com.starrocks.thrift.TAuthenticateParams;
 import com.starrocks.thrift.TBatchGetTableSchemaRequest;
 import com.starrocks.thrift.TBatchGetTableSchemaResponse;
+import com.starrocks.thrift.TBatchGetTabletMetadataRequest;
+import com.starrocks.thrift.TBatchGetTabletMetadataResponse;
 import com.starrocks.thrift.TBatchReportExecStatusParams;
 import com.starrocks.thrift.TBatchReportExecStatusResult;
 import com.starrocks.thrift.TBeginRemoteTxnRequest;
 import com.starrocks.thrift.TBeginRemoteTxnResponse;
+import com.starrocks.thrift.TCloudTabletMeta;
 import com.starrocks.thrift.TClusterSnapshotJobsRequest;
 import com.starrocks.thrift.TClusterSnapshotJobsResponse;
 import com.starrocks.thrift.TClusterSnapshotsRequest;
@@ -273,6 +280,8 @@ import com.starrocks.thrift.TGetTablesInfoRequest;
 import com.starrocks.thrift.TGetTablesInfoResponse;
 import com.starrocks.thrift.TGetTablesParams;
 import com.starrocks.thrift.TGetTablesResult;
+import com.starrocks.thrift.TGetTabletMetadataRequest;
+import com.starrocks.thrift.TGetTabletMetadataResponse;
 import com.starrocks.thrift.TGetTabletScheduleRequest;
 import com.starrocks.thrift.TGetTabletScheduleResponse;
 import com.starrocks.thrift.TGetTaskInfoResult;
@@ -372,6 +381,7 @@ import com.starrocks.thrift.TTablePrivDesc;
 import com.starrocks.thrift.TTableReplicationRequest;
 import com.starrocks.thrift.TTableReplicationResponse;
 import com.starrocks.thrift.TTabletLocation;
+import com.starrocks.thrift.TTabletRange;
 import com.starrocks.thrift.TTabletReshardJobsRequest;
 import com.starrocks.thrift.TTabletReshardJobsResponse;
 import com.starrocks.thrift.TTaskInfo;
@@ -1088,6 +1098,8 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             final TMasterOpResult result = new TMasterOpResult();
             result.setErrorMsg(e.getMessage());
             return result;
+        } finally {
+            ConnectContext.remove();
         }
     }
 
@@ -2229,7 +2241,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         // All lock-requiring operations are confined to the creator path.
         try {
             TCreatePartitionResult result = doCreatePartition(state, db, olapTable, tableId, request.getTxn_id(),
-                    request.partition_values, isTemp, partitionNamePrefix, metrics);
+                    request.partition_values, isTemp, partitionNamePrefix, timeoutMs, metrics);
             future.complete(result);
             metrics.finish();
             logMetrics(metrics, request);
@@ -2335,7 +2347,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     private static TCreatePartitionResult doCreatePartition(
             GlobalStateMgr state, Database db, OlapTable olapTable, long tableId, long txnId,
             List<List<String>> partitionValues, boolean isTemp, String partitionNamePrefix,
-            CreatePartitionMetrics metrics) throws Exception {
+            long timeoutMs, CreatePartitionMetrics metrics) throws Exception {
 
         // Step 1: Parse partition clause under READ lock (only creator does this)
         AddPartitionClause addPartitionClause = parseAddPartitionClause(
@@ -2379,7 +2391,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             if (needCreate) {
                 try {
                     createPartitionsIfNeeded(state, db, olapTable, txnState, txnId,
-                            addPartitionClause, creatingPartitionNames);
+                            addPartitionClause, creatingPartitionNames, timeoutMs);
                 } catch (Exception e) {
                     txnState.setIsCreatePartitionFailed(true);
                     throw e;
@@ -2523,7 +2535,8 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     private static void createPartitionsIfNeeded(GlobalStateMgr state, Database db, OlapTable olapTable,
                                                  TransactionState txnState, long txnId,
                                                  AddPartitionClause addPartitionClause,
-                                                 Set<String> creatingPartitionNames) throws Exception {
+                                                 Set<String> creatingPartitionNames,
+                                                 long timeoutMs) throws Exception {
         if (txnState.getIsCreatePartitionFailed()) {
             throw new StarRocksException("automatic create partition failed. error: txn " + txnId +
                     " already create partition failed");
@@ -2559,7 +2572,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         boolean willCreateNewPartition =
                 CatalogUtils.checkIfNewPartitionExists(olapTable, resolvedPartitionNames);
 
-        cancelConflictingAlterJobs(state, db, olapTable, txnId, willCreateNewPartition);
+        cancelConflictingAlterJobs(state, db, olapTable, txnId, willCreateNewPartition, timeoutMs);
 
         if (willCreateNewPartition) {
             state.getLocalMetastore().addPartitions(ctx, db, olapTable.getName(), addPartitionClause);
@@ -2570,7 +2583,8 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     }
 
     private static void cancelConflictingAlterJobs(GlobalStateMgr state, Database db, OlapTable olapTable,
-                                                   long txnId, boolean willCreateNewPartition) {
+                                                   long txnId, boolean willCreateNewPartition,
+                                                   long timeoutMs) {
         if (!willCreateNewPartition) {
             return;
         }
@@ -2591,6 +2605,78 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             }
         } catch (Exception e) {
             LOG.warn("cancel schema change or rollup failed. error: {}", e.getMessage());
+            // If cancel failed and the table is still in a non-NORMAL state, check whether
+            // the alter job is in FINISHED_REWRITING (Lake table specific). In this state,
+            // the job cannot be cancelled but will complete naturally. We poll-wait for the
+            // table state to return to NORMAL so that addPartitions can proceed safely.
+            // Directly skipping checkTableState is NOT safe because visualiseShadowIndex
+            // would crash on partitions not in its commitVersionMap.
+            if (olapTable.getState() == OlapTable.OlapTableState.SCHEMA_CHANGE
+                    || olapTable.getState() == OlapTable.OlapTableState.ROLLUP) {
+                waitForAlterJobCompletion(state, olapTable, txnId, timeoutMs);
+            }
+        }
+    }
+
+    private static void waitForAlterJobCompletion(GlobalStateMgr state, OlapTable olapTable,
+                                                  long txnId, long requestTimeoutMs) {
+        // Only wait if the alter job is in FINISHED_REWRITING — a transient state where cancel
+        // is rejected but the job is guaranteed to finish (only needs version publishing).
+        // For other non-cancellable states (FINISHED, CANCELLED), no point in waiting.
+        if (!isAlterJobInFinishedRewriting(state, olapTable)) {
+            return;
+        }
+
+        // Use up to half of the remaining request timeout for waiting, capped by config.
+        long maxWaitMs = Math.min(requestTimeoutMs / 2,
+                Config.auto_partition_wait_alter_finish_timeout_ms);
+        long pollIntervalMs = 500;
+        long waited = 0;
+
+        LOG.info("schema change job is in FINISHED_REWRITING for table {}, "
+                        + "waiting up to {}ms for completion, txn_id={}",
+                olapTable.getName(), maxWaitMs, txnId);
+
+        while (waited < maxWaitMs) {
+            try {
+                Thread.sleep(pollIntervalMs);
+            } catch (InterruptedException ie) {
+                Thread.currentThread().interrupt();
+                break;
+            }
+            waited += pollIntervalMs;
+
+            OlapTable.OlapTableState currentState = olapTable.getState();
+            if (currentState == OlapTable.OlapTableState.NORMAL
+                    || currentState == OlapTable.OlapTableState.OPTIMIZE
+                    || currentState == OlapTable.OlapTableState.TABLET_RESHARD) {
+                LOG.info("table {} state changed to {} after waiting {}ms, txn_id={}",
+                        olapTable.getName(), currentState, waited, txnId);
+                return;
+            }
+        }
+
+        LOG.warn("timed out waiting {}ms for alter job completion on table {}, "
+                        + "current state={}, txn_id={}",
+                waited, olapTable.getName(), olapTable.getState(), txnId);
+    }
+
+    private static boolean isAlterJobInFinishedRewriting(GlobalStateMgr state, OlapTable olapTable) {
+        try {
+            List<AlterJobV2> jobs = state.getSchemaChangeHandler()
+                    .getUnfinishedAlterJobV2ByTableId(olapTable.getId());
+            if (!jobs.isEmpty() && jobs.stream()
+                    .allMatch(j -> j.getJobState() == AlterJobV2.JobState.FINISHED_REWRITING)) {
+                return true;
+            }
+            // Also check rollup handler
+            jobs = state.getRollupHandler()
+                    .getUnfinishedAlterJobV2ByTableId(olapTable.getId());
+            return !jobs.isEmpty() && jobs.stream()
+                    .allMatch(j -> j.getJobState() == AlterJobV2.JobState.FINISHED_REWRITING);
+        } catch (Exception e) {
+            LOG.warn("failed to check alter job state for table {}", olapTable.getName(), e);
+            return false;
         }
     }
 
@@ -2877,11 +2963,8 @@ public class FrontendServiceImpl implements FrontendService.Iface {
 
     @Override
     public TMVReportEpochResponse mvReport(TMVMaintenanceTasks request) throws TException {
-        LOG.info("Recieve mvReport: {}", request);
-        if (!request.getTask_type().equals(MVTaskType.REPORT_EPOCH)) {
-            throw new TException("Only support report_epoch task");
-        }
-        GlobalStateMgr.getCurrentState().getMaterializedViewMgr().onReportEpoch(request);
+        LOG.warn("Ignore legacy mvReport request because {}: {}",
+                MaterializedViewExceptions.unsupportedReasonForLegacyIncrementalMaintenance(), request);
         return new TMVReportEpochResponse();
     }
 
@@ -3511,6 +3594,150 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             }
         }
         return batchResponse;
+    }
+
+    @Override
+    public TBatchGetTabletMetadataResponse getTabletMetadata(
+            TBatchGetTabletMetadataRequest batchRequest) {
+        TBatchGetTabletMetadataResponse batchResponse = new TBatchGetTabletMetadataResponse();
+        batchResponse.setStatus(new TStatus(OK));
+        if (!batchRequest.isSetRequests() || batchRequest.getRequests().isEmpty()) {
+            return batchResponse;
+        }
+        // The thrift type is a batch but only single-request payloads are accepted today.
+        // A real batch implementation would have to take a read lock on every distinct
+        // (db, table) covered by the batch and hold all of them for the full batch so that
+        // sibling tablets observe one consistent snapshot. Otherwise a schema change
+        // committing between two per-request locks would leave sibling responses with
+        // mismatched schemas and CN would assemble inconsistent TabletMetadataPBs. The
+        // grouping, lock-ordering (to avoid deadlocks against other DDL), and partial-failure
+        // bookkeeping needed to do that correctly are not worth the complexity given that
+        // the current CN caller packs exactly one request.
+        // Keep the wire shape so a future change can lift the restriction; reject the
+        // overflow case loudly until then.
+        if (batchRequest.getRequests().size() > 1) {
+            TStatus status = new TStatus(TStatusCode.NOT_IMPLEMENTED_ERROR);
+            status.addToError_msgs("multi-request batches are not supported, got: "
+                    + batchRequest.getRequests().size());
+            batchResponse.setStatus(status);
+            return batchResponse;
+        }
+        batchResponse.addToResponses(handleGetTabletMetadata(batchRequest.getRequests().get(0)));
+        return batchResponse;
+    }
+
+    private TGetTabletMetadataResponse handleGetTabletMetadata(TGetTabletMetadataRequest request) {
+        TGetTabletMetadataResponse response = new TGetTabletMetadataResponse();
+        // Only version 1 (initial empty metadata) is supported today. Higher versions
+        // would require returning rowsets and historical schemas, which are not yet
+        // wired through this RPC.
+        long version = request.isSetVersion() ? request.getVersion() : 1;
+        if (version != 1) {
+            TStatus status = new TStatus(TStatusCode.NOT_IMPLEMENTED_ERROR);
+            status.addToError_msgs("only version 1 is supported, requested version: " + version);
+            response.setStatus(status);
+            return response;
+        }
+        long tableId = request.getTable_id();
+        long partitionId = request.getPartition_id();
+        long indexId = request.getIndex_id();
+
+        long tabletId = request.getTablet_id();
+        TabletMeta tabletMeta = GlobalStateMgr.getCurrentState().getTabletInvertedIndex().getTabletMeta(tabletId);
+        if (tabletMeta == null) {
+            TStatus status = new TStatus(TStatusCode.NOT_FOUND);
+            status.addToError_msgs("tablet not found: " + tabletId);
+            response.setStatus(status);
+            return response;
+        }
+        long dbId = tabletMeta.getDbId();
+
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(dbId, tableId);
+        if (table == null) {
+            TStatus status = new TStatus(TStatusCode.NOT_FOUND);
+            status.addToError_msgs("table not found, db_id: " + dbId + ", table_id: " + tableId);
+            response.setStatus(status);
+            return response;
+        }
+        if (!table.isCloudNativeTableOrMaterializedView()) {
+            TStatus status = new TStatus(TStatusCode.INTERNAL_ERROR);
+            status.addToError_msgs("not a cloud native table, table_id: " + tableId);
+            response.setStatus(status);
+            return response;
+        }
+        OlapTable olapTable = (OlapTable) table;
+        try (AutoCloseableLock ignore = new AutoCloseableLock(
+                new Locker(), dbId, Collections.singletonList(tableId), LockType.READ)) {
+            PhysicalPartition partition = olapTable.getPhysicalPartition(partitionId);
+            if (partition == null) {
+                TStatus status = new TStatus(TStatusCode.NOT_FOUND);
+                status.addToError_msgs("partition not found: " + partitionId);
+                response.setStatus(status);
+                return response;
+            }
+
+            MaterializedIndex index = partition.getIndex(indexId);
+            if (index == null) {
+                TStatus status = new TStatus(TStatusCode.NOT_FOUND);
+                status.addToError_msgs("index not found: " + indexId);
+                response.setStatus(status);
+                return response;
+            }
+
+            MaterializedIndexMeta indexMeta = olapTable.getIndexMetaByMetaId(index.getMetaId());
+            if (indexMeta == null) {
+                TStatus status = new TStatus(TStatusCode.NOT_FOUND);
+                status.addToError_msgs("index meta not found for metaId: " + index.getMetaId());
+                response.setStatus(status);
+                return response;
+            }
+
+            TCloudTabletMeta meta = new TCloudTabletMeta();
+            meta.setTablet_id(tabletId);
+
+            long indexMetaId = index.getMetaId();
+            SchemaInfo schemaInfo = SchemaInfo.fromMaterializedIndex(olapTable, indexMetaId, indexMeta);
+            meta.setSchema(schemaInfo.toTabletSchema());
+
+            meta.setEnable_persistent_index(olapTable.enablePersistentIndex());
+            if (olapTable.getPersistentIndexType() != null) {
+                meta.setPersistent_index_type(olapTable.getPersistentIndexType());
+            }
+            meta.setCompaction_strategy(olapTable.getCompactionStrategy());
+            FlatJsonConfig flatJsonConfig = olapTable.getFlatJsonConfig();
+            if (flatJsonConfig != null) {
+                meta.setFlat_json_config(flatJsonConfig.toTFlatJsonConfig());
+            }
+            if (olapTable.getCompressionType() != null) {
+                meta.setCompression_type(olapTable.getCompressionType());
+            }
+            meta.setCompression_level(olapTable.getCompressionLevel());
+
+            // tablet_ranges holds all tablets' ranges in this index, only for range distribution
+            if (olapTable.isRangeDistribution()) {
+                Map<Long, TTabletRange> tabletRanges = new HashMap<>();
+                for (Tablet tablet : index.getTablets()) {
+                    if (tablet.getRange() != null) {
+                        tabletRanges.put(tablet.getId(), tablet.getRange().toThrift());
+                    }
+                }
+                if (!tabletRanges.isEmpty()) {
+                    meta.setTablet_ranges(tabletRanges);
+                }
+            }
+
+            meta.setGtid(0);
+
+            response.setMeta(meta);
+            response.setStatus(new TStatus(TStatusCode.OK));
+        } catch (Exception e) {
+            TStatus status = new TStatus(TStatusCode.INTERNAL_ERROR);
+            status.addToError_msgs("failed to get tablet metadata, table_id: " + tableId
+                    + ", partition_id: " + partitionId + ", index_id: " + indexId
+                    + ", error: " + e.getMessage());
+            response.setStatus(status);
+        }
+        return response;
     }
 
     private static class CreatePartitionMetrics {

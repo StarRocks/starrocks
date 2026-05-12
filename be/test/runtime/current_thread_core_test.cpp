@@ -94,6 +94,15 @@ TEST_F(CurrentThreadCoreTest, reset_provider_to_default_behaves_as_pre_init) {
     EXPECT_EQ(CurrentThread::mem_tracker(), nullptr);
 }
 
+TEST_F(CurrentThreadCoreTest, exported_offsets_match_tls_layout) {
+    const auto* base = reinterpret_cast<const uint8_t*>(&tls_thread_status);
+    const auto* query_id = reinterpret_cast<const uint8_t*>(&tls_thread_status._query_id);
+    const auto* module_type = reinterpret_cast<const uint8_t*>(&tls_thread_status._module_type);
+
+    EXPECT_EQ(CurrentThread::query_id_offset(), static_cast<size_t>(query_id - base));
+    EXPECT_EQ(CurrentThread::module_type_offset(), static_cast<size_t>(module_type - base));
+}
+
 } // namespace
 
 } // namespace starrocks

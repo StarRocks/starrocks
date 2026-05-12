@@ -63,8 +63,8 @@ Status FetchNode::init(const TPlanNode& tnode, RuntimeState* state) {
     return Status::OK();
 }
 
-pipeline::OpFactories FetchNode::decompose_to_pipeline(pipeline::PipelineBuilderContext* context) {
-    OpFactories operators = _children[0]->decompose_to_pipeline(context);
+StatusOr<pipeline::OpFactories> FetchNode::decompose_to_pipeline(pipeline::PipelineBuilderContext* context) {
+    ASSIGN_OR_RETURN(auto operators, _children[0]->decompose_to_pipeline(context));
 
     auto fetch_processor_factory = std::make_shared<pipeline::FetchProcessorFactory>(_target_node_id, _row_pos_descs,
                                                                                      _slot_id_to_desc, _nodes_info);

@@ -1,6 +1,7 @@
 -- name: test_glm_native_with_models
 
 set enable_global_late_materialization = true;
+set enable_global_late_materialization_cost_based = false;
 
 -- update
 CREATE TABLE tablepk (pkkey int, pkvalue int) PRIMARY KEY(pkkey);

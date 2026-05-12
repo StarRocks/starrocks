@@ -19,6 +19,7 @@
 #include "exec/pipeline/spill_process_channel.h"
 #include "exec/spill/executor.h"
 #include "exec/spill/spiller.hpp"
+#include "runtime/runtime_state.h"
 
 namespace starrocks::pipeline {
 

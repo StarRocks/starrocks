@@ -18,7 +18,7 @@
 #include "base/orlp/pdqsort.h"
 #include "base/utility/defer_op.h"
 #include "column/column_helper.h"
-#include "column/type_traits.h"
+#include "column/runtime_type_traits.h"
 #include "column/vectorized_fwd.h"
 #include "common/runtime_profile.h"
 #include "exec/sorting/merge.h"

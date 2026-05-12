@@ -74,6 +74,12 @@ CONF_mBool(enable_pk_index_parallel_execution, "true");
 // The minimum rows threshold to enable parallel get for primary key index in shared-data mode.
 CONF_mInt64(pk_index_parallel_execution_min_rows, "16384");
 
+// Skip the parallel two-phase prefetch in LakePersistentIndex::load_dels when the update
+// mem tracker is already past this percent (0-100) of its limit. In that regime the function
+// falls back to a single-pass loop that holds only one decoded del-file column at a time,
+// trading the cold-start latency win for bounded peak memory.
+CONF_mInt32(pk_index_parallel_load_dels_mem_ratio, "50");
+
 // The maximum number of memtables for pk index in shared-data mode.
 CONF_mInt32(pk_index_memtable_max_count, "2");
 
@@ -224,8 +230,6 @@ CONF_mInt64(primary_key_batch_get_index_memory_limit, "104857600"); // 100MB
 CONF_mInt64(pk_dump_interval_seconds, "3600"); // 1 hour
 
 CONF_mBool(enable_pk_strict_memcheck, "true");
-
-CONF_mBool(skip_pk_preload, "true");
 
 CONF_mInt32(apply_version_slow_log_sec, "30");
 

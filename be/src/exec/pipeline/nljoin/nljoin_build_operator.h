@@ -18,7 +18,7 @@
 
 #include "column/vectorized_fwd.h"
 #include "exec/pipeline/nljoin/nljoin_context.h"
-#include "exec/pipeline/operator.h"
+#include "exec/pipeline/operator_factory.h"
 
 namespace starrocks::pipeline {
 
@@ -49,7 +49,7 @@ public:
 
     OutputAmplificationType intra_pipeline_amplification_type() const override;
     size_t output_amplification_factor() const override;
-    void update_exec_stats(RuntimeState* state) override {}
+    OperatorExecStatsSnapshot exec_stats_snapshot() const override { return OperatorExecStatsSnapshot::ignored(); }
 
 private:
     std::atomic<bool> _is_finished = false;

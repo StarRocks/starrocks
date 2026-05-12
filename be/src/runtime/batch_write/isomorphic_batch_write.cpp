@@ -21,9 +21,9 @@
 #include <atomic>
 #include <utility>
 
-#include "agent/master_info.h"
 #include "base/testutil/sync_point.h"
 #include "common/config_merge_commit_fwd.h"
+#include "common/system/master_info.h"
 #include "common/util/bthreads/executor.h"
 #include "common/utils.h"
 #include "gen_cpp/FrontendService.h"
@@ -33,7 +33,7 @@
 #include "runtime/exec_env.h"
 #include "runtime/stream_load/stream_load_context.h"
 #include "runtime/stream_load/time_bounded_stream_load_pipe.h"
-#include "util/thrift_rpc_helper.h"
+#include "runtime/thrift_rpc_helper.h"
 
 namespace starrocks {
 

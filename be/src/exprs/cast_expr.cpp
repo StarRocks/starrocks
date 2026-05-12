@@ -40,7 +40,7 @@
 #include "column/column_viewer.h"
 #include "column/json_converter.h"
 #include "column/nullable_column.h"
-#include "column/type_traits.h"
+#include "column/runtime_type_traits.h"
 #include "column/variant_column.h"
 #include "column/variant_converter.h"
 #include "column/variant_encoder.h"
@@ -2227,9 +2227,8 @@ StatusOr<Expr*> VectorizedCastExprFactory::create_cast_expr(ObjectPool* pool, co
             std::vector<int> source_field_indices(to_type.children.size());
             for (int i = 0; i < (int)to_type.children.size(); ++i) {
                 source_field_indices[i] = i;
-                ASSIGN_OR_RETURN(field_casts[i],
-                                 create_cast_expr(pool, from_type.children[i], to_type.children[i],
-                                                  allow_throw_exception));
+                ASSIGN_OR_RETURN(field_casts[i], create_cast_expr(pool, from_type.children[i], to_type.children[i],
+                                                                  allow_throw_exception));
                 pool->add(field_casts[i]);
                 auto cast_input = create_slot_ref(from_type.children[i]);
                 field_casts[i]->add_child(cast_input.get());

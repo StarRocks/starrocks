@@ -14,6 +14,7 @@
 
 #include <utility>
 
+#include "column/adaptive_nullable_column.h"
 #include "column/array_column.h"
 #include "column/column_helper.h"
 #include "column/column_visitor_adapter.h"
@@ -226,6 +227,11 @@ public:
         DCHECK(false) << "not support object column sort_and_tie";
 
         return Status::NotSupported("not support object column sort_and_tie");
+    }
+
+    Status do_visit(const AdaptiveNullableColumn& column) {
+        // TODO: supported later
+        return Status::NotSupported("not support AdaptiveNullableColumn in ColumnCompare");
     }
 
     Status do_visit(const JsonColumn& column) {

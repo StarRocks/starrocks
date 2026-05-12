@@ -478,7 +478,7 @@ ALTER TABLE <table_name> MERGE { TABLET | TABLETS }
 
 参数说明：
 
-- `tablet_reshard_target_size`: 执行 SPLIT 或 MERGE 后的 Tablet 目标大小。默认值：1 GB。如果已明确指定了 Tablet ID，则无需指定此参数。
+- `tablet_reshard_target_size`: 执行 SPLIT 或 MERGE 后的 Tablet 目标大小。默认值：10 GB。如果已明确指定了 Tablet ID，则无需指定此参数。
 
   - 触发拆分（SPLIT）的条件：
     - Tablet 的大小**大于** `tablet_reshard_target_size`。
@@ -1399,7 +1399,7 @@ ALTER TABLE db1.test_tbl DROP PERSISTENT INDEX ON TABLETS (100, 101);
 
 ### 拆分或合并 Tablet
 
-- 将表中所有符合条件的 Tablet 拆分，目标大小为 1 GB（默认值）。
+- 将表中所有符合条件的 Tablet 拆分，目标大小为 10 GB（默认值）。
 
 ```SQL
 ALTER TABLE table1 SPLIT TABLETS;
@@ -1419,7 +1419,7 @@ ALTER TABLE table1 SPLIT TABLETS
 (9588955, 9588956, 9588957);
 ```
 
-- 将表中所有符合条件的 Tablet 合并，目标大小为 1 GB（默认值）。
+- 将表中所有符合条件的 Tablet 合并，目标大小为 10 GB（默认值）。
 
 ```SQL
 ALTER TABLE table1 MERGE TABLETS

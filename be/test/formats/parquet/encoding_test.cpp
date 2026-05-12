@@ -21,6 +21,7 @@
 
 #include "base/simd/byte_stream_split.h"
 #include "column/binary_column.h"
+#include "column/column_helper.h"
 #include "column/fixed_length_column.h"
 #include "column/nullable_column.h"
 #include "common/config_exec_fwd.h"
@@ -84,10 +85,9 @@ struct DecoderChecker {
                 st = decoder->next_batch(values.size(), ColumnContentType::VALUE, column.get());
                 ASSERT_TRUE(st.ok()) << st.to_string();
 
-                const T* check = (const T*)column->raw_data();
+                const auto& check = column->immutable_data();
                 for (int i = 0; i < values.size(); ++i) {
-                    ASSERT_EQ(values[i], *check);
-                    check++;
+                    ASSERT_EQ(values[i], check[i]);
                 }
 
                 if (!is_dictionary) {
@@ -101,14 +101,14 @@ struct DecoderChecker {
                 size_t values_to_skip = values.size() / 2;
                 size_t remain_values = values.size() - values_to_skip;
 
-                auto column = starrocks::FixedLengthColumn<T>::create();
+                auto column = FixedLengthColumn<T>::create();
                 st = decoder->set_data(encoded_data);
                 ASSERT_TRUE(st.ok()) << st.to_string();
                 st = decoder->skip(values_to_skip);
                 st = decoder->next_batch(remain_values, ColumnContentType::VALUE, column.get());
                 ASSERT_TRUE(st.ok()) << st.to_string();
 
-                const T* check = (const T*)column->raw_data();
+                const auto check = column->immutable_data();
                 for (int i = 0; i < remain_values; ++i) {
                     ASSERT_EQ(values[values_to_skip + i], check[i]);
                 }
@@ -131,10 +131,10 @@ struct DecoderChecker {
                 st = decoder->next_batch(values.size(), ColumnContentType::VALUE, column.get());
                 ASSERT_TRUE(st.ok()) << st.to_string();
 
-                const T* check = (const T*)column->data_column()->raw_data();
+                const auto check =
+                        down_cast<const FixedLengthColumn<T>*>(column->data_column().get())->immutable_data();
                 for (int i = 0; i < values.size(); ++i) {
-                    ASSERT_EQ(values[i], *check);
-                    check++;
+                    ASSERT_EQ(values[i], check[i]);
                 }
 
                 if (!is_dictionary) {
@@ -148,7 +148,7 @@ struct DecoderChecker {
                 size_t values_to_skip = values.size() / 2;
                 size_t remain_values = values.size() - values_to_skip;
 
-                auto data_column = starrocks::FixedLengthColumn<T>::create();
+                auto data_column = FixedLengthColumn<T>::create();
                 auto column = NullableColumn::create(std::move(data_column), NullColumn::create());
 
                 st = decoder->set_data(encoded_data);
@@ -157,7 +157,8 @@ struct DecoderChecker {
                 st = decoder->next_batch(remain_values, ColumnContentType::VALUE, column.get());
                 ASSERT_TRUE(st.ok()) << st.to_string();
 
-                const T* check = (const T*)column->data_column()->raw_data();
+                const auto check =
+                        down_cast<const FixedLengthColumn<T>*>(column->data_column().get())->immutable_data();
                 for (int i = 0; i < remain_values; ++i) {
                     ASSERT_EQ(values[values_to_skip + i], check[i]);
                 }
@@ -215,17 +216,16 @@ struct DecoderChecker<Slice, is_dictionary> {
         if (true) {
             // read
             {
-                auto column = starrocks::BinaryColumn::create();
+                auto column = BinaryColumn::create();
 
                 st = decoder->set_data(encoded_data);
                 ASSERT_TRUE(st.ok()) << st.to_string();
                 st = decoder->next_batch(values.size(), ColumnContentType::VALUE, column.get());
                 ASSERT_TRUE(st.ok()) << st.to_string();
 
-                const auto* check = (const Slice*)column->raw_data();
-                for (auto value : values) {
-                    ASSERT_EQ(value, *check);
-                    check++;
+                const auto check = column->immutable_data();
+                for (int i = 0; i < values.size(); ++i) {
+                    ASSERT_EQ(values[i], check[i]);
                 }
 
                 if (!is_dictionary) {
@@ -247,7 +247,7 @@ struct DecoderChecker<Slice, is_dictionary> {
                 st = decoder->next_batch(remain_values, ColumnContentType::VALUE, column.get());
                 ASSERT_TRUE(st.ok()) << st.to_string();
 
-                const auto* check = (const Slice*)column->raw_data();
+                const auto check = column->immutable_data();
                 for (size_t i = 0; i < remain_values; i++) {
                     EXPECT_EQ(values[values_to_skip + i], check[i]);
                 }
@@ -270,10 +270,9 @@ struct DecoderChecker<Slice, is_dictionary> {
                 st = decoder->next_batch(values.size(), ColumnContentType::VALUE, column.get());
                 ASSERT_TRUE(st.ok()) << st.to_string();
 
-                const auto* check = (const Slice*)column->data_column()->raw_data();
-                for (auto value : values) {
-                    ASSERT_EQ(value, *check);
-                    check++;
+                const auto& checks = GetContainer<TYPE_VARCHAR>::get_data(column.get());
+                for (size_t i = 0; i < values.size(); i++) {
+                    ASSERT_EQ(values[i], checks[i]);
                 }
 
                 if (!is_dictionary) {
@@ -296,9 +295,9 @@ struct DecoderChecker<Slice, is_dictionary> {
                 st = decoder->next_batch(remain_values, ColumnContentType::VALUE, column.get());
                 ASSERT_TRUE(st.ok()) << st.to_string();
 
-                const auto* check = (const Slice*)column->data_column()->raw_data();
+                const auto& checks = GetContainer<TYPE_VARCHAR>::get_data(column.get());
                 for (size_t i = 0; i < remain_values; i++) {
-                    EXPECT_EQ(values[values_to_skip + i], check[i]);
+                    EXPECT_EQ(values[values_to_skip + i], checks[i]);
                 }
 
                 if (!is_dictionary) {

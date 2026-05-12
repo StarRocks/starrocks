@@ -29,6 +29,8 @@
 #include "exec/pipeline/bucket_process_operator.h"
 #include "exec/pipeline/chunk_accumulate_operator.h"
 #include "exec/pipeline/exchange/local_exchange_source_operator.h"
+#include "exec/pipeline/exec_node_pipeline_adapter.h"
+#include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/limit_operator.h"
 #include "exec/pipeline/operator.h"
 #include "exec/pipeline/pipeline_builder.h"
@@ -39,9 +41,9 @@
 namespace starrocks {
 
 template <class AggFactory, class SourceFactory, class SinkFactory>
-pipeline::OpFactories AggregateBlockingNode::_decompose_to_pipeline(pipeline::OpFactories& ops_with_sink,
-                                                                    pipeline::PipelineBuilderContext* context,
-                                                                    bool per_bucket_optimize) {
+StatusOr<pipeline::OpFactories> AggregateBlockingNode::_decompose_to_pipeline(pipeline::OpFactories& ops_with_sink,
+                                                                              pipeline::PipelineBuilderContext* context,
+                                                                              bool per_bucket_optimize) {
     using namespace pipeline;
 
     auto workgroup = context->fragment_context()->workgroup();
@@ -87,7 +89,7 @@ pipeline::OpFactories AggregateBlockingNode::_decompose_to_pipeline(pipeline::Op
     // Create a shared RefCountedRuntimeFilterCollector
     // Initialize OperatorFactory's fields involving runtime filters.
     auto&& rc_rf_probe_collector = std::make_shared<RcRfProbeCollector>(2, std::move(this->runtime_filter_collector()));
-    this->init_runtime_filter_for_operator(agg_sink_op.get(), context, rc_rf_probe_collector);
+    pipeline::init_runtime_filter_for_operator(*this, agg_sink_op.get(), context, rc_rf_probe_collector);
     auto bucket_process_context_factory = std::make_shared<BucketProcessContextFactory>();
     if (per_bucket_optimize) {
         agg_sink_op = std::make_shared<BucketProcessSinkOperatorFactory>(
@@ -98,7 +100,7 @@ pipeline::OpFactories AggregateBlockingNode::_decompose_to_pipeline(pipeline::Op
 
     OpFactories ops_with_source;
     // Initialize OperatorFactory's fields involving runtime filters.
-    this->init_runtime_filter_for_operator(agg_source_op.get(), context, rc_rf_probe_collector);
+    pipeline::init_runtime_filter_for_operator(*this, agg_source_op.get(), context, rc_rf_probe_collector);
 
     if (per_bucket_optimize) {
         auto bucket_source_operator = std::make_shared<BucketProcessSourceOperatorFactory>(
@@ -117,11 +119,12 @@ pipeline::OpFactories AggregateBlockingNode::_decompose_to_pipeline(pipeline::Op
     return ops_with_source;
 }
 
-pipeline::OpFactories AggregateBlockingNode::decompose_to_pipeline(pipeline::PipelineBuilderContext* context) {
+StatusOr<pipeline::OpFactories> AggregateBlockingNode::decompose_to_pipeline(
+        pipeline::PipelineBuilderContext* context) {
     using namespace pipeline;
 
     context->has_aggregation = true;
-    OpFactories ops_with_sink = _children[0]->decompose_to_pipeline(context);
+    ASSIGN_OR_RETURN(auto ops_with_sink, _children[0]->decompose_to_pipeline(context));
     auto& agg_node = _tnode.agg_node;
 
     bool sorted_streaming_aggregate = _tnode.agg_node.__isset.use_sort_agg && _tnode.agg_node.use_sort_agg;
@@ -167,31 +170,37 @@ pipeline::OpFactories AggregateBlockingNode::decompose_to_pipeline(pipeline::Pip
 
     OpFactories ops_with_source;
     if (sorted_streaming_aggregate) {
-        ops_with_source =
-                _decompose_to_pipeline<StreamingAggregatorFactory, SortedAggregateStreamingSourceOperatorFactory,
-                                       SortedAggregateStreamingSinkOperatorFactory>(ops_with_sink, context, false);
+        ASSIGN_OR_RETURN(
+                ops_with_source,
+                (_decompose_to_pipeline<StreamingAggregatorFactory, SortedAggregateStreamingSourceOperatorFactory,
+                                        SortedAggregateStreamingSinkOperatorFactory>(ops_with_sink, context, false)));
     } else {
         // disable spill when group by with a small limit
+        // having clause filters rows after aggregation, so a small limit does not bound the
+        // aggregation input size; only disable spill when there is no having clause.
         bool enable_agg_spill = runtime_state()->enable_spill() && runtime_state()->enable_agg_spill();
-        if (limit() != -1 && limit() < runtime_state()->chunk_size()) {
+        if (limit() != -1 && limit() < runtime_state()->chunk_size() && _tnode.conjuncts.empty()) {
             enable_agg_spill = false;
         }
         if (enable_agg_spill && has_group_by_keys) {
             if (runtime_state()->enable_spill_partitionwise_agg()) {
-                ops_with_source =
-                        _decompose_to_pipeline<AggregatorFactory, SpillablePartitionWiseAggregateSourceOperatorFactory,
-                                               SpillablePartitionWiseAggregateSinkOperatorFactory>(ops_with_sink,
-                                                                                                   context, false);
+                ASSIGN_OR_RETURN(
+                        ops_with_source,
+                        (_decompose_to_pipeline<AggregatorFactory, SpillablePartitionWiseAggregateSourceOperatorFactory,
+                                                SpillablePartitionWiseAggregateSinkOperatorFactory>(ops_with_sink,
+                                                                                                    context, false)));
             } else {
-                ops_with_source =
-                        _decompose_to_pipeline<AggregatorFactory, SpillableAggregateBlockingSourceOperatorFactory,
-                                               SpillableAggregateBlockingSinkOperatorFactory>(ops_with_sink, context,
-                                                                                              false);
+                ASSIGN_OR_RETURN(
+                        ops_with_source,
+                        (_decompose_to_pipeline<AggregatorFactory, SpillableAggregateBlockingSourceOperatorFactory,
+                                                SpillableAggregateBlockingSinkOperatorFactory>(ops_with_sink, context,
+                                                                                               false)));
             }
         } else {
-            ops_with_source = _decompose_to_pipeline<AggregatorFactory, AggregateBlockingSourceOperatorFactory,
+            ASSIGN_OR_RETURN(ops_with_source,
+                             (_decompose_to_pipeline<AggregatorFactory, AggregateBlockingSourceOperatorFactory,
                                                      AggregateBlockingSinkOperatorFactory>(
-                    ops_with_sink, context, use_per_bucket_optimize && has_group_by_keys);
+                                     ops_with_sink, context, use_per_bucket_optimize && has_group_by_keys)));
         }
     }
 
@@ -206,7 +215,7 @@ pipeline::OpFactories AggregateBlockingNode::decompose_to_pipeline(pipeline::Pip
     }
 
     if (!_tnode.conjuncts.empty() || ops_with_source.back()->has_runtime_filters()) {
-        may_add_chunk_accumulate_operator(ops_with_source, context, id());
+        pipeline::may_add_chunk_accumulate_operator(ops_with_source, context, id());
     }
 
     ops_with_source = context->maybe_interpolate_debug_ops(runtime_state(), _id, ops_with_source);

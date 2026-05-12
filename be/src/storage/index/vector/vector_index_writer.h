@@ -29,6 +29,16 @@
 namespace starrocks {
 
 class ArrayColumn;
+class VectorIndexFileWriter;
+
+// Validate an array column against the vector index parameters. Every caller
+// that feeds data into a vector index builder must call this first so the
+// same dim and cosine-normalization rules apply regardless of whether the
+// build is inline (VectorIndexWriter::append, sync OLAP path) or asynchronous
+// (lake::VectorIndexBuildTask, shared-data path), and so that buffered data
+// below the build threshold is still checked. Mirrors the original
+// valid_input_vector logic in tenann_index_builder.cpp.
+Status validate_vector_index_input(const ArrayColumn& array_col, size_t dim, bool is_input_normalized);
 
 class VectorIndexWriter {
 public:
@@ -37,6 +47,8 @@ public:
 
     VectorIndexWriter(std::shared_ptr<TabletIndex> tablet_index, std::string vector_index_file_path,
                       bool is_element_nullable);
+
+    ~VectorIndexWriter();
 
     Status init();
 
@@ -53,6 +65,11 @@ public:
 private:
     std::shared_ptr<TabletIndex> _tablet_index;
     std::string _vector_index_file_path;
+    // Declared before _index_builder: TenAnnIndexBuilderProxy stores a raw pointer to this
+    // VectorIndexFileWriter. Members are destroyed in reverse declaration order, so the
+    // proxy's destructor (which calls close() -> _file_writer->Close()) must run BEFORE
+    // _file_writer_holder is freed, otherwise we get a use-after-free on teardown.
+    std::unique_ptr<VectorIndexFileWriter> _file_writer_holder;
     std::unique_ptr<VectorIndexBuilder> _index_builder;
 
     uint32_t _start_vector_index_build_threshold;

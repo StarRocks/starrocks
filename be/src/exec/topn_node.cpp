@@ -21,6 +21,8 @@
 #include "exec/chunks_sorter_full_sort.h"
 #include "exec/chunks_sorter_heap_sort.h"
 #include "exec/chunks_sorter_topn.h"
+#include "exec/pipeline/exec_node_pipeline_adapter.h"
+#include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/limit_operator.h"
 #include "exec/pipeline/pipeline_builder.h"
 #include "exec/pipeline/sort/local_merge_sort_source_operator.h"
@@ -160,12 +162,13 @@ void TopNNode::close(RuntimeState* state) {
 }
 
 template <class ContextFactory, class SinkFactory, class SourceFactory>
-std::vector<std::shared_ptr<pipeline::OperatorFactory>> TopNNode::_decompose_to_pipeline(
-        pipeline::PipelineBuilderContext* context, bool is_partition_topn, bool is_partition_skewed, bool need_merge,
-        bool enable_parallel_merge, bool is_per_pipeline) {
+StatusOr<pipeline::OpFactories> TopNNode::_decompose_to_pipeline(pipeline::PipelineBuilderContext* context,
+                                                                 bool is_partition_topn, bool is_partition_skewed,
+                                                                 bool need_merge, bool enable_parallel_merge,
+                                                                 bool is_per_pipeline) {
     using namespace pipeline;
 
-    OpFactories ops_sink_with_sort = _children[0]->decompose_to_pipeline(context);
+    ASSIGN_OR_RETURN(auto ops_sink_with_sort, _children[0]->decompose_to_pipeline(context));
     ops_sink_with_sort = context->maybe_interpolate_grouped_exchange(_id, ops_sink_with_sort);
 
     int64_t partition_limit = _limit;
@@ -234,7 +237,7 @@ std::vector<std::shared_ptr<pipeline::OperatorFactory>> TopNNode::_decompose_to_
             _early_materialized_slots, spill_channel_factory);
 
     // Initialize OperatorFactory's fields involving runtime filters.
-    this->init_runtime_filter_for_operator(sink_operator.get(), context, rc_rf_probe_collector);
+    pipeline::init_runtime_filter_for_operator(*this, sink_operator.get(), context, rc_rf_probe_collector);
 
     OpFactories operators_source_with_sort;
     SourceOperatorFactoryPtr source_operator;
@@ -274,7 +277,7 @@ std::vector<std::shared_ptr<pipeline::OperatorFactory>> TopNNode::_decompose_to_
     return operators_source_with_sort;
 }
 
-pipeline::OpFactories TopNNode::decompose_to_pipeline(pipeline::PipelineBuilderContext* context) {
+StatusOr<pipeline::OpFactories> TopNNode::decompose_to_pipeline(pipeline::PipelineBuilderContext* context) {
     using namespace pipeline;
 
     // is_partition_topn is needed for a special optimization on the case of ranking window function with limit or predicate(rk < 100)
@@ -293,39 +296,40 @@ pipeline::OpFactories TopNNode::decompose_to_pipeline(pipeline::PipelineBuilderC
     OpFactories operators_source_with_sort;
 
     if (is_partition_topn) {
-        operators_source_with_sort =
-                _decompose_to_pipeline<LocalPartitionTopnContextFactory, LocalPartitionTopnSinkOperatorFactory,
-                                       LocalPartitionTopnSourceOperatorFactory>(context, is_partition_topn,
-                                                                                is_partition_skewed, need_merge,
-                                                                                enable_parallel_merge, is_per_pipeline);
+        ASSIGN_OR_RETURN(
+                operators_source_with_sort,
+                (_decompose_to_pipeline<LocalPartitionTopnContextFactory, LocalPartitionTopnSinkOperatorFactory,
+                                        LocalPartitionTopnSourceOperatorFactory>(
+                        context, is_partition_topn, is_partition_skewed, need_merge, enable_parallel_merge,
+                        is_per_pipeline)));
     } else {
         if (runtime_state()->enable_spill() && runtime_state()->enable_sort_spill()) {
             if (enable_parallel_merge) {
-                operators_source_with_sort =
-                        _decompose_to_pipeline<SortContextFactory, SpillablePartitionSortSinkOperatorFactory,
-                                               LocalParallelMergeSortSourceOperatorFactory>(
-                                context, is_partition_topn, is_partition_skewed, need_merge, enable_parallel_merge,
-                                is_per_pipeline);
+                ASSIGN_OR_RETURN(operators_source_with_sort,
+                                 (_decompose_to_pipeline<SortContextFactory, SpillablePartitionSortSinkOperatorFactory,
+                                                         LocalParallelMergeSortSourceOperatorFactory>(
+                                         context, is_partition_topn, is_partition_skewed, need_merge,
+                                         enable_parallel_merge, is_per_pipeline)));
             } else {
-                operators_source_with_sort =
-                        _decompose_to_pipeline<SortContextFactory, SpillablePartitionSortSinkOperatorFactory,
-                                               LocalMergeSortSourceOperatorFactory>(
-                                context, is_partition_topn, is_partition_skewed, need_merge, enable_parallel_merge,
-                                is_per_pipeline);
+                ASSIGN_OR_RETURN(operators_source_with_sort,
+                                 (_decompose_to_pipeline<SortContextFactory, SpillablePartitionSortSinkOperatorFactory,
+                                                         LocalMergeSortSourceOperatorFactory>(
+                                         context, is_partition_topn, is_partition_skewed, need_merge,
+                                         enable_parallel_merge, is_per_pipeline)));
             }
         } else {
             if (enable_parallel_merge) {
-                operators_source_with_sort =
-                        _decompose_to_pipeline<SortContextFactory, PartitionSortSinkOperatorFactory,
-                                               LocalParallelMergeSortSourceOperatorFactory>(
-                                context, is_partition_topn, is_partition_skewed, need_merge, enable_parallel_merge,
-                                is_per_pipeline);
+                ASSIGN_OR_RETURN(operators_source_with_sort,
+                                 (_decompose_to_pipeline<SortContextFactory, PartitionSortSinkOperatorFactory,
+                                                         LocalParallelMergeSortSourceOperatorFactory>(
+                                         context, is_partition_topn, is_partition_skewed, need_merge,
+                                         enable_parallel_merge, is_per_pipeline)));
             } else {
-                operators_source_with_sort =
-                        _decompose_to_pipeline<SortContextFactory, PartitionSortSinkOperatorFactory,
-                                               LocalMergeSortSourceOperatorFactory>(
-                                context, is_partition_topn, is_partition_skewed, need_merge, enable_parallel_merge,
-                                is_per_pipeline);
+                ASSIGN_OR_RETURN(operators_source_with_sort,
+                                 (_decompose_to_pipeline<SortContextFactory, PartitionSortSinkOperatorFactory,
+                                                         LocalMergeSortSourceOperatorFactory>(
+                                         context, is_partition_topn, is_partition_skewed, need_merge,
+                                         enable_parallel_merge, is_per_pipeline)));
             }
         }
     }

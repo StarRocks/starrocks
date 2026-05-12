@@ -19,6 +19,7 @@
 #include <memory>
 
 #include "common/statusor.h"
+#include "exec/pipeline/fragment_context.h"
 #include "exec/spill/common.h"
 #include "exec/spill/options.h"
 #include "exec/spill/spiller_factory.h"

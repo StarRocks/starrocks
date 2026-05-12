@@ -33,7 +33,7 @@ ARG DEPLOYDIR=/data/deploy
 ENV SR_HOME=${DEPLOYDIR}/starrocks
 
 RUN apt-get update -y && apt-get install -y --no-install-recommends \
-        openjdk-17-jdk python3 python-is-python3 mysql-client curl vim tree net-tools less tzdata linux-tools-common linux-tools-generic supervisor nginx netcat-traditional locales tini && \
+        openjdk-17-jdk python3 python-is-python3 mysql-client curl vim tree net-tools less tzdata linux-tools-common linux-tools-generic supervisor nginx netcat-traditional locales tini  libssl-dev && \
         ln -fs /usr/share/zoneinfo/UTC /etc/localtime && \
         dpkg-reconfigure -f noninteractive tzdata && \
         locale-gen en_US.UTF-8 && \

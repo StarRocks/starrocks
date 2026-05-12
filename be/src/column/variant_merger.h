@@ -14,6 +14,8 @@
 
 #pragma once
 
+#include <cctz/time_zone.h>
+
 #include "base/status.h"
 #include "base/statusor.h"
 #include "column/column.h"
@@ -51,8 +53,21 @@ class VariantColumnMerger {
 public:
     static StatusOr<TypeDescriptor> choose_common_type(const TypeDescriptor& lhs, const TypeDescriptor& rhs);
 
+    // Compatibility wrapper for callers that do not carry session timezone context.
+    //
+    // This overload is safe for non-temporal casts. For VARIANT -> DATE/TIME/DATETIME it
+    // intentionally rejects the cast instead of silently using a process-local timezone,
+    // because temporal cast semantics must follow the query/session timezone.
     static StatusOr<MutableColumnPtr> cast_typed_column(const Column& src_col, const TypeDescriptor& src_type_desc,
                                                         const TypeDescriptor& dst_type_desc);
+
+    // Main implementation for callers that already have the query/session timezone.
+    //
+    // Use this overload for any cast path that may produce temporal results from VARIANT,
+    // so DATE/TIME/DATETIME conversion uses the explicit runtime timezone context.
+    static StatusOr<MutableColumnPtr> cast_typed_column(const Column& src_col, const TypeDescriptor& src_type_desc,
+                                                        const TypeDescriptor& dst_type_desc,
+                                                        const cctz::time_zone& timezone);
 
     // Reconcile overlapping shredded path type conflicts between dst and src.
     // Numeric/decimalv3 paths are widened when possible; unsupported conflicts are hoisted to TYPE_VARIANT.

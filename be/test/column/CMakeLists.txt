@@ -19,6 +19,7 @@ set(COLUMN_TEST_FILES
     german_string_test.cpp
     object_column_core_test.cpp
     column_visitor_test.cpp
+    raw_data_visitor_test.cpp
     column_filter_range_test.cpp
     column_viewer_core_test.cpp
     fixed_length_column_core_test.cpp
@@ -31,7 +32,9 @@ set(COLUMN_TEST_FILES
     const_nullable_core_test.cpp
     nullable_column_core_test.cpp
     decimalv3_json_core_test.cpp
+    append_with_mask_core_test.cpp
     datum_convert_core_test.cpp
+    column_helper_time_core_test.cpp
     json_converter_core_test.cpp
     adaptive_nullable_column_core_test.cpp
     column_view_base_core_test.cpp
@@ -42,6 +45,7 @@ set(COLUMN_TEST_FILES
     variant_merger_test.cpp
     variant_builder_test.cpp
     variant_encoder_test.cpp
+    buffer_test.cpp
 )
 
 set(COLUMN_TEST_LINK_LIBS
@@ -68,7 +72,9 @@ target_link_libraries(column_test ${COLUMN_TEST_LINK_LIBS} gtest_main)
 
 set(CHUNK_TEST_FILES
     ../base/cxa_throw_wrap.cpp
+    column_access_path_core_test.cpp
     chunk_core_test.cpp
+    segmented_chunk_core_test.cpp
     field_test.cpp
     schema_test.cpp
 )

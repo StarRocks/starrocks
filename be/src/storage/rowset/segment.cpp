@@ -53,7 +53,6 @@
 #include "gutil/strings/substitute.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
-#include "runtime/starrocks_metrics.h"
 #include "segment_iterator.h"
 #include "segment_options.h"
 #include "storage/lake/tablet_manager.h"
@@ -64,6 +63,7 @@
 #include "storage/rowset/page_io.h"
 #include "storage/rowset/scalar_column_iterator.h"
 #include "storage/rowset/segment_writer.h" // k_segment_magic_length
+#include "storage/storage_metrics.h"
 #include "storage/tablet_schema.h"
 #include "storage/utils.h"
 #include "util/json_flattener.h"
@@ -254,7 +254,7 @@ Status Segment::open(size_t* footer_length_hint, const FooterPointerPB* partial_
 
     auto res = success_once(_open_once, [&] { return _open(footer_length_hint, partial_rowset_footer, lake_io_opts); });
     if (res.status().is_not_found()) {
-        StarRocksMetrics::instance()->segment_file_not_found_total.increment(1);
+        StorageMetrics::instance()->segment_file_not_found_total.increment(1);
     }
 
     // move the cache size update out of the `success_once`,
@@ -282,6 +282,8 @@ Status Segment::_open(size_t* footer_length_hint, const FooterPointerPB* partial
     RETURN_IF_ERROR(_create_column_readers(&footer));
     _num_rows = footer.num_rows();
     _short_key_index_page = PagePointer(footer.short_key_index_page());
+    _skip_vector_index =
+            footer.has_vector_index_storage_type() && footer.vector_index_storage_type() == VECTOR_INDEX_STORAGE_NONE;
     return Status::OK();
 }
 
@@ -522,8 +524,6 @@ StatusOr<std::unique_ptr<ColumnIterator>> Segment::new_column_iterator_or_defaul
         auto default_value_iter = std::make_unique<DefaultValueColumnIterator>(
                 column.has_default_value(), column.default_value(), column.is_nullable(), type_info, column.length(),
                 num_rows(), path);
-        ColumnIteratorOptions iter_opts;
-        RETURN_IF_ERROR(default_value_iter->init(iter_opts));
         return default_value_iter;
     }
 }
@@ -548,8 +548,6 @@ StatusOr<ColumnIteratorUPtr> Segment::_new_extended_column_iterator(const Tablet
         auto default_iter = std::make_unique<DefaultValueColumnIterator>(column.has_default_value(),
                                                                          column.default_value(), column.is_nullable(),
                                                                          type_info, column.length(), num_rows());
-        ColumnIteratorOptions iter_opts;
-        RETURN_IF_ERROR(default_iter->init(iter_opts));
         VLOG(2) << "root column '" << col_name << "' not found in segment, return default for path: " << full_path;
         return default_iter;
     }
@@ -599,8 +597,6 @@ StatusOr<ColumnIteratorUPtr> Segment::_new_extended_column_iterator(const Tablet
         // create an iterator always return NULL for fields that don't exist in this segment
         auto default_null_iter = std::make_unique<DefaultValueColumnIterator>(false, "", true, get_type_info(column),
                                                                               column.length(), num_rows());
-        ColumnIteratorOptions iter_opts;
-        RETURN_IF_ERROR(default_null_iter->init(iter_opts));
         VLOG(2) << "json field " << full_path << " not found in segment, return NULL directly";
         return default_null_iter;
     }
@@ -682,7 +678,12 @@ void Segment::turn_off_batch_update_cache_size() {
         if (_dirty_cache_counter.exchange(0) > 0) {
             if (_tablet_manager != nullptr) {
                 auto mem_cost = mem_usage();
-                _tablet_manager->update_segment_cache_size(file_name(), mem_cost, reinterpret_cast<intptr_t>(this));
+                // Use FileInfo::cache_key() so this matches the key load_segment registered under;
+                // a path-only key would miss for bundled slices (non-zero bundle_file_offset) and
+                // their cache entries would never get the post-open memory cost, defeating
+                // metacache capacity control.
+                _tablet_manager->update_segment_cache_size(_segment_file_info.cache_key(), mem_cost,
+                                                           reinterpret_cast<intptr_t>(this));
             }
         }
     }
@@ -693,7 +694,8 @@ void Segment::update_cache_size() {
         // could be race condition on this `_batch_on_flags_counter` check, but it is ok to be inaccurate in such case.
         if (_batch_on_flags_counter.load(std::memory_order_relaxed) == 0) {
             auto mem_cost = mem_usage();
-            _tablet_manager->update_segment_cache_size(file_name(), mem_cost, reinterpret_cast<intptr_t>(this));
+            _tablet_manager->update_segment_cache_size(_segment_file_info.cache_key(), mem_cost,
+                                                       reinterpret_cast<intptr_t>(this));
         } else {
             // under batch mode, only increase the _dirty_cache_counter
             _dirty_cache_counter.fetch_add(1, std::memory_order_relaxed);

@@ -74,7 +74,7 @@ netstat -tunlp | grep 8060
 netstat -tunlp | grep 9070
 ```
 
-If any of the above ports are occupied, you must find alternatives and specify them later when you deploy CN nodes. For detailed instructions, see [Deploy StarRocks - Start the CN service](../deployment/deploy_manually.md#step-3-optional-start-the-cn-service).
+If any of the above ports are occupied, you must find alternatives and specify them later when you deploy CN nodes. For detailed instructions, see [Deploy StarRocks - Start the CN service](../deployment/deploy_shared_data_manually.md#step-2-start-the-cn-service).
 
 ## Hostnames
 
@@ -82,9 +82,9 @@ If you want to [enable FQDN access](../administration/management/enable_fqdn.md)
 
 In the file **/etc/hosts** on each instance, you must specify the IP addresses and corresponding hostnames of all the other instances in the cluster.
 
-> **CAUTION**
->
-> All IP addresses in the file **/etc/hosts** must be unique.
+:::important
+All IP addresses in the file **/etc/hosts** must be unique.
+:::
 
 ## JDK configuration
 

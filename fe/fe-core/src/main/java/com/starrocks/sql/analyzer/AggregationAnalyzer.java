@@ -270,6 +270,11 @@ public class AggregationAnalyzer {
                         node.getPos());
             }
 
+            // GROUP BY ALL folds GROUPING(...) to 0 in the non-grouping-sets path.
+            if (analyzeState.getGroupingSetsList() == null) {
+                return true;
+            }
+
             if (node.getChildren().stream().anyMatch(argument -> !analyzeState.getGroupBy().contains(argument))) {
                 throw new SemanticException(PARSER_ERROR_MSG.argsCanOnlyFromGroupBy(), node.getPos());
             }
@@ -330,9 +335,7 @@ public class AggregationAnalyzer {
                     if (!SqlModeHelper.check(session.getSessionVariable().getSqlMode(),
                             SqlModeHelper.MODE_ONLY_FULL_GROUP_BY)) {
                         if (!analyzeState.getColumnNotInGroupBy().contains(expr)) {
-                            throw new SemanticException(
-                                    PARSER_ERROR_MSG.unsupportedNoGroupBySubquery(ExprToSql.toSql(expr), ExprToSql.toSql(node)),
-                                    expr.getPos());
+                            analyzeState.getColumnNotInGroupBy().add(expr);
                         }
                     } else {
                         return false;

@@ -39,13 +39,12 @@
 #include "gutil/stl_util.h"
 #include "gutil/strings/join.h"
 #include "gutil/strings/substitute.h"
-#include "io/io_profiler.h"
+#include "io/core/io_profiler.h"
 #include "rocksdb/write_batch.h"
 #include "row_store_encoder.h"
 #include "rowset_merger.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
-#include "runtime/starrocks_metrics.h"
 #include "storage/chunk_helper.h"
 #include "storage/chunk_iterator.h"
 #include "storage/compaction_utils.h"
@@ -71,6 +70,7 @@
 #include "storage/schema_change.h"
 #include "storage/snapshot_meta.h"
 #include "storage/storage_engine.h"
+#include "storage/storage_metrics.h"
 #include "storage/tablet.h"
 #include "storage/tablet_meta_manager.h"
 #include "storage/types.h"
@@ -1025,11 +1025,11 @@ void TabletUpdates::do_apply() {
         if (version_info_apply->deltas.size() > 0) {
             int64_t duration_ns = 0;
             {
-                StarRocksMetrics::instance()->update_rowset_commit_apply_total.increment(1);
+                StorageMetrics::instance()->update_rowset_commit_apply_total.increment(1);
                 SCOPED_RAW_TIMER(&duration_ns);
                 apply_st = _apply_rowset_commit(*version_info_apply);
             }
-            StarRocksMetrics::instance()->update_rowset_commit_apply_duration_us.increment(duration_ns / 1000);
+            StorageMetrics::instance()->update_rowset_commit_apply_duration_us.increment(duration_ns / 1000);
             apply_operation_performed = true;
         } else if (version_info_apply->compaction) {
             // _compaction_running may be false after BE restart, reset it to true
@@ -1103,8 +1103,8 @@ void TabletUpdates::stop_and_wait_apply_done() {
     _apply_stopped = true;
     _wait_apply_done();
     int64_t duration = MonotonicMicros() - start_time;
-    StarRocksMetrics::instance()->primary_key_wait_apply_done_duration_ms.increment(duration / 1000);
-    StarRocksMetrics::instance()->primary_key_wait_apply_done_total.increment(1);
+    StorageMetrics::instance()->primary_key_wait_apply_done_duration_ms.increment(duration / 1000);
+    StorageMetrics::instance()->primary_key_wait_apply_done_total.increment(1);
 }
 
 Status TabletUpdates::breakpoint_check() {
@@ -1312,13 +1312,13 @@ Status TabletUpdates::_apply_rowset_commit(const EditVersionInfo& version_info) 
     uint32_t rowset_id = version_info.deltas[0];
     RowsetSharedPtr rowset = get_rowset(rowset_id);
     if (rowset->is_column_mode_partial_update()) {
-        StarRocksMetrics::instance()->column_partial_update_apply_total.increment(1);
+        StorageMetrics::instance()->column_partial_update_apply_total.increment(1);
         int64_t duration_ns = 0;
         {
             SCOPED_RAW_TIMER(&duration_ns);
             st = _apply_column_partial_update_commit(version_info, rowset);
         }
-        StarRocksMetrics::instance()->column_partial_update_apply_duration_us.increment(duration_ns / 1000);
+        StorageMetrics::instance()->column_partial_update_apply_duration_us.increment(duration_ns / 1000);
     } else {
         st = _apply_normal_rowset_commit(version_info, rowset);
     }
@@ -1732,8 +1732,8 @@ Status TabletUpdates::_apply_normal_rowset_commit(const EditVersionInfo& version
                 return apply_st;
             }
             if (VLOG_IS_ON(1)) {
-                StringAppendF(&delvec_change_info, " %u:%zu(%ld)+%zu=%zu", rssid, cur_old, old_del_vec->version(),
-                              cur_add, cur_new);
+                StringAppendF(&delvec_change_info, " %u:%zu(%lld)+%zu=%zu", rssid, cur_old,
+                              static_cast<long long>(old_del_vec->version()), cur_add, cur_new);
             }
             old_total_del += cur_old;
             new_del += cur_add;
@@ -1742,8 +1742,8 @@ Status TabletUpdates::_apply_normal_rowset_commit(const EditVersionInfo& version
 
         idx++;
     }
-    StarRocksMetrics::instance()->update_del_vector_deletes_total.increment(total_del);
-    StarRocksMetrics::instance()->update_del_vector_deletes_new.increment(new_del);
+    StorageMetrics::instance()->update_del_vector_deletes_total.increment(total_del);
+    StorageMetrics::instance()->update_del_vector_deletes_new.increment(new_del);
     int64_t t_delvec = MonotonicMillis();
 
     {
@@ -1763,8 +1763,15 @@ Status TabletUpdates::_apply_normal_rowset_commit(const EditVersionInfo& version
                 full_rowset_size = r.value();
                 rowset->rowset_meta()->clear_txn_meta();
                 rowset->rowset_meta()->set_total_row_size(full_row_size);
+                const auto index_disk_size = rowset->rowset_meta()->index_disk_size();
+                // full_rowset_size is the segment file bytes (column data + embedded indexes).
+                // index_disk_size tracks additional index bytes recorded in RowsetMeta; these may
+                // be separately persisted (e.g. primary-key SSTable indexes) or otherwise accounted
+                // for outside the segment file.
+                // Canonical invariant: data_disk_size = segment_size - index_size,
+                //                      total_disk_size = segment_size (== data + index).
+                rowset->rowset_meta()->set_data_disk_size(std::max<int64_t>(0, full_rowset_size - index_disk_size));
                 rowset->rowset_meta()->set_total_disk_size(full_rowset_size);
-                rowset->rowset_meta()->set_data_disk_size(full_rowset_size);
                 rowset->set_schema(apply_tschema);
                 rowset->rowset_meta()->set_tablet_schema(apply_tschema);
                 (void)rowset->reload();
@@ -2939,7 +2946,7 @@ int64_t TabletUpdates::get_compaction_score() {
         }
     }
     // scale score to a reasonable range relative to the number of files * 10
-    return total_score / std::max(1L, config::update_compaction_size_threshold / 10);
+    return total_score / std::max<int64_t>(1, config::update_compaction_size_threshold / 10);
 }
 
 struct CompactionEntry {
@@ -3750,7 +3757,7 @@ std::string TabletUpdates::_debug_string(bool lock, bool abbr) const {
     last_version = _edit_version_infos.back()->version;
     rowsets = _edit_version_infos.back()->rowsets;
     for (auto const& pending_commit : _pending_commits) {
-        StringAppendF(&pending_info, "%ld,", pending_commit.first);
+        StringAppendF(&pending_info, "%lld,", static_cast<long long>(pending_commit.first));
     }
     if (lock) _lock.unlock();
 
@@ -3835,7 +3842,7 @@ void TabletUpdates::_print_rowsets(std::vector<uint32_t>& rowsets, std::string* 
 }
 
 void TabletUpdates::_set_error(const string& msg) {
-    StarRocksMetrics::instance()->primary_key_table_error_state_total.increment(1);
+    StorageMetrics::instance()->primary_key_table_error_state_total.increment(1);
     _error_msg = msg;
     _error = true;
     _apply_version_changed.notify_all();
@@ -5032,8 +5039,8 @@ Status TabletUpdates::load_snapshot(const SnapshotMeta& snapshot_meta, bool rest
         for (const auto& rowset_meta_pb : snapshot_meta.rowset_metas()) {
             auto rowset_meta = std::make_shared<RowsetMeta>(rowset_meta_pb);
             const auto new_id = rowset_meta_pb.rowset_seg_id() + _next_rowset_id;
-            new_next_rowset_id =
-                    std::max<uint32_t>(new_next_rowset_id, new_id + std::max(1L, rowset_meta_pb.num_segments()));
+            new_next_rowset_id = std::max<uint32_t>(new_next_rowset_id,
+                                                    new_id + std::max<int64_t>(1, rowset_meta_pb.num_segments()));
             rowset_meta->set_rowset_seg_id(new_id);
             RowsetSharedPtr* rowset = &new_rowsets[new_id];
             RETURN_IF_ERROR(RowsetFactory::create_rowset(_tablet.tablet_schema(), _tablet.schema_hash_path(),
