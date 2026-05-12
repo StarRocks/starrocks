@@ -774,6 +774,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 説明: 共有データモードでのプライマリキーインデックス並列実行用のスレッドプールの最大スレッド数。0 は CPU コア数の半分に自動設定されることを意味します。
 - 導入バージョン: -
 
+### pk_index_parallel_load_dels_mem_ratio
+
+- デフォルト: 50
+- タイプ: Int
+- 単位: パーセント (0-100)
+- 変更可能: はい
+- 説明: 共有データモードで、update メモリトラッカーの使用量が上限のこの割合を超えている場合、`LakePersistentIndex::load_dels` における並列二段階の delete ファイルプリフェッチをスキップし、一度に 1 つのデコード済み del ファイルカラムのみを保持するシングルパスループにフォールバックします。このメモリ圧迫下では、コールドスタートのレイテンシ改善を諦め、ピークメモリを抑制します。値を大きくすると、より高いメモリ圧迫下でも最適化を許可します。`100` に設定するとメモリゲートが無効化され、`enable_pk_index_parallel_execution=true` かつ複数の del ファイルがある場合は常に並列実行されます。
+- 導入バージョン: -
+
 ### lake_partial_update_thread_pool_max_threads
 
 - デフォルト: 0
