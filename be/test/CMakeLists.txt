@@ -302,9 +302,13 @@ set(EXEC_FILES
         ./runtime/arrow_result_writer_test.cpp
         ./runtime/buffer_control_block_test.cpp
         ./runtime/data_stream_mgr_test.cpp
+<<<<<<< HEAD
         ./runtime/datetime_value_test.cpp
         ./runtime/decimalv2_value_test.cpp
         ./runtime/decimalv3_test.cpp
+=======
+        ./runtime/descriptors_test.cpp
+>>>>>>> 701dc0fc51 ([Enhancement] Skip redundant partition key expr build on add_partition_value dedup hit (#73156))
         ./runtime/diagnose_daemon_test.cpp
         ./runtime/external_scan_context_mgr_test.cpp
         ./runtime/fragment_mgr_test.cpp
