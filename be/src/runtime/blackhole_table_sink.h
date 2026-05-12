@@ -27,7 +27,13 @@ public:
 
     Status open(RuntimeState* state) override { return Status::OK(); }
 
+<<<<<<< HEAD:be/src/runtime/blackhole_table_sink.h
     RuntimeProfile* profile() override { return _profile; }
+=======
+    METRIC_DEFINE_INT_COUNTER(staros_shard_info_fallback_total, MetricUnit::REQUESTS);
+    METRIC_DEFINE_INT_COUNTER(staros_shard_info_fallback_failed_total, MetricUnit::REQUESTS);
+    METRIC_DEFINE_INT_GAUGE(staros_shard_count, MetricUnit::NOUNIT);
+>>>>>>> 1ebdffab01 ([Enhancement] Expose staros_shard_count metric on BE StarOSWorker (#73096)):be/src/staros_integration/staros_worker_metrics.h
 
 private:
     ObjectPool* _pool;
