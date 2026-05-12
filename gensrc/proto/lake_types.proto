@@ -421,7 +421,7 @@ message TxnInfoPB {
     // Carried at the txn level (not per SplittingTabletInfoPB) because the value
     // is table-level metadata: every SplittingTabletInfoPB in one txn would
     // carry the same value.
-    optional int32 colocate_column_count = 9;
+    optional int32 colocate_column_count = 11;
 }
 
 message SplittingTabletInfoPB {
