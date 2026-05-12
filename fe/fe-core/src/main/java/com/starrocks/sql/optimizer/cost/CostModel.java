@@ -30,6 +30,7 @@ import com.starrocks.sql.optimizer.GroupExpression;
 import com.starrocks.sql.optimizer.JoinHelper;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
+import com.starrocks.sql.optimizer.base.DistributionCol;
 import com.starrocks.sql.optimizer.base.DistributionSpec;
 import com.starrocks.sql.optimizer.base.HashDistributionDesc;
 import com.starrocks.sql.optimizer.base.HashDistributionSpec;
@@ -284,8 +285,79 @@ public class CostModel {
                 factor = 0.1;
             }
 
-            return CostEstimate.of(inputStatistics.getComputeSize() * factor, statistics.getComputeSize() * factor,
-                    0);
+            double networkCost = computeLocalAggDistributionMismatchPenalty(node, statistics, inputStatistics);
+            return CostEstimate.of(inputStatistics.getComputeSize() * factor,
+                    statistics.getComputeSize() * factor, networkCost);
+        }
+
+        /**
+         * For a local agg, if the child's distribution does not cover the
+         * group-by columns, the aggregation cannot effectively reduce rows and each node essentially sees all distinct
+         * groups. This method models the respective network cost.
+         * We have to add the network cost to the agg since statistics are derived once
+         * before child distribution properties are known.
+         * The downstream exchange reads those pre-computed stats. During Phase-2 re-costing the agg is the first
+         * operator that sees the actual child distribution, so it is the only place that can correct for
+         * the mismatch. The network cost term here acts as a proxy for the exchange cost that would
+         * exist if the exchange could see the true, un-reduced row count.
+         */
+        private double computeLocalAggDistributionMismatchPenalty(PhysicalHashAggregateOperator node, Statistics statistics,
+                                                                  Statistics inputStatistics) {
+            // Only applies to LOCAL split aggs with group-by columns
+            if (!node.isSplit() || !node.getType().isLocal() || node.getGroupBys().isEmpty()) {
+                return 0;
+            }
+
+            // Need physical distribution to assess this penalty.
+            if (CollectionUtils.isEmpty(inputProperties)) {
+                return 0;
+            }
+
+            double inputRows = inputStatistics.getOutputRowCount();
+            double estimatedOutputRows = statistics.getOutputRowCount();
+
+            // Only penalize if the agg estimates significant reduction that won't actually happen
+            // due to the induced network costs.
+            if (estimatedOutputRows >= inputRows * 0.5) {
+                return 0;
+            }
+
+            final var childDistribution = inputProperties.get(0).getDistributionProperty();
+
+            if (childDistribution.isGather()) {
+                // For gather, there is no penalty since there is no exchange.
+                return 0;
+            }
+
+            // If the child is hash-distributed on columns that cover the group-by columns there is no network penalty.
+            // For any other distribution (shuffle on wrong columns, random, round-robin, gather, etc.),
+            // each node may see all distinct groups, so the local agg can not reduce rows effectively.
+            // We use EquivalentDescriptor.isConnected() rather than raw column ID comparison to account for
+            // equivalences established by joins (e.g., after A.a = B.b, distribution on A.a covers GROUP BY B.b).
+            if (childDistribution.isShuffle()) {
+                final var childHashSpec = (HashDistributionSpec) childDistribution.getSpec();
+                final var distributionColumns = childHashSpec.getHashDistributionDesc().getDistributionCols();
+                final var equivDesc = childHashSpec.getEquivDesc();
+
+                final var groupByDistCols = node.getGroupBys().stream() //
+                        .map(col -> new DistributionCol(col.getId(), false)) //
+                        .toList();
+
+                final boolean distributionCoversGroupBy = distributionColumns.stream() //
+                        .allMatch(dc -> groupByDistCols.stream()
+                                .anyMatch(groupByCol -> equivDesc.isConnected(groupByCol, dc)));
+
+                if (distributionCoversGroupBy) {
+                    return 0;
+                }
+            }
+
+            // With mismatched distribution, each node sees all distinct groups.
+            final int numBackends = Math.max(1, ConnectContext.get().getAliveBackendNumber());
+            final double outputRows = Math.min(estimatedOutputRows * numBackends, inputRows);
+            final double toShuffleRows = Math.max(0, outputRows - estimatedOutputRows);
+
+            return toShuffleRows * statistics.getAvgRowSize();
         }
 
         private List<ColumnRefOperator> getGroupBysWithoutDistinctColumn(List<ColumnRefOperator> groupByList,

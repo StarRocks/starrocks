@@ -1721,4 +1721,24 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
         Assertions.assertEquals(19930101, keyRange.get(0).end_key);
         Assertions.assertEquals(1, scanNodes.getPartitionConjuncts().size());
     }
+
+    @Test
+    public void testLocalAggDistributionMismatchPenalty() throws Exception {
+        // Force two-phase aggregation so the penalty on LOCAL split aggs is actually exercised.
+        connectContext.getSessionVariable().setNewPlanerAggStage(2);
+
+        // GIVEN
+        final var sql = "select l_partkey, count(*) from lineitem " +
+                "join supplier on l_suppkey = s_suppkey group by l_partkey";
+
+        // WHEN
+        final var plan = getFragmentPlan(sql);
+
+        // THEN
+        // The penalty should steer the optimizer towards a BROADCAST join (preserving lineitem's
+        // distribution) instead of a SHUFFLE join on l_suppkey which would misalign with GROUP BY l_partkey.
+        assertContains(plan, "join op: INNER JOIN (BROADCAST)");
+        // Verify a two-phase (local streaming + global) aggregation is actually used.
+        assertContains(plan, "STREAMING");
+    }
 }
