@@ -102,14 +102,22 @@ public class IVMAnalyzer {
                     .put(FunctionSet.COUNT,                  args -> args.length <= 1)
                     // sum: integer / float / DECIMAL.
                     .put(FunctionSet.SUM,                    args -> isFixedOrFloat(args[0]) || args[0].isDecimalV3())
-                    // avg: integer / float only. DECIMAL is excluded — BE state_union for
-                    // avg<DECIMAL> currently corrupts the (sum, count) tuple on incremental refresh.
-                    .put(FunctionSet.AVG,                    args -> isFixedOrFloat(args[0]))
-                    // min/max: numeric and temporal. VARCHAR/STRING is excluded — combinator
-                    // intermediateType for VARCHAR widens to varchar(MAX) and trips the
-                    // type-equality assertion in IvmOpUtils.buildStateUnionScalarOperator.
-                    .put(FunctionSet.MIN,                    args -> isFixedOrFloat(args[0]) || isTemporal(args[0]))
-                    .put(FunctionSet.MAX,                    args -> isFixedOrFloat(args[0]) || isTemporal(args[0]))
+                    // avg: integer / float / DECIMAL. DECIMAL was unblocked by #73012 which
+                    // preserves the typed AggStateDesc on the state_union scalar so the
+                    // intermediate (sum, count) tuple keeps its DECIMAL precision/scale.
+                    .put(FunctionSet.AVG,                    args -> isFixedOrFloat(args[0]) || args[0].isDecimalV3())
+                    // min/max: numeric, temporal, and string. VARCHAR was unblocked by #73095
+                    // which relaxed state_union's strict type-equality precondition to accept
+                    // compatible string types (VARCHAR(N) vs catalog-normalized VARCHAR(65533)).
+                    .put(FunctionSet.MIN,                    args -> isFixedOrFloat(args[0]) || isTemporal(args[0])
+                                                                    || args[0].isStringType())
+                    .put(FunctionSet.MAX,                    args -> isFixedOrFloat(args[0]) || isTemporal(args[0])
+                                                                    || args[0].isStringType())
+                    // array_agg: accept single-arg only. ORDER BY in the source query inlines extra
+                    // children via FunctionAnalyzer.getAdjustedAnalyzedAggregateFunction, so args.length
+                    // exceeds 1 for `array_agg(col ORDER BY key)`. IVM state_union is unordered, so
+                    // rejecting ORDER BY variants here keeps semantics safe.
+                    .put(FunctionSet.ARRAY_AGG,              args -> args.length == 1)
                     // bool_or: associative OR over booleans, no state representation issues.
                     .put(FunctionSet.BOOL_OR,                args -> args.length == 1 && args[0].isBoolean())
                     // approx_count_distinct / ndv: HLL state union is well-defined.
