@@ -1382,10 +1382,20 @@ void LakeServiceImpl::compact_collect_and_publish(::google::protobuf::RpcControl
 
     int64_t base_version = request->visible_version();
     int64_t txn_id = request->txn_id();
+    // Two modes:
+    //  - skip_write_txnlog = false: per-BE flow. BE writes a per-tablet TxnLog
+    //    to remote (put_txn_log). FE later publishes via publish_version RPC.
+    //  - skip_write_txnlog = true:  aggregator flow (used when the table has
+    //    file_bundling=true). This BE returns the merged TxnLog in
+    //    response.txn_logs; the aggregator BE combines all sub-responses into
+    //    a single CombinedTxnLogPB and calls put_combined_txn_log. FE then
+    //    publishes via aggregate_publish_version, which reads the combined log.
+    bool skip_write_txnlog = request->has_skip_write_txnlog() && request->skip_write_txnlog();
 
     // BE only does the COLLECT half. Actual publish is driven by FE's existing
-    // PublishVersionDaemon, which sends a publish_version RPC after FE commits
-    // the transaction with forceCommit=true (so TxnInfoPB.force_publish=true).
+    // PublishVersionDaemon, which sends a publish_version (or
+    // aggregate_publish_version when the table uses file bundling) RPC after FE
+    // commits the transaction with forceCommit=true so TxnInfoPB.force_publish=true.
     // When FE publishes:
     //   - Tablets with a TxnLog: applied normally (OpParallelCompaction).
     //   - Tablets without a TxnLog: ignore_txn_log + observe_empty_compaction
@@ -1414,19 +1424,33 @@ void LakeServiceImpl::compact_collect_and_publish(::google::protobuf::RpcControl
             consumed_result_ids.push_back(r.result_id());
         }
 
-        // Build merged OpParallelCompaction TxnLog and put it to remote storage.
+        // Build merged OpParallelCompaction TxnLog.
         auto txn_log = lake::merge_results_to_txn_log(results, tablet_id, txn_id);
-        auto put_st = _tablet_mgr->put_txn_log(txn_log);
-        if (!put_st.ok()) {
-            LOG(WARNING) << "Fail to put_txn_log tablet=" << tablet_id << ": " << put_st;
-            response->add_failed_tablets(tablet_id);
-            ++failed;
-            continue;
+
+        if (skip_write_txnlog) {
+            // Aggregator flow: hand the TxnLog back to the aggregator, do not
+            // write remote storage here. The aggregator will package all
+            // per-tablet TxnLogs into one CombinedTxnLogPB.
+            *response->add_txn_logs() = *txn_log;
+        } else {
+            // Per-BE flow: write remote per-tablet TxnLog.
+            auto put_st = _tablet_mgr->put_txn_log(txn_log);
+            if (!put_st.ok()) {
+                LOG(WARNING) << "Fail to put_txn_log tablet=" << tablet_id << ": " << put_st;
+                response->add_failed_tablets(tablet_id);
+                ++failed;
+                continue;
+            }
         }
         ++with_compaction;
-        // It is safe to delete local result files now: the TxnLog is the canonical
-        // record going forward. If FE later aborts the txn, abort_txn cleans up the
-        // TxnLog and any output segments it references.
+        // It is safe to delete local result files now. For per-BE flow the
+        // TxnLog on remote is the canonical record. For aggregator flow we
+        // trust the aggregator's combined log write to succeed; if it fails
+        // we lose the merged metadata but the compaction output rowsets
+        // (produced during the autonomous compact task and already on remote
+        // storage) are intact, so the next autonomous round can re-compact
+        // from them. This mirrors the failure-recovery semantics of the
+        // per-BE flow.
         (void)result_mgr->delete_results(tablet_id, consumed_result_ids);
     }
     // Always populate at least one field on the response. Otherwise the BRpc
@@ -1436,7 +1460,7 @@ void LakeServiceImpl::compact_collect_and_publish(::google::protobuf::RpcControl
     response->mutable_status()->set_status_code(0);
     LOG(INFO) << "compact_collect_and_publish total=" << total_tablets << " with_compaction=" << with_compaction
               << " without_compaction=" << without_compaction << " failed=" << failed << " base=" << base_version
-              << " txn=" << txn_id;
+              << " txn=" << txn_id << " skip_write_txnlog=" << skip_write_txnlog;
 }
 
 void LakeServiceImpl::compact(::google::protobuf::RpcController* controller, const ::starrocks::CompactRequest* request,

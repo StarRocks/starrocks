@@ -170,15 +170,10 @@ public class CompactionScheduler extends Daemon {
             if (disabledIds.contains(partition.getTableId())) {
                 continue;
             }
-            // Per-table file-bundling check. Bundled tables write CombinedTxnLog
-            // at publish time (transactions.cpp:160 expects combined_txn_log_location),
-            // but the per-BE COLLECT_AND_PUBLISH path writes per-tablet TxnLog. Until
-            // the aggregate-based autonomous publish path lands (Level 2), bundled
-            // tables must keep using the existing aggregate_compact path manually
-            // scheduled by ALTER TABLE ... COMPACT.
-            if (isPartitionTableFileBundling(partition)) {
-                continue;
-            }
+            // Per-table file-bundling is no longer a skip — startPublishOnly
+            // routes bundled tables to an aggregate-based path (Level 2) so the
+            // combined_txn_log layout the publish side expects is produced by
+            // one aggregator BE rather than per-tablet by each BE.
             PartitionStatistics stats = compactionManager.getStatistics(partition);
             if (stats == null) {
                 continue;
@@ -275,13 +270,30 @@ public class CompactionScheduler extends Daemon {
                 computeResource, warehouse.getName());
         job.setJobType(CompactionJob.JobType.PUBLISH_ONLY);
         try {
-            List<CompactionTask> tasks = createPublishOnlyTasks(visibleVersion, newVersion, beToTablets, txnId);
-            for (CompactionTask t : tasks) {
-                t.sendRequest();
+            // File-bundling tables write a CombinedTxnLogPB at publish time
+            // (transactions.cpp:160 reads combined_txn_log_location). For those,
+            // pick an aggregator BE that owns one of the partition's tablets and
+            // submit a single AggregateCompactRequest whose sub-requests carry
+            // mode=COLLECT_AND_PUBLISH + skip_write_txnlog=true. The aggregator
+            // BE forwards the sub-requests to each owning BE, receives the merged
+            // per-tablet TxnLogs in responses, and writes the combined log.
+            if (Boolean.TRUE.equals(table.isFileBundling())) {
+                CompactionTask aggregateTask = createAggregatePublishOnlyTask(
+                        visibleVersion, newVersion, beToTablets, txnId,
+                        computeResource, partitionIdentifier.getPartitionId());
+                aggregateTask.sendRequest();
+                job.setAggregateTask(aggregateTask);
+            } else {
+                List<CompactionTask> tasks = createPublishOnlyTasks(
+                        visibleVersion, newVersion, beToTablets, txnId);
+                for (CompactionTask t : tasks) {
+                    t.sendRequest();
+                }
+                job.setTasks(tasks);
             }
-            job.setTasks(tasks);
-            LOG.debug("Started PUBLISH_ONLY job partition={} reason={} visible={} new={} txn={}",
-                    partitionIdentifier, reason, visibleVersion, newVersion, txnId);
+            LOG.debug("Started PUBLISH_ONLY job partition={} reason={} visible={} new={} txn={} bundling={}",
+                    partitionIdentifier, reason, visibleVersion, newVersion, txnId,
+                    Boolean.TRUE.equals(table.isFileBundling()));
             return job;
         } catch (Exception e) {
             LOG.warn("Fail to dispatch PUBLISH_ONLY tasks partition={} err={}", partitionIdentifier, e.getMessage());
@@ -678,6 +690,67 @@ public class CompactionScheduler extends Daemon {
             tasks.add(task);
         }
         return tasks;
+    }
+
+    /**
+     * Build the aggregate-based PUBLISH_ONLY task used for file-bundling tables.
+     * Picks one aggregator BE among those owning tablets in the partition, then
+     * packages one sub-CompactRequest per owning BE. Each sub-request has:
+     *   - mode = COLLECT_AND_PUBLISH (BE loads local CompactionResultPB)
+     *   - skip_write_txnlog = true   (per-BE handler returns the merged TxnLog
+     *     in response.txn_logs instead of writing per-tablet TxnLog to remote)
+     *   - visible_version / new_version propagated for force_publish semantics
+     *
+     * The aggregator BE collects the per-tablet TxnLogs from every sub-response
+     * and writes a single CombinedTxnLogPB via put_combined_txn_log; FE then
+     * commits the txn and PublishVersionDaemon dispatches aggregate_publish_version
+     * which is the only publish RPC that understands the combined log layout.
+     */
+    @NotNull
+    private CompactionTask createAggregatePublishOnlyTask(long visibleVersion, long newVersion,
+            Map<Long, List<Long>> beToTablets, long txnId, ComputeResource computeResource, long partitionId)
+            throws StarRocksException, RpcException {
+        AggregateCompactRequest aggRequest = new AggregateCompactRequest();
+        aggRequest.requests = Lists.newArrayList();
+        aggRequest.computeNodes = Lists.newArrayList();
+        aggRequest.partitionId = partitionId;
+
+        List<ComputeNode> candidateAggregatorNodes = Lists.newArrayList();
+        for (Map.Entry<Long, List<Long>> entry : beToTablets.entrySet()) {
+            ComputeNode node = systemInfoService.getBackendOrComputeNode(entry.getKey());
+            if (node == null) {
+                throw new StarRocksException("Node " + entry.getKey() + " has been dropped");
+            }
+            candidateAggregatorNodes.add(node);
+
+            ComputeNodePB nodePB = new ComputeNodePB();
+            nodePB.setHost(node.getHost());
+            nodePB.setBrpcPort(node.getBrpcPort());
+            nodePB.setId(entry.getKey());
+
+            CompactRequest sub = new CompactRequest();
+            sub.tabletIds = entry.getValue();
+            sub.txnId = txnId;
+            sub.mode = com.starrocks.proto.CompactionMode.COLLECT_AND_PUBLISH;
+            sub.visibleVersion = visibleVersion;
+            sub.newVersion = newVersion;
+            // version proto field kept set for older validation paths.
+            sub.version = visibleVersion;
+            sub.timeoutMs = Config.lake_compaction_publish_timeout_seconds * 1000L;
+            sub.allowPartialSuccess = true;
+            sub.skipWriteTxnlog = true;
+            sub.encryptionMeta = GlobalStateMgr.getCurrentState().getKeyMgr().getCurrentKEKAsEncryptionMeta();
+
+            aggRequest.requests.add(sub);
+            aggRequest.computeNodes.add(nodePB);
+        }
+
+        ComputeNode aggregatorNode = LakeAggregator.chooseAggregatorNode(computeResource, candidateAggregatorNodes);
+        if (aggregatorNode == null) {
+            throw new NoAliveBackendException("No alive compute node available for aggregate autonomous publish");
+        }
+        LakeService service = BrpcProxy.getLakeService(aggregatorNode.getHost(), aggregatorNode.getBrpcPort());
+        return new AggregateCompactionTask(aggregatorNode.getId(), service, aggRequest);
     }
 
     @NotNull

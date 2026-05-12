@@ -911,61 +911,125 @@ public class CompactionSchedulerTest {
     }
 
     /**
-     * Level 1: schedulePartitionPublish must skip partitions whose owning table
-     * has file_bundling enabled, while continuing to publish non-bundled tables.
-     * The bundled-table skip is per-table now, not a global skip based on
-     * Config.enable_file_bundling.
+     * Level 2: when the partition's table has file_bundling enabled,
+     * startPublishOnly must build an AggregateCompactionTask (single
+     * aggregate_compact RPC to one aggregator BE) instead of per-BE
+     * CompactionTasks. This is what produces the CombinedTxnLogPB that the
+     * aggregate_publish_version path on the BE reads at publish time.
      */
     @Test
-    public void testSchedulePartitionPublishSkipsBundledTable() throws Exception {
-        int savedDelta = Config.lake_compaction_version_delta_threshold;
-        Config.lake_compaction_version_delta_threshold = 1;
-        try {
-            long dbId = 100L;
-            long bundledTableId = 200L;
-            long partitionId = 300L;
-            PartitionIdentifier bundledPartition =
-                    new PartitionIdentifier(dbId, bundledTableId, partitionId);
+    public void testStartPublishOnlyRoutesBundledTableToAggregator() throws Exception {
+        long dbId = 100L;
+        long tableId = 200L;
+        long partitionId = 300L;
+        long txnId = 5000L;
+        long beId = 2001L;
+        PartitionIdentifier pid = new PartitionIdentifier(dbId, tableId, partitionId);
+        PartitionStatistics stats = new PartitionStatistics(pid);
+        stats.setCurrentVersion(new com.starrocks.lake.compaction.PartitionVersion(10L, System.currentTimeMillis()));
+        stats.setCompactionScore(new Quantiles(1.0, 2.0, 3.0));
+        PartitionStatisticsSnapshot snapshot = new PartitionStatisticsSnapshot(stats);
 
-            CompactionMgr compactionManager = new CompactionMgr();
-            compactionManager.handleLoadingFinished(bundledPartition, 10L, System.currentTimeMillis(),
-                    new Quantiles(1.0, 2.0, 3.0));
+        LakeTable bundled = new LakeTable();
+        bundled.setFileBundling(true);
+        PhysicalPartition pp = new PhysicalPartition(partitionId, partitionId, new MaterializedIndex());
 
-            LakeTable bundled = new LakeTable();
-            bundled.setFileBundling(true);
+        CompactionMgr compactionManager = new CompactionMgr();
+        CompactionScheduler scheduler = new CompactionScheduler(compactionManager, systemInfoService,
+                globalTransactionMgr, globalStateMgr, "");
 
-            new MockUp<GlobalStateMgr>() {
-                @Mock
-                public LocalMetastore getLocalMetastore() {
-                    return new LocalMetastore(globalStateMgr, null, null);
-                }
-            };
-            new MockUp<LocalMetastore>() {
-                @Mock
-                public Database getDb(long id) {
-                    return new Database(dbId, "db");
-                }
-                @Mock
-                public Table getTable(Long dbIdParam, Long tableIdParam) {
-                    return bundled;
-                }
-            };
+        ComputeNode node = new ComputeNode(beId, "10.0.0.1", 9040);
+        node.setBrpcPort(9050);
 
-            CompactionScheduler scheduler = new CompactionScheduler(compactionManager, systemInfoService,
-                    globalTransactionMgr, globalStateMgr, "");
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public LocalMetastore getLocalMetastore() {
+                return new LocalMetastore(globalStateMgr, null, null);
+            }
+            @Mock
+            public WarehouseManager getWarehouseMgr() {
+                return warehouseManager;
+            }
+        };
+        new MockUp<LocalMetastore>() {
+            @Mock
+            public Database getDb(long id) {
+                return new Database(dbId, "db");
+            }
+            @Mock
+            public Table getTable(Long dbIdParam, Long tableIdParam) {
+                return bundled;
+            }
+        };
+        new MockUp<OlapTable>() {
+            @Mock
+            public PhysicalPartition getPhysicalPartition(long ppId) {
+                return pp;
+            }
+        };
+        new MockUp<CompactionScheduler>() {
+            @Mock
+            protected Map<Long, List<Long>> collectPartitionTablets(PhysicalPartition partition,
+                                                                     ComputeResource computeResource) {
+                Map<Long, List<Long>> m = new HashMap<>();
+                m.put(beId, Lists.newArrayList(11L, 12L));
+                return m;
+            }
+            @Mock
+            protected long beginTransaction(PartitionIdentifier partition, PhysicalPartition physicalPartition,
+                                            ComputeResource computeResource) {
+                return txnId;
+            }
+        };
+        new MockUp<CompactionTask>() {
+            @Mock
+            public void sendRequest() {
+                // no-op
+            }
+        };
+        new MockUp<AggregateCompactionTask>() {
+            @Mock
+            public void sendRequest() {
+                // no-op
+            }
+        };
 
-            Method method = CompactionScheduler.class.getDeclaredMethod("schedulePartitionPublish");
-            method.setAccessible(true);
-            Assertions.assertDoesNotThrow(() -> method.invoke(scheduler));
+        new Expectations() {
+            {
+                warehouseManager.getCompactionComputeResource(tableId);
+                result = WarehouseManager.DEFAULT_RESOURCE;
+                warehouseManager.getWarehouse(anyLong);
+                result = warehouse;
+                warehouse.getName();
+                result = "wh";
+                systemInfoService.getBackendOrComputeNode(beId);
+                result = node;
+            }
+        };
+        new Expectations() {
+            {
+                BrpcProxy.getLakeService("10.0.0.1", 9050);
+                result = lakeService;
+            }
+        };
 
-            // Bundled table is skipped → partition stays tracked; no PUBLISH_ONLY job
-            // was created (we can't observe an absent call directly here, but the
-            // bundled check is reached before startPublishOnly is invoked, so the
-            // db is not removed by removePartition).
-            Assertions.assertNotNull(compactionManager.getStatistics(bundledPartition));
-        } finally {
-            Config.lake_compaction_version_delta_threshold = savedDelta;
-        }
+        Method m = CompactionScheduler.class.getDeclaredMethod("startPublishOnly",
+                PartitionStatisticsSnapshot.class, long.class, String.class);
+        m.setAccessible(true);
+        Object result = m.invoke(scheduler, snapshot, 10L, "test");
+        Assertions.assertNotNull(result);
+        Assertions.assertTrue(result instanceof CompactionJob);
+        CompactionJob job = (CompactionJob) result;
+        Assertions.assertEquals(CompactionJob.JobType.PUBLISH_ONLY, job.getJobType());
+
+        // The single task on the job must be the aggregator variant.
+        Field tasksField = CompactionJob.class.getDeclaredField("tasks");
+        tasksField.setAccessible(true);
+        @SuppressWarnings("unchecked")
+        List<CompactionTask> tasks = (List<CompactionTask>) tasksField.get(job);
+        Assertions.assertEquals(1, tasks.size());
+        Assertions.assertTrue(tasks.get(0) instanceof AggregateCompactionTask,
+                "bundled table must route to AggregateCompactionTask");
     }
 
     /**
