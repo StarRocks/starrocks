@@ -718,7 +718,7 @@ public class VacuumTest {
             pinned.put(partition.getId(), 5L);
             pinManager.pinVersions("test-inflight-query", pinned);
 
-            final long[] capturedMinRetainVersion = new long[]{-1L};
+            final long[] capturedMinRetainVersion = new long[] {-1L};
 
             VacuumResponse mockResponse = new VacuumResponse();
             mockResponse.status = new StatusPB();
@@ -781,7 +781,7 @@ public class VacuumTest {
             pinned.put(partition.getId(), 3L);
             pinManager.pinVersions("test-inflight-query-disabled", pinned);
 
-            final long[] capturedMinRetainVersion = new long[]{-1L};
+            final long[] capturedMinRetainVersion = new long[] {-1L};
 
             VacuumResponse mockResponse = new VacuumResponse();
             mockResponse.status = new StatusPB();
