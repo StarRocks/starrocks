@@ -20,6 +20,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.Type;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.persist.InsertOverwriteStateChangeInfo;
@@ -30,11 +31,10 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.AstTraverser;
 import com.starrocks.sql.ast.InsertStmt;
-import com.starrocks.sql.ast.expression.LambdaArgument;
+import com.starrocks.sql.ast.LambdaArgument;
 import com.starrocks.sql.common.DmlException;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.statistic.StatisticsMetaManager;
-import com.starrocks.type.IntegerType;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.Assertions;
@@ -361,7 +361,7 @@ public class InsertOverwriteJobRunnerTest {
 
         // Simulate the first plan() caching ColumnRefOperators in LambdaArgument.transformedOp
         for (LambdaArgument arg : lambdaArgs) {
-            ColumnRefOperator mockOp = new ColumnRefOperator(999, IntegerType.INT, "mock_col", true);
+            ColumnRefOperator mockOp = new ColumnRefOperator(999, Type.INT, "mock_col", true);
             arg.setTransformed(mockOp);
             Assertions.assertNotNull(arg.getTransformed(), "transformedOp should be set");
         }

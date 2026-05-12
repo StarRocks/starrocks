@@ -48,16 +48,11 @@ import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AddPartitionClause;
 import com.starrocks.sql.ast.AstTraverser;
 import com.starrocks.sql.ast.InsertStmt;
+import com.starrocks.sql.ast.LambdaArgument;
 import com.starrocks.sql.ast.ListPartitionDesc;
 import com.starrocks.sql.ast.PartitionDesc;
 import com.starrocks.sql.ast.PartitionNames;
 import com.starrocks.sql.ast.RangePartitionDesc;
-<<<<<<< HEAD
-=======
-import com.starrocks.sql.ast.expression.Expr;
-import com.starrocks.sql.ast.expression.LambdaArgument;
-import com.starrocks.sql.ast.expression.LiteralExpr;
->>>>>>> 987cc67f10 ([BugFix] Clear LambdaArgument.transformedOp before INSERT OVERWRITE re-plan (#72832))
 import com.starrocks.sql.common.DmlException;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.plan.ExecPlan;
