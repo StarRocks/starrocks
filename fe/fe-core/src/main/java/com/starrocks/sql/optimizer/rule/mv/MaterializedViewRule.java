@@ -49,9 +49,7 @@ import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
-import com.starrocks.sql.optimizer.operator.scalar.LambdaFunctionOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
-import com.starrocks.sql.optimizer.operator.scalar.SubqueryOperator;
 import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorTypeReDeriver;
 import com.starrocks.sql.optimizer.rewrite.TypeReDeriveException;
@@ -71,6 +69,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
+
+import static com.starrocks.sql.optimizer.rule.mv.MaterializedViewRewriter.isCaseWhenScalarOperator;
 
 /**
  * Select best materialized view for olap scan node
@@ -963,35 +963,6 @@ public class MaterializedViewRule extends Rule {
         return mvColumnFn.isDistinct() || COUNT_DISTINCT_FUNCTION_NAMES.contains(mvColumnFn.getFnName());
     }
 
-    /**
-     * Returns true if {@code expr} contains a shape that is unsafe for MV rewrite:
-     * subquery, lambda, or a nondeterministic scalar function.
-     *
-     * <p>This pre-screen is applied before the column-coverage check so that we
-     * never broaden eligibility to expressions whose semantics cannot be reproduced
-     * by simply projecting columns out of the MV.
-     */
-    private static boolean containsForbiddenShape(ScalarOperator expr) {
-        if (expr instanceof SubqueryOperator) {
-            return true;
-        }
-        if (expr instanceof LambdaFunctionOperator) {
-            return true;
-        }
-        if (expr instanceof CallOperator) {
-            CallOperator c = (CallOperator) expr;
-            if (FunctionSet.allNonDeterministicFunctions.contains(c.getFnName())) {
-                return true;
-            }
-        }
-        for (ScalarOperator child : expr.getChildren()) {
-            if (containsForbiddenShape(child)) {
-                return true;
-            }
-        }
-        return false;
-    }
-
     public boolean isMVMatchAggFunctions(Long indexId, CallOperator queryFn,
                                          CallOperator mvColumnFn, ColumnRefSet keyColumns,
                                          ColumnRefSet aggregateColumns, Set<Integer> usedBaseColumnIds) {
@@ -1025,37 +996,30 @@ public class MaterializedViewRule extends Rule {
         ScalarOperator mvColumnFnChild0 = mvColumnFn.getChild(0);
 
         if (!queryFnChild0.isColumnRef()) {
-            // Reject expressions with forbidden shapes (subquery, lambda, nondeterministic functions).
-            if (containsForbiddenShape(queryFnChild0)) {
-                return false;
-            }
-            // Special-case bitmap_union / hll_union / etc.: when the MV column was defined
-            // with an explicit function expression (e.g. to_bitmap(k)), verify the query
-            // uses the same function name before falling through to column-coverage.
-            ColumnRefOperator mvColumnRef = factory.getColumnRef(mvColumnFnChild0.getUsedColumns().getFirstId());
-            Column mvColumn = factory.getColumn(mvColumnRef);
-            if (mvColumn.getDefineExpr() != null && mvColumn.getDefineExpr() instanceof FunctionCallExpr &&
-                    queryFnChild0 instanceof CallOperator) {
-                CallOperator queryCall = (CallOperator) queryFnChild0;
-                String mvName = ((FunctionCallExpr) mvColumn.getDefineExpr()).getFunctionName();
-                String queryName = queryCall.getFnName();
-                if (!mvName.equalsIgnoreCase(queryName)) {
+            IsNoCallChildrenValidator validator = new IsNoCallChildrenValidator(keyColumns, aggregateColumns);
+            if (!(isCaseWhenScalarOperator(queryFnChild0) && queryFnChild0.accept(validator, null))) {
+                ColumnRefOperator mvColumnRef = factory.getColumnRef(mvColumnFnChild0.getUsedColumns().getFirstId());
+                Column mvColumn = factory.getColumn(mvColumnRef);
+                if (mvColumn.getDefineExpr() != null && mvColumn.getDefineExpr() instanceof FunctionCallExpr &&
+                        queryFnChild0 instanceof CallOperator) {
+                    CallOperator queryCall = (CallOperator) queryFnChild0;
+                    String mvName = ((FunctionCallExpr) mvColumn.getDefineExpr()).getFunctionName();
+                    String queryName = queryCall.getFnName();
+
+                    if (!mvName.equalsIgnoreCase(queryName)) {
+                        return false;
+                    }
+                } else {
                     return false;
                 }
             }
-            // Fall through to the column-coverage check below.
         }
 
         if (queryFnChild0.getUsedColumns().equals(mvColumnFnChild0.getUsedColumns())) {
             return true;
         }
 
-        // Generalized column coverage: accept any expression whose leaf ColumnRefs
-        // are all present in the MV's base column id set. Type/signature coherence
-        // after rewriting is handled by ScalarOperatorTypeReDeriver +
-        // MvRewriteOutputValidator, so the prior shape gating is no longer needed
-        // for safety.
-        if (!queryFnChild0.isColumnRef()) {
+        if (isCaseWhenScalarOperator(queryFnChild0)) {
             int[] queryColumnIds = queryFnChild0.getUsedColumns().getColumnIds();
             Set<Integer> mvColumnIdSet = usedBaseColumnIds.stream()
                     .collect(Collectors.toSet());

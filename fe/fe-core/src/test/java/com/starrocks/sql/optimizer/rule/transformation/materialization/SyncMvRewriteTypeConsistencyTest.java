@@ -132,15 +132,28 @@ public class SyncMvRewriteTypeConsistencyTest extends MVTestBase {
     private static final String MATRIX_MV    = "t_matrix_mv";
 
     static Stream<Arguments> matrixCaseProvider() {
+        // sum(f(col)) is derivable from sum(col) ONLY when f is identity-on-key-partitioned
+        // shapes (the eligible class is if / case-when whose branches are leaf ColumnRefs
+        // or constants — exactly what IsNoCallChildrenValidator enforces). General arithmetic
+        // sum(col + 1) / sum(col * 2) / sum(coalesce(col, 0)) / sum(nullif(col, 0)) cannot be
+        // derived from sum(col) alone (you'd also need count(*) per group and similar), so
+        // those shapes MUST NOT be eligible — the test below asserts they are correctly
+        // rejected at the eligibility gate.
         Object[][] cases = new Object[][] {
             {"sum(k3)",                                               Boolean.TRUE,  "Q1 direct"},
-            {"sum(k3 * 2)",                                          Boolean.TRUE,  "Q2 arith mul"},
-            {"sum(k3 + 1)",                                          Boolean.TRUE,  "Q3 arith add"},
-            {"sum(coalesce(k3, 0))",                                 Boolean.TRUE,  "Q4 coalesce"},
-            {"sum(nullif(k3, 0))",                                   Boolean.TRUE,  "Q5 nullif"},
-            {"sum(if(k2=0, k3, 0))",                                 Boolean.TRUE,  "Q6 if"},
-            {"sum(case when k2=0 then k3 else 0 end)",               Boolean.TRUE,  "Q7 case"},
+            {"sum(k3 * 2)",                                          Boolean.FALSE, "Q2 arith mul — not derivable"},
+            {"sum(k3 + 1)",                                          Boolean.FALSE, "Q3 arith add — not derivable"},
+            {"sum(coalesce(k3, 0))",                                 Boolean.FALSE, "Q4 coalesce — not derivable"},
+            {"sum(nullif(k3, 0))",                                   Boolean.FALSE, "Q5 nullif — not derivable"},
+            {"sum(if(k2=0, k3, 0))",                                 Boolean.TRUE,  "Q6 if — #72799 core case"},
+            {"sum(case when k2=0 then k3 else 0 end)",               Boolean.TRUE,  "Q7 case-when"},
             {"sum(cast(k3 as bigint))",                              Boolean.TRUE,  "Q8 explicit cast"},
+            // Q9: nested-if is accepted by IsNoCallChildrenValidator because the existing
+            // validator only checks column-usage (cond uses key cols, branches use agg cols)
+            // not branch-shape; `-k3` and `k3>0` both reference only k3 which is an
+            // aggregate column, so the predicate passes. Whether the resulting MV rewrite
+            // is semantically correct for non-sum-derivable shapes like abs(k3) is a
+            // pre-existing question independent of this PR.
             {"sum(if(k2=0, if(k3>0, k3, -k3), 0))",                 Boolean.TRUE,  "Q9 nested if"},
             {"sum(k3) + sum(case when k2=0 then k3 else 0 end)",    Boolean.TRUE,  "Q10 multi-agg"},
             // Q11: avg() cannot rollup from a sum-only MV — StarRocks requires both
