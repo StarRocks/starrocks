@@ -54,6 +54,7 @@
 #include "storage/lake/vacuum.h"
 #include "storage/lake/vacuum_full.h"
 #include "storage/lake/vector_index_build_task.h"
+#include "storage/tablet_index.h"
 
 namespace starrocks {
 
@@ -170,6 +171,25 @@ bool should_rebuild_pindex(const std::unordered_set<int64>& rebuild_pindex_table
     }
     for (auto tablet_id_in_txn_log : tablet_info.get_tablet_ids_in_txn_logs()) {
         if (rebuild_pindex_tablets.count(tablet_id_in_txn_log) > 0) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// Returns true if any VECTOR index has index_build_mode = "async".
+bool is_async_vector_index_table(const TabletMetadataPB& metadata) {
+    if (!metadata.has_schema()) return false;
+    for (const auto& index_pb : metadata.schema().table_indices()) {
+        if (!index_pb.has_index_type() || index_pb.index_type() != VECTOR) {
+            continue;
+        }
+        TabletIndex parsed;
+        if (!parsed.init_from_pb(index_pb).ok()) {
+            continue;
+        }
+        auto it = parsed.common_properties().find("index_build_mode");
+        if (it != parsed.common_properties().end() && it->second == "async") {
             return true;
         }
     }
@@ -384,20 +404,22 @@ void LakeServiceImpl::publish_version(::google::protobuf::RpcController* control
                         if (prealloc_metadata != nullptr) {
                             prealloc_metadata->CopyFrom(*metadata);
                         }
-                        // Report tablet for async vector index build only if this publish's
-                        // new rowset(s) have vector_index_ids (i.e., met the build threshold).
-                        // Old unbuilt rowsets are handled by recovery scan after leader switch.
+                        // Report tablet for async VI build only on async-mode tables
+                        // whose new rowset(s) have vector_index_ids. Sync-mode tables
+                        // build VI inline on write/compaction, so FE dispatch is unneeded.
                         bool new_rowset_has_vi = false;
-                        for (const auto& rowset : metadata->rowsets()) {
-                            int64_t rv = rowset.has_version() ? rowset.version() : 0;
-                            if (rv <= base_version) continue; // existing rowset, not from this publish
-                            for (int i = 0; i < rowset.segment_metas_size(); i++) {
-                                if (rowset.segment_metas(i).vector_index_ids_size() > 0) {
-                                    new_rowset_has_vi = true;
-                                    break;
+                        if (is_async_vector_index_table(*metadata)) {
+                            for (const auto& rowset : metadata->rowsets()) {
+                                int64_t rv = rowset.has_version() ? rowset.version() : 0;
+                                if (rv <= base_version) continue; // existing rowset, not from this publish
+                                for (int i = 0; i < rowset.segment_metas_size(); i++) {
+                                    if (rowset.segment_metas(i).vector_index_ids_size() > 0) {
+                                        new_rowset_has_vi = true;
+                                        break;
+                                    }
                                 }
+                                if (new_rowset_has_vi) break;
                             }
-                            if (new_rowset_has_vi) break;
                         }
                         if (new_rowset_has_vi) {
                             std::lock_guard l(response_mtx);
