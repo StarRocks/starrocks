@@ -23,8 +23,6 @@
 #include "gen_cpp/Descriptors_types.h"
 #include "gen_cpp/Exprs_types.h"
 #include "runtime/descriptors_ext.h"
-#include "runtime/exec_env.h"
-#include "runtime/runtime_state.h"
 #include "types/logical_type.h"
 
 namespace starrocks {
@@ -32,25 +30,12 @@ namespace starrocks {
 class HiveTableDescriptorAddPartitionTest : public ::testing::Test {
 public:
     void SetUp() override {
-        _exec_env = ExecEnv::GetInstance();
         _pool = std::make_unique<ObjectPool>();
 
         TTableDescriptor tdesc;
         tdesc.id = 1;
         tdesc.tableType = TTableType::HDFS_TABLE;
         _table_desc = _pool->add(new HdfsTableDescriptor(tdesc, _pool.get()));
-
-        _runtime_state = _make_runtime_state();
-    }
-
-    std::shared_ptr<RuntimeState> _make_runtime_state() {
-        TUniqueId fragment_id;
-        TQueryOptions query_options;
-        TQueryGlobals query_globals;
-        auto rs = std::make_shared<RuntimeState>(fragment_id, query_options, query_globals, _exec_env);
-        TUniqueId query_id;
-        rs->init_mem_trackers(query_id);
-        return rs;
     }
 
     // Build a minimal THdfsPartition. partition_key_exprs is left empty by default;
@@ -84,10 +69,8 @@ public:
     }
 
 protected:
-    ExecEnv* _exec_env = nullptr;
     std::unique_ptr<ObjectPool> _pool;
     HdfsTableDescriptor* _table_desc = nullptr;
-    std::shared_ptr<RuntimeState> _runtime_state;
 };
 
 // First call inserts a new partition descriptor; get_partition returns it.
@@ -95,7 +78,7 @@ TEST_F(HiveTableDescriptorAddPartitionTest, FirstCallInsertsNewEntry) {
     constexpr int64_t partition_id = 1;
     THdfsPartition thrift = _make_partition();
 
-    ASSERT_OK(_table_desc->add_partition_value(_runtime_state.get(), _pool.get(), partition_id, thrift));
+    ASSERT_OK(_table_desc->add_partition_value(_pool.get(), partition_id, thrift));
 
     HdfsPartitionDescriptor* desc = _table_desc->get_partition(partition_id);
     ASSERT_NE(nullptr, desc);
@@ -108,12 +91,12 @@ TEST_F(HiveTableDescriptorAddPartitionTest, SamePartitionIdSameThriftIsDedupHit)
     constexpr int64_t partition_id = 2;
     THdfsPartition thrift = _make_partition();
 
-    ASSERT_OK(_table_desc->add_partition_value(_runtime_state.get(), _pool.get(), partition_id, thrift));
+    ASSERT_OK(_table_desc->add_partition_value(_pool.get(), partition_id, thrift));
     HdfsPartitionDescriptor* first = _table_desc->get_partition(partition_id);
     ASSERT_NE(nullptr, first);
 
     // Same thrift: must succeed and must NOT replace the existing entry.
-    ASSERT_OK(_table_desc->add_partition_value(_runtime_state.get(), _pool.get(), partition_id, thrift));
+    ASSERT_OK(_table_desc->add_partition_value(_pool.get(), partition_id, thrift));
     HdfsPartitionDescriptor* second = _table_desc->get_partition(partition_id);
     ASSERT_EQ(first, second);
 }
@@ -126,9 +109,9 @@ TEST_F(HiveTableDescriptorAddPartitionTest, SamePartitionIdDifferentThriftFails)
     THdfsPartition base = _make_partition();
     THdfsPartition conflict = _make_partition({_make_int_literal_thrift_expr(1)});
 
-    ASSERT_OK(_table_desc->add_partition_value(_runtime_state.get(), _pool.get(), partition_id, base));
+    ASSERT_OK(_table_desc->add_partition_value(_pool.get(), partition_id, base));
 
-    Status s = _table_desc->add_partition_value(_runtime_state.get(), _pool.get(), partition_id, conflict);
+    Status s = _table_desc->add_partition_value(_pool.get(), partition_id, conflict);
     ASSERT_FALSE(s.ok());
     ASSERT_TRUE(s.is_internal_error()) << s.to_string();
 
@@ -152,8 +135,8 @@ TEST_F(HiveTableDescriptorAddPartitionTest, DifferentPartitionIdsCoexist) {
     THdfsPartition p1 = _make_partition();
     THdfsPartition p2 = _make_partition({_make_int_literal_thrift_expr(42)});
 
-    ASSERT_OK(_table_desc->add_partition_value(_runtime_state.get(), _pool.get(), 10, p1));
-    ASSERT_OK(_table_desc->add_partition_value(_runtime_state.get(), _pool.get(), 11, p2));
+    ASSERT_OK(_table_desc->add_partition_value(_pool.get(), 10, p1));
+    ASSERT_OK(_table_desc->add_partition_value(_pool.get(), 11, p2));
 
     HdfsPartitionDescriptor* d10 = _table_desc->get_partition(10);
     HdfsPartitionDescriptor* d11 = _table_desc->get_partition(11);
@@ -168,11 +151,11 @@ TEST_F(HiveTableDescriptorAddPartitionTest, RepeatedDedupHitsKeepFirstEntry) {
     constexpr int64_t partition_id = 42;
     THdfsPartition thrift = _make_partition();
 
-    ASSERT_OK(_table_desc->add_partition_value(_runtime_state.get(), _pool.get(), partition_id, thrift));
+    ASSERT_OK(_table_desc->add_partition_value(_pool.get(), partition_id, thrift));
     HdfsPartitionDescriptor* first = _table_desc->get_partition(partition_id);
 
     for (int i = 0; i < 100; ++i) {
-        ASSERT_OK(_table_desc->add_partition_value(_runtime_state.get(), _pool.get(), partition_id, thrift));
+        ASSERT_OK(_table_desc->add_partition_value(_pool.get(), partition_id, thrift));
     }
     ASSERT_EQ(first, _table_desc->get_partition(partition_id));
 }
@@ -192,7 +175,7 @@ TEST_F(HiveTableDescriptorAddPartitionTest, ConcurrentInsertSameIdConvergesToOne
 
     for (int i = 0; i < kThreads; ++i) {
         threads.emplace_back([&, i]() {
-            statuses[i] = _table_desc->add_partition_value(_runtime_state.get(), _pool.get(), partition_id, thrift);
+            statuses[i] = _table_desc->add_partition_value(_pool.get(), partition_id, thrift);
         });
     }
     for (auto& t : threads) {
