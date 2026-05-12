@@ -69,7 +69,6 @@ Status PersistentIndexSstable::init(std::unique_ptr<RandomAccessFile> rf, const 
     if (open_st.is_corruption()) {
         auto drop_status = drop_corrupted_sstable_cache(rf->filename());
         if (drop_status.ok()) {
-            table.reset();
             if (tablet_mgr == nullptr) {
                 return Status::InvalidArgument("tablet_mgr is null when loading sst file");
             }

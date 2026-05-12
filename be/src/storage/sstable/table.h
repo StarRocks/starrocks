@@ -28,7 +28,8 @@ public:
     // retrieving data from the table.
     //
     // If successful, returns ok and sets "table" to the newly opened table.
-    // If there was an error, returns a non-ok status and resets "table" to nullptr.
+    // The caller may only use "table" when the returned Status is OK.
+    // On failure, "table" is left in an unspecified state and must not be used.
     //
     // Does not take ownership of "file", but the caller must ensure
     // that "file" remains live for the duration of the returned table's
