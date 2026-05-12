@@ -20,6 +20,7 @@ import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.sql.ast.HintNode;
 import com.starrocks.sql.ast.OrderByElement;
 import com.starrocks.sql.ast.expression.AnalyticExpr;
 import com.starrocks.sql.ast.expression.AnalyticWindow;
@@ -144,6 +145,23 @@ public class AnalyticAnalyzer {
             }
         }
 
+
+        if (HintNode.HINT_ANALYTIC_SKEW_EXPLICIT.equalsIgnoreCase(analyticExpr.getSkewHint())) {
+            if (analyticExpr.getSkewColumn() == null) {
+                throw new SemanticException("Window skew column must be specified when using explicit skew hint");
+            }
+            if (analyticExpr.getSkewValues() == null || analyticExpr.getSkewValues().isEmpty()) {
+                throw new SemanticException("Window skew value must be specified");
+            }
+            if (analyticExpr.getSkewValues().size() != 1) {
+                throw new SemanticException(
+                        "Window skew hint currently supports only a single value, but got "
+                                + analyticExpr.getSkewValues().size() + " values");
+            }
+            if (analyticExpr.getSkewValues().stream().anyMatch(expr -> !expr.isConstant())) {
+                throw new SemanticException("Window skew values must be constant");
+            }
+        }
 
         if (analyticExpr.getWindow() != null) {
             if ((isRankingFn(analyticFunction.getFn()) || isCumeFn(analyticFunction.getFn()) ||
