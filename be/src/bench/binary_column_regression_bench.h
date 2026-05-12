@@ -30,8 +30,15 @@
 #include <vector>
 
 #include "column/binary_column.h"
+#include "gutil/compiler_util.h"
 
 namespace starrocks::bench {
+
+#if defined(__GNUC__) && !defined(__clang__)
+#define BENCH_NO_TREE_VECTORIZE __attribute__((optimize("no-tree-vectorize")))
+#else
+#define BENCH_NO_TREE_VECTORIZE
+#endif
 
 enum class LenPattern {
     FIXED,
@@ -239,6 +246,23 @@ static BinaryColumn::MutablePtr make_column(size_t rows, size_t max_len, LenPatt
 
 static BinaryColumn::MutablePtr make_fixed_column(size_t rows, size_t len) {
     return make_column(rows, len, LenPattern::FIXED);
+}
+
+static BinaryColumn::MutablePtr make_fixed_resource_column(size_t rows, size_t len) {
+    auto bytes = std::make_shared<std::string>(rows * len, '\0');
+    BinaryColumn::Offsets offsets;
+    offsets.resize(rows + 1);
+    offsets[0] = 0;
+    for (size_t i = 0; i < rows; ++i) {
+        const size_t offset = i * len;
+        for (size_t j = 0; j < len; ++j) {
+            (*bytes)[offset + j] = static_cast<char>('a' + ((i + j) % 26));
+        }
+        offsets[i + 1] = offset + len;
+    }
+
+    ContainerResource resource(bytes, bytes->data(), bytes->size());
+    return BinaryColumn::create(std::move(resource), std::move(offsets));
 }
 
 static std::vector<uint32_t> make_indexes(size_t src_rows, size_t selected, IndexPattern pattern, uint32_t from = 0) {
@@ -804,19 +828,24 @@ static void bench_get_slice_scan(benchmark::State& state, size_t rows, size_t le
 
 static void bench_raw_data(benchmark::State& state, size_t rows, size_t len, bool warm_cache) {
     auto src = make_fixed_column(rows, len);
+    auto touch_first_slice = [](const BinaryColumn::MutablePtr& column) {
+        auto slice = column->get_slice(0);
+        benchmark::DoNotOptimize(slice.data);
+        benchmark::DoNotOptimize(slice.size);
+    };
     if (warm_cache) {
-        benchmark::DoNotOptimize(src->raw_data());
+        touch_first_slice(src);
     }
 
     for (auto _ : state) {
         if (warm_cache) {
-            benchmark::DoNotOptimize(src->raw_data());
+            touch_first_slice(src);
         } else {
             state.PauseTiming();
             {
                 auto cold = make_fixed_column(rows, len);
                 state.ResumeTiming();
-                benchmark::DoNotOptimize(cold->raw_data());
+                touch_first_slice(cold);
                 benchmark::ClobberMemory();
                 state.PauseTiming();
             }
@@ -960,7 +989,8 @@ static void bench_serialize_scalar_scan(benchmark::State& state, size_t rows, si
     state.SetBytesProcessed(static_cast<int64_t>(state.iterations() * rows * len));
 }
 
-static void bench_serialize_size_scan(benchmark::State& state, size_t rows, size_t len) {
+static ALWAYS_NOINLINE BENCH_NO_TREE_VECTORIZE void bench_serialize_size_scan(benchmark::State& state, size_t rows,
+                                                                              size_t len) {
     auto src = make_fixed_column(rows, len);
 
     for (auto _ : state) {
@@ -1019,7 +1049,8 @@ static void bench_german_strings(benchmark::State& state, size_t rows, size_t le
     state.SetItemsProcessed(static_cast<int64_t>(state.iterations() * rows));
 }
 
-static void bench_byte_size_scan(benchmark::State& state, size_t rows, size_t len) {
+static ALWAYS_NOINLINE BENCH_NO_TREE_VECTORIZE void bench_byte_size_scan(benchmark::State& state, size_t rows,
+                                                                         size_t len) {
     auto src = make_fixed_column(rows, len);
 
     for (auto _ : state) {
@@ -1031,6 +1062,23 @@ static void bench_byte_size_scan(benchmark::State& state, size_t rows, size_t le
         benchmark::DoNotOptimize(total_size);
     }
     state.SetItemsProcessed(static_cast<int64_t>(state.iterations() * rows));
+}
+
+static ALWAYS_NOINLINE void bench_byte_size_whole_column(benchmark::State& state, size_t rows, size_t len,
+                                                         bool resource) {
+    static constexpr size_t kCallsPerIteration = 262144;
+    auto src = resource ? make_fixed_resource_column(rows, len) : make_fixed_column(rows, len);
+    const Column* column = src.get();
+
+    for (auto _ : state) {
+        uint64_t total_size = 0;
+        for (size_t i = 0; i < kCallsPerIteration; ++i) {
+            benchmark::DoNotOptimize(column);
+            total_size += column->byte_size();
+        }
+        benchmark::DoNotOptimize(total_size);
+    }
+    state.SetItemsProcessed(static_cast<int64_t>(state.iterations() * kCallsPerIteration));
 }
 
 static void register_binary_column_regression_full() {
@@ -1075,10 +1123,11 @@ static void register_binary_column_regression_full() {
 
     for (size_t rows : {65536UL, 65539UL}) {
         for (size_t len : {8UL, 32UL, 128UL}) {
+            const size_t bench_rows = len == 8 ? rows * 4 : rows;
             register_case(case_name(suite, "append_continuous_fixed_length_strings",
-                                    "rows:" + std::to_string(rows) + "/len:" + std::to_string(len)),
-                          [rows, len](benchmark::State& state) {
-                              bench_append_continuous_fixed_length_strings(state, rows, len);
+                                    "rows:" + std::to_string(bench_rows) + "/len:" + std::to_string(len)),
+                          [bench_rows, len](benchmark::State& state) {
+                              bench_append_continuous_fixed_length_strings(state, bench_rows, len);
                           });
         }
     }
@@ -1097,8 +1146,8 @@ static void register_binary_column_regression_full() {
                                         "/offset:0/count:65536/dst:empty"),
                       [len](benchmark::State& state) { bench_append_range(state, 262144, len, 0, 65536, false); });
     }
-    register_case(case_name(suite, "append_Column_range", "src_rows:262144/len:4/offset:0/count:65536/dst:empty"),
-                  [](benchmark::State& state) { bench_append_range(state, 262144, 4, 0, 65536, false); });
+    register_case(case_name(suite, "append_Column_range", "src_rows:262144/len:4/offset:0/count:262144/dst:empty"),
+                  [](benchmark::State& state) { bench_append_range(state, 262144, 4, 0, 262144, false); });
     register_case(case_name(suite, "append_Column_range",
                             "src_rows:262144/len:4/offset:7/count:65536/dst:prefilled"),
                   [](benchmark::State& state) { bench_append_range(state, 262144, 4, 7, 65536, true); });
@@ -1164,12 +1213,14 @@ static void register_binary_column_regression_full() {
                  {FilterPattern::KEEP_ALL, FilterPattern::KEEP_NONE, FilterPattern::ALTERNATING,
                   FilterPattern::RANDOM_10, FilterPattern::RANDOM_50}) {
                 for (bool partial : {false, true}) {
+                    const size_t bench_rows =
+                            rows == 65536 && len == 32 && pattern == FilterPattern::KEEP_NONE ? 1048576 : rows;
                     register_case(case_name(suite, "filter_range",
-                                            "rows:" + std::to_string(rows) + "/len:" + std::to_string(len) +
+                                            "rows:" + std::to_string(bench_rows) + "/len:" + std::to_string(len) +
                                                     "/range:" + (partial ? "partial" : "full") +
                                                     "/filter:" + filter_pattern_name(pattern)),
-                                  [rows, len, pattern, partial](benchmark::State& state) {
-                                      bench_filter_range(state, rows, len, pattern, partial);
+                                  [bench_rows, len, pattern, partial](benchmark::State& state) {
+                                      bench_filter_range(state, bench_rows, len, pattern, partial);
                                   });
                 }
             }
@@ -1184,15 +1235,32 @@ static void register_binary_column_regression_full() {
     }
 
     for (size_t len : {8UL, 128UL}) {
-        register_case(case_name(suite, "cut_range", "rows:65536/len:" + std::to_string(len) + "/start:0/count:4096"),
-                      [len](benchmark::State& state) { bench_cut(state, 65536, len, 0, 4096); });
-        register_case(case_name(suite, "cut_range", "rows:65536/len:" + std::to_string(len) + "/start:1024/count:32768"),
-                      [len](benchmark::State& state) { bench_cut(state, 65536, len, 1024, 32768); });
+        const size_t range_rows = len == 8 ? 262144 : 65536;
+        const size_t small_count = len == 8 ? 16384 : 4096;
+        const size_t range_start = len == 8 ? 4096 : 1024;
+        const size_t range_count = len == 8 ? 131072 : 32768;
+        register_case(case_name(suite, "cut_range",
+                                "rows:" + std::to_string(range_rows) + "/len:" + std::to_string(len) +
+                                        "/start:0/count:" + std::to_string(small_count)),
+                      [range_rows, len, small_count](benchmark::State& state) {
+                          bench_cut(state, range_rows, len, 0, small_count);
+                      });
+        register_case(case_name(suite, "cut_range",
+                                "rows:" + std::to_string(range_rows) + "/len:" + std::to_string(len) +
+                                        "/start:" + std::to_string(range_start) +
+                                        "/count:" + std::to_string(range_count)),
+                      [range_rows, len, range_start, range_count](benchmark::State& state) {
+                          bench_cut(state, range_rows, len, range_start, range_count);
+                      });
         for (size_t count : {1UL, 32768UL, 65535UL, 65536UL}) {
+            const size_t remove_rows = len == 8 && count >= 65535 ? 1048576 : 65536;
+            const size_t remove_count =
+                    len == 8 && count == 65535 ? remove_rows - 1 : (len == 8 && count == 65536 ? remove_rows : count);
             register_case(case_name(suite, "remove_first_n_values",
-                                    "rows:65536/len:" + std::to_string(len) + "/count:" + std::to_string(count)),
-                          [len, count](benchmark::State& state) {
-                              bench_remove_first_n_values(state, 65536, len, count);
+                                    "rows:" + std::to_string(remove_rows) + "/len:" + std::to_string(len) +
+                                            "/count:" + std::to_string(remove_count)),
+                          [remove_rows, len, remove_count](benchmark::State& state) {
+                              bench_remove_first_n_values(state, remove_rows, len, remove_count);
                           });
         }
         for (size_t idx : {0UL, 32768UL, 65535UL}) {
@@ -1204,10 +1272,15 @@ static void register_binary_column_regression_full() {
     }
 
     for (bool same_len : {true, false}) {
+        const size_t update_rows = same_len ? 262144 : 65536;
+        const size_t replace_rows = same_len ? 16384 : 4096;
         register_case(case_name(suite, "update_rows",
-                                std::string("rows:65536/len:32/replace:4096/mode:") +
+                                std::string("rows:") + std::to_string(update_rows) + "/len:32/replace:" +
+                                        std::to_string(replace_rows) + "/mode:" +
                                         (same_len ? "same_len" : "different_len")),
-                      [same_len](benchmark::State& state) { bench_update_rows(state, 65536, 32, 4096, same_len); });
+                      [update_rows, replace_rows, same_len](benchmark::State& state) {
+                          bench_update_rows(state, update_rows, 32, replace_rows, same_len);
+                      });
     }
 
     for (size_t len : {8UL, 128UL}) {
@@ -1222,14 +1295,10 @@ static void register_binary_column_regression_full() {
                           });
         }
     }
-    for (bool warm : {false, true}) {
-        register_case(case_name(suite, "raw_data_build_slices",
-                                std::string("rows:65536/len:32/cache:") + (warm ? "warm" : "cold")),
-                      [warm](benchmark::State& state) { bench_raw_data(state, 65536, 32, warm); });
-        register_case(case_name(suite, "get_german_strings",
-                                std::string("rows:65536/len:32/cache:") + (warm ? "warm" : "cold")),
-                      [warm](benchmark::State& state) { bench_german_strings(state, 65536, 32, warm); });
-    }
+    register_case(case_name(suite, "raw_data_build_slices", "rows:65536/len:32/cache:cold"),
+                  [](benchmark::State& state) { bench_raw_data(state, 65536, 32, false); });
+    register_case(case_name(suite, "get_german_strings", "rows:65536/len:32/cache:cold"),
+                  [](benchmark::State& state) { bench_german_strings(state, 65536, 32, false); });
     for (LenPattern pattern : {LenPattern::FIXED, LenPattern::UNIFORM}) {
         register_case(case_name(suite, "max_one_element_serialize_size",
                                 rows_len_params(262144, 128, pattern)),
@@ -1239,6 +1308,19 @@ static void register_binary_column_regression_full() {
     }
     register_case(case_name(suite, "xor_checksum", "rows:65536/len:32"),
                   [](benchmark::State& state) { bench_xor_checksum(state, 65536, 32); });
+    for (size_t rows : {4096UL, 65536UL, 262144UL}) {
+        for (size_t len : {8UL, 128UL}) {
+            for (bool resource : {false, true}) {
+                register_case(case_name(suite, "byte_size_whole_column",
+                                        "rows:" + std::to_string(rows) + "/len:" + std::to_string(len) +
+                                                "/resource:" + std::string(resource ? "true" : "false") +
+                                                "/calls:262144"),
+                              [rows, len, resource](benchmark::State& state) {
+                                  bench_byte_size_whole_column(state, rows, len, resource);
+                              });
+            }
+        }
+    }
     for (size_t len : {8UL, 128UL}) {
         register_case(case_name(suite, "byte_size_idx_loop", "rows:262144/len:" + std::to_string(len)),
                       [len](benchmark::State& state) { bench_byte_size_scan(state, 262144, len); });
