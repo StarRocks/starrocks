@@ -1,12 +1,4 @@
 -- name: test_ivm_with_iceberg_multi_refresh_tvr_advance
--- Regression: ensure baseTableInfoTvrVersionRangeMap advances across multiple
--- incremental refreshes. Pre-fix, prepareRefreshPlan()'s finally reset
--- enable_ivm_refresh before executor.executePlan ran, so
--- IVMInsertLoadTxnCallback never registered and the persistent TVR map
--- stayed at baseline — each refresh recomputed the delta from baseline →
--- currentVersion, producing duplicate-row accumulation in the MV
--- (mv rows grow by 1, 2, 3, ... instead of by the new-insert count).
-
 create external catalog mv_iceberg_${uuid0}
 properties
 (
@@ -14,20 +6,32 @@ properties
     "iceberg.catalog.type" = "hive",
     "hive.metastore.uris" = "${iceberg_catalog_hive_metastore_uris}"
 );
+-- result:
+-- !result
 set catalog mv_iceberg_${uuid0};
+-- result:
+-- !result
 create database mv_ice_db_${uuid0};
+-- result:
+-- !result
 use mv_ice_db_${uuid0};
-
+-- result:
+-- !result
 create table t_multi (k int, v bigint);
+-- result:
+-- !result
 insert into t_multi values (1, 10), (2, 20);
-
+-- result:
+-- !result
 set catalog default_catalog;
+-- result:
+-- !result
 create database db_${uuid0};
+-- result:
+-- !result
 use db_${uuid0};
-
--- Unpartitioned IVM MV with simple projection (the minimal shape that triggers
--- the bug: partitioned MVs go through PCT and have a separate TVR persistence
--- path, so the regression specifically targets the IVM-only code path).
+-- result:
+-- !result
 CREATE MATERIALIZED VIEW test_mv_multi
 REFRESH DEFERRED MANUAL
 properties
@@ -35,45 +39,77 @@ properties
     "refresh_mode" = "incremental"
 )
 AS SELECT k, v FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t_multi;
-
--- Baseline refresh (goes through Hybrid → PCT to establish TVR baseline).
+-- result:
+-- !result
 [UC]REFRESH MATERIALIZED VIEW test_mv_multi WITH SYNC MODE;
 SELECT count(*) FROM test_mv_multi;
-
--- Iteration 1: +1 row → mv should have 3 rows. (Pre-fix: 3 ✓ — first
--- post-baseline refresh happens to look correct because the persistent map
--- starts at the baseline snapshot S0; this is the only refresh where the
--- bug is invisible.)
+-- result:
+2
+-- !result
 insert into mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t_multi values (3, 30);
+-- result:
+-- !result
 [UC]REFRESH MATERIALIZED VIEW test_mv_multi WITH SYNC MODE;
 SELECT count(*) FROM test_mv_multi;
-
--- Iteration 2: +1 row → mv should have 4 rows. (Pre-fix: 5 — TVR stuck at S0,
--- delta = S0→S2 covers both iter1's row and iter2's row, iter1's row gets
--- re-applied.)
+-- result:
+3
+-- !result
 insert into mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t_multi values (4, 40);
+-- result:
+-- !result
 [UC]REFRESH MATERIALIZED VIEW test_mv_multi WITH SYNC MODE;
 SELECT count(*) FROM test_mv_multi;
-
--- Iteration 3: +1 row → mv should have 5 rows. (Pre-fix: 8 — accumulating.)
+-- result:
+4
+-- !result
 insert into mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t_multi values (5, 50);
+-- result:
+-- !result
 [UC]REFRESH MATERIALIZED VIEW test_mv_multi WITH SYNC MODE;
 SELECT count(*) FROM test_mv_multi;
-
--- Iteration 4: +2 rows → mv should have 7 rows. (Pre-fix: 12.)
+-- result:
+5
+-- !result
 insert into mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t_multi values (6, 60), (7, 70);
+-- result:
+-- !result
 [UC]REFRESH MATERIALIZED VIEW test_mv_multi WITH SYNC MODE;
 SELECT count(*) FROM test_mv_multi;
-
--- Per-row equality. The count(*) checks above already catch duplicate
--- accumulation (pre-fix the mv row counts diverge as 3, 5, 8, 12 instead of
--- 3, 4, 5, 7). This SELECT pins the actual row values too — both source
--- and mv should produce the same 7 rows when ordered by (k, v).
+-- result:
+7
+-- !result
 SELECT k, v FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t_multi ORDER BY k, v;
+-- result:
+1	10
+2	20
+3	30
+4	40
+5	50
+6	60
+7	70
+-- !result
 SELECT k, v FROM test_mv_multi ORDER BY k, v;
-
+-- result:
+1	10
+2	20
+3	30
+4	40
+5	50
+6	60
+7	70
+-- !result
 drop materialized view test_mv_multi;
+-- result:
+-- !result
 drop table mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t_multi force;
+-- result:
+-- !result
 drop database mv_iceberg_${uuid0}.mv_ice_db_${uuid0} force;
+-- result:
+-- !result
 drop database db_${uuid0} force;
+-- result:
+-- !result
 drop catalog mv_iceberg_${uuid0};
+-- result:
+-- !result
