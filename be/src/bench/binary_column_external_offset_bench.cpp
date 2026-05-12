@@ -2712,15 +2712,18 @@ static void register_p0_core_cases() {
     }
 
     for (size_t len : {4UL, 32UL, 128UL}) {
+        const size_t rows = len == 4 ? 524288 : 65536;
         register_case(ext_case_name("P0", "parquet_plain_flba_decode",
-                                    "rows:65536/len:" + std::to_string(len) + "/nullable:false/nulls:none"),
+                                    "rows:" + std::to_string(rows) + "/len:" + std::to_string(len) +
+                                            "/nullable:false/nulls:none"),
                       [=](benchmark::State& state) {
-                          bench_parquet_plain_flba_decode(state, 65536, len, false, FilterPattern::KEEP_NONE);
+                          bench_parquet_plain_flba_decode(state, rows, len, false, FilterPattern::KEEP_NONE);
                       });
         register_case(ext_case_name("P0", "parquet_plain_flba_decode",
-                                    "rows:65536/len:" + std::to_string(len) + "/nullable:true/nulls:random50"),
+                                    "rows:" + std::to_string(rows) + "/len:" + std::to_string(len) +
+                                            "/nullable:true/nulls:random50"),
                       [=](benchmark::State& state) {
-                          bench_parquet_plain_flba_decode(state, 65536, len, true, FilterPattern::RANDOM_50);
+                          bench_parquet_plain_flba_decode(state, rows, len, true, FilterPattern::RANDOM_50);
                       });
     }
 
@@ -2756,7 +2759,7 @@ static void register_p0_core_cases() {
 }
 
 static void register_p0_boundary_cases() {
-    for (size_t rows : {4096UL, 65536UL}) {
+    for (size_t rows : {65536UL, 262144UL}) {
         for (size_t len : {4UL, 32UL, 128UL}) {
             register_case(ext_case_name("P0B", "column_array_serde",
                                         "rows:" + std::to_string(rows) + "/len:" + std::to_string(len) +
@@ -2769,11 +2772,11 @@ static void register_p0_boundary_cases() {
         }
     }
     register_case(ext_case_name("P0B", "column_array_serde",
-                                "rows:262144/len:4/mode:serialize/encode:0"),
-                  [](benchmark::State& state) { bench_column_array_serde_serialize(state, 262144, 4, 0); });
+                                "rows:524288/len:4/mode:serialize/encode:0"),
+                  [](benchmark::State& state) { bench_column_array_serde_serialize(state, 524288, 4, 0); });
     register_case(ext_case_name("P0B", "column_array_serde",
-                                "rows:262144/len:4/mode:deserialize/encode:0"),
-                  [](benchmark::State& state) { bench_column_array_serde_deserialize(state, 262144, 4, 0); });
+                                "rows:524288/len:4/mode:deserialize/encode:0"),
+                  [](benchmark::State& state) { bench_column_array_serde_deserialize(state, 524288, 4, 0); });
 
     for (size_t len : {4UL, 32UL}) {
         register_case(ext_case_name("P0B", "binary_plain_page_zero_copy_offsets_with_alloc",
