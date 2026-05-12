@@ -260,7 +260,11 @@ public class MaterializedViewRewriter extends OptExpressionVisitor<OptExpression
         replaceMap.put(context.queryColumnRef, context.mvColumnRef);
         ReplaceColumnRefRewriter replaceColumnRefRewriter = new ReplaceColumnRefRewriter(replaceMap);
 
-        Map<ColumnRefOperator, CallOperator> newAggMap = new HashMap<>(aggregationOperator.getAggregations());
+        // Preserve insertion order so plan-text fixtures that pin a specific agg output
+        // ordering remain stable across JVM / architecture differences in HashMap
+        // bucketization.
+        Map<ColumnRefOperator, CallOperator> newAggMap =
+                new java.util.LinkedHashMap<>(aggregationOperator.getAggregations());
         for (Map.Entry<ColumnRefOperator, CallOperator> kv : aggregationOperator.getAggregations().entrySet()) {
             ColumnRefOperator outputRef = kv.getKey();
             CallOperator queryAggFunc = kv.getValue();

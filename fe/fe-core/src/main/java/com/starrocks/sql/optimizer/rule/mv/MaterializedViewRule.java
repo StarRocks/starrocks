@@ -1254,7 +1254,10 @@ public class MaterializedViewRule extends Rule {
                         ScalarOperator redrived = ScalarOperatorTypeReDeriver.reDerive(aggFunc);
                         if (redrived instanceof CallOperator) {
                             if (newAggMap == null) {
-                                newAggMap = new HashMap<>(oldAggMap);
+                                // Preserve insertion order so plan-text fixtures that pin
+                                // a specific agg output ordering remain stable across JVM
+                                // / architecture differences in HashMap bucketization.
+                                newAggMap = new java.util.LinkedHashMap<>(oldAggMap);
                             }
                             CallOperator redrivedCall = (CallOperator) redrived;
                             newAggMap.put(entry.getKey(), redrivedCall);
