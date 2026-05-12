@@ -383,21 +383,47 @@ StatusOr<TPartitionMap*> HiveTableDescriptor::deserialize_partition_map(
 
 Status HiveTableDescriptor::add_partition_value(RuntimeState* runtime_state, ObjectPool* pool, int64_t id,
                                                 const THdfsPartition& thrift_partition) {
-    auto* partition = pool->add(new HdfsPartitionDescriptor(thrift_partition, _mr));
-    RETURN_IF_ERROR(partition->create_part_key_exprs(runtime_state, pool));
+    // Produce a uniform mismatch error so that callers see the same wording and
+    // fields regardless of which branch (fast-path shared-lock hit, or slow-path
+    // emplace() race loss) actually detected the conflict.
+    auto mismatch_status = [&](const HdfsPartitionDescriptor* old_partition) {
+        return Status::InternalError(
+                fmt::format("Partition id {} already exists with different partition_key_exprs. "
+                            "new partition (thrift) = {}, old_partition = {}",
+                            id, apache::thrift::ThriftDebugString(thrift_partition), old_partition->debug_string()));
+    };
+
+    // Fast path: shared-lock lookup. If the partition is already registered, skip
+    // building a new HdfsPartitionDescriptor and the expensive create_part_key_exprs
+    // (ExprFactory + prepare + open). This is the common case when many scan ranges
+    // share the same partition_id.
     {
-        std::unique_lock lock(_map_mutex);
+        std::shared_lock lock(_map_mutex);
         const auto it = _partition_id_to_desc_map.find(id);
         if (it != _partition_id_to_desc_map.end()) {
             auto* old_partition = it->second;
-            if (partition->thrift_partition_key_exprs() != old_partition->thrift_partition_key_exprs()) {
-                return Status::InternalError(
-                        fmt::format("Partition id {} already exists. new partition = {}, old_partition = {}", id,
-                                    partition->debug_string(), old_partition->debug_string()));
+            if (thrift_partition.partition_key_exprs != old_partition->thrift_partition_key_exprs()) {
+                return mismatch_status(old_partition);
             }
-        } else {
-            _partition_id_to_desc_map[id] = partition;
+            return Status::OK();
         }
+    }
+
+    // Slow path: build a new HdfsPartitionDescriptor and its key exprs outside any
+    // lock so that create_part_key_exprs (prepare/open) is not serialized.
+    auto* partition = pool->add(new HdfsPartitionDescriptor(thrift_partition, _mr));
+    RETURN_IF_ERROR(partition->create_part_key_exprs(runtime_state, pool));
+
+    // Insert under a write lock; another caller may have inserted the same id while
+    // we were building, so double-check and tolerate the race.
+    std::unique_lock lock(_map_mutex);
+    auto [it, inserted] = _partition_id_to_desc_map.emplace(id, partition);
+    if (!inserted) {
+        auto* old_partition = it->second;
+        if (thrift_partition.partition_key_exprs != old_partition->thrift_partition_key_exprs()) {
+            return mismatch_status(old_partition);
+        }
+        // The newly built `partition` is unreferenced; it will be freed when `pool` dies.
     }
     return Status::OK();
 }
