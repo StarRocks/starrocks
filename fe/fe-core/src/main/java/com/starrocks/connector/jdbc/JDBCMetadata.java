@@ -41,9 +41,9 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.sql.Connection;
-import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Statement;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -360,13 +360,13 @@ public class JDBCMetadata implements ConnectorMetadata {
         String normalizedQuery = JDBCTable.normalizePassThroughQuery(query);
         String metadataQuery = "SELECT * FROM (" + normalizedQuery + ") starrocks_query WHERE 1 = 0";
         try (Connection connection = getConnection();
-                PreparedStatement preparedStatement = connection.prepareStatement(metadataQuery)) {
+                Statement statement = connection.createStatement()) {
             int queryTimeoutSeconds = schemaResolver.getQueryTimeoutSeconds();
             if (queryTimeoutSeconds > 0) {
-                preparedStatement.setQueryTimeout(queryTimeoutSeconds);
+                statement.setQueryTimeout(queryTimeoutSeconds);
             }
 
-            try (ResultSet resultSet = preparedStatement.executeQuery()) {
+            try (ResultSet resultSet = statement.executeQuery(metadataQuery)) {
                 Map<String, Integer> originalJdbcTypes = new HashMap<>();
                 List<Column> fullSchema = schemaResolver.convertToSRTable(resultSet.getMetaData(), originalJdbcTypes);
                 if (fullSchema.isEmpty()) {
