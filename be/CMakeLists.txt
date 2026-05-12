@@ -536,6 +536,7 @@ endif()
 # Set starrocks libraries
 set(STARROCKS_LINK_LIBS
     ${WL_START_GROUP}
+    Service
     Agent
     Connector
     Exec

@@ -32,7 +32,7 @@ ADD_BE_LIB(Service
         ${EXEC_FILES}
 )
 
-target_link_libraries(ServiceBE PUBLIC Service)
+add_dependencies(ServiceBE Service)
 
 # only build starrocks_be when TEST is off
 if ((NOT ${MAKE_TEST} STREQUAL "ON") AND (NOT BUILD_FORMAT_LIB))
