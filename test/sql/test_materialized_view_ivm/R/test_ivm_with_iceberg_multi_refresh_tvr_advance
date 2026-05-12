@@ -46,6 +46,14 @@ SELECT count(*) FROM test_mv_multi;
 -- result:
 2
 -- !result
+[UC]EXPLAIN REFRESH MATERIALIZED VIEW test_mv_multi;
+SELECT @@enable_ivm_refresh;
+-- result:
+0
+-- !result
+SELECT @@tvr_target_mvid;
+-- result:
+-- !result
 insert into mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t_multi values (3, 30);
 -- result:
 -- !result
