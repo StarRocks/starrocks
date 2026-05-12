@@ -360,7 +360,10 @@ public class RewriteToVectorPlanRule extends TransformationRule {
     /**
      * Whether the scalar operator is a constant array of float, which is represented as
      * `ArrayOperator(type=ArrayType(float))` or
-     * `CastOperator(child=ArrayOperator(type=ArrayType(numeric_type)), type=ArrayType(float))`.
+     * `CastOperator(child=ArrayOperator(type=ArrayType(numeric_type)), type=ArrayType(float))` or
+     * `CastOperator(child=ConstantOperator(VARCHAR, "[...]"), type=ArrayType(float))`
+     * (the last form is used by prepared statements that send the array as a string parameter,
+     * cf. Doris-style `CAST(? AS ARRAY<FLOAT>)`).
      */
     private boolean isConstantArrayFloat(ScalarOperator scalarOperator) {
         if (!scalarOperator.isConstant()) {
@@ -375,6 +378,10 @@ public class RewriteToVectorPlanRule extends TransformationRule {
             if (!arrayType.getItemType().isFloatingPointType()) {
                 return false;
             }
+            // Doris-compatible prepared-statement form: CAST(StringLiteral AS ARRAY<FLOAT>).
+            if (isCastStringToArrayFloat(scalarOperator)) {
+                return true;
+            }
 
             return scalarOperator.getChildren().stream().allMatch(this::isConstantArrayFloat);
         } else if (scalarOperator instanceof ArrayOperator) {
@@ -388,8 +395,35 @@ public class RewriteToVectorPlanRule extends TransformationRule {
         }
     }
 
+    /**
+     * True iff {@code op} is {@code CastOperator(ConstantOperator(VARCHAR/CHAR, "[..]"), ARRAY<FLOAT>)}.
+     */
+    private static boolean isCastStringToArrayFloat(ScalarOperator op) {
+        if (!(op instanceof CastOperator) || !op.getType().isArrayType()) {
+            return false;
+        }
+        ArrayType arrayType = (ArrayType) op.getType();
+        if (!arrayType.getItemType().isFloatingPointType()) {
+            return false;
+        }
+        if (op.getChildren().size() != 1) {
+            return false;
+        }
+        ScalarOperator child = op.getChild(0);
+        return child instanceof ConstantOperator && child.getType() != null && child.getType().isStringType();
+    }
+
     private void extractValuesFromConstantArray(ScalarOperator scalarOperator, List<String> vectorQuery) {
         if (scalarOperator instanceof ColumnRefOperator) {
+            return;
+        }
+
+        // CAST(StringLiteral AS ARRAY<FLOAT>) form: parse the string as a comma-separated
+        // float list and append each value. Used by prepared-statement vector queries.
+        if (isCastStringToArrayFloat(scalarOperator)) {
+            ConstantOperator stringConst = (ConstantOperator) scalarOperator.getChild(0);
+            String literal = String.valueOf(stringConst.getValue());
+            parseStringAsFloatList(literal, vectorQuery);
             return;
         }
 
@@ -400,6 +434,47 @@ public class RewriteToVectorPlanRule extends TransformationRule {
 
         for (ScalarOperator child : scalarOperator.getChildren()) {
             extractValuesFromConstantArray(child, vectorQuery);
+        }
+    }
+
+    /** Parse {@code "[f1, f2, ..., fN]"} into N decimal-string tokens appended to {@code out}. */
+    private static void parseStringAsFloatList(String literal, List<String> out) {
+        if (literal == null) {
+            throw new SemanticException("Vector array literal cannot be null");
+        }
+        String trimmed = literal.trim();
+        int open = trimmed.indexOf('[');
+        int close = trimmed.lastIndexOf(']');
+        if (open < 0 || close <= open) {
+            throw new SemanticException("Vector array literal must be enclosed in [..]: " + literal);
+        }
+        String body = trimmed.substring(open + 1, close);
+        int n = body.length();
+        int i = 0;
+        while (i < n) {
+            while (i < n && Character.isWhitespace(body.charAt(i))) {
+                i++;
+            }
+            if (i >= n) {
+                break;
+            }
+            int tokStart = i;
+            while (i < n && body.charAt(i) != ',') {
+                i++;
+            }
+            String tok = body.substring(tokStart, i).trim();
+            if (tok.isEmpty()) {
+                throw new SemanticException("Empty element in vector array literal: " + literal);
+            }
+            try {
+                Double.parseDouble(tok); // validate
+            } catch (NumberFormatException e) {
+                throw new SemanticException("Invalid float in vector array literal: '" + tok + "'");
+            }
+            out.add(tok);
+            if (i < n && body.charAt(i) == ',') {
+                i++;
+            }
         }
     }
 
