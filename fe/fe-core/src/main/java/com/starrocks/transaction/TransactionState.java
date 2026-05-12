@@ -1133,6 +1133,10 @@ public class TransactionState implements Writable, GsonPreProcessable {
         return sourceType;
     }
 
+    public boolean isFromLakeCompaction() {
+        return sourceType == LoadJobSourceType.LAKE_COMPACTION;
+    }
+
     public TransactionType getTransactionType() {
         return sourceType == LoadJobSourceType.REPLICATION ? TransactionType.TXN_REPLICATION
                 : TransactionType.TXN_NORMAL;

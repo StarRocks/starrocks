@@ -712,7 +712,11 @@ public class PublishVersionDaemon extends LeaderDaemon {
                             compactionScores, nodeToTablets, computeResource, null, vectorIndexBuildInfos);
                 }
 
-                VectorIndexBuildScheduler.onPublishComplete(vectorIndexBuildInfos);
+                // Mixed batches (rare) fall back to false so the load-tail delay protects
+                // against wasted builds.
+                boolean allFromCompaction = !transactionStates.isEmpty() &&
+                        transactionStates.stream().allMatch(TransactionState::isFromLakeCompaction);
+                VectorIndexBuildScheduler.onPublishComplete(vectorIndexBuildInfos, allFromCompaction);
                 Quantiles quantiles = Quantiles.compute(compactionScores.values());
                 stateBatch.setCompactionScore(tableId, partitionId, quantiles);
                 stateBatch.putBeTablets(partitionId, nodeToTablets);
@@ -1105,7 +1109,7 @@ public class PublishVersionDaemon extends LeaderDaemon {
                 Utils.publishVersion(normalTablets, txnInfo, baseVersion, txnVersion, compactionScores,
                         computeResource, tabletRowNums, useAggregatePublish, vectorIndexBuildInfos);
 
-                VectorIndexBuildScheduler.onPublishComplete(vectorIndexBuildInfos);
+                VectorIndexBuildScheduler.onPublishComplete(vectorIndexBuildInfos, txnState.isFromLakeCompaction());
                 Quantiles quantiles = Quantiles.compute(compactionScores.values());
                 partitionCommitInfo.setCompactionScore(quantiles);
                 if (!tabletRowNums.isEmpty()) {

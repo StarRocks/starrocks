@@ -622,6 +622,130 @@ TEST_F(LakeServiceTest, test_publish_version_for_write) {
     }
 }
 
+// Verifies the publish-time async VI dispatch gate: only async-mode tables
+// (index_build_mode = "async") generate vector_index_build_infos in the publish
+// response. Sync-mode tables build VI inline during write/compaction, so the FE
+// scheduler should not be involved.
+TEST_F(LakeServiceTest, test_publish_version_vector_index_dispatch_gate) {
+    auto make_vi_metadata = [&](bool async_mode) {
+        auto metadata = lake::generate_simple_tablet_metadata(DUP_KEYS);
+        auto* schema = metadata->mutable_schema();
+        auto* idx = schema->add_table_indices();
+        idx->set_index_id(next_id());
+        idx->set_index_type(VECTOR);
+        idx->add_col_unique_id(schema->column(1).unique_id());
+        std::string props_json = R"({"common_properties": {"index_type": "hnsw")";
+        if (async_mode) {
+            props_json += R"(, "index_build_mode": "async")";
+        }
+        props_json += "}}";
+        idx->set_index_properties(props_json);
+        return metadata;
+    };
+
+    auto sync_metadata = make_vi_metadata(false);
+    auto async_metadata = make_vi_metadata(true);
+    auto sync_tablet_id = sync_metadata->id();
+    auto async_tablet_id = async_metadata->id();
+    auto sync_index_id = sync_metadata->schema().table_indices(0).index_id();
+    auto async_index_id = async_metadata->schema().table_indices(0).index_id();
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(sync_metadata));
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(async_metadata));
+
+    auto build_vi_txn_log = [&](int64_t tablet_id, int64_t index_id) {
+        auto txn_id = next_id();
+        TxnLog log;
+        log.set_tablet_id(tablet_id);
+        log.set_partition_id(_partition_id);
+        log.set_txn_id(txn_id);
+        log.mutable_op_write()->mutable_rowset()->add_segments(generate_segment_file_for_tablet(tablet_id, txn_id));
+        log.mutable_op_write()->mutable_rowset()->add_segment_size(1024);
+        auto* segment_meta = log.mutable_op_write()->mutable_rowset()->add_segment_metas();
+        segment_meta->set_num_rows(100);
+        segment_meta->add_vector_index_ids(index_id);
+        log.mutable_op_write()->mutable_rowset()->set_data_size(1024);
+        log.mutable_op_write()->mutable_rowset()->set_num_rows(100);
+        log.mutable_op_write()->mutable_rowset()->set_overlapped(false);
+        return log;
+    };
+
+    auto sync_log = build_vi_txn_log(sync_tablet_id, sync_index_id);
+    auto async_log = build_vi_txn_log(async_tablet_id, async_index_id);
+    ASSERT_OK(_tablet_mgr->put_txn_log(sync_log));
+    ASSERT_OK(_tablet_mgr->put_txn_log(async_log));
+
+    // Sync-mode table: response should NOT contain vector_index_build_infos.
+    {
+        PublishVersionRequest request;
+        request.set_base_version(1);
+        request.set_new_version(2);
+        request.add_tablet_ids(sync_tablet_id);
+        request.add_txn_ids(sync_log.txn_id());
+        PublishVersionResponse response;
+        _lake_service.publish_version(nullptr, &request, &response, nullptr);
+        ASSERT_EQ(0, response.failed_tablets_size());
+        EXPECT_EQ(0, response.vector_index_build_infos_size())
+                << "sync-mode tablet must not appear in vector_index_build_infos";
+    }
+
+    // Async-mode table: response should contain one vector_index_build_infos entry
+    // pointing at this tablet/version.
+    {
+        PublishVersionRequest request;
+        request.set_base_version(1);
+        request.set_new_version(2);
+        request.add_tablet_ids(async_tablet_id);
+        request.add_txn_ids(async_log.txn_id());
+        PublishVersionResponse response;
+        _lake_service.publish_version(nullptr, &request, &response, nullptr);
+        ASSERT_EQ(0, response.failed_tablets_size());
+        ASSERT_EQ(1, response.vector_index_build_infos_size())
+                << "async-mode tablet with new vector_index_ids must be reported";
+        EXPECT_EQ(async_tablet_id, response.vector_index_build_infos(0).tablet_id());
+        EXPECT_EQ(2, response.vector_index_build_infos(0).version());
+    }
+}
+
+// Async-mode table whose new rowset has no vector_index_ids (segment under
+// threshold) should also not appear in vector_index_build_infos.
+TEST_F(LakeServiceTest, test_publish_version_async_table_no_vi_ids_skipped) {
+    auto metadata = lake::generate_simple_tablet_metadata(DUP_KEYS);
+    auto* schema = metadata->mutable_schema();
+    auto* idx = schema->add_table_indices();
+    idx->set_index_id(next_id());
+    idx->set_index_type(VECTOR);
+    idx->add_col_unique_id(schema->column(1).unique_id());
+    idx->set_index_properties(R"({"common_properties": {"index_type": "hnsw", "index_build_mode": "async"}})");
+    auto tablet_id = metadata->id();
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(metadata));
+
+    auto txn_id = next_id();
+    TxnLog log;
+    log.set_tablet_id(tablet_id);
+    log.set_partition_id(_partition_id);
+    log.set_txn_id(txn_id);
+    log.mutable_op_write()->mutable_rowset()->add_segments(generate_segment_file_for_tablet(tablet_id, txn_id));
+    log.mutable_op_write()->mutable_rowset()->add_segment_size(1024);
+    auto* segment_meta = log.mutable_op_write()->mutable_rowset()->add_segment_metas();
+    segment_meta->set_num_rows(100);
+    // intentionally do NOT add vector_index_ids: simulates async + below-threshold
+    log.mutable_op_write()->mutable_rowset()->set_data_size(1024);
+    log.mutable_op_write()->mutable_rowset()->set_num_rows(100);
+    log.mutable_op_write()->mutable_rowset()->set_overlapped(false);
+    ASSERT_OK(_tablet_mgr->put_txn_log(log));
+
+    PublishVersionRequest request;
+    request.set_base_version(1);
+    request.set_new_version(2);
+    request.add_tablet_ids(tablet_id);
+    request.add_txn_ids(txn_id);
+    PublishVersionResponse response;
+    _lake_service.publish_version(nullptr, &request, &response, nullptr);
+    ASSERT_EQ(0, response.failed_tablets_size());
+    EXPECT_EQ(0, response.vector_index_build_infos_size())
+            << "async-mode tablet without vector_index_ids must not be reported";
+}
+
 TEST_F(LakeServiceTest, test_publish_version_for_write_batch) {
     // Empty TxnLog
     {

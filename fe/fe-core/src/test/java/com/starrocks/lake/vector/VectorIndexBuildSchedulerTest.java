@@ -61,8 +61,32 @@ public class VectorIndexBuildSchedulerTest {
         return scheduler.getRunningTasksForTest();
     }
 
-    private ConcurrentHashMap<Long, Long> getPendingTablets() {
+    private ConcurrentHashMap<Long, VectorIndexBuildScheduler.Pending> getPendingTablets() {
         return scheduler.getPendingTabletsForTest();
+    }
+
+    private long latestVersion(long tabletId) {
+        VectorIndexBuildScheduler.Pending p = scheduler.getPendingTabletsForTest().get(tabletId);
+        return p == null ? -1 : p.latestVersion;
+    }
+
+    private long latestCompactionVersion(long tabletId) {
+        VectorIndexBuildScheduler.Pending p = scheduler.getPendingTabletsForTest().get(tabletId);
+        return p == null ? -2 : p.latestCompactionVersion;
+    }
+
+    private long compactionCaughtUpMs(long tabletId) {
+        VectorIndexBuildScheduler.Pending p = scheduler.getPendingTabletsForTest().get(tabletId);
+        return p == null ? Long.MIN_VALUE : p.compactionCaughtUpMs;
+    }
+
+    private void setCompactionCaughtUp(long tabletId, long ms) {
+        VectorIndexBuildScheduler.Pending old = scheduler.getPendingTabletsForTest().get(tabletId);
+        if (old != null) {
+            scheduler.getPendingTabletsForTest().put(tabletId,
+                    new VectorIndexBuildScheduler.Pending(
+                            old.latestVersion, old.latestCompactionVersion, ms));
+        }
     }
 
     private LakeTable mockLakeTable(boolean asyncVectorIndex) {
@@ -170,22 +194,22 @@ public class VectorIndexBuildSchedulerTest {
 
     @Test
     public void testAddPendingTablet() {
-        scheduler.addPendingTablet(1001L, 5L);
-        Assertions.assertEquals(5L, getPendingTablets().get(1001L));
+        scheduler.addPendingTablet(1001L, 5L, false);
+        Assertions.assertEquals(5L, getPendingTablets().get(1001L).latestVersion);
     }
 
     @Test
     public void testAddPendingTabletMergeMax() {
-        scheduler.addPendingTablet(1001L, 5L);
-        scheduler.addPendingTablet(1001L, 8L);
-        Assertions.assertEquals(8L, getPendingTablets().get(1001L));
+        scheduler.addPendingTablet(1001L, 5L, false);
+        scheduler.addPendingTablet(1001L, 8L, false);
+        Assertions.assertEquals(8L, getPendingTablets().get(1001L).latestVersion);
     }
 
     @Test
     public void testAddPendingTabletNoRegression() {
-        scheduler.addPendingTablet(1001L, 8L);
-        scheduler.addPendingTablet(1001L, 5L);
-        Assertions.assertEquals(8L, getPendingTablets().get(1001L));
+        scheduler.addPendingTablet(1001L, 8L, false);
+        scheduler.addPendingTablet(1001L, 5L, false);
+        Assertions.assertEquals(8L, getPendingTablets().get(1001L).latestVersion);
     }
 
     // ========== Recovery scan tests ==========
@@ -210,9 +234,9 @@ public class VectorIndexBuildSchedulerTest {
         setupRecoveryScanExpectations(db);
         scheduler.recoveryScan();
 
-        ConcurrentHashMap<Long, Long> pending = getPendingTablets();
-        Assertions.assertEquals(5L, pending.get(2001L));
-        Assertions.assertEquals(5L, pending.get(2002L));
+        ConcurrentHashMap<Long, VectorIndexBuildScheduler.Pending> pending = getPendingTablets();
+        Assertions.assertEquals(5L, pending.get(2001L).latestVersion);
+        Assertions.assertEquals(5L, pending.get(2002L).latestVersion);
     }
 
     @Test
@@ -339,7 +363,7 @@ public class VectorIndexBuildSchedulerTest {
         scheduler.checkRunningTaskTimeout();
 
         Assertions.assertTrue(getRunningTasks().isEmpty());
-        Assertions.assertEquals(7L, getPendingTablets().get(tabletId));
+        Assertions.assertEquals(7L, getPendingTablets().get(tabletId).latestVersion);
     }
 
     @Test
@@ -359,7 +383,7 @@ public class VectorIndexBuildSchedulerTest {
     @Test
     public void testScheduleFromPendingSkipsAlreadyBuilt() {
         long tabletId = 3001L;
-        scheduler.addPendingTablet(tabletId, 5L);
+        scheduler.addPendingTablet(tabletId, 5L, false);
 
         LakeTablet tablet = new LakeTablet(tabletId);
         tablet.setVectorIndexBuiltVersion(5L);
@@ -375,14 +399,14 @@ public class VectorIndexBuildSchedulerTest {
     @Test
     public void testScheduleFromPendingSkipsAlreadyRunning() {
         long tabletId = 3001L;
-        scheduler.addPendingTablet(tabletId, 5L);
+        scheduler.addPendingTablet(tabletId, 5L, false);
 
         VectorIndexBuildTask existing = createTaskWithStartTime(tabletId, 5L, System.currentTimeMillis());
         getRunningTasks().put(tabletId, existing);
 
         scheduler.scheduleFromPending();
 
-        Assertions.assertEquals(5L, getPendingTablets().get(tabletId));
+        Assertions.assertEquals(5L, getPendingTablets().get(tabletId).latestVersion);
     }
 
     // ========== hasAsyncVectorIndex tests ==========
@@ -486,17 +510,17 @@ public class VectorIndexBuildSchedulerTest {
         infos.add(infoOf(4001L, 5L));
         infos.add(infoOf(4002L, 7L));
 
-        VectorIndexBuildScheduler.onPublishComplete(infos);
+        VectorIndexBuildScheduler.onPublishComplete(infos, false);
 
-        Assertions.assertEquals(5L, getPendingTablets().get(4001L));
-        Assertions.assertEquals(7L, getPendingTablets().get(4002L));
+        Assertions.assertEquals(5L, getPendingTablets().get(4001L).latestVersion);
+        Assertions.assertEquals(7L, getPendingTablets().get(4002L).latestVersion);
     }
 
     @Test
     public void testOnPublishCompleteSkipsNullAndEmpty() {
         // No GlobalStateMgr expectation needed — early return on null/empty must not touch state.
-        VectorIndexBuildScheduler.onPublishComplete(null);
-        VectorIndexBuildScheduler.onPublishComplete(Collections.emptyList());
+        VectorIndexBuildScheduler.onPublishComplete(null, false);
+        VectorIndexBuildScheduler.onPublishComplete(Collections.emptyList(), false);
         Assertions.assertTrue(getPendingTablets().isEmpty());
     }
 
@@ -508,7 +532,7 @@ public class VectorIndexBuildSchedulerTest {
         VectorIndexBuildInfoPB missingVersion = new VectorIndexBuildInfoPB();
         missingVersion.tabletId = 9L;
 
-        VectorIndexBuildScheduler.onPublishComplete(Lists.newArrayList(missingTablet, missingVersion));
+        VectorIndexBuildScheduler.onPublishComplete(Lists.newArrayList(missingTablet, missingVersion), false);
 
         Assertions.assertTrue(getPendingTablets().isEmpty());
     }
@@ -518,7 +542,7 @@ public class VectorIndexBuildSchedulerTest {
         mockGetScheduler(null);
         // Must silently no-op when scheduler is not initialized (FE startup race window).
         Assertions.assertDoesNotThrow(
-                () -> VectorIndexBuildScheduler.onPublishComplete(Lists.newArrayList(infoOf(1L, 1L))));
+                () -> VectorIndexBuildScheduler.onPublishComplete(Lists.newArrayList(infoOf(1L, 1L)), false));
     }
 
     // ========== getBuiltVersion tests ==========
@@ -566,7 +590,7 @@ public class VectorIndexBuildSchedulerTest {
         ComputeNode keepNode = Mockito.mock(ComputeNode.class);
         preferredNodes.put(7001L, orphanNode);
         preferredNodes.put(7002L, keepNode);
-        scheduler.addPendingTablet(7002L, 1L); // 7002 still pending → keep
+        scheduler.addPendingTablet(7002L, 1L, false); // 7002 still pending → keep
 
         scheduler.cleanupStaleEntries();
 
@@ -591,7 +615,9 @@ public class VectorIndexBuildSchedulerTest {
         long tabletId = 8001L;
         long version = 12L;
         LakeTablet tablet = new LakeTablet(tabletId);
-        scheduler.addPendingTablet(tabletId, version);
+        // fromCompaction=true so we go through phase 1 and dispatch immediately,
+        // exercising the dispatch mechanism without the phase-2 wait.
+        scheduler.addPendingTablet(tabletId, version, true);
         setupFindLakeTabletExpectations(tabletId, tablet, 1L, 2L, 3L, 4L);
 
         ComputeNode node = Mockito.mock(ComputeNode.class);
@@ -617,7 +643,7 @@ public class VectorIndexBuildSchedulerTest {
 
         scheduler.scheduleFromPending();
 
-        Assertions.assertTrue(getPendingTablets().isEmpty(), "tablet moved out of pending");
+        // Pending entry is intentionally preserved until task-completion path runs.
         Assertions.assertTrue(getRunningTasks().containsKey(tabletId), "task added to runningTasks");
     }
 
@@ -627,7 +653,7 @@ public class VectorIndexBuildSchedulerTest {
         long tabletId = 8002L;
         long version = 5L;
         LakeTablet tablet = new LakeTablet(tabletId);
-        scheduler.addPendingTablet(tabletId, version);
+        scheduler.addPendingTablet(tabletId, version, true);
         setupFindLakeTabletExpectations(tabletId, tablet, 1L, 2L, 3L, 4L);
 
         ComputeNode preferred = Mockito.mock(ComputeNode.class);
@@ -658,20 +684,20 @@ public class VectorIndexBuildSchedulerTest {
     @Test
     public void testScheduleFromPendingSkipsTabletInActiveCooldown() throws Exception {
         long tabletId = 8003L;
-        scheduler.addPendingTablet(tabletId, 5L);
+        scheduler.addPendingTablet(tabletId, 5L, false);
         long futureTs = System.currentTimeMillis() + 60_000;
         getMap("cooldownUntil").put(tabletId, futureTs);
 
         scheduler.scheduleFromPending();
 
-        Assertions.assertEquals(5L, getPendingTablets().get(tabletId), "still pending");
+        Assertions.assertEquals(5L, getPendingTablets().get(tabletId).latestVersion, "still pending");
         Assertions.assertTrue(getRunningTasks().isEmpty(), "no task dispatched");
     }
 
     @Test
     public void testScheduleFromPendingClearsExpiredCooldownAndProceeds() throws Exception {
         long tabletId = 8004L;
-        scheduler.addPendingTablet(tabletId, 5L);
+        scheduler.addPendingTablet(tabletId, 5L, false);
         getMap("cooldownUntil").put(tabletId, System.currentTimeMillis() - 1000);
         // No findLakeTablet mock → tablet null → orphan-removed; this drives the "expired cooldown
         // is cleared, then proceed with normal logic" path which currently sees tablet missing.
@@ -770,7 +796,7 @@ public class VectorIndexBuildSchedulerTest {
 
         Assertions.assertTrue(getRunningTasks().isEmpty(), "task removed");
         Assertions.assertEquals(5L, tablet.getVectorIndexBuiltVersion(), "builtVersion updated to partial");
-        Assertions.assertEquals(10L, getPendingTablets().get(tabletId), "tablet re-enqueued for next round");
+        Assertions.assertEquals(10L, getPendingTablets().get(tabletId).latestVersion, "tablet re-enqueued for next round");
     }
 
     @Test
@@ -788,7 +814,7 @@ public class VectorIndexBuildSchedulerTest {
         scheduler.checkRunningTasks();
 
         Assertions.assertTrue(getRunningTasks().isEmpty(), "task removed");
-        Assertions.assertEquals(7L, getPendingTablets().get(tabletId), "tablet re-enqueued (cooldown)");
+        Assertions.assertEquals(7L, getPendingTablets().get(tabletId).latestVersion, "tablet re-enqueued (cooldown)");
     }
 
     @Test
@@ -799,11 +825,184 @@ public class VectorIndexBuildSchedulerTest {
             getRunningTasks().put((long) (10_000 + i),
                     createTaskWithStartTime(10_000 + i, 1L, System.currentTimeMillis()));
         }
-        scheduler.addPendingTablet(9001L, 5L);
+        scheduler.addPendingTablet(9001L, 5L, false);
 
         scheduler.scheduleFromPending();
 
         // Pending tablet must NOT be promoted to running because we're at the cap.
-        Assertions.assertEquals(5L, getPendingTablets().get(9001L));
+        Assertions.assertEquals(5L, getPendingTablets().get(9001L).latestVersion);
+    }
+
+    // ========== Two-version frontier tests ==========
+
+    @Test
+    public void testAddPendingTabletCompactionSetsLC() {
+        scheduler.addPendingTablet(1001L, 10L, true);
+        Assertions.assertEquals(10L, latestVersion(1001L));
+        Assertions.assertEquals(10L, latestCompactionVersion(1001L));
+    }
+
+    @Test
+    public void testAddPendingTabletCompactionThenLoadKeepsLC() {
+        scheduler.addPendingTablet(1001L, 10L, true);
+        scheduler.addPendingTablet(1001L, 11L, false);
+        Assertions.assertEquals(11L, latestVersion(1001L));
+        // Compaction frontier sticks at v10 even though a load arrived at v11.
+        Assertions.assertEquals(10L, latestCompactionVersion(1001L));
+    }
+
+    @Test
+    public void testAddPendingTabletLoadThenCompactionAdvancesLC() {
+        scheduler.addPendingTablet(1001L, 11L, false);
+        scheduler.addPendingTablet(1001L, 12L, true);
+        Assertions.assertEquals(12L, latestVersion(1001L));
+        Assertions.assertEquals(12L, latestCompactionVersion(1001L));
+    }
+
+    @Test
+    public void testAddPendingTabletNewCompactionResetsCaughtUp() {
+        scheduler.addPendingTablet(1001L, 12L, true);
+        // Simulate "built caught up to compaction frontier" and phase-2 stamp fired.
+        setCompactionCaughtUp(1001L, 1000L);
+        Assertions.assertEquals(1000L, compactionCaughtUpMs(1001L));
+
+        // New compaction bumps frontier → must re-enter phase 1.
+        scheduler.addPendingTablet(1001L, 15L, true);
+        Assertions.assertEquals(15L, latestCompactionVersion(1001L));
+        Assertions.assertEquals(-1L, compactionCaughtUpMs(1001L));
+    }
+
+    @Test
+    public void testAddPendingTabletStaleCompactionIgnored() {
+        scheduler.addPendingTablet(1001L, 15L, true);
+        setCompactionCaughtUp(1001L, 2000L);
+        // A stale compaction event with lower version arrives (out of order).
+        scheduler.addPendingTablet(1001L, 12L, true);
+        Assertions.assertEquals(15L, latestVersion(1001L));
+        Assertions.assertEquals(15L, latestCompactionVersion(1001L));
+        Assertions.assertEquals(2000L, compactionCaughtUpMs(1001L),
+                "stale compaction must not reset the caughtUp timestamp");
+    }
+
+    @Test
+    public void testAddPendingTabletOlderVersionDropped() {
+        scheduler.addPendingTablet(1001L, 10L, false);
+        scheduler.addPendingTablet(1001L, 5L, false);
+        Assertions.assertEquals(10L, latestVersion(1001L));
+        Assertions.assertEquals(-1L, latestCompactionVersion(1001L));
+    }
+
+    @Test
+    public void testScheduleFromPendingMarksCompactionCaughtUp() {
+        long tabletId = 3001L;
+        // built=15, latestVersion=16, lc=15 → phase-2 transition tick, stamps caughtUp.
+        scheduler.addPendingTablet(tabletId, 15L, true);
+        scheduler.addPendingTablet(tabletId, 16L, false);
+
+        LakeTablet tablet = new LakeTablet(tabletId);
+        tablet.setVectorIndexBuiltVersion(15L);
+        setupFindLakeTabletExpectations(tabletId, tablet, 1L, 2L, 3L, 4L);
+
+        long before = System.currentTimeMillis();
+        scheduler.scheduleFromPending();
+        long after = System.currentTimeMillis();
+
+        long stamp = compactionCaughtUpMs(tabletId);
+        Assertions.assertTrue(stamp >= before && stamp <= after,
+                "caughtUp timestamp should be stamped during this tick");
+        // Pending is still present; next tick handles phase 2 logic.
+        Assertions.assertEquals(16L, latestVersion(tabletId));
+        Assertions.assertTrue(getRunningTasks().isEmpty(),
+                "should not dispatch during the caughtUp-marking tick");
+    }
+
+    @Test
+    public void testScheduleFromPendingPhase2DefersWithinDelay() {
+        long tabletId = 3001L;
+        scheduler.addPendingTablet(tabletId, 15L, true);
+        scheduler.addPendingTablet(tabletId, 16L, false);
+        // Simulate caughtUp set very recently (within the delay window).
+        setCompactionCaughtUp(tabletId, System.currentTimeMillis());
+
+        LakeTablet tablet = new LakeTablet(tabletId);
+        tablet.setVectorIndexBuiltVersion(15L);
+        setupFindLakeTabletExpectations(tabletId, tablet, 1L, 2L, 3L, 4L);
+
+        scheduler.scheduleFromPending();
+
+        // Still pending, not dispatched.
+        Assertions.assertEquals(16L, latestVersion(tabletId));
+        Assertions.assertTrue(getRunningTasks().isEmpty());
+    }
+
+    @Test
+    public void testScheduleFromPendingPhase2NewCompactionMergesBackToPhase1() {
+        long tabletId = 3001L;
+        scheduler.addPendingTablet(tabletId, 15L, true);
+        scheduler.addPendingTablet(tabletId, 16L, false);
+        setCompactionCaughtUp(tabletId, System.currentTimeMillis());
+
+        // Before the delay expires, a new compaction arrives.
+        scheduler.addPendingTablet(tabletId, 17L, true);
+
+        Assertions.assertEquals(17L, latestVersion(tabletId));
+        Assertions.assertEquals(17L, latestCompactionVersion(tabletId));
+        Assertions.assertEquals(-1L, compactionCaughtUpMs(tabletId),
+                "new compaction should send us back to phase 1 with caughtUp reset");
+    }
+
+    @Test
+    public void testScheduleFromPendingTabletDeletedCleanup() {
+        long tabletId = 999L;
+        scheduler.addPendingTablet(tabletId, 5L, false);
+        // No setupFindLakeTabletExpectations → findLakeTablet returns null (JMockit default).
+        scheduler.scheduleFromPending();
+        Assertions.assertTrue(getPendingTablets().isEmpty(),
+                "pending entry for a deleted tablet must be cleaned up");
+    }
+
+    @Test
+    public void testCheckRunningTasksPartialPreservesFrontier() {
+        long tabletId = 3001L;
+        // Set pending with a frontier (lc=15, latest=20) as it would look after
+        // a compaction + later load pair had been enqueued.
+        scheduler.addPendingTablet(tabletId, 15L, true);
+        scheduler.addPendingTablet(tabletId, 20L, false);
+
+        // A task was dispatched targeting lc=15 but BE only built up to v11 (batch limit).
+        LakeTablet tablet = new LakeTablet(tabletId);
+        BuildVectorIndexResponse response = new BuildVectorIndexResponse();
+        response.newBuiltVersion = 11L;
+        CompletableFuture<BuildVectorIndexResponse> future = CompletableFuture.completedFuture(response);
+        VectorIndexBuildTask task = createTaskWithFuture(tabletId, 15L, future);
+        getRunningTasks().put(tabletId, task);
+
+        setupFindLakeTabletExpectations(tabletId, tablet, 1L, 2L, 3L, 4L);
+
+        scheduler.checkRunningTasks();
+
+        Assertions.assertTrue(getRunningTasks().isEmpty());
+        Assertions.assertEquals(11L, tablet.getVectorIndexBuiltVersion());
+        // Frontier must be intact so the next tick continues phase 1 toward lc=15.
+        Assertions.assertEquals(20L, latestVersion(tabletId));
+        Assertions.assertEquals(15L, latestCompactionVersion(tabletId));
+    }
+
+    @Test
+    public void testCheckRunningTasksFailurePreservesFrontier() {
+        long tabletId = 3001L;
+        scheduler.addPendingTablet(tabletId, 15L, true);
+        scheduler.addPendingTablet(tabletId, 20L, false);
+
+        CompletableFuture<BuildVectorIndexResponse> future = new CompletableFuture<>();
+        future.completeExceptionally(new RuntimeException("RPC failed"));
+        VectorIndexBuildTask task = createTaskWithFuture(tabletId, 15L, future);
+        getRunningTasks().put(tabletId, task);
+
+        scheduler.checkRunningTasks();
+
+        Assertions.assertTrue(getRunningTasks().isEmpty());
+        Assertions.assertEquals(20L, latestVersion(tabletId));
+        Assertions.assertEquals(15L, latestCompactionVersion(tabletId));
     }
 }

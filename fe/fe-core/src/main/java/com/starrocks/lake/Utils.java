@@ -121,7 +121,7 @@ public class Utils {
         List<VectorIndexBuildInfoPB> vectorIndexBuildInfos = new ArrayList<>();
         publishVersion(tablets, txnInfo, baseVersion, newVersion, null, computeResource,
                 null, useAggregatePublish, vectorIndexBuildInfos);
-        VectorIndexBuildScheduler.onPublishComplete(vectorIndexBuildInfos);
+        VectorIndexBuildScheduler.onPublishComplete(vectorIndexBuildInfos, /* fromCompaction= */ false);
     }
 
     public static void publishVersionBatch(@NotNull List<Tablet> tablets, List<TxnInfoPB> txnInfos,

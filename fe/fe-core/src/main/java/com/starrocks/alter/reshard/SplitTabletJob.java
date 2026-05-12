@@ -559,7 +559,7 @@ public class SplitTabletJob extends TabletReshardJob {
             List<VectorIndexBuildInfoPB> vectorIndexBuildInfos = new ArrayList<>();
             Utils.publishVersion(tablets, txnInfo, commitVersion - 1, commitVersion, null, tabletRange,
                     computeResource, null, useAggregatePublish, vectorIndexBuildInfos);
-            VectorIndexBuildScheduler.onPublishComplete(vectorIndexBuildInfos);
+            VectorIndexBuildScheduler.onPublishComplete(vectorIndexBuildInfos, /* fromCompaction= */ false);
 
             return tabletRange;
         } catch (Exception e) {

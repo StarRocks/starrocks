@@ -642,6 +642,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: 当此项设置为 `true` 时，系统允许 Lake 表使用组合事务日志路径进行相关事务。仅适用于存算分离集群。
 - 引入版本: v3.3.7, v3.4.0, v3.5.0
 
+### `lake_vi_build_load_tail_delay_ms`
+
+- 默认值：300000
+- 类型：Long
+- 单位：毫秒
+- 是否动态：是
+- 描述：存算分离模式下，若某个 tablet 的最新 pending 版本是纯导入（没有未构建的 compaction 产物），调度 async 向量索引构建前等待的时长。延迟窗口内若有新的 compaction 到来，其版本会和 load tail 一起构建；而 compaction 产物本身总是立即派发。仅对声明了 async 向量索引的表生效。
+- 引入版本：v4.2.0
+
 ### `lake_repair_metadata_fetch_max_version_batch_size`
 
 - 默认值：160
