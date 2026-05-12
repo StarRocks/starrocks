@@ -162,20 +162,33 @@ public final class MVIVMRefreshProcessor extends MVRefreshProcessor {
                                                       MVRefreshExecutor executor) throws Exception {
         final InsertStmt insertStmt = processExecPlan.insertStmt();
         final ExecPlan execPlan = processExecPlan.execPlan();
-        try (Timer ignored = Tracers.watchScope("MVRefreshMaterializedView")) {
-            MaterializedView.AsyncRefreshContext mvRefreshContext =
-                    mv.getRefreshScheme().getAsyncRefreshContext();
-            logger.info("staged tvr delta map: {}", stagedTvrDeltaMap);
-            String owner = mvContext.getStatus().getStartTaskRunId();
-            mvRefreshContext.replaceTempBaseTableInfoTvrDeltaMap(owner, stagedTvrDeltaMap);
-            executor.executePlan(execPlan, insertStmt);
-        }
+        final ConnectContext ctx = mvContext.getCtx();
 
-        try (Timer ignored = Tracers.watchScope("MVRefreshUpdateMeta")) {
-            updatePCTMeta(execPlan, pctMVToRefreshedPartitions, pctRefTableRefreshPartitions, Maps.newHashMap());
-        }
+        // Scope enable_ivm_refresh around executor.executePlan so
+        // InsertLoadTxnCallbackFactory registers the TVR-persistence callback.
+        boolean prevIvmEnabled = ctx.getSessionVariable().isEnableIVMRefresh();
+        String prevTvrTargetMvId = ctx.getSessionVariable().getTvrTargetMvId();
+        ctx.getSessionVariable().setEnableIVMRefresh(true);
+        ctx.getSessionVariable().setTvrTargetMvid(GsonUtils.GSON.toJson(mv.getMvId()));
+        try {
+            try (Timer ignored = Tracers.watchScope("MVRefreshMaterializedView")) {
+                MaterializedView.AsyncRefreshContext mvRefreshContext =
+                        mv.getRefreshScheme().getAsyncRefreshContext();
+                logger.info("staged tvr delta map: {}", stagedTvrDeltaMap);
+                String owner = mvContext.getStatus().getStartTaskRunId();
+                mvRefreshContext.replaceTempBaseTableInfoTvrDeltaMap(owner, stagedTvrDeltaMap);
+                executor.executePlan(execPlan, insertStmt);
+            }
 
-        return Constants.TaskRunState.SUCCESS;
+            try (Timer ignored = Tracers.watchScope("MVRefreshUpdateMeta")) {
+                updatePCTMeta(execPlan, pctMVToRefreshedPartitions, pctRefTableRefreshPartitions, Maps.newHashMap());
+            }
+
+            return Constants.TaskRunState.SUCCESS;
+        } finally {
+            ctx.getSessionVariable().setEnableIVMRefresh(prevIvmEnabled);
+            ctx.getSessionVariable().setTvrTargetMvid(prevTvrTargetMvId);
+        }
     }
 
     @Override
@@ -446,10 +459,8 @@ public final class MVIVMRefreshProcessor extends MVRefreshProcessor {
                 .setQuerySource(QueryDetail.QuerySource.MV.name())
                 .setCNGroup(ctx.getCurrentComputeResourceName());
 
-        // Scope the IVM session variables to this method only. The same ConnectContext
-        // is reused by MVHybridRefreshProcessor.switchToPCTRefresh on IVM failure, so
-        // leaking enable_ivm_refresh=true into the PCT retry would make IvmRewriter run
-        // on a non-IVM plan and fail at convergence — defeating the AUTO fallback.
+        // Scope enable_ivm_refresh to this method so it doesn't leak into the Hybrid
+        // -> PCT fallback (#73004) or the caller's session after EXPLAIN REFRESH.
         boolean prevIvmEnabled = ctx.getSessionVariable().isEnableIVMRefresh();
         String prevTvrTargetMvId = ctx.getSessionVariable().getTvrTargetMvId();
         ctx.getSessionVariable().setEnableIVMRefresh(true);
