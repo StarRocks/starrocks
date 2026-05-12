@@ -21,9 +21,11 @@
 #include "base/testutil/assert.h"
 #include "common/object_pool.h"
 #include "gen_cpp/Descriptors_types.h"
+#include "gen_cpp/Exprs_types.h"
 #include "runtime/descriptors_ext.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
+#include "types/logical_type.h"
 
 namespace starrocks {
 
@@ -61,13 +63,22 @@ public:
         return p;
     }
 
-    // Returns a TExpr that is non-equal under thrift `!=` to a default-constructed TExpr.
-    // We just give it one synthetic node so the vector comparison detects a difference.
-    static TExpr _make_distinct_thrift_expr() {
-        TExpr e;
+    // Returns a TExpr describing a valid INT_LITERAL so it can survive both the
+    // thrift inequality check on the fast path and a real ExprFactory::create_expr_trees
+    // call on the slow path. The literal value is parameterised so callers can produce
+    // distinct-but-valid exprs.
+    static TExpr _make_int_literal_thrift_expr(int64_t value) {
         TExprNode node;
         node.node_type = TExprNodeType::INT_LITERAL;
+        node.type = gen_type_desc(TPrimitiveType::INT);
         node.num_children = 0;
+        node.is_nullable = false;
+        node.has_nullable_child = false;
+        TIntLiteral lit;
+        lit.value = value;
+        node.__set_int_literal(lit);
+
+        TExpr e;
         e.nodes.push_back(node);
         return e;
     }
@@ -113,7 +124,7 @@ TEST_F(HiveTableDescriptorAddPartitionTest, SamePartitionIdSameThriftIsDedupHit)
 TEST_F(HiveTableDescriptorAddPartitionTest, SamePartitionIdDifferentThriftFails) {
     constexpr int64_t partition_id = 3;
     THdfsPartition base = _make_partition();
-    THdfsPartition conflict = _make_partition({_make_distinct_thrift_expr()});
+    THdfsPartition conflict = _make_partition({_make_int_literal_thrift_expr(1)});
 
     ASSERT_OK(_table_desc->add_partition_value(_runtime_state.get(), _pool.get(), partition_id, base));
 
@@ -135,7 +146,7 @@ TEST_F(HiveTableDescriptorAddPartitionTest, SamePartitionIdDifferentThriftFails)
 // Different partition_ids should produce independent descriptors.
 TEST_F(HiveTableDescriptorAddPartitionTest, DifferentPartitionIdsCoexist) {
     THdfsPartition p1 = _make_partition();
-    THdfsPartition p2 = _make_partition({_make_distinct_thrift_expr()});
+    THdfsPartition p2 = _make_partition({_make_int_literal_thrift_expr(42)});
 
     ASSERT_OK(_table_desc->add_partition_value(_runtime_state.get(), _pool.get(), 10, p1));
     ASSERT_OK(_table_desc->add_partition_value(_runtime_state.get(), _pool.get(), 11, p2));
