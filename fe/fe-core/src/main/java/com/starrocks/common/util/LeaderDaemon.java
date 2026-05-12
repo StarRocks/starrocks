@@ -16,6 +16,10 @@ package com.starrocks.common.util;
 
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LeaderLease;
+import com.starrocks.server.WarehouseManager;
+import com.starrocks.warehouse.Warehouse;
+import com.starrocks.warehouse.cngroup.CRAcquireContext;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -49,6 +53,14 @@ public abstract class LeaderDaemon {
     private final AtomicBoolean isRunning = new AtomicBoolean(false);
     private volatile Thread worker;
     private volatile LeaderLease capturedLease = LeaderLease.INVALID;
+
+    /**
+     * Last compute resource the subclass acquired through {@link #acquireBackgroundComputeResource()}.
+     * Mirrors the same-named field on {@code FrontendDaemon} so lake-side leader daemons that
+     * relied on it before migration continue to compile and behave identically. Defaults to
+     * {@link WarehouseManager#DEFAULT_RESOURCE} until the subclass acquires one.
+     */
+    protected ComputeResource computeResource = WarehouseManager.DEFAULT_RESOURCE;
 
     protected LeaderDaemon(String name) {
         this(name, DEFAULT_INTERVAL_SECONDS * 1000L);
@@ -227,5 +239,18 @@ public abstract class LeaderDaemon {
     protected void onJoinTimeout() {
         LOG.error("{} did not exit within stop timeout; terminating JVM to avoid concurrent workers", name);
         System.exit(-1);
+    }
+
+    /**
+     * Refresh {@link #computeResource} from the background warehouse. Migrated from the same
+     * helper on {@code FrontendDaemon}; only subclasses that perform background work against a
+     * lake compute group need to call it.
+     */
+    protected void acquireBackgroundComputeResource() {
+        final WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
+        final Warehouse warehouse = warehouseManager.getBackgroundWarehouse();
+        final CRAcquireContext acquireContext = CRAcquireContext.of(warehouse.getId(), computeResource);
+        // check resource before each run
+        this.computeResource = warehouseManager.acquireComputeResource(acquireContext);
     }
 }

@@ -173,7 +173,7 @@ public class TabletReshardJobMgrTest {
         Assertions.assertEquals(normalJob.getParallelTablets() + abnormalJob.getParallelTablets(),
                 jobMgr.getTotalParallelTablets());
 
-        jobMgr.runAfterCatalogReady();
+        jobMgr.runAfterLeaseValid();
 
         Assertions.assertEquals(TabletReshardJob.JobState.FINISHED, normalJob.getJobState());
         Assertions.assertEquals(TabletReshardJob.JobState.ABORTED, abnormalJob.getJobState());
@@ -187,7 +187,7 @@ public class TabletReshardJobMgrTest {
         abnormalJob.finishedTimeMs = 0;
         Assertions.assertTrue(abnormalJob.isExpired());
 
-        jobMgr.runAfterCatalogReady();
+        jobMgr.runAfterLeaseValid();
 
         Assertions.assertEquals(1, jobMgr.getTabletReshardJobs().size());
     }

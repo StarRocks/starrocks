@@ -37,7 +37,7 @@ package com.starrocks.load;
 import com.google.common.collect.Maps;
 import com.starrocks.common.Config;
 import com.starrocks.common.StarRocksException;
-import com.starrocks.common.util.FrontendDaemon;
+import com.starrocks.common.util.LeaderDaemon;
 import com.starrocks.load.ExportJob.JobState;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.ComputeNode;
@@ -51,12 +51,13 @@ import org.apache.logging.log4j.Logger;
 import java.util.List;
 import java.util.Map;
 
-public final class ExportChecker extends FrontendDaemon {
+public final class ExportChecker extends LeaderDaemon {
     private static final Logger LOG = LogManager.getLogger(ExportChecker.class);
 
-    // checkers for running job state
+    // checkers for running job state. Replaced on every {@link #init(long)} call so a
+    // leader demotion drain followed by re-election creates fresh instances.
     private static Map<JobState, ExportChecker> checkers = Maps.newHashMap();
-    // executors for pending tasks
+    // executors for pending tasks. Same lifecycle as {@link #checkers}.
     private static Map<JobState, LeaderTaskExecutor> executors = Maps.newHashMap();
     private JobState jobState;
 
@@ -93,12 +94,42 @@ public final class ExportChecker extends FrontendDaemon {
         exportingSubTaskExecutor.start();
     }
 
+    /**
+     * Coordinated stop for leader demotion. Drains each checker so onStopped() runs and the
+     * worker thread exits, then closes every owned LeaderTaskExecutor so its internal pools
+     * are shut down with shutdownNow(). The next {@link #init(long)} call (run by the
+     * re-elected leader) replaces the static maps with fresh instances.
+     */
+    public static void stopAll(long timeoutMs) {
+        for (ExportChecker exportChecker : checkers.values()) {
+            try {
+                exportChecker.stopGracefully(timeoutMs);
+            } catch (Throwable t) {
+                LOG.warn("stop {} failed", exportChecker.getName(), t);
+            }
+        }
+        for (LeaderTaskExecutor leaderTaskExecutor : executors.values()) {
+            try {
+                leaderTaskExecutor.close();
+            } catch (Throwable t) {
+                LOG.warn("close export LeaderTaskExecutor failed", t);
+            }
+        }
+        if (exportingSubTaskExecutor != null) {
+            try {
+                exportingSubTaskExecutor.close();
+            } catch (Throwable t) {
+                LOG.warn("close exportingSubTaskExecutor failed", t);
+            }
+        }
+    }
+
     public static LeaderTaskExecutor getExportingSubTaskExecutor() {
         return exportingSubTaskExecutor;
     }
 
     @Override
-    protected void runAfterCatalogReady() {
+    protected void runAfterLeaseValid() {
         LOG.debug("start check export jobs. job state: {}", jobState.name());
         switch (jobState) {
             case PENDING:

@@ -21,7 +21,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.Config;
 import com.starrocks.common.StarRocksException;
-import com.starrocks.common.util.FrontendDaemon;
+import com.starrocks.common.util.LeaderDaemon;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.gson.GsonPostProcessable;
@@ -42,7 +42,7 @@ import org.apache.logging.log4j.Logger;
 import java.io.IOException;
 import java.util.Map;
 
-public class TabletReshardJobMgr extends FrontendDaemon implements GsonPostProcessable {
+public class TabletReshardJobMgr extends LeaderDaemon implements GsonPostProcessable {
     private static final Logger LOG = LogManager.getLogger(TabletReshardJobMgr.class);
 
     @SerializedName(value = "tabletReshardJobs")
@@ -170,8 +170,13 @@ public class TabletReshardJobMgr extends FrontendDaemon implements GsonPostProce
         reshardingTabletInfos.remove(tabletId);
     }
 
+    // tabletReshardJobs is persistent (@SerializedName, save/load via image) and
+    // reshardingTabletInfos is also serialized through writer.writeJson(this), so neither
+    // map should be cleared on demotion - the next leader resumes those jobs from the same
+    // maps. Default onStopped() is sufficient.
+
     @Override
-    protected void runAfterCatalogReady() {
+    protected void runAfterLeaseValid() {
         colocateChecker.runOneCycle();
         runTabletReshardJobs();
     }

@@ -337,7 +337,7 @@ public class GlobalStateMgr {
 
     private FrontendDaemon labelCleaner; // To clean old LabelInfo, ExportJobInfos
     private LeaderDaemon txnTimeoutChecker; // To abort timeout txns
-    private FrontendDaemon taskCleaner;   // To clean expire Task/TaskRun
+    private LeaderDaemon taskCleaner;   // To clean expire Task/TaskRun
     private FrontendDaemon tableKeeper;   // Maintain internal history tables
     private JournalWriter journalWriter; // leader only: write journal log
     private Daemon replayer;
@@ -1692,14 +1692,35 @@ public class GlobalStateMgr {
     void stopLeaderOnlyDaemonThreads() {
         long timeoutMs = Math.max(1000L, Config.leader_demotion_drain_timeout_sec * 1000L);
         // Stop in the reverse order of startLeaderOnlyDaemonThreads().
+        if (RunMode.isSharedDataMode()) {
+            stopOne("tabletReshardJobMgr", () -> tabletReshardJobMgr.stopGracefully(timeoutMs));
+        }
         stopOne("tabletCollector", () -> tabletCollector.stopGracefully(timeoutMs));
         stopOne("reportHandler", () -> reportHandler.stopGracefully(timeoutMs));
+        if (RunMode.isSharedDataMode()) {
+            stopOne("clusterSnapshotMgr", () -> clusterSnapshotMgr.stopGracefully(timeoutMs));
+        }
         stopOne("temporaryTableCleaner", () -> temporaryTableCleaner.stopGracefully(timeoutMs));
         stopOne("metaRecoveryDaemon", () -> metaRecoveryDaemon.stopGracefully(timeoutMs));
         stopOne("replicationMgr", () -> replicationMgr.stopGracefully(timeoutMs));
         stopOne("safeModeChecker", () -> safeModeChecker.stopGracefully(timeoutMs));
+        if (RunMode.isSharedDataMode()) {
+            stopOne("vectorIndexBuildScheduler", () -> vectorIndexBuildScheduler.stopGracefully(timeoutMs));
+            stopOne("fullVacuumDaemon", () -> fullVacuumDaemon.stopGracefully(timeoutMs));
+            stopOne("autovacuumDaemon", () -> autovacuumDaemon.stopGracefully(timeoutMs));
+            stopOne("starMgrMetaSyncer", () -> starMgrMetaSyncer.stopGracefully(timeoutMs));
+        }
+        if (taskRunStateSynchronizer != null) {
+            stopOne("taskRunStateSynchronizer", () -> taskRunStateSynchronizer.stopGracefully(timeoutMs));
+        }
         stopOne("spmAutoCapturer", () -> spmAutoCapturer.stopGracefully(timeoutMs));
         stopOne("mvActiveChecker", () -> mvActiveChecker.stopGracefully(timeoutMs));
+        stopOne("pipeScheduler", () -> pipeScheduler.stopGracefully(timeoutMs));
+        stopOne("pipeListener", () -> pipeListener.stopGracefully(timeoutMs));
+        if (taskCleaner != null) {
+            stopOne("taskCleaner", () -> taskCleaner.stopGracefully(timeoutMs));
+        }
+        stopOne("taskManager", () -> taskManager.stop());
         stopOne("statisticAutoCollector", () -> statisticAutoCollector.stopGracefully(timeoutMs));
         stopOne("statisticsMetaManager", () -> statisticsMetaManager.stopGracefully(timeoutMs));
         stopOne("updateDbUsedDataQuotaDaemon", () -> updateDbUsedDataQuotaDaemon.stopGracefully(timeoutMs));
@@ -1718,8 +1739,10 @@ public class GlobalStateMgr {
             stopOne("txnTimeoutChecker", () -> txnTimeoutChecker.stopGracefully(timeoutMs));
         }
         stopOne("publishVersionDaemon", () -> publishVersionDaemon.stopGracefully(timeoutMs));
+        stopOne("exportChecker", () -> ExportChecker.stopAll(timeoutMs));
         stopOne("loadLoadingChecker", () -> loadLoadingChecker.stopGracefully(timeoutMs));
         stopOne("loadEtlChecker", () -> loadEtlChecker.stopGracefully(timeoutMs));
+        stopOne("tabletWriteLogHistorySyncer", () -> tabletWriteLogHistorySyncer.stopGracefully(timeoutMs));
         stopOne("loadsHistorySyncer", () -> loadsHistorySyncer.stopGracefully(timeoutMs));
         stopOne("loadTimeoutChecker", () -> loadTimeoutChecker.stopGracefully(timeoutMs));
         stopOne("loadJobScheduler", () -> loadJobScheduler.stopGracefully(timeoutMs));
@@ -2162,9 +2185,9 @@ public class GlobalStateMgr {
     }
 
     public void createTaskCleaner() {
-        taskCleaner = new FrontendDaemon("TaskCleaner", Config.task_check_interval_second * 1000L) {
+        taskCleaner = new LeaderDaemon("TaskCleaner", Config.task_check_interval_second * 1000L) {
             @Override
-            protected void runAfterCatalogReady() {
+            protected void runAfterLeaseValid() {
                 doTaskBackgroundJob();
                 setInterval(Config.task_check_interval_second * 1000L);
             }
