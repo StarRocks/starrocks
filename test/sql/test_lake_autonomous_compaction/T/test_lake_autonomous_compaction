@@ -136,40 +136,60 @@ SELECT * FROM off_t ORDER BY k1;
 DROP DATABASE test_lake_auto_compaction_off_${uuid0} FORCE;
 
 -- name: test_lake_autonomous_compaction_bundling_skip @cloud @sequential
--- Bundling-conflict guard: when both enable_lake_autonomous_compaction AND
--- enable_file_bundling are on, FE must log a warning and skip the autonomous
--- publish path (its RPC path is incompatible with aggregate_publish_version).
--- The visible behavior is the same as "disabled": no PUBLISH_ONLY jobs. We
--- only assert data integrity since the skip is a log-only side effect.
+-- Per-table file-bundling skip (Level 1). With autonomous compaction ON,
+-- a table that has file_bundling=true must be skipped by schedulePartitionPublish,
+-- while a non-bundled table in the same DB must be normally published.
+-- Both tables must keep correct data either way.
 create database test_lake_auto_compaction_bundle_${uuid0};
 use test_lake_auto_compaction_bundle_${uuid0};
 
 ADMIN SET FRONTEND CONFIG ("enable_lake_autonomous_compaction" = "true");
 ADMIN SET FRONTEND CONFIG ("lake_compaction_version_delta_threshold" = "2");
 ADMIN SET FRONTEND CONFIG ("lake_compaction_max_interval_ms" = "1000");
-ADMIN SET FRONTEND CONFIG ("enable_file_bundling" = "true");
+ADMIN SET FRONTEND CONFIG ("enable_file_bundling" = "false");
+UPDATE information_schema.be_configs SET VALUE = 'true' WHERE name = 'enable_lake_autonomous_compaction';
+UPDATE information_schema.be_configs SET VALUE = '1.0' WHERE name = 'lake_autonomous_compaction_score_threshold';
 
+-- Bundled table (per-table property): autonomous publish must skip.
 CREATE TABLE bundle_t (
     k1 BIGINT NOT NULL,
     v1 VARCHAR(100)
 )
 DUPLICATE KEY(k1)
-DISTRIBUTED BY HASH(k1) BUCKETS 1;
+DISTRIBUTED BY HASH(k1) BUCKETS 1
+PROPERTIES ("file_bundling" = "true");
+
+-- Non-bundled table in the SAME database: autonomous publish must run.
+CREATE TABLE no_bundle_t (
+    k1 BIGINT NOT NULL,
+    v1 VARCHAR(100)
+)
+DUPLICATE KEY(k1)
+DISTRIBUTED BY HASH(k1) BUCKETS 1
+PROPERTIES ("file_bundling" = "false");
 
 INSERT INTO bundle_t VALUES (1, 'a');
 INSERT INTO bundle_t VALUES (2, 'b');
 INSERT INTO bundle_t VALUES (3, 'c');
+INSERT INTO no_bundle_t VALUES (1, 'a');
+INSERT INTO no_bundle_t VALUES (2, 'b');
+INSERT INTO no_bundle_t VALUES (3, 'c');
 
-SELECT sleep(8);
+SELECT sleep(15);
+
+-- Both tables keep their data; the skip is invisible at the data layer.
 SELECT COUNT(*) FROM bundle_t;
 SELECT * FROM bundle_t ORDER BY k1;
+SELECT COUNT(*) FROM no_bundle_t;
+SELECT * FROM no_bundle_t ORDER BY k1;
 
 -- Restore.
 ADMIN SET FRONTEND CONFIG ("enable_lake_autonomous_compaction" = "false");
 ADMIN SET FRONTEND CONFIG ("lake_compaction_version_delta_threshold" = "10");
 ADMIN SET FRONTEND CONFIG ("lake_compaction_max_interval_ms" = "1800000");
--- enable_file_bundling default is true; restore to the documented default.
 ADMIN SET FRONTEND CONFIG ("enable_file_bundling" = "true");
+UPDATE information_schema.be_configs SET VALUE = 'false' WHERE name = 'enable_lake_autonomous_compaction';
+UPDATE information_schema.be_configs SET VALUE = '10.0' WHERE name = 'lake_autonomous_compaction_score_threshold';
 
 DROP DATABASE test_lake_auto_compaction_bundle_${uuid0} FORCE;
 

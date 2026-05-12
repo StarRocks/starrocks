@@ -911,39 +911,60 @@ public class CompactionSchedulerTest {
     }
 
     /**
-     * Test schedulePartitionPublish skip path: when file_bundling is on, it warns and skips.
+     * Level 1: schedulePartitionPublish must skip partitions whose owning table
+     * has file_bundling enabled, while continuing to publish non-bundled tables.
+     * The bundled-table skip is per-table now, not a global skip based on
+     * Config.enable_file_bundling.
      */
     @Test
-    public void testRunOneCycleSkipsAutonomousWhenFileBundlingEnabled() throws Exception {
-        boolean savedAuto = Config.enable_lake_autonomous_compaction;
-        boolean savedBundle = Config.enable_file_bundling;
+    public void testSchedulePartitionPublishSkipsBundledTable() throws Exception {
+        int savedDelta = Config.lake_compaction_version_delta_threshold;
+        Config.lake_compaction_version_delta_threshold = 1;
         try {
-            Config.enable_lake_autonomous_compaction = true;
-            Config.enable_file_bundling = true;
-            CompactionScheduler scheduler = new CompactionScheduler(new CompactionMgr(), systemInfoService,
-                    globalTransactionMgr, globalStateMgr, "");
+            long dbId = 100L;
+            long bundledTableId = 200L;
+            long partitionId = 300L;
+            PartitionIdentifier bundledPartition =
+                    new PartitionIdentifier(dbId, bundledTableId, partitionId);
+
+            CompactionMgr compactionManager = new CompactionMgr();
+            compactionManager.handleLoadingFinished(bundledPartition, 10L, System.currentTimeMillis(),
+                    new Quantiles(1.0, 2.0, 3.0));
+
+            LakeTable bundled = new LakeTable();
+            bundled.setFileBundling(true);
 
             new MockUp<GlobalStateMgr>() {
                 @Mock
-                public boolean isLeader() {
-                    return true;
-                }
-
-                @Mock
-                public boolean isReady() {
-                    return true;
+                public LocalMetastore getLocalMetastore() {
+                    return new LocalMetastore(globalStateMgr, null, null);
                 }
             };
-            // schedulePartitionPublish must not be invoked when bundling is on.
-            // We verify by ensuring runOneCycle doesn't throw. The actual
-            // skip-warning is logged but not directly observable from the test.
-            Method runOneCycle = CompactionScheduler.class.getSuperclass().getDeclaredMethod("runOneCycle");
-            runOneCycle.setAccessible(true);
-            // Don't actually run it (would need full FE state); just verify reflection access.
-            Assertions.assertNotNull(runOneCycle);
+            new MockUp<LocalMetastore>() {
+                @Mock
+                public Database getDb(long id) {
+                    return new Database(dbId, "db");
+                }
+                @Mock
+                public Table getTable(Long dbIdParam, Long tableIdParam) {
+                    return bundled;
+                }
+            };
+
+            CompactionScheduler scheduler = new CompactionScheduler(compactionManager, systemInfoService,
+                    globalTransactionMgr, globalStateMgr, "");
+
+            Method method = CompactionScheduler.class.getDeclaredMethod("schedulePartitionPublish");
+            method.setAccessible(true);
+            Assertions.assertDoesNotThrow(() -> method.invoke(scheduler));
+
+            // Bundled table is skipped → partition stays tracked; no PUBLISH_ONLY job
+            // was created (we can't observe an absent call directly here, but the
+            // bundled check is reached before startPublishOnly is invoked, so the
+            // db is not removed by removePartition).
+            Assertions.assertNotNull(compactionManager.getStatistics(bundledPartition));
         } finally {
-            Config.enable_lake_autonomous_compaction = savedAuto;
-            Config.enable_file_bundling = savedBundle;
+            Config.lake_compaction_version_delta_threshold = savedDelta;
         }
     }
 

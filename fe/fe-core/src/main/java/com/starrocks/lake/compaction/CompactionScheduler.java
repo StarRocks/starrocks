@@ -20,6 +20,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PhysicalPartition;
+import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
@@ -116,17 +117,10 @@ public class CompactionScheduler extends Daemon {
             abortStaleCompaction(deletedPartitionIdentifiers);
             scheduleNewCompaction();
             if (Config.enable_lake_autonomous_compaction) {
-                if (Config.enable_file_bundling) {
-                    // Aggregate publish path uses a different RPC (aggregate_compact /
-                    // aggregate_publish_version) that the autonomous COLLECT_AND_PUBLISH
-                    // flow does not understand. Mixing both would cause two publish
-                    // sources to race for the same partition. Log and skip.
-                    LOG.warn("enable_lake_autonomous_compaction is ON but enable_file_bundling is also ON; "
-                            + "skipping autonomous publish to avoid conflicts. "
-                            + "Disable file bundling to use autonomous compaction.");
-                } else {
-                    schedulePartitionPublish();
-                }
+                // File-bundling is checked per-table inside schedulePartitionPublish
+                // (Level 1: bundled tables are skipped; Level 2 will route them to
+                // an aggregate-based autonomous publish path).
+                schedulePartitionPublish();
             }
             history.changeMaxSize(Config.lake_compaction_history_size);
         }
@@ -174,6 +168,15 @@ public class CompactionScheduler extends Daemon {
                 continue; // partition is busy with COMPACT_AND_PUBLISH or an earlier PUBLISH_ONLY
             }
             if (disabledIds.contains(partition.getTableId())) {
+                continue;
+            }
+            // Per-table file-bundling check. Bundled tables write CombinedTxnLog
+            // at publish time (transactions.cpp:160 expects combined_txn_log_location),
+            // but the per-BE COLLECT_AND_PUBLISH path writes per-tablet TxnLog. Until
+            // the aggregate-based autonomous publish path lands (Level 2), bundled
+            // tables must keep using the existing aggregate_compact path manually
+            // scheduled by ALTER TABLE ... COMPACT.
+            if (isPartitionTableFileBundling(partition)) {
                 continue;
             }
             PartitionStatistics stats = compactionManager.getStatistics(partition);
@@ -285,6 +288,20 @@ public class CompactionScheduler extends Daemon {
             abortTransactionIgnoreError(job, e.getMessage());
             return null;
         }
+    }
+
+    /**
+     * Resolve whether the partition's owning table has file-bundling enabled.
+     * Returns false when the database or table no longer exists (it will be cleaned
+     * up by the next removePartition call).
+     */
+    private boolean isPartitionTableFileBundling(PartitionIdentifier partition) {
+        Database db = stateMgr.getLocalMetastore().getDb(partition.getDbId());
+        if (db == null) {
+            return false;
+        }
+        Table table = stateMgr.getLocalMetastore().getTable(db.getId(), partition.getTableId());
+        return (table instanceof OlapTable) && Boolean.TRUE.equals(((OlapTable) table).isFileBundling());
     }
 
     private void scheduleNewCompaction() {
