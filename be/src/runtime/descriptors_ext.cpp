@@ -41,7 +41,13 @@ HdfsPartitionDescriptor::HdfsPartitionDescriptor(const THdfsPartition& thrift_pa
 
 std::string HdfsPartitionDescriptor::debug_string() const {
     std::stringstream out;
-    out << "HdfsPartition(id=" << _id << ", location=" << _location << ", file_format=" << _file_format << ")";
+    out << "HdfsPartition(id=" << _id << ", location=" << _location << ", file_format=" << _file_format
+        << ", partition_key_exprs=[";
+    for (size_t i = 0; i < _thrift_partition_key_exprs.size(); ++i) {
+        if (i > 0) out << ", ";
+        out << apache::thrift::ThriftDebugString(_thrift_partition_key_exprs[i]);
+    }
+    out << "])";
     return out.str();
 }
 

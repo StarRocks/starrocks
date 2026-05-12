@@ -106,8 +106,10 @@ TEST_F(HiveTableDescriptorAddPartitionTest, SamePartitionIdSameThriftIsDedupHit)
 // partition's debug string) to help diagnose the mismatch.
 TEST_F(HiveTableDescriptorAddPartitionTest, SamePartitionIdDifferentThriftFails) {
     constexpr int64_t partition_id = 3;
-    THdfsPartition base = _make_partition();
-    THdfsPartition conflict = _make_partition({_make_int_literal_thrift_expr(1)});
+    constexpr int64_t kOldLiteral = 7;
+    constexpr int64_t kNewLiteral = 99;
+    THdfsPartition base = _make_partition({_make_int_literal_thrift_expr(kOldLiteral)});
+    THdfsPartition conflict = _make_partition({_make_int_literal_thrift_expr(kNewLiteral)});
 
     ASSERT_OK(_table_desc->add_partition_value(_pool.get(), partition_id, base));
 
@@ -123,6 +125,12 @@ TEST_F(HiveTableDescriptorAddPartitionTest, SamePartitionIdDifferentThriftFails)
     EXPECT_NE(std::string::npos, msg.find("partition_key_exprs")) << msg;
     EXPECT_NE(std::string::npos, msg.find("new partition (thrift)")) << msg;
     EXPECT_NE(std::string::npos, msg.find("old_partition")) << msg;
+
+    // Symmetry: both the incoming thrift partition_key_exprs AND the existing
+    // partition's partition_key_exprs must surface in the message — without that
+    // diagnosing a conflict requires re-running with extra logging.
+    EXPECT_NE(std::string::npos, msg.find(std::to_string(kOldLiteral))) << msg;
+    EXPECT_NE(std::string::npos, msg.find(std::to_string(kNewLiteral))) << msg;
 
     // Existing entry must be unchanged.
     HdfsPartitionDescriptor* desc = _table_desc->get_partition(partition_id);
