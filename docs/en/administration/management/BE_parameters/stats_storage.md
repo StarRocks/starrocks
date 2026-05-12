@@ -909,6 +909,15 @@ This topic introduces the following types of FE configurations:
 - Description: The maximum number of threads in the thread pool for Primary Key index parallel execution in a shared-data cluster. `0` means automatically set to half of the number of CPU cores.
 - Introduced in: -
 
+### pk_index_parallel_load_dels_mem_ratio
+
+- Default: 50
+- Type: Int
+- Unit: percent (0-100)
+- Is mutable: Yes
+- Description: In a shared-data cluster, skip the parallel two-phase delete-file prefetch in `LakePersistentIndex::load_dels` when the update mem tracker is already past this percent of its limit. In that regime the function falls back to a single-pass loop that holds only one decoded del-file column at a time, trading the cold-start latency win for bounded peak memory. Set to a higher value to allow the optimization under more memory pressure; set to `100` to disable the memory gate (always run the parallel path when `enable_pk_index_parallel_execution=true` and there are multiple del files).
+- Introduced in: -
+
 ### lake_partial_update_thread_pool_max_threads
 
 - Default: 0

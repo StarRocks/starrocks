@@ -902,23 +902,28 @@ Status LakePersistentIndex::load_dels(const RowsetPtr& rowset, const Schema& pke
     ASSIGN_OR_RETURN(auto pk_encoding_type, rowset->tablet_schema()->primary_key_encoding_type_or_error());
     MutableColumnPtr pk_column;
     RETURN_IF_ERROR(PrimaryKeyEncoder::create_column(pkey_schema, &pk_column, pk_encoding_type));
-    // Iterate all del files and insert into index.
-    for (int del_idx = 0; del_idx < rowset->metadata().del_files_size(); ++del_idx) {
-        TRACE_COUNTER_INCREMENT("rebuild_index_del_cnt", 1);
+
+    const int num_del_files = rowset->metadata().del_files_size();
+
+    // Read+deserialize one delete file into a fresh pk column. Pure I/O — safe to run off-thread.
+    auto read_one = [&](int del_idx) -> StatusOr<MutableColumnPtr> {
         const auto& del = rowset->metadata().del_files(del_idx);
         RandomAccessFileOptions ropts;
         if (!del.encryption_meta().empty()) {
             ASSIGN_OR_RETURN(ropts.encryption_info, KeyCache::instance().unwrap_encryption_meta(del.encryption_meta()));
         }
-        ASSIGN_OR_RETURN(auto read_file,
-                         fs::new_random_access_file(ropts, _tablet_mgr->del_location(_tablet_id, del.name())));
-        ASSIGN_OR_RETURN(auto read_buffer, read_file->read_all());
-        const auto* data = reinterpret_cast<const uint8_t*>(read_buffer.data());
-        const auto* end = data + read_buffer.size();
-        // serialize to column
+        ASSIGN_OR_RETURN(auto rf, fs::new_random_access_file(ropts, _tablet_mgr->del_location(_tablet_id, del.name())));
+        ASSIGN_OR_RETURN(auto buf, rf->read_all());
         auto pkc = pk_column->clone();
-        using Serd = serde::ColumnArraySerde;
-        RETURN_IF_ERROR(Serd::deserialize(data, end, pkc.get()));
+        const auto* data = reinterpret_cast<const uint8_t*>(buf.data());
+        RETURN_IF_ERROR(serde::ColumnArraySerde::deserialize(data, data + buf.size(), pkc.get()));
+        return pkc;
+    };
+
+    // Apply one decoded del column to the index. Order-dependent: replay_erase mutates state
+    // observed by later files' get(), so callers must invoke this sequentially in del_idx order.
+    auto apply_one = [&](int del_idx, MutableColumnPtr& pkc) -> Status {
+        const auto& del = rowset->metadata().del_files(del_idx);
         // We can't insert delete operation to index directly, because some delete operation is
         // older than current item, and we need to igore these delete operations.
         std::vector<IndexValue> found_values(pkc->size(), IndexValue(NullIndexValue));
@@ -967,6 +972,67 @@ Status LakePersistentIndex::load_dels(const RowsetPtr& rowset, const Schema& pke
             RETURN_IF_ERROR(replay_erase(pkc->size(), reinterpret_cast<const Slice*>(keys.data()), filter,
                                          rowset_version, del_rebuild_rssid));
         }
+        return Status::OK();
+    };
+
+    // Gate the two-phase parallel path on update-memtracker pressure: when the update tracker
+    // is already past `pk_index_parallel_load_dels_mem_ratio` percent of its limit, fall back
+    // to the legacy single-pass loop to avoid holding all decoded del-file columns in memory
+    // at once. Cold-start latency loss is acceptable in that regime; OOM is not.
+    auto* update_tracker = GlobalEnv::GetInstance()->update_mem_tracker();
+    const bool use_two_phase = config::enable_pk_index_parallel_execution && num_del_files > 1 &&
+                               update_tracker != nullptr &&
+                               !update_tracker->limit_exceeded_by_ratio(config::pk_index_parallel_load_dels_mem_ratio);
+
+    if (!use_two_phase) {
+        // Legacy single-pass loop: read+decode+apply per file, only one decoded column held at a time.
+        for (int del_idx = 0; del_idx < num_del_files; ++del_idx) {
+            TRACE_COUNTER_INCREMENT("rebuild_index_del_cnt", 1);
+            ASSIGN_OR_RETURN(auto pkc, read_one(del_idx));
+            RETURN_IF_ERROR(apply_one(del_idx, pkc));
+        }
+        return Status::OK();
+    }
+
+    // Phase 1 (parallel): read each delete file's bytes from object storage and deserialize
+    // them into a per-file pk column. Reads dominate cold-start cost (8 files × ~OSS_RTT each
+    // = seconds); parallelising them collapses that wall-clock without changing on-disk semantics.
+    // Memory tradeoff: this path holds all `num_del_files` decoded columns concurrently until
+    // Phase 2 consumes them — guarded above by the update-memtracker pressure check.
+    std::vector<MutableColumnPtr> pkcs(num_del_files);
+    std::mutex shared_mutex;
+    Status shared_status;
+    auto record_err = [&](const Status& s) {
+        std::lock_guard<std::mutex> l(shared_mutex);
+        shared_status.update(s);
+    };
+    auto run_one = [&](int del_idx) {
+        auto res = read_one(del_idx);
+        if (!res.ok()) {
+            record_err(res.status());
+            return;
+        }
+        pkcs[del_idx] = std::move(res).value();
+    };
+
+    auto token =
+            ExecEnv::GetInstance()->pk_index_execution_thread_pool()->new_token(ThreadPool::ExecutionMode::CONCURRENT);
+    for (int del_idx = 0; del_idx < num_del_files; ++del_idx) {
+        // Count attempted files here on the orchestrator thread; TRACE_COUNTER_INCREMENT reads
+        // a thread-local current trace that worker threads don't inherit, so incrementing from
+        // inside the submitted closure would silently drop the count.
+        TRACE_COUNTER_INCREMENT("rebuild_index_del_cnt", 1);
+        auto st = token->submit_func([&run_one, del_idx]() { run_one(del_idx); });
+        if (!st.ok()) {
+            run_one(del_idx);
+        }
+    }
+    token->wait();
+    RETURN_IF_ERROR(shared_status);
+
+    // Phase 2 (sequential): order-dependent index mutations.
+    for (int del_idx = 0; del_idx < num_del_files; ++del_idx) {
+        RETURN_IF_ERROR(apply_one(del_idx, pkcs[del_idx]));
     }
     return Status::OK();
 }

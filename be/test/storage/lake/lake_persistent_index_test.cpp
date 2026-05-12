@@ -25,6 +25,7 @@
 #include "runtime/descriptors.h"
 #include "storage/chunk_helper.h"
 #include "storage/lake/meta_file.h"
+#include "storage/lake/rowset.h"
 #include "storage/lake/tablet_range_helper.h"
 #include "storage/primary_key_encoder.h"
 #include "test_util.h"
@@ -1137,6 +1138,42 @@ TEST_F(LakePersistentIndexTest, test_ingest_sst_preserves_shared_flag_for_new_ss
     EXPECT_EQ(match_count, 1);
 
     config::l0_max_mem_usage = l0_max_mem_usage;
+}
+
+// Failure-injection guard for the parallel path in load_dels (see
+// be/src/storage/lake/lake_persistent_index.cpp). With N=3 del files where every
+// read fails (files do not exist on disk), the parallel phase must propagate the
+// error via shared_status and return cleanly instead of crashing or proceeding
+// to Phase 2 with default-constructed pkc slots. This is the regression surface
+// added by the parallel refactor that existing publish-version tests do not
+// cover, and is the targeted guard requested before broader backports.
+TEST_F(LakePersistentIndexTest, test_load_dels_parallel_propagates_io_error) {
+    auto tablet_id = _tablet_metadata->id();
+    auto index = std::make_unique<LakePersistentIndex>(_tablet_mgr.get(), tablet_id);
+    ASSERT_OK(index->init(_tablet_metadata));
+
+    RowsetMetadataPB rowset_meta;
+    rowset_meta.set_id(42);
+    for (int i = 0; i < 3; ++i) {
+        auto* d = rowset_meta.add_del_files();
+        d->set_name("nonexistent_del_" + std::to_string(i));
+        d->set_origin_rowset_id(42);
+        d->set_op_offset(0);
+    }
+    auto tablet_schema = std::make_shared<TabletSchema>(_tablet_metadata->schema());
+    auto rowset = std::make_shared<Rowset>(_tablet_mgr.get(), tablet_id, &rowset_meta, /*index=*/0, tablet_schema);
+
+    std::vector<ColumnId> pk_columns(tablet_schema->num_key_columns());
+    for (auto i = 0; i < tablet_schema->num_key_columns(); i++) {
+        pk_columns[i] = (ColumnId)i;
+    }
+    auto pkey_schema = ChunkHelper::convert_schema(tablet_schema, pk_columns);
+
+    // Force the parallel path on so the test can't be silently weakened by a future flag flip.
+    ConfigResetGuard<bool> g(&config::enable_pk_index_parallel_execution, true);
+
+    auto st = index->load_dels(rowset, pkey_schema, /*rowset_version=*/1);
+    EXPECT_FALSE(st.ok()) << "expected error from missing del files; got OK";
 }
 
 } // namespace starrocks::lake
