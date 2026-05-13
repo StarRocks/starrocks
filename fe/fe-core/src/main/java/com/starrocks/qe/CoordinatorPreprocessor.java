@@ -150,7 +150,7 @@ public class CoordinatorPreprocessor {
     private WorkerProvider.Factory newWorkerProviderFactory() {
         SessionVariable sessionVariable = connectContext.getSessionVariable();
         boolean skipBlackList = sessionVariable.isSkipBlackList();
-        
+
         if (RunMode.isSharedDataMode()) {
             BlacklistBackupRoutingPolicy blacklistBackupRoutingPolicy =
                     sessionVariable.getBlacklistBackupRoutingPolicy();
@@ -350,13 +350,13 @@ public class CoordinatorPreprocessor {
         // 1. try to use the resource group specified by the variable
         if (StringUtils.isNotEmpty(sessionVariable.getResourceGroup())) {
             String rgName = sessionVariable.getResourceGroup();
-            resourceGroup = resourceGroupMgr.chooseResourceGroupByName(rgName);
+            resourceGroup = resourceGroupMgr.chooseResourceGroupByName(connect, rgName);
         }
 
         // 2. try to use the resource group specified by workgroup_id
         long workgroupId = connect.getSessionVariable().getResourceGroupId();
         if (resourceGroup == null && workgroupId > 0) {
-            resourceGroup = resourceGroupMgr.chooseResourceGroupByID(workgroupId);
+            resourceGroup = resourceGroupMgr.chooseResourceGroupByID(connect, workgroupId);
         }
 
         // 3. if the specified resource group not exist try to use the default one
@@ -366,7 +366,7 @@ public class CoordinatorPreprocessor {
         }
 
         if (resourceGroup == null) {
-            resourceGroup = resourceGroupMgr.chooseResourceGroupByName(ResourceGroup.DEFAULT_RESOURCE_GROUP_NAME);
+            resourceGroup = resourceGroupMgr.chooseResourceGroupByName(connect, ResourceGroup.DEFAULT_RESOURCE_GROUP_NAME);
         }
 
         if (resourceGroup != null) {

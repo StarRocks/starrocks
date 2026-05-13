@@ -199,7 +199,7 @@ public class SetStmtAnalyzer {
             String rgName = resolvedExpression.getStringValue();
             if (!StringUtils.isEmpty(rgName)) {
                 TWorkGroup wg =
-                        GlobalStateMgr.getCurrentState().getResourceGroupMgr().chooseResourceGroupByName(rgName);
+                        GlobalStateMgr.getCurrentState().getResourceGroupMgr().chooseResourceGroupByName(null, rgName);
                 if (wg == null) {
                     throw new SemanticException("resource group not exists: " + rgName);
                 }
@@ -209,7 +209,7 @@ public class SetStmtAnalyzer {
             long rgID = resolvedExpression.getLongValue();
             if (rgID > 0) {
                 TWorkGroup wg =
-                        GlobalStateMgr.getCurrentState().getResourceGroupMgr().chooseResourceGroupByID(rgID);
+                        GlobalStateMgr.getCurrentState().getResourceGroupMgr().chooseResourceGroupByID(null, rgID);
                 if (wg == null) {
                     throw new SemanticException("resource group not exists: " + rgID);
                 }

@@ -405,6 +405,12 @@ public class ResourceGroupAnalyzer {
                         "'big_query_mem_limit', 'big_query_scan_rows_limit','big_query_cpu_second_limit'," +
                         "'spill_mem_limit_threshold','warehouses') should be specified");
             }
+
+            List<String> warehouses = tempResourceGroup.getWarehouses();
+            if (ResourceGroup.BUILTIN_WG_NAMES.contains(name) && warehouses != null && !warehouses.isEmpty()) {
+                throw new SemanticException(
+                        String.format("cannot set non-empty warehouses for builtin resource group [%s]", name));
+            }
         }
 
         // Validate builtin resource group constraints
