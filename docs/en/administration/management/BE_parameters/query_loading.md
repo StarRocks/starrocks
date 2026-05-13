@@ -628,6 +628,42 @@ This topic introduces the following types of BE configurations:
 - Description: Fraction of the BE process memory reserved for update-related memory and caches. During startup `GlobalEnv` computes the `MemTracker` for updates as process_mem_limit * clamp(update_memory_limit_percent, 0, 100) / 100. `UpdateManager` also uses this percentage to size its primary-index/index-cache capacity (index cache capacity = GlobalEnv::process_mem_limit * update_memory_limit_percent / 100). The HTTP config update logic registers a callback that calls `update_primary_index_memory_limit` on the update managers, so changes would be applied to the update subsystem if the config were changed. Increasing this value gives more memory to update/primary-index paths (reducing memory available for other pools); decreasing it reduces update memory and cache capacity. Values are clamped to the range 0–100.
 - Introduced in: v3.2.0
 
+### enable_vector_adaptive_search
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Master switch for adaptive `ef_search` scaling on HNSW vector indexes. When enabled, BE scales the effective `ef_search` per segment based on its row count, so recall is preserved when compaction enlarges segments without forcing manual `ef_search` retuning. Set to `false` to disable scaling and use the user-supplied `ef_search` literally.
+- Introduced in: -
+
+### vector_adaptive_ef_alpha
+
+- Default: 1.0
+- Type: Double
+- Unit: -
+- Is mutable: Yes
+- Description: Growth slope for adaptive `ef_search`. The scaling factor is `1 + alpha * log2(segment_rows / vector_adaptive_ef_baseline_rows)`. Higher values raise recall more aggressively at the cost of higher CPU per query; lower values trim CPU at the cost of recall on large segments. Effective only when `enable_vector_adaptive_search` is true and `segment_rows > vector_adaptive_ef_baseline_rows`.
+- Introduced in: -
+
+### vector_adaptive_ef_baseline_rows
+
+- Default: 300000
+- Type: Int
+- Unit: Rows
+- Is mutable: Yes
+- Description: Segment row count below which adaptive `ef_search` does not scale. Segments with fewer rows than this threshold use the user-supplied `ef_search` directly; segments above this threshold receive a higher effective `ef_search` to compensate for the larger HNSW graph. Effective only when `enable_vector_adaptive_search` is true.
+- Introduced in: -
+
+### vector_adaptive_ef_cap
+
+- Default: 8.0
+- Type: Double
+- Unit: -
+- Is mutable: Yes
+- Description: Upper bound on the adaptive `ef_search` multiplier. Caps the worst-case CPU and latency cost of the scaling formula even on extremely large segments. Effective only when `enable_vector_adaptive_search` is true.
+- Introduced in: -
+
 ### vector_chunk_size
 
 - Default: 4096

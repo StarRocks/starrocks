@@ -39,6 +39,7 @@
 #include "common/status.h"
 #include "common/statusor.h"
 #include "fs/fs.h"
+#include "storage/index/vector/tenann/tenann_index_utils.h"
 #include "storage/index/vector/vector_index_file_reader.h"
 #include "tenann/common/error.h"
 #include "tenann/common/seq_view.h"
@@ -104,6 +105,13 @@ Status TenANNReader::init_searcher(const tenann::IndexMeta& meta, const std::str
         return Status::InternalError(e.what());
     }
     return Status::OK();
+}
+
+Status TenANNReader::init_searcher(const tenann::IndexMeta& meta, const std::string& index_path, FileSystem* fs,
+                                   size_t segment_num_rows, int query_k, bool user_set_ef) {
+    auto adapted_meta = meta;
+    apply_adaptive_ef_search(&adapted_meta, segment_num_rows, query_k, user_set_ef);
+    return init_searcher(adapted_meta, index_path, fs);
 }
 
 Status TenANNReader::search(tenann::PrimitiveSeqView query_vector, int k, int64_t* result_ids,

@@ -43,6 +43,23 @@ static const std::string RANGE_SEARCH_CONFIDENCE = "range_search_confidence";
 namespace starrocks {
 StatusOr<tenann::IndexMeta> get_vector_meta(const std::shared_ptr<TabletIndex>& tablet_index,
                                             const std::map<std::string, std::string>& query_params);
+
+// Compute the effective ef_search for a single segment.
+//
+//   ef_base = max(user_ef, query_k)                      // faiss max(ef,k) floor
+//   factor  = min(1 + alpha * log2(rows/baseline), cap)  // 1.0 when rows<=baseline
+//   return    ef_base * factor
+//
+// `user_ef` and `query_k` must be positive; otherwise the returned value is clamped
+// to a non-negative int. Caller is expected to check
+// `config::enable_vector_adaptive_search` and user_set_ef overrides before calling.
+int compute_adaptive_ef_search(int user_ef, int query_k, size_t segment_num_rows);
+
+// Apply adaptive ef_search to meta.search_params["efSearch"] in place. Honors:
+//   - `config::enable_vector_adaptive_search` (global enable)
+//   - `user_set_ef` (user explicitly specified ef in query -> skip)
+//   - Missing efSearch in meta (non-HNSW indexes -> skip)
+void apply_adaptive_ef_search(tenann::IndexMeta* meta, size_t segment_num_rows, int query_k, bool user_set_ef);
 } // namespace starrocks
 
 #endif

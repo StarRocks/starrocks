@@ -57,6 +57,19 @@ public:
         return init_searcher(meta, index_path);
     }
 
+    // Overload that carries context for per-segment adaptive ef_search:
+    //   segment_num_rows: row count of this segment, used as the scaling signal
+    //   query_k: effective k (already multiplied by k_factor) the caller plans
+    //     to pass to search(); used as a floor for ef_base to match faiss's
+    //     internal `ef = max(efSearch, k)` rule
+    //   user_set_ef: true if the user explicitly specified efSearch (e.g. via
+    //     query hint); when true, adaptive scaling is skipped
+    // Default forwards to the row-count-unaware overload.
+    virtual Status init_searcher(const tenann::IndexMeta& meta, const std::string& index_path, FileSystem* fs,
+                                 size_t segment_num_rows, int query_k, bool user_set_ef) {
+        return init_searcher(meta, index_path, fs);
+    }
+
     virtual Status search(tenann::PrimitiveSeqView query_vector, int k, int64_t* result_ids, uint8_t* result_distances,
                           tenann::IdFilter* id_filter = nullptr) = 0;
     virtual Status range_search(tenann::PrimitiveSeqView query_vector, int k, std::vector<int64_t>* result_ids,

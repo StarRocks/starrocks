@@ -15,6 +15,7 @@
 #include "segment_iterator.h"
 
 #include <algorithm>
+#include <boost/algorithm/string/predicate.hpp>
 #include <cmath>
 #include <limits>
 #include <memory>
@@ -970,7 +971,21 @@ inline Status SegmentIterator::_init_reader_from_file(const std::string& index_p
         return Status::OK();
     }
     RETURN_IF_ERROR(create_st);
-    auto status = _vector_index_ctx->ann_reader->init_searcher(*_vector_index_ctx->index_meta.get(), index_path, fs);
+    // Enable per-segment adaptive ef_search. query_params carries a user-explicit
+    // efSearch iff the user set one via query hint / session var; that disables
+    // adaptive scaling so user intent is honored. FE preserves the user-typed key
+    // casing for ann_params (e.g. "efsearch", "Efsearch", "EFSEARCH" are all
+    // valid), so the check must be case-insensitive.
+    bool user_set_ef = false;
+    for (const auto& entry : query_params) {
+        if (boost::iequals(entry.first, starrocks::index::vector::EF_SEARCH)) {
+            user_set_ef = true;
+            break;
+        }
+    }
+    auto status = _vector_index_ctx->ann_reader->init_searcher(*_vector_index_ctx->index_meta.get(), index_path, fs,
+                                                               static_cast<size_t>(_segment->num_rows()),
+                                                               _vector_index_ctx->k, user_set_ef);
     // empty ann reader — caller will set up brute-force fallback
     if (status.is_not_supported()) {
         _vector_index_ctx->use_vector_index = false;
