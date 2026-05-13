@@ -49,8 +49,8 @@ Status PrimaryKeyCompactionConflictResolver::execute() {
                 // 4 K chunk, that is ~250 such calls per segment. Batching N chunks amortises the
                 // per-call setup, vector allocations, and memtable bookkeeping by ~N×. 0 disables
                 // batching (one replace per chunk).
-                const size_t batch_rows_threshold = std::max<size_t>(
-                        1, static_cast<size_t>(config::primary_key_compaction_replace_batch_rows));
+                const size_t batch_rows_threshold =
+                        std::max<size_t>(1, static_cast<size_t>(config::primary_key_compaction_replace_batch_rows));
                 for (size_t segment_id = 0; segment_id < segment_iters.size(); segment_id++) {
                     RETURN_IF_ERROR(breakpoint_check());
                     // only hold pkey, so can use larger chunk size
@@ -71,9 +71,8 @@ Status PrimaryKeyCompactionConflictResolver::execute() {
                         }
                         if (!batch_replace_indexes.empty()) {
                             TRACE_COUNTER_SCOPE_LATENCY_US("compaction_replace_index_latency_us");
-                            RETURN_IF_ERROR(params.index->replace(params.rowset_id + segment_id,
-                                                                  batch_start_rowid, batch_replace_indexes,
-                                                                  *batch_col));
+                            RETURN_IF_ERROR(params.index->replace(params.rowset_id + segment_id, batch_start_rowid,
+                                                                  batch_replace_indexes, *batch_col));
                         }
                         batch_start_rowid += batch_acc_rows;
                         batch_acc_rows = 0;
