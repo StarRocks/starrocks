@@ -16,6 +16,8 @@
 
 #include <butil/time.h> // NOLINT
 
+#include <algorithm>
+
 #include "base/debug/trace.h"
 #include "base/testutil/sync_point.h"
 #include "common/config_primary_key_fwd.h"
@@ -24,6 +26,7 @@
 #include "fs/fs_factory.h"
 #include "fs/key_cache.h"
 #include "gen_cpp/types.pb.h"
+#include "io/core/input_stream.h"
 #include "storage/lake/lake_delvec_loader.h"
 #include "storage/lake/utils.h"
 #include "storage/sstable/table_builder.h"
@@ -32,6 +35,17 @@
 namespace starrocks::lake {
 
 namespace {
+
+// Cheap drop-in for `get_numeric_statistics()` on the publish hot path: a single
+// virtual call returning a 13×int64 struct, no heap alloc / no strings / no vector.
+// Plain POSIX (shared-nothing UT) returns all zero via the base default. Callers
+// always pass non-null `_rf.get()` (set in `init()`) or non-null fresh `rf.get()`
+// (from `ASSIGN_OR_RETURN`), so the only guard we need is against the rare case
+// where the underlying file's stream pointer comes back null.
+io::IoStatsSnapshot take_sstable_io_snapshot(RandomAccessFile* rf) {
+    auto stream = rf->stream();
+    return stream ? stream->get_io_stats_snapshot() : io::IoStatsSnapshot{};
+}
 
 Status drop_corrupted_sstable_cache(const std::string& path) {
 #if defined(USE_STAROS) && !defined(BUILD_FORMAT_LIB)
@@ -160,6 +174,11 @@ Status PersistentIndexSstable::multi_get(const Slice* keys, const KeyIndexSet& k
         ASSIGN_OR_RETURN(rf, fs::new_random_access_file(opts, _rf->filename()));
     }
     options.file = rf.get();
+    // When parallel execution opens a fresh `rf`, its IO counters start at 0 so the delta below
+    // equals the absolute IO done by this multi_get. Otherwise `_rf` is reused across calls and
+    // we measure the delta against its running totals.
+    RandomAccessFile* active_rf = (rf != nullptr) ? rf.get() : _rf.get();
+    io::IoStatsSnapshot io_snap_before = take_sstable_io_snapshot(active_rf);
     // Currently, there is no need to set predicate for MultiGet of persistent index sstable. Because predicate
     // only used for sstable compaction to filter out some keys for tablet split purpose and such keys can not
     // be read by the persistent index by designed. So even we provide a predicate, all keys read by multi_get
@@ -181,9 +200,23 @@ Status PersistentIndexSstable::multi_get(const Slice* keys, const KeyIndexSet& k
         return multiget_st;
     }
     auto end_ts = butil::gettimeofday_us();
+    io::IoStatsSnapshot io_snap_after = take_sstable_io_snapshot(active_rf);
     TRACE_COUNTER_INCREMENT("multi_get_us", end_ts - start_ts);
     TRACE_COUNTER_INCREMENT("read_block_hit_cache_cnt", stat.block_cnt_from_cache);
     TRACE_COUNTER_INCREMENT("read_block_miss_cache_cnt", stat.block_cnt_from_file);
+    // Break down the misses into reads served by the local data cache vs. reads that went out to
+    // the remote object store (S3/OSS/etc.). Deltas are clamped at 0 because cumulative counters
+    // should never decrease, but we guard against the file being swapped underneath us in retries.
+    TRACE_COUNTER_INCREMENT(
+            "sstable_io_local_disk_bytes",
+            std::max<int64_t>(0, io_snap_after.bytes_read_local_disk - io_snap_before.bytes_read_local_disk));
+    TRACE_COUNTER_INCREMENT("sstable_io_remote_bytes",
+                            std::max<int64_t>(0, io_snap_after.bytes_read_remote - io_snap_before.bytes_read_remote));
+    TRACE_COUNTER_INCREMENT(
+            "sstable_io_count_local_disk",
+            std::max<int64_t>(0, io_snap_after.io_count_local_disk - io_snap_before.io_count_local_disk));
+    TRACE_COUNTER_INCREMENT("sstable_io_count_remote",
+                            std::max<int64_t>(0, io_snap_after.io_count_remote - io_snap_before.io_count_remote));
     size_t i = 0;
     for (auto& key_index : key_indexes) {
         // Index_value_with_vers is empty means key is not found in sst.

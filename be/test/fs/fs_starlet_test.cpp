@@ -183,6 +183,14 @@ TEST_P(StarletFileSystemTest, test_write_and_read) {
     ASSIGN_OR_ABORT(auto stats2, rf->get_numeric_statistics());
     EXPECT_EQ((*stats2).size(), 11);
     EXPECT_EQ("hello world!", std::string_view(buf, nr));
+    // Exercise the lightweight `get_io_stats_snapshot()` path used by the publish
+    // trace. After the read above the snapshot must reflect non-zero byte/op
+    // counters on either the local-disk (cache-hit) or remote (cache-miss) side,
+    // and the underlying StarletInputStream override must be reached via the
+    // SeekableInputStreamWrapper forward.
+    auto io_snap = rf->get_io_stats_snapshot();
+    EXPECT_GT(io_snap.bytes_read_local_disk + io_snap.bytes_read_remote, 0);
+    EXPECT_GT(io_snap.io_count_local_disk + io_snap.io_count_remote, 0);
 
     ASSIGN_OR_ABORT(nr, rf->read_at(3, buf, sizeof(buf)));
     EXPECT_OK(rf->touch_cache(0 /* offset */, sizeof("hello world!")));
@@ -559,6 +567,132 @@ public:
         set_staros_worker_for_test(nullptr);
     }
 };
+
+// Minimal mock InputStream whose only useful operation is `get_io_stats()` —
+// returns a pre-populated `IOStats` with distinct sentinel values per field, so
+// the corresponding fields surfacing through `StarletInputStream::get_io_stats_snapshot()`
+// can be matched 1:1.
+class SnapshotMockInputStream : public staros::starlet::fslib::InputStream {
+public:
+    SnapshotMockInputStream() {
+        get_mutable_io_stats().bytes_read_local_disk = 11;
+        get_mutable_io_stats().bytes_read_remote = 12;
+        get_mutable_io_stats().bytes_write_local_disk = 13;
+        get_mutable_io_stats().bytes_write_remote = 14;
+        get_mutable_io_stats().io_count_local_disk = 21;
+        get_mutable_io_stats().io_count_remote = 22;
+        get_mutable_io_stats().io_ns_read_local_disk = 31;
+        get_mutable_io_stats().io_ns_read_remote = 32;
+        get_mutable_io_stats().io_ns_write_local_disk = 33;
+        get_mutable_io_stats().io_ns_write_remote = 34;
+        get_mutable_io_stats().prefetch_hit_count = 41;
+        get_mutable_io_stats().prefetch_wait_finish_ns = 42;
+        get_mutable_io_stats().prefetch_pending_ns = 43;
+    }
+
+    absl::StatusOr<size_t> seek(int64_t /*offset*/, Anchor /*anchor*/) override { return 0; }
+    absl::StatusOr<size_t> tell() override { return 0; }
+    absl::StatusOr<size_t> size() override { return 0; }
+    absl::Status close() override { return absl::OkStatus(); }
+    absl::StatusOr<size_t> read(void* /*data*/, size_t /*length*/) override { return 0; }
+};
+
+class SnapshotMockReadOnlyFile : public staros::starlet::fslib::ReadOnlyFile {
+public:
+    explicit SnapshotMockReadOnlyFile(bool stream_fails = false)
+            : _stream(std::make_unique<SnapshotMockInputStream>()),
+              _name("mock_io_stats_file"),
+              _stream_fails(stream_fails) {}
+
+    const std::string& name() override { return _name; }
+    absl::StatusOr<size_t> size() override { return 0; }
+    absl::StatusOr<std::string> get_meta(std::string_view /*key*/) override {
+        return absl::UnimplementedError("get_meta");
+    }
+    absl::Status set_meta(std::string_view /*key*/, std::string_view /*value*/) override {
+        return absl::UnimplementedError("set_meta");
+    }
+    absl::Status remove_meta(std::string_view /*key*/) override { return absl::UnimplementedError("remove_meta"); }
+    absl::Status close() override { return absl::OkStatus(); }
+    absl::StatusOr<staros::starlet::fslib::InputStream*> stream() override {
+        if (_stream_fails) {
+            return absl::InternalError("stream() failed (mock)");
+        }
+        return _stream.get();
+    }
+
+private:
+    std::unique_ptr<SnapshotMockInputStream> _stream;
+    std::string _name;
+    bool _stream_fails;
+};
+
+class SnapshotMockFileSystem : public MockStarletFileSystem {
+public:
+    explicit SnapshotMockFileSystem(bool stream_fails = false) : _stream_fails(stream_fails) {}
+
+    absl::StatusOr<std::unique_ptr<staros::starlet::fslib::ReadOnlyFile>> open(
+            std::string_view /*path*/, const staros::starlet::fslib::ReadOptions& /*opts*/) override {
+        return std::unique_ptr<staros::starlet::fslib::ReadOnlyFile>(new SnapshotMockReadOnlyFile(_stream_fails));
+    }
+
+private:
+    bool _stream_fails;
+};
+
+// Exercises StarletInputStream::get_io_stats_snapshot() without needing real S3
+// credentials. The trace-driven publish path on shared-data clusters calls this
+// method through the RandomAccessFile / SeekableInputStreamWrapper forward, so
+// regressions here would silently zero out the local-vs-remote breakdown on
+// production shared-data builds.
+TEST_F(NewFsStarletTest, test_starlet_input_stream_get_io_stats_snapshot) {
+    auto mock_fs = std::make_shared<SnapshotMockFileSystem>();
+    int64_t test_shard_id = 99999;
+    SyncPoint::GetInstance()->SetCallBack("new_fs_starlet::get_shard_filesystem", [&](void* arg) {
+        auto* fs_st = static_cast<absl::StatusOr<std::shared_ptr<staros::starlet::fslib::FileSystem>>*>(arg);
+        *fs_st = mock_fs;
+    });
+
+    auto fs = new_fs_starlet(test_shard_id, false);
+    ASSIGN_OR_ABORT(auto rf, fs->new_random_access_file(fmt::format("staros://{}/anyfile", test_shard_id)));
+    auto snap = rf->get_io_stats_snapshot();
+
+    EXPECT_EQ(11, snap.bytes_read_local_disk);
+    EXPECT_EQ(12, snap.bytes_read_remote);
+    EXPECT_EQ(13, snap.bytes_write_local_disk);
+    EXPECT_EQ(14, snap.bytes_write_remote);
+    EXPECT_EQ(21, snap.io_count_local_disk);
+    EXPECT_EQ(22, snap.io_count_remote);
+    EXPECT_EQ(31, snap.io_ns_read_local_disk);
+    EXPECT_EQ(32, snap.io_ns_read_remote);
+    EXPECT_EQ(33, snap.io_ns_write_local_disk);
+    EXPECT_EQ(34, snap.io_ns_write_remote);
+    EXPECT_EQ(41, snap.prefetch_hit_count);
+    EXPECT_EQ(42, snap.prefetch_wait_finish_ns);
+    EXPECT_EQ(43, snap.prefetch_pending_ns);
+}
+
+// Covers the `stream_st not ok` early-return branch in StarletInputStream::
+// get_io_stats_snapshot(). With the mock fail flag set, ReadOnlyFile::stream()
+// returns InternalError and the override must degrade gracefully to all-zero
+// instead of dereferencing the failed StatusOr.
+TEST_F(NewFsStarletTest, test_starlet_input_stream_get_io_stats_snapshot_stream_failure) {
+    auto mock_fs = std::make_shared<SnapshotMockFileSystem>(/*stream_fails=*/true);
+    int64_t test_shard_id = 99998;
+    SyncPoint::GetInstance()->SetCallBack("new_fs_starlet::get_shard_filesystem", [&](void* arg) {
+        auto* fs_st = static_cast<absl::StatusOr<std::shared_ptr<staros::starlet::fslib::FileSystem>>*>(arg);
+        *fs_st = mock_fs;
+    });
+
+    auto fs = new_fs_starlet(test_shard_id, false);
+    ASSIGN_OR_ABORT(auto rf, fs->new_random_access_file(fmt::format("staros://{}/anyfile", test_shard_id)));
+    auto snap = rf->get_io_stats_snapshot();
+
+    EXPECT_EQ(0, snap.bytes_read_local_disk);
+    EXPECT_EQ(0, snap.bytes_read_remote);
+    EXPECT_EQ(0, snap.io_count_local_disk);
+    EXPECT_EQ(0, snap.io_count_remote);
+}
 
 TEST_F(NewFsStarletTest, test_new_fs_starlet_with_s3_raw_path_mode_true) {
     auto mock_fs = std::make_shared<MockStarletFileSystem>();

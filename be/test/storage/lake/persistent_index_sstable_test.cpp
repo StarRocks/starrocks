@@ -17,15 +17,25 @@
 #include <gtest/gtest.h>
 
 #include <ctime>
+#include <map>
 #include <set>
+#include <string_view>
 
 #include "base/container/lru_cache.h"
+#include "base/debug/trace.h"
+#include "base/debug/trace_metrics.h"
 #include "base/phmap/btree.h"
 #include "base/testutil/assert.h"
 #include "base/testutil/sync_point.h"
+#include "base/utility/defer_op.h"
+#include "common/config_primary_key_fwd.h"
 #include "common/config_starlet_fwd.h"
+#include "fs/bundle_file.h"
 #include "fs/fs.h"
 #include "fs/fs_util.h"
+#include "io/core/input_stream.h"
+#include "io/core/seekable_input_stream.h"
+#include "io/shared_buffered_input_stream.h"
 #include "storage/lake/fixed_location_provider.h"
 #include "storage/lake/join_path.h"
 #include "storage/lake/location_provider.h"
@@ -918,6 +928,390 @@ TEST_F(PersistentIndexSstableTest, test_multi_get_preserves_tombstones_with_shar
     ASSERT_EQ(found_versioned.size(), static_cast<size_t>(kNumTombstones));
     for (int i = 0; i < kNumTombstones; i++) {
         ASSERT_EQ(NullIndexValue, values_versioned[i].get_value());
+    }
+}
+
+namespace {
+
+// Wraps an underlying SeekableInputStream and reports synthetic IO statistics so a
+// shared-nothing UT can drive the local-disk vs remote breakdown that production
+// gets from starlet's CacheFs. Every successful read_at_fully contributes its byte
+// count to one bucket, selected by the mode passed at construction.
+class FakeStatsInputStream : public io::SeekableInputStreamWrapper {
+public:
+    enum Mode { kAllLocal, kAllRemote };
+
+    FakeStatsInputStream(std::shared_ptr<io::SeekableInputStream> inner, Mode mode)
+            : io::SeekableInputStreamWrapper(inner.get(), kDontTakeOwnership), _inner(std::move(inner)), _mode(mode) {}
+
+    Status read_at_fully(int64_t offset, void* out, int64_t count) override {
+        RETURN_IF_ERROR(_inner->read_at_fully(offset, out, count));
+        _bytes_read += count;
+        ++_io_count;
+        return Status::OK();
+    }
+
+    StatusOr<int64_t> read(void* data, int64_t count) override {
+        auto res = _inner->read(data, count);
+        if (res.ok()) {
+            _bytes_read += *res;
+            ++_io_count;
+        }
+        return res;
+    }
+
+    io::IoStatsSnapshot get_io_stats_snapshot() const override {
+        io::IoStatsSnapshot snap;
+        if (_mode == kAllRemote) {
+            snap.bytes_read_remote = _bytes_read;
+            snap.io_count_remote = _io_count;
+        } else {
+            snap.bytes_read_local_disk = _bytes_read;
+            snap.io_count_local_disk = _io_count;
+        }
+        return snap;
+    }
+
+private:
+    std::shared_ptr<io::SeekableInputStream> _inner;
+    Mode _mode;
+    int64_t _bytes_read{0};
+    int64_t _io_count{0};
+};
+
+// Simulates the rare `_rf`-swap case where the second snapshot sees smaller counters
+// than the first (e.g., when retry-after-corruption replaces the underlying file).
+// First snapshot call returns inflated values; every subsequent call returns all zero.
+// `multi_get` must clamp the resulting negative delta to zero before incrementing the
+// trace metric — otherwise the metric would record a negative number.
+class SwappingStatsInputStream : public io::SeekableInputStreamWrapper {
+public:
+    static constexpr int64_t kInflatedBefore = 1 << 20;
+
+    explicit SwappingStatsInputStream(std::shared_ptr<io::SeekableInputStream> inner)
+            : io::SeekableInputStreamWrapper(inner.get(), kDontTakeOwnership), _inner(std::move(inner)) {}
+
+    Status read_at_fully(int64_t offset, void* out, int64_t count) override {
+        return _inner->read_at_fully(offset, out, count);
+    }
+    StatusOr<int64_t> read(void* data, int64_t count) override { return _inner->read(data, count); }
+
+    io::IoStatsSnapshot get_io_stats_snapshot() const override {
+        io::IoStatsSnapshot snap;
+        if (_call_count++ == 0) {
+            snap.bytes_read_local_disk = kInflatedBefore;
+            snap.bytes_read_remote = kInflatedBefore;
+            snap.io_count_local_disk = kInflatedBefore;
+            snap.io_count_remote = kInflatedBefore;
+        }
+        return snap;
+    }
+
+private:
+    std::shared_ptr<io::SeekableInputStream> _inner;
+    mutable int _call_count = 0;
+};
+
+// Trace stores counters keyed by `const char*` (pointer comparison), and the
+// literal we pass here may not share an address with the one inside
+// persistent_index_sstable.cpp across translation units. Match by string value
+// instead so the test is robust against the compiler's string pooling decisions.
+int64_t find_trace_metric(const std::map<const char*, int64_t>& metrics, std::string_view name) {
+    for (const auto& [k, v] : metrics) {
+        if (k != nullptr && name == k) {
+            return v;
+        }
+    }
+    return 0;
+}
+
+void run_multi_get_io_breakdown_case(const std::string& test_dir, const std::string& filename,
+                                     FakeStatsInputStream::Mode mode) {
+    // Force the non-parallel `multi_get` code path so the read goes through the wrapped `_rf`
+    // we inject below. With parallel execution on (the default), multi_get opens a fresh
+    // RandomAccessFile via `fs::new_random_access_file` and bypasses our fake entirely; that
+    // production-only branch exercises the same snapshot helper against the real starlet
+    // stream and is out of scope for a shared-nothing UT.
+    bool saved_parallel = config::enable_pk_index_parallel_execution;
+    config::enable_pk_index_parallel_execution = false;
+    DeferOp restore_parallel([&] { config::enable_pk_index_parallel_execution = saved_parallel; });
+    constexpr int kN = 256; // big enough that MultiGet actually reads data blocks from the file
+    ASSIGN_OR_ABORT(auto wf, fs::new_writable_file(lake::join_path(test_dir, filename)));
+    phmap::btree_map<std::string, IndexValueWithVer, std::less<>> map;
+    for (int i = 0; i < kN; ++i) {
+        map.emplace(fmt::format("io_key_{:08d}", i), std::make_pair(int64_t(1), IndexValue(i)));
+    }
+    uint64_t filesize = 0;
+    PersistentIndexSstableRangePB range_pb;
+    ASSERT_OK(PersistentIndexSstable::build_sstable(map, wf.get(), &filesize, &range_pb));
+    ASSERT_OK(wf->close());
+
+    ASSIGN_OR_ABORT(auto read_file, fs::new_random_access_file(lake::join_path(test_dir, filename)));
+    auto inner_stream = read_file->stream();
+    auto fake_stream = std::make_shared<FakeStatsInputStream>(inner_stream, mode);
+    auto wrapped_file = std::make_unique<RandomAccessFile>(fake_stream, read_file->filename());
+
+    auto sst = std::make_unique<PersistentIndexSstable>();
+    std::unique_ptr<Cache> cache(new_lru_cache(1024));
+    PersistentIndexSstablePB sstable_pb;
+    sstable_pb.set_filename(filename);
+    sstable_pb.set_filesize(filesize);
+    sstable_pb.mutable_range()->CopyFrom(range_pb);
+    sstable_pb.mutable_fileset_id()->CopyFrom(UniqueId::gen_uid().to_proto());
+    ASSERT_OK(sst->init(std::move(wrapped_file), sstable_pb, cache.get()));
+
+    std::vector<std::string> key_str(kN);
+    std::vector<Slice> keys(kN);
+    std::vector<IndexValue> values(kN, IndexValue(NullIndexValue));
+    KeyIndexSet key_indexes;
+    KeyIndexSet found;
+    for (int i = 0; i < kN; ++i) {
+        key_str[i] = fmt::format("io_key_{:08d}", i);
+        keys[i] = Slice(key_str[i]);
+        key_indexes.insert(i);
+    }
+
+    scoped_refptr<Trace> trace(new Trace);
+    {
+        ADOPT_TRACE(trace.get());
+        ASSERT_OK(sst->multi_get(keys.data(), key_indexes, -1, values.data(), &found));
+    }
+    ASSERT_EQ(found.size(), static_cast<size_t>(kN));
+
+    auto metrics = trace->metrics()->Get();
+    int64_t miss_cnt = find_trace_metric(metrics, "read_block_miss_cache_cnt");
+    int64_t local_bytes = find_trace_metric(metrics, "sstable_io_local_disk_bytes");
+    int64_t remote_bytes = find_trace_metric(metrics, "sstable_io_remote_bytes");
+    int64_t local_count = find_trace_metric(metrics, "sstable_io_count_local_disk");
+    int64_t remote_count = find_trace_metric(metrics, "sstable_io_count_remote");
+
+    // The sstable layer must have missed its in-memory block cache at least once for
+    // the new counters to mean anything; otherwise the case isn't exercising the path.
+    ASSERT_GT(miss_cnt, 0) << "MultiGet didn't trigger any sstable block file reads";
+
+    if (mode == FakeStatsInputStream::kAllRemote) {
+        EXPECT_EQ(0, local_bytes);
+        EXPECT_EQ(0, local_count);
+        EXPECT_GT(remote_bytes, 0);
+        EXPECT_GT(remote_count, 0);
+    } else {
+        EXPECT_GT(local_bytes, 0);
+        EXPECT_GT(local_count, 0);
+        EXPECT_EQ(0, remote_bytes);
+        EXPECT_EQ(0, remote_count);
+    }
+}
+
+} // namespace
+
+TEST_F(PersistentIndexSstableTest, test_multi_get_io_breakdown_local_disk) {
+    run_multi_get_io_breakdown_case(kTestDir, "io_breakdown_local.sst", FakeStatsInputStream::kAllLocal);
+}
+
+TEST_F(PersistentIndexSstableTest, test_multi_get_io_breakdown_remote) {
+    run_multi_get_io_breakdown_case(kTestDir, "io_breakdown_remote.sst", FakeStatsInputStream::kAllRemote);
+}
+
+// When the underlying stream exposes no NumericStatistics (the common shared-nothing
+// case), multi_get must still emit the new counters at zero rather than crash or skip
+// them entirely. This guards the nullptr-stats branch of take_index_sstable_io_snapshot.
+TEST_F(PersistentIndexSstableTest, test_multi_get_io_breakdown_no_stats) {
+    constexpr int kN = 16;
+    const std::string filename = "io_breakdown_no_stats.sst";
+    ASSIGN_OR_ABORT(auto wf, fs::new_writable_file(lake::join_path(kTestDir, filename)));
+    phmap::btree_map<std::string, IndexValueWithVer, std::less<>> map;
+    for (int i = 0; i < kN; ++i) {
+        map.emplace(fmt::format("ns_key_{:08d}", i), std::make_pair(int64_t(1), IndexValue(i)));
+    }
+    uint64_t filesize = 0;
+    PersistentIndexSstableRangePB range_pb;
+    ASSERT_OK(PersistentIndexSstable::build_sstable(map, wf.get(), &filesize, &range_pb));
+    ASSERT_OK(wf->close());
+
+    auto sst = std::make_unique<PersistentIndexSstable>();
+    ASSIGN_OR_ABORT(auto read_file, fs::new_random_access_file(lake::join_path(kTestDir, filename)));
+    std::unique_ptr<Cache> cache(new_lru_cache(1024));
+    PersistentIndexSstablePB sstable_pb;
+    sstable_pb.set_filename(filename);
+    sstable_pb.set_filesize(filesize);
+    sstable_pb.mutable_range()->CopyFrom(range_pb);
+    sstable_pb.mutable_fileset_id()->CopyFrom(UniqueId::gen_uid().to_proto());
+    ASSERT_OK(sst->init(std::move(read_file), sstable_pb, cache.get()));
+
+    std::vector<std::string> key_str(kN);
+    std::vector<Slice> keys(kN);
+    std::vector<IndexValue> values(kN, IndexValue(NullIndexValue));
+    KeyIndexSet key_indexes;
+    KeyIndexSet found;
+    for (int i = 0; i < kN; ++i) {
+        key_str[i] = fmt::format("ns_key_{:08d}", i);
+        keys[i] = Slice(key_str[i]);
+        key_indexes.insert(i);
+    }
+
+    scoped_refptr<Trace> trace(new Trace);
+    {
+        ADOPT_TRACE(trace.get());
+        ASSERT_OK(sst->multi_get(keys.data(), key_indexes, -1, values.data(), &found));
+    }
+    ASSERT_EQ(found.size(), static_cast<size_t>(kN));
+
+    auto metrics = trace->metrics()->Get();
+    EXPECT_EQ(0, find_trace_metric(metrics, "sstable_io_local_disk_bytes"));
+    EXPECT_EQ(0, find_trace_metric(metrics, "sstable_io_remote_bytes"));
+    EXPECT_EQ(0, find_trace_metric(metrics, "sstable_io_count_local_disk"));
+    EXPECT_EQ(0, find_trace_metric(metrics, "sstable_io_count_remote"));
+}
+
+// Schema contract: every field of IoStatsSnapshot must zero-initialize so the base
+// `InputStream::get_io_stats_snapshot()` default (`return {};`) yields an all-zero
+// snapshot and the trace counters degrade cleanly on streams that don't expose IO
+// breakdown. Loud, focused guard against someone later adding a field without a
+// default — TraceMetrics::Increment is a plain int64_t add, an uninitialized field
+// would silently leak whatever garbage was on the stack into the trace.
+TEST_F(PersistentIndexSstableTest, test_io_stats_snapshot_default_zeroed) {
+    io::IoStatsSnapshot snap{};
+    EXPECT_EQ(0, snap.bytes_read_local_disk);
+    EXPECT_EQ(0, snap.bytes_read_remote);
+    EXPECT_EQ(0, snap.bytes_write_local_disk);
+    EXPECT_EQ(0, snap.bytes_write_remote);
+    EXPECT_EQ(0, snap.io_count_local_disk);
+    EXPECT_EQ(0, snap.io_count_remote);
+    EXPECT_EQ(0, snap.io_ns_read_local_disk);
+    EXPECT_EQ(0, snap.io_ns_read_remote);
+    EXPECT_EQ(0, snap.io_ns_write_local_disk);
+    EXPECT_EQ(0, snap.io_ns_write_remote);
+    EXPECT_EQ(0, snap.prefetch_hit_count);
+    EXPECT_EQ(0, snap.prefetch_wait_finish_ns);
+    EXPECT_EQ(0, snap.prefetch_pending_ns);
+}
+
+// `multi_get`'s retry-after-corruption path can replace the underlying file mid-call.
+// When that happens the after-snapshot reads a fresh, all-zero counter set while
+// before-snapshot still holds the prior file's running totals — the naive delta is
+// negative. SwappingStatsInputStream simulates this by returning inflated values on
+// the first snapshot call and zero on subsequent calls. The trace metrics must stay
+// non-negative; without the `std::max<int64_t>(0, …)` clamp they would record the
+// negative delta directly via TraceMetrics::Increment (plain int64 add, no floor).
+TEST_F(PersistentIndexSstableTest, test_multi_get_io_breakdown_clamps_negative_delta) {
+    bool saved_parallel = config::enable_pk_index_parallel_execution;
+    config::enable_pk_index_parallel_execution = false;
+    DeferOp restore_parallel([&] { config::enable_pk_index_parallel_execution = saved_parallel; });
+
+    constexpr int kN = 16;
+    const std::string filename = "io_breakdown_clamp.sst";
+    ASSIGN_OR_ABORT(auto wf, fs::new_writable_file(lake::join_path(kTestDir, filename)));
+    phmap::btree_map<std::string, IndexValueWithVer, std::less<>> map;
+    for (int i = 0; i < kN; ++i) {
+        map.emplace(fmt::format("clamp_key_{:08d}", i), std::make_pair(int64_t(1), IndexValue(i)));
+    }
+    uint64_t filesize = 0;
+    PersistentIndexSstableRangePB range_pb;
+    ASSERT_OK(PersistentIndexSstable::build_sstable(map, wf.get(), &filesize, &range_pb));
+    ASSERT_OK(wf->close());
+
+    ASSIGN_OR_ABORT(auto read_file, fs::new_random_access_file(lake::join_path(kTestDir, filename)));
+    auto fake_stream = std::make_shared<SwappingStatsInputStream>(read_file->stream());
+    auto wrapped_file = std::make_unique<RandomAccessFile>(fake_stream, read_file->filename());
+
+    auto sst = std::make_unique<PersistentIndexSstable>();
+    std::unique_ptr<Cache> cache(new_lru_cache(1024));
+    PersistentIndexSstablePB sstable_pb;
+    sstable_pb.set_filename(filename);
+    sstable_pb.set_filesize(filesize);
+    sstable_pb.mutable_range()->CopyFrom(range_pb);
+    sstable_pb.mutable_fileset_id()->CopyFrom(UniqueId::gen_uid().to_proto());
+    ASSERT_OK(sst->init(std::move(wrapped_file), sstable_pb, cache.get()));
+
+    std::vector<std::string> key_str(kN);
+    std::vector<Slice> keys(kN);
+    std::vector<IndexValue> values(kN, IndexValue(NullIndexValue));
+    KeyIndexSet key_indexes;
+    KeyIndexSet found;
+    for (int i = 0; i < kN; ++i) {
+        key_str[i] = fmt::format("clamp_key_{:08d}", i);
+        keys[i] = Slice(key_str[i]);
+        key_indexes.insert(i);
+    }
+
+    scoped_refptr<Trace> trace(new Trace);
+    {
+        ADOPT_TRACE(trace.get());
+        ASSERT_OK(sst->multi_get(keys.data(), key_indexes, -1, values.data(), &found));
+    }
+    ASSERT_EQ(found.size(), static_cast<size_t>(kN));
+
+    auto metrics = trace->metrics()->Get();
+    // Inflated-before minus zero-after would be roughly -kInflatedBefore per counter
+    // if the clamp were removed. We assert non-negative — any positive residual
+    // (e.g., from MultiGet's own reads on the inner stream) is acceptable because
+    // SwappingStatsInputStream doesn't track real reads at all; it just produces
+    // a deterministic before>after pair.
+    EXPECT_GE(find_trace_metric(metrics, "sstable_io_local_disk_bytes"), 0);
+    EXPECT_GE(find_trace_metric(metrics, "sstable_io_remote_bytes"), 0);
+    EXPECT_GE(find_trace_metric(metrics, "sstable_io_count_local_disk"), 0);
+    EXPECT_GE(find_trace_metric(metrics, "sstable_io_count_remote"), 0);
+}
+
+namespace {
+
+// Minimal seekable stream whose `get_io_stats_snapshot()` returns a recognizable
+// sentinel. Used by the wrapper-forwarding test below to verify each wrapper
+// layer in the InputStream hierarchy passes the call straight to its inner.
+class SentinelSeekableStream : public io::SeekableInputStream {
+public:
+    static constexpr int64_t kSentinel = 0xC0DE;
+
+    StatusOr<int64_t> read(void* /*data*/, int64_t /*count*/) override { return 0; }
+    Status read_fully(void* /*data*/, int64_t /*count*/) override { return Status::OK(); }
+    Status seek(int64_t /*position*/) override { return Status::OK(); }
+    StatusOr<int64_t> position() override { return 0; }
+    StatusOr<int64_t> get_size() override { return 1; }
+
+    io::IoStatsSnapshot get_io_stats_snapshot() const override {
+        io::IoStatsSnapshot snap;
+        snap.bytes_read_local_disk = kSentinel;
+        return snap;
+    }
+};
+
+} // namespace
+
+// Trivial wrappers in the InputStream / SeekableInputStream hierarchy must pass
+// `get_io_stats_snapshot()` straight through to the wrapped stream — they are
+// 1-line forwarders and easy to break silently. This test wraps a sentinel-
+// emitting stream in each of:
+//   - io::InputStreamWrapper         (be/src/io/core/input_stream.h)
+//   - io::SeekableInputStreamWrapper (be/src/io/core/seekable_input_stream.h)
+//   - io::SharedBufferedInputStream  (be/src/io/shared_buffered_input_stream.h)
+//   - BundleSeekableInputStream      (be/src/fs/bundle_file.h)
+// and asserts the sentinel byte count survives the forward. CompressedInputStream
+// is left out because its constructor needs a real StreamDecompressor and the
+// forwarder there is the identical 1-liner pattern.
+TEST_F(PersistentIndexSstableTest, test_io_stats_snapshot_wrapper_forwarding) {
+    // InputStreamWrapper
+    {
+        auto sentinel = std::make_unique<SentinelSeekableStream>();
+        io::InputStreamWrapper w(std::unique_ptr<io::InputStream>(sentinel.release()));
+        EXPECT_EQ(SentinelSeekableStream::kSentinel, w.get_io_stats_snapshot().bytes_read_local_disk);
+    }
+    // SeekableInputStreamWrapper
+    {
+        auto sentinel = std::make_unique<SentinelSeekableStream>();
+        io::SeekableInputStreamWrapper w(std::move(sentinel));
+        EXPECT_EQ(SentinelSeekableStream::kSentinel, w.get_io_stats_snapshot().bytes_read_local_disk);
+    }
+    // SharedBufferedInputStream
+    {
+        auto sentinel = std::make_shared<SentinelSeekableStream>();
+        io::SharedBufferedInputStream w(sentinel, "" /*filename*/, 1 /*file_size*/);
+        EXPECT_EQ(SentinelSeekableStream::kSentinel, w.get_io_stats_snapshot().bytes_read_local_disk);
+    }
+    // BundleSeekableInputStream
+    {
+        auto sentinel = std::make_shared<SentinelSeekableStream>();
+        BundleSeekableInputStream w(sentinel, 0 /*offset*/, 1 /*size*/);
+        EXPECT_EQ(SentinelSeekableStream::kSentinel, w.get_io_stats_snapshot().bytes_read_local_disk);
     }
 }
 

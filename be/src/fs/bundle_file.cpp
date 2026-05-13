@@ -141,6 +141,10 @@ StatusOr<std::unique_ptr<io::NumericStatistics>> BundleSeekableInputStream::get_
     return _stream->get_numeric_statistics();
 }
 
+io::IoStatsSnapshot BundleSeekableInputStream::get_io_stats_snapshot() const {
+    return _stream->get_io_stats_snapshot();
+}
+
 const std::string& BundleSeekableInputStream::filename() const {
     return _stream->filename();
 }

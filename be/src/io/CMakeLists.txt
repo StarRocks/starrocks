@@ -21,6 +21,7 @@ ADD_BE_LIB(IOCore
         core/array_input_stream.cpp
         core/fd_input_stream.cpp
         core/fd_output_stream.cpp
+        core/input_stream.cpp
         core/io_profiler.cpp
         core/io_profiler_metrics.cpp
         core/readable.cpp
