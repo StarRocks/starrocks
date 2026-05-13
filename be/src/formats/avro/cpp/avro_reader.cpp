@@ -94,14 +94,25 @@ static bool try_read_byte(AvroBufferInputStream& s, uint8_t& b) {
 }
 
 static bool try_read_avro_long(AvroBufferInputStream& s, int64_t& out) {
+    constexpr int kMaxAvroLongBytes = 10;
     uint64_t n = 0;
     int shift = 0;
+    int bytes_read = 0;
     uint8_t b;
     if (!try_read_byte(s, b)) return false;
     for (;;) {
+        ++bytes_read;
+        if (bytes_read > kMaxAvroLongBytes || shift >= 64) {
+            throw avro::Exception("Avro long is too long");
+        }
+        if (shift == 63 && (b & 0x7F) > 1) {
+            throw avro::Exception("Avro long overflow");
+        }
+
         n |= static_cast<uint64_t>(b & 0x7F) << shift;
-        shift += 7;
         if (!(b & 0x80)) break;
+
+        shift += 7;
         if (!try_read_byte(s, b)) throw avro::Exception("truncated Avro long");
     }
     out = static_cast<int64_t>((n >> 1) ^ -(n & 1));
