@@ -43,10 +43,21 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.util.Map;
 import java.util.stream.Collectors;
 
 public class OAuth2Action extends RestBaseAction {
+    // Reuse a single HttpClient instance across all OAuth2 token exchanges.
+    // java.net.http.HttpClient is thread-safe and designed to be used as a singleton.
+    // Creating a new instance per request leaks FDs (selector epoll/eventfd/pipe + idle
+    // sockets) because the JDK 17 HttpClient has no close() method and relies on GC,
+    // which fails to keep up under sustained load. See: https://bugs.openjdk.org/browse/JDK-8277459
+    private static final HttpClient HTTP_CLIENT = HttpClient.newBuilder()
+            .connectTimeout(Duration.ofSeconds(5))
+            .version(HttpClient.Version.HTTP_1_1)
+            .build();
+
     public OAuth2Action(ActionController controller) {
         super(controller);
     }
@@ -137,14 +148,13 @@ public class OAuth2Action extends RestBaseAction {
                             URLEncoder.encode(entry.getValue().toString(), StandardCharsets.UTF_8))
                     .collect(Collectors.joining("&"));
 
-            HttpClient client = HttpClient.newHttpClient();
             HttpRequest request = HttpRequest.newBuilder()
                     .uri(URI.create(oAuth2Context.tokenServerUrl()))
                     .header("Content-Type", "application/x-www-form-urlencoded")
                     .POST(HttpRequest.BodyPublishers.ofString(requestBody))
                     .build();
 
-            response = client.send(request, HttpResponse.BodyHandlers.ofString());
+            response = HTTP_CLIENT.send(request, HttpResponse.BodyHandlers.ofString());
             if (response.statusCode() == 200) {
                 return response.body();
             } else {

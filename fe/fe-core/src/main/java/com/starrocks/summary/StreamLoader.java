@@ -31,6 +31,7 @@ import java.net.URISyntaxException;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
@@ -41,6 +42,17 @@ import java.util.Optional;
 
 class StreamLoader {
     private static final String LOAD_URL_PATTERN = "/api/%s/%s/_stream_load";
+
+    // Reuse a single HttpClient instance across all stream load batches.
+    // java.net.http.HttpClient is thread-safe and designed to be used as a singleton.
+    // Creating a new instance per batch leaks FDs (selector epoll/eventfd/pipe + idle
+    // sockets) because the JDK 17 HttpClient has no close() method and relies on GC,
+    // which fails to keep up under sustained periodic load.
+    private static final HttpClient HTTP_CLIENT = HttpClient.newBuilder()
+            .connectTimeout(Duration.ofSeconds(5))
+            .version(HttpClient.Version.HTTP_1_1)
+            .build();
+
     private final String loadUrlStr;
 
     private final List<String> columns;
@@ -77,8 +89,7 @@ class StreamLoader {
                 .PUT(HttpRequest.BodyPublishers.ofString(sb))
                 .build();
 
-        HttpClient client = HttpClient.newHttpClient();
-        HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+        HttpResponse<String> response = HTTP_CLIENT.send(request, HttpResponse.BodyHandlers.ofString());
 
         if (response.statusCode() == HttpStatus.SC_OK) {
             JsonElement obj = JsonParser.parseString(response.body());
