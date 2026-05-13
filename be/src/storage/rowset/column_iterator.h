@@ -131,6 +131,8 @@ public:
 
     virtual ordinal_t get_current_ordinal() const = 0;
 
+    virtual bool only_nulls() const { return false; }
+
     virtual bool has_zone_map() const { return false; }
 
     /// Store the row ranges that satisfy the given predicates into |row_ranges|.
