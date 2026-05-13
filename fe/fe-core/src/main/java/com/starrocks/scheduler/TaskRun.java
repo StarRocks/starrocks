@@ -32,6 +32,7 @@ import com.starrocks.catalog.UserIdentity;
 import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
@@ -264,10 +265,29 @@ public class TaskRun implements Comparable<TaskRun> {
 
             Warehouse w = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(
                     materializedView.getWarehouseId());
-            newProperties.put(PROPERTIES_WAREHOUSE, w.getName());
+            String warehouseName = w.getName();
+
+            // Auto-route MV refresh to the configured write warehouse when enabled.
+            if (Config.enable_warehouse_auto_routing && !Strings.isNullOrEmpty(Config.warehouse_route_write)) {
+                if (GlobalStateMgr.getCurrentState().getWarehouseMgr().warehouseExists(Config.warehouse_route_write)) {
+                    warehouseName = Config.warehouse_route_write;
+                    LOG.info("auto-routed MV refresh (mvId={}) to warehouse {}", mvId, warehouseName);
+                } else {
+                    LOG.warn("warehouse_route_write '{}' does not exist, using MV's assigned warehouse '{}'",
+                            Config.warehouse_route_write, warehouseName);
+                }
+            }
+
+            newProperties.put(PROPERTIES_WAREHOUSE, warehouseName);
 
             // set current warehouse
-            ctx.setCurrentWarehouse(w.getName());
+            ctx.setCurrentWarehouse(warehouseName);
+        } catch (ErrorReportException e) {
+            // Warehouse no longer exists — propagate so the refresh fails with a clear error
+            // rather than silently running in the wrong warehouse.
+            LOG.warn("Warehouse assigned to materialized view (id={}) no longer exists, " +
+                    "aborting refresh: {}", task.getProperties().get(MV_ID), e.getMessage());
+            throw e;
         } catch (Exception e) {
             LOG.warn("refresh task properties failed:", e);
         }

@@ -176,6 +176,7 @@ import com.starrocks.sql.ast.AnalyzeProfileStmt;
 import com.starrocks.sql.ast.AnalyzeStmt;
 import com.starrocks.sql.ast.AnalyzeTypeDesc;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
+import com.starrocks.sql.ast.CreateRoutineLoadStmt;
 import com.starrocks.sql.ast.CreateTableAsSelectStmt;
 import com.starrocks.sql.ast.CreateTemporaryTableAsSelectStmt;
 import com.starrocks.sql.ast.CreateTemporaryTableStmt;
@@ -713,6 +714,21 @@ public class StmtExecutor {
         return parsedStmt instanceof DmlStmt || parsedStmt instanceof CreateTableAsSelectStmt;
     }
 
+    /**
+     * Returns true if the statement is a write operation that should be auto-routed
+     * to the write warehouse when warehouse auto-routing is enabled.
+     * Covers: INSERT, UPDATE, DELETE, CTAS, MV create/refresh, LOAD, ANALYZE.
+     */
+    static boolean isWriteStmt(StatementBase stmt) {
+        return stmt instanceof DmlStmt
+                || stmt instanceof CreateTableAsSelectStmt
+                || stmt instanceof CreateMaterializedViewStatement
+                || stmt instanceof RefreshMaterializedViewStatement
+                || stmt instanceof LoadStmt
+                || stmt instanceof CreateRoutineLoadStmt
+                || stmt instanceof AnalyzeStmt;
+    }
+
     public Pair<String, Integer> getTableQueryTimeoutInfo() {
         if (tableQueryTimeoutTableName != null && tableQueryTimeoutValue > 0) {
             return Pair.create(tableQueryTimeoutTableName, tableQueryTimeoutValue);
@@ -953,6 +969,24 @@ public class StmtExecutor {
             context.getState().setIsQuery(context.isQueryStmt(parsedStmt));
             if (parsedStmt.isExistQueryScopeHint()) {
                 processQueryScopeHint();
+            }
+
+            // Auto-route write operations to a dedicated warehouse when enabled.
+            // Per-query hints take priority (already applied above).
+            // Clone session variable before modifying so the backup restore in finally
+            // reverts to the original warehouse.
+            if (Config.enable_warehouse_auto_routing && !parsedStmt.isExistQueryScopeHint() && isWriteStmt(parsedStmt)) {
+                String targetWarehouse = Config.warehouse_route_write;
+                if (!Strings.isNullOrEmpty(targetWarehouse) &&
+                        GlobalStateMgr.getCurrentState().getWarehouseMgr().warehouseExists(targetWarehouse)) {
+                    SessionVariable cloned = (SessionVariable) context.getSessionVariable().clone();
+                    context.setSessionVariable(cloned);
+                    context.setCurrentWarehouse(targetWarehouse);
+                    LOG.info("auto-routed write stmt queryId={} to warehouse {}",
+                            DebugUtil.printId(context.getQueryId()), targetWarehouse);
+                } else if (!Strings.isNullOrEmpty(targetWarehouse)) {
+                    LOG.warn("warehouse_route_write '{}' does not exist, skipping auto-routing", targetWarehouse);
+                }
             }
 
             // set warehouse for auditLog

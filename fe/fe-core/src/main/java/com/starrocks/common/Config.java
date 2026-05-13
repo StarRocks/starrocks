@@ -3374,6 +3374,17 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static String lake_background_warehouse = "default_warehouse";
 
+    @ConfField(mutable = true, comment = "Enable automatic warehouse routing for write operations. " +
+            "When enabled, write statements (INSERT, CTAS, MV create/refresh, LOAD, ANALYZE) are " +
+            "automatically routed to the warehouse specified by warehouse_route_write. " +
+            "Read queries and other statements use the session's current warehouse. " +
+            "Per-query hints /*+ SET_VAR(warehouse='x') */ always take priority over auto-routing.")
+    public static boolean enable_warehouse_auto_routing = false;
+
+    @ConfField(mutable = true, comment = "Target warehouse for write operations when enable_warehouse_auto_routing is true. " +
+            "Applies to INSERT INTO, CREATE TABLE AS SELECT, CREATE/REFRESH MATERIALIZED VIEW, LOAD, and ANALYZE statements.")
+    public static String warehouse_route_write = "default_warehouse";
+
     @ConfField(mutable = true)
     public static String lake_vector_index_build_warehouse = "default_warehouse";
 
