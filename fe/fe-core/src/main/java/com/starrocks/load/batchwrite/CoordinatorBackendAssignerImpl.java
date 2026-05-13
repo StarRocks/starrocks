@@ -149,6 +149,17 @@ public final class CoordinatorBackendAssignerImpl implements CoordinatorBackendA
                 return;
             }
         }
+        // Now that the schedule loop has terminated, drop the leader-session state it owned.
+        // BatchWriteMgr.onStopped() pushes async UNREGISTER_LOAD tasks for each merge-commit
+        // job before calling stop(), but those tasks are discarded by shutdownNow(); without
+        // an explicit clear here, warehouseMetas / registeredLoadMetas / taskPriorityQueue
+        // would survive into the next leader session and let stale load ownership leak into
+        // new backend assignments. Safe to mutate without further locking because the only
+        // writer (runSchedule) has just terminated.
+        taskPriorityQueue.clear();
+        registeredLoadMetas.clear();
+        warehouseMetas.clear();
+        numPendingTasksForDetectUnavailableNodes.set(0);
     }
 
     /**

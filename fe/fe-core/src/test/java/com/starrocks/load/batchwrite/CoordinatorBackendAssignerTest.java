@@ -309,6 +309,43 @@ public class CoordinatorBackendAssignerTest extends BatchWriteTestBase {
     }
 
     @Test
+    public void testStopClearsAssignerStateForLeaderHandoff() throws Exception {
+        // BatchWriteMgr.onStopped() pushes async UNREGISTER_LOAD tasks for each merge-commit
+        // job, but stop() then drops the queue via shutdownNow() before they run. To keep
+        // leader-session load ownership from leaking into the next leader, stop() must
+        // synchronously clear warehouseMetas / registeredLoadMetas / taskPriorityQueue after
+        // the worker terminates.
+        registerBatchWrite(1L, 1, new TableId(DB_NAME_1, TABLE_NAME_1_1), 1);
+        registerBatchWrite(2L, 1, new TableId(DB_NAME_1, TABLE_NAME_1_2), 1);
+        Awaitility.await().timeout(5, TimeUnit.SECONDS)
+                .until(() -> assigner.getBackends(1L).isPresent()
+                        && assigner.getBackends(2L).isPresent());
+        assertNotNull(getWarehouseMeta(1));
+
+        assigner.stop();
+        Awaitility.await().timeout(5, TimeUnit.SECONDS).until(readSingleExecutor()::isTerminated);
+
+        // After stop returns, all leader-session collections must be empty so a freshly
+        // re-elected leader starts with a clean assigner.
+        @SuppressWarnings("unchecked")
+        java.util.Map<Long, ?> registeredLoadMetas =
+                (java.util.Map<Long, ?>) readPrivateField("registeredLoadMetas");
+        java.util.Map<?, ?> warehouseMetasMap =
+                (java.util.Map<?, ?>) readPrivateField("warehouseMetas");
+        java.util.concurrent.PriorityBlockingQueue<?> queue =
+                (java.util.concurrent.PriorityBlockingQueue<?>) readPrivateField("taskPriorityQueue");
+        assertTrue(registeredLoadMetas.isEmpty(), "registeredLoadMetas must be cleared on stop");
+        assertTrue(warehouseMetasMap.isEmpty(), "warehouseMetas must be cleared on stop");
+        assertTrue(queue.isEmpty(), "taskPriorityQueue must be cleared on stop");
+    }
+
+    private Object readPrivateField(String name) throws Exception {
+        java.lang.reflect.Field field = CoordinatorBackendAssignerImpl.class.getDeclaredField(name);
+        field.setAccessible(true);
+        return field.get(assigner);
+    }
+
+    @Test
     public void testStartRefusesWhenPreviousWorkerNotTerminated() throws Exception {
         // Inject a shutdown-but-not-terminated executor to mimic a stop() that timed out
         // because the worker was stuck. start() must refuse rather than spinning up a
