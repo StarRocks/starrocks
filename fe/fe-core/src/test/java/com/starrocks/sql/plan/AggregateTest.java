@@ -2659,6 +2659,69 @@ public class AggregateTest extends PlanTestBase {
     }
 
     @Test
+    public void testPercentileApproxSplitFromOtherAggregates() throws Exception {
+        String sql = "select count(v1), sum(v2), percentile_approx(v3, 0.5) " +
+                "from t0 group by v3 limit 10";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "HASH JOIN");
+        assertContains(plan, "percentile_approx");
+    }
+
+    @Test
+    public void testPercentileApproxWeightedSplitFromOtherAggregates() throws Exception {
+        String sql = "select count(v1), percentile_approx_weighted(v3, v2, 0.5) " +
+                "from t0 group by v3 limit 10";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "HASH JOIN");
+        assertContains(plan, "percentile_approx_weighted");
+    }
+
+    @Test
+    public void testGlobalPercentileApproxSplitFromOtherAggregates() throws Exception {
+        String sql = "select count(v1), percentile_approx(v3, 0.5) from t0";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "NESTLOOP JOIN");
+        assertContains(plan, "join op: CROSS JOIN");
+        assertContains(plan, "percentile_approx");
+    }
+
+    @Test
+    public void testGlobalCountStarPercentileApproxSplitFromOtherAggregates() throws Exception {
+        String sql = "select count(*), percentile_approx(v3, 0.5) from t0";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "NESTLOOP JOIN");
+        assertContains(plan, "join op: CROSS JOIN");
+        assertContains(plan, "percentile_approx");
+    }
+
+    @Test
+    public void testPercentileApproxSplitKeepsHavingPredicate() throws Exception {
+        String sql = "select v3, count(v1), percentile_approx(v2, 0.5) " +
+                "from t0 group by v3 having count(v1) > 1 and percentile_approx(v2, 0.5) > 1";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "HASH JOIN");
+        assertContains(plan, "having: 4: count > 1");
+        assertContains(plan, "having: 5: percentile_approx > 1.0");
+    }
+
+    @Test
+    public void testPercentileApproxOnlyDoesNotSplit() throws Exception {
+        String sql = "select percentile_approx(v3, 0.5) from t0 group by v3 limit 10";
+        String plan = getFragmentPlan(sql);
+        assertNotContains(plan, "HASH JOIN");
+        assertContains(plan, "percentile_approx");
+    }
+
+    @Test
+    public void testMultiDistinctWithPercentileApproxSplitsPercentileAggregate() throws Exception {
+        String sql = "select count(distinct v1), count(distinct v2), percentile_approx(v3, 0.5) " +
+                "from t0 group by v3 limit 10";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "HASH JOIN");
+        assertContains(plan, "percentile_approx");
+    }
+
+    @Test
     public void testOrderByWithAgg() throws Exception {
         String sql = "select round(count(t1e) * 100.0 / min(t1f), 4) as potential_customer_rate, " +
                 "min(t1f) as t1f, min(t1f) as t1f from test_all_type_not_null " +
