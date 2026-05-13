@@ -9,7 +9,7 @@ This topic describes how to manage query queues in StarRocks.
 
 From v2.5, StarRocks supports query queues. With query queues enabled, StarRocks automatically queues the incoming queries when the concurrency threshold or resource limit is reached, thereby avoiding the overload deteriorating. Pending queries wait in a queue until there is enough compute resources available to begin execution.
 
-Query queues have two versions:
+The Query Queue feature has two versions:
 
 - **Query Queue v1**: Triggers queuing based on query concurrency, BE memory usage, and BE CPU usage. The original query queue configurations and behaviors in this topic belong to v1. From v3.1.4 onwards, v1 supports setting query queues on the resource group level.
 - **Query Queue v2**: Supported from v3.3 onwards. v2 estimates the BE resources consumed by each query, represents BE resources as logical slots, and queues and schedules queries based on the number of slots each query needs.
@@ -73,13 +73,10 @@ You can set the thresholds that trigger query queues via the following global se
 
 :::note
 
-These three threshold parameters apply only to Query Queue v1. After Query Queue v2 is enabled, `query_queue_concurrency_limit`, `query_queue_mem_used_pct_limit`, and `query_queue_cpu_used_permille_limit` are no longer supported for triggering queuing.
+- These three threshold parameters apply only to Query Queue v1. After Query Queue v2 is enabled, `query_queue_concurrency_limit`, `query_queue_mem_used_pct_limit`, and `query_queue_cpu_used_permille_limit` are no longer supported for queue triggering.
+- By default, BE reports resource usage to FE at one-second intervals. You can change this interval by setting the BE configuration item `report_resource_usage_interval_ms`.
 
 :::
-
-> **NOTE**
->
-> By default, BE reports resource usage to FE at one-second intervals. You can change this interval by setting the BE configuration item `report_resource_usage_interval_ms`.
 
 #### Specify resource thresholds for resource group-level query queues
 
@@ -127,7 +124,7 @@ You can configure the dynamic adjustment of query concurrency `pipeline_dop` usi
 
 ## Query Queue v2
 
-From v3.3 onwards, StarRocks supports Query Queue v2. v2 no longer triggers queuing based on fixed thresholds for query concurrency, BE memory usage, or BE CPU usage. Instead, it estimates the BE resources required by each query and queues and schedules queries based on logical slots.
+From v3.3 onwards, StarRocks supports Query Queue v2. In Query Queue v2, query queues are no longer triggered based on fixed thresholds for query concurrency, BE memory usage, or BE CPU usage. Instead, it estimates the BE resources required by each query and queues and schedules queries based on logical slots.
 
 ### Configure Query Queue v2
 
