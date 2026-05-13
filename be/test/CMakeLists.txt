@@ -79,6 +79,11 @@ set(EXEC_FILES
         ./exec/pipeline/local_bucket_shuffle_test.cpp
         ./exec/pipeline/mem_limited_chunk_queue_test.cpp
         ./exec/pipeline/exec_group_test.cpp
+<<<<<<< HEAD
+=======
+        ./exec/pipeline/fragment_executor_test.cpp
+        ./exec/pipeline/glm_manager_tablet_adaptor_test.cpp
+>>>>>>> f1fc89ddf8 ([BugFix] Fix Hive partition descriptor UAF across fragment teardown (#73176))
         ./exec/pipeline/scan/physical_split_morsel_queue_test.cpp
         ./exec/query_cache/query_cache_test.cpp
         ./exec/query_cache/transform_operator.cpp
