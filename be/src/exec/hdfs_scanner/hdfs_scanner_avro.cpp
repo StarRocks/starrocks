@@ -45,10 +45,22 @@ Status HdfsAvroScanner::do_open(RuntimeState* state) {
     RETURN_IF_ERROR(open_random_access_file());
     auto input_stream = std::make_unique<AvroBufferInputStream>(_file.get(), config::avro_reader_buffer_size_bytes,
                                                                 &_scanner_counter);
+
+    // Extract split boundaries from the scan range so the reader honours split-level
+    // parallelism.  FE marks AVRO as splittable; without these boundaries every split
+    // scanner would read the whole file and produce duplicated rows.
+    int64_t split_offset = 0;
+    int64_t split_length = 0;
+    if (_scanner_params.scan_range != nullptr) {
+        split_offset = _scanner_params.scan_range->offset;
+        split_length = _scanner_params.scan_range->length;
+    }
+
     _avro_reader = std::make_unique<AvroReader>();
     return _avro_reader->init(std::move(input_stream), _scanner_params.path, state, &_scanner_counter,
                               &_materialize_slot_descs, &_column_readers,
-                              /*col_not_found_as_null=*/true, _file.get(), config::avro_reader_buffer_size_bytes);
+                              /*col_not_found_as_null=*/true, _file.get(), config::avro_reader_buffer_size_bytes,
+                              split_offset, split_length);
 }
 
 Status HdfsAvroScanner::do_get_next(RuntimeState* state, ChunkPtr* chunk) {

@@ -77,10 +77,20 @@ public:
     // raw_file and buffer_size are optional; when provided and no columns are needed
     // (count(*) path), records are counted by reading only Avro block headers — no
     // decompression — which is much faster than record-level decoding.
+    //
+    // split_offset / split_length: when non-zero the reader operates in split mode.
+    //   - init() calls DataFileReader::sync(split_offset), which advances to the first
+    //     sync marker at or after split_offset.  This is the same strategy used by
+    //     Hadoop's AvroInputFormat.
+    //   - read_chunk() stops once DataFileReader::pastSync(split_offset + split_length)
+    //     returns true, i.e. once the reader has passed the end of the split.
+    // When split_offset == 0 the reader starts from the beginning of the file (first
+    // split or unsplit scan), and split_length == 0 means "read to end of file".
     Status init(std::unique_ptr<avro::InputStream> input_stream, const std::string& filename, RuntimeState* state,
                 ScannerCounter* counter, const std::vector<SlotDescriptor*>* slot_descs,
                 const std::vector<avrocpp::ColumnReaderUniquePtr>* column_readers, bool col_not_found_as_null,
-                RandomAccessFile* raw_file = nullptr, size_t buffer_size = 0);
+                RandomAccessFile* raw_file = nullptr, size_t buffer_size = 0, int64_t split_offset = 0,
+                int64_t split_length = 0);
 
     void TEST_init(const std::vector<SlotDescriptor*>* slot_descs,
                    const std::vector<avrocpp::ColumnReaderUniquePtr>* column_readers, bool col_not_found_as_null);
@@ -115,6 +125,10 @@ private:
     // -1 means not precomputed; >= 0 means read_chunk() drains from here without file IO.
     int64_t _total_count = -1;
     int64_t _count_remaining = 0;
+
+    // Split end position (exclusive byte offset).  0 means "read to end of file".
+    // read_chunk() stops once _file_reader->pastSync(_split_end) is true.
+    int64_t _split_end = 0;
 };
 
 using AvroReaderUniquePtr = std::unique_ptr<AvroReader>;

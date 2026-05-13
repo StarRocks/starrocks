@@ -141,7 +141,9 @@ static void skip_avro_metadata(AvroBufferInputStream& s) {
     }
 }
 
-static int64_t count_avro_blocks(RandomAccessFile* file, size_t buffer_size, ScannerCounter* counter) {
+static int64_t count_avro_blocks(RandomAccessFile* file, size_t buffer_size, ScannerCounter* counter,
+                                 int64_t split_offset, int64_t split_end) {
+    // Always read the file header from byte 0 to get the sync marker.
     auto st = file->seek(0);
     if (!st.ok()) throw avro::Exception("seek failed: " + st.to_string());
 
@@ -157,11 +159,48 @@ static int64_t count_avro_blocks(RandomAccessFile* file, size_t buffer_size, Sca
     uint8_t sync[avro::SyncSize];
     read_exact(stream, sync, avro::SyncSize);
 
+    // If split_offset > 0, reuse the same sync-scan logic as DataFileReaderBase::sync():
+    // seek to split_offset then slide forward one byte at a time until we match the sync marker.
+    if (split_offset > 0 && static_cast<int64_t>(stream.byteCount()) < split_offset) {
+        stream.seek(split_offset);
+        std::vector<uint8_t> window(avro::SyncSize, 0);
+        size_t filled = 0;
+        while (filled < static_cast<size_t>(avro::SyncSize)) {
+            const uint8_t* p;
+            size_t len;
+            if (!stream.next(&p, &len)) return 0;
+            size_t take = std::min(len, static_cast<size_t>(avro::SyncSize) - filled);
+            memcpy(window.data() + filled, p, take);
+            filled += take;
+            if (take < len) stream.backup(len - take);
+        }
+        bool found = false;
+        for (;;) {
+            if (memcmp(window.data(), sync, avro::SyncSize) == 0) {
+                found = true;
+                break;
+            }
+            uint8_t b;
+            if (!try_read_byte(stream, b)) break;
+            memmove(window.data(), window.data() + 1, avro::SyncSize - 1);
+            window[avro::SyncSize - 1] = b;
+        }
+        if (!found) return 0;
+    }
+
     int64_t total = 0;
     int64_t obj_count;
     while (try_read_avro_long(stream, obj_count)) {
         int64_t byte_count;
         if (!try_read_avro_long(stream, byte_count)) throw avro::Exception("truncated block header");
+
+        // Stop if we have moved past the split end.  The boundary check uses the position
+        // after reading both varints, which corresponds to DataFileReaderBase::previousSync()
+        // semantics (the sync marker that introduced this block is at a position <= split_end).
+        if (split_end > 0 && static_cast<int64_t>(stream.byteCount()) > split_end) {
+            break;
+        }
+
         stream.skip(static_cast<size_t>(byte_count));
 
         uint8_t block_sync[avro::SyncSize];
@@ -250,7 +289,7 @@ AvroReader::~AvroReader() {
 Status AvroReader::init(std::unique_ptr<avro::InputStream> input_stream, const std::string& filename,
                         RuntimeState* state, ScannerCounter* counter, const std::vector<SlotDescriptor*>* slot_descs,
                         const std::vector<avrocpp::ColumnReaderUniquePtr>* column_readers, bool col_not_found_as_null,
-                        RandomAccessFile* raw_file, size_t buffer_size) {
+                        RandomAccessFile* raw_file, size_t buffer_size, int64_t split_offset, int64_t split_length) {
     if (_is_inited) {
         return Status::OK();
     }
@@ -297,12 +336,23 @@ Status AvroReader::init(std::unique_ptr<avro::InputStream> input_stream, const s
         const auto& effective_schema = using_projection ? _file_reader->readerSchema() : writer_schema;
         _datum = std::make_unique<avro::GenericDatum>(effective_schema);
 
+        // Split handling.
+        // DataFileReader::sync(pos) advances to the first sync marker at or after pos,
+        // which is exactly the same strategy used by Hadoop's AvroInputFormat.
+        // split_offset == 0 means "start of file" — leave the reader positioned after
+        // the file header as opened above (no extra seek needed).
+        if (split_offset > 0) {
+            _file_reader->sync(split_offset);
+        }
+        // split_end > 0 enables the pastSync() check in read_chunk().
+        _split_end = (split_length > 0) ? split_offset + split_length : 0;
+
         // When no columns are needed (count(*) path), count records by reading only
-        // Avro block headers — no decompression. raw_file seeks back to 0 independently
-        // of the stream owned by _file_reader; _file_reader is never read in this path.
+        // Avro block headers — no decompression. raw_file is used independently of
+        // the stream owned by _file_reader; _file_reader is never read in this path.
         if (_num_of_columns_from_file == 0 && raw_file != nullptr) {
             try {
-                _total_count = count_avro_blocks(raw_file, buffer_size, counter);
+                _total_count = count_avro_blocks(raw_file, buffer_size, counter, split_offset, _split_end);
                 _count_remaining = _total_count;
             } catch (const avro::Exception&) {
                 // fall back to record-level reading if block counting fails
@@ -386,6 +436,13 @@ Status AvroReader::read_chunk(ChunkPtr& chunk, int rows_to_read, int64_t* rows_c
     try {
         int64_t row_count = 0;
         while (rows_to_read > 0 && _file_reader->read(*_datum)) {
+            // Stop once we have passed the split boundary.  pastSync() returns true
+            // when previousSync() (the sync marker before the current block) is past
+            // the given position, which mirrors the AvroInputFormat split boundary check.
+            if (_split_end > 0 && _file_reader->pastSync(_split_end)) {
+                break;
+            }
+
             auto num_rows = chunk->num_rows();
 
             DCHECK(_datum->type() == avro::AVRO_RECORD);
