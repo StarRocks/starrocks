@@ -173,6 +173,7 @@ public class AsyncTaskQueue<T> {
                 outputQueueSize.addAndGet(-size);
             }
         } catch (InterruptedException e) {
+            hasMoreOutput = false;
             Thread.currentThread().interrupt();
             LOG.warn("Thread interrupted while waiting for outputs in AsyncTaskQueue", e);
         } finally {
