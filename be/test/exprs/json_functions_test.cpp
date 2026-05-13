@@ -36,12 +36,9 @@
 #include "gtest/gtest-param-test.h"
 #include "gutil/casts.h"
 #include "gutil/strings/strip.h"
-<<<<<<< HEAD
-#include "testutil/assert.h"
-=======
 #include "runtime/runtime_state.h"
+#include "testutil/assert.h"
 #include "types/json_value.h"
->>>>>>> cb7d9b5e3e ([BugFix] Respect ALLOW_THROW_EXCEPTION in get_json_string (#73199))
 #include "types/logical_type.h"
 #include "util/defer_op.h"
 #include "util/json.h"
