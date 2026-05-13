@@ -33,7 +33,7 @@ Release date: May 13, 2026
 ### Behavior Changes
 
 - `SHOW CREATE TABLE` and `DESC` now show Primary Keys for Paimon tables. [#70535](https://github.com/StarRocks/starrocks/pull/70535)
-- Loading into insert-only ACID Hive tables in Hive catalogs via INSERT is now disabled. [#71460](https://github.com/StarRocks/starrocks/pull/71460)
+- Disallowed INSERT into insert-only ACID Hive tables in Hive catalogs. [#71460](https://github.com/StarRocks/starrocks/pull/71460)
 - `START_TIME` and `END_TIME` in Profile are now displayed using the session time zone. [#71429](https://github.com/StarRocks/starrocks/pull/71429)
 
 ### Improvements
