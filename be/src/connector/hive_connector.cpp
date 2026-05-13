@@ -23,6 +23,7 @@
 #include "common/config_scan_io_fwd.h"
 #include "connector/hive_chunk_sink.h"
 #include "exec/hdfs_scanner/cache_select_scanner.h"
+#include "exec/hdfs_scanner/hdfs_scanner_avro.h"
 #include "exec/hdfs_scanner/hdfs_scanner_json.h"
 #include "exec/hdfs_scanner/hdfs_scanner_orc.h"
 #include "exec/hdfs_scanner/hdfs_scanner_parquet.h"
@@ -934,8 +935,12 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
         } else {
             scanner = new HdfsTextScanner();
         }
-    } else if ((format == THdfsFileFormat::AVRO || format == THdfsFileFormat::RC_FILE ||
-                format == THdfsFileFormat::RC_TEXT || format == THdfsFileFormat::SEQUENCE_FILE) &&
+    } else if (format == THdfsFileFormat::AVRO &&
+               (dynamic_cast<const HdfsTableDescriptor*>(_hive_table) != nullptr ||
+                dynamic_cast<const FileTableDescriptor*>(_hive_table) != nullptr)) {
+        scanner = new HdfsAvroScanner();
+    } else if ((format == THdfsFileFormat::RC_FILE || format == THdfsFileFormat::RC_TEXT ||
+                format == THdfsFileFormat::SEQUENCE_FILE) &&
                (dynamic_cast<const HdfsTableDescriptor*>(_hive_table) != nullptr ||
                 dynamic_cast<const FileTableDescriptor*>(_hive_table) != nullptr)) {
         // THdfsFileFormat::RC_TEXT is deprecated. RCText and RCBinary are both mapped to RC_FILE in the frontend.

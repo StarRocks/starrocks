@@ -1,0 +1,119 @@
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+#include "exec/hdfs_scanner/hdfs_scanner_avro.h"
+
+#include <fmt/format.h>
+
+#include "column/adaptive_nullable_column.h"
+#include "column/chunk.h"
+#include "column/column_helper.h"
+#include "common/config_scan_io_fwd.h"
+#include "exprs/chunk_predicate_evaluator.h"
+#include "runtime/runtime_state.h"
+#include "util/timezone_utils.h"
+
+namespace starrocks {
+
+Status HdfsAvroScanner::do_init(RuntimeState* state, const HdfsScannerParams& /*params*/) {
+    if (!TimezoneUtils::find_cctz_time_zone(state->timezone(), _timezone)) {
+        return Status::InvalidArgument(fmt::format("Cannot find cctz time zone: {}", state->timezone()));
+    }
+
+    for (const auto& col : _scanner_ctx.materialized_columns) {
+        _materialize_slot_descs.push_back(col.slot_desc);
+        _column_readers.push_back(avrocpp::ColumnReader::get_nullable_column_reader(
+                col.slot_desc->col_name(), col.slot_desc->slot_type(), _timezone, /*null_as_error=*/false));
+    }
+    return Status::OK();
+}
+
+Status HdfsAvroScanner::do_open(RuntimeState* state) {
+    RETURN_IF_ERROR(open_random_access_file());
+
+    auto input_stream = std::make_unique<AvroBufferInputStream>(_file, config::avro_reader_buffer_size_bytes,
+                                                                &_scanner_counter);
+    _avro_reader = std::make_unique<AvroReader>();
+    RETURN_IF_ERROR(_avro_reader->init(std::move(input_stream), _scanner_params.path, state, &_scanner_counter,
+                                       &_materialize_slot_descs, &_column_readers,
+                                       /*col_not_found_as_null=*/true));
+    return Status::OK();
+}
+
+Status HdfsAvroScanner::do_get_next(RuntimeState* state, ChunkPtr* chunk) {
+    CHECK(chunk != nullptr);
+    ChunkPtr& ck = *chunk;
+
+    // Build a temporary chunk with only the materialized (Avro) columns.
+    auto avro_chunk = std::make_shared<Chunk>();
+    for (size_t i = 0; i < _scanner_ctx.materialized_columns.size(); i++) {
+        const auto& col_info = _scanner_ctx.materialized_columns[i];
+        auto column = ColumnHelper::create_column(col_info.slot_desc->slot_type(), true, false, 0, true);
+        avro_chunk->append_column(std::move(column), col_info.slot_desc->id());
+    }
+
+    Status st = _avro_reader->read_chunk(avro_chunk, state->chunk_size());
+    if (!st.ok() && !st.is_end_of_file()) {
+        return st;
+    }
+    if (avro_chunk->is_empty()) {
+        return Status::EndOfFile("no more avro data");
+    }
+
+    // Convert AdaptiveNullableColumn → NullableColumn.
+    _materialize_nullable_columns(avro_chunk);
+
+    size_t row_count = avro_chunk->num_rows();
+    _app_stats.raw_rows_read += row_count;
+
+    // Merge materialized columns into the output chunk.
+    for (size_t i = 0; i < _scanner_ctx.materialized_columns.size(); i++) {
+        const auto& col_info = _scanner_ctx.materialized_columns[i];
+        ck->append_or_update_column(avro_chunk->get_column_by_slot_id(col_info.slot_desc->id()),
+                                    col_info.slot_desc->id());
+    }
+    ck->set_num_rows(row_count);
+
+    // Fill partition and extended constant columns.
+    _scanner_ctx.append_or_update_partition_column_to_chunk(&ck, row_count);
+    _scanner_ctx.append_or_update_extended_column_to_chunk(&ck, row_count);
+
+    // Post-read row-level conjunct evaluation (Avro has no block statistics for pushdown).
+    for (auto& it : _scanner_ctx.conjunct_ctxs_by_slot) {
+        SCOPED_RAW_TIMER(&_app_stats.expr_filter_ns);
+        RETURN_IF_ERROR(ChunkPredicateEvaluator::eval_conjuncts(it.second, ck.get()));
+        if (ck->num_rows() == 0) {
+            break;
+        }
+    }
+
+    _app_stats.rows_read += ck->num_rows();
+    return Status::OK();
+}
+
+void HdfsAvroScanner::do_close(RuntimeState* /*state*/) noexcept {
+    _avro_reader.reset();
+}
+
+void HdfsAvroScanner::_materialize_nullable_columns(ChunkPtr& chunk) {
+    chunk->materialized_nullable();
+    for (int i = 0; i < chunk->num_columns(); i++) {
+        auto* adaptive = down_cast<AdaptiveNullableColumn*>(chunk->get_column_raw_ptr_by_index(i));
+        chunk->update_column_by_index(
+                NullableColumn::create(adaptive->materialized_raw_data_column(), adaptive->materialized_raw_null_column()),
+                i);
+    }
+}
+
+} // namespace starrocks
