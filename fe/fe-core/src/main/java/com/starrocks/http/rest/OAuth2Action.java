@@ -49,7 +49,7 @@ import java.util.stream.Collectors;
 
 public class OAuth2Action extends RestBaseAction {
     private static final int CONNECT_TIMEOUT_SECOND = 5;
-    private static final int REQUEST_TIMEOUT_SECOND = 30;
+    private static final int REQUEST_TIMEOUT_SECOND = 10;
 
     // Reuse a single HttpClient instance across all OAuth2 token exchanges.
     // java.net.http.HttpClient is thread-safe and designed to be used as a singleton.

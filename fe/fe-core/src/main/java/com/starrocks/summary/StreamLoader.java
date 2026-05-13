@@ -44,7 +44,6 @@ class StreamLoader {
     private static final String LOAD_URL_PATTERN = "/api/%s/%s/_stream_load";
 
     private static final int CONNECT_TIMEOUT_SECOND = 5;
-    private static final int REQUEST_TIMEOUT_SECOND = 60;
 
     // Reuse a single HttpClient instance across all stream load batches.
     // java.net.http.HttpClient is thread-safe and designed to be used as a singleton.
@@ -83,7 +82,6 @@ class StreamLoader {
         }
         URI uri = new URI("http", null, be.get().getHost(), be.get().getHttpPort(), loadUrlStr, null, null);
         HttpRequest request = HttpRequest.newBuilder(uri)
-                .timeout(Duration.ofSeconds(REQUEST_TIMEOUT_SECOND))
                 .header("Authorization", "Basic " + authEncoding)
                 .header("Content-Type", "text/plain; charset=UTF-8")
                 .header("format", "json")
