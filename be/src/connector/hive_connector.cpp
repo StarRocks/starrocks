@@ -883,6 +883,11 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
         use_kudu_jni_reader = scan_range.use_kudu_jni_reader;
     }
 
+    bool use_avro_jni_reader = false;
+    if (scan_range.__isset.use_avro_jni_reader) {
+        use_avro_jni_reader = scan_range.use_avro_jni_reader;
+    }
+
     JniScanner::CreateOptions jni_scanner_create_options = {.fs_options = &fsOptions,
                                                             .hive_table = _hive_table,
                                                             .scan_range = &scan_range,
@@ -937,7 +942,11 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
         }
     } else if (format == THdfsFileFormat::AVRO && (dynamic_cast<const HdfsTableDescriptor*>(_hive_table) != nullptr ||
                                                    dynamic_cast<const FileTableDescriptor*>(_hive_table) != nullptr)) {
-        scanner = new HdfsAvroScanner();
+        if (use_avro_jni_reader) {
+            scanner = create_hive_jni_scanner(jni_scanner_create_options).release();
+        } else {
+            scanner = new HdfsAvroScanner();
+        }
     } else if ((format == THdfsFileFormat::RC_FILE || format == THdfsFileFormat::RC_TEXT ||
                 format == THdfsFileFormat::SEQUENCE_FILE) &&
                (dynamic_cast<const HdfsTableDescriptor*>(_hive_table) != nullptr ||

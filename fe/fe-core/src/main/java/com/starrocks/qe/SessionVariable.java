@@ -740,6 +740,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_FILE_PAGECACHE = "enable_file_pagecache";
     public static final String HUDI_MOR_FORCE_JNI_READER = "hudi_mor_force_jni_reader";
     public static final String PAIMON_FORCE_JNI_READER = "paimon_force_jni_reader";
+    public static final String AVRO_USE_JNI_READER = "avro_use_jni_reader";
     public static final String ENABLE_DYNAMIC_PRUNE_SCAN_RANGE = "enable_dynamic_prune_scan_range";
     public static final String IO_TASKS_PER_SCAN_OPERATOR = "io_tasks_per_scan_operator";
     public static final String CONNECTOR_IO_TASKS_PER_SCAN_OPERATOR = "connector_io_tasks_per_scan_operator";
@@ -2783,6 +2784,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = PAIMON_FORCE_JNI_READER)
     private boolean paimonForceJNIReader = false;
 
+    @VariableMgr.VarAttr(name = AVRO_USE_JNI_READER)
+    private boolean avroUseJNIReader = false;
+
     @VarAttr(name = ENABLE_QUERY_CACHE)
     private boolean enableQueryCache = false;
 
@@ -3614,6 +3618,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public boolean getPaimonForceJNIReader() {
         return paimonForceJNIReader;
+    }
+
+    public boolean getAvroUseJNIReader() {
+        return avroUseJNIReader;
     }
 
     public void setCboCTEMaxLimit(int cboCTEMaxLimit) {

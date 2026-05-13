@@ -319,6 +319,10 @@ public class HiveConnectorScanRangeSource extends ConnectorScanRangeSource {
                 hdfsScanRange.setText_file_desc(fileDesc.getTextFileFormatDesc().toThrift());
             }
 
+            if (fileFormat == RemoteFileInputFormat.AVRO) {
+                hdfsScanRange.setUse_avro_jni_reader(sv.getAvroUseJNIReader());
+            }
+
             if (attachment.dataCacheOptions != null) {
                 TDataCacheOptions tDataCacheOptions = new TDataCacheOptions();
                 tDataCacheOptions.setPriority(attachment.dataCacheOptions.getPriority());
