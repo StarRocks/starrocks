@@ -112,7 +112,7 @@ public:
 
     // Register the partition_value of each scan range into its HiveTableDescriptor's
     // _partition_id_to_desc_map. The HdfsPartitionDescriptor is allocated from the
-    // query-level ObjectPool (RuntimeStateHelper::global_obj_pool) so that the map's
+    // query-level ObjectPool (RuntimeState::global_obj_pool) so that the map's
     // entries outlive any single fragment instance — see the function body for the
     // UAF this prevents.
     //

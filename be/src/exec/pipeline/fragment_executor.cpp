@@ -386,7 +386,7 @@ static std::unordered_set<int32_t> collect_broadcast_join_right_offsprings(
 
 Status FragmentExecutor::add_scan_ranges_partition_values(RuntimeState* runtime_state,
                                                           const std::vector<TScanRangeParams>& scan_ranges) {
-    auto* obj_pool = RuntimeStateHelper::global_obj_pool(runtime_state);
+    auto* obj_pool = runtime_state->global_obj_pool();
     const DescriptorTbl& desc_tbl = runtime_state->desc_tbl();
     TTableId cache_table_id = -1;
     TableDescriptor* table = nullptr;
