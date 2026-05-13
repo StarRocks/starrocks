@@ -36,6 +36,7 @@
 #include "gtest/gtest-param-test.h"
 #include "gutil/casts.h"
 #include "gutil/strings/strip.h"
+#include "runtime/runtime_state.h"
 #include "testutil/assert.h"
 #include "types/logical_type.h"
 #include "util/defer_op.h"
@@ -180,6 +181,36 @@ TEST_F(JsonFunctionsTest, get_json_string_array) {
     ASSERT_TRUE(JsonFunctions::native_json_path_close(
                         ctx.get(), FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
                         .ok());
+}
+
+TEST_F(JsonFunctionsTest, get_json_string_invalid_json_respects_allow_throw_exception) {
+    Columns columns;
+    auto strings = BinaryColumn::create();
+    auto paths = BinaryColumn::create();
+    strings->append(std::string(kJSONLengthLimit + 1, '{'));
+    paths->append("$.a");
+    columns.emplace_back(strings);
+    columns.emplace_back(paths);
+
+    {
+        std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+        auto result = JsonFunctions::get_json_string(ctx.get(), columns);
+        ASSERT_TRUE(result.ok()) << result.status();
+        ASSERT_EQ(1, ColumnHelper::count_nulls(result.value()));
+    }
+
+    {
+        TQueryOptions query_options;
+        query_options.__set_allow_throw_exception(true);
+        TQueryGlobals query_globals;
+        RuntimeState state(TUniqueId(), query_options, query_globals, nullptr);
+        std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+        ctx->set_runtime_state(&state);
+
+        auto result = JsonFunctions::get_json_string(ctx.get(), columns);
+        ASSERT_FALSE(result.ok());
+        ASSERT_EQ("JSON string exceed maximum length 16MB", result.status().message());
+    }
 }
 
 TEST_F(JsonFunctionsTest, get_json_emptyTest) {
