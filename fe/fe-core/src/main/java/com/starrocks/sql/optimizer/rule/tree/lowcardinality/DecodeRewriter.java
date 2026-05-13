@@ -39,7 +39,6 @@ import com.starrocks.sql.optimizer.base.Ordering;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.ScanOperatorPredicates;
-import com.starrocks.sql.optimizer.operator.logical.LogicalTopNOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalDecodeOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalDistributionOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashAggregateOperator;
@@ -259,7 +258,6 @@ public class DecodeRewriter extends OptExpressionVisitor<OptExpression, ColumnRe
         op.setWithLocalShuffle(aggregate.isWithLocalShuffle());
         op.setMergedLocalAgg(aggregate.isMergedLocalAgg());
         op.setTopNLocalAgg(aggregate.isTopNLocalAgg());
-        op.setTopNSortInfo(rewriteTopNSortInfo(aggregate.getTopNSortInfo(), inputStringRefs));
         op.setUseSortAgg(aggregate.isUseSortAgg());
         op.setUsePerBucketOptmize(aggregate.isUsePerBucketOptmize());
         op.setWithoutColocateRequirement(aggregate.isWithoutColocateRequirement());
@@ -268,25 +266,6 @@ public class DecodeRewriter extends OptExpressionVisitor<OptExpression, ColumnRe
         op.setLocalLimit(aggregate.getLocalLimit());
         op.setGroupByMinMaxStatistic(aggregate.getGroupByMinMaxStatistic());
         return rewriteOptExpression(optExpression, op, info.outputStringColumns);
-    }
-
-    private LogicalTopNOperator.TopNSortInfo rewriteTopNSortInfo(LogicalTopNOperator.TopNSortInfo sortInfo,
-                                                                 ColumnRefSet inputStringRefs) {
-        if (sortInfo == null) {
-            return null;
-        }
-        List<Ordering> newOrderByElements = sortInfo.orderByElements().stream().map(ordering -> {
-            ColumnRefOperator columnRef = ordering.getColumnRef();
-            if (inputStringRefs.contains(columnRef)) {
-                ColumnRefOperator dictRef = context.stringRefToDictRefMap.get(columnRef);
-                if (dictRef != null) {
-                    return new Ordering(dictRef, ordering.isAscending(), ordering.isNullsFirst());
-                }
-            }
-            return ordering;
-        }).collect(Collectors.toList());
-        return new LogicalTopNOperator.TopNSortInfo(newOrderByElements, sortInfo.sortPhase(),
-                sortInfo.topNType(), sortInfo.limit(), sortInfo.offset());
     }
 
     @Override
