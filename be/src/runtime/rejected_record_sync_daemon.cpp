@@ -587,8 +587,7 @@ Status RejectedRecordSyncDaemon::post_to_stream_load(const std::string& payload)
     // of `rejected_record_sync_interval_sec` so the FE flushes the
     // merged batch promptly without holding the daemon's sync wait too
     // long; parallel=1 is plenty for this low-volume bookkeeping table.
-    int32_t merge_interval_ms = std::max(
-            1, std::max(1000, config::rejected_record_sync_interval_sec * 1000 / 6));
+    int32_t merge_interval_ms = std::max(1, std::max(1000, config::rejected_record_sync_interval_sec * 1000 / 6));
     ctx->load_parameters[HTTP_MERGE_COMMIT_INTERVAL_MS] = std::to_string(merge_interval_ms);
     ctx->load_parameters[HTTP_MERGE_COMMIT_PARALLEL] = "1";
 
