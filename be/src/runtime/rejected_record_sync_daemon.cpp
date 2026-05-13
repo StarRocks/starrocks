@@ -578,6 +578,19 @@ Status RejectedRecordSyncDaemon::post_to_stream_load(const std::string& payload)
     // label-tracking polling loop that we leave for a follow-up if the
     // sync wait turns out to block long enough to matter in production.
     ctx->load_parameters[HTTP_MERGE_COMMIT_ASYNC] = "false";
+    // FE-side `BatchWriteMgr.getOrCreateJob` REJECTS the request unless
+    // both `merge_commit_interval_ms` and `merge_commit_parallel` are
+    // positive integers (see BatchWriteMgr.java:228/237). Without them
+    // the daemon's append_data() returns INVALID_ARGUMENT and the
+    // table stays empty -- the same failure mode the earlier raw-PUT
+    // attempt at b217aef7ca3 hit. Tune the interval as a small fraction
+    // of `rejected_record_sync_interval_sec` so the FE flushes the
+    // merged batch promptly without holding the daemon's sync wait too
+    // long; parallel=1 is plenty for this low-volume bookkeeping table.
+    int32_t merge_interval_ms = std::max(
+            1, std::max(1000, config::rejected_record_sync_interval_sec * 1000 / 6));
+    ctx->load_parameters[HTTP_MERGE_COMMIT_INTERVAL_MS] = std::to_string(merge_interval_ms);
+    ctx->load_parameters[HTTP_MERGE_COMMIT_PARALLEL] = "1";
 
     // Stuff the entire JSON-Lines payload into the ByteBuffer in one
     // shot. allocate_with_tracker needs a CurrentThread memory tracker
