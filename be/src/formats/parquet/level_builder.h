@@ -40,11 +40,11 @@
 #include "column/nullable_column.h"
 #include "column/vectorized_fwd.h"
 #include "common/status.h"
+#include "common/thread/priority_thread_pool.hpp"
 #include "formats/parquet/chunk_writer.h"
 #include "fs/fs.h"
 #include "types/logical_type.h"
 #include "types/type_descriptor.h"
-#include "util/priority_thread_pool.hpp"
 
 namespace starrocks::parquet {
 

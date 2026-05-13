@@ -35,7 +35,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 
 ---
 
-This topic introduces the following types of FE configurations:
+This topic introduces the following types of BE configurations:
 - [Statistic report](#statistic-report)
 - [Storage](#storage)
 
@@ -47,7 +47,7 @@ This topic introduces the following types of FE configurations:
 - Type: boolean
 - Unit: -
 - Is mutable: No
-- Description: When true, the BE process launches a background "metrics_daemon" thread (started in Daemon::init on non-Apple platforms) that runs every ~15 seconds to invoke `StarRocksMetrics::instance()->metrics()->trigger_hook()` and compute derived/system metrics (e.g., push/query bytes/sec, max disk I/O util, max network send/receive rates), log memory breakdowns and run table metrics cleanup. When false, those hooks are executed synchronously inside `MetricRegistry::collect` at metric collection time, which can increase metric-scrape latency. Requires process restart to take effect.
+- Description: When true, the BE process launches a background "metrics_daemon" thread (started in Daemon::init on non-Apple platforms) that runs every ~15 seconds to invoke `MetricRegistry::trigger_hook()` on the process metrics registry and compute derived/system metrics (e.g., push/query bytes/sec, max disk I/O util, max network send/receive rates), log memory breakdowns and run table metrics cleanup. When false, those hooks are executed synchronously inside `MetricRegistry::collect` at metric collection time, which can increase metric-scrape latency. Requires process restart to take effect.
 - Introduced in: v3.2.0
 
 ### enable_system_metrics
@@ -908,6 +908,33 @@ This topic introduces the following types of FE configurations:
 - Is mutable: Yes
 - Description: The maximum number of threads in the thread pool for Primary Key index parallel execution in a shared-data cluster. `0` means automatically set to half of the number of CPU cores.
 - Introduced in: -
+
+### pk_index_parallel_load_dels_mem_ratio
+
+- Default: 50
+- Type: Int
+- Unit: percent (0-100)
+- Is mutable: Yes
+- Description: In a shared-data cluster, skip the parallel two-phase delete-file prefetch in `LakePersistentIndex::load_dels` when the update mem tracker is already past this percent of its limit. In that regime the function falls back to a single-pass loop that holds only one decoded del-file column at a time, trading the cold-start latency win for bounded peak memory. Set to a higher value to allow the optimization under more memory pressure; set to `100` to disable the memory gate (always run the parallel path when `enable_pk_index_parallel_execution=true` and there are multiple del files).
+- Introduced in: -
+
+### lake_partial_update_thread_pool_max_threads
+
+- Default: 0
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The maximum number of threads in the thread pool for lake partial update segment-level parallelism in a shared-data cluster. This thread pool is used by both row-mode and column-mode partial updates to parallelize I/O-heavy segment operations (load_segment + rewrite_segment for row-mode, DCG generation for column-mode). `0` means automatically set to half of the number of CPU cores. Runtime on/off is controlled by `enable_pk_index_parallel_execution`.
+- Introduced in: v4.1
+
+### lake_partial_update_thread_pool_queue_size
+
+- Default: 2048
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The task queue size for the lake partial update thread pool.
+- Introduced in: v4.1
 
 ### pk_index_size_tiered_level_multiplier
 

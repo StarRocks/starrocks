@@ -1104,10 +1104,10 @@ void JsonMerger::_merge_impl(size_t rows) {
             builder.add(vpack::Value(vpack::ValueType::Object));
             _merge_json(_src_root.get(), &builder, i);
             builder.close();
-            _json_result->append(JsonValue(builder.slice()));
+            auto json = builder.slice();
+            _json_result->append(JsonValue(json));
+            _null_result->append(json.isEmptyObject());
         }
-        int zero = 0;
-        _null_result->append_value_multiple_times(&zero, rows);
     }
 }
 

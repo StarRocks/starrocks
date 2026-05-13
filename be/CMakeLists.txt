@@ -537,7 +537,6 @@ endif()
 set(STARROCKS_LINK_LIBS
     ${WL_START_GROUP}
     Agent
-    Column
     Connector
     Exec
     ${WL_WHOLE_ARCHIVE_PREFIX} Exprs ${WL_WHOLE_ARCHIVE_SUFFIX}
@@ -545,12 +544,9 @@ set(STARROCKS_LINK_LIBS
     Formats
     HttpClient
     IO
-    Serde
     Storage
     Rowset
     Runtime
-    Service
-    ServiceBE
     Types
     Udf
     Util
@@ -558,11 +554,11 @@ set(STARROCKS_LINK_LIBS
     Webserver
     TestUtil
     Tools
-    Geo
-    Cache
     orc
     ${WL_END_GROUP}
     ${WL_WHOLE_ARCHIVE_PREFIX} $<TARGET_FILE:ExprCore> ${WL_WHOLE_ARCHIVE_SUFFIX}
+    Serde
+    $<TARGET_FILE:Cache>
     RuntimeCore
     $<TARGET_FILE:HttpCore>
     $<TARGET_FILE:ChunkCore>
@@ -570,6 +566,8 @@ set(STARROCKS_LINK_LIBS
     $<TARGET_FILE:TypesCore>
     $<TARGET_FILE:FSCore>
     $<TARGET_FILE:IOCore>
+    StarOSIntegration
+    Geo
     $<TARGET_FILE:Common>
     $<TARGET_FILE:Base>
     $<TARGET_FILE:Gutil>
@@ -954,6 +952,7 @@ add_subdirectory(${SRC_DIR}/common)
 add_subdirectory(${SRC_DIR}/connector)
 add_subdirectory(${SRC_DIR}/column)
 add_subdirectory(${SRC_DIR}/formats)
+add_subdirectory(${SRC_DIR}/staros_integration)
 add_subdirectory(${SRC_DIR}/fs)
 add_subdirectory(${SRC_DIR}/exec)
 add_subdirectory(${SRC_DIR}/exprs)
@@ -1019,8 +1018,11 @@ install(FILES
     ${BASE_DIR}/../conf/udf_security.policy
     ${BASE_DIR}/../conf/core-site.xml
     ${BASE_DIR}/../conf/asan_suppressions.conf
-    ${BASE_DIR}/../conf/type_checker_config.xml
     DESTINATION ${OUTPUT_DIR}/conf)
+
+install(FILES
+    ${BASE_DIR}/../conf/type_checker_config.xml
+    DESTINATION ${OUTPUT_DIR}/lib)
 
 install(DIRECTORY
     ${BASE_DIR}/../webroot/be/

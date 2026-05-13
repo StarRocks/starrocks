@@ -17,6 +17,7 @@
 #include <memory>
 #include <mutex>
 
+#include "base/format.h"
 #include "base/phmap/phmap.h"
 #include "column/chunk.h"
 #include "column/column.h"

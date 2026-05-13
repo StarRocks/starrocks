@@ -34,6 +34,8 @@
 
 #pragma once
 
+#include <fmt/format.h>
+
 #include <list>
 #include <map>
 #include <mutex>
@@ -43,7 +45,6 @@
 #include <unordered_set>
 #include <vector>
 
-#include "agent/status.h"
 #include "base/concurrency/spinlock.h"
 #include "base/statusor.h"
 #include "common/status.h"
@@ -66,6 +67,7 @@ class BaseRowset;
 using BaseRowsetSharedPtr = std::shared_ptr<BaseRowset>;
 struct TabletBasicInfo;
 class MetadataCache;
+class TableMetricsManager;
 
 // RowsetsAcqRel is a RAII wrapper for invocation of Rowset::acquire_readers and Rowset::release_readers
 class RowsetsAcqRel;
@@ -100,7 +102,7 @@ public:
     TabletManager(const TabletManager&) = delete;
     const TabletManager& operator=(const TabletManager&) = delete;
 
-    explicit TabletManager(int64_t tablet_map_lock_shard_size);
+    explicit TabletManager(int64_t tablet_map_lock_shard_size, TableMetricsManager* table_metrics_mgr = nullptr);
     ~TabletManager() = default;
 
     // The param stores holds all candidate data_dirs for this tablet.
@@ -289,6 +291,7 @@ private:
     static Status _move_tablet_directories_to_trash(const TabletSharedPtr& tablet);
 
     std::vector<TabletsShard> _tablets_shards;
+    TableMetricsManager* _table_metrics_mgr = nullptr;
     const int64_t _tablets_shards_mask;
     LockTable _schema_change_lock_tbl;
 
@@ -332,3 +335,8 @@ inline bool TabletManager::LockTable::unlock(int64_t tablet_id) {
 }
 
 } // namespace starrocks
+
+template <>
+struct fmt::formatter<starrocks::TabletDropFlag> : formatter<std::underlying_type_t<starrocks::TabletDropFlag>> {
+    auto format(starrocks::TabletDropFlag value, format_context& ctx) const -> format_context::iterator;
+};

@@ -17,22 +17,22 @@
 #include <arrow/type.h>
 
 #include "common/config_exec_flow_fwd.h"
+#include "exec/data_sinks/arrow_result_writer.h"
+#include "exec/data_sinks/customized_result_writer.h"
+#include "exec/data_sinks/http_result_writer.h"
+#include "exec/data_sinks/metadata_result_writer.h"
+#include "exec/data_sinks/mysql_result_writer.h"
+#include "exec/data_sinks/statistic_result_writer.h"
+#include "exec/data_sinks/variable_result_writer.h"
 #include "exec/pipeline/query_context.h"
 #include "exprs/expr.h"
 #include "exprs/expr_executor.h"
 #include "exprs/expr_factory.h"
-#include "runtime/arrow_result_writer.h"
 #include "runtime/buffer_control_block.h"
-#include "runtime/customized_result_writer.h"
 #include "runtime/exec_env.h"
-#include "runtime/http_result_writer.h"
-#include "runtime/metadata_result_writer.h"
-#include "runtime/mysql_result_writer.h"
 #include "runtime/query_statistics.h"
 #include "runtime/result_buffer_mgr.h"
 #include "runtime/runtime_state.h"
-#include "runtime/statistic_result_writer.h"
-#include "runtime/variable_result_writer.h"
 
 namespace starrocks::pipeline {
 Status ResultSinkOperator::prepare(RuntimeState* state) {

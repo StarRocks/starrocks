@@ -16,6 +16,10 @@
 
 #include <filesystem>
 
+#include "cache/disk_cache/block_cache.h"
+#ifdef WITH_STARCACHE
+#include "cache/datacache.h"
+#endif
 #include "common/config_scan_io_fwd.h"
 #include "connector/hive_chunk_sink.h"
 #include "exec/hdfs_scanner/cache_select_scanner.h"
@@ -28,6 +32,7 @@
 #include "exec/pipeline/query_context.h"
 #include "exec/pipeline/scan/glm_manager.h"
 #include "exprs/chunk_predicate_evaluator.h"
+#include "exprs/column_access_path_resolver.h"
 #include "exprs/expr.h"
 #include "exprs/expr_executor.h"
 #include "exprs/expr_factory.h"
@@ -299,15 +304,22 @@ Status HiveDataSource::_init_partition_values() {
                             _scan_range.partition_id, full_path, relative_path, table_name));
     }
 
-    const auto& partition_values = partition_desc->partition_key_value_evals();
-    _partition_values = partition_desc->partition_key_value_evals();
+    // Build partition_key ExprContexts in the fragment-local pool. ExprContext::prepare
+    // captures a fragment RuntimeState in its `_runtime_state` field, so the contexts
+    // must live and close within the fragment scope — they cannot be shared from the
+    // (query-scoped) HdfsPartitionDescriptor.
+    const auto& thrift_partition_key_exprs = partition_desc->thrift_partition_key_exprs();
+    RETURN_IF_ERROR(
+            ExprFactory::create_expr_trees(&_pool, thrift_partition_key_exprs, &_partition_values, _runtime_state));
+    RETURN_IF_ERROR(ExprExecutor::prepare(_partition_values, _runtime_state));
+    RETURN_IF_ERROR(ExprExecutor::open(_partition_values, _runtime_state));
 
     // init partition chunk
     auto partition_chunk = std::make_shared<Chunk>();
     for (int i = 0; i < _partition_slots.size(); i++) {
         SlotId slot_id = _partition_slots[i]->id();
         int partition_col_idx = _partition_index_in_hdfs_partition_columns[i];
-        ASSIGN_OR_RETURN(auto partition_value_col, partition_values[partition_col_idx]->evaluate(nullptr));
+        ASSIGN_OR_RETURN(auto partition_value_col, _partition_values[partition_col_idx]->evaluate(nullptr));
         DCHECK(partition_value_col->is_constant());
         partition_chunk->append_column(std::move(partition_value_col), slot_id);
     }
@@ -434,6 +446,14 @@ void HiveDataSource::_init_tuples_and_slots(RuntimeState* state) {
     }
     if (hdfs_scan_node.__isset.can_use_min_max_opt) {
         _use_min_max_opt = hdfs_scan_node.can_use_min_max_opt;
+    }
+    // can_use_any_column is set by PruneHDFSScanColumnRule when every queried column is
+    // a partition column and a placeholder materialized column was injected to satisfy
+    // the "at least one materialized column" requirement.  We propagate this flag so that
+    // the scanner can avoid reading that placeholder column from the data file when
+    // min/max optimization is active.
+    if (hdfs_scan_node.__isset.can_use_any_column) {
+        _can_use_any_column = hdfs_scan_node.can_use_any_column;
     }
     if (hdfs_scan_node.__isset.can_use_count_opt) {
         _use_count_opt = hdfs_scan_node.can_use_count_opt;
@@ -746,8 +766,9 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
     if (hdfs_scan_node.__isset.column_access_paths && !_disable_column_access_path_hints &&
         _column_access_paths.empty()) {
         bool failed = false;
+        auto path_resolver = make_column_access_path_resolver(state, state->obj_pool());
         for (const auto& thrift_path : hdfs_scan_node.column_access_paths) {
-            auto st = ColumnAccessPath::create(thrift_path, state, state->obj_pool());
+            auto st = ColumnAccessPath::create(thrift_path, path_resolver);
             if (LIKELY(st.ok())) {
                 _column_access_paths.emplace_back(std::move(st.value()));
             } else {
@@ -828,6 +849,7 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
     scanner_params.use_file_pagecache = _use_file_pagecache;
 
     scanner_params.use_min_max_opt = _use_min_max_opt;
+    scanner_params.can_use_any_column = _can_use_any_column;
     scanner_params.use_count_opt = _use_count_opt;
     scanner_params.all_conjunct_ctxs = _all_conjunct_ctxs;
     if (!_disable_column_access_path_hints && !_column_access_paths.empty()) {
@@ -948,6 +970,7 @@ void HiveDataSource::close(RuntimeState* state) {
     }
     ExprExecutor::close(_min_max_conjunct_ctxs, state);
     ExprExecutor::close(_partition_conjunct_ctxs, state);
+    ExprExecutor::close(_partition_values, state);
     ExprExecutor::close(_scanner_conjunct_ctxs, state);
     for (auto& it : _conjunct_ctxs_by_slot) {
         ExprExecutor::close(it.second, state);

@@ -15,6 +15,7 @@
 set(HTTP_CORE_TEST_FILES
     ../base/cxa_throw_wrap.cpp
     http_core_test.cpp
+    http_metrics_test.cpp
 )
 
 set(HTTP_CORE_TEST_LINK_LIBS

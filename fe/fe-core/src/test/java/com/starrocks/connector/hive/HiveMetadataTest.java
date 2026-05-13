@@ -32,7 +32,7 @@ import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.tvr.TvrTableSnapshot;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.connector.CachingRemoteFileIO;
-import com.starrocks.connector.ConnectorMetadatRequestContext;
+import com.starrocks.connector.ConnectorMetadataRequestContext;
 import com.starrocks.connector.ConnectorProperties;
 import com.starrocks.connector.ConnectorType;
 import com.starrocks.connector.GetRemoteFilesParams;
@@ -177,7 +177,7 @@ public class HiveMetadataTest {
     public void testGetPartitionKeys() {
         Assertions.assertEquals(
                 Lists.newArrayList("col1"),
-                hiveMetadata.listPartitionNames("db1", "tbl1", ConnectorMetadatRequestContext.DEFAULT));
+                hiveMetadata.listPartitionNames("db1", "tbl1", ConnectorMetadataRequestContext.DEFAULT));
     }
 
     @Test

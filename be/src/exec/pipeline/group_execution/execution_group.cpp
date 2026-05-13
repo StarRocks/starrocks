@@ -17,6 +17,7 @@
 #include <cstddef>
 
 #include "common/logging.h"
+#include "common/thread/priority_thread_pool.hpp"
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/pipeline.h"
 #include "exec/pipeline/pipeline_driver_executor.h"
@@ -24,7 +25,6 @@
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
-#include "util/priority_thread_pool.hpp"
 
 namespace starrocks::pipeline {
 // clang-format off

@@ -26,6 +26,8 @@ import com.starrocks.proto.AbortTxnRequest;
 import com.starrocks.proto.AbortTxnResponse;
 import com.starrocks.proto.AggregateCompactRequest;
 import com.starrocks.proto.AggregatePublishVersionRequest;
+import com.starrocks.proto.BuildVectorIndexRequest;
+import com.starrocks.proto.BuildVectorIndexResponse;
 import com.starrocks.proto.CompactRequest;
 import com.starrocks.proto.CompactResponse;
 import com.starrocks.proto.DeleteDataRequest;
@@ -730,6 +732,17 @@ public class MockedBackend {
         @Override
         public Future<RepairTabletMetadataResponse> repairTabletMetadata(RepairTabletMetadataRequest request) {
             return CompletableFuture.completedFuture(null);
+        }
+
+        @Override
+        public Future<BuildVectorIndexResponse> buildVectorIndex(BuildVectorIndexRequest request) {
+            // Return a non-null OK response so VectorIndexBuildScheduler treats this as
+            // a successful build instead of looping/re-enqueuing on null and spamming logs.
+            BuildVectorIndexResponse response = new BuildVectorIndexResponse();
+            StatusPB pStatus = new StatusPB();
+            pStatus.statusCode = 0;
+            response.status = pStatus;
+            return CompletableFuture.completedFuture(response);
         }
     }
 }

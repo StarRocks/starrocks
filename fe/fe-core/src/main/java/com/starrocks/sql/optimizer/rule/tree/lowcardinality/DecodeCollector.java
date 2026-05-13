@@ -99,7 +99,6 @@ import java.util.Set;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
-import static com.starrocks.sql.ast.expression.BinaryType.EQ_FOR_NULL;
 import static org.apache.iceberg.TableProperties.DEFAULT_FILE_FORMAT;
 import static org.apache.iceberg.TableProperties.DEFAULT_FILE_FORMAT_DEFAULT;
 
@@ -404,7 +403,7 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
             for (CallOperator agg : aggregateExprs) {
                 if (agg.getColumnRefs().stream().map(ColumnRefOperator::getId)
                         .anyMatch(context.allStringColumns::contains)) {
-                    context.stringAggregateExprs.addAll(aggregateExprs);
+                    context.stringAggregateExprs.put(aggregateId, aggregateExprs);
                     context.allStringColumns.add(aggregateId);
                     break;
                 }
@@ -420,6 +419,24 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
             info.inputStringColumns.intersect(alls);
             if (!info.isEmpty()) {
                 context.operatorDecodeInfo.put(operator, info);
+                if (operator instanceof PhysicalHashAggregateOperator hashAgg) {
+                    hashAgg.getAggregations().keySet().forEach(agg -> {
+                        context.aggIdToSupportColumns.computeIfAbsent(agg.getId(), k -> new ColumnRefSet())
+                                .union(info.inputStringColumns);
+                    });
+                }
+                if (operator instanceof PhysicalWindowOperator window) {
+                    window.getAnalyticCall().keySet().forEach(agg -> {
+                        context.aggIdToSupportColumns.computeIfAbsent(agg.getId(), k -> new ColumnRefSet())
+                                .union(info.inputStringColumns);
+                    });
+                }
+                if (operator instanceof PhysicalTopNOperator topN && topN.getPreAggCall() != null) {
+                    topN.getPreAggCall().keySet().forEach(agg -> {
+                        context.aggIdToSupportColumns.computeIfAbsent(agg.getId(), k -> new ColumnRefSet())
+                                .union(info.inputStringColumns);
+                    });
+                }
             }
         }
         // Filling context's structOpToFieldUseStringRefMap and structRefToFieldUseStringRefMap with fields in
@@ -1661,9 +1678,6 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
 
         @Override
         public ScalarOperator visitBinaryPredicate(BinaryPredicateOperator predicate, Void context) {
-            if (predicate.getBinaryType() == EQ_FOR_NULL) {
-                return forbidden(visitChildren(predicate, context), predicate);
-            }
             return merge(visitChildren(predicate, context), predicate);
         }
 

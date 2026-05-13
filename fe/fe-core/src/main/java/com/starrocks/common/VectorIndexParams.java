@@ -70,7 +70,17 @@ public class VectorIndexParams {
         },
 
         // Threshold of row number to build index file
-        INDEX_BUILD_THRESHOLD
+        INDEX_BUILD_THRESHOLD,
+
+        // Index build mode: "sync" (default, build during write) or "async" (build asynchronously by scheduler)
+        INDEX_BUILD_MODE {
+            @Override
+            public void check(String value) {
+                if (!StringUtils.equalsIgnoreCase(value, "sync") && !StringUtils.equalsIgnoreCase(value, "async")) {
+                    throw new SemanticException("Value of `index_build_mode` must be `sync` or `async`");
+                }
+            }
+        }
     }
 
     public enum VectorIndexType {

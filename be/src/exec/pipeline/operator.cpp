@@ -21,8 +21,6 @@
 #include "base/failpoint/fail_point.h"
 #include "common/logging.h"
 #include "common/runtime_profile.h"
-#include "exec/pipeline/operator_factory.h"
-#include "exec/pipeline/query_context.h"
 #include "exprs/chunk_predicate_evaluator.h"
 #include "exprs/expr_context.h"
 #include "gutil/strings/substitute.h"
@@ -36,13 +34,14 @@ const int32_t Operator::s_pseudo_plan_node_id_for_final_sink = -1;
 Operator::Operator(OperatorFactory* factory, int32_t id, std::string name, int32_t plan_node_id, bool is_subordinate,
                    int32_t driver_sequence, OperatorRuntimeAccess* runtime_access)
         : _factory(factory),
-          _runtime_access(runtime_access != nullptr ? runtime_access : factory),
+          _runtime_access(runtime_access),
           _id(id),
           _name(std::move(name)),
           _plan_node_id(plan_node_id),
           _is_subordinate(is_subordinate),
           _driver_sequence(driver_sequence),
           _runtime_filter_probe_sequence(driver_sequence) {
+    DCHECK(_runtime_access != nullptr);
     std::string upper_name(_name);
     std::transform(upper_name.begin(), upper_name.end(), upper_name.begin(), ::toupper);
     std::string profile_name = strings::Substitute("$0 (plan_node_id=$1)", upper_name, _plan_node_id);
@@ -71,11 +70,6 @@ Operator::Operator(OperatorFactory* factory, int32_t id, std::string name, int32
 
 Status Operator::prepare(RuntimeState* state) {
     FAIL_POINT_TRIGGER_RETURN_ERROR(random_error);
-
-    if (state->query_ctx() && state->query_ctx()->spill_manager()) {
-        _mem_resource_manager.prepare(this, state->query_ctx()->spill_manager());
-    }
-
     return Status::OK();
 }
 
@@ -125,7 +119,6 @@ void Operator::set_precondition_ready(RuntimeState* state) {
 }
 
 void Operator::close(RuntimeState* state) {
-    _mem_resource_manager.close();
     if (auto* rf_bloom_filters = _runtime_access->get_runtime_bloom_filters()) {
         _init_rf_counters(false);
         COUNTER_SET(_runtime_in_filter_num_counter, (int64_t)runtime_in_filters().size());
@@ -282,22 +275,30 @@ void Operator::_init_conjuct_counters() {
     }
 }
 
-void Operator::update_exec_stats(RuntimeState* state) {
-    auto ctx = state->query_ctx();
-    if (!_is_subordinate && ctx != nullptr && ctx->need_record_exec_stats(_plan_node_id)) {
-        ctx->update_push_rows_stats(_plan_node_id, COUNTER_VALUE(_push_row_num_counter));
-        ctx->update_pull_rows_stats(_plan_node_id, COUNTER_VALUE(_pull_row_num_counter));
-        if (_conjuncts_input_counter != nullptr && _conjuncts_output_counter != nullptr) {
-            ctx->update_pred_filter_stats(
-                    _plan_node_id, COUNTER_VALUE(_conjuncts_input_counter) - COUNTER_VALUE(_conjuncts_output_counter));
-        }
-        if (_bloom_filter_eval_context.join_runtime_filter_input_counter != nullptr &&
-            _bloom_filter_eval_context.join_runtime_filter_output_counter != nullptr) {
-            int64_t input_rows = COUNTER_VALUE(_bloom_filter_eval_context.join_runtime_filter_input_counter);
-            int64_t output_rows = COUNTER_VALUE(_bloom_filter_eval_context.join_runtime_filter_output_counter);
-            ctx->update_rf_filter_stats(_plan_node_id, input_rows - output_rows);
-        }
+OperatorExecStatsSnapshot Operator::exec_stats_snapshot() const {
+    if (_is_subordinate) {
+        return OperatorExecStatsSnapshot::ignored();
     }
+
+    OperatorExecStatsSnapshot snapshot;
+    snapshot.plan_node_id = _plan_node_id;
+    snapshot.require_registered_plan_node = true;
+    snapshot.update_push_rows = true;
+    snapshot.update_pull_rows = true;
+    snapshot.push_rows = COUNTER_VALUE(_push_row_num_counter);
+    snapshot.pull_rows = COUNTER_VALUE(_pull_row_num_counter);
+    if (_conjuncts_input_counter != nullptr && _conjuncts_output_counter != nullptr) {
+        snapshot.update_pred_filter_rows = true;
+        snapshot.pred_filter_rows = COUNTER_VALUE(_conjuncts_input_counter) - COUNTER_VALUE(_conjuncts_output_counter);
+    }
+    if (_bloom_filter_eval_context.join_runtime_filter_input_counter != nullptr &&
+        _bloom_filter_eval_context.join_runtime_filter_output_counter != nullptr) {
+        snapshot.update_rf_filter_rows = true;
+        int64_t input_rows = COUNTER_VALUE(_bloom_filter_eval_context.join_runtime_filter_input_counter);
+        int64_t output_rows = COUNTER_VALUE(_bloom_filter_eval_context.join_runtime_filter_output_counter);
+        snapshot.rf_filter_rows = input_rows - output_rows;
+    }
+    return snapshot;
 }
 
 } // namespace starrocks::pipeline

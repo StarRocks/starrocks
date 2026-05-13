@@ -291,7 +291,13 @@ public:
     }
 
     Status do_visit(StructColumn* column) {
-        return Status::NotSupported("Unsupported struct column in column wise comparator");
+        // Each subfield is independently a NullableColumn (see ColumnHelper::create_column
+        // STRUCT branch), so we just recurse into each field and let the NullableColumn
+        // arm refresh its `_has_null` like for ARRAY/MAP element columns.
+        for (size_t i = 0; i < column->fields_size(); ++i) {
+            RETURN_IF_ERROR(column->field_column_raw_ptr(i)->accept_mutable(this));
+        }
+        return Status::OK();
     }
 
     template <typename T>

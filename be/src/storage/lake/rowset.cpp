@@ -14,6 +14,7 @@
 
 #include "storage/lake/rowset.h"
 
+#include <algorithm>
 #include <future>
 #include <unordered_set>
 
@@ -217,10 +218,12 @@ Status Rowset::add_partial_compaction_segments_info(TxnLogPB_OpCompaction* op_co
         }
         if (metadata().segment_metas_size() > 0) {
             auto* segment_meta = op_compaction->mutable_output_rowset()->add_segment_metas();
-            file.sort_key_min.to_proto(segment_meta->mutable_sort_key_min());
-            file.sort_key_max.to_proto(segment_meta->mutable_sort_key_max());
+            file.write_sort_key_fields_to(segment_meta);
             segment_meta->set_num_rows(file.num_rows);
             segment_meta->set_segment_idx(next_segment_id++);
+            for (int64_t vi_id : file.vector_index_ids) {
+                segment_meta->add_vector_index_ids(vi_id);
+            }
         }
     }
     op_compaction->set_new_segment_count(writer->segments().size());
@@ -291,6 +294,9 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::read(const Schema& schema, const
     seg_options.lake_io_opts = options.lake_io_opts;
     seg_options.asc_hint = options.asc_hint;
     seg_options.column_access_paths = options.column_access_paths;
+    seg_options.use_vector_index = options.use_vector_index;
+    seg_options.vector_search_option = options.vector_search_option;
+    seg_options.belonged_to_cloud_native = true;
     seg_options.has_preaggregation = options.has_preaggregation;
     seg_options.enable_predicate_col_late_materialize = options.enable_predicate_col_late_materialize;
     seg_options.tablet_id = tablet_id();
@@ -480,7 +486,10 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_each_segment_iterator_with_d
         const std::vector<SparseRangePtr>* rowid_range_per_segment) {
     TRACE_COUNTER_SCOPE_LATENCY_US("get_each_segment_iterator_with_delvec_us");
     std::vector<SegmentPtr> segments;
-    RETURN_IF_ERROR(load_segments(&segments, false));
+    {
+        TRACE_COUNTER_SCOPE_LATENCY_US("load_segments_for_iter_with_delvec_us");
+        RETURN_IF_ERROR(load_segments(&segments, false));
+    }
     auto root_loc = _tablet_mgr->tablet_root_location(tablet_id());
     std::vector<ChunkIteratorPtr> seg_iterators;
     seg_iterators.reserve(segments.size());
@@ -771,8 +780,11 @@ int64_t Rowset::data_size_after_deletion() const {
     if (num_rows() == 0 || data_size() == 0) {
         return 0;
     }
-    // data size * (num_rows - num_deleted_rows) / num_rows
-    return (int64_t)(data_size() * ((double)(num_rows() - num_dels()) / num_rows()));
+    // data size * (num_rows - num_deleted_rows) / num_rows. Clamp live rows to 0 to
+    // guard against callers that observe an inflated num_dels (e.g. pre-fix reshard
+    // children that inherited the parent's full delvec cardinality).
+    int64_t live_rows = std::max<int64_t>(0, num_rows() - num_dels());
+    return (int64_t)(data_size() * ((double)live_rows / num_rows()));
 }
 
 } // namespace starrocks::lake

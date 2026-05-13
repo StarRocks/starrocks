@@ -91,7 +91,7 @@ private:
     SpillableHashJoinProbeOperator* as_mutable() const { return const_cast<SpillableHashJoinProbeOperator*>(this); }
 
     // acquire next build-side partitions
-    void _acquire_next_partitions();
+    void _acquire_next_partitions(RuntimeState* state);
 
     bool _all_loaded_partition_data_ready();
 

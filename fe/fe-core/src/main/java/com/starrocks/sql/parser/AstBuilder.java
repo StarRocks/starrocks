@@ -7224,6 +7224,9 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
         } else if (context.GROUP() != null) {
             Identifier group = (Identifier) visit(context.identifierOrString());
             showGrantsStmt = new ShowGrantsStmt(group.getValue(), GrantType.GROUP, pos);
+        } else if (context.CURRENT_USER() != null) {
+            // SHOW GRANTS FOR CURRENT_USER[()] — MySQL-compatible syntax; resolve to current session user
+            showGrantsStmt = new ShowGrantsStmt((UserRef) null, pos);
         } else {
             UserRef userId = context.user() == null ? null : (UserRef) visit(context.user());
             showGrantsStmt = new ShowGrantsStmt(userId, pos);
@@ -9305,7 +9308,8 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
         } else if (context.IMMEDIATE() != null) {
             refreshMoment = RefreshSchemeClause.RefreshMoment.IMMEDIATE;
         }
-        if (context.ASYNC() != null) {
+        // SCHEDULE is the preferred keyword; ASYNC is kept as a synonym for compatibility.
+        if (context.ASYNC() != null || context.SCHEDULE() != null) {
             boolean defineStartTime = false;
             if (context.START() != null) {
                 NodePosition timePos = createPos(context.string());

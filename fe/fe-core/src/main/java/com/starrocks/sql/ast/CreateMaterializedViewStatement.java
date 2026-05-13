@@ -22,6 +22,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Index;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.PartitionType;
+import com.starrocks.sql.analyzer.mv.RowIdStrategy;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.parser.NodePosition;
 
@@ -81,6 +82,9 @@ public class CreateMaterializedViewStatement extends DdlStmt {
     private MaterializedView.RefreshMode currentRefreshMode = MaterializedView.RefreshMode.PCT;
     // the encode row id version deduced by analyzer
     private int encodeRowIdVersion = 0;
+    // the __ROW_ID__ production strategy deduced by analyzer for incremental MVs;
+    // null when this is not an incremental MV
+    private RowIdStrategy rowIdStrategy = null;
 
     // Sink table information
     private List<Column> mvColumnItems = Lists.newArrayList();
@@ -376,6 +380,14 @@ public class CreateMaterializedViewStatement extends DdlStmt {
 
     public int getEncodeRowIdVersion() {
         return encodeRowIdVersion;
+    }
+
+    public void setRowIdStrategy(RowIdStrategy rowIdStrategy) {
+        this.rowIdStrategy = rowIdStrategy;
+    }
+
+    public RowIdStrategy getRowIdStrategy() {
+        return rowIdStrategy;
     }
 
     @Override

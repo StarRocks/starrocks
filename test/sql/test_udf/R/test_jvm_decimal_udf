@@ -1,0 +1,118 @@
+-- name: test_jvm_decimal_udf @no_arrow_flight_sql
+CREATE FUNCTION dec_add(DECIMAL(18, 4), DECIMAL(18, 4))
+RETURNS DECIMAL(20, 4)
+PROPERTIES (
+    "symbol" = "UDFDecimalAdd",
+    "type" = "StarrocksJar",
+    "file" = "${udf_url}/starrocks-jdbc/decimal.jar"
+);
+-- result:
+-- !result
+CREATE FUNCTION dec_array_add(array<DECIMAL(18, 4)>, array<DECIMAL(18, 4)>)
+RETURNS array<DECIMAL(20, 4)>
+PROPERTIES (
+    "symbol" = "UDFDecimalArrayAdd",
+    "type" = "StarrocksJar",
+    "file" = "${udf_url}/starrocks-jdbc/decimal.jar"
+);
+-- result:
+-- !result
+CREATE AGGREGATE FUNCTION dec_sum(DECIMAL(18, 4))
+RETURNS DECIMAL(38, 4)
+PROPERTIES (
+    "symbol" = "DecimalSum",
+    "type" = "StarrocksJar",
+    "file" = "${udf_url}/starrocks-jdbc/decimal.jar"
+);
+-- result:
+-- !result
+CREATE TABLE t_dec (
+    id INT,
+    d18_4 DECIMAL(18, 4),
+    d10_2 DECIMAL(10, 2)
+) ENGINE=OLAP
+DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+INSERT INTO t_dec VALUES
+    (1, 12345.6789, 100.10),
+    (2, -12345.6789, 200.20),
+    (3, 0, 300.30),
+    (4, NULL, 400.40),
+    (5, 99999999999999.9999, 500.50);
+-- result:
+-- !result
+SELECT id, dec_add(d18_4, d18_4) FROM t_dec ORDER BY id;
+-- result:
+1	24691.3578
+2	-24691.3578
+3	0.0000
+4	None
+5	199999999999999.9998
+-- !result
+SELECT id, dec_array_add([d18_4], [d18_4]) FROM t_dec ORDER BY id;
+-- result:
+1	[24691.3578]
+2	[-24691.3578]
+3	[0.0000]
+4	None
+5	[199999999999999.9998]
+-- !result
+SELECT id, dec_add(d18_4, CAST('1.0001' AS DECIMAL(18, 4))) FROM t_dec ORDER BY id;
+-- result:
+1	12346.6790
+2	-12344.6788
+3	1.0001
+4	None
+5	100000000000001.0000
+-- !result
+SELECT dec_add(d18_4, NULL) FROM t_dec WHERE id = 1;
+-- result:
+None
+-- !result
+SELECT dec_sum(d18_4) FROM t_dec;
+-- result:
+99999999999999.9999
+-- !result
+SELECT id % 2 AS g, dec_sum(d10_2) FROM t_dec GROUP BY g ORDER BY g;
+-- result:
+0	600.6000
+1	900.9000
+-- !result
+CREATE FUNCTION dec_add_narrow(DECIMAL(18, 4), DECIMAL(18, 4))
+RETURNS DECIMAL(18, 4)
+PROPERTIES (
+    "symbol" = "UDFDecimalAdd",
+    "type" = "StarrocksJar",
+    "file" = "${udf_url}/starrocks-jdbc/decimal.jar"
+);
+-- result:
+-- !result
+SET sql_mode = 'ERROR_IF_OVERFLOW';
+-- result:
+-- !result
+SELECT dec_add_narrow(d18_4, d18_4) FROM t_dec WHERE id = 5;
+-- result:
+[REGEX] .*java.lang.ArithmeticException.*
+-- !result
+SET sql_mode = '';
+-- result:
+-- !result
+SELECT dec_add_narrow(d18_4, d18_4) FROM t_dec WHERE id = 5;
+-- result:
+None
+-- !result
+DROP FUNCTION dec_add(DECIMAL(18, 4), DECIMAL(18, 4));
+-- result:
+-- !result
+DROP FUNCTION dec_add_narrow(DECIMAL(18, 4), DECIMAL(18, 4));
+-- result:
+-- !result
+DROP FUNCTION dec_sum(DECIMAL(18, 4));
+-- result:
+-- !result
+DROP TABLE t_dec;
+-- result:
+-- !result

@@ -4514,20 +4514,85 @@ TEST_F(FileReaderTest, test_read_variant_shredding_with_access_paths) {
     ASSERT_TRUE(variant_col->is_shredded_variant());
     ASSERT_EQ(2u, variant_col->shredded_paths().size());
     ASSERT_EQ(2u, variant_col->typed_columns().size());
-    ASSERT_TRUE(variant_col->has_metadata_column());
-    ASSERT_TRUE(variant_col->has_remain_value());
-    ASSERT_NE(-1, variant_col->find_shredded_path("id"));
-    ASSERT_NE(-1, variant_col->find_shredded_path("profile.salary"));
+    // Fast path: all bindings are SCALAR, so base payload (metadata/remain) is not populated.
+    ASSERT_FALSE(variant_col->has_metadata_column());
+    ASSERT_FALSE(variant_col->has_remain_value());
+    int id_idx = variant_col->find_shredded_path("id");
+    int salary_idx = variant_col->find_shredded_path("profile.salary");
+    ASSERT_NE(-1, id_idx);
+    ASSERT_NE(-1, salary_idx);
     ASSERT_EQ(-1, variant_col->find_shredded_path("age"));
     ASSERT_EQ(-1, variant_col->find_shredded_path("score"));
     ASSERT_EQ(-1, variant_col->find_shredded_path("events"));
 
-    VariantRowValue row0;
-    ASSERT_NE(variant_col->get_row_value(0, &row0), nullptr);
-    auto row0_json = row0.to_json();
-    ASSERT_TRUE(row0_json.ok());
-    ASSERT_TRUE(row0_json.value().find("\"id\":1000") != std::string::npos);
-    ASSERT_TRUE(row0_json.value().find("\"salary\":50000.0") != std::string::npos);
+    // Verify typed column values directly (id: INT64, salary: DOUBLE).
+    const auto& id_col = variant_col->typed_columns()[id_idx];
+    const auto& salary_col = variant_col->typed_columns()[salary_idx];
+    ASSERT_FALSE(id_col->is_null(0));
+    ASSERT_FALSE(salary_col->is_null(0));
+    ASSERT_EQ(1000, id_col->get(0).get_int64());
+    ASSERT_NEAR(50000.0, salary_col->get(0).get_double(), 0.1);
+}
+
+TEST_F(FileReaderTest, test_read_variant_shredding_with_access_paths_nulls) {
+    const std::string variant_file_path = "./be/test/formats/parquet/test_data/variant_shredding_sparse.parquet";
+    auto file_reader = _create_file_reader(variant_file_path);
+
+    TypeDescriptor variant_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_VARIANT);
+    Utils::SlotDesc slot_descs[] = {{"data", variant_type}, {""}};
+    auto ctx = _create_scan_context(slot_descs, variant_file_path);
+
+    std::vector<ColumnAccessPathPtr> column_access_paths;
+    auto root_or = ColumnAccessPath::create(TAccessPathType::ROOT, "data", 0);
+    ASSERT_TRUE(root_or.ok()) << root_or.status().to_string();
+    auto root = std::move(root_or).value();
+    auto id_or = ColumnAccessPath::create(TAccessPathType::FIELD, "id", 0, root->absolute_path());
+    ASSERT_TRUE(id_or.ok()) << id_or.status().to_string();
+    root->children().emplace_back(std::move(id_or).value());
+    auto profile_or = ColumnAccessPath::create(TAccessPathType::FIELD, "profile", 0, root->absolute_path());
+    ASSERT_TRUE(profile_or.ok()) << profile_or.status().to_string();
+    auto profile = std::move(profile_or).value();
+    auto salary_or = ColumnAccessPath::create(TAccessPathType::FIELD, "salary", 0, profile->absolute_path());
+    ASSERT_TRUE(salary_or.ok()) << salary_or.status().to_string();
+    profile->children().emplace_back(std::move(salary_or).value());
+    root->children().emplace_back(std::move(profile));
+    column_access_paths.emplace_back(std::move(root));
+    ctx->column_access_paths = &column_access_paths;
+
+    Status status = file_reader->init(ctx);
+    ASSERT_TRUE(status.ok()) << status.message();
+
+    auto chunk = std::make_shared<Chunk>();
+    chunk->append_column(ColumnHelper::create_column(variant_type, true), chunk->num_columns());
+    status = file_reader->get_next(&chunk);
+    ASSERT_TRUE(status.ok()) << status.message();
+    ASSERT_EQ(5, chunk->num_rows());
+
+    const auto* nullable = down_cast<const NullableColumn*>(chunk->get_column_by_index(0).get());
+    ASSERT_NE(nullable, nullptr);
+    const auto* variant_col = down_cast<const VariantColumn*>(nullable->data_column().get());
+    ASSERT_NE(variant_col, nullptr);
+    ASSERT_TRUE(variant_col->is_shredded_variant());
+    ASSERT_EQ(2u, variant_col->typed_columns().size());
+    ASSERT_FALSE(variant_col->has_metadata_column());
+    ASSERT_FALSE(variant_col->has_remain_value());
+
+    int id_idx = variant_col->find_shredded_path("id");
+    int salary_idx = variant_col->find_shredded_path("profile.salary");
+    ASSERT_NE(-1, id_idx);
+    ASSERT_NE(-1, salary_idx);
+
+    const auto& id_col = variant_col->typed_columns()[id_idx];
+    const auto& salary_col = variant_col->typed_columns()[salary_idx];
+    ASSERT_EQ(1000, id_col->get(0).get_int64());
+    ASSERT_NEAR(50000.0, salary_col->get(0).get_double(), 0.1);
+    ASSERT_FALSE(id_col->is_null(2));
+    ASSERT_TRUE(salary_col->is_null(2));
+    ASSERT_TRUE(id_col->is_null(3));
+    ASSERT_FALSE(salary_col->is_null(3));
+    ASSERT_TRUE(id_col->is_null(4));
+    ASSERT_TRUE(salary_col->is_null(4));
+    ASSERT_TRUE(nullable->is_null(4));
 }
 
 TEST_F(FileReaderTest, test_read_variant_shredding_with_prefix_access_path) {
@@ -4575,6 +4640,55 @@ TEST_F(FileReaderTest, test_read_variant_shredding_with_prefix_access_path) {
     ASSERT_TRUE(row0_json.ok());
     ASSERT_TRUE(row0_json.value().find("\"salary\":50000.0") != std::string::npos);
     ASSERT_TRUE(row0_json.value().find("\"department\":\"dept_0\"") != std::string::npos);
+}
+
+TEST_F(FileReaderTest, test_read_variant_shredding_with_prefix_access_path_null_row) {
+    const std::string variant_file_path = "./be/test/formats/parquet/test_data/variant_shredding_sparse.parquet";
+    auto file_reader = _create_file_reader(variant_file_path);
+
+    TypeDescriptor variant_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_VARIANT);
+    Utils::SlotDesc slot_descs[] = {{"data", variant_type}, {""}};
+    auto ctx = _create_scan_context(slot_descs, variant_file_path);
+
+    std::vector<ColumnAccessPathPtr> column_access_paths;
+    auto root_or = ColumnAccessPath::create(TAccessPathType::ROOT, "data", 0);
+    ASSERT_TRUE(root_or.ok()) << root_or.status().to_string();
+    auto root = std::move(root_or).value();
+    auto profile_or = ColumnAccessPath::create(TAccessPathType::FIELD, "profile", 0, root->absolute_path());
+    ASSERT_TRUE(profile_or.ok()) << profile_or.status().to_string();
+    root->children().emplace_back(std::move(profile_or).value());
+    column_access_paths.emplace_back(std::move(root));
+    ctx->column_access_paths = &column_access_paths;
+
+    Status status = file_reader->init(ctx);
+    ASSERT_TRUE(status.ok()) << status.message();
+
+    auto chunk = std::make_shared<Chunk>();
+    chunk->append_column(ColumnHelper::create_column(variant_type, true), chunk->num_columns());
+    status = file_reader->get_next(&chunk);
+    ASSERT_TRUE(status.ok()) << status.message();
+    ASSERT_EQ(5, chunk->num_rows());
+
+    const auto* nullable = down_cast<const NullableColumn*>(chunk->get_column_by_index(0).get());
+    ASSERT_NE(nullable, nullptr);
+    ASSERT_TRUE(nullable->is_null(4));
+    const auto* variant_col = down_cast<const VariantColumn*>(nullable->data_column().get());
+    ASSERT_NE(variant_col, nullptr);
+    ASSERT_TRUE(variant_col->is_shredded_variant());
+    ASSERT_TRUE(variant_col->has_metadata_column());
+    ASSERT_TRUE(variant_col->has_remain_value());
+
+    VariantRowValue row0;
+    ASSERT_NE(variant_col->get_row_value(0, &row0), nullptr);
+    auto row0_json = row0.to_json();
+    ASSERT_TRUE(row0_json.ok());
+    ASSERT_TRUE(row0_json.value().find("\"salary\":50000.0") != std::string::npos);
+
+    VariantRowValue row4;
+    ASSERT_NE(variant_col->get_row_value(4, &row4), nullptr);
+    auto row4_json = row4.to_json();
+    ASSERT_TRUE(row4_json.ok());
+    ASSERT_EQ("null", row4_json.value());
 }
 
 TEST_F(FileReaderTest, test_read_variant_shredding_with_whole_column_access_path) {

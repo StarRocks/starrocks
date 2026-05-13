@@ -39,6 +39,7 @@
 #include <memory>
 #include <utility>
 
+#include "base/concurrency/once.h"
 #include "common/statusor.h"
 #include "gen_cpp/segment.pb.h"
 #include "storage/index/inverted/inverted_index_iterator.h"
@@ -53,7 +54,6 @@
 #include "storage/rowset/segment.h"
 #include "storage/rowset/zone_map_index.h"
 #include "types/datum.h"
-#include "util/once.h"
 
 namespace starrocks {
 

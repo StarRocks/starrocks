@@ -21,6 +21,7 @@
 #include "bthread/timer_thread.h"
 #include "butil/resource_pool.h"
 #include "common/logging.h"
+#include "common/stack_util.h"
 #include "gen_cpp/Types_types.h"
 #include "runtime/current_thread.h"
 
@@ -52,9 +53,6 @@ private:
     LazyMsgCallBack _callback;
     int64_t _begin_time = 0;
 };
-
-// export from stack_util.h
-std::string get_stack_trace_for_thread(int tid, int timeout_ms);
 
 // SignalTimerGuard class manages a timer to capture and log thread stack traces after a specified timeout.
 // Note: If bthread yields. you may not get the expected stacktrace. But it's still safe.

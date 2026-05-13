@@ -17,6 +17,7 @@
 #include <fmt/format.h>
 
 #include "agent/agent_common.h"
+#include "agent/agent_metrics.h"
 #include "agent/finish_task.h"
 #include "agent/task_signatures_manager.h"
 #include "base/testutil/sync_point.h"
@@ -25,7 +26,7 @@
 #include "common/status.h"
 #include "common/system/backend_options.h"
 #include "gutil/strings/join.h"
-#include "io/io_profiler.h"
+#include "io/core/io_profiler.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
 #include "runtime/snapshot_loader.h"
@@ -357,7 +358,7 @@ void run_clear_transaction_task(const std::shared_ptr<ClearTransactionAgentTaskR
 
 void run_clone_task(const std::shared_ptr<CloneAgentTaskRequest>& agent_task_req, ExecEnv* exec_env) {
     SCOPED_SET_MODULE_TYPE(ThreadModuleType::CLONE);
-    StarRocksMetrics::instance()->clone_requests_total.increment(1);
+    AgentMetrics::instance()->clone_requests_total.increment(1);
     const TCloneReq& clone_req = agent_task_req->task_req;
     AgentStatus status = STARROCKS_SUCCESS;
 
@@ -376,7 +377,7 @@ void run_clone_task(const std::shared_ptr<CloneAgentTaskRequest>& agent_task_req
     if (clone_req.__isset.is_local && clone_req.is_local) {
         DataDir* dest_store = StorageEngine::instance()->get_store(clone_req.dest_path_hash);
         if (dest_store == nullptr) {
-            StarRocksMetrics::instance()->clone_requests_failed.increment(1);
+            AgentMetrics::instance()->clone_requests_failed.increment(1);
             LOG(WARNING) << "fail to get dest store. path_hash:" << clone_req.dest_path_hash;
             status_code = TStatusCode::RUNTIME_ERROR;
         } else {
@@ -385,7 +386,7 @@ void run_clone_task(const std::shared_ptr<CloneAgentTaskRequest>& agent_task_req
                                                    need_rebuild_pk_index);
             Status res = StorageEngine::instance()->execute_task(&engine_task);
             if (!res.ok()) {
-                StarRocksMetrics::instance()->clone_requests_failed.increment(1);
+                AgentMetrics::instance()->clone_requests_failed.increment(1);
                 status_code = TStatusCode::RUNTIME_ERROR;
                 LOG(WARNING) << "local tablet migration failed. status: " << res
                              << ", signature: " << agent_task_req->signature;
@@ -407,11 +408,11 @@ void run_clone_task(const std::shared_ptr<CloneAgentTaskRequest>& agent_task_req
 
                 int64_t copy_size = engine_task.get_copy_size();
                 finish_task_request.__set_copy_size(copy_size);
-                StarRocksMetrics::instance()->clone_task_intra_node_copy_bytes.increment(copy_size);
+                AgentMetrics::instance()->clone_task_intra_node_copy_bytes.increment(copy_size);
 
                 int64_t copy_time_ms = engine_task.get_copy_time_ms();
                 finish_task_request.__set_copy_time_ms(copy_time_ms);
-                StarRocksMetrics::instance()->clone_task_intra_node_copy_duration_ms.increment(copy_time_ms);
+                AgentMetrics::instance()->clone_task_intra_node_copy_duration_ms.increment(copy_time_ms);
             }
         }
     } else {
@@ -419,13 +420,13 @@ void run_clone_task(const std::shared_ptr<CloneAgentTaskRequest>& agent_task_req
                                     &error_msgs, &tablet_infos, &status);
         Status res = StorageEngine::instance()->execute_task(&engine_task);
         if (!res.ok()) {
-            StarRocksMetrics::instance()->clone_requests_failed.increment(1);
+            AgentMetrics::instance()->clone_requests_failed.increment(1);
             status_code = TStatusCode::RUNTIME_ERROR;
             LOG(WARNING) << "clone failed. status:" << res << ", signature:" << agent_task_req->signature;
             error_msgs.emplace_back("clone failed.");
         } else {
             if (status != STARROCKS_SUCCESS && status != STARROCKS_CREATE_TABLE_EXIST) {
-                StarRocksMetrics::instance()->clone_requests_failed.increment(1);
+                AgentMetrics::instance()->clone_requests_failed.increment(1);
                 status_code = TStatusCode::RUNTIME_ERROR;
                 LOG(WARNING) << "clone failed. signature: " << agent_task_req->signature;
                 error_msgs.emplace_back("clone failed.");
@@ -436,11 +437,11 @@ void run_clone_task(const std::shared_ptr<CloneAgentTaskRequest>& agent_task_req
 
                 int64_t copy_size = engine_task.get_copy_size();
                 finish_task_request.__set_copy_size(copy_size);
-                StarRocksMetrics::instance()->clone_task_inter_node_copy_bytes.increment(copy_size);
+                AgentMetrics::instance()->clone_task_inter_node_copy_bytes.increment(copy_size);
 
                 int64_t copy_time_ms = engine_task.get_copy_time_ms();
                 finish_task_request.__set_copy_time_ms(copy_time_ms);
-                StarRocksMetrics::instance()->clone_task_inter_node_copy_duration_ms.increment(copy_time_ms);
+                AgentMetrics::instance()->clone_task_inter_node_copy_duration_ms.increment(copy_time_ms);
             }
         }
     }
@@ -1087,7 +1088,7 @@ void run_remote_snapshot_task(const std::shared_ptr<RemoteSnapshotAgentTaskReque
 }
 
 void run_replicate_snapshot_task(const std::shared_ptr<ReplicateSnapshotAgentTaskRequest>& agent_task_req,
-                                 ExecEnv* exec_env) {
+                                 ExecEnv* exec_env, ThreadPool* replicate_snapshot_pool) {
     SCOPED_SET_MODULE_TYPE(ThreadModuleType::REPLICATION);
     MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(GlobalEnv::GetInstance()->replication_mem_tracker());
     DeferOp op([prev_tracker] { tls_thread_status.set_mem_tracker(prev_tracker); });
@@ -1102,7 +1103,8 @@ void run_replicate_snapshot_task(const std::shared_ptr<ReplicateSnapshotAgentTas
 
     Status res;
     if (replicate_snapshot_req.tablet_type == TTabletType::TABLET_TYPE_LAKE) {
-        res = exec_env->lake_replication_txn_manager()->replicate_snapshot(replicate_snapshot_req);
+        res = exec_env->lake_replication_txn_manager()->replicate_snapshot(replicate_snapshot_req,
+                                                                           replicate_snapshot_pool);
     } else {
         res = StorageEngine::instance()->replication_txn_manager()->replicate_snapshot(replicate_snapshot_req);
     }

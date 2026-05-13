@@ -38,6 +38,11 @@ ADD_BE_LIB(TypesCore
     variant_value.cpp
 )
 
+target_link_libraries(TypesCore PRIVATE
+    simdjson
+    velocypack
+)
+
 ADD_BE_LIB(Types
     hll_sketch.cpp
     logical_type_size.cpp

@@ -51,6 +51,7 @@
 #include "base/uid_util.h"
 #include "brpc/errno.pb.h"
 #include "cache/datacache.h"
+#include "cache/disk_cache/block_cache.h"
 #include "common/compiler_util.h"
 #include "common/config_exec_flow_fwd.h"
 #include "common/config_ingest_fwd.h"
@@ -64,6 +65,7 @@
 #include "exec/pipeline/pipeline_driver_executor.h"
 #include "exec/pipeline/query_context.h"
 #include "exec/short_circuit.h"
+#include "exec/workgroup/work_group.h"
 #include "gen_cpp/AgentService_types.h"
 #include "gen_cpp/BackendService.h"
 #include "gen_cpp/InternalService_types.h"
@@ -81,6 +83,7 @@
 #include "runtime/result_buffer_mgr.h"
 #include "runtime/routine_load/routine_load_task_executor.h"
 #include "runtime/runtime_filter_worker.h"
+#include "service/service_metrics.h"
 #include "storage/dictionary_cache_manager.h"
 #include "storage/storage_engine.h"
 #include "storage/txn_manager.h"
@@ -1321,7 +1324,7 @@ void PInternalServiceImplBase<T>::exec_short_circuit(google::protobuf::RpcContro
                                                      google::protobuf::Closure* done) {
     ClosureGuard closure_guard(done);
 
-    StarRocksMetrics::instance()->short_circuit_request_total.increment(1);
+    ServiceMetrics::instance()->short_circuit_request_total.increment(1);
     MonotonicStopWatch watch;
     watch.start();
 
@@ -1334,7 +1337,7 @@ void PInternalServiceImplBase<T>::exec_short_circuit(google::protobuf::RpcContro
     auto st = _exec_short_circuit(cntl, request, response);
     st.to_protobuf(response->mutable_status());
     uint64_t elapsed_time_ns = watch.elapsed_time();
-    StarRocksMetrics::instance()->short_circuit_request_duration_us.increment(elapsed_time_ns / 1000);
+    ServiceMetrics::instance()->short_circuit_request_duration_us.increment(elapsed_time_ns / 1000);
 }
 
 template <typename T>

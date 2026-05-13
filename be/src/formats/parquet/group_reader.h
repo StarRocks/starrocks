@@ -180,6 +180,9 @@ private:
         SlotId slot_id;                       // synthetic negative id (-1, -2, ...) that identifies this source
         std::unique_ptr<ColumnReader> reader; // reader for the underlying VARIANT column
         bool is_active = false;               // active (pre-conjunct) vs lazy (post-conjunct)
+        // true when ALL virtual slots backed by this source are promoted to VariantTypedValueProxy
+        // readers in Phase 2; skip IO and Phase 3 reads for this source entirely.
+        bool fully_promoted = false;
     };
 
     void _set_end_offset(int64_t value) { _end_offset = value; }
@@ -199,8 +202,24 @@ private:
     // result once after Phase 4 (in get_next).
     // An empty filter means there were no deferred conjuncts (all rows pass).
     // A non-empty all-zero filter means every row was filtered out.
-    StatusOr<Filter> _apply_deferred_variant_conjuncts(ChunkPtr& active_chunk, size_t raw_count);
-    Status _fill_dst_chunk(ChunkPtr& active_chunk, ChunkPtr* chunk);
+    // Evaluates deferred variant virtual conjuncts and optionally returns the projected
+    // virtual columns used by those conjuncts.
+    //
+    // projected_chunk:
+    //   - Output chunk keyed by virtual slot id, containing only slots that have deferred
+    //     conjuncts and were projected in this phase.
+    //   - Row order/row count matches `active_chunk` BEFORE Phase-4 combined filter is applied.
+    //     Caller must apply the exact same filter to projected_chunk before passing it to
+    //     _fill_dst_chunk.
+    StatusOr<Filter> _apply_deferred_variant_conjuncts(ChunkPtr& active_chunk, size_t raw_count,
+                                                       ChunkPtr* projected_chunk);
+    Status _align_deferred_projected_chunk_after_filter(const ChunkPtr& active_chunk,
+                                                        const ChunkPtr& deferred_projected_chunk,
+                                                        const Filter& chunk_filter, size_t pre_filter_rows);
+    // Fills output chunk and computes virtual projections. For slots present in
+    // `projected_chunk`, reuse precomputed columns (from deferred conjunct evaluation) to
+    // avoid re-projecting and re-seeking variant paths.
+    Status _fill_dst_chunk(ChunkPtr& active_chunk, const ChunkPtr& projected_chunk, ChunkPtr* chunk);
     const cctz::time_zone& _get_variant_projection_timezone();
 
     Status _create_column_readers();
@@ -209,6 +228,11 @@ private:
     StatusOr<ColumnReaderPtr> _create_column_reader(const GroupReaderParam::Column& column);
     VariantShreddedReadHints _get_variant_shredded_hints(std::string_view column_name) const;
     Status _prepare_column_readers() const;
+    // Promotes variant virtual columns to VariantTypedValueProxy readers in Phase 2 when the
+    // backing hidden source has _skip_base_payload=true (all paths are scalar typed-value leaves).
+    // Promoted slots are placed in _column_readers instead of _variant_virtual_projections and
+    // the hidden source is marked fully_promoted=true to skip Phase 3 IO/reads.
+    Status _promote_variant_virtual_columns();
     // Creates a lightweight VIEW chunk of _read_chunk containing the given slot_ids.
     // Each entry in slot_ids must already exist as a column in _read_chunk. _init_read_chunk()
     // pre-allocates physical slots and active hidden variant source slots; lazy hidden sources
@@ -277,6 +301,11 @@ private:
     // slot ids of virtual columns that have at least one deferred conjunct.
     // used in _apply_deferred_variant_conjuncts to detect invariant violations.
     std::unordered_set<SlotId> _deferred_conjunct_slot_ids;
+
+    // Slot ids of virtual variant columns promoted to VariantTypedValueProxy readers in Phase 2.
+    // These slots appear in _column_readers (not _variant_virtual_projections) and participate
+    // in dict filter like normal physical columns.
+    std::unordered_set<SlotId> _promoted_virtual_slots;
 
     // active columns that hold read_col index
     std::vector<int> _active_column_indices;

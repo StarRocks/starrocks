@@ -20,7 +20,7 @@
 #include "common/config_compaction_fwd.h"
 #include "runtime/current_thread.h"
 #include "runtime/mem_tracker.h"
-#include "runtime/starrocks_metrics.h"
+#include "storage/storage_metrics.h"
 
 namespace starrocks {
 
@@ -34,8 +34,8 @@ Status BaseCompaction::compact() {
         return Status::InvalidArgument("base compaction input parameter error.");
     }
 
-    StarRocksMetrics::instance()->base_compaction_request_total.increment(1);
-    StarRocksMetrics::instance()->running_base_compaction_task_num.increment(1);
+    StorageMetrics::instance()->base_compaction_request_total.increment(1);
+    StorageMetrics::instance()->running_base_compaction_task_num.increment(1);
     std::unique_lock lock(_tablet->get_base_lock(), std::try_to_lock);
     if (!lock.owns_lock()) {
         return Status::OK();
@@ -51,7 +51,7 @@ Status BaseCompaction::compact() {
     MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(_mem_tracker);
     DeferOp op([&] {
         tls_thread_status.set_mem_tracker(prev_tracker);
-        StarRocksMetrics::instance()->running_base_compaction_task_num.increment(-1);
+        StorageMetrics::instance()->running_base_compaction_task_num.increment(-1);
     });
 
     // 2. do base compaction, merge rowsets
@@ -64,11 +64,11 @@ Status BaseCompaction::compact() {
     // 4. add metric to base compaction
     int64_t end_time = UnixMillis();
     int64_t cost_time = end_time - start_time;
-    StarRocksMetrics::instance()->base_compaction_deltas_total.increment(_input_rowsets.size());
-    StarRocksMetrics::instance()->base_compaction_bytes_total.increment(_input_rowsets_size);
-    StarRocksMetrics::instance()->base_compaction_task_cost_time_ms.set_value(cost_time);
-    StarRocksMetrics::instance()->base_compaction_task_byte_per_second.set_value(_input_rowsets_size /
-                                                                                 (cost_time / 1000.0 + 1));
+    StorageMetrics::instance()->base_compaction_deltas_total.increment(_input_rowsets.size());
+    StorageMetrics::instance()->base_compaction_bytes_total.increment(_input_rowsets_size);
+    StorageMetrics::instance()->base_compaction_task_cost_time_ms.set_value(cost_time);
+    StorageMetrics::instance()->base_compaction_task_byte_per_second.set_value(_input_rowsets_size /
+                                                                               (cost_time / 1000.0 + 1));
     TRACE("save base compaction metrics");
 
     return Status::OK();

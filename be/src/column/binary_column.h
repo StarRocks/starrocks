@@ -183,11 +183,8 @@ public:
 
     void remove_first_n_values(size_t count) override;
 
-    // No complain about the overloaded-virtual for this function
-    DIAGNOSTIC_PUSH
-    DIAGNOSTIC_IGNORE("-Woverloaded-virtual")
+    using Column::append;
     void append(const Slice& str);
-    DIAGNOSTIC_POP
 
     void append_datum(const Datum& datum) override { append(datum.get_slice()); }
 

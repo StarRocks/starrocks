@@ -271,7 +271,7 @@ This topic introduces the following types of FE configurations:
 - Type: Boolean
 - Unit: -
 - Is mutable: No
-- Description: When this item is set to `true`, the system replaces or hides sensitive SQL content before it is written to logs and query-detail records. Code paths that honor this configuration include ConnectProcessor.formatStmt (audit logs), StmtExecutor.addRunningQueryDetail (query details), and SimpleExecutor.formatSQL (internal executor logs). With the feature enabled, invalid SQLs may be replaced with a fixed desensitized message, credentials (user/password) are hidden, and the SQL formatter is required to produce a sanitized representation (it can also enable digest-style output). This reduces leakage of sensitive literals and credentials in audit/internal logs but also means logs and query details no longer contain the original full SQL text (which can affect replay or debugging).
+- Description: When this item is set to `true`, the system replaces or hides sensitive SQL content before it is written to logs, query-detail records, and query profiles. Code paths that honor this configuration include ConnectProcessor.formatStmt (audit logs), StmtExecutor.addRunningQueryDetail (query details), SimpleExecutor.formatSQL (internal executor logs), and StmtExecutor.buildTopLevelProfile / processProfileAsync (the `Sql Statement` and `ExplainPlan` info-strings stored in a profile's `Summary` section). With the feature enabled, invalid SQLs may be replaced with a fixed desensitized message, credentials (user/password) are hidden, and the SQL formatter is required to produce a sanitized representation (it can also enable digest-style output). For the `ExplainPlan` field added by the `enable_explain_in_profile` session variable, this config also forces literal-digest rendering of the embedded `EXPLAIN COSTS` text, so the profile does not leak the literals that the persisted `Sql Statement` would have hidden. This reduces leakage of sensitive literals and credentials in audit/internal logs and profiles, but also means logs, query details, and profiles no longer contain the original full SQL text (which can affect replay or debugging).
 - Introduced in: -
 
 ### `internal_log_delete_age`
@@ -1377,6 +1377,15 @@ This topic introduces the following types of FE configurations:
 - Is mutable: Yes
 - Description: When StarRocks deserializes TaskRun history rows for `information_schema.task_runs`, a corrupted or invalid JSON row will normally cause deserialization to log a warning and throw a RuntimeException. If this item is set to `true`, the system will catch deserialization errors, skip the malformed record, and continue processing remaining rows instead of failing the query. This will make `information_schema.task_runs` queries tolerant of bad entries in the `_statistics_.task_run_history` table. Note that enabling it will silently drop corrupted history records (potential data loss) instead of surfacing an explicit error.
 - Introduced in: v3.3.3, v3.4.0, v3.5.0
+
+### `leader_demotion_drain_timeout_sec`
+
+- Default: 180
+- Type: Int
+- Unit: Seconds
+- Is mutable: Yes
+- Description: Per-daemon timeout used during leader demotion to wait for each leader-only daemon worker thread to exit after being interrupted. If a worker is still alive when the timeout elapses, the FE process is terminated, because a stuck worker combined with a later re-election would run two workers against the same singleton state - strictly worse than a process restart. Increase this if you routinely see heartbeat/report/publish/tablet-scheduler daemons needing more than the default to drain.
+- Introduced in: v4.1
 
 ### `lock_checker_interval_second`
 

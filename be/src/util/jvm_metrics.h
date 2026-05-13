@@ -45,6 +45,8 @@ public:
     JVMMetrics() = default;
     ~JVMMetrics() = default;
 
+    static JVMMetrics* instance();
+
     METRIC_DEFINE_INT_GAUGE(jvm_heap_used_bytes, MetricUnit::BYTES);
     METRIC_DEFINE_INT_GAUGE(jvm_heap_committed_bytes, MetricUnit::BYTES);
     METRIC_DEFINE_INT_GAUGE(jvm_heap_max_bytes, MetricUnit::BYTES);

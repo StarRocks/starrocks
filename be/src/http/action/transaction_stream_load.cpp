@@ -27,7 +27,6 @@
 #include <rapidjson/prettywriter.h>
 #include <thrift/protocol/TDebugProtocol.h>
 
-#include "base/metrics.h"
 #include "base/testutil/sync_point.h"
 #include "base/time/time.h"
 #include "base/uid_util.h"
@@ -53,15 +52,14 @@
 #include "runtime/fragment_mgr.h"
 #include "runtime/load_path_mgr.h"
 #include "runtime/plan_fragment_executor.h"
-#include "runtime/starrocks_metrics.h"
 #include "runtime/stream_load/load_stream_mgr.h"
 #include "runtime/stream_load/stream_load_context.h"
 #include "runtime/stream_load/stream_load_executor.h"
 #include "runtime/stream_load/stream_load_pipe.h"
 #include "runtime/stream_load/transaction_mgr.h"
+#include "runtime/thrift_rpc_helper.h"
 #include "util/byte_buffer.h"
 #include "util/json_util.h"
-#include "util/thrift_rpc_helper.h"
 
 namespace starrocks {
 

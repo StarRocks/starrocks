@@ -16,6 +16,7 @@
 
 #include "column/column_helper.h"
 #include "column/nullable_column.h"
+#include "exec/pipeline/exec_node_pipeline_adapter.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/limit_operator.h"
 #include "exec/pipeline/pipeline_builder.h"
@@ -390,7 +391,8 @@ StatusOr<pipeline::OpFactories> UnionNode::decompose_to_pipeline(pipeline::Pipel
                 context->next_operator_id(), id(), dst2src_slot_map, dst_slots, src_slots);
         operators_list[i].emplace_back(std::move(union_passthrough_op));
         // Initialize OperatorFactory's fields involving runtime filters.
-        this->init_runtime_filter_for_operator(operators_list[i].back().get(), context, rc_rf_probe_collector);
+        pipeline::init_runtime_filter_for_operator(*this, operators_list[i].back().get(), context,
+                                                   rc_rf_probe_collector);
     }
 
     // ProjectOperatorFactory is used for the materialized sub-node.
@@ -418,7 +420,8 @@ StatusOr<pipeline::OpFactories> UnionNode::decompose_to_pipeline(pipeline::Pipel
                 std::move(dst_column_is_nullables), std::vector<int32_t>(), std::vector<ExprContext*>());
         operators_list[i].emplace_back(std::move(project_op));
         // Initialize OperatorFactory's fields involving runtime filters.
-        this->init_runtime_filter_for_operator(operators_list[i].back().get(), context, rc_rf_probe_collector);
+        pipeline::init_runtime_filter_for_operator(*this, operators_list[i].back().get(), context,
+                                                   rc_rf_probe_collector);
     }
 
     // UnionConstSourceOperatorFactory is used for the const sub exprs.
@@ -441,7 +444,8 @@ StatusOr<pipeline::OpFactories> UnionNode::decompose_to_pipeline(pipeline::Pipel
 
         operators_list[i].emplace_back(std::move(union_const_source_op));
         // Initialize OperatorFactory's fields involving runtime filters.
-        this->init_runtime_filter_for_operator(operators_list[i].back().get(), context, rc_rf_probe_collector);
+        pipeline::init_runtime_filter_for_operator(*this, operators_list[i].back().get(), context,
+                                                   rc_rf_probe_collector);
     }
 
     if (limit() != -1) {

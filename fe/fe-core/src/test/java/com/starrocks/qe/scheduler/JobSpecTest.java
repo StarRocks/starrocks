@@ -42,6 +42,7 @@ import com.starrocks.thrift.TExecPlanFragmentParams;
 import com.starrocks.thrift.TLoadJobType;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TPlanFragmentExecParams;
+import com.starrocks.thrift.TQueryOptions;
 import com.starrocks.thrift.TQueryType;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.thrift.TWorkGroup;
@@ -403,6 +404,35 @@ public class JobSpecTest extends SchedulerTestBase {
         Assertions.assertEquals(queryId, jobSpec.getQueryId());
         Assertions.assertFalse(jobSpec.isEnablePipeline());
         Assertions.assertNull(jobSpec.getResourceGroup());
+        Assertions.assertFalse(jobSpec.getQueryOptions().isSetEnable_profile());
+        Assertions.assertFalse(coordinator.isEnableLoadProfile());
+    }
 
+    @Test
+    public void testFromSyncStreamLoadSpecEnableProfile(@Mocked StreamLoadPlanner planner) throws Exception {
+        TUniqueId queryId = new TUniqueId(2, 3);
+        TQueryOptions plannerOptions = new TQueryOptions();
+        plannerOptions.setEnable_profile(true);
+        plannerOptions.setLoad_profile_collect_second(42);
+        TExecPlanFragmentParams params = new TExecPlanFragmentParams()
+                .setParams(new TPlanFragmentExecParams().setFragment_instance_id(queryId))
+                .setQuery_options(plannerOptions);
+        new Expectations(planner) {
+            {
+                planner.getExecPlanFragmentParams();
+                result = params;
+                planner.getConnectContext();
+                result = new ConnectContext();
+            }
+        };
+
+        DefaultCoordinator coordinator = COORDINATOR_FACTORY.createSyncStreamLoadScheduler(planner, new TNetworkAddress());
+        JobSpec jobSpec = coordinator.getJobSpec();
+
+        Assertions.assertTrue(jobSpec.getQueryOptions().isEnable_profile());
+        Assertions.assertEquals(42, jobSpec.getQueryOptions().getLoad_profile_collect_second());
+        // isEnableLoadProfile must honor the planner-decided enable_profile even though the
+        // ConnectContext has an empty SessionVariable (the direct-CN stream-load path).
+        Assertions.assertTrue(coordinator.isEnableLoadProfile());
     }
 }

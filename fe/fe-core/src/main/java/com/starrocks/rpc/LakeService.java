@@ -22,6 +22,8 @@ import com.starrocks.proto.AbortTxnRequest;
 import com.starrocks.proto.AbortTxnResponse;
 import com.starrocks.proto.AggregateCompactRequest;
 import com.starrocks.proto.AggregatePublishVersionRequest;
+import com.starrocks.proto.BuildVectorIndexRequest;
+import com.starrocks.proto.BuildVectorIndexResponse;
 import com.starrocks.proto.CompactRequest;
 import com.starrocks.proto.CompactResponse;
 import com.starrocks.proto.DeleteDataRequest;
@@ -79,6 +81,7 @@ public interface LakeService {
     long TIMEOUT_VACUUM = MILLIS_PER_HOUR;
     long TIMEOUT_VACUUM_FULL = MILLIS_PER_HOUR * 24;
     long TIMEOUT_REPAIR_METADATA = MILLIS_PER_HOUR;
+    long TIMEOUT_BUILD_VECTOR_INDEX = MILLIS_PER_DAY;
 
     @ProtobufRPC(serviceName = "LakeService", methodName = "publish_version", onceTalkTimeout = TIMEOUT_PUBLISH_VERSION)
     Future<PublishVersionResponse> publishVersion(PublishVersionRequest request);
@@ -146,5 +149,9 @@ public interface LakeService {
 
     @ProtobufRPC(serviceName = "LakeService", methodName = "repair_tablet_metadata", onceTalkTimeout = TIMEOUT_REPAIR_METADATA)
     Future<RepairTabletMetadataResponse> repairTabletMetadata(RepairTabletMetadataRequest request);
+
+    @ProtobufRPC(serviceName = "LakeService", methodName = "build_vector_index",
+            onceTalkTimeout = TIMEOUT_BUILD_VECTOR_INDEX)
+    Future<BuildVectorIndexResponse> buildVectorIndex(BuildVectorIndexRequest request);
 }
 

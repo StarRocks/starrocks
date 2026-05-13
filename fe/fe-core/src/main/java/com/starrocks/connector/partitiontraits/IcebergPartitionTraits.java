@@ -22,7 +22,7 @@ import com.starrocks.catalog.NullablePartitionKey;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.tvr.TvrTableSnapshot;
-import com.starrocks.connector.ConnectorMetadatRequestContext;
+import com.starrocks.connector.ConnectorMetadataRequestContext;
 import com.starrocks.connector.PartitionInfo;
 import com.starrocks.connector.iceberg.IcebergPartitionUtils;
 import com.starrocks.server.GlobalStateMgr;
@@ -59,7 +59,7 @@ public class IcebergPartitionTraits extends DefaultTraits {
     public List<PartitionInfo> getPartitions(List<String> partitionNames) {
         IcebergTable icebergTable = (IcebergTable) table;
         if (pinnedVersionRange != null) {
-            ConnectorMetadatRequestContext ctx = new ConnectorMetadatRequestContext();
+            ConnectorMetadataRequestContext ctx = new ConnectorMetadataRequestContext();
             ctx.setTableVersionRange(pinnedVersionRange);
             return GlobalStateMgr.getCurrentState().getMetadataMgr().
                     getPartitions(icebergTable.getCatalogName(), table, partitionNames, ctx);
@@ -81,7 +81,7 @@ public class IcebergPartitionTraits extends DefaultTraits {
         }
 
         IcebergTable icebergTable = (IcebergTable) table;
-        ConnectorMetadatRequestContext requestContext = new ConnectorMetadatRequestContext();
+        ConnectorMetadataRequestContext requestContext = new ConnectorMetadataRequestContext();
         requestContext.setQueryMVRewrite(isQueryMVRewrite());
         if (pinnedVersionRange != null) {
             requestContext.setTableVersionRange(pinnedVersionRange);

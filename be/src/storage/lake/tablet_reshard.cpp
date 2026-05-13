@@ -19,12 +19,16 @@
 
 #include <unordered_map>
 
+#include "base/utility/defer_op.h"
 #include "common/logging.h"
+#include "runtime/exec_env.h"
 #include "storage/lake/metacache.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_merger.h"
 #include "storage/lake/tablet_reshard_helper.h"
 #include "storage/lake/tablet_splitter.h"
+#include "storage/lake/transactions.h"
+#include "storage/lake/vacuum.h" // delete_files_async
 
 // Layer 1: Reshard operation overall metrics
 bvar::Adder<int64_t> g_tablet_reshard_total("tablet_reshard_total");
@@ -332,6 +336,101 @@ CONTINUE_HANDLE_IDENTICAL_TABLET:
     return Status::OK();
 }
 
+// Transform |txn_log| (which still carries the source tablet id) for publish
+// on the merged tablet. Drops compaction as a no-op (background compaction
+// will rerun it on the merged tablet) and asynchronously deletes the output
+// files that the compaction had already written under the source tablet's path.
+// Other op shapes (op_write only, or empty log) pass through unchanged.
+Status convert_txn_log_for_merging(TxnLogPB* txn_log) {
+    if (!txn_log->has_op_compaction() && !txn_log->has_op_parallel_compaction()) {
+        return Status::OK();
+    }
+    delete_files_async(tablet_reshard_helper::collect_compaction_output_file_paths(
+            *txn_log, ExecEnv::GetInstance()->lake_tablet_manager()));
+    txn_log->clear_op_compaction();
+    txn_log->clear_op_parallel_compaction();
+    return Status::OK();
+}
+
+// Transform |txn_log| for publish on one of the split child tablets.
+//
+// Compaction ops are dropped on cross-publish, mirroring the merging-side
+// handling (see convert_txn_log_for_merging above). The reason is the same in
+// the other direction: a compaction transaction committed on the parent before
+// the split has its rows-mapper file (.lcrm) and output rowset built against
+// the parent tablet's full key range. Each split child only owns a subrange,
+// so when the conflict resolver runs for its op_compaction publish on the
+// child it iterates fewer segment rows than the mapper's stored row_count and
+// `RowsMapperIterator::status()` rejects the publish with
+//   "Chunk vs rows mapper's row count mismatch. <N> vs <total>"
+// (see storage/rows_mapper.cpp:155, storage/primary_key_compaction_conflict_resolver.cpp:124,175).
+// Because the compaction's input rowsets are still present in every child's
+// metadata (shared via set_all_data_files_shared), it is safe to drop the
+// compaction here — background compaction on the child will rerun it. The
+// compaction's output files were written under the parent tablet's path and
+// are deleted async so they do not leak. The async cleanup is gated to a
+// single child (split_index == 0) because publish runs convert_txn_log once
+// per split child against the same parent txn_log; without the gate the
+// identical output paths would be queued for deletion split_count times.
+Status convert_txn_log_for_splitting(TxnLogPB* txn_log, const TabletMetadataPtr& base_tablet_metadata,
+                                     const PublishTabletInfo& publish_tablet_info) {
+    if (txn_log->has_op_compaction() || txn_log->has_op_parallel_compaction()) {
+        if (publish_tablet_info.get_split_index() == 0) {
+            delete_files_async(tablet_reshard_helper::collect_compaction_output_file_paths(
+                    *txn_log, ExecEnv::GetInstance()->lake_tablet_manager()));
+        }
+        txn_log->clear_op_compaction();
+        txn_log->clear_op_parallel_compaction();
+    }
+    tablet_reshard_helper::set_all_data_files_shared(txn_log);
+    RETURN_IF_ERROR(tablet_reshard_helper::update_rowset_ranges(txn_log, base_tablet_metadata->range()));
+    tablet_reshard_helper::update_txn_log_data_stats(txn_log, publish_tablet_info.get_split_count(),
+                                                     publish_tablet_info.get_split_index());
+    return Status::OK();
+}
+
+// Pick a single stable tablet id from |info| to serve as the BE-side publish
+// slot for this reshard. We always anchor on the old side — SPLIT has one
+// old tablet, MERGE picks the first of its old_tablet_ids, IDENTICAL uses its
+// old_tablet_id. This keeps three properties:
+//
+//   1. Retry dedup: all retries of the same reshard carry the same
+//      ReshardingTabletInfoPB, so they lock the same id.
+//   2. BE-level fail-safe against DML: the same id is what a DML
+//      publish_version with PUBLISH_NORMAL would acquire, so any DML that
+//      isn't routed through cross-publish also serializes against reshard.
+//   3. Deterministic convergence: a single CAS has no partial-acquire /
+//      rollback window, so concurrent retries cannot convoy each other the
+//      way a multi-tablet acquire-in-loop could.
+int64_t reshard_serialization_id(const ReshardingTabletInfoPB& info) {
+    if (info.has_splitting_tablet_info()) {
+        return info.splitting_tablet_info().old_tablet_id();
+    }
+    if (info.has_merging_tablet_info()) {
+        DCHECK(!info.merging_tablet_info().old_tablet_ids().empty());
+        return info.merging_tablet_info().old_tablet_ids(0);
+    }
+    if (info.has_identical_tablet_info()) {
+        return info.identical_tablet_info().old_tablet_id();
+    }
+    return 0;
+}
+
+Status acquire_publish_tablets(const ReshardingTabletInfoPB& info) {
+    const int64_t id = reshard_serialization_id(info);
+    if (!acquire_publish_tablet(id)) {
+        return Status::ResourceBusy(
+                fmt::format("The previous publish task for tablet {} has not finished. You can ignore this "
+                            "error and the task will retry later.",
+                            id));
+    }
+    return Status::OK();
+}
+
+void release_publish_tablets(const ReshardingTabletInfoPB& info) {
+    release_publish_tablet(reshard_serialization_id(info));
+}
+
 } // namespace
 
 std::ostream& operator<<(std::ostream& out, const PublishTabletInfo& tablet_info) {
@@ -345,35 +444,34 @@ std::ostream& operator<<(std::ostream& out, const PublishTabletInfo& tablet_info
 
 StatusOr<TxnLogPtr> convert_txn_log(const TxnLogPtr& txn_log, const TabletMetadataPtr& base_tablet_metadata,
                                     const PublishTabletInfo& publish_tablet_info) {
-    if (publish_tablet_info.get_publish_tablet_type() == PublishTabletInfo::PUBLISH_NORMAL) {
+    const auto type = publish_tablet_info.get_publish_tablet_type();
+    if (type == PublishTabletInfo::PUBLISH_NORMAL) {
         return txn_log;
     }
 
     g_tablet_reshard_cross_publish_total << 1;
-    switch (publish_tablet_info.get_publish_tablet_type()) {
+    auto new_txn_log = std::make_shared<TxnLogPB>(*txn_log);
+
+    // Each case increments its per-type metric and applies any op-level
+    // transform while the log still carries the source tablet id (critical for
+    // MERGING, benign for others). Final tablet_id rewrite happens uniformly.
+    switch (type) {
     case PublishTabletInfo::SPLITTING_TABLET:
         g_tablet_reshard_cross_publish_splitting_total << 1;
+        RETURN_IF_ERROR(convert_txn_log_for_splitting(new_txn_log.get(), base_tablet_metadata, publish_tablet_info));
         break;
     case PublishTabletInfo::MERGING_TABLET:
         g_tablet_reshard_cross_publish_merging_total << 1;
+        RETURN_IF_ERROR(convert_txn_log_for_merging(new_txn_log.get()));
         break;
     case PublishTabletInfo::IDENTICAL_TABLET:
         g_tablet_reshard_cross_publish_identical_total << 1;
         break;
     default:
-        break;
+        return Status::InternalError(fmt::format("unknown publish tablet type: {}", static_cast<int>(type)));
     }
 
-    auto new_txn_log = std::make_shared<TxnLogPB>(*txn_log);
     new_txn_log->set_tablet_id(publish_tablet_info.get_tablet_id_in_metadata());
-
-    if (publish_tablet_info.get_publish_tablet_type() == PublishTabletInfo::SPLITTING_TABLET) {
-        tablet_reshard_helper::set_all_data_files_shared(new_txn_log.get());
-        RETURN_IF_ERROR(tablet_reshard_helper::update_rowset_ranges(new_txn_log.get(), base_tablet_metadata->range()));
-        tablet_reshard_helper::update_txn_log_data_stats(new_txn_log.get(), publish_tablet_info.get_split_count(),
-                                                         publish_tablet_info.get_split_index());
-    }
-
     return new_txn_log;
 }
 
@@ -384,6 +482,20 @@ Status publish_resharding_tablet(TabletManager* tablet_manager, const Resharding
                                  std::unordered_map<int64_t, TabletRangePB>& tablet_ranges) {
     g_tablet_reshard_total << 1;
     auto reshard_start_ts = butil::gettimeofday_us();
+
+    // Reserve the per-reshard publish slot. All retries of the same reshard
+    // resolve to the same id (see reshard_serialization_id), so this
+    // single-CAS acquire dedups FE's 10 ms resubmits. Mutual exclusion with
+    // concurrent DML publish on the old-side tablet falls out for free: the
+    // chosen id matches what a PUBLISH_NORMAL DML would acquire in
+    // publish_version. Cross-tablet correctness for the rest of the reshard
+    // (all N inputs + the new tablet) is provided by FE commitVersion
+    // ordering and convert_txn_log routing, not by this slot.
+    if (auto st = acquire_publish_tablets(resharding_tablet); !st.ok()) {
+        g_tablet_reshard_failed << 1;
+        return st;
+    }
+    DeferOp release_tablets([&] { release_publish_tablets(resharding_tablet); });
 
     LOG(INFO) << "Start publish resharding tablet"
               << ", resharding_tablet=" << resharding_tablet.DebugString() << ", txn_info=" << txn_info.DebugString()

@@ -216,9 +216,9 @@ private:
 
     std::unique_ptr<EventScheduler> _event_scheduler;
     PipelineTimer* _pipeline_timer = nullptr;
-    PipelineTimerTask* _timeout_task = nullptr;
-    PipelineTimerTask* _report_state_task = nullptr;
-    std::unordered_map<uint64_t, PipelineTimerTask*> _rf_timeout_tasks;
+    std::shared_ptr<PipelineTimerTask> _timeout_task = nullptr;
+    std::shared_ptr<PipelineTimerTask> _report_state_task = nullptr;
+    std::unordered_map<uint64_t, std::shared_ptr<PipelineTimerTask>> _rf_timeout_tasks;
 
     RuntimeFilterHub _runtime_filter_hub;
 

@@ -25,7 +25,7 @@
 #include "base/concurrency/stopwatch.hpp"
 #include "base/failpoint/fail_point.h"
 #include "common/logging.h"
-#include "io/io_profiler.h"
+#include "io/core/io_profiler.h"
 
 namespace starrocks::io {
 

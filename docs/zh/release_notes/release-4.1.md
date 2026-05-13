@@ -4,6 +4,14 @@ displayed_sidebar: docs
 
 # StarRocks version 4.1
 
+:::danger
+
+**容器镜像问题（v4.1.0）**
+
+由于 v4.1.0 容器镜像存在加载顺序不稳定的问题，BE 进程在容器环境中可能无法可靠启动。**容器环境用户请勿升级至 v4.1.0。** 请等待包含修复的 v4.1.1（[#71825](https://github.com/StarRocks/starrocks/pull/71825)）。
+
+:::
+
 :::warning
 
 **降级注意事项**
@@ -26,7 +34,7 @@ displayed_sidebar: docs
 
 - **大容量 Tablet 支持（第一阶段）**
 
-  支持存算分离集群中更大的单 Tablet 数据容量，长期目标是每个 Tablet 100 GB。第一阶段侧重于在单个 Lake Tablet 中实现并行 Compaction 和并行 MemTable 最终化，从而随着 Tablet 大小增长而减少导入和 Compaction 开销。[#66586](https://github.com/StarRocks/starrocks/pull/66586) [#68677](https://github.com/StarRocks/starrocks/pull/68677)
+  使存算分离集群能够在每个 Tablet 中存储显著更多的数据，长期目标是达到每个 Tablet 100 GB。第一阶段在整个数据摄取、主键更新和压缩管道中引入了 Tablet 内部并行处理，因此随着 Tablet 规模的扩大，单个 Lake Tablet 不再成为单线程瓶颈。改进内容包括：单个 Tablet 内的并行 Compaction（支持 Segment 级拆分）、Lake 导入过程中的并行 MemTable 最终化、刷新和合并（包括导入溢出路径）、Tablet 内部的并行 Publish 以及主键表的并行条件更新，此外还针对支持远程存储映射文件的云原生主键索引，引入了范围拆分/并行/分级大小的 Compaction 机制。这些改进共同显著降低了大型 Tablet 工作负载的摄入内存开销、Compaction 放大效应以及 FE 元数据压力。[#66424](https://github.com/StarRocks/starrocks/pull/66424) [#66522](https://github.com/StarRocks/starrocks/pull/66522) [#66778](https://github.com/StarRocks/starrocks/pull/66778) [#66586](https://github.com/StarRocks/starrocks/pull/66586) [#67432](https://github.com/StarRocks/starrocks/pull/67432) [#67478](https://github.com/StarRocks/starrocks/pull/67478) [#67554](https://github.com/StarRocks/starrocks/pull/67554) [#66796](https://github.com/StarRocks/starrocks/pull/66796) [#67392](https://github.com/StarRocks/starrocks/pull/67392) [#67878](https://github.com/StarRocks/starrocks/pull/67878) [#65908](https://github.com/StarRocks/starrocks/pull/65908) [#68677](https://github.com/StarRocks/starrocks/pull/68677) [#68123](https://github.com/StarRocks/starrocks/pull/68123) [#69865](https://github.com/StarRocks/starrocks/pull/69865)
 
 - **Fast Schema Evolution V2**
 
@@ -41,11 +49,11 @@ displayed_sidebar: docs
   查询级别的缓存命中率现已在审计日志和监控系统中公开，以提高缓存透明度和延迟诊断能力。额外的数据缓存指标包括内存和磁盘配额使用情况以及页面缓存统计信息。[#63964](https://github.com/StarRocks/starrocks/pull/63964)
 
 - 为 Lake 表添加了段元数据过滤器，可在扫描期间根据排序键范围跳过不相关的段，从而减少范围谓词查询的 I/O。[#68124](https://github.com/StarRocks/starrocks/pull/68124)
-- 支持 Lake DeltaWriter 的快速取消，减少共享数据集群中已取消的摄取作业的延迟。[#68877](https://github.com/StarRocks/starrocks/pull/68877)
+- 支持 Lake DeltaWriter 的快速取消，减少存算分离集群中已取消的摄取作业的延迟。[#68877](https://github.com/StarRocks/starrocks/pull/68877)
 - 新增支持基于时间间隔的调度，用于自动化集群快照。[#67525](https://github.com/StarRocks/starrocks/pull/67525)
-- 支持 MemTable 刷写和合并的管道执行，提高共享数据集群中云原生表的摄取吞吐量。[#67878](https://github.com/StarRocks/starrocks/pull/67878)
+- 支持 MemTable 刷写和合并的管道执行，提高存算分离集群中云原生表的摄取吞吐量。[#67878](https://github.com/StarRocks/starrocks/pull/67878)
 - 支持 `dry_run` 模式修复云原生表，允许用户在执行前预览修复操作。[#68494](https://github.com/StarRocks/starrocks/pull/68494)
-- 在无共享集群中为发布事务添加了线程池，提高了发布吞吐量。[#67797](https://github.com/StarRocks/starrocks/pull/67797)
+- 在存算一体集群中为发布事务添加了线程池，提高了发布吞吐量。[#67797](https://github.com/StarRocks/starrocks/pull/67797)
 - 支持动态修改云原生表的 `datacache.enable` 属性。[#69011](https://github.com/StarRocks/starrocks/pull/69011)
 
 ### 数据湖分析
@@ -165,7 +173,7 @@ displayed_sidebar: docs
 - 引入 REFRESH CONNECTIONS 命令，将全局变量更改传播到现有连接，而无需重新连接。[#64964](https://github.com/StarRocks/starrocks/pull/64964)
 - 添加了内置 UI 功能，用于分析查询配置文件和查看格式化 SQL，使查询调优更易于访问。[#63867](https://github.com/StarRocks/starrocks/pull/63867)
 - 实现 `ClusterSummaryActionV2` API 端点，以提供结构化的集群概览。[#68836](https://github.com/StarRocks/starrocks/pull/68836)
-- 新增了一个全局只读系统变量 `@@run_mode`，用于查询当前集群运行模式（共享数据或无共享）。[#69247](https://github.com/StarRocks/starrocks/pull/69247)
+- 新增了一个全局只读系统变量 `@@run_mode`，用于查询当前集群运行模式（存算分离或存算一体）。[#69247](https://github.com/StarRocks/starrocks/pull/69247)
 - 默认启用 `query_queue_v2` 以改进查询队列管理。[#67462](https://github.com/StarRocks/starrocks/pull/67462)
 - 支持 Stream Load 和 Merge Commit 操作的用户级默认仓库。[#68106](https://github.com/StarRocks/starrocks/pull/68106) [#68616](https://github.com/StarRocks/starrocks/pull/68616)
 - 新增 `skip_black_list` 会话变量，以便在需要时绕过后端黑名单验证。[#67467](https://github.com/StarRocks/starrocks/pull/67467)
@@ -203,7 +211,7 @@ displayed_sidebar: docs
 - 修复了外连接中带有常量侧列引用的谓词重写不正确的问题。[#67072](https://github.com/StarRocks/starrocks/pull/67072)
 - 修复了磁盘重新迁移 (A→B→A) 期间 GC 竞争导致的 PK tablet 行集元数据丢失问题。[#70727](https://github.com/StarRocks/starrocks/pull/70727)
 - 修复了 SharedDataStorageVolumeMgr 中的 DB 读锁泄漏问题。[#70987](https://github.com/StarRocks/starrocks/pull/70987)
-- 修复了在共享数据中修改 CHAR 列长度后查询结果错误的问题。[#68808](https://github.com/StarRocks/starrocks/pull/68808)
+- 修复了在存算分离中修改 CHAR 列长度后查询结果错误的问题。[#68808](https://github.com/StarRocks/starrocks/pull/68808)
 - 修复了多表情况下 MV 刷新错误。[#61763](https://github.com/StarRocks/starrocks/pull/61763)
 - 修复了强制刷新后 MV 回收时间不正确的问题。[#68673](https://github.com/StarRocks/starrocks/pull/68673)
 - 修复了同步 MV 中全空值处理错误。[#69136](https://github.com/StarRocks/starrocks/pull/69136)
@@ -225,7 +233,7 @@ displayed_sidebar: docs
 - 修复了带有 CTE 范围的 join on 子句错误。[#68809](https://github.com/StarRocks/starrocks/pull/68809)
 - 修复了短路点查找中缺少分区谓词的问题。[#71124](https://github.com/StarRocks/starrocks/pull/71124)
 - 通过使用 bindScope() 模式修复了 ConnectContext 内存泄漏。[#68215](https://github.com/StarRocks/starrocks/pull/68215)
-- 修复了无共享集群中 `CatalogRecycleBin.asyncDeleteForTables` 的内存泄漏。[#68275](https://github.com/StarRocks/starrocks/pull/68275)
+- 修复了存算一体集群中 `CatalogRecycleBin.asyncDeleteForTables` 的内存泄漏。[#68275](https://github.com/StarRocks/starrocks/pull/68275)
 - 修复了 Thrift 接受线程在遇到任何异常时退出。[#68644](https://github.com/StarRocks/starrocks/pull/68644)
 - 修复了例行加载列映射中的 UDF 解析。[#68201](https://github.com/StarRocks/starrocks/pull/68201)
 - 修复了 `DROP FUNCTION IF EXISTS` 忽略 `ifExists` 标志的问题。[#69216](https://github.com/StarRocks/starrocks/pull/69216)

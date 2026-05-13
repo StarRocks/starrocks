@@ -42,23 +42,29 @@
 #include "base/string/parse_util.h"
 #include "base/time/time.h"
 #include "base/utility/pretty_printer.h"
+#include "common/brpc/brpc_stub_cache.h"
 #include "common/config_exec_env_fwd.h"
 #include "common/config_lake_fwd.h"
+#include "common/config_vector_index_fwd.h"
 #include "common/logging.h"
 #include "common/mem_chunk.h"
+#include "common/metrics/process_metrics_registry.h"
 #include "common/process_exit.h"
 #include "common/system/cpu_info.h"
 #include "common/system/master_info.h"
 #include "common/system/mem_info.h"
+#include "common/thread/priority_thread_pool.hpp"
 #include "common/thread/threadpool.h"
 #include "connector/connector_sink_executor.h"
 #include "exec/pipeline/driver_limiter.h"
 #include "exec/pipeline/pipeline_driver_executor.h"
+#include "exec/pipeline/pipeline_metrics.h"
 #include "exec/pipeline/query_context.h"
 #include "exec/pipeline/schedule/pipeline_timer.h"
 #include "exec/query_cache/cache_manager.h"
 #include "exec/spill/dir_manager.h"
 #include "exec/spill/global_spill_manager.h"
+#include "exec/spill/spill_metrics.h"
 #include "exec/workgroup/pipeline_executor_set.h"
 #include "exec/workgroup/scan_executor.h"
 #include "exec/workgroup/scan_task_queue.h"
@@ -92,12 +98,12 @@
 #include "runtime/routine_load/routine_load_task_executor.h"
 #include "runtime/runtime_filter_cache.h"
 #include "runtime/runtime_filter_worker.h"
+#include "runtime/runtime_metrics.h"
 #include "runtime/small_file_mgr.h"
-#include "runtime/starrocks_metrics.h"
 #include "runtime/stream_load/load_stream_mgr.h"
 #include "runtime/stream_load/stream_load_executor.h"
 #include "runtime/stream_load/transaction_mgr.h"
-#include "service/staros_worker.h"
+#include "runtime/thrift_rpc_helper.h"
 #include "storage/lake/fixed_location_provider.h"
 #include "storage/lake/lake_persistent_index_parallel_compact_mgr.h"
 #include "storage/lake/replication_txn_manager.h"
@@ -110,9 +116,10 @@
 #include "storage/update_manager.h"
 #include "types/hll.h"
 #include "udf/python/env.h"
-#include "util/brpc_stub_cache.h"
-#include "util/global_metrics_registry.h"
-#include "util/priority_thread_pool.hpp"
+
+#ifdef USE_STAROS
+#include <fslib/configuration.h>
+#endif
 
 #ifdef STARROCKS_JIT_ENABLE
 #include "exprs/jit/jit_engine.h"
@@ -201,14 +208,14 @@ bool GlobalEnv::is_init() {
     return _is_init;
 }
 
-Status GlobalEnv::init() {
-    RETURN_IF_ERROR(_init_mem_tracker());
+Status GlobalEnv::init(MetricRegistry* metrics) {
+    RETURN_IF_ERROR(_init_mem_tracker(metrics));
     CurrentThread::set_mem_tracker_source(&GlobalEnv::is_init, process_mem_tracker_provider);
     _is_init = true;
     return Status::OK();
 }
 
-Status GlobalEnv::_init_mem_tracker() {
+Status GlobalEnv::_init_mem_tracker(MetricRegistry* metrics) {
     MemTracker::init_type_label_map();
 
     int64_t bytes_limit = 0;
@@ -288,7 +295,9 @@ Status GlobalEnv::_init_mem_tracker() {
     _replication_mem_tracker = regist_tracker(MemTrackerType::REPLICATION, -1, process_mem_tracker());
 
     register_hll_registers_allocator();
-    register_mem_chunk_allocator_metrics(GlobalMetricsRegistry::instance()->metrics());
+    if (metrics != nullptr) {
+        register_mem_chunk_allocator_metrics(metrics);
+    }
 
     return Status::OK();
 }
@@ -394,6 +403,7 @@ void ExecEnv::_refresh_service_contexts() {
     _lake_services.parallel_compact_mgr = _parallel_compact_mgr.get();
     _lake_services.pk_index_execution_thread_pool = _pk_index_execution_thread_pool.get();
     _lake_services.pk_index_memtable_flush_thread_pool = _pk_index_memtable_flush_thread_pool.get();
+    _lake_services.lake_partial_update_thread_pool = _lake_partial_update_thread_pool.get();
 
     _runtime_services.external_scan_context_mgr = _external_scan_context_mgr;
     _runtime_services.stream_mgr = _stream_mgr;
@@ -435,20 +445,24 @@ void ExecEnv::_refresh_service_contexts() {
     _admin_services.agent = &_agent_services;
 }
 
-Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
+Status ExecEnv::init(const std::vector<StorePath>& store_paths, ProcessMetricsRegistry* process_metrics_registry,
+                     bool as_cn) {
+    DCHECK(process_metrics_registry != nullptr);
+    _process_metrics_registry = process_metrics_registry;
+    _metrics = process_metrics_registry->root_registry();
+    _table_metrics_mgr = process_metrics_registry->table_metrics_mgr();
     _store_paths = store_paths;
     _external_scan_context_mgr = new ExternalScanContextMgr(this);
-    _metrics = GlobalMetricsRegistry::instance()->metrics();
-    _stream_mgr = new DataStreamMgr();
+    _stream_mgr = new DataStreamMgr(_metrics);
     _lookup_dispatcher_mgr = new LookUpDispatcherMgr();
-    _result_mgr = new ResultBufferMgr();
-    _result_queue_mgr = new ResultQueueMgr();
+    _result_mgr = new ResultBufferMgr(_metrics);
+    _result_queue_mgr = new ResultQueueMgr(_metrics);
     _backend_client_cache = new BackendServiceClientCache(config::max_client_cache_size_per_host);
     _frontend_client_cache = new FrontendServiceClientCache(config::max_client_cache_size_per_host);
     _broker_client_cache = new BrokerServiceClientCache(config::max_client_cache_size_per_host);
     // query_context_mgr keeps slotted map with 64 slot to reduce contention
     _query_context_mgr = new pipeline::QueryContextManager(6);
-    RETURN_IF_ERROR(_query_context_mgr->init());
+    RETURN_IF_ERROR(_query_context_mgr->init(_metrics));
     _thread_pool =
             new PriorityThreadPool("table_scan_io", // olap/external table scan thread pool
                                    config::scanner_thread_pool_thread_num, config::scanner_thread_pool_queue_size);
@@ -481,7 +495,7 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
                             .set_max_queue_size(automatic_partition_queue_size)
                             .set_idle_timeout(MonoDelta::FromMilliseconds(2000))
                             .build(&_automatic_partition_pool));
-    REGISTER_THREAD_POOL_METRICS(automatic_partition, _automatic_partition_pool);
+    REGISTER_THREAD_POOL_RUNTIME_METRICS(_metrics, automatic_partition, _automatic_partition_pool);
 
     int num_prepare_threads = config::pipeline_prepare_thread_pool_thread_num;
     if (num_prepare_threads == 0) {
@@ -493,7 +507,7 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
     _pipeline_prepare_pool =
             new PriorityThreadPool("pip_prepare", num_prepare_threads, config::pipeline_prepare_thread_pool_queue_size);
     // register the metrics to monitor the task queue len
-    REGISTER_GAUGE_STARROCKS_METRIC(pipe_prepare_pool_queue_len, [] {
+    pipeline::PipelineExecutorMetrics::instance()->register_pipe_prepare_pool_queue_len_hook([] {
         auto pool = ExecEnv::GetInstance()->pipeline_prepare_pool();
         return (pool == nullptr) ? 0U : pool->get_queue_size();
     });
@@ -528,7 +542,7 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
                             .set_max_queue_size(0)
                             .set_idle_timeout(MonoDelta::FromMilliseconds(2000))
                             .build(&_load_rpc_pool));
-    REGISTER_GAUGE_STARROCKS_METRIC(load_rpc_threadpool_size, _load_rpc_pool->num_threads)
+    REGISTER_GAUGE_RUNTIME_METRIC(_metrics, load_rpc_threadpool_size, _load_rpc_pool->num_threads)
 
     RETURN_IF_ERROR(ThreadPoolBuilder("dictionary_cache") // thread pool for dictionary cache Sink
                             .set_min_threads(1)
@@ -546,7 +560,7 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
 
     _driver_limiter =
             new pipeline::DriverLimiter(_max_executor_threads * config::pipeline_max_num_drivers_per_exec_thread);
-    REGISTER_GAUGE_STARROCKS_METRIC(pipe_drivers, [] {
+    pipeline::PipelineExecutorMetrics::instance()->register_pipe_drivers_hook([] {
         auto* driver_limiter = ExecEnv::GetInstance()->driver_limiter();
         return (driver_limiter == nullptr) ? 0 : driver_limiter->num_total_drivers();
     });
@@ -582,8 +596,8 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
     workgroup::PipelineExecutorSetConfig executors_manager_opts(
             CpuInfo::num_cores(), _max_executor_threads, num_io_threads, connector_num_io_threads,
             CpuInfo::get_core_ids(), enable_bind_cpus, config::enable_resource_group_cpu_borrowing,
-            GlobalMetricsRegistry::instance()->pipeline_executor_metrics());
-    _workgroup_manager = std::make_unique<workgroup::WorkGroupManager>(std::move(executors_manager_opts));
+            pipeline::PipelineExecutorMetrics::instance());
+    _workgroup_manager = std::make_unique<workgroup::WorkGroupManager>(std::move(executors_manager_opts), _metrics);
     RETURN_IF_ERROR(_workgroup_manager->start());
     workgroup::DefaultWorkGroupInitialization default_workgroup_init(_workgroup_manager.get(), _max_executor_threads);
 
@@ -614,7 +628,7 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
                     .build(&load_segment_pool));
     _load_segment_thread_pool = load_segment_pool.release();
 
-    _broker_mgr = new BrokerMgr();
+    _broker_mgr = new BrokerMgr(_metrics);
 
     RETURN_IF_ERROR(ThreadPoolBuilder("put_combined_txn_log_thread_pool")
                             .set_min_threads(0)
@@ -623,8 +637,8 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
                             .build(&put_combined_txn_log_thread_pool));
     _put_combined_txn_log_thread_pool = put_combined_txn_log_thread_pool.release();
 
-    _load_stream_mgr = new LoadStreamMgr();
-    _brpc_stub_cache = new BrpcStubCache(_pipeline_timer);
+    _load_stream_mgr = new LoadStreamMgr(_metrics);
+    _brpc_stub_cache = new BrpcStubCache(_pipeline_timer, _metrics);
     _stream_load_executor = new StreamLoadExecutor(this);
     _stream_context_mgr = new StreamContextMgr();
     _transaction_mgr = new TransactionMgr(this);
@@ -639,29 +653,29 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
     auto batch_write_executor =
             std::make_unique<bthreads::ThreadPoolExecutor>(batch_write_thread_pool.release(), kTakesOwnership);
     _batch_write_mgr = new BatchWriteMgr(std::move(batch_write_executor));
-    RETURN_IF_ERROR(_batch_write_mgr->init());
+    RETURN_IF_ERROR(_batch_write_mgr->init(_metrics));
 
 #ifndef __APPLE__
     _routine_load_task_executor = new RoutineLoadTaskExecutor(this);
-    RETURN_IF_ERROR(_routine_load_task_executor->init());
+    RETURN_IF_ERROR(_routine_load_task_executor->init(_metrics));
 #endif
 
     _connector_sink_spill_executor = new connector::ConnectorSinkSpillExecutor();
     RETURN_IF_ERROR(_connector_sink_spill_executor->init());
 
-    _small_file_mgr = new SmallFileMgr(config::small_file_dir);
+    _small_file_mgr = new SmallFileMgr(config::small_file_dir, _metrics);
     _runtime_filter_worker = new RuntimeFilterWorker(&_runtime_services, &_rpc_services);
     _runtime_filter_cache = new RuntimeFilterCache(8);
     RETURN_IF_ERROR(_runtime_filter_cache->init());
     _profile_report_worker = new ProfileReportWorker(_fragment_mgr, _query_context_mgr);
-    REGISTER_GAUGE_STARROCKS_METRIC(runtime_filter_event_queue_len, [] {
+    RuntimeMetrics::instance()->register_runtime_filter_event_queue_len_hook([] {
         auto pool = ExecEnv::GetInstance()->runtime_filter_worker();
         return (pool == nullptr) ? 0U : pool->queue_size();
     });
 
-    _backend_client_cache->init_metrics(GlobalMetricsRegistry::instance()->metrics(), "backend");
-    _frontend_client_cache->init_metrics(GlobalMetricsRegistry::instance()->metrics(), "frontend");
-    _broker_client_cache->init_metrics(GlobalMetricsRegistry::instance()->metrics(), "broker");
+    _backend_client_cache->init_metrics(_metrics, "backend");
+    _frontend_client_cache->init_metrics(_metrics, "frontend");
+    _broker_client_cache->init_metrics(_metrics, "broker");
     RETURN_IF_ERROR(_result_mgr->init());
 
     // it means acting as compute node while store_path is empty. some threads are not needed for that case.
@@ -697,7 +711,7 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
                             .set_max_threads(std::max(1, max_thread_count))
                             .set_max_queue_size(std::numeric_limits<int>::max())
                             .build(&_put_aggregate_metadata_thread_pool));
-    REGISTER_THREAD_POOL_METRICS(put_aggregate_metadata, _put_aggregate_metadata_thread_pool);
+    REGISTER_THREAD_POOL_RUNTIME_METRICS(_metrics, put_aggregate_metadata, _put_aggregate_metadata_thread_pool);
     _parallel_compact_mgr = std::make_unique<lake::LakePersistentIndexParallelCompactMgr>(_lake_tablet_manager);
     RETURN_IF_ERROR_WITH_WARN(_parallel_compact_mgr->init(), "init ParallelCompactMgr failed");
     max_thread_count = config::pk_index_parallel_execution_threadpool_max_threads;
@@ -709,7 +723,7 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
                             .set_max_threads(std::max(1, max_thread_count))
                             .set_max_queue_size(config::pk_index_parallel_execution_threadpool_size)
                             .build(&_pk_index_execution_thread_pool));
-    REGISTER_THREAD_POOL_METRICS(cloud_native_pk_index_execution, _pk_index_execution_thread_pool);
+    REGISTER_THREAD_POOL_RUNTIME_METRICS(_metrics, cloud_native_pk_index_execution, _pk_index_execution_thread_pool);
     max_thread_count = config::pk_index_memtable_flush_threadpool_max_threads;
     if (max_thread_count <= 0) {
         max_thread_count = CpuInfo::num_cores() / 2;
@@ -719,7 +733,18 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
                             .set_max_threads(std::max(1, max_thread_count))
                             .set_max_queue_size(config::pk_index_memtable_flush_threadpool_size)
                             .build(&_pk_index_memtable_flush_thread_pool));
-    REGISTER_THREAD_POOL_METRICS(cloud_native_pk_index_memtable_flush, _pk_index_memtable_flush_thread_pool);
+    REGISTER_THREAD_POOL_RUNTIME_METRICS(_metrics, cloud_native_pk_index_memtable_flush,
+                                         _pk_index_memtable_flush_thread_pool);
+    max_thread_count = config::lake_partial_update_thread_pool_max_threads;
+    if (max_thread_count <= 0) {
+        max_thread_count = CpuInfo::num_cores() / 2;
+    }
+    RETURN_IF_ERROR(ThreadPoolBuilder("lake_partial_update")
+                            .set_min_threads(0)
+                            .set_max_threads(std::max(1, max_thread_count))
+                            .set_max_queue_size(config::lake_partial_update_thread_pool_queue_size)
+                            .build(&_lake_partial_update_thread_pool));
+    REGISTER_THREAD_POOL_RUNTIME_METRICS(_metrics, lake_partial_update, _lake_partial_update_thread_pool);
 
 #elif defined(BE_TEST)
     _lake_location_provider = std::make_shared<lake::FixedLocationProvider>(_store_paths.front().path);
@@ -745,16 +770,38 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
                             .set_max_threads(1)
                             .set_max_queue_size(std::numeric_limits<int>::max())
                             .build(&_pk_index_memtable_flush_thread_pool));
+    RETURN_IF_ERROR(ThreadPoolBuilder("lake_partial_update")
+                            .set_min_threads(0)
+                            .set_max_threads(4)
+                            .set_max_queue_size(std::numeric_limits<int>::max())
+                            .build(&_lake_partial_update_thread_pool));
 #endif
 
-    _load_channel_mgr = new LoadChannelMgr(_lake_tablet_manager);
+    _load_channel_mgr = new LoadChannelMgr(_lake_tablet_manager, _metrics, _table_metrics_mgr);
 
     RETURN_IF_ERROR(ThreadPoolBuilder("lake_metadata_fetch")
                             .set_min_threads(0)
                             .set_max_threads(std::max(1, (int)config::lake_metadata_fetch_thread_count))
                             .set_max_queue_size(std::numeric_limits<int>::max())
                             .build(&_lake_metadata_fetch_thread_pool));
-    REGISTER_THREAD_POOL_METRICS(lake_metadata_fetch, _lake_metadata_fetch_thread_pool);
+    REGISTER_THREAD_POOL_RUNTIME_METRICS(_metrics, lake_metadata_fetch, _lake_metadata_fetch_thread_pool);
+
+    {
+        // Adaptive pool sizing: pool = budget / omp_threads,
+        // where budget = nproc * cpu_ratio.
+        int nproc = CpuInfo::num_cores();
+        int budget = std::max(2, static_cast<int>(nproc * config::vector_index_build_max_cpu_ratio));
+        int configured_omp = std::max(1, static_cast<int>(config::config_vector_index_build_concurrency));
+        int effective_pool = std::max(1, budget / configured_omp);
+        LOG(INFO) << "Vector index build adaptive sizing: nproc=" << nproc << " budget=" << budget
+                  << " pool=" << effective_pool << " omp=" << configured_omp;
+        RETURN_IF_ERROR(ThreadPoolBuilder("lake_vi_build")
+                                .set_min_threads(0)
+                                .set_max_threads(effective_pool)
+                                .set_max_queue_size(std::numeric_limits<int>::max())
+                                .build(&_lake_vector_index_build_thread_pool));
+    }
+    REGISTER_THREAD_POOL_RUNTIME_METRICS(_metrics, lake_vi_build, _lake_vector_index_build_thread_pool);
 
     _agent_server = new AgentServer(this, false);
     RETURN_IF_ERROR(_agent_server->init());
@@ -770,6 +817,19 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
 
     _spill_dir_mgr = std::make_shared<spill::DirManager>();
     RETURN_IF_ERROR(_spill_dir_mgr->init(config::spill_local_storage_dir));
+    // Bridge the local spill DirManager into the spill_disk_bytes_used gauge
+    // via a collect-time hook so the metrics registry stays decoupled from
+    // spill internals. The callback captures a raw pointer because the
+    // DirManager lives for the lifetime of ExecEnv.
+    if (auto* spill_metrics = SpillMetrics::instance(); spill_metrics->local_disk_bytes_used() != nullptr) {
+        _metrics->register_hook("spill_disk_bytes_used", [dir_mgr = _spill_dir_mgr.get(), spill_metrics]() {
+            int64_t local_bytes = 0;
+            for (auto& dir : dir_mgr->dirs()) {
+                local_bytes += dir->get_current_size();
+            }
+            spill_metrics->local_disk_bytes_used()->set_value(local_bytes);
+        });
+    }
 
     _global_spill_manager = std::make_shared<spill::GlobalSpillManager>();
 
@@ -848,6 +908,12 @@ void ExecEnv::stop() {
         component_times.emplace_back("lake_metadata_fetch_thread_pool", MonotonicMillis() - start);
     }
 
+    if (_lake_vector_index_build_thread_pool) {
+        start = MonotonicMillis();
+        _lake_vector_index_build_thread_pool->shutdown();
+        component_times.emplace_back("lake_vector_index_build_thread_pool", MonotonicMillis() - start);
+    }
+
     if (_parallel_compact_mgr) {
         start = MonotonicMillis();
         _parallel_compact_mgr->shutdown();
@@ -864,6 +930,12 @@ void ExecEnv::stop() {
         start = MonotonicMillis();
         _pk_index_memtable_flush_thread_pool->shutdown();
         component_times.emplace_back("pk_index_memtable_flush_thread_pool", MonotonicMillis() - start);
+    }
+
+    if (_lake_partial_update_thread_pool) {
+        start = MonotonicMillis();
+        _lake_partial_update_thread_pool->shutdown();
+        component_times.emplace_back("lake_partial_update_thread_pool", MonotonicMillis() - start);
     }
 
     if (_agent_server) {
@@ -1040,6 +1112,7 @@ void ExecEnv::destroy() {
     }
 #endif
     SAFE_DELETE(_pipeline_timer);
+    ThriftRpcHelper::clear();
     SAFE_DELETE(_broker_client_cache);
     SAFE_DELETE(_frontend_client_cache);
     SAFE_DELETE(_backend_client_cache);
@@ -1058,9 +1131,11 @@ void ExecEnv::destroy() {
     _automatic_partition_pool.reset();
     _put_aggregate_metadata_thread_pool.reset();
     _lake_metadata_fetch_thread_pool.reset();
+    _lake_vector_index_build_thread_pool.reset();
     _parallel_compact_mgr.reset();
     _pk_index_execution_thread_pool.reset();
     _pk_index_memtable_flush_thread_pool.reset();
+    _lake_partial_update_thread_pool.reset();
     _metrics = nullptr;
 }
 

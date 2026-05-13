@@ -12,8 +12,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+set(BE_TEST_MACOS_LINK_STUBS)
+if (APPLE)
+    list(APPEND BE_TEST_MACOS_LINK_STUBS ../base/macos_link_stubs.cpp)
+endif()
+
 set(EXPR_CORE_TEST_FILES
-    ../base/cxa_throw_wrap.cpp
+    ${BE_TEST_MACOS_LINK_STUBS}
     arithmetic_expr_test.cpp
     array_expr_test.cpp
     case_expr_test.cpp
@@ -67,4 +72,5 @@ target_link_libraries(starrocks_expr_core_test_objs PRIVATE StarRocksPCH)
 set_target_properties(starrocks_expr_core_test_objs PROPERTIES
     COMPILE_FLAGS "-fno-access-control -DSTARROCKS_EXPR_CORE_TEST_NO_JIT")
 add_executable(expr_core_test $<TARGET_OBJECTS:starrocks_expr_core_test_objs>)
+target_link_be_test_cxa_throw_wrap(expr_core_test)
 target_link_libraries(expr_core_test ${EXPR_CORE_TEST_LINK_LIBS} gtest_main)

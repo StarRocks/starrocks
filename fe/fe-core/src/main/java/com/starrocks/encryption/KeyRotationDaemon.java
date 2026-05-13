@@ -13,9 +13,9 @@
 // limitations under the License.
 package com.starrocks.encryption;
 
-import com.starrocks.common.util.FrontendDaemon;
+import com.starrocks.common.util.LeaderDaemon;
 
-public class KeyRotationDaemon extends FrontendDaemon {
+public class KeyRotationDaemon extends LeaderDaemon {
     private static final int KEY_ROTATION_CHECK_INTERVAL_MS = 10000;
     private final KeyMgr keyMgr;
 
@@ -25,7 +25,7 @@ public class KeyRotationDaemon extends FrontendDaemon {
     }
 
     @Override
-    protected void runAfterCatalogReady() {
+    protected void runAfterLeaseValid() {
         keyMgr.checkKeyRotation();
     }
 }

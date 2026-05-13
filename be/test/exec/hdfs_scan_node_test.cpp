@@ -29,9 +29,7 @@
 #include "runtime/exec_env.h"
 #include "runtime/global_dict/fragment_dict_state.h"
 #include "runtime/runtime_state.h"
-#include "runtime/starrocks_metrics.h"
 #include "storage/storage_engine.h"
-#include "util/global_metrics_registry.h"
 
 //TODO: test multi thread
 //TODO: test runtime filter
@@ -41,9 +39,9 @@ public:
     void SetUp() override {
         config::enable_system_metrics = false;
         config::enable_metric_calculator = false;
-        GlobalMetricsRegistry::instance()->metrics()->set_collect_hook_enabled(true);
 
         _exec_env = ExecEnv::GetInstance();
+        _exec_env->metrics()->set_collect_hook_enabled(true);
 
         _create_runtime_state();
         _pool = _runtime_state->obj_pool();
@@ -352,7 +350,6 @@ DescriptorTbl* HdfsScanNodeTest::_create_table_desc_for_filter_partition() {
     TTableDescriptor tdesc;
     tdesc.__set_hdfsTable(t_hdfs_table);
     _table_desc = _pool->add(new HdfsTableDescriptor(tdesc, _pool));
-    _table_desc->create_key_exprs(_runtime_state.get(), _pool);
     tbl->get_tuple_descriptor(0)->set_table_desc(_table_desc);
 
     return tbl;

@@ -20,6 +20,11 @@
 
 namespace starrocks::io {
 
+// Out-of-line so gcov can attribute coverage to a concrete `.cpp` line.
+IoStatsSnapshot SeekableInputStreamWrapper::get_io_stats_snapshot() const {
+    return _impl->get_io_stats_snapshot();
+}
+
 StatusOr<int64_t> SeekableInputStream::read_at(int64_t offset, void* data, int64_t count) {
     RETURN_IF_ERROR(seek(offset));
     return read(data, count);
@@ -43,6 +48,20 @@ StatusOr<std::string> SeekableInputStream::read_all() {
     raw::stl_string_resize_uninitialized(&ret, size);
     RETURN_IF_ERROR(read_at_fully(0, ret.data(), ret.size()));
     return std::move(ret);
+}
+
+std::string SeekableInputStream::page_cache_key(int64_t stream_offset) const {
+    // Use the virtual filename() rather than the _filename member: many subclasses (e.g.
+    // RandomAccessFile, MemoryFileInputStream, S3InputStream) override filename() to return a
+    // value held in their own member while leaving _filename unset, so reading _filename here
+    // would return an empty string and silently collapse the keys of every file to the same
+    // (empty, offset) prefix.
+    const std::string& fname = filename();
+    std::string key;
+    key.reserve(fname.size() + sizeof(stream_offset));
+    key.append(fname);
+    key.append(reinterpret_cast<const char*>(&stream_offset), sizeof(stream_offset));
+    return key;
 }
 
 } // namespace starrocks::io

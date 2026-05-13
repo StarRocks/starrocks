@@ -84,7 +84,7 @@ private:
     WaitContext* _wait_context = nullptr;
     int64_t _wait_time_ns = 0;
     EnumDebugAction _action = EnumDebugAction::WAIT;
-    std::unique_ptr<PipelineTimerTask> _wait_timer_task;
+    std::shared_ptr<PipelineTimerTask> _wait_timer_task;
 };
 
 class WaitSinkOperator final : public Operator {
@@ -124,7 +124,7 @@ private:
     int64_t _wait_time_ns = 0;
     EnumDebugAction _action = EnumDebugAction::WAIT;
     mutable bool _reached_timeout = false;
-    std::unique_ptr<PipelineTimerTask> _wait_timer_task;
+    std::shared_ptr<PipelineTimerTask> _wait_timer_task;
 };
 
 class WaitContextFactory {

@@ -166,7 +166,7 @@ CREATE MATERIALIZED VIEW [IF NOT EXISTS] [database.]<mv_name>
 -- refresh_moment
     [IMMEDIATE | DEFERRED]
 -- refresh_scheme
-    [ASYNC | ASYNC [START (<start_time>)] EVERY (INTERVAL <refresh_interval>) | MANUAL]
+    [ASYNC | SCHEDULE [START (<start_time>)] EVERY (INTERVAL <refresh_interval>) | MANUAL]
 ]
 -- partition_expression
 [PARTITION BY 
@@ -252,7 +252,7 @@ AS
 非同期マテリアライズドビューのリフレッシュ戦略。有効な値:
 
 - `ASYNC`: 自動リフレッシュモード。ベーステーブルデータが変更されるたびに、マテリアライズドビューが自動的にリフレッシュされます。
-- `ASYNC [START (<start_time>)] EVERY(INTERVAL <interval>)`: 定期リフレッシュモード。定義された間隔でマテリアライズドビューが定期的にリフレッシュされます。間隔は`EVERY (interval n day/hour/minute/second)`として指定できます。使用可能な単位は`DAY`、`HOUR`、`MINUTE`、`SECOND`です。デフォルト値は`10 MINUTE`です。リフレッシュ開始時間を`START('yyyy-MM-dd hh:mm:ss')`としてさらに指定できます。開始時間が指定されていない場合、現在の時間が使用されます。例: `ASYNC START ('2023-09-12 16:30:25') EVERY (INTERVAL 5 MINUTE)`。
+- `SCHEDULE [START (<start_time>)] EVERY(INTERVAL <interval>)`: 定期リフレッシュモード。定義された間隔でマテリアライズドビューが定期的にリフレッシュされます。間隔は`EVERY (interval n day/hour/minute/second)`として指定できます。使用可能な単位は`DAY`、`HOUR`、`MINUTE`、`SECOND`です。デフォルト値は`10 MINUTE`です。リフレッシュ開始時間を`START('yyyy-MM-dd hh:mm:ss')`としてさらに指定できます。開始時間が指定されていない場合、現在の時間が使用されます。例: `SCHEDULE START ('2023-09-12 16:30:25') EVERY (INTERVAL 5 MINUTE)`。互換性のため `ASYNC [START (...)] EVERY (...)` も引き続き受け付けますが、`SHOW CREATE MATERIALIZED VIEW` の出力は常に `SCHEDULE` で表示されます。
 - `MANUAL`: 手動リフレッシュモード。リフレッシュタスクを手動でトリガーしない限り、マテリアライズドビューはリフレッシュされません。
 
 このパラメータが指定されていない場合、デフォルト値`MANUAL`が使用されます。
@@ -410,7 +410,6 @@ ALTER MATERIALIZED VIEW <mv_name> SET ("bloom_filter_columns" = "");
 
   - `PCT`: （デフォルト）パーティション化されたマテリアライズドビューの場合、ベーステーブルにデータの変更があると影響を受けたパーティションのみリフレッシュされ、そのパーティションの結果の一貫性が保証されます。パーティション化されていないマテリアライズドビューの場合、ベーステーブルのいずれかが変更されるとマテリアライズドビュー全体がフルリフレッシュされます。
   - `INCREMENTAL`: 増分リフレッシュのみを行うことを保証します。マテリアライズドビューの定義で増分リフレッシュがサポートされていない場合や、非増分データに遭遇した場合、作成やリフレッシュが失敗します。
-  - `FULL`: マテリアライズドビューが増分やパーティション単位のリフレッシュをサポートしているかどうかに関係なく、毎回全データのフルリフレッシュを強制します。
 
 <MVWarehouse />
 

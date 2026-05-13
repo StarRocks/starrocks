@@ -33,7 +33,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 
 ---
 
-This topic introduces the following types of FE configurations:
+This topic introduces the following types of BE configurations:
 - [Query](#query)
 - [Loading and unloading](#loading-and-unloading)
 
@@ -304,6 +304,15 @@ This topic introduces the following types of FE configurations:
 - Description: The maximum number of HDFS file descriptors that can be opened.
 - Introduced in: -
 
+### max_hdfs_scanner_num
+
+- Default: 50
+- Type: Int
+- Unit: -
+- Is mutable: No
+- Description: Maximum number of concurrent remote scanners (HDFS, object storage, etc.) that ConnectorScanNode can run simultaneously. This value caps estimated concurrency at startup and also limits pending-scanner scheduling at runtime, controlling thread, memory, and file-handle pressure.
+- Introduced in: v3.2.0
+
 ### max_memory_sink_batch_count
 
 - Default: 20
@@ -430,6 +439,15 @@ This topic introduces the following types of FE configurations:
 - Description: The number of scan threads assigned to Pipeline Connector per CPU core in the BE node. This configuration is changed to dynamic from v3.1.7 onwards.
 - Introduced in: -
 
+### pipeline_enable_large_column_checker
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to enable large column detection in the pipeline execution framework. When enabled, queries fail with a capacity limit error if an intermediate column reaches the chunk capacity limit in pipeline execution or spill serialization.
+- Introduced in: v4.0.0
+
 ### pipeline_poller_timeout_guard_ms
 
 - Default: -1
@@ -474,6 +492,15 @@ This topic introduces the following types of FE configurations:
 - Is mutable: No
 - Description: The maximum task queue length of SCAN thread pool for Pipeline execution engine.
 - Introduced in: -
+
+### enable_lock_free_scan_task_queue
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Controls whether `ScanExecutor` uses `LockFreeWorkGroupScanTaskQueue` for OLAP scan and connector scan task scheduling. When enabled, scan tasks are scheduled through a lock-free per-workgroup queue plus a workgroup-level coordinator, which reduces contention compared with the legacy mutex-based `WorkGroupScanTaskQueue`. Set this item to `false` to fall back to the legacy scan task queue implementation during troubleshooting or rollback.
+- Introduced in: v4.1.0
 
 ### pk_index_parallel_get_threadpool_size
 
@@ -601,6 +628,42 @@ This topic introduces the following types of FE configurations:
 - Description: Fraction of the BE process memory reserved for update-related memory and caches. During startup `GlobalEnv` computes the `MemTracker` for updates as process_mem_limit * clamp(update_memory_limit_percent, 0, 100) / 100. `UpdateManager` also uses this percentage to size its primary-index/index-cache capacity (index cache capacity = GlobalEnv::process_mem_limit * update_memory_limit_percent / 100). The HTTP config update logic registers a callback that calls `update_primary_index_memory_limit` on the update managers, so changes would be applied to the update subsystem if the config were changed. Increasing this value gives more memory to update/primary-index paths (reducing memory available for other pools); decreasing it reduces update memory and cache capacity. Values are clamped to the range 0–100.
 - Introduced in: v3.2.0
 
+### enable_vector_adaptive_search
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Master switch for adaptive `ef_search` scaling on HNSW vector indexes. When enabled, BE scales the effective `ef_search` per segment based on its row count, so recall is preserved when compaction enlarges segments without forcing manual `ef_search` retuning. Set to `false` to disable scaling and use the user-supplied `ef_search` literally.
+- Introduced in: -
+
+### vector_adaptive_ef_alpha
+
+- Default: 1.0
+- Type: Double
+- Unit: -
+- Is mutable: Yes
+- Description: Growth slope for adaptive `ef_search`. The scaling factor is `1 + alpha * log2(segment_rows / vector_adaptive_ef_baseline_rows)`. Higher values raise recall more aggressively at the cost of higher CPU per query; lower values trim CPU at the cost of recall on large segments. Effective only when `enable_vector_adaptive_search` is true and `segment_rows > vector_adaptive_ef_baseline_rows`.
+- Introduced in: -
+
+### vector_adaptive_ef_baseline_rows
+
+- Default: 300000
+- Type: Int
+- Unit: Rows
+- Is mutable: Yes
+- Description: Segment row count below which adaptive `ef_search` does not scale. Segments with fewer rows than this threshold use the user-supplied `ef_search` directly; segments above this threshold receive a higher effective `ef_search` to compensate for the larger HNSW graph. Effective only when `enable_vector_adaptive_search` is true.
+- Introduced in: -
+
+### vector_adaptive_ef_cap
+
+- Default: 8.0
+- Type: Double
+- Unit: -
+- Is mutable: Yes
+- Description: Upper bound on the adaptive `ef_search` multiplier. Caps the worst-case CPU and latency cost of the scaling formula even on extremely large segments. Effective only when `enable_vector_adaptive_search` is true.
+- Introduced in: -
+
 ### vector_chunk_size
 
 - Default: 4096
@@ -629,6 +692,15 @@ This topic introduces the following types of FE configurations:
 - Is mutable: Yes
 - Description: Batch size for column mode partial update when processing inserted rows. If this item is set to `0` or negative, it will be clamped to `1` to avoid infinite loop. This item controls the number of newly inserted rows processed in each batch. Larger values can improve write performance but will consume more memory.
 - Introduced in: v3.5.10, v4.0.2
+
+### partial_update_memory_limit_per_worker
+
+- Default: 2147483648
+- Type: Int
+- Unit: Bytes
+- Is mutable: Yes
+- Description: Maximum memory per worker thread for partial update operations. Controls the memory footprint of individual worker threads when processing partial updates.
+- Introduced in: -
 
 ### enable_load_spill_parallel_merge
 
@@ -794,6 +866,15 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Description: The RPC timeout for Stream Load.
 - Introduced in: -
 
+### transaction_publish_version_thread_pool_num_min
+
+- Default: 0
+- Type: Int
+- Unit: Threads
+- Is mutable: Yes
+- Description: Minimum number of threads in the Publish Version thread pool. The pool can shrink to this value when idle. `0` means no fixed lower bound.
+- Introduced in: -
+
 ### transaction_publish_version_thread_pool_idle_time_ms
 
 - Default: 60000
@@ -811,6 +892,15 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Is mutable: Yes
 - Description: The maximum number of threads used to publish a version. When this value is set to less than or equal to `0`, the system uses the CPU core count as the value, so as to avoid insufficient thread resources when import concurrency is high but only a fixed number of threads are used. From v2.5, the default value has been changed from `8` to `0`.
 - Introduced in: -
+
+### use_mmap_allocate_chunk
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: No
+- Description: Whether to use anonymous mmap (`MAP_ANONYMOUS | MAP_PRIVATE`) for chunk allocation. When enabled, many VM mappings are created; you must raise `vm.max_map_count` (e.g., `echo 262144 > /proc/sys/vm/max_map_count`) and set a large `chunk_reserved_bytes_limit`, otherwise frequent map/unmap operations will cause severe performance degradation.
+- Introduced in: v3.2.0
 
 ### write_buffer_size
 

@@ -40,18 +40,19 @@
 #include "common/util/misc.h"
 #include "gen_cpp/InternalService_types.h"
 #include "runtime/buffer_control_block.h"
-#include "runtime/starrocks_metrics.h"
-#include "util/global_metrics_registry.h"
+#include "runtime/runtime_metrics.h"
 
 namespace starrocks {
 
-ResultBufferMgr::ResultBufferMgr() {
+ResultBufferMgr::ResultBufferMgr(MetricRegistry* metrics) {
     // Each BufferControlBlock has a limited queue size of 1024, it's not needed to count the
     // actual size of all BufferControlBlock.
-    REGISTER_GAUGE_STARROCKS_METRIC(result_buffer_block_count, [this]() {
-        std::lock_guard<std::mutex> l(_lock);
-        return _buffer_map.size();
-    });
+    if (metrics != nullptr) {
+        REGISTER_GAUGE_RUNTIME_METRIC(metrics, result_buffer_block_count, [this]() {
+            std::lock_guard<std::mutex> l(_lock);
+            return _buffer_map.size();
+        });
+    }
 }
 
 void ResultBufferMgr::stop() {

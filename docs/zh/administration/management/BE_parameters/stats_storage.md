@@ -32,7 +32,7 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 
 ---
 
-当前主题包含以下类型的 FE 配置：
+当前主题包含以下类型的 BE 配置：
 - [统计报告](#统计报告)
 - [存储](#存储)
 
@@ -898,6 +898,33 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - 是否动态：是
 - 描述：存算分离集群中，主键索引并行执行的线程池最大线程数。0 表示自动设置为 CPU 核数的一半。
 - 引入版本：-
+
+### pk_index_parallel_load_dels_mem_ratio
+
+- 默认值：50
+- 类型：Int
+- 单位：百分比（0-100）
+- 是否动态：是
+- 描述：存算分离集群中，当 update mem tracker 已超过其上限的此百分比时，`LakePersistentIndex::load_dels` 将跳过并行两阶段 del 文件预取，退回到单遍循环路径，一次只持有一个解码后的 del 文件列。在该内存压力下放弃冷启延迟收益以换取受控的峰值内存。值越大表示在更大的内存压力下仍允许该优化；设为 `100` 时禁用内存门控（只要 `enable_pk_index_parallel_execution=true` 且存在多个 del 文件即并行）。
+- 引入版本：-
+
+### lake_partial_update_thread_pool_max_threads
+
+- 默认值：0
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：存算分离集群中，部分列更新 segment 级并行执行的线程池最大线程数。该线程池同时用于行模式（并行 load_segment + rewrite_segment）和列模式（并行 DCG 生成）的部分列更新。0 表示自动设置为 CPU 核数的一半。运行时开关由 `enable_pk_index_parallel_execution` 控制。
+- 引入版本：v4.1
+
+### lake_partial_update_thread_pool_queue_size
+
+- 默认值：2048
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：部分列更新线程池的任务队列大小。
+- 引入版本：v4.1
 
 ### pk_index_size_tiered_level_multiplier
 

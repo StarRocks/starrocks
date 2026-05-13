@@ -28,7 +28,6 @@
 #include "common/config_primary_key_fwd.h"
 #include "fs/fs_util.h"
 #include "fs/key_cache.h"
-#include "runtime/starrocks_metrics.h"
 #include "storage/del_vector.h"
 #include "storage/lake/filenames.h"
 #include "storage/lake/lake_persistent_index.h"
@@ -36,6 +35,7 @@
 #include "storage/lake/metacache.h"
 #include "storage/lake/update_manager.h"
 #include "storage/protobuf_file.h"
+#include "storage/storage_metrics.h"
 
 namespace starrocks::lake {
 
@@ -317,9 +317,14 @@ void trim_partial_compaction_last_input_rowset(const MutableTabletMetadataPtr& m
                                    op_compaction.output_rowset().segments().end(),
                                    [iter](const std::string& segment) { return *iter == segment; });
             if (it != op_compaction.output_rowset().segments().end()) {
+                auto pos = iter - last_input_rowset.segments().begin();
                 if (last_input_rowset.shared_segments_size() > 0) {
-                    last_input_rowset.mutable_shared_segments()->erase(iter - last_input_rowset.segments().begin() +
+                    last_input_rowset.mutable_shared_segments()->erase(pos +
                                                                        last_input_rowset.shared_segments().begin());
+                }
+                if (pos < last_input_rowset.segment_metas_size()) {
+                    last_input_rowset.mutable_segment_metas()->erase(
+                            last_input_rowset.mutable_segment_metas()->begin() + pos);
                 }
 
                 iter = last_input_rowset.mutable_segments()->erase(iter);
@@ -607,7 +612,7 @@ Status MetaFileBuilder::update_num_del_stat(const std::map<uint32_t, size_t>& se
             std::string err_msg =
                     fmt::format("unexpected segment id: {} tablet id: {}", each.first, _tablet_meta->id());
             LOG(ERROR) << err_msg;
-            StarRocksMetrics::instance()->primary_key_table_error_state_total.increment(1);
+            StorageMetrics::instance()->primary_key_table_error_state_total.increment(1);
             if (!config::experimental_lake_ignore_pk_consistency_check) {
                 set_recover_flag(RecoverFlag::RECOVER_WITHOUT_PUBLISH);
                 return Status::InternalError(err_msg);
@@ -793,15 +798,19 @@ Status get_del_vec(TabletManager* tablet_mgr, const TabletMetadata& metadata, co
     }
     const auto& delvec_name = iter->second.name();
     RandomAccessFileOptions opts{.skip_fill_local_cache = !lake_io_opts.fill_data_cache};
-    std::unique_ptr<RandomAccessFile> rf;
-    if (lake_io_opts.fs && lake_io_opts.location_provider) {
-        ASSIGN_OR_RETURN(rf,
-                         lake_io_opts.fs->new_random_access_file(
-                                 opts, lake_io_opts.location_provider->delvec_location(metadata.id(), delvec_name)));
-    } else {
-        ASSIGN_OR_RETURN(rf, fs::new_random_access_file(opts, tablet_mgr->delvec_location(metadata.id(), delvec_name)));
+    {
+        TRACE_COUNTER_SCOPE_LATENCY_US("delvec_file_read_latency_us");
+        std::unique_ptr<RandomAccessFile> rf;
+        if (lake_io_opts.fs && lake_io_opts.location_provider) {
+            ASSIGN_OR_RETURN(
+                    rf, lake_io_opts.fs->new_random_access_file(
+                                opts, lake_io_opts.location_provider->delvec_location(metadata.id(), delvec_name)));
+        } else {
+            ASSIGN_OR_RETURN(rf,
+                             fs::new_random_access_file(opts, tablet_mgr->delvec_location(metadata.id(), delvec_name)));
+        }
+        RETURN_IF_ERROR(rf->read_at_fully(delvec_page.offset(), buf.data(), delvec_page.size()));
     }
-    RETURN_IF_ERROR(rf->read_at_fully(delvec_page.offset(), buf.data(), delvec_page.size()));
     if (delvec_page.has_crc32c() && delvec_page.crc32c_gen_version() == delvec_page.version()) {
         // check crc32c
         uint32_t crc32c = crc32c::Value(buf.data(), delvec_page.size());
@@ -910,6 +919,32 @@ Status merge_delvec_files(TabletManager* tablet_mgr, const std::vector<DelvecFil
     } else {
         new_delvec_file->clear_encryption_meta();
     }
+    new_delvec_file->set_shared(false);
+    return Status::OK();
+}
+
+Status write_delvec_file_from_buffer(TabletManager* tablet_mgr, int64_t new_tablet_id, int64_t txn_id,
+                                     const Slice& buffer, FileMetaPB* new_delvec_file) {
+    DCHECK(new_delvec_file != nullptr);
+    if (buffer.empty()) {
+        return Status::InvalidArgument("write_delvec_file_from_buffer called with empty buffer");
+    }
+
+    const std::string new_file_name = gen_delvec_filename(txn_id);
+    const std::string new_file_path = tablet_mgr->delvec_location(new_tablet_id, new_file_name);
+    WritableFileOptions wopts{.sync_on_close = true, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
+    // No encryption: merge_delvec_files only encrypts when at least one
+    // source file carried encryption_meta, and there are no source files
+    // here. A future caller wanting encrypted output should pass the
+    // encryption metadata in explicitly rather than implicitly fetching the
+    // KEK (which is not configured in unit tests).
+    ASSIGN_OR_RETURN(auto writer, fs::new_writable_file(wopts, new_file_path));
+    RETURN_IF_ERROR(writer->append(buffer));
+    RETURN_IF_ERROR(writer->close());
+
+    new_delvec_file->set_name(new_file_name);
+    new_delvec_file->set_size(buffer.size);
+    new_delvec_file->clear_encryption_meta();
     new_delvec_file->set_shared(false);
     return Status::OK();
 }

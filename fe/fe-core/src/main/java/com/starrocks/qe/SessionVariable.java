@@ -101,6 +101,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
+import static com.starrocks.qe.SessionVariableConstants.BlacklistBackupRoutingPolicy;
 import static com.starrocks.qe.SessionVariableConstants.ChooseInstancesMode.LOCALITY;
 import static com.starrocks.qe.SessionVariableConstants.ComputationFragmentSchedulingPolicy.COMPUTE_NODES_ONLY;
 
@@ -239,6 +240,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String IS_REPORT_SUCCESS = "is_report_success";
     public static final String COLOR_EXPLAIN_OUTPUT = "enable_color_explain_output";
     public static final String ENABLE_PROFILE = "enable_profile";
+    public static final String ENABLE_EXPLAIN_IN_PROFILE = "enable_explain_in_profile";
     public static final String BINARY_ENCODING_FORMAT = "binary_encoding_format";
     public static final String BINARY_ENCODING_LEVEL = "binary_encoding_level";
 
@@ -299,6 +301,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String INSERT_MAX_FILTER_RATIO = "insert_max_filter_ratio";
     public static final String INSERT_TIMEOUT = "insert_timeout";
     public static final String DYNAMIC_OVERWRITE = "dynamic_overwrite";
+    public static final String ENABLE_CACHE_UDAF = "enable_cache_udaf";
     public static final String ENABLE_SPILL = "enable_spill";
     public static final String ENABLE_SPILL_TO_REMOTE_STORAGE = "enable_spill_to_remote_storage";
     public static final String DISABLE_SPILL_TO_LOCAL_DISK = "disable_spill_to_local_disk";
@@ -397,6 +400,11 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String SKIP_PAGE_CACHE = "skip_page_cache";
 
     public static final String SKIP_BLACK_LIST = "skip_black_list";
+
+    /**
+     * Policy for selecting a backup compute node when the tablet's primary worker cannot be used in shared-data mode.
+     */
+    public static final String BLACKLIST_BACKUP_ROUTING = "blacklist_backup_routing";
 
     public static final String ENABLE_TABLET_INTERNAL_PARALLEL = "enable_tablet_internal_parallel";
     public static final String ENABLE_TABLET_INTERNAL_PARALLEL_V2 = "enable_tablet_internal_parallel_v2";
@@ -960,6 +968,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String DISTINCT_COLUMN_BUCKETS = "count_distinct_column_buckets";
     public static final String ENABLE_DISTINCT_COLUMN_BUCKETIZATION = "enable_distinct_column_bucketization";
     public static final String DATA_SKEW_ROW_PERCENTAGE_THRESHOLD = "data_skew_row_percentage_threshold";
+    public static final String ENABLE_FORCE_GROUP_BY_SKEW_ELIMINATE_WHEN_SKEWED =
+            "enable_force_group_by_skew_eliminate_when_skewed";
     public static final String ENABLE_SPLIT_WINDOW_SKEW_TO_UNION = "enable_split_window_skew_to_union";
     public static final String HDFS_BACKEND_SELECTOR_SCAN_RANGE_SHUFFLE = "hdfs_backend_selector_scan_range_shuffle";
 
@@ -1171,7 +1181,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_LABELED_COLUMN_STATISTIC_OUTPUT = "enable_labeled_column_statistic_output";
 
     public static final String DYNAMIC_PARTITION_PRUNE_VALUES_LIMIT = "dynamic_partition_prune_limit";
-
+    public static final String MCV_ROW_PERCENTAGE_PROPAGATION_THRESHOLD = "mcv_row_percentage_propagation_threshold";
+    
     public static final List<String> DEPRECATED_VARIABLES = ImmutableList.<String>builder()
             .add(CODEGEN_LEVEL)
             .add(MAX_EXECUTION_TIME)
@@ -1272,6 +1283,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = SKIP_BLACK_LIST)
     private boolean skipBlackList = false;
 
+    @VariableMgr.VarAttr(name = BLACKLIST_BACKUP_ROUTING)
+    private String blacklistBackupRouting = BlacklistBackupRoutingPolicy.CIRCULAR.name();
+
     @VariableMgr.VarAttr(name = RUNTIME_FILTER_SCAN_WAIT_TIME, flag = VariableMgr.INVISIBLE)
     private long runtimeFilterScanWaitTime = 20L;
 
@@ -1331,6 +1345,11 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // if true, need report to coordinator when plan fragment execute successfully.
     @VariableMgr.VarAttr(name = ENABLE_PROFILE, alias = IS_REPORT_SUCCESS)
     private boolean enableProfile = false;
+
+    // When true and a profile is built for the query, the EXPLAIN COSTS text
+    // of the executed plan is embedded in the profile's Summary section.
+    @VariableMgr.VarAttr(name = ENABLE_EXPLAIN_IN_PROFILE)
+    private boolean enableExplainInProfile = false;
 
     @VariableMgr.VarAttr(name = BINARY_ENCODING_FORMAT)
     private String binaryEncodingFormat = BinaryEncodingFormat.HEX.sessionValue();
@@ -1655,6 +1674,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = INSERT_TIMEOUT)
     private int insertTimeoutS = 14400;
+
+    @VariableMgr.VarAttr(name = ENABLE_CACHE_UDAF)
+    private boolean enableCacheUdaf = false;
 
     @VariableMgr.VarAttr(name = ENABLE_SPILL)
     private boolean enableSpill = false;
@@ -2993,6 +3015,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = DATA_SKEW_ROW_PERCENTAGE_THRESHOLD)
     private double dataSkewRowPercentageThreshold = 0.2;
 
+    @VariableMgr.VarAttr(name = ENABLE_FORCE_GROUP_BY_SKEW_ELIMINATE_WHEN_SKEWED)
+    private boolean enableForceGroupBySkewEliminateWhenSkewed = false;
+
     @VariableMgr.VarAttr(name = ENABLE_SPLIT_WINDOW_SKEW_TO_UNION)
     private boolean enableSplitWindowSkewToUnion = false;
 
@@ -3109,6 +3134,11 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = CBO_ENABLE_PARALLEL_PREPARE_METADATA)
     private boolean enableParallelPrepareMetadata = false;
+
+    // The percentage of rows that need to be contained in MCVs so that MCV propagation through operators is enabled
+    // while losing bucket information. Lowering this threshold can lead to worse plans.
+    @VarAttr(name = MCV_ROW_PERCENTAGE_PROPAGATION_THRESHOLD, flag = VariableMgr.INVISIBLE)
+    private double mcvRowPercentagePropagationThreshold = 0.5;
 
     // To set ANN tuning parameters for user.
     // Since the session variables does not support map variables,
@@ -3562,6 +3592,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return dataSkewRowPercentageThreshold;
     }
 
+    public void setEnableForceGroupBySkewEliminateWhenSkewed(boolean enableForceGroupBySkewEliminateWhenSkewed) {
+        this.enableForceGroupBySkewEliminateWhenSkewed = enableForceGroupBySkewEliminateWhenSkewed;
+    }
+
+    public boolean isEnableForceGroupBySkewEliminateWhenSkewed() {
+        return enableForceGroupBySkewEliminateWhenSkewed;
+    }
+
     public boolean isEnableSplitWindowSkewToUnion() {
         return enableSplitWindowSkewToUnion;
     }
@@ -3706,6 +3744,23 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return skipBlackList;
     }
 
+    public void setBlacklistBackupRouting(String blacklistBackupRouting) {
+        BlacklistBackupRoutingPolicy result =
+                Enums.getIfPresent(BlacklistBackupRoutingPolicy.class,
+                        StringUtils.upperCase(blacklistBackupRouting)).orNull();
+        if (result == null) {
+            String legalValues = Joiner.on(" | ").join(BlacklistBackupRoutingPolicy.values());
+            throw new IllegalArgumentException("Legal values of " + BLACKLIST_BACKUP_ROUTING + " are " + legalValues);
+        }
+        this.blacklistBackupRouting = StringUtils.upperCase(blacklistBackupRouting);
+    }
+
+    public BlacklistBackupRoutingPolicy getBlacklistBackupRoutingPolicy() {
+        return Enums.getIfPresent(BlacklistBackupRoutingPolicy.class,
+                        StringUtils.upperCase(blacklistBackupRouting))
+                .or(BlacklistBackupRoutingPolicy.getDefault());
+    }
+
     public int getStatisticCollectParallelism() {
         return statisticCollectParallelism;
     }
@@ -3837,6 +3892,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setEnableProfile(boolean enableProfile) {
         this.enableProfile = enableProfile;
+    }
+
+    public boolean isEnableExplainInProfile() {
+        return enableExplainInProfile;
+    }
+
+    public void setEnableExplainInProfile(boolean enableExplainInProfile) {
+        this.enableExplainInProfile = enableExplainInProfile;
     }
 
     public boolean getColorExplainOutput() {
@@ -4082,6 +4145,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setInsertTimeoutS(int insertTimeoutS) {
         this.insertTimeoutS = insertTimeoutS;
+    }
+
+    public boolean isEnableCacheUdaf() {
+        return enableCacheUdaf;
+    }
+
+    public void setEnableCacheUdaf(boolean enableCacheUdaf) {
+        this.enableCacheUdaf = enableCacheUdaf;
     }
 
     public boolean isEnableSpill() {
@@ -6197,6 +6268,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return this.enableLabeledColumnStatisticOutput;
     }
 
+    public void setMcvRowPercentagePropagationThreshold(double mcvRowPercentagePropagationThreshold) {
+        this.mcvRowPercentagePropagationThreshold = mcvRowPercentagePropagationThreshold;
+    }
+
+    public double getMcvRowPercentagePropagationThreshold() {
+        return mcvRowPercentagePropagationThreshold;
+    }
+
     // Serialize to thrift object
     // used for rest api
     public TQueryOptions toThrift() {
@@ -6236,6 +6315,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
             tResult.setError_for_division_by_zero(true);
         }
 
+        tResult.setEnable_cache_udaf(enableCacheUdaf);
         tResult.setEnable_spill(enableSpill);
         if (enableSpill) {
             TSpillOptions spillOptions = new TSpillOptions();

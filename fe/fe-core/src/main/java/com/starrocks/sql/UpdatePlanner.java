@@ -18,6 +18,7 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
@@ -25,8 +26,10 @@ import com.starrocks.catalog.TableName;
 import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.common.Pair;
 import com.starrocks.common.StarRocksException;
+import com.starrocks.connector.iceberg.IcebergMetadata;
 import com.starrocks.planner.DataSink;
 import com.starrocks.planner.DescriptorTable;
+import com.starrocks.planner.IcebergRowDeltaSink;
 import com.starrocks.planner.OlapTableSink;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.SchemaTableSink;
@@ -39,6 +42,7 @@ import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.TableRef;
 import com.starrocks.sql.ast.UpdateStmt;
+import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.common.TypeManager;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.Optimizer;
@@ -81,117 +85,66 @@ public class UpdatePlanner {
         List<ColumnRefOperator> outputColumns = logicalPlan.getOutputColumn();
         Table targetTable = updateStmt.getTable();
 
-        //1. Cast output columns type to target type
+        // Determine required physical property and prepare the optimizer root
         OptExprBuilder optExprBuilder = logicalPlan.getRootBuilder();
-        optExprBuilder = castOutputColumnsTypeToTargetColumns(columnRefFactory, targetTable,
-                colNames, outputColumns, optExprBuilder);
+        PhysicalPropertySet requiredProperty;
 
-        // TODO: remove forceDisablePipeline when all the operators support pipeline engine.
+        if (targetTable instanceof IcebergTable icebergTable) {
+            requiredProperty = IcebergPlannerUtils.createShuffleProperty(icebergTable, outputColumns);
+        } else {
+            // OLAP/System: cast output column types to target schema types
+            optExprBuilder = castOutputColumnsTypeToTargetColumns(columnRefFactory, targetTable,
+                    colNames, outputColumns, optExprBuilder);
+            requiredProperty = new PhysicalPropertySet();
+        }
+
+        return createUpdatePlan(updateStmt, session, optExprBuilder.getRoot(), columnRefFactory,
+                outputColumns, colNames, targetTable, requiredProperty);
+    }
+
+    /**
+     * Shared planning core: pipeline guard → optimize → build physical plan → setup sink.
+     */
+    private ExecPlan createUpdatePlan(UpdateStmt updateStmt, ConnectContext session,
+                                      OptExpression logicalRoot, ColumnRefFactory columnRefFactory,
+                                      List<ColumnRefOperator> outputColumns, List<String> colNames,
+                                      Table targetTable, PhysicalPropertySet requiredProperty) {
         boolean isEnablePipeline = session.getSessionVariable().isEnablePipelineEngine();
-        boolean canUsePipeline = isEnablePipeline && DataSink.canTableSinkUsePipeline(updateStmt.getTable());
+        boolean canUsePipeline = isEnablePipeline && DataSink.canTableSinkUsePipeline(targetTable);
         boolean forceDisablePipeline = isEnablePipeline && !canUsePipeline;
         boolean prevIsEnableLocalShuffleAgg = session.getSessionVariable().isEnableLocalShuffleAgg();
         try {
             if (forceDisablePipeline) {
                 session.getSessionVariable().setEnablePipelineEngine(false);
             }
-            // Non-query must use the strategy assign scan ranges per driver sequence, which local shuffle agg cannot use.
             session.getSessionVariable().setEnableLocalShuffleAgg(false);
 
-            long tableId = targetTable.getId();
+            // Optimize
             OptimizerContext optimizerContext = OptimizerFactory.initContext(session, columnRefFactory);
-            optimizerContext.setUpdateTableId(tableId);
-
+            if (targetTable instanceof OlapTable) {
+                optimizerContext.setUpdateTableId(targetTable.getId());
+            }
             Optimizer optimizer = OptimizerFactory.create(optimizerContext);
             OptExpression optimizedPlan = optimizer.optimize(
-                    optExprBuilder.getRoot(),
-                    new PhysicalPropertySet(),
-                    new ColumnRefSet(outputColumns));
+                    logicalRoot, requiredProperty, new ColumnRefSet(outputColumns));
+
+            // Build physical plan
             ExecPlan execPlan = PlanFragmentBuilder.createPhysicalPlan(optimizedPlan, session,
                     outputColumns, columnRefFactory, colNames, TResultSinkType.MYSQL_PROTOCAL, false);
-            DescriptorTable descriptorTable = execPlan.getDescTbl();
-            TupleDescriptor olapTuple = descriptorTable.createTupleDescriptor();
 
-            List<Pair<Integer, ColumnDict>> globalDicts = Lists.newArrayList();
-            for (Column column : targetTable.getFullSchema()) {
-                if (updateStmt.usePartialUpdate() && !column.isGeneratedColumn() &&
-                        !updateStmt.isAssignmentColumn(column.getName()) && !column.isKey()) {
-                    // When using partial update, skip columns which aren't key column and not be assign, except for
-                    // generated column
-                    continue;
-                }
-                SlotDescriptor slotDescriptor = descriptorTable.addSlotDescriptor(olapTuple);
-                slotDescriptor.setIsMaterialized(true);
-                slotDescriptor.setType(column.getType());
-                slotDescriptor.setColumn(column);
-                slotDescriptor.setIsNullable(column.isAllowNull());
-                if (column.getType().isVarchar() &&
-                        IDictManager.getInstance().hasGlobalDict(tableId, column.getColumnId())) {
-                    Optional<ColumnDict> dict = IDictManager.getInstance().getGlobalDict(tableId, column.getColumnId());
-                    dict.ifPresent(
-                            columnDict -> globalDicts.add(new Pair<>(slotDescriptor.getId().asInt(), columnDict)));
-                }
-            }
-            olapTuple.computeMemLayout();
-
-            if (targetTable instanceof OlapTable) {
-                List<Long> partitionIds = Lists.newArrayList();
-                for (Partition partition : targetTable.getPartitions()) {
-                    partitionIds.add(partition.getId());
-                }
-                OlapTable olapTable = (OlapTable) targetTable;
-                DataSink dataSink = new OlapTableSink(olapTable, olapTuple, partitionIds, olapTable.writeQuorum(),
-                        olapTable.enableReplicatedStorage(), false,
-                        olapTable.supportedAutomaticPartition(), session.getCurrentComputeResource());
-                if (updateStmt.usePartialUpdate()) {
-                    // using column mode partial update in UPDATE stmt
-                    ((OlapTableSink) dataSink).setPartialUpdateMode(TPartialUpdateMode.COLUMN_UPDATE_MODE);
-                }
-                if (session.getTxnId() != 0) {
-                    ((OlapTableSink) dataSink).setIsMultiStatementsTxn(true);
-                }
-
-                execPlan.getFragments().get(0).setSink(dataSink);
-                execPlan.getFragments().get(0).setLoadGlobalDicts(globalDicts);
-
-                // if sink is OlapTableSink Assigned to Be execute this sql [cn execute OlapTableSink will crash]
-                session.getSessionVariable().setPreferComputeNode(false);
-                session.getSessionVariable().setUseComputeNodes(0);
-                OlapTableSink olapTableSink = (OlapTableSink) dataSink;
-                TableRef tableRef = updateStmt.getTableRef();
-                TableName catalogDbTable = TableName.fromTableRef(tableRef);
-                Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(session, catalogDbTable.getCatalog(),
-                        catalogDbTable.getDb());
-                try {
-                    olapTableSink.init(session.getExecutionId(), updateStmt.getTxnId(), db.getId(), session.getExecTimeout());
-                    olapTableSink.complete();
-                } catch (StarRocksException e) {
-                    throw new SemanticException(e.getMessage());
-                }
+            // Setup sink and configure pipeline based on table type
+            if (targetTable instanceof IcebergTable icebergTable) {
+                setupIcebergRowDeltaSink(execPlan, colNames, icebergTable, session);
+                IcebergPlannerUtils.configureIcebergSinkPipeline(execPlan, session, canUsePipeline);
+            } else if (targetTable instanceof OlapTable) {
+                setupOlapTableSink(execPlan, updateStmt, session, targetTable, canUsePipeline);
             } else if (targetTable instanceof SystemTable) {
                 DataSink dataSink = new SchemaTableSink((SystemTable) targetTable,
                         ConnectContext.get().getCurrentComputeResource());
                 execPlan.getFragments().get(0).setSink(dataSink);
+                configureSinkPipelineDop(execPlan, session, canUsePipeline, false);
             } else {
                 throw new SemanticException("Unsupported table type: " + targetTable.getClass().getName());
-            }
-            if (canUsePipeline) {
-                PlanFragment sinkFragment = execPlan.getFragments().get(0);
-                SessionVariable sv = session.getSessionVariable();
-                if (sv.getEnableAdaptiveSinkDop()) {
-                    long warehouseId = session.getCurrentComputeResource().getWarehouseId();
-                    sinkFragment.setPipelineDop(sv.getSinkDegreeOfParallelism(warehouseId));
-                } else {
-                    sinkFragment.setPipelineDop(sv.getParallelExecInstanceNum());
-                }
-                if (targetTable instanceof OlapTable) {
-                    sinkFragment.setHasOlapTableSink();
-                }
-                sinkFragment.setForceSetTableSinkDop();
-                sinkFragment.setForceAssignScanRangesPerDriverSeq();
-                sinkFragment.disableRuntimeAdaptiveDop();
-            } else {
-                execPlan.getFragments().get(0).setPipelineDop(1);
             }
             return execPlan;
         } finally {
@@ -202,15 +155,126 @@ public class UpdatePlanner {
         }
     }
 
+    private void setupOlapTableSink(ExecPlan execPlan, UpdateStmt updateStmt,
+                                     ConnectContext session, Table targetTable,
+                                     boolean canUsePipeline) {
+        DescriptorTable descriptorTable = execPlan.getDescTbl();
+        TupleDescriptor olapTuple = descriptorTable.createTupleDescriptor();
+        long tableId = targetTable.getId();
+
+        List<Pair<Integer, ColumnDict>> globalDicts = Lists.newArrayList();
+        for (Column column : targetTable.getFullSchema()) {
+            if (updateStmt.usePartialUpdate() && !column.isGeneratedColumn() &&
+                    !updateStmt.isAssignmentColumn(column.getName()) && !column.isKey()) {
+                continue;
+            }
+            SlotDescriptor slotDescriptor = descriptorTable.addSlotDescriptor(olapTuple);
+            slotDescriptor.setIsMaterialized(true);
+            slotDescriptor.setType(column.getType());
+            slotDescriptor.setColumn(column);
+            slotDescriptor.setIsNullable(column.isAllowNull());
+            if (column.getType().isVarchar() &&
+                    IDictManager.getInstance().hasGlobalDict(tableId, column.getColumnId())) {
+                Optional<ColumnDict> dict = IDictManager.getInstance().getGlobalDict(tableId, column.getColumnId());
+                dict.ifPresent(
+                        columnDict -> globalDicts.add(new Pair<>(slotDescriptor.getId().asInt(), columnDict)));
+            }
+        }
+        olapTuple.computeMemLayout();
+
+        OlapTable olapTable = (OlapTable) targetTable;
+        List<Long> partitionIds = Lists.newArrayList();
+        for (Partition partition : olapTable.getPartitions()) {
+            partitionIds.add(partition.getId());
+        }
+        DataSink dataSink = new OlapTableSink(olapTable, olapTuple, partitionIds, olapTable.writeQuorum(),
+                olapTable.enableReplicatedStorage(), false,
+                olapTable.supportedAutomaticPartition(), session.getCurrentComputeResource());
+        if (updateStmt.usePartialUpdate()) {
+            ((OlapTableSink) dataSink).setPartialUpdateMode(TPartialUpdateMode.COLUMN_UPDATE_MODE);
+        }
+        if (session.getTxnId() != 0) {
+            ((OlapTableSink) dataSink).setIsMultiStatementsTxn(true);
+        }
+
+        execPlan.getFragments().get(0).setSink(dataSink);
+        execPlan.getFragments().get(0).setLoadGlobalDicts(globalDicts);
+
+        // if sink is OlapTableSink Assigned to Be execute this sql [cn execute OlapTableSink will crash]
+        session.getSessionVariable().setPreferComputeNode(false);
+        session.getSessionVariable().setUseComputeNodes(0);
+        OlapTableSink olapTableSink = (OlapTableSink) dataSink;
+        TableRef tableRef = updateStmt.getTableRef();
+        TableName catalogDbTable = TableName.fromTableRef(tableRef);
+        Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(session, catalogDbTable.getCatalog(),
+                catalogDbTable.getDb());
+        try {
+            olapTableSink.init(session.getExecutionId(), updateStmt.getTxnId(), db.getId(), session.getExecTimeout());
+            olapTableSink.complete();
+        } catch (StarRocksException e) {
+            throw new SemanticException(e.getMessage());
+        }
+
+        configureSinkPipelineDop(execPlan, session, canUsePipeline, true);
+    }
+
+    private void setupIcebergRowDeltaSink(ExecPlan execPlan, List<String> colNames,
+                                          IcebergTable icebergTable, ConnectContext session) {
+        DescriptorTable descriptorTable = execPlan.getDescTbl();
+        TupleDescriptor rowDeltaTuple = descriptorTable.createTupleDescriptor();
+
+        List<Expr> outputExprs = execPlan.getOutputExprs();
+        Preconditions.checkArgument(colNames.size() == outputExprs.size(),
+                "output column size mismatch");
+        for (int index = 0; index < colNames.size(); ++index) {
+            SlotDescriptor slot = descriptorTable.addSlotDescriptor(rowDeltaTuple);
+            slot.setIsMaterialized(true);
+            slot.setType(outputExprs.get(index).getType());
+            slot.setColumn(new Column(colNames.get(index), outputExprs.get(index).getType()));
+            slot.setIsNullable(outputExprs.get(index).isNullable());
+        }
+        rowDeltaTuple.computeMemLayout();
+
+        descriptorTable.addReferencedTable(icebergTable);
+        IcebergRowDeltaSink dataSink = new IcebergRowDeltaSink(
+                icebergTable, rowDeltaTuple, session.getSessionVariable());
+        dataSink.init();
+
+        IcebergMetadata.IcebergSinkExtra icebergSinkExtra = new IcebergMetadata.IcebergSinkExtra();
+        org.apache.iceberg.expressions.Expression filterExpr = IcebergPlannerUtils.buildIcebergFilterExpr(execPlan);
+        if (filterExpr != null) {
+            icebergSinkExtra.setConflictDetectionFilter(filterExpr);
+        }
+        dataSink.setSinkExtraInfo(icebergSinkExtra);
+
+        execPlan.getFragments().get(0).setSink(dataSink);
+    }
+
     /**
-     * Cast output columns type to target type.
-     * @param columnRefFactory :  column ref factory of update stmt.
-     * @param targetTable: target table of update stmt.
-     * @param colNames: column names of update stmt.
-     * @param outputColumns: output columns of update stmt.
-     * @param root: root logical plan of update stmt.
-     * @return: new root logical plan with cast operator.
+     * Configures pipeline DOP for OLAP table sink.
      */
+    private void configureSinkPipelineDop(ExecPlan execPlan, ConnectContext session,
+                                           boolean canUsePipeline, boolean isOlapSink) {
+        if (!canUsePipeline) {
+            execPlan.getFragments().get(0).setPipelineDop(1);
+            return;
+        }
+        PlanFragment sinkFragment = execPlan.getFragments().get(0);
+        SessionVariable sv = session.getSessionVariable();
+        if (sv.getEnableAdaptiveSinkDop()) {
+            long warehouseId = session.getCurrentComputeResource().getWarehouseId();
+            sinkFragment.setPipelineDop(sv.getSinkDegreeOfParallelism(warehouseId));
+        } else {
+            sinkFragment.setPipelineDop(sv.getParallelExecInstanceNum());
+        }
+        if (isOlapSink) {
+            sinkFragment.setHasOlapTableSink();
+        }
+        sinkFragment.setForceSetTableSinkDop();
+        sinkFragment.setForceAssignScanRangesPerDriverSeq();
+        sinkFragment.disableRuntimeAdaptiveDop();
+    }
+
     private static OptExprBuilder castOutputColumnsTypeToTargetColumns(ColumnRefFactory columnRefFactory,
                                                                        Table targetTable,
                                                                        List<String> colNames,
@@ -225,12 +289,10 @@ public class UpdatePlanner {
         for (int columnIdx = 0; columnIdx < outputColumns.size(); ++columnIdx) {
             ColumnRefOperator outputColumn = outputColumns.get(columnIdx);
             String colName = colNames.get(columnIdx);
-            // It's safe to use getColumn directly, because the column name's case-insensitive is the same with table's schema.
             Column column = targetTable.getColumn(colName);
             Preconditions.checkState(column != null, "Column %s not found in table %s", colName,
                     targetTable.getName());
             if (!column.getType().matchesType(outputColumn.getType())) {
-                // This should be always true but add a check here to avoid updating the wrong column type.
                 if (!TypeManager.canCastTo(outputColumn.getType(), column.getType())) {
                     throw new SemanticException(String.format("Output column type %s is not compatible table column type: %s",
                             outputColumn.getType(), column.getType()));

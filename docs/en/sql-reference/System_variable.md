@@ -234,6 +234,15 @@ Used for MySQL client compatibility. No practical usage.
 * **Data type**: String
 * **Introduced in**: v3.1
 
+### blacklist_backup_routing
+
+* **Scope**: Session
+* **Description**: In shared-data mode, if the compute node the plan prefers for a scan is not among the workers available to the current query (for example, the node is down or appears on the host blocklist), the planner must choose a backup compute node. This variable sets how that backup is chosen among eligible nodes (other than the primary). `RANDOM` samples uniformly at random from the eligible set. `CIRCULAR` walks the sorted compute node id ring from the primary and takes the first eligible node (deterministic). Which nodes are eligible for backup also depends on `skip_black_list`: by default, nodes on the host blocklist are excluded; if `skip_black_list` is `true`, a node that is on the blocklist may still be chosen as a backup when it is otherwise available (for example, alive and in the warehouse).
+* **Default**: `CIRCULAR`
+* **Data type**: String
+* **Valid values**: `CIRCULAR`, `RANDOM`
+* **Introduced in**: -
+
 ### broadcast_row_limit
 
 * **Scope**: Session
@@ -552,6 +561,14 @@ Used for MySQL client compatibility. No practical usage.
 * **Default**: `false`
 * **Data Type**: boolean
 * **Introduced in**: v3.2.0
+
+### enable_cache_udaf
+
+* **Description**: When set to `true`, enables in-memory caching of the class-level Java UDAF initialization (class loading, method introspection, and batch-update stub generation). The cache is populated on first use and reused across all aggregator/analytor instances within the same BE process, eliminating the repeated per-instance initialization overhead that is otherwise proportional to pipeline DOP. Caching only applies to UDAFs and window functions that were created with `"isolation" = "shared"`. Functions created with `"isolation" = "private"` always go through the uncached path regardless of this setting. Default is `false`; enable after verifying that shared-isolation UDAFs are safe to share their class-level state across concurrent queries. The runtime profile exposes `UdafCacheHitCount`, `UdafCachePopulateCount`, and `UdafLoadTime` counters to observe cache behavior.
+* **Scope**: Session
+* **Default**: `false`
+* **Data Type**: boolean
+* **Introduced in**: v3.4.0
 
 ### enable_color_explain_output
 
@@ -894,6 +911,15 @@ If a Join (other than Broadcast Join and Replicated Join) has multiple equi-join
 
 * **Default**: false
 
+### enable_explain_in_profile
+
+* **Scope**: Session
+* **Description**: When set to `true` and a profile is built for the query, the `EXPLAIN COSTS` text of the executed plan is embedded in the profile's `Summary` section under the `ExplainPlan` key. This lets the optimizer's cardinality estimates, column statistics, predicates, runtime-filter declarations, and overall plan cost be inspected offline alongside the runtime metrics, which is useful when triaging slow queries from a saved profile artifact without access to the live cluster.
+
+  The embedded plan honors the same desensitization controls as other persisted SQL artifacts: credential literals (e.g. in `FILES(...)`) are always redacted, and predicate / projection literals are rendered as digests when either the cluster-wide FE config `enable_sql_desensitize_in_log` or the session variable `enable_desensitize_explain` is enabled.
+* **Default**: false
+* **Data type**: boolean
+
 ### profile_log_latency_threshold_ms
 
 * **Scope**: Session
@@ -975,7 +1001,7 @@ If a Join (other than Broadcast Join and Replicated Join) has multiple equi-join
 ### enable_scan_datacache
 
 * **Description**: Specifies whether to enable the Data Cache feature. After this feature is enabled, StarRocks caches hot data read from external storage systems into blocks, which accelerates queries and analysis. For more information, see [Data Cache](../data_source/data_cache.md). In versions prior to 3.2, this variable was named as `enable_scan_block_cache`.
-* **Default**: true 
+* **Default**: true
 * **Introduced in**: v2.5
 
 ### enable_shared_scan
@@ -1588,7 +1614,7 @@ Used for compatibility with JDBC connection pool C3P0. No practical use.
 * **Default**: 100
 * **Introduced in**: v3.0
 
-### resource_group 
+### resource_group
 
         * **Description**: The specified resource group of this session
         * **Default**: ""
@@ -1706,6 +1732,8 @@ Used to specify the SQL mode to accommodate certain SQL dialects. Valid values i
 * `SORT_NULLS_LAST`: places NULL values at the end after sorting.
 * `ERROR_IF_OVERFLOW`: returns an error instead of NULL in the case of arithmetic overflow. Currently, only the DECIMAL data type supports this option.
 * `GROUP_CONCAT_LEGACY`: uses the `group_concat` syntax of v2.5 and earlier. This option is supported from v3.0.9 and v3.1.6.
+* `FORBID_INVALID_IMPLICIT_CAST`: enforces Trino-style strict type checking at plan time. Only widening coercions within the same type family are allowed implicitly (for example, `TINYINT`→`INT`→`BIGINT`→`DECIMAL`→`DOUBLE`, `DATE`→`DATETIME`). Casts within the `VARCHAR`/`CHAR` family are allowed regardless of declared length. Cross-family casts (such as `string`↔`numeric`, `string`↔`date`, `numeric`↔`date`, `boolean`↔other types) and narrowing numeric casts (such as `BIGINT`→`INT` or `DOUBLE`→`FLOAT`) are rejected with a semantic error. Use an explicit `CAST` to perform those conversions.
+* `STRUCT_CAST_BY_NAME`: enables name-based field matching when casting between STRUCT types, rather than the default position-based matching. When this mode is enabled, fields in the source struct are matched to fields in the target struct by field name (case-insensitively), regardless of the order in which they are declared. Fields present in the source but absent in the target are ignored; fields present in the target but absent in the source are filled with NULL. This mode affects both the FE type resolution (common supertype computation for UNION ALL and castability checks) and the BE cast evaluation (runtime field reordering in CastStructExpr). This is particularly useful when performing UNION ALL on STRUCT columns whose fields are defined in different orders across branches.
 
 You can set only one SQL mode, for example:
 

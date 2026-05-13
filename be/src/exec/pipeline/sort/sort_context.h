@@ -29,6 +29,7 @@
 #include "exec/runtime_filter/runtime_filter_descriptor.h"
 #include "exec/runtime_filter/runtime_filter_probe.h"
 #include "exec/sorting/merge.h"
+#include "exec/sorting/sort_cursor.h"
 #include "exec/sorting/sorting.h"
 
 namespace starrocks::pipeline {

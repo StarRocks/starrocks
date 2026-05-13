@@ -224,6 +224,16 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 * 类型：String
 * 引入版本：v3.1
 
+### blacklist_backup_routing
+
+* **范围**：Session
+* **描述**：在 shared-data（存算分离）模式下，若某次扫描在规划中偏好的计算节点不在本查询当前可使用的计算节点范围内（例如节点宕机或出现在主机黑名单上），则规划器需另选备份计算节点。本变量控制在该候选集合中如何挑选备份节点。`RANDOM` 在候选集中均匀随机选取。`CIRCULAR` 在按 id 排好序的节点环上、从主节点起向后寻找第一个可用候选（确定性、与旧版行为类似）。哪些节点可作为备份还受 `skip_black_list` 影响：默认会排除位于主机黑名单上的节点；`skip_black_list` 为 `true` 时，位于黑名单的节点在集群中仍属可用时，也可能被选为备份。
+
+* **默认值**：`CIRCULAR`
+* **类型**：String
+* **合法取值**：`CIRCULAR`、`RANDOM`
+* **引入版本**：-
+
 ### catalog（3.2.4 及以后）
 
 * 描述：用于指定当前会话所在的 Catalog。
@@ -346,7 +356,7 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 * 描述：用于指定写入 Hive 表或 Iceberg 表时以及使用 Files() 导出数据时的压缩算法。有效值：`uncompressed`、`snappy`、`lz4`、`zstd`、`gzip`。该参数只在以下情况生效：
   * Hive 表中未指定 `compression_codec` 属性。
   * Iceberg 表中未包含`write.parquet.compression-codec` 属性。
-  * `INSERT INTO FILES` 时未设置 `compression` 属性。 
+  * `INSERT INTO FILES` 时未设置 `compression` 属性。
 * 默认值：uncompressed
 * 类型：String
 * 引入版本：v3.2.3
@@ -467,6 +477,14 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 * **默认值**: `false`
 * **数据类型**: boolean
 * **引入版本**: v3.2.0
+
+### enable_cache_udaf
+
+* **描述**: 设置为 `true` 时，启用 Java UDAF 类级初始化的内存缓存（包括类加载、方法内省和批量更新 stub 类生成）。缓存在首次使用时填充，并在同一 BE 进程内的所有 aggregator/analytor 实例之间复用，从而消除原本与 pipeline DOP 成线性比例的重复每实例初始化开销。缓存仅适用于创建时指定 `"isolation" = "shared"` 的 UDAF 和窗口函数；使用 `"isolation" = "private"` 创建的函数无论此设置如何，始终走非缓存路径。默认为 `false`；在确认 shared 隔离模式的 UDAF 可安全跨并发查询共享类级状态后再启用。运行时 Profile 中提供 `UdafCacheHitCount`、`UdafCachePopulateCount` 和 `UdafLoadTime` 计数器用于观测缓存行为。
+* **范围**: Session
+* **默认值**: `false`
+* **数据类型**: boolean
+* **引入版本**: v3.4.0
 
 ### enable_color_explain_output
 
@@ -744,6 +762,15 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 用于设置是否需要查看查询的 profile。默认为 `false`，即不需要查看 profile。2.5 版本之前，该变量名称为 `is_report_success`，2.5 版本之后更名为 `enable_profile`。
 
 默认情况下，只有在查询发生错误时，BE 才会发送 profile 给 FE，用于查看错误。正常结束的查询不会发送 profile。发送 profile 会产生一定的网络开销，对高并发查询场景不利。当用户希望对一个查询的 profile 进行分析时，可以将这个变量设为 `true` 后，发送查询。查询结束后，可以通过在当前连接的 FE 的 web 页面（地址：fe_host:fe_http_port/query）查看 profile。该页面会显示最近 100 条开启了 `enable_profile` 的查询的 profile。
+
+### enable_explain_in_profile
+
+* **范围**: Session
+* **描述**: 当该变量为 `true` 且该查询会生成 profile 时，会将已执行计划的 `EXPLAIN COSTS` 文本嵌入到 profile 的 `Summary` 段中，键名为 `ExplainPlan`。这样在离线分析 profile 工件（无需访问运行中的集群）时，可以同时查看优化器的基数估算、列统计、谓词下推、Runtime Filter 声明和总体计划代价等信息，便于排查慢查询。
+
+  嵌入到 profile 中的计划与其他持久化的 SQL 工件遵循一致的脱敏控制：包含凭据的字面量（例如 `FILES(...)`）始终会被屏蔽；当集群级 FE 配置 `enable_sql_desensitize_in_log` 或会话变量 `enable_desensitize_explain` 任一项开启时，谓词 / 投影中的字面量将以摘要形式渲染。
+* **默认值**: false
+* **类型**: boolean
 
 ### profile_log_latency_threshold_ms
 
@@ -1261,7 +1288,7 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 
 * 描述：StarRocks 从外部存储系统读取数据时，控制数据缓存填充行为。有效值包括：
   * `auto`（默认）：系统自动根据查询的特点，选择性进行缓存。
-  * `always`：总是缓存数据。 
+  * `always`：总是缓存数据。
   * `never` 永不缓存数据。
 * 默认值：auto
 * 引入版本：v3.3.2
@@ -1347,7 +1374,7 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 * 默认值：100
 * 引入版本：v3.0
 
-### resource_group 
+### resource_group
 
 * **描述**: 此会话指定的 resource group
 * **默认值**: ""
@@ -1440,6 +1467,8 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 * `SORT_NULLS_LAST`：排序后，将 NULL 值放到最后。
 * `ERROR_IF_OVERFLOW`：运算溢出时，报错而不是返回 NULL，目前仅 DECIMAL 支持这一行为。
 * `GROUP_CONCAT_LEGACY`：使用 2.5 及以前的 `group_concat` 的语法。该选项从 3.0.9，3.1.6 开始支持。
+* `FORBID_INVALID_IMPLICIT_CAST`：在计划阶段启用类似 Trino 的严格类型检查。仅允许同一类型族内的扩宽（widening）隐式转换，例如 `TINYINT`→`INT`→`BIGINT`→`DECIMAL`→`DOUBLE`、`DATE`→`DATETIME`。`VARCHAR`/`CHAR` 之间的隐式转换不校验声明长度，仍然允许。跨类型族的转换（例如 `string`↔`numeric`、`string`↔`date`、`numeric`↔`date`、`boolean` 与其他类型之间）以及数值窄化转换（例如 `BIGINT`→`INT`、`DOUBLE`→`FLOAT`）会被拒绝并返回语义错误。如需进行此类转换，请使用显式 `CAST`。
+* `STRUCT_CAST_BY_NAME`：在 STRUCT 类型之间进行类型转换时，启用基于名称的字段匹配，而非默认的基于位置的匹配。启用此模式后，源 Struct 中的字段将根据字段名称（不区分大小写）与目标 Struct 中的字段进行匹配，无论它们的声明顺序如何。源 Struct 中存在而目标 Struct 中缺失的字段将被忽略；目标 Struct 中存在而源 Struct 中缺失的字段将被填充为 NULL。此模式同时影响 FE 类型解析（UNION ALL 的通用超类型计算和可转换性检查）以及 BE 转换评估（CastStructExpr 中的运行时字段重新排序）。当对 STRUCT 列执行 UNION ALL 操作时，若各分支中字段的定义顺序不同，此模式尤为有用。
 
 不同模式之间可以独立设置，您可以单独开启某一个模式，例如：
 

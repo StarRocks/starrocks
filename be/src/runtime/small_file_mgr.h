@@ -30,6 +30,8 @@
 
 namespace starrocks {
 
+class MetricRegistry;
+
 struct CacheEntry {
     std::string path; // absolute path
     std::string md5;
@@ -41,7 +43,7 @@ struct CacheEntry {
  */
 class SmallFileMgr {
 public:
-    explicit SmallFileMgr(std::string local_path);
+    explicit SmallFileMgr(std::string local_path, MetricRegistry* metrics = nullptr);
 
     ~SmallFileMgr();
 

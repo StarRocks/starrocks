@@ -208,10 +208,11 @@ public:
 
     void build_slices(Buffer<uint8_t>& buffer, Buffer<Slice>& slices) const;
 
-private:
-    // add this to avoid warning clang-diagnostic-overloaded-virtual
+    // Unhide the virtual `Column::append(const Column&)` so derived classes
+    // (e.g. JsonColumn) can also add it back to their scope via `using`.
     using Column::append;
 
+private:
     Buffer<T> _pool;
 };
 } // namespace starrocks

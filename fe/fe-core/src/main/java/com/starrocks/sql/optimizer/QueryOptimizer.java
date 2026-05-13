@@ -131,6 +131,7 @@ import com.starrocks.sql.optimizer.rule.tree.SimplifyCaseWhenPredicateRule;
 import com.starrocks.sql.optimizer.rule.tree.SkewShuffleJoinEliminationRule;
 import com.starrocks.sql.optimizer.rule.tree.SubfieldExprNoCopyRule;
 import com.starrocks.sql.optimizer.rule.tree.VariantPathRewriteRule;
+import com.starrocks.sql.optimizer.rule.tree.WidenProjectionNullableRule;
 import com.starrocks.sql.optimizer.rule.tree.exprreuse.ScalarOperatorsReuseRule;
 import com.starrocks.sql.optimizer.rule.tree.lazymaterialize.GlobalLateMaterializationRewriter;
 import com.starrocks.sql.optimizer.rule.tree.lowcardinality.LowCardinalityRewriteRule;
@@ -1049,6 +1050,10 @@ public class QueryOptimizer extends Optimizer {
         result = new DataCachePopulateRewriteRule(connectContext).rewrite(result, rootTaskContext);
         result = new EliminateOveruseColumnAccessPathRule().rewrite(result, rootTaskContext);
         result = new RemoveUselessScanOutputPropertyRule().rewrite(result, rootTaskContext);
+        // Must run before GlobalLateMaterializationRewriter: FETCH writes target slots directly
+        // from storage, so any post-MV-rewrite Projection whose output nullable is narrower than
+        // its input nullable must be widened first.
+        result = new WidenProjectionNullableRule().rewrite(result, rootTaskContext);
         result = new GlobalLateMaterializationRewriter().rewrite(result, context);
 
         result.setPlanCount(planCount);
