@@ -880,7 +880,9 @@ TEST(TabletRangeHelperTest, validate_new_tablet_ranges_first_lower_must_be_inclu
     auto ranges = as_pb_list({r});
     auto s = TabletRangeHelper::validate_new_tablet_ranges(parent, ranges);
     ASSERT_FALSE(s.ok());
-    ASSERT_THAT(s.to_string(), testing::HasSubstr("first.lower_bound must be inclusive"));
+    // The per-range guard (validate_tablet_range) fires before the positional
+    // "first.lower_bound must be inclusive" check and emits the generic message.
+    ASSERT_THAT(s.to_string(), testing::HasSubstr("Lower bound is exclusive"));
 }
 
 TEST(TabletRangeHelperTest, validate_new_tablet_ranges_first_lower_mismatch_rejected) {
@@ -908,7 +910,9 @@ TEST(TabletRangeHelperTest, validate_new_tablet_ranges_last_upper_must_be_exclus
     auto ranges = as_pb_list({r});
     auto s = TabletRangeHelper::validate_new_tablet_ranges(parent, ranges);
     ASSERT_FALSE(s.ok());
-    ASSERT_THAT(s.to_string(), testing::HasSubstr("last.upper_bound must be exclusive"));
+    // The per-range guard (validate_tablet_range) fires before the positional
+    // "last.upper_bound must be exclusive" check and emits the generic message.
+    ASSERT_THAT(s.to_string(), testing::HasSubstr("Upper bound is inclusive"));
 }
 
 TEST(TabletRangeHelperTest, validate_new_tablet_ranges_interior_gap_missing_bound_rejected) {
@@ -929,7 +933,9 @@ TEST(TabletRangeHelperTest, validate_new_tablet_ranges_interior_bound_flags_reje
     auto ranges = as_pb_list({first, second});
     auto s = TabletRangeHelper::validate_new_tablet_ranges(parent, ranges);
     ASSERT_FALSE(s.ok());
-    ASSERT_THAT(s.to_string(), testing::HasSubstr("invalid bound flags"));
+    // The per-range guard (validate_tablet_range) fires before the positional
+    // "invalid bound flags" check and emits the generic message.
+    ASSERT_THAT(s.to_string(), testing::HasSubstr("Upper bound is inclusive"));
 }
 
 TEST(TabletRangeHelperTest, validate_new_tablet_ranges_adjacency_gap_rejected) {
