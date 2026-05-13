@@ -232,6 +232,33 @@ public class AlterHandlerTest {
     }
 
     /**
+     * start() must refuse to spin up a fresh pool when the previous one is shutdown but has
+     * not actually terminated yet - otherwise two AlterReplicaTask submission workers could
+     * race on alterJobsV2 during a fast demote/re-elect cycle.
+     */
+    @Test
+    public void testStartRefusesToRestartBeforePreviousPoolTerminates() throws Exception {
+        java.util.concurrent.ThreadPoolExecutor blockedPool = new java.util.concurrent.ThreadPoolExecutor(
+                1, 1, 0L, java.util.concurrent.TimeUnit.MILLISECONDS,
+                new java.util.concurrent.ArrayBlockingQueue<>(1));
+        blockedPool.execute(() -> {
+            try {
+                Thread.sleep(30_000L);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+        });
+        blockedPool.shutdown();
+        org.apache.commons.lang3.reflect.FieldUtils.writeField(handler, "executor", blockedPool, true);
+
+        try {
+            Assertions.assertThrows(IllegalStateException.class, handler::start);
+        } finally {
+            blockedPool.shutdownNow();
+        }
+    }
+
+    /**
      * Helper method to create a mock AlterJobV2 with specified properties.
      */
     private AlterJobV2 createMockJob(long jobId, long tableId, long txnId, AlterJobV2.JobState state) {

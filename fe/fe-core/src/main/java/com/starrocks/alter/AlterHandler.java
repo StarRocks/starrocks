@@ -203,6 +203,16 @@ public abstract class AlterHandler extends LeaderDaemon {
 
     @Override
     public synchronized void start() {
+        // Refuse to overlap with a previous pool that has not finished draining. Mirrors the
+        // pattern used by BatchWriteMgr / RoutineLoadTaskScheduler / CoordinatorBackendAssigner:
+        // shutdownNow() in onStopped() is best-effort, so a worker thread that ignores the
+        // interrupt momentarily may still be alive when start() runs. Spinning up a fresh pool
+        // would put two AlterReplicaTask submission workers against the same alterJobsV2 +
+        // handler state.
+        if (executor != null && executor.isShutdown() && !executor.isTerminated()) {
+            throw new IllegalStateException(
+                    "AlterHandler " + getName() + " executor has not terminated; refuse to restart");
+        }
         // Rebuild the executor if a previous demotion shut it down so handleFinishAlterTask
         // submissions accepted by the new leader run on a fresh pool.
         if (executor == null || executor.isShutdown()) {
