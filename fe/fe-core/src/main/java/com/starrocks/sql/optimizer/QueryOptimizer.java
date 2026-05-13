@@ -812,6 +812,18 @@ public class QueryOptimizer extends Optimizer {
                 if (!isRewrittenSuccess) {
                     MvUtils.replaceLogicalViewScanOperator(tree);
                 }
+
+                /*
+                 * treeWithView is cloned from queryOptPlanWithView which was saved before
+                 * PRUNE_COLUMNS phase in MvRewritePreprocessor.processPlanWithView().
+                 * It may contain aggregation columns that have already been pruned in the
+                 * current tree. Re-run PRUNE_COLUMNS to eliminate those redundant columns.
+                 * This must come AFTER replaceLogicalViewScanOperator to avoid dangling
+                 * column references from expanded sub-plans.
+                 */
+                ColumnRefSet requiredColumns = rootTaskContext.getRequiredColumns().clone();
+                rootTaskContext.setRequiredColumns(requiredColumns);
+                scheduler.rewriteOnce(tree, rootTaskContext, RuleSet.PRUNE_COLUMNS_RULES);
             }
             OptimizerTraceUtil.logMVRewriteRule("VIEW_BASED_MV_REWRITE", "original view scans size: {}, " +
                     "left view scans size: {}", origQueryViewScanOperators.size(), leftViewScanOperators.size());
