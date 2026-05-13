@@ -164,26 +164,31 @@ public class IVMAnalyzer {
 
         try {
             QueryRelation queryRelation = queryStatement.getQueryRelation();
-            // rewriteImpl returns whether the query is "retractable" (currently equivalent
-            // to "has aggregate" after dead-code cleanup). A retractable query produces its
-            // own __ROW_ID__ expression (e.g. encode(group_by_keys)); a non-retractable
-            // query — today an append-only Iceberg scan — relies on storage AUTO_INCREMENT.
+            // Retractable queries produce their own __ROW_ID__ (encode(group_by_keys)); non-retractable
+            // append-only scans rely on storage AUTO_INCREMENT.
             boolean isRetractable = rewriteImpl(queryRelation);
             RowIdStrategy strategy = isRetractable
                     ? RowIdStrategy.QUERY_COMPUTED
                     : RowIdStrategy.AUTO_INCREMENT;
+            // Trial-rewrite catches drift the analyzer-level checks can't: e.g. a new logical
+            // operator without a matching IvmDelta*Rule, or a combinator's metadata that no
+            // longer matches the BE state-union path. INCREMENTAL only.
+            if (refreshMode.isIncremental()) {
+                IvmTrialRewriter.runTrial(connectContext, statement, queryStatement);
+            }
             IVMAnalyzeResult result = IVMAnalyzeResult.of(queryStatement, strategy, refreshMode);
             return Optional.of(result);
+        } catch (SemanticException e) {
+            // Already has a self-describing message (rewriteImpl or IvmTrialRewriter). Don't re-wrap.
+            if (refreshMode.isIncremental()) {
+                throw e;
+            }
+            return Optional.empty();
         } catch (Exception e) {
             if (refreshMode.isIncremental()) {
                 throw new SemanticException("Failed to rewrite the query for IVM: %s", e.getMessage());
-            } else {
-                // If the refresh mode is not strictly incremental, we can fallback to full refresh.
-                // NOTE: pre-existing AST-mutation leak — if rewriteImpl partially mutates the
-                // queryStatement then throws, the caller will see a partially-rewritten AST
-                // when falling back to PCT mode. Tracked as a separate follow-up issue.
-                return Optional.empty();
             }
+            return Optional.empty();
         }
     }
 
