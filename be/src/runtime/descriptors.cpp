@@ -477,20 +477,34 @@ StatusOr<TPartitionMap*> HiveTableDescriptor::deserialize_partition_map(
 
 Status HiveTableDescriptor::add_partition_value(RuntimeState* runtime_state, ObjectPool* pool, int64_t id,
                                                 const THdfsPartition& thrift_partition) {
-    auto* partition = pool->add(new HdfsPartitionDescriptor(thrift_partition));
-    RETURN_IF_ERROR(partition->create_part_key_exprs(runtime_state, pool));
+    auto mismatch_status = [&](const HdfsPartitionDescriptor* old_partition) {
+        return Status::InternalError(
+                fmt::format("Partition id {} already exists with different partition_key_exprs. "
+                            "new partition (thrift) = {}, old_partition = {}",
+                            id, apache::thrift::ThriftDebugString(thrift_partition), old_partition->debug_string()));
+    };
+
     {
-        std::unique_lock lock(_map_mutex);
+        std::shared_lock lock(_map_mutex);
         const auto it = _partition_id_to_desc_map.find(id);
         if (it != _partition_id_to_desc_map.end()) {
             auto* old_partition = it->second;
-            if (partition->thrift_partition_key_exprs() != old_partition->thrift_partition_key_exprs()) {
-                return Status::InternalError(
-                        fmt::format("Partition id {} already exists. new partition = {}, old_partition = {}", id,
-                                    partition->debug_string(), old_partition->debug_string()));
+            if (thrift_partition.partition_key_exprs != old_partition->thrift_partition_key_exprs()) {
+                return mismatch_status(old_partition);
             }
-        } else {
-            _partition_id_to_desc_map[id] = partition;
+            return Status::OK();
+        }
+    }
+
+    auto* partition = pool->add(new HdfsPartitionDescriptor(thrift_partition));
+    RETURN_IF_ERROR(partition->create_part_key_exprs(runtime_state, pool));
+
+    std::unique_lock lock(_map_mutex);
+    auto [it, inserted] = _partition_id_to_desc_map.emplace(id, partition);
+    if (!inserted) {
+        auto* old_partition = it->second;
+        if (thrift_partition.partition_key_exprs != old_partition->thrift_partition_key_exprs()) {
+            return mismatch_status(old_partition);
         }
     }
     return Status::OK();
