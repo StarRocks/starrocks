@@ -161,6 +161,7 @@ set(EXEC_FILES
         ./exprs/encryption_functions_test.cpp
         ./exprs/function_call_expr_test.cpp
         ./exprs/geography_functions_test.cpp
+        ./exprs/ngram_search_test.cpp
         ./exprs/if_expr_test.cpp
         ./exprs/json_functions_test.cpp
         ./exprs/flat_json_functions_test.cpp

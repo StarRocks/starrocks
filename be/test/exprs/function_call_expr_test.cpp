@@ -21,6 +21,7 @@
 
 #include "base/testutil/assert.h"
 #include "butil/time.h"
+#include "column/binary_column.h"
 #include "column/column_helper.h"
 #include "column/fixed_length_column.h"
 #include "exprs/cast_expr.h"
@@ -29,6 +30,7 @@
 #include "exprs/mock_vectorized_expr.h"
 #include "runtime/mem_tracker.h"
 #include "runtime/runtime_state.h"
+#include "util/bloom_filter.h"
 
 namespace starrocks {
 
@@ -307,6 +309,152 @@ TEST_F(VectorizedFunctionCallExprTest, prepare_close) {
     st = expr_context.open(&_runtime_state);
     ASSERT_TRUE(st.ok());
     expr_context.close(&_runtime_state);
+}
+
+// ---------------------------------------------------------------------------
+// ngram_bloom_filter pushdown helper: validates needle, lowers it via the
+// ICU/ASCII path matching the writer, and probes the bloom filter. These
+// tests cover the index-side reader path for ngram_bf with UTF-8 needles.
+// ---------------------------------------------------------------------------
+
+class NgramBloomFilterPushdownTest : public ::testing::Test {
+protected:
+    static TExprNode make_typed_node(TPrimitiveType::type t) {
+        TExprNode n;
+        n.node_type = TExprNodeType::SLOT_REF;
+        n.num_children = 0;
+        n.type = gen_type_desc(t);
+        return n;
+    }
+
+    TExprNode build_ngram_call_node() {
+        TFunction function;
+        TFunctionName functionName;
+        functionName.__set_function_name("ngram_search_case_insensitive");
+        function.__set_name(functionName);
+        function.__set_binary_type(TFunctionBinaryType::BUILTIN);
+        function.__set_fid(30441);
+        function.__set_has_var_args(false);
+        std::vector<TTypeDesc> arg_types = {
+                gen_type_desc(TPrimitiveType::VARCHAR),
+                gen_type_desc(TPrimitiveType::VARCHAR),
+                gen_type_desc(TPrimitiveType::INT),
+        };
+        function.__set_arg_types(arg_types);
+        function.__set_ret_type(gen_type_desc(TPrimitiveType::DOUBLE));
+
+        TExprNode parent;
+        parent.node_type = TExprNodeType::FUNCTION_CALL;
+        parent.num_children = 3;
+        parent.type = gen_type_desc(TPrimitiveType::DOUBLE);
+        parent.__set_fn(function);
+        return parent;
+    }
+
+    std::unique_ptr<BloomFilter> make_bf_with_cyrillic_lowered_trigrams() {
+        std::unique_ptr<BloomFilter> bf;
+        EXPECT_OK(BloomFilter::create(BLOCK_BLOOM_FILTER, &bf));
+        EXPECT_OK(bf->init(16, 0.05, HashStrategyPB::HASH_MURMUR3_X64_64));
+        // Lowercase Cyrillic character trigrams of "привет" (each char is 2 bytes).
+        bf->add_bytes("при", 6);
+        bf->add_bytes("рив", 6);
+        bf->add_bytes("иве", 6);
+        bf->add_bytes("вет", 6);
+        return bf;
+    }
+
+    RuntimeState _runtime_state;
+};
+
+TEST_F(NgramBloomFilterPushdownTest, MatchUtf8CaseInsensitiveLowersNeedle) {
+    TExprNode varchar_node = make_typed_node(TPrimitiveType::VARCHAR);
+    TExprNode int_node = make_typed_node(TPrimitiveType::INT);
+    TExprNode parent_node = build_ngram_call_node();
+
+    VectorizedFunctionCallExpr expr(parent_node);
+    MockColumnExpr haystack(varchar_node, BinaryColumn::create());
+    MockConstVectorizedExpr<TYPE_VARCHAR> needle(varchar_node, "ПРИВЕТ");
+    MockConstVectorizedExpr<TYPE_INT> gram_num(int_node, 3);
+    expr.add_child(&haystack);
+    expr.add_child(&needle);
+    expr.add_child(&gram_num);
+
+    ExprContext exprContext(&expr);
+    std::vector<ExprContext*> expr_ctxs = {&exprContext};
+    ASSERT_OK(ExprExecutor::prepare(expr_ctxs, &_runtime_state));
+    ASSERT_OK(ExprExecutor::open(expr_ctxs, &_runtime_state));
+
+    auto bf = make_bf_with_cyrillic_lowered_trigrams();
+    NgramBloomFilterReaderOptions opts;
+    opts.index_gram_num = 3;
+    opts.index_case_sensitive = false;
+
+    // Needle "ПРИВЕТ" lowered via utf8_tolower to "привет"; all 4 trigrams hit
+    // the bloom filter, so the helper must report the page as a candidate.
+    EXPECT_TRUE(expr.ngram_bloom_filter(&exprContext, bf.get(), opts));
+
+    ExprExecutor::close(expr_ctxs, &_runtime_state);
+}
+
+TEST_F(NgramBloomFilterPushdownTest, MissUtf8CaseInsensitiveFiltersPage) {
+    TExprNode varchar_node = make_typed_node(TPrimitiveType::VARCHAR);
+    TExprNode int_node = make_typed_node(TPrimitiveType::INT);
+    TExprNode parent_node = build_ngram_call_node();
+
+    VectorizedFunctionCallExpr expr(parent_node);
+    MockColumnExpr haystack(varchar_node, BinaryColumn::create());
+    MockConstVectorizedExpr<TYPE_VARCHAR> needle(varchar_node, "ПОКА");
+    MockConstVectorizedExpr<TYPE_INT> gram_num(int_node, 3);
+    expr.add_child(&haystack);
+    expr.add_child(&needle);
+    expr.add_child(&gram_num);
+
+    ExprContext exprContext(&expr);
+    std::vector<ExprContext*> expr_ctxs = {&exprContext};
+    ASSERT_OK(ExprExecutor::prepare(expr_ctxs, &_runtime_state));
+    ASSERT_OK(ExprExecutor::open(expr_ctxs, &_runtime_state));
+
+    auto bf = make_bf_with_cyrillic_lowered_trigrams();
+    NgramBloomFilterReaderOptions opts;
+    opts.index_gram_num = 3;
+    opts.index_case_sensitive = false;
+
+    // Needle "ПОКА" lowered to "пока" produces trigrams "пок", "ока" — neither
+    // present in the bloom filter that was populated for "привет".
+    EXPECT_FALSE(expr.ngram_bloom_filter(&exprContext, bf.get(), opts));
+
+    ExprExecutor::close(expr_ctxs, &_runtime_state);
+}
+
+TEST_F(NgramBloomFilterPushdownTest, InvalidUtf8NeedleDisablesIndex) {
+    TExprNode varchar_node = make_typed_node(TPrimitiveType::VARCHAR);
+    TExprNode int_node = make_typed_node(TPrimitiveType::INT);
+    TExprNode parent_node = build_ngram_call_node();
+
+    VectorizedFunctionCallExpr expr(parent_node);
+    MockColumnExpr haystack(varchar_node, BinaryColumn::create());
+    // 0xC0 0xC1 are illegal lead bytes in UTF-8.
+    MockConstVectorizedExpr<TYPE_VARCHAR> needle(varchar_node, std::string("\xC0\xC1\xFE", 3));
+    MockConstVectorizedExpr<TYPE_INT> gram_num(int_node, 3);
+    expr.add_child(&haystack);
+    expr.add_child(&needle);
+    expr.add_child(&gram_num);
+
+    ExprContext exprContext(&expr);
+    std::vector<ExprContext*> expr_ctxs = {&exprContext};
+    ASSERT_OK(ExprExecutor::prepare(expr_ctxs, &_runtime_state));
+    ASSERT_OK(ExprExecutor::open(expr_ctxs, &_runtime_state));
+
+    auto bf = make_bf_with_cyrillic_lowered_trigrams();
+    NgramBloomFilterReaderOptions opts;
+    opts.index_gram_num = 3;
+    opts.index_case_sensitive = false;
+
+    // Invalid UTF-8 needle: helper short-circuits with index_useful=false and
+    // returns true so the page is not filtered out by the bloom filter.
+    EXPECT_TRUE(expr.ngram_bloom_filter(&exprContext, bf.get(), opts));
+
+    ExprExecutor::close(expr_ctxs, &_runtime_state);
 }
 
 } // namespace starrocks

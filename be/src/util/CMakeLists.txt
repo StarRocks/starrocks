@@ -38,6 +38,7 @@ set(UTIL_FILES
   jvm_metrics.cpp
   llm_cache.cpp
   llm_query_service.cpp
+  utf8.cpp
 )
 
 ADD_BE_LIB(Util
