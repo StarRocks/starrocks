@@ -88,8 +88,7 @@ RuntimeState::RuntimeState(const TUniqueId& query_id, const TUniqueId& fragment_
     _init(fragment_instance_id, query_options, query_globals, exec_env);
 }
 
-RuntimeState::RuntimeState(const TQueryGlobals& query_globals)
-        : _unreported_error_idx(0), _obj_pool(new ObjectPool()) {
+RuntimeState::RuntimeState(const TQueryGlobals& query_globals) : _unreported_error_idx(0), _obj_pool(new ObjectPool()) {
     _profile = std::make_shared<RuntimeProfile>("<unnamed>");
     _load_channel_profile = std::make_shared<RuntimeProfile>("<unnamed>");
     _query_options.batch_size = DEFAULT_CHUNK_SIZE;
