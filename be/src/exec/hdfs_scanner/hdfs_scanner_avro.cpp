@@ -114,9 +114,9 @@ void HdfsAvroScanner::_materialize_nullable_columns(ChunkPtr& chunk) {
     chunk->materialized_nullable();
     for (int i = 0; i < chunk->num_columns(); i++) {
         auto* adaptive = down_cast<AdaptiveNullableColumn*>(chunk->get_column_raw_ptr_by_index(i));
-        chunk->update_column_by_index(
-                NullableColumn::create(adaptive->materialized_raw_data_column(), adaptive->materialized_raw_null_column()),
-                i);
+        chunk->update_column_by_index(NullableColumn::create(adaptive->materialized_raw_data_column(),
+                                                             adaptive->materialized_raw_null_column()),
+                                      i);
     }
 }
 
