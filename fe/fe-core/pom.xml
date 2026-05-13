@@ -1207,6 +1207,42 @@ under the License.
                             <skip>${skip.plugin}</skip>
                             <!-- exclude test only jars(junit&mysql-connector), GPL jar(mysql-connector) must be excluded in release package -->
                             <includeScope>runtime</includeScope>
+                            <excludeGroupIds>com.squareup.okhttp3,com.squareup.okio</excludeGroupIds>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-shade-plugin</artifactId>
+                <version>3.5.3</version>
+                <executions>
+                    <execution>
+                        <id>shade-okhttp-okio</id>
+                        <phase>package</phase>
+                        <goals>
+                            <goal>shade</goal>
+                        </goals>
+                        <configuration>
+                            <createDependencyReducedPom>false</createDependencyReducedPom>
+                            <artifactSet>
+                                <includes>
+                                    <include>com.squareup.okhttp3:okhttp</include>
+                                    <include>com.squareup.okio:okio</include>
+                                    <include>com.squareup.okio:okio-jvm</include>
+                                </includes>
+                            </artifactSet>
+                            <relocations>
+                                <relocation>
+                                    <pattern>okhttp3</pattern>
+                                    <shadedPattern>com.starrocks.shaded.okhttp3</shadedPattern>
+                                </relocation>
+                                <relocation>
+                                    <pattern>okio</pattern>
+                                    <shadedPattern>com.starrocks.shaded.okio</shadedPattern>
+                                </relocation>
+                            </relocations>
                         </configuration>
                     </execution>
                 </executions>
