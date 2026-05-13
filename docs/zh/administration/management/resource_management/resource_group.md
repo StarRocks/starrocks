@@ -103,7 +103,12 @@ UPDATE information_schema.be_configs SET VALUE = "false" WHERE NAME = "enable_re
 
 ##### `warehouses`
 
-自 v4.1 起，资源组支持通过 `warehouses` 指定生效范围。设置后，该资源组只会在指定 Warehouse 的 BE 上生效，而不会在所有 BE 上生效。如果不设置 `warehouses`，资源组默认在所有 Warehouse 的 BE 上生效。
+自 v4.1 起，资源组支持通过 `warehouses` 指定生效范围。从逻辑上看，设置 `warehouses` 后，该资源组只在指定的 Warehouse 上生效。如果不设置 `warehouses`，资源组默认在所有 Warehouse 上生效。
+
+`warehouses` 会同时影响 FE 和 BE：
+
+- FE：为查询匹配资源组时，FE 只会将 `warehouses` 为空，或 `warehouses` 包含该查询使用的 Warehouse 的资源组作为候选资源组。然后，FE 再根据分类器从这些候选资源组中选择一个资源组。
+- BE：资源组只会下发到 `warehouses` 指定的 Warehouse 的 BE 上。
 
 `warehouses` 的取值为 Warehouse 名称列表，多个名称使用英文逗号（,）分隔，例如 `wh1,wh2,wh3`。指定的 Warehouse 必须已经存在，并且列表中不能包含重复名称。
 

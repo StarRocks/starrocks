@@ -103,7 +103,12 @@ UPDATE information_schema.be_configs SET VALUE = "false" WHERE NAME = "enable_re
 
 ##### `warehouses`
 
-v4.1 以降、リソースグループは `warehouses` を使用して有効範囲を指定できます。`warehouses` を指定すると、このリソースグループは指定された Warehouse の BE でのみ有効になり、すべての BE で有効になるわけではありません。`warehouses` を指定しない場合、リソースグループはデフォルトですべての Warehouse の BE で有効になります。
+v4.1 以降、リソースグループは `warehouses` を使用して有効範囲を指定できます。論理的には、`warehouses` を指定すると、このリソースグループは指定された Warehouse でのみ有効になります。`warehouses` を指定しない場合、リソースグループはデフォルトですべての Warehouse で有効になります。
+
+`warehouses` は FE と BE の両方に影響します。
+
+- FE: クエリに一致するリソースグループを選択する際、FE は `warehouses` が空、または `warehouses` にそのクエリが使用する Warehouse が含まれるリソースグループのみを候補にします。その後、FE はこれらの候補からクラシファイアに基づいて 1 つのリソースグループを選択します。
+- BE: リソースグループは、`warehouses` で指定された Warehouse の BE にのみ配信されます。
 
 `warehouses` の値は Warehouse 名のリストで、複数の名前はカンマ（`,`）で区切ります。例: `wh1,wh2,wh3`。指定する Warehouse は既に存在している必要があり、重複した名前は許可されません。
 

@@ -104,7 +104,12 @@ UPDATE information_schema.be_configs SET VALUE = "false" WHERE NAME = "enable_re
 
 ##### `warehouses`
 
-From v4.1 onwards, resource groups support `warehouses` to specify the scope where they take effect. If `warehouses` is specified, the resource group takes effect only on BEs in the specified warehouses, rather than on all BEs. If `warehouses` is not specified, the resource group takes effect on BEs in all warehouses by default.
+From v4.1 onwards, resource groups support `warehouses` to specify the scope where they take effect. Logically, if `warehouses` is specified, the resource group takes effect only in the specified warehouses. If `warehouses` is not specified, the resource group takes effect in all warehouses by default.
+
+`warehouses` affects both FEs and BEs:
+
+- FE: When matching a query to a resource group, the FE only uses resource groups whose `warehouses` is empty or contains the warehouse used by the query as candidates. The FE then uses classifiers to select one resource group from these candidates.
+- BE: The resource group is delivered only to BEs in the warehouses specified by `warehouses`.
 
 The value of `warehouses` is a list of warehouse names separated by commas (`,`), for example, `wh1,wh2,wh3`. The specified warehouses must already exist, and duplicate names are not allowed.
 
