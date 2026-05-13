@@ -175,12 +175,34 @@ WHERE target_database = 'mydb'
   }
   ```
 
-  `raw_record` 本身已足以逐列排查原因。完整行回放需要等后续
-  `parquet_read_rows(file, anchors)` TVF 落地——它会根据锚点重读源
-  Parquet 文件还原完整行。TVF 落地前，锚点仍然有用：
-  `row_in_file`（0-based）能把用户直接指到原始 Parquet 文件里的具体
-  行；`file_size` / `file_mtime_ms` 是扫描打开时的快照，手动回放前
-  要先比对这两个字段，确认源文件没有被改动。
+  `raw_record` 本身已足以逐列排查原因。完整行回放使用
+  `parquet_read_rows(source_info)` 表值函数，它把锚点作为输入并以
+  lateral 形式接在 `_statistics_.rejected_records` 右侧：
+
+  ```sql
+  -- 把 db.t 表中所有 parquet 拒绝行还原后修复重导
+  INSERT INTO db.t
+  SELECT cast(json_extract_string(p.raw_record, '$.id')   AS INT),
+         cast(case when json_extract_string(p.raw_record, '$.val') = 'bad_val'
+                   then '0'
+                   else json_extract_string(p.raw_record, '$.val')
+              end AS INT),
+         json_extract_string(p.raw_record, '$.name')
+  FROM _statistics_.rejected_records r,
+       TABLE(parquet_read_rows(r.source_info)) p
+  WHERE r.target_database = 'db' AND r.target_table = 't'
+    AND r.format = 'parquet';
+  ```
+
+  `parquet_read_rows` 每个锚点输出一行，列为
+  `(file VARCHAR, row_in_file BIGINT, raw_record JSON)`。
+  `raw_record` 是按 Parquet 列名为键的 JSON 对象，值保留 Parquet 中
+  的原始内容（例如 `STRING` 列里的 `"bad_val"` 仍以字符串形式回来，
+  你在 SQL 里再施加修复后写回）。当 `source_info` 携带 `file_size` /
+  `file_mtime_ms` 时，BE 会在打开文件后做 fail-closed 校验，大小或
+  修改时间漂移则整条查询失败；若底层文件系统不暴露修改时间
+  （S3 / OSS），mtime 校验自动跳过。单个 chunk 处理的锚点数受 BE
+  配置 `parquet_read_rows_max_anchors` 限制（默认 10000）。
 - **`information_schema.loads.rejected_record_path` 已弃用。** 它此前
   指向的 BE 本地 tab 分隔拒绝文件已被移除；列本身保留用于升级兼容，取值
   恒为 `NULL`。改用 `_statistics_.rejected_records`，按 `load_label`

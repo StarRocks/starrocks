@@ -601,6 +601,11 @@ CONF_mBool(enable_rejected_record_sync, "false");
 // merge-commit batches synchronously across multiple BEs and may sit in
 // the FE-side commit queue briefly.
 CONF_mInt32(rejected_record_sync_post_timeout_sec, "60");
+// Upper bound on the number of source_info anchors processed in a single
+// `parquet_read_rows()` invocation chunk. Each anchor causes a parquet file
+// re-open + a row-group read, so the cost scales with the number of rejected
+// rows fed in. Setting the cap to <=0 disables the check (not recommended).
+CONF_mInt64(parquet_read_rows_max_anchors, "10000");
 // Whether to execute load channel RPC requests asynchronously, that is,
 // to run RPCs in a separate thread pool instead of within BRPC workers
 CONF_mBool(enable_load_channel_rpc_async, "true");

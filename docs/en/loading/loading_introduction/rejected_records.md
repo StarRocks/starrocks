@@ -195,14 +195,38 @@ to the reporting role.
   ```
 
   `raw_record` alone is enough to diagnose what went wrong column by
-  column. For full-row replay a follow-up commit will ship a
-  `parquet_read_rows(file, anchors)` TVF that rehydrates the full row
-  by re-reading the source file using the anchor. Until that TVF
-  lands, the anchor is still useful for pointing users at the exact
-  row in the original Parquet file (`row_in_file` is 0-based) and for
-  validating that the source file has not changed (`file_size` and
-  `file_mtime_ms` are snapshotted at scan open and should be compared
-  before attempting any manual rehydration).
+  column. For full-row replay use the `parquet_read_rows(source_info)`
+  table-valued function as a lateral right side of
+  `_statistics_.rejected_records`:
+
+  ```sql
+  -- Rehydrate every parquet row that was rejected for `db.t` and
+  -- replay it with a fix applied in SQL.
+  INSERT INTO db.t
+  SELECT cast(json_extract_string(p.raw_record, '$.id')   AS INT),
+         cast(case when json_extract_string(p.raw_record, '$.val') = 'bad_val'
+                   then '0'
+                   else json_extract_string(p.raw_record, '$.val')
+              end AS INT),
+         json_extract_string(p.raw_record, '$.name')
+  FROM _statistics_.rejected_records r,
+       TABLE(parquet_read_rows(r.source_info)) p
+  WHERE r.target_database = 'db' AND r.target_table = 't'
+    AND r.format = 'parquet';
+  ```
+
+  `parquet_read_rows` emits one row per anchor with columns
+  `(file VARCHAR, row_in_file BIGINT, raw_record JSON)`. `raw_record`
+  is a JSON object keyed by Parquet column name carrying the original
+  values as they appeared in the file (so a `STRING` column holding
+  `"bad_val"` arrives back as a string and you re-apply your fix in
+  SQL before re-inserting). When `source_info` carries `file_size` /
+  `file_mtime_ms`, the BE fail-closes the rehydration if the current
+  file has drifted from the recorded size or modification time; if the
+  underlying filesystem does not expose modification time (S3 / OSS),
+  the mtime check is silently skipped. Anchor count per chunk is
+  capped by the BE config `parquet_read_rows_max_anchors` (default
+  10000).
 - **`information_schema.loads.rejected_record_path` is deprecated.**
   The BE-local tab-delimited rejected-record file it used to point at
   was removed; the column is kept for upgrade compatibility but is

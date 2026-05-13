@@ -391,6 +391,14 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 描述：控制是否启用 Parquet 文件的布隆过滤器以提升性能的布尔值。`true` 表示启用布隆过滤器，`false` 表示禁用。也可以通过会话级别的系统变量 `enable_parquet_reader_bloom_filter` 控制此行为。Parquet 中的布隆过滤器是按“每个 row group 的列级别”维护的。如果 Parquet 文件为某些列维护了布隆过滤器，则对这些列的谓词可以高效地跳过不相关的 row group。
 - 引入版本：v3.5
 
+### parquet_read_rows_max_anchors
+
+- 默认值：10000
+- 类型：Int64
+- 单位：行
+- 是否动态：是
+- 描述：表值函数 `parquet_read_rows()` 单次调用 chunk 内处理 `source_info` 锚点数的上限。该函数用于从 `_statistics_.rejected_records` 还原 Parquet 拒绝行。每个锚点都需要重新打开源 Parquet 文件并读取对应 row group，工作量与锚点数成正比。设为 `<= 0` 关闭此校验（不建议）。超过上限时查询以 `InvalidArgument` 失败；可通过 `_statistics_.rejected_records` 上的额外 `WHERE` 条件拆分查询以保持在上限内。
+
 ### path_gc_check_step
 
 - 默认值：1000

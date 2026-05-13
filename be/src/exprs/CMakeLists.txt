@@ -102,6 +102,7 @@ set(EXPR_FILES
   expr_factory_exprs_extension.cpp
   table_function/table_function_factory.cpp
   table_function/list_rowsets.cpp
+  table_function/parquet_read_rows.cpp
   array_functions.cpp
   arrow_function_call.cpp
   dictmapping_expr.cpp

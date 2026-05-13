@@ -239,6 +239,58 @@ shell: rm -f /tmp/rej_parquet_${uuid0}.parquet; ossutil64 rm -rf oss://${oss_buc
 drop database db_${uuid0};
 
 -- =============================================================
+-- parquet_read_rows TVF: rehydrate the rejected row from its anchor and
+-- replay it (with a fix) into the target table. Exercises the lateral join
+-- between _statistics_.rejected_records.source_info and TABLE(parquet_read_rows(...)).
+-- =============================================================
+
+-- name: test_rejected_records_parquet_rehydrate @sequential
+-- End-to-end fix loop:
+--   1. INSERT from a parquet OSS object that contains one un-castable row.
+--   2. Read the rejected anchor out of _statistics_.rejected_records.
+--   3. Use parquet_read_rows(source_info) to rehydrate the full original row.
+--   4. Apply a fix in SQL and INSERT it back into the target table.
+
+create database db_${uuid0};
+use db_${uuid0};
+create table t (id int not null, val int not null, name varchar(64))
+    duplicate key(id) distributed by hash(id) buckets 1
+    properties("replication_num" = "1");
+
+shell: { ${mysql_cmd} -Ne "show backends"; ${mysql_cmd} -Ne "show compute nodes"; } | awk '{print $2":"$5}' | sort -u | while read h; do curl -s -X POST "http://$h/api/update_config?rejected_record_sync_interval_sec=1" >/dev/null; curl -s -X POST "http://$h/api/update_config?enable_rejected_record_sync=true" >/dev/null; done; echo "0"
+
+shell: python3 -c 'import pyarrow as pa, pyarrow.parquet as pq; tbl = pa.table({"id": pa.array([1,2,3],pa.int32()), "val": pa.array(["100","bad_val","200"],pa.string()), "name": pa.array(["alice","bob","carol"],pa.string())}); pq.write_table(tbl, "/tmp/rej_rehydrate_${uuid0}.parquet"); print(0)'
+
+shell: ossutil64 mkdir oss://${oss_bucket}/test_rejected_records/${uuid0} >/dev/null 2>&1 || true; ossutil64 cp --force /tmp/rej_rehydrate_${uuid0}.parquet oss://${oss_bucket}/test_rejected_records/${uuid0}/rej.parquet >/dev/null 2>&1; echo 0
+
+set log_rejected_record_num = -1;
+set insert_max_filter_ratio = 1.0;
+insert into t select cast(id as int), cast(val as int), name from files("path" = "oss://${oss_bucket}/test_rejected_records/${uuid0}/rej.parquet", "fs.oss.endpoint" = "${oss_endpoint}", "fs.oss.accessKeyId" = "${oss_ak}", "fs.oss.accessKeySecret" = "${oss_sk}", "format" = "parquet");
+
+select id, val, name from t order by id;
+
+shell: for i in $(seq 1 30); do n=$(${mysql_cmd} -Ne "select count(*) from _statistics_.rejected_records where target_database='db_${uuid0}' and target_table='t'" 2>/dev/null); [ -n "$n" ] && [ "$n" -ge 1 ] && break; sleep 1; done; sleep 3; echo 0
+
+-- The TVF emits (file, row_in_file, raw_record JSON) per anchor row.
+-- raw_record is keyed by the parquet column names, so val arrives back as the
+-- original string "bad_val"; we apply a fix in the CASE expression and replay.
+insert into t
+select cast(json_extract_string(p.raw_record, '$.id') as int),
+       cast(case when json_extract_string(p.raw_record, '$.val') = 'bad_val'
+                 then '0'
+                 else json_extract_string(p.raw_record, '$.val') end as int),
+       json_extract_string(p.raw_record, '$.name')
+from _statistics_.rejected_records r,
+     table(parquet_read_rows(r.source_info)) p
+where r.target_database='db_${uuid0}' and r.target_table='t' and r.format='parquet';
+
+select id, val, name from t order by id;
+
+shell: { ${mysql_cmd} -Ne "show backends"; ${mysql_cmd} -Ne "show compute nodes"; } | awk '{print $2":"$5}' | sort -u | while read h; do curl -s -X POST "http://$h/api/update_config?enable_rejected_record_sync=false" >/dev/null; curl -s -X POST "http://$h/api/update_config?rejected_record_sync_interval_sec=30" >/dev/null; done; echo "0"
+shell: rm -f /tmp/rej_rehydrate_${uuid0}.parquet; ossutil64 rm -rf oss://${oss_bucket}/test_rejected_records/${uuid0}/ >/dev/null 2>&1 || true; echo 0
+drop database db_${uuid0};
+
+-- =============================================================
 -- ORC rejection via INSERT FROM FILES (stream load does not accept orc).
 -- =============================================================
 

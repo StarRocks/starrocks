@@ -149,6 +149,19 @@ public class TableFunction extends Function {
                         IntegerType.BIGINT, IntegerType.BIGINT,
                         BooleanType.BOOLEAN, StringType.STRING));
         functionSet.addBuiltin(listRowsets);
+
+        // parquet_read_rows(source_info_json) -> (file, row_in_file, raw_record)
+        // Rehydrates the original Parquet row pointed to by the source_info anchor stored
+        // in `_statistics_.rejected_records`. The TVF runs lateral against the rejected
+        // records table, e.g.:
+        //     SELECT ... FROM rejected_records r,
+        //                     TABLE(parquet_read_rows(r.source_info)) p;
+        // BE enforces a fail-closed check on file_size + file_mtime_ms inside source_info.
+        TableFunction parquetReadRows = new TableFunction(new FunctionName(FunctionSet.PARQUET_READ_ROWS),
+                Lists.newArrayList("file", "row_in_file", "raw_record"),
+                Lists.newArrayList(JsonType.JSON),
+                Lists.newArrayList(VarcharType.VARCHAR, IntegerType.BIGINT, JsonType.JSON));
+        functionSet.addBuiltin(parquetReadRows);
     }
 
     public List<Type> getTableFnReturnTypes() {
