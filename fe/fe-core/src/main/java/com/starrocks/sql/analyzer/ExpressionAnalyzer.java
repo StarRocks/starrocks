@@ -1585,9 +1585,6 @@ public class ExpressionAnalyzer {
             }
             node.getPartitionExprs().forEach(e -> visit(e, context));
             node.getOrderByElements().stream().map(OrderByElement::getExpr).forEach(e -> visit(e, context));
-            if (node.getSkewColumn() != null) {
-                visit(node.getSkewColumn(), context);
-            }
             verifyAnalyticExpression(node);
             return null;
         }
