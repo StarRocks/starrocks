@@ -1051,6 +1051,9 @@ CONF_Int64(pipeline_sink_brpc_dop, "64");
 CONF_Int64(pipeline_max_num_drivers_per_exec_thread, "10240");
 CONF_mBool(pipeline_print_profile, "false");
 CONF_mBool(pipeline_timeout_diagnostic, "false");
+// BE-wide kill switch for the pipeline event scheduler. When false, the event scheduler is
+// disabled even if the session variable `enable_pipeline_event_scheduler` is true.
+CONF_mBool(enable_pipeline_event_scheduler, "true");
 // If this value is greater than 0 and the query time exceeds the timeout, then execute gcore on the process.
 CONF_Int64(pipeline_gcore_timeout_threshold_sec, "-1");
 CONF_String(pipeline_gcore_output_dir, "${STARROCKS_HOME}/log");
