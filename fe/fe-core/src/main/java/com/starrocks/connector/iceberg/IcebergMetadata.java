@@ -1762,7 +1762,7 @@ public class IcebergMetadata implements ConnectorMetadata {
                            ConnectContext context) {
         // Skip the commit entirely when there is nothing to write — a zero-row INSERT/UPDATE/DELETE
         // would otherwise produce an empty `append` snapshot that pollutes snapshot history and
-        // confuses downstream CDC consumers. Aligns with Trino's fix in trinodb/trino#12412.
+        // confuses downstream CDC consumers.
         if (commitInfos.isEmpty()) {
             LOG.info("Skipping empty Iceberg commit for {}.{} (no data or delete files produced)", dbName, tableName);
             return;
@@ -2102,8 +2102,16 @@ public class IcebergMetadata implements ConnectorMetadata {
                 getOrDefault(UPDATE_ISOLATION_LEVEL, UPDATE_ISOLATION_LEVEL_DEFAULT));
         if (isolationLevel == IsolationLevel.SERIALIZABLE) {
             rowDelta.validateNoConflictingDataFiles();
-            rowDelta.validateNoConflictingDeleteFiles();
         }
+        // Per Iceberg's RowDelta contract, validateNoConflictingDeleteFiles must be
+        // called for UPDATE/MERGE "independently of the isolation level" — a concurrent
+        // writer adding position-delete files that overlap rows being updated would
+        // otherwise commit silently and resurrect rows that were concurrently deleted.
+        // Not required for pure DELETE (deleting an already-deleted record is
+        // idempotent), which is why the sibling DELETE-commit path above does not call
+        // this method.
+        // Reference: https://github.com/apache/iceberg/blob/main/api/src/main/java/org/apache/iceberg/RowDelta.java#L149-L163
+        rowDelta.validateNoConflictingDeleteFiles();
 
         if (context != null) {
             updateCommitInfo(rowDelta, context);

@@ -35,22 +35,26 @@ import static org.apache.iceberg.TableProperties.DELETE_PARQUET_COMPRESSION;
 import static org.apache.iceberg.TableProperties.PARQUET_COMPRESSION;
 
 /**
- * IcebergRowDeltaSink is used to support UPDATE operations on Iceberg tables
+ * IcebergRowDeltaSink is used to support row-delta operations on Iceberg tables
  * using the RowDelta model. It writes both position delete files and new data
  * files in a single atomic operation.
  * <p>
  * Required columns:
  * - _file (STRING): Path of the data file
  * - _pos (BIGINT): Row position within the file
- * - Plus data columns for the updated rows
+ * - Plus data columns for the new rows
+ * - Optional trailing op_code column for mixed row-level routing
  */
 public class IcebergRowDeltaSink extends DataSink {
-    public static final String WRITE_MODE_ROW_DELTA = "ROW_DELTA";
 
     /**
      * Operation codes for row-level delta operations.
-     * Each row in the RowDelta output carries an op_code that tells the BE sink
-     * how to route it. Values must stay in sync with BE IcebergRowDeltaSink::OP_*.
+     * MERGE row-delta output carries an op_code that tells the BE sink how to
+     * route each row. Values must stay in sync with BE IcebergRowDeltaSink::OP_*.
+     * These values are the RowDelta sink's internal routing protocol; never expose
+     * them as SQL-visible analyzer output columns. UPDATE uses ROW_DELTA_UPDATE
+     * mode with no per-row routing; MERGE uses ROW_DELTA_MIXED with a
+     * planner-injected routing projection.
      */
     public enum OpCode {
         NO_OP(0),           // discard (MERGE row matches no WHEN clause)
@@ -79,6 +83,7 @@ public class IcebergRowDeltaSink extends DataSink {
     private final String deleteCompressionType;
     private final long targetMaxFileSize;
     private final String tableIdentifier;
+    private final TIcebergWriteMode writeMode;
     private CloudConfiguration cloudConfiguration;
     private com.starrocks.connector.iceberg.IcebergMetadata.IcebergSinkExtra sinkExtraInfo;
 
@@ -88,9 +93,10 @@ public class IcebergRowDeltaSink extends DataSink {
      * @param icebergTable    The target Iceberg table
      * @param desc            Tuple descriptor containing operation columns
      * @param sessionVariable Session variables for configuration
+     * @param writeMode       RowDelta physical layout mode
      */
     public IcebergRowDeltaSink(IcebergTable icebergTable, TupleDescriptor desc,
-                               SessionVariable sessionVariable) {
+                               SessionVariable sessionVariable, TIcebergWriteMode writeMode) {
         this.icebergTable = icebergTable;
         Table nativeTable = icebergTable.getNativeTable();
         this.desc = desc;
@@ -109,6 +115,10 @@ public class IcebergRowDeltaSink extends DataSink {
         this.dataCompressionType = dataCodec;
         this.deleteCompressionType = nativeTable.properties().getOrDefault(DELETE_PARQUET_COMPRESSION, dataCodec);
         this.targetMaxFileSize = IcebergUtil.resolveTargetMaxFileSize(nativeTable, sessionVariable);
+        Preconditions.checkArgument(writeMode == TIcebergWriteMode.ROW_DELTA_UPDATE ||
+                        writeMode == TIcebergWriteMode.ROW_DELTA_MIXED,
+                "IcebergRowDeltaSink write mode must be ROW_DELTA_UPDATE or ROW_DELTA_MIXED");
+        this.writeMode = writeMode;
     }
 
     public void init() {
@@ -162,7 +172,7 @@ public class IcebergRowDeltaSink extends DataSink {
         strBuilder.append("\n");
         strBuilder.append(prefix).append("  TABLE: ").append(tableIdentifier).append("\n");
         strBuilder.append(prefix).append("  LOCATION: ").append(tableLocation).append("\n");
-        strBuilder.append(prefix).append("  WRITE MODE: ").append(WRITE_MODE_ROW_DELTA).append("\n");
+        strBuilder.append(prefix).append("  WRITE MODE: ").append(writeMode.name()).append("\n");
         strBuilder.append(prefix).append("  TUPLE ID: ").append(desc.getId()).append("\n");
         return strBuilder.toString();
     }
@@ -177,7 +187,7 @@ public class IcebergRowDeltaSink extends DataSink {
         tIcebergTableSink.setData_location(dataLocation);
         tIcebergTableSink.setFile_format(fileFormat);
         tIcebergTableSink.setIs_static_partition_sink(false);
-        tIcebergTableSink.setWrite_mode(TIcebergWriteMode.ROW_DELTA);
+        tIcebergTableSink.setWrite_mode(writeMode);
         TCompressionType dataCompression = PARQUET_COMPRESSION_TYPE_MAP.get(dataCompressionType);
         Preconditions.checkState(dataCompression != null,
                 "data file compression type not supported: " + dataCompressionType);

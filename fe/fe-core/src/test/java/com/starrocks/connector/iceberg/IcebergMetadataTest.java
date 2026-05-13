@@ -1228,8 +1228,8 @@ public class IcebergMetadataTest extends TableTestBase {
     @Test
     public void testFinishSinkSkipsEmptyCommit() {
         // Zero-row INSERT / UPDATE / DELETE should NOT produce a new snapshot.
-        // Aligns with Trino's fix in trinodb/trino#12412 — empty DML pollutes
-        // snapshot history and confuses downstream CDC consumers.
+        // Empty DML would otherwise pollute snapshot history and confuse
+        // downstream CDC consumers.
         IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog(CATALOG_NAME, new Configuration(), DEFAULT_CONFIG);
         IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog,
                 Executors.newSingleThreadExecutor(), Executors.newSingleThreadExecutor(), null);
@@ -3006,6 +3006,169 @@ public class IcebergMetadataTest extends TableTestBase {
         mockedNativeTableA.refresh();
         List<FileScanTask> fileScanTasks = Lists.newArrayList(mockedNativeTableA.newScan().planFiles());
         Assertions.assertFalse(fileScanTasks.isEmpty());
+    }
+
+    // Helpers for row-delta commit tests. A row-delta commit (UPDATE / MERGE) goes
+    // through commitRowDeltaOperation when commitInfos contains BOTH a position-delete
+    // file and a new data file, exercising RowDelta-specific validations.
+    //
+    // column_stats must be set on both files: buildPositionDeleteFile passes
+    // null metrics to Iceberg's FileMetadata.Builder when column_stats is unset,
+    // and Iceberg then NPEs on metrics.recordCount() during build.
+    private TIcebergColumnStats emptyColumnStats() {
+        TIcebergColumnStats stats = new TIcebergColumnStats();
+        stats.setColumn_sizes(Map.of());
+        stats.setValue_counts(Map.of());
+        stats.setNull_value_counts(Map.of());
+        stats.setLower_bounds(Map.of());
+        stats.setUpper_bounds(Map.of());
+        return stats;
+    }
+
+    private TIcebergDataFile buildRowDeltaPositionDeleteFile() {
+        TIcebergDataFile deleteFile = new TIcebergDataFile();
+        deleteFile.setPath(mockedNativeTableA.location() + "/data/delete_for_update.parquet");
+        deleteFile.setFormat("parquet");
+        deleteFile.setRecord_count(3);
+        deleteFile.setFile_size_in_bytes(256);
+        deleteFile.setPartition_path(mockedNativeTableA.location() + "/data/data_bucket=1/");
+        deleteFile.setPartition_null_fingerprint("0");
+        deleteFile.setFile_content(TIcebergFileContent.POSITION_DELETES);
+        deleteFile.setReferenced_data_file(FILE_A.path().toString());
+        deleteFile.setColumn_stats(emptyColumnStats());
+        return deleteFile;
+    }
+
+    private TIcebergDataFile buildRowDeltaDataFile() {
+        TIcebergDataFile dataFile = new TIcebergDataFile();
+        dataFile.setPath(mockedNativeTableA.location() + "/data/data_bucket=0/new_after_update.parquet");
+        dataFile.setFormat("parquet");
+        dataFile.setRecord_count(3);
+        dataFile.setSplit_offsets(Lists.newArrayList(4L));
+        dataFile.setPartition_path(mockedNativeTableA.location() + "/data/data_bucket=0/");
+        dataFile.setFile_size_in_bytes(512);
+        dataFile.setPartition_null_fingerprint("0");
+        dataFile.setColumn_stats(emptyColumnStats());
+        return dataFile;
+    }
+
+    @Test
+    public void testCommitRowDeltaOperationWithBaseSnapshotAndConflictFilter() throws Exception {
+        // Establish a baseline snapshot so RowDelta has something to validate against.
+        mockedNativeTableA.newFastAppend().appendFile(FILE_A).commit();
+        long baseSnapshotId = mockedNativeTableA.currentSnapshot().snapshotId();
+
+        IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog(CATALOG_NAME, new Configuration(), DEFAULT_CONFIG);
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog,
+                Executors.newSingleThreadExecutor(), Executors.newSingleThreadExecutor(), DEFAULT_CATALOG_PROPERTIES);
+        IcebergTable icebergTable = new IcebergTable(1, "srTableName", CATALOG_NAME, "resource_name", "iceberg_db",
+                "iceberg_table", "", Lists.newArrayList(), mockedNativeTableA, Maps.newHashMap());
+
+        new Expectations(metadata) {
+            {
+                metadata.getTable((ConnectContext) any, anyString, anyString);
+                result = icebergTable;
+                minTimes = 0;
+            }
+        };
+
+        TSinkCommitInfo deleteCommit = new TSinkCommitInfo();
+        deleteCommit.setIceberg_data_file(buildRowDeltaPositionDeleteFile());
+        TSinkCommitInfo dataCommit = new TSinkCommitInfo();
+        dataCommit.setIceberg_data_file(buildRowDeltaDataFile());
+
+        // Explicit baseSnapshotId frozen at plan time + conflict detection filter:
+        // exercises the IcebergSinkExtra.baseSnapshotId branch and the
+        // conflictDetectionFilter set-up in commitRowDeltaOperation.
+        IcebergMetadata.IcebergSinkExtra extra = new IcebergMetadata.IcebergSinkExtra();
+        extra.setBaseSnapshotId(baseSnapshotId);
+        extra.setConflictDetectionFilter(org.apache.iceberg.expressions.Expressions.greaterThan("id", 100));
+
+        metadata.finishSink("iceberg_db", "iceberg_table",
+                Lists.newArrayList(deleteCommit, dataCommit), null, extra);
+
+        mockedNativeTableA.refresh();
+        Snapshot newSnapshot = mockedNativeTableA.currentSnapshot();
+        Assertions.assertNotNull(newSnapshot, "row-delta commit must produce a snapshot");
+        Assertions.assertNotEquals(baseSnapshotId, newSnapshot.snapshotId(),
+                "row-delta commit must advance the snapshot id past the plan-time base");
+    }
+
+    @Test
+    public void testCommitRowDeltaOperationSerializableIsolation() throws Exception {
+        // SERIALIZABLE turns on validateNoConflictingDataFiles in addition to the
+        // unconditional validateNoConflictingDeleteFiles. Cover both checks here.
+        mockedNativeTableA.updateProperties()
+                .set(org.apache.iceberg.TableProperties.UPDATE_ISOLATION_LEVEL, "serializable")
+                .commit();
+        mockedNativeTableA.newFastAppend().appendFile(FILE_A).commit();
+
+        IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog(CATALOG_NAME, new Configuration(), DEFAULT_CONFIG);
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog,
+                Executors.newSingleThreadExecutor(), Executors.newSingleThreadExecutor(), DEFAULT_CATALOG_PROPERTIES);
+        IcebergTable icebergTable = new IcebergTable(1, "srTableName", CATALOG_NAME, "resource_name", "iceberg_db",
+                "iceberg_table", "", Lists.newArrayList(), mockedNativeTableA, Maps.newHashMap());
+
+        new Expectations(metadata) {
+            {
+                metadata.getTable((ConnectContext) any, anyString, anyString);
+                result = icebergTable;
+                minTimes = 0;
+            }
+        };
+
+        TSinkCommitInfo deleteCommit = new TSinkCommitInfo();
+        deleteCommit.setIceberg_data_file(buildRowDeltaPositionDeleteFile());
+        TSinkCommitInfo dataCommit = new TSinkCommitInfo();
+        dataCommit.setIceberg_data_file(buildRowDeltaDataFile());
+
+        IcebergMetadata.IcebergSinkExtra extra = new IcebergMetadata.IcebergSinkExtra();
+        extra.setBaseSnapshotId(mockedNativeTableA.currentSnapshot().snapshotId());
+
+        metadata.finishSink("iceberg_db", "iceberg_table",
+                Lists.newArrayList(deleteCommit, dataCommit), null, extra);
+
+        mockedNativeTableA.refresh();
+        Assertions.assertNotNull(mockedNativeTableA.currentSnapshot(),
+                "serializable-isolation row-delta commit must still produce a snapshot");
+    }
+
+    @Test
+    public void testCommitRowDeltaOperationFallsBackToCurrentSnapshotWhenExtraMissing() throws Exception {
+        // When IcebergSinkExtra (or its baseSnapshotId) is not provided, the commit
+        // path falls back to nativeTbl.currentSnapshot() to scope validateFromSnapshot.
+        // This branch covers the null-extra / null-baseSnapshotId fallback.
+        mockedNativeTableA.newFastAppend().appendFile(FILE_A).commit();
+        long baseSnapshotId = mockedNativeTableA.currentSnapshot().snapshotId();
+
+        IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog(CATALOG_NAME, new Configuration(), DEFAULT_CONFIG);
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog,
+                Executors.newSingleThreadExecutor(), Executors.newSingleThreadExecutor(), DEFAULT_CATALOG_PROPERTIES);
+        IcebergTable icebergTable = new IcebergTable(1, "srTableName", CATALOG_NAME, "resource_name", "iceberg_db",
+                "iceberg_table", "", Lists.newArrayList(), mockedNativeTableA, Maps.newHashMap());
+
+        new Expectations(metadata) {
+            {
+                metadata.getTable((ConnectContext) any, anyString, anyString);
+                result = icebergTable;
+                minTimes = 0;
+            }
+        };
+
+        TSinkCommitInfo deleteCommit = new TSinkCommitInfo();
+        deleteCommit.setIceberg_data_file(buildRowDeltaPositionDeleteFile());
+        TSinkCommitInfo dataCommit = new TSinkCommitInfo();
+        dataCommit.setIceberg_data_file(buildRowDeltaDataFile());
+
+        // No extra → commitRowDeltaOperation must derive baseSnapshotId from currentSnapshot().
+        metadata.finishSink("iceberg_db", "iceberg_table",
+                Lists.newArrayList(deleteCommit, dataCommit), null, null);
+
+        mockedNativeTableA.refresh();
+        Snapshot newSnapshot = mockedNativeTableA.currentSnapshot();
+        Assertions.assertNotNull(newSnapshot, "row-delta commit must produce a snapshot");
+        Assertions.assertNotEquals(baseSnapshotId, newSnapshot.snapshotId(),
+                "row-delta commit must advance past the implicit base snapshot");
     }
 
     @Test

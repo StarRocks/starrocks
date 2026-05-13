@@ -15,7 +15,6 @@
 package com.starrocks.sql.analyzer;
 
 import com.starrocks.catalog.IcebergTable;
-import com.starrocks.planner.IcebergRowDeltaSink;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
@@ -24,7 +23,6 @@ import com.starrocks.sql.ast.SelectListItem;
 import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.UpdateStmt;
 import com.starrocks.sql.ast.expression.Expr;
-import com.starrocks.sql.ast.expression.IntLiteral;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.utframe.StarRocksAssert;
@@ -144,7 +142,7 @@ public class UpdateAnalyzerIcebergTest {
     }
 
     @Test
-    public void testIcebergUpdateConvertsToSelectWithOpCode() {
+    public void testIcebergUpdateConvertsToSelectWithoutOpCode() {
         String sql = "UPDATE iceberg0.unpartitioned_db.t0_v2 SET data = 'new' WHERE id = 1";
         UpdateStmt updateStmt = (UpdateStmt) SqlParser.parse(
                 sql, connectContext.getSessionVariable().getSqlMode()).get(0);
@@ -160,7 +158,7 @@ public class UpdateAnalyzerIcebergTest {
         SelectRelation selectRelation = (SelectRelation) queryRelation;
         assertNotNull(selectRelation.getSelectList());
 
-        // Check that select list contains _file, _pos, and op_code columns
+        // Check that select list contains _file and _pos columns, but no routing op_code.
         boolean hasFileColumn = false;
         boolean hasPosColumn = false;
         boolean hasOpCode = false;
@@ -180,7 +178,7 @@ public class UpdateAnalyzerIcebergTest {
 
         assertTrue(hasFileColumn, "Select list should contain _file column");
         assertTrue(hasPosColumn, "Select list should contain _pos column");
-        assertTrue(hasOpCode, "Select list should contain op_code column");
+        assertFalse(hasOpCode, "UPDATE select list should not expose op_code column");
     }
 
     @Test
@@ -234,14 +232,13 @@ public class UpdateAnalyzerIcebergTest {
         // Verify column output names include all expected columns
         List<String> colNames = updateStmt.getQueryStatement().getQueryRelation().getColumnOutputNames();
         assertNotNull(colNames);
-        // _file, _pos, id, data, date, op_code
-        assertEquals(6, colNames.size());
+        // _file, _pos, id, data, date
+        assertEquals(5, colNames.size());
         assertEquals(IcebergTable.FILE_PATH, colNames.get(0));
         assertEquals(IcebergTable.ROW_POSITION, colNames.get(1));
         assertEquals("id", colNames.get(2));
         assertEquals("data", colNames.get(3));
         assertEquals("date", colNames.get(4));
-        assertEquals("op_code", colNames.get(5));
     }
 
     @Test
@@ -254,11 +251,11 @@ public class UpdateAnalyzerIcebergTest {
 
         List<String> colNames = updateStmt.getQueryStatement().getQueryRelation().getColumnOutputNames();
         assertNotNull(colNames);
-        // _file, _pos, id, data, date, op_code
-        assertEquals(6, colNames.size());
+        // _file, _pos, id, data, date
+        assertEquals(5, colNames.size());
         assertEquals(IcebergTable.FILE_PATH, colNames.get(0));
         assertEquals(IcebergTable.ROW_POSITION, colNames.get(1));
-        assertEquals("op_code", colNames.get(colNames.size() - 1));
+        assertFalse(colNames.contains("op_code"));
     }
 
     @Test
@@ -274,13 +271,13 @@ public class UpdateAnalyzerIcebergTest {
         SelectList selectList = selectRelation.getSelectList();
         List<SelectListItem> items = selectList.getItems();
 
-        // Expected: _file, _pos, id, data, date, op_code = 6 items
-        assertEquals(6, items.size());
+        // Expected: _file, _pos, id, data, date = 5 items
+        assertEquals(5, items.size());
 
         // Verify output expressions are present and cast correctly
         List<Expr> outputExprs = selectRelation.getOutputExpression();
         assertNotNull(outputExprs);
-        assertEquals(6, outputExprs.size());
+        assertEquals(5, outputExprs.size());
     }
 
     @Test
@@ -327,8 +324,8 @@ public class UpdateAnalyzerIcebergTest {
         // Verify output expressions have been set (cast step completed)
         List<Expr> outputExprs = selectRelation.getOutputExpression();
         assertNotNull(outputExprs);
-        // All 6 columns should have output expressions
-        assertEquals(6, outputExprs.size());
+        // All 5 columns should have output expressions
+        assertEquals(5, outputExprs.size());
         // None should be null
         for (Expr expr : outputExprs) {
             assertNotNull(expr);
@@ -389,15 +386,15 @@ public class UpdateAnalyzerIcebergTest {
         assertNotNull(updateStmt.getQueryStatement());
         SelectRelation selectRelation =
                 (SelectRelation) updateStmt.getQueryStatement().getQueryRelation();
-        // Expect _file, _pos, id, data, date, op_code
-        assertEquals(6, selectRelation.getSelectList().getItems().size());
-        assertEquals(6, selectRelation.getOutputExpression().size());
+        // Expect _file, _pos, id, data, date
+        assertEquals(5, selectRelation.getSelectList().getItems().size());
+        assertEquals(5, selectRelation.getOutputExpression().size());
     }
 
     @Test
     public void testIcebergUpdateWithNullAssignment() {
         // SET col = NULL is a valid assignment; analyzer must cast the null literal
-        // to the target column type and produce 6 output exprs.
+        // to the target column type and produce 5 output exprs.
         String sql = "UPDATE iceberg0.unpartitioned_db.t0_v2 SET data = NULL WHERE id = 1";
         UpdateStmt updateStmt = (UpdateStmt) SqlParser.parse(
                 sql, connectContext.getSessionVariable().getSqlMode()).get(0);
@@ -406,13 +403,13 @@ public class UpdateAnalyzerIcebergTest {
 
         SelectRelation selectRelation =
                 (SelectRelation) updateStmt.getQueryStatement().getQueryRelation();
-        assertEquals(6, selectRelation.getOutputExpression().size());
+        assertEquals(5, selectRelation.getOutputExpression().size());
     }
 
     @Test
-    public void testIcebergUpdateLastItemIsOpCodeLiteral() {
-        // The last SELECT item must be an IntLiteral tagged with the UPDATE op code
-        // (exercises the op_code literal creation in analyzeIcebergTable).
+    public void testIcebergUpdateDoesNotAppendOpCodeLiteral() {
+        // UPDATE uses a fixed row-delta routing mode; op_code is not part of the
+        // analyzer's public SELECT output.
         String sql = "UPDATE iceberg0.unpartitioned_db.t0_v2 SET data = 'x' WHERE id = 1";
         UpdateStmt updateStmt = (UpdateStmt) SqlParser.parse(
                 sql, connectContext.getSessionVariable().getSqlMode()).get(0);
@@ -423,10 +420,8 @@ public class UpdateAnalyzerIcebergTest {
                 (SelectRelation) updateStmt.getQueryStatement().getQueryRelation();
         SelectList selectList = selectRelation.getSelectList();
         SelectListItem last = selectList.getItems().get(selectList.getItems().size() - 1);
-        assertEquals("op_code", last.getAlias());
-        assertInstanceOf(IntLiteral.class, last.getExpr());
-        assertEquals(IcebergRowDeltaSink.OpCode.UPDATE.value(),
-                ((IntLiteral) last.getExpr()).getValue());
+        assertEquals("date", last.getAlias());
+        assertFalse(selectList.getItems().stream().anyMatch(item -> "op_code".equals(item.getAlias())));
     }
 
     @Test
@@ -458,7 +453,7 @@ public class UpdateAnalyzerIcebergTest {
     @Test
     public void testIcebergUpdatePartitionedTableColumnOutputNames() {
         // For a partitioned V2 table, the column output list must still follow the
-        // same contract: [_file, _pos, id, data, date, op_code].
+        // same contract: [_file, _pos, id, data, date].
         String sql = "UPDATE iceberg0.partitioned_db.t1_v2 SET data = 'new' WHERE id = 1";
         UpdateStmt updateStmt = (UpdateStmt) SqlParser.parse(
                 sql, connectContext.getSessionVariable().getSqlMode()).get(0);
@@ -467,10 +462,10 @@ public class UpdateAnalyzerIcebergTest {
 
         List<String> colNames = updateStmt.getQueryStatement().getQueryRelation().getColumnOutputNames();
         assertNotNull(colNames);
-        assertEquals(6, colNames.size());
+        assertEquals(5, colNames.size());
         assertEquals(IcebergTable.FILE_PATH, colNames.get(0));
         assertEquals(IcebergTable.ROW_POSITION, colNames.get(1));
-        assertEquals("op_code", colNames.get(colNames.size() - 1));
+        assertFalse(colNames.contains("op_code"));
     }
 
     @Test
@@ -515,10 +510,9 @@ public class UpdateAnalyzerIcebergTest {
         SelectRelation selectRelation =
                 (SelectRelation) updateStmt.getQueryStatement().getQueryRelation();
         List<Expr> outputExprs = selectRelation.getOutputExpression();
-        // _file + _pos + 3 data cols + op_code = 6
-        assertEquals(6, outputExprs.size());
-        // Last expression is the op_code literal
-        assertInstanceOf(IntLiteral.class, outputExprs.get(outputExprs.size() - 1));
+        // _file + _pos + 3 data cols = 5
+        assertEquals(5, outputExprs.size());
+        assertFalse(selectRelation.getColumnOutputNames().contains("op_code"));
     }
 
     @Test

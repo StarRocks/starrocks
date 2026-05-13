@@ -24,7 +24,6 @@ import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableName;
-import com.starrocks.planner.IcebergRowDeltaSink;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SelectAnalyzer.RewriteAliasVisitor;
@@ -41,13 +40,11 @@ import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.ast.UpdateStmt;
 import com.starrocks.sql.ast.expression.DefaultValueExpr;
 import com.starrocks.sql.ast.expression.Expr;
-import com.starrocks.sql.ast.expression.IntLiteral;
 import com.starrocks.sql.ast.expression.NullLiteral;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.common.TypeManager;
-import com.starrocks.type.IntegerType;
 import com.starrocks.type.NullType;
 
 import java.util.HashMap;
@@ -81,7 +78,7 @@ public class UpdateAnalyzer {
      *   UPDATE table SET col1=expr1, col2=expr2 WHERE condition
      * to:
      *   INSERT INTO iceberg_row_delta_sink
-     *   SELECT _file, _pos, partition_col1, ..., new_col1, new_col2, ..., 2 AS op_code
+     *   SELECT _file, _pos, partition_col1, ..., new_col1, new_col2, ...
      *   FROM table WHERE condition
      */
     private static void analyzeIcebergTable(UpdateStmt updateStmt, IcebergTable icebergTable,
@@ -130,7 +127,7 @@ public class UpdateAnalyzer {
             }
         }
 
-        // Build SELECT list: _file, _pos, partition_cols, full schema (with SET exprs), op_code
+        // Build SELECT list: _file, _pos, partition_cols, full schema (with SET exprs)
         SelectList selectList = new SelectList();
 
         // Add _file column
@@ -144,7 +141,7 @@ public class UpdateAnalyzer {
         // No separate partition prefix — partition columns are already part of the full
         // table schema in the data section below. Adding them here would create duplicate
         // SlotRefs that the optimizer merges, changing the column count and breaking
-        // the BE layout assumptions (data_column_start, op_code_index).
+        // the BE layout assumptions.
         // Partition shuffle uses the partition columns from the data section.
 
         // Add full target-table schema: for assigned columns use the SET expression,
@@ -169,14 +166,6 @@ public class UpdateAnalyzer {
             }
         }
 
-        // Add op_code = OP_UPDATE as the last column
-        try {
-            selectList.addItem(new SelectListItem(
-                    new IntLiteral(IcebergRowDeltaSink.OpCode.UPDATE.value(), IntegerType.TINYINT), "op_code"));
-        } catch (Exception e) {
-            throw new SemanticException("analyze update failed", e);
-        }
-
         // Create table relation with WHERE predicate
         TableRelation tableRelation = new TableRelation(tableName);
         SelectRelation selectRelation = new SelectRelation(
@@ -195,8 +184,8 @@ public class UpdateAnalyzer {
         new QueryAnalyzer(session).analyze(queryStatement);
 
         // Cast data columns to target schema types.
-        // Layout: [_file, _pos, data_cols..., op_code]
-        // Only data_cols need casting — _file/_pos are fixed types, op_code is a literal.
+        // Layout: [_file, _pos, data_cols...]
+        // Only data_cols need casting — _file/_pos are fixed types.
         List<Expr> outputExprs = queryStatement.getQueryRelation().getOutputExpression();
         int dataColumnStart = 2;
         List<Expr> castOutputExprs = Lists.newArrayList(outputExprs);
