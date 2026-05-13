@@ -91,6 +91,8 @@ public class BrokerFileGroup implements Writable {
     // fileFieldNames should be filled automatically according to schema and mapping when loading from hive table.
     private List<String> fileFieldNames;
     private List<String> columnsFromPath;
+    // if true, the file path will be exposed as an additional column after columnsFromPath
+    private boolean hasPathColumn = false;
     // columnExprList includes all fileFieldNames, columnsFromPath and column mappings
     // this param will be recreated by data desc when the log replay
     private List<ImportColumnDesc> columnExprList;
@@ -143,6 +145,7 @@ public class BrokerFileGroup implements Writable {
 
         this.columnExprList = table.getColumnExprList(scanColumns);
         this.columnsFromPath = table.getColumnsFromPath();
+        this.hasPathColumn = table.hasPathColumn();
     }
 
     public BrokerFileGroup(DataDescription dataDescription) {
@@ -324,6 +327,10 @@ public class BrokerFileGroup implements Writable {
 
     public List<String> getColumnsFromPath() {
         return columnsFromPath;
+    }
+
+    public boolean hasPathColumn() {
+        return hasPathColumn;
     }
 
     public List<ImportColumnDesc> getColumnExprList() {

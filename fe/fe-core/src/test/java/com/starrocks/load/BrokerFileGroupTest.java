@@ -185,4 +185,41 @@ public class BrokerFileGroupTest {
         Assertions.assertEquals("\1", fileGroup.getColumnSeparator());
         Assertions.assertEquals("\2", fileGroup.getRowDelimiter());
     }
+
+    @Test
+    public void testTableFunctionTableWithPathColumn() throws StarRocksException {
+        Map<String, String> properties = new HashMap<>();
+        properties.put("path", "fake://some_bucket/some_path/*");
+        properties.put("format", "CSV");
+        properties.put("path_column", "_filepath");
+
+        TableFunctionTable table = new TableFunctionTable(properties);
+        BrokerFileGroup fileGroup = new BrokerFileGroup(table, Sets.newHashSet());
+        Assertions.assertTrue(fileGroup.hasPathColumn());
+    }
+
+    @Test
+    public void testTableFunctionTableWithoutPathColumn() throws StarRocksException {
+        Map<String, String> properties = new HashMap<>();
+        properties.put("path", "fake://some_bucket/some_path/*");
+        properties.put("format", "CSV");
+
+        TableFunctionTable table = new TableFunctionTable(properties);
+        BrokerFileGroup fileGroup = new BrokerFileGroup(table, Sets.newHashSet());
+        Assertions.assertFalse(fileGroup.hasPathColumn());
+    }
+
+    @Test
+    public void testTableFunctionTableWithPathColumnAndColumnsFromPath() throws StarRocksException {
+        Map<String, String> properties = new HashMap<>();
+        properties.put("path", "fake://some_bucket/some_path/*");
+        properties.put("format", "CSV");
+        properties.put("columns_from_path", "year,month");
+        properties.put("path_column", "source_file");
+
+        TableFunctionTable table = new TableFunctionTable(properties);
+        BrokerFileGroup fileGroup = new BrokerFileGroup(table, Sets.newHashSet());
+        Assertions.assertTrue(fileGroup.hasPathColumn());
+        Assertions.assertEquals(Arrays.asList("year", "month"), fileGroup.getColumnsFromPath());
+    }
 }
