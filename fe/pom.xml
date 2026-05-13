@@ -1398,6 +1398,14 @@ under the License.
                 <version>${paimon.version}</version>
                 <exclusions>
                     <exclusion>
+                        <artifactId>okio</artifactId>
+                        <groupId>com.squareup.okio</groupId>
+                    </exclusion>
+                    <exclusion>
+                        <artifactId>okhttp</artifactId>
+                        <groupId>com.squareup.okhttp3</groupId>
+                    </exclusion>
+                    <exclusion>
                         <artifactId>lz4-java</artifactId>
                         <groupId>org.lz4</groupId>
                     </exclusion>
