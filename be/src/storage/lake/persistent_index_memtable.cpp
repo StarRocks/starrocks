@@ -247,16 +247,24 @@ void PersistentIndexMemtable::clear() {
 
 void PersistentIndexMemtable::run() {
     auto st = flush();
-    if (!st.ok()) {
-        LOG(ERROR) << "PersistentIndexMemtable flush failed for tablet " << _tablet_id << ": " << st;
+    {
         std::lock_guard<std::mutex> lg(_flush_mutex);
-        _flush_status = st;
+        if (!st.ok()) {
+            LOG(ERROR) << "PersistentIndexMemtable flush failed for tablet " << _tablet_id << ": " << st;
+            _flush_status = st;
+        }
+        _flush_done = true;
     }
+    _flush_done_cv.notify_all();
 }
 
 void PersistentIndexMemtable::cancel() {
-    std::lock_guard<std::mutex> lg(_flush_mutex);
-    _flush_status = Status::Cancelled("PersistentIndexMemtable flush cancelled");
+    {
+        std::lock_guard<std::mutex> lg(_flush_mutex);
+        _flush_status = Status::Cancelled("PersistentIndexMemtable flush cancelled");
+        _flush_done = true;
+    }
+    _flush_done_cv.notify_all();
 }
 
 std::unique_ptr<PersistentIndexSstable> PersistentIndexMemtable::release_sstable() {
@@ -267,6 +275,11 @@ std::unique_ptr<PersistentIndexSstable> PersistentIndexMemtable::release_sstable
 Status PersistentIndexMemtable::flush_status() const {
     std::lock_guard<std::mutex> lg(_flush_mutex);
     return _flush_status;
+}
+
+void PersistentIndexMemtable::wait_flush_done() const {
+    std::unique_lock<std::mutex> lk(_flush_mutex);
+    _flush_done_cv.wait(lk, [this] { return _flush_done; });
 }
 
 } // namespace starrocks::lake
