@@ -419,7 +419,7 @@ public class EnforceAndCostTask extends OptimizerTask implements Cloneable {
                 return false;
             }
 
-            if (sv.isEnableLocalShuffleAgg() &&
+            if (sv.isEnableLocalShuffleAgg() && !sv.isEnableQueryCache() &&
                     GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().isSingleBackendAndComputeNode()) {
                 return true;
             }
