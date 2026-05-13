@@ -46,6 +46,8 @@ Release date: May 13, 2026
 
 ### Bug fixes
 
+The following issues have been fixed:
+
 - Wrong results for local-shuffle aggregate queries with OFFSET. [#71997](https://github.com/StarRocks/starrocks/pull/71997)
 - Incorrect Join output properties after Exchange shuffle columns are pruned. [#72003](https://github.com/StarRocks/starrocks/pull/72003)
 - Several dependency CVE issues. [#71762](https://github.com/StarRocks/starrocks/pull/71762) [#71914](https://github.com/StarRocks/starrocks/pull/71914)
