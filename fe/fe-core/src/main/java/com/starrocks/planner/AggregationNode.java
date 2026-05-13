@@ -78,6 +78,7 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
+import static com.starrocks.qe.SessionVariableConstants.AUTO;
 import static com.starrocks.qe.SessionVariableConstants.FORCE_PREAGGREGATION;
 import static com.starrocks.qe.SessionVariableConstants.FORCE_STREAMING;
 import static com.starrocks.qe.SessionVariableConstants.LIMITED;
@@ -371,6 +372,10 @@ public class AggregationNode extends PlanNode implements RuntimeFilterBuildNode 
         }
         if (useSortAgg) {
             output.append(detailPrefix).append("sorted streaming: true\n");
+        }
+        if (detailLevel == TExplainLevel.VERBOSE && !AUTO.equalsIgnoreCase(streamingPreaggregationMode)) {
+            output.append(detailPrefix).append("streaming preaggregation mode: ")
+                    .append(streamingPreaggregationMode).append("\n");
         }
 
         if (withLocalShuffle) {

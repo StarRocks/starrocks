@@ -117,6 +117,7 @@ public class PhysicalHashAggregateOperator extends PhysicalOperator {
         this.withoutColocateRequirement = aggregateOperator.withoutColocateRequirement;
         this.distinctColumnDataSkew = aggregateOperator.distinctColumnDataSkew;
         this.groupByMinMaxStatistic = aggregateOperator.groupByMinMaxStatistic;
+        this.forcePreAggregation = aggregateOperator.forcePreAggregation;
         this.withLocalShuffle = aggregateOperator.withLocalShuffle;
         this.localLimit = aggregateOperator.localLimit;
     }
@@ -248,6 +249,10 @@ public class PhysicalHashAggregateOperator extends PhysicalOperator {
 
     public void setForcePreAggregation(boolean forcePreAggregation) {
         this.forcePreAggregation = forcePreAggregation;
+    }
+
+    public boolean isForcePreAggregation() {
+        return forcePreAggregation;
     }
 
     public boolean isWithLocalShuffle() {

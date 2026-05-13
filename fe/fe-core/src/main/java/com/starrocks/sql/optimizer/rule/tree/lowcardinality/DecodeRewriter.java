@@ -257,10 +257,14 @@ public class DecodeRewriter extends OptExpressionVisitor<OptExpression, ColumnRe
                         projection);
         op.setWithLocalShuffle(aggregate.isWithLocalShuffle());
         op.setMergedLocalAgg(aggregate.isMergedLocalAgg());
+        op.setTopNLocalAgg(aggregate.isTopNLocalAgg());
         op.setUseSortAgg(aggregate.isUseSortAgg());
         op.setUsePerBucketOptmize(aggregate.isUsePerBucketOptmize());
         op.setWithoutColocateRequirement(aggregate.isWithoutColocateRequirement());
+        op.setDistinctColumnDataSkew(aggregate.getDistinctColumnDataSkew());
+        op.setForcePreAggregation(aggregate.isForcePreAggregation());
         op.setLocalLimit(aggregate.getLocalLimit());
+        op.setGroupByMinMaxStatistic(aggregate.getGroupByMinMaxStatistic());
         return rewriteOptExpression(optExpression, op, info.outputStringColumns);
     }
 
