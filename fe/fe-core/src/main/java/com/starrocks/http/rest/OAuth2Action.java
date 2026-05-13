@@ -48,13 +48,16 @@ import java.util.Map;
 import java.util.stream.Collectors;
 
 public class OAuth2Action extends RestBaseAction {
+    private static final int CONNECT_TIMEOUT_SECOND = 5;
+    private static final int REQUEST_TIMEOUT_SECOND = 30;
+
     // Reuse a single HttpClient instance across all OAuth2 token exchanges.
     // java.net.http.HttpClient is thread-safe and designed to be used as a singleton.
     // Creating a new instance per request leaks FDs (selector epoll/eventfd/pipe + idle
     // sockets) because the JDK 17 HttpClient has no close() method and relies on GC,
-    // which fails to keep up under sustained load. See: https://bugs.openjdk.org/browse/JDK-8277459
+    // which fails to keep up under sustained load.
     private static final HttpClient HTTP_CLIENT = HttpClient.newBuilder()
-            .connectTimeout(Duration.ofSeconds(5))
+            .connectTimeout(Duration.ofSeconds(CONNECT_TIMEOUT_SECOND))
             .version(HttpClient.Version.HTTP_1_1)
             .build();
 
@@ -150,6 +153,7 @@ public class OAuth2Action extends RestBaseAction {
 
             HttpRequest request = HttpRequest.newBuilder()
                     .uri(URI.create(oAuth2Context.tokenServerUrl()))
+                    .timeout(Duration.ofSeconds(REQUEST_TIMEOUT_SECOND))
                     .header("Content-Type", "application/x-www-form-urlencoded")
                     .POST(HttpRequest.BodyPublishers.ofString(requestBody))
                     .build();

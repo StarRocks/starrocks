@@ -43,13 +43,16 @@ import java.util.Optional;
 class StreamLoader {
     private static final String LOAD_URL_PATTERN = "/api/%s/%s/_stream_load";
 
+    private static final int CONNECT_TIMEOUT_SECOND = 5;
+    private static final int REQUEST_TIMEOUT_SECOND = 60;
+
     // Reuse a single HttpClient instance across all stream load batches.
     // java.net.http.HttpClient is thread-safe and designed to be used as a singleton.
     // Creating a new instance per batch leaks FDs (selector epoll/eventfd/pipe + idle
     // sockets) because the JDK 17 HttpClient has no close() method and relies on GC,
     // which fails to keep up under sustained periodic load.
     private static final HttpClient HTTP_CLIENT = HttpClient.newBuilder()
-            .connectTimeout(Duration.ofSeconds(5))
+            .connectTimeout(Duration.ofSeconds(CONNECT_TIMEOUT_SECOND))
             .version(HttpClient.Version.HTTP_1_1)
             .build();
 
@@ -80,6 +83,7 @@ class StreamLoader {
         }
         URI uri = new URI("http", null, be.get().getHost(), be.get().getHttpPort(), loadUrlStr, null, null);
         HttpRequest request = HttpRequest.newBuilder(uri)
+                .timeout(Duration.ofSeconds(REQUEST_TIMEOUT_SECOND))
                 .header("Authorization", "Basic " + authEncoding)
                 .header("Content-Type", "text/plain; charset=UTF-8")
                 .header("format", "json")
