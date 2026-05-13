@@ -368,8 +368,11 @@ public:
         RETURN_IF_ERROR(decoder->next_batch(num_values, (uint8_t*)slices));
 
         size_t total_length = 0;
+        _has_fixed_value_length = num_values > 0;
+        _fixed_value_length = num_values > 0 ? slices[0].size : 0;
         for (int i = 0; i < num_values; ++i) {
             total_length += slices[i].size;
+            _has_fixed_value_length &= slices[i].size == _fixed_value_length;
         }
 
         _dict.resize(num_values);
@@ -549,9 +552,10 @@ private:
             const uint64_t max_final_offset = offset + static_cast<uint64_t>(read_count) * _max_value_length;
             const bool need_exact_final_offset =
                     !offsets.is_large() && max_final_offset > std::numeric_limits<uint32_t>::max();
-            uint64_t total_length = 0;
+            uint64_t total_length =
+                    _has_fixed_value_length ? static_cast<uint64_t>(read_count) * _fixed_value_length : 0;
 
-            if (LIKELY(!need_exact_final_offset)) {
+            if (LIKELY(!need_exact_final_offset || _has_fixed_value_length)) {
                 for (size_t i = 0; i < read_count; ++i) {
                     datas[i] = _slices[i].data;
                     lengths[i] = _slices[i].size;
@@ -566,18 +570,36 @@ private:
 
             // relocate offsets
             size_t prev_offsets = offsets.size();
-            const uint64_t final_offset = need_exact_final_offset ? offset + total_length : max_final_offset;
+            const uint64_t final_offset =
+                    (need_exact_final_offset || _has_fixed_value_length) ? offset + total_length : max_final_offset;
             offsets.resize_uninitialized(count + prev_offsets, final_offset);
             size_t cnt = 0;
             const uint32_t* lengths_ptr = lengths;
-            offsets.visit_storage([prev_offsets, count, is_nulls, lengths_ptr, offset, cnt](auto& offsets_buf) mutable {
-                using OffsetValue = typename std::decay_t<decltype(offsets_buf)>::value_type;
+            if (LIKELY(!offsets.is_large())) {
+                auto& offsets_buf = offsets.small_storage();
                 auto* dst_offsets = offsets_buf.data() + prev_offsets;
-                for (size_t i = 0; i < count; ++i) {
-                    offset += is_nulls[i] ? 0 : lengths_ptr[cnt++];
-                    dst_offsets[i] = static_cast<OffsetValue>(offset);
+                uint64_t current_offset = offset;
+                if (_has_fixed_value_length) {
+                    const uint64_t fixed_value_length = _fixed_value_length;
+                    for (size_t i = 0; i < count; ++i) {
+                        current_offset += is_nulls[i] ? 0 : fixed_value_length;
+                        dst_offsets[i] = static_cast<uint32_t>(current_offset);
+                    }
+                } else {
+                    for (size_t i = 0; i < count; ++i) {
+                        current_offset += is_nulls[i] ? 0 : lengths_ptr[cnt++];
+                        dst_offsets[i] = static_cast<uint32_t>(current_offset);
+                    }
                 }
-            });
+            } else {
+                auto& offsets_buf = offsets.large_storage();
+                auto* dst_offsets = offsets_buf.data() + prev_offsets;
+                uint64_t current_offset = offset;
+                for (size_t i = 0; i < count; ++i) {
+                    current_offset += is_nulls[i] ? 0 : lengths_ptr[cnt++];
+                    dst_offsets[i] = current_offset;
+                }
+            }
 
             if (read_count == 0) {
                 return Status::OK();
@@ -636,6 +658,8 @@ private:
     std::vector<uint32_t> _indexes;
     FixedSliceArray _slices;
     size_t _max_value_length = 0;
+    size_t _fixed_value_length = 0;
+    bool _has_fixed_value_length = false;
 };
 
 } // namespace starrocks::parquet

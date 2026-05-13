@@ -313,8 +313,10 @@ StatusOr<ColumnPtr> LikePredicate::constant_equals_fn(FunctionContext* context, 
 }
 
 template <typename OffsetValue, typename ResultValue>
-static void constant_substring_impl(const OffsetValue* __restrict offsets, size_t num_rows, const char* begin,
-                                    const char* end, Slice needle, ResultValue* __restrict result_data) {
+// Keep Volnitsky fallback search in this hot loop; GCC's default inline budget leaves it out of line.
+static __attribute__((flatten)) void constant_substring_impl(const OffsetValue* __restrict offsets, size_t num_rows,
+                                                             const char* begin, const char* end, Slice needle,
+                                                             ResultValue* __restrict result_data) {
     const char* pos = begin;
     size_t i = 0;
     auto searcher = VolnitskyUTF8(needle.data, needle.size, end - pos);
@@ -386,9 +388,13 @@ StatusOr<ColumnPtr> LikePredicate::constant_substring_fn(FunctionContext* contex
         auto* __restrict result_data = res->get_data().data();
         const size_t num_rows = haystack->size();
 
-        offsets.visit_storage([&](const auto& offsets_buf) {
+        if (LIKELY(!offsets.is_large())) {
+            const auto& offsets_buf = offsets.small_storage();
             constant_substring_impl(offsets_buf.data(), num_rows, begin, end, needle, result_data);
-        });
+        } else {
+            const auto& offsets_buf = offsets.large_storage();
+            constant_substring_impl(offsets_buf.data(), num_rows, begin, end, needle, result_data);
+        }
     }
 
     if (columns[0]->has_null()) {

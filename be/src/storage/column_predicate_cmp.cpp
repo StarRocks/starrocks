@@ -641,31 +641,46 @@ public:
     StatusOr<uint16_t> evaluate_branchless(const Column* column, uint16_t* sel, uint16_t sel_size) const override {
         // Get BinaryColumn
         const BinaryColumn* binary_column;
+        const uint8_t* is_null = nullptr;
         if (column->is_nullable()) {
             // This is NullableColumn, get its data_column
-            binary_column =
-                    down_cast<const BinaryColumn*>(down_cast<const NullableColumn*>(column)->data_column().get());
+            const auto* nullable_column = down_cast<const NullableColumn*>(column);
+            binary_column = down_cast<const BinaryColumn*>(nullable_column->data_column().get());
+            if (column->has_null()) {
+                /* must use uint8_t* to make vectorized effect */
+                is_null = nullable_column->immutable_null_column_data().data();
+            }
         } else {
             binary_column = down_cast<const BinaryColumn*>(column);
         }
 
         uint16_t new_size = 0;
         auto eval = Eval();
-        if (!column->has_null()) {
+        const auto* raw_bytes = binary_column->raw_bytes();
+        const auto& offsets = binary_column->get_offset();
+        offsets.visit_storage([&](const auto& offsets_buf) {
+            if (is_null == nullptr) {
+                for (uint16_t i = 0; i < sel_size; ++i) {
+                    uint16_t data_idx = sel[i];
+                    const auto begin = offsets_buf[data_idx];
+                    const auto end = offsets_buf[data_idx + 1];
+                    sel[new_size] = data_idx;
+                    new_size += eval(Slice(raw_bytes + begin, end - begin), _value);
+                }
+                return;
+            }
+
             for (uint16_t i = 0; i < sel_size; ++i) {
                 uint16_t data_idx = sel[i];
+                if (is_null[data_idx]) {
+                    continue;
+                }
+                const auto begin = offsets_buf[data_idx];
+                const auto end = offsets_buf[data_idx + 1];
                 sel[new_size] = data_idx;
-                new_size += eval(binary_column->get_slice(data_idx), _value);
+                new_size += eval(Slice(raw_bytes + begin, end - begin), _value);
             }
-        } else {
-            /* must use uint8_t* to make vectorized effect */
-            const uint8_t* is_null = down_cast<const NullableColumn*>(column)->immutable_null_column_data().data();
-            for (uint16_t i = 0; i < sel_size; ++i) {
-                uint16_t data_idx = sel[i];
-                sel[new_size] = data_idx;
-                new_size += !is_null[data_idx] && eval(binary_column->get_slice(data_idx), _value);
-            }
-        }
+        });
         return new_size;
     }
 

@@ -179,11 +179,37 @@ public:
         slices.reserve(_perm.size());
         size_t added_bytes = 0;
 
-        for (auto& p : _perm) {
-            Slice slice = down_cast<const BinaryColumnBase<T>*>(_columns[PermTraits::chunk(p)])
-                                  ->get_slice(PermTraits::index(p));
-            added_bytes += slice.get_size();
-            slices.push_back(slice);
+        if constexpr (std::is_same_v<typename PermRange::value_type, SmallPermuteItem>) {
+            const auto* src_column = down_cast<const ColumnType*>(_columns[0]);
+            const auto& src_offsets = src_column->get_offset();
+            const uint8_t* src_base = src_column->raw_bytes();
+
+            if (LIKELY(!src_offsets.is_large())) {
+                const auto& offsets_buf = src_offsets.small_storage();
+                for (auto& p : _perm) {
+                    const auto idx = p.index_in_chunk;
+                    const auto offset = offsets_buf[idx];
+                    const size_t size = offsets_buf[idx + 1] - offset;
+                    added_bytes += size;
+                    slices.emplace_back(src_base + offset, size);
+                }
+            } else {
+                const auto& offsets_buf = src_offsets.large_storage();
+                for (auto& p : _perm) {
+                    const auto idx = p.index_in_chunk;
+                    const auto offset = offsets_buf[idx];
+                    const size_t size = offsets_buf[idx + 1] - offset;
+                    added_bytes += size;
+                    slices.emplace_back(src_base + offset, size);
+                }
+            }
+        } else {
+            for (auto& p : _perm) {
+                Slice slice = down_cast<const BinaryColumnBase<T>*>(_columns[PermTraits::chunk(p)])
+                                      ->get_slice(PermTraits::index(p));
+                added_bytes += slice.get_size();
+                slices.push_back(slice);
+            }
         }
 
         DCHECK(!offsets.empty());

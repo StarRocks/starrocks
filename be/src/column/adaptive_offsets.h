@@ -62,6 +62,26 @@ public:
 
     bool is_large() const { return _large; }
 
+    Small& small_storage() {
+        DCHECK(!_large);
+        return _u32;
+    }
+
+    const Small& small_storage() const {
+        DCHECK(!_large);
+        return _u32;
+    }
+
+    Large& large_storage() {
+        DCHECK(_large);
+        return _u64;
+    }
+
+    const Large& large_storage() const {
+        DCHECK(_large);
+        return _u64;
+    }
+
     size_t size() const {
         if (LIKELY(!_large)) return _u32.size();
         return _u64.size();

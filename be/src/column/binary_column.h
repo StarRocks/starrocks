@@ -147,11 +147,15 @@ public:
     }
 
     size_t byte_size(size_t from, size_t size) const override {
-        DCHECK_LE(from + size, this->size()) << "Range error";
-        return (_offsets[from + size] - _offsets[from]) + size * _offsets.element_size();
+        if (LIKELY(!_offsets.is_large())) {
+            const auto& offsets = _offsets.small_storage();
+            return (offsets[from + size] - offsets[from]) + size * sizeof(uint32_t);
+        }
+        const auto& offsets = _offsets.large_storage();
+        return (offsets[from + size] - offsets[from]) + size * sizeof(uint64_t);
     }
 
-    size_t byte_size(size_t idx) const override { return _offsets[idx + 1] - _offsets[idx] + _offsets.element_size(); }
+    size_t byte_size(size_t idx) const override { return _offsets[idx + 1] - _offsets[idx] + sizeof(uint32_t); }
 
     Slice get_slice(size_t idx) const {
         const uint8_t* base = _data_base();
