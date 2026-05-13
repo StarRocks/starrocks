@@ -20,6 +20,7 @@
 #include <mutex>
 #include <string_view>
 
+#include "base/testutil/sync_point.h"
 #include "base/time/time.h"
 #include "base/uid_util.h"
 #include "base/utility/defer_op.h"
@@ -401,10 +402,21 @@ Status SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id, const std::fun
             _first_send_time = MonotonicNanos();
         }
 
-        auto failed_function = [this, request_byte_size](const ClosureContext& ctx,
-                                                         std::string_view rpc_error_msg) noexcept {
-            auto query_ctx = _fragment_ctx->runtime_state()->query_ctx();
-            auto query_ctx_guard = query_ctx->shared_from_this();
+        auto query_ctx_weak = _fragment_ctx->runtime_state()->query_ctx()->weak_from_this();
+
+        auto failed_function = [this, request_byte_size, query_ctx_weak](const ClosureContext& ctx,
+                                                                         std::string_view rpc_error_msg) noexcept {
+            auto query_ctx_guard = query_ctx_weak.lock();
+            if (UNLIKELY(!query_ctx_guard)) {
+                _is_finishing = true;
+                auto& context = sink_ctx(ctx.instance_id.lo);
+                ++context.num_finished_rpcs;
+                --context.num_in_flight_rpcs;
+                _buffered_mem_usage->release(request_byte_size);
+                GlobalEnv::GetInstance()->brpc_iobuf_mem_tracker()->set(butil::IOBuf::block_memory());
+                --_total_in_flight_rpc;
+                return;
+            }
             auto notify = this->defer_notify();
 
             auto defer = DeferOp([this]() { --_total_in_flight_rpc; });
@@ -424,10 +436,19 @@ Status SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id, const std::fun
             LOG(WARNING) << err_msg;
         };
 
-        auto success_function = [this, request_byte_size](const ClosureContext& ctx,
-                                                          const PTransmitChunkResult& result) noexcept {
-            auto query_ctx = _fragment_ctx->runtime_state()->query_ctx();
-            auto query_ctx_guard = query_ctx->shared_from_this();
+        auto success_function = [this, request_byte_size, query_ctx_weak](const ClosureContext& ctx,
+                                                                          const PTransmitChunkResult& result) noexcept {
+            auto query_ctx_guard = query_ctx_weak.lock();
+            if (UNLIKELY(!query_ctx_guard)) {
+                _is_finishing = true;
+                auto& context = sink_ctx(ctx.instance_id.lo);
+                ++context.num_finished_rpcs;
+                --context.num_in_flight_rpcs;
+                _buffered_mem_usage->release(request_byte_size);
+                GlobalEnv::GetInstance()->brpc_iobuf_mem_tracker()->set(butil::IOBuf::block_memory());
+                --_total_in_flight_rpc;
+                return;
+            }
             auto notify = this->defer_notify();
 
             auto defer = DeferOp([this]() { --_total_in_flight_rpc; });
@@ -468,6 +489,11 @@ Status SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id, const std::fun
         closure->cntl.set_timeout_ms(_brpc_timeout_ms);
         set_ignore_overcrowded_for_query(closure->cntl);
 
+        auto sync_point_arg = std::make_pair(false, closure);
+        TEST_SYNC_POINT_CALLBACK("SinkBuffer::_try_to_send_rpc::before_send_rpc", &sync_point_arg);
+        if (sync_point_arg.first) {
+            return Status::OK();
+        }
         return _send_rpc(closure, request);
     }
     return Status::OK();
