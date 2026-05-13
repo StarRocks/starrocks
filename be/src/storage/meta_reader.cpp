@@ -395,7 +395,7 @@ Status SegmentMetaCollecter::_collect_dict_for_column(ColumnIterator* column_ite
         auto& tablet_column = _params->tablet_schema->column(cid);
         // For JSON data, the schema may be heterogeneous, meaning that some segments might not contain the dictionary column,
         // but a global dictionary could still be present and usable.
-        if (!tablet_column.is_extended()) {
+        if (!tablet_column.is_extended() || !column_iter->only_nulls()) {
             return Status::GlobalDictError("no global dict");
         } else {
             return Status::OK();
