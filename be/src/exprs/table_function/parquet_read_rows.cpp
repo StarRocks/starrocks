@@ -58,8 +58,7 @@ namespace {
 // from a TableFunction context.
 class ArrowRandomAccessFile final : public arrow::io::RandomAccessFile {
 public:
-    ArrowRandomAccessFile(std::shared_ptr<RandomAccessFile> file, int64_t size)
-            : _file(std::move(file)), _size(size) {}
+    ArrowRandomAccessFile(std::shared_ptr<RandomAccessFile> file, int64_t size) : _file(std::move(file)), _size(size) {}
 
     arrow::Status Close() override {
         _file.reset();
@@ -314,8 +313,8 @@ Status rehydrate_one(const Anchor& anchor, std::string* out_json) {
         file_size = static_cast<int64_t>(cur_size_or.value());
         if (anchor.expected_size >= 0 && file_size != anchor.expected_size) {
             return Status::Corruption(strings::Substitute(
-                    "parquet_read_rows: file '$0' size changed (expected=$1, actual=$2); fail-closed",
-                    anchor.file, anchor.expected_size, file_size));
+                    "parquet_read_rows: file '$0' size changed (expected=$1, actual=$2); fail-closed", anchor.file,
+                    anchor.expected_size, file_size));
         }
     } else if (cur_size_or.status().is_not_supported()) {
         // FS can't tell us; rely on anchor.
@@ -363,7 +362,7 @@ Status rehydrate_one(const Anchor& anchor, std::string* out_json) {
         auto pq_reader = parquet::ParquetFileReader::Open(arrow_file, pq_props);
         file_metadata = pq_reader->metadata();
         auto open_st = parquet::arrow::FileReader::Make(arrow::default_memory_pool(), std::move(pq_reader),
-                                                       parquet::ArrowReaderProperties(), &reader);
+                                                        parquet::ArrowReaderProperties(), &reader);
         if (!open_st.ok()) {
             return Status::IOError(strings::Substitute("parquet_read_rows: failed to open parquet '$0': $1",
                                                        anchor.file, open_st.ToString()));
@@ -375,9 +374,9 @@ Status rehydrate_one(const Anchor& anchor, std::string* out_json) {
 
     int64_t total_rows = file_metadata->num_rows();
     if (anchor.row_in_file >= total_rows) {
-        return Status::InvalidArgument(strings::Substitute(
-                "parquet_read_rows: row_in_file=$0 out of range (total_rows=$1) for file '$2'",
-                anchor.row_in_file, total_rows, anchor.file));
+        return Status::InvalidArgument(
+                strings::Substitute("parquet_read_rows: row_in_file=$0 out of range (total_rows=$1) for file '$2'",
+                                    anchor.row_in_file, total_rows, anchor.file));
     }
 
     // 4. Locate the row group that contains this anchor.
@@ -394,9 +393,9 @@ Status rehydrate_one(const Anchor& anchor, std::string* out_json) {
         cumulative += rg_rows;
     }
     if (row_group_id < 0) {
-        return Status::InternalError(strings::Substitute(
-                "parquet_read_rows: could not locate row group for row_in_file=$0 in '$1'",
-                anchor.row_in_file, anchor.file));
+        return Status::InternalError(
+                strings::Substitute("parquet_read_rows: could not locate row group for row_in_file=$0 in '$1'",
+                                    anchor.row_in_file, anchor.file));
     }
 
     // 5. Read just that row group.
@@ -408,13 +407,14 @@ Status rehydrate_one(const Anchor& anchor, std::string* out_json) {
                                                        row_group_id, anchor.file, read_st.ToString()));
         }
     } catch (const parquet::ParquetException& e) {
-        return Status::IOError(strings::Substitute("parquet_read_rows: parquet exception reading row group $0 of '$1': $2",
-                                                   row_group_id, anchor.file, e.what()));
+        return Status::IOError(
+                strings::Substitute("parquet_read_rows: parquet exception reading row group $0 of '$1': $2",
+                                    row_group_id, anchor.file, e.what()));
     }
     if (row_in_group >= table->num_rows()) {
-        return Status::InternalError(strings::Substitute(
-                "parquet_read_rows: row group $0 of '$1' has $2 rows, expected at least $3",
-                row_group_id, anchor.file, table->num_rows(), row_in_group + 1));
+        return Status::InternalError(
+                strings::Substitute("parquet_read_rows: row group $0 of '$1' has $2 rows, expected at least $3",
+                                    row_group_id, anchor.file, table->num_rows(), row_in_group + 1));
     }
 
     // 6. Serialize the target row to a JSON object keyed by column name.
@@ -467,9 +467,9 @@ std::pair<Columns, UInt32Column::Ptr> ParquetReadRows::process(RuntimeState* /*r
 
     int64_t max_anchors = config::parquet_read_rows_max_anchors;
     if (max_anchors > 0 && static_cast<int64_t>(num_input_rows) > max_anchors) {
-        state->set_status(Status::InvalidArgument(strings::Substitute(
-                "parquet_read_rows: anchor count $0 exceeds parquet_read_rows_max_anchors=$1",
-                num_input_rows, max_anchors)));
+        state->set_status(Status::InvalidArgument(
+                strings::Substitute("parquet_read_rows: anchor count $0 exceeds parquet_read_rows_max_anchors=$1",
+                                    num_input_rows, max_anchors)));
         for (size_t i = 0; i < num_input_rows; ++i) {
             offset_col->append(0);
         }
@@ -479,16 +479,14 @@ std::pair<Columns, UInt32Column::Ptr> ParquetReadRows::process(RuntimeState* /*r
     uint32_t cumulative = 0;
     for (size_t i = 0; i < num_input_rows; ++i) {
         if (arg0->is_null(i)) {
-            state->set_status(Status::InvalidArgument(
-                    "parquet_read_rows: source_info is NULL; cannot rehydrate"));
+            state->set_status(Status::InvalidArgument("parquet_read_rows: source_info is NULL; cannot rehydrate"));
             offset_col->append(cumulative);
             continue;
         }
 
         const JsonValue* jv = json_column->get_object(i);
         if (jv == nullptr) {
-            state->set_status(Status::InvalidArgument(
-                    "parquet_read_rows: source_info JSON is unreadable"));
+            state->set_status(Status::InvalidArgument("parquet_read_rows: source_info JSON is unreadable"));
             offset_col->append(cumulative);
             continue;
         }
