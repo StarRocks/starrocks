@@ -103,15 +103,43 @@ public class LeaderTaskExecutor {
     }
 
     public void close() {
-        // Use shutdown() not shutdownNow(): the only production caller is ExportChecker, whose
-        // ExportExportingTasks wait inside subTasksDoneSignal.await(timeoutSec). Interrupting
-        // them via shutdownNow() would translate into a TIMEOUT cancel of the underlying export
-        // job (ExportExportingTask treats the InterruptedException from await as a hard
-        // failure) and also skip the job.setDoExportingThread(null) cleanup. The bounded await
-        // already exits within leader_demotion_drain_timeout_sec; we just stop submitting new
-        // work and let in-flight tasks finish.
+        close(0L);
+    }
+
+    /**
+     * Coordinated stop for leader demotion. Uses shutdown() (not shutdownNow()) so in-flight
+     * tasks complete their bounded {@code subTasksDoneSignal.await(timeoutSec)} naturally —
+     * interrupting via shutdownNow() would cause the caller (e.g. ExportExportingTask) to
+     * translate the InterruptedException into a TIMEOUT cancel of a healthy job and skip
+     * the job.setDoExportingThread(null) cleanup.
+     *
+     * If {@code awaitMillis > 0}, also blocks up to that budget waiting for both internal
+     * pools to actually terminate. This is required on the leader demotion drain path so a
+     * re-elected leader does not race the old leader's still-running tasks.
+     *
+     * @param awaitMillis maximum time to wait for both pools to drain, in milliseconds. Zero
+     *                    or negative means do not wait (legacy behaviour). The budget is
+     *                    split across the two internal pools.
+     */
+    public void close(long awaitMillis) {
         scheduledThreadPool.shutdown();
         executor.shutdown();
+        if (awaitMillis > 0L) {
+            long deadline = System.currentTimeMillis() + awaitMillis;
+            try {
+                long remaining = Math.max(1L, deadline - System.currentTimeMillis());
+                if (!scheduledThreadPool.awaitTermination(remaining, TimeUnit.MILLISECONDS)) {
+                    LOG.warn("LeaderTaskExecutor scheduledThreadPool did not terminate within drain timeout");
+                }
+                remaining = Math.max(1L, deadline - System.currentTimeMillis());
+                if (!executor.awaitTermination(remaining, TimeUnit.MILLISECONDS)) {
+                    LOG.warn("LeaderTaskExecutor executor did not terminate within drain timeout");
+                }
+            } catch (InterruptedException ie) {
+                Thread.currentThread().interrupt();
+                LOG.warn("Interrupted while waiting for LeaderTaskExecutor to terminate");
+            }
+        }
         synchronized (runningTasks) {
             runningTasks.clear();
         }

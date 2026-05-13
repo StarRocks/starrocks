@@ -96,8 +96,11 @@ public final class ExportChecker extends LeaderDaemon {
 
     /**
      * Coordinated stop for leader demotion. Drains each checker so onStopped() runs and the
-     * worker thread exits, then closes every owned LeaderTaskExecutor so its internal pools
-     * are shut down with shutdownNow(). The next {@link #init(long)} call (run by the
+     * worker thread exits, then closes every owned LeaderTaskExecutor and blocks up to
+     * {@code timeoutMs} for its internal pools to actually terminate. Without this wait
+     * demotion would return immediately while ExportExportingTask is still blocked in
+     * subTasksDoneSignal.await(getLeftTimeSecond()) and would run concurrently with the
+     * re-elected leader's export work. The next {@link #init(long)} call (run by the
      * re-elected leader) replaces the static maps with fresh instances.
      */
     public static void stopAll(long timeoutMs) {
@@ -108,16 +111,20 @@ public final class ExportChecker extends LeaderDaemon {
                 LOG.warn("stop {} failed", exportChecker.getName(), t);
             }
         }
+        // Split the drain budget across the three executors so the total stopAll() wall time
+        // stays within timeoutMs even when every pool needs the full budget.
+        int executorCount = executors.size() + (exportingSubTaskExecutor != null ? 1 : 0);
+        long perExecutorMs = executorCount > 0 ? Math.max(1L, timeoutMs / executorCount) : 0L;
         for (LeaderTaskExecutor leaderTaskExecutor : executors.values()) {
             try {
-                leaderTaskExecutor.close();
+                leaderTaskExecutor.close(perExecutorMs);
             } catch (Throwable t) {
                 LOG.warn("close export LeaderTaskExecutor failed", t);
             }
         }
         if (exportingSubTaskExecutor != null) {
             try {
-                exportingSubTaskExecutor.close();
+                exportingSubTaskExecutor.close(perExecutorMs);
             } catch (Throwable t) {
                 LOG.warn("close exportingSubTaskExecutor failed", t);
             }
