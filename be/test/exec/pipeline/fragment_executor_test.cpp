@@ -79,7 +79,7 @@ protected:
 // leaving dangling pointers. A sibling fragment then hit UAF on the duplicate-check
 // path `partition->thrift_partition_key_exprs() != old_partition->...`.
 //
-// The fix switches the allocation to `RuntimeStateHelper::global_obj_pool(rs)`
+// The fix switches the allocation to `rs->global_obj_pool()`
 // (query-level). Together with the earlier refactor that made HdfsPartitionDescriptor
 // thrift-only (no fragment-bound ExprContexts on the descriptor), this lets the
 // descriptor live for the whole query without smuggling fragment-scoped state.
@@ -129,7 +129,7 @@ TEST_F(FragmentExecutorPartitionTest, PartitionDescriptorOutlivesFragmentPool) {
         // Sanity: the contract being asserted only holds when the two pools really
         // differ. If a future refactor unified them, the assertion below would not
         // tell us anything useful, so guard it.
-        ASSERT_NE(rs->obj_pool(), RuntimeStateHelper::global_obj_pool(rs.get()));
+        ASSERT_NE(rs->obj_pool(), rs->global_obj_pool());
 
         ASSERT_OK(FragmentExecutor::add_scan_ranges_partition_values(rs.get(), scan_ranges));
     }
