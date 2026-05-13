@@ -130,6 +130,8 @@ public:
         return _impl->get_numeric_statistics();
     }
 
+    IoStatsSnapshot get_io_stats_snapshot() const override;
+
     StatusOr<int64_t> position() override { return _impl->position(); }
 
     StatusOr<int64_t> read_at(int64_t offset, void* out, int64_t count) override {
