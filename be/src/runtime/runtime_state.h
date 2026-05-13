@@ -664,7 +664,7 @@ private:
     // if true, execution should stop with a CANCELLED status
     std::atomic<bool> _is_cancelled{false};
 
-    int _per_fragment_instance_idx;
+    int _per_fragment_instance_idx = 0;
     int _num_per_fragment_instances = 0;
 
     // used as send id
