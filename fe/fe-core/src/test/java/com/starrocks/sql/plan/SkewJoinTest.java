@@ -428,6 +428,49 @@ public class SkewJoinTest extends PlanTestBase {
         }
     }
 
+    @Test
+    void testSkewJoinNotAppliedWhenAtLeastOnePredicateIsUnskewed() throws Exception {
+        final var oldStatisticsStorage = connectContext.getGlobalStateMgr().getStatisticStorage();
+        final double oldThreshold = connectContext.getSessionVariable().getSkewJoinDataSkewThreshold();
+        try {
+            // GIVEN
+            // v1 is skewed (high NULL fraction), but v2 is not skewed
+            final var statisticsStorage = new EmptyStatisticStorage() {
+                @Override
+                public ColumnStatistic getColumnStatistic(Table table, String column) {
+                    if (table.getName().equalsIgnoreCase("t0") && column.equalsIgnoreCase("v1")) {
+                        return ColumnStatistic.builder()
+                                .setNullsFraction(0.8) // skewed
+                                .build();
+                    }
+                    if (table.getName().equalsIgnoreCase("t0") && column.equalsIgnoreCase("v2")) {
+                        return ColumnStatistic.builder()
+                                .setNullsFraction(0.01) // NOT skewed
+                                .build();
+                    }
+                    return ColumnStatistic.builder()
+                            .setNullsFraction(0.01)
+                            .build();
+                }
+            };
+            setTableStatistics(getOlapTable("t0"), 1337);
+            connectContext.getGlobalStateMgr().setStatisticStorage(statisticsStorage);
+            connectContext.getSessionVariable().setSkewJoinDataSkewThreshold(0.1);
+            connectContext.getSessionVariable().setEnableStatsToOptimizeSkewJoin(true);
+            connectContext.getSessionVariable().setEnableOptimizerSkewJoinOptimizeV1(true);
+
+            // WHEN
+            String sql = "select * from t0 left join t1 on t0.v1 = t1.v4 and t0.v2 = t1.v5";
+            String plan = getFragmentPlan(sql);
+
+            // THEN
+            assertNotContains(plan, "rand_col");
+        } finally {
+            connectContext.getSessionVariable().setSkewJoinDataSkewThreshold(oldThreshold);
+            connectContext.getGlobalStateMgr().setStatisticStorage(oldStatisticsStorage);
+        }
+    }
+
     private static File newFolder(File root, String... subDirs) throws IOException {
         String subFolder = String.join("/", subDirs);
         File result = new File(root, subFolder);
