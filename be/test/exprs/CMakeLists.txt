@@ -74,27 +74,3 @@ set_target_properties(starrocks_expr_core_test_objs PROPERTIES
 add_executable(expr_core_test $<TARGET_OBJECTS:starrocks_expr_core_test_objs>)
 target_link_be_test_cxa_throw_wrap(expr_core_test)
 target_link_libraries(expr_core_test ${EXPR_CORE_TEST_LINK_LIBS} gtest_main)
-
-set(DS_HLL_TEST_LINK_LIBS
-    Exprs
-    ExprCore
-    RuntimeCore
-    ChunkCore
-    ColumnCore
-    Types
-    Common
-    Base
-    Gutil
-    StarRocksGen
-    ${STARROCKS_DEPENDENCIES}
-    ${STARROCKS_STATIC_LINK_LIBS}
-    ${WL_LINK_DYNAMIC} ${STARROCKS_SYSTEM_LINK_LIBS} ${WRAP_LINKER_FLAGS}
-    ${WL_START_GROUP}
-    gmock
-    gtest
-    ${WL_END_GROUP}
-)
-
-add_executable(ds_hll_test ${BE_TEST_MACOS_LINK_STUBS} agg/data_sketch/ds_hll_test.cpp)
-target_link_be_test_cxa_throw_wrap(ds_hll_test)
-target_link_libraries(ds_hll_test ${DS_HLL_TEST_LINK_LIBS} gtest_main)
