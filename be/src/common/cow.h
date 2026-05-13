@@ -247,8 +247,10 @@ public:
     using Ptr = ImmutPtr<Derived>;
     using WrappedPtr = ChameleonPtr<Derived>;
 
-protected:
-    // trigger clone-on-write, deep clone if the data is shared with others, otherwise shadow clone.
+    // COW-safe mutation: returns a mutable pointer to this object.
+    // If this is the sole owner (use_count == 1) the existing object is returned in-place;
+    // otherwise a deep clone is made so that the shared copy is not mutated.
+    // Prefer this over as_mutable_ptr() / as_mutable_raw_ptr() whenever COW semantics matter.
     MutablePtr try_mutate() const {
         uint32_t ref_count = this->use_count();
         if (config::cow_optimization_diagnose_level > 0 && ref_count > config::cow_optimization_diagnose_level) {
@@ -262,7 +264,6 @@ protected:
         }
     }
 
-public:
     uint32_t use_count() const { return _use_count.load(); }
 
     template <typename... Args>
