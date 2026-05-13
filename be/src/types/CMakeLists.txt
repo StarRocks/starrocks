@@ -14,7 +14,7 @@
 
 set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/types")
 
-ADD_BE_LIB(TypesCore
+ADD_BE_LIB(Types
     bitmap_value.cpp
     datum.cpp
     decimalv2_value.cpp
@@ -38,12 +38,7 @@ ADD_BE_LIB(TypesCore
     variant_value.cpp
 )
 
-target_link_libraries(TypesCore PRIVATE
+target_link_libraries(Types PRIVATE
     simdjson
     velocypack
-)
-
-ADD_BE_LIB(Types
-    hll_sketch.cpp
-    logical_type_size.cpp
 )

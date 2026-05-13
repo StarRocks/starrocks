@@ -15,11 +15,11 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "types/hll_sketch.h"
+#include "exprs/agg/data_sketch/ds_hll.h"
 
 #include <glog/logging.h>
 
-#include "runtime/mem_pool.h"
+#include "base/string/slice.h"
 
 namespace starrocks {
 

@@ -50,7 +50,7 @@ set(COLUMN_TEST_FILES
 
 set(COLUMN_TEST_LINK_LIBS
     ColumnCore
-    TypesCore
+    Types
     Common
     Base
     Gutil
@@ -82,7 +82,7 @@ set(CHUNK_TEST_FILES
 set(CHUNK_TEST_LINK_LIBS
     ChunkCore
     ColumnCore
-    TypesCore
+    Types
     Common
     Base
     Gutil

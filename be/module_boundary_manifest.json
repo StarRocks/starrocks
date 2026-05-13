@@ -198,19 +198,15 @@
     },
     {
       "id": "typecore",
-      "doc_label": "TypesCore",
+      "doc_label": "Types",
       "summary": "Core type system without runtime/storage/exec coupling.",
-      "owned_targets": ["TypesCore"],
+      "owned_targets": ["Types"],
       "owned_globs": ["be/src/types/**"],
-      "excluded_globs": [
-        "be/src/types/hll_sketch.*",
-        "be/src/types/logical_type_size.*"
-      ],
       "allowed_include_prefixes": ["types/", "common/", "base/", "gutil/", "gen_cpp/"],
       "allowed_target_deps": ["Common", "Base", "Gutil"],
       "allowed_test_targets": ["types_test"],
-      "allowed_test_link_deps": ["TypesCore", "Common", "Base", "Gutil", "StarRocksGen"],
-      "remediation": "Keep TypesCore independent of runtime/util/storage/exec layers; move integration code into higher layers."
+      "allowed_test_link_deps": ["Types", "Common", "Base", "Gutil", "StarRocksGen"],
+      "remediation": "Keep Types independent of runtime/util/storage/exec layers; move integration code into higher layers."
     },
     {
       "id": "columncore",
@@ -229,9 +225,9 @@
         "be/src/column/segmented_chunk.*"
       ],
       "allowed_include_prefixes": ["column/", "types/", "common/", "base/", "gutil/", "gen_cpp/"],
-      "allowed_target_deps": ["TypesCore", "Common", "Base", "Gutil", "StarRocksGen"],
+      "allowed_target_deps": ["Types", "Common", "Base", "Gutil", "StarRocksGen"],
       "allowed_test_targets": ["column_test"],
-      "allowed_test_link_deps": ["ColumnCore", "TypesCore", "Common", "Base", "Gutil", "StarRocksGen"],
+      "allowed_test_link_deps": ["ColumnCore", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
       "remediation": "Keep ColumnCore free of ChunkCore/Runtime/Exec/Storage coupling; move integration code upward or introduce an interface."
     },
     {
@@ -240,9 +236,9 @@
       "summary": "Core chunk, schema, field, and chunk-adjacent helpers on top of ColumnCore.",
       "owned_targets": ["ChunkCore"],
       "allowed_include_prefixes": ["column/", "types/", "common/", "base/", "gutil/", "gen_cpp/"],
-      "allowed_target_deps": ["ColumnCore", "TypesCore", "Common", "Base", "Gutil", "StarRocksGen"],
+      "allowed_target_deps": ["ColumnCore", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
       "allowed_test_targets": ["chunk_test"],
-      "allowed_test_link_deps": ["ChunkCore", "ColumnCore", "TypesCore", "Common", "Base", "Gutil", "StarRocksGen"],
+      "allowed_test_link_deps": ["ChunkCore", "ColumnCore", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
       "remediation": "Keep ChunkCore limited to chunk/schema helpers and free of Runtime/Exec/Storage/Serde coupling."
     },
     {
@@ -334,9 +330,9 @@
         "runtime/user_function_cache.h",
         "runtime/variable_result_writer.h"
       ],
-      "allowed_target_deps": ["ChunkCore", "ColumnCore", "TypesCore", "Common", "Base", "Gutil", "StarRocksGen"],
+      "allowed_target_deps": ["ChunkCore", "ColumnCore", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
       "allowed_test_targets": ["runtime_core_test"],
-      "allowed_test_link_deps": ["RuntimeCore", "ChunkCore", "ColumnCore", "TypesCore", "Common", "Base", "Gutil", "StarRocksGen"],
+      "allowed_test_link_deps": ["RuntimeCore", "ChunkCore", "ColumnCore", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
       "remediation": "Keep RuntimeCore restricted to core runtime infrastructure; move service/storage/stream-load/integration code into Runtime."
     },
     {
@@ -370,9 +366,9 @@
         "exprs/substring_index.h",
         "exprs/utility_functions.h"
       ],
-      "allowed_target_deps": ["RuntimeCore", "ChunkCore", "ColumnCore", "TypesCore", "Common", "Base", "Gutil", "StarRocksGen"],
+      "allowed_target_deps": ["RuntimeCore", "ChunkCore", "ColumnCore", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
       "allowed_test_targets": ["expr_core_test"],
-      "allowed_test_link_deps": ["ExprCore", "RuntimeCore", "ChunkCore", "ColumnCore", "TypesCore", "Common", "Base", "Gutil", "StarRocksGen"],
+      "allowed_test_link_deps": ["ExprCore", "RuntimeCore", "ChunkCore", "ColumnCore", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
       "remediation": "Keep ExprCore limited to core expression infrastructure; move aggregate/UDF/integration code into Exprs."
     },
     {
@@ -384,9 +380,9 @@
         "be/src/exec/runtime_filter/**"
       ],
       "allowed_include_prefixes": ["exec/runtime_filter/", "exec/pipeline/pipeline_fwd.h", "exprs/", "runtime/", "column/", "types/", "common/", "base/", "gutil/", "gen_cpp/"],
-      "allowed_target_deps": ["ExprCore", "RuntimeCore", "ChunkCore", "ColumnCore", "TypesCore", "Common", "Base", "Gutil", "StarRocksGen"],
+      "allowed_target_deps": ["ExprCore", "RuntimeCore", "ChunkCore", "ColumnCore", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
       "allowed_test_targets": ["exec_core_test"],
-      "allowed_test_link_deps": ["ExecCore", "ExprCore", "RuntimeCore", "ChunkCore", "ColumnCore", "TypesCore", "Common", "Base", "Gutil", "StarRocksGen"],
+      "allowed_test_link_deps": ["ExecCore", "ExprCore", "RuntimeCore", "ChunkCore", "ColumnCore", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
       "remediation": "Keep ExecCore limited to the legacy execution-node base and runtime-filter orchestration; only the pipeline forward header is allowed from broader pipeline code."
     },
     {
@@ -413,7 +409,7 @@
         "exec/pipeline/query_context.h",
         "runtime/exec_env.h"
       ],
-      "allowed_target_deps": ["ExecCore", "ExprCore", "RuntimeCore", "ChunkCore", "ColumnCore", "TypesCore", "Common", "Base", "Gutil", "StarRocksGen"],
+      "allowed_target_deps": ["ExecCore", "ExprCore", "RuntimeCore", "ChunkCore", "ColumnCore", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
       "allowed_test_targets": [],
       "allowed_test_link_deps": [],
       "remediation": "Keep pipeline primitives limited to base operator contracts and narrow helper types; move runtime, scheduler, factory, and concrete operator behavior into higher pipeline modules."
@@ -447,9 +443,9 @@
         "exec/exec_node.h",
         "exec/data_sink.h"
       ],
-      "allowed_target_deps": ["ExprCore", "RuntimeCore", "ChunkCore", "ColumnCore", "TypesCore", "Common", "Base", "Gutil", "StarRocksGen"],
+      "allowed_target_deps": ["ExprCore", "RuntimeCore", "ChunkCore", "ColumnCore", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
       "allowed_test_targets": ["schema_scanner_core_test"],
-      "allowed_test_link_deps": ["ExecSchemaScannerCore", "ExprCore", "RuntimeCore", "ChunkCore", "ColumnCore", "TypesCore", "Common", "Base", "Gutil", "StarRocksGen"],
+      "allowed_test_link_deps": ["ExecSchemaScannerCore", "ExprCore", "RuntimeCore", "ChunkCore", "ColumnCore", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
       "remediation": "Keep SchemaScannerCore limited to the base SchemaScanner contract; move concrete scanner creation and service-specific logic into higher schema scanner modules."
     },
     {
@@ -468,9 +464,9 @@
         "exec/exec_node.h",
         "exec/data_sink.h"
       ],
-      "allowed_target_deps": ["ExecSchemaScannerCore", "RuntimeCore", "ChunkCore", "ColumnCore", "TypesCore", "Common", "Base", "Gutil", "StarRocksGen"],
+      "allowed_target_deps": ["ExecSchemaScannerCore", "RuntimeCore", "ChunkCore", "ColumnCore", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
       "allowed_test_targets": ["exec_schema_scanners_test"],
-      "allowed_test_link_deps": ["ExecSchemaScanners", "ExecSchemaScannerCore", "RuntimeCore", "ChunkCore", "ColumnCore", "TypesCore", "Common", "Base", "Gutil", "StarRocksGen"],
+      "allowed_test_link_deps": ["ExecSchemaScanners", "ExecSchemaScannerCore", "RuntimeCore", "ChunkCore", "ColumnCore", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
       "remediation": "Keep this first schema scanner target limited to clean local/static scanners; leave SchemaHelper, storage, HTTP, cache, service, and ExecEnv users in higher compatibility modules until they get explicit boundaries."
     },
     {
@@ -498,9 +494,9 @@
         "exec/chunks_sorter.h",
         "exec/sort_exec_exprs.h"
       ],
-      "allowed_target_deps": ["ExprCore", "RuntimeCore", "ChunkCore", "ColumnCore", "TypesCore", "Common", "Base", "Gutil", "StarRocksGen"],
+      "allowed_target_deps": ["ExprCore", "RuntimeCore", "ChunkCore", "ColumnCore", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
       "allowed_test_targets": ["exec_sorting_core_test"],
-      "allowed_test_link_deps": ["ExecSortingCore", "ExprCore", "RuntimeCore", "ChunkCore", "ColumnCore", "TypesCore", "Common", "Base", "Gutil", "StarRocksGen"],
+      "allowed_test_link_deps": ["ExecSortingCore", "ExprCore", "RuntimeCore", "ChunkCore", "ColumnCore", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
       "remediation": "Keep ExecSortingCore limited to reusable sorting algorithms; leave merge-path pipeline observer integration, chunk sorters, spill-aware sorting, and exec-node adapters in higher modules."
     },
     {
@@ -522,9 +518,9 @@
         "exec/hash_joiner.h",
         "runtime/exec_env.h"
       ],
-      "allowed_target_deps": ["ExecSortingCore", "ExprCore", "Serde", "RuntimeCore", "ChunkCore", "ColumnCore", "TypesCore", "Common", "Base", "Gutil", "StarRocksGen"],
+      "allowed_target_deps": ["ExecSortingCore", "ExprCore", "Serde", "RuntimeCore", "ChunkCore", "ColumnCore", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
       "allowed_test_targets": ["exec_join_core_test"],
-      "allowed_test_link_deps": ["ExecJoinCore", "ExecSortingCore", "ExprCore", "Serde", "RuntimeCore", "ChunkCore", "ColumnCore", "TypesCore", "Common", "Base", "Gutil", "StarRocksGen"],
+      "allowed_test_link_deps": ["ExecJoinCore", "ExecSortingCore", "ExprCore", "Serde", "RuntimeCore", "ChunkCore", "ColumnCore", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
       "remediation": "Keep ExecJoinCore limited to reusable join hash table algorithms; leave join nodes, pipeline operators, storage/service integration, and util diagnostics in higher modules."
     },
     {

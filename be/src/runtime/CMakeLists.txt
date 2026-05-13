@@ -56,7 +56,7 @@ ADD_BE_LIB(RuntimeCore
 target_link_libraries(RuntimeCore PRIVATE
     ChunkCore
     ColumnCore
-    TypesCore
+    Types
     Common
     Base
     Gutil

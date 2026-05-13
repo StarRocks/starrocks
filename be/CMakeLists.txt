@@ -547,7 +547,6 @@ set(STARROCKS_LINK_LIBS
     Storage
     Rowset
     Runtime
-    Types
     Udf
     Util
     Script
@@ -563,7 +562,7 @@ set(STARROCKS_LINK_LIBS
     $<TARGET_FILE:HttpCore>
     $<TARGET_FILE:ChunkCore>
     $<TARGET_FILE:ColumnCore>
-    $<TARGET_FILE:TypesCore>
+    $<TARGET_FILE:Types>
     $<TARGET_FILE:FSCore>
     $<TARGET_FILE:IOCore>
     StarOSIntegration

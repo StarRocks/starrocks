@@ -75,7 +75,7 @@ target_link_libraries(ExecSchemaScannerCore PUBLIC
     RuntimeCore
     ChunkCore
     ColumnCore
-    TypesCore
+    Types
     Common
     Base
     Gutil
@@ -103,7 +103,7 @@ target_link_libraries(ExecSchemaScanners PUBLIC
     RuntimeCore
     ChunkCore
     ColumnCore
-    TypesCore
+    Types
     Common
     Base
     Gutil
@@ -129,7 +129,7 @@ target_link_libraries(ExecSortingCore PUBLIC
     RuntimeCore
     ChunkCore
     ColumnCore
-    TypesCore
+    Types
     Common
     Base
     Gutil
@@ -158,7 +158,7 @@ target_link_libraries(ExecJoinCore PUBLIC
     RuntimeCore
     ChunkCore
     ColumnCore
-    TypesCore
+    Types
     Common
     Base
     Gutil
@@ -545,7 +545,7 @@ target_link_libraries(PipelinePrimitives PUBLIC
     RuntimeCore
     ChunkCore
     ColumnCore
-    TypesCore
+    Types
     Common
     Base
     Gutil
