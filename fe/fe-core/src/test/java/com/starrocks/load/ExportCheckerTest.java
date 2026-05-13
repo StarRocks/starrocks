@@ -109,6 +109,15 @@ public class ExportCheckerTest {
                 "exporting executor pool must be shut down");
         Assertions.assertTrue(readPoolFromExecutor(subTaskBefore).isShutdown(),
                 "sub-task executor pool must be shut down");
+        // stopAll must block until the pools actually terminate so demotion does not race
+        // with old-leader export work. With idle pools (no in-flight tasks) every executor
+        // should terminate before stopAll returns.
+        Assertions.assertTrue(readPoolFromExecutor(pendingBefore).isTerminated(),
+                "pending executor pool must be terminated before stopAll returns");
+        Assertions.assertTrue(readPoolFromExecutor(exportingBefore).isTerminated(),
+                "exporting executor pool must be terminated before stopAll returns");
+        Assertions.assertTrue(readPoolFromExecutor(subTaskBefore).isTerminated(),
+                "sub-task executor pool must be terminated before stopAll returns");
 
         // init() again must produce fresh instances.
         ExportChecker.init(1000L);
