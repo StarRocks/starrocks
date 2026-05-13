@@ -620,6 +620,39 @@ Used for MySQL client compatibility. No practical usage.
 
 * **Default**: false
 
+<<<<<<< HEAD
+=======
+### enable_explain_in_profile
+
+* **Scope**: Session
+* **Description**: When set to `true` and a profile is built for the query, the `EXPLAIN COSTS` text of the executed plan is embedded in the profile's `Summary` section under the `ExplainPlan` key. This lets the optimizer's cardinality estimates, column statistics, predicates, runtime-filter declarations, and overall plan cost be inspected offline alongside the runtime metrics, which is useful when triaging slow queries from a saved profile artifact without access to the live cluster.
+
+  The embedded plan honors the same desensitization controls as other persisted SQL artifacts: credential literals (e.g. in `FILES(...)`) are always redacted, and predicate / projection literals are rendered as digests when either the cluster-wide FE config `enable_sql_desensitize_in_log` or the session variable `enable_desensitize_explain` is enabled.
+* **Default**: false
+* **Data type**: boolean
+
+### profile_log_latency_threshold_ms
+
+* **Scope**: Session
+* **Description**: Minimum query latency (milliseconds) for the FE to write a profile to `fe.profile.log`. Only queries with execution time greater than or equal to this value are logged. When set to `-1` (default), the FE config `profile_log_latency_threshold_ms` is used. When set to `0`, all profiles are logged. When set to a positive value (e.g. `1000`), only queries with latency ≥ that value (in ms) are logged. Use this session variable to override the deployment-wide config per connection.
+* **Default**: -1
+* **Data type**: long
+* **Unit**: Milliseconds
+
+### enable_query_cache
+
+* **Description**: Specifies whether to enable the Query Cache feature. Valid values: true and false. `true` specifies to enable this feature, and `false` specifies to disable this feature. When this feature is enabled, it works only for queries that meet the conditions specified in the application scenarios of [Query Cache](../using_starrocks/caching/query_cache.md#application-scenarios).
+* **Default**: false
+* **Introduced in**: v2.5
+
+### enable_query_dump
+
+* **Description**: Controls per-session query dumping. When this variable is set to true and HTTP Query Dump mode is not active, the server will collect and persist the session's Dump informatation. For non-HTTP queries, the system will serialize the session Dump information and write it to the Query Dump Log when an exception occurs. For HTTP-triggered dumps, the system uses a separate path (to add exception stack traces into the connection's Dump information). Use this variable to opt a session into FE-side query dump collection for post-mortem analysis and debugging; it is evaluated at runtime per session and does not affect global behavior.
+* **Default**: false
+* **Data Type**: boolean
+* **Introduced in**: v3.2.0
+
+>>>>>>> e360d41aca ([Enhancement] Allow including EXPLAIN COSTS output in profile (#73005))
 ### enable_query_queue_load (global)
 
 * **Description**: Boolean value to enable query queues for loading tasks.
