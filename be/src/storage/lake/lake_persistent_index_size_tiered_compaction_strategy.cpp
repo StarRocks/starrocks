@@ -206,8 +206,7 @@ StatusOr<CompactionCandidateResult> LakePersistentIndexSizeTieredCompactionStrat
 
             for (int sstable_idx : fileset.sstable_indices) {
                 fileset_sstables.push_back(sstable_meta.sstables(sstable_idx));
-                max_max_rss_rowid =
-                        std::max(max_max_rss_rowid, sstable_meta.sstables(sstable_idx).max_rss_rowid());
+                max_max_rss_rowid = std::max(max_max_rss_rowid, sstable_meta.sstables(sstable_idx).max_rss_rowid());
             }
             if (fileset.fileset_id == base_level_fileset_id) {
                 merge_base_level = true;
