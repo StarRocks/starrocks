@@ -30,7 +30,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 
 ---
 
-当前主题包含以下类型的 FE 配置：
+当前主题包含以下类型的 BE 配置：
 - [存算分离](#存算分离)
 - [数据湖](#数据湖)
 - [其他](#其他)
