@@ -23,15 +23,19 @@
 #include <sstream>
 #include <system_error>
 
+#include "base/uid_util.h"
+#include "base/utility/defer_op.h"
 #include "common/config_exec_env_fwd.h"
 #include "common/logging.h"
+#include "common/system/backend_options.h"
 #include "common/system/master_info.h"
 #include "gen_cpp/HeartbeatService_types.h"
-#include "http/http_client.h"
 #include "http/http_common.h"
-#include "rapidjson/document.h"
+#include "runtime/batch_write/batch_write_mgr.h"
 #include "runtime/exec_env.h"
+#include "runtime/stream_load/stream_load_context.h"
 #include "storage/store_path.h"
+#include "util/byte_buffer.h"
 
 namespace starrocks {
 
@@ -515,113 +519,84 @@ Status RejectedRecordSyncDaemon::post_to_stream_load(const std::string& payload)
         return Status::Uninitialized(
                 "RejectedRecordSyncDaemon: master FE address not yet known (no heartbeat received?)");
     }
-
-    // Stream Load PUT path for an internal system table. The FE serves
-    // loads to any table under /api/<db>/<table>/_stream_load; we target
-    // `_statistics_.rejected_records` directly.
-    std::ostringstream url;
-    url << "http://" << master_info.network_address.hostname << ":" << master_info.http_port
-        << "/api/_statistics_/rejected_records/_stream_load";
-
-    HttpClient client;
-    RETURN_IF_ERROR(client.init(url.str()));
-    // Use set_custom_method("PUT") instead of set_method(PUT) which
-    // sets CURLOPT_UPLOAD. CURLOPT_UPLOAD conflicts with set_payload's
-    // CURLOPT_POSTFIELDS -- the former expects a read callback while the
-    // latter provides inline data. set_custom_method uses
-    // CURLOPT_CUSTOMREQUEST which overrides the method string without
-    // changing curl's transfer semantics, so the payload is correctly
-    // sent as the PUT body through the FE 307 redirect to the CN.
-    client.set_custom_method("PUT");
-    client.set_content_type("application/json");
-
-    // Internal-trust authentication: instead of HTTP Basic auth (which
-    // would require the operator-rotated root password to live in BE
-    // memory or config), the daemon presents the FE cluster token that
-    // every BE already receives through heartbeats. The FE's LoadAction
-    // recognizes this header for `_statistics_.rejected_records` only
-    // and short-circuits Basic auth, dispatching the request as the
-    // built-in ROOT identity. The token never leaves the cluster VPC.
-    //
-    // We also send a placeholder Basic auth header so the FE's 307
-    // redirect target (a peer BE running StreamLoadAction) has a
-    // syntactically-valid Authorization header to parse. The BE-side
-    // stream_load handler doesn't actually validate the password
-    // (FrontendServiceImpl.streamLoadPut only consumes the username),
-    // so an empty password is fine here. The placeholder is kept to
-    // avoid touching the BE-side stream load entry point.
     if (!master_info.__isset.token || master_info.token.empty()) {
         return Status::Uninitialized(
                 "RejectedRecordSyncDaemon: master FE token not yet propagated (no heartbeat received?)");
     }
-    client.set_header("X-StarRocks-Internal-Token", master_info.token);
-    client.set_basic_auth("root", "");
-
-    // Format is json-lines (one JSON object per line); the StarRocks
-    // Stream Load parses this when `strip_outer_array=false` (the
-    // default) with `format=json`.
-    client.set_header(HTTP_FORMAT_KEY, "json");
-    client.set_header(HTTP_STRIP_OUTER_ARRAY, "false");
-    // NOTE: an earlier iteration of this code set
-    // `enable_merge_commit: true` here to coalesce concurrent BE PUTs
-    // through the FE BatchWriteMgr. That regressed the load -- BatchWrite
-    // selects a coordinator backend but does not consume the inline
-    // JSON Lines PUT body the same way `processNormalStreamLoad` does,
-    // so the requests redirected to the coordinator with no body and
-    // the table stayed empty. Don't restore that header without first
-    // routing the daemon through the same BatchWrite client / RPC path
-    // that ordinary flexible-batch-write users use, not a raw HTTP PUT.
-    // The normal stream-load path produces one transaction per BE per
-    // tick -- acceptable volume given default `rejected_record_sync_
-    // interval_sec = 30` and the table being a low-volume bookkeeping
-    // sink.
-    // The FE 307-redirects large PUTs; opt into 100-continue so curl
-    // negotiates before uploading the payload body.
-    client.set_header("Expect", "100-continue");
-    // Follow the redirect with both the placeholder Basic auth and the
-    // internal-trust token preserved. CURLOPT_UNRESTRICTED_AUTH makes
-    // libcurl keep the Basic auth header on the host the FE returned;
-    // custom headers (the internal token) follow redirects automatically.
-    // Both target BE peers are inside the same cluster VPC so neither
-    // value crosses a trust boundary. Operators running the FE behind a
-    // non-cluster reverse proxy must ensure it only redirects inside
-    // their trust boundary or the headers will follow wherever the
-    // proxy points.
-    client.set_unrestricted_auth(1);
-
-    client.set_payload(payload);
-    client.set_timeout_ms(static_cast<int64_t>(std::max(1, config::rejected_record_sync_post_timeout_sec)) * 1000);
-
-    std::string response;
-    RETURN_IF_ERROR(client.execute(&response));
-
-    long http_status = client.get_http_status();
-    _last_http_status.store(http_status, std::memory_order_relaxed);
-    if (http_status < 200 || http_status >= 300) {
-        return Status::InternalError(fmt::format("Stream Load HTTP {} from FE: {}", http_status, response));
+    if (_env == nullptr || _env->batch_write_mgr() == nullptr) {
+        // Pre-bootstrap state: no ExecEnv / BatchWriteMgr. Treat the same
+        // as "master not ready" so process_files() retries on the next
+        // tick instead of counting this as a real failure.
+        return Status::Uninitialized("RejectedRecordSyncDaemon: ExecEnv/BatchWriteMgr not yet initialized");
     }
 
-    // The Stream Load response is a JSON object; "Status" is either
-    // "Success" or "Publish Timeout" on a successful commit, and the
-    // latter is still committed data per the existing semantics in
-    // StreamLoadContext.
-    rapidjson::Document doc;
-    if (doc.Parse(response.c_str(), response.size()).HasParseError() || !doc.IsObject() || !doc.HasMember("Status") ||
-        !doc["Status"].IsString()) {
-        return Status::InternalError(fmt::format("Stream Load response from FE is not valid JSON: {}", response));
+    // Ship the merge-commit payload through the BE-internal BatchWriteMgr
+    // (the same client every flexible-batch-write user goes through), so
+    // the N concurrent BEs that ran a tick this interval coalesce into a
+    // single FE-managed transaction on `_statistics_.rejected_records`
+    // rather than each producing its own. The earlier iteration of this
+    // code issued a raw HTTP PUT with `enable_merge_commit: true`; that
+    // tripped a routing mismatch in the FE coordinator (body discarded
+    // on 307 redirect) and is why we now go through the in-process
+    // client end-to-end.
+    //
+    // Authentication: the daemon has no user-facing credential. We set
+    // `auth.internal_token` to the cluster token that every BE already
+    // receives from FE heartbeats. The FE thrift entry
+    // (FrontendServiceImpl.requestMergeCommit) treats a matching token
+    // on `_statistics_.rejected_records` -- and only that table -- as
+    // ROOT, skipping password / INSERT-privilege checks. The placeholder
+    // user/passwd fields below are kept syntactically valid; FE thrift
+    // ignores them once the token bypass fires.
+    StreamLoadContext* ctx = new StreamLoadContext(_env);
+    ctx->ref();
+    DeferOp release([&] {
+        if (ctx->unref()) {
+            delete ctx;
+        }
+    });
+
+    ctx->db = "_statistics_";
+    ctx->table = "rejected_records";
+    ctx->label = generate_uuid_string();
+    ctx->auth.user = "root";
+    ctx->auth.passwd = "";
+    ctx->auth.user_ip = BackendOptions::get_localhost();
+    ctx->auth.internal_token = master_info.token;
+    ctx->enable_batch_write = true;
+
+    // JSON Lines payload -- one rejected-record JSON object per line.
+    // The FE-side parser reads with strip_outer_array=false (the
+    // default) so each line is an independent row.
+    ctx->load_parameters[HTTP_FORMAT_KEY] = "json";
+    ctx->load_parameters[HTTP_STRIP_OUTER_ARRAY] = "false";
+    ctx->load_parameters[HTTP_ENABLE_MERGE_COMMIT] = "true";
+    // Default `merge_commit_async = false` keeps append_data synchronous;
+    // it returns only after the FE-coordinated transaction has committed
+    // (or failed), which preserves the daemon's existing commit-then-
+    // delete-files contract. Async mode would require an additional
+    // label-tracking polling loop that we leave for a follow-up if the
+    // sync wait turns out to block long enough to matter in production.
+    ctx->load_parameters[HTTP_MERGE_COMMIT_ASYNC] = "false";
+
+    // Stuff the entire JSON-Lines payload into the ByteBuffer in one
+    // shot. allocate_with_tracker needs a CurrentThread memory tracker
+    // -- ExecEnv installs a process-wide provider at startup
+    // (set_mem_tracker_source), so daemon-thread allocations resolve to
+    // the global tracker rather than blowing up.
+    ASSIGN_OR_RETURN(ctx->buffer, ByteBuffer::allocate_with_tracker(payload.size()));
+    ctx->buffer->put_bytes(payload.data(), payload.size());
+    ctx->buffer->flip_to_read();
+    ctx->body_bytes = payload.size();
+    ctx->receive_bytes = payload.size();
+
+    Status st = _env->batch_write_mgr()->append_data(ctx);
+    if (st.ok()) {
+        _last_http_status.store(200, std::memory_order_relaxed);
+    } else {
+        _last_http_status.store(-1, std::memory_order_relaxed);
     }
-    std::string status = doc["Status"].GetString();
-    if (status == "Success" || status == "Publish Timeout") {
-        return Status::OK();
-    }
-    // The response typically carries a "Message" field with details; bubble
-    // it up so operators see the actual reason in the BE log.
-    std::string message;
-    if (doc.HasMember("Message") && doc["Message"].IsString()) {
-        message = doc["Message"].GetString();
-    }
-    return Status::InternalError(fmt::format(
-            "Stream Load for _statistics_.rejected_records rejected: Status={} Message={}", status, message));
+    return st;
 }
 
 void RejectedRecordSyncDaemon::garbage_collect_stale_files() {
