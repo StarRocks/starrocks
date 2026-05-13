@@ -743,14 +743,15 @@ public class ShowExecutor {
             Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(showStmt.getDb());
             MetaUtils.checkDbNullAndReport(db, showStmt.getDb());
             List<List<String>> rows = Lists.newArrayList();
-            Locker locker = new Locker();
-            locker.lockDatabase(db.getId(), LockType.READ);
-            try {
-                Table table = MetaUtils.getSessionAwareTable(connectContext, db, showStmt.getTbl());
-                if (table == null) {
-                    if (showStmt.getType() != ShowCreateTableStmt.CreateTableType.MATERIALIZED_VIEW) {
-                        ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_TABLE_ERROR, showStmt.getTable());
-                    } else {
+            TableName tableName = showStmt.getTbl();
+            Table table = MetaUtils.getSessionAwareTable(connectContext, db, tableName);
+            if (table == null) {
+                if (showStmt.getType() != ShowCreateTableStmt.CreateTableType.MATERIALIZED_VIEW) {
+                    ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_TABLE_ERROR, showStmt.getTable());
+                } else {
+                    Locker dbLocker = new Locker();
+                    dbLocker.lockDatabase(db.getId(), LockType.READ);
+                    try {
                         // For Sync Materialized View, it is a mv index inside OLAP table,
                         // so we can not get it from database.
                         for (Table tbl : GlobalStateMgr.getCurrentState().getLocalMetastore().getTables(db.getId())) {
@@ -764,7 +765,7 @@ public class ShowExecutor {
                                             String mvName = olapTable.getIndexNameById(mvMeta.getIndexId());
                                             rows.add(Lists.newArrayList(showStmt.getTable(),
                                                     ShowMaterializedViewStatus.buildCreateMVSql(olapTable,
-                                                    mvName, mvMeta), "utf8", "utf8_general_ci"));
+                                                            mvName, mvMeta), "utf8", "utf8_general_ci"));
                                         } else {
                                             rows.add(Lists.newArrayList(showStmt.getTable(), mvMeta.getOriginStmt(),
                                                     "utf8", "utf8_general_ci"));
@@ -772,17 +773,26 @@ public class ShowExecutor {
 
                                         ShowResultSetMetaData showResultSetMetaData = ShowResultSetMetaData.builder()
                                                 .addColumn(new Column("Materialized View", ScalarType.createVarchar(20)))
-                                                .addColumn(new Column("Create Materialized View", ScalarType.createVarchar(30)))
+                                                .addColumn(new Column("Create Materialized View",
+                                                        ScalarType.createVarchar(30)))
                                                 .build();
                                         return new ShowResultSet(showResultSetMetaData, rows);
                                     }
                                 }
                             }
                         }
-                        ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_TABLE_ERROR, showStmt.getTable());
+                    } finally {
+                        dbLocker.unLockDatabase(db.getId(), LockType.READ);
                     }
+                    ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_TABLE_ERROR, showStmt.getTable());
                 }
-
+            }
+            Locker locker = new Locker();
+            locker.lockTableWithIntensiveDbLock(db.getId(), table.getId(), LockType.READ);
+            try {
+                if (MetaUtils.getSessionAwareTable(connectContext, db, tableName) != table) {
+                    ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_TABLE_ERROR, showStmt.getTable());
+                }
                 List<String> createTableStmt = Lists.newArrayList();
                 AstToStringBuilder.getDdlStmt(table, createTableStmt, null, null, false, true /* hide password */);
                 if (createTableStmt.isEmpty()) {
@@ -835,7 +845,7 @@ public class ShowExecutor {
                     return new ShowResultSet(showResultMetaFactory.getMetadata(showStmt), rows);
                 }
             } finally {
-                locker.unLockDatabase(db.getId(), LockType.READ);
+                locker.unLockTableWithIntensiveDbLock(db.getId(), table.getId(), LockType.READ);
             }
         }
 
@@ -1713,7 +1723,7 @@ public class ShowExecutor {
                     dbName = db.getFullName();
 
                     Locker locker = new Locker();
-                    locker.lockDatabase(db.getId(), LockType.READ);
+                    locker.lockTableWithIntensiveDbLock(db.getId(), tableId, LockType.READ);
                     try {
                         Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
                         if (!(table instanceof OlapTable)) {
@@ -1774,7 +1784,7 @@ public class ShowExecutor {
                         }
 
                     } finally {
-                        locker.unLockDatabase(db.getId(), LockType.READ);
+                        locker.unLockTableWithIntensiveDbLock(db.getId(), tableId, LockType.READ);
                     }
                 } while (false);
 
@@ -1788,18 +1798,19 @@ public class ShowExecutor {
                 Database db = globalStateMgr.getLocalMetastore().getDb(statement.getDbName());
                 MetaUtils.checkDbNullAndReport(db, statement.getDbName());
 
-                Locker locker = new Locker();
-                locker.lockDatabase(db.getId(), LockType.READ);
-                try {
-                    Table table = MetaUtils.getSessionAwareTable(
-                            context, db, new TableName(statement.getDbName(), statement.getTableName()));
-                    if (table == null) {
-                        ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_TABLE_ERROR, statement.getTableName());
-                    }
-                    if (!table.isNativeTableOrMaterializedView()) {
-                        ErrorReport.reportSemanticException(ErrorCode.ERR_NOT_OLAP_TABLE, statement.getTableName());
-                    }
+                TableName tableName = new TableName(statement.getDbName(), statement.getTableName());
+                Table table = MetaUtils.getSessionAwareTable(context, db, tableName);
+                if (!table.isNativeTableOrMaterializedView()) {
+                    ErrorReport.reportSemanticException(ErrorCode.ERR_NOT_OLAP_TABLE, statement.getTableName());
+                }
 
+                Locker locker = new Locker();
+                locker.lockTableWithIntensiveDbLock(db.getId(), table.getId(), LockType.READ);
+                try {
+                    if (MetaUtils.getSessionAwareTable(context, db, tableName) != table) {
+                        ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_TABLE_ERROR,
+                                statement.getTableName());
+                    }
                     Pair<Boolean, Boolean> privResult = Authorizer.checkPrivForShowTablet(
                             context, db.getFullName(), table);
                     if (!privResult.first) {
@@ -1894,7 +1905,7 @@ public class ShowExecutor {
                         rows.add(oneTablet);
                     }
                 } finally {
-                    locker.unLockDatabase(db.getId(), LockType.READ);
+                    locker.unLockTableWithIntensiveDbLock(db.getId(), table.getId(), LockType.READ);
                 }
             }
 
