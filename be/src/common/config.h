@@ -488,7 +488,15 @@ CONF_mInt32(lake_partial_update_thread_pool_max_threads, "0");
 // Queue size for the lake partial update threadpool.
 CONF_mInt32(lake_partial_update_thread_pool_queue_size, "2048");
 // The maximum number of memtables for pk index in shared-data mode.
-CONF_mInt32(pk_index_memtable_max_count, "2");
+// Each compaction publish builds a fresh PK-index memtable by chunk-replacing
+// up to ~tens-of-millions of rows; when it reaches l0_max_mem_usage (default
+// 100 MB) it must flush. With max_count=2 only one flush can run async — the
+// next one falls back to a synchronous OSS write that blocks the compaction
+// publish (observed on 1_100gb_sortkey: flush_times=20, single publish cost
+// up to 41 s, driving freshness P99 to ~20 s). Allowing more inflight async
+// flushes lets the flush thread pool absorb bursty per-tablet flushes during
+// large compactions without serializing them on the publish path.
+CONF_mInt32(pk_index_memtable_max_count, "6");
 // The maximum wait flush timeout for pk index memtable in shared-data mode, in milliseconds.
 CONF_mInt64(pk_index_memtable_max_wait_flush_timeout_ms, "30000");
 // The parameters for pk index size-tiered compaction strategy.
