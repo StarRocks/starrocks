@@ -198,6 +198,20 @@ private:
     TIcebergSchema _t_paimon_schema;
 };
 
+class FlussTableDescriptor : public HiveTableDescriptor {
+public:
+    FlussTableDescriptor(const TTableDescriptor& tdesc, ObjectPool* pool,
+                         std::pmr::memory_resource* mr = std::pmr::get_default_resource());
+    ~FlussTableDescriptor() override = default;
+    bool has_partition() const override { return false; }
+    std::string_view get_table_conf() const;
+    std::string_view get_time_zone() const;
+
+private:
+    std::pmr::string _table_conf;
+    std::pmr::string _time_zone;
+};
+
 class OdpsTableDescriptor : public HiveTableDescriptor {
 public:
     OdpsTableDescriptor(const TTableDescriptor& tdesc, ObjectPool* pool,
