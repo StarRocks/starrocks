@@ -197,7 +197,10 @@ public class RewriteMultiDistinctRule extends TransformationRule {
         if (aggOp.hasLimit()) {
             return false;
         }
-        Utils.calculateStatistics(input, context);
+        if (input.inputAt(0).getOp().getOpType() == OperatorType.LOGICAL_CTE_CONSUME) {
+            return false;
+        }
+        Utils.calculateStatistics(input.inputAt(0), context);
 
         Statistics inputStatistics = input.inputAt(0).getStatistics();
         // inputStatistics may be null if it's a cte consumer operator
