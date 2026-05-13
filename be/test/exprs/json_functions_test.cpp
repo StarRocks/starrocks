@@ -38,7 +38,6 @@
 #include "gutil/strings/strip.h"
 #include "runtime/runtime_state.h"
 #include "testutil/assert.h"
-#include "types/json_value.h"
 #include "types/logical_type.h"
 #include "util/defer_op.h"
 #include "util/json.h"
