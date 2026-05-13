@@ -211,16 +211,22 @@ TEST_F(SinkBufferBadWeakPtrTest, SuccessCallbackWithValidQueryContext) {
         SyncPoint::GetInstance()->DisableProcessing();
     });
 
+    // Run closure->Run() in a separate thread to avoid deadlock:
+    // _try_to_send_rpc holds context.mutex, and the success callback (when status is OK)
+    // recursively calls _try_to_send_rpc which tries to acquire the same mutex.
+    // In production, brpc invokes the callback asynchronously in a different bthread.
+    std::thread callback_thread;
     SyncPoint::GetInstance()->SetCallBack("SinkBuffer::_try_to_send_rpc::before_send_rpc", [&](void* arg) {
         auto* sync_arg = static_cast<SyncPointArg*>(arg);
         auto* closure = sync_arg->second;
         closure->result.mutable_status()->set_status_code(0);
-        closure->Run();
+        callback_thread = std::thread([closure]() { closure->Run(); });
         sync_arg->first = true;
     });
 
     auto request = build_request();
     ASSERT_OK(sink_buffer->add_request(request));
+    callback_thread.join();
 
     ASSERT_EQ(sink_buffer->_total_in_flight_rpc, 0);
 
