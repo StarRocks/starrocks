@@ -462,11 +462,17 @@ public class ClusterSnapshotMgr implements GsonPostProcessable {
      * Coordinated stop for leader demotion. ClusterSnapshotMgr is not a daemon itself; it
      * owns an inner LeaderDaemon. Fan out to it so its worker thread exits and onStopped()
      * runs. automatedSnapshotJobs is persistent (saved through gson) so it is NOT cleared.
+     *
+     * The scheduler reference is nulled out after the stop so the next {@link #start()} call
+     * (triggered by re-election) rebuilds it. Without this, start() short-circuits on the
+     * non-null check and snapshot scheduling never resumes; the dangling scheduler would also
+     * keep references to the previous leader session's CheckpointControllers.
      */
     public void stopGracefully(long timeoutMs) {
         ClusterSnapshotJobScheduler scheduler = clusterSnapshotJobScheduler;
         if (scheduler != null) {
             scheduler.stopGracefully(timeoutMs);
+            clusterSnapshotJobScheduler = null;
         }
     }
 

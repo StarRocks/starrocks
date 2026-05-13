@@ -57,6 +57,12 @@ public class PipeScheduler extends LeaderDaemon {
         // recovered and beSlotMap are leader-session bookkeeping: the next leader must
         // re-run pipe.recovery() before scheduling, and BE slot reservations made against a
         // sealed editlog must not leak across sessions.
+        //
+        // Each Pipe also carries its own transient `recovered` flag and `runningTasks` map.
+        // Pipe.recovery() short-circuits when recovered is true and buildNewTasks() refuses
+        // to enqueue new work while runningTasks is non-empty, so reset both per pipe;
+        // otherwise the re-elected leader thinks every pipe is already recovered and never
+        // schedules another task.
         slotLock.lock();
         try {
             beSlotMap.clear();
@@ -64,6 +70,13 @@ public class PipeScheduler extends LeaderDaemon {
             slotLock.unlock();
         }
         recovered = false;
+        for (Pipe pipe : CollectionUtils.emptyIfNull(pipeManager.getAllPipes())) {
+            try {
+                pipe.resetForLeaderHandoff();
+            } catch (Throwable e) {
+                LOG.warn("Failed to reset pipe {} for leader handoff", pipe, e);
+            }
+        }
     }
 
     private void process() {

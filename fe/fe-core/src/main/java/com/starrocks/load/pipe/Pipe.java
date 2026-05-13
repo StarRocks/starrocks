@@ -597,6 +597,21 @@ public class Pipe implements GsonPostProcessable {
         getPipeSource().getFileListRepo().destroy();
     }
 
+    /**
+     * Reset transient leader-session state so the next leader re-runs
+     * {@link #recovery()} and rebuilds {@code runningTasks} via {@link #buildNewTasks()}.
+     * Pipe metadata itself is persistent; only the in-memory progress flags are dropped.
+     * The PipeTaskDesc handles in {@code runningTasks} were tied to BE RPC bookkeeping on
+     * the old leader, so leaving them around would block buildNewTasks() (it skips when
+     * runningTasks is non-empty) and Pipe.recovery() (it short-circuits when recovered).
+     */
+    public void resetForLeaderHandoff() {
+        try (CloseableLock l = takeWriteLock()) {
+            recovered = false;
+            runningTasks.clear();
+        }
+    }
+
     public boolean isRecovered() {
         return recovered;
     }

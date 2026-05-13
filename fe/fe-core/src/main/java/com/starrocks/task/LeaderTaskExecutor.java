@@ -103,12 +103,15 @@ public class LeaderTaskExecutor {
     }
 
     public void close() {
-        // shutdownNow() interrupts in-flight tasks so worker threads exit promptly even if
-        // blocked on metadata locks; this is required for the leader-demotion drain path
-        // bounded by leader_demotion_drain_timeout_sec. Queued tasks are discarded - they
-        // are leader-side work that the new leader will re-issue.
-        scheduledThreadPool.shutdownNow();
-        executor.shutdownNow();
+        // Use shutdown() not shutdownNow(): the only production caller is ExportChecker, whose
+        // ExportExportingTasks wait inside subTasksDoneSignal.await(timeoutSec). Interrupting
+        // them via shutdownNow() would translate into a TIMEOUT cancel of the underlying export
+        // job (ExportExportingTask treats the InterruptedException from await as a hard
+        // failure) and also skip the job.setDoExportingThread(null) cleanup. The bounded await
+        // already exits within leader_demotion_drain_timeout_sec; we just stop submitting new
+        // work and let in-flight tasks finish.
+        scheduledThreadPool.shutdown();
+        executor.shutdown();
         synchronized (runningTasks) {
             runningTasks.clear();
         }
