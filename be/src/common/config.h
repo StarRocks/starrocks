@@ -1367,6 +1367,12 @@ CONF_mBool(lake_clear_corrupted_cache_data, "false");
 // The maximum number of files which need to rebuilt in cloud native pk index.
 // If files which need to rebuilt larger than this, we will flush memtable immediately.
 CONF_mInt32(cloud_native_pk_index_rebuild_files_threshold, "50");
+// Batch row count for PrimaryKeyCompactionConflictResolver::execute() — multiple per-chunk
+// `params.index->replace()` calls are accumulated into one call across this many rows. Each
+// replace() in LakePersistentIndex runs a memtable flush check + lock round-trip; batching N
+// chunks amortises that work by ~N×. Setting this <= vector_chunk_size (4096) effectively
+// disables batching. 32 K rows ≈ 8 chunks ≈ ~1.6 MB of accumulated PK bytes.
+CONF_mInt32(primary_key_compaction_replace_batch_rows, "32768");
 // The maximum number of rows which need to be rebuilt in cloud native pk index.
 // If rows which need to be rebuilt exceed this threshold, we will flush memtable immediately
 // to reduce index rebuild cost. 0 means disabled.
