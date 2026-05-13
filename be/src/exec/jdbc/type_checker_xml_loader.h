@@ -22,8 +22,8 @@
 #include <vector>
 
 #include "common/status.h"
+#include "exec/jdbc/type_checker.h"
 #include "gutil/strings/substitute.h"
-#include "types/checker/type_checker.h"
 
 namespace starrocks {
 

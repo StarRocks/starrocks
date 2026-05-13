@@ -16,7 +16,7 @@
 
 #include <filesystem>
 
-#include "types/type_checker_manager.h"
+#include "exec/jdbc/type_checker_manager.h"
 
 namespace starrocks {
 

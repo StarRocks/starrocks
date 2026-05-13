@@ -488,6 +488,9 @@ set(EXEC_NON_PIPELINE_FILES
     schema_scanner/schema_keywords_scanner.cpp
     schema_scanner/schema_tablet_reshard_jobs_scanner.cpp
     jdbc_scanner.cpp
+    jdbc/type_checker.cpp
+    jdbc/type_checker_manager.cpp
+    jdbc/type_checker_xml_loader.cpp
     sorting/merge_path.cpp
     connector_scan_node.cpp
     workgroup/work_group.cpp

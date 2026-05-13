@@ -301,8 +301,8 @@ set(EXEC_FILES
         ./exec/data_sinks/memory_scratch_sink_test.cpp
         ./runtime/command_executor_test.cpp
         ./runtime/exec_env_test.cpp
-        ./types/type_checker_test.cpp
-        ./types/type_checker_xml_loader_test.cpp
+        ./exec/jdbc/type_checker_test.cpp
+        ./exec/jdbc/type_checker_xml_loader_test.cpp
         ./column/simd_selector_test.cpp
         ./column/simd_mulselector_test.cpp
         ./util/brpc_stub_cache_test.cpp
