@@ -39,7 +39,7 @@ displayed_sidebar: docs
 ### 功能优化
 
 - `INSERT INTO FILES` CSV 导出支持 `csv.enclose` 和 `csv.escape`。 [#71589](https://github.com/StarRocks/starrocks/pull/71589)
-- 审计日志支持记录被查询的关系信息。 [#71596](https://github.com/StarRocks/starrocks/pull/71596)
+- 审计日志支持记录查询关系（被直接查询的表和视图）信息。 [#71596](https://github.com/StarRocks/starrocks/pull/71596)
 - FE 配置项 `star_mgr_meta_sync_interval_sec` 支持动态修改。 [#71675](https://github.com/StarRocks/starrocks/pull/71675)
 - 降低了表元数据和行数统计相关路径中的元数据加载和锁开销。 [#72053](https://github.com/StarRocks/starrocks/pull/72053) [#72042](https://github.com/StarRocks/starrocks/pull/72042) [#71672](https://github.com/StarRocks/starrocks/pull/71672)
 - 通过将 Broker Builder 合并到 FE 构建并移除 WildFly OpenSSL，改进了构建和依赖管理。 [#71823](https://github.com/StarRocks/starrocks/pull/71823) [#71908](https://github.com/StarRocks/starrocks/pull/71908)
