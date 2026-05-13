@@ -3392,4 +3392,305 @@ TEST_F(JoinHashMapTest, TestProbeKeyConstructorForSerializedNullable) {
     }
 }
 
+// NOLINTNEXTLINE
+TEST_F(JoinHashMapTest, CopyProbeColumnMostMatchOneRespectsCOW) {
+    JoinHashTableItems table_items;
+    HashTableProbeState probe_state;
+
+    const uint32_t row_count = 8;
+
+    TDescriptorTableBuilder row_desc_builder;
+    add_tuple_descriptor(&row_desc_builder, LogicalType::TYPE_INT, false, 1);
+    auto probe_row_desc = create_probe_desc(&row_desc_builder);
+    const SlotDescriptor* slot = probe_row_desc->tuple_descriptors()[0]->slots()[0];
+
+    probe_state.match_flag = JoinMatchFlag::MOST_MATCH_ONE;
+    probe_state.probe_row_count = row_count;
+    probe_state.probe_match_filter.resize(config::vector_chunk_size, 0);
+    for (uint32_t i = 0; i < row_count; i++) {
+        probe_state.probe_match_filter[i] = (i % 2 == 0) ? 1 : 0;
+    }
+
+    auto join_hash_map = std::make_unique<JoinHashMapForOneKey(TYPE_INT)>(&table_items, &probe_state);
+
+    {
+        ColumnPtr src_col = create_int32_column(row_count, 0);
+        ColumnPtr alias = src_col;
+        ASSERT_EQ(src_col->use_count(), 2);
+
+        auto chunk = std::make_shared<Chunk>();
+        join_hash_map->_copy_probe_column(src_col, &chunk, slot, false);
+
+        ASSERT_EQ(src_col->size(), row_count) << "src_col mutated in-place, breaking COW";
+
+        ASSERT_EQ(chunk->num_columns(), 1);
+        const ColumnPtr& out = chunk->get_column_by_slot_id(slot->id());
+        ASSERT_FALSE(out->is_nullable());
+        ASSERT_EQ(out->size(), 4u);
+        const auto& data = ColumnHelper::as_raw_column<Int32Column>(out)->get_data();
+        ASSERT_EQ(data[0], 0);
+        ASSERT_EQ(data[1], 2);
+        ASSERT_EQ(data[2], 4);
+        ASSERT_EQ(data[3], 6);
+    }
+
+    {
+        ColumnPtr src_col = create_int32_column(row_count, 0);
+        ColumnPtr alias = src_col;
+        ASSERT_EQ(src_col->use_count(), 2);
+
+        auto chunk = std::make_shared<Chunk>();
+        join_hash_map->_copy_probe_column(src_col, &chunk, slot, true);
+
+        ASSERT_EQ(src_col->size(), row_count) << "src_col mutated in-place, breaking COW";
+
+        ASSERT_EQ(chunk->num_columns(), 1);
+        const ColumnPtr& out = chunk->get_column_by_slot_id(slot->id());
+        ASSERT_TRUE(out->is_nullable());
+        ASSERT_EQ(out->size(), 4u);
+        const auto* nullable_out = ColumnHelper::as_raw_column<NullableColumn>(out);
+        const auto& data = ColumnHelper::as_raw_column<Int32Column>(nullable_out->data_column())->get_data();
+        ASSERT_EQ(data[0], 0);
+        ASSERT_EQ(data[1], 2);
+        ASSERT_EQ(data[2], 4);
+        ASSERT_EQ(data[3], 6);
+        for (size_t i = 0; i < 4; i++) {
+            ASSERT_EQ(nullable_out->null_column()->get_data()[i], 0);
+        }
+    }
+}
+
+// NOLINTNEXTLINE
+TEST_F(JoinHashMapTest, CopyProbeNullableColumnMostMatchOneRespectsCOW) {
+    JoinHashTableItems table_items;
+    HashTableProbeState probe_state;
+
+    const uint32_t row_count = 8;
+
+    TDescriptorTableBuilder row_desc_builder;
+    add_tuple_descriptor(&row_desc_builder, LogicalType::TYPE_INT, true, 1);
+    auto probe_row_desc = create_probe_desc(&row_desc_builder);
+    const SlotDescriptor* slot = probe_row_desc->tuple_descriptors()[0]->slots()[0];
+
+    probe_state.match_flag = JoinMatchFlag::MOST_MATCH_ONE;
+    probe_state.probe_row_count = row_count;
+    probe_state.probe_match_filter.resize(config::vector_chunk_size, 0);
+    for (uint32_t i = 0; i < row_count; i++) {
+        probe_state.probe_match_filter[i] = (i % 2 == 0) ? 1 : 0;
+    }
+
+    // Even-indexed rows are non-null (values 0,2,4,6); filter keeps even indices — all non-null.
+    ColumnPtr src_col = create_int32_nullable_column(row_count, 0);
+    ColumnPtr alias = src_col;
+    ASSERT_EQ(src_col->use_count(), 2);
+
+    auto join_hash_map = std::make_unique<JoinHashMapForOneKey(TYPE_INT)>(&table_items, &probe_state);
+    auto chunk = std::make_shared<Chunk>();
+    join_hash_map->_copy_probe_nullable_column(src_col, &chunk, slot);
+
+    ASSERT_EQ(src_col->size(), row_count) << "src_col mutated in-place, breaking COW";
+
+    ASSERT_EQ(chunk->num_columns(), 1);
+    const ColumnPtr& out = chunk->get_column_by_slot_id(slot->id());
+    ASSERT_TRUE(out->is_nullable());
+    ASSERT_EQ(out->size(), 4u);
+    const auto* nullable_out = ColumnHelper::as_raw_column<NullableColumn>(out);
+    const auto& data = ColumnHelper::as_raw_column<Int32Column>(nullable_out->data_column())->get_data();
+    ASSERT_EQ(data[0], 0);
+    ASSERT_EQ(data[1], 2);
+    ASSERT_EQ(data[2], 4);
+    ASSERT_EQ(data[3], 6);
+    for (size_t i = 0; i < 4; i++) {
+        ASSERT_EQ(nullable_out->null_column()->get_data()[i], 0);
+    }
+}
+
+// NOLINTNEXTLINE
+TEST_F(JoinHashMapTest, CopyProbeColumnMostMatchOneSoleOwnerCorrectness) {
+    JoinHashTableItems table_items;
+    HashTableProbeState probe_state;
+
+    const uint32_t row_count = 8;
+
+    TDescriptorTableBuilder row_desc_builder;
+    add_tuple_descriptor(&row_desc_builder, LogicalType::TYPE_INT, false, 1);
+    auto probe_row_desc = create_probe_desc(&row_desc_builder);
+    const SlotDescriptor* slot = probe_row_desc->tuple_descriptors()[0]->slots()[0];
+
+    probe_state.match_flag = JoinMatchFlag::MOST_MATCH_ONE;
+    probe_state.probe_row_count = row_count;
+    probe_state.probe_match_filter.resize(config::vector_chunk_size, 0);
+    for (uint32_t i = 0; i < row_count; i++) {
+        probe_state.probe_match_filter[i] = (i % 2 == 0) ? 1 : 0;
+    }
+
+    auto join_hash_map = std::make_unique<JoinHashMapForOneKey(TYPE_INT)>(&table_items, &probe_state);
+
+    // Sole owner (use_count=1): try_mutate() returns the same object in-place.
+    // src_col IS the output column after the call (same object, filtered).
+    {
+        ColumnPtr src_col = create_int32_column(row_count, 0);
+        ASSERT_EQ(src_col->use_count(), 1);
+
+        auto chunk = std::make_shared<Chunk>();
+        join_hash_map->_copy_probe_column(src_col, &chunk, slot, false);
+
+        ASSERT_EQ(chunk->num_columns(), 1);
+        const ColumnPtr& out = chunk->get_column_by_slot_id(slot->id());
+        ASSERT_FALSE(out->is_nullable());
+        ASSERT_EQ(out->size(), 4u);
+        const auto& data = ColumnHelper::as_raw_column<Int32Column>(out)->get_data();
+        ASSERT_EQ(data[0], 0);
+        ASSERT_EQ(data[1], 2);
+        ASSERT_EQ(data[2], 4);
+        ASSERT_EQ(data[3], 6);
+        // try_mutate() with use_count=1 mutates in-place: src_col reflects the filter.
+        ASSERT_EQ(src_col->size(), 4u);
+    }
+
+    // Sole owner, to_nullable=true: filtered data column is wrapped in a new NullableColumn.
+    {
+        ColumnPtr src_col = create_int32_column(row_count, 0);
+        ASSERT_EQ(src_col->use_count(), 1);
+
+        auto chunk = std::make_shared<Chunk>();
+        join_hash_map->_copy_probe_column(src_col, &chunk, slot, true);
+
+        ASSERT_EQ(chunk->num_columns(), 1);
+        const ColumnPtr& out = chunk->get_column_by_slot_id(slot->id());
+        ASSERT_TRUE(out->is_nullable());
+        ASSERT_EQ(out->size(), 4u);
+        const auto* nullable_out = ColumnHelper::as_raw_column<NullableColumn>(out);
+        const auto& data = ColumnHelper::as_raw_column<Int32Column>(nullable_out->data_column())->get_data();
+        ASSERT_EQ(data[0], 0);
+        ASSERT_EQ(data[1], 2);
+        ASSERT_EQ(data[2], 4);
+        ASSERT_EQ(data[3], 6);
+        for (size_t i = 0; i < 4; i++) {
+            ASSERT_EQ(nullable_out->null_column()->get_data()[i], 0);
+        }
+        ASSERT_EQ(src_col->size(), 4u);
+    }
+
+    // _copy_probe_nullable_column sole-owner path.
+    {
+        ColumnPtr src_col = create_int32_nullable_column(row_count, 0);
+        ASSERT_EQ(src_col->use_count(), 1);
+
+        auto chunk = std::make_shared<Chunk>();
+        join_hash_map->_copy_probe_nullable_column(src_col, &chunk, slot);
+
+        ASSERT_EQ(chunk->num_columns(), 1);
+        const ColumnPtr& out = chunk->get_column_by_slot_id(slot->id());
+        ASSERT_TRUE(out->is_nullable());
+        ASSERT_EQ(out->size(), 4u);
+        const auto* nullable_out = ColumnHelper::as_raw_column<NullableColumn>(out);
+        const auto& data = ColumnHelper::as_raw_column<Int32Column>(nullable_out->data_column())->get_data();
+        ASSERT_EQ(data[0], 0);
+        ASSERT_EQ(data[1], 2);
+        ASSERT_EQ(data[2], 4);
+        ASSERT_EQ(data[3], 6);
+        ASSERT_EQ(src_col->size(), 4u);
+    }
+}
+
+// NOLINTNEXTLINE
+TEST_F(JoinHashMapTest, CopyProbeNullableColumnMostMatchOnePreservesNulls) {
+    // Verifies that null rows passing through the filter are preserved in the output.
+    // create_int32_nullable_column(4, 0): row0=non-null(0), row1=null, row2=non-null(2), row3=null.
+    // Filter keeps all four rows → output must contain both null and non-null entries.
+    JoinHashTableItems table_items;
+    HashTableProbeState probe_state;
+
+    const uint32_t row_count = 4;
+
+    TDescriptorTableBuilder row_desc_builder;
+    add_tuple_descriptor(&row_desc_builder, LogicalType::TYPE_INT, true, 1);
+    auto probe_row_desc = create_probe_desc(&row_desc_builder);
+    const SlotDescriptor* slot = probe_row_desc->tuple_descriptors()[0]->slots()[0];
+
+    probe_state.match_flag = JoinMatchFlag::MOST_MATCH_ONE;
+    probe_state.probe_row_count = row_count;
+    probe_state.probe_match_filter.resize(config::vector_chunk_size, 0);
+    for (uint32_t i = 0; i < row_count; i++) {
+        probe_state.probe_match_filter[i] = 1; // keep all rows
+    }
+
+    ColumnPtr src_col = create_int32_nullable_column(row_count, 0);
+    ColumnPtr alias = src_col; // use_count=2 to exercise COW clone path
+    ASSERT_EQ(src_col->use_count(), 2);
+
+    auto join_hash_map = std::make_unique<JoinHashMapForOneKey(TYPE_INT)>(&table_items, &probe_state);
+    auto chunk = std::make_shared<Chunk>();
+    join_hash_map->_copy_probe_nullable_column(src_col, &chunk, slot);
+
+    // COW invariant: shared source must not be mutated in-place.
+    ASSERT_EQ(src_col->size(), row_count) << "src_col mutated in-place, breaking COW";
+
+    ASSERT_EQ(chunk->num_columns(), 1);
+    const ColumnPtr& out = chunk->get_column_by_slot_id(slot->id());
+    ASSERT_TRUE(out->is_nullable());
+    ASSERT_EQ(out->size(), row_count);
+
+    const auto* nullable_out = ColumnHelper::as_raw_column<NullableColumn>(out);
+    const auto& null_data = nullable_out->null_column()->get_data();
+    // row0 non-null, row1 null, row2 non-null, row3 null
+    ASSERT_EQ(null_data[0], 0);
+    ASSERT_EQ(null_data[1], 1);
+    ASSERT_EQ(null_data[2], 0);
+    ASSERT_EQ(null_data[3], 1);
+
+    const auto& data = ColumnHelper::as_raw_column<Int32Column>(nullable_out->data_column())->get_data();
+    ASSERT_EQ(data[0], 0);
+    ASSERT_EQ(data[2], 2);
+}
+
+// NOLINTNEXTLINE
+TEST_F(JoinHashMapTest, CopyProbeNullableColumnMostMatchOneSubcolumnCOW) {
+    // The outer NullableColumn is sole-owned (use_count=1) but its internal data_column is
+    // shared (use_count=2). mutate_each_subcolumn() must clone the data_column before filter()
+    // reaches it via ChameleonPtr, which otherwise hands out a mutable raw pointer even to a
+    // shared sub-column (bypassing COW at the sub-column level).
+    JoinHashTableItems table_items;
+    HashTableProbeState probe_state;
+
+    const uint32_t row_count = 8;
+
+    TDescriptorTableBuilder row_desc_builder;
+    add_tuple_descriptor(&row_desc_builder, LogicalType::TYPE_INT, true, 1);
+    auto probe_row_desc = create_probe_desc(&row_desc_builder);
+    const SlotDescriptor* slot = probe_row_desc->tuple_descriptors()[0]->slots()[0];
+
+    probe_state.match_flag = JoinMatchFlag::MOST_MATCH_ONE;
+    probe_state.probe_row_count = row_count;
+    probe_state.probe_match_filter.resize(config::vector_chunk_size, 0);
+    for (uint32_t i = 0; i < row_count; i++) {
+        probe_state.probe_match_filter[i] = (i % 2 == 0) ? 1 : 0;
+    }
+
+    ColumnPtr src_col = create_int32_nullable_column(row_count, 0);
+    ASSERT_EQ(src_col->use_count(), 1);
+    // Pin a second shared_ptr to the internal data_column so it becomes shared (use_count=2).
+    ColumnPtr data_alias = ColumnHelper::as_raw_column<NullableColumn>(src_col)->data_column();
+    ASSERT_EQ(data_alias->use_count(), 2);
+
+    auto join_hash_map = std::make_unique<JoinHashMapForOneKey(TYPE_INT)>(&table_items, &probe_state);
+    auto chunk = std::make_shared<Chunk>();
+    join_hash_map->_copy_probe_nullable_column(src_col, &chunk, slot);
+
+    // Sub-column COW: the shared data_column must not be filtered in-place.
+    ASSERT_EQ(data_alias->size(), row_count) << "data_column mutated in-place, violating sub-column COW";
+
+    ASSERT_EQ(chunk->num_columns(), 1);
+    const ColumnPtr& out = chunk->get_column_by_slot_id(slot->id());
+    ASSERT_TRUE(out->is_nullable());
+    ASSERT_EQ(out->size(), 4u);
+    const auto* nullable_out = ColumnHelper::as_raw_column<NullableColumn>(out);
+    const auto& out_data = ColumnHelper::as_raw_column<Int32Column>(nullable_out->data_column())->get_data();
+    ASSERT_EQ(out_data[0], 0);
+    ASSERT_EQ(out_data[1], 2);
+    ASSERT_EQ(out_data[2], 4);
+    ASSERT_EQ(out_data[3], 6);
+}
+
 } // namespace starrocks
