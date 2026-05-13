@@ -749,8 +749,8 @@ public class ShowExecutor {
                 if (showStmt.getType() != ShowCreateTableStmt.CreateTableType.MATERIALIZED_VIEW) {
                     ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_TABLE_ERROR, showStmt.getTable());
                 } else {
-                    Locker locker = new Locker();
-                    locker.lockDatabase(db.getId(), LockType.READ);
+                    Locker dbLocker = new Locker();
+                    dbLocker.lockDatabase(db.getId(), LockType.READ);
                     try {
                         // For Sync Materialized View, it is a mv index inside OLAP table,
                         // so we can not get it from database.
@@ -782,7 +782,7 @@ public class ShowExecutor {
                             }
                         }
                     } finally {
-                        locker.unLockDatabase(db.getId(), LockType.READ);
+                        dbLocker.unLockDatabase(db.getId(), LockType.READ);
                     }
                     ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_TABLE_ERROR, showStmt.getTable());
                 }
