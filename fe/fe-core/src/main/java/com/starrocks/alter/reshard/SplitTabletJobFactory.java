@@ -29,7 +29,9 @@ import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
+import com.starrocks.catalog.TabletRange;
 import com.starrocks.catalog.Tuple;
+import com.starrocks.common.Config;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.concurrent.lock.AutoCloseableLock;
 import com.starrocks.common.util.concurrent.lock.LockType;
@@ -96,7 +98,119 @@ public class SplitTabletJobFactory implements TabletReshardJobFactory {
                     + db.getFullName() + '.' + table.getName());
         }
 
-        createNewShards(reshardingPhysicalPartitions);
+        createNewShards(table, reshardingPhysicalPartitions);
+
+        long jobId = GlobalStateMgr.getCurrentState().getNextId();
+        return new SplitTabletJob(jobId, db.getId(), table.getId(), reshardingPhysicalPartitions);
+    }
+
+    /*
+     * PSPS (Pre-Sample & Pre-Split) entry point. Build a TabletReshardJob
+     * that splits exactly one tablet using FE-supplied K-1 boundaries
+     * instead of letting BE compute boundaries from segment distribution.
+     *
+     * The new-tablet count is implied by {@code newTabletRanges.size()} and
+     * must be >= 2. FE owns range validity at this layer; BE re-validates
+     * structural and schema-aware invariants and falls back to an identical
+     * tablet on any mismatch.
+     */
+    public static TabletReshardJob forExternalBoundaries(Database db, OlapTable table, long oldTabletId,
+            List<TabletRange> newTabletRanges) throws StarRocksException {
+        if (!table.isCloudNativeTableOrMaterializedView()) {
+            throw new StarRocksException("Unsupported table type " + table.getType()
+                    + " in table " + db.getFullName() + '.' + table.getName());
+        }
+        if (!table.isRangeDistribution()) {
+            throw new StarRocksException("Unsupported distribution type "
+                    + table.getDefaultDistributionInfo().getType()
+                    + " in table " + db.getFullName() + '.' + table.getName());
+        }
+        Preconditions.checkArgument(newTabletRanges != null && newTabletRanges.size() >= 2,
+                "PSPS requires at least 2 new-tablet ranges (got %s)",
+                newTabletRanges == null ? "null" : newTabletRanges.size());
+        // Mirror the upper bound that TabletReshardUtils.calcSplitCount applies on the
+        // data-driven path. PSPS bypasses calcSplitCount, so enforce the cap here so
+        // a bad caller cannot allocate an unbounded number of new tablets/shards.
+        Preconditions.checkArgument(newTabletRanges.size() <= Config.tablet_reshard_max_split_count,
+                "PSPS new-tablet count %s exceeds tablet_reshard_max_split_count %s",
+                newTabletRanges.size(), Config.tablet_reshard_max_split_count);
+
+        // Mirror the data-driven path's range-colocate unstable-group guard:
+        // refuse to start a PSPS split while any peer GroupId is unstable.
+        ColocateTableIndex colocateTableIndex = GlobalStateMgr.getCurrentState().getColocateTableIndex();
+        ColocateTableIndex.GroupId myGroupId = colocateTableIndex.getRangeColocateGroupId(table.getId());
+        if (myGroupId != null && colocateTableIndex.isAnyGroupWithSameGrpIdUnstable(myGroupId.grpId)) {
+            throw new StarRocksException("Cannot split tablets for range-colocate group "
+                    + myGroupId.grpId + ": group is unstable; wait for alignment to complete before retrying");
+        }
+
+        Map<Long, ReshardingPhysicalPartition> reshardingPhysicalPartitions = new HashMap<>();
+
+        try (AutoCloseableLock lock = new AutoCloseableLock(db.getId(), table.getId(), LockType.READ)) {
+            if (table.getState() != OlapTable.OlapTableState.NORMAL) {
+                throw new StarRocksException("Unexpected table state " + table.getState()
+                        + " in table " + db.getFullName() + '.' + table.getName());
+            }
+
+            TabletMeta tabletMeta = GlobalStateMgr.getCurrentState().getTabletInvertedIndex()
+                    .getTabletMeta(oldTabletId);
+            // getTabletMeta returns null (raw map miss) when the tablet is
+            // unknown — distinct from getTabletMetaList's NOT_EXIST sentinel.
+            if (tabletMeta == null || tabletMeta == TabletInvertedIndex.NOT_EXIST_TABLET_META
+                    || tabletMeta.getTableId() != table.getId()) {
+                throw new StarRocksException("Cannot find tablet " + oldTabletId
+                        + " in inverted index in table " + db.getFullName() + '.' + table.getName());
+            }
+
+            PhysicalPartition physicalPartition = table.getPhysicalPartition(tabletMeta.getPhysicalPartitionId());
+            if (physicalPartition == null) {
+                throw new StarRocksException("Cannot find physical partition "
+                        + tabletMeta.getPhysicalPartitionId()
+                        + " in table " + db.getFullName() + '.' + table.getName());
+            }
+
+            MaterializedIndex index = physicalPartition.getIndex(tabletMeta.getIndexId());
+            if (index == null) {
+                throw new StarRocksException("Cannot find materialized index " + tabletMeta.getIndexId()
+                        + " in physical partition " + physicalPartition.getId()
+                        + " in table " + db.getFullName() + '.' + table.getName());
+            }
+            if (index.getState() != IndexState.NORMAL) {
+                throw new StarRocksException("Not a normal state materialized index " + tabletMeta.getIndexId()
+                        + " in physical partition " + physicalPartition.getId()
+                        + " in table " + db.getFullName() + '.' + table.getName());
+            }
+            if (index.getTablet(oldTabletId) == null) {
+                throw new StarRocksException("Cannot find tablet " + oldTabletId
+                        + " in materialized index " + tabletMeta.getIndexId()
+                        + " in physical partition " + physicalPartition.getId()
+                        + " in table " + db.getFullName() + '.' + table.getName());
+            }
+
+            SplittingTablet splittingTablet = createSplittingTablet(oldTabletId, newTabletRanges);
+
+            // Build the full resharding-tablet list: PSPS for the chosen
+            // tablet, IdenticalTablet for siblings in the same index.
+            List<ReshardingTablet> reshardingTablets = new ArrayList<>();
+            for (Tablet sibling : index.getTablets()) {
+                if (sibling.getId() == oldTabletId) {
+                    reshardingTablets.add(splittingTablet);
+                } else {
+                    reshardingTablets.add(createIdenticalTablet(sibling.getId()));
+                }
+            }
+
+            Map<Long, ReshardingMaterializedIndex> reshardingIndexes = new HashMap<>();
+            reshardingIndexes.put(index.getId(),
+                    new ReshardingMaterializedIndex(index.getId(),
+                            createMaterializedIndex(index, reshardingTablets),
+                            reshardingTablets));
+
+            reshardingPhysicalPartitions.put(physicalPartition.getId(),
+                    new ReshardingPhysicalPartition(physicalPartition.getId(), reshardingIndexes));
+        }
+
+        createNewShards(table, reshardingPhysicalPartitions);
 
         long jobId = GlobalStateMgr.getCurrentState().getNextId();
         return new SplitTabletJob(jobId, db.getId(), table.getId(), reshardingPhysicalPartitions);
@@ -290,7 +404,7 @@ public class SplitTabletJobFactory implements TabletReshardJobFactory {
         return reshardingTablets;
     }
 
-    private MaterializedIndex createMaterializedIndex(MaterializedIndex oldIndex,
+    private static MaterializedIndex createMaterializedIndex(MaterializedIndex oldIndex,
             List<ReshardingTablet> reshardingTablets) {
         MaterializedIndex newIndex = new MaterializedIndex(GlobalStateMgr.getCurrentState().getNextId(), oldIndex.getMetaId(),
                 IndexState.NORMAL, oldIndex.getShardGroupId());
@@ -307,8 +421,8 @@ public class SplitTabletJobFactory implements TabletReshardJobFactory {
         return newIndex;
     }
 
-    private void createNewShards(Map<Long, ReshardingPhysicalPartition> reshardingPhysicalPartitions)
-            throws StarRocksException {
+    private static void createNewShards(OlapTable table,
+            Map<Long, ReshardingPhysicalPartition> reshardingPhysicalPartitions) throws StarRocksException {
         ColocateTableIndex colocateTableIndex = GlobalStateMgr.getCurrentState().getColocateTableIndex();
         ColocateTableIndex.GroupId groupId = colocateTableIndex.getRangeColocateGroupId(table.getId());
         // Snapshot colocate ranges once: createShards inside the loop only reads the same
@@ -318,6 +432,7 @@ public class SplitTabletJobFactory implements TabletReshardJobFactory {
                 : colocateTableIndex.getColocateRangeMgr().getColocateRanges(groupId.grpId);
         int colocateColumnCount = groupId == null ? 0
                 : colocateTableIndex.getGroupSchema(groupId).getColocateColumnCount();
+
 
         for (ReshardingPhysicalPartition reshardingPhysicalPartition : reshardingPhysicalPartitions.values()) {
             long physicalPartitionId = reshardingPhysicalPartition.getPhysicalPartitionId();
@@ -377,6 +492,18 @@ public class SplitTabletJobFactory implements TabletReshardJobFactory {
             newTabletIds.add(globalStateMgr.getNextId());
         }
         return new SplittingTablet(oldTabletId, newTabletIds);
+    }
+
+    // PSPS overload: allocate K new tablet ids matching K FE-supplied ranges
+    // and forward both into SplittingTablet so the BE dispatches to the
+    // external-boundaries path on publish.
+    private static SplittingTablet createSplittingTablet(long oldTabletId, List<TabletRange> newTabletRanges) {
+        GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
+        List<Long> newTabletIds = new ArrayList<>(newTabletRanges.size());
+        for (int j = 0; j < newTabletRanges.size(); ++j) {
+            newTabletIds.add(globalStateMgr.getNextId());
+        }
+        return new SplittingTablet(oldTabletId, newTabletIds, newTabletRanges);
     }
 
     private static IdenticalTablet createIdenticalTablet(long oldTabletId) {

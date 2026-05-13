@@ -403,6 +403,210 @@ public class SplitTabletJobTest {
         }
     }
 
+    // -------------------------------------------------------------------------
+    // PSPS (Pre-Sample & Pre-Split) end-to-end driver.
+    //
+    // Drives SplitTabletJobFactory.forExternalBoundaries(...) through PENDING
+    // -> RUNNING -> FINISHED with a mocked BE that echoes the FE-supplied
+    // ranges back verbatim (the BE contract: "external boundaries honored
+    // verbatim"). Asserts the SplittingTablet carries newTabletRanges all the
+    // way through toProto(), and that the resulting new tablets land with the
+    // FE-supplied ranges.
+    // -------------------------------------------------------------------------
+    @Test
+    public void testRunPspsTabletReshardJob() throws Exception {
+        new MockUp<MockLakeService>() {
+            @Mock
+            public Future<PublishVersionResponse> publishVersion(PublishVersionRequest request) {
+                PublishVersionResponse response = new PublishVersionResponse();
+                response.status = new StatusPB();
+                response.status.statusCode = TStatusCode.OK.getValue();
+                if (request.reshardingTabletInfos == null) {
+                    return CompletableFuture.completedFuture(response);
+                }
+                response.tabletRanges = new HashMap<>();
+                for (ReshardingTabletInfoPB info : request.reshardingTabletInfos) {
+                    addEchoedRanges(info, response.tabletRanges);
+                }
+                return CompletableFuture.completedFuture(response);
+            }
+
+            @Mock
+            public Future<PublishVersionResponse> aggregatePublishVersion(AggregatePublishVersionRequest request) {
+                PublishVersionResponse response = new PublishVersionResponse();
+                response.status = new StatusPB();
+                response.status.statusCode = TStatusCode.OK.getValue();
+                response.tabletRanges = new HashMap<>();
+                for (PublishVersionRequest publishRequest : request.publishReqs) {
+                    if (publishRequest.reshardingTabletInfos == null) {
+                        continue;
+                    }
+                    for (ReshardingTabletInfoPB info : publishRequest.reshardingTabletInfos) {
+                        addEchoedRanges(info, response.tabletRanges);
+                    }
+                }
+                return CompletableFuture.completedFuture(response);
+            }
+        };
+
+        PhysicalPartition physicalPartition = table.getAllPhysicalPartitions().iterator().next();
+        MaterializedIndex materializedIndex = physicalPartition.getLatestBaseIndex();
+        Tablet oldTablet = materializedIndex.getTablets().get(0);
+        long oldTabletId = oldTablet.getId();
+        long oldVersion = physicalPartition.getVisibleVersion();
+        int oldTabletCount = materializedIndex.getTablets().size();
+
+        // Tests in this class share a single static table, and earlier @Test
+        // methods can leave the latest index's tablets with bounded ranges.
+        // Reset the chosen old tablet to Range.all() so the K=3 PSPS ranges
+        // below — built for a Range.all() parent — are deterministically
+        // valid regardless of test order.
+        oldTablet.setRange(new TabletRange());
+
+        // K=3 PSPS ranges that satisfy the BE-side structural validator on a
+        // Range.all() parent: first.lower absent, last.upper absent, interior
+        // boundaries set with closed-lower / open-upper, adjacent ranges meet
+        // exactly. This mirrors the contract enforced in
+        // TabletRangeHelper::validate_new_tablet_ranges (BE).
+        List<TabletRange> newTabletRanges = List.of(
+                tabletRangeUpperOnly(100),
+                tabletRange(100, 200),
+                tabletRangeLowerOnly(200));
+
+        TabletReshardJob tabletReshardJob = SplitTabletJobFactory.forExternalBoundaries(
+                db, table, oldTabletId, newTabletRanges);
+        Assertions.assertNotNull(tabletReshardJob);
+
+        // The SplittingTablet inside the job must carry the FE-supplied
+        // ranges, and toProto() must serialize them into the wire shape that
+        // BE's split_tablet dispatches on.
+        SplittingTablet splittingTablet = findSplittingTablet(tabletReshardJob, oldTabletId);
+        Assertions.assertEquals(newTabletRanges.size(), splittingTablet.getNewTabletIds().size());
+        Assertions.assertEquals(newTabletRanges.size(), splittingTablet.getNewTabletRanges().size());
+
+        ReshardingTabletInfoPB pb = splittingTablet.toProto();
+        Assertions.assertNotNull(pb.splittingTabletInfo.newTabletRanges,
+                "newTabletRanges must be present on the wire so BE dispatches to PSPS");
+        Assertions.assertEquals(newTabletRanges.size(), pb.splittingTabletInfo.newTabletRanges.size());
+
+        Assertions.assertEquals(TabletReshardJob.JobState.PENDING, tabletReshardJob.getJobState());
+        Assertions.assertEquals(OlapTable.OlapTableState.NORMAL, table.getState());
+
+        tabletReshardJob.run();
+        Assertions.assertEquals(TabletReshardJob.JobState.RUNNING, tabletReshardJob.getJobState());
+        Assertions.assertEquals(OlapTable.OlapTableState.TABLET_RESHARD, table.getState());
+
+        tabletReshardJob.run();
+        Assertions.assertEquals(TabletReshardJob.JobState.FINISHED, tabletReshardJob.getJobState());
+        Assertions.assertEquals(OlapTable.OlapTableState.NORMAL, table.getState());
+        Assertions.assertEquals(oldVersion + 1, physicalPartition.getVisibleVersion());
+
+        // Net effect: the index gained K-1 tablets; the chosen old tablet is
+        // gone; the K new tablets carry the FE-supplied ranges (echoed by the
+        // mocked BE).
+        MaterializedIndex newMaterializedIndex = physicalPartition.getLatestBaseIndex();
+        Assertions.assertEquals(oldTabletCount + (newTabletRanges.size() - 1),
+                newMaterializedIndex.getTablets().size());
+        Assertions.assertNull(GlobalStateMgr.getCurrentState().getTabletInvertedIndex().getTabletMeta(oldTabletId));
+
+        // TabletRangePB (generated jprotobuf class) has no equals override;
+        // compare the underlying Range<Tuple> which does. The values must
+        // match the FE-supplied PSPS ranges position-for-position.
+        List<Long> ids = splittingTablet.getNewTabletIds();
+        for (int idx = 0; idx < ids.size(); idx++) {
+            Tablet newTablet = newMaterializedIndex.getTablet(ids.get(idx));
+            Assertions.assertNotNull(newTablet);
+            Assertions.assertNotNull(newTablet.getRange());
+            Assertions.assertEquals(newTabletRanges.get(idx).getRange(), newTablet.getRange().getRange(),
+                    "new tablet range must match the FE-supplied PSPS range exactly (idx=" + idx + ")");
+        }
+    }
+
+    // forExternalBoundaries rejects non-PSPS-shaped input.
+    @Test
+    public void testForExternalBoundariesRejectsTooFewRanges() {
+        PhysicalPartition physicalPartition = table.getAllPhysicalPartitions().iterator().next();
+        long oldTabletId = physicalPartition.getLatestBaseIndex().getTablets().get(0).getId();
+        Assertions.assertThrows(IllegalArgumentException.class,
+                () -> SplitTabletJobFactory.forExternalBoundaries(db, table, oldTabletId,
+                        List.of(tabletRange(0, 100))));
+    }
+
+    @Test
+    public void testForExternalBoundariesRejectsUnknownTablet() {
+        Assertions.assertThrows(com.starrocks.common.StarRocksException.class,
+                () -> SplitTabletJobFactory.forExternalBoundaries(db, table, /*oldTabletId=*/Long.MAX_VALUE,
+                        List.of(tabletRange(0, 100), tabletRange(100, 200))));
+    }
+
+    // PSPS must respect the tablet_reshard_max_split_count cap that the
+    // data-driven path enforces via TabletReshardUtils.calcSplitCount.
+    @Test
+    public void testForExternalBoundariesRejectsTooManyRanges() {
+        PhysicalPartition physicalPartition = table.getAllPhysicalPartitions().iterator().next();
+        long oldTabletId = physicalPartition.getLatestBaseIndex().getTablets().get(0).getId();
+
+        int oversize = Config.tablet_reshard_max_split_count + 1;
+        List<TabletRange> tooMany = new ArrayList<>(oversize);
+        for (int i = 0; i < oversize; i++) {
+            tooMany.add(tabletRange(i * 100, (i + 1) * 100));
+        }
+        Assertions.assertThrows(IllegalArgumentException.class,
+                () -> SplitTabletJobFactory.forExternalBoundaries(db, table, oldTabletId, tooMany));
+    }
+
+    // Mock helper: BE echo of the FE-supplied PSPS ranges, plus identical-tablet
+    // siblings retaining their original ranges. This matches the BE's success
+    // contract — newTabletRanges honored verbatim into K new tablets.
+    private void addEchoedRanges(ReshardingTabletInfoPB info, Map<Long, TabletRangePB> out) {
+        if (info.splittingTabletInfo != null) {
+            List<Long> newTabletIds = info.splittingTabletInfo.newTabletIds;
+            List<TabletRangePB> ranges = info.splittingTabletInfo.newTabletRanges;
+            if (ranges != null && ranges.size() == newTabletIds.size()) {
+                for (int i = 0; i < newTabletIds.size(); i++) {
+                    out.put(newTabletIds.get(i), ranges.get(i));
+                }
+            } else {
+                // Data-driven path fallback (no PSPS ranges on the wire).
+                out.putAll(createSplitTabletRanges(info.splittingTabletInfo.oldTabletId, newTabletIds));
+            }
+        }
+        if (info.identicalTabletInfo != null) {
+            Long oldId = info.identicalTabletInfo.oldTabletId;
+            Long newId = info.identicalTabletInfo.newTabletId;
+            out.put(newId, createTabletRangePBFromOldTablet(oldId));
+        }
+    }
+
+    private static SplittingTablet findSplittingTablet(TabletReshardJob job, long oldTabletId) {
+        SplitTabletJob splitJob = (SplitTabletJob) job;
+        for (ReshardingPhysicalPartition rpp : splitJob.getReshardingPhysicalPartitions().values()) {
+            for (ReshardingMaterializedIndex rmi : rpp.getReshardingIndexes().values()) {
+                for (ReshardingTablet rt : rmi.getReshardingTablets()) {
+                    SplittingTablet st = rt.getSplittingTablet();
+                    if (st != null && st.getOldTabletId() == oldTabletId) {
+                        return st;
+                    }
+                }
+            }
+        }
+        throw new AssertionError("SplittingTablet for old tablet " + oldTabletId + " not found");
+    }
+
+    private static TabletRange tabletRange(int lowerValue, int upperValue) {
+        return new TabletRange(Range.of(createTuple(lowerValue), createTuple(upperValue), true, false));
+    }
+
+    // First range of a PSPS list that splits a Range.all() parent: (-inf, upperValue).
+    private static TabletRange tabletRangeUpperOnly(int upperValue) {
+        return new TabletRange(Range.lt(createTuple(upperValue)));
+    }
+
+    // Last range of a PSPS list that splits a Range.all() parent: [lowerValue, +inf).
+    private static TabletRange tabletRangeLowerOnly(int lowerValue) {
+        return new TabletRange(Range.ge(createTuple(lowerValue)));
+    }
+
     private static Tuple createTuple(int value) {
         return new Tuple(Arrays.asList(Variant.of(IntegerType.INT, String.valueOf(value))));
     }
