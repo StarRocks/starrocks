@@ -1081,4 +1081,28 @@ public class ClusterSnapshotTest {
         Assertions.assertEquals("boom", err);
     }
 
+    @Test
+    public void testStopGracefullyNullsOutSchedulerSoStartRebuilds() {
+        // After demotion the inner ClusterSnapshotJobScheduler must be nulled out so that the
+        // next start() rebuilds it with fresh CheckpointController references; otherwise the
+        // re-elected leader silently never restarts snapshot scheduling.
+        ClusterSnapshotMgr mgr = new ClusterSnapshotMgr();
+        ClusterSnapshotJobScheduler injected = new ClusterSnapshotJobScheduler(null, null);
+        Deencapsulation.setField(mgr, "clusterSnapshotJobScheduler", injected);
+        Assertions.assertNotNull(Deencapsulation.getField(mgr, "clusterSnapshotJobScheduler"));
+
+        mgr.stopGracefully(1000L);
+
+        Assertions.assertNull(Deencapsulation.getField(mgr, "clusterSnapshotJobScheduler"),
+                "scheduler reference must be cleared so start() rebuilds it on re-election");
+    }
+
+    @Test
+    public void testStopGracefullyIsNoOpWhenSchedulerNeverStarted() {
+        // Followers / non-shared-data clusters never instantiate the scheduler. stopGracefully
+        // must tolerate that and not throw.
+        ClusterSnapshotMgr mgr = new ClusterSnapshotMgr();
+        Assertions.assertDoesNotThrow(() -> mgr.stopGracefully(1000L));
+    }
+
 }
