@@ -374,6 +374,44 @@ TEST_F(AvroReaderTest, test_read_complex_nest_types) {
     ASSERT_TRUE(st.is_end_of_file());
 }
 
+// Verifies that init() projects the Avro reader schema down to only the requested
+// columns, and that the correct values are decoded for those columns.
+TEST_F(AvroReaderTest, test_column_projection) {
+    std::string filename = "primitive.avro";
+
+    // Get full schema so we can pick individual SlotDescriptors by name.
+    auto schema_reader = create_avro_reader(filename);
+    std::vector<SlotDescriptor> all_descs;
+    ASSERT_OK(schema_reader->get_schema(&all_descs));
+    ASSERT_EQ(8, all_descs.size());
+
+    // Request only "int_field" (index 2) and "string_field" (index 7).
+    std::vector<SlotDescriptor*> slot_descs = {&all_descs[2], &all_descs[7]};
+    ASSERT_EQ("int_field", slot_descs[0]->col_name());
+    ASSERT_EQ("string_field", slot_descs[1]->col_name());
+    create_column_readers(slot_descs, _timezone, false);
+
+    // Open a fresh reader via the full init() path with projected slot_descs.
+    auto file_or = FileSystem::Default()->new_random_access_file(_test_exec_dir + filename);
+    ASSERT_OK(file_or.status());
+    auto avro_reader = std::make_unique<AvroReader>();
+    ASSERT_OK(avro_reader->init(std::make_unique<AvroBufferInputStream>(
+                                        std::move(file_or.value()), config::avro_reader_buffer_size_bytes, _counter),
+                                filename, _state.get(), _counter, &slot_descs, &_column_readers,
+                                /*col_not_found_as_null=*/false));
+
+    auto chunk = create_src_chunk(slot_descs);
+    ASSERT_OK(avro_reader->read_chunk(chunk, 2));
+    materialize_src_chunk_adaptive_nullable_column(chunk);
+
+    ASSERT_EQ(1, chunk->num_rows());
+    ASSERT_EQ(2, chunk->num_columns());
+    ASSERT_EQ("[123, 'hello avro']", chunk->debug_row(0));
+
+    chunk = create_src_chunk(slot_descs);
+    ASSERT_TRUE(avro_reader->read_chunk(chunk, 2).is_end_of_file());
+}
+
 TEST_F(AvroReaderTest, test_read_logical_types) {
     std::string filename = "logical.avro";
     std::vector<SlotDescriptor*> slot_descs;

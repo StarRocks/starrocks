@@ -16,13 +16,13 @@
 
 #include <fmt/format.h>
 
+#include "base/time/timezone_utils.h"
 #include "column/adaptive_nullable_column.h"
 #include "column/chunk.h"
 #include "column/column_helper.h"
 #include "common/config_scan_io_fwd.h"
 #include "exprs/chunk_predicate_evaluator.h"
 #include "runtime/runtime_state.h"
-#include "util/timezone_utils.h"
 
 namespace starrocks {
 
@@ -30,25 +30,25 @@ Status HdfsAvroScanner::do_init(RuntimeState* state, const HdfsScannerParams& /*
     if (!TimezoneUtils::find_cctz_time_zone(state->timezone(), _timezone)) {
         return Status::InvalidArgument(fmt::format("Cannot find cctz time zone: {}", state->timezone()));
     }
-
-    for (const auto& col : _scanner_ctx.materialized_columns) {
-        _materialize_slot_descs.push_back(col.slot_desc);
-        _column_readers.push_back(avrocpp::ColumnReader::get_nullable_column_reader(
-                col.slot_desc->col_name(), col.slot_desc->slot_type(), _timezone, /*null_as_error=*/false));
-    }
     return Status::OK();
 }
 
 Status HdfsAvroScanner::do_open(RuntimeState* state) {
-    RETURN_IF_ERROR(open_random_access_file());
+    // _scanner_ctx is populated by _build_scanner_context() before do_open() is called,
+    // so materialized_columns is available here (not in do_init).
+    for (const auto& col : _scanner_ctx.materialized_columns) {
+        _materialize_slot_descs.push_back(col.slot_desc);
+        _column_readers.push_back(avrocpp::ColumnReader::get_nullable_column_reader(
+                col.slot_desc->col_name(), col.slot_desc->type(), _timezone, /*null_as_error=*/false));
+    }
 
-    auto input_stream = std::make_unique<AvroBufferInputStream>(_file, config::avro_reader_buffer_size_bytes,
+    RETURN_IF_ERROR(open_random_access_file());
+    auto input_stream = std::make_unique<AvroBufferInputStream>(_file.get(), config::avro_reader_buffer_size_bytes,
                                                                 &_scanner_counter);
     _avro_reader = std::make_unique<AvroReader>();
-    RETURN_IF_ERROR(_avro_reader->init(std::move(input_stream), _scanner_params.path, state, &_scanner_counter,
-                                       &_materialize_slot_descs, &_column_readers,
-                                       /*col_not_found_as_null=*/true));
-    return Status::OK();
+    return _avro_reader->init(std::move(input_stream), _scanner_params.path, state, &_scanner_counter,
+                              &_materialize_slot_descs, &_column_readers,
+                              /*col_not_found_as_null=*/true, _file.get(), config::avro_reader_buffer_size_bytes);
 }
 
 Status HdfsAvroScanner::do_get_next(RuntimeState* state, ChunkPtr* chunk) {
@@ -59,31 +59,34 @@ Status HdfsAvroScanner::do_get_next(RuntimeState* state, ChunkPtr* chunk) {
     auto avro_chunk = std::make_shared<Chunk>();
     for (size_t i = 0; i < _scanner_ctx.materialized_columns.size(); i++) {
         const auto& col_info = _scanner_ctx.materialized_columns[i];
-        auto column = ColumnHelper::create_column(col_info.slot_desc->slot_type(), true, false, 0, true);
+        auto column = ColumnHelper::create_column(col_info.slot_desc->type(), true, false, 0, true);
         avro_chunk->append_column(std::move(column), col_info.slot_desc->id());
     }
 
-    Status st = _avro_reader->read_chunk(avro_chunk, state->chunk_size());
+    int64_t row_count = 0;
+    Status st = _avro_reader->read_chunk(avro_chunk, state->chunk_size(), &row_count);
     if (!st.ok() && !st.is_end_of_file()) {
         return st;
     }
-    if (avro_chunk->is_empty()) {
+    if (row_count == 0) {
         return Status::EndOfFile("no more avro data");
     }
 
-    // Convert AdaptiveNullableColumn → NullableColumn.
-    _materialize_nullable_columns(avro_chunk);
-
-    size_t row_count = avro_chunk->num_rows();
     _app_stats.raw_rows_read += row_count;
 
     // Merge materialized columns into the output chunk.
-    for (size_t i = 0; i < _scanner_ctx.materialized_columns.size(); i++) {
-        const auto& col_info = _scanner_ctx.materialized_columns[i];
-        ck->append_or_update_column(avro_chunk->get_column_by_slot_id(col_info.slot_desc->id()),
-                                    col_info.slot_desc->id());
+    if (!avro_chunk->is_empty()) {
+        // Convert AdaptiveNullableColumn → NullableColumn.
+        _materialize_nullable_columns(avro_chunk);
+        for (size_t i = 0; i < _scanner_ctx.materialized_columns.size(); i++) {
+            const auto& col_info = _scanner_ctx.materialized_columns[i];
+            ck->append_or_update_column(std::move(avro_chunk->get_column_by_slot_id(col_info.slot_desc->id())),
+                                        col_info.slot_desc->id());
+        }
     }
-    ck->set_num_rows(row_count);
+    // Fill not-existed slots: fills the ___count___ column (count queries) and any
+    // schema-evolution columns absent from this file. Also calls ck->set_num_rows().
+    RETURN_IF_ERROR(_scanner_ctx.append_or_update_not_existed_columns_to_chunk(&ck, row_count));
 
     // Fill partition and extended constant columns.
     _scanner_ctx.append_or_update_partition_column_to_chunk(&ck, row_count);
@@ -98,7 +101,8 @@ Status HdfsAvroScanner::do_get_next(RuntimeState* state, ChunkPtr* chunk) {
         }
     }
 
-    _app_stats.rows_read += ck->num_rows();
+    // Note: _app_stats.rows_read is updated by the base class HdfsScanner::get_next
+    // after do_get_next returns. Do NOT update it here to avoid double-counting.
     return Status::OK();
 }
 

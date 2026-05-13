@@ -31,13 +31,21 @@ class SlotDescriptor;
 
 class AvroBufferInputStream final : public avro::SeekableInputStream {
 public:
+    // Owning: takes a shared_ptr and keeps it alive for the stream's lifetime.
     AvroBufferInputStream(std::shared_ptr<RandomAccessFile> file, size_t buffer_size, ScannerCounter* counter)
-            : _file(std::move(file)),
+            : _file_owned(std::move(file)),
+              _file(_file_owned.get()),
               _buffer_size(buffer_size),
               _buffer(new uint8_t[buffer_size]),
-
               _next(_buffer),
+              _counter(counter) {}
 
+    // Non-owning: caller guarantees the file outlives this stream.
+    AvroBufferInputStream(RandomAccessFile* file, size_t buffer_size, ScannerCounter* counter)
+            : _file(file),
+              _buffer_size(buffer_size),
+              _buffer(new uint8_t[buffer_size]),
+              _next(_buffer),
               _counter(counter) {}
 
     ~AvroBufferInputStream() override { delete[] _buffer; }
@@ -51,7 +59,8 @@ public:
 private:
     bool fill();
 
-    std::shared_ptr<RandomAccessFile> _file;
+    std::shared_ptr<RandomAccessFile> _file_owned; // non-null only for the owning constructor
+    RandomAccessFile* _file = nullptr;             // always valid; either _file_owned.get() or caller-managed
     const size_t _buffer_size;
     uint8_t* const _buffer;
     size_t _byte_count{0};
@@ -65,14 +74,20 @@ public:
     AvroReader() = default;
     ~AvroReader();
 
+    // raw_file and buffer_size are optional; when provided and no columns are needed
+    // (count(*) path), records are counted by reading only Avro block headers — no
+    // decompression — which is much faster than record-level decoding.
     Status init(std::unique_ptr<avro::InputStream> input_stream, const std::string& filename, RuntimeState* state,
                 ScannerCounter* counter, const std::vector<SlotDescriptor*>* slot_descs,
-                const std::vector<avrocpp::ColumnReaderUniquePtr>* column_readers, bool col_not_found_as_null);
+                const std::vector<avrocpp::ColumnReaderUniquePtr>* column_readers, bool col_not_found_as_null,
+                RandomAccessFile* raw_file = nullptr, size_t buffer_size = 0);
 
     void TEST_init(const std::vector<SlotDescriptor*>* slot_descs,
                    const std::vector<avrocpp::ColumnReaderUniquePtr>* column_readers, bool col_not_found_as_null);
 
-    Status read_chunk(ChunkPtr& chunk, int rows_to_read);
+    // rows_counted_out: when non-null, receives the number of Avro records traversed
+    // in the no-materialized-column path (used by do_get_next for count queries).
+    Status read_chunk(ChunkPtr& chunk, int rows_to_read, int64_t* rows_counted_out = nullptr);
 
     Status get_schema(std::vector<SlotDescriptor>* schema);
 
@@ -95,6 +110,11 @@ private:
 
     RuntimeState* _state = nullptr;
     ScannerCounter* _counter = nullptr;
+
+    // Block-level record count precomputed in init() for the no-column (count(*)) path.
+    // -1 means not precomputed; >= 0 means read_chunk() drains from here without file IO.
+    int64_t _total_count = -1;
+    int64_t _count_remaining = 0;
 };
 
 using AvroReaderUniquePtr = std::unique_ptr<AvroReader>;

@@ -15,7 +15,11 @@
 #include "formats/avro/cpp/avro_reader.h"
 
 #include <fmt/format.h>
+#include <rapidjson/document.h>
+#include <rapidjson/stringbuffer.h>
+#include <rapidjson/writer.h>
 
+#include <avrocpp/Compiler.hh>
 #include <avrocpp/NodeImpl.hh>
 #include <avrocpp/Types.hh>
 #include <avrocpp/ValidSchema.hh>
@@ -30,6 +34,146 @@
 #include "runtime/runtime_state_helper.h"
 
 namespace starrocks {
+
+namespace {
+
+// Build an Avro record schema that contains only the columns in `needed_cols`.
+// Fields present in `writer_schema` but absent from `needed_cols` will be skipped
+// by the ResolvingDecoder, saving CPU deserialization work for unused columns.
+// Returns `writer_schema` unchanged if projection is not beneficial or if
+// JSON round-trip fails (safe fallback).
+avro::ValidSchema build_projected_schema(const avro::ValidSchema& writer_schema,
+                                         const std::set<std::string>& needed_cols) {
+    std::string json = writer_schema.toJson(false);
+
+    rapidjson::Document doc;
+    if (doc.Parse(json.c_str()).HasParseError()) {
+        return writer_schema;
+    }
+
+    if (!doc.HasMember("fields") || !doc["fields"].IsArray()) {
+        return writer_schema;
+    }
+
+    auto& alloc = doc.GetAllocator();
+    rapidjson::Value projected(rapidjson::kArrayType);
+    for (auto& field : doc["fields"].GetArray()) {
+        if (field.HasMember("name") && field["name"].IsString() && needed_cols.count(field["name"].GetString())) {
+            projected.PushBack(rapidjson::Value(field, alloc), alloc);
+        }
+    }
+
+    if (static_cast<size_t>(projected.Size()) >= writer_schema.root()->leaves()) {
+        return writer_schema;
+    }
+
+    doc["fields"] = std::move(projected);
+
+    rapidjson::StringBuffer buf;
+    rapidjson::Writer<rapidjson::StringBuffer> writer(buf);
+    doc.Accept(writer);
+
+    try {
+        return avro::compileJsonSchemaFromString(buf.GetString());
+    } catch (const avro::Exception&) {
+        return writer_schema;
+    }
+}
+
+// ---- Avro block-level record counting ----
+// Parses only block headers (object_count + byte_count), skips compressed
+// data via seek. No decompression — O(number_of_blocks) instead of O(records).
+
+static bool try_read_byte(AvroBufferInputStream& s, uint8_t& b) {
+    const uint8_t* p;
+    size_t len;
+    if (!s.next(&p, &len)) return false;
+    b = *p;
+    if (len > 1) s.backup(len - 1);
+    return true;
+}
+
+static bool try_read_avro_long(AvroBufferInputStream& s, int64_t& out) {
+    uint64_t n = 0;
+    int shift = 0;
+    uint8_t b;
+    if (!try_read_byte(s, b)) return false;
+    for (;;) {
+        n |= static_cast<uint64_t>(b & 0x7F) << shift;
+        shift += 7;
+        if (!(b & 0x80)) break;
+        if (!try_read_byte(s, b)) throw avro::Exception("truncated Avro long");
+    }
+    out = static_cast<int64_t>((n >> 1) ^ -(n & 1));
+    return true;
+}
+
+static void read_exact(AvroBufferInputStream& s, uint8_t* buf, size_t n) {
+    size_t done = 0;
+    while (done < n) {
+        const uint8_t* p;
+        size_t len;
+        if (!s.next(&p, &len)) throw avro::Exception("unexpected EOF reading exact bytes");
+        size_t take = std::min(len, n - done);
+        memcpy(buf + done, p, take);
+        if (take < len) s.backup(len - take);
+        done += take;
+    }
+}
+
+static void skip_avro_bytes(AvroBufferInputStream& s) {
+    int64_t len;
+    if (try_read_avro_long(s, len) && len > 0) s.skip(static_cast<size_t>(len));
+}
+
+static void skip_avro_metadata(AvroBufferInputStream& s) {
+    int64_t block_count;
+    while (try_read_avro_long(s, block_count) && block_count != 0) {
+        int64_t n = block_count < 0 ? -block_count : block_count;
+        if (block_count < 0) {
+            int64_t ignored;
+            try_read_avro_long(s, ignored);
+        }
+        for (int64_t i = 0; i < n; ++i) {
+            skip_avro_bytes(s);
+            skip_avro_bytes(s);
+        }
+    }
+}
+
+static int64_t count_avro_blocks(RandomAccessFile* file, size_t buffer_size, ScannerCounter* counter) {
+    auto st = file->seek(0);
+    if (!st.ok()) throw avro::Exception("seek failed: " + st.to_string());
+
+    AvroBufferInputStream stream(file, buffer_size, counter);
+
+    uint8_t magic[4];
+    read_exact(stream, magic, 4);
+    static const uint8_t kMagic[] = {'O', 'b', 'j', 1};
+    if (memcmp(magic, kMagic, 4) != 0) throw avro::Exception("not a valid Avro file");
+
+    skip_avro_metadata(stream);
+
+    uint8_t sync[avro::SyncSize];
+    read_exact(stream, sync, avro::SyncSize);
+
+    int64_t total = 0;
+    int64_t obj_count;
+    while (try_read_avro_long(stream, obj_count)) {
+        int64_t byte_count;
+        if (!try_read_avro_long(stream, byte_count)) throw avro::Exception("truncated block header");
+        stream.skip(static_cast<size_t>(byte_count));
+
+        uint8_t block_sync[avro::SyncSize];
+        read_exact(stream, block_sync, avro::SyncSize);
+        if (memcmp(sync, block_sync, avro::SyncSize) != 0) throw avro::Exception("sync marker mismatch");
+
+        total += obj_count;
+    }
+    return total;
+}
+
+} // namespace
 
 bool AvroBufferInputStream::next(const uint8_t** data, size_t* len) {
     if (_available == 0 && !fill()) {
@@ -105,7 +249,8 @@ AvroReader::~AvroReader() {
 
 Status AvroReader::init(std::unique_ptr<avro::InputStream> input_stream, const std::string& filename,
                         RuntimeState* state, ScannerCounter* counter, const std::vector<SlotDescriptor*>* slot_descs,
-                        const std::vector<avrocpp::ColumnReaderUniquePtr>* column_readers, bool col_not_found_as_null) {
+                        const std::vector<avrocpp::ColumnReaderUniquePtr>* column_readers, bool col_not_found_as_null,
+                        RandomAccessFile* raw_file, size_t buffer_size) {
     if (_is_inited) {
         return Status::OK();
     }
@@ -120,21 +265,60 @@ Status AvroReader::init(std::unique_ptr<avro::InputStream> input_stream, const s
     _counter = counter;
 
     try {
-        _file_reader = std::make_unique<avro::DataFileReader<avro::GenericDatum>>(std::move(input_stream));
+        // Read the Avro file header once via DataFileReaderBase (schema + sync marker).
+        // init() is intentionally NOT called yet so we can inspect the writer schema
+        // and apply column projection before setting up the decoder.
+        auto base = std::make_unique<avro::DataFileReaderBase>(std::move(input_stream));
+        const auto& writer_schema = base->dataSchema();
 
-        const auto& schema = _file_reader->dataSchema();
-        _datum = std::make_unique<avro::GenericDatum>(schema);
+        // Collect the column names that actually need to be decoded.
+        std::set<std::string> needed_cols;
+        if (slot_descs != nullptr) {
+            for (const auto* slot : *slot_descs) {
+                if (slot != nullptr) {
+                    needed_cols.insert(std::string(slot->col_name()));
+                }
+            }
+        }
 
+        // Build a projected reader schema that contains only the needed columns.
+        // The ResolvingDecoder will then skip unwanted fields at the binary level,
+        // saving CPU deserialization work — the Trino-equivalent of maskColumnsFromTableSchema.
+        avro::ValidSchema projected = build_projected_schema(writer_schema, needed_cols);
+        bool using_projection = !needed_cols.empty() && projected.root()->leaves() < writer_schema.root()->leaves();
+
+        if (using_projection) {
+            _file_reader = std::make_unique<avro::DataFileReader<avro::GenericDatum>>(std::move(base), projected);
+        } else {
+            _file_reader = std::make_unique<avro::DataFileReader<avro::GenericDatum>>(std::move(base));
+        }
+
+        // The datum must match the schema the decoder will produce values for.
+        const auto& effective_schema = using_projection ? _file_reader->readerSchema() : writer_schema;
+        _datum = std::make_unique<avro::GenericDatum>(effective_schema);
+
+        // When no columns are needed (count(*) path), count records by reading only
+        // Avro block headers — no decompression. raw_file seeks back to 0 independently
+        // of the stream owned by _file_reader; _file_reader is never read in this path.
+        if (_num_of_columns_from_file == 0 && raw_file != nullptr) {
+            try {
+                _total_count = count_avro_blocks(raw_file, buffer_size, counter);
+                _count_remaining = _total_count;
+            } catch (const avro::Exception&) {
+                // fall back to record-level reading if block counting fails
+            }
+        }
+
+        // Map each slot to its field index in the effective (possibly projected) schema.
         _field_indexes.resize(_num_of_columns_from_file, -1);
         for (size_t i = 0; i < _num_of_columns_from_file; ++i) {
             const auto& desc = (*_slot_descs)[i];
             if (desc == nullptr) {
                 continue;
             }
-
             size_t index = 0;
-            if (schema.root()->nameIndex(std::string(desc->col_name()), index)) {
-                _field_indexes[i] = index;
+            if (effective_schema.root()->nameIndex(std::string(desc->col_name()), index)) {
+                _field_indexes[i] = static_cast<int64_t>(index);
             }
         }
     } catch (const avro::Exception& ex) {
@@ -174,7 +358,7 @@ void AvroReader::TEST_init(const std::vector<SlotDescriptor*>* slot_descs,
     _is_inited = true;
 }
 
-Status AvroReader::read_chunk(ChunkPtr& chunk, int rows_to_read) {
+Status AvroReader::read_chunk(ChunkPtr& chunk, int rows_to_read, int64_t* rows_counted_out) {
     if (!_is_inited) {
         return Status::Uninitialized("Avro reader is not initialized");
     }
@@ -191,7 +375,16 @@ Status AvroReader::read_chunk(ChunkPtr& chunk, int rows_to_read) {
         column_raw_ptrs[i] = down_cast<AdaptiveNullableColumn*>(chunk->get_column_raw_ptr_by_slot_id(desc->id()));
     }
 
+    // Fast path: block-level precomputed count (no file reads at all).
+    if (_total_count >= 0) {
+        int64_t batch = std::min(static_cast<int64_t>(rows_to_read), _count_remaining);
+        if (rows_counted_out != nullptr) *rows_counted_out = batch;
+        _count_remaining -= batch;
+        return batch > 0 ? Status::OK() : Status::EndOfFile("No more data to read");
+    }
+
     try {
+        int64_t row_count = 0;
         while (rows_to_read > 0 && _file_reader->read(*_datum)) {
             auto num_rows = chunk->num_rows();
 
@@ -206,21 +399,18 @@ Status AvroReader::read_chunk(ChunkPtr& chunk, int rows_to_read) {
                     RuntimeStateHelper::append_error_msg_to_file(_state, json_str, std::string(st.message()));
                     LOG(WARNING) << "Failed to read row. error: " << st;
                 }
-
-                // before continuing to process other rows, we need to first clean the fail parsed row.
+                // Rollback the partially-written row before processing the next record.
                 chunk->set_num_rows(num_rows);
+                continue;
             } else if (!st.ok()) {
                 return st;
-            } else {
-                --rows_to_read;
             }
+            ++row_count;
+            --rows_to_read;
         }
 
-        if (chunk->is_empty()) {
-            return Status::EndOfFile("No more data to read");
-        } else {
-            return Status::OK();
-        }
+        if (rows_counted_out != nullptr) *rows_counted_out = row_count;
+        return row_count > 0 ? Status::OK() : Status::EndOfFile("No more data to read");
     } catch (const avro::Exception& ex) {
         auto err_msg = fmt::format("Avro reader read chunk throws exception: {}", ex.what());
         LOG(WARNING) << err_msg;
