@@ -21,13 +21,7 @@
 #include "common/object_pool.h"
 #include "gen_cpp/Descriptors_types.h"
 #include "gen_cpp/Exprs_types.h"
-<<<<<<< HEAD
-#include "runtime/exec_env.h"
-#include "runtime/runtime_state.h"
 #include "testutil/assert.h"
-=======
-#include "runtime/descriptors_ext.h"
->>>>>>> 52c8818a4b ([Refactor] Build Hive partition ExprContexts in data source open phase (#73171))
 #include "types/logical_type.h"
 
 namespace starrocks {

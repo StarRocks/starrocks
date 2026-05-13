@@ -260,10 +260,9 @@ Status HiveDataSource::_init_partition_values() {
     // must live and close within the fragment scope — they cannot be shared from the
     // (query-scoped) HdfsPartitionDescriptor.
     const auto& thrift_partition_key_exprs = partition_desc->thrift_partition_key_exprs();
-    RETURN_IF_ERROR(
-            ExprFactory::create_expr_trees(&_pool, thrift_partition_key_exprs, &_partition_values, _runtime_state));
-    RETURN_IF_ERROR(ExprExecutor::prepare(_partition_values, _runtime_state));
-    RETURN_IF_ERROR(ExprExecutor::open(_partition_values, _runtime_state));
+    RETURN_IF_ERROR(Expr::create_expr_trees(&_pool, thrift_partition_key_exprs, &_partition_values, _runtime_state));
+    RETURN_IF_ERROR(Expr::prepare(_partition_values, _runtime_state));
+    RETURN_IF_ERROR(Expr::open(_partition_values, _runtime_state));
 
     // init partition chunk
     auto partition_chunk = std::make_shared<Chunk>();
@@ -866,16 +865,10 @@ void HiveDataSource::close(RuntimeState* state) {
         }
         _scanner->close();
     }
-<<<<<<< HEAD
     Expr::close(_min_max_conjunct_ctxs, state);
     Expr::close(_partition_conjunct_ctxs, state);
+    Expr::close(_partition_values, state);
     Expr::close(_scanner_conjunct_ctxs, state);
-=======
-    ExprExecutor::close(_min_max_conjunct_ctxs, state);
-    ExprExecutor::close(_partition_conjunct_ctxs, state);
-    ExprExecutor::close(_partition_values, state);
-    ExprExecutor::close(_scanner_conjunct_ctxs, state);
->>>>>>> 52c8818a4b ([Refactor] Build Hive partition ExprContexts in data source open phase (#73171))
     for (auto& it : _conjunct_ctxs_by_slot) {
         Expr::close(it.second, state);
     }
