@@ -4,6 +4,10 @@ sidebar_position: 10
 keywords: ['resource groups', 'isolation']
 ---
 
+import ScopeParam from '../../../_assets/commonMarkdown/rg_scope_param.mdx'
+import WhSyntaxExample from '../../../_assets/commonMarkdown/rg_wh_syntax_example.mdx'
+import WhAlterSyntax from '../../../_assets/commonMarkdown/rg_wh_alter_syntax.mdx'
+
 # Resource group
 
 This topic describes the resource group feature of StarRocks.
@@ -56,14 +60,14 @@ You can specify CPU and memory resource quotas for a resource group on a BE by u
 
 ##### `cpu_weight` and `cpu_weight_percent`
 
-This parameter specifies the CPU scheduling weight of a resource group on a single BE node, determining the relative share of CPU time allocated to tasks from this group. Before v3.3.5, this was referred to as `cpu_core_limit`.
+These parameters specify the CPU scheduling weight of a resource group on a single BE node, determining the relative share of CPU time allocated to tasks from this group. Before v3.3.5, they were referred to as `cpu_core_limit`.
 
 You can use one of the following parameters to set the CPU scheduling weight:
 
 - `cpu_weight`: Directly sets the CPU scheduling weight. Its value range is (0, `avg_be_cpu_cores`], where `avg_be_cpu_cores` is the average number of CPU cores across all BE nodes. The parameter is effective only when it is set to greater than 0.
 - `cpu_weight_percent`: Supported from v4.1. Sets the CPU scheduling weight as a percentage. Its value range is [0, 100]. The parameter is effective only when it is set to greater than 0. If `min_be_cpu_cores * cpu_weight_percent / 100 < 1`, the system returns an error, where `min_be_cpu_cores` is the minimum number of CPU cores across all BE nodes.
 
-At runtime, each BE converts `cpu_weight_percent` to the actual `cpu_weight` based on the number of CPU cores on that BE, `be_cpu_cores`: `cpu_weight = be_cpu_cores * cpu_weight_percent / 100`.
+At runtime, each BE converts `cpu_weight_percent` to the actual `cpu_weight` based on the number of CPU cores on that BE (`be_cpu_cores`): `cpu_weight = be_cpu_cores * cpu_weight_percent / 100`.
 
 Only one of `cpu_weight`, `cpu_weight_percent`, `exclusive_cpu_cores`, and `exclusive_cpu_percent` can be greater than 0.
 
@@ -73,7 +77,7 @@ Only one of `cpu_weight`, `cpu_weight_percent`, `exclusive_cpu_cores`, and `excl
 
 ##### `exclusive_cpu_cores` and `exclusive_cpu_percent`
 
-This parameter defines CPU hard isolation for a resource group. It has two implications:
+These parameters define CPU hard isolation for a resource group. It has two implications:
 
 - **Exclusive**: Reserves a specified number of CPU cores exclusively for this resource group, making them unavailable to other groups, even when idle.
 - **Quota**: Limits the resource group to only using these reserved CPU cores, preventing it from using available CPU resources from other groups.
@@ -83,16 +87,16 @@ You can use one of the following parameters to set CPU hard isolation:
 - `exclusive_cpu_cores`: Directly sets the number of reserved CPU cores. Its value range is (0, `min_be_cpu_cores - 1`]. The parameter is effective only when it is set to greater than 0.
 - `exclusive_cpu_percent`: Supported from v4.1. Sets the number of reserved CPU cores as a percentage. Its value range is [0, 100]. The parameter is effective only when it is set to greater than 0. If `min_be_cpu_cores * exclusive_cpu_percent / 100 < 1`, the system returns an error.
 
-At runtime, each BE converts `exclusive_cpu_percent` to the actual `exclusive_cpu_cores` based on the number of CPU cores on that BE, `be_cpu_cores`: `exclusive_cpu_cores = be_cpu_cores * exclusive_cpu_percent / 100`.
+At runtime, each BE converts `exclusive_cpu_percent` to the actual `exclusive_cpu_cores` based on the number of CPU cores on that BE (`be_cpu_cores`): `exclusive_cpu_cores = be_cpu_cores * exclusive_cpu_percent / 100`.
 
-- Resource groups with `exclusive_cpu_cores` or `exclusive_cpu_percent` greater than 0 are called Exclusive resource groups, and the CPU cores allocated to them are called Exclusive Cores. Other groups are called Shared resource groups and run on Shared Cores.
-- The total number of `exclusive_cpu_cores` across all Exclusive resource groups cannot exceed `min_be_cpu_cores - 1`. If `exclusive_cpu_percent` is used, the system first converts it to CPU cores based on `min_be_cpu_cores * exclusive_cpu_percent / 100` and then calculates the total. The upper limit is set to leave at least one Shared Core available.
+- Resource groups with `exclusive_cpu_cores` or `exclusive_cpu_percent` greater than 0 are called Exclusive Resource Groups, and the CPU cores allocated to them are called Exclusive Cores. Other groups are called Shared Resource Groups and run on Shared Cores.
+- The total number of `exclusive_cpu_cores` across all Exclusive Resource Groups cannot exceed `min_be_cpu_cores - 1`. If `exclusive_cpu_percent` is used, the system first converts it to CPU cores based on `min_be_cpu_cores * exclusive_cpu_percent / 100` and then calculates the total. The upper limit is set to leave at least one Shared Core available.
 
 The relationship between `exclusive_cpu_cores`, `exclusive_cpu_percent`, `cpu_weight`, and `cpu_weight_percent`:
 
-Only one of `cpu_weight`, `cpu_weight_percent`, `exclusive_cpu_cores`, and `exclusive_cpu_percent` can be active at a time. Exclusive resource groups operate on their own reserved Exclusive Cores without requiring a share of CPU time through `cpu_weight` or `cpu_weight_percent`.
+Only one of `cpu_weight`, `cpu_weight_percent`, `exclusive_cpu_cores`, and `exclusive_cpu_percent` can be active at a time. Exclusive Resource Groups operate on their own reserved Exclusive Cores without requiring a share of CPU time through `cpu_weight` or `cpu_weight_percent`.
 
-You can configure whether Shared resource groups can borrow Exclusive Cores from Exclusive resource groups using the BE configuration `enable_resource_group_cpu_borrowing`. When set to `true` (default), Shared groups can borrow CPU resources when Exclusive groups are idle.
+You can configure whether Shared Resource Groups can borrow Exclusive Cores from Exclusive Resource Groups using the BE configuration `enable_resource_group_cpu_borrowing`. When set to `true` (default), Shared Resouce Groups can borrow CPU resources when Exclusive Resouce Groups are idle.
 
 To modify this configuration dynamically, use the following command:
 
@@ -100,11 +104,13 @@ To modify this configuration dynamically, use the following command:
 UPDATE information_schema.be_configs SET VALUE = "false" WHERE NAME = "enable_resource_group_cpu_borrowing";
 ```
 
+<ScopeParam />
+
 #### Scope parameter
 
 ##### `warehouses`
 
-From v4.1 onwards, resource groups support `warehouses` to specify the scope where they take effect. Logically, if `warehouses` is specified, the resource group takes effect only in the specified warehouses. If `warehouses` is not specified, the resource group takes effect in all warehouses by default.
+From v4.1 onwards, resource groups support the `warehouses` parameter to specify the scope where they take effect. Logically, if `warehouses` is specified, the resource group takes effect only in the specified warehouses. If `warehouses` is not specified, the resource group takes effect in all warehouses by default.
 
 `warehouses` affects both FEs and BEs:
 
@@ -115,9 +121,9 @@ The value of `warehouses` is a list of warehouse names separated by commas (`,`)
 
 After `warehouses` is specified, `min_be_cpu_cores` in CPU percentage parameter validation refers to the minimum number of CPU cores among BEs in the specified warehouses. If `warehouses` is not specified, `min_be_cpu_cores` refers to the minimum number of CPU cores across all BEs.
 
-> **NOTE**
->
-> After `warehouses` is specified, CPU quotas for the resource group must be configured by using `cpu_weight_percent` or `exclusive_cpu_percent`, rather than `cpu_weight` or `exclusive_cpu_cores`.
+:::note
+After `warehouses` is specified, CPU quotas for the resource group must be configured by using `cpu_weight_percent` or `exclusive_cpu_percent`, rather than `cpu_weight` or `exclusive_cpu_cores`.
+:::
 
 #### Memory resource parameters
 
@@ -299,6 +305,8 @@ SET GLOBAL enable_pipeline_engine = true;
 
 Execute the following statement to create a resource group, associate the resource group with a classifier, and allocate computing resources to the resource group:
 
+<WhSyntaxExample />
+
 ```SQL
 CREATE RESOURCE GROUP <group_name> 
 TO (
@@ -397,6 +405,8 @@ SHOW VERBOSE RESOURCE GROUP group_name;
 You can modify the resource quotas for each resource group. You can also add or delete classifiers from resource groups.
 
 Execute the following statement to modify the resource quotas for an existing resource group:
+
+<WhAlterSyntax />
 
 ```SQL
 ALTER RESOURCE GROUP group_name WITH (
