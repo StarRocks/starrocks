@@ -169,37 +169,67 @@ StatusOr<CompactionCandidateResult> LakePersistentIndexSizeTieredCompactionStrat
         order_levels.emplace_back(std::move(level));
     }
 
-    // Pick the best level for compaction
+    // Pick the best level for compaction. When pk_index_size_tiered_pick_multi_levels
+    // is enabled, also continue with subsequent priority levels so the parallel
+    // compact pool can overlap level compactions that would otherwise drain in
+    // sequential rounds (the pool is typically idle in steady state).
     if (priority_levels.empty()) {
         return result;
     }
 
-    SizeTieredLevel* selected_level = *priority_levels.begin();
-    if (selected_level->fileset_indexes.size() < min_compaction_filesets) {
-        return result;
-    }
-
-    // Build result: for each selected fileset, add all its sstables
     uint64_t max_max_rss_rowid = 0;
     bool merge_base_level = false;
-    for (size_t fileset_idx : selected_level->fileset_indexes) {
-        const FilesetInfo& fileset = filesets[fileset_idx];
-        std::vector<PersistentIndexSstablePB> fileset_sstables;
+    bool picked_any = false;
+    const int32_t max_versions = config::lake_pk_index_sst_max_compaction_versions;
+    const bool pick_multi_levels = config::pk_index_size_tiered_pick_multi_levels;
 
-        for (int sstable_idx : fileset.sstable_indices) {
-            fileset_sstables.push_back(sstable_meta.sstables(sstable_idx));
-            max_max_rss_rowid = std::max(max_max_rss_rowid, sstable_meta.sstables(sstable_idx).max_rss_rowid());
-        }
-        if (fileset.fileset_id == base_level_fileset_id) {
-            merge_base_level = true;
+    for (SizeTieredLevel* level : priority_levels) {
+        if (level->fileset_indexes.size() < min_compaction_filesets) {
+            // priority_levels is sorted by score (best first). A level that
+            // does not meet the minimum is not actionable here, but a later
+            // level might still have higher score+lower fileset count? No --
+            // min_compaction_filesets is an absolute lower bound; skip and
+            // continue checking remaining levels.
+            continue;
         }
 
-        result.candidate_filesets.push_back(std::move(fileset_sstables));
-        if (result.candidate_filesets.size() >= config::lake_pk_index_sst_max_compaction_versions) {
-            // Already reach max compaction versions, stop picking more filesets.
+        if (!picked_any) {
+            // Preserve original behaviour: the first level picked must also
+            // satisfy min_compaction_filesets (already checked above).
+            picked_any = true;
+        }
+
+        // Build result: for each selected fileset, add all its sstables.
+        for (size_t fileset_idx : level->fileset_indexes) {
+            const FilesetInfo& fileset = filesets[fileset_idx];
+            std::vector<PersistentIndexSstablePB> fileset_sstables;
+
+            for (int sstable_idx : fileset.sstable_indices) {
+                fileset_sstables.push_back(sstable_meta.sstables(sstable_idx));
+                max_max_rss_rowid =
+                        std::max(max_max_rss_rowid, sstable_meta.sstables(sstable_idx).max_rss_rowid());
+            }
+            if (fileset.fileset_id == base_level_fileset_id) {
+                merge_base_level = true;
+            }
+
+            result.candidate_filesets.push_back(std::move(fileset_sstables));
+            if (result.candidate_filesets.size() >= max_versions) {
+                // Already reach max compaction versions, stop picking more filesets.
+                break;
+            }
+        }
+
+        if (result.candidate_filesets.size() >= max_versions || !pick_multi_levels) {
+            // Either hit the cap or only one level is allowed per cycle.
             break;
         }
     }
+
+    if (!picked_any) {
+        return result;
+    }
+
     result.merge_base_level = merge_base_level;
     result.max_max_rss_rowid = max_max_rss_rowid;
 
