@@ -24,6 +24,7 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableName;
 import com.starrocks.common.AlreadyExistsException;
+import com.starrocks.common.Config;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
@@ -304,10 +305,61 @@ public class AnalyzeStmtTest {
                         "{}, Test Failed]",
                 ShowAnalyzeStatusStmt.showAnalyzeStatus(getConnectContext(), analyzeStatus).toString());
 
-        AnalyzeStatus extenalAnalyzeStatus = new ExternalAnalyzeStatus(-1, "hive0", "partitioned_db",
-                "tx", "tx:xxxx", Lists.newArrayList(), StatsConstants.AnalyzeType.FULL,
-                StatsConstants.ScheduleType.ONCE, Maps.newHashMap(), LocalDateTime.MIN);
-        Assertions.assertNull(ShowAnalyzeStatusStmt.showAnalyzeStatus(getConnectContext(), extenalAnalyzeStatus));
+        // SHOW ANALYZE STATUS now resolves external tables via MetadataMgr.getBasicTable(...,
+        // fetchExternalMetadata). The config flag picks the lightweight (no network IO) path or
+        // the legacy full-metadata path, which differ in two externally visible ways.
+        boolean savedFetchFullMetadata = Config.enable_external_catalog_information_schema_tables_access_full_metadata;
+        try {
+            // Case 1: a table that was dropped in the source catalog.
+            AnalyzeStatus deletedExternalStatus = new ExternalAnalyzeStatus(-1, "hive0", "partitioned_db",
+                    "tx", "tx:xxxx", Lists.newArrayList(), StatsConstants.AnalyzeType.FULL,
+                    StatsConstants.ScheduleType.ONCE, Maps.newHashMap(), LocalDateTime.of(2020, 1, 1, 1, 1));
+            deletedExternalStatus.setStatus(StatsConstants.ScheduleStatus.FINISH);
+
+            // Lightweight path (default): the BasicTable stub is non-null without touching the
+            // connector, so the row for a dropped external table is now rendered instead of being
+            // silently filtered out.
+            Config.enable_external_catalog_information_schema_tables_access_full_metadata = false;
+            List<String> deletedRow =
+                    ShowAnalyzeStatusStmt.showAnalyzeStatus(getConnectContext(), deletedExternalStatus);
+            Assertions.assertNotNull(deletedRow);
+            Assertions.assertEquals("hive0.partitioned_db", deletedRow.get(1));
+            Assertions.assertEquals("tx", deletedRow.get(2));
+            Assertions.assertEquals("SUCCESS", deletedRow.get(6));
+
+            // Full-metadata path: getTable cannot resolve the dropped table, so the legacy
+            // fail-soft null (row filtered out) is preserved.
+            Config.enable_external_catalog_information_schema_tables_access_full_metadata = true;
+            Assertions.assertNull(
+                    ShowAnalyzeStatusStmt.showAnalyzeStatus(getConnectContext(), deletedExternalStatus));
+
+            // Case 2: an explicit column list equal to the table's full collectible set.
+            Table ordersTable = GlobalStateMgr.getCurrentState().getMetadataMgr()
+                    .getTable(getConnectContext(), "hive0", "partitioned_db", "orders");
+            List<String> allColumns = StatisticUtils.getCollectibleColumns(ordersTable);
+            AnalyzeStatus fullColumnsStatus = new ExternalAnalyzeStatus(-1, "hive0", "partitioned_db",
+                    "orders", "orders:xxxx", allColumns, StatsConstants.AnalyzeType.FULL,
+                    StatsConstants.ScheduleType.ONCE, Maps.newHashMap(), LocalDateTime.of(2020, 1, 1, 1, 1));
+            fullColumnsStatus.setStatus(StatsConstants.ScheduleStatus.FINISH);
+
+            // Lightweight path: no schema is available, so the explicit column list is rendered
+            // verbatim instead of collapsing to "ALL".
+            Config.enable_external_catalog_information_schema_tables_access_full_metadata = false;
+            List<String> namedColumnsRow =
+                    ShowAnalyzeStatusStmt.showAnalyzeStatus(getConnectContext(), fullColumnsStatus);
+            Assertions.assertNotNull(namedColumnsRow);
+            Assertions.assertEquals(String.join(",", allColumns), namedColumnsRow.get(3));
+
+            // Full-metadata path: the real table schema is available, so a complete column list
+            // still collapses to "ALL" (legacy rendering).
+            Config.enable_external_catalog_information_schema_tables_access_full_metadata = true;
+            List<String> allColumnsRow =
+                    ShowAnalyzeStatusStmt.showAnalyzeStatus(getConnectContext(), fullColumnsStatus);
+            Assertions.assertNotNull(allColumnsRow);
+            Assertions.assertEquals("ALL", allColumnsRow.get(3));
+        } finally {
+            Config.enable_external_catalog_information_schema_tables_access_full_metadata = savedFetchFullMetadata;
+        }
 
         sql = "show histogram meta where updateTime = '2020-01-01 01:01:00'";
         ShowHistogramStatsMetaStmt showHistogramStatsMetaStmt = (ShowHistogramStatsMetaStmt) analyzeSuccess(sql);
