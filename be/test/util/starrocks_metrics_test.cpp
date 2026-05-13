@@ -139,6 +139,12 @@ TEST_F(StarRocksMetricsTest, Normal) {
         ASSERT_STREQ("104", metric->to_string().c_str());
     }
     {
+        instance->staros_shard_count.set_value(7);
+        auto metric = metrics->get_metric("staros_shard_count");
+        ASSERT_TRUE(metric != nullptr);
+        ASSERT_STREQ("7", metric->to_string().c_str());
+    }
+    {
         instance->query_scan_bytes.increment(104);
         auto metric = metrics->get_metric("query_scan_bytes");
         ASSERT_TRUE(metric != nullptr);

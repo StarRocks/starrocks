@@ -125,6 +125,7 @@ StarRocksMetrics::StarRocksMetrics() : _metrics(_s_registry_name) {
 
     REGISTER_STARROCKS_METRIC(staros_shard_info_fallback_total);
     REGISTER_STARROCKS_METRIC(staros_shard_info_fallback_failed_total);
+    REGISTER_STARROCKS_METRIC(staros_shard_count);
 
     // clone
     _metrics.register_metric("clone_task_copy_bytes", MetricLabels().add("type", "INTER_NODE"),
