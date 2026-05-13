@@ -77,13 +77,12 @@ Status PersistentIndexSstable::init(std::unique_ptr<RandomAccessFile> rf, const 
         options.filter_policy = _filter_policy.get();
     }
     options.block_cache = cache;
-    sstable::Table* table;
-    auto open_st = sstable::Table::Open(options, rf.get(), sstable_pb.filesize(), &table);
+    std::unique_ptr<sstable::Table> table;
+    auto open_st = sstable::Table::Open(options, rf.get(), sstable_pb.filesize(), table);
     TEST_SYNC_POINT_CALLBACK("PersistentIndexSstable::init:table_open_error", &open_st);
     if (open_st.is_corruption()) {
         auto drop_status = drop_corrupted_sstable_cache(rf->filename());
         if (drop_status.ok()) {
-            delete table;
             if (tablet_mgr == nullptr) {
                 return Status::InvalidArgument("tablet_mgr is null when loading sst file");
             }
@@ -94,7 +93,7 @@ Status PersistentIndexSstable::init(std::unique_ptr<RandomAccessFile> rf, const 
             }
             ASSIGN_OR_RETURN(rf, fs::new_random_access_file(
                                          opts, tablet_mgr->sst_location(metadata->id(), sstable_pb.filename())));
-            open_st = sstable::Table::Open(options, rf.get(), sstable_pb.filesize(), &table);
+            open_st = sstable::Table::Open(options, rf.get(), sstable_pb.filesize(), table);
             TEST_SYNC_POINT_CALLBACK("PersistentIndexSstable::init:table_open_retry_error", &open_st);
         }
     }
@@ -103,7 +102,7 @@ Status PersistentIndexSstable::init(std::unique_ptr<RandomAccessFile> rf, const 
         LOG(WARNING) << "Failed to open PersistentIndex SST file: " << sstable_pb.filename() << ", error: " << open_st;
         return open_st;
     }
-    _sst.reset(table);
+    _sst = std::move(table);
     _rf = std::move(rf);
     _sstable_pb.CopyFrom(sstable_pb);
     // load delvec

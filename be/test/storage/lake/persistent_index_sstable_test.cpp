@@ -75,9 +75,9 @@ TEST_F(PersistentIndexSstableTest, test_generate_sst_scan_and_check) {
     CHECK_OK(builder.Finish());
     uint64_t filesz = builder.FileSize();
     // scan & check
-    sstable::Table* sstable = nullptr;
     ASSIGN_OR_ABORT(auto read_file, fs::new_random_access_file(lake::join_path(kTestDir, filename)));
-    CHECK_OK(sstable::Table::Open(options, read_file.get(), filesz, &sstable));
+    std::unique_ptr<sstable::Table> sstable;
+    CHECK_OK(sstable::Table::Open(options, read_file.get(), filesz, sstable));
     sstable::ReadOptions read_options;
     int count = 0;
     sstable::Iterator* iter = sstable->NewIterator(read_options);
@@ -90,7 +90,6 @@ TEST_F(PersistentIndexSstableTest, test_generate_sst_scan_and_check) {
     }
     ASSERT_TRUE(count == N);
     delete iter;
-    delete sstable;
 }
 
 TEST_F(PersistentIndexSstableTest, test_generate_sst_seek_and_check) {
@@ -107,9 +106,9 @@ TEST_F(PersistentIndexSstableTest, test_generate_sst_seek_and_check) {
     CHECK_OK(builder.Finish());
     uint64_t filesz = builder.FileSize();
     // seek & check
-    sstable::Table* sstable = nullptr;
     ASSIGN_OR_ABORT(auto read_file, fs::new_random_access_file(lake::join_path(kTestDir, filename)));
-    CHECK_OK(sstable::Table::Open(options, read_file.get(), filesz, &sstable));
+    std::unique_ptr<sstable::Table> sstable;
+    CHECK_OK(sstable::Table::Open(options, read_file.get(), filesz, sstable));
     sstable::ReadOptions read_options;
     sstable::Iterator* iter = sstable->NewIterator(read_options);
     for (int i = 0; i < 100; i++) {
@@ -122,7 +121,6 @@ TEST_F(PersistentIndexSstableTest, test_generate_sst_seek_and_check) {
         ASSERT_TRUE(exp_val == cur_val);
     }
     delete iter;
-    delete sstable;
 }
 
 TEST_F(PersistentIndexSstableTest, test_merge) {
@@ -151,11 +149,11 @@ TEST_F(PersistentIndexSstableTest, test_merge) {
     sstable::ReadOptions read_options;
     std::vector<std::unique_ptr<sstable::Table>> sstable_ptrs(3);
     for (int i = 0; i < 3; ++i) {
-        sstable::Table* sstable = nullptr;
-        CHECK_OK(sstable::Table::Open(options, read_files[i].get(), fileszs[i], &sstable));
+        std::unique_ptr<sstable::Table> sstable;
+        CHECK_OK(sstable::Table::Open(options, read_files[i].get(), fileszs[i], sstable));
         sstable::Iterator* iter = sstable->NewIterator(read_options);
         list.emplace_back(iter);
-        sstable_ptrs[i].reset(sstable);
+        sstable_ptrs[i] = std::move(sstable);
     }
 
     phmap::btree_map<std::string, std::string> map;
@@ -190,9 +188,9 @@ TEST_F(PersistentIndexSstableTest, test_merge) {
     }
     CHECK_OK(builder.Finish());
     uint64_t filesz = builder.FileSize();
-    sstable::Table* sstable = nullptr;
     ASSIGN_OR_ABORT(auto read_file, fs::new_random_access_file(lake::join_path(kTestDir, filename)));
-    CHECK_OK(sstable::Table::Open(options, read_file.get(), filesz, &sstable));
+    std::unique_ptr<sstable::Table> sstable;
+    CHECK_OK(sstable::Table::Open(options, read_file.get(), filesz, sstable));
     sstable::Iterator* iter = sstable->NewIterator(read_options);
     for (int i = 0; i < 100; i++) {
         int r = rand() % N;
@@ -206,7 +204,6 @@ TEST_F(PersistentIndexSstableTest, test_merge) {
     list.clear();
     read_files.clear();
     delete iter;
-    delete sstable;
     sstable_ptrs.clear();
 }
 
@@ -475,16 +472,15 @@ TEST_F(PersistentIndexSstableTest, test_ioerror_inject) {
     uint64_t filesz = builder.FileSize();
     if (st.ok()) {
         // scan & check
-        sstable::Table* sstable = nullptr;
         ASSIGN_OR_ABORT(auto read_file, fs::new_random_access_file(lake::join_path(kTestDir, filename)));
-        CHECK_OK(sstable::Table::Open(options, read_file.get(), filesz, &sstable));
+        std::unique_ptr<sstable::Table> sstable;
+        CHECK_OK(sstable::Table::Open(options, read_file.get(), filesz, sstable));
         sstable::ReadOptions read_options;
         sstable::Iterator* iter = sstable->NewIterator(read_options);
         for (iter->SeekToFirst(); iter->Valid() && iter->status().ok(); iter->Next()) {
         }
         ASSERT_TRUE(iter->status().ok());
         delete iter;
-        delete sstable;
     }
 }
 

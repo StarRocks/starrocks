@@ -384,17 +384,16 @@ void dump_lake_persistent_index_sst(const std::string& file_name, const starrock
 
     // Open the table via the official API for full KV iteration.
     Options tbl_opts;
-    Table* table = nullptr;
-    st = Table::Open(tbl_opts, file.get(), file_size, &table);
+    std::unique_ptr<Table> table;
+    st = Table::Open(tbl_opts, file.get(), file_size, table);
     if (!st.ok()) {
         std::cerr << "open SST table for iteration failed: " << st << std::endl;
         return;
     }
-    std::unique_ptr<Table> table_guard(table);
 
     ReadOptions iter_opts;
     iter_opts.fill_cache = false;
-    auto* iter = table_guard->NewIterator(iter_opts);
+    auto* iter = table->NewIterator(iter_opts);
     std::unique_ptr<Iterator> iter_guard(iter);
 
     // Dump all key-value entries.
