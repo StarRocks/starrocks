@@ -36,6 +36,19 @@ Status HdfsAvroScanner::do_init(RuntimeState* state, const HdfsScannerParams& /*
 Status HdfsAvroScanner::do_open(RuntimeState* state) {
     // _scanner_ctx is populated by _build_scanner_context() before do_open() is called,
     // so materialized_columns is available here (not in do_init).
+    //
+    // NOTE: unlike ORC/Text scanners we do NOT call _scanner_ctx.update_materialized_columns()
+    // here because the Avro writer schema is not yet available at this point — the file must
+    // be opened first to read its embedded schema.  Consequences:
+    //   1. Columns absent from the Avro file are handled by AvroReader (col_not_found_as_null=true),
+    //      which fills them with NULL.  This is functionally correct for typical Hive Avro tables
+    //      since Hive Avro schema evolution is uncommon and column defaults are rarely configured.
+    //   2. materialize_slot_default_values is ignored — missing columns always get NULL rather than
+    //      the configured default value.
+    //   3. should_skip_by_evaluating_not_existed_slots() short-circuit is not applied.
+    // TODO: open the file, extract the writer schema field-name set, then call
+    // _scanner_ctx.update_materialized_columns() before building _column_readers to fully
+    // support schema evolution defaults and not-existed-slot predicate short-circuiting.
     for (const auto& col : _scanner_ctx.materialized_columns) {
         _materialize_slot_descs.push_back(col.slot_desc);
         _column_readers.push_back(avrocpp::ColumnReader::get_nullable_column_reader(
