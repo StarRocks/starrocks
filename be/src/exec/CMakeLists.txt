@@ -425,6 +425,7 @@ set(EXEC_NON_PIPELINE_FILES
     arrow_flight_batch_reader.cpp
     iceberg/iceberg_delete_builder.cpp    
     paimon/paimon_delete_file_builder.cpp
+    paimon/paimon_vector_data_scanner.cpp
     hdfs_scanner/cache_select_scanner.cpp
     hdfs_scanner/hdfs_scanner_text.cpp
     hdfs_scanner/hdfs_scanner_json.cpp

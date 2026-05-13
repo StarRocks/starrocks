@@ -29,6 +29,7 @@
 #include "exec/hdfs_scanner/hdfs_scanner_partition.h"
 #include "exec/hdfs_scanner/hdfs_scanner_text.h"
 #include "exec/hdfs_scanner/jni_scanner.h"
+#include "exec/paimon/paimon_vector_data_scanner.h"
 #include "exec/pipeline/query_context.h"
 #include "exec/pipeline/scan/glm_manager.h"
 #include "exprs/chunk_predicate_evaluator.h"
@@ -863,6 +864,10 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
     if (scan_range.__isset.use_hudi_jni_reader) {
         use_hudi_jni_reader = scan_range.use_hudi_jni_reader;
     }
+    bool use_paimon_vector_scanner = false;
+    if (scan_range.__isset.paimon_vector_search_condition) {
+        use_paimon_vector_scanner = true;
+    }
     bool use_paimon_jni_reader = false;
     if (scan_range.__isset.use_paimon_jni_reader) {
         use_paimon_jni_reader = scan_range.use_paimon_jni_reader;
@@ -890,6 +895,9 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
         scanner = new CacheSelectScanner();
     } else if (_use_partition_column_value_only) {
         scanner = new HdfsPartitionScanner();
+    } else if (use_paimon_vector_scanner) {
+        scanner_params.paimon_vector_search_condition = &scan_range.paimon_vector_search_condition;
+        scanner = new PaimonVectorDataScanner();
     } else if (use_paimon_jni_reader) {
         scanner = create_paimon_jni_scanner(jni_scanner_create_options).release();
     } else if (use_hudi_jni_reader) {

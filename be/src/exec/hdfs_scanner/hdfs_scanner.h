@@ -295,6 +295,8 @@ struct HdfsScannerParams {
     int64_t connector_max_split_size = 0;
 
     ColumnIdToGlobalDictMap* global_dictmaps = &EMPTY_GLOBAL_DICTMAPS;
+
+    const TPaimonVectorSearchCondition* paimon_vector_search_condition = nullptr;
 };
 
 struct HdfsScannerContext {

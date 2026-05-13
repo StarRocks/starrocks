@@ -21,12 +21,15 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.PaimonTable;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
+import com.starrocks.common.Pair;
 import com.starrocks.connector.CatalogConnector;
-import com.starrocks.connector.ConnectorMetadataRequestContext;
+import com.starrocks.connector.ConnectorMetadatRequestContext;
+import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.GetRemoteFilesParams;
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.paimon.PaimonRemoteFileDesc;
 import com.starrocks.connector.paimon.PaimonSplitsInfo;
+import com.starrocks.connector.paimon.PaimonVectorSearchOptions;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
@@ -75,6 +78,7 @@ public class PaimonScanNode extends ScanNode {
     private final HDFSScanNodePredicates scanNodePredicates = new HDFSScanNodePredicates();
     private final List<TScanRangeLocations> scanRangeLocationsList = new ArrayList<>();
     private CloudConfiguration cloudConfiguration = null;
+    private PaimonVectorSearchOptions vectorSearchOptions = null;
 
     public PaimonScanNode(PlanNodeId id, TupleDescriptor desc, String planNodeName) {
         super(id, desc, planNodeName);
@@ -122,6 +126,45 @@ public class PaimonScanNode extends ScanNode {
         long rowSize = dataColumns.stream().mapToInt(column -> column.getType().getTypeSize()).sum();
 
         return rowCount * rowSize;
+    }
+
+    public void setVectorSearchOptions(PaimonVectorSearchOptions options) {
+        this.vectorSearchOptions = options;
+    }
+
+    public PaimonVectorSearchOptions getVectorSearchOptions() {
+        return vectorSearchOptions;
+    }
+
+    /**
+     * Build per-shard scan ranges for single-round vector search.
+     * Each shard becomes one THdfsScanRange with its vector search condition populated.
+     */
+    public void setupSingleRoundVectorScanRanges() {
+        String catalogName = paimonTable.getCatalogName();
+        CatalogConnector connector = GlobalStateMgr.getCurrentState().getConnectorMgr().getConnector(catalogName);
+        ConnectorMetadata metadata = connector.getMetadata();
+
+        List<Pair<Long, Long>> shardRanges = metadata.getGlobalIndexShardRanges(paimonTable);
+        String tablePath = paimonTable.getTableLocation();
+
+        for (int shardId = 0; shardId < shardRanges.size(); shardId++) {
+            Pair<Long, Long> range = shardRanges.get(shardId);
+
+            THdfsScanRange hdfsScanRange = new THdfsScanRange();
+            hdfsScanRange.setPaimon_vector_search_condition(
+                    vectorSearchOptions.toThrift(shardId, range.first, range.second, tablePath));
+
+            TScanRange scanRange = new TScanRange();
+            scanRange.setHdfs_scan_range(hdfsScanRange);
+
+            TScanRangeLocations scanRangeLocations = new TScanRangeLocations();
+            scanRangeLocations.setScan_range(scanRange);
+            TScanRangeLocation location = new TScanRangeLocation(new TNetworkAddress("-1", -1));
+            scanRangeLocations.addToLocations(location);
+
+            scanRangeLocationsList.add(scanRangeLocations);
+        }
     }
 
     public void setupScanRangeLocations(TupleDescriptor tupleDescriptor, ScalarOperator predicate, long limit) {
@@ -346,6 +389,10 @@ public class PaimonScanNode extends ScanNode {
         StringBuilder output = new StringBuilder();
 
         output.append(prefix).append("TABLE: ").append(paimonTable.getName()).append("\n");
+
+        if (vectorSearchOptions != null) {
+            output.append(vectorSearchOptions.getExplainString(prefix));
+        }
 
         if (null != sortColumn) {
             output.append(prefix).append("SORT COLUMN: ").append(sortColumn).append("\n");

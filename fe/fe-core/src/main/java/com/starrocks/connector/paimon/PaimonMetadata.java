@@ -24,6 +24,7 @@ import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.Pair;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.common.tvr.TvrDeltaStats;
@@ -1079,5 +1080,17 @@ public class PaimonMetadata implements ConnectorMetadata {
         }
 
         return true;
+    }
+
+    /**
+     * Query Paimon's native global index for shard topology.
+     * Returns a list of (rangeFrom, rangeTo) pairs, one per shard.
+     *
+     * TODO: integrate with Paimon's native global index API once available.
+     *       Currently returns a single shard covering all rows as a placeholder.
+     */
+    @Override
+    public List<Pair<Long, Long>> getGlobalIndexShardRanges(Table table) {
+        return Lists.newArrayList(Pair.create(0L, Long.MAX_VALUE));
     }
 }

@@ -22,6 +22,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.tvr.TvrTableSnapshot;
 import com.starrocks.common.tvr.TvrVersionRange;
+import com.starrocks.connector.paimon.PaimonVectorSearchOptions;
 import com.starrocks.datacache.DataCacheOptions;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.RowOutputInfo;
@@ -53,6 +54,7 @@ public abstract class PhysicalScanOperator extends PhysicalOperator {
     protected TvrVersionRange tvrVersionRange;
     protected DataCacheOptions dataCacheOptions = null;
     protected boolean enableGlobalLateMaterialization = false;
+    protected PaimonVectorSearchOptions paimonVectorSearchOptions;
 
     protected PhysicalScanOperator(OperatorType type) {
         super(type);
@@ -112,6 +114,7 @@ public abstract class PhysicalScanOperator extends PhysicalOperator {
                 scanOperator.getPredicate(), scanOperator.getProjection(), scanOperator.getTvrVersionRange());
         this.scanOptimizeOption = scanOperator.getScanOptimizeOption().copy();
         this.columnAccessPaths = ImmutableList.copyOf(scanOperator.getColumnAccessPaths());
+        this.paimonVectorSearchOptions = scanOperator.getPaimonVectorSearchOptions();
     }
 
     public List<ColumnRefOperator> getOutputColumns() {
@@ -178,6 +181,14 @@ public abstract class PhysicalScanOperator extends PhysicalOperator {
         return dataCacheOptions;
     }
 
+    public PaimonVectorSearchOptions getPaimonVectorSearchOptions() {
+        return paimonVectorSearchOptions;
+    }
+
+    public void setPaimonVectorSearchOptions(PaimonVectorSearchOptions options) {
+        this.paimonVectorSearchOptions = options;
+    }
+
     @Override
     public ColumnRefSet getUsedColumns() {
         ColumnRefSet set = super.getUsedColumns();
@@ -223,6 +234,7 @@ public abstract class PhysicalScanOperator extends PhysicalOperator {
             builder.scanOptimizeOption = operator.scanOptimizeOption;
             builder.tvrVersionRange = operator.tvrVersionRange;
             builder.enableGlobalLateMaterialization = operator.enableGlobalLateMaterialization;
+            builder.paimonVectorSearchOptions = operator.paimonVectorSearchOptions;
             return (B) this;
         }
 
