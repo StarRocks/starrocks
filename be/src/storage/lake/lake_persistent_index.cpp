@@ -341,8 +341,7 @@ Status LakePersistentIndex::flush_memtable(bool force) {
         //    the I/O runs on the dedicated pk_index_memtable_flush thread pool
         //    (preserving its concurrency across tablets), and the publish thread
         //    can resume replace work on a new memtable as soon as one slot frees.
-        while (!_inactive_memtables.empty() &&
-               _inactive_memtables.size() + 1 >= config::pk_index_memtable_max_count) {
+        while (!_inactive_memtables.empty() && _inactive_memtables.size() + 1 >= config::pk_index_memtable_max_count) {
             TRACE_COUNTER_SCOPE_LATENCY_US("wait_oldest_pk_flush_us");
             _inactive_memtables.front()->wait_flush_done();
             RETURN_IF_ERROR(_inactive_memtables.front()->flush_status());
