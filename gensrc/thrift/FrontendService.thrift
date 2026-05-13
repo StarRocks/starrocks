@@ -1033,6 +1033,12 @@ struct TMergeCommitRequest {
     6: optional i64 backend_id
     7: optional string backend_host;
     8: optional map<string, string> params;
+    // Cluster-internal trust token: when set and matching the FE cluster
+    // token, the request bypasses Basic-style password verification and
+    // is dispatched as ROOT. Only honored for designated system tables
+    // (currently `_statistics_.rejected_records`); any other db/tbl
+    // falls back to the normal user/passwd check regardless of token.
+    9: optional string internal_token;
 }
 
 struct TMergeCommitResult {

@@ -28,6 +28,12 @@ struct AuthInfo {
     std::string user_ip;
     // -1 as unset
     int64_t auth_code = -1;
+    // Optional cluster-internal trust token used by the rejected_records
+    // sync daemon to authenticate its merge-commit RPCs without holding
+    // a real password. Empty for normal load paths. Only honored by the
+    // FE for system-table loads that are explicitly whitelisted (see
+    // FrontendServiceImpl::isAuthorizedByInternalToken).
+    std::string internal_token;
 };
 
 template <class T>
