@@ -262,7 +262,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - タイプ：Boolean
 - 単位：-
 - 変更可能：No
-- 説明：この項目が `true` に設定されている場合、システムはログとクエリ詳細レコードに書き込まれる前に機密性の高い SQL コンテンツを置き換えるか隠します。この設定を尊重するコードパスには、ConnectProcessor.formatStmt (監査ログ)、StmtExecutor.addRunningQueryDetail (クエリ詳細)、および SimpleExecutor.formatSQL (内部エクゼキュータログ) が含まれます。この機能が有効になっている場合、無効な SQL は固定の非機密化メッセージに置き換えられる可能性があり、資格情報 (ユーザー/パスワード) は隠され、SQL フォーマッターはサニタイズされた表現を生成する必要があります (ダイジェスト形式の出力を有効にすることもできます)。これにより、監査/内部ログでの機密リテラルや資格情報の漏洩が減少しますが、ログとクエリ詳細に元の完全な SQL テキストが含まれなくなることになります (これは再生やデバッグに影響する可能性があります)。
+- 説明：この項目が `true` に設定されている場合、システムはログ、クエリ詳細レコード、およびクエリプロファイルに書き込まれる前に機密性の高い SQL コンテンツを置き換えるか隠します。この設定を尊重するコードパスには、ConnectProcessor.formatStmt (監査ログ)、StmtExecutor.addRunningQueryDetail (クエリ詳細)、SimpleExecutor.formatSQL (内部エクゼキュータログ)、および StmtExecutor.buildTopLevelProfile / processProfileAsync (プロファイルの `Summary` セクションに格納される `Sql Statement` および `ExplainPlan` info-string) が含まれます。この機能が有効になっている場合、無効な SQL は固定の非機密化メッセージに置き換えられる可能性があり、資格情報 (ユーザー/パスワード) は隠され、SQL フォーマッターはサニタイズされた表現を生成する必要があります (ダイジェスト形式の出力を有効にすることもできます)。セッション変数 `enable_explain_in_profile` によって追加される `ExplainPlan` フィールドについても、本設定により埋め込まれる `EXPLAIN COSTS` テキストのリテラルが強制的にダイジェスト化されるため、プロファイル内で `Sql Statement` が非機密化されているにもかかわらず `ExplainPlan` が元のリテラルを露出してしまうことを防ぎます。これにより、監査/内部ログおよびプロファイルでの機密リテラルや資格情報の漏洩が減少しますが、ログ、クエリ詳細、およびプロファイルに元の完全な SQL テキストが含まれなくなることになります (これは再生やデバッグに影響する可能性があります)。
 - 導入時期：-
 
 ### `internal_log_delete_age`

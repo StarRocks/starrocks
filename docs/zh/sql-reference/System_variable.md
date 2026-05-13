@@ -763,6 +763,15 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 
 默认情况下，只有在查询发生错误时，BE 才会发送 profile 给 FE，用于查看错误。正常结束的查询不会发送 profile。发送 profile 会产生一定的网络开销，对高并发查询场景不利。当用户希望对一个查询的 profile 进行分析时，可以将这个变量设为 `true` 后，发送查询。查询结束后，可以通过在当前连接的 FE 的 web 页面（地址：fe_host:fe_http_port/query）查看 profile。该页面会显示最近 100 条开启了 `enable_profile` 的查询的 profile。
 
+### enable_explain_in_profile
+
+* **范围**: Session
+* **描述**: 当该变量为 `true` 且该查询会生成 profile 时，会将已执行计划的 `EXPLAIN COSTS` 文本嵌入到 profile 的 `Summary` 段中，键名为 `ExplainPlan`。这样在离线分析 profile 工件（无需访问运行中的集群）时，可以同时查看优化器的基数估算、列统计、谓词下推、Runtime Filter 声明和总体计划代价等信息，便于排查慢查询。
+
+  嵌入到 profile 中的计划与其他持久化的 SQL 工件遵循一致的脱敏控制：包含凭据的字面量（例如 `FILES(...)`）始终会被屏蔽；当集群级 FE 配置 `enable_sql_desensitize_in_log` 或会话变量 `enable_desensitize_explain` 任一项开启时，谓词 / 投影中的字面量将以摘要形式渲染。
+* **默认值**: false
+* **类型**: boolean
+
 ### profile_log_latency_threshold_ms
 
 * **范围**: Session

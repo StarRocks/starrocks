@@ -271,7 +271,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: Boolean
 - 单位: -
 - 是否可变: No
-- 描述: 当此项设置为 `true` 时，系统会在将敏感 SQL 内容写入日志和查询详细记录之前替换或隐藏这些内容。遵循此配置的代码路径包括 ConnectProcessor.formatStmt（审计日志）、StmtExecutor.addRunningQueryDetail（查询详细信息）和 SimpleExecutor.formatSQL（内部执行器日志）。启用此功能后，无效的 SQL 可能会被替换为固定的脱敏消息，凭据（用户/密码）将被隐藏，并且 SQL 格式化程序必须生成 sanitized 表示（它还可以启用摘要式输出）。这减少了审计/内部日志中敏感文字和凭据的泄露，但也意味着日志和查询详细信息不再包含原始完整 SQL 文本（这可能会影响回放或调试）。
+- 描述: 当此项设置为 `true` 时，系统会在将敏感 SQL 内容写入日志、查询详细记录以及查询 profile 之前替换或隐藏这些内容。遵循此配置的代码路径包括 ConnectProcessor.formatStmt（审计日志）、StmtExecutor.addRunningQueryDetail（查询详细信息）、SimpleExecutor.formatSQL（内部执行器日志），以及 StmtExecutor.buildTopLevelProfile / processProfileAsync（profile 的 `Summary` 段中的 `Sql Statement` 与 `ExplainPlan` info-string）。启用此功能后，无效的 SQL 可能会被替换为固定的脱敏消息，凭据（用户/密码）将被隐藏，并且 SQL 格式化程序必须生成 sanitized 表示（它还可以启用摘要式输出）。对于通过会话变量 `enable_explain_in_profile` 加入的 `ExplainPlan` 字段，此配置还会强制对嵌入的 `EXPLAIN COSTS` 文本启用文字（literal）摘要渲染，从而避免 profile 中的 `Sql Statement` 已被脱敏但 `ExplainPlan` 仍然暴露原始字面量。这减少了审计/内部日志和 profile 中敏感字面量和凭据的泄露，但也意味着日志、查询详细信息和 profile 不再包含原始完整 SQL 文本（这可能会影响回放或调试）。
 - 引入版本: -
 
 ### `internal_log_delete_age`
