@@ -413,6 +413,15 @@ public class EnforceAndCostTask extends OptimizerTask implements Cloneable {
             if (!distinctAggCallOperator.isEmpty()) {
                 return false;
             }
+<<<<<<< HEAD
+=======
+
+            if (sv.isEnableLocalShuffleAgg() && !sv.isEnableQueryCache() &&
+                    GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().isSingleBackendAndComputeNode()) {
+                return true;
+            }
+
+>>>>>>> 3cf4eccfe6 ([BugFix] Fix query cache conflicts local shuffle agg (#73194))
             // 1.3 disable one stage agg with multi group by columns
             return aggregate.getGroupBys().size() <= 1;
         }
