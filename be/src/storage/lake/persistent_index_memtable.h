@@ -14,6 +14,8 @@
 
 #pragma once
 
+#include <condition_variable>
+
 #include "storage/lake/types_fwd.h"
 #include "storage/persistent_index.h"
 #include "util/phmap/btree.h"
@@ -94,6 +96,11 @@ public:
 
     Status flush_status() const;
 
+    // Block the caller until run() or cancel() has set the terminal flush state.
+    // Only valid for memtables already submitted to the flush thread pool;
+    // memtables that were never submitted will block forever.
+    void wait_flush_done() const;
+
 private:
     Status flush(WritableFile* wf, uint64_t* filesize, PersistentIndexSstableRangePB* range_pb);
     static void update_index_value(IndexValueWithVer* index_value_info, int64_t version, const IndexValue& value);
@@ -111,6 +118,10 @@ private:
     Status _flush_status = Status::OK();
     // flush state mutex
     mutable std::mutex _flush_mutex;
+    // Signaled when run()/cancel() has completed, so a waiter can block on
+    // a specific memtable's flush without polling the thread pool.
+    mutable std::condition_variable _flush_done_cv;
+    bool _flush_done{false};
 };
 
 } // namespace starrocks::lake

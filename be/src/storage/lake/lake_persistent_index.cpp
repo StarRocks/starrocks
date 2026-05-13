@@ -335,9 +335,24 @@ Status LakePersistentIndex::flush_memtable(bool force) {
         if (finish_point >= 0) {
             _inactive_memtables.erase(_inactive_memtables.begin(), _inactive_memtables.begin() + finish_point + 1);
         }
-        // 3. flush current memtable
+        // 3. If we're at the inflight cap, wait for the oldest async flush to
+        //    complete rather than synchronously flushing the current memtable on
+        //    the publish thread. The wall-clock back-pressure is the same, but
+        //    the I/O runs on the dedicated pk_index_memtable_flush thread pool
+        //    (preserving its concurrency across tablets), and the publish thread
+        //    can resume replace work on a new memtable as soon as one slot frees.
+        while (!_inactive_memtables.empty() &&
+               _inactive_memtables.size() + 1 >= config::pk_index_memtable_max_count) {
+            TRACE_COUNTER_SCOPE_LATENCY_US("wait_oldest_pk_flush_us");
+            _inactive_memtables.front()->wait_flush_done();
+            RETURN_IF_ERROR(_inactive_memtables.front()->flush_status());
+            auto sstable = _inactive_memtables.front()->release_sstable();
+            RETURN_IF_ERROR(merge_sstable_into_fileset(sstable));
+            _inactive_memtables.erase(_inactive_memtables.begin());
+        }
+        // 4. flush current memtable
         bool flush_async = false;
-        if (_inactive_memtables.size() + 1 < config::pk_index_memtable_max_count) {
+        if (_inactive_memtables.size() + 1 <= config::pk_index_memtable_max_count) {
             if (ExecEnv::GetInstance()->pk_index_memtable_flush_thread_pool()->submit(_memtable).ok()) {
                 flush_async = true;
             }
@@ -345,7 +360,7 @@ Status LakePersistentIndex::flush_memtable(bool force) {
         if (flush_async) {
             _inactive_memtables.push_back(_memtable);
         } else {
-            // If too many memtables or submit flush job fail, switch to sync flush.
+            // Thread pool submit failed (e.g. shutting down). Fall back to sync flush.
             RETURN_IF_ERROR(_memtable->flush());
             if (_inactive_memtables.empty()) {
                 auto sstable = _memtable->release_sstable();
