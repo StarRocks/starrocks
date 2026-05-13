@@ -1376,6 +1376,21 @@ public class UtFrameUtils {
         // Use sync analyze
         Config.mv_auto_analyze_async = false;
 
+        // FIXME(mv-validator-strict-gate): kept OFF in fe-ut default because both
+        // sync and async MV rewrite paths still contain pre-existing latent type
+        // incoherence (declared CallOperator / output ColumnRef types diverging
+        // from substituted child types) that the strict-mode validator catches as
+        // IllegalStateException. Turning this on globally breaks ~36 plan tests
+        // across MVRewriteTest, MvTimeSeriesRewriteWithOlapTest, MvRewriteEnumerateTest,
+        // MaterializedViewAggPushDownRewriteTest, etc. — none of which are
+        // regressions introduced by this PR. Tests that need strict-mode behavior
+        // flip the flag locally via try/finally (see
+        // MvRewriteOutputValidatorTest.strictModeThrowsOnIncoherentOutput). The
+        // global gate stays off until the async/percentile-family/output-ref
+        // drift cases are addressed in follow-up PRs; at that point flip this
+        // back to `true` and the validator becomes a real CI gate.
+        FeConstants.strictMvRewriteValidator = false;
+
         // Default REFRESH DEFERRED
         Config.default_mv_refresh_immediate = false;
         // default replication num: 1

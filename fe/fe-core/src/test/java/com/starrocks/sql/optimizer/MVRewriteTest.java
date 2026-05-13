@@ -1258,9 +1258,13 @@ public class MVRewriteTest extends StarRocksTestBase {
 
         String query = "select k1, sum(case when(k2=0) then k3 else 0 end) from t1 group by k1";
         String plan = starRocksAssert.query(query).explainQuery();
+        // Type-coherent rewrite (#72799): k3 is widened to BIGINT after MV
+        // substitution, so IF's else-branch 0 is wrapped in CAST(0 AS BIGINT)
+        // to unify branch types — BE crash (VectorizedIfExpr down_cast assert)
+        // happens without this cast.
         PlanTestBase.assertContains(plan, "  1:Project\n" +
                 "  |  <slot 1> : 1: k1\n" +
-                "  |  <slot 6> : if(2: k2 = 0, 3: k3, 0)\n");
+                "  |  <slot 6> : if(2: k2 = 0, 3: k3, CAST(0 AS BIGINT))\n");
         PlanTestBase.assertContains(plan, "     TABLE: t1\n" +
                 "     PREAGGREGATION: OFF. Reason: The result of ELSE isn't value column\n" +
                 "     partitions=1/1");

@@ -24,6 +24,7 @@ import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.operator.OperatorType;
+import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
@@ -36,6 +37,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorUtil;
 import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.common.MvColumnRefSubstitutor;
 import com.starrocks.type.BitmapType;
 import com.starrocks.type.HLLType;
 import com.starrocks.type.IntegerType;
@@ -45,10 +47,17 @@ import com.starrocks.type.Type;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 import static com.starrocks.catalog.Function.CompareMode.IS_IDENTICAL;
 
 public class MaterializedViewRewriter extends OptExpressionVisitor<OptExpression, MaterializedViewRule.RewriteContext> {
+
+    private boolean substitutionFailed = false;
+
+    public boolean substitutionFailed() {
+        return substitutionFailed;
+    }
 
     public MaterializedViewRewriter() {
     }
@@ -91,12 +100,17 @@ public class MaterializedViewRewriter extends OptExpressionVisitor<OptExpression
                 if (queryScalarOperator instanceof ColumnRefOperator) {
                     newProjectMap.put(context.mvColumnRef, context.mvColumnRef);
                 } else if (isCaseWhenScalarOperator(queryScalarOperator)) {
-                    // rewrite query column ref into mv agg column ref,
-                    // eg: sum(case when a > 1 then b else 0 end), rewrite to sum(case when mv_column > 1 then b else 0 end)
+                    // Route through MvColumnRefSubstitutor so the rewritten subtree's
+                    // types are re-derived bottom-up after the leaf substitution.
                     Map<ColumnRefOperator, ScalarOperator> replaceMap = new HashMap<>();
                     replaceMap.put(context.queryColumnRef, context.mvColumnRef);
-                    ReplaceColumnRefRewriter replaceColumnRefRewriter = new ReplaceColumnRefRewriter(replaceMap);
-                    newProjectMap.put(queryColRef, replaceColumnRefRewriter.rewrite(kv.getValue()));
+                    Optional<ScalarOperator> rewritten = MvColumnRefSubstitutor.substituteAndSyncOutput(
+                            queryColRef, queryScalarOperator, replaceMap);
+                    if (!rewritten.isPresent()) {
+                        substitutionFailed = true;
+                        return optExpression;
+                    }
+                    newProjectMap.put(queryColRef, rewritten.get());
                 } else {
                     // eg: bitmap_union(to_bitmap(a)), still rewrite to bitmap_union(to_bitmap(a))
                     newProjectMap.put(queryColRef, context.mvColumnRef);
@@ -108,6 +122,37 @@ public class MaterializedViewRewriter extends OptExpressionVisitor<OptExpression
         return OptExpression.create(new LogicalProjectOperator(newProjectMap), optExpression.getInputs());
     }
 
+    private Projection rewriteScanProjection(Projection projection, MaterializedViewRule.RewriteContext context) {
+        if (projection == null) {
+            return null;
+        }
+        Map<ColumnRefOperator, ScalarOperator> replaceMap = new HashMap<>();
+        replaceMap.put(context.queryColumnRef, context.mvColumnRef);
+
+        Map<ColumnRefOperator, ScalarOperator> newColMap = new HashMap<>();
+        boolean changed = false;
+        for (Map.Entry<ColumnRefOperator, ScalarOperator> kv : projection.getColumnRefMap().entrySet()) {
+            ScalarOperator expr = kv.getValue();
+            if (!expr.getUsedColumns().contains(context.queryColumnRef)) {
+                newColMap.put(kv.getKey(), expr);
+                continue;
+            }
+            Optional<ScalarOperator> rewritten = MvColumnRefSubstitutor.substituteAndSyncOutput(
+                    kv.getKey(), expr, replaceMap);
+            if (!rewritten.isPresent()) {
+                substitutionFailed = true;
+                return projection;
+            }
+            newColMap.put(kv.getKey(), rewritten.get());
+            changed = true;
+        }
+        if (!changed) {
+            return projection;
+        }
+        return new Projection(newColMap, projection.getCommonSubOperatorMap(),
+                projection.needReuseLambdaDependentExpr());
+    }
+
     @Override
     public OptExpression visitLogicalTableScan(OptExpression optExpression,
                                                MaterializedViewRule.RewriteContext context) {
@@ -116,19 +161,30 @@ public class MaterializedViewRewriter extends OptExpressionVisitor<OptExpression
         }
 
         LogicalOlapScanOperator olapScanOperator = (LogicalOlapScanOperator) optExpression.getOp();
+        Projection newProjection = rewriteScanProjection(olapScanOperator.getProjection(), context);
+        if (substitutionFailed) {
+            return optExpression;
+        }
 
-        if (olapScanOperator.getColRefToColumnMetaMap().containsKey(context.queryColumnRef)) {
+        boolean colMetaChanged = olapScanOperator.getColRefToColumnMetaMap().containsKey(context.queryColumnRef);
+        boolean projChanged = newProjection != olapScanOperator.getProjection();
+        if (!colMetaChanged && !projChanged) {
+            return optExpression;
+        }
+
+        LogicalOlapScanOperator.Builder builder = new LogicalOlapScanOperator.Builder();
+        builder.withOperator(olapScanOperator);
+        if (colMetaChanged) {
             Map<ColumnRefOperator, Column> columnRefOperatorColumnMap =
                     new HashMap<>(olapScanOperator.getColRefToColumnMetaMap());
             columnRefOperatorColumnMap.remove(context.queryColumnRef);
             columnRefOperatorColumnMap.put(context.mvColumnRef, context.mvColumn);
-
-            LogicalOlapScanOperator.Builder builder = new LogicalOlapScanOperator.Builder();
-            LogicalOlapScanOperator newScanOperator = builder.withOperator(olapScanOperator)
-                    .setColRefToColumnMetaMap(columnRefOperatorColumnMap).build();
-            optExpression = OptExpression.create(newScanOperator, optExpression.getInputs());
+            builder.setColRefToColumnMetaMap(columnRefOperatorColumnMap);
         }
-        return optExpression;
+        if (projChanged) {
+            builder.setProjection(newProjection);
+        }
+        return OptExpression.create(builder.build(), optExpression.getInputs());
     }
 
     private CallOperator rewriteAggregateFunc(ReplaceColumnRefRewriter replaceColumnRefRewriter,
@@ -204,21 +260,43 @@ public class MaterializedViewRewriter extends OptExpressionVisitor<OptExpression
         replaceMap.put(context.queryColumnRef, context.mvColumnRef);
         ReplaceColumnRefRewriter replaceColumnRefRewriter = new ReplaceColumnRefRewriter(replaceMap);
 
-        Map<ColumnRefOperator, CallOperator> newAggMap = new HashMap<>(aggregationOperator.getAggregations());
+        // Preserve insertion order so plan-text fixtures that pin a specific agg output
+        // ordering remain stable across JVM / architecture differences in HashMap
+        // bucketization.
+        Map<ColumnRefOperator, CallOperator> newAggMap =
+                new java.util.LinkedHashMap<>(aggregationOperator.getAggregations());
         for (Map.Entry<ColumnRefOperator, CallOperator> kv : aggregationOperator.getAggregations().entrySet()) {
+            ColumnRefOperator outputRef = kv.getKey();
             CallOperator queryAggFunc = kv.getValue();
-            if (queryAggFunc.getUsedColumns().isEmpty()) {
-                break;
+            if (!queryAggFunc.getUsedColumns().contains(context.queryColumnRef)) {
+                // Agg doesn't reference the substituted column — leave it alone.
+                continue;
             }
 
             String functionName = queryAggFunc.getFnName();
-            if (functionName.equals(context.aggCall.getFnName())
-                    && queryAggFunc.getUsedColumns().getFirstId() == context.queryColumnRef.getId()) {
+            // For rollup-family-changing rewrites (BITMAP_UNION_COUNT, HLL_UNION_AGG,
+            // PERCENTILE_APPROX), prefer rewriteAggregateFunc which constructs the
+            // appropriate rollup CallOperator. Match by query function name + the
+            // RewriteContext's expected agg name.
+            if (functionName.equalsIgnoreCase(context.aggCall.getFnName())) {
                 CallOperator newAggFunc = rewriteAggregateFunc(replaceColumnRefRewriter, context.mvColumn, queryAggFunc);
                 if (newAggFunc != null) {
-                    newAggMap.put(kv.getKey(), newAggFunc);
-                    break;
+                    newAggMap.put(outputRef, newAggFunc);
+                    outputRef.setType(newAggFunc.getType());
+                    outputRef.setNullable(newAggFunc.isNullable());
+                    continue;
                 }
+            }
+
+            // Generic path: substitute children + re-derive types.
+            Optional<ScalarOperator> coherent = MvColumnRefSubstitutor.substituteAndSyncOutput(
+                    outputRef, queryAggFunc, replaceMap);
+            if (!coherent.isPresent()) {
+                substitutionFailed = true;
+                return optExpression;
+            }
+            if (coherent.get() instanceof CallOperator) {
+                newAggMap.put(outputRef, (CallOperator) coherent.get());
             }
         }
         return OptExpression.create(new LogicalAggregationOperator(

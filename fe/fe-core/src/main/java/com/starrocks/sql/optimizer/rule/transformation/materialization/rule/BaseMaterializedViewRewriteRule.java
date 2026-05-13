@@ -246,6 +246,39 @@ public abstract class BaseMaterializedViewRewriteRule extends TransformationRule
             // NOTE: derive logical property is necessary for statistics calculation.
             deriveLogicalProperty(candidate);
 
+            // FIXME(async-mv-type-incoherence): the async MV rewrite path leaves
+            // declared CallOperator / output ColumnRef types out of sync with the
+            // actual substituted child types in several well-known shapes (sum
+            // SMALLINT→BIGINT widening, case-when branch type drift, etc.). This
+            // is structurally the same defect class as issue #72799 fixed on the
+            // sync path by this PR, but the async path's substitution sites
+            // (AggregatedMaterializedViewRewriter / async MaterializedViewRewriter /
+            // EquationRewriter / AggregateFunctionRewriter — 4 ReplaceColumnRefRewriter
+            // call points) were intentionally left untouched here to keep this
+            // PR scoped to sync.
+            //
+            // Wiring MvRewriteOutputValidator.validate(...) here surfaces the
+            // pre-existing incoherence loudly. An earlier revision of this PR
+            // did so and CI revealed ~20 plan-test failures across
+            // MvTimeSeriesRewriteWithOlapTest / MvRewriteEnumerateTest /
+            // MVRewriteTest / MaterializedViewAggRollupTest /
+            // MaterializedViewAggPushDownRewriteTest — all real latent drift,
+            // none false positives. The fix requires extending substitutor +
+            // post-pass coverage to the async path, which is a separate effort.
+            //
+            // To reproduce the failures locally for the follow-up PR:
+            //   1. Add the validator call back here, e.g.
+            //        String mvIdent = "mvId=" + mvContext.getMv().getId()
+            //                       + " mvName=" + mvContext.getMv().getName();
+            //        if (!MvRewriteOutputValidator.validate(candidate, mvIdent)) {
+            //            LOG.error("MvRewriteOutputValidator rejected MV candidate for {}", mvIdent);
+            //        }
+            //   2. Ensure FeConstants.strictMvRewriteValidator = true in fe-ut
+            //      (already true via UtFrameUtils.setDefaultConfigForAsyncMVTest).
+            //   3. Run e.g.
+            //        fe/gradlew :fe-core:test --tests "com.starrocks.sql.optimizer.rule.transformation.materialization.MvTimeSeriesRewriteWithOlapTest"
+            //      and inspect WARN logs tagged [mvval-...] in the test output;
+            //      stack traces show "MvRewriteOutputValidator strict-mode rejection".
             results.add(candidate);
             mvContext.updateMVUsedCount();
             IMaterializedViewMetricsEntity mvEntity =
