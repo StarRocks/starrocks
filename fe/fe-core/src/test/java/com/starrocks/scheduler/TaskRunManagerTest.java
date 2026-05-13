@@ -92,7 +92,7 @@ public class TaskRunManagerTest {
         boolean[] forces = {false, true};
         for (boolean force : forces) {
             for (int i = 0; i < N; i++) {
-                TaskRun taskRun = makeTaskRun(taskId, task, makeExecuteOption(true, false, 1));
+                TaskRun taskRun = makeTaskRun(taskId, task, makeExecuteOption(true, false, 1), System.currentTimeMillis());
                 taskRuns.add(taskRun);
                 scheduler.addPendingTaskRun(taskRun);
             }
@@ -797,6 +797,101 @@ public class TaskRunManagerTest {
         // All finish states should be in history
         List<TaskRunStatus> history = taskManager.getTaskRunHistory().getInMemoryHistory();
         Assertions.assertEquals(5, history.size()); // RUNNING, FAILED, SUCCESS, MERGED, SKIPPED
+    }
+
+    @Test
+    public void testKillPendingTaskRunsAddsToHistory() {
+        Task task = new Task("test");
+        task.setDefinition("select 1");
+        long taskId = 200L;
+
+        TaskRunScheduler scheduler = new TaskRunScheduler();
+        TaskRunManager taskRunManager = new TaskRunManager(scheduler);
+
+        int numPending = 3;
+        for (int i = 0; i < numPending; i++) {
+            TaskRun taskRun = makeTaskRun(taskId, task, makeExecuteOption(true, false, 1));
+            taskRun.initStatus("pending-query-" + i, System.currentTimeMillis());
+            scheduler.addPendingTaskRun(taskRun);
+        }
+        Assertions.assertEquals(numPending, scheduler.getPendingQueueCount());
+
+        taskRunManager.killPendingTaskRuns(taskId);
+
+        Assertions.assertTrue(CollectionUtils.isEmpty(scheduler.getPendingTaskRunsByTaskId(taskId)));
+
+        List<TaskRunStatus> history = taskRunManager.getTaskRunHistory().getInMemoryHistory();
+        Assertions.assertEquals(numPending, history.size());
+        for (TaskRunStatus status : history) {
+            Assertions.assertEquals(Constants.TaskRunState.FAILED, status.getState());
+            Assertions.assertTrue(status.getFinishTime() > 0);
+        }
+    }
+
+    @Test
+    public void testKillRunningTaskRunForceAddsToHistory() {
+        Task task = new Task("test");
+        task.setDefinition("select 1");
+        long taskId = 201L;
+
+        TaskRunScheduler scheduler = new TaskRunScheduler();
+        TaskRunManager taskRunManager = new TaskRunManager(scheduler);
+
+        TaskRun taskRun = makeTaskRun(taskId, task, makeExecuteOption(true, false, 1));
+        taskRun.initStatus("running-query-1", System.currentTimeMillis());
+        scheduler.addPendingTaskRun(taskRun);
+
+        scheduler.scheduledPendingTaskRun(tr -> {});
+
+        TaskRun runningTaskRun = scheduler.getRunningTaskRun(taskId);
+        Assertions.assertNotNull(runningTaskRun);
+
+        taskRunManager.killRunningTaskRun(runningTaskRun, true);
+
+        Assertions.assertNull(scheduler.getRunningTaskRun(taskId));
+
+        List<TaskRunStatus> history = taskRunManager.getTaskRunHistory().getInMemoryHistory();
+        Assertions.assertEquals(1, history.size());
+        Assertions.assertTrue(history.get(0).getFinishTime() > 0);
+    }
+
+    @Test
+    public void testKillTaskRunForceAddsAllToHistory() {
+        Task task = new Task("test");
+        task.setDefinition("select 1");
+        long taskId = 202L;
+        int numTotalRuns = 4;
+
+        TaskRunScheduler scheduler = new TaskRunScheduler();
+        TaskRunManager taskRunManager = new TaskRunManager(scheduler);
+
+        for (int i = 0; i < numTotalRuns; i++) {
+            TaskRun taskRun = makeTaskRun(taskId, task, makeExecuteOption(true, false, 1));
+            taskRun.initStatus("combined-query-" + i, System.currentTimeMillis());
+            scheduler.addPendingTaskRun(taskRun);
+        }
+
+        scheduler.scheduledPendingTaskRun(tr -> {});
+
+        Assertions.assertNotNull(scheduler.getRunningTaskRun(taskId));
+        Assertions.assertEquals(numTotalRuns - 1, scheduler.getPendingTaskRunsByTaskId(taskId).size());
+
+        taskRunManager.killTaskRun(taskId, true);
+
+        Assertions.assertNull(scheduler.getRunningTaskRun(taskId));
+        Assertions.assertTrue(CollectionUtils.isEmpty(scheduler.getPendingTaskRunsByTaskId(taskId)));
+
+        List<TaskRunStatus> history = taskRunManager.getTaskRunHistory().getInMemoryHistory();
+        Assertions.assertEquals(numTotalRuns, history.size());
+
+        long failedCount = history.stream()
+                                  .filter(s -> s.getState() == Constants.TaskRunState.FAILED)
+                                  .count();
+        Assertions.assertEquals(numTotalRuns - 1, failedCount);
+
+        for (TaskRunStatus status : history) {
+            Assertions.assertTrue(status.getFinishTime() > 0);
+        }
     }
 
     @Test

@@ -119,6 +119,9 @@ public class TaskRunManager implements MemoryTrackable {
             if (force) {
                 // remove it from running TaskRun map
                 taskRunScheduler.removeRunningTask(taskRun.getTaskId());
+                TaskRunStatus status = taskRun.getStatus();
+                status.setFinishTime(System.currentTimeMillis());
+                taskRunHistory.addHistory(status);
             }
         }
     }
@@ -132,7 +135,11 @@ public class TaskRunManager implements MemoryTrackable {
         Set<TaskRun> pendingTaskRuns = taskRunScheduler.getPendingTaskRunsByTaskId(taskId);
         if (CollectionUtils.isNotEmpty(pendingTaskRuns)) {
             for (TaskRun pendingTaskRun : pendingTaskRuns) {
+                TaskRunStatus status = pendingTaskRun.getStatus();
+                status.setState(Constants.TaskRunState.FAILED);
+                status.setFinishTime(System.currentTimeMillis());
                 taskRunScheduler.removePendingTaskRun(pendingTaskRun, Constants.TaskRunState.FAILED);
+                taskRunHistory.addHistory(status);
             }
         }
     }
