@@ -113,6 +113,11 @@ public class PhysicalHashAggregateOperator extends PhysicalOperator {
         this.usePerBucketOptmize = aggregateOperator.usePerBucketOptmize;
         this.withoutColocateRequirement = aggregateOperator.withoutColocateRequirement;
         this.distinctColumnDataSkew = aggregateOperator.distinctColumnDataSkew;
+<<<<<<< HEAD
+=======
+        this.groupByMinMaxStatistic = aggregateOperator.groupByMinMaxStatistic;
+        this.forcePreAggregation = aggregateOperator.forcePreAggregation;
+>>>>>>> fcbcbee25d ([BugFix] Fix PushDownTopNToPreAggRule bugs (backport #68954) (#73195))
         this.withLocalShuffle = aggregateOperator.withLocalShuffle;
         this.localLimit = aggregateOperator.localLimit;
     }
@@ -231,6 +236,21 @@ public class PhysicalHashAggregateOperator extends PhysicalOperator {
         this.forcePreAggregation = forcePreAggregation;
     }
 
+<<<<<<< HEAD
+=======
+    public boolean isForcePreAggregation() {
+        return forcePreAggregation;
+    }
+
+    public boolean isWithLocalShuffle() {
+        return withLocalShuffle;
+    }
+
+    public void setWithLocalShuffle(boolean withLocalShuffle) {
+        this.withLocalShuffle = withLocalShuffle;
+    }
+
+>>>>>>> fcbcbee25d ([BugFix] Fix PushDownTopNToPreAggRule bugs (backport #68954) (#73195))
     @Override
     public RowOutputInfo deriveRowOutputInfo(List<OptExpression> inputs) {
         List<ColumnOutputInfo> columnOutputInfoList = Lists.newArrayList();
