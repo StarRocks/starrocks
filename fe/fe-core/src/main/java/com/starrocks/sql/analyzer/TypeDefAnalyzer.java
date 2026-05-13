@@ -87,16 +87,16 @@ public class TypeDefAnalyzer {
                 }
                 int len = scalarType.getLength();
                 // len is decided by child, when it is -1.
-
+                if (len == -1 && !requireExplicitSize) {
+                    // Permit unsized CHAR/VARCHAR; matchesType() ignores
+                    // string sizes for signature matching, and toSql() renders len=-1 as the bare type name.
+                    break;
+                }
                 if (len <= 0) {
-                    if (!requireExplicitSize) {
-                        // Permit unsized CHAR/VARCHAR; matchesType() ignores
-                        // string sizes for signature matching, and toSql() renders len=-1 as the bare type name.
-                        break;
-                    }
                     throw new SemanticException(name + " size must be > 0: " + len);
                 }
-                if (scalarType.getLength() > maxLen) {
+
+                if (len > maxLen) {
                     throw new SemanticException(
                             name + " size must be <= " + maxLen + ": " + len);
                 }
