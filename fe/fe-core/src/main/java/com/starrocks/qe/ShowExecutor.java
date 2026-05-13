@@ -743,56 +743,8 @@ public class ShowExecutor {
             Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(showStmt.getDb());
             MetaUtils.checkDbNullAndReport(db, showStmt.getDb());
             List<List<String>> rows = Lists.newArrayList();
-<<<<<<< HEAD
-            Locker locker = new Locker();
-            locker.lockDatabase(db.getId(), LockType.READ);
-            try {
-                Table table = MetaUtils.getSessionAwareTable(connectContext, db, showStmt.getTbl());
-                if (table == null) {
-                    if (showStmt.getType() != ShowCreateTableStmt.CreateTableType.MATERIALIZED_VIEW) {
-                        ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_TABLE_ERROR, showStmt.getTable());
-                    } else {
-                        // For Sync Materialized View, it is a mv index inside OLAP table,
-                        // so we can not get it from database.
-                        for (Table tbl : GlobalStateMgr.getCurrentState().getLocalMetastore().getTables(db.getId())) {
-                            if (tbl.getType() == Table.TableType.OLAP) {
-                                OlapTable olapTable = (OlapTable) tbl;
-                                List<MaterializedIndexMeta> visibleMaterializedViews =
-                                        olapTable.getVisibleIndexMetas();
-                                for (MaterializedIndexMeta mvMeta : visibleMaterializedViews) {
-                                    if (olapTable.getIndexNameById(mvMeta.getIndexId()).equals(showStmt.getTable())) {
-                                        if (mvMeta.getOriginStmt() == null) {
-                                            String mvName = olapTable.getIndexNameById(mvMeta.getIndexId());
-                                            rows.add(Lists.newArrayList(showStmt.getTable(),
-                                                    ShowMaterializedViewStatus.buildCreateMVSql(olapTable,
-                                                    mvName, mvMeta), "utf8", "utf8_general_ci"));
-                                        } else {
-                                            rows.add(Lists.newArrayList(showStmt.getTable(), mvMeta.getOriginStmt(),
-                                                    "utf8", "utf8_general_ci"));
-                                        }
-
-                                        ShowResultSetMetaData showResultSetMetaData = ShowResultSetMetaData.builder()
-                                                .addColumn(new Column("Materialized View", ScalarType.createVarchar(20)))
-                                                .addColumn(new Column("Create Materialized View", ScalarType.createVarchar(30)))
-                                                .build();
-                                        return new ShowResultSet(showResultSetMetaData, rows);
-=======
-            TableName tableName = new TableName(showStmt.getCatalogName(), showStmt.getDb(), showStmt.getTable());
-            // Lookup is ConcurrentHashMap-backed (Database.nameToTable) for internal catalog and
-            // throws SemanticException if the table is missing, so it is safe outside the lock.
+            TableName tableName = showStmt.getTbl();
             Table table = MetaUtils.getSessionAwareTable(connectContext, db, tableName);
-            // TODO(sync-mv): the (table == null) branch below is currently unreachable -
-            // MetaUtils.getSessionAwareTable throws SemanticException on miss rather than
-            // returning null (since #43162, "temporary table part-1"), so the sync-MV
-            // fallback never runs. As a side effect, SHOW CREATE MATERIALIZED VIEW <sync_mv>
-            // has been broken since that change (sync MVs live as MaterializedIndexMeta
-            // inside an OLAP table, not as separately-registered Tables, so they are missed
-            // by the throwing lookup above). The fallback is kept here as a marker until a
-            // follow-up commit reworks the lookup to make this path reachable. When that
-            // happens, the iteration must run under DB READ (or per-table READ) - it reads
-            // HashMap-backed OlapTable index metadata which is mutated by concurrent
-            // ALTER/rollup. Today the unlocked iteration is harmless because it never
-            // executes.
             if (table == null) {
                 if (showStmt.getType() != ShowCreateTableStmt.CreateTableType.MATERIALIZED_VIEW) {
                     ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_TABLE_ERROR, showStmt.getTable());
@@ -805,23 +757,20 @@ public class ShowExecutor {
                             List<MaterializedIndexMeta> visibleMaterializedViews =
                                     olapTable.getVisibleIndexMetas();
                             for (MaterializedIndexMeta mvMeta : visibleMaterializedViews) {
-                                if (olapTable.getIndexNameByMetaId(mvMeta.getIndexMetaId()).equals(showStmt.getTable())) {
+                                if (olapTable.getIndexNameById(mvMeta.getIndexId()).equals(showStmt.getTable())) {
                                     if (mvMeta.getOriginStmt() == null) {
-                                        String mvName = olapTable.getIndexNameByMetaId(mvMeta.getIndexMetaId());
+                                        String mvName = olapTable.getIndexNameById(mvMeta.getIndexId());
                                         rows.add(Lists.newArrayList(showStmt.getTable(),
                                                 ShowMaterializedViewStatus.buildCreateMVSql(olapTable,
                                                         mvName, mvMeta), "utf8", "utf8_general_ci"));
                                     } else {
                                         rows.add(Lists.newArrayList(showStmt.getTable(), mvMeta.getOriginStmt(),
                                                 "utf8", "utf8_general_ci"));
->>>>>>> c15972b5ad ([BugFix] Relax DB lock to intensive path in qe/ read-only paths (#73067))
                                     }
 
                                     ShowResultSetMetaData showResultSetMetaData = ShowResultSetMetaData.builder()
-                                            .addColumn(new Column("Materialized View",
-                                                    TypeFactory.createVarcharType(20)))
-                                            .addColumn(new Column("Create Materialized View",
-                                                    TypeFactory.createVarcharType(30)))
+                                            .addColumn(new Column("Materialized View", ScalarType.createVarchar(20)))
+                                            .addColumn(new Column("Create Materialized View", ScalarType.createVarchar(30)))
                                             .build();
                                     return new ShowResultSet(showResultSetMetaData, rows);
                                 }
@@ -834,11 +783,6 @@ public class ShowExecutor {
             Locker locker = new Locker();
             locker.lockTableWithIntensiveDbLock(db.getId(), table.getId(), LockType.READ);
             try {
-                // Revalidate by name to detect concurrent DROP/RENAME between unlocked lookup
-                // and lock acquisition. The table id is stable for a given Table object, so an
-                // id-based check would miss a RENAME that re-binds the name to a different
-                // (or no) table; revalidate via the same lookup path so both regular and
-                // temporary tables are handled correctly.
                 if (MetaUtils.getSessionAwareTable(connectContext, db, tableName) != table) {
                     ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_TABLE_ERROR, showStmt.getTable());
                 }
@@ -1847,35 +1791,15 @@ public class ShowExecutor {
                 Database db = globalStateMgr.getLocalMetastore().getDb(statement.getDbName());
                 MetaUtils.checkDbNullAndReport(db, statement.getDbName());
 
-<<<<<<< HEAD
-                Locker locker = new Locker();
-                locker.lockDatabase(db.getId(), LockType.READ);
-                try {
-                    Table table = MetaUtils.getSessionAwareTable(
-                            context, db, new TableName(statement.getDbName(), statement.getTableName()));
-                    if (table == null) {
-                        ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_TABLE_ERROR, statement.getTableName());
-                    }
-                    if (!table.isNativeTableOrMaterializedView()) {
-                        ErrorReport.reportSemanticException(ErrorCode.ERR_NOT_OLAP_TABLE, statement.getTableName());
-                    }
-=======
-                // Lookup is ConcurrentHashMap-backed for the internal catalog and throws on missing
-                // table, so it is safe outside the lock.
-                TableName tableName = new TableName(tableRef.getCatalogName(), tableRef.getDbName(),
-                        tableRef.getTableName());
+                TableName tableName = new TableName(statement.getDbName(), statement.getTableName());
                 Table table = MetaUtils.getSessionAwareTable(context, db, tableName);
                 if (!table.isNativeTableOrMaterializedView()) {
                     ErrorReport.reportSemanticException(ErrorCode.ERR_NOT_OLAP_TABLE, statement.getTableName());
                 }
->>>>>>> c15972b5ad ([BugFix] Relax DB lock to intensive path in qe/ read-only paths (#73067))
 
                 Locker locker = new Locker();
                 locker.lockTableWithIntensiveDbLock(db.getId(), table.getId(), LockType.READ);
                 try {
-                    // Revalidate by name to detect concurrent DROP/RENAME between unlocked lookup
-                    // and lock acquisition. Id-based check would miss a RENAME that re-binds the
-                    // name to a different table; re-running the same lookup catches that.
                     if (MetaUtils.getSessionAwareTable(context, db, tableName) != table) {
                         ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_TABLE_ERROR,
                                 statement.getTableName());
