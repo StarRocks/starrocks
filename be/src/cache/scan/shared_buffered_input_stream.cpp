@@ -633,6 +633,10 @@ Status SharedBufferedInputStream::_ensure_sb_filled(const SharedBufferPtr& sb) {
             if (!to_sync_fill.empty()) {
                 L.unlock();
                 for (size_t i : to_sync_fill) {
+                    {
+                        std::lock_guard<std::mutex> CL(sb->mu);
+                        if (sb->state == SharedBuffer::State::Abandoned) break;
+                    }
                     Status s =
                             _stream->read_at_fully(sb->chunks[i].file_offset,
                                                    sb->buffer.data() + sb->chunks[i].buffer_offset, sb->chunks[i].size);
