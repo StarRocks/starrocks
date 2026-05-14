@@ -335,6 +335,7 @@ jobs:
           REVIEWER_SLACK_ID=$(jq -r --arg login "$REVIEWER_LOGIN" '.[$login] // empty' ci-tool/conf/member_slack.json)
 
           PR_URL="${{ steps.open_pr.outputs.pr_url }}"
+          RUN_URL="https://github.com/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
           CHANNEL_ID="C0APHDFLAQ7"   # int-cd-rd-ci
 
           if [[ -n "$REVIEWER_SLACK_ID" ]]; then
@@ -344,7 +345,7 @@ jobs:
             MENTION="@${REVIEWER_LOGIN}"
           fi
 
-          MSG=$(printf ':robot_face: Weekly unstable-case review cleanup PR ready for confirmation:\n%s\n\n%s please review and merge.' "$PR_URL" "$MENTION")
+          MSG=$(printf ':robot_face: Weekly unstable-case review cleanup ready for confirmation:\n• Run: %s\n• PR:  %s\n\n%s please review and merge.' "$RUN_URL" "$PR_URL" "$MENTION")
 
           # Reuse ci-tool's slack_notify.py (--mode channel) instead of inlining
           # curl; keeps the Slack-API wire format in one place (lib/slack_lib.py).
