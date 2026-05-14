@@ -75,7 +75,7 @@ if(STARROCKS_JIT_ENABLE)
 endif()
 
 ADD_BE_LIB(Webserver ${WEB_SERVER_FILES})
-target_link_libraries(Webserver PUBLIC HttpCore)
+target_link_libraries(Webserver PUBLIC HttpCore PRIVATE Storage)
 
 # target_link_libraries(Webserver pthread dl Util)
 #ADD_BE_TEST(integer-array-test)
