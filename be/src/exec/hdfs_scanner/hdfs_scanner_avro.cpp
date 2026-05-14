@@ -191,7 +191,8 @@ void HdfsAvroScanner::do_update_counter(HdfsScanProfile* profile) {
     COUNTER_UPDATE(direct_read_field_calls, avro_stats.direct_rows_decoded * avro_stats.direct_read_entries);
     COUNTER_UPDATE(direct_skip_field_calls, avro_stats.direct_rows_decoded * avro_stats.direct_skip_entries);
     COUNTER_UPDATE(direct_fast_skip_calls, avro_stats.direct_rows_decoded * avro_stats.direct_fast_skip_entries);
-    COUNTER_UPDATE(direct_fallback_skip_calls, avro_stats.direct_rows_decoded * avro_stats.direct_fallback_skip_entries);
+    COUNTER_UPDATE(direct_fallback_skip_calls,
+                   avro_stats.direct_rows_decoded * avro_stats.direct_fallback_skip_entries);
     COUNTER_UPDATE(input_stream_read_count, _scanner_counter.file_read_count);
     COUNTER_UPDATE(input_stream_read_timer, _scanner_counter.file_read_ns);
 }

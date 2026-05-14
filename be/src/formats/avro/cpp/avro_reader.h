@@ -63,10 +63,11 @@ struct FieldPlanEntry {
     };
 
     Kind kind{Kind::SKIP_NODE};
-    uint8_t null_branch{0};  // SKIP_NULLABLE_*: which union branch is null (0 or 1)
-    uint32_t skip_bytes{0};  // SKIP_FIXED / SKIP_NULLABLE_FIXED: bytes to skip; uint32 to avoid truncation for large AVRO_FIXED
-    int32_t slot_index{-1};  // READ: index into _direct_column_readers
-    avro::NodePtr node{};    // SKIP_NODE / READ: field avro node (error-path skip)
+    uint8_t null_branch{0}; // SKIP_NULLABLE_*: which union branch is null (0 or 1)
+    uint32_t skip_bytes{
+            0}; // SKIP_FIXED / SKIP_NULLABLE_FIXED: bytes to skip; uint32 to avoid truncation for large AVRO_FIXED
+    int32_t slot_index{-1}; // READ: index into _direct_column_readers
+    avro::NodePtr node{};   // SKIP_NODE / READ: field avro node (error-path skip)
 };
 
 class AvroBufferInputStream final : public avro::SeekableInputStream {
