@@ -18,6 +18,7 @@ import com.google.common.collect.ImmutableList;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.IcebergTable;
+import com.starrocks.catalog.MvId;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AlreadyExistsException;
@@ -166,6 +167,16 @@ public class CatalogConnectorMetadata implements ConnectorMetadata, DelegatingCo
         }
 
         return metadata.getCurrentTvrSnapshot(dbName, table);
+    }
+
+    @Override
+    public TvrTableSnapshot acquireTvrSnapshot(String dbName, Table table, MvId mvId) {
+        ConnectorMetadata metadata = metadataOfTable(table);
+        if (metadata == null) {
+            metadata = metadataOfDb(dbName);
+        }
+
+        return metadata.acquireTvrSnapshot(dbName, table, mvId);
     }
 
     @Override
