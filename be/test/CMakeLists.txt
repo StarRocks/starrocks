@@ -411,6 +411,7 @@ SET(DW_TEST_FILES
     ./storage/column_and_predicate_test.cpp
     ./storage/column_or_predicate_test.cpp
     ./storage/column_predicate_test.cpp
+    ./storage/column_predicate_inverted_index_fallback_test.cpp
     ./storage/compaction_manager_test.cpp
     ./storage/compaction_parallelization_test.cpp
     ./storage/compaction_utils_test.cpp

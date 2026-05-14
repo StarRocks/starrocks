@@ -32,16 +32,19 @@ InvertedIndexFallbackPredicate::InvertedIndexFallbackPredicate(const ColumnExprP
 
 Status InvertedIndexFallbackPredicate::evaluate(const Column* column, uint8_t* selection, uint16_t from,
                                                 uint16_t to) const {
-    // Does not support range evaluation
+    // The rowid buffer is populated in chunk-row order during the scan; rowid
+    // for chunk row i lives at (*_rowid_buffer)[i]. We evaluate the chunk-row
+    // range [from, to), which must fit inside the captured rowids.
     DCHECK(from == 0);
+    DCHECK_LE(to, _rowid_buffer->size());
 
-    // Use bitmap for fallback evaluation
     const bool is_negated = is_negated_expr();
     const uint8_t hit_value = is_negated ? 0 : 1;
     const uint8_t miss_value = is_negated ? 1 : 0;
     roaring::BulkContext ctx;
-    for (size_t i = 0; i < _rowid_buffer->size(); i++) {
-        selection[i] = _bitmap.containsBulk(ctx, (*_rowid_buffer)[i]) ? hit_value : miss_value;
+    const auto& rowids = *_rowid_buffer;
+    for (uint16_t i = from; i < to; i++) {
+        selection[i] = _bitmap.containsBulk(ctx, rowids[i]) ? hit_value : miss_value;
     }
     return Status::OK();
 }
