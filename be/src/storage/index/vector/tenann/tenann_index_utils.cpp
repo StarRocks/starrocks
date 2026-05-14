@@ -23,7 +23,6 @@
 #include "common/config_vector_index_fwd.h"
 #include "common/logging.h"
 #include "tenann/index/parameters.h"
-#include "tenann/index/parameters.h"
 
 namespace starrocks {
 

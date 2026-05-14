@@ -244,10 +244,9 @@ TEST_F(VectorIndexWriterTest, hnsw_sq8_end_to_end) {
     // append_test_data). Self-query must return it as the nearest hit even
     // through SQ8 quantization at this small scale.
     std::vector<float> query{1.0f, 2.0f, 3.0f};
-    tenann::PrimitiveSeqView q{
-            .data = reinterpret_cast<uint8_t*>(query.data()),
-            .size = 3,
-            .elem_type = tenann::PrimitiveType::kFloatType};
+    tenann::PrimitiveSeqView q{.data = reinterpret_cast<uint8_t*>(query.data()),
+                               .size = 3,
+                               .elem_type = tenann::PrimitiveType::kFloatType};
     std::vector<int64_t> result(3, -1);
     searcher->AnnSearch(q, /*k=*/3, result.data());
     EXPECT_NE(result[0], -1) << "SQ8 search returned no hit";
@@ -317,10 +316,9 @@ TEST_F(VectorIndexWriterTest, hnsw_pq_end_to_end) {
         // is "search produces results", which fails if BE properties weren't
         // forwarded to tenann correctly (PQ would refuse to build) or if the
         // generated index is unreadable.
-        tenann::PrimitiveSeqView q{
-                .data = reinterpret_cast<uint8_t*>(first_row.data()),
-                .size = kDim,
-                .elem_type = tenann::PrimitiveType::kFloatType};
+        tenann::PrimitiveSeqView q{.data = reinterpret_cast<uint8_t*>(first_row.data()),
+                                   .size = kDim,
+                                   .elem_type = tenann::PrimitiveType::kFloatType};
         std::vector<int64_t> result(5, -1);
         searcher->AnnSearch(q, /*k=*/5, result.data());
         EXPECT_NE(result[0], -1) << "PQ search returned no hit";
