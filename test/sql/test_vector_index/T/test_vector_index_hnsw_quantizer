@@ -1,0 +1,146 @@
+-- name: test_vector_index_hnsw_quantizer @sequential @native
+
+ADMIN SET FRONTEND CONFIG("enable_experimental_vector" = "true");
+
+-- =====================================================================
+-- HNSW + quantizer DDL: SQ4 / SQ8 / PQ acceptance
+-- Covers the FE analyzer path (quantizer / m_pq / nbits_pq properties)
+-- end-to-end through index build and top-K query.
+-- =====================================================================
+
+-- HNSW + SQ8 (most common quantizer)
+CREATE TABLE t_hnsw_sq8 (
+  id bigint NOT NULL,
+  vec ARRAY<float> NOT NULL,
+  INDEX vec_idx (vec) USING VECTOR (
+    "index_type" = "hnsw",
+    "dim" = "4",
+    "metric_type" = "l2_distance",
+    "is_vector_normed" = "false",
+    "M" = "16",
+    "efconstruction" = "40",
+    "quantizer" = "sq8"
+  )
+) ENGINE=OLAP
+DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+
+INSERT INTO t_hnsw_sq8 VALUES
+  (1, [1.0, 0.0, 0.0, 0.0]),
+  (2, [0.0, 1.0, 0.0, 0.0]),
+  (3, [0.0, 0.0, 1.0, 0.0]),
+  (4, [0.0, 0.0, 0.0, 1.0]);
+
+SELECT id FROM t_hnsw_sq8
+  ORDER BY approx_l2_distance([1.0, 0.0, 0.0, 0.0], vec)
+  LIMIT 1;
+
+-- HNSW + SQ4
+CREATE TABLE t_hnsw_sq4 (
+  id bigint NOT NULL,
+  vec ARRAY<float> NOT NULL,
+  INDEX vec_idx (vec) USING VECTOR (
+    "index_type" = "hnsw",
+    "dim" = "4",
+    "metric_type" = "l2_distance",
+    "is_vector_normed" = "false",
+    "M" = "16",
+    "efconstruction" = "40",
+    "quantizer" = "sq4"
+  )
+) ENGINE=OLAP
+DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+
+INSERT INTO t_hnsw_sq4 VALUES
+  (1, [1.0, 0.0, 0.0, 0.0]),
+  (2, [0.0, 1.0, 0.0, 0.0]);
+
+SELECT id FROM t_hnsw_sq4
+  ORDER BY approx_l2_distance([1.0, 0.0, 0.0, 0.0], vec)
+  LIMIT 1;
+
+-- HNSW + PQ: requires m_pq (must divide dim)
+CREATE TABLE t_hnsw_pq (
+  id bigint NOT NULL,
+  vec ARRAY<float> NOT NULL,
+  INDEX vec_idx (vec) USING VECTOR (
+    "index_type" = "hnsw",
+    "dim" = "8",
+    "metric_type" = "l2_distance",
+    "is_vector_normed" = "false",
+    "M" = "16",
+    "efconstruction" = "40",
+    "quantizer" = "pq",
+    "m_pq" = "4",
+    "nbits_pq" = "8"
+  )
+) ENGINE=OLAP
+DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+
+-- DDL rejection: PQ without m_pq
+CREATE TABLE t_hnsw_pq_missing_m (
+  id bigint NOT NULL,
+  vec ARRAY<float> NOT NULL,
+  INDEX vec_idx (vec) USING VECTOR (
+    "index_type" = "hnsw",
+    "dim" = "8",
+    "metric_type" = "l2_distance",
+    "is_vector_normed" = "false",
+    "M" = "16",
+    "efconstruction" = "40",
+    "quantizer" = "pq"
+  )
+) ENGINE=OLAP
+DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+
+-- DDL rejection: m_pq does not divide dim
+CREATE TABLE t_hnsw_pq_bad_m (
+  id bigint NOT NULL,
+  vec ARRAY<float> NOT NULL,
+  INDEX vec_idx (vec) USING VECTOR (
+    "index_type" = "hnsw",
+    "dim" = "8",
+    "metric_type" = "l2_distance",
+    "is_vector_normed" = "false",
+    "M" = "16",
+    "efconstruction" = "40",
+    "quantizer" = "pq",
+    "m_pq" = "3"
+  )
+) ENGINE=OLAP
+DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+
+-- DDL rejection: invalid quantizer name
+CREATE TABLE t_hnsw_bad_quantizer (
+  id bigint NOT NULL,
+  vec ARRAY<float> NOT NULL,
+  INDEX vec_idx (vec) USING VECTOR (
+    "index_type" = "hnsw",
+    "dim" = "4",
+    "metric_type" = "l2_distance",
+    "is_vector_normed" = "false",
+    "M" = "16",
+    "efconstruction" = "40",
+    "quantizer" = "lq2"
+  )
+) ENGINE=OLAP
+DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+
+-- Cleanup
+DROP TABLE IF EXISTS t_hnsw_sq8;
+DROP TABLE IF EXISTS t_hnsw_sq4;
+DROP TABLE IF EXISTS t_hnsw_pq;
+DROP TABLE IF EXISTS t_hnsw_pq_missing_m;
+DROP TABLE IF EXISTS t_hnsw_pq_bad_m;
+DROP TABLE IF EXISTS t_hnsw_bad_quantizer;
