@@ -44,10 +44,8 @@ struct AvroReaderStats {
     int64_t direct_fast_skip_entries = 0;
     int64_t direct_fallback_skip_entries = 0;
 
-    int64_t direct_read_field_calls = 0;
-    int64_t direct_skip_field_calls = 0;
-    int64_t direct_fast_skip_calls = 0;
-    int64_t direct_fallback_skip_calls = 0;
+    // Derived totals; computed lazily in do_update_counter() as direct_rows_decoded × entry counts.
+    // Not stored here to avoid 4 additions per row in the hot decode loop.
 };
 
 // Pre-computed per-field dispatch entry for the direct decode hot path.
@@ -65,10 +63,10 @@ struct FieldPlanEntry {
     };
 
     Kind kind{Kind::SKIP_NODE};
-    uint8_t null_branch{0}; // SKIP_NULLABLE_*: which union branch is null (0 or 1)
-    uint16_t skip_bytes{0}; // SKIP_FIXED / SKIP_NULLABLE_FIXED: bytes to skip
-    int32_t slot_index{-1}; // READ: index into _direct_column_readers
-    avro::NodePtr node{};   // SKIP_NODE / READ: field avro node (error-path skip)
+    uint8_t null_branch{0};  // SKIP_NULLABLE_*: which union branch is null (0 or 1)
+    uint32_t skip_bytes{0};  // SKIP_FIXED / SKIP_NULLABLE_FIXED: bytes to skip; uint32 to avoid truncation for large AVRO_FIXED
+    int32_t slot_index{-1};  // READ: index into _direct_column_readers
+    avro::NodePtr node{};    // SKIP_NODE / READ: field avro node (error-path skip)
 };
 
 class AvroBufferInputStream final : public avro::SeekableInputStream {

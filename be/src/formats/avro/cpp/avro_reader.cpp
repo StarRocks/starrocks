@@ -295,7 +295,7 @@ static FieldPlanEntry make_skip_plan_entry(const avro::NodePtr& node) {
     case avro::AVRO_FIXED:
         // Schema-defined size; no wire-level length prefix.
         e.kind = FieldPlanEntry::Kind::SKIP_FIXED;
-        e.skip_bytes = static_cast<uint16_t>(node->fixedSize());
+        e.skip_bytes = static_cast<uint32_t>(node->fixedSize());
         return e;
     // ── variable-width non-nullable types ────────────────────────────────────
     case avro::AVRO_INT:
@@ -347,7 +347,7 @@ static FieldPlanEntry make_skip_plan_entry(const avro::NodePtr& node) {
                     return e;
                 case avro::AVRO_FIXED:
                     e.kind = FieldPlanEntry::Kind::SKIP_NULLABLE_FIXED;
-                    e.skip_bytes = static_cast<uint16_t>(inner->fixedSize());
+                    e.skip_bytes = static_cast<uint32_t>(inner->fixedSize());
                     return e;
                 case avro::AVRO_INT:
                 case avro::AVRO_LONG:
@@ -715,6 +715,12 @@ Status AvroReader::read_chunk(ChunkPtr& chunk, int rows_to_read, int64_t* rows_c
                 if (!_base_reader->hasMore()) {
                     break;
                 }
+                // hasMore() + decr() + decoder() replicates what DataFileReaderBase::read()
+                // does internally: hasMore() loads the next block when the current one is
+                // exhausted and returns false at EOF; decr() decrements the per-block item
+                // counter that hasMore() uses; decoder() returns the live BinaryDecoder
+                // positioned at the current record.  We bypass read() so we can decode
+                // directly into columns instead of materializing a GenericDatum.
                 _base_reader->decr();
                 st = read_direct_row(_base_reader->decoder(), column_raw_ptrs);
             } else {
@@ -747,10 +753,6 @@ Status AvroReader::read_chunk(ChunkPtr& chunk, int rows_to_read, int64_t* rows_c
             ++_stats.rows_decoded;
             if (_use_direct_path) {
                 ++_stats.direct_rows_decoded;
-                _stats.direct_read_field_calls += _stats.direct_read_entries;
-                _stats.direct_skip_field_calls += _stats.direct_skip_entries;
-                _stats.direct_fast_skip_calls += _stats.direct_fast_skip_entries;
-                _stats.direct_fallback_skip_calls += _stats.direct_fallback_skip_entries;
             } else {
                 ++_stats.generic_rows_decoded;
             }
@@ -863,7 +865,9 @@ bool AvroReader::try_init_direct_readers(const avro::ValidSchema& writer_schema)
         merged.reserve(_direct_field_plan.size());
         for (auto& entry : _direct_field_plan) {
             if (!merged.empty() && merged.back().kind == FieldPlanEntry::Kind::SKIP_FIXED &&
-                entry.kind == FieldPlanEntry::Kind::SKIP_FIXED) {
+                entry.kind == FieldPlanEntry::Kind::SKIP_FIXED &&
+                static_cast<uint64_t>(merged.back().skip_bytes) + entry.skip_bytes <=
+                        std::numeric_limits<uint32_t>::max()) {
                 merged.back().skip_bytes += entry.skip_bytes;
             } else {
                 merged.push_back(std::move(entry));

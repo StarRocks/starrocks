@@ -170,6 +170,12 @@ void HdfsAvroScanner::do_update_counter(HdfsScanProfile* profile) {
             ADD_CHILD_COUNTER(root, "InputStreamReadCount", TUnit::UNIT, kAvroProfileSectionPrefix);
     auto* input_stream_read_timer = ADD_CHILD_TIMER(root, "InputStreamReadTime", kAvroProfileSectionPrefix);
 
+    if (_avro_reader == nullptr) {
+        COUNTER_UPDATE(input_stream_read_count, _scanner_counter.file_read_count);
+        COUNTER_UPDATE(input_stream_read_timer, _scanner_counter.file_read_ns);
+        return;
+    }
+
     const auto& avro_stats = _avro_reader->stats();
     COUNTER_UPDATE(direct_path_used, avro_stats.direct_path_used);
     COUNTER_UPDATE(rows_decoded, avro_stats.rows_decoded);
@@ -181,10 +187,11 @@ void HdfsAvroScanner::do_update_counter(HdfsScanProfile* profile) {
     COUNTER_UPDATE(direct_skip_entries, avro_stats.direct_skip_entries);
     COUNTER_UPDATE(direct_fast_skip_entries, avro_stats.direct_fast_skip_entries);
     COUNTER_UPDATE(direct_fallback_skip_entries, avro_stats.direct_fallback_skip_entries);
-    COUNTER_UPDATE(direct_read_field_calls, avro_stats.direct_read_field_calls);
-    COUNTER_UPDATE(direct_skip_field_calls, avro_stats.direct_skip_field_calls);
-    COUNTER_UPDATE(direct_fast_skip_calls, avro_stats.direct_fast_skip_calls);
-    COUNTER_UPDATE(direct_fallback_skip_calls, avro_stats.direct_fallback_skip_calls);
+    // Derived totals: total field-level calls = rows_decoded × per-plan entry count.
+    COUNTER_UPDATE(direct_read_field_calls, avro_stats.direct_rows_decoded * avro_stats.direct_read_entries);
+    COUNTER_UPDATE(direct_skip_field_calls, avro_stats.direct_rows_decoded * avro_stats.direct_skip_entries);
+    COUNTER_UPDATE(direct_fast_skip_calls, avro_stats.direct_rows_decoded * avro_stats.direct_fast_skip_entries);
+    COUNTER_UPDATE(direct_fallback_skip_calls, avro_stats.direct_rows_decoded * avro_stats.direct_fallback_skip_entries);
     COUNTER_UPDATE(input_stream_read_count, _scanner_counter.file_read_count);
     COUNTER_UPDATE(input_stream_read_timer, _scanner_counter.file_read_ns);
 }
