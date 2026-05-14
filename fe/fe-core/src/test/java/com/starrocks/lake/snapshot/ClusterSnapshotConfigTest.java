@@ -17,6 +17,8 @@
 
 package com.starrocks.lake.snapshot;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
@@ -146,5 +148,29 @@ public class ClusterSnapshotConfigTest {
 
         // onLoad() should have chosen snapshot_storage_volume for clusterSnapshot
         Assertions.assertSame(snapshotVolume, clusterSnapshot.getStorageVolume());
+    }
+
+    @Test
+    public void testStorageVolumeCommentDefaultsToEmpty() throws Exception {
+        // No-arg construction: comment must default to "" so downstream
+        // protobuf FileStoreInfo.Builder.setComment() never sees null.
+        ClusterSnapshotConfig.StorageVolume sv = new ClusterSnapshotConfig.StorageVolume();
+        Assertions.assertEquals("", sv.getComment());
+
+        // YAML omitting the `comment` key: getComment() must still be "".
+        String yamlMissing = "name: my_s3_volume\n"
+                + "type: S3\n"
+                + "location: s3://defaultbucket/test/\n"
+                + "properties:\n"
+                + "  - key: aws.s3.region\n"
+                + "    value: us-west-2\n";
+        ObjectMapper mapper = new ObjectMapper(new YAMLFactory());
+        ClusterSnapshotConfig.StorageVolume parsed =
+                mapper.readValue(yamlMissing, ClusterSnapshotConfig.StorageVolume.class);
+        Assertions.assertEquals("", parsed.getComment());
+
+        // Explicit setComment(null) must also be normalized to "" by the getter.
+        parsed.setComment(null);
+        Assertions.assertEquals("", parsed.getComment());
     }
 }
