@@ -344,7 +344,8 @@
         "enable_vector_adaptive_search",
         "vector_adaptive_ef_alpha",
         "vector_adaptive_ef_cap",
-        "vector_adaptive_ef_baseline_rows"
+        "vector_adaptive_ef_baseline_rows",
+        "vector_index_build_flush_threshold_rows"
       ]
     },
     {
