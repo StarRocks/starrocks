@@ -305,6 +305,12 @@ public class HiveConnectorScanRangeSource extends ConnectorScanRangeSource {
             PartitionAttachment attachment = (PartitionAttachment) remoteFileInfo.getAttachment();
             TScanRangeLocations scanRangeLocations = new TScanRangeLocations();
 
+            SessionVariable sv = SessionVariable.DEFAULT_SESSION_VARIABLE;
+            ConnectContext connectContext = ConnectContext.get();
+            if (connectContext != null) {
+                sv = connectContext.getSessionVariable();
+            }
+
             THdfsScanRange hdfsScanRange = new THdfsScanRange();
             hdfsScanRange.setRelative_path(fileDesc.getFileName());
             hdfsScanRange.setOffset(offset);
