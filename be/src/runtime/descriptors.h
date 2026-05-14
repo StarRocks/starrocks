@@ -225,6 +225,7 @@ public:
     const std::string& get_input_format() const;
     const std::string& get_serde_lib() const;
     const std::map<std::string, std::string> get_serde_properties() const;
+    const std::string& get_avro_schema_json() const;
     const std::string& get_time_zone() const;
 
 private:
@@ -233,6 +234,7 @@ private:
     std::string _hive_column_names;
     std::string _hive_column_types;
     std::map<std::string, std::string> _serde_properties;
+    std::string _avro_schema_json;
     std::string _time_zone;
 };
 

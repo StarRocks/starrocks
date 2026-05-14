@@ -172,6 +172,9 @@ HdfsTableDescriptor::HdfsTableDescriptor(const TTableDescriptor& tdesc, ObjectPo
     _input_format = tdesc.hdfsTable.input_format;
     _serde_lib = tdesc.hdfsTable.serde_lib;
     _serde_properties = tdesc.hdfsTable.serde_properties;
+    if (tdesc.hdfsTable.__isset.avro_schema_json) {
+        _avro_schema_json = tdesc.hdfsTable.avro_schema_json;
+    }
     _time_zone = tdesc.hdfsTable.time_zone;
 }
 
@@ -193,6 +196,10 @@ const std::string& HdfsTableDescriptor::get_serde_lib() const {
 
 const std::map<std::string, std::string> HdfsTableDescriptor::get_serde_properties() const {
     return _serde_properties;
+}
+
+const std::string& HdfsTableDescriptor::get_avro_schema_json() const {
+    return _avro_schema_json;
 }
 
 const std::string& HdfsTableDescriptor::get_time_zone() const {
