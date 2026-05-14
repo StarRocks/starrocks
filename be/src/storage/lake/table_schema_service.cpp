@@ -404,4 +404,144 @@ StatusOr<TabletSchemaPtr> TableSchemaService::_fallback_load_to_schema_file(int6
     return tablet_schema;
 }
 
+// Latency (in microseconds) for get_tablet_initial_metadata calls (end-to-end including SingleFlight wait).
+bvar::LatencyRecorder g_initial_metadata_fetch_latency_us("table_schema_service", "metadata_fetch_us");
+// Latency (in microseconds) for individual RPC calls to FE for initial metadata fetching.
+bvar::LatencyRecorder g_initial_metadata_rpc_latency_us("table_schema_service", "metadata_rpc_us");
+// Number of initial metadata fetch requests.
+bvar::Adder<int64_t> g_initial_metadata_fetch_count("table_schema_service", "metadata_fetch_count");
+// Number of initial metadata fetch failures.
+bvar::Adder<int64_t> g_initial_metadata_fetch_error("table_schema_service", "metadata_fetch_error");
+// Number of retry attempts for initial metadata fetches (excludes the initial attempt).
+bvar::Adder<int64_t> g_initial_metadata_fetch_retries("table_schema_service", "metadata_fetch_retries");
+
+StatusOr<TGetTabletMetadataResponse> TableSchemaService::get_tablet_initial_metadata(int64_t tablet_id,
+                                                                                     int64_t table_id,
+                                                                                     int64_t partition_id,
+                                                                                     int64_t index_id) {
+    g_initial_metadata_fetch_count << 1;
+    auto start = butil::gettimeofday_us();
+    DeferOp defer([&]() { g_initial_metadata_fetch_latency_us << (butil::gettimeofday_us() - start); });
+
+    const int max_retries = std::max(1, config::table_schema_service_max_retries);
+    InitialMetadataSFResultPtr sf_result;
+    // Use (table_id, index_id) as SingleFlight key so concurrent requests
+    // for different tablets under the same index share one RPC.
+    std::string key = fmt::format("{}:{}", table_id, index_id);
+
+    for (int attempt = 0; attempt < max_retries; ++attempt) {
+        g_initial_metadata_fetch_retries << (attempt == 0 ? 0 : 1);
+        sf_result = _select_initial_metadata_sf_group(key).Do(
+                key, [&]() { return _fetch_initial_metadata_via_rpc(tablet_id, table_id, partition_id, index_id); });
+
+        auto& result = sf_result->result;
+
+        VLOG(2) << "get_tablet_initial_metadata, tablet_id: " << tablet_id << ", table_id: " << table_id
+                << ", partition_id: " << partition_id << ", index_id: " << index_id << ", attempt: " << attempt + 1
+                << "/" << max_retries << ", status: " << result.status();
+
+        if (result.ok()) {
+            return result;
+        }
+
+        const auto& status = result.status();
+
+        // Permanent errors: do not retry
+        if (status.is_not_found() || status.is_table_not_exist()) {
+            break;
+        }
+        if (status.is_thrift_rpc_error()) {
+            break;
+        }
+
+        // Other errors (e.g. INTERNAL_ERROR): retry
+    }
+
+    if (sf_result != nullptr && !sf_result->result.ok()) {
+        g_initial_metadata_fetch_error << 1;
+    }
+    if (sf_result != nullptr) {
+        return sf_result->result;
+    }
+    return Status::InternalError("get_tablet_initial_metadata result is null");
+}
+
+TableSchemaService::InitialMetadataSFResultPtr TableSchemaService::_fetch_initial_metadata_via_rpc(int64_t tablet_id,
+                                                                                                   int64_t table_id,
+                                                                                                   int64_t partition_id,
+                                                                                                   int64_t index_id) {
+    TBatchGetTabletMetadataRequest batch_req;
+    TGetTabletMetadataRequest req;
+    req.__set_tablet_id(tablet_id);
+    req.__set_table_id(table_id);
+    req.__set_partition_id(partition_id);
+    req.__set_index_id(index_id);
+    req.__set_version(1);
+    batch_req.__set_requests({req});
+
+    TNetworkAddress fe = get_master_address();
+    TBatchGetTabletMetadataResponse batch_resp;
+    Status rpc_status;
+    bool mock_thrift_rpc = false;
+
+#ifdef BE_TEST
+    std::array<void*, 4> test_ctx{(void*)&req, (void*)&batch_resp, (void*)&rpc_status, (void*)&mock_thrift_rpc};
+    TEST_SYNC_POINT_CALLBACK("TableSchemaService::_fetch_initial_metadata_via_rpc::test_hook", &test_ctx);
+#endif
+
+    int64_t rpc_latency_us = 0;
+    if (!mock_thrift_rpc) {
+        auto start = butil::gettimeofday_us();
+        rpc_status = ThriftRpcHelper::rpc<FrontendServiceClient>(
+                fe.hostname, fe.port,
+                [&batch_req, &batch_resp](FrontendServiceConnection& client) {
+                    client->getTabletMetadata(batch_resp, batch_req);
+                },
+                config::thrift_rpc_timeout_ms);
+        rpc_latency_us = butil::gettimeofday_us() - start;
+    }
+    g_initial_metadata_rpc_latency_us << rpc_latency_us;
+
+    auto result = std::make_shared<InitialMetadataSFResult>();
+
+    if (!rpc_status.ok()) {
+        LOG(WARNING) << "get_tablet_initial_metadata rpc failed, tablet_id: " << tablet_id << ", table_id: " << table_id
+                     << ", partition_id: " << partition_id << ", index_id: " << index_id << ", fe: " << fe.hostname
+                     << ":" << fe.port << ", latency: " << rpc_latency_us << "us, error: " << rpc_status;
+        result->result = rpc_status;
+        return result;
+    }
+
+    Status batch_status(batch_resp.status);
+    if (!batch_status.ok()) {
+        LOG(WARNING) << "get_tablet_initial_metadata batch failed, tablet_id: " << tablet_id
+                     << ", table_id: " << table_id << ", partition_id: " << partition_id << ", index_id: " << index_id
+                     << ", error: " << batch_status;
+        result->result = batch_status;
+        return result;
+    }
+
+    if (!batch_resp.__isset.responses || batch_resp.responses.empty()) {
+        LOG(WARNING) << "get_tablet_initial_metadata empty response, tablet_id: " << tablet_id
+                     << ", table_id: " << table_id << ", partition_id: " << partition_id << ", index_id: " << index_id;
+        result->result = Status::InternalError("empty response");
+        return result;
+    }
+
+    auto& resp = batch_resp.responses[0];
+    Status resp_status(resp.status);
+    if (!resp_status.ok()) {
+        LOG(INFO) << "get_tablet_initial_metadata failed, tablet_id: " << tablet_id << ", table_id: " << table_id
+                  << ", partition_id: " << partition_id << ", index_id: " << index_id << ", error: " << resp_status;
+        result->result = resp_status;
+        return result;
+    }
+
+    VLOG(2) << "get_tablet_initial_metadata success, tablet_id: " << tablet_id << ", table_id: " << table_id
+            << ", partition_id: " << partition_id << ", index_id: " << index_id << ", latency: " << rpc_latency_us
+            << "us";
+    result->result = std::move(resp);
+    return result;
+}
+
 } // namespace starrocks::lake
