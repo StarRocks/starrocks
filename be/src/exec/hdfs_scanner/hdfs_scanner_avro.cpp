@@ -16,13 +16,12 @@
 
 #include <fmt/format.h>
 
-#include "base/time/timezone_utils.h"
 #include "column/adaptive_nullable_column.h"
 #include "column/chunk.h"
 #include "column/column_helper.h"
-#include "common/config_scan_io_fwd.h"
-#include "exprs/chunk_predicate_evaluator.h"
+#include "common/config.h"
 #include "runtime/runtime_state.h"
+#include "util/timezone_utils.h"
 
 namespace starrocks {
 
@@ -120,7 +119,7 @@ Status HdfsAvroScanner::do_get_next(RuntimeState* state, ChunkPtr* chunk) {
     // Post-read row-level conjunct evaluation (Avro has no block statistics for pushdown).
     for (auto& it : _scanner_ctx.conjunct_ctxs_by_slot) {
         SCOPED_RAW_TIMER(&_app_stats.expr_filter_ns);
-        RETURN_IF_ERROR(ChunkPredicateEvaluator::eval_conjuncts(it.second, ck.get()));
+        RETURN_IF_ERROR(ExecNode::eval_conjuncts(it.second, ck.get()));
         if (ck->num_rows() == 0) {
             break;
         }
