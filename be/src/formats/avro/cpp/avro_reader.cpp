@@ -446,11 +446,17 @@ Status AvroReader::read_chunk(ChunkPtr& chunk, int rows_to_read, int64_t* rows_c
 
     try {
         int64_t row_count = 0;
-        while (rows_to_read > 0 && _file_reader->read(*_datum)) {
-            // Stop once we have passed the split boundary.  pastSync() returns true
-            // when previousSync() (the sync marker before the current block) is past
-            // the given position, which mirrors the AvroInputFormat split boundary check.
+        while (rows_to_read > 0) {
+            // Check split boundary BEFORE reading the next record.
+            // pastSync(pos) returns true once previousSync() — the sync marker that
+            // introduced the current block — is past pos.  Checking before read()
+            // mirrors Hadoop AvroInputFormat: if the block we are about to read from
+            // started after split_end, stop now rather than reading one extra record.
             if (_split_end > 0 && _file_reader->pastSync(_split_end)) {
+                break;
+            }
+
+            if (!_file_reader->read(*_datum)) {
                 break;
             }
 
