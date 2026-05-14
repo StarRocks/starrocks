@@ -264,10 +264,10 @@ public class VectorIndexTest extends PlanTestBase {
                     put(IndexParamsKey.NBITS_PQ.name(), "8");
                 }}, KeysType.DUP_KEYS));
 
-        // V1 rejects quantizer != flat combined with non-L2 metric. Users who
-        // want SQ/PQ on cosine should upgrade once we validate recall.
-        Assertions.assertThrows(
-                SemanticException.class,
+        // Quantized HNSW (SQ/PQ) on cosine_similarity: tenann composes the factory
+        // string with an `L2Norm` pre-transform when is_vector_normed = false, so
+        // cosine + SQ/PQ is supported end-to-end. Just check the DDL is accepted.
+        Assertions.assertDoesNotThrow(
                 () -> IndexAnalyzer.checkVectorIndexValid(vecCol, new HashMap<>() {{
                     put(CommonIndexParamKey.INDEX_TYPE.name(), VectorIndexType.HNSW.name());
                     put(CommonIndexParamKey.DIM.name(), "128");
@@ -276,8 +276,7 @@ public class VectorIndexTest extends PlanTestBase {
                     put(IndexParamsKey.M.name(), "16");
                     put(IndexParamsKey.EFCONSTRUCTION.name(), "40");
                     put(IndexParamsKey.QUANTIZER.name(), QuantizerType.SQ8.name());
-                }}, KeysType.DUP_KEYS),
-                "Quantized HNSW index only supports metric_type = l2_distance in V1");
+                }}, KeysType.DUP_KEYS));
 
         // PQ requires m_pq — tenann/faiss cannot infer it.
         Assertions.assertThrows(

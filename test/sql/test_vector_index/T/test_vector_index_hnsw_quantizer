@@ -3,9 +3,11 @@
 ADMIN SET FRONTEND CONFIG("enable_experimental_vector" = "true");
 
 -- =====================================================================
--- HNSW + quantizer DDL: SQ4 / SQ8 / PQ acceptance
--- Covers the FE analyzer path (quantizer / m_pq / nbits_pq properties)
--- end-to-end through index build and top-K query.
+-- HNSW + quantizer DDL: SQ4 / SQ8 / PQ acceptance and rejection.
+-- Covers the FE analyzer path (quantizer / m_pq / nbits_pq properties).
+-- SQ4 / SQ8 cases also INSERT + SELECT to verify the build/query path.
+-- PQ is DDL-only: PQ training needs many samples per sub-quantizer (e.g.
+-- 256 at nbits_pq=8) which is impractical inside a SQL-tester case.
 -- =====================================================================
 
 -- HNSW + SQ8 (most common quantizer)
