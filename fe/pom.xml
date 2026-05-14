@@ -94,6 +94,7 @@ under the License.
         <async-profiler.version>4.0</async-profiler.version>
         <maven.surefire.plugin.version>3.2.5</maven.surefire.plugin.version>
         <bouncycastle.version>1.84</bouncycastle.version>
+        <thrift.version>0.23.0</thrift.version>
     </properties>
 
     <profiles>
@@ -497,7 +498,7 @@ under the License.
             <dependency>
                 <groupId>org.apache.thrift</groupId>
                 <artifactId>libthrift</artifactId>
-                <version>0.22.0</version>
+                <version>${thrift.version}</version>
                 <exclusions>
                     <exclusion>
                         <groupId>org.apache.tomcat.embed</groupId>
