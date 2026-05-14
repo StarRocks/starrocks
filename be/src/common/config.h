@@ -1368,6 +1368,23 @@ CONF_mInt64(cloud_native_pk_index_rebuild_rows_threshold, "10000000");
 // wall-clock (~85% on the `1_100gb_sortkey` workload at iter-008 measurement).
 // Set to false to fall back to the per-chunk insert path bit-for-bit.
 CONF_mBool(lake_pk_index_rebuild_bulk_load_sort, "true");
+// Number of parallel sort chunks for the PK-index cold-load rebuild's
+// `std::sort` of the bulk-load scratch vector. Iter-010 measurement showed
+// the serial `std::sort` over 1.7M (string, IndexValueWithVer) pairs took
+// ~950 ms (~55% of cold-load wall-clock) — dominated by string comparisons
+// on random PK keys. Splitting the scratch into N approximately-equal chunks
+// and dispatching N-1 of them onto `pk_index_execution_thread_pool` cuts the
+// parallel-sort phase to ~O(N/K log N/K), with a sequential pairwise
+// `std::inplace_merge` to recombine. Set to 1 (or 0) to fall back to the
+// single-threaded `std::sort` path. Chunks are also clamped so each chunk
+// has at least `lake_pk_index_rebuild_parallel_sort_min_per_chunk` entries.
+CONF_mInt32(lake_pk_index_rebuild_parallel_sort_chunks, "4");
+// Minimum entries per parallel-sort chunk. Below this, the chunking
+// overhead (token allocation, dispatch, merge bookkeeping) outweighs the
+// gain from parallelism, so the rebuild silently falls back to a single
+// `std::sort`. Default 50 000 picked to keep per-chunk wall-clock above the
+// thread-dispatch cost (~tens of microseconds).
+CONF_mInt32(lake_pk_index_rebuild_parallel_sort_min_per_chunk, "50000");
 // if set to true, CACHE SELECT will only read file, save CPU time
 // if set to false, CACHE SELECT will behave like SELECT
 CONF_mBool(lake_cache_select_in_physical_way, "true");

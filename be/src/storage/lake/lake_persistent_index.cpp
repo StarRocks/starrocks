@@ -1305,7 +1305,67 @@ Status LakePersistentIndex::load_from_lake_tablet(TabletManager* tablet_mgr, con
         // method; rebuild within one pass produces each PK at most once, so a
         // plain ascending sort is sufficient.
         int64_t t_sort_start = GetCurrentTimeMicros();
-        std::sort(scratch.begin(), scratch.end(), [](const auto& a, const auto& b) { return a.first < b.first; });
+        auto key_less = [](const auto& a, const auto& b) { return a.first < b.first; };
+        const int cfg_chunks = std::max(1, config::lake_pk_index_rebuild_parallel_sort_chunks);
+        const size_t min_per_chunk =
+                static_cast<size_t>(std::max(1, config::lake_pk_index_rebuild_parallel_sort_min_per_chunk));
+        // Cap chunk count so every chunk holds at least `min_per_chunk` entries
+        // — below that, dispatch overhead exceeds the parallel speedup.
+        const size_t n_pairs = scratch.size();
+        size_t k = (cfg_chunks <= 1) ? 1
+                                     : std::min<size_t>(cfg_chunks, std::max<size_t>(1, n_pairs / min_per_chunk));
+        if (k < 2) {
+            std::sort(scratch.begin(), scratch.end(), key_less);
+            TRACE_COUNTER_INCREMENT("rebuild_parallel_sort_chunks", 1);
+        } else {
+            // Even split. bounds[i] is the half-open chunk start of chunk i;
+            // bounds[k] == n_pairs is the past-the-end sentinel.
+            std::vector<size_t> bounds(k + 1);
+            for (size_t i = 0; i <= k; ++i) {
+                bounds[i] = (n_pairs * i) / k;
+            }
+            TRACE_COUNTER_INCREMENT("rebuild_parallel_sort_chunks", static_cast<int64_t>(k));
+            // Each worker thread accumulates into a thread-safe atomic; emit
+            // once after `token->wait()` because TRACE_COUNTER_INCREMENT from
+            // worker threads silently drops (trace ctx is thread-local).
+            std::atomic<int64_t> sort_chunk_us{0};
+            auto sort_chunk = [&](size_t lo, size_t hi) {
+                int64_t t0 = GetCurrentTimeMicros();
+                std::sort(scratch.begin() + lo, scratch.begin() + hi, key_less);
+                sort_chunk_us.fetch_add(GetCurrentTimeMicros() - t0, std::memory_order_relaxed);
+            };
+            auto token = ExecEnv::GetInstance()->pk_index_execution_thread_pool()->new_token(
+                    ThreadPool::ExecutionMode::CONCURRENT);
+            // Dispatch chunks [1..k-1] to the pool; the caller thread sorts
+            // chunk 0 inline so we don't waste a thread spinning on wait().
+            for (size_t i = 1; i < k; ++i) {
+                size_t lo = bounds[i];
+                size_t hi = bounds[i + 1];
+                auto st = token->submit_func([&sort_chunk, lo, hi]() { sort_chunk(lo, hi); });
+                if (!st.ok()) {
+                    sort_chunk(lo, hi);
+                }
+            }
+            sort_chunk(bounds[0], bounds[1]);
+            token->wait();
+            TRACE_COUNTER_INCREMENT("rebuild_parallel_sort_chunk_us", sort_chunk_us.load());
+            // Sequential pairwise `std::inplace_merge` over log2(k) passes.
+            // Each pass is O(N) comparisons + O(min(left,right)) auxiliary
+            // memory; total merge work is O(N log k), which empirically lands
+            // under 100 ms for N=1.7M, k=4.
+            int64_t t_merge_start = GetCurrentTimeMicros();
+            size_t span = 1;
+            while (span < k) {
+                size_t step = span * 2;
+                for (size_t i = 0; i + span < k; i += step) {
+                    size_t j = std::min(i + step, k);
+                    std::inplace_merge(scratch.begin() + bounds[i], scratch.begin() + bounds[i + span],
+                                       scratch.begin() + bounds[j], key_less);
+                }
+                span = step;
+            }
+            TRACE_COUNTER_INCREMENT("rebuild_parallel_sort_merge_us", GetCurrentTimeMicros() - t_merge_start);
+        }
         TRACE_COUNTER_INCREMENT("rebuild_bulk_load_sort_us", GetCurrentTimeMicros() - t_sort_start);
         // Hand the sorted vector to the memtable; it walks the input once and
         // appends with end-hint inserts (O(1) amortized each).
