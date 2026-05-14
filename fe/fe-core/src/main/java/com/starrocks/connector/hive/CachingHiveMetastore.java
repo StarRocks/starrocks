@@ -86,24 +86,32 @@ public class CachingHiveMetastore extends CachingMetastore implements IHiveMetas
     protected LoadingCache<DatabaseTableName, HivePartitionStats> tableStatsCache;
     protected AsyncLoadingCache<HivePartitionName, HivePartitionStats> partitionStatsCache;
     protected Cache<DatabaseTableName, String> hmsExternalTableCache;
+    protected Cache<DatabaseTableName, String> avroSchemaCache;
+    private final Optional<AvroSchemaResolver> avroSchemaResolver;
 
     public static CachingHiveMetastore createQueryLevelInstance(IHiveMetastore metastore, long perQueryCacheMaxSize) {
-        return new CachingHiveMetastore(
-                metastore,
-                newDirectExecutorService(),
-                newDirectExecutorService(),
-                NEVER_EVICT,
-                NEVER_REFRESH,
-                perQueryCacheMaxSize,
-                true);
+        return createQueryLevelInstance(metastore, perQueryCacheMaxSize, Optional.empty());
+    }
+
+    public static CachingHiveMetastore createQueryLevelInstance(
+            IHiveMetastore metastore, long perQueryCacheMaxSize, Optional<AvroSchemaResolver> avroSchemaResolver) {
+        return new CachingHiveMetastore(metastore, newDirectExecutorService(), newDirectExecutorService(), NEVER_EVICT,
+                NEVER_REFRESH, perQueryCacheMaxSize, true, avroSchemaResolver);
     }
 
     public static CachingHiveMetastore createCatalogLevelInstance(IHiveMetastore metastore, Executor executor,
                                                                   Executor partitionExecutor, long expireAfterWrite,
                                                                   long refreshInterval, long maxSize,
                                                                   boolean enableListNamesCache) {
-        return new CachingHiveMetastore(metastore, executor, partitionExecutor,
-          expireAfterWrite, refreshInterval, maxSize, enableListNamesCache);
+        return createCatalogLevelInstance(metastore, executor, partitionExecutor, expireAfterWrite, refreshInterval,
+                maxSize, enableListNamesCache, Optional.empty());
+    }
+
+    public static CachingHiveMetastore createCatalogLevelInstance(IHiveMetastore metastore, Executor executor,
+            Executor partitionExecutor, long expireAfterWrite, long refreshInterval, long maxSize,
+            boolean enableListNamesCache, Optional<AvroSchemaResolver> avroSchemaResolver) {
+        return new CachingHiveMetastore(metastore, executor, partitionExecutor, expireAfterWrite, refreshInterval,
+                maxSize, enableListNamesCache, avroSchemaResolver);
     }
 
     public static class PartitionStatisticsLoader implements AsyncCacheLoader<HivePartitionName, HivePartitionStats> {
@@ -129,10 +137,18 @@ public class CachingHiveMetastore extends CachingMetastore implements IHiveMetas
     protected CachingHiveMetastore(IHiveMetastore metastore, Executor executor, Executor partitionExecutor,
                                    long expireAfterWriteSec, long refreshIntervalSec, long maxSize,
                                    boolean enableListNamesCache) {
+        this(metastore, executor, partitionExecutor, expireAfterWriteSec, refreshIntervalSec, maxSize,
+                enableListNamesCache, Optional.empty());
+    }
+
+    protected CachingHiveMetastore(IHiveMetastore metastore, Executor executor, Executor partitionExecutor,
+            long expireAfterWriteSec, long refreshIntervalSec, long maxSize, boolean enableListNamesCache,
+            Optional<AvroSchemaResolver> avroSchemaResolver) {
         super(executor, expireAfterWriteSec, refreshIntervalSec, maxSize);
         this.metastore = metastore;
         this.enableListNameCache = enableListNamesCache;
         this.lastAccessTimeMap = Maps.newConcurrentMap();
+        this.avroSchemaResolver = avroSchemaResolver;
 
         // The list names interface of hive metastore latency is very low, so we default to pull the latest every time.
         if (enableListNamesCache) {
@@ -171,6 +187,7 @@ public class CachingHiveMetastore extends CachingMetastore implements IHiveMetas
         tableStatsCache = newCacheBuilder(expireAfterWriteSec, refreshIntervalSec, maxSize)
                 .build(asyncReloading(CacheLoader.from(this::loadTableStatistics), executor));
 
+        avroSchemaCache = newCacheBuilder(expireAfterWriteSec, NEVER_REFRESH, maxSize).build();
 
         Caffeine<Object, Object> builder = Caffeine.newBuilder().maximumSize(maxSize).executor(executor);
         if (expireAfterWriteSec > 0) {
@@ -309,6 +326,19 @@ public class CachingHiveMetastore extends CachingMetastore implements IHiveMetas
 
     public Table loadTable(DatabaseTableName databaseTableName) {
         Table table = metastore.getTable(databaseTableName.getDatabaseName(), databaseTableName.getTableName());
+        if (table instanceof HiveTable hiveTable) {
+            String avroSchema = avroSchemaCache.getIfPresent(databaseTableName);
+            if (avroSchema == null) {
+                Optional<String> schemaOpt = avroSchemaResolver.flatMap(resolver -> resolver.resolve(hiveTable));
+                if (schemaOpt.isPresent()) {
+                    avroSchema = schemaOpt.get();
+                    avroSchemaCache.put(databaseTableName, avroSchema);
+                }
+            }
+            if (avroSchema != null) {
+                hiveTable.setAvroSchemaJson(avroSchema);
+            }
+        }
         if (table.isHMSExternalTable()) {
             hmsExternalTableCache.put(databaseTableName, databaseTableName.toString());
         }
@@ -507,6 +537,7 @@ public class CachingHiveMetastore extends CachingMetastore implements IHiveMetas
                                                            boolean onlyCachedPartitions) {
         Table updatedTable;
         try {
+            avroSchemaCache.invalidate(databaseTableName);
             updatedTable = loadTable(databaseTableName);
         } catch (StarRocksConnectorException e) {
             Throwable cause = e.getCause();
@@ -676,6 +707,8 @@ public class CachingHiveMetastore extends CachingMetastore implements IHiveMetas
         partitionCache.invalidateAll();
         tableStatsCache.invalidateAll();
         partitionStatsCache.synchronous().invalidateAll();
+        hmsExternalTableCache.invalidateAll();
+        avroSchemaCache.invalidateAll();
     }
 
     public synchronized void invalidateDatabase(String dbName) {
@@ -688,6 +721,8 @@ public class CachingHiveMetastore extends CachingMetastore implements IHiveMetas
         DatabaseTableName databaseTableName = DatabaseTableName.of(dbName, tableName);
         tableCache.invalidate(databaseTableName);
         tableStatsCache.invalidate(databaseTableName);
+        hmsExternalTableCache.invalidate(databaseTableName);
+        avroSchemaCache.invalidate(databaseTableName);
         invalidateTablePartitionInfo(dbName, tableName, databaseTableName);
     }
 
