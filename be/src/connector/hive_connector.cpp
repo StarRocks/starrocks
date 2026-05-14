@@ -812,6 +812,9 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
     scanner_params.min_max_conjunct_ctxs = _min_max_conjunct_ctxs;
     scanner_params.min_max_tuple_desc = _min_max_tuple_desc;
     scanner_params.hive_column_names = &_hive_column_names;
+    if (const auto* hdfs_desc = dynamic_cast<const HdfsTableDescriptor*>(_hive_table)) {
+        scanner_params.avro_schema_json = hdfs_desc->get_avro_schema_json();
+    }
     scanner_params.case_sensitive = _case_sensitive;
     scanner_params.profile = &_profile;
     scanner_params.lazy_column_coalesce_counter = get_lazy_column_coalesce_counter();

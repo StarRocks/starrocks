@@ -14,6 +14,10 @@
 
 package com.starrocks.connector.hive;
 
+import static com.starrocks.connector.CachingRemoteFileIO.NEVER_REFRESH;
+import static com.starrocks.connector.hive.HiveConnector.HIVE_METASTORE_TYPE;
+import static com.starrocks.connector.hive.HiveConnector.HIVE_METASTORE_URIS;
+
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
@@ -26,16 +30,12 @@ import com.starrocks.connector.MetastoreType;
 import com.starrocks.connector.ReentrantExecutor;
 import com.starrocks.connector.RemoteFileIO;
 import com.starrocks.sql.analyzer.SemanticException;
-
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-
-import static com.starrocks.connector.CachingRemoteFileIO.NEVER_REFRESH;
-import static com.starrocks.connector.hive.HiveConnector.HIVE_METASTORE_TYPE;
-import static com.starrocks.connector.hive.HiveConnector.HIVE_METASTORE_URIS;
 
 public class HiveConnectorInternalMgr {
     public static final List<String> SUPPORTED_METASTORE_TYPE = Lists.newArrayList("hive", "glue", "dlf");
@@ -124,14 +124,13 @@ public class HiveConnectorInternalMgr {
                     new ThreadFactoryBuilder().setNameFormat("hive-metastore-refresh-%d").build());
             refreshHiveExternalTableExecutor = Executors.newCachedThreadPool(
                     new ThreadFactoryBuilder().setNameFormat("hive-external-table-refresh-%d").build());
-            baseHiveMetastore = CachingHiveMetastore.createCatalogLevelInstance(
-                    hiveMetastore,
+            baseHiveMetastore = CachingHiveMetastore.createCatalogLevelInstance(hiveMetastore,
                     new ReentrantExecutor(refreshHiveMetastoreExecutor, hmsConf.getCacheRefreshThreadMaxNum()),
                     new ReentrantExecutor(refreshHiveExternalTableExecutor, hmsConf.getCacheRefreshThreadMaxNum()),
                     hmsConf.getCacheTtlSec(),
                     enableHmsEventsIncrementalSync ? NEVER_REFRESH : hmsConf.getCacheRefreshIntervalSec(),
-                    hmsConf.getCacheMaxNum(),
-                    hmsConf.enableListNamesCache());
+                    hmsConf.getCacheMaxNum(), hmsConf.enableListNamesCache(),
+                    Optional.of(new AvroSchemaResolver(hdfsEnvironment.getConfiguration())));
         }
 
         return baseHiveMetastore;

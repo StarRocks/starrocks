@@ -73,7 +73,7 @@ Status HdfsAvroScanner::do_open(RuntimeState* state) {
     return _avro_reader->init(std::move(input_stream), _scanner_params.path, state, &_scanner_counter,
                               &_materialize_slot_descs, &_column_readers,
                               /*col_not_found_as_null=*/true, _file.get(), config::avro_reader_buffer_size_bytes,
-                              split_offset, split_length);
+                              split_offset, split_length, _scanner_params.avro_schema_json);
 }
 
 Status HdfsAvroScanner::do_get_next(RuntimeState* state, ChunkPtr* chunk) {

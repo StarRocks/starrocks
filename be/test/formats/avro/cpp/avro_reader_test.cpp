@@ -469,6 +469,37 @@ TEST_F(AvroReaderTest, test_column_projection) {
     ASSERT_TRUE(avro_reader->read_chunk(chunk, 2).is_end_of_file());
 }
 
+TEST_F(AvroReaderTest, test_external_reader_schema_default_field) {
+    std::string filename = "primitive.avro";
+    std::string reader_schema = R"({
+        "type": "record",
+        "name": "PrimitiveTypesRecord",
+        "fields": [
+            {"name": "added_field", "type": "int", "default": 7}
+        ]
+    })";
+
+    std::vector<SlotDescriptor> descs;
+    descs.emplace_back(100, "added_field", TypeDescriptor::from_logical_type(TYPE_INT));
+    std::vector<SlotDescriptor*> slot_descs = {&descs[0]};
+    create_column_readers(slot_descs, _timezone, false);
+
+    auto file_or = FileSystem::Default()->new_random_access_file(_test_exec_dir + filename);
+    ASSERT_OK(file_or.status());
+    auto avro_reader = std::make_unique<AvroReader>();
+    ASSERT_OK(avro_reader->init(std::make_unique<AvroBufferInputStream>(
+                                        std::move(file_or.value()), config::avro_reader_buffer_size_bytes, _counter),
+                                filename, _state.get(), _counter, &slot_descs, &_column_readers,
+                                /*col_not_found_as_null=*/false, nullptr, 0, 0, 0, reader_schema));
+
+    auto chunk = create_src_chunk(slot_descs);
+    ASSERT_OK(avro_reader->read_chunk(chunk, 2));
+    materialize_src_chunk_adaptive_nullable_column(chunk);
+
+    ASSERT_EQ(1, chunk->num_rows());
+    ASSERT_EQ("[7]", chunk->debug_row(0));
+}
+
 TEST_F(AvroReaderTest, test_read_logical_types) {
     std::string filename = "logical.avro";
     std::vector<SlotDescriptor*> slot_descs;

@@ -494,6 +494,9 @@ struct THdfsTable {
 
     // timezone
     11: optional string time_zone
+
+    // resolved Avro reader schema json from avro.schema.literal/url
+    12: optional string avro_schema_json
 }
 
 struct TFileTable {
