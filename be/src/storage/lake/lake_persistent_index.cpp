@@ -1312,8 +1312,7 @@ Status LakePersistentIndex::load_from_lake_tablet(TabletManager* tablet_mgr, con
         // Cap chunk count so every chunk holds at least `min_per_chunk` entries
         // — below that, dispatch overhead exceeds the parallel speedup.
         const size_t n_pairs = scratch.size();
-        size_t k = (cfg_chunks <= 1) ? 1
-                                     : std::min<size_t>(cfg_chunks, std::max<size_t>(1, n_pairs / min_per_chunk));
+        size_t k = (cfg_chunks <= 1) ? 1 : std::min<size_t>(cfg_chunks, std::max<size_t>(1, n_pairs / min_per_chunk));
         if (k < 2) {
             std::sort(scratch.begin(), scratch.end(), key_less);
             TRACE_COUNTER_INCREMENT("rebuild_parallel_sort_chunks", 1);
