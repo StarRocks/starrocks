@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#pragma once
+
 #include "exprs/table_function/table_function.h"
 
 namespace starrocks {
