@@ -1,0 +1,36 @@
+
+```SQL
+CREATE RESOURCE GROUP <group_name> 
+TO (
+    user='string', 
+    role='string', 
+    query_type in ('select'), 
+    source_ip='cidr'
+) --Create a classifier. If you create more than one classifier, separate the classifiers with commas (`,`).
+WITH (
+    "{ cpu_weight | cpu_weight_percent | exclusive_cpu_cores | exclusive_cpu_percent }" = "INT",
+    "warehouses" = "wh1,wh2,wh3",
+    "mem_limit" = "m%",
+    "concurrency_limit" = "INT"
+);
+```
+
+Example:
+
+```SQL
+CREATE RESOURCE GROUP rg1
+TO 
+    (user='rg1_user1', role='rg1_role1', query_type in ('select'), source_ip='192.168.x.x/24'),
+    (user='rg1_user2', query_type in ('select'), source_ip='192.168.x.x/24'),
+    (user='rg1_user3', source_ip='192.168.x.x/24'),
+    (user='rg1_user4'),
+    (db='db1')
+WITH (
+    'exclusive_cpu_percent' = '20',
+    'warehouses' = 'wh1,wh2,wh3',
+    'mem_limit' = '20%',
+    'big_query_cpu_second_limit' = '100',
+    'big_query_scan_rows_limit' = '100000',
+    'big_query_mem_limit' = '1073741824'
+);
+```
