@@ -491,6 +491,13 @@ CONF_mInt32(lake_partial_update_thread_pool_queue_size, "2048");
 CONF_mInt32(pk_index_memtable_max_count, "2");
 // The maximum wait flush timeout for pk index memtable in shared-data mode, in milliseconds.
 CONF_mInt64(pk_index_memtable_max_wait_flush_timeout_ms, "30000");
+// Cold-load rebuild of LakePersistentIndex used to call LakePersistentIndex::insert() once per
+// segment-iterator chunk (~2 K rows). That keeps the per-call wrapper overhead (vector
+// construction, flush_memtable cap check) on the critical path for ~hundreds of calls per
+// tablet. Accumulate up to this many rows across chunks within one rowset before invoking
+// insert(); flush at rowset boundary to preserve the rowset->version contract. 0 disables
+// the optimisation (falls back to per-chunk insert, pre-patch behaviour).
+CONF_mInt32(lake_pk_index_rebuild_batch_rows, "32768");
 // The parameters for pk index size-tiered compaction strategy.
 CONF_mInt64(pk_index_size_tiered_min_level_size, "131072");
 CONF_mInt64(pk_index_size_tiered_level_multiplier, "10");

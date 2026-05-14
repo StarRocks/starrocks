@@ -1139,6 +1139,48 @@ Status LakePersistentIndex::load_from_lake_tablet(TabletManager* tablet_mgr, con
     int64_t get_next_cost_us = 0;
     int64_t pk_encode_cost_us = 0;
     int64_t build_values_cost_us = 0;
+    int64_t batch_insert_cnt = 0;
+    int64_t batch_total_rows = 0;
+    // Accumulator: each cold-load chunk is ~2 K rows, and the old code called insert() per
+    // chunk. The wrapper around _memtable->insert() (per-call vector construction inside the
+    // memtable, flush_memtable cap check, status plumbing) adds ~1 ms on every call, which on
+    // a 2 M-row rebuild totals ~1 s of pure wrapper time. Accumulate keys across chunks WITHIN
+    // a rowset, then flush via one insert() call. Rowset boundary is mandatory: each rowset
+    // carries a distinct version, and insert() persists that version into the memtable.
+    const int32_t batch_threshold = config::lake_pk_index_rebuild_batch_rows;
+    std::string batch_key_buf;
+    std::vector<uint32_t> batch_key_offsets;
+    std::vector<IndexValue> batch_values;
+    auto reset_batch = [&]() {
+        batch_key_buf.clear();
+        batch_key_offsets.clear();
+        batch_values.clear();
+    };
+    auto append_batch = [&](const Slice* keys, size_t n, const IndexValue* values) {
+        batch_key_offsets.reserve(batch_key_offsets.size() + n);
+        for (size_t i = 0; i < n; ++i) {
+            batch_key_offsets.push_back(static_cast<uint32_t>(batch_key_buf.size()));
+            batch_key_buf.append(keys[i].data, keys[i].size);
+        }
+        batch_values.insert(batch_values.end(), values, values + n);
+    };
+    auto flush_batch = [&](int64_t version) -> Status {
+        if (batch_values.empty()) return Status::OK();
+        std::vector<Slice> slices;
+        slices.reserve(batch_values.size());
+        const char* buf = batch_key_buf.data();
+        const size_t buf_size = batch_key_buf.size();
+        for (size_t i = 0; i < batch_values.size(); ++i) {
+            const size_t off = batch_key_offsets[i];
+            const size_t end = (i + 1 < batch_values.size()) ? batch_key_offsets[i + 1] : buf_size;
+            slices.emplace_back(buf + off, end - off);
+        }
+        batch_insert_cnt += 1;
+        batch_total_rows += batch_values.size();
+        Status st = insert(slices.size(), slices.data(), batch_values.data(), version);
+        reset_batch();
+        return st;
+    };
     // Rowset whose version is between max_sstable_version and base_version should be recovered.
     for (auto& rowset : rowsets) {
         TRACE_COUNTER_INCREMENT("total_segment_cnt", rowset->num_segments());
@@ -1231,23 +1273,49 @@ Status LakePersistentIndex::load_from_lake_tablet(TabletManager* tablet_mgr, con
                         continue;
                     }
                     TRACE_COUNTER_INCREMENT("rebuild_index_num_rows", pkc->size());
-                    if (pkc->is_binary()) {
-                        RETURN_IF_ERROR(insert(pkc->size(), reinterpret_cast<const Slice*>(pkc->raw_data()),
-                                               values.data(), rowset_version));
-                    } else {
-                        std::vector<Slice> keys;
-                        keys.reserve(pkc->size());
-                        const auto* fkeys = pkc->continuous_data();
-                        for (size_t i = 0; i < pkc->size(); ++i) {
-                            keys.emplace_back(fkeys, _key_size);
-                            fkeys += _key_size;
+                    if (batch_threshold <= 0) {
+                        // Disabled: per-chunk insert (pre-patch behaviour).
+                        if (pkc->is_binary()) {
+                            RETURN_IF_ERROR(insert(pkc->size(), reinterpret_cast<const Slice*>(pkc->raw_data()),
+                                                   values.data(), rowset_version));
+                        } else {
+                            std::vector<Slice> keys;
+                            keys.reserve(pkc->size());
+                            const auto* fkeys = pkc->continuous_data();
+                            for (size_t i = 0; i < pkc->size(); ++i) {
+                                keys.emplace_back(fkeys, _key_size);
+                                fkeys += _key_size;
+                            }
+                            RETURN_IF_ERROR(insert(pkc->size(),
+                                                   reinterpret_cast<const Slice*>(keys.data()),
+                                                   values.data(), rowset_version));
                         }
-                        RETURN_IF_ERROR(insert(pkc->size(), reinterpret_cast<const Slice*>(keys.data()), values.data(),
-                                               rowset_version));
+                    } else {
+                        // Append into the rowset-scoped batch buffer.
+                        if (pkc->is_binary()) {
+                            append_batch(reinterpret_cast<const Slice*>(pkc->raw_data()), pkc->size(),
+                                         values.data());
+                        } else {
+                            // Synthesize fixed-size Slices on the stack to feed append_batch,
+                            // which immediately copies the bytes into batch_key_buf.
+                            std::vector<Slice> keys;
+                            keys.reserve(pkc->size());
+                            const auto* fkeys = pkc->continuous_data();
+                            for (size_t i = 0; i < pkc->size(); ++i) {
+                                keys.emplace_back(fkeys, _key_size);
+                                fkeys += _key_size;
+                            }
+                            append_batch(keys.data(), keys.size(), values.data());
+                        }
+                        if (static_cast<int64_t>(batch_values.size()) >= batch_threshold) {
+                            RETURN_IF_ERROR(flush_batch(rowset_version));
+                        }
                     }
                 }
             }
         }
+        // Drain the batch before moving to the next rowset (rowset_version changes).
+        RETURN_IF_ERROR(flush_batch(rowset_version));
         // Rebuild from del files
         if (rowset->metadata().del_files_size() > 0) {
             RETURN_IF_ERROR(load_dels(rowset, pkey_schema, rowset_version));
@@ -1256,6 +1324,8 @@ Status LakePersistentIndex::load_from_lake_tablet(TabletManager* tablet_mgr, con
     TRACE_COUNTER_INCREMENT("rebuild_get_next_cost_us", get_next_cost_us);
     TRACE_COUNTER_INCREMENT("rebuild_pk_encode_cost_us", pk_encode_cost_us);
     TRACE_COUNTER_INCREMENT("rebuild_build_values_cost_us", build_values_cost_us);
+    TRACE_COUNTER_INCREMENT("rebuild_batch_insert_cnt", batch_insert_cnt);
+    TRACE_COUNTER_INCREMENT("rebuild_batch_total_rows", batch_total_rows);
     TRACE_COUNTER_INCREMENT("segment_io_local_disk_us", stats.io_ns_read_local_disk / 1000);
     TRACE_COUNTER_INCREMENT("segment_io_remote_us", stats.io_ns_remote / 1000);
     TRACE_COUNTER_INCREMENT("segment_io_count_local_disk", stats.io_count_local_disk);
