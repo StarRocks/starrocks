@@ -765,6 +765,7 @@ jobs:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           fail_on_error: true
           level: error
+          reviewdog_flags: "-tee"
 
   fe-ut:
     runs-on: [self-hosted, normal]
