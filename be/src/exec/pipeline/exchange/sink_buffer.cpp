@@ -20,7 +20,6 @@
 #include <mutex>
 #include <string_view>
 
-#include "base/testutil/sync_point.h"
 #include "base/time/time.h"
 #include "base/uid_util.h"
 #include "base/utility/defer_op.h"
@@ -471,11 +470,6 @@ Status SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id, const std::fun
         closure->cntl.set_timeout_ms(_brpc_timeout_ms);
         set_ignore_overcrowded_for_query(closure->cntl);
 
-        auto sync_point_arg = std::make_pair(false, closure);
-        TEST_SYNC_POINT_CALLBACK("SinkBuffer::_try_to_send_rpc::before_send_rpc", &sync_point_arg);
-        if (sync_point_arg.first) {
-            return Status::OK();
-        }
         return _send_rpc(closure, request);
     }
     return Status::OK();
