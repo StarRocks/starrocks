@@ -297,6 +297,7 @@ set(EXEC_FILES
         ./runtime/merge_cascade_test.cpp
         ./exec/data_sinks/memory_scratch_sink_test_issue_8676.cpp
         ./exec/data_sinks/memory_scratch_sink_test.cpp
+        ./exec/data_sinks/mysql_result_writer_test.cpp
         ./runtime/command_executor_test.cpp
         ./runtime/exec_env_test.cpp
         ./exec/jdbc/type_checker_test.cpp
