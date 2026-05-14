@@ -92,7 +92,7 @@ public:
                 const std::vector<avrocpp::ColumnReaderUniquePtr>* column_readers, bool col_not_found_as_null,
                 RandomAccessFile* raw_file = nullptr, size_t buffer_size = 0, int64_t split_offset = 0,
                 int64_t split_length = 0, const std::string& reader_schema_json = "",
-                bool invalid_as_null = false);
+                bool invalid_as_null = false, bool allow_direct_path = true);
 
     void TEST_init(const std::vector<SlotDescriptor*>* slot_descs,
                    const std::vector<avrocpp::ColumnReaderUniquePtr>* column_readers, bool col_not_found_as_null);

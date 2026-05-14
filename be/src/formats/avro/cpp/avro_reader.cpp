@@ -308,7 +308,7 @@ Status AvroReader::init(std::unique_ptr<avro::InputStream> input_stream, const s
                         RuntimeState* state, ScannerCounter* counter, const std::vector<SlotDescriptor*>* slot_descs,
                         const std::vector<avrocpp::ColumnReaderUniquePtr>* column_readers, bool col_not_found_as_null,
                         RandomAccessFile* raw_file, size_t buffer_size, int64_t split_offset, int64_t split_length,
-                        const std::string& reader_schema_json, bool invalid_as_null) {
+                        const std::string& reader_schema_json, bool invalid_as_null, bool allow_direct_path) {
     if (_is_inited) {
         return Status::OK();
     }
@@ -358,7 +358,13 @@ Status AvroReader::init(std::unique_ptr<avro::InputStream> input_stream, const s
         }
 
         _data_schema = writer_schema;
-        _use_direct_path = reader_schema_json.empty() && !invalid_as_null && try_init_direct_readers(writer_schema);
+        // Direct path: reads binary fields straight from the BinaryDecoder without materializing
+        // a GenericDatum, which avoids heap allocation and ResolvingDecoder overhead per row.
+        // Consequence: _datum stays nullptr throughout — error reporting cannot serialize the row
+        // to JSON.  Callers that need row context in error messages (e.g. LOAD / AvroCppScanner)
+        // must pass allow_direct_path=false to fall back to the GenericDatum path.
+        _use_direct_path = allow_direct_path && reader_schema_json.empty() && !invalid_as_null &&
+                           try_init_direct_readers(writer_schema);
         if (_use_direct_path) {
             _base_reader = std::move(base);
             _base_reader->init();
@@ -511,6 +517,9 @@ Status AvroReader::read_chunk(ChunkPtr& chunk, int rows_to_read, int64_t* rows_c
                     std::string json_str;
                     if (_datum != nullptr) {
                         (void)AvroUtils::datum_to_json(*_datum, &json_str);
+                    } else {
+                        // Direct path: no GenericDatum is allocated, so row context is unavailable.
+                        json_str = "(row context unavailable in direct decode mode)";
                     }
                     RuntimeStateHelper::append_error_msg_to_file(_state, json_str, std::string(st.message()));
                     LOG(WARNING) << "Failed to read row. error: " << st;

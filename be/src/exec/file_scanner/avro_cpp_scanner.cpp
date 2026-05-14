@@ -206,7 +206,7 @@ StatusOr<AvroReaderUniquePtr> AvroCppScanner::open_avro_reader(const TBrokerRang
             std::make_unique<AvroBufferInputStream>(file, config::avro_reader_buffer_size_bytes, _counter),
             range_desc.path, _state, _counter, &_src_slot_descriptors, &_column_readers, col_not_found_as_null,
             /*raw_file=*/nullptr, /*buffer_size=*/0, /*split_offset=*/0, /*split_length=*/0,
-            /*reader_schema_json=*/"", /*invalid_as_null=*/!_strict_mode));
+            /*reader_schema_json=*/"", /*invalid_as_null=*/!_strict_mode, /*allow_direct_path=*/false));
     return std::move(avro_reader);
 }
 
