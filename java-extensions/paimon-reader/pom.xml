@@ -60,7 +60,10 @@
         <dependency>
             <groupId>org.apache.thrift</groupId>
             <artifactId>libthrift</artifactId>
+<<<<<<< HEAD
             <version>0.20.0</version>
+=======
+>>>>>>> 98f654c85b ([BugFix][CVE] bump libthrift to 0.23.0 (#73243))
         </dependency>
 
         <!-- https://mvnrepository.com/artifact/at.yawk.lz4/lz4-java -->
