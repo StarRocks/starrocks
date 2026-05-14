@@ -163,8 +163,8 @@ ADMIN SET FRONTEND CONFIG ("enable_experimental_vector" = "true");
 ##### nbits_pq
 
 - **默认值**: 8
-- **必需**: 否（仅在 `quantizer = pq` 时生效）。
-- **描述**: HNSW 特定参数（仅 PQ 量化器）。每个 PQ 子量化器的位数。必须在 1–8 之间。
+- **必需**: 否（仅在 `quantizer = pq` 时允许；其他场景下不允许设置）。
+- **描述**: HNSW 特定参数（仅 PQ 量化器）。每个 PQ 子量化器的位数。必须在 4–16 之间。
 
 ##### nbits
 
