@@ -1385,6 +1385,15 @@ CONF_mInt32(lake_pk_index_rebuild_parallel_sort_chunks, "4");
 // `std::sort`. Default 50 000 picked to keep per-chunk wall-clock above the
 // thread-dispatch cost (~tens of microseconds).
 CONF_mInt32(lake_pk_index_rebuild_parallel_sort_min_per_chunk, "50000");
+// If true, the pairwise `std::inplace_merge` passes that recombine the
+// parallel-sorted chunks dispatch independent merges within each pass onto
+// `pk_index_execution_thread_pool`. iter-012 measurement: with K=4 the merge
+// phase ran 287 ms serial (3 sequential `std::inplace_merge` calls). Within
+// each pass the merges operate on non-overlapping ranges and are
+// trivially-parallel; the caller thread executes one merge inline while the
+// rest run in the pool. Set to false to fall back to the fully-serial merge
+// path bit-for-bit.
+CONF_mBool(lake_pk_index_rebuild_parallel_merge, "true");
 // if set to true, CACHE SELECT will only read file, save CPU time
 // if set to false, CACHE SELECT will behave like SELECT
 CONF_mBool(lake_cache_select_in_physical_way, "true");

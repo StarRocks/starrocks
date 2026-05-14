@@ -1348,22 +1348,59 @@ Status LakePersistentIndex::load_from_lake_tablet(TabletManager* tablet_mgr, con
             sort_chunk(bounds[0], bounds[1]);
             token->wait();
             TRACE_COUNTER_INCREMENT("rebuild_parallel_sort_chunk_us", sort_chunk_us.load());
-            // Sequential pairwise `std::inplace_merge` over log2(k) passes.
-            // Each pass is O(N) comparisons + O(min(left,right)) auxiliary
-            // memory; total merge work is O(N log k), which empirically lands
-            // under 100 ms for N=1.7M, k=4.
+            // Pairwise `std::inplace_merge` over log2(k) passes. Within each
+            // pass the merges operate on non-overlapping ranges, so they run
+            // in parallel on `pk_index_execution_thread_pool` when
+            // `lake_pk_index_rebuild_parallel_merge` is true. The caller
+            // thread runs one merge inline (no thread spins waiting). When
+            // disabled, fall back to fully-serial merging bit-for-bit.
+            const bool parallel_merge = config::lake_pk_index_rebuild_parallel_merge;
+            std::atomic<int64_t> merge_job_us{0};
+            std::atomic<int64_t> merge_job_count{0};
             int64_t t_merge_start = GetCurrentTimeMicros();
+            struct MergeJob {
+                size_t lo;
+                size_t mid;
+                size_t hi;
+            };
+            auto do_merge = [&](MergeJob mj) {
+                int64_t t0 = GetCurrentTimeMicros();
+                std::inplace_merge(scratch.begin() + mj.lo, scratch.begin() + mj.mid, scratch.begin() + mj.hi,
+                                   key_less);
+                merge_job_us.fetch_add(GetCurrentTimeMicros() - t0, std::memory_order_relaxed);
+                merge_job_count.fetch_add(1, std::memory_order_relaxed);
+            };
             size_t span = 1;
             while (span < k) {
                 size_t step = span * 2;
+                std::vector<MergeJob> jobs;
+                jobs.reserve(k / step + 1);
                 for (size_t i = 0; i + span < k; i += step) {
                     size_t j = std::min(i + step, k);
-                    std::inplace_merge(scratch.begin() + bounds[i], scratch.begin() + bounds[i + span],
-                                       scratch.begin() + bounds[j], key_less);
+                    jobs.push_back({bounds[i], bounds[i + span], bounds[j]});
+                }
+                if (parallel_merge && jobs.size() >= 2) {
+                    auto merge_token = ExecEnv::GetInstance()->pk_index_execution_thread_pool()->new_token(
+                            ThreadPool::ExecutionMode::CONCURRENT);
+                    for (size_t i = 1; i < jobs.size(); ++i) {
+                        MergeJob mj = jobs[i];
+                        auto st = merge_token->submit_func([&do_merge, mj]() { do_merge(mj); });
+                        if (!st.ok()) {
+                            do_merge(mj);
+                        }
+                    }
+                    do_merge(jobs[0]);
+                    merge_token->wait();
+                } else {
+                    for (const auto& mj : jobs) {
+                        do_merge(mj);
+                    }
                 }
                 span = step;
             }
             TRACE_COUNTER_INCREMENT("rebuild_parallel_sort_merge_us", GetCurrentTimeMicros() - t_merge_start);
+            TRACE_COUNTER_INCREMENT("rebuild_parallel_merge_job_us", merge_job_us.load());
+            TRACE_COUNTER_INCREMENT("rebuild_parallel_merge_jobs", merge_job_count.load());
         }
         TRACE_COUNTER_INCREMENT("rebuild_bulk_load_sort_us", GetCurrentTimeMicros() - t_sort_start);
         // Hand the sorted vector to the memtable; it walks the input once and
