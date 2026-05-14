@@ -308,7 +308,7 @@ Status AvroReader::init(std::unique_ptr<avro::InputStream> input_stream, const s
                         RuntimeState* state, ScannerCounter* counter, const std::vector<SlotDescriptor*>* slot_descs,
                         const std::vector<avrocpp::ColumnReaderUniquePtr>* column_readers, bool col_not_found_as_null,
                         RandomAccessFile* raw_file, size_t buffer_size, int64_t split_offset, int64_t split_length,
-                        const std::string& reader_schema_json) {
+                        const std::string& reader_schema_json, bool invalid_as_null) {
     if (_is_inited) {
         return Status::OK();
     }
@@ -358,7 +358,7 @@ Status AvroReader::init(std::unique_ptr<avro::InputStream> input_stream, const s
         }
 
         _data_schema = writer_schema;
-        _use_direct_path = reader_schema_json.empty() && try_init_direct_readers(writer_schema);
+        _use_direct_path = reader_schema_json.empty() && !invalid_as_null && try_init_direct_readers(writer_schema);
         if (_use_direct_path) {
             _base_reader = std::move(base);
             _base_reader->init();
