@@ -496,6 +496,10 @@ public:
         return _query_options.__isset.enable_hyperscan_vec && _query_options.enable_hyperscan_vec;
     }
 
+    bool enable_json_extract_fusion() const {
+        return _query_options.__isset.enable_json_extract_fusion && _query_options.enable_json_extract_fusion;
+    }
+
     long column_view_concat_rows_limit() const {
         return _query_options.__isset.column_view_concat_rows_limit ? _query_options.column_view_concat_rows_limit
                                                                     : -1L;

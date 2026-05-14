@@ -398,6 +398,11 @@ struct TQueryOptions {
   // hardcoded "stream-load-pipe" filename. Optional and unused for
   // non-routine-load query paths.
   218: optional string routine_load_source_info;
+
+  // Enable fused JSON-extract fast path (simdjson::ondemand) for get_json_*(VARCHAR, VARCHAR)
+  // and json_query_from_string. Default true; set false to fall back to the legacy
+  // parse_json+JsonPath::extract pipeline.
+  220: optional bool enable_json_extract_fusion = true;
 }
 
 // A scan range plus the parameters needed to execute that scan.
