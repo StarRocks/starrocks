@@ -163,6 +163,7 @@ import com.starrocks.journal.bdbje.Timestamp;
 import com.starrocks.lake.StarMgrMetaSyncer;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.lake.TabletWriteLogHistorySyncer;
+import com.starrocks.lake.bookmark.BookmarkManager;
 import com.starrocks.lake.compaction.CompactionControlScheduler;
 import com.starrocks.lake.compaction.CompactionMgr;
 import com.starrocks.lake.snapshot.ClusterSnapshotMgr;
@@ -606,6 +607,8 @@ public class GlobalStateMgr {
 
     private final TabletReshardJobMgr tabletReshardJobMgr;
 
+    private final BookmarkManager bookmarkManager;
+
     private final LicenseMgr licenseMgr;
 
     enum LeaderRoleState {
@@ -962,6 +965,8 @@ public class GlobalStateMgr {
         this.jwkMgr = new JwkMgr();
 
         this.tabletReshardJobMgr = new TabletReshardJobMgr();
+
+        this.bookmarkManager = new BookmarkManager();
 
         this.licenseMgr = new LicenseMgr(nodeMgr);
     }
@@ -1324,6 +1329,10 @@ public class GlobalStateMgr {
 
     public TabletReshardJobMgr getTabletReshardJobMgr() {
         return tabletReshardJobMgr;
+    }
+
+    public BookmarkManager getBookmarkManager() {
+        return bookmarkManager;
     }
 
     // Use tryLock to avoid potential deadlock
@@ -1888,6 +1897,7 @@ public class GlobalStateMgr {
         tabletStatMgr.start();
         // load and export job label cleaner thread
         labelCleaner.start();
+        bookmarkManager.start();
         // ES state store
         esRepository.start();
 
@@ -2034,6 +2044,7 @@ public class GlobalStateMgr {
                 .put(SRMetaBlockID.HISTORICAL_NODE_MGR, historicalNodeMgr::load)
                 .put(SRMetaBlockID.TABLET_RESHARD_JOB_MGR, tabletReshardJobMgr::load)
                 .put(SRMetaBlockIDEPack.LICENSE_MGR, licenseMgr::load)
+                .put(SRMetaBlockIDEPack.BOOKMARK_MANAGER, bookmarkManager::load)
                 .build();
 
         Set<SRMetaBlockID> metaMgrMustExists = new HashSet<>(loadImages.keySet());
@@ -2276,6 +2287,7 @@ public class GlobalStateMgr {
                 tabletReshardJobMgr.save(imageWriter);
                 licenseMgr.save(imageWriter);
                 sqlDigestBlackList.save(imageWriter);
+                bookmarkManager.save(imageWriter);
             } catch (SRMetaBlockException e) {
                 LOG.error("Save meta block failed ", e);
                 throw new IOException("Save meta block failed ", e);

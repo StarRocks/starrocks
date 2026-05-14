@@ -26,6 +26,7 @@ import com.starrocks.catalog.Tablet;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.jmockit.Deencapsulation;
+import com.starrocks.lake.bookmark.BookmarkManager;
 import com.starrocks.lake.snapshot.ClusterSnapshotMgr;
 import com.starrocks.lake.vacuum.AutovacuumDaemon;
 import com.starrocks.lake.vacuum.FullVacuumDaemon;
@@ -60,6 +61,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Future;
@@ -527,6 +529,200 @@ public class VacuumTest {
         Config.lake_fullvacuum_partition_naptime_seconds = oldValue2;
         Config.lake_fullvacuum_parallel_partitions = oldValue1;
         FeConstants.runningUnitTest = true;
+    }
+
+    @Test
+    public void testFullVacuumRespectsBookmark() {
+        GlobalStateMgr currentState = GlobalStateMgr.getCurrentState();
+        FullVacuumDaemon fullVacuumDaemon = new FullVacuumDaemon();
+
+        long expectedVisibleVersion = 10L;
+        long expectedOldestReferencedVersion = 4L;
+
+        long testDbId = 0;
+        List<Long> dbIds = currentState.getLocalMetastore().getDbIds();
+        for (Long dbId : dbIds) {
+            Database currDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+            if (currDb != null && !currDb.isSystemDatabase()) {
+                testDbId = dbId;
+                break;
+            }
+        }
+        final Database sourceDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(testDbId);
+        for (Table tbl : sourceDb.getTables()) {
+            if (tbl.isOlapTable()) {
+                OlapTable olapTbl = (OlapTable) tbl;
+                for (PhysicalPartition part : olapTbl.getPhysicalPartitions()) {
+                    part.setLastFullVacuumTime(1L);
+                    part.setMinRetainVersion(0L);
+                }
+            }
+        }
+
+        new MockUp<PhysicalPartition>() {
+            @Mock
+            public long getVisibleVersion() {
+                return expectedVisibleVersion;
+            }
+        };
+
+        new MockUp<Table>() {
+            @Mock
+            public boolean isCloudNativeTableOrMaterializedView() {
+                return true;
+            }
+        };
+
+        new MockUp<LocalMetastore>() {
+            @Mock
+            public Database getDb(long dbId) {
+                return sourceDb;
+            }
+
+            @Mock
+            public List<Table> getTables(Long dbId) {
+                return sourceDb.getTables();
+            }
+        };
+
+        new MockUp<WarehouseManager>() {
+            @Mock
+            public ComputeNode getComputeNodeAssignedToTablet(ComputeResource computeResource, long tabletId) {
+                return new ComputeNode();
+            }
+        };
+
+        new MockUp<BrpcProxy>() {
+            @Mock
+            public LakeService getLakeService(String host, int port) {
+                return new LakeServiceWithMetrics(null);
+            }
+        };
+
+        new MockUp<LakeServiceWithMetrics>() {
+            @Mock
+            public Future<VacuumFullResponse> vacuumFull(VacuumFullRequest request) {
+                VacuumFullResponse resp = new VacuumFullResponse();
+                resp.status = new StatusPB();
+                resp.status.statusCode = 0;
+                resp.vacuumedFiles = 1L;
+                resp.vacuumedFileSize = 1L;
+                return CompletableFuture.completedFuture(resp);
+            }
+        };
+
+        BookmarkFenceMocks fence = new BookmarkFenceMocks(expectedOldestReferencedVersion);
+
+        final StarOSAgent starOSAgent = new StarOSAgent();
+        final ClusterSnapshotMgr clusterSnapshotMgr = new ClusterSnapshotMgr();
+        final WarehouseManager curWarehouseManager = new WarehouseManager();
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public ClusterSnapshotMgr getClusterSnapshotMgr() {
+                return clusterSnapshotMgr;
+            }
+
+            @Mock
+            public WarehouseManager getWarehouseMgr() {
+                return curWarehouseManager;
+            }
+
+            @Mock
+            public StarOSAgent getStarOSAgent() {
+                return starOSAgent;
+            }
+
+            @Mock
+            public BookmarkManager getBookmarkManager() {
+                return fence.bookmarkManager;
+            }
+        };
+
+        new MockUp<ClusterSnapshotMgr>() {
+            @Mock
+            public long getSafeDeletionTimeMs() {
+                return 454545L;
+            }
+        };
+
+        new MockUp<VacuumFullRequest>() {
+            @Mock
+            public void setMaxCheckVersion(long v) {
+                Assertions.assertEquals(expectedOldestReferencedVersion, v);
+            }
+        };
+
+        FeConstants.runningUnitTest = false;
+        int oldValue1 = Config.lake_fullvacuum_parallel_partitions;
+        long oldValue2 = Config.lake_fullvacuum_partition_naptime_seconds;
+        Config.lake_fullvacuum_parallel_partitions = 1;
+        Config.lake_fullvacuum_partition_naptime_seconds = 0;
+        Deencapsulation.invoke(fullVacuumDaemon, "runAfterCatalogReady");
+        Config.lake_fullvacuum_partition_naptime_seconds = oldValue2;
+        Config.lake_fullvacuum_parallel_partitions = oldValue1;
+        FeConstants.runningUnitTest = true;
+    }
+
+    @Test
+    public void testAutoVacuumRespectsBookmark() throws Exception {
+        partition = olapTable.getPhysicalPartitions().stream().findFirst().orElse(null);
+        partition.setVisibleVersion(10L, System.currentTimeMillis());
+        partition.setMinRetainVersion(10L);
+        partition.setMetadataSwitchVersion(0L);
+        partition.setLastSuccVacuumVersion(0L);
+
+        long expectedOldestReferencedVersion = 4L;
+        BookmarkFenceMocks fence = new BookmarkFenceMocks(expectedOldestReferencedVersion);
+
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public BookmarkManager getBookmarkManager() {
+                return fence.bookmarkManager;
+            }
+        };
+
+        VacuumResponse mockResponse = new VacuumResponse();
+        mockResponse.status = new StatusPB();
+        mockResponse.status.statusCode = 0;
+        mockResponse.vacuumedFiles = 0L;
+        mockResponse.vacuumedFileSize = 0L;
+        mockResponse.vacuumedVersion = 0L;
+        mockResponse.extraFileSize = 0L;
+        mockResponse.tabletInfos = new ArrayList<>();
+
+        Future<VacuumResponse> mockFuture = mock(Future.class);
+        when(mockFuture.get()).thenReturn(mockResponse);
+
+        LakeService localLakeService = mock(LakeService.class);
+        when(localLakeService.vacuum(any(VacuumRequest.class))).thenAnswer(invocation -> {
+            VacuumRequest req = invocation.getArgument(0);
+            Assertions.assertEquals(expectedOldestReferencedVersion, req.minRetainVersion);
+            return mockFuture;
+        });
+        try (MockedStatic<BrpcProxy> mockBrpcProxyStatic = mockStatic(BrpcProxy.class)) {
+            mockBrpcProxyStatic.when(() -> BrpcProxy.getLakeService(anyString(), anyInt())).thenReturn(localLakeService);
+            new AutovacuumDaemon().testVacuumPartitionImpl(db, olapTable, partition);
+        } finally {
+            // vacuumPartitionImpl writes partition.lastVacuumTime; reset it so later tests
+            // (e.g. testVacuumCheck, which doesn't reset lastVacuumTime) see a clean slate.
+            partition.setLastVacuumTime(0L);
+        }
+    }
+
+    /** Installs a MockUp so BookmarkManager.getPhysicalPartitionFenceVersion returns the given version. */
+    private static class BookmarkFenceMocks {
+        final BookmarkManager bookmarkManager = new BookmarkManager();
+
+        BookmarkFenceMocks(long version) {
+            new MockUp<BookmarkManager>() {
+                @Mock
+                public Optional<Long> getPhysicalPartitionFenceVersion(long dbId, long tableId,
+                                                                       long logicalPartitionId,
+                                                                       long physicalPartitionId) {
+                    return Optional.of(version);
+                }
+            };
+        }
     }
 
     @Test

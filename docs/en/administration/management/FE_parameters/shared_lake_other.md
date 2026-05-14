@@ -1409,3 +1409,21 @@ This topic introduces the following types of FE configurations:
 - Description: Whether to prefer string type for fixed length varchar columns in materialized view creation and CTAS operations.
 - Introduced in: v4.0.0
 
+### `bookmark_table_lock_timeout_ms`
+
+- Default: 30000
+- Type: Int
+- Unit: Milliseconds
+- Is mutable: Yes
+- Description: Maximum time a bookmark create call waits for the table read lock. Bounds caller latency when DDL or other writers hold the table lock; on timeout the create fails fast and the caller can retry.
+- Introduced in:
+
+### `bookmark_cleanup_interval_sec`
+
+- Default: 60
+- Type: Long
+- Unit: Seconds
+- Is mutable: Yes
+- Description: Interval at which the bookmark module sweeps stale references.
+- Introduced in:
+

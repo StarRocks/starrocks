@@ -706,6 +706,10 @@ public class OperationType {
     public static final short OP_GRANT_ROLE_TO_GROUP = 20501;
     public static final short OP_REVOKE_ROLE_FROM_GROUP = 20502;
 
+    // Bookmark (com.starrocks.lake.bookmark).
+    @IgnorableOnReplayFailed
+    public static final short OP_BOOKMARK_LOG = 20615;
+
     public static final ImmutableSet<Short> IGNORABLE_OPERATIONS = buildIgnorableOperations();
 
     private static ImmutableSet<Short> buildIgnorableOperations() {
@@ -733,7 +737,8 @@ public class OperationType {
                     opType != OP_DROP_SECURITY_INTEGRATION &&
                     opType != OP_ALTER_SECURITY_INTEGRATION &&
                     opType != OP_GRANT_ROLE_TO_GROUP &&
-                    opType != OP_REVOKE_ROLE_FROM_GROUP) {
+                    opType != OP_REVOKE_ROLE_FROM_GROUP &&
+                    opType != OP_BOOKMARK_LOG) {
                 LOG.fatal("OperationType cannot use a value exceeding 20000, " +
                         "and an error will be reported if it exceeds : {} = {}", field.getName(), opType);
                 System.exit(-1);

@@ -208,6 +208,15 @@ public class AutovacuumDaemon extends FrontendDaemon {
             locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.READ);
         }
 
+        // Lower minRetainVersion to the oldest version still referenced by a bookmark holder.
+        long oldestReferencedVersion = GlobalStateMgr.getCurrentState().getBookmarkManager()
+                .getPhysicalPartitionFenceVersion(db.getId(), table.getId(),
+                        partition.getParentId(), partition.getId())
+                .orElse(Long.MAX_VALUE);
+        if (oldestReferencedVersion < minRetainVersion) {
+            minRetainVersion = oldestReferencedVersion;
+        }
+
         boolean enableSharedFileCleanup = fileBundling || rangeDistribution;
         WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
         ComputeResource computeResource = warehouseManager.getBackgroundComputeResource(table.getId());

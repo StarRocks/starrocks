@@ -4598,4 +4598,15 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true, comment = "Allow private IPs (127.x, 10.x, 192.168.x, 172.16-31.x) if in allowlist. " +
             "Default false for security. Set true to allow internal service calls.")
     public static boolean http_request_allow_private_in_allowlist = false;
+
+    /////////////////////////////////////////////////    Bookmark   ///////////////////////////////////////////////////
+    @ConfField(mutable = true, comment =
+            "Interval at which the bookmark module sweeps stale references.")
+    public static long bookmark_cleanup_interval_sec = 60;
+
+    @ConfField(mutable = true, comment =
+            "Maximum time (ms) a bookmark create call waits for the table read lock. "
+                    + "Bounds caller latency when DDL or other writers hold the table lock; on timeout "
+                    + "the create fails fast and the caller can retry.")
+    public static int bookmark_table_lock_timeout_ms = 30 * 1000;
 }

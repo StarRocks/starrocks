@@ -78,6 +78,7 @@ import com.starrocks.journal.JournalTask;
 import com.starrocks.journal.JournalWriteException;
 import com.starrocks.journal.SerializeException;
 import com.starrocks.journal.bdbje.Timestamp;
+import com.starrocks.lake.bookmark.BookmarkLogEntry;
 import com.starrocks.lake.restore.SnapshotRestoreJob;
 import com.starrocks.load.DeleteMgr;
 import com.starrocks.load.ExportJob;
@@ -1455,6 +1456,11 @@ public class EditLog {
                     globalStateMgr.getTabletReshardJobMgr().replayRemoveTabletReshardJob(log.getJobId());
                     break;
                 }
+                case OperationType.OP_BOOKMARK_LOG: {
+                    BookmarkLogEntry entry = (BookmarkLogEntry) journal.data();
+                    globalStateMgr.getBookmarkManager().replay(entry);
+                    break;
+                }
                 default: {
                     if (Config.metadata_ignore_unknown_operation_type) {
                         LOG.warn("UNKNOWN Operation Type {}", opCode);
@@ -2547,5 +2553,9 @@ public class EditLog {
 
     public void logDropGroupProvider(GroupProviderLog groupProviderLog, WALApplier walApplier) {
         logJsonObject(OperationType.OP_DROP_GROUP_PROVIDER, groupProviderLog, walApplier);
+    }
+
+    public void logBookmarkEntry(BookmarkLogEntry entry, WALApplier applier) {
+        logJsonObject(OperationType.OP_BOOKMARK_LOG, entry, applier);
     }
 }

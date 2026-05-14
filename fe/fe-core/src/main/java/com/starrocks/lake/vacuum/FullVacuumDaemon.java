@@ -212,6 +212,14 @@ public class FullVacuumDaemon extends FrontendDaemon implements Writable {
         if (partition.getMinRetainVersion() > 0) {
             maxCheckVersion = Math.min(maxCheckVersion, partition.getMinRetainVersion());
         }
+        // Lower maxCheckVersion to the oldest version still referenced by a bookmark holder.
+        long oldestReferencedVersion = GlobalStateMgr.getCurrentState().getBookmarkManager()
+                .getPhysicalPartitionFenceVersion(db.getId(), table.getId(),
+                        partition.getParentId(), partition.getId())
+                .orElse(Long.MAX_VALUE);
+        if (oldestReferencedVersion < maxCheckVersion) {
+            maxCheckVersion = oldestReferencedVersion;
+        }
         vacuumFullRequest.setMinCheckVersion(minCheckVersion);
         vacuumFullRequest.setMaxCheckVersion(maxCheckVersion);
         vacuumFullRequest.setRetainVersions(retainVersions);

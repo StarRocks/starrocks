@@ -1407,3 +1407,21 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 是否可变: Yes
 - 描述: 在物化视图创建和 CTAS 操作中，是否更倾向于为固定长度的 varchar 列使用 string 类型。
 - 引入版本: v4.0.0
+
+### `bookmark_table_lock_timeout_ms`
+
+- 默认值: 30000
+- 类型: Int
+- 单位: 毫秒
+- 是否可变: Yes
+- 描述: 创建 bookmark 时等待 table 读锁的最长时间。当 DDL 或其它写入持有 table 锁时，限制调用方等待时延；超时后创建快速失败，调用方可重试。
+- 引入版本:
+
+### `bookmark_cleanup_interval_sec`
+
+- 默认值: 60
+- 类型: Long
+- 单位: 秒
+- 是否可变: Yes
+- 描述: Bookmark 模块清理失效引用的执行间隔。
+- 引入版本:

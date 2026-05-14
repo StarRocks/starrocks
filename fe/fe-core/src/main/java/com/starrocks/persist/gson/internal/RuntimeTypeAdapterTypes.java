@@ -124,6 +124,8 @@ import com.starrocks.lake.RecycleLakeUnPartitionInfo;
 import com.starrocks.lake.backup.LakeBackupJob;
 import com.starrocks.lake.backup.LakeRestoreJob;
 import com.starrocks.lake.backup.LakeTableSnapshotInfo;
+import com.starrocks.lake.bookmark.BookmarkLogEntry;
+import com.starrocks.lake.bookmark.HolderInfo;
 import com.starrocks.lake.compaction.CompactionTxnCommitAttachment;
 import com.starrocks.lake.restore.SnapshotRestoreJob;
 import com.starrocks.lake.snapshot.ClusterSnapshot;
@@ -261,6 +263,14 @@ public class RuntimeTypeAdapterTypes {
                 .registerSubtype(SparkLoadJob.SparkLoadJobStateUpdateInfo.class, "SparkLoadJobStateUpdateInfo");
         CLAZZ_TO_RUNTIME_TYPE_ADAPTOR_FACTORIES.put(LoadJob.LoadJobStateUpdateInfo.class,
                 load_job_state_update_info_type_adapter_factory);
+
+        // runtime adapter for class "BookmarkLogEntry" (subtype list owned by the class itself)
+        CLAZZ_TO_RUNTIME_TYPE_ADAPTOR_FACTORIES.put(BookmarkLogEntry.class,
+                BookmarkLogEntry.typeAdapterFactory());
+
+        // runtime adapter for class "HolderInfo" (subtype list owned by the interface itself)
+        CLAZZ_TO_RUNTIME_TYPE_ADAPTOR_FACTORIES.put(HolderInfo.class,
+                HolderInfo.typeAdapterFactory());
 
         // runtime adapter for class "Tablet"
         final RuntimeTypeAdapterFactory<Tablet> tablet_type_adapter_factory = RuntimeTypeAdapterFactory

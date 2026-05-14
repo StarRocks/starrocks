@@ -52,6 +52,7 @@ import com.starrocks.epack.persist.UpdateFailoverGroupLog;
 import com.starrocks.epack.system.SystemInfo;
 import com.starrocks.ha.LeaderInfo;
 import com.starrocks.journal.bdbje.Timestamp;
+import com.starrocks.lake.bookmark.BookmarkLogEntry;
 import com.starrocks.lake.restore.SnapshotRestoreJob;
 import com.starrocks.load.ExportJob;
 import com.starrocks.load.MultiDeleteInfo;
@@ -333,6 +334,7 @@ public class EditLogDeserializer {
             .put(OperationType.OP_DISABLE_SPM_BASELINE_LOG, BaselinePlan.Info.class)
             .put(OperationType.OP_UPDATE_TABLET_RESHARD_JOB_LOG, TabletReshardJob.class)
             .put(OperationType.OP_REMOVE_TABLET_RESHARD_JOB_LOG, RemoveTabletReshardJobLog.class)
+            .put(OperationType.OP_BOOKMARK_LOG, BookmarkLogEntry.class)
             .put(OperationType.OP_SAVE_NEXTID_V2, NextIdLog.class)
             .put(OperationType.OP_ERASE_DB_V2, EraseDbLog.class)
             .put(OperationType.OP_ERASE_PARTITION_V2, ErasePartitionLog.class)
