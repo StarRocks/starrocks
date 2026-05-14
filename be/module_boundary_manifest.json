@@ -86,6 +86,8 @@
       "owned_targets": ["HttpCore"],
       "owned_globs": [
         "be/src/http/http_handler.h",
+        "be/src/http/http_auth.*",
+        "be/src/http/http_common.h",
         "be/src/http/http_method.*",
         "be/src/http/http_status.*",
         "be/src/http/http_headers.*",
@@ -101,7 +103,6 @@
       "forbidden_includes": [
         "http/default_path_handlers.h",
         "http/download_action.h",
-        "http/http_common.h",
         "http/monitor_action.h",
         "http/rest_monitor_iface.h",
         "http/utils.h",

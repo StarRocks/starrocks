@@ -45,7 +45,6 @@
 #include "http/http_headers.h"
 #include "http/http_request.h"
 #include "http/http_response.h"
-#include "http/utils.h"
 #include "runtime/client_cache.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"

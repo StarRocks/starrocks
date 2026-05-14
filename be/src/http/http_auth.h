@@ -19,13 +19,18 @@
 
 #include <string>
 
+#include "common/utils.h"
+
 namespace starrocks {
 
 class HttpRequest;
 
-void do_file_response(const std::string& dir_path, HttpRequest* req);
+std::string encode_basic_auth(const std::string& user, const std::string& passwd);
 
-void do_dir_response(const std::string& dir_path, HttpRequest* req);
+// Parse HTTP Basic authorization. Returns true when the request contains valid
+// Basic auth credentials.
+bool parse_basic_auth(const HttpRequest& req, std::string* user, std::string* passwd);
 
-std::string get_content_type(const std::string& file_name);
+bool parse_basic_auth(const HttpRequest& req, AuthInfo* auth);
+
 } // namespace starrocks
