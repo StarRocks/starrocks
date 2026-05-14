@@ -1305,8 +1305,7 @@ Status LakePersistentIndex::load_from_lake_tablet(TabletManager* tablet_mgr, con
         // method; rebuild within one pass produces each PK at most once, so a
         // plain ascending sort is sufficient.
         int64_t t_sort_start = GetCurrentTimeMicros();
-        std::sort(scratch.begin(), scratch.end(),
-                  [](const auto& a, const auto& b) { return a.first < b.first; });
+        std::sort(scratch.begin(), scratch.end(), [](const auto& a, const auto& b) { return a.first < b.first; });
         TRACE_COUNTER_INCREMENT("rebuild_bulk_load_sort_us", GetCurrentTimeMicros() - t_sort_start);
         // Hand the sorted vector to the memtable; it walks the input once and
         // appends with end-hint inserts (O(1) amortized each).
