@@ -1140,8 +1140,8 @@ Status LakePersistentIndex::load_from_lake_tablet(TabletManager* tablet_mgr, con
     // segment, so segments are independent and can run concurrently; the only shared
     // state is the memtable, guarded by `insert_mutex`. OSS reads + decode + PK
     // encoding all run outside the lock, which is the cold-load wall-clock win.
-    const bool parallel_segments = config::enable_pk_index_rebuild_parallel_segment &&
-                                   config::enable_pk_index_parallel_execution;
+    const bool parallel_segments =
+            config::enable_pk_index_rebuild_parallel_segment && config::enable_pk_index_parallel_execution;
     for (auto& rowset : rowsets) {
         TRACE_COUNTER_INCREMENT("total_segment_cnt", rowset->num_segments());
         TRACE_COUNTER_INCREMENT("total_num_rows", rowset->num_rows());
