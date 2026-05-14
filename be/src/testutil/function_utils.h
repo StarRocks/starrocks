@@ -32,6 +32,8 @@
 // specific language governing permissions and limitations
 // under the License.
 
+#pragma once
+
 #include "exprs/function_context.h"
 
 namespace starrocks {
