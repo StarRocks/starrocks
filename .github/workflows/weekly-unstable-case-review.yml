@@ -283,6 +283,13 @@ jobs:
           echo "REPORT_URL=${REPORT_OSS}report.html" >> $GITHUB_OUTPUT
 
       - name: Open PR with updated unstable_case.json
+        # Temporarily disabled: secrets.SYNC_PAT is not configured on
+        # this repo (the `SYNC_PAT` name lives in celerdata-enterprise),
+        # so `gh pr create` runs with an empty GH_TOKEN and fails. Also
+        # /var/lib/ci-tool is a shared dirty working tree on the runner.
+        # Re-enable after a working PAT is wired in and a clean-checkout
+        # safeguard is added to the step.
+        if: false
         id: open_pr
         env:
           GH_TOKEN: ${{ secrets.SYNC_PAT }}
