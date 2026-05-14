@@ -696,17 +696,17 @@ Status Analytor::_prepare_processing_mode(RuntimeState* state, RuntimeProfile* r
 void Analytor::_compute_range_nonnull_segment() {
     _range_nonnull_start = _partition.start;
     _range_nonnull_end = _partition.end;
-    if (_order_columns.empty()) {
-        _range_nonnull_segment_valid = true;
-        _reset_range_frame_cursors();
-        return;
+
+    // only check when order by column is nullable column
+    if (_order_columns[0]->is_nullable()) {
+        while (_range_nonnull_start < _range_nonnull_end && _order_columns[0]->is_null(_range_nonnull_start)) {
+            ++_range_nonnull_start;
+        }
+        while (_range_nonnull_end > _range_nonnull_start && _order_columns[0]->is_null(_range_nonnull_end - 1)) {
+            --_range_nonnull_end;
+        }
     }
-    while (_range_nonnull_start < _range_nonnull_end && _order_columns[0]->is_null(_range_nonnull_start)) {
-        ++_range_nonnull_start;
-    }
-    while (_range_nonnull_end > _range_nonnull_start && _order_columns[0]->is_null(_range_nonnull_end - 1)) {
-        --_range_nonnull_end;
-    }
+
     _range_nonnull_segment_valid = true;
     _reset_range_frame_cursors();
 }
@@ -727,9 +727,19 @@ int64_t Analytor::_seek_range_frame_boundary_with_offset(const RangeBoundarySpec
     // Constant offsets make boundary keys monotonic in physical order, so cursors only move forward.
     cursor = std::clamp(cursor, _range_nonnull_start, _range_nonnull_end);
     while (cursor < _range_nonnull_end) {
+        // cmp compares order_key[cursor] with boundary_value[current_row].
+        // For the start boundary, keep skipping rows before the inclusive lower bound:
+        //   ASC:  key < bound; DESC: key > bound.
+        // For the end boundary, keep skipping rows still inside the inclusive upper bound:
+        //   ASC:  key <= bound; DESC: key >= bound.
+        // The returned cursor is therefore a half-open frame boundary [start, end).
         const int cmp = _order_columns[0]->compare_at(cursor, _current_row_position, *boundary.column, 1);
-        const bool should_advance =
-                _range_order_is_asc ? (is_start ? cmp < 0 : cmp <= 0) : (is_start ? cmp > 0 : cmp >= 0);
+        bool should_advance;
+        if (is_start) {
+            should_advance = _range_order_is_asc ? cmp < 0 : cmp > 0;
+        } else {
+            should_advance = _range_order_is_asc ? cmp <= 0 : cmp >= 0;
+        }
         if (!should_advance) {
             break;
         }
@@ -756,9 +766,8 @@ int64_t Analytor::_resolve_range_offset_boundary(const RangeBoundarySpec& bounda
         // Finite RANGE boundaries on NULL current rows degenerate to CURRENT ROW peer group.
         return is_start ? _peer_group.start : _peer_group.end;
     }
-    if (!_range_nonnull_segment_valid || _range_nonnull_start >= _range_nonnull_end) {
-        return is_start ? _range_nonnull_start : _range_nonnull_end;
-    }
+    DCHECK(_range_nonnull_segment_valid);
+    DCHECK_LT(_range_nonnull_start, _range_nonnull_end);
 
     DCHECK(boundary.column != nullptr);
     if (boundary.column->is_null(_current_row_position)) {
@@ -780,18 +789,19 @@ Analytor::FrameRange Analytor::_get_frame_for_range() {
         return {_peer_group.start, _peer_group.end};
     }
 
-    bool current_row_is_null = false;
-    if (!_order_columns.empty()) {
-        current_row_is_null = _order_columns[0]->is_null(_current_row_position);
-    }
+    DCHECK(!_order_columns.empty());
+    bool current_row_is_null = _order_columns[0]->is_null(_current_row_position);
+
     if (!_range_nonnull_segment_valid) {
         _compute_range_nonnull_segment();
     }
 
     int64_t frame_start = _resolve_range_offset_boundary(_range_start_boundary, true, current_row_is_null);
     int64_t frame_end = _resolve_range_offset_boundary(_range_end_boundary, false, current_row_is_null);
-    frame_start = std::max<int64_t>(frame_start, _partition.start);
-    frame_end = std::min<int64_t>(frame_end, _partition.end);
+    DCHECK_GE(frame_start, _partition.start);
+    DCHECK_LE(frame_start, _partition.end);
+    DCHECK_GE(frame_end, _partition.start);
+    DCHECK_LE(frame_end, _partition.end);
     if (frame_end < frame_start) {
         frame_end = frame_start;
     }
@@ -1321,6 +1331,11 @@ void Analytor::_materializing_process_for_range_frame(RuntimeState* state) {
     }
 }
 
+// Process growing RANGE frames such as RANGE BETWEEN UNBOUNDED PRECEDING AND N FOLLOWING/PRECEDING.
+// The frame start is fixed at the partition start, and the finite end boundary moves monotonically forward as
+// peer groups are processed. Therefore the aggregate state can be maintained cumulatively by adding only the newly
+// exposed rows [_range_cumulative_frame_end, range.end) instead of rebuilding the whole frame for each peer group.
+// Results are still written peer-group-wise, clipped to the current output chunk when a peer group crosses chunks.
 void Analytor::_materializing_process_for_growing_range_frame(RuntimeState* state) {
     const auto chunk_size = static_cast<int64_t>(_current_chunk_size());
     while (_current_row_position < _partition.end && !_is_current_chunk_finished_eval()) {
