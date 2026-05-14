@@ -52,13 +52,15 @@ set(SPILL_CORE_FILES
     spill/file_block_manager.cpp
     spill/hybird_block_manager.cpp
     spill/spill_metrics.cpp
+    spill/query_spill_manager.cpp
+    spill/operator_mem_resource_manager.cpp
 )
 
 ADD_BE_LIB(SpillCore
     ${SPILL_CORE_FILES}
 )
 
-target_link_libraries(SpillCore PUBLIC FSCore IOCore Common Base Gutil StarRocksGen)
+target_link_libraries(SpillCore PUBLIC RuntimeCore FSCore IOCore Common Base Gutil StarRocksGen)
 
 set(EXEC_SCHEMA_SCANNER_CORE_FILES
     schema_scanner.cpp
@@ -204,8 +206,6 @@ set(PIPELINE_RUNTIME_SRCS
     pipeline/runtime_filter_types.cpp
     workgroup/pipeline_executor_set.cpp
     workgroup/pipeline_executor_set_manager.cpp
-    spill/operator_mem_resource_manager.cpp
-    spill/query_spill_manager.cpp
 )
 
 set(PIPELINE_ADAPTERS_SRCS

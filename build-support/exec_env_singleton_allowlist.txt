@@ -14,7 +14,6 @@ src/exec/pipeline/pipeline_driver_queue.cpp
 src/exec/pipeline/query_context.cpp
 src/exec/schema_scanner/schema_be_cloud_native_compactions_scanner.cpp
 src/exec/schema_scanner/schema_be_tablets_scanner.cpp
-src/exec/spill/query_spill_manager.cpp
 src/exec/workgroup/lock_free_work_group_scan_task_queue.cpp
 src/exec/workgroup/scan_task_queue.cpp
 src/exec/write_combined_txn_log.cpp
