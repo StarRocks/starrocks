@@ -1286,15 +1286,13 @@ Status LakePersistentIndex::load_from_lake_tablet(TabletManager* tablet_mgr, con
                                 keys.emplace_back(fkeys, _key_size);
                                 fkeys += _key_size;
                             }
-                            RETURN_IF_ERROR(insert(pkc->size(),
-                                                   reinterpret_cast<const Slice*>(keys.data()),
+                            RETURN_IF_ERROR(insert(pkc->size(), reinterpret_cast<const Slice*>(keys.data()),
                                                    values.data(), rowset_version));
                         }
                     } else {
                         // Append into the rowset-scoped batch buffer.
                         if (pkc->is_binary()) {
-                            append_batch(reinterpret_cast<const Slice*>(pkc->raw_data()), pkc->size(),
-                                         values.data());
+                            append_batch(reinterpret_cast<const Slice*>(pkc->raw_data()), pkc->size(), values.data());
                         } else {
                             // Synthesize fixed-size Slices on the stack to feed append_batch,
                             // which immediately copies the bytes into batch_key_buf.
