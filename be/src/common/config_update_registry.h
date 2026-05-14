@@ -12,23 +12,35 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "runtime/command_executor.h"
+#pragma once
 
-#include <gtest/gtest.h>
-
+#include <functional>
+#include <shared_mutex>
 #include <string>
+#include <unordered_map>
+
+#include "common/status.h"
 
 namespace starrocks {
 
-TEST(CommandExecutorTest, not_support) {
-    std::string result;
-    EXPECT_TRUE(execute_command("set_config_11", "{}", &result).is_not_supported());
-}
+class ConfigUpdateRegistry {
+public:
+    using Callback = std::function<Status()>;
 
-TEST(CommandExecutorTest, set_config_rejects_invalid_json_shape) {
-    std::string result;
-    auto st = execute_command("set_config", R"({"name":1,"value":"x"})", &result);
-    EXPECT_TRUE(st.is_invalid_argument()) << st;
-}
+    static ConfigUpdateRegistry* instance();
+
+    void register_callback(const std::string& name, Callback callback);
+    Status update_config(const std::string& name, const std::string& value);
+
+    void set_ready();
+    void TEST_reset();
+
+private:
+    ConfigUpdateRegistry() = default;
+
+    std::shared_mutex _mutex;
+    bool _ready = false;
+    std::unordered_map<std::string, Callback> _callbacks;
+};
 
 } // namespace starrocks

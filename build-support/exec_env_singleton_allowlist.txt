@@ -17,7 +17,7 @@ src/exec/workgroup/lock_free_work_group_scan_task_queue.cpp
 src/exec/workgroup/scan_task_queue.cpp
 src/exec/write_combined_txn_log.cpp
 src/fs/fs_broker.cpp
-src/http/action/update_config_action.cpp
+src/service/service_be/config_update_hooks.cpp
 src/runtime/exec_env.cpp
 src/runtime/fragment_mgr.cpp
 src/runtime/load_channel_mgr.cpp
