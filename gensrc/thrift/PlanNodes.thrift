@@ -441,8 +441,6 @@ struct THdfsScanRange {
 
     // mapping transformed bucket id, used to schedule scan range
     36: optional i32 bucket_id;
-<<<<<<< HEAD
-=======
 
     // Iceberg v3 row lineage: first row id of the data file, used to compute _row_id
     // as first_row_id + row_position for non-compacted files.
@@ -451,7 +449,6 @@ struct THdfsScanRange {
 
     // whether to use JNI scanner to read Avro data (default: false = use native C++ scanner)
     38: optional bool use_avro_jni_reader
->>>>>>> e4e99234a2 ([Enhancement] Replace JNI Avro scanner with native C++ scanner for Hive connector (#73237))
 }
 
 struct TBinlogScanRange {

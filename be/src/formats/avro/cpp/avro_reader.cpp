@@ -376,13 +376,8 @@ Status AvroReader::init(std::unique_ptr<avro::InputStream> input_stream, const s
                 continue;
             }
             size_t index = 0;
-<<<<<<< HEAD
-            if (schema.root()->nameIndex(desc->col_name(), index)) {
-                _field_indexes[i] = index;
-=======
             if (effective_schema.root()->nameIndex(std::string(desc->col_name()), index)) {
                 _field_indexes[i] = static_cast<int64_t>(index);
->>>>>>> e4e99234a2 ([Enhancement] Replace JNI Avro scanner with native C++ scanner for Hive connector (#73237))
             }
         }
     } catch (const avro::Exception& ex) {
