@@ -1003,7 +1003,8 @@ Status LakeDataSource::open_reader_for_current_morsel() {
         }
         _params.rowid_range_option = std::move(local_rowid_range);
         _params.short_key_ranges_option.reset();
-    } else if (split_context != nullptr && split_context->task_type == pipeline::LakeSplitContext::TaskType::PHYSICAL_SPLIT) {
+    } else if (split_context != nullptr &&
+               split_context->task_type == pipeline::LakeSplitContext::TaskType::PHYSICAL_SPLIT) {
         observe_adaptive_split_task(split_context, _params.rowid_range_option);
         if (split_context->adaptive_task_source == pipeline::LakeSplitContext::AdaptiveTaskSource::PENDING_COARSE) {
             _params.rowid_range_option =
