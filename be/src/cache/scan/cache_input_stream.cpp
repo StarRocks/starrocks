@@ -83,31 +83,42 @@ Status CacheInputStream::_read_block_from_local(const int64_t offset, const int6
         return Status::OK();
     }
 
-    // check shared buffer
     int64_t block_offset = block_id * _block_size;
     int64_t load_size = std::min(_block_size, _size - block_offset);
 
-    SharedBufferPtr sb = nullptr;
-    {
-        // try to find data from shared buffer
+    // Disk cache lookup goes FIRST. The SBI prefetch may already be in flight against S3, but
+    // if the bytes are in the local disk cache we should serve from there and skip the remote
+    // wait. Routing through SBI first (a previous iteration of this code) defeated cache hits
+    // for coalesced reads — every cached block paid the S3 latency.
+    Status res = _read_from_cache(offset, size, block_offset, load_size, out);
+    if (res.ok()) {
         auto ret = _sb_stream->find_shared_buffer(offset, size);
         if (ret.ok()) {
-            sb = ret.value();
-            if (sb->buffer.capacity() > 0) {
-                strings::memcpy_inlined(out, sb->buffer.data() + offset - sb->offset, size);
-                if (_enable_populate_cache) {
-                    _populate_to_cache((const char*)sb->buffer.data() + block_offset - sb->offset, block_offset,
-                                       load_size, sb);
-                }
-                return Status::OK();
-            }
+            // Keep block_map / shared_buffer accounting consistent.
+            _deduplicate_shared_buffer(ret.value());
         }
+        return res;
     }
 
-    Status res = _read_from_cache(offset, size, block_offset, load_size, out);
-    if (res.ok() && sb) {
-        // Duplicate the block ranges to avoid saving the same data both in cache and shared buffer.
-        _deduplicate_shared_buffer(sb);
+    // Cache miss. Fall back to the SBI buffer if it covers this range — this lets the
+    // prefetched bytes serve the request and also populates the cache for next time. The
+    // SharedBuffer state machine gates: get_bytes() returns only after state==Filled (real
+    // bytes) or propagates the first IO error.
+    auto ret = _sb_stream->find_shared_buffer(offset, size);
+    if (ret.ok()) {
+        SharedBufferPtr sb = ret.value();
+        const uint8_t* buf = nullptr;
+        Status s = _sb_stream->get_bytes(&buf, offset, size, sb);
+        if (s.ok()) {
+            strings::memcpy_inlined(out, buf, size);
+            if (_enable_populate_cache) {
+                _populate_to_cache((const char*)sb->buffer.data() + block_offset - sb->offset, block_offset, load_size,
+                                   sb);
+            }
+            return Status::OK();
+        }
+        // SBI fill failed; return the original cache lookup error (NotFound) so _read_blocks_from_remote
+        // can fall back to a direct remote read.
     }
 
     return res;
@@ -287,6 +298,10 @@ void CacheInputStream::_deduplicate_shared_buffer(const SharedBufferPtr& sb) {
     if (sb->size == 0 || _block_map.empty()) {
         return;
     }
+    // Take sb->mu so we observe a coherent state. The "shrink sb->offset/size" branch is only
+    // safe while the buffer hasn't been allocated yet (state==Cold). Once SBI has initialized
+    // the buffer or started chunked reads, mutating offset/size would corrupt the chunk plan.
+    std::lock_guard<std::mutex> L(sb->mu);
     int64_t end_offset = sb->offset + sb->size;
     int64_t start_block_id = sb->offset / _block_size;
     int64_t end_block_id = (end_offset - 1) / _block_size;
@@ -303,7 +318,7 @@ void CacheInputStream::_deduplicate_shared_buffer(const SharedBufferPtr& sb) {
         --end_block_id;
     }
 
-    if (sb->buffer.capacity() == 0) {
+    if (sb->state == SharedBufferedInputStream::SharedBuffer::State::Cold) {
         // shared buffer is empty, don't need to deduplicate block map
         sb->offset = std::max(start_block_id * _block_size, sb->offset);
         int64_t end = std::min((end_block_id + 1) * _block_size, end_offset);

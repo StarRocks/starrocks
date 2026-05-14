@@ -18,6 +18,7 @@
 #include <hdfs/hdfs.h>
 
 #include <exception>
+#include <shared_mutex>
 #include <utility>
 
 #include "base/failpoint/fail_point.h"
@@ -122,6 +123,31 @@ public:
         return Status::IOError(fmt::format("fail to hdfsPread {}: {}", _path, get_hdfs_err_msg()));
     }
 
+    // Positional pread for concurrent callers — explicit offset, no mutation of _offset.
+    // Lock pattern: shared lock around hdfsPread; on error release shared and take unique
+    // for close+reopen, then loop and reacquire shared. Never upgrade shared to unique.
+    StatusOr<int64_t> pread_positional(int64_t offset, uint8_t* data, int64_t size, int retry = 0) {
+        {
+            std::unique_lock<std::shared_mutex> l(_handle_mu);
+            RETURN_IF_ERROR(ensureOpened());
+        }
+        for (int i = 0; i < (retry + 1); i++) {
+            tSize r;
+            {
+                std::shared_lock<std::shared_mutex> l(_handle_mu);
+                hdfsFS fs = getFS();
+                r = hdfsPread(fs, _file, offset, data, static_cast<tSize>(size));
+            }
+            if (r != -1) {
+                return r;
+            }
+            std::unique_lock<std::shared_mutex> l(_handle_mu);
+            (void)close();
+            RETURN_IF_ERROR(ensureOpened());
+        }
+        return Status::IOError(fmt::format("fail to hdfsPread {}: {}", _path, get_hdfs_err_msg()));
+    }
+
     StatusOr<int64_t> read(uint8_t* data, int64_t size, int retry = 0) {
         RETURN_IF_ERROR(ensureOpened());
         RETURN_IF_ERROR(seek(_offset));
@@ -151,7 +177,12 @@ public:
     }
 
     StatusOr<int64_t> getSize() {
-        RETURN_IF_ERROR(getOrCreateFS());
+        // Serialize `_hdfs_client` lazy init with concurrent positional-read callers that
+        // also init via `pread_positional`. After init `_hdfs_client` is stable.
+        {
+            std::unique_lock<std::shared_mutex> l(_handle_mu);
+            RETURN_IF_ERROR(getOrCreateFS());
+        }
         hdfsFS fs = getFS();
         auto info = hdfsGetPathInfo(fs, _path.c_str());
         if (UNLIKELY(info == nullptr)) {
@@ -171,6 +202,9 @@ private:
     int64_t _total_open_fs_time_ns = 0;
     int64_t _total_open_file_time_ns = 0;
     int64_t _offset = 0;
+    // Guards `_file` and `_hdfs_client` lifetime across concurrent positional reads:
+    // shared during hdfsPread, unique during close+reopen.
+    std::shared_mutex _handle_mu;
 };
 
 // ==================================  HdfsInputStream  ==========================================
@@ -185,6 +219,13 @@ public:
     ~HdfsInputStream() override;
 
     StatusOr<int64_t> read(void* data, int64_t size) override;
+    Status read_at_fully(int64_t offset, void* data, int64_t count) override;
+    // `hdfsPread` on a shared `hdfsFile` handle is safe to call concurrently: it maps to
+    // HDFS Java `FSDataInputStream.read(pos, buf, off, len)` (or libhdfs3's equivalent),
+    // both of which document positional reads as thread-safe on the same stream — the
+    // invariant HBase/Parquet have relied on for years. `pread_positional`'s shared lock
+    // additionally protects `_file` / `_hdfs_client` lifetime against close+reopen on retry.
+    bool is_thread_safe_positional_read() const override { return true; }
     StatusOr<int64_t> get_size() override;
     StatusOr<int64_t> position() override { return _offset; }
     StatusOr<std::unique_ptr<io::NumericStatistics>> get_numeric_statistics() override;
@@ -217,6 +258,20 @@ StatusOr<int64_t> HdfsInputStream::read(void* data, int64_t size) {
     }
     return _handle->pread(static_cast<uint8_t*>(data), size, config::hdfs_client_io_read_retry);
     // return _handle->read(static_cast<uint8_t*>(data), size, config::hdfs_client_io_read_retry);
+}
+
+Status HdfsInputStream::read_at_fully(int64_t offset, void* data, int64_t count) {
+    int64_t total = 0;
+    while (total < count) {
+        int64_t chunk = std::min<int64_t>(count - total, std::numeric_limits<tSize>::max());
+        ASSIGN_OR_RETURN(int64_t r, _handle->pread_positional(offset + total, static_cast<uint8_t*>(data) + total,
+                                                              chunk, config::hdfs_client_io_read_retry));
+        if (r == 0) {
+            return Status::EndOfFile("read past end of file");
+        }
+        total += r;
+    }
+    return Status::OK();
 }
 
 Status HdfsInputStream::seek(int64_t offset) {

@@ -81,10 +81,19 @@ public:
     }
 
     Status read_at_fully(int64_t offset, void* data, int64_t size) override {
-        SCOPED_RAW_TIMER(&_stats->io_ns);
-        _stats->io_count += 1;
-        _stats->bytes_read += size;
-        return _stream->read_at_fully(offset, data, size);
+        // SharedBufferedInputStream calls read_at_fully concurrently from worker threads when
+        // parallel prefetch is enabled, so the stats updates here must be thread-safe even
+        // though _stats is plain int64_t shared with other streams. Do the IO outside, then
+        // bump stats atomically. SCOPED_RAW_TIMER isn't safe to share across threads on the
+        // same field; time it locally and fetch_add the elapsed.
+        MonotonicStopWatch watch;
+        watch.start();
+        auto status = _stream->read_at_fully(offset, data, size);
+        const int64_t elapsed = watch.elapsed_time();
+        __atomic_fetch_add(&_stats->io_ns, elapsed, __ATOMIC_RELAXED);
+        __atomic_fetch_add(&_stats->io_count, 1, __ATOMIC_RELAXED);
+        __atomic_fetch_add(&_stats->bytes_read, size, __ATOMIC_RELAXED);
+        return status;
     }
 
     StatusOr<std::string_view> peek(int64_t count) override {
@@ -351,9 +360,15 @@ void HdfsScanner::close() noexcept {
 StatusOr<std::unique_ptr<RandomAccessFile>> HdfsScanner::create_random_access_file(
         std::shared_ptr<SharedBufferedInputStream>& shared_buffered_input_stream,
         std::shared_ptr<CacheInputStream>& cache_input_stream, const OpenFileOptions& options) {
-    ASSIGN_OR_RETURN(std::unique_ptr<RandomAccessFile> raw_file, options.fs->new_random_access_file(options.path))
+    // Use FileInfo with size when known - allows S3InputStream to skip HEAD request
+    std::unique_ptr<RandomAccessFile> raw_file;
     int64_t file_size = options.file_size;
-    if (file_size < 0) {
+
+    if (file_size > 0) {
+        FileInfo file_info{.path = options.path, .size = file_size};
+        ASSIGN_OR_RETURN(raw_file, options.fs->new_random_access_file(file_info));
+    } else {
+        ASSIGN_OR_RETURN(raw_file, options.fs->new_random_access_file(options.path));
         ASSIGN_OR_RETURN(file_size, raw_file->stream()->get_size());
     }
     raw_file->set_size(file_size);

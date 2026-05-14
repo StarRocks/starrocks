@@ -44,6 +44,7 @@ set(EXEC_FILES
         ./fs/fs_posix_test.cpp
         ./fs/fs_memory_test.cpp
         ./fs/fs_s3_test.cpp
+        ./fs/s3_retry_strategy_test.cpp
         ./fs/fs_test.cpp
         ./fs/key_cache_test.cpp
         ./fs/output_stream_wrapper_test.cpp

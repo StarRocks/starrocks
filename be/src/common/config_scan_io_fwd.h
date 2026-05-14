@@ -74,6 +74,15 @@ CONF_mInt64(tablet_internal_parallel_min_scan_dop, "4");
 // The max hdfs file handle.
 CONF_mInt32(max_hdfs_file_handle, "1000");
 
+// Parallel coalesced read in SharedBufferedInputStream — backend-agnostic; gate on
+// each backend's SeekableInputStream::is_thread_safe_positional_read() override.
+// Max inflight bytes = thread_pool_size * max_buffer_size (8MB) = 128 * 8MB = 1GB by default.
+CONF_Int32(parallel_io_thread_pool_size, "128"); // Global thread pool size (requires restart)
+
+CONF_mInt32(parallel_io_workers_per_file, "8"); // Max parallel reads per file (sliding window)
+
+CONF_mString(parallel_io_buffer_limit, "10%"); // Max memory for parallel read buffers (supports: "10%", "1G", "512M")
+
 // Lake
 CONF_mBool(io_coalesce_lake_read_enable, "false");
 

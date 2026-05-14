@@ -30,4 +30,5 @@ ADD_BE_LIB(IO
         s3_input_stream.cpp
         s3_output_stream.cpp
         direct_s3_output_stream.cpp
+        s3_global_throttle.cpp
 )

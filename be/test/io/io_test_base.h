@@ -41,6 +41,15 @@ public:
 
     StatusOr<int64_t> get_size() override { return _contents.size(); }
 
+    // Thread-safe positional read for parallel I/O
+    Status read_at_fully(int64_t offset, void* out, int64_t count) override {
+        if (offset + count > static_cast<int64_t>(_contents.size())) {
+            return Status::IOError("Read beyond EOF");
+        }
+        memcpy(out, _contents.data() + offset, count);
+        return Status::OK();
+    }
+
 private:
     std::string _contents;
     int64_t _block_size;

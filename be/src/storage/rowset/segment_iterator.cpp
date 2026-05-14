@@ -1405,6 +1405,12 @@ Status SegmentIterator::_init_column_iterator_by_cid(const ColumnId cid, const C
         if (config::io_coalesce_lake_read_enable && !_segment->is_default_column(col) &&
             _segment->lake_tablet_manager() != nullptr) {
             ASSIGN_OR_RETURN(auto file_size, rfile->get_size());
+            // SBI unique-owned here: SharedBufferedInputStream::_schedule()'s weak_from_this().lock()
+            // returns null and parallel prefetch is skipped (SyncOnly path). This is intentional —
+            // CLOUD_NATIVE shared-data reads on CN actually go through StarletInputStream (via
+            // StarletFileSystem), whose gate is false because starlet-fslib Stream has no positional
+            // pread. Migrating ownership to shared_ptr alone would not enable parallel prefetch for
+            // this path; the unblocker is upstream starlet positional read API.
             auto shared_buffered_input_stream =
                     std::make_unique<SharedBufferedInputStream>(rfile->stream(), _segment->file_name(), file_size);
             auto options = SharedBufferedInputStream::CoalesceOptions{

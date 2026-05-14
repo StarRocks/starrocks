@@ -53,6 +53,7 @@ set(EXEC_FILES
     s3/poco_http_client_factory.cpp
     s3/poco_http_client.cpp
     s3/poco_common.cpp
+    s3/s3_retry_strategy.cpp
     )
 
 if (NOT BUILD_FORMAT_LIB)

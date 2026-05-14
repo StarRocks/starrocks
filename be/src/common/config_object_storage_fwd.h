@@ -66,6 +66,11 @@ CONF_Int64(object_storage_max_retries, "10");
 
 CONF_Int64(object_storage_retry_scale_factor, "25");
 
+// S3 enhanced retry strategy with exponential backoff and global throttling
+CONF_mInt64(s3_retry_initial_delay_ms, "25"); // Initial delay for exponential backoff
+
+CONF_mInt64(s3_retry_max_delay_ms, "10000"); // Maximum delay between retries (10s)
+
 CONF_Strings(fallback_to_hadoop_fs_list, "");
 
 CONF_Strings(s3_compatible_fs_list, "s3n://, s3a://, s3://, oss://, cos://, cosn://, obs://, ks3://, tos://");

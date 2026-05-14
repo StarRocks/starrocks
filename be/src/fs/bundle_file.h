@@ -118,6 +118,10 @@ public:
     // that names the page's absolute position in the physical file.
     std::string page_cache_key(int64_t stream_offset) const override;
 
+    // read_at_fully translates the offset and delegates to the underlying stream without
+    // touching shared state, so thread-safety follows the wrapped stream's contract.
+    bool is_thread_safe_positional_read() const override { return _stream->is_thread_safe_positional_read(); }
+
 private:
     std::shared_ptr<io::SeekableInputStream> _stream;
     int64_t _offset = 0;

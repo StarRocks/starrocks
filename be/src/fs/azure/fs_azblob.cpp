@@ -16,8 +16,10 @@
 
 #include <fmt/format.h>
 
+#include <atomic>
 #include <azure/identity.hpp>
 #include <azure/storage/blobs.hpp>
+#include <mutex>
 
 #include "base/concurrency/stopwatch.hpp"
 #include "fs/azure/azblob_uri.h"
@@ -52,24 +54,28 @@ public:
     void operator=(AzBlobInputStream&&) = delete;
 
     StatusOr<int64_t> read(void* data, int64_t size) override;
+    Status read_at_fully(int64_t offset, void* data, int64_t count) override;
+    bool is_thread_safe_positional_read() const override { return true; }
     StatusOr<int64_t> get_size() override;
     StatusOr<int64_t> position() override { return _offset; }
     Status seek(int64_t offset) override;
-    void set_size(int64_t size) override { _size = size; }
+    void set_size(int64_t size) override { _size.store(size, std::memory_order_release); }
 
 private:
     BlockBlobClientUniquePtr _blob_client;
     AzBlobURI _uri;
     int64_t _offset{0};
-    int64_t _size{-1};
+    std::atomic<int64_t> _size{-1};
+    std::mutex _size_init_mu;
 };
 
 StatusOr<int64_t> AzBlobInputStream::read(void* data, int64_t count) {
-    if (UNLIKELY(_size == -1)) {
-        ASSIGN_OR_RETURN(_size, get_size());
+    if (UNLIKELY(_size.load(std::memory_order_acquire) == -1)) {
+        RETURN_IF_ERROR(get_size().status());
     }
+    int64_t size = _size.load(std::memory_order_relaxed);
 
-    if (_offset >= _size) { // 0 means reach EOF
+    if (_offset >= size) { // 0 means reach EOF
         return 0;
     }
 
@@ -78,19 +84,19 @@ StatusOr<int64_t> AzBlobInputStream::read(void* data, int64_t count) {
 
     Azure::Core::Http::HttpRange range;
     range.Offset = _offset;
-    range.Length = std::min<int64_t>(count, _size - _offset);
+    range.Length = std::min<int64_t>(count, size - _offset);
 
     Azure::Storage::Blobs::DownloadBlobToOptions options;
     options.Range = range;
 
-    int64_t size = 0;
+    int64_t bytes = 0;
     try {
         auto response = _blob_client->DownloadTo(reinterpret_cast<uint8_t*>(data), count, options);
         if (!response.Value.ContentRange.Length.HasValue()) {
             return Status::InternalError(fmt::format("Download blob object %s error: read length in response is empty",
                                                      _uri.get_blob_uri()));
         }
-        size = response.Value.ContentRange.Length.Value();
+        bytes = response.Value.ContentRange.Length.Value();
     } catch (const Azure::Core::RequestFailedException& e) {
         return azure_error_to_status(e.StatusCode,
                                      fmt::format("Download blob object {} error: {}", _uri.get_blob_uri(), e.what()),
@@ -99,26 +105,76 @@ StatusOr<int64_t> AzBlobInputStream::read(void* data, int64_t count) {
         return Status::InternalError(fmt::format("Download blob object {} error: {}", _uri.get_blob_uri(), e.what()));
     }
 
-    _offset += size;
-    IOProfiler::add_read(size, watch.elapsed_time());
-    return size;
+    _offset += bytes;
+    IOProfiler::add_read(bytes, watch.elapsed_time());
+    return bytes;
+}
+
+Status AzBlobInputStream::read_at_fully(int64_t offset, void* data, int64_t count) {
+    if (UNLIKELY(_size.load(std::memory_order_acquire) == -1)) {
+        RETURN_IF_ERROR(get_size().status());
+    }
+    int64_t size = _size.load(std::memory_order_relaxed);
+    if (offset + count > size) {
+        return Status::EndOfFile("read past end of blob");
+    }
+
+    MonotonicStopWatch watch;
+    watch.start();
+
+    Azure::Core::Http::HttpRange range;
+    range.Offset = offset;
+    range.Length = count;
+
+    Azure::Storage::Blobs::DownloadBlobToOptions options;
+    options.Range = range;
+
+    int64_t bytes = 0;
+    try {
+        auto response = _blob_client->DownloadTo(reinterpret_cast<uint8_t*>(data), count, options);
+        if (!response.Value.ContentRange.Length.HasValue()) {
+            return Status::InternalError(fmt::format("Download blob object {} error: read length in response is empty",
+                                                     _uri.get_blob_uri()));
+        }
+        bytes = response.Value.ContentRange.Length.Value();
+    } catch (const Azure::Core::RequestFailedException& e) {
+        return azure_error_to_status(e.StatusCode,
+                                     fmt::format("Download blob object {} error: {}", _uri.get_blob_uri(), e.what()),
+                                     _uri.get_blob_uri());
+    } catch (const std::exception& e) {
+        return Status::InternalError(fmt::format("Download blob object {} error: {}", _uri.get_blob_uri(), e.what()));
+    }
+
+    if (bytes != count) {
+        return Status::InternalError(fmt::format("Short positional read on blob object {}: got {} of {}",
+                                                 _uri.get_blob_uri(), bytes, count));
+    }
+    IOProfiler::add_read(bytes, watch.elapsed_time());
+    return Status::OK();
 }
 
 StatusOr<int64_t> AzBlobInputStream::get_size() {
-    if (_size == -1) {
-        try {
-            auto response = _blob_client->GetProperties();
-            _size = response.Value.BlobSize;
-        } catch (const Azure::Core::RequestFailedException& e) {
-            return azure_error_to_status(
-                    e.StatusCode, fmt::format("Blob object {} get properties error: {}", _uri.get_blob_uri(), e.what()),
-                    _uri.get_blob_uri());
-        } catch (const std::exception& e) {
-            return Status::InternalError(
-                    fmt::format("Blob object {} get properties error: {}", _uri.get_blob_uri(), e.what()));
-        }
+    int64_t cached = _size.load(std::memory_order_acquire);
+    if (cached != -1) {
+        return cached;
     }
-    return _size;
+    std::lock_guard<std::mutex> l(_size_init_mu);
+    cached = _size.load(std::memory_order_relaxed);
+    if (cached != -1) {
+        return cached;
+    }
+    try {
+        auto response = _blob_client->GetProperties();
+        _size.store(response.Value.BlobSize, std::memory_order_release);
+        return response.Value.BlobSize;
+    } catch (const Azure::Core::RequestFailedException& e) {
+        return azure_error_to_status(
+                e.StatusCode, fmt::format("Blob object {} get properties error: {}", _uri.get_blob_uri(), e.what()),
+                _uri.get_blob_uri());
+    } catch (const std::exception& e) {
+        return Status::InternalError(
+                fmt::format("Blob object {} get properties error: {}", _uri.get_blob_uri(), e.what()));
+    }
 }
 
 Status AzBlobInputStream::seek(int64_t offset) {

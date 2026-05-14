@@ -14,7 +14,9 @@
 
 #pragma once
 
+#include <atomic>
 #include <memory>
+#include <mutex>
 #include <string>
 
 #include "io/seekable_input_stream.h"
@@ -58,6 +60,13 @@ public:
 
     StatusOr<std::string> read_all() override;
 
+    // Thread-safe positional read for parallel I/O.
+    // Does NOT modify internal stream state (_offset, _read_buffer).
+    // S3 GetObject with Range header is inherently thread-safe.
+    Status read_at_fully(int64_t offset, void* out, int64_t count) override;
+
+    bool is_thread_safe_positional_read() const override { return true; }
+
     // only for UT
     int64_t get_read_ahead_size() const { return _read_ahead_size; }
 
@@ -66,7 +75,10 @@ private:
     std::string _bucket;
     std::string _object;
     int64_t _offset{0};
-    int64_t _size{-1};
+    // Lazy-initialized via HEAD; reads from any thread (parallel workers + consumer).
+    // Mutated under _size_init_mu; loaded everywhere as atomic.
+    std::atomic<int64_t> _size{-1};
+    mutable std::mutex _size_init_mu;
     int64_t _read_ahead_size{-1};
     // _read_buffer start offset, indicate buffer[0]'s offset in s3 file.
     int64_t _buffer_start_offset{-1};

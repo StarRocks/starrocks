@@ -41,6 +41,7 @@
 #include "fs/fs_registry.h"
 #include "fs/fs_scheme.h"
 #include "fs/output_stream_adapter.h"
+#include "fs/s3/s3_retry_strategy.h"
 #include "gutil/casts.h"
 #include "gutil/strings/util.h"
 #include "io/direct_s3_output_stream.h"
@@ -174,8 +175,13 @@ S3ClientFactory::S3ClientPtr S3ClientFactory::new_client(const TCloudConfigurati
 
     auto credential_provider = _get_aws_credentials_provider(aws_cloud_credential);
 
-    config.retryStrategy = std::make_shared<Aws::Client::SpecifiedRetryableErrorsRetryStrategy>(
-            retryable_errors, config::object_storage_max_retries, config::object_storage_retry_scale_factor);
+    // Enhanced retry strategy with exponential backoff, jitter, and global throttling
+    S3RetryStrategy::Config retry_config;
+    retry_config.max_retries = config::object_storage_max_retries;
+    retry_config.initial_delay_ms = config::s3_retry_initial_delay_ms;
+    retry_config.max_delay_ms = config::s3_retry_max_delay_ms;
+    config.retryStrategy = std::make_shared<S3RetryStrategy>(retry_config);
+
     S3ClientPtr client = std::make_shared<Aws::S3::S3Client>(
             credential_provider, config, Aws::Client::AWSAuthV4Signer::PayloadSigningPolicy::Never, !path_style_access);
 
@@ -332,13 +338,19 @@ static std::shared_ptr<Aws::S3::S3Client> new_s3client(
         if (itr != opts._fs_options.end() && !itr->second.empty()) {
             s3client_max_retries = std::stoi(itr->second);
         }
-        int64_t s3client_retry_scale_factor = config::object_storage_retry_scale_factor;
+        // Enhanced retry strategy with exponential backoff, jitter, and global throttling
+        S3RetryStrategy::Config retry_config;
+        retry_config.max_retries = s3client_max_retries;
+        retry_config.initial_delay_ms = config::s3_retry_initial_delay_ms;
+        retry_config.max_delay_ms = config::s3_retry_max_delay_ms;
+        // fs.s3a.retry.interval (per-FS catalog/load option) used to override the retry delay
+        // before this file moved to the exponential-backoff S3RetryStrategy. Map it onto the
+        // strategy's initial delay so existing catalogs that tuned this value still take effect.
         itr = opts._fs_options.find(FSOptions::FS_S3_RETRY_INTERVAL);
         if (itr != opts._fs_options.end() && !itr->second.empty()) {
-            s3client_retry_scale_factor = std::stoi(itr->second);
+            retry_config.initial_delay_ms = std::stoll(itr->second);
         }
-        config.retryStrategy = std::make_shared<Aws::Client::SpecifiedRetryableErrorsRetryStrategy>(
-                retryable_errors, s3client_max_retries, s3client_retry_scale_factor);
+        config.retryStrategy = std::make_shared<S3RetryStrategy>(retry_config);
     }
 
     if (!uri.endpoint().empty()) {
@@ -483,12 +495,14 @@ StatusOr<std::unique_ptr<RandomAccessFile>> S3FileSystem::new_random_access_file
     }
     auto client = new_s3client(uri, _options);
     auto read_ahead_size = read_ahead_size_from_options(_options);
-    auto input_stream =
-            std::make_unique<io::S3InputStream>(std::move(client), uri.bucket(), uri.key(), read_ahead_size);
+    auto s3_stream = std::make_unique<io::S3InputStream>(std::move(client), uri.bucket(), uri.key(), read_ahead_size);
+
+    // Set file size if known (prefetch is now handled by SharedBufferedInputStream)
     if (file_info.size.has_value()) {
-        input_stream->set_size(file_info.size.value());
+        s3_stream->set_size(file_info.size.value());
     }
-    return RandomAccessFile::from(std::move(input_stream), file_info.path, false, opts.encryption_info);
+
+    return RandomAccessFile::from(std::move(s3_stream), file_info.path, false, opts.encryption_info);
 }
 
 StatusOr<std::unique_ptr<SequentialFile>> S3FileSystem::new_sequential_file(const SequentialFileOptions& opts,

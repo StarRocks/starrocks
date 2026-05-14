@@ -89,6 +89,18 @@ public:
 
     virtual bool is_encrypted() const { return false; };
 
+    // May return true only when `read_at_fully(offset, data, size)` can be called
+    // concurrently on the same stream instance. Implementations must not use a
+    // shared seek/read cursor on this path. Any shared state touched by the
+    // positional read path — including cached size, handle reopen state,
+    // retry/client state, and stats — must be immutable or synchronized/atomic
+    // (lazy-initialized fields like `_size` populated via HEAD on first call are
+    // fine when the field is atomic and the round-trip is serialized). Concurrent
+    // reads at different offsets must not affect each other's offsets, results, or
+    // buffer contents. Default false keeps callers on the legacy stateful path;
+    // SBI's `_schedule()` will not run parallel reads on this stream.
+    virtual bool is_thread_safe_positional_read() const { return false; }
+
     // Cache key for the page hosted at `stream_offset` bytes within this stream. The default
     // encodes (filename, stream_offset). Streams whose `filename()` is shared with other streams
     // (e.g. BundleSeekableInputStream slices of one physical file) must override to fold their
@@ -151,6 +163,8 @@ public:
     StatusOr<std::string> read_all() override { return _impl->read_all(); }
 
     bool is_encrypted() const override { return _impl->is_encrypted(); };
+
+    bool is_thread_safe_positional_read() const override { return _impl->is_thread_safe_positional_read(); }
 
     Status touch_cache(int64_t offset, size_t length) override { return _impl->touch_cache(offset, length); }
 

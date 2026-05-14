@@ -23,6 +23,7 @@
 #include "base/brpc/brpc.h"
 #include "cache/datacache.h"
 #include "cache/disk_cache/block_cache.h"
+#include "cache/scan/shared_buffered_input_stream.h"
 #include "common/config_cache_fwd.h"
 #include "common/config_ingest_fwd.h"
 #include "common/config_lake_fwd.h"
@@ -116,6 +117,10 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
     auto* global_env = GlobalEnv::GetInstance();
     EXIT_IF_ERROR(global_env->init(process_metrics_registry->root_registry()));
     LOG(INFO) << process_name << " start step " << start_step++ << ": global env init successfully";
+
+    // Inject the process memory limit into the cache layer so it can resolve the
+    // percentage-based parallel_io_buffer_limit without depending on GlobalEnv directly.
+    SharedBufferedInputStream::set_process_mem_limit(global_env->process_mem_limit());
 
     auto* platform_env = PlatformEnv::GetInstance();
     EXIT_IF_ERROR(platform_env->init(process_metrics_registry->root_registry()));
