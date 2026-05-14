@@ -86,6 +86,36 @@ Status PersistentIndexMemtable::insert(size_t n, const Slice* keys, const IndexV
     return Status::OK();
 }
 
+Status PersistentIndexMemtable::bulk_load_sorted_unique(
+        std::vector<std::pair<std::string, IndexValueWithVer>>&& sorted_unique_pairs) {
+    TRACE_COUNTER_SCOPE_LATENCY_US("pindex_memtable_bulk_load_insert_us");
+    if (sorted_unique_pairs.empty()) {
+        return Status::OK();
+    }
+    // Strict-sortedness sanity check. The lake cold-load rebuild path guarantees
+    // unique PKs per pass, so duplicates here would mirror the AlreadyExist case
+    // that `insert()` raises — fail loudly rather than silently overwrite.
+    auto bad = std::adjacent_find(sorted_unique_pairs.begin(), sorted_unique_pairs.end(),
+                                  [](const auto& a, const auto& b) { return !(a.first < b.first); });
+    if (bad != sorted_unique_pairs.end()) {
+        return Status::InternalError(
+                strings::Substitute("bulk_load_sorted_unique: input not strictly sorted at index $0",
+                                    static_cast<int64_t>(bad - sorted_unique_pairs.begin())));
+    }
+    // End-hint insert is O(1) amortized when key > all existing keys, which
+    // holds because (a) the input is strictly sorted and (b) we don't mix this
+    // call with concurrent inserts on the same memtable.
+    uint64_t max_v = _max_rss_rowid;
+    for (auto& kv : sorted_unique_pairs) {
+        const uint64_t v = kv.second.second.get_value();
+        max_v = std::max(max_v, v);
+        auto it = _map.insert(_map.end(), std::move(kv));
+        _keys_heap_size += is_string_heap_allocated(it->first) ? it->first.capacity() : 0;
+    }
+    _max_rss_rowid = max_v;
+    return Status::OK();
+}
+
 Status PersistentIndexMemtable::erase(size_t n, const Slice* keys, IndexValue* old_values, KeyIndexSet* not_founds,
                                       size_t* num_found, int64_t version, uint32_t rowset_id) {
     TRACE_COUNTER_SCOPE_LATENCY_US("pindex_memtable_erase_us");
