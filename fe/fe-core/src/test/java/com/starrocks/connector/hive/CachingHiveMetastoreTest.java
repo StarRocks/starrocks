@@ -219,6 +219,46 @@ public class CachingHiveMetastoreTest {
     }
 
     @Test
+    public void testLoadTableResolveAvroSchemaUrlWithCache() throws Exception {
+        java.nio.file.Path schemaPath = Files.createTempFile("sr-avro-schema-cache", ".avsc");
+        Files.writeString(schemaPath, AVRO_SCHEMA_LITERAL);
+        HiveTable table = createAvroTable(Map.of(AvroSchemaResolver.AVRO_SCHEMA_URL, schemaPath.toUri().toString()));
+        new Expectations(metastore) {
+            {
+                metastore.getTable("db1", "avro_tbl");
+                result = table;
+                minTimes = 0;
+            }
+        };
+
+        AvroSchemaResolver resolver = new AvroSchemaResolver(new Configuration());
+        CachingHiveMetastore cachingHiveMetastore =
+                new CachingHiveMetastore(metastore, executor, executor, expireAfterWriteSec, refreshAfterWriteSec, 1000,
+                        false, Optional.of(resolver));
+
+        // First load: resolve from URL
+        HiveTable loadedTable1 = (HiveTable) cachingHiveMetastore.loadTable(DatabaseTableName.of("db1", "avro_tbl"));
+        String schema1 = loadedTable1.getAvroSchemaJson();
+        Assertions.assertNotNull(schema1);
+
+        // Update the file content
+        Files.writeString(schemaPath, AVRO_SCHEMA_LITERAL_UPDATED);
+
+        // Second load (direct call to loadTable, bypass tableCache):
+        // avroSchemaCache should return cached schema, avoiding URL re-read
+        HiveTable loadedTable2 = (HiveTable) cachingHiveMetastore.loadTable(DatabaseTableName.of("db1", "avro_tbl"));
+        String schema2 = loadedTable2.getAvroSchemaJson();
+        Assertions.assertEquals(schema1, schema2); // Should be cached old value
+
+        // After invalidateTable: avroSchemaCache cleared, should get new schema
+        cachingHiveMetastore.invalidateTable("db1", "avro_tbl");
+        HiveTable loadedTable3 = (HiveTable) cachingHiveMetastore.loadTable(DatabaseTableName.of("db1", "avro_tbl"));
+        String schema3 = loadedTable3.getAvroSchemaJson();
+        Assertions.assertEquals(new org.apache.avro.Schema.Parser().parse(AVRO_SCHEMA_LITERAL_UPDATED).toString(),
+                schema3);
+    }
+
+    @Test
     public void testGetTransactionalTable() {
         CachingHiveMetastore cachingHiveMetastore = new CachingHiveMetastore(
                 metastore, executor, executor,

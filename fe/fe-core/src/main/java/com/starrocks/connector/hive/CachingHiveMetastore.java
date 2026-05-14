@@ -86,6 +86,7 @@ public class CachingHiveMetastore extends CachingMetastore implements IHiveMetas
     protected LoadingCache<DatabaseTableName, HivePartitionStats> tableStatsCache;
     protected AsyncLoadingCache<HivePartitionName, HivePartitionStats> partitionStatsCache;
     protected Cache<DatabaseTableName, String> hmsExternalTableCache;
+    protected Cache<DatabaseTableName, String> avroSchemaCache;
     private final Optional<AvroSchemaResolver> avroSchemaResolver;
 
     public static CachingHiveMetastore createQueryLevelInstance(IHiveMetastore metastore, long perQueryCacheMaxSize) {
@@ -186,6 +187,7 @@ public class CachingHiveMetastore extends CachingMetastore implements IHiveMetas
         tableStatsCache = newCacheBuilder(expireAfterWriteSec, refreshIntervalSec, maxSize)
                 .build(asyncReloading(CacheLoader.from(this::loadTableStatistics), executor));
 
+        avroSchemaCache = newCacheBuilder(expireAfterWriteSec, refreshIntervalSec, maxSize).build();
 
         Caffeine<Object, Object> builder = Caffeine.newBuilder().maximumSize(maxSize).executor(executor);
         if (expireAfterWriteSec > 0) {
@@ -325,7 +327,17 @@ public class CachingHiveMetastore extends CachingMetastore implements IHiveMetas
     public Table loadTable(DatabaseTableName databaseTableName) {
         Table table = metastore.getTable(databaseTableName.getDatabaseName(), databaseTableName.getTableName());
         if (table instanceof HiveTable hiveTable && hiveTable.getAvroSchemaJson() == null) {
-            avroSchemaResolver.flatMap(resolver -> resolver.resolve(hiveTable)).ifPresent(hiveTable::setAvroSchemaJson);
+            String avroSchema = avroSchemaCache.getIfPresent(databaseTableName);
+            if (avroSchema == null) {
+                Optional<String> schemaOpt = avroSchemaResolver.flatMap(resolver -> resolver.resolve(hiveTable));
+                if (schemaOpt.isPresent()) {
+                    avroSchema = schemaOpt.get();
+                    avroSchemaCache.put(databaseTableName, avroSchema);
+                }
+            }
+            if (avroSchema != null) {
+                hiveTable.setAvroSchemaJson(avroSchema);
+            }
         }
         if (table.isHMSExternalTable()) {
             hmsExternalTableCache.put(databaseTableName, databaseTableName.toString());
@@ -525,6 +537,7 @@ public class CachingHiveMetastore extends CachingMetastore implements IHiveMetas
                                                            boolean onlyCachedPartitions) {
         Table updatedTable;
         try {
+            avroSchemaCache.invalidate(databaseTableName);
             updatedTable = loadTable(databaseTableName);
         } catch (StarRocksConnectorException e) {
             Throwable cause = e.getCause();
@@ -694,6 +707,7 @@ public class CachingHiveMetastore extends CachingMetastore implements IHiveMetas
         partitionCache.invalidateAll();
         tableStatsCache.invalidateAll();
         partitionStatsCache.synchronous().invalidateAll();
+        avroSchemaCache.invalidateAll();
     }
 
     public synchronized void invalidateDatabase(String dbName) {
@@ -706,6 +720,7 @@ public class CachingHiveMetastore extends CachingMetastore implements IHiveMetas
         DatabaseTableName databaseTableName = DatabaseTableName.of(dbName, tableName);
         tableCache.invalidate(databaseTableName);
         tableStatsCache.invalidate(databaseTableName);
+        avroSchemaCache.invalidate(databaseTableName);
         invalidateTablePartitionInfo(dbName, tableName, databaseTableName);
     }
 
