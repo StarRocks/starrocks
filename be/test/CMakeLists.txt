@@ -252,9 +252,9 @@ set(EXEC_FILES
         ./formats/disk_range_test.cpp
         ./http/default_path_handlers_test.cpp
         ./http/ev_http_server_test.cpp
+        ./http/http_core_test.cpp
         ./http/http_metrics_test.cpp
         ./http/http_client_test.cpp
-        ./http/http_utils_test.cpp
         ./http/message_body_sink_test.cpp
         ./http/metrics_action_test.cpp
         ./http/stream_load_test.cpp

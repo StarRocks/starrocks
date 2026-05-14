@@ -41,10 +41,10 @@
 
 #include "exec/es/es_scroll_query.h"
 #include "http/ev_http_server.h"
+#include "http/http_auth.h"
 #include "http/http_channel.h"
 #include "http/http_handler.h"
 #include "http/http_request.h"
-#include "http/utils.h"
 #ifndef __clang__
 DIAGNOSTIC_PUSH
 DIAGNOSTIC_IGNORE("-Wclass-memaccess")

@@ -16,8 +16,11 @@
 
 #include <string>
 
+#include "base/url_coding.h"
 #include "http/ev_http_server.h"
+#include "http/http_auth.h"
 #include "http/http_handler.h"
+#include "http/http_headers.h"
 #include "http/http_method.h"
 #include "http/http_parser.h"
 #include "http/http_request.h"
@@ -81,6 +84,49 @@ TEST(HttpCoreTest, RequestHeaderLookupIsCaseInsensitive) {
     EXPECT_EQ("12345", req.param("tablet_id"));
     EXPECT_TRUE(req.header("missing").empty());
     EXPECT_TRUE(req.param("missing").empty());
+}
+
+TEST(HttpCoreTest, BasicAuthParsesValidAuthorization) {
+    HttpRequest req(nullptr);
+    auto auth = encode_basic_auth("starrocks", "passwd");
+    req._headers.emplace(HttpHeaders::AUTHORIZATION, auth);
+
+    std::string user;
+    std::string passwd;
+    EXPECT_TRUE(parse_basic_auth(req, &user, &passwd));
+    EXPECT_EQ("starrocks", user);
+    EXPECT_EQ("passwd", passwd);
+}
+
+TEST(HttpCoreTest, BasicAuthRejectsInvalidAuthorization) {
+    {
+        HttpRequest req(nullptr);
+        req._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic starrocks:passwd");
+
+        std::string user;
+        std::string passwd;
+        EXPECT_FALSE(parse_basic_auth(req, &user, &passwd));
+    }
+    {
+        HttpRequest req(nullptr);
+        std::string encoded_str;
+        base64_encode("starrockspasswd", &encoded_str);
+        req._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic " + encoded_str);
+
+        std::string user;
+        std::string passwd;
+        EXPECT_FALSE(parse_basic_auth(req, &user, &passwd));
+    }
+    {
+        HttpRequest req(nullptr);
+        std::string encoded_str;
+        base64_encode("starrocks:passwd", &encoded_str);
+        req._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic" + encoded_str);
+
+        std::string user;
+        std::string passwd;
+        EXPECT_FALSE(parse_basic_auth(req, &user, &passwd));
+    }
 }
 
 TEST(HttpCoreTest, ChunkParserParsesPayload) {
