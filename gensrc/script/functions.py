@@ -932,12 +932,20 @@ vectorized_functions = [
      "JsonFunctions::native_json_path_prepare", "JsonFunctions::native_json_path_close"],
     [110021, "get_json_bool", False, False, "BOOLEAN", ["JSON", "VARCHAR"], "JsonFunctions::get_native_json_bool",
      "JsonFunctions::native_json_path_prepare", "JsonFunctions::native_json_path_close"],
+    # get_json_bool over VARCHAR input — fused simdjson fast path on constant paths
+    [110030, "get_json_bool", False, False, "BOOLEAN", ["VARCHAR", "VARCHAR"], "JsonFunctions::get_json_bool",
+     "JsonFunctions::native_json_path_prepare", "JsonFunctions::native_json_path_close"],
 
 
     # json type function
     [110003, "parse_json", False, False, "JSON", ["VARCHAR"], "JsonFunctions::parse_json"],
     [110004, "json_string", False, True, "VARCHAR", ["JSON"], "JsonFunctions::json_string"],
     [110005, "json_query", False, False, "JSON", ["JSON", "VARCHAR"], "JsonFunctions::json_query",
+     "JsonFunctions::native_json_path_prepare", "JsonFunctions::native_json_path_close"],
+    # VARCHAR-input json_query overload — fused simdjson path; FE rewrite uses this for
+    # parse_json(x) -> 'p' and cast(json_query(parse_json(x), 'p') as JSON) patterns.
+    [110031, "json_query_from_string", False, False, "JSON", ["VARCHAR", "VARCHAR"],
+     "JsonFunctions::json_query_from_string",
      "JsonFunctions::native_json_path_prepare", "JsonFunctions::native_json_path_close"],
     # [110006, "json_value", "JSON", ["JSON", "VARCHAR"], "JsonFunctions::json_query"],
     [110007, "json_exists", False, False, "BOOLEAN", ["JSON", "VARCHAR"], "JsonFunctions::json_exists",
