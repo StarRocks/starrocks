@@ -46,6 +46,15 @@ public:
     // |version|: version of index values
     Status insert(size_t n, const Slice* keys, const IndexValue* values, int64_t version);
 
+    // Bulk-load a vector of (key, IndexValueWithVer) pairs that is already
+    // strictly sorted by key (no duplicate keys). Used by the lake PK-index
+    // cold-load rebuild path to amortize the cost of populating an initially-
+    // empty `phmap::btree_map`: with sorted input and an end-hint, each
+    // `insert(end(), ...)` is O(1) amortized, giving O(N) total — vs O(N log N)
+    // for a per-key `emplace`. Takes ownership of the vector so callers don't
+    // pay a second copy of the key strings.
+    Status bulk_load_sorted_unique(std::vector<std::pair<std::string, IndexValueWithVer>>&& sorted_unique_pairs);
+
     // |version|: version of index values
     // |rowset_id|: The rowset that keys belong to. Used for setup rebuild point
     Status erase(size_t n, const Slice* keys, IndexValue* old_values, KeyIndexSet* not_founds, size_t* num_found,

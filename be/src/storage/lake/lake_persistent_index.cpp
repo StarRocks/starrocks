@@ -1139,6 +1139,19 @@ Status LakePersistentIndex::load_from_lake_tablet(TabletManager* tablet_mgr, con
     int64_t get_next_cost_us = 0;
     int64_t pk_encode_cost_us = 0;
     int64_t build_values_cost_us = 0;
+    // Scratch buffer for the bulk-load path. The per-chunk `insert()` chain
+    // dominates cold-load wall-clock (~85% on the 1_100gb_sortkey workload)
+    // because every emplace into an initially-empty `phmap::btree_map` is
+    // O(log N) with random-PK keys. We accumulate the keys here, sort once at
+    // the end, and call `_memtable->bulk_load_sorted_unique()`, which uses
+    // end-hint inserts that are O(1) amortized for sorted input.
+    const bool bulk_load_mode = config::lake_pk_index_rebuild_bulk_load_sort;
+    std::vector<std::pair<std::string, IndexValueWithVer>> scratch;
+    if (bulk_load_mode && _need_rebuild_row_cnt > 0) {
+        scratch.reserve(_need_rebuild_row_cnt);
+    }
+    // Defer del-file processing in bulk-load mode (see the call site below).
+    std::vector<std::pair<RowsetPtr, int64_t>> deferred_dels;
     // Rowset whose version is between max_sstable_version and base_version should be recovered.
     for (auto& rowset : rowsets) {
         TRACE_COUNTER_INCREMENT("total_segment_cnt", rowset->num_segments());
@@ -1231,7 +1244,28 @@ Status LakePersistentIndex::load_from_lake_tablet(TabletManager* tablet_mgr, con
                         continue;
                     }
                     TRACE_COUNTER_INCREMENT("rebuild_index_num_rows", pkc->size());
-                    if (pkc->is_binary()) {
+                    if (bulk_load_mode) {
+                        // Deep-copy key bytes into owning std::strings since
+                        // `chunk->reset()` on the next loop iteration would
+                        // invalidate any Slice/pkc-backed pointers we kept.
+                        const Slice* slices = nullptr;
+                        std::vector<Slice> slice_holder;
+                        if (pkc->is_binary()) {
+                            slices = reinterpret_cast<const Slice*>(pkc->raw_data());
+                        } else {
+                            slice_holder.reserve(pkc->size());
+                            const auto* fkeys = pkc->continuous_data();
+                            for (size_t k = 0; k < pkc->size(); ++k) {
+                                slice_holder.emplace_back(fkeys, _key_size);
+                                fkeys += _key_size;
+                            }
+                            slices = slice_holder.data();
+                        }
+                        for (uint32_t k = 0; k < pkc->size(); ++k) {
+                            scratch.emplace_back(std::string(slices[k].data, slices[k].size),
+                                                 std::make_pair(rowset_version, values[k]));
+                        }
+                    } else if (pkc->is_binary()) {
                         RETURN_IF_ERROR(insert(pkc->size(), reinterpret_cast<const Slice*>(pkc->raw_data()),
                                                values.data(), rowset_version));
                     } else {
@@ -1248,10 +1282,46 @@ Status LakePersistentIndex::load_from_lake_tablet(TabletManager* tablet_mgr, con
                 }
             }
         }
-        // Rebuild from del files
+        // Rebuild from del files. In bulk-load mode this is deferred until
+        // after the bulk-load (see below): load_dels writes NullIndexValue
+        // markers to the memtable, and those markers would either (a) block
+        // the bulk-load's end-hint fast path or (b) collide with bulk-load
+        // keys (since end-hint insert is a no-op on duplicate keys). Final
+        // index state is identical either way because load_dels' own filter
+        // (`found_rssid > del_rebuild_rssid` → skip) already encodes the
+        // "this delete is too old for this key" rule against whatever index
+        // state get() returns.
         if (rowset->metadata().del_files_size() > 0) {
-            RETURN_IF_ERROR(load_dels(rowset, pkey_schema, rowset_version));
+            if (bulk_load_mode) {
+                deferred_dels.emplace_back(rowset, rowset_version);
+            } else {
+                RETURN_IF_ERROR(load_dels(rowset, pkey_schema, rowset_version));
+            }
         }
+    }
+    if (bulk_load_mode && !scratch.empty()) {
+        TRACE_COUNTER_INCREMENT("rebuild_bulk_load_pair_count", scratch.size());
+        // Sort by key. Strictly-sorted unique input is required by the bulk-load
+        // method; rebuild within one pass produces each PK at most once, so a
+        // plain ascending sort is sufficient.
+        int64_t t_sort_start = GetCurrentTimeMicros();
+        std::sort(scratch.begin(), scratch.end(),
+                  [](const auto& a, const auto& b) { return a.first < b.first; });
+        TRACE_COUNTER_INCREMENT("rebuild_bulk_load_sort_us", GetCurrentTimeMicros() - t_sort_start);
+        // Hand the sorted vector to the memtable; it walks the input once and
+        // appends with end-hint inserts (O(1) amortized each).
+        RETURN_IF_ERROR(_memtable->bulk_load_sorted_unique(std::move(scratch)));
+    }
+    if (bulk_load_mode) {
+        // Apply deferred del files now that the memtable carries the final
+        // insert state. Order across rowsets is preserved (rowsets-list order).
+        for (auto& [rs, rs_ver] : deferred_dels) {
+            RETURN_IF_ERROR(load_dels(rs, pkey_schema, rs_ver));
+        }
+        // The per-chunk `insert()` path used to call `flush_memtable()` after
+        // every chunk. Now that we populate the memtable in one shot, flush
+        // once at the end to honor the same size-based flush trigger.
+        RETURN_IF_ERROR(flush_memtable());
     }
     TRACE_COUNTER_INCREMENT("rebuild_get_next_cost_us", get_next_cost_us);
     TRACE_COUNTER_INCREMENT("rebuild_pk_encode_cost_us", pk_encode_cost_us);

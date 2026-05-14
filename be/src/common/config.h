@@ -1359,6 +1359,15 @@ CONF_mInt32(cloud_native_pk_index_rebuild_files_threshold, "50");
 // If rows which need to be rebuilt exceed this threshold, we will flush memtable immediately
 // to reduce index rebuild cost. 0 means disabled.
 CONF_mInt64(cloud_native_pk_index_rebuild_rows_threshold, "10000000");
+// If true, the lake PK-index cold-load rebuild path accumulates all
+// (key, IndexValueWithVer) pairs into a scratch vector, sorts them once at the
+// end of the rebuild loop, and bulk-inserts them into the memtable using
+// end-hint inserts (O(1) amortized per element for strictly-sorted input).
+// This replaces the per-chunk `_memtable->insert()` call site, which was the
+// single-threaded `phmap::btree_map::emplace()` chain that dominated cold-load
+// wall-clock (~85% on the `1_100gb_sortkey` workload at iter-008 measurement).
+// Set to false to fall back to the per-chunk insert path bit-for-bit.
+CONF_mBool(lake_pk_index_rebuild_bulk_load_sort, "true");
 // if set to true, CACHE SELECT will only read file, save CPU time
 // if set to false, CACHE SELECT will behave like SELECT
 CONF_mBool(lake_cache_select_in_physical_way, "true");
