@@ -37,12 +37,9 @@ public:
               _file(_file_owned.get()),
               _buffer_size(buffer_size),
               _buffer(new uint8_t[buffer_size]),
-<<<<<<< HEAD
               _byte_count(0),
               _next(_buffer),
               _available(0),
-=======
-              _next(_buffer),
               _counter(counter) {}
 
     // Non-owning: caller guarantees the file outlives this stream.
@@ -50,8 +47,9 @@ public:
             : _file(file),
               _buffer_size(buffer_size),
               _buffer(new uint8_t[buffer_size]),
+              _byte_count(0),
               _next(_buffer),
->>>>>>> e4e99234a2 ([Enhancement] Replace JNI Avro scanner with native C++ scanner for Hive connector (#73237))
+              _available(0),
               _counter(counter) {}
 
     ~AvroBufferInputStream() override { delete[] _buffer; }
