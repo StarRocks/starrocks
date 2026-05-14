@@ -47,7 +47,6 @@ You can specify CPU and memory resource quotas for a resource group on a BE by u
 | cpu_weight_percent         | The CPU scheduling weight percentage of this resource group on a BE node. Supported from v4.1. | [0, 100] (takes effect when greater than 0)     | 0       |
 | exclusive_cpu_cores        | CPU hard isolation parameter for this resource group.          | (0, `min_be_cpu_cores - 1`] (takes effect when greater than 0) | 0       |
 | exclusive_cpu_percent      | CPU hard isolation percentage for this resource group. Supported from v4.1. | [0, 100] (takes effect when greater than 0) | 0       |
-| warehouses                 | Warehouses where this resource group takes effect. Supported from v4.1. | Warehouse names separated by commas (`,`) | All warehouses |
 | mem_limit                  | The percentage of memory available for queries by this resource group on the current BE node. | (0, 1] (required)               | -       |
 | mem_pool                   | Groups resource groups to share a memory limit.                | String                                                         | default_mem_pool |
 | spill_mem_limit_threshold  | Memory usage threshold that triggers spilling to disk.         | (0, 1]                                                         | 1.0     |
@@ -105,25 +104,6 @@ UPDATE information_schema.be_configs SET VALUE = "false" WHERE NAME = "enable_re
 ```
 
 <ScopeParam />
-
-#### Scope parameter
-
-##### `warehouses`
-
-From v4.1 onwards, resource groups support the `warehouses` parameter to specify the scope where they take effect. Logically, if `warehouses` is specified, the resource group takes effect only in the specified warehouses. If `warehouses` is not specified, the resource group takes effect in all warehouses by default.
-
-`warehouses` affects both FEs and BEs:
-
-- FE: When matching a query to a resource group, the FE only uses resource groups whose `warehouses` is empty or contains the warehouse used by the query as candidates. The FE then uses classifiers to select one resource group from these candidates.
-- BE: The resource group is delivered only to BEs in the warehouses specified by `warehouses`.
-
-The value of `warehouses` is a list of warehouse names separated by commas (`,`), for example, `wh1,wh2,wh3`. The specified warehouses must already exist, and duplicate names are not allowed.
-
-After `warehouses` is specified, `min_be_cpu_cores` in CPU percentage parameter validation refers to the minimum number of CPU cores among BEs in the specified warehouses. If `warehouses` is not specified, `min_be_cpu_cores` refers to the minimum number of CPU cores across all BEs.
-
-:::note
-After `warehouses` is specified, CPU quotas for the resource group must be configured by using `cpu_weight_percent` or `exclusive_cpu_percent`, rather than `cpu_weight` or `exclusive_cpu_cores`.
-:::
 
 #### Memory resource parameters
 
@@ -307,42 +287,6 @@ Execute the following statement to create a resource group, associate the resour
 
 <WhSyntaxExample />
 
-```SQL
-CREATE RESOURCE GROUP <group_name> 
-TO (
-    user='string', 
-    role='string', 
-    query_type in ('select'), 
-    source_ip='cidr'
-) --Create a classifier. If you create more than one classifier, separate the classifiers with commas (`,`).
-WITH (
-    "{ cpu_weight | cpu_weight_percent | exclusive_cpu_cores | exclusive_cpu_percent }" = "INT",
-    "warehouses" = "wh1,wh2,wh3",
-    "mem_limit" = "m%",
-    "concurrency_limit" = "INT"
-);
-```
-
-Example:
-
-```SQL
-CREATE RESOURCE GROUP rg1
-TO 
-    (user='rg1_user1', role='rg1_role1', query_type in ('select'), source_ip='192.168.x.x/24'),
-    (user='rg1_user2', query_type in ('select'), source_ip='192.168.x.x/24'),
-    (user='rg1_user3', source_ip='192.168.x.x/24'),
-    (user='rg1_user4'),
-    (db='db1')
-WITH (
-    'exclusive_cpu_percent' = '20',
-    'warehouses' = 'wh1,wh2,wh3',
-    'mem_limit' = '20%',
-    'big_query_cpu_second_limit' = '100',
-    'big_query_scan_rows_limit' = '100000',
-    'big_query_mem_limit' = '1073741824'
-);
-```
-
 ### Specify resource group (Optional)
 
 You can specify resource group for the current session directly, including `default_wg` and `default_mv_wg`.
@@ -407,14 +351,6 @@ You can modify the resource quotas for each resource group. You can also add or 
 Execute the following statement to modify the resource quotas for an existing resource group:
 
 <WhAlterSyntax />
-
-```SQL
-ALTER RESOURCE GROUP group_name WITH (
-    "{ cpu_weight | cpu_weight_percent | exclusive_cpu_cores | exclusive_cpu_percent }" = "INT",
-    'warehouses' = 'wh1,wh2,wh3',
-    'mem_limit' = 'm%'
-);
-```
 
 Execute the following statement to delete a resource group:
 
