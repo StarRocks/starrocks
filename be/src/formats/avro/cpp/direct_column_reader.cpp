@@ -346,9 +346,9 @@ private:
     Status read_binary(avro::Decoder& decoder, BinaryColumn* column) {
         switch (_value_node->type()) {
         case avro::AVRO_STRING:
-            decoder.decodeString(_string_buf);
-            return check_append_binary_column(_string_buf, _col_name, _type_desc, column);
         case avro::AVRO_BYTES:
+            // STRING and BYTES share the same wire format (varint length + raw bytes).
+            // Decode into _bytes_buf to avoid a std::string intermediate.
             decoder.decodeBytes(_bytes_buf);
             return check_append_binary_column(
                     std::string_view(reinterpret_cast<const char*>(_bytes_buf.data()), _bytes_buf.size()), _col_name,
@@ -378,7 +378,6 @@ private:
     size_t _null_branch;
     size_t _value_branch;
     cctz::time_zone _timezone;
-    std::string _string_buf;
     std::vector<uint8_t> _bytes_buf;
 };
 
