@@ -479,7 +479,7 @@ struct TExternalClusterSnapshotRequest {
     7: optional Types.TVersion new_version
     8: optional Types.TTabletId dest_tablet_id
     9: optional bool is_filebundling
-    10: required bool is_drop_partition
+    10: optional bool is_drop_partition
     11: optional list<TComputeNodeTablets> compute_node_tablets
 }
 
