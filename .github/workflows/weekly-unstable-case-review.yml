@@ -346,13 +346,13 @@ jobs:
 
           MSG=$(printf ':robot_face: Weekly unstable-case review cleanup PR ready for confirmation:\n%s\n\n%s please review and merge.' "$PR_URL" "$MENTION")
 
-          PAYLOAD=$(jq -nc --arg channel "$CHANNEL_ID" --arg text "$MSG" \
-            '{channel: $channel, text: $text}')
-          RESP=$(curl -sS -X POST https://slack.com/api/chat.postMessage \
-            -H "Authorization: Bearer ${SLACK_BOT_TOKEN}" \
-            -H "Content-Type: application/json" \
-            -d "$PAYLOAD")
-          echo "$RESP" | jq -r 'if .ok then "Slack: notification sent" else "Slack: failed: " + (.error // "unknown") end'
+          # Reuse ci-tool's slack_notify.py (--mode channel) instead of inlining
+          # curl; keeps the Slack-API wire format in one place (lib/slack_lib.py).
+          python3 ci-tool/lib/slack_notify.py \
+            --mode channel \
+            --token "${SLACK_BOT_TOKEN}" \
+            --channel "${CHANNEL_ID}" \
+            --text "${MSG}"
 
       - name: Clean ENV
         if: always()
