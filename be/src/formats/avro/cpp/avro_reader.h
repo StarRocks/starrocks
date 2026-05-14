@@ -20,6 +20,7 @@
 
 #include "column/vectorized_fwd.h"
 #include "formats/avro/cpp/column_reader.h"
+#include "formats/avro/cpp/direct_column_reader.h"
 
 namespace starrocks {
 
@@ -101,11 +102,17 @@ public:
 
     Status get_schema(std::vector<SlotDescriptor>* schema);
 
+    bool TEST_use_direct_path() const { return _use_direct_path; }
+
 private:
     Status read_row(const avro::GenericRecord& record, const std::vector<AdaptiveNullableColumn*>& column_raw_ptrs);
+    Status read_direct_row(avro::Decoder& decoder, const std::vector<AdaptiveNullableColumn*>& column_raw_ptrs);
+    bool try_init_direct_readers(const avro::ValidSchema& writer_schema);
 
     std::unique_ptr<avro::DataFileReader<avro::GenericDatum>> _file_reader = nullptr;
+    std::unique_ptr<avro::DataFileReaderBase> _base_reader = nullptr;
     bool _is_inited = false;
+    bool _use_direct_path = false;
 
     // all belows are only used in read data
     std::string _filename = "";
@@ -117,6 +124,9 @@ private:
     // reuse generic datum and field indexes for better performance
     std::unique_ptr<avro::GenericDatum> _datum = nullptr;
     std::vector<int64_t> _field_indexes;
+    std::vector<int64_t> _direct_field_to_slot;
+    std::vector<avrocpp::DirectColumnReaderUniquePtr> _direct_column_readers;
+    avro::ValidSchema _data_schema;
 
     RuntimeState* _state = nullptr;
     ScannerCounter* _counter = nullptr;

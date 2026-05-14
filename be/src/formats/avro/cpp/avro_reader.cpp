@@ -28,9 +28,11 @@
 #include "column/chunk.h"
 #include "exec/file_scanner/file_scanner.h"
 #include "formats/avro/cpp/avro_schema_builder.h"
+#include "formats/avro/cpp/direct_column_reader.h"
 #include "formats/avro/cpp/utils.h"
 #include "fs/fs.h"
 #include "runtime/descriptors.h"
+#include "runtime/runtime_state.h"
 #include "runtime/runtime_state_helper.h"
 
 namespace starrocks {
@@ -204,6 +206,7 @@ static int64_t count_avro_blocks(RandomAccessFile* file, size_t buffer_size, Sca
     while (try_read_avro_long(stream, obj_count)) {
         int64_t byte_count;
         if (!try_read_avro_long(stream, byte_count)) throw avro::Exception("truncated block header");
+        if (obj_count < 0 || byte_count < 0) throw avro::Exception("invalid Avro block header");
 
         // Stop if we have moved past the split end.  The boundary check uses the position
         // after reading both varints, which corresponds to DataFileReaderBase::previousSync()
@@ -295,6 +298,10 @@ AvroReader::~AvroReader() {
         _file_reader->close();
         _file_reader.reset();
     }
+    if (_base_reader != nullptr) {
+        _base_reader->close();
+        _base_reader.reset();
+    }
 }
 
 Status AvroReader::init(std::unique_ptr<avro::InputStream> input_stream, const std::string& filename,
@@ -316,6 +323,22 @@ Status AvroReader::init(std::unique_ptr<avro::InputStream> input_stream, const s
     _counter = counter;
 
     try {
+        // Count queries materialize no physical Avro columns.  Keep this path
+        // ahead of reader-schema setup so FE-provided schemas do not force
+        // row-reader construction or resolving-decoder initialization.
+        _split_end = (split_length > 0) ? split_offset + split_length : 0;
+        if (_num_of_columns_from_file == 0 && raw_file != nullptr) {
+            try {
+                _total_count = count_avro_blocks(raw_file, buffer_size, counter, split_offset, _split_end);
+                _count_remaining = _total_count;
+                _is_inited = true;
+                return Status::OK();
+            } catch (const avro::Exception&) {
+                (void)raw_file->seek(0);
+                // fall back to record-level reading if block counting fails
+            }
+        }
+
         // Read the Avro file header once via DataFileReaderBase (schema + sync marker).
         // init() is intentionally NOT called yet so we can inspect the writer schema
         // and apply column projection before setting up the decoder.
@@ -334,24 +357,45 @@ Status AvroReader::init(std::unique_ptr<avro::InputStream> input_stream, const s
             }
         }
 
-        // Build a projected reader schema that contains only the needed columns.
-        // The ResolvingDecoder will then skip unwanted fields at the binary level,
-        // saving CPU deserialization work — the Trino-equivalent of maskColumnsFromTableSchema.
-        avro::ValidSchema projected = build_projected_schema(reader_schema, needed_cols);
-        bool using_projection = !needed_cols.empty() && projected.root()->leaves() < reader_schema.root()->leaves();
-
-        if (using_projection) {
-            _file_reader = std::make_unique<avro::DataFileReader<avro::GenericDatum>>(std::move(base), projected);
-        } else if (!reader_schema_json.empty()) {
-            _file_reader = std::make_unique<avro::DataFileReader<avro::GenericDatum>>(std::move(base), reader_schema);
+        _data_schema = writer_schema;
+        _use_direct_path = reader_schema_json.empty() && try_init_direct_readers(writer_schema);
+        if (_use_direct_path) {
+            _base_reader = std::move(base);
+            _base_reader->init();
         } else {
-            _file_reader = std::make_unique<avro::DataFileReader<avro::GenericDatum>>(std::move(base));
-        }
+            // Build a projected reader schema that contains only the needed columns.
+            // The ResolvingDecoder will then skip unwanted fields at the binary level,
+            // saving CPU deserialization work — the Trino-equivalent of maskColumnsFromTableSchema.
+            avro::ValidSchema projected = build_projected_schema(reader_schema, needed_cols);
+            bool using_projection = !needed_cols.empty() && projected.root()->leaves() < reader_schema.root()->leaves();
 
-        // The datum must match the schema the decoder will produce values for.
-        const auto& effective_schema =
-                (using_projection || !reader_schema_json.empty()) ? _file_reader->readerSchema() : writer_schema;
-        _datum = std::make_unique<avro::GenericDatum>(effective_schema);
+            if (using_projection) {
+                _file_reader = std::make_unique<avro::DataFileReader<avro::GenericDatum>>(std::move(base), projected);
+            } else if (!reader_schema_json.empty()) {
+                _file_reader =
+                        std::make_unique<avro::DataFileReader<avro::GenericDatum>>(std::move(base), reader_schema);
+            } else {
+                _file_reader = std::make_unique<avro::DataFileReader<avro::GenericDatum>>(std::move(base));
+            }
+
+            // The datum must match the schema the decoder will produce values for.
+            const auto& effective_schema =
+                    (using_projection || !reader_schema_json.empty()) ? _file_reader->readerSchema() : writer_schema;
+            _datum = std::make_unique<avro::GenericDatum>(effective_schema);
+
+            // Map each slot to its field index in the effective (possibly projected) schema.
+            _field_indexes.resize(_num_of_columns_from_file, -1);
+            for (size_t i = 0; i < _num_of_columns_from_file; ++i) {
+                const auto& desc = (*_slot_descs)[i];
+                if (desc == nullptr) {
+                    continue;
+                }
+                size_t index = 0;
+                if (effective_schema.root()->nameIndex(std::string(desc->col_name()), index)) {
+                    _field_indexes[i] = static_cast<int64_t>(index);
+                }
+            }
+        }
 
         // Split handling.
         // DataFileReader::sync(pos) advances to the first sync marker at or after pos,
@@ -359,35 +403,14 @@ Status AvroReader::init(std::unique_ptr<avro::InputStream> input_stream, const s
         // split_offset == 0 means "start of file" — leave the reader positioned after
         // the file header as opened above (no extra seek needed).
         if (split_offset > 0) {
-            _file_reader->sync(split_offset);
+            if (_use_direct_path) {
+                _base_reader->sync(split_offset);
+            } else {
+                _file_reader->sync(split_offset);
+            }
         }
         // split_end > 0 enables the pastSync() check in read_chunk().
         _split_end = (split_length > 0) ? split_offset + split_length : 0;
-
-        // When no columns are needed (count(*) path), count records by reading only
-        // Avro block headers — no decompression. raw_file is used independently of
-        // the stream owned by _file_reader; _file_reader is never read in this path.
-        if (_num_of_columns_from_file == 0 && raw_file != nullptr) {
-            try {
-                _total_count = count_avro_blocks(raw_file, buffer_size, counter, split_offset, _split_end);
-                _count_remaining = _total_count;
-            } catch (const avro::Exception&) {
-                // fall back to record-level reading if block counting fails
-            }
-        }
-
-        // Map each slot to its field index in the effective (possibly projected) schema.
-        _field_indexes.resize(_num_of_columns_from_file, -1);
-        for (size_t i = 0; i < _num_of_columns_from_file; ++i) {
-            const auto& desc = (*_slot_descs)[i];
-            if (desc == nullptr) {
-                continue;
-            }
-            size_t index = 0;
-            if (effective_schema.root()->nameIndex(std::string(desc->col_name()), index)) {
-                _field_indexes[i] = static_cast<int64_t>(index);
-            }
-        }
     } catch (const avro::Exception& ex) {
         auto err_msg = fmt::format("Avro reader init throws exception: {}", ex.what());
         LOG(WARNING) << err_msg;
@@ -458,24 +481,37 @@ Status AvroReader::read_chunk(ChunkPtr& chunk, int rows_to_read, int64_t* rows_c
             // introduced the current block — is past pos.  Checking before read()
             // mirrors Hadoop AvroInputFormat: if the block we are about to read from
             // started after split_end, stop now rather than reading one extra record.
-            if (_split_end > 0 && _file_reader->pastSync(_split_end)) {
-                break;
-            }
-
-            if (!_file_reader->read(*_datum)) {
+            if (!_use_direct_path && _split_end > 0 && _file_reader->pastSync(_split_end)) {
                 break;
             }
 
             auto num_rows = chunk->num_rows();
 
-            DCHECK(_datum->type() == avro::AVRO_RECORD);
-            const auto& record = _datum->value<avro::GenericRecord>();
+            Status st;
+            if (_use_direct_path) {
+                if (_split_end > 0 && _base_reader->pastSync(_split_end)) {
+                    break;
+                }
+                if (!_base_reader->hasMore()) {
+                    break;
+                }
+                _base_reader->decr();
+                st = read_direct_row(_base_reader->decoder(), column_raw_ptrs);
+            } else {
+                if (!_file_reader->read(*_datum)) {
+                    break;
+                }
 
-            auto st = read_row(record, column_raw_ptrs);
+                DCHECK(_datum->type() == avro::AVRO_RECORD);
+                const auto& record = _datum->value<avro::GenericRecord>();
+                st = read_row(record, column_raw_ptrs);
+            }
             if (st.is_data_quality_error()) {
                 if (_counter->num_rows_filtered++ < MAX_ERROR_LINES_IN_FILE) {
                     std::string json_str;
-                    (void)AvroUtils::datum_to_json(*_datum, &json_str);
+                    if (_datum != nullptr) {
+                        (void)AvroUtils::datum_to_json(*_datum, &json_str);
+                    }
                     RuntimeStateHelper::append_error_msg_to_file(_state, json_str, std::string(st.message()));
                     LOG(WARNING) << "Failed to read row. error: " << st;
                 }
@@ -524,13 +560,86 @@ Status AvroReader::read_row(const avro::GenericRecord& record,
     return Status::OK();
 }
 
+bool AvroReader::try_init_direct_readers(const avro::ValidSchema& writer_schema) {
+    const auto& root = writer_schema.root();
+    if (root->type() != avro::AVRO_RECORD) {
+        return false;
+    }
+
+    _direct_field_to_slot.assign(root->leaves(), -1);
+    _direct_column_readers.clear();
+    _direct_column_readers.resize(_num_of_columns_from_file);
+
+    if (_slot_descs == nullptr) {
+        return false;
+    }
+
+    for (size_t i = 0; i < _num_of_columns_from_file; ++i) {
+        const auto* desc = (*_slot_descs)[i];
+        if (desc == nullptr) {
+            continue;
+        }
+
+        size_t field_index = 0;
+        if (!root->nameIndex(std::string(desc->col_name()), field_index)) {
+            if (_col_not_found_as_null) {
+                continue;
+            }
+            return false;
+        }
+
+        const auto& timezone = _state != nullptr ? _state->timezone_obj() : cctz::local_time_zone();
+        auto reader =
+                avrocpp::DirectColumnReader::make(desc->col_name(), desc->type(), root->leafAt(field_index), timezone);
+        if (reader == nullptr) {
+            return false;
+        }
+
+        _direct_field_to_slot[field_index] = static_cast<int64_t>(i);
+        _direct_column_readers[i] = std::move(reader);
+    }
+
+    return true;
+}
+
+Status AvroReader::read_direct_row(avro::Decoder& decoder,
+                                   const std::vector<AdaptiveNullableColumn*>& column_raw_ptrs) {
+    const auto& root = _data_schema.root();
+    for (size_t field_index = 0; field_index < root->leaves(); ++field_index) {
+        int64_t slot_index = _direct_field_to_slot[field_index];
+        if (slot_index < 0) {
+            avrocpp::DirectColumnReader::skip_node(decoder, root->leafAt(field_index));
+            continue;
+        }
+
+        DCHECK_LT(slot_index, static_cast<int64_t>(_direct_column_readers.size()));
+        DCHECK(_direct_column_readers[slot_index] != nullptr);
+        DCHECK(column_raw_ptrs[slot_index] != nullptr);
+        auto st = _direct_column_readers[slot_index]->read_field(decoder, column_raw_ptrs[slot_index]);
+        if (!st.ok()) {
+            for (size_t rest = field_index + 1; rest < root->leaves(); ++rest) {
+                avrocpp::DirectColumnReader::skip_node(decoder, root->leafAt(rest));
+            }
+            return st;
+        }
+    }
+
+    for (size_t i = 0; i < _num_of_columns_from_file; ++i) {
+        if ((*_slot_descs)[i] != nullptr && _direct_column_readers[i] == nullptr) {
+            DCHECK(_col_not_found_as_null);
+            column_raw_ptrs[i]->append_nulls(1);
+        }
+    }
+    return Status::OK();
+}
+
 Status AvroReader::get_schema(std::vector<SlotDescriptor>* schema) {
     if (!_is_inited) {
         return Status::Uninitialized("Avro reader is not initialized");
     }
 
     try {
-        const auto& avro_schema = _file_reader->dataSchema();
+        const auto& avro_schema = _use_direct_path ? _data_schema : _file_reader->dataSchema();
         VLOG(2) << "avro data schema: " << avro_schema.toJson(false);
 
         const auto& node = avro_schema.root();
