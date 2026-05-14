@@ -407,16 +407,7 @@ Status SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id, const std::fun
         auto failed_function = [this, request_byte_size, query_ctx_weak](const ClosureContext& ctx,
                                                                          std::string_view rpc_error_msg) noexcept {
             auto query_ctx_guard = query_ctx_weak.lock();
-            if (UNLIKELY(!query_ctx_guard)) {
-                _is_finishing = true;
-                auto& context = sink_ctx(ctx.instance_id.lo);
-                ++context.num_finished_rpcs;
-                --context.num_in_flight_rpcs;
-                _buffered_mem_usage->release(request_byte_size);
-                GlobalEnv::GetInstance()->brpc_iobuf_mem_tracker()->set(butil::IOBuf::block_memory());
-                --_total_in_flight_rpc;
-                return;
-            }
+            RETURN_IF(!query_ctx_guard, Status::OK());
             auto notify = this->defer_notify();
 
             auto defer = DeferOp([this]() { --_total_in_flight_rpc; });
@@ -439,16 +430,7 @@ Status SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id, const std::fun
         auto success_function = [this, request_byte_size, query_ctx_weak](const ClosureContext& ctx,
                                                                           const PTransmitChunkResult& result) noexcept {
             auto query_ctx_guard = query_ctx_weak.lock();
-            if (UNLIKELY(!query_ctx_guard)) {
-                _is_finishing = true;
-                auto& context = sink_ctx(ctx.instance_id.lo);
-                ++context.num_finished_rpcs;
-                --context.num_in_flight_rpcs;
-                _buffered_mem_usage->release(request_byte_size);
-                GlobalEnv::GetInstance()->brpc_iobuf_mem_tracker()->set(butil::IOBuf::block_memory());
-                --_total_in_flight_rpc;
-                return;
-            }
+            RETURN_IF(!query_ctx_guard, Status::OK());
             auto notify = this->defer_notify();
 
             auto defer = DeferOp([this]() { --_total_in_flight_rpc; });
