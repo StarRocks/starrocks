@@ -19,6 +19,7 @@
 #include <avrocpp/Decoder.hh>
 #include <avrocpp/Exception.hh>
 #include <avrocpp/LogicalType.hh>
+#include <cmath>
 #include <string>
 #include <utility>
 #include <vector>
@@ -38,14 +39,19 @@ namespace {
 
 template <typename FromType, typename ToType>
 static inline bool checked_cast(const FromType& from, ToType* to) {
-    *to = static_cast<ToType>(from);
+    if constexpr (std::is_floating_point_v<FromType> && std::is_integral_v<ToType>) {
+        if (std::isnan(from) || std::isinf(from)) return true;
+    }
 
     DIAGNOSTIC_PUSH
 #if defined(__clang__)
     DIAGNOSTIC_IGNORE("-Wimplicit-int-float-conversion")
 #endif
-    return check_signed_number_overflow<FromType, ToType>(from);
+    if (check_signed_number_overflow<FromType, ToType>(from)) return true;
     DIAGNOSTIC_POP
+
+    *to = static_cast<ToType>(from);
+    return false;
 }
 
 template <typename FromType, typename ToType>
@@ -122,8 +128,13 @@ static bool unwrap_nullable_union(const avro::NodePtr& node, avro::NodePtr* valu
         return true;
     }
 
+    *value_node = nullptr;
+    *null_branch = static_cast<size_t>(-1);
+    *value_branch = 0;
+
     bool found_value = false;
     bool found_null = false;
+
     for (size_t i = 0; i < node->leaves(); ++i) {
         const auto& branch = node->leafAt(i);
         if (branch->type() == avro::AVRO_NULL) {
