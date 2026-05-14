@@ -489,6 +489,11 @@ CONF_mInt32(lake_partial_update_thread_pool_max_threads, "0");
 CONF_mInt32(lake_partial_update_thread_pool_queue_size, "2048");
 // The maximum number of memtables for pk index in shared-data mode.
 CONF_mInt32(pk_index_memtable_max_count, "2");
+// Parallelise the segment-iteration loop in LakePersistentIndex::load_from_lake_tablet
+// (PK-index cold-load on first publish per CN/tablet). Reads and decodes segments
+// of the same rowset concurrently on `pk_index_execution_thread_pool`; the memtable
+// insert itself remains serialised by a per-rowset mutex.
+CONF_mBool(enable_pk_index_rebuild_parallel_segment, "true");
 // The maximum wait flush timeout for pk index memtable in shared-data mode, in milliseconds.
 CONF_mInt64(pk_index_memtable_max_wait_flush_timeout_ms, "30000");
 // The parameters for pk index size-tiered compaction strategy.

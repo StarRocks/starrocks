@@ -1124,22 +1124,24 @@ Status LakePersistentIndex::load_from_lake_tablet(TabletManager* tablet_mgr, con
     const uint64_t rebuild_rss_rowid_point = sstables.empty() ? 0 : sstables.rbegin()->max_rss_rowid();
     const uint32_t rebuild_rss_id = rebuild_rss_rowid_point >> 32;
     OlapReaderStatistics stats;
-    MutableColumnPtr pk_column;
-    if (pk_columns.size() > 1 || pk_encoding_type == PrimaryKeyEncodingType::PK_ENCODING_TYPE_V2) {
-        // more than one key column or big endian encoding
-        if (!PrimaryKeyEncoder::create_column(pkey_schema, &pk_column, pk_encoding_type).ok()) {
-            CHECK(false) << "create column for primary key encoder failed";
-        }
-    }
-    vector<uint32_t> rowids;
-    rowids.reserve(4096);
-    auto chunk_shared_ptr = ChunkHelper::new_chunk(pkey_schema, 4096);
-    auto chunk = chunk_shared_ptr.get();
     auto rowsets = Rowset::get_rowsets(tablet_mgr, metadata);
-    int64_t get_next_cost_us = 0;
-    int64_t pk_encode_cost_us = 0;
-    int64_t build_values_cost_us = 0;
-    // Rowset whose version is between max_sstable_version and base_version should be recovered.
+    // Accumulators that may be written from worker threads. Trace counters cannot be
+    // updated from worker threads (the trace context is thread-local and the parent
+    // increment would be silently dropped), so each worker writes to atomics here and
+    // the orchestrator emits a single TRACE_COUNTER_INCREMENT after wait().
+    std::atomic<int64_t> get_next_cost_us{0};
+    std::atomic<int64_t> pk_encode_cost_us{0};
+    std::atomic<int64_t> build_values_cost_us{0};
+    std::atomic<int64_t> rebuild_index_num_rows{0};
+    // Parallelise the segment loop within each rowset. Different rowsets MAY contain
+    // the same PK (update of a previous row), so they must be processed in order to
+    // preserve "latest version wins" semantics — the outer rowset loop stays
+    // sequential. Within one rowset (one transaction), each PK lands in at most one
+    // segment, so segments are independent and can run concurrently; the only shared
+    // state is the memtable, guarded by `insert_mutex`. OSS reads + decode + PK
+    // encoding all run outside the lock, which is the cold-load wall-clock win.
+    const bool parallel_segments = config::enable_pk_index_rebuild_parallel_segment &&
+                                   config::enable_pk_index_parallel_execution;
     for (auto& rowset : rowsets) {
         TRACE_COUNTER_INCREMENT("total_segment_cnt", rowset->num_segments());
         TRACE_COUNTER_INCREMENT("total_num_rows", rowset->num_rows());
@@ -1180,82 +1182,158 @@ Status LakePersistentIndex::load_from_lake_tablet(TabletManager* tablet_mgr, con
         }
         auto& itrs = res.value();
         CHECK(itrs.size() == rowset->num_segments()) << "itrs.size != num_segments";
-        for (size_t i = 0; i < itrs.size(); i++) {
-            TRACE_COUNTER_SCOPE_LATENCY_US("rebuild_index_segment_cost_us");
-            auto itr = itrs[i].get();
+
+        std::mutex insert_mutex;
+        std::mutex status_mutex;
+        Status shared_status;
+        auto record_err = [&](const Status& s) {
+            std::lock_guard<std::mutex> lg(status_mutex);
+            shared_status.update(s);
+        };
+
+        // Process a single segment: drain its iterator, encode PKs, insert into the
+        // memtable under `insert_mutex`. Stateful local buffers (chunk, rowids,
+        // pk_column) must live on the worker stack — they cannot be hoisted out
+        // because workers run concurrently.
+        auto process_segment = [&](size_t i) {
+            ChunkIteratorPtr itr_holder = itrs[i];
+            auto* itr = itr_holder.get();
             if (itr == nullptr) {
-                continue;
+                return;
             }
             DeferOp close_iter([&] { itr->close(); });
             uint32_t rssid = rowset->id() + get_segment_idx(rowset->metadata(), static_cast<int32_t>(i));
             if (rssid < rebuild_rss_id) {
-                // lower than rebuild point, skip
-                // Notice: segment id that equal `rebuild_rss_id` can't be skip because
-                // there are maybe some rows need to rebuild.
-                continue;
+                // lower than rebuild point, skip; segment id == rebuild_rss_id
+                // can't be skipped (it may still have rows above the point).
+                return;
             }
-            TRACE_COUNTER_INCREMENT("rebuild_index_segment_cnt", 1);
+            vector<uint32_t> local_rowids;
+            local_rowids.reserve(4096);
+            auto local_chunk_sp = ChunkHelper::new_chunk(pkey_schema, 4096);
+            auto* local_chunk = local_chunk_sp.get();
+            MutableColumnPtr local_pk_column;
+            if (pk_columns.size() > 1 || pk_encoding_type == PrimaryKeyEncodingType::PK_ENCODING_TYPE_V2) {
+                if (!PrimaryKeyEncoder::create_column(pkey_schema, &local_pk_column, pk_encoding_type).ok()) {
+                    record_err(Status::InternalError("create column for primary key encoder failed"));
+                    return;
+                }
+            }
+            int64_t local_get_next = 0;
+            int64_t local_encode = 0;
+            int64_t local_build = 0;
             while (true) {
-                chunk->reset();
-                rowids.clear();
+                // Cheap early-out so siblings stop draining IO after one task fails.
+                {
+                    std::lock_guard<std::mutex> lg(status_mutex);
+                    if (!shared_status.ok()) {
+                        return;
+                    }
+                }
+                local_chunk->reset();
+                local_rowids.clear();
                 int64_t t1 = GetCurrentTimeMicros();
-                auto st = itr->get_next(chunk, &rowids);
-                get_next_cost_us += GetCurrentTimeMicros() - t1;
+                auto st = itr->get_next(local_chunk, &local_rowids);
+                local_get_next += GetCurrentTimeMicros() - t1;
                 if (st.is_end_of_file()) {
                     break;
-                } else if (!st.ok()) {
-                    return st;
+                }
+                if (!st.ok()) {
+                    record_err(st);
+                    return;
+                }
+                Column* pkc = nullptr;
+                if (local_pk_column) {
+                    int64_t t2 = GetCurrentTimeMicros();
+                    local_pk_column->reset_column();
+                    PrimaryKeyEncoder::encode(pkey_schema, *local_chunk, 0, local_chunk->num_rows(),
+                                              local_pk_column.get(), pk_encoding_type);
+                    local_encode += GetCurrentTimeMicros() - t2;
+                    pkc = local_pk_column.get();
                 } else {
-                    Column* pkc = nullptr;
-                    if (pk_column) {
-                        int64_t t2 = GetCurrentTimeMicros();
-                        pk_column->reset_column();
-                        PrimaryKeyEncoder::encode(pkey_schema, *chunk, 0, chunk->num_rows(), pk_column.get(),
-                                                  pk_encoding_type);
-                        pk_encode_cost_us += GetCurrentTimeMicros() - t2;
-                        pkc = pk_column.get();
-                    } else {
-                        pkc = const_cast<Column*>(chunk->columns()[0].get());
+                    pkc = const_cast<Column*>(local_chunk->columns()[0].get());
+                }
+                int64_t t3 = GetCurrentTimeMicros();
+                uint64_t base = ((uint64_t)rssid) << 32;
+                std::vector<IndexValue> values;
+                values.reserve(pkc->size());
+                DCHECK(pkc->size() <= local_rowids.size());
+                for (uint32_t r = 0; r < pkc->size(); r++) {
+                    values.emplace_back(base + local_rowids[r]);
+                }
+                local_build += GetCurrentTimeMicros() - t3;
+                if (values.back().get_value() <= rebuild_rss_rowid_point) {
+                    continue;
+                }
+                rebuild_index_num_rows.fetch_add(pkc->size(), std::memory_order_relaxed);
+                Status insert_st;
+                if (pkc->is_binary()) {
+                    std::lock_guard<std::mutex> lg(insert_mutex);
+                    insert_st = insert(pkc->size(), reinterpret_cast<const Slice*>(pkc->raw_data()), values.data(),
+                                       rowset_version);
+                } else {
+                    std::vector<Slice> keys;
+                    keys.reserve(pkc->size());
+                    const auto* fkeys = pkc->continuous_data();
+                    for (size_t r = 0; r < pkc->size(); ++r) {
+                        keys.emplace_back(fkeys, _key_size);
+                        fkeys += _key_size;
                     }
-                    int64_t t3 = GetCurrentTimeMicros();
-                    uint64_t base = ((uint64_t)rssid) << 32;
-                    std::vector<IndexValue> values;
-                    values.reserve(pkc->size());
-                    DCHECK(pkc->size() <= rowids.size());
-                    for (uint32_t i = 0; i < pkc->size(); i++) {
-                        values.emplace_back(base + rowids[i]);
+                    std::lock_guard<std::mutex> lg(insert_mutex);
+                    insert_st = insert(pkc->size(), reinterpret_cast<const Slice*>(keys.data()), values.data(),
+                                       rowset_version);
+                }
+                if (!insert_st.ok()) {
+                    record_err(insert_st);
+                    return;
+                }
+            }
+            get_next_cost_us.fetch_add(local_get_next, std::memory_order_relaxed);
+            pk_encode_cost_us.fetch_add(local_encode, std::memory_order_relaxed);
+            build_values_cost_us.fetch_add(local_build, std::memory_order_relaxed);
+        };
+
+        // Count attempted segments on the orchestrator (TRACE_COUNTER is thread-local;
+        // see load_dels for the same pattern).
+        for (size_t i = 0; i < itrs.size(); i++) {
+            ChunkIterator* it = itrs[i].get();
+            if (it == nullptr) continue;
+            uint32_t rssid = rowset->id() + get_segment_idx(rowset->metadata(), static_cast<int32_t>(i));
+            if (rssid < rebuild_rss_id) continue;
+            TRACE_COUNTER_INCREMENT("rebuild_index_segment_cnt", 1);
+        }
+
+        {
+            TRACE_COUNTER_SCOPE_LATENCY_US("rebuild_index_segment_cost_us");
+            if (parallel_segments && itrs.size() > 1) {
+                auto token = ExecEnv::GetInstance()->pk_index_execution_thread_pool()->new_token(
+                        ThreadPool::ExecutionMode::CONCURRENT);
+                for (size_t i = 0; i < itrs.size(); i++) {
+                    auto st = token->submit_func([&process_segment, i]() { process_segment(i); });
+                    if (!st.ok()) {
+                        // Pool full or shutting down — run inline so we don't drop the segment.
+                        process_segment(i);
                     }
-                    build_values_cost_us += GetCurrentTimeMicros() - t3;
-                    if (values.back().get_value() <= rebuild_rss_rowid_point) {
-                        // lower AND equal than rebuild point, skip
-                        continue;
-                    }
-                    TRACE_COUNTER_INCREMENT("rebuild_index_num_rows", pkc->size());
-                    if (pkc->is_binary()) {
-                        RETURN_IF_ERROR(insert(pkc->size(), reinterpret_cast<const Slice*>(pkc->raw_data()),
-                                               values.data(), rowset_version));
-                    } else {
-                        std::vector<Slice> keys;
-                        keys.reserve(pkc->size());
-                        const auto* fkeys = pkc->continuous_data();
-                        for (size_t i = 0; i < pkc->size(); ++i) {
-                            keys.emplace_back(fkeys, _key_size);
-                            fkeys += _key_size;
-                        }
-                        RETURN_IF_ERROR(insert(pkc->size(), reinterpret_cast<const Slice*>(keys.data()), values.data(),
-                                               rowset_version));
-                    }
+                }
+                token->wait();
+            } else {
+                for (size_t i = 0; i < itrs.size(); i++) {
+                    process_segment(i);
                 }
             }
         }
-        // Rebuild from del files
+        RETURN_IF_ERROR(shared_status);
+
+        // Rebuild from del files (sequential — relies on the memtable populated above
+        // and the existing single-threaded erase path).
         if (rowset->metadata().del_files_size() > 0) {
             RETURN_IF_ERROR(load_dels(rowset, pkey_schema, rowset_version));
         }
     }
-    TRACE_COUNTER_INCREMENT("rebuild_get_next_cost_us", get_next_cost_us);
-    TRACE_COUNTER_INCREMENT("rebuild_pk_encode_cost_us", pk_encode_cost_us);
-    TRACE_COUNTER_INCREMENT("rebuild_build_values_cost_us", build_values_cost_us);
+    TRACE_COUNTER_INCREMENT("rebuild_get_next_cost_us", get_next_cost_us.load());
+    TRACE_COUNTER_INCREMENT("rebuild_pk_encode_cost_us", pk_encode_cost_us.load());
+    TRACE_COUNTER_INCREMENT("rebuild_build_values_cost_us", build_values_cost_us.load());
+    TRACE_COUNTER_INCREMENT("rebuild_index_num_rows", rebuild_index_num_rows.load());
     TRACE_COUNTER_INCREMENT("segment_io_local_disk_us", stats.io_ns_read_local_disk / 1000);
     TRACE_COUNTER_INCREMENT("segment_io_remote_us", stats.io_ns_remote / 1000);
     TRACE_COUNTER_INCREMENT("segment_io_count_local_disk", stats.io_count_local_disk);
