@@ -241,6 +241,23 @@ static BinaryColumn::MutablePtr make_fixed_column(size_t rows, size_t len) {
     return make_column(rows, len, LenPattern::FIXED);
 }
 
+static BinaryColumn::MutablePtr make_fixed_resource_column(size_t rows, size_t len) {
+    auto bytes = std::make_shared<std::string>(rows * len, '\0');
+    BinaryColumn::Offsets offsets;
+    offsets.resize(rows + 1);
+    offsets[0] = 0;
+    for (size_t i = 0; i < rows; ++i) {
+        const size_t offset = i * len;
+        for (size_t j = 0; j < len; ++j) {
+            (*bytes)[offset + j] = static_cast<char>('a' + ((i + j) % 26));
+        }
+        offsets[i + 1] = offset + len;
+    }
+
+    ContainerResource resource(bytes, bytes->data(), bytes->size());
+    return BinaryColumn::create(std::move(resource), std::move(offsets));
+}
+
 static std::vector<uint32_t> make_indexes(size_t src_rows, size_t selected, IndexPattern pattern, uint32_t from = 0) {
     std::vector<uint32_t> indexes(from + selected, 0);
     for (size_t i = 0; i < selected; ++i) {
@@ -1038,6 +1055,23 @@ static void bench_byte_size_scan(benchmark::State& state, size_t rows, size_t le
     state.SetItemsProcessed(static_cast<int64_t>(state.iterations() * rows));
 }
 
+static ALWAYS_NOINLINE void bench_byte_size_whole_column(benchmark::State& state, size_t rows, size_t len,
+                                                         bool resource) {
+    static constexpr size_t kCallsPerIteration = 262144;
+    auto src = resource ? make_fixed_resource_column(rows, len) : make_fixed_column(rows, len);
+    const Column* column = src.get();
+
+    for (auto _ : state) {
+        uint64_t total_size = 0;
+        for (size_t i = 0; i < kCallsPerIteration; ++i) {
+            benchmark::DoNotOptimize(column);
+            total_size += column->byte_size();
+        }
+        benchmark::DoNotOptimize(total_size);
+    }
+    state.SetItemsProcessed(static_cast<int64_t>(state.iterations() * kCallsPerIteration));
+}
+
 static void register_binary_column_regression_full() {
     const std::string suite = "BinaryColumnRegressionFull";
 
@@ -1265,6 +1299,19 @@ static void register_binary_column_regression_full() {
     }
     register_case(case_name(suite, "xor_checksum", "rows:65536/len:32"),
                   [](benchmark::State& state) { bench_xor_checksum(state, 65536, 32); });
+    for (size_t rows : {4096UL, 65536UL, 262144UL}) {
+        for (size_t len : {8UL, 128UL}) {
+            for (bool resource : {false, true}) {
+                register_case(case_name(suite, "byte_size_whole_column",
+                                        "rows:" + std::to_string(rows) + "/len:" + std::to_string(len) +
+                                                "/resource:" + std::string(resource ? "true" : "false") +
+                                                "/calls:262144"),
+                              [rows, len, resource](benchmark::State& state) {
+                                  bench_byte_size_whole_column(state, rows, len, resource);
+                              });
+            }
+        }
+    }
     for (size_t len : {8UL, 128UL}) {
         register_case(case_name(suite, "byte_size_idx_loop", "rows:262144/len:" + std::to_string(len)),
                       [len](benchmark::State& state) { bench_byte_size_scan(state, 262144, len); });
