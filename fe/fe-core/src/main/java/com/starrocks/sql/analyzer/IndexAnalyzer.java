@@ -373,9 +373,8 @@ public class IndexAnalyzer {
                             "`DIM` should be a multiple of `M_PQ` for PQ-quantized HNSW index");
                 }
             } else {
-                // M_PQ / NBITS_PQ are PQ-only knobs. Silently accepting them when
-                // QUANTIZER is omitted or non-PQ misleads users into thinking the
-                // value takes effect — BE will ignore both.
+                // BE silently ignores M_PQ / NBITS_PQ for non-PQ quantizers; fail
+                // loudly so users don't think the value took effect.
                 if (mPq != null) {
                     throw new SemanticException("`M_PQ` is only allowed when QUANTIZER = pq");
                 }
