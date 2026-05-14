@@ -145,6 +145,27 @@ This tutorial creates vector indexes while creating tables. You can also append 
 - **Required**: No
 - **Description**: HNSW-specific parameter. The size of the candidate list containing the nearest neighbors.  It must be an integer greater than or equal to `1`. It is used to control the search depth during the graph construction process. Specifically, `efconstruction` defines the size of the search list (also known as the candidate list) for each vertex during the graph construction process. This candidate list is used to store the neighbor candidates of the current vertex, and the size of the list is `efconstruction`. The larger the value of `efconstruction`, the more candidates is considered as the neighbors of the vertex during the graph construction process, and, as a result, the better quality (such as better connectivity) of the graph, but also the higher time consumption and computation complexity of graph construction.
 
+##### quantizer
+
+- **Default**: `flat` (no quantization)
+- **Required**: No
+- **Description**: HNSW-specific parameter. Adds a scalar or product quantizer in front of the inner HNSW storage to reduce on-disk and in-memory size at the cost of some recall. Accepted values:
+  - `flat` — no quantization (default). Identical to omitting this property; preserves backward compatibility with indexes built before the quantizer property existed.
+  - `sq4` — 4-bit scalar quantization. Smallest footprint, larger recall drop than `sq8`.
+  - `sq8` — 8-bit scalar quantization. Recommended starting point for size reduction; recall loss is typically small at higher `ef_search`.
+  - `pq` — product quantization. Requires `m_pq`; storage scales with `m_pq * nbits_pq` bits per vector.
+
+##### m_pq
+
+- **Required**: Required when `quantizer = pq`; rejected otherwise.
+- **Description**: HNSW-specific parameter (PQ quantizer only). Number of product-quantization sub-quantizers. The original vector is split into `m_pq` equal-length sub-vectors; therefore `m_pq` must divide `dim`. Larger `m_pq` raises recall at the cost of more bytes per vector. Typical values are in the range 4–32 depending on `dim`.
+
+##### nbits_pq
+
+- **Default**: 8
+- **Required**: No (applies only when `quantizer = pq`).
+- **Description**: HNSW-specific parameter (PQ quantizer only). Bits per PQ sub-quantizer. Must be in the range 1–8.
+
 ##### nbits
 
 - **Default**: 16
