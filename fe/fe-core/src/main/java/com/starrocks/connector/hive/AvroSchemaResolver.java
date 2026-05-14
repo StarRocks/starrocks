@@ -46,17 +46,28 @@ public class AvroSchemaResolver {
 
         Map<String, String> serdeProperties =
                 table.getSerdeProperties() == null ? Collections.emptyMap() : table.getSerdeProperties();
-        String literal = serdeProperties.get(AVRO_SCHEMA_LITERAL);
+        Map<String, String> tableProperties =
+                table.getProperties() == null ? Collections.emptyMap() : table.getProperties();
+        String literal = getConfiguredSchemaValue(serdeProperties, tableProperties, AVRO_SCHEMA_LITERAL);
         if (isConfigured(literal)) {
             return Optional.of(parseSchema(
                     literal, String.format("%s.%s", table.getCatalogDBName(), table.getCatalogTableName())));
         }
 
-        String schemaUrl = serdeProperties.get(AVRO_SCHEMA_URL);
+        String schemaUrl = getConfiguredSchemaValue(serdeProperties, tableProperties, AVRO_SCHEMA_URL);
         if (!isConfigured(schemaUrl)) {
             return Optional.empty();
         }
         return Optional.of(parseSchema(readSchemaUrl(schemaUrl), schemaUrl));
+    }
+
+    private String getConfiguredSchemaValue(
+            Map<String, String> serdeProperties, Map<String, String> tableProperties, String key) {
+        String serdeValue = serdeProperties.get(key);
+        if (isConfigured(serdeValue)) {
+            return serdeValue;
+        }
+        return tableProperties.get(key);
     }
 
     private boolean isConfigured(String value) {

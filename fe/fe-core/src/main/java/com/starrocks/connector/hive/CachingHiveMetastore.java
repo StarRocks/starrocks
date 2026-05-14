@@ -187,7 +187,7 @@ public class CachingHiveMetastore extends CachingMetastore implements IHiveMetas
         tableStatsCache = newCacheBuilder(expireAfterWriteSec, refreshIntervalSec, maxSize)
                 .build(asyncReloading(CacheLoader.from(this::loadTableStatistics), executor));
 
-        avroSchemaCache = newCacheBuilder(expireAfterWriteSec, refreshIntervalSec, maxSize).build();
+        avroSchemaCache = newCacheBuilder(expireAfterWriteSec, NEVER_REFRESH, maxSize).build();
 
         Caffeine<Object, Object> builder = Caffeine.newBuilder().maximumSize(maxSize).executor(executor);
         if (expireAfterWriteSec > 0) {
@@ -326,7 +326,7 @@ public class CachingHiveMetastore extends CachingMetastore implements IHiveMetas
 
     public Table loadTable(DatabaseTableName databaseTableName) {
         Table table = metastore.getTable(databaseTableName.getDatabaseName(), databaseTableName.getTableName());
-        if (table instanceof HiveTable hiveTable && hiveTable.getAvroSchemaJson() == null) {
+        if (table instanceof HiveTable hiveTable) {
             String avroSchema = avroSchemaCache.getIfPresent(databaseTableName);
             if (avroSchema == null) {
                 Optional<String> schemaOpt = avroSchemaResolver.flatMap(resolver -> resolver.resolve(hiveTable));
@@ -707,6 +707,7 @@ public class CachingHiveMetastore extends CachingMetastore implements IHiveMetas
         partitionCache.invalidateAll();
         tableStatsCache.invalidateAll();
         partitionStatsCache.synchronous().invalidateAll();
+        hmsExternalTableCache.invalidateAll();
         avroSchemaCache.invalidateAll();
     }
 
@@ -720,6 +721,7 @@ public class CachingHiveMetastore extends CachingMetastore implements IHiveMetas
         DatabaseTableName databaseTableName = DatabaseTableName.of(dbName, tableName);
         tableCache.invalidate(databaseTableName);
         tableStatsCache.invalidate(databaseTableName);
+        hmsExternalTableCache.invalidate(databaseTableName);
         avroSchemaCache.invalidate(databaseTableName);
         invalidateTablePartitionInfo(dbName, tableName, databaseTableName);
     }

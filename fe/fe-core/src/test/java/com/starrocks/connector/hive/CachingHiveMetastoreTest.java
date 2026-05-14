@@ -74,11 +74,16 @@ public class CachingHiveMetastoreTest {
     }
 
     private HiveTable createAvroTable(Map<String, String> serdeProperties) {
+        return createAvroTable(serdeProperties, Map.of());
+    }
+
+    private HiveTable createAvroTable(Map<String, String> serdeProperties, Map<String, String> tableProperties) {
         Map<String, String> properties = new HashMap<>();
         properties.put(HiveTable.HIVE_TABLE_SERDE_LIB, HiveClassNames.AVRO_SERDE_CLASS);
         properties.put(HiveTable.HIVE_TABLE_INPUT_FORMAT, HiveClassNames.AVRO_INPUT_FORMAT_CLASS);
         properties.put(HiveTable.HIVE_TABLE_COLUMN_NAMES, "id");
         properties.put(HiveTable.HIVE_TABLE_COLUMN_TYPES, "int");
+        properties.putAll(tableProperties);
         return new HiveTable.Builder()
                 .setId(1)
                 .setTableName("avro_tbl")
@@ -167,10 +172,52 @@ public class CachingHiveMetastoreTest {
     }
 
     @Test
+    public void testLoadTableResolveAvroSchemaLiteralFromTableProperties() {
+        HiveTable table = createAvroTable(Map.of(), Map.of(AvroSchemaResolver.AVRO_SCHEMA_LITERAL, AVRO_SCHEMA_LITERAL));
+        new Expectations(metastore) {
+            {
+                metastore.getTable("db1", "avro_tbl");
+                result = table;
+            }
+        };
+
+        CachingHiveMetastore cachingHiveMetastore =
+                new CachingHiveMetastore(metastore, executor, executor, expireAfterWriteSec, refreshAfterWriteSec, 1000,
+                        false, Optional.of(new AvroSchemaResolver(new Configuration())));
+
+        HiveTable loadedTable = (HiveTable) cachingHiveMetastore.loadTable(DatabaseTableName.of("db1", "avro_tbl"));
+        Assertions.assertEquals(new org.apache.avro.Schema.Parser().parse(AVRO_SCHEMA_LITERAL).toString(),
+                loadedTable.getAvroSchemaJson());
+    }
+
+    @Test
     public void testLoadTableResolveAvroSchemaUrl() throws Exception {
         java.nio.file.Path schemaPath = Files.createTempFile("sr-avro-schema", ".avsc");
         Files.writeString(schemaPath, AVRO_SCHEMA_LITERAL);
         HiveTable table = createAvroTable(Map.of(AvroSchemaResolver.AVRO_SCHEMA_URL, schemaPath.toUri().toString()));
+        new Expectations(metastore) {
+            {
+                metastore.getTable("db1", "avro_tbl");
+                result = table;
+                minTimes = 0;
+            }
+        };
+
+        CachingHiveMetastore cachingHiveMetastore =
+                new CachingHiveMetastore(metastore, executor, executor, expireAfterWriteSec, refreshAfterWriteSec, 1000,
+                        false, Optional.of(new AvroSchemaResolver(new Configuration())));
+
+        HiveTable loadedTable = (HiveTable) cachingHiveMetastore.loadTable(DatabaseTableName.of("db1", "avro_tbl"));
+        Assertions.assertEquals(new org.apache.avro.Schema.Parser().parse(AVRO_SCHEMA_LITERAL).toString(),
+                loadedTable.getAvroSchemaJson());
+    }
+
+    @Test
+    public void testLoadTableResolveAvroSchemaUrlFromTableProperties() throws Exception {
+        java.nio.file.Path schemaPath = Files.createTempFile("sr-avro-schema-table-properties", ".avsc");
+        Files.writeString(schemaPath, AVRO_SCHEMA_LITERAL);
+        HiveTable table =
+                createAvroTable(Map.of(), Map.of(AvroSchemaResolver.AVRO_SCHEMA_URL, schemaPath.toUri().toString()));
         new Expectations(metastore) {
             {
                 metastore.getTable("db1", "avro_tbl");
