@@ -123,6 +123,25 @@ set(EXEC_FILES
     iceberg/iceberg_delete_builder.cpp
     iceberg/iceberg_delete_file_iterator.cpp
     paimon/paimon_delete_file_builder.cpp
+<<<<<<< HEAD
+=======
+    hdfs_scanner/cache_select_scanner.cpp
+    hdfs_scanner/hdfs_scanner_text.cpp
+    hdfs_scanner/hdfs_scanner_json.cpp
+    hdfs_scanner/hdfs_scanner_partition.cpp
+    hdfs_scanner/hdfs_scanner_parquet.cpp
+    hdfs_scanner/hdfs_scanner_orc.cpp
+    hdfs_scanner/hdfs_scanner_avro.cpp
+    hdfs_scanner/hdfs_scanner.cpp
+    hdfs_scanner/jni_scanner.cpp
+    file_scanner/avro_cpp_scanner.cpp
+    file_scanner/avro_scanner.cpp
+    file_scanner/csv_scanner.cpp
+    file_scanner/file_scanner.cpp
+    file_scanner/json_scanner.cpp
+    file_scanner/orc_scanner.cpp
+    file_scanner/parquet_scanner.cpp
+>>>>>>> e4e99234a2 ([Enhancement] Replace JNI Avro scanner with native C++ scanner for Hive connector (#73237))
     schema_scanner/schema_analyze_status.cpp
     schema_scanner/schema_tables_scanner.cpp
     schema_scanner/schema_dummy_scanner.cpp
