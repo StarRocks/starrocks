@@ -38,7 +38,7 @@ set(RUNTIME_CORE_TEST_LINK_LIBS
     RuntimeCore
     ChunkCore
     ColumnCore
-    TypesCore
+    Types
     Common
     Base
     Gutil

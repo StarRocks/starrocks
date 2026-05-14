@@ -43,7 +43,6 @@ set(STARROCKS_LIBS
     Rowset
     Runtime
     RuntimeCore
-    TypesCore
     Types
     Util
     Script

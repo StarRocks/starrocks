@@ -308,7 +308,7 @@ class CheckBeModuleBoundariesTest(unittest.TestCase):
                 set(cmake_state.target_sources["ColumnCore"]),
             )
             self.assertEqual(
-                ["ColumnCore", "TypesCore", "Common", "Base", "Gutil", "StarRocksGen"],
+                ["ColumnCore", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
                 cmake_state.test_target_links["column_test"],
             )
 
@@ -417,11 +417,11 @@ class CheckBeModuleBoundariesTest(unittest.TestCase):
                                 "gutil/",
                                 "gen_cpp/",
                             ],
-                            "allowed_target_deps": ["TypesCore", "Common", "Base", "Gutil", "StarRocksGen"],
+                            "allowed_target_deps": ["Types", "Common", "Base", "Gutil", "StarRocksGen"],
                             "allowed_test_targets": ["column_test"],
                             "allowed_test_link_deps": [
                                 "ColumnCore",
-                                "TypesCore",
+                                "Types",
                                 "Common",
                                 "Base",
                                 "Gutil",
@@ -500,7 +500,7 @@ class CheckBeModuleBoundariesTest(unittest.TestCase):
                 """\
                 set(COLUMN_TEST_LINK_LIBS
                     ColumnCore
-                    TypesCore
+                    Types
                     Common
                     Base
                     Gutil

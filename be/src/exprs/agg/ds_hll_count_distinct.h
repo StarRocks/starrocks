@@ -20,8 +20,8 @@
 #include "column/runtime_type_traits.h"
 #include "column/vectorized_fwd.h"
 #include "exprs/agg/aggregate.h"
+#include "exprs/agg/data_sketch/ds_hll.h"
 #include "gutil/casts.h"
-#include "types/hll_sketch.h"
 
 namespace starrocks {
 

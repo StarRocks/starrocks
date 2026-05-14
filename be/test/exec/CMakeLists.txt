@@ -29,7 +29,7 @@ set(EXEC_CORE_TEST_LINK_LIBS
     RuntimeCore
     ChunkCore
     ColumnCore
-    TypesCore
+    Types
     Common
     Base
     Gutil
@@ -86,7 +86,7 @@ set(SCHEMA_SCANNER_CORE_TEST_LINK_LIBS
     RuntimeCore
     ChunkCore
     ColumnCore
-    TypesCore
+    Types
     Common
     Base
     Gutil
@@ -117,7 +117,7 @@ set(EXEC_SCHEMA_SCANNERS_TEST_LINK_LIBS
     RuntimeCore
     ChunkCore
     ColumnCore
-    TypesCore
+    Types
     Common
     Base
     Gutil
@@ -148,7 +148,7 @@ set(SORTING_CORE_TEST_LINK_LIBS
     RuntimeCore
     ChunkCore
     ColumnCore
-    TypesCore
+    Types
     Common
     Base
     Gutil
@@ -181,7 +181,7 @@ set(JOIN_CORE_TEST_LINK_LIBS
     RuntimeCore
     ChunkCore
     ColumnCore
-    TypesCore
+    Types
     Common
     Base
     Gutil
