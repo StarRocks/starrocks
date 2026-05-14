@@ -1,4 +1,4 @@
 # Headers that still require a complete ExecEnv or GlobalEnv definition.
 src/runtime/stream_load/transaction_mgr.h
-src/testutil/init_test_env.h
+test/testutil/init_test_env.h
 test/storage/lake/test_util.h
