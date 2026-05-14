@@ -45,4 +45,8 @@ public interface SQLPlanStorage {
     default List<BaselinePlan> queryBaselinePlan(List<String> sqlDigest, String source) {
         return Collections.emptyList();
     }
+
+    default long getBaselineCount() {
+        return 0L;
+    }
 }
