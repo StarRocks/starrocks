@@ -407,7 +407,7 @@ Status SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id, const std::fun
         auto failed_function = [this, request_byte_size, query_ctx_weak](const ClosureContext& ctx,
                                                                          std::string_view rpc_error_msg) noexcept {
             auto query_ctx_guard = query_ctx_weak.lock();
-            RETURN_IF(!query_ctx_guard, Status::OK());
+            RETURN_IF(!query_ctx_guard, (void)0);
             auto notify = this->defer_notify();
 
             auto defer = DeferOp([this]() { --_total_in_flight_rpc; });
@@ -430,7 +430,7 @@ Status SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id, const std::fun
         auto success_function = [this, request_byte_size, query_ctx_weak](const ClosureContext& ctx,
                                                                           const PTransmitChunkResult& result) noexcept {
             auto query_ctx_guard = query_ctx_weak.lock();
-            RETURN_IF(!query_ctx_guard, Status::OK());
+            RETURN_IF(!query_ctx_guard, (void)0);
             auto notify = this->defer_notify();
 
             auto defer = DeferOp([this]() { --_total_in_flight_rpc; });
