@@ -307,6 +307,36 @@ public class VectorIndexTest extends PlanTestBase {
                     put(IndexParamsKey.M_PQ.name(), "3");
                 }}, KeysType.DUP_KEYS),
                 "`DIM` should be a multiple of `M_PQ` for PQ-quantized HNSW index");
+
+        // M_PQ supplied with a non-PQ quantizer is rejected (BE ignores it; failing
+        // loudly avoids silently accepting an ineffective config).
+        Assertions.assertThrows(
+                SemanticException.class,
+                () -> IndexAnalyzer.checkVectorIndexValid(vecCol, new HashMap<>() {{
+                    put(CommonIndexParamKey.INDEX_TYPE.name(), VectorIndexType.HNSW.name());
+                    put(CommonIndexParamKey.DIM.name(), "128");
+                    put(CommonIndexParamKey.METRIC_TYPE.name(), MetricsType.L2_DISTANCE.name());
+                    put(CommonIndexParamKey.IS_VECTOR_NORMED.name(), "false");
+                    put(IndexParamsKey.M.name(), "16");
+                    put(IndexParamsKey.EFCONSTRUCTION.name(), "40");
+                    put(IndexParamsKey.QUANTIZER.name(), QuantizerType.SQ8.name());
+                    put(IndexParamsKey.M_PQ.name(), "16");
+                }}, KeysType.DUP_KEYS),
+                "`M_PQ` is only allowed when QUANTIZER = pq");
+
+        // NBITS_PQ supplied without QUANTIZER (defaults to flat) is rejected.
+        Assertions.assertThrows(
+                SemanticException.class,
+                () -> IndexAnalyzer.checkVectorIndexValid(vecCol, new HashMap<>() {{
+                    put(CommonIndexParamKey.INDEX_TYPE.name(), VectorIndexType.HNSW.name());
+                    put(CommonIndexParamKey.DIM.name(), "128");
+                    put(CommonIndexParamKey.METRIC_TYPE.name(), MetricsType.L2_DISTANCE.name());
+                    put(CommonIndexParamKey.IS_VECTOR_NORMED.name(), "false");
+                    put(IndexParamsKey.M.name(), "16");
+                    put(IndexParamsKey.EFCONSTRUCTION.name(), "40");
+                    put(IndexParamsKey.NBITS_PQ.name(), "8");
+                }}, KeysType.DUP_KEYS),
+                "`NBITS_PQ` is only allowed when QUANTIZER = pq");
     }
 
     @Test

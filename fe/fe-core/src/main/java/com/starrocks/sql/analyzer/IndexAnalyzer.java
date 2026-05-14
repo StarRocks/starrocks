@@ -355,8 +355,12 @@ public class IndexAnalyzer {
             // User-typed property keys have not been normalized yet (lower-casing
             // happens at the end of this method), so look up case-insensitively.
             String quantizer = getPropertyIgnoreCase(properties, IndexParamsKey.QUANTIZER.name());
-            if (quantizer != null && quantizer.equalsIgnoreCase(VectorIndexParams.QuantizerType.PQ.name())) {
-                String mPq = getPropertyIgnoreCase(properties, IndexParamsKey.M_PQ.name());
+            String mPq = getPropertyIgnoreCase(properties, IndexParamsKey.M_PQ.name());
+            String nbitsPq = getPropertyIgnoreCase(properties, IndexParamsKey.NBITS_PQ.name());
+            boolean isPq = quantizer != null
+                    && quantizer.equalsIgnoreCase(VectorIndexParams.QuantizerType.PQ.name());
+
+            if (isPq) {
                 if (mPq == null) {
                     throw new SemanticException("`M_PQ` is required when QUANTIZER = pq");
                 }
@@ -367,6 +371,16 @@ public class IndexAnalyzer {
                 if (dimValue % mPqValue != 0) {
                     throw new SemanticException(
                             "`DIM` should be a multiple of `M_PQ` for PQ-quantized HNSW index");
+                }
+            } else {
+                // M_PQ / NBITS_PQ are PQ-only knobs. Silently accepting them when
+                // QUANTIZER is omitted or non-PQ misleads users into thinking the
+                // value takes effect — BE will ignore both.
+                if (mPq != null) {
+                    throw new SemanticException("`M_PQ` is only allowed when QUANTIZER = pq");
+                }
+                if (nbitsPq != null) {
+                    throw new SemanticException("`NBITS_PQ` is only allowed when QUANTIZER = pq");
                 }
             }
         }
