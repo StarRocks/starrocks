@@ -298,7 +298,10 @@ jobs:
             exit 0
           fi
 
-          BR="auto/weekly-review-cleanup-$(date +%Y-%m-%d)-${COMMIT_SHA:0:8}"
+          # Include GITHUB_RUN_ID so reruns of the same workflow (same date,
+          # same commit) get a fresh head branch instead of colliding with a
+          # previous attempt's branch / PR.
+          BR="auto/weekly-review-cleanup-$(date +%Y-%m-%d)-${COMMIT_SHA:0:8}-r${GITHUB_RUN_ID}"
           git checkout -b "$BR"
           git add files/unstable_case.json
           git commit -m "[Tool] weekly review cleanup ${BRANCH} ${COMMIT_SHA:0:8} (auto)"
