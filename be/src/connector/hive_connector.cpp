@@ -23,6 +23,7 @@
 #include "common/config_scan_io_fwd.h"
 #include "connector/hive_chunk_sink.h"
 #include "exec/hdfs_scanner/cache_select_scanner.h"
+#include "exec/hdfs_scanner/hdfs_scanner_avro.h"
 #include "exec/hdfs_scanner/hdfs_scanner_json.h"
 #include "exec/hdfs_scanner/hdfs_scanner_orc.h"
 #include "exec/hdfs_scanner/hdfs_scanner_parquet.h"
@@ -882,6 +883,11 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
         use_kudu_jni_reader = scan_range.use_kudu_jni_reader;
     }
 
+    bool use_avro_jni_reader = false;
+    if (scan_range.__isset.use_avro_jni_reader) {
+        use_avro_jni_reader = scan_range.use_avro_jni_reader;
+    }
+
     JniScanner::CreateOptions jni_scanner_create_options = {.fs_options = &fsOptions,
                                                             .hive_table = _hive_table,
                                                             .scan_range = &scan_range,
@@ -934,8 +940,15 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
         } else {
             scanner = new HdfsTextScanner();
         }
-    } else if ((format == THdfsFileFormat::AVRO || format == THdfsFileFormat::RC_FILE ||
-                format == THdfsFileFormat::RC_TEXT || format == THdfsFileFormat::SEQUENCE_FILE) &&
+    } else if (format == THdfsFileFormat::AVRO && (dynamic_cast<const HdfsTableDescriptor*>(_hive_table) != nullptr ||
+                                                   dynamic_cast<const FileTableDescriptor*>(_hive_table) != nullptr)) {
+        if (use_avro_jni_reader) {
+            scanner = create_hive_jni_scanner(jni_scanner_create_options).release();
+        } else {
+            scanner = new HdfsAvroScanner();
+        }
+    } else if ((format == THdfsFileFormat::RC_FILE || format == THdfsFileFormat::RC_TEXT ||
+                format == THdfsFileFormat::SEQUENCE_FILE) &&
                (dynamic_cast<const HdfsTableDescriptor*>(_hive_table) != nullptr ||
                 dynamic_cast<const FileTableDescriptor*>(_hive_table) != nullptr)) {
         // THdfsFileFormat::RC_TEXT is deprecated. RCText and RCBinary are both mapped to RC_FILE in the frontend.
