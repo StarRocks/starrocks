@@ -4432,6 +4432,17 @@ public class Config extends ConfigBase {
             "Only takes effect for tables in clusters with run_mode=shared_data.")
     public static boolean tablet_reshard_enable_tablet_merge = false;
 
+    @ConfField(mutable = true, comment = "Whether to enable Sample-Based Tablet Pre-Split for "
+            + "INSERT INTO ... SELECT FROM FILES() loads. Default off; flip on per cluster after the "
+            + "GA gate (see Sample-Based Tablet Pre-Split design doc). The session variable "
+            + "enable_tablet_pre_split must also be true for pre-split to run.")
+    public static boolean enable_tablet_pre_split_for_insert_from_files = false;
+
+    @ConfField(mutable = true, comment = "Whether to enable Sample-Based Tablet Pre-Split for "
+            + "Broker Load. Default off; flip on per cluster after the GA gate. The session "
+            + "variable enable_tablet_pre_split must also be true for pre-split to run.")
+    public static boolean enable_tablet_pre_split_for_broker_load = false;
+
     /**
      * Whether to enable tracing historical nodes when cluster scale
      */
