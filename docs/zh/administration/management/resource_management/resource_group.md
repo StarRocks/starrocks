@@ -3,6 +3,10 @@ displayed_sidebar: docs
 keywords: ['fuzai', 'ziyuan', 'ziyuanzu'] 
 ---
 
+import ScopeParam from '../../../_assets/commonMarkdown/rg_scope_param.mdx'
+import WhSyntaxExample from '../../../_assets/commonMarkdown/rg_wh_syntax_example.mdx'
+import WhAlterSyntax from '../../../_assets/commonMarkdown/rg_wh_alter_syntax.mdx'
+
 # 资源隔离
 
 本文介绍如何使用资源隔离功能。
@@ -39,7 +43,6 @@ keywords: ['fuzai', 'ziyuan', 'ziyuanzu']
 | cpu_weight_percent         | 该资源组在单个 BE 节点上调度 CPU 的权重百分比。自 v4.1 起支持。         | [0, 100] (大于 0 时生效)                      | 0      |
 | exclusive_cpu_cores        | 该资源组的 CPU 硬隔离参数。                                  | (0, `min_be_cpu_cores - 1`] (大于 0 时生效)   | 0      |
 | exclusive_cpu_percent      | 该资源组的 CPU 硬隔离百分比。自 v4.1 起支持。                         | [0, 100] (大于 0 时生效)                      | 0      |
-| warehouses                 | 该资源组生效的 Warehouse。自 v4.1 起支持。                              | Warehouse 名称列表，多个名称用英文逗号（,）分隔 | 所有 Warehouse |
 | mem_limit                  | 该资源组在当前 BE 节点可使用于查询的内存的比例。                 | (0, 1] (必填项)                              | -      |
 | mem_pool                   | 将资源组进行分组以共享内存限制。                 | 字符串                                     | default_mem_pool |
 | spill_mem_limit_threshold  | 该资源组触发落盘的内存占用阈值。                               | (0, 1]                                      | 1.0    |
@@ -99,24 +102,7 @@ keywords: ['fuzai', 'ziyuan', 'ziyuanzu']
 UPDATE information_schema.be_configs SET VALUE = "false" WHERE NAME = "enable_resource_group_cpu_borrowing";
 ```
 
-#### 生效范围相关配置项
-
-##### `warehouses`
-
-自 v4.1 起，资源组支持通过 `warehouses` 指定生效范围。从逻辑上看，设置 `warehouses` 后，该资源组只在指定的 Warehouse 上生效。如果不设置 `warehouses`，资源组默认在所有 Warehouse 上生效。
-
-`warehouses` 会同时影响 FE 和 BE：
-
-- FE：为查询匹配资源组时，FE 只会将 `warehouses` 为空，或 `warehouses` 包含该查询使用的 Warehouse 的资源组作为候选资源组。然后，FE 再根据分类器从这些候选资源组中选择一个资源组。
-- BE：资源组只会下发到 `warehouses` 指定的 Warehouse 的 BE 上。
-
-`warehouses` 的取值为 Warehouse 名称列表，多个名称使用英文逗号（,）分隔，例如 `wh1,wh2,wh3`。指定的 Warehouse 必须已经存在，并且列表中不能包含重复名称。
-
-设置 `warehouses` 后，CPU 百分比参数校验中的 `min_be_cpu_cores` 表示指定 Warehouse 中 BE 的最小 CPU 核数；未设置 `warehouses` 时，`min_be_cpu_cores` 表示所有 BE 的 CPU 核数的最小值。
-
-> **说明**
->
-> 设置 `warehouses` 后，资源组的 CPU 配额需要使用 `cpu_weight_percent` 或 `exclusive_cpu_percent` 设置，不能使用 `cpu_weight` 或 `exclusive_cpu_cores`。
+<ScopeParam />
 
 #### 内存资源相关配置项
 
@@ -293,41 +279,7 @@ SET GLOBAL enable_pipeline_engine = true;
 
 创建资源组，关联分类器，并分配资源。
 
-```SQL
-CREATE RESOURCE GROUP group_name 
-TO (
-    user='string', 
-    role='string', 
-    query_type in ('select'), 
-    source_ip='cidr'
-) -- 创建分类器，多个分类器间用英文逗号（,）分隔。
-WITH (
-    "{ cpu_weight | cpu_weight_percent | exclusive_cpu_cores | exclusive_cpu_percent }" = "INT",
-    "warehouses" = "wh1,wh2,wh3",
-    "mem_limit" = "m%",
-    "concurrency_limit" = "INT"
-);
-```
-
-示例：
-
-```SQL
-CREATE RESOURCE GROUP rg1
-TO 
-    (user='rg1_user1', role='rg1_role1', query_type in ('select'), source_ip='192.168.x.x/24'),
-    (user='rg1_user2', query_type in ('select'), source_ip='192.168.x.x/24'),
-    (user='rg1_user3', source_ip='192.168.x.x/24'),
-    (user='rg1_user4'),
-    (db='db1')
-WITH (
-    'exclusive_cpu_percent' = '20',
-    'warehouses' = 'wh1,wh2,wh3',
-    'mem_limit' = '20%',
-    'big_query_cpu_second_limit' = '100',
-    'big_query_scan_rows_limit' = '100000',
-    'big_query_mem_limit' = '1073741824'
-);
-```
+<WhSyntaxExample />
 
 ### 指定资源组（可选）
 
@@ -393,13 +345,7 @@ SHOW VERBOSE RESOURCE GROUP group_name;
 
 为已有的资源组修改资源配额。
 
-```SQL
-ALTER RESOURCE GROUP group_name WITH (
-    "{ cpu_weight | cpu_weight_percent | exclusive_cpu_cores | exclusive_cpu_percent }" = "INT",
-    'warehouses' = 'wh1,wh2,wh3',
-    'mem_limit' = 'm%'
-);
-```
+<WhAlterSyntax />
 
 删除指定资源组。
 
