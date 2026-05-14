@@ -2,28 +2,24 @@
 displayed_sidebar: docs
 ---
 
-import FlinkConnectorIntro from '../_assets/loading/flink_connector_intro.mdx'
-import FlinkConnectorSinkWHParam from '../_assets/loading/flink_connector_sink_wh_param.mdx'
-import FlinkConnectorURLWHParam from '../_assets/loading/flink_connector_url_wh_param.mdx'
-
 # Continuously load data from Apache Flink®
 
-<FlinkConnectorIntro />
+StarRocks provides a self-developed connector named StarRocks Connector for Apache Flink® (Flink connector for short) to help you load data into a StarRocks table by using Flink. The basic principle is to accumulate the data and then load it all at a time into StarRocks through [STREAM LOAD](../sql-reference/sql-statements/loading_unloading/STREAM_LOAD.md).
 
-The Flink connector supports DataStream API, Table API & SQL, and Python API. It has a higher and more stable performance than [`flink-connector-jdbc`](https://nightlies.apache.org/flink/flink-docs-master/docs/connectors/table/jdbc/) provided by Apache Flink®.
+The Flink connector supports DataStream API, Table API & SQL, and Python API. It has a higher and more stable performance than [flink-connector-jdbc](https://nightlies.apache.org/flink/flink-docs-master/docs/connectors/table/jdbc/) provided by Apache Flink®.
 
-:::note
-Loading data with Flink connector requires SELECT and INSERT privileges on the target table. If you do not have these privileges, follow the instructions provided in [GRANT](../sql-reference/sql-statements/account-management/GRANT.md) to grant these privileges to the user that you use to connect to the cluster.
-:::
+> **NOTICE**
+>
+> Loading data into StarRocks tables with Flink connector needs SELECT and INSERT privileges on the target StarRocks table. If you do not have these privileges, follow the instructions provided in [GRANT](../sql-reference/sql-statements/account-management/GRANT.md) to grant these privileges to the user that you use to connect to your StarRocks cluster.
 
 ## Version requirements
 
-| Connector | Flink                         | Database kernel | Java | Scala     |
-|-----------|-------------------------------|-----------------| ---- |-----------|
-| 1.2.14    | 1.16,1.17,1.18,1.19,1.20      | 2.1 and later   | 8    | 2.11,2.12 |
-| 1.2.12    | 1.16,1.17,1.18,1.19,1.20      | 2.1 and later   | 8    | 2.11,2.12 |
-| 1.2.11    | 1.15,1.16,1.17,1.18,1.19,1.20 | 2.1 and later   | 8    | 2.11,2.12 |
-| 1.2.10    | 1.15,1.16,1.17,1.18,1.19      | 2.1 and later   | 8    | 2.11,2.12 |
+| Connector | Flink                         | StarRocks     | Java | Scala     |
+|-----------|-------------------------------|---------------| ---- |-----------|
+| 1.2.14    | 1.16,1.17,1.18,1.19,1.20      | 2.1 and later | 8    | 2.11,2.12 |
+| 1.2.12    | 1.16,1.17,1.18,1.19,1.20      | 2.1 and later | 8    | 2.11,2.12 |
+| 1.2.11    | 1.15,1.16,1.17,1.18,1.19,1.20 | 2.1 and later | 8    | 2.11,2.12 |
+| 1.2.10    | 1.15,1.16,1.17,1.18,1.19      | 2.1 and later | 8    | 2.11,2.12 |
 
 ## Obtain Flink connector
 
@@ -35,68 +31,62 @@ You can obtain the Flink connector JAR file in the following ways:
 
 The naming format of the Flink connector JAR file is as follows:
 
-- Since Flink 1.15, the JAR file naming format is `flink-connector-starrocks-${connector_version}_flink-${flink_version}.jar`. For example, if you have Flink 1.15 and you want to use Flink connector 1.2.7, you can use `flink-connector-starrocks-1.2.7_flink-1.15.jar`.
+- Since Flink 1.15, it's `flink-connector-starrocks-${connector_version}_flink-${flink_version}.jar`. For example, if you install Flink 1.15 and you want to use Flink connector 1.2.7, you can use `flink-connector-starrocks-1.2.7_flink-1.15.jar`.
 
-- Prior to Flink 1.15, the naming format is `flink-connector-starrocks-${connector_version}_flink-${flink_version}_${scala_version}.jar`. For example, if you have Flink 1.14 and Scala 2.12 in your environment, and you want to use Flink connector 1.2.7, you can use `flink-connector-starrocks-1.2.7_flink-1.14_2.12.jar`.
+- Prior to Flink 1.15, it's `flink-connector-starrocks-${connector_version}_flink-${flink_version}_${scala_version}.jar`. For example, if you install Flink 1.14 and Scala 2.12 in your environment, and you want to use Flink connector 1.2.7, you can use `flink-connector-starrocks-1.2.7_flink-1.14_2.12.jar`.
 
-:::note
-In general, the latest version of the Flink connector only maintains compatibility with the three most recent versions of Flink.
-:::
+> **NOTICE**
+>
+> In general, the latest version of the Flink connector only maintains compatibility with the three most recent versions of Flink.
 
-### Download JAR file
+### Download the compiled Jar file
 
-Download the corresponding version of the Flink connector JAR file from the [Maven Central Repository](https://repo1.maven.org/maven2/com/starrocks).
+Directly download the corresponding version of the Flink connector Jar file from the [Maven Central Repository](https://repo1.maven.org/maven2/com/starrocks).
 
-### Add to Maven project
+### Maven Dependency
 
-In the `pom.xml` file of your Maven project, add the Flink connector as a dependency.
+In your Maven project's `pom.xml` file, add the Flink connector as a dependency according to the following format. Replace `flink_version`, `scala_version`, and `connector_version` with the respective versions.
 
-- In Flink 1.15 and later:
+- In Flink 1.15 and later
 
-  ```xml
-  <!-- Replace ${connector_version} with the Flink connector version, 
-  and ${flink_version} with your Flink version.-->
-  <dependency>
-      <groupId>com.starrocks</groupId>
-      <artifactId>flink-connector-starrocks</artifactId>
-      <version>${connector_version}_flink-${flink_version}</version>
-  </dependency>
-  ```
+    ```xml
+    <dependency>
+        <groupId>com.starrocks</groupId>
+        <artifactId>flink-connector-starrocks</artifactId>
+        <version>${connector_version}_flink-${flink_version}</version>
+    </dependency>
+    ```
 
-- In versions earlier than Flink 1.15:
+- In versions earlier than Flink 1.15
 
-  ```xml
-  <!-- Replace ${connector_version} with the Flink connector version, 
-  ${flink_version} with your Flink version, 
-  and ${scala_version} with your Scala version.-->
-  <dependency>
-      <groupId>com.starrocks</groupId>
-      <artifactId>flink-connector-starrocks</artifactId>
-      <version>${connector_version}_flink-${flink_version}_${scala_version}</version>
-  </dependency>
-  ```
+    ```xml
+    <dependency>
+        <groupId>com.starrocks</groupId>
+        <artifactId>flink-connector-starrocks</artifactId>
+        <version>${connector_version}_flink-${flink_version}_${scala_version}</version>
+    </dependency>
+    ```
 
-### Compile source code
+### Compile by yourself
 
 1. Download the [Flink connector source code](https://github.com/StarRocks/starrocks-connector-for-apache-flink).
-2. Execute the following command to compile the source code of Flink connector.
+2. Execute the following command to compile the source code of Flink connector into a JAR file. Note that `flink_version` is replaced with the corresponding Flink version.
 
-   ```bash
-   # Replace <flink_version> with your Flink version.
-   sh build.sh <flink_version>
-   ```
+      ```bash
+      sh build.sh <flink_version>
+      ```
 
-   Example:
+   For example, if the Flink version in your environment is 1.15, you need to execute the following command:
 
-   ```bash
-   sh build.sh 1.15
-   ```
+      ```bash
+      sh build.sh 1.15
+      ```
 
-3. Navigate to the `target/` directory and find the Flink connector JAR file generated upon compilation.
+3. Go to the `target/` directory to find the Flink connector JAR file, such as `flink-connector-starrocks-1.2.7_flink-1.15-SNAPSHOT.jar`, generated upon compilation.
 
-:::note
-The name of Flink connector which is not formally released contains the `SNAPSHOT` suffix.
-:::
+> **NOTE**
+>
+> The name of Flink connector which is not formally released contains the `SNAPSHOT` suffix.
 
 ## Options
 
@@ -108,33 +98,41 @@ The name of Flink connector which is not formally released contains the `SNAPSHO
 - **Default value**: NONE
 - **Description**: The connector that you want to use. The value must be "starrocks".
 
-<FlinkConnectorURLWHParam />
+#### jdbc-url
+
+- **Required**: Yes
+- **Default value**: NONE
+- **Description**: The address that is used to connect to the MySQL server of the FE. You can specify multiple addresses, which must be separated by a comma (,). Format: `jdbc:mysql://<fe_host1>:<fe_query_port1>,<fe_host2>:<fe_query_port2>,<fe_host3>:<fe_query_port3>`.
+
+#### load-url
+
+- **Required**: Yes
+- **Default value**: NONE
+- **Description**: The address that is used to connect to the HTTP server of the FE. You can specify multiple addresses, which must be separated by a semicolon (;). Format: `<fe_host1>:<fe_http_port1>;<fe_host2>:<fe_http_port2>`.
 
 #### database-name
 
 - **Required**: Yes
 - **Default value**: NONE
-- **Description**: The name of the database into which you want to load data.
+- **Description**: The name of the StarRocks database into which you want to load data.
 
 #### table-name
 
 - **Required**: Yes
 - **Default value**: NONE
-- **Description**: The name of the table into which you want to load data.
+- **Description**: The name of the table that you want to use to load data into StarRocks.
 
 #### username
 
 - **Required**: Yes
 - **Default value**: NONE
-- **Description**: The username of the database user that you want to use to load data. The account needs [SELECT and INSERT privileges](../sql-reference/sql-statements/account-management/GRANT.md) on the target table.
+- **Description**: The username of the account that you want to use to load data into StarRocks. The account needs [SELECT and INSERT privileges](../sql-reference/sql-statements/account-management/GRANT.md) on the target StarRocks table.
 
 #### password
 
 - **Required**: Yes
 - **Default value**: NONE
-- **Description**: The password of the database user
-
-<FlinkConnectorSinkWHParam />
+- **Description**: The password of the preceding account.
 
 #### sink.version
 
@@ -142,14 +140,14 @@ The name of Flink connector which is not formally released contains the `SNAPSHO
 - **Default value**: AUTO
 - **Description**: The interface used to load data. This parameter is supported from Flink connector version 1.2.4 onwards. Valid Values:
   - `V1`: Use [Stream Load](../loading/StreamLoad.md) interface to load data. Connectors before 1.2.4 only support this mode. 
-  - `V2`: Use [Stream Load transaction](./Stream_Load_transaction_interface.md) interface to load data. Database kernel v2.4 or later is required. `V2` is recommended because it optimizes the memory usage and provides a more stable exactly-once implementation.
-  - `AUTO`: If the database version supports the Stream Load transaction interface, will choose `V2` automatically, otherwise choose `V1`
+  - `V2`: Use [Stream Load transaction](./Stream_Load_transaction_interface.md) interface to load data. It requires StarRocks to be at least version 2.4. Recommends `V2` because it optimizes the memory usage and provides a more stable exactly-once implementation.
+  - `AUTO`: If the version of StarRocks supports transaction Stream Load, will choose `V2` automatically, otherwise choose `V1`
 
 #### sink.label-prefix
 
 - **Required**: No
 - **Default value**: NONE
-- **Description**: The label prefix used by Stream Load. It is recommended to configure this item if you are using exactly-once with the flink connector 1.2.8 or later. See [exactly-once usage notes](#exactly-once).
+- **Description**: The label prefix used by Stream Load. Recommend to configure it if you are using exactly-once with connector 1.2.8 and later. See [exactly-once usage notes](#exactly-once).
 
 #### sink.semantic
 
@@ -174,7 +172,7 @@ The name of Flink connector which is not formally released contains the `SNAPSHO
 - **Required**: No
 - **Default value**: 300000
 - **Description**: The interval at which data is flushed. This parameter is available only when `sink.semantic` is `at-least-once`. Unit: ms. Valid value range:
-  - For versions earlier than 1.2.14: [1000, 3600000]
+  - For versions earlier than v1.2.14: [1000, 3600000]
   - For v1.2.14 and later: (0, 3600000].
 
 #### sink.max-retries
