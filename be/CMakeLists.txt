@@ -536,6 +536,7 @@ endif()
 
 # Set starrocks libraries
 set(STARROCKS_LINK_LIBS
+    Webserver
     ${WL_START_GROUP}
     Agent
     Connector
@@ -551,7 +552,6 @@ set(STARROCKS_LINK_LIBS
     Udf
     Util
     Script
-    Webserver
     TestUtil
     Tools
     orc
