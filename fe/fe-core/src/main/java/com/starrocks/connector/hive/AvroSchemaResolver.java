@@ -17,16 +17,17 @@ package com.starrocks.connector.hive;
 import com.google.common.base.Strings;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.connector.exception.StarRocksConnectorException;
-import java.io.IOException;
-import java.nio.charset.StandardCharsets;
-import java.util.Collections;
-import java.util.Map;
-import java.util.Optional;
 import org.apache.avro.Schema;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FSDataInputStream;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
+
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.util.Collections;
+import java.util.Map;
+import java.util.Optional;
 
 public class AvroSchemaResolver {
     public static final String AVRO_SCHEMA_LITERAL = "avro.schema.literal";
@@ -34,7 +35,9 @@ public class AvroSchemaResolver {
 
     private final Configuration hadoopConf;
 
-    public AvroSchemaResolver(Configuration hadoopConf) { this.hadoopConf = hadoopConf; }
+    public AvroSchemaResolver(Configuration hadoopConf) {
+        this.hadoopConf = hadoopConf;
+    }
 
     public Optional<String> resolve(HiveTable table) {
         if (table.getStorageFormat() != HiveStorageFormat.AVRO) {

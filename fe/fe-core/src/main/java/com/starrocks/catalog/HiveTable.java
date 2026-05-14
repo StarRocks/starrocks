@@ -258,9 +258,13 @@ public class HiveTable extends Table {
         return serdeProperties;
     }
 
-    public String getAvroSchemaJson() { return avroSchemaJson; }
+    public String getAvroSchemaJson() {
+        return avroSchemaJson;
+    }
 
-    public void setAvroSchemaJson(String avroSchemaJson) { this.avroSchemaJson = avroSchemaJson; }
+    public void setAvroSchemaJson(String avroSchemaJson) {
+        this.avroSchemaJson = avroSchemaJson;
+    }
 
     public boolean hasBooleanTypePartitionColumn() {
         return getPartitionColumns().stream().anyMatch(column -> column.getType().isBoolean());

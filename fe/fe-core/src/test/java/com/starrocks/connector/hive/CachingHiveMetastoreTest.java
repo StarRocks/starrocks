@@ -14,10 +14,6 @@
 
 package com.starrocks.connector.hive;
 
-import static com.starrocks.connector.hive.RemoteFileInputFormat.ORC;
-import static org.apache.hadoop.hive.common.StatsSetupConst.TASK;
-import static org.apache.hadoop.hive.common.StatsSetupConst.TOTAL_SIZE;
-
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
@@ -32,6 +28,14 @@ import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.type.BitmapType;
 import com.starrocks.type.IntegerType;
 import com.starrocks.type.PrimitiveType;
+import mockit.Expectations;
+import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.hive.metastore.api.NoSuchObjectException;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+
 import java.lang.reflect.InvocationTargetException;
 import java.nio.file.Files;
 import java.util.HashMap;
@@ -40,13 +44,10 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import mockit.Expectations;
-import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.hive.metastore.api.NoSuchObjectException;
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.Assertions;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
+
+import static com.starrocks.connector.hive.RemoteFileInputFormat.ORC;
+import static org.apache.hadoop.hive.common.StatsSetupConst.TASK;
+import static org.apache.hadoop.hive.common.StatsSetupConst.TOTAL_SIZE;
 
 public class CachingHiveMetastoreTest {
     private HiveMetaClient client;
