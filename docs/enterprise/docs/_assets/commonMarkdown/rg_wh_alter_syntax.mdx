@@ -1,0 +1,7 @@
+```SQL
+ALTER RESOURCE GROUP group_name WITH (
+    "{ cpu_weight | cpu_weight_percent | exclusive_cpu_cores | exclusive_cpu_percent }" = "INT",
+    'warehouses' = 'wh1,wh2,wh3',
+    'mem_limit' = 'm%'
+);
+```
