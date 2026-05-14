@@ -242,7 +242,7 @@ public class ClusterSnapshotConfig {
         private String location;
 
         @JsonProperty("comment")
-        private String comment;
+        private String comment = "";
 
         @JsonProperty("properties")
         @JsonDeserialize(using = PropertiesDeserializer.class)
@@ -273,7 +273,7 @@ public class ClusterSnapshotConfig {
         }
 
         public String getComment() {
-            return comment;
+            return comment == null ? "" : comment;
         }
 
         public void setComment(String comment) {

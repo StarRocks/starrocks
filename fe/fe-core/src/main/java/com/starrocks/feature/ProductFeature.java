@@ -93,6 +93,13 @@ public class ProductFeature {
                         "claim (e.g. email / preferred_username) directly.",
                 ""
         ));
+        features.add(new ProductFeature(
+                "cross-region-recovery",
+                "Create cluster snapshots to external storage and bootstrap a new shared-data " +
+                        "cluster from them via a startup YAML config, enabling cross-region disaster " +
+                        "recovery and cluster cloning.",
+                "https://docs.starrocks.io/docs/administration/cluster_snapshot/"
+        ));
         FEATURES = ImmutableList.copyOf(features);
     }
 
