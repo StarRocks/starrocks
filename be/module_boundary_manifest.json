@@ -203,10 +203,8 @@
       "owned_targets": ["TypesCore"],
       "owned_globs": ["be/src/types/**"],
       "excluded_globs": [
-        "be/src/types/checker/**",
         "be/src/types/hll_sketch.*",
-        "be/src/types/logical_type_size.*",
-        "be/src/types/type_checker_manager.*"
+        "be/src/types/logical_type_size.*"
       ],
       "allowed_include_prefixes": ["types/", "common/", "base/", "gutil/", "gen_cpp/"],
       "allowed_target_deps": ["Common", "Base", "Gutil"],

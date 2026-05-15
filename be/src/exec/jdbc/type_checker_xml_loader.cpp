@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "types/checker/type_checker_xml_loader.h"
+#include "exec/jdbc/type_checker_xml_loader.h"
 
 #include <libxml/parser.h>
 #include <libxml/tree.h>

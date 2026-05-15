@@ -46,7 +46,4 @@ target_link_libraries(TypesCore PRIVATE
 ADD_BE_LIB(Types
     hll_sketch.cpp
     logical_type_size.cpp
-    checker/type_checker.cpp
-    checker/type_checker_xml_loader.cpp
-    type_checker_manager.cpp
 )

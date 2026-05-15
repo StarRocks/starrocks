@@ -23,6 +23,7 @@
 #include "column/vectorized_fwd.h"
 #include "common/config_exec_flow_fwd.h"
 #include "common/statusor.h"
+#include "exec/jdbc/type_checker_manager.h"
 #include "exprs/cast_expr.h"
 #include "exprs/clone_expr.h"
 #include "exprs/expr.h"
@@ -30,7 +31,6 @@
 #include "exprs/expr_executor.h"
 #include "runtime/runtime_state.h"
 #include "types/logical_type.h"
-#include "types/type_checker_manager.h"
 #include "types/type_descriptor.h"
 #include "udf/java/java_udf.h"
 

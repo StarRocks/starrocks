@@ -12,14 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "types/type_checker_manager.h"
+#include "exec/jdbc/type_checker_manager.h"
 
 #include <cstdlib>
 #include <filesystem>
 
-#include "checker/type_checker.h"
-#include "checker/type_checker_xml_loader.h"
 #include "common/logging.h"
+#include "exec/jdbc/type_checker.h"
+#include "exec/jdbc/type_checker_xml_loader.h"
 
 namespace starrocks {
 
