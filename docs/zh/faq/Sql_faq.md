@@ -4,12 +4,6 @@ displayed_sidebar: docs
 
 # 查询常见问题
 
-## 构建物化视图失败：fail to allocate memory
-
-修改 `be.conf` 中的`memory_limitation_per_thread_for_schema_change`。
-
-该参数表示单个 schema change 任务允许占用的最大内存，默认大小 2G。修改完成后，需重启 BE 使配置生效。
-
 ## StarRocks 会缓存查询结果吗？
 
 StarRocks 不直接缓存最终查询结果。从 2.5 版本开始，StarRocks 会将多阶段聚合查询的第一阶段聚合的中间结果缓存在 Query Cache 里，后续查询可以复用之前缓存的结果，加速计算。Query Cache 占用所在 BE 的内存。更多信息，参见 [Query Cache](../using_starrocks/caching/query_cache.md)。

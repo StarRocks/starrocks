@@ -6,10 +6,6 @@ displayed_sidebar: docs
 
 This topic provides answers to some frequently asked questions about SQL.
 
-## This error "fail to allocate memory." when I build a materialized view
-
-To solve this problem, increase the value of the `memory_limitation_per_thread_for_schema_change` parameter in the **be.conf** file. This parameter refers to the maximum storage that can be allocated for a single task to change the scheme. The default value of the maximum storage is 2 GB.
-
 ## Does StarRocks support caching query results?
 
 StarRocks does not directly cache final query results. From v2.5 onwards, StarRocks uses the Query Cache feature to save the intermediate results of first-stage aggregation in the cache. New queries that are semantically equivalent to previous queries can reuse the cached computation results to accelerate computations. Query cache uses BE memory. For more information, see [Query cache](../using_starrocks/caching/query_cache.md).

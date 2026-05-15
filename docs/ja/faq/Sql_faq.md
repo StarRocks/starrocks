@@ -6,10 +6,6 @@ displayed_sidebar: docs
 
 このトピックでは、SQL に関するよくある質問への回答を提供します。
 
-## マテリアライズドビューを作成するときに "fail to allocate memory." というエラーが発生する
-
-この問題を解決するには、**be.conf** ファイルの `memory_limitation_per_thread_for_schema_change` パラメータの値を増やしてください。このパラメータは、スキームを変更するために単一のタスクに割り当てられる最大ストレージを指します。最大ストレージのデフォルト値は 2 GB です。
-
 ## StarRocks はクエリ結果のキャッシュをサポートしていますか？
 
 StarRocks は最終的なクエリ結果を直接キャッシュしません。v2.5 以降、StarRocks は Query Cache 機能を使用して、キャッシュ内の最初の段階の集約の中間結果を保存します。以前のクエリと意味的に同等の新しいクエリは、キャッシュされた計算結果を再利用して計算を高速化できます。Query Cache は BE メモリを使用します。詳細は [Query cache](../using_starrocks/caching/query_cache.md) を参照してください。
