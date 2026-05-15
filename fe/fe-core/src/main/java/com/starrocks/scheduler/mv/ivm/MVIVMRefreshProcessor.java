@@ -313,7 +313,7 @@ public final class MVIVMRefreshProcessor extends MVRefreshProcessor {
         // For now, we always refresh the latest snapshot from the last refresh.
         // current tvr snapshot
         TvrVersionRange currentTvrSnapshot = GlobalStateMgr.getCurrentState().getMetadataMgr()
-                .getCurrentTvrSnapshot(baseTableInfo.getDbName(), snapshotTable);
+                .acquireTvrSnapshot(baseTableInfo.getDbName(), snapshotTable, mv.getMvId());
         if (currentTvrSnapshot == null || !(currentTvrSnapshot instanceof TvrTableSnapshot)) {
             logger.warn("Current tvr snapshot is null for base table: {}, db: {}",
                     baseTableInfo.getTableName(), baseTableInfo.getDbName());

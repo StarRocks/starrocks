@@ -16,6 +16,7 @@ package com.starrocks.connector.unified;
 
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.MvId;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AlreadyExistsException;
@@ -139,6 +140,12 @@ public class UnifiedMetadata implements ConnectorMetadata, DelegatingConnectorMe
     public TvrTableSnapshot getCurrentTvrSnapshot(String dbName, Table table) {
         ConnectorMetadata metadata = metadataOfTable(table);
         return metadata.getCurrentTvrSnapshot(dbName, table);
+    }
+
+    @Override
+    public TvrTableSnapshot acquireTvrSnapshot(String dbName, Table table, MvId mvId) {
+        ConnectorMetadata metadata = metadataOfTable(table);
+        return metadata.acquireTvrSnapshot(dbName, table, mvId);
     }
 
     @Override
