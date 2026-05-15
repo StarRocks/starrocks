@@ -527,6 +527,7 @@ TEST_F(PersistentIndexSstableTest, test_metric_sst_open_read_error) {
     ASSERT_EQ(before + 1, StarRocksMetrics::instance()->pk_index_sst_read_error_total.value());
 }
 
+#if defined(USE_STAROS) && !defined(BUILD_FORMAT_LIB)
 TEST_F(PersistentIndexSstableTest, test_sst_open_retry_after_clear_corrupted_cache) {
     const std::string filename = "open_retry_corrupted_cache.sst";
     const std::string path = lake::join_path(kTestDir, filename);
@@ -561,6 +562,7 @@ TEST_F(PersistentIndexSstableTest, test_sst_open_retry_after_clear_corrupted_cac
 
     ASSERT_OK(st);
 }
+#endif // USE_STAROS && !BUILD_FORMAT_LIB
 
 TEST_F(PersistentIndexSstableTest, test_metric_sst_multiget_read_error) {
     const std::string path = lake::join_path(kTestDir, "metric_multiget_error.sst");
@@ -595,6 +597,7 @@ TEST_F(PersistentIndexSstableTest, test_metric_sst_multiget_read_error) {
     ASSERT_EQ(before + 1, StarRocksMetrics::instance()->pk_index_sst_read_error_total.value());
 }
 
+#if defined(USE_STAROS) && !defined(BUILD_FORMAT_LIB)
 TEST_F(PersistentIndexSstableTest, test_multiget_retry_after_clear_corrupted_cache) {
     const std::string path = lake::join_path(kTestDir, "multiget_retry_corrupted_cache.sst");
     uint64_t filesize = 0;
@@ -634,5 +637,6 @@ TEST_F(PersistentIndexSstableTest, test_multiget_retry_after_clear_corrupted_cac
     ASSERT_TRUE(found.contains(0));
     ASSERT_EQ(IndexValue(0), values[0]);
 }
+#endif // USE_STAROS && !BUILD_FORMAT_LIB
 
 } // namespace starrocks::lake
