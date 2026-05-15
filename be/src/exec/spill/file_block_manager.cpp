@@ -29,7 +29,8 @@ class FileBlockContainer {
 public:
     FileBlockContainer(DirPtr dir, const TUniqueId& query_id, const TUniqueId& fragment_instance_id,
                        int32_t plan_node_id, std::string plan_node_name, uint64_t id, size_t acquired_size,
-                       bool skip_parent_path_deletion, bool skip_file_deletion)
+                       bool skip_parent_path_deletion, bool skip_file_deletion, bool flat_layout,
+                       std::string flat_name_prefix)
             : _dir(std::move(dir)),
               _query_id(query_id),
               _fragment_instance_id(fragment_instance_id),
@@ -38,7 +39,9 @@ public:
               _id(id),
               _acquired_data_size(acquired_size),
               _skip_parent_path_deletion(skip_parent_path_deletion),
-              _skip_file_deletion(skip_file_deletion) {
+              _skip_file_deletion(skip_file_deletion),
+              _flat_layout(flat_layout),
+              _flat_name_prefix(std::move(flat_name_prefix)) {
         // Design invariant: when skip_file_deletion = true (Lake write path),
         // skip_parent_path_deletion MUST also be true. Otherwise the destructor would attempt
         // to delete the parent directory while the spill file is still present on remote
@@ -49,6 +52,12 @@ public:
         DCHECK(!_skip_file_deletion || _skip_parent_path_deletion)
                 << "skip_file_deletion requires skip_parent_path_deletion to be true; otherwise "
                 << "the parent directory would be removed while spill files still exist.";
+        // Flat-layout invariant: must combine with both skip flags. Otherwise the dtor would
+        // either delete a file vacuum is supposed to reclaim, or attempt to delete a parent
+        // directory that does not exist in flat layout (everything lives directly under dir()).
+        DCHECK(!_flat_layout || (_skip_parent_path_deletion && _skip_file_deletion))
+                << "flat_layout requires skip_parent_path_deletion && skip_file_deletion";
+        DCHECK(!_flat_layout || !_flat_name_prefix.empty()) << "flat_layout requires a non-empty flat_name_prefix";
     }
 
     ~FileBlockContainer() {
@@ -81,10 +90,21 @@ public:
         return _writable_file->size();
     }
     std::string path() const {
+        if (_flat_layout) {
+            // <dir>/<flat_name_prefix>_<seq>, where flat_name_prefix = "<txn_id_hex>_<load_id>_<frag_id>"
+            return fmt::format("{}/{}_{}", _dir->dir(), _flat_name_prefix, _id);
+        }
         return fmt::format("{}/{}/{}-{}-{}-{}", _dir->dir(), print_id(_query_id), print_id(_fragment_instance_id),
                            _plan_node_name, _plan_node_id, _id);
     }
-    std::string parent_path() const { return fmt::format("{}/{}", _dir->dir(), print_id(_query_id)); }
+    std::string parent_path() const {
+        // parent_path() is only meaningful in the legacy <dir>/<query_id>/ layout.
+        // In flat layout there is no per-query parent dir to clean up; the dtor is
+        // guaranteed by the ctor invariant to skip the !_skip_parent_path_deletion branch,
+        // so this should never be called when _flat_layout = true.
+        DCHECK(!_flat_layout) << "parent_path() must not be called in flat layout";
+        return fmt::format("{}/{}", _dir->dir(), print_id(_query_id));
+    }
     uint64_t id() const { return _id; }
 
     Status append_data(const std::vector<Slice>& data, size_t total_size);
@@ -108,7 +128,8 @@ public:
     static StatusOr<FileBlockContainerPtr> create(const DirPtr& dir, const TUniqueId& query_id,
                                                   const TUniqueId& fragment_instance_id, int32_t plan_node_id,
                                                   const std::string& plan_node_name, uint64_t id, size_t block_size,
-                                                  bool skip_parent_path_deletion, bool skip_file_deletion);
+                                                  bool skip_parent_path_deletion, bool skip_file_deletion,
+                                                  bool flat_layout, const std::string& flat_name_prefix);
 
 private:
     DirPtr _dir;
@@ -130,6 +151,12 @@ private:
     // (LoadSpillBlockManager with vacuum-cleanup mode) to defer file deletion to the offline
     // `vacuum_load_spill` job, eliminating S3 DeleteObject calls on the write hot path.
     bool _skip_file_deletion = false;
+    // When true, files are written directly under `_dir->dir()` (no <query_id>/ subdir),
+    // and the file name is composed as "<_flat_name_prefix>_<_id>".
+    // See AcquireBlockOptions::flat_layout for the full semantics.
+    bool _flat_layout = false;
+    // Caller-supplied prefix used in flat layout. Format: "<txn_id_hex>_<load_id>_<frag_id>".
+    std::string _flat_name_prefix;
 };
 
 Status FileBlockContainer::open() {
@@ -172,10 +199,11 @@ StatusOr<FileBlockContainerPtr> FileBlockContainer::create(const DirPtr& dir, co
                                                            const TUniqueId& fragment_instance_id, int32_t plan_node_id,
                                                            const std::string& plan_node_name, uint64_t id,
                                                            size_t block_size, bool skip_parent_path_deletion,
-                                                           bool skip_file_deletion) {
-    auto container =
-            std::make_shared<FileBlockContainer>(dir, query_id, fragment_instance_id, plan_node_id, plan_node_name, id,
-                                                 block_size, skip_parent_path_deletion, skip_file_deletion);
+                                                           bool skip_file_deletion, bool flat_layout,
+                                                           const std::string& flat_name_prefix) {
+    auto container = std::make_shared<FileBlockContainer>(dir, query_id, fragment_instance_id, plan_node_id,
+                                                          plan_node_name, id, block_size, skip_parent_path_deletion,
+                                                          skip_file_deletion, flat_layout, flat_name_prefix);
     RETURN_IF_ERROR(container->open());
     return container;
 }
@@ -225,6 +253,10 @@ public:
 #endif
     }
 
+    // FileBlock <-> FileBlockContainer is 1:1, so the underlying file path is well-defined
+    // and equal to the container's path. Used by lake merge task hot-delete path.
+    std::optional<std::string> path() const override { return _container->path(); }
+
     bool try_acquire_sizes(size_t size) override { return _container->try_acquire_sizes(size); }
 
 private:
@@ -246,7 +278,8 @@ StatusOr<BlockPtr> FileBlockManager::acquire_block(const AcquireBlockOptions& op
     ASSIGN_OR_RETURN(auto dir, _dir_mgr->acquire_writable_dir(acquire_dir_opts));
     ASSIGN_OR_RETURN(auto block_container,
                      get_or_create_container(dir, opts.fragment_instance_id, opts.plan_node_id, opts.name,
-                                             opts.block_size, opts.skip_parent_path_deletion, opts.skip_file_deletion));
+                                             opts.block_size, opts.skip_parent_path_deletion, opts.skip_file_deletion,
+                                             opts.flat_layout, opts.flat_name_prefix));
     auto res = std::make_shared<FileBlock>(block_container);
     res->set_is_remote(dir->is_remote());
     return res;
@@ -262,20 +295,27 @@ Status FileBlockManager::release_block(BlockPtr block) {
 
 StatusOr<FileBlockContainerPtr> FileBlockManager::get_or_create_container(
         const DirPtr& dir, const TUniqueId& fragment_instance_id, int32_t plan_node_id,
-        const std::string& plan_node_name, size_t block_size, bool skip_parent_path_deletion, bool skip_file_deletion) {
+        const std::string& plan_node_name, size_t block_size, bool skip_parent_path_deletion, bool skip_file_deletion,
+        bool flat_layout, const std::string& flat_name_prefix) {
     TRACE_SPILL_LOG << "get_or_create_container at dir: " << dir->dir() << ", plan node:" << plan_node_id << ", "
                     << plan_node_name << ", block size: " << block_size << " bytes"
                     << ", skip parent path deletion: " << skip_parent_path_deletion
-                    << ", skip file deletion: " << skip_file_deletion;
+                    << ", skip file deletion: " << skip_file_deletion << ", flat layout: " << flat_layout;
     uint64_t id = _next_container_id++;
-    std::string container_dir = dir->dir() + "/" + print_id(_query_id);
-    if (_last_created_container_dir != container_dir) {
-        RETURN_IF_ERROR(dir->fs()->create_dir_if_missing(container_dir));
-        _last_created_container_dir = container_dir;
+    if (!flat_layout) {
+        // Legacy layout: ensure the per-query subdirectory <dir>/<query_id>/ exists once.
+        std::string container_dir = dir->dir() + "/" + print_id(_query_id);
+        if (_last_created_container_dir != container_dir) {
+            RETURN_IF_ERROR(dir->fs()->create_dir_if_missing(container_dir));
+            _last_created_container_dir = container_dir;
+        }
     }
+    // Flat layout: the parent <root>/load_spill_txns/ is created once during
+    // LoadSpillBlockManager::init() (or by starlet auto-mkparent), so no per-acquire mkdir.
     ASSIGN_OR_RETURN(auto block_container,
                      FileBlockContainer::create(dir, _query_id, fragment_instance_id, plan_node_id, plan_node_name, id,
-                                                block_size, skip_parent_path_deletion, skip_file_deletion));
+                                                block_size, skip_parent_path_deletion, skip_file_deletion, flat_layout,
+                                                flat_name_prefix));
     RETURN_IF_ERROR(block_container->open());
     return block_container;
 }

@@ -77,9 +77,10 @@ Status vacuum_txn_log(std::string_view root_location, int64_t min_active_txn_id,
 //     reclaimed. Legacy directories are written only by older BE versions before
 //     the txn_id layer was introduced.
 //
-// |*deleted_dirs|, if non-null, is incremented by the number of subdirs reclaimed.
+// |*deleted_files|, if non-null, is incremented by the number of flat-layout files
+// reclaimed under load_spill_txns/ (plus any legacy entries when cleanup_legacy_load_spill).
 Status vacuum_load_spill(std::string_view root_location, int64_t min_active_txn_id, bool cleanup_legacy_load_spill,
-                         int64_t* deleted_dirs = nullptr);
+                         int64_t* deleted_files = nullptr);
 
 StatusOr<std::pair<std::list<std::string>, std::list<std::string>>> list_meta_files(
         FileSystem* fs, const std::string& metadata_root_location);

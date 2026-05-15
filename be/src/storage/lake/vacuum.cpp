@@ -94,7 +94,7 @@ static bvar::Adder<uint64_t> g_deleted_files("lake_vacuum_deleted_files");
 static bvar::LatencyRecorder g_metadata_travel_latency("lake_vacuum_metadata_travel"); // unit: ms
 static bvar::LatencyRecorder g_vacuum_txnlog_latency("lake_vacuum_delete_txnlog");
 static bvar::LatencyRecorder g_vacuum_load_spill_latency("lake_vacuum_load_spill");
-static bvar::Adder<uint64_t> g_vacuum_load_spill_deleted_dirs("lake_vacuum_load_spill_deleted_dirs");
+static bvar::Adder<uint64_t> g_vacuum_load_spill_deleted_files("lake_vacuum_load_spill_deleted_files");
 static bvar::PassiveStatus<int> g_queued_delete_file_tasks("lake_vacuum_queued_delete_file_tasks",
                                                            get_num_delete_file_queued_tasks, nullptr);
 static bvar::PassiveStatus<int> g_active_delete_file_tasks("lake_vacuum_active_delete_file_tasks",
@@ -614,22 +614,11 @@ Status vacuum_txn_log(std::string_view root_location, int64_t min_active_txn_id,
 
 // Reclaim load_spill subtrees that no longer correspond to any active load.
 Status vacuum_load_spill(std::string_view root_location, int64_t min_active_txn_id, bool cleanup_legacy_load_spill,
-                         int64_t* deleted_dirs) {
+                         int64_t* deleted_files) {
     ASSIGN_OR_RETURN(auto fs, FileSystemFactory::CreateSharedFromString(root_location));
     auto t0 = butil::gettimeofday_s();
     auto ret = Status::OK();
     int64_t local_deleted = 0;
-
-    // Parse a directory name produced by fmt::format("{:016x}", txn_id). Returns
-    // nullopt for anything else (non-hex, overflow, non-positive) so the caller
-    // can skip and warn instead of aborting on corruption / stray garbage.
-    auto parse_hex_txn_id = [](std::string_view s) -> std::optional<int64_t> {
-        if (s.empty() || s.size() > 16) return std::nullopt;
-        StringParser::ParseResult res = StringParser::PARSE_FAILURE;
-        int64_t txn_id = StringParser::string_to_int<int64_t>(s.data(), s.size(), 16, &res);
-        if (res != StringParser::PARSE_SUCCESS || txn_id <= 0) return std::nullopt;
-        return txn_id;
-    };
 
     // Object storage typically surfaces CommonPrefixes with a trailing '/'. Normalize
     // so the name-matching logic below works on both POSIX-style and S3-style listings.
@@ -641,39 +630,77 @@ Status vacuum_load_spill(std::string_view root_location, int64_t min_active_txn_
         return name;
     };
 
-    // ---- (1) Active layout: <root>/load_spill_txns/<txn_id_hex>/ ----
+    // ---- (1) Active layout: <root>/load_spill_txns/<txn_id_hex>_<load_id>_<frag_id>_<seq> ----
+    //
+    // Flat layout: every spill file lives directly under load_spill_txns/. We parse the
+    // leading hex segment (txn_id) from each file name and delete the file if the txn is
+    // no longer active. No per-subdir list — only one paginated iterate_dir2 over the flat
+    // directory. See design-doc/2026-05-13-load-spill-flat-layout.md §3.7.1.
     auto load_spill_txns_dir = join_path(root_location, kLoadSpillTxnsDirectoryName);
+
+    // Parse the leading hex txn_id from a flat file name "<hex>_<load_id>_<frag_id>_<seq>".
+    // Returns nullopt for anything that does not start with "<hex_digits>_". The hex segment
+    // is at most 16 chars (int64 max = 0xffffffffffffffff).
+    auto parse_hex_txn_id_prefix = [](std::string_view name) -> std::optional<int64_t> {
+        auto sep = name.find('_');
+        if (sep == std::string_view::npos || sep == 0 || sep > 16) return std::nullopt;
+        StringParser::ParseResult res = StringParser::PARSE_FAILURE;
+        int64_t txn_id = StringParser::string_to_int<int64_t>(name.data(), sep, 16, &res);
+        if (res != StringParser::PARSE_SUCCESS || txn_id <= 0) return std::nullopt;
+        return txn_id;
+    };
+
+    // Batch deletion buffer. S3 DeleteObjects API allows up to 1000 keys per request and
+    // staros::S3FileSystem::delete_files batches by FLAGS_delete_files_max_key_in_batch
+    // (default 1000). See design-doc §10.3.
+    constexpr size_t kBatchSize = 1000;
+    std::vector<std::string> batch;
+    batch.reserve(kBatchSize);
+
+    auto flush_batch = [&]() {
+        if (batch.empty()) return;
+        auto st = ignore_not_found(fs->delete_files(batch));
+        if (!st.ok()) {
+            // Tolerant: log and continue. Next vacuum round will retry untouched files
+            // (list is idempotent and the surviving files keep their hex prefix).
+            LOG(WARNING) << "Fail to batch-delete " << batch.size() << " load spill files under " << load_spill_txns_dir
+                         << ": " << st;
+            ret.update(st);
+        } else {
+            local_deleted += batch.size();
+        }
+        batch.clear();
+    };
+
     auto txns_iter_st = ignore_not_found(fs->iterate_dir2(load_spill_txns_dir, [&](DirEntry entry) {
-        // Some object-storage FS impls report non-dir entries here, skip them defensively.
-        if (entry.is_dir.has_value() && !entry.is_dir.value()) {
-            return true;
-        }
         std::string_view name = normalize_entry_name(entry);
-        if (name.empty()) {
+        if (name.empty()) return true;
+
+        // Defensive: skip directory entries (residual from the abandoned hex-dir layout, if any).
+        // They should not exist in flat layout; warn but do not auto-delete to avoid wiping
+        // active data on a misconfigured deployment.
+        if (entry.is_dir.has_value() && entry.is_dir.value()) {
+            LOG_EVERY_N(WARNING, 100) << "Unexpected sub-directory under flat load_spill_txns: "
+                                      << join_path(load_spill_txns_dir, std::string(name));
             return true;
         }
 
-        auto parsed = parse_hex_txn_id(name);
+        auto parsed = parse_hex_txn_id_prefix(name);
         if (!parsed.has_value()) {
-            LOG_EVERY_N(WARNING, 100) << "Skip unrecognized entry under " << load_spill_txns_dir << ": " << name;
+            LOG_EVERY_N(WARNING, 100) << "Skip unrecognized file under " << load_spill_txns_dir << ": " << name;
             return true;
         }
-
-        int64_t txn_id = *parsed;
-        if (txn_id >= min_active_txn_id) {
+        if (*parsed >= min_active_txn_id) {
             return true; // still potentially in use
         }
 
-        auto sub_dir = join_path(load_spill_txns_dir, std::string(name));
-        auto st = ignore_not_found(fs->delete_dir_recursive(sub_dir));
-        if (!st.ok()) {
-            LOG(WARNING) << "Fail to delete load spill txn dir " << sub_dir << ": " << st;
-            ret.update(st);
-            return false; // Stop listing on first hard error.
+        batch.emplace_back(join_path(load_spill_txns_dir, std::string(name)));
+        if (batch.size() >= kBatchSize) {
+            flush_batch();
         }
-        ++local_deleted;
         return true;
     }));
+    flush_batch();
     ret.update(txns_iter_st);
 
     // ---- (2) Legacy layout: <root>/load_spill/<load_id>/ ----
@@ -704,9 +731,9 @@ Status vacuum_load_spill(std::string_view root_location, int64_t min_active_txn_
 
     auto t1 = butil::gettimeofday_s();
     g_vacuum_load_spill_latency << (t1 - t0);
-    g_vacuum_load_spill_deleted_dirs << local_deleted;
-    if (deleted_dirs != nullptr) {
-        *deleted_dirs += local_deleted;
+    g_vacuum_load_spill_deleted_files << local_deleted;
+    if (deleted_files != nullptr) {
+        *deleted_files += local_deleted;
     }
 
     return ret;
@@ -773,11 +800,10 @@ Status vacuum_impl(TabletManager* tablet_mgr, const VacuumRequest& request, Vacu
     extra_file_size -= vacuumed_file_size;
     if (request.delete_txn_log()) {
         RETURN_IF_ERROR(vacuum_txn_log(root_loc, min_active_txn_id, &vacuumed_files, &vacuumed_file_size));
-        // Piggyback load-spill cleanup on delete_txn_log so it shares the same
-        // retention window. Best-effort: a failure here must not fail vacuum_impl.
-        auto spill_st = vacuum_load_spill(root_loc, min_active_txn_id, request.cleanup_legacy_load_spill(),
-                                          /*deleted_dirs=*/nullptr);
-        LOG_IF(WARNING, !spill_st.ok()) << "Fail to vacuum load spill under " << root_loc << ": " << spill_st;
+        // NOTE: vacuum_load_spill is intentionally NOT called from this high-frequency
+        // auto-vacuum path. It is invoked exclusively by vacuum_full (60s cycle) so its
+        // list QPS does not contend with the merge task hot-delete path under S3 list
+        // rate limits.
     }
     response->set_vacuumed_files(vacuumed_files);
     response->set_vacuumed_file_size(vacuumed_file_size);
