@@ -16,6 +16,10 @@
 
 #include <gtest/gtest.h>
 
+#include <atomic>
+#include <chrono>
+#include <thread>
+
 #include "base/testutil/assert.h"
 #include "storage/lake/persistent_index_sstable.h"
 
@@ -165,6 +169,44 @@ TEST(PersistentIndexMemtableTest, test_memory_usage) {
         ASSERT_OK(memtable->insert(N, key_slices.data(), values.data(), -1));
     }
     ASSERT_TRUE(memtable->memory_usage() < 100000 && memtable->memory_usage() > 0);
+}
+
+// wait_flush_done() must return immediately once cancel() has marked the
+// memtable terminal — the LakePersistentIndex publish path relies on this
+// to drain the inflight queue without polling.
+TEST(PersistentIndexMemtableTest, wait_flush_done_after_cancel) {
+    auto memtable = std::make_unique<PersistentIndexMemtable>();
+    memtable->cancel();
+
+    auto t0 = std::chrono::steady_clock::now();
+    memtable->wait_flush_done();
+    auto elapsed = std::chrono::steady_clock::now() - t0;
+
+    EXPECT_LT(elapsed, std::chrono::milliseconds(50));
+    EXPECT_FALSE(memtable->flush_status().ok());
+}
+
+// A waiter parked in wait_flush_done() before cancel() must unblock when
+// cancel() is called, not deadlock. Regression test for the new
+// _flush_done_cv / _flush_done pair.
+TEST(PersistentIndexMemtableTest, wait_flush_done_unblocks_concurrent_waiter) {
+    auto memtable = std::make_unique<PersistentIndexMemtable>();
+    std::atomic<bool> waiter_returned{false};
+
+    std::thread waiter([&] {
+        memtable->wait_flush_done();
+        waiter_returned.store(true);
+    });
+
+    // Give the waiter a chance to enter the condvar wait. The exact sleep is
+    // not load-bearing — even if cancel() races ahead, the post-condition
+    // (waiter eventually unblocks) still holds.
+    std::this_thread::sleep_for(std::chrono::milliseconds(20));
+    EXPECT_FALSE(waiter_returned.load());
+
+    memtable->cancel();
+    waiter.join();
+    EXPECT_TRUE(waiter_returned.load());
 }
 
 } // namespace starrocks::lake
