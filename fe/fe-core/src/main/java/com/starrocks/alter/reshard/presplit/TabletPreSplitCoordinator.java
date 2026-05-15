@@ -22,6 +22,7 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.common.Config;
 import com.starrocks.common.StarRocksException;
+import com.starrocks.common.TimeoutException;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.qe.ConnectContext;
@@ -36,10 +37,10 @@ import java.util.Optional;
 /**
  * FE-side orchestrator for Sample-Based Tablet Pre-Split.
  *
- * <p>{@link #maybeAct(Database, OlapTable, long, ScanContext)} is the
+ * <p>{@link #maybeAct(Database, OlapTable, long, ScanContext, LoadKind)} is the
  * eligibility gate — every check that fails produces a specific
  * {@link SkipReason} for downstream bvar labels.
- * {@link #runPreSplit(Database, OlapTable, long, ScanContext, PreSplitPipeline, int)}
+ * {@link #runPreSplit(Database, OlapTable, long, ScanContext, LoadKind, PreSplitPipeline, int)}
  * is the full entry point used by the integrating load path (INSERT-from-FILES,
  * Broker Load): it runs the eligibility gate, then drives the
  * {@link PreSplitPipeline} through the pre-submit / submit / post-submit
@@ -60,14 +61,17 @@ public final class TabletPreSplitCoordinator {
      * @param table                target table.
      * @param physicalPartitionId  load-target physical partition.
      * @param scanContext          integration-point scan context (used by the sampling stage).
+     * @param loadKind             which integration path is calling — picks the right
+     *                             per-path FE Config flag for the eligibility gate.
      */
     public static PreSplitOutcome maybeAct(
-            Database db, OlapTable table, long physicalPartitionId, ScanContext scanContext) {
+            Database db, OlapTable table, long physicalPartitionId, ScanContext scanContext, LoadKind loadKind) {
         Objects.requireNonNull(db, "db");
         Objects.requireNonNull(table, "table");
         Objects.requireNonNull(scanContext, "scanContext");
+        Objects.requireNonNull(loadKind, "loadKind");
 
-        SkipReason gateReason = checkConfigAndSession();
+        SkipReason gateReason = checkConfigAndSession(loadKind);
         if (gateReason != null) {
             return new PreSplitOutcome.Skipped(gateReason);
         }
@@ -103,13 +107,15 @@ public final class TabletPreSplitCoordinator {
     }
 
     /**
-     * Either Config flag being on is enough — the caller's integration commit
-     * decides which Config its load path reads. Returns {@code null} when both
-     * the Config gate and the session opt-out allow pre-split.
+     * Picks the per-path Config flag that gates the caller's load kind, then checks the
+     * session opt-out. Returns {@code null} when both gates are open.
      */
-    private static SkipReason checkConfigAndSession() {
-        if (!Config.enable_tablet_pre_split_for_insert_from_files
-                && !Config.enable_tablet_pre_split_for_broker_load) {
+    private static SkipReason checkConfigAndSession(LoadKind loadKind) {
+        boolean configEnabled = switch (loadKind) {
+            case INSERT_FROM_FILES -> Config.enable_tablet_pre_split_for_insert_from_files;
+            case BROKER_LOAD -> Config.enable_tablet_pre_split_for_broker_load;
+        };
+        if (!configEnabled) {
             return SkipReason.DISABLED_BY_CONFIG;
         }
         if (!ConnectContext.getSessionVariableOrDefault().isEnableTabletPreSplit()) {
@@ -147,12 +153,13 @@ public final class TabletPreSplitCoordinator {
      */
     public static PreSplitOutcome runPreSplit(
             Database db, OlapTable table, long physicalPartitionId, ScanContext scanContext,
-            PreSplitPipeline pipeline, int activeComputeNodeCount) throws PreSplitPostSubmitTimeoutException {
+            LoadKind loadKind, PreSplitPipeline pipeline, int activeComputeNodeCount)
+            throws PreSplitPostSubmitTimeoutException {
         Objects.requireNonNull(pipeline, "pipeline");
         Preconditions.checkArgument(activeComputeNodeCount >= 1,
                 "activeComputeNodeCount must be >= 1, was %s", activeComputeNodeCount);
 
-        PreSplitOutcome eligibility = maybeAct(db, table, physicalPartitionId, scanContext);
+        PreSplitOutcome eligibility = maybeAct(db, table, physicalPartitionId, scanContext, loadKind);
         if (!(eligibility instanceof PreSplitOutcome.Eligible)) {
             return eligibility;
         }
@@ -192,16 +199,17 @@ public final class TabletPreSplitCoordinator {
 
         try {
             pipeline.awaitFinished(preparedJob, postSubmitTimeout);
-        } catch (PreSplitPostSubmitTimeoutException timeout) {
-            // Re-throw so the load transaction aborts — committing against stale tablet
-            // metadata is unsafe. Record the hard-cap event first so operator dashboards
-            // see the abort.
+        } catch (TimeoutException timeout) {
+            // Any post-submit timeout — typed or bare — means we never confirmed FINISHED;
+            // committing against stale tablet metadata is unsafe. Record the hard-cap event
+            // and propagate. PreSplitPostSubmitTimeoutException.from normalizes bare
+            // timeouts into the dedicated type so the load executor's catch matches.
             if (MetricRepo.hasInit) {
                 MetricRepo.COUNTER_TABLET_PRE_SPLIT_POST_SUBMIT_HARD_CAP.increase(1L);
             }
             LOG.warn("Pre-split post-submit timeout for table {} after {}s — load transaction will abort: {}",
                     table.getName(), postSubmitTimeout.toSeconds(), timeout.getMessage());
-            throw timeout;
+            throw PreSplitPostSubmitTimeoutException.from(timeout);
         } catch (StarRocksException waitFailure) {
             LOG.warn("Pre-split skipped for table {}: admitted job entered terminal-error state — {}",
                     table.getName(), waitFailure.getMessage());
@@ -229,10 +237,19 @@ public final class TabletPreSplitCoordinator {
         Preconditions.checkArgument(activeComputeNodeCount >= 1,
                 "activeComputeNodeCount must be >= 1, was %s", activeComputeNodeCount);
 
-        long byteTargetTabletCount = (long) Math.ceil(
-                (double) estimates.totalBytes() / Config.tablet_reshard_target_size);
+        long targetSize = Config.tablet_reshard_target_size;
+        int maxSplitCount = Config.tablet_reshard_max_split_count;
+        Preconditions.checkState(targetSize > 0,
+                "tablet_reshard_target_size must be > 0, was %s", targetSize);
+        Preconditions.checkState(maxSplitCount >= 2,
+                "tablet_reshard_max_split_count must be >= 2, was %s", maxSplitCount);
+
+        // Integer ceil-divide written as (n - 1) / d + 1 with a zero-case guard so it
+        // does not overflow when totalBytes is near Long.MAX_VALUE.
+        long totalBytes = estimates.totalBytes();
+        long byteTargetTabletCount = totalBytes == 0L ? 0L : ((totalBytes - 1) / targetSize) + 1;
         long proposed = Math.max(activeComputeNodeCount, byteTargetTabletCount);
-        long clamped = Math.max(2L, Math.min(proposed, Config.tablet_reshard_max_split_count));
+        long clamped = Math.max(2L, Math.min(proposed, maxSplitCount));
         return (int) clamped;
     }
 }

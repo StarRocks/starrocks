@@ -23,6 +23,7 @@ import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.common.Config;
 import com.starrocks.common.StarRocksException;
+import com.starrocks.common.TimeoutException;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.metric.LongCounterMetric;
 import com.starrocks.metric.Metric.MetricUnit;
@@ -54,8 +55,17 @@ public class TabletPreSplitCoordinatorTest {
     private PhysicalPartition partition;
     private MaterializedIndex baseIndex;
 
+    private boolean savedConfigInsertFromFiles;
+    private boolean savedConfigBrokerLoad;
+    private long savedConfigReshardTargetSize;
+    private int savedConfigReshardMaxSplitCount;
+
     @BeforeEach
     public void setUp() {
+        savedConfigInsertFromFiles = Config.enable_tablet_pre_split_for_insert_from_files;
+        savedConfigBrokerLoad = Config.enable_tablet_pre_split_for_broker_load;
+        savedConfigReshardTargetSize = Config.tablet_reshard_target_size;
+        savedConfigReshardMaxSplitCount = Config.tablet_reshard_max_split_count;
         Config.enable_tablet_pre_split_for_insert_from_files = true;
         Config.enable_tablet_pre_split_for_broker_load = false;
         // Pin tablet-count-selection inputs so the test arithmetic stays valid if defaults move.
@@ -92,10 +102,15 @@ public class TabletPreSplitCoordinatorTest {
     @AfterEach
     public void tearDown() {
         ConnectContext.remove();
+        Config.enable_tablet_pre_split_for_insert_from_files = savedConfigInsertFromFiles;
+        Config.enable_tablet_pre_split_for_broker_load = savedConfigBrokerLoad;
+        Config.tablet_reshard_target_size = savedConfigReshardTargetSize;
+        Config.tablet_reshard_max_split_count = savedConfigReshardMaxSplitCount;
     }
 
     private PreSplitOutcome invokeMaybeAct() {
-        return TabletPreSplitCoordinator.maybeAct(database, table, PARTITION_ID, DUMMY_CONTEXT);
+        return TabletPreSplitCoordinator.maybeAct(
+                database, table, PARTITION_ID, DUMMY_CONTEXT, LoadKind.INSERT_FROM_FILES);
     }
 
     private static void assertSkipped(PreSplitOutcome outcome, SkipReason expected) {
@@ -110,7 +125,7 @@ public class TabletPreSplitCoordinatorTest {
     }
 
     @Test
-    public void testBothConfigsOffSkipped() {
+    public void testInsertCallSkippedWhenInsertConfigOff() {
         Config.enable_tablet_pre_split_for_insert_from_files = false;
         Config.enable_tablet_pre_split_for_broker_load = false;
 
@@ -118,11 +133,33 @@ public class TabletPreSplitCoordinatorTest {
     }
 
     @Test
-    public void testBrokerConfigAloneReturnsEligible() {
+    public void testInsertCallSkippedWhenOnlyBrokerConfigOn() {
+        // Operator enabled Broker Load only; an INSERT-from-FILES call must still be gated off.
         Config.enable_tablet_pre_split_for_insert_from_files = false;
         Config.enable_tablet_pre_split_for_broker_load = true;
 
-        Assertions.assertInstanceOf(PreSplitOutcome.Eligible.class, invokeMaybeAct());
+        assertSkipped(invokeMaybeAct(), SkipReason.DISABLED_BY_CONFIG);
+    }
+
+    @Test
+    public void testBrokerLoadCallReturnsEligibleWithOnlyBrokerConfigOn() {
+        Config.enable_tablet_pre_split_for_insert_from_files = false;
+        Config.enable_tablet_pre_split_for_broker_load = true;
+
+        PreSplitOutcome outcome = TabletPreSplitCoordinator.maybeAct(
+                database, table, PARTITION_ID, DUMMY_CONTEXT, LoadKind.BROKER_LOAD);
+        Assertions.assertInstanceOf(PreSplitOutcome.Eligible.class, outcome);
+    }
+
+    @Test
+    public void testBrokerLoadCallSkippedWhenOnlyInsertConfigOn() {
+        // And the inverse: a Broker Load call is gated off if only INSERT is enabled.
+        Config.enable_tablet_pre_split_for_insert_from_files = true;
+        Config.enable_tablet_pre_split_for_broker_load = false;
+
+        PreSplitOutcome outcome = TabletPreSplitCoordinator.maybeAct(
+                database, table, PARTITION_ID, DUMMY_CONTEXT, LoadKind.BROKER_LOAD);
+        assertSkipped(outcome, SkipReason.DISABLED_BY_CONFIG);
     }
 
     @Test
@@ -253,6 +290,25 @@ public class TabletPreSplitCoordinatorTest {
                 () -> TabletPreSplitCoordinator.selectTabletCount(anyEstimates, -1));
     }
 
+    @Test
+    public void testTabletCountRejectsNonPositiveTargetSize() {
+        Estimates anyEstimates = new Estimates(DebugUtil.GIGABYTE, 0L);
+        Config.tablet_reshard_target_size = 0L;
+        Assertions.assertThrows(IllegalStateException.class,
+                () -> TabletPreSplitCoordinator.selectTabletCount(anyEstimates, 3));
+        Config.tablet_reshard_target_size = -1L;
+        Assertions.assertThrows(IllegalStateException.class,
+                () -> TabletPreSplitCoordinator.selectTabletCount(anyEstimates, 3));
+    }
+
+    @Test
+    public void testTabletCountRejectsMaxSplitCountBelowTwo() {
+        Estimates anyEstimates = new Estimates(DebugUtil.GIGABYTE, 0L);
+        Config.tablet_reshard_max_split_count = 1;
+        Assertions.assertThrows(IllegalStateException.class,
+                () -> TabletPreSplitCoordinator.selectTabletCount(anyEstimates, 3));
+    }
+
     // ---- runPreSplit pipeline orchestration (B3) ----
 
     private static final PreSplitPipeline.PreparedReshardJob FAKE_PREPARED_JOB =
@@ -296,7 +352,8 @@ public class TabletPreSplitCoordinatorTest {
 
     private PreSplitOutcome invokeRunPreSplit(FakePipeline pipeline) throws PreSplitPostSubmitTimeoutException {
         return TabletPreSplitCoordinator.runPreSplit(
-                database, table, PARTITION_ID, DUMMY_CONTEXT, pipeline, /*activeComputeNodeCount*/ 3);
+                database, table, PARTITION_ID, DUMMY_CONTEXT,
+                LoadKind.INSERT_FROM_FILES, pipeline, /*activeComputeNodeCount*/ 3);
     }
 
     @Test
@@ -449,13 +506,33 @@ public class TabletPreSplitCoordinatorTest {
     @Test
     public void testRunPreSplitRejectsNullPipeline() {
         Assertions.assertThrows(NullPointerException.class, () -> TabletPreSplitCoordinator.runPreSplit(
-                database, table, PARTITION_ID, DUMMY_CONTEXT, null, 3));
+                database, table, PARTITION_ID, DUMMY_CONTEXT, LoadKind.INSERT_FROM_FILES, null, 3));
     }
 
     @Test
     public void testRunPreSplitRejectsNonPositiveComputeNodeCount() {
         FakePipeline pipeline = new FakePipeline();
         Assertions.assertThrows(IllegalArgumentException.class, () -> TabletPreSplitCoordinator.runPreSplit(
-                database, table, PARTITION_ID, DUMMY_CONTEXT, pipeline, 0));
+                database, table, PARTITION_ID, DUMMY_CONTEXT, LoadKind.INSERT_FROM_FILES, pipeline, 0));
+    }
+
+    @Test
+    public void testRunPreSplitBareTimeoutExceptionMapsToHardCap() {
+        // Defense in depth: even if the pipeline throws a generic TimeoutException (the
+        // parent class) rather than the typed PreSplitPostSubmitTimeoutException, the
+        // coordinator must treat it as a post-submit hard-cap event and propagate (load
+        // txn aborts). Otherwise the bare timeout would fall into the StarRocksException
+        // catch and the load would proceed against unfinished tablet metadata.
+        withHardCapCounter(counter -> {
+            FakePipeline pipeline = new FakePipeline();
+            pipeline.awaitThrow = new TimeoutException("bare timeout from deeper await");
+
+            PreSplitPostSubmitTimeoutException thrown = Assertions.assertThrows(
+                    PreSplitPostSubmitTimeoutException.class, () -> invokeRunPreSplit(pipeline));
+            Assertions.assertSame(pipeline.awaitThrow, thrown.getCause(),
+                    "the original timeout should be the wrapped exception's cause");
+            Assertions.assertEquals(1L, counter.getValue().longValue(),
+                    "bare TimeoutException must record one hard-cap event");
+        });
     }
 }

@@ -29,4 +29,19 @@ public final class PreSplitPostSubmitTimeoutException extends TimeoutException {
     public PreSplitPostSubmitTimeoutException(String reason) {
         super(reason);
     }
+
+    /**
+     * Convert any {@link TimeoutException} surfacing from the post-submit phase into
+     * the dedicated type so the load executor's catch (and the test fixtures) can
+     * match on a single class. Already-typed timeouts pass through; bare timeouts are
+     * wrapped with the original as {@link #getCause}.
+     */
+    public static PreSplitPostSubmitTimeoutException from(TimeoutException timeout) {
+        if (timeout instanceof PreSplitPostSubmitTimeoutException typed) {
+            return typed;
+        }
+        PreSplitPostSubmitTimeoutException wrapped = new PreSplitPostSubmitTimeoutException(timeout.getMessage());
+        wrapped.initCause(timeout);
+        return wrapped;
+    }
 }
