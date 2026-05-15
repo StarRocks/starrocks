@@ -1,0 +1,49 @@
+// HtmlCodeTag.tengo
+//
+// Detect <code> HTML tags used in body text instead of backtick inline code.
+// Raw HTML <code> tags survive linting but break remark's parse→translate→
+// stringify roundtrip: the translator model may reorder attributes or emit the
+// closing tag inside an emphasis run, producing MDX build failures.
+//
+// Use backtick inline code instead:
+//   Bad:  <code class="language-text">hello*</code>
+//   Good: `hello*`
+//
+// Code regions excluded from flagging:
+//   - Backtick fenced code blocks:  ```[lang]\n...\n```
+//   - Tilde fenced code blocks:     ~~~[lang]\n...\n~~~
+//   - Inline code spans:            `...`
+
+text := import("text")
+
+code_regions := []
+
+for groups in text.re_find("(?s)```[^\n]*\n.*?\n[ \t]*```[ \t]*(?:\n|$)", scope, -1) {
+    m := groups[0]
+    code_regions = append(code_regions, [m.begin, m.end])
+}
+
+for groups in text.re_find("(?s)~~~[^\n]*\n.*?\n[ \t]*~~~[ \t]*(?:\n|$)", scope, -1) {
+    m := groups[0]
+    code_regions = append(code_regions, [m.begin, m.end])
+}
+
+for groups in text.re_find("`+[^`\n]+`+", scope, -1) {
+    m := groups[0]
+    code_regions = append(code_regions, [m.begin, m.end])
+}
+
+matches := []
+for groups in text.re_find(`<code\b`, scope, -1) {
+    hit := groups[0]
+    inside := false
+    for r in code_regions {
+        if hit.begin >= r[0] && hit.begin < r[1] {
+            inside = true
+            break
+        }
+    }
+    if !inside {
+        matches = append(matches, {begin: hit.begin, end: hit.end})
+    }
+}
