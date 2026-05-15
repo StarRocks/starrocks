@@ -353,8 +353,10 @@ public class CostModel {
             }
 
             // With mismatched distribution, each node sees all distinct groups.
-            final int numBackends = Math.max(1, ConnectContext.get().getAliveBackendNumber());
-            final double outputRows = Math.min(estimatedOutputRows * numBackends, inputRows);
+            // Include compute nodes for shared-data deployments, consistent with HashJoinCostModel.
+            final int numWorkers = Math.max(1, ConnectContext.get().getAliveBackendNumber()
+                    + GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getAliveComputeNodeNumber());
+            final double outputRows = Math.min(estimatedOutputRows * numWorkers, inputRows);
             final double toShuffleRows = Math.max(0, outputRows - estimatedOutputRows);
 
             return toShuffleRows * statistics.getAvgRowSize();
