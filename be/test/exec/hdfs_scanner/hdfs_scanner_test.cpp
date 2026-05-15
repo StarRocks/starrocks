@@ -23,12 +23,7 @@
 #include "cache/disk_cache/starcache_engine.h"
 #include "cache/disk_cache/test_cache_utils.h"
 #include "column/column_helper.h"
-<<<<<<< HEAD
-=======
-#include "common/config_cache_fwd.h"
-#include "common/config_exec_fwd.h"
 #include "exec/hdfs_scanner/hdfs_scanner_avro.h"
->>>>>>> 59f51d0c27 ([Enhancement] Optimize native Hive Avro scanning with direct binary decoding (#73283))
 #include "exec/hdfs_scanner/hdfs_scanner_orc.h"
 #include "exec/hdfs_scanner/hdfs_scanner_parquet.h"
 #include "exec/hdfs_scanner/hdfs_scanner_text.h"

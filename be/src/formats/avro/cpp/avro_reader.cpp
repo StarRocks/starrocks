@@ -32,13 +32,8 @@
 #include "formats/avro/cpp/direct_column_reader.h"
 #include "formats/avro/cpp/utils.h"
 #include "fs/fs.h"
-<<<<<<< HEAD
-#include "runtime/runtime_state.h"
-=======
 #include "runtime/descriptors.h"
 #include "runtime/runtime_state.h"
-#include "runtime/runtime_state_helper.h"
->>>>>>> 59f51d0c27 ([Enhancement] Optimize native Hive Avro scanning with direct binary decoding (#73283))
 
 namespace starrocks {
 
@@ -740,18 +735,13 @@ Status AvroReader::read_chunk(ChunkPtr& chunk, int rows_to_read, int64_t* rows_c
             if (st.is_data_quality_error()) {
                 if (_counter->num_rows_filtered++ < MAX_ERROR_LINES_IN_FILE) {
                     std::string json_str;
-<<<<<<< HEAD
-                    (void)AvroUtils::datum_to_json(*_datum, &json_str);
-                    _state->append_error_msg_to_file(json_str, std::string(st.message()));
-=======
                     if (_datum != nullptr) {
                         (void)AvroUtils::datum_to_json(*_datum, &json_str);
                     } else {
                         // Direct path: no GenericDatum is allocated, so row context is unavailable.
                         json_str = "(row context unavailable in direct decode mode)";
                     }
-                    RuntimeStateHelper::append_error_msg_to_file(_state, json_str, std::string(st.message()));
->>>>>>> 59f51d0c27 ([Enhancement] Optimize native Hive Avro scanning with direct binary decoding (#73283))
+                    _state->append_error_msg_to_file(json_str, std::string(st.message()));
                     LOG(WARNING) << "Failed to read row. error: " << st;
                 }
                 // Rollback the partially-written row before processing the next record.

@@ -23,7 +23,7 @@
 #include <string_view>
 
 #include "common/status.h"
-#include "types/type_descriptor.h"
+#include "runtime/types.h"
 
 namespace avro {
 class Decoder;
