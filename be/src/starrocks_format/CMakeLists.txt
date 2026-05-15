@@ -48,7 +48,6 @@ set(STARROCKS_LIBS
     Script
     StarRocksGen
     Webserver
-    TestUtil
     Cache
     ${WL_END_GROUP}
 )

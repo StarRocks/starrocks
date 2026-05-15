@@ -12,11 +12,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/testutil")
+set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/test/testutil")
 
 # where to put generated binaries
-set(EXECUTABLE_OUTPUT_PATH "${BUILD_DIR}/src/testutil")
+set(EXECUTABLE_OUTPUT_PATH "${BUILD_DIR}/test/testutil")
 
+# TestUtil contains helper implementations used only by unit tests. Keep it
+# under be/test and link it through TEST_LINK_LIBS instead of production links.
 add_library(TestUtil
     chunk_assert.cpp
     desc_tbl_builder.cc

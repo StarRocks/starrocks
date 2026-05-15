@@ -1,3 +1,5 @@
+add_subdirectory(testutil)
+
 set(EXEC_FILES
         ./agent/agent_metrics_test.cpp
         ./agent/agent_task_test.cpp
