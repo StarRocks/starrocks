@@ -23,7 +23,6 @@ import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.common.Config;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.TimeoutException;
-import com.starrocks.common.util.DebugUtil;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.qe.ConnectContext;
 import org.apache.logging.log4j.LogManager;
@@ -49,9 +48,6 @@ import java.util.Optional;
 public final class TabletPreSplitCoordinator {
 
     private static final Logger LOG = LogManager.getLogger(TabletPreSplitCoordinator.class);
-
-    /** Tier-2 sample byte budget when no Config gate is wired up. 16 MiB ≈ 10k 1.5 KB tuples. */
-    private static final long DEFAULT_SAMPLE_BYTE_LIMIT = 16L * DebugUtil.MEGABYTE;
 
     private TabletPreSplitCoordinator() {
     }
@@ -165,7 +161,8 @@ public final class TabletPreSplitCoordinator {
         }
 
         SampleRequest sampleRequest = new SampleRequest(
-                scanContext, table.getKeyColumnsInOrder(), DEFAULT_SAMPLE_BYTE_LIMIT, /*seed*/ 0L);
+                scanContext, table.getKeyColumnsInOrder(),
+                Config.tablet_pre_split_sample_byte_limit, /*seed*/ 0L);
         Duration preSubmitTimeout = Duration.ofSeconds(Config.tablet_pre_split_pre_submit_timeout_seconds);
         Duration postSubmitTimeout = Duration.ofSeconds(Config.tablet_pre_split_post_submit_wait_seconds);
 

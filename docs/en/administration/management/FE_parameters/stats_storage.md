@@ -561,3 +561,65 @@ This topic introduces the following types of FE configurations:
 - Is mutable: Yes
 - Description: The maximum retention time of historical tablet SPLIT/MERGE jobs.
 - Introduced in: v4.1.0
+
+### `enable_tablet_pre_split_for_insert_from_files`
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to enable Sample-Based Tablet Pre-Split for `INSERT INTO ... SELECT FROM FILES()` loads. Off by default; flip on per cluster after the feature's GA gate. The session variable `enable_tablet_pre_split` must also be `true` for pre-split to run.
+- Introduced in: v4.1.0
+
+### `enable_tablet_pre_split_for_broker_load`
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to enable Sample-Based Tablet Pre-Split for Broker Load. Off by default; flip on per cluster after the feature's GA gate. The session variable `enable_tablet_pre_split` must also be `true` for pre-split to run.
+- Introduced in: v4.1.0
+
+### `tablet_pre_split_pre_submit_timeout_seconds`
+
+- Default: 30
+- Type: Long
+- Unit: Seconds
+- Is mutable: Yes
+- Description: Wall-clock budget for the pre-submit phase of Sample-Based Tablet Pre-Split (sample + plan boundaries + build reshard job). On expiry the coordinator skips pre-split and the load proceeds against the original single tablet.
+- Introduced in: v4.1.0
+
+### `tablet_pre_split_post_submit_wait_seconds`
+
+- Default: 300
+- Type: Long
+- Unit: Seconds
+- Is mutable: Yes
+- Description: Maximum time the coordinator will wait for an admitted Sample-Based Tablet Pre-Split reshard job to reach `FINISHED`. On expiry the coordinator throws `PreSplitPostSubmitTimeoutException` and the load transaction aborts cleanly — committing against stale tablet metadata is unsafe.
+- Introduced in: v4.1.0
+
+### `tablet_pre_split_sample_byte_limit`
+
+- Default: 16777216 (16 MiB)
+- Type: Long
+- Unit: Bytes
+- Is mutable: Yes
+- Description: Soft byte cap on the FE-side accumulation buffer of the Tier 2 reservoir sampler used by Sample-Based Tablet Pre-Split. The sampler stops reading once accumulated values exceed this limit. The first row is always admitted so an oversize row still produces a non-empty sample.
+- Introduced in: v4.1.0
+
+### `tablet_pre_split_tier1_overlap_threshold`
+
+- Default: 0.3
+- Type: Double
+- Unit: -
+- Is mutable: Yes
+- Description: Maximum overlap fraction tolerated when Sample-Based Tablet Pre-Split's Tier 1 (Parquet/ORC row-group metadata) computes boundaries. Above this threshold the cumulative-row count stops being monotone in sorted-min order so Tier 1 falls back to Tier 2 (row sampling).
+- Introduced in: v4.1.0
+
+#### Rolling back Sample-Based Tablet Pre-Split
+
+To disable the feature safely before a downgrade or during a production rollback:
+
+1. Set both `enable_tablet_pre_split_for_insert_from_files = false` and `enable_tablet_pre_split_for_broker_load = false`. New loads will skip pre-split immediately.
+2. Wait for in-flight reshard jobs created by pre-split to drain. Monitor with `SHOW TABLET RESHARD JOB`; the rollback is complete once no `RUNNING` or `PENDING` rows remain.
+3. Proceed with the downgrade. The substrate (External-Boundaries Tablet Split) remains available regardless of the pre-split feature flag.

@@ -59,6 +59,7 @@ public class TabletPreSplitCoordinatorTest {
     private boolean savedConfigBrokerLoad;
     private long savedConfigReshardTargetSize;
     private int savedConfigReshardMaxSplitCount;
+    private long savedConfigSampleByteLimit;
 
     @BeforeEach
     public void setUp() {
@@ -66,11 +67,13 @@ public class TabletPreSplitCoordinatorTest {
         savedConfigBrokerLoad = Config.enable_tablet_pre_split_for_broker_load;
         savedConfigReshardTargetSize = Config.tablet_reshard_target_size;
         savedConfigReshardMaxSplitCount = Config.tablet_reshard_max_split_count;
+        savedConfigSampleByteLimit = Config.tablet_pre_split_sample_byte_limit;
         Config.enable_tablet_pre_split_for_insert_from_files = true;
         Config.enable_tablet_pre_split_for_broker_load = false;
         // Pin tablet-count-selection inputs so the test arithmetic stays valid if defaults move.
         Config.tablet_reshard_target_size = 10L * DebugUtil.GIGABYTE;
         Config.tablet_reshard_max_split_count = 1024;
+        Config.tablet_pre_split_sample_byte_limit = 16L * DebugUtil.MEGABYTE;
 
         // Bind a fresh ConnectContext so the coordinator's session-var check finds one.
         ConnectContext connectContext = new ConnectContext();
@@ -106,6 +109,7 @@ public class TabletPreSplitCoordinatorTest {
         Config.enable_tablet_pre_split_for_broker_load = savedConfigBrokerLoad;
         Config.tablet_reshard_target_size = savedConfigReshardTargetSize;
         Config.tablet_reshard_max_split_count = savedConfigReshardMaxSplitCount;
+        Config.tablet_pre_split_sample_byte_limit = savedConfigSampleByteLimit;
     }
 
     private PreSplitOutcome invokeMaybeAct() {

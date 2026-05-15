@@ -561,3 +561,65 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 是否可变: Yes
 - 描述: SPLIT/MERGE 批处理作业历史的最大保留时间。
 - 引入版本: v4.1.0
+
+### `enable_tablet_pre_split_for_insert_from_files`
+
+- 默认值: false
+- 类型: Boolean
+- 单位: -
+- 是否可变: Yes
+- 描述: 是否为 `INSERT INTO ... SELECT FROM FILES()` 导入启用基于采样的 Tablet 预分裂（Sample-Based Tablet Pre-Split）。默认关闭，GA 后按集群开启。会话变量 `enable_tablet_pre_split` 也必须为 `true` 时预分裂才会运行。
+- 引入版本: v4.1.0
+
+### `enable_tablet_pre_split_for_broker_load`
+
+- 默认值: false
+- 类型: Boolean
+- 单位: -
+- 是否可变: Yes
+- 描述: 是否为 Broker Load 启用基于采样的 Tablet 预分裂。默认关闭，GA 后按集群开启。会话变量 `enable_tablet_pre_split` 也必须为 `true` 时预分裂才会运行。
+- 引入版本: v4.1.0
+
+### `tablet_pre_split_pre_submit_timeout_seconds`
+
+- 默认值: 30
+- 类型: Long
+- 单位: Seconds
+- 是否可变: Yes
+- 描述: 基于采样的 Tablet 预分裂的「提交前阶段」墙钟时间预算（采样 + 规划边界 + 构建 reshard 作业）。超时后协调器跳过预分裂，导入沿用原始单 Tablet 路径继续执行。
+- 引入版本: v4.1.0
+
+### `tablet_pre_split_post_submit_wait_seconds`
+
+- 默认值: 300
+- 类型: Long
+- 单位: Seconds
+- 是否可变: Yes
+- 描述: 基于采样的 Tablet 预分裂协调器等待已提交 reshard 作业到达 `FINISHED` 的最长时间。超时后协调器抛出 `PreSplitPostSubmitTimeoutException`，导入事务安全回滚——若提交到陈旧的 Tablet 元数据上是不安全的。
+- 引入版本: v4.1.0
+
+### `tablet_pre_split_sample_byte_limit`
+
+- 默认值: 16777216 (16 MiB)
+- 类型: Long
+- 单位: Bytes
+- 是否可变: Yes
+- 描述: 基于采样的 Tablet 预分裂 Tier 2 储水池采样器在 FE 端累积缓冲的软字节上限。累积值超过该上限后采样器停止读取。首行始终被接纳，超大单行仍会产生非空样本。
+- 引入版本: v4.1.0
+
+### `tablet_pre_split_tier1_overlap_threshold`
+
+- 默认值: 0.3
+- 类型: Double
+- 单位: -
+- 是否可变: Yes
+- 描述: 基于采样的 Tablet 预分裂 Tier 1（Parquet/ORC row-group 元数据）计算边界时容忍的最大重叠率。超过该阈值时按最小值排序的累计行数将不再单调，Tier 1 会回退到 Tier 2（行采样）。
+- 引入版本: v4.1.0
+
+#### 回滚基于采样的 Tablet 预分裂
+
+降级或线上回滚前安全关闭该特性的步骤：
+
+1. 将 `enable_tablet_pre_split_for_insert_from_files = false` 和 `enable_tablet_pre_split_for_broker_load = false` 同时设为 `false`，新导入将立即跳过预分裂。
+2. 等待预分裂创建的在途 reshard 作业排空。用 `SHOW TABLET RESHARD JOB` 监控；当没有 `RUNNING` 或 `PENDING` 行后回滚完成。
+3. 继续降级流程。底层基础设施（External-Boundaries Tablet Split）与预分裂特性开关解耦，无论开关如何都可用。
