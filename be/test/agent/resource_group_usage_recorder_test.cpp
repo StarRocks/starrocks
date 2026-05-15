@@ -28,6 +28,9 @@ TEST(ResourceGroupUsageRecorderTest, test_get_resource_group_usages) {
     const size_t num_cores = CpuInfo::num_cores();
 
     auto& exec_env = *ExecEnv::GetInstance();
+    // Save original workgroup_manager to restore at end (otherwise subsequent tests fail)
+    auto original_wg_manager = std::move(exec_env._workgroup_manager);
+
     workgroup::PipelineExecutorSetConfig executors_manager_opts(
             CpuInfo::num_cores(), num_cores, num_cores, num_cores, CpuInfo::get_core_ids(), true,
             config::enable_resource_group_cpu_borrowing, pipeline::PipelineExecutorMetrics::instance());
@@ -48,6 +51,9 @@ TEST(ResourceGroupUsageRecorderTest, test_get_resource_group_usages) {
     ASSERT_EQ(group_usages[0].mem_pool, workgroup::WorkGroup::DEFAULT_MEM_POOL);
     ASSERT_EQ(group_usages[0].mem_limit_bytes, default_wg->mem_limit_bytes());
     ASSERT_EQ(group_usages[0].mem_pool_mem_limit_bytes, default_wg->mem_limit_bytes());
+
+    // Restore original workgroup_manager
+    exec_env._workgroup_manager = std::move(original_wg_manager);
 }
 
 } // namespace starrocks
