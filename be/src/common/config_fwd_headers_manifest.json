@@ -747,6 +747,7 @@
         "lake_pk_index_cumulative_base_compaction_ratio",
         "lake_pk_index_block_cache_limit_percent",
         "cloud_native_pk_index_rebuild_files_threshold",
+        "primary_key_compaction_replace_batch_rows",
         "cloud_native_pk_index_rebuild_rows_threshold",
         "l0_l1_merge_ratio",
         "l0_max_file_size",
