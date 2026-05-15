@@ -567,10 +567,6 @@
     "message": "系统元数据库",
     "description": "The label for category 系统元数据库 in sidebar docs"
   },
-  "sidebar.docs.category.Best Practices": {
-    "message": "Best Practices",
-    "description": "The label for category Best Practices in sidebar docs"
-  },
   "sidebar.docs.category.Query Tuning": {
     "message": "查询调优",
     "description": "The label for category Query Tuning in sidebar docs"
