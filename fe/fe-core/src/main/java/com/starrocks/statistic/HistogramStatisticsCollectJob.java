@@ -81,7 +81,7 @@ public class HistogramStatisticsCollectJob extends StatisticsCollectJob {
                     "   $columnName as column_key, " +
                     "   count($columnName) as column_value " +
                     "FROM `$dbName`.`$tableName` $sampleClause " +
-                    "WHERE $columnName is not null " +
+                    "WHERE $randFilter and $columnName is not null " +
                     "GROUP BY $columnName " +
                     "ORDER BY count($columnName) desc limit $topN ) t";
 
@@ -165,14 +165,32 @@ public class HistogramStatisticsCollectJob extends StatisticsCollectJob {
         context.put("tableName", table.getName());
         context.put("topN", topN);
 
-        if (sampleRatio > 0.0 && sampleRatio < 1.0) {
-            String sample = String.format("SAMPLE('percent'='%d')", (int) (sampleRatio * 100));
-            context.put("sampleClause", sample);
-        } else {
-            context.put("sampleClause", "");
-        }
+        addSampleContext(context, sampleRatio);
 
         return build(context, COLLECT_MCV_STATISTIC_TEMPLATE);
+    }
+
+    private void addSampleContext(VelocityContext context, double sampleRatio) {
+        if (canUseTableSample(sampleRatio)) {
+            context.put("sampleClause", String.format("SAMPLE('percent'='%d')", (int) (sampleRatio * 100)));
+            context.put("randFilter", "TRUE");
+        } else {
+            context.put("sampleClause", "");
+            context.put("randFilter", buildRandFilter(sampleRatio));
+        }
+    }
+
+    private boolean canUseTableSample(double sampleRatio) {
+        // sampleRatio * 100 must be between 1 and 100 to use SAMPLE statement
+        return Config.enable_use_table_sample_collect_statistics &&
+                sampleRatio >= 0.01 && sampleRatio < 1.0;
+    }
+
+    private String buildRandFilter(double sampleRatio) {
+        if (sampleRatio > 0.0 && sampleRatio < 1.0) {
+            return String.format("rand() <= %f", sampleRatio);
+        }
+        return "TRUE";
     }
 
     private String buildInsertIntoHistogramStatistics(String query) {
@@ -262,16 +280,7 @@ public class HistogramStatisticsCollectJob extends StatisticsCollectJob {
                 withSampleNdv));
         context.put("totalRows", Config.histogram_max_sample_row_count);
 
-        // TODO: use it by default and remove this switch
-        if (Config.enable_use_table_sample_collect_statistics && sampleRatio > 0.0 && sampleRatio < 1.0) {
-            String sampleClause = String.format("SAMPLE('percent'='%d')", (int) (sampleRatio * 100));
-            context.put("sampleClause", sampleClause);
-            context.put("randFilter", "TRUE");
-        } else {
-            String randFilter = String.format(" rand() <= %f", sampleRatio);
-            context.put("randFilter", randFilter);
-            context.put("sampleClause", "");
-        }
+        addSampleContext(context, sampleRatio);
 
         addMcvToContext(context, mostCommonValues);
         addMcvExcludeToContext(context, mostCommonValues, columnName, columnType);

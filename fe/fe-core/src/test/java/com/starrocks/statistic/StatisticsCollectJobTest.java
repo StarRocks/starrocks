@@ -544,7 +544,24 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
                 " as db_id, " + t0StatsTableId +
                 " as table_id, `v2` as column_key, count(`v2`) as column_value from `test`.`t0_stats` sample" +
                 "('percent'='10') " +
-                "where `v2` is not null group by `v2` order by count(`v2`) desc limit 100 ) t"), normalize.apply(sql));
+                "where true and `v2` is not null group by `v2` order by count(`v2`) desc limit 100 ) t"),
+                normalize.apply(sql));
+
+        sql = Deencapsulation.invoke(histogramStatisticsCollectJob, "buildCollectMCV",
+                db, olapTable, 100L, "v2", 0.00637);
+        Assertions.assertFalse(sql.contains("SAMPLE('percent'='0')"));
+        Assertions.assertEquals(normalize.apply("select cast(version as INT), cast(db_id as BIGINT), cast(table_id as " +
+                "BIGINT), " +
+                "cast(column_key as varchar), cast(column_value as varchar) from (select 2 as version, " + dbid +
+                " as db_id, " + t0StatsTableId +
+                " as table_id, `v2` as column_key, count(`v2`) as column_value from `test`.`t0_stats` " +
+                "where rand() <= 0.006370 and `v2` is not null group by `v2` order by count(`v2`) desc limit 100 ) t"),
+                normalize.apply(sql));
+
+        sql = Deencapsulation.invoke(histogramStatisticsCollectJob, "buildCollectHistogram",
+                db, olapTable, 0.00637, 64L, Maps.newHashMap(), "v2", IntegerType.BIGINT, false);
+        Assertions.assertFalse(sql.contains("SAMPLE('percent'='0')"));
+        Assertions.assertTrue(normalize.apply(sql).contains("where rand() <= 0.006370 and `v2` is not null"));
 
         mostCommonValues = new HashMap<>();
         mostCommonValues.put("1", "10");
