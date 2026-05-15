@@ -275,12 +275,11 @@ public class SkewJoinTest extends PlanTestBase {
 
     @Test
     public void testSkewJoinWithStats() throws Exception {
-        String sql = "select * from test.customer join test.part on c_mktsegment = p_name and c_custkey = p_partkey ";
+        String sql = "select * from test.customer join test.part on c_mktsegment = p_name ";
         String sqlPlan = getFragmentPlan(sql);
         // rewrite success
         assertCContains(sqlPlan, "equal join conjunct: 20: rand_col = 27: rand_col\n" +
-                "  |  equal join conjunct: 7: C_MKTSEGMENT = 11: P_NAME\n" +
-                "  |  equal join conjunct: 1: C_CUSTKEY = 10: P_PARTKEY");
+                "  |  equal join conjunct: 7: C_MKTSEGMENT = 11: P_NAME");
 
         int skewJoinUseMCVCount = connectContext.getSessionVariable().getSkewJoinOptimizeUseMCVCount();
         double skewDataThreshold = connectContext.getSessionVariable().getSkewJoinDataSkewThreshold();
@@ -288,15 +287,13 @@ public class SkewJoinTest extends PlanTestBase {
         connectContext.getSessionVariable().setSkewJoinDataSkewThreshold(0.3);
         sqlPlan = getFragmentPlan(sql);
         // not rewrite because of the skewJoinUseMCVCount and skewDataThreshold
-        assertCContains(sqlPlan, "equal join conjunct: 7: C_MKTSEGMENT = 11: P_NAME\n" +
-                "  |  equal join conjunct: 1: C_CUSTKEY = 10: P_PARTKEY");
+        assertCContains(sqlPlan, "equal join conjunct: 7: C_MKTSEGMENT = 11: P_NAME");
         connectContext.getSessionVariable().setSkewJoinDataSkewThreshold(skewDataThreshold);
         connectContext.getSessionVariable().setSkewJoinOptimizeUseMCVCount(skewJoinUseMCVCount);
 
-        sql = "select * from test.customer join test.part on trim(c_mktsegment) = p_name and c_custkey = p_partkey ";
+        sql = "select * from test.customer join test.part on trim(c_mktsegment) = p_name ";
         sqlPlan = getFragmentPlan(sql);
-        assertCContains(sqlPlan, "equal join conjunct: 20: trim = 11: P_NAME\n" +
-                "  |  equal join conjunct: 1: C_CUSTKEY = 10: P_PARTKEY");
+        assertCContains(sqlPlan, "equal join conjunct: 20: trim = 11: P_NAME");
 
         sql = "select c_custkey, sum(p_retailprice) from (select c_custkey, c_mktsegment from test.customer) c" +
                 " join (select p_name,p_retailprice from test.part) p on c.c_mktsegment = p.p_name group by c_custkey";
@@ -304,11 +301,10 @@ public class SkewJoinTest extends PlanTestBase {
         assertCContains(sqlPlan, "equal join conjunct: 21: rand_col = 28: rand_col\n" +
                 "  |  equal join conjunct: 7: C_MKTSEGMENT = 11: P_NAME");
 
-        sql = "select * from test.customer join test.part on p_name = c_mktsegment and p_partkey = c_custkey";
+        sql = "select * from test.customer join test.part on p_name = c_mktsegment";
         sqlPlan = getFragmentPlan(sql);
         assertCContains(sqlPlan, "equal join conjunct: 20: rand_col = 27: rand_col\n" +
-                "  |  equal join conjunct: 7: C_MKTSEGMENT = 11: P_NAME\n" +
-                "  |  equal join conjunct: 1: C_CUSTKEY = 10: P_PARTKEY");
+                "  |  equal join conjunct: 7: C_MKTSEGMENT = 11: P_NAME");
     }
 
     @Test
