@@ -14,6 +14,7 @@
 
 package com.starrocks.alter.reshard.presplit;
 
+import com.google.common.base.Preconditions;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
@@ -113,5 +114,31 @@ public final class TabletPreSplitCoordinator {
         // sampler tuples) is BoundaryPlanner's job at plan time; this gate only needs to keep
         // composite/complex types out of the external-boundaries split path.
         return keyColumns.get(0).getType().isScalarType();
+    }
+
+    /**
+     * Choose how many tablets to pre-split a load into.
+     *
+     * <p>Picks the larger of two lower bounds — the cluster's active compute-node
+     * count (so every compute node gets at least one tablet) and the byte-volume
+     * estimate ({@code ceil(estimatedTotalBytes / tablet_reshard_target_size)})
+     * — then clamps to {@code [2, tablet_reshard_max_split_count]}. Two is the
+     * minimum because a single-tablet result is equivalent to skipping pre-split.
+     *
+     * @param estimates              full-input estimates from the sampler. Only
+     *                               {@link Estimates#totalBytes} is read.
+     * @param activeComputeNodeCount compute nodes available to the load, after
+     *                               warehouse/blocklist filtering. Must be {@code >= 1}.
+     */
+    static int selectTabletCount(Estimates estimates, int activeComputeNodeCount) {
+        Objects.requireNonNull(estimates, "estimates");
+        Preconditions.checkArgument(activeComputeNodeCount >= 1,
+                "activeComputeNodeCount must be >= 1, was %s", activeComputeNodeCount);
+
+        long byteTargetTabletCount = (long) Math.ceil(
+                (double) estimates.totalBytes() / Config.tablet_reshard_target_size);
+        long proposed = Math.max(activeComputeNodeCount, byteTargetTabletCount);
+        long clamped = Math.max(2L, Math.min(proposed, Config.tablet_reshard_max_split_count));
+        return (int) clamped;
     }
 }

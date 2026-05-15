@@ -22,6 +22,7 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.common.Config;
+import com.starrocks.common.util.DebugUtil;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.type.IntegerType;
@@ -51,6 +52,9 @@ public class TabletPreSplitCoordinatorTest {
     public void setUp() {
         Config.enable_tablet_pre_split_for_insert_from_files = true;
         Config.enable_tablet_pre_split_for_broker_load = false;
+        // Pin tablet-count-selection inputs so the test arithmetic stays valid if defaults move.
+        Config.tablet_reshard_target_size = 10L * DebugUtil.GIGABYTE;
+        Config.tablet_reshard_max_split_count = 1024;
 
         // Bind a fresh ConnectContext so the coordinator's session-var check finds one.
         ConnectContext connectContext = new ConnectContext();
@@ -189,5 +193,57 @@ public class TabletPreSplitCoordinatorTest {
         when(partition.getIndex(BASE_INDEX_META_ID)).thenReturn(null);
 
         assertSkipped(invokeMaybeAct(), SkipReason.METADATA_NOT_RESOLVED);
+    }
+
+    // ---- selectTabletCount (B2) ----
+
+    private static int selectTabletCount(long totalBytes, int activeComputeNodeCount) {
+        return TabletPreSplitCoordinator.selectTabletCount(
+                new Estimates(totalBytes, /*totalRows*/ 0L), activeComputeNodeCount);
+    }
+
+    @Test
+    public void testTabletCountSmallLoadOnThreeComputeNodes() {
+        // 1 GB / 10 GB target rounds up to 1 tablet by bytes; compute-node floor of 3 wins.
+        Assertions.assertEquals(3, selectTabletCount(DebugUtil.GIGABYTE, 3));
+    }
+
+    @Test
+    public void testTabletCountLargeLoadOnThreeComputeNodes() {
+        // 100 GB / 10 GB target = 10 tablets by bytes; beats the compute-node floor of 3.
+        Assertions.assertEquals(10, selectTabletCount(100L * DebugUtil.GIGABYTE, 3));
+    }
+
+    @Test
+    public void testTabletCountSmallLoadOnTwelveComputeNodes() {
+        Assertions.assertEquals(12, selectTabletCount(DebugUtil.GIGABYTE, 12));
+    }
+
+    @Test
+    public void testTabletCountLargeLoadOnTwelveComputeNodes() {
+        // 100 GB / 10 GB target = 10 tablets by bytes; compute-node floor of 12 wins.
+        Assertions.assertEquals(12, selectTabletCount(100L * DebugUtil.GIGABYTE, 12));
+    }
+
+    @Test
+    public void testTabletCountSaturatesAtMaxSplitCount() {
+        // 10 PB / 10 GB target ≈ 1M tablets by bytes; clamps to tablet_reshard_max_split_count.
+        Assertions.assertEquals(Config.tablet_reshard_max_split_count,
+                selectTabletCount(10L * 1024L * DebugUtil.TERABYTE, 1));
+    }
+
+    @Test
+    public void testTabletCountFloorsAtTwo() {
+        // Zero bytes + single compute node would give 1; clamp lifts it to the minimum 2.
+        Assertions.assertEquals(2, selectTabletCount(0L, 1));
+    }
+
+    @Test
+    public void testTabletCountRejectsNonPositiveComputeNodeCount() {
+        Estimates anyEstimates = new Estimates(DebugUtil.GIGABYTE, 0L);
+        Assertions.assertThrows(IllegalArgumentException.class,
+                () -> TabletPreSplitCoordinator.selectTabletCount(anyEstimates, 0));
+        Assertions.assertThrows(IllegalArgumentException.class,
+                () -> TabletPreSplitCoordinator.selectTabletCount(anyEstimates, -1));
     }
 }
