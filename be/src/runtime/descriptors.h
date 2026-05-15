@@ -492,7 +492,6 @@ public:
     TableDescriptor* get_table_descriptor(TableId id) const;
     TupleDescriptor* get_tuple_descriptor(TupleId id) const;
     SlotDescriptor* get_slot_descriptor(SlotId id) const;
-    SlotDescriptor* get_slot_descriptor_with_column(SlotId id) const;
 
     // return all registered tuple descriptors
     void get_tuple_descs(std::vector<TupleDescriptor*>* descs) const;
@@ -507,9 +506,18 @@ private:
     TableDescriptorMap _tbl_desc_map;
     TupleDescriptorMap _tuple_desc_map;
     SlotDescriptorMap _slot_desc_map;
-    SlotDescriptorMap _slot_with_column_name_map;
 
+<<<<<<< HEAD
     DescriptorTbl() = default;
+=======
+    DescriptorTbl()
+            : _mr(std::pmr::get_default_resource()), _tbl_desc_map(_mr), _tuple_desc_map(_mr), _slot_desc_map(_mr) {}
+
+    explicit DescriptorTbl(std::pmr::memory_resource* mr)
+            : _mr(mr), _tbl_desc_map(_mr), _tuple_desc_map(_mr), _slot_desc_map(_mr) {}
+
+    friend class ObjectPool;
+>>>>>>> a6834e9e7d ([BugFix] Fix slot lookup for output slots with empty col_name in spark connector external scan (#73225))
 };
 
 // Records positions of tuples within row produced by ExecNode.
