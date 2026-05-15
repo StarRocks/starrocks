@@ -33,4 +33,14 @@ public enum SkipReason {
     UNSUPPORTED_SORT_KEY,
     /** Catalog snapshot did not resolve the partition or base index — load surfaces this error. */
     METADATA_NOT_RESOLVED,
+    /** Pre-submit phase (sample + plan + build job) exceeded its timeout. */
+    TIMEOUT_PRE_SUBMIT,
+    /** Sampler or boundary planner failed for a non-timeout reason — load proceeds without pre-split. */
+    SAMPLE_FAILED,
+    /** Planner concluded no useful split exists (no distinct cuts above the minimum). */
+    NO_USEFUL_CUTS,
+    /** Submission of the reshard job to {@code TabletReshardJobMgr} failed (state check, journal, etc.). */
+    SUBMIT_FAILED,
+    /** Admitted reshard job entered a terminal-error state (CANCELLED, etc.) before reaching FINISHED. */
+    JOB_FAILED_BEFORE_FINISH,
 }

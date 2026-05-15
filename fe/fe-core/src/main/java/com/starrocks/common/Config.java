@@ -4443,6 +4443,18 @@ public class Config extends ConfigBase {
             + "variable enable_tablet_pre_split must also be true for pre-split to run.")
     public static boolean enable_tablet_pre_split_for_broker_load = false;
 
+    @ConfField(mutable = true, comment = "Wall-clock budget for the pre-submit phase of "
+            + "Sample-Based Tablet Pre-Split (sample + plan boundaries + build reshard job). "
+            + "On expiry the coordinator skips pre-split and the load proceeds against the "
+            + "original single tablet.")
+    public static long tablet_pre_split_pre_submit_timeout_seconds = 30L;
+
+    @ConfField(mutable = true, comment = "Maximum time the coordinator will wait for an admitted "
+            + "Sample-Based Tablet Pre-Split reshard job to reach FINISHED. On expiry the "
+            + "coordinator throws PreSplitPostSubmitTimeoutException and the load transaction "
+            + "aborts cleanly — committing against stale tablet metadata is unsafe.")
+    public static long tablet_pre_split_post_submit_wait_seconds = 300L;
+
     /**
      * Whether to enable tracing historical nodes when cluster scale
      */

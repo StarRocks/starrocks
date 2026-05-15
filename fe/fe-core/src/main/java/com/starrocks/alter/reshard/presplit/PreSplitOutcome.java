@@ -19,11 +19,15 @@ package com.starrocks.alter.reshard.presplit;
  * cannot silently miss a new case when later stages add planning/submission
  * outcomes.
  */
-public sealed interface PreSplitOutcome permits PreSplitOutcome.Skipped, PreSplitOutcome.Eligible {
+public sealed interface PreSplitOutcome
+        permits PreSplitOutcome.Skipped, PreSplitOutcome.Eligible, PreSplitOutcome.Finished {
 
-    /** Eligibility check failed; carries the structured reason for skip-metric labels. */
+    /** Eligibility check failed or a recoverable pipeline failure occurred; load proceeds against the original tablet. */
     record Skipped(SkipReason reason) implements PreSplitOutcome { }
 
-    /** All eligibility checks passed. */
+    /** All eligibility checks passed. Returned by the eligibility-only entry point. */
     record Eligible() implements PreSplitOutcome { }
+
+    /** Pre-split completed: the reshard job was submitted and reached the FINISHED state. */
+    record Finished() implements PreSplitOutcome { }
 }

@@ -22,6 +22,7 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.common.Config;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
@@ -32,7 +33,9 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.time.Duration;
 import java.util.List;
+import java.util.Optional;
 
 import static com.starrocks.alter.reshard.presplit.PresplitTestSupport.DUMMY_CONTEXT;
 import static org.mockito.Mockito.mock;
@@ -245,5 +248,155 @@ public class TabletPreSplitCoordinatorTest {
                 () -> TabletPreSplitCoordinator.selectTabletCount(anyEstimates, 0));
         Assertions.assertThrows(IllegalArgumentException.class,
                 () -> TabletPreSplitCoordinator.selectTabletCount(anyEstimates, -1));
+    }
+
+    // ---- runPreSplit pipeline orchestration (B3) ----
+
+    private static final PreSplitPipeline.PreparedReshardJob FAKE_PREPARED_JOB =
+            new PreSplitPipeline.PreparedReshardJob(new Object());
+
+    private static class FakePipeline implements PreSplitPipeline {
+        Optional<PreparedReshardJob> preSubmitReturn = Optional.of(FAKE_PREPARED_JOB);
+        StarRocksException preSubmitThrow;
+        StarRocksException submitThrow;
+        StarRocksException awaitThrow;
+        int preSubmitCalls;
+        int submitCalls;
+        int awaitCalls;
+
+        @Override
+        public Optional<PreparedReshardJob> preSubmit(SampleRequest request, int activeComputeNodeCount,
+                                                       Duration timeout) throws StarRocksException {
+            preSubmitCalls++;
+            if (preSubmitThrow != null) {
+                throw preSubmitThrow;
+            }
+            return preSubmitReturn;
+        }
+
+        @Override
+        public void submit(PreparedReshardJob preparedJob) throws StarRocksException {
+            submitCalls++;
+            if (submitThrow != null) {
+                throw submitThrow;
+            }
+        }
+
+        @Override
+        public void awaitFinished(PreparedReshardJob preparedJob, Duration timeout) throws StarRocksException {
+            awaitCalls++;
+            if (awaitThrow != null) {
+                throw awaitThrow;
+            }
+        }
+    }
+
+    private PreSplitOutcome invokeRunPreSplit(FakePipeline pipeline) throws PreSplitPostSubmitTimeoutException {
+        return TabletPreSplitCoordinator.runPreSplit(
+                database, table, PARTITION_ID, DUMMY_CONTEXT, pipeline, /*activeComputeNodeCount*/ 3);
+    }
+
+    @Test
+    public void testRunPreSplitSkipsWhenEligibilityFails() throws Exception {
+        // Eligibility fails → pipeline must not be invoked.
+        when(table.isRangeDistribution()).thenReturn(false);
+        FakePipeline pipeline = new FakePipeline();
+
+        PreSplitOutcome outcome = invokeRunPreSplit(pipeline);
+
+        assertSkipped(outcome, SkipReason.NOT_RANGE_DISTRIBUTION);
+        Assertions.assertEquals(0, pipeline.preSubmitCalls, "pipeline.preSubmit should not run when eligibility fails");
+    }
+
+    @Test
+    public void testRunPreSplitHappyPathReturnsFinished() throws Exception {
+        FakePipeline pipeline = new FakePipeline();
+
+        PreSplitOutcome outcome = invokeRunPreSplit(pipeline);
+
+        Assertions.assertInstanceOf(PreSplitOutcome.Finished.class, outcome);
+        Assertions.assertEquals(1, pipeline.preSubmitCalls);
+        Assertions.assertEquals(1, pipeline.submitCalls);
+        Assertions.assertEquals(1, pipeline.awaitCalls);
+    }
+
+    @Test
+    public void testRunPreSplitPreSubmitTimeoutMapsToSkipped() throws Exception {
+        FakePipeline pipeline = new FakePipeline();
+        pipeline.preSubmitThrow = new PreSplitPreSubmitTimeoutException("sampler exceeded budget");
+
+        PreSplitOutcome outcome = invokeRunPreSplit(pipeline);
+
+        assertSkipped(outcome, SkipReason.TIMEOUT_PRE_SUBMIT);
+        Assertions.assertEquals(0, pipeline.submitCalls);
+        Assertions.assertEquals(0, pipeline.awaitCalls);
+    }
+
+    @Test
+    public void testRunPreSplitSampleFailureMapsToSkipped() throws Exception {
+        FakePipeline pipeline = new FakePipeline();
+        pipeline.preSubmitThrow = new StarRocksException("connector unavailable");
+
+        PreSplitOutcome outcome = invokeRunPreSplit(pipeline);
+
+        assertSkipped(outcome, SkipReason.SAMPLE_FAILED);
+        Assertions.assertEquals(0, pipeline.submitCalls);
+    }
+
+    @Test
+    public void testRunPreSplitNoUsefulCutsSkipsBeforeSubmit() throws Exception {
+        FakePipeline pipeline = new FakePipeline();
+        pipeline.preSubmitReturn = Optional.empty();
+
+        PreSplitOutcome outcome = invokeRunPreSplit(pipeline);
+
+        assertSkipped(outcome, SkipReason.NO_USEFUL_CUTS);
+        Assertions.assertEquals(0, pipeline.submitCalls);
+        Assertions.assertEquals(0, pipeline.awaitCalls);
+    }
+
+    @Test
+    public void testRunPreSplitSubmitFailureMapsToSkipped() throws Exception {
+        FakePipeline pipeline = new FakePipeline();
+        pipeline.submitThrow = new StarRocksException("table state changed during submit");
+
+        PreSplitOutcome outcome = invokeRunPreSplit(pipeline);
+
+        assertSkipped(outcome, SkipReason.SUBMIT_FAILED);
+        Assertions.assertEquals(0, pipeline.awaitCalls);
+    }
+
+    @Test
+    public void testRunPreSplitPostSubmitTimeoutPropagates() {
+        FakePipeline pipeline = new FakePipeline();
+        pipeline.awaitThrow = new PreSplitPostSubmitTimeoutException("job did not finish in 300s");
+
+        // Caller (load executor) is expected to catch this and abort the load txn.
+        Assertions.assertThrows(PreSplitPostSubmitTimeoutException.class,
+                () -> invokeRunPreSplit(pipeline));
+    }
+
+    @Test
+    public void testRunPreSplitJobFailureBeforeFinishMapsToSkipped() throws Exception {
+        // The admitted job entered a terminal-error state (e.g. CANCELLED) before reaching FINISHED.
+        FakePipeline pipeline = new FakePipeline();
+        pipeline.awaitThrow = new StarRocksException("job CANCELLED");
+
+        PreSplitOutcome outcome = invokeRunPreSplit(pipeline);
+
+        assertSkipped(outcome, SkipReason.JOB_FAILED_BEFORE_FINISH);
+    }
+
+    @Test
+    public void testRunPreSplitRejectsNullPipeline() {
+        Assertions.assertThrows(NullPointerException.class, () -> TabletPreSplitCoordinator.runPreSplit(
+                database, table, PARTITION_ID, DUMMY_CONTEXT, null, 3));
+    }
+
+    @Test
+    public void testRunPreSplitRejectsNonPositiveComputeNodeCount() {
+        FakePipeline pipeline = new FakePipeline();
+        Assertions.assertThrows(IllegalArgumentException.class, () -> TabletPreSplitCoordinator.runPreSplit(
+                database, table, PARTITION_ID, DUMMY_CONTEXT, pipeline, 0));
     }
 }

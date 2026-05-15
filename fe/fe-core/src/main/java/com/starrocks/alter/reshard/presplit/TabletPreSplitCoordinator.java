@@ -21,23 +21,31 @@ import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.common.Config;
+import com.starrocks.common.StarRocksException;
+import com.starrocks.common.util.DebugUtil;
 import com.starrocks.qe.ConnectContext;
 
+import java.time.Duration;
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 
 /**
- * FE-side orchestrator for Sample-Based Tablet Pre-Split. The integrating
- * load path (INSERT-from-FILES, Broker Load) calls
- * {@link #maybeAct(Database, OlapTable, long, ScanContext)} after the scan
- * side is resolved and before the load coordinator runs.
+ * FE-side orchestrator for Sample-Based Tablet Pre-Split.
  *
- * <p>Currently a pure eligibility gate: every check that fails produces a
- * specific {@link SkipReason} for downstream bvar labels. A passing gate
- * returns {@link PreSplitOutcome.Eligible}; later stages of this feature
- * will extend the outcome shape with planning and submission results.
+ * <p>{@link #maybeAct(Database, OlapTable, long, ScanContext)} is the
+ * eligibility gate — every check that fails produces a specific
+ * {@link SkipReason} for downstream bvar labels.
+ * {@link #runPreSplit(Database, OlapTable, long, ScanContext, PreSplitPipeline, int)}
+ * is the full entry point used by the integrating load path (INSERT-from-FILES,
+ * Broker Load): it runs the eligibility gate, then drives the
+ * {@link PreSplitPipeline} through the pre-submit / submit / post-submit
+ * phases described in the design doc.
  */
 public final class TabletPreSplitCoordinator {
+
+    /** Tier-2 sample byte budget when no Config gate is wired up. 16 MiB ≈ 10k 1.5 KB tuples. */
+    private static final long DEFAULT_SAMPLE_BYTE_LIMIT = 16L * DebugUtil.MEGABYTE;
 
     private TabletPreSplitCoordinator() {
     }
@@ -114,6 +122,69 @@ public final class TabletPreSplitCoordinator {
         // sampler tuples) is BoundaryPlanner's job at plan time; this gate only needs to keep
         // composite/complex types out of the external-boundaries split path.
         return keyColumns.get(0).getType().isScalarType();
+    }
+
+    /**
+     * Run eligibility, then drive the pipeline through the three pre-split phases.
+     *
+     * <p>Failures are mapped to {@link PreSplitOutcome.Skipped} with a specific
+     * {@link SkipReason} so the load proceeds against the original single tablet:
+     * {@link SkipReason#TIMEOUT_PRE_SUBMIT}, {@link SkipReason#SAMPLE_FAILED},
+     * {@link SkipReason#NO_USEFUL_CUTS}, {@link SkipReason#SUBMIT_FAILED}.
+     * On post-submit timeout the method throws
+     * {@link PreSplitPostSubmitTimeoutException} so the load executor's DML
+     * try/catch can abort the transaction — committing against stale tablet
+     * metadata is unsafe.
+     *
+     * @param activeComputeNodeCount compute nodes available to the load after
+     *                               warehouse/blocklist filtering (passed to the
+     *                               pipeline's internal tablet-count selector).
+     */
+    public static PreSplitOutcome runPreSplit(
+            Database db, OlapTable table, long physicalPartitionId, ScanContext scanContext,
+            PreSplitPipeline pipeline, int activeComputeNodeCount) throws PreSplitPostSubmitTimeoutException {
+        Objects.requireNonNull(pipeline, "pipeline");
+        Preconditions.checkArgument(activeComputeNodeCount >= 1,
+                "activeComputeNodeCount must be >= 1, was %s", activeComputeNodeCount);
+
+        PreSplitOutcome eligibility = maybeAct(db, table, physicalPartitionId, scanContext);
+        if (!(eligibility instanceof PreSplitOutcome.Eligible)) {
+            return eligibility;
+        }
+
+        SampleRequest sampleRequest = new SampleRequest(
+                scanContext, table.getKeyColumnsInOrder(), DEFAULT_SAMPLE_BYTE_LIMIT, /*seed*/ 0L);
+        Duration preSubmitTimeout = Duration.ofSeconds(Config.tablet_pre_split_pre_submit_timeout_seconds);
+        Duration postSubmitTimeout = Duration.ofSeconds(Config.tablet_pre_split_post_submit_wait_seconds);
+
+        Optional<PreSplitPipeline.PreparedReshardJob> prepared;
+        try {
+            prepared = pipeline.preSubmit(sampleRequest, activeComputeNodeCount, preSubmitTimeout);
+        } catch (PreSplitPreSubmitTimeoutException timeout) {
+            return new PreSplitOutcome.Skipped(SkipReason.TIMEOUT_PRE_SUBMIT);
+        } catch (StarRocksException sampleFailure) {
+            return new PreSplitOutcome.Skipped(SkipReason.SAMPLE_FAILED);
+        }
+        if (prepared.isEmpty()) {
+            return new PreSplitOutcome.Skipped(SkipReason.NO_USEFUL_CUTS);
+        }
+
+        PreSplitPipeline.PreparedReshardJob preparedJob = prepared.get();
+        try {
+            pipeline.submit(preparedJob);
+        } catch (StarRocksException submitFailure) {
+            return new PreSplitOutcome.Skipped(SkipReason.SUBMIT_FAILED);
+        }
+
+        try {
+            pipeline.awaitFinished(preparedJob, postSubmitTimeout);
+        } catch (PreSplitPostSubmitTimeoutException timeout) {
+            // Propagate so the load executor aborts the transaction.
+            throw timeout;
+        } catch (StarRocksException waitFailure) {
+            return new PreSplitOutcome.Skipped(SkipReason.JOB_FAILED_BEFORE_FINISH);
+        }
+        return new PreSplitOutcome.Finished();
     }
 
     /**
