@@ -184,7 +184,9 @@ public class SkewJoinOptimizeRule extends TransformationRule {
             if (!skewInfoOpt.get().isSkewed()) {
                 return false;
             }
-            final var otherColumn = (ColumnRefOperator) equalConj.getChild(1);
+            final var leftCol = (ColumnRefOperator) equalConj.getChild(0);
+            final var rightCol = (ColumnRefOperator) equalConj.getChild(1);
+            final var otherColumn = columnOpt.get().equals(leftCol) ? rightCol : leftCol;
             skewedPredicates.add(new PredicateSkewInfo(columnOpt.get(), otherColumn, skewInfoOpt.get()));
         }
 
