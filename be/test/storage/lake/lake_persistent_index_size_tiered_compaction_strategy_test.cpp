@@ -509,8 +509,8 @@ TEST_F(LakePersistentIndexSizeTieredCompactionStrategyTest, test_pick_multi_leve
     // L2: 3 filesets ~500KB each (lower score, but still ≥ min_compaction_filesets=2)
     // Plus a base level so merge_base_level can be evaluated.
     std::vector<std::tuple<int64_t, int64_t, uint64_t>> sstables_info = {
-            {1, 100000, 100}, {2, 105000, 200}, {3, 98000, 300},   // L1
-            {4, 500000, 400}, {5, 510000, 500}, {6, 495000, 600},  // L2
+            {1, 100000, 100},  {2, 105000, 200}, {3, 98000, 300},  // L1
+            {4, 500000, 400},  {5, 510000, 500}, {6, 495000, 600}, // L2
             {7, 2600000, 700},                                     // base
     };
     auto metadata = create_tablet_metadata_with_sstables(sstables_info);
@@ -531,8 +531,8 @@ TEST_F(LakePersistentIndexSizeTieredCompactionStrategyTest, test_pick_multi_leve
 
     // Same fileset layout as the enabled case.
     std::vector<std::tuple<int64_t, int64_t, uint64_t>> sstables_info = {
-            {1, 100000, 100}, {2, 105000, 200}, {3, 98000, 300},   // L1
-            {4, 500000, 400}, {5, 510000, 500}, {6, 495000, 600},  // L2
+            {1, 100000, 100},  {2, 105000, 200}, {3, 98000, 300},  // L1
+            {4, 500000, 400},  {5, 510000, 500}, {6, 495000, 600}, // L2
             {7, 2600000, 700},                                     // base
     };
     auto metadata = create_tablet_metadata_with_sstables(sstables_info);
@@ -557,8 +557,8 @@ TEST_F(LakePersistentIndexSizeTieredCompactionStrategyTest, test_pick_multi_leve
     config::lake_pk_index_sst_max_compaction_versions = 4;
 
     std::vector<std::tuple<int64_t, int64_t, uint64_t>> sstables_info = {
-            {1, 100000, 100}, {2, 105000, 200}, {3, 98000, 300},   // L1: 3
-            {4, 500000, 400}, {5, 510000, 500}, {6, 495000, 600},  // L2: 3
+            {1, 100000, 100},  {2, 105000, 200}, {3, 98000, 300},  // L1: 3
+            {4, 500000, 400},  {5, 510000, 500}, {6, 495000, 600}, // L2: 3
             {7, 2600000, 700},                                     // base
     };
     auto metadata = create_tablet_metadata_with_sstables(sstables_info);
