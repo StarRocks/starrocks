@@ -30,6 +30,8 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.IOException;
+import java.util.Collections;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
@@ -118,6 +120,30 @@ public class BookmarkManager extends FrontendDaemon {
         }
     }
 
+    public void releaseAllForHolder(long dbId, long tableId, HolderId holderId) {
+        Preconditions.checkNotNull(holderId);
+        // Get the id list inside trackerMapLock so we don't touch a tracker once
+        // the outer lock is dropped; releaseReference re-takes the lock per id.
+        List<Long> bookmarkIds;
+        trackerMapLock.readLock().lock();
+        try {
+            Optional<TableBookmarkTracker> trOpt = getTrackerLocked(dbId, tableId, false);
+            if (trOpt.isEmpty()) {
+                return;
+            }
+            bookmarkIds = trOpt.get().listBookmarkIdsByHolder(holderId);
+        } finally {
+            trackerMapLock.readLock().unlock();
+        }
+        for (long bookmarkId : bookmarkIds) {
+            try {
+                releaseReference(dbId, tableId, bookmarkId, holderId);
+            } catch (BookmarkNotFoundException | ReferenceNotFoundException ignored) {
+                // Released concurrently — at-most-once semantics of releaseReference.
+            }
+        }
+    }
+
     /* ---------- queries ---------- */
 
     public Optional<Bookmark> findBookmarkById(long dbId, long tableId, long bookmarkId) {
@@ -133,6 +159,18 @@ public class BookmarkManager extends FrontendDaemon {
         trackerMapLock.readLock().lock();
         try {
             return getTrackerLocked(dbId, tableId, false).flatMap(tr -> tr.findByTimestamp(ts));
+        } finally {
+            trackerMapLock.readLock().unlock();
+        }
+    }
+
+    public List<Long> listBookmarkIdsByHolder(long dbId, long tableId, HolderId holderId) {
+        Preconditions.checkNotNull(holderId);
+        trackerMapLock.readLock().lock();
+        try {
+            return getTrackerLocked(dbId, tableId, false)
+                    .map(tr -> tr.listBookmarkIdsByHolder(holderId))
+                    .orElse(Collections.emptyList());
         } finally {
             trackerMapLock.readLock().unlock();
         }

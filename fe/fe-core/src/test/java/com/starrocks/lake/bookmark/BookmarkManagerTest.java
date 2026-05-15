@@ -22,6 +22,7 @@ import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.Test;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -221,6 +222,90 @@ public class BookmarkManagerTest extends BookmarkTestBase {
 
         // Unknown partition pair → empty.
         assertFalse(mgr.getPhysicalPartitionFenceVersion(dbId, tableId, 999_999L, 999_999L).isPresent());
+    }
+
+    /* ---------- Holder lookups / bulk release ---------- */
+
+    @Test
+    public void testListBookmarkIdsByHolder() throws Exception {
+        long tableId = createDefaultTable();
+        long otherTableId = createDefaultTable();
+        long noTrackerTableId = createDefaultTable();
+        BookmarkManager mgr = manager();
+        BookmarkHolder h1 = BookmarkHolder.forEmptyInfo("list_h1");
+        BookmarkHolder h2 = BookmarkHolder.forEmptyInfo("list_h2");
+
+        // 1. No tracker → empty.
+        assertTrue(mgr.listBookmarkIdsByHolder(dbId, noTrackerTableId, h1.getHolderId()).isEmpty());
+
+        // 2. h1 holds one bookmark on `tableId`.
+        Bookmark b1 = mgr.create(dbId, tableId, h1);
+        assertEquals(List.of(b1.getBookmarkId()),
+                mgr.listBookmarkIdsByHolder(dbId, tableId, h1.getHolderId()));
+
+        // 3. h2 holds nothing on `tableId` even though the tracker exists.
+        assertTrue(mgr.listBookmarkIdsByHolder(dbId, tableId, h2.getHolderId()).isEmpty());
+
+        // 4. ALTER ADD PARTITION then h1 creates a second bookmark — ascending order.
+        addPartition(tableId, "p3", "2024-04-01");
+        Bookmark b2 = mgr.create(dbId, tableId, h1);
+        assertEquals(List.of(b1.getBookmarkId(), b2.getBookmarkId()),
+                mgr.listBookmarkIdsByHolder(dbId, tableId, h1.getHolderId()));
+
+        // 5. h2 attaches to b2 only — list returns only the matched id, not all active ids.
+        mgr.acquireReference(dbId, tableId, b2.getBookmarkId(), h2);
+        assertEquals(List.of(b2.getBookmarkId()),
+                mgr.listBookmarkIdsByHolder(dbId, tableId, h2.getHolderId()));
+
+        // 6. Listing is scoped to (dbId, tableId): h1 on a different table is empty.
+        assertTrue(mgr.listBookmarkIdsByHolder(dbId, otherTableId, h1.getHolderId()).isEmpty());
+    }
+
+    @Test
+    public void testReleaseAllForHolder() throws Exception {
+        long tableA = createDefaultTable();
+        long tableB = createDefaultTable();
+        long noTrackerTableId = createDefaultTable();
+        BookmarkManager mgr = manager();
+        BookmarkHolder h1 = BookmarkHolder.forEmptyInfo("rall_h1");
+        BookmarkHolder h2 = BookmarkHolder.forEmptyInfo("rall_h2");
+
+        // h1 holds two bookmarks on tableA (one shared with h2) plus one on tableB.
+        Bookmark bA1 = mgr.create(dbId, tableA, h1);
+        mgr.acquireReference(dbId, tableA, bA1.getBookmarkId(), h2);
+        addPartition(tableA, "p3", "2024-04-01");
+        Bookmark bA2 = mgr.create(dbId, tableA, h1);
+        Bookmark bB = mgr.create(dbId, tableB, h1);
+        assertEquals(2, mgr.referenceCount(dbId, tableA, bA1.getBookmarkId()));
+        assertEquals(1, mgr.referenceCount(dbId, tableA, bA2.getBookmarkId()));
+        assertEquals(1, mgr.referenceCount(dbId, tableB, bB.getBookmarkId()));
+
+        // 1. Release h1 on tableA only — leaves bA1 alive (h2 still holds it), drops bA2,
+        // and does NOT touch tableB.
+        mgr.releaseAllForHolder(dbId, tableA, h1.getHolderId());
+        assertEquals(1, mgr.referenceCount(dbId, tableA, bA1.getBookmarkId()));
+        assertTrue(mgr.findBookmarkById(dbId, tableA, bA1.getBookmarkId()).isPresent());
+        assertFalse(mgr.findBookmarkById(dbId, tableA, bA2.getBookmarkId()).isPresent());
+        assertTrue(mgr.listBookmarkIdsByHolder(dbId, tableA, h1.getHolderId()).isEmpty());
+        assertEquals(1, mgr.referenceCount(dbId, tableB, bB.getBookmarkId()));
+
+        // 2. Idempotent: second call on the same scope is a silent no-op and doesn't touch h2.
+        mgr.releaseAllForHolder(dbId, tableA, h1.getHolderId());
+        assertEquals(1, mgr.referenceCount(dbId, tableA, bA1.getBookmarkId()));
+
+        // 3. Releasing h1 on tableB drops bB (its only reference).
+        mgr.releaseAllForHolder(dbId, tableB, h1.getHolderId());
+        assertFalse(mgr.findBookmarkById(dbId, tableB, bB.getBookmarkId()).isPresent());
+
+        // 4. Releasing h2 reclaims the last reference on bA1.
+        mgr.releaseAllForHolder(dbId, tableA, h2.getHolderId());
+        assertFalse(mgr.findBookmarkById(dbId, tableA, bA1.getBookmarkId()).isPresent());
+
+        // 5. No tracker for table → no-op.
+        mgr.releaseAllForHolder(dbId, noTrackerTableId, h1.getHolderId());
+
+        // 6. Holder owns nothing on the (already-empty) table → no-op.
+        mgr.releaseAllForHolder(dbId, tableA, BookmarkHolder.forEmptyInfo("rall_unknown").getHolderId());
     }
 
     /* ---------- Replay ---------- */

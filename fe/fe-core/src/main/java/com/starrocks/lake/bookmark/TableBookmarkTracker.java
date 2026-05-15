@@ -31,6 +31,8 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.NavigableMap;
 import java.util.Objects;
@@ -240,6 +242,23 @@ public class TableBookmarkTracker {
                 }
             }
             return Optional.empty();
+        } finally {
+            rwLock.readLock().unlock();
+        }
+    }
+
+    /** Ids of bookmarks {@code holderId} references in this tracker, ascending. */
+    public List<Long> listBookmarkIdsByHolder(HolderId holderId) {
+        Objects.requireNonNull(holderId, "holderId");
+        rwLock.readLock().lock();
+        try {
+            List<Long> ids = new ArrayList<>();
+            for (Map.Entry<Long, ReferenceSet> e : referencesByBookmark.entrySet()) {
+                if (e.getValue().get(holderId) != null) {
+                    ids.add(e.getKey());
+                }
+            }
+            return ids;
         } finally {
             rwLock.readLock().unlock();
         }
