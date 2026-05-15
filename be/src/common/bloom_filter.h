@@ -35,8 +35,10 @@
 #pragma once
 
 #include <cstdint>
+#include <cstring>
 #include <functional>
 #include <memory>
+#include <string>
 
 #include "base/hash/hash_std.hpp"
 #include "base/hash/murmur_hash3.h"
@@ -44,7 +46,6 @@
 #include "common/status.h"
 #include "gen_cpp/segment.pb.h"
 #include "gutil/strings/substitute.h"
-#include "storage/utils.h"
 
 namespace starrocks {
 class Slice;

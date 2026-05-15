@@ -19,6 +19,7 @@
 #include "column/nullable_column.h"
 #include "column/raw_data_visitor.h"
 #include "column/vectorized_fwd.h"
+#include "common/bloom_filter.h"
 #include "gutil/casts.h"
 #include "roaring/roaring.hh"
 #include "runtime/runtime_filter.h"
@@ -27,7 +28,6 @@
 #include "storage/olap_type_infra.h"
 #include "storage/rowset/bitmap_index_reader.h"
 #include "types/logical_type.h"
-#include "util/bloom_filter.h"
 
 namespace starrocks {
 

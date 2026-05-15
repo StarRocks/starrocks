@@ -34,7 +34,7 @@
 
 #pragma once
 
-#include "util/bloom_filter.h"
+#include "common/bloom_filter.h"
 
 namespace starrocks {
 

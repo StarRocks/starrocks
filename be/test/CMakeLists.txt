@@ -521,7 +521,6 @@ SET(DW_TEST_FILES
     ./storage/rowset/binary_prefix_page_test.cpp
     ./storage/rowset/bitmap_index_test.cpp
     ./storage/rowset/bitshuffle_page_test.cpp
-    ./storage/rowset/block_bloom_filter_test.cpp
     ./storage/rowset/bloom_filter_index_reader_writer_test.cpp
     ./storage/rowset/cast_column_iterator_test.cpp
     ./storage/rowset/column_iterator_decorator_test.cpp

@@ -19,13 +19,13 @@
 
 #include "base/phmap/phmap.h"
 #include "base/phmap/phmap_dump.h"
+#include "common/bloom_filter.h"
 #include "common/statusor.h"
 #include "fs/fs.h"
 #include "gen_cpp/persistent_index.pb.h"
 #include "storage/edit_version.h"
 #include "storage/rowset/rowset.h"
 #include "storage/storage_engine.h"
-#include "util/bloom_filter.h"
 
 namespace starrocks {
 

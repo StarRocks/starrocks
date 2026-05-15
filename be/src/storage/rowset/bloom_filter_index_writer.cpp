@@ -41,6 +41,7 @@
 #include "base/hash/unaligned_access.h"
 #include "base/string/slice.h"
 #include "base/string/utf8.h"
+#include "common/bloom_filter.h" // for BloomFilterOptions, BloomFilter
 #include "fs/fs.h"
 #include "storage/olap_type_infra.h"
 #include "storage/rowset/common.h"
@@ -50,7 +51,6 @@
 #include "storage/types.h"
 #include "types/logical_type.h"
 #include "types/storage_type_traits.h"
-#include "util/bloom_filter.h" // for BloomFilterOptions, BloomFilter
 
 namespace starrocks {
 

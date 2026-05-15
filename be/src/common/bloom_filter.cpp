@@ -32,14 +32,17 @@
 // specific language governing permissions and limitations
 // under the License.
 
+#include "common/bloom_filter.h"
+
+#include <cmath>
 #include <cstdint>
 #include <functional>
 #include <memory>
 
+#include "base/hash/hash_util.hpp"
+#include "common/block_split_bloom_filter.h"
 #include "gen_cpp/segment.pb.h"
 #include "gutil/strings/substitute.h"
-#include "storage/utils.h"
-#include "util/block_split_bloom_filter.h"
 
 namespace starrocks {
 
