@@ -814,20 +814,7 @@ public class QueryAnalyzer {
                     QueryStatement queryStatement = view.getQueryStatement();
                     ViewRelation viewRelation = new ViewRelation(tableName, view, queryStatement);
 
-                    // If tableRelation is an object that needs to be rewritten by policy,
-                    // then when it is changed to ViewRelation, both the view and the table
-                    // after the view is parsed also need to inherit this rewriting logic.
-                    if (tableRelation.isNeedRewrittenByPolicy()) {
-                        viewRelation.setNeedRewrittenByPolicy(true);
-
-                        new AstTraverser<Void, Void>() {
-                            @Override
-                            public Void visitRelation(Relation relation, Void context) {
-                                relation.setNeedRewrittenByPolicy(true);
-                                return null;
-                            }
-                        }.visit(queryStatement);
-                    }
+                    inheritPolicyRewriteFlag(tableRelation, viewRelation, queryStatement);
                     viewRelation.setAlias(tableRelation.getAlias());
 
                     r = viewRelation;
@@ -840,6 +827,7 @@ public class QueryAnalyzer {
                             connectorView.getType());
                     view.setInlineViewDefWithSqlMode(connectorView.getInlineViewDef(), 0);
                     ViewRelation viewRelation = new ViewRelation(tableName, view, queryStatement);
+                    inheritPolicyRewriteFlag(tableRelation, viewRelation, queryStatement);
                     viewRelation.setAlias(tableRelation.getAlias());
 
                     r = viewRelation;
@@ -885,6 +873,25 @@ public class QueryAnalyzer {
                 }
                 return relation;
             }
+        }
+
+        // If tableRelation is an object that needs to be rewritten by policy,
+        // then when it is changed to ViewRelation, both the view and the table
+        // after the view is parsed also need to inherit this rewriting logic.
+        private void inheritPolicyRewriteFlag(TableRelation tableRelation, ViewRelation viewRelation,
+                                              QueryStatement queryStatement) {
+            if (!tableRelation.isNeedRewrittenByPolicy()) {
+                return;
+            }
+
+            viewRelation.setNeedRewrittenByPolicy(true);
+            new AstTraverser<Void, Void>() {
+                @Override
+                public Void visitRelation(Relation relation, Void context) {
+                    relation.setNeedRewrittenByPolicy(true);
+                    return null;
+                }
+            }.visit(queryStatement);
         }
 
         // convert FileTableFunctionRelation to ValuesRelation if only list files
