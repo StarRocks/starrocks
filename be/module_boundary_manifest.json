@@ -141,7 +141,8 @@
         "be/src/fs/fs_factory.*",
         "be/src/fs/fs_posix.*",
         "be/src/fs/fs_registry.*",
-        "be/src/fs/fs_scheme.*"
+        "be/src/fs/fs_scheme.*",
+        "be/src/fs/fs_util.*"
       ],
       "allowed_include_prefixes": ["fs/", "io/core/", "common/", "base/", "gutil/", "gen_cpp/"],
       "forbidden_include_prefixes": ["fs/azure/", "fs/credential/", "fs/hdfs/", "fs/s3/"],
@@ -150,7 +151,6 @@
         "fs/fs_options_helper.h",
         "fs/fs_s3.h",
         "fs/fs_starlet.h",
-        "fs/fs_util.h",
         "fs/key_cache.h",
         "fs/output_stream_adapter.h"
       ],

@@ -28,6 +28,7 @@ set(CORE_FILES
     fs_posix.cpp
     fs_registry.cpp
     fs_scheme.cpp
+    fs_util.cpp
     )
 
 ADD_BE_LIB(FSCore
@@ -51,7 +52,6 @@ set(EXEC_FILES
     s3/poco_http_client_factory.cpp
     s3/poco_http_client.cpp
     s3/poco_common.cpp
-    fs_util.cpp
     )
 
 if (NOT BUILD_FORMAT_LIB)

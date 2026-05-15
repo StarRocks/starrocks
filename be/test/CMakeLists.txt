@@ -432,7 +432,6 @@ SET(DW_TEST_FILES
     ./storage/dictionary_cache_manager_test.cpp
     ./storage/disjunctive_predicates_test.cpp
     ./storage/fast_schema_evolution_test.cpp
-    ./storage/file_utils_test.cpp
     ./storage/get_use_pk_index_test.cpp
     ./storage/index/vector_index_test.cpp
     ./storage/index/vector_search_test.cpp

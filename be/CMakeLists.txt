@@ -536,6 +536,7 @@ endif()
 # Set starrocks libraries
 set(STARROCKS_LINK_LIBS
     Webserver
+    Tools
     ${WL_START_GROUP}
     Agent
     Connector
@@ -551,7 +552,6 @@ set(STARROCKS_LINK_LIBS
     Udf
     Util
     Script
-    Tools
     orc
     ${WL_END_GROUP}
     ${WL_WHOLE_ARCHIVE_PREFIX} $<TARGET_FILE:ExprCore> ${WL_WHOLE_ARCHIVE_SUFFIX}
