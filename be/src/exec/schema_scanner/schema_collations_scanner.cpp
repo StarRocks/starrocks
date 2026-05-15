@@ -27,11 +27,15 @@ SchemaScanner::ColumnDesc SchemaCollationsScanner::_s_cols_columns[] = {
         {"IS_DEFAULT", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), false},
         {"IS_COMPILED", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), false},
         {"SORTLEN", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
+        {"PAD_ATTRIBUTE", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), false},
 };
 
+// PAD_ATTRIBUTE follows MySQL 8 rules: UCA 9.0.0+ collations (utf8mb4_0900_*)
+// are NO PAD, all others (including utf8_general_ci) are PAD SPACE. See MySQL
+// reference manual section "Trailing Space Handling in Comparisons".
 SchemaCollationsScanner::CollationStruct SchemaCollationsScanner::_s_collations[] = {
-        {"utf8_general_ci", "utf8", 33, "Yes", "Yes", 1},
-        {nullptr, nullptr, 0, nullptr, nullptr, 0},
+        {"utf8_general_ci", "utf8", 33, "Yes", "Yes", 1, "PAD SPACE"},
+        {nullptr, nullptr, 0, nullptr, nullptr, 0, nullptr},
 };
 
 SchemaCollationsScanner::SchemaCollationsScanner()
@@ -92,6 +96,15 @@ Status SchemaCollationsScanner::fill_chunk(ChunkPtr* chunk) {
             {
                 auto* column = (*chunk)->get_column_raw_ptr_by_slot_id(6);
                 fill_column_with_slot<TYPE_BIGINT>(column, (void*)&_s_collations[_index].sortlen);
+            }
+            break;
+        }
+        case 7: {
+            // pad_attribute
+            {
+                auto* column = (*chunk)->get_column_raw_ptr_by_slot_id(7);
+                Slice value(_s_collations[_index].pad_attribute, strlen(_s_collations[_index].pad_attribute));
+                fill_column_with_slot<TYPE_VARCHAR>(column, (void*)&value);
             }
             break;
         }

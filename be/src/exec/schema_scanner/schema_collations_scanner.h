@@ -36,6 +36,7 @@ private:
         const char* is_default;
         const char* is_compile;
         int64_t sortlen;
+        const char* pad_attribute;
     };
 
     Status fill_chunk(ChunkPtr* chunk);
