@@ -873,6 +873,30 @@ std::shared_ptr<RuntimeProfile> JoinHashMapTest::create_runtime_profile() {
     return profile;
 }
 
+<<<<<<< HEAD
+=======
+DescriptorTbl* JoinHashMapTest::create_descriptor_tbl(TDescriptorTableBuilder* table_desc_builder) {
+    auto* tbl = _object_pool->add(new DescriptorTbl());
+    auto thrift_tbl = table_desc_builder->desc_tbl();
+
+    for (const auto& tdesc : thrift_tbl.tupleDescriptors) {
+        auto* tuple_desc = _object_pool->add(new TupleDescriptor(tdesc));
+        tbl->_tuple_desc_map[tdesc.id] = tuple_desc;
+    }
+
+    for (const auto& sdesc : thrift_tbl.slotDescriptors) {
+        auto* slot_desc = _object_pool->add(new SlotDescriptor(sdesc));
+        tbl->_slot_desc_map[sdesc.id] = slot_desc;
+
+        auto tuple = tbl->_tuple_desc_map.find(sdesc.parent);
+        CHECK(tuple != tbl->_tuple_desc_map.end());
+        tuple->second->add_slot(slot_desc);
+    }
+
+    return tbl;
+}
+
+>>>>>>> a6834e9e7d ([BugFix] Fix slot lookup for output slots with empty col_name in spark connector external scan (#73225))
 std::shared_ptr<RowDescriptor> JoinHashMapTest::create_row_desc(TDescriptorTableBuilder* table_desc_builder) {
     std::vector<TTupleId> row_tuples = std::vector<TTupleId>{0, 1};
     DescriptorTbl* tbl = nullptr;
