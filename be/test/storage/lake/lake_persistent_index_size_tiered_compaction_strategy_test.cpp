@@ -497,4 +497,81 @@ TEST_F(LakePersistentIndexSizeTieredCompactionStrategyTest, test_level_multiple_
     EXPECT_EQ(result.candidate_filesets.size(), 2);
 }
 
+// Multi-level pick: two priority levels each satisfying min_compaction_filesets.
+// With pk_index_size_tiered_pick_multi_levels = true, both levels feed the same
+// cycle so the parallel compact pool can drain them concurrently. With false,
+// only the highest-score level is picked — preserves the pre-patch behaviour.
+TEST_F(LakePersistentIndexSizeTieredCompactionStrategyTest, test_pick_multi_levels_enabled) {
+    bool old_pick_multi = config::pk_index_size_tiered_pick_multi_levels;
+    config::pk_index_size_tiered_pick_multi_levels = true;
+
+    // L1: 3 filesets ~100KB each (high score, low size band)
+    // L2: 3 filesets ~500KB each (lower score, but still ≥ min_compaction_filesets=2)
+    // Plus a base level so merge_base_level can be evaluated.
+    std::vector<std::tuple<int64_t, int64_t, uint64_t>> sstables_info = {
+            {1, 100000, 100}, {2, 105000, 200}, {3, 98000, 300},   // L1
+            {4, 500000, 400}, {5, 510000, 500}, {6, 495000, 600},  // L2
+            {7, 2600000, 700},                                     // base
+    };
+    auto metadata = create_tablet_metadata_with_sstables(sstables_info);
+
+    ASSIGN_OR_ABORT(
+            CompactionCandidateResult result,
+            LakePersistentIndexSizeTieredCompactionStrategy::pick_compaction_candidates(metadata->sstable_meta()));
+
+    // Both L1 and L2 picked => 6 filesets total.
+    EXPECT_EQ(6, result.candidate_filesets.size());
+
+    config::pk_index_size_tiered_pick_multi_levels = old_pick_multi;
+}
+
+TEST_F(LakePersistentIndexSizeTieredCompactionStrategyTest, test_pick_multi_levels_disabled) {
+    bool old_pick_multi = config::pk_index_size_tiered_pick_multi_levels;
+    config::pk_index_size_tiered_pick_multi_levels = false;
+
+    // Same fileset layout as the enabled case.
+    std::vector<std::tuple<int64_t, int64_t, uint64_t>> sstables_info = {
+            {1, 100000, 100}, {2, 105000, 200}, {3, 98000, 300},   // L1
+            {4, 500000, 400}, {5, 510000, 500}, {6, 495000, 600},  // L2
+            {7, 2600000, 700},                                     // base
+    };
+    auto metadata = create_tablet_metadata_with_sstables(sstables_info);
+
+    ASSIGN_OR_ABORT(
+            CompactionCandidateResult result,
+            LakePersistentIndexSizeTieredCompactionStrategy::pick_compaction_candidates(metadata->sstable_meta()));
+
+    // Only the highest-score level (L1) is picked => 3 filesets.
+    EXPECT_EQ(3, result.candidate_filesets.size());
+
+    config::pk_index_size_tiered_pick_multi_levels = old_pick_multi;
+}
+
+// When multi-level pick fills past lake_pk_index_sst_max_compaction_versions,
+// the loop must stop at the cap — picking partway through the second level is
+// fine, picking more than the cap is a bug.
+TEST_F(LakePersistentIndexSizeTieredCompactionStrategyTest, test_pick_multi_levels_capped_by_max_versions) {
+    bool old_pick_multi = config::pk_index_size_tiered_pick_multi_levels;
+    int32_t old_max_versions = config::lake_pk_index_sst_max_compaction_versions;
+    config::pk_index_size_tiered_pick_multi_levels = true;
+    config::lake_pk_index_sst_max_compaction_versions = 4;
+
+    std::vector<std::tuple<int64_t, int64_t, uint64_t>> sstables_info = {
+            {1, 100000, 100}, {2, 105000, 200}, {3, 98000, 300},   // L1: 3
+            {4, 500000, 400}, {5, 510000, 500}, {6, 495000, 600},  // L2: 3
+            {7, 2600000, 700},                                     // base
+    };
+    auto metadata = create_tablet_metadata_with_sstables(sstables_info);
+
+    ASSIGN_OR_ABORT(
+            CompactionCandidateResult result,
+            LakePersistentIndexSizeTieredCompactionStrategy::pick_compaction_candidates(metadata->sstable_meta()));
+
+    // L1 (3) + 1 from L2 = 4, hit the cap.
+    EXPECT_EQ(4, result.candidate_filesets.size());
+
+    config::pk_index_size_tiered_pick_multi_levels = old_pick_multi;
+    config::lake_pk_index_sst_max_compaction_versions = old_max_versions;
+}
+
 } // namespace starrocks::lake
