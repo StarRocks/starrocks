@@ -28,16 +28,10 @@ set(HTTP_CORE_FILES
   http_parser.cpp
   http_stream_channel.cpp
   ev_http_server.cpp
-)
-
-ADD_BE_LIB(HttpCore ${HTTP_CORE_FILES})
-
-set(HTTP_CLIENT_FILES
   http_client.cpp
 )
 
-ADD_BE_LIB(HttpClient ${HTTP_CLIENT_FILES})
-target_link_libraries(HttpClient PUBLIC HttpCore FileSystem)
+ADD_BE_LIB(HttpCore ${HTTP_CORE_FILES})
 
 set(WEB_SERVER_FILES
   download_action.cpp

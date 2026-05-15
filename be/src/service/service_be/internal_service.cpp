@@ -36,7 +36,6 @@
 
 #include "base/brpc/brpc.h"
 #include "base/uid_util.h"
-#include "common/utils.h"
 #include "exec/pipeline/fragment_context.h"
 #include "gen_cpp/BackendService.h"
 #include "gutil/strings/substitute.h"

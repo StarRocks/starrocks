@@ -637,7 +637,22 @@ Status EngineCloneTask::_download_files(DataDir* data_dir, const std::string& re
         auto download_cb = [&remote_file_url, estimate_timeout, &local_file_path, file_size](HttpClient* client) {
             RETURN_IF_ERROR(client->init(remote_file_url));
             client->set_timeout_ms(estimate_timeout * 1000);
-            RETURN_IF_ERROR(client->download(local_file_path));
+            WritableFileOptions opts{.sync_on_close = true, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
+            ASSIGN_OR_RETURN(auto output_file, FileSystem::Default()->new_writable_file(opts, local_file_path));
+
+            Status status;
+            auto write_cb = [&status, &output_file, &local_file_path](const void* data, size_t length) {
+                status = output_file->append(Slice(static_cast<const char*>(data), length));
+                if (!status.ok()) {
+                    LOG(WARNING) << "fail to write data to file, file=" << local_file_path << ", error=" << status;
+                    return status;
+                }
+                return Status::OK();
+            };
+            RETURN_IF_ERROR(client->download(write_cb, config::download_low_speed_limit_kbps,
+                                             config::download_low_speed_time, config::max_download_speed_kbps));
+            RETURN_IF_ERROR(status);
+            RETURN_IF_ERROR(output_file->close());
 
             // Check file length
             uint64_t local_file_size = std::filesystem::file_size(local_file_path);

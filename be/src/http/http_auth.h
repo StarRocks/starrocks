@@ -19,7 +19,7 @@
 
 #include <string>
 
-#include "common/utils.h"
+#include "base/auth/auth_info.h"
 
 namespace starrocks {
 
