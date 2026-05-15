@@ -49,6 +49,7 @@ public class StatisticsSystemTable {
                         .column("INDEX_TYPE", TypeFactory.createVarcharType(16))
                         .column("COMMENT", TypeFactory.createVarcharType(16))
                         .column("INDEX_COMMENT", TypeFactory.createVarcharType(1024))
+                        .column("IS_VISIBLE", TypeFactory.createVarcharType(3))
                         .column("EXPRESSION", TypeFactory.createVarcharType(MAX_FIELD_VARCHAR_LENGTH))
                         .build(), TSchemaTableType.SCH_STATISTICS);
     }
