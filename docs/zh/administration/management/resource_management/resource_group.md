@@ -3,6 +3,10 @@ displayed_sidebar: docs
 keywords: ['fuzai', 'ziyuan', 'ziyuanzu'] 
 ---
 
+import ScopeParam from '../../../_assets/commonMarkdown/rg_scope_param.mdx'
+import WhSyntaxExample from '../../../_assets/commonMarkdown/rg_wh_syntax_example.mdx'
+import WhAlterSyntax from '../../../_assets/commonMarkdown/rg_wh_alter_syntax.mdx'
+
 # 资源隔离
 
 本文介绍如何使用资源隔离功能。
@@ -36,7 +40,9 @@ keywords: ['fuzai', 'ziyuan', 'ziyuanzu']
 | 配置名称                    | 描述                                                       | 取值范围                                     | 默认值  |
 | -------------------------- | --------------------------------------------------------- | ------------------------------------------- | ------ |
 | cpu_weight                 | 该资源组在一个 BE 节点上调度 CPU 的权重。                           | (0, `avg_be_cpu_cores`] (大于 0 时生效)       | 0      |
+| cpu_weight_percent         | 该资源组在单个 BE 节点上调度 CPU 的权重百分比。自 v4.1 起支持。         | [0, 100] (大于 0 时生效)                      | 0      |
 | exclusive_cpu_cores        | 该资源组的 CPU 硬隔离参数。                                  | (0, `min_be_cpu_cores - 1`] (大于 0 时生效)   | 0      |
+| exclusive_cpu_percent      | 该资源组的 CPU 硬隔离百分比。自 v4.1 起支持。                         | [0, 100] (大于 0 时生效)                      | 0      |
 | mem_limit                  | 该资源组在当前 BE 节点可使用于查询的内存的比例。                 | (0, 1] (必填项)                              | -      |
 | mem_pool                   | 将资源组进行分组以共享内存限制。                 | 字符串                                     | default_mem_pool |
 | spill_mem_limit_threshold  | 该资源组触发落盘的内存占用阈值。                               | (0, 1]                                      | 1.0    |
@@ -47,31 +53,43 @@ keywords: ['fuzai', 'ziyuan', 'ziyuanzu']
 
 #### CPU 资源相关配置项
 
-##### `cpu_weight`
+##### `cpu_weight` 和 `cpu_weight_percent`
 
 该资源组在单个 BE 节点上调度 CPU 的权重。该值指定了该资源组的任务可用的 CPU 时间的相对份额。在 v3.3.5 以前，该配置名称为 `cpu_core_limit`。
 
-取值范围为 (0, `avg_be_cpu_cores`]，其中 `avg_be_cpu_cores` 表示所有 BE 的 CPU 核数的平均值。只有大于 0 时才生效。`cpu_weight` 和 `exclusive_cpu_cores` 有且只能有一个为正数。
+您可以通过以下任一参数设置该权重：
+
+- `cpu_weight`：直接设置 CPU 调度权重。取值范围为 (0, `avg_be_cpu_cores`]，其中 `avg_be_cpu_cores` 表示所有 BE 的 CPU 核数的平均值。只有大于 0 时才生效。
+- `cpu_weight_percent`：自 v4.1 起支持，用百分比设置 CPU 调度权重。取值范围为 [0, 100]。只有大于 0 时才生效。如果 `min_be_cpu_cores * cpu_weight_percent / 100 < 1`，系统会返回错误，其中 `min_be_cpu_cores` 表示所有 BE 的 CPU 核数的最小值。
+
+实际使用时，每个 BE 会根据本机 CPU 核数 `be_cpu_cores` 将 `cpu_weight_percent` 换算为真实的 `cpu_weight`：`cpu_weight = be_cpu_cores * cpu_weight_percent / 100`。
+
+`cpu_weight`、`cpu_weight_percent`、`exclusive_cpu_cores` 和 `exclusive_cpu_percent` 中有且只能有一个为正数。
 
 > **说明**
 >
 > 例如，假设设置了三个资源组 rg1、rg2、rg3，`cpu_weight` 分别设置为 `2`、`6`、`8`。如果当前 BE 节点满载，那么资源组 rg1、rg2、rg3 能分配到的 CPU 时间分别为 12.5%、37.5%、50%。如果当前 BE 节点资源非满载，rg1、rg2 有负载，rg3 无负载，那么资源组 rg1、rg2 分配到的 CPU 时间分别为 25% 和 75%。
 
-##### `exclusive_cpu_cores`
+##### `exclusive_cpu_cores` 和 `exclusive_cpu_percent`
 
 该项为资源组的 CPU 硬隔离参数，有如下双重含义：
 
-- **专属**：为该资源组预留 `exclusive_cpu_cores` 个 CPU Core，其余资源组不可以使用，即使这些 CPU 处于空闲状态。
-- **限额**：该资源组只能使用这 `exclusive_cpu_cores` 个 CPU Core。即使其他资源组有空闲的 CPU 资源，该资源组也不能使用。
+- **专属**：为该资源组预留指定数量的 CPU Core，其余资源组不可以使用，即使这些 CPU 处于空闲状态。
+- **限额**：该资源组只能使用这些预留的 CPU Core。即使其他资源组有空闲的 CPU 资源，该资源组也不能使用。
 
-该项取值范围为 (0, `min_be_cpu_cores - 1`]，其中 `min_be_cpu_cores` 表示所有 BE 的 CPU 核数的最小值。只有大于 0 时才生效。`cpu_weight` 和 `exclusive_cpu_cores` 有且只能有一个为正数。
+您可以通过以下任一参数设置 CPU 硬隔离：
 
-- `exclusive_cpu_cores` 大于 0 的资源组称为 Exclusive 资源组，分配给它的 CPU Core 称为 Exclusive Core。其余资源组称为 Shared 资源组，他们运行在非 Exclusive Core 上，称为 Shared Core。
-- 所有资源组的 `exclusive_cpu_cores` 之和不能超过 `min_be_cpu_cores - 1`。之所以最大值为 `min_be_cpu_cores - 1` 而非 `min_be_cpu_cores`，是为了让 Shared Core 至少为 1。
+- `exclusive_cpu_cores`：直接设置预留的 CPU Core 数。取值范围为 (0, `min_be_cpu_cores - 1`]。只有大于 0 时才生效。
+- `exclusive_cpu_percent`：自 v4.1 起支持，用百分比设置预留的 CPU Core 数。取值范围为 [0, 100]。只有大于 0 时才生效。如果 `min_be_cpu_cores * exclusive_cpu_percent / 100 < 1`，系统会返回错误。
 
-该项与 `cpu_weight` 的关系：
+实际使用时，每个 BE 会根据本机 CPU 核数 `be_cpu_cores` 将 `exclusive_cpu_percent` 换算为真实的 `exclusive_cpu_cores`：`exclusive_cpu_cores = be_cpu_cores * exclusive_cpu_percent / 100`。
 
-`cpu_weight`  和 `exclusive_cpu_cores` 有且仅有一个为正数，即有且仅有一个生效。因为 Exclusive 资源组可以在自己完全拥有的为其预留的 `exclusive_cpu_cores` 个 CPU Core 上运行，无须通过 `cpu_weight` 分配到相对份额的 CPU 时间片。
+- `exclusive_cpu_cores` 或 `exclusive_cpu_percent` 大于 0 的资源组称为 Exclusive 资源组，分配给它的 CPU Core 称为 Exclusive Core。其余资源组称为 Shared 资源组，他们运行在非 Exclusive Core 上，称为 Shared Core。
+- 所有 Exclusive 资源组的 `exclusive_cpu_cores` 之和不能超过 `min_be_cpu_cores - 1`。如果使用 `exclusive_cpu_percent`，系统会先按照 `min_be_cpu_cores * exclusive_cpu_percent / 100` 换算成 CPU Core 数再计算总和。之所以最大值为 `min_be_cpu_cores - 1` 而非 `min_be_cpu_cores`，是为了让 Shared Core 至少为 1。
+
+该项与 `cpu_weight`、`cpu_weight_percent` 的关系：
+
+`cpu_weight`、`cpu_weight_percent`、`exclusive_cpu_cores` 和 `exclusive_cpu_percent` 中有且仅有一个为正数，即有且仅有一个生效。因为 Exclusive 资源组可以在自己完全拥有的为其预留的 CPU Core 上运行，无须通过 `cpu_weight` 或 `cpu_weight_percent` 分配到相对份额的 CPU 时间片。
     
 此外，您可以使用 BE 配置项 `enable_resource_group_cpu_borrowing` 来指定是否允许 Shared 资源组借用 Exclusive 资源组的 Exclusive Core。将该配置项设置为 `true` 表示允许借用。默认为 `true`。具体来讲，当开启该功能时：
 
@@ -83,6 +101,8 @@ keywords: ['fuzai', 'ziyuan', 'ziyuanzu']
 ```SQL
 UPDATE information_schema.be_configs SET VALUE = "false" WHERE NAME = "enable_resource_group_cpu_borrowing";
 ```
+
+<ScopeParam />
 
 #### 内存资源相关配置项
 
@@ -259,39 +279,7 @@ SET GLOBAL enable_pipeline_engine = true;
 
 创建资源组，关联分类器，并分配资源。
 
-```SQL
-CREATE RESOURCE GROUP group_name 
-TO (
-    user='string', 
-    role='string', 
-    query_type in ('select'), 
-    source_ip='cidr'
-) -- 创建分类器，多个分类器间用英文逗号（,）分隔。
-WITH (
-    "{ cpu_weight | exclusive_cpu_cores }" = "INT",
-    "mem_limit" = "m%",
-    "concurrency_limit" = "INT"
-);
-```
-
-示例：
-
-```SQL
-CREATE RESOURCE GROUP rg1
-TO 
-    (user='rg1_user1', role='rg1_role1', query_type in ('select'), source_ip='192.168.x.x/24'),
-    (user='rg1_user2', query_type in ('select'), source_ip='192.168.x.x/24'),
-    (user='rg1_user3', source_ip='192.168.x.x/24'),
-    (user='rg1_user4'),
-    (db='db1')
-WITH (
-    'exclusive_cpu_cores' = '10',
-    'mem_limit' = '20%',
-    'big_query_cpu_second_limit' = '100',
-    'big_query_scan_rows_limit' = '100000',
-    'big_query_mem_limit' = '1073741824'
-);
-```
+<WhSyntaxExample />
 
 ### 指定资源组（可选）
 
@@ -357,12 +345,7 @@ SHOW VERBOSE RESOURCE GROUP group_name;
 
 为已有的资源组修改资源配额。
 
-```SQL
-ALTER RESOURCE GROUP group_name WITH (
-    'cpu_core_limit' = 'INT',
-    'mem_limit' = 'm%'
-);
-```
+<WhAlterSyntax />
 
 删除指定资源组。
 
