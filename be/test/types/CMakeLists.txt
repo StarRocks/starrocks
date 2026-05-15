@@ -31,7 +31,7 @@ set(TYPES_TEST_FILES
 )
 
 set(TYPES_TEST_LINK_LIBS
-    TypesCore
+    Types
     Common
     Base
     Gutil

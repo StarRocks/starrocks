@@ -126,7 +126,7 @@ TEST(TimerThreadTest, test) {
         // schedule a expired task
         ASSERT_OK(timer.schedule(noop.get(), s1));
         s.acquire();
-        noop->unschedule(&timer);
+        noop->unschedule_and_join(&timer);
         ASSERT_TRUE(changed);
 
         timespec s2 = abstime;
@@ -135,7 +135,7 @@ TEST(TimerThreadTest, test) {
         changed = false;
         ASSERT_OK(timer.schedule(noop.get(), s2));
         sleep(1);
-        noop->unschedule(&timer);
+        noop->unschedule_and_join(&timer);
         ASSERT_FALSE(changed);
     }
     {
@@ -160,7 +160,7 @@ TEST(TimerThreadTest, test) {
         ASSERT_OK(timer.schedule(noop.get(), s1));
         s.acquire();
         // will wait util timer finished
-        noop->unschedule(&timer);
+        noop->unschedule_and_join(&timer);
         ASSERT_TRUE(changed);
     }
 }

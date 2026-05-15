@@ -181,6 +181,18 @@ public class PhysicalTopNOperator extends PhysicalOperator {
         return visitor.visitPhysicalTopN(optExpression, context);
     }
 
+    @Override
+    public ColumnRefSet getUsedColumns() {
+        ColumnRefSet set = super.getUsedColumns();
+        if (partitionByColumns != null) {
+            partitionByColumns.forEach(set::union);
+        }
+        if (preAggCall != null) {
+            preAggCall.values().forEach(v -> set.union(v.getUsedColumns()));
+        }
+        return set;
+    }
+
     public void fillDisableDictOptimizeColumns(ColumnRefSet resultSet, Set<Integer> dictColIds) {
         // nothing to do
         if (preAggCall == null) {

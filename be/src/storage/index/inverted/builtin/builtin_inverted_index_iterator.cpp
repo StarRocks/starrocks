@@ -304,7 +304,8 @@ Status BuiltinInvertedIndexIterator::_wildcard_query(const Slice* search_query, 
     return _bitmap_itr->read_union_bitmap(hit_rowids, bitmap);
 }
 
-Status BuiltinInvertedIndexIterator::read_from_inverted_index(const std::string& column_name, const void* query_value,
+Status BuiltinInvertedIndexIterator::read_from_inverted_index(const std::string_view column_name,
+                                                              const void* query_value,
                                                               InvertedIndexQueryType query_type,
                                                               roaring::Roaring* bitmap) {
     const auto* search_query = reinterpret_cast<const Slice*>(query_value);
@@ -351,7 +352,7 @@ Status BuiltinInvertedIndexIterator::read_from_inverted_index(const std::string&
     return Status::OK();
 }
 
-Status BuiltinInvertedIndexIterator::read_null(const std::string& column_name, roaring::Roaring* bitmap) {
+Status BuiltinInvertedIndexIterator::read_null(const std::string_view column_name, roaring::Roaring* bitmap) {
     return Status::InternalError("Unsupported");
 }
 

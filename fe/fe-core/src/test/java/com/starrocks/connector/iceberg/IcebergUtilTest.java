@@ -19,6 +19,7 @@ import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.planner.SlotDescriptor;
 import com.starrocks.planner.SlotId;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.SessionVariable;
 import com.starrocks.thrift.TExprMinMaxValue;
 import com.starrocks.type.DateType;
 import com.starrocks.type.IntegerType;
@@ -255,6 +256,68 @@ public class IcebergUtilTest {
         } finally {
             ConnectContext.remove();
         }
+    }
+
+    private static org.apache.iceberg.Table tableWithProperty(String key, String value) {
+        org.apache.iceberg.Table table = org.mockito.Mockito.mock(org.apache.iceberg.Table.class);
+        Map<String, String> props = new HashMap<>();
+        if (key != null) {
+            props.put(key, value);
+        }
+        org.mockito.Mockito.when(table.properties()).thenReturn(props);
+        return table;
+    }
+
+    private static SessionVariable sessionWithTargetMaxFileSize(long value) {
+        // SessionVariable doesn't expose a setter for this field (it's bound via @VarAttr),
+        // so we mock just the one getter we care about.
+        SessionVariable sv = org.mockito.Mockito.mock(SessionVariable.class);
+        org.mockito.Mockito.when(sv.getConnectorSinkTargetMaxFileSize()).thenReturn(value);
+        return sv;
+    }
+
+    @Test
+    public void testResolveTargetMaxFileSizePrefersTableProperty() {
+        // Table property wins over session value.
+        org.apache.iceberg.Table table = tableWithProperty(
+                TableProperties.WRITE_TARGET_FILE_SIZE_BYTES, "262144000"); // 250 MiB
+        SessionVariable sv = sessionWithTargetMaxFileSize(123456L);
+        assertEquals(262144000L, IcebergUtil.resolveTargetMaxFileSize(table, sv));
+    }
+
+    @Test
+    public void testResolveTargetMaxFileSizeFallsBackToSession() {
+        // Table property absent → session value used.
+        org.apache.iceberg.Table table = tableWithProperty(null, null);
+        SessionVariable sv = sessionWithTargetMaxFileSize(999_999L);
+        assertEquals(999_999L, IcebergUtil.resolveTargetMaxFileSize(table, sv));
+    }
+
+    @Test
+    public void testResolveTargetMaxFileSizeDefaultsToHardcoded() {
+        // Neither property set nor session > 0 → IcebergUtil.DEFAULT_TARGET_FILE_SIZE_BYTES.
+        org.apache.iceberg.Table table = tableWithProperty(null, null);
+        SessionVariable sv = sessionWithTargetMaxFileSize(0L);
+        assertEquals(IcebergUtil.DEFAULT_TARGET_FILE_SIZE_BYTES,
+                IcebergUtil.resolveTargetMaxFileSize(table, sv));
+    }
+
+    @Test
+    public void testResolveTargetMaxFileSizeIgnoresUnparseableProperty() {
+        // Garbage property value → WARN logged, falls back through the chain.
+        org.apache.iceberg.Table table = tableWithProperty(
+                TableProperties.WRITE_TARGET_FILE_SIZE_BYTES, "not-a-number");
+        SessionVariable sv = sessionWithTargetMaxFileSize(555L);
+        assertEquals(555L, IcebergUtil.resolveTargetMaxFileSize(table, sv));
+    }
+
+    @Test
+    public void testResolveTargetMaxFileSizeIgnoresNonPositiveProperty() {
+        // Zero / negative are treated like unset.
+        org.apache.iceberg.Table table = tableWithProperty(
+                TableProperties.WRITE_TARGET_FILE_SIZE_BYTES, "0");
+        SessionVariable sv = sessionWithTargetMaxFileSize(777L);
+        assertEquals(777L, IcebergUtil.resolveTargetMaxFileSize(table, sv));
     }
 
     private FileScanTask createMockFileScanTask(FileFormat fileFormat) {

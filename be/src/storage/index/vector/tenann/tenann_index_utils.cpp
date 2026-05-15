@@ -16,6 +16,14 @@
 
 #include "storage/index/vector/tenann/tenann_index_utils.h"
 
+#include <algorithm>
+#include <cmath>
+#include <limits>
+
+#include "common/config_vector_index_fwd.h"
+#include "common/logging.h"
+#include "tenann/index/parameters.h"
+
 namespace starrocks {
 
 #define CHECK_AND_RETURN(STANDARD_STR, NAME, TYPE) \
@@ -118,6 +126,62 @@ StatusOr<tenann::IndexMeta> get_vector_meta(const std::shared_ptr<TabletIndex>& 
     }
 
     return meta;
+}
+
+int compute_adaptive_ef_search(int user_ef, int query_k, size_t segment_num_rows) {
+    int ef_base = std::max(user_ef, query_k);
+    if (ef_base <= 0) return 0;
+    int64_t baseline = config::vector_adaptive_ef_baseline_rows;
+    if (baseline <= 0 || static_cast<int64_t>(segment_num_rows) <= baseline) {
+        return ef_base;
+    }
+    // `vector_adaptive_ef_alpha` / `vector_adaptive_ef_cap` are mutable doubles
+    // and `strtod` accepts "nan"/"inf". Validate up front so the formula below
+    // never produces a non-finite value that would make `static_cast<int>` UB.
+    double alpha = config::vector_adaptive_ef_alpha;
+    double cap = config::vector_adaptive_ef_cap;
+    if (!std::isfinite(alpha) || !std::isfinite(cap)) return ef_base;
+    double ratio = static_cast<double>(segment_num_rows) / static_cast<double>(baseline);
+    double factor = std::min(1.0 + alpha * std::log2(ratio), cap);
+    if (factor <= 1.0) return ef_base;
+    // Clamp before casting to int: float-to-int conversion is UB when the
+    // double exceeds the int range. Pathological cap/ef_base combinations
+    // (or future config tuning) could cross INT_MAX otherwise.
+    double scaled = static_cast<double>(ef_base) * factor;
+    if (scaled >= static_cast<double>(std::numeric_limits<int>::max())) {
+        return std::numeric_limits<int>::max();
+    }
+    return static_cast<int>(scaled);
+}
+
+void apply_adaptive_ef_search(tenann::IndexMeta* meta, size_t segment_num_rows, int query_k, bool user_set_ef) {
+    if (!config::enable_vector_adaptive_search) return;
+    if (user_set_ef) return;
+
+    auto& params = meta->search_params();
+    auto it = params.find(starrocks::index::vector::EF_SEARCH);
+    if (it == params.end()) return;
+
+    int user_ef = 0;
+    try {
+        if (it->is_number_integer()) {
+            user_ef = it->get<int>();
+        } else if (it->is_string()) {
+            user_ef = std::stoi(it->get<std::string>());
+        } else {
+            return;
+        }
+    } catch (...) {
+        return;
+    }
+    if (user_ef <= 0) return;
+
+    int eff_ef = compute_adaptive_ef_search(user_ef, query_k, segment_num_rows);
+    if (eff_ef != user_ef) {
+        params[starrocks::index::vector::EF_SEARCH] = eff_ef;
+        VLOG(2) << "Adaptive ef_search: user_ef=" << user_ef << " query_k=" << query_k << " rows=" << segment_num_rows
+                << " effective=" << eff_ef;
+    }
 }
 
 } // namespace starrocks

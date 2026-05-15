@@ -456,6 +456,9 @@ struct THdfsScanRange {
     // as first_row_id + row_position for non-compacted files.
     // The _last_updated_sequence_number fallback value is passed via the extended_columns map.
     37: optional i64 first_row_id;
+
+    // whether to use JNI scanner to read Avro data (default: false = use native C++ scanner)
+    38: optional bool use_avro_jni_reader
 }
 
 struct TBinlogScanRange {

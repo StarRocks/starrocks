@@ -101,6 +101,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
+import static com.starrocks.qe.SessionVariableConstants.BlacklistBackupRoutingPolicy;
 import static com.starrocks.qe.SessionVariableConstants.ChooseInstancesMode.LOCALITY;
 import static com.starrocks.qe.SessionVariableConstants.ComputationFragmentSchedulingPolicy.COMPUTE_NODES_ONLY;
 
@@ -239,6 +240,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String IS_REPORT_SUCCESS = "is_report_success";
     public static final String COLOR_EXPLAIN_OUTPUT = "enable_color_explain_output";
     public static final String ENABLE_PROFILE = "enable_profile";
+    public static final String ENABLE_EXPLAIN_IN_PROFILE = "enable_explain_in_profile";
     public static final String BINARY_ENCODING_FORMAT = "binary_encoding_format";
     public static final String BINARY_ENCODING_LEVEL = "binary_encoding_level";
 
@@ -398,6 +400,11 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String SKIP_PAGE_CACHE = "skip_page_cache";
 
     public static final String SKIP_BLACK_LIST = "skip_black_list";
+
+    /**
+     * Policy for selecting a backup compute node when the tablet's primary worker cannot be used in shared-data mode.
+     */
+    public static final String BLACKLIST_BACKUP_ROUTING = "blacklist_backup_routing";
 
     public static final String ENABLE_TABLET_INTERNAL_PARALLEL = "enable_tablet_internal_parallel";
     public static final String ENABLE_TABLET_INTERNAL_PARALLEL_V2 = "enable_tablet_internal_parallel_v2";
@@ -734,6 +741,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_FILE_PAGECACHE = "enable_file_pagecache";
     public static final String HUDI_MOR_FORCE_JNI_READER = "hudi_mor_force_jni_reader";
     public static final String PAIMON_FORCE_JNI_READER = "paimon_force_jni_reader";
+    public static final String AVRO_USE_JNI_READER = "avro_use_jni_reader";
     public static final String ENABLE_DYNAMIC_PRUNE_SCAN_RANGE = "enable_dynamic_prune_scan_range";
     public static final String IO_TASKS_PER_SCAN_OPERATOR = "io_tasks_per_scan_operator";
     public static final String CONNECTOR_IO_TASKS_PER_SCAN_OPERATOR = "connector_io_tasks_per_scan_operator";
@@ -1277,6 +1285,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = SKIP_BLACK_LIST)
     private boolean skipBlackList = false;
 
+    @VariableMgr.VarAttr(name = BLACKLIST_BACKUP_ROUTING)
+    private String blacklistBackupRouting = BlacklistBackupRoutingPolicy.CIRCULAR.name();
+
     @VariableMgr.VarAttr(name = RUNTIME_FILTER_SCAN_WAIT_TIME, flag = VariableMgr.INVISIBLE)
     private long runtimeFilterScanWaitTime = 20L;
 
@@ -1336,6 +1347,11 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // if true, need report to coordinator when plan fragment execute successfully.
     @VariableMgr.VarAttr(name = ENABLE_PROFILE, alias = IS_REPORT_SUCCESS)
     private boolean enableProfile = false;
+
+    // When true and a profile is built for the query, the EXPLAIN COSTS text
+    // of the executed plan is embedded in the profile's Summary section.
+    @VariableMgr.VarAttr(name = ENABLE_EXPLAIN_IN_PROFILE)
+    private boolean enableExplainInProfile = false;
 
     @VariableMgr.VarAttr(name = BINARY_ENCODING_FORMAT)
     private String binaryEncodingFormat = BinaryEncodingFormat.HEX.sessionValue();
@@ -2769,6 +2785,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = PAIMON_FORCE_JNI_READER)
     private boolean paimonForceJNIReader = false;
 
+    @VariableMgr.VarAttr(name = AVRO_USE_JNI_READER)
+    private boolean avroUseJNIReader = false;
+
     @VarAttr(name = ENABLE_QUERY_CACHE)
     private boolean enableQueryCache = false;
 
@@ -3608,6 +3627,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return paimonForceJNIReader;
     }
 
+    public boolean getAvroUseJNIReader() {
+        return avroUseJNIReader;
+    }
+
     public void setCboCTEMaxLimit(int cboCTEMaxLimit) {
         this.cboCTEMaxLimit = cboCTEMaxLimit;
     }
@@ -3734,6 +3757,23 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public boolean isSkipBlackList() {
         return skipBlackList;
+    }
+
+    public void setBlacklistBackupRouting(String blacklistBackupRouting) {
+        BlacklistBackupRoutingPolicy result =
+                Enums.getIfPresent(BlacklistBackupRoutingPolicy.class,
+                        StringUtils.upperCase(blacklistBackupRouting)).orNull();
+        if (result == null) {
+            String legalValues = Joiner.on(" | ").join(BlacklistBackupRoutingPolicy.values());
+            throw new IllegalArgumentException("Legal values of " + BLACKLIST_BACKUP_ROUTING + " are " + legalValues);
+        }
+        this.blacklistBackupRouting = StringUtils.upperCase(blacklistBackupRouting);
+    }
+
+    public BlacklistBackupRoutingPolicy getBlacklistBackupRoutingPolicy() {
+        return Enums.getIfPresent(BlacklistBackupRoutingPolicy.class,
+                        StringUtils.upperCase(blacklistBackupRouting))
+                .or(BlacklistBackupRoutingPolicy.getDefault());
     }
 
     public int getStatisticCollectParallelism() {
@@ -3867,6 +3907,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setEnableProfile(boolean enableProfile) {
         this.enableProfile = enableProfile;
+    }
+
+    public boolean isEnableExplainInProfile() {
+        return enableExplainInProfile;
+    }
+
+    public void setEnableExplainInProfile(boolean enableExplainInProfile) {
+        this.enableExplainInProfile = enableExplainInProfile;
     }
 
     public boolean getColorExplainOutput() {

@@ -2336,7 +2336,19 @@ class StarrocksSQLApiLib(object):
                 mvs.sort()
                 print("Hit materialized views:", ", ".join(mvs))
                 return mvs
-        return self._with_materialized_view_rewrite(check_mv)
+
+        # Retry the check several times before declaring failure. MV partition
+        # staleness state propagates asynchronously after base-table writes, so
+        # the optimizer may not pick the expected rewrite (e.g. UNION) on the
+        # first explain call right after an INSERT.
+        max_retries = 5
+        for attempt in range(max_retries):
+            result = self._with_materialized_view_rewrite(check_mv)
+            if not isinstance(result, bool) or result:
+                return result
+            if attempt < max_retries - 1:
+                time.sleep(2)
+        return False
 
     def print_hit_materialized_views(self, query) -> str:
         """

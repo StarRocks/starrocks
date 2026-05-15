@@ -846,6 +846,46 @@ static bool _column_chunk_all_null_for_num_rows(const ColumnReader* reader, uint
     return chunk_meta->meta_data.statistics.null_count == static_cast<int64_t>(num_rows);
 }
 
+static bool _column_chunk_has_no_null(const ColumnReader* reader) {
+    if (reader == nullptr) {
+        return false;
+    }
+    const tparquet::ColumnChunk* chunk_meta = reader->get_chunk_metadata();
+    if (chunk_meta == nullptr || !chunk_meta->meta_data.__isset.statistics ||
+        !chunk_meta->meta_data.statistics.__isset.null_count) {
+        return false;
+    }
+    return chunk_meta->meta_data.statistics.null_count == 0;
+}
+
+static bool _requested_paths_are_scalar_typed_leaves(const std::vector<ShreddedFieldNode>& nodes,
+                                                     const std::vector<VariantPath>& requested_paths) {
+    if (requested_paths.empty()) {
+        return false;
+    }
+    for (const auto& path : requested_paths) {
+        const ShreddedFieldNode* node = find_shredded_field_node_for_path(nodes, path);
+        if (node == nullptr || node->kind != ShreddedFieldNode::Kind::SCALAR || node->typed_value_reader == nullptr) {
+            return false;
+        }
+    }
+    return true;
+}
+
+static bool _requested_scalar_fallback_values_all_null(const std::vector<ShreddedFieldNode>& nodes,
+                                                       const std::vector<VariantPath>& requested_paths) {
+    for (const auto& path : requested_paths) {
+        const ShreddedFieldNode* node = find_shredded_field_node_for_path(nodes, path);
+        if (node == nullptr) {
+            return false;
+        }
+        if (node->value_reader != nullptr && !_column_chunk_all_null(node->value_reader.get())) {
+            return false;
+        }
+    }
+    return true;
+}
+
 static void _clear_shredded_field_node_columns(ShreddedFieldNode* node) {
     if (node == nullptr) {
         return;
@@ -1776,23 +1816,12 @@ Status VariantColumnReader::prepare() {
     // no root-level typed_value re-encoding, the metadata column is never needed (it is only
     // used for variant binary decoding).  We set _skip_base_payload = true in this case.
     //
-    // The value (binary payload) column is handled separately:
-    //   - Non-nullable field: value is also skipped — typed_value nullness is sufficient.
-    //   - Nullable field:     value is still read, but only to recover the outer row-null mask.
-    //     (A null typed_value means either "variant row is null" or "field is absent", so the
-    //      value column's null flag is the only reliable source for outer-row nullness.)
+    // Top-level value is only needed if leaf fallback values force us back to full
+    // per-row reconstruction. For nullable variant columns, top-level metadata is only
+    // decoded when statistics cannot prove the outer null mask is all zero.
     _skip_base_payload = false;
     if (!_requested_shredded_paths.empty() && _top_level.root_typed_value_reader == nullptr) {
-        bool all_scalar = true;
-        for (const auto& path : _requested_shredded_paths) {
-            const auto* node = find_shredded_field_node_for_path(_shredded_fields, path);
-            if (node == nullptr || node->kind != ShreddedFieldNode::Kind::SCALAR ||
-                node->typed_value_reader == nullptr) {
-                all_scalar = false;
-                break;
-            }
-        }
-        _skip_base_payload = all_scalar;
+        _skip_base_payload = _requested_paths_are_scalar_typed_leaves(_shredded_fields, _requested_shredded_paths);
     }
     return Status::OK();
 }
@@ -1846,13 +1875,12 @@ void VariantColumnReader::set_need_parse_levels(bool need_parse_levels) {
 
 void VariantColumnReader::collect_column_io_range(std::vector<io::SharedBufferedInputStream::IORange>* ranges,
                                                   int64_t* end_offset, ColumnIOTypeFlags types, bool active) {
-    // Always include metadata and value in IO range.
-    // When _skip_base_payload: metadata is read for outer row-null mask; value is kept so that
-    // if per-field fallback values are detected at read time we can fall back to the per-row path.
-    if (_top_level.metadata_reader != nullptr) {
+    const TopLevelSkipFlags skip_flags = _compute_top_level_skip_flags();
+
+    if (_top_level.metadata_reader != nullptr && !skip_flags.skip_metadata) {
         _top_level.metadata_reader->collect_column_io_range(ranges, end_offset, types, active);
     }
-    if (_top_level.value_reader != nullptr) {
+    if (_top_level.value_reader != nullptr && !skip_flags.skip_payload) {
         _top_level.value_reader->collect_column_io_range(ranges, end_offset, types, active);
     }
     if (_top_level.root_typed_value_reader != nullptr) {
@@ -1866,10 +1894,12 @@ void VariantColumnReader::collect_column_io_range(std::vector<io::SharedBuffered
 }
 
 void VariantColumnReader::select_offset_index(const SparseRange<uint64_t>& range, const uint64_t rg_first_row) {
-    if (_top_level.metadata_reader != nullptr) {
+    const TopLevelSkipFlags skip_flags = _compute_top_level_skip_flags();
+
+    if (_top_level.metadata_reader != nullptr && !skip_flags.skip_metadata) {
         _top_level.metadata_reader->select_offset_index(range, rg_first_row);
     }
-    if (_top_level.value_reader != nullptr) {
+    if (_top_level.value_reader != nullptr && !skip_flags.skip_payload) {
         _top_level.value_reader->select_offset_index(range, rg_first_row);
     }
     if (_top_level.root_typed_value_reader != nullptr) {
@@ -1880,6 +1910,15 @@ void VariantColumnReader::select_offset_index(const SparseRange<uint64_t>& range
     for (const auto& node : _shredded_fields) {
         _select_shredded_field_offset_index(node, range, rg_first_row, requested_paths);
     }
+}
+
+VariantColumnReader::TopLevelSkipFlags VariantColumnReader::_compute_top_level_skip_flags() const {
+    TopLevelSkipFlags flags;
+    flags.skip_payload = _top_level.root_typed_value_reader == nullptr &&
+                         _requested_paths_are_scalar_typed_leaves(_shredded_fields, _requested_shredded_paths) &&
+                         _requested_scalar_fallback_values_all_null(_shredded_fields, _requested_shredded_paths);
+    flags.skip_metadata = flags.skip_payload && _column_chunk_has_no_null(_top_level.metadata_reader.get());
+    return flags;
 }
 
 // Fast-path read when _skip_base_payload is true.
@@ -1956,14 +1995,19 @@ StatusOr<bool> VariantColumnReader::_read_range_skip_base_payload(const Range<ui
     // cannot be used as a reliable null indicator here.
     if (nullable_column != nullptr) {
         DCHECK(_top_level.metadata_reader != nullptr);
-        ColumnPtr metadata_col = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
-        RETURN_IF_ERROR(_top_level.metadata_reader->read_range(range, filter, metadata_col));
-        const auto* metadata_nullable = down_cast<const NullableColumn*>(metadata_col.get());
-        DCHECK_EQ(metadata_nullable->size(), num_rows);
         auto* outer_null = nullable_column->null_column_raw_ptr();
-        outer_null->get_data().assign(metadata_nullable->null_column()->get_data().begin(),
-                                      metadata_nullable->null_column()->get_data().end());
-        nullable_column->set_has_null(metadata_nullable->has_null());
+        if (_column_chunk_has_no_null(_top_level.metadata_reader.get())) {
+            outer_null->get_data().assign(num_rows, 0);
+            nullable_column->set_has_null(false);
+        } else {
+            ColumnPtr metadata_col = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
+            RETURN_IF_ERROR(_top_level.metadata_reader->read_range(range, filter, metadata_col));
+            const auto* metadata_nullable = down_cast<const NullableColumn*>(metadata_col.get());
+            DCHECK_EQ(metadata_nullable->size(), num_rows);
+            outer_null->get_data().assign(metadata_nullable->null_column()->get_data().begin(),
+                                          metadata_nullable->null_column()->get_data().end());
+            nullable_column->set_has_null(metadata_nullable->has_null());
+        }
     }
     return true;
 }
@@ -2125,6 +2169,14 @@ const ColumnReader* VariantColumnReader::filterable_typed_value_reader_for_path(
         LogicalType lt = found_node->typed_value_read_type->type;
         if (lt == TYPE_BINARY || lt == TYPE_VARBINARY) return nullptr;
     }
+    return found_node->typed_value_reader.get();
+}
+
+ColumnReader* VariantColumnReader::scalar_typed_value_reader_for_path(const VariantPath& path) {
+    const ShreddedFieldNode* found_node = find_shredded_field_node_for_path(_shredded_fields, path);
+    if (found_node == nullptr) return nullptr;
+    if (found_node->kind != ShreddedFieldNode::Kind::SCALAR) return nullptr;
+    if (found_node->typed_value_reader == nullptr) return nullptr;
     return found_node->typed_value_reader.get();
 }
 

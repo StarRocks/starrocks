@@ -122,4 +122,66 @@ public class ColocateRangeUtils {
         // returned Tuple does not retain a reference to the tablet's bound.
         return new Tuple(new ArrayList<>(values.subList(0, colocateColumnCount)));
     }
+
+    /**
+     * Returns true iff {@code range}'s lower bound is a canonical {@code (k, NULL...)} tuple
+     * (i.e. the shape {@link #expandToFullSortKey} produces from a colocate-range bound). The
+     * upper bound is intentionally NOT required to be canonical — in a multi-way split a mid-way
+     * child can have a canonical lower at the colocate boundary and a within-prefix non-canonical
+     * upper. The caller pairs this with old-tablet containment to decide whether the boundary
+     * is genuinely new.
+     */
+    public static boolean hasCanonicalLowerBound(Range<Tuple> range, List<Column> sortKeyColumns,
+                                                  int colocateColumnCount) {
+        Preconditions.checkArgument(colocateColumnCount >= 0
+                        && colocateColumnCount <= sortKeyColumns.size(),
+                "colocateColumnCount %s out of range [0, %s]",
+                colocateColumnCount, sortKeyColumns.size());
+        return !range.isMinimum()
+                && isCanonicalTuple(range.getLowerBound(), sortKeyColumns, colocateColumnCount);
+    }
+
+    private static boolean isCanonicalTuple(Tuple tuple, List<Column> sortKeyColumns,
+                                            int colocateColumnCount) {
+        if (tuple == null) {
+            return false;
+        }
+        List<Variant> values = tuple.getValues();
+        if (values.size() != sortKeyColumns.size()) {
+            return false;
+        }
+        for (int i = colocateColumnCount; i < values.size(); i++) {
+            if (!(values.get(i) instanceof NullVariant)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /**
+     * Returns true iff {@code tabletRange} is fully contained within the {@link ColocateRange}
+     * that owns the colocate prefix of its lower bound. Used by both the scan-time alignment
+     * guard ({@link com.starrocks.planner.RangeColocateScanDispatch}) and the post-publish
+     * split classifier — both must agree on what "stays inside the colocate range" means so
+     * the post-split classification cannot accept a tablet that the scan-time guard would
+     * reject.
+     *
+     * <p>Returns {@code false} when no {@link ColocateRange} owns the prefix (caller should
+     * treat this as the "missing coverage" defensive case rather than as crossing).
+     */
+    public static boolean isContainedInOwningColocateRange(Range<Tuple> tabletRange,
+                                                          List<ColocateRange> ranges,
+                                                          List<Column> sortKeyColumns,
+                                                          int colocateColumnCount) {
+        Tuple lowerPrefix = colocateColumnCount > 0
+                ? extractColocatePrefix(tabletRange, colocateColumnCount)
+                : null;
+        int idx = ColocateRangeMgr.indexOf(ranges, lowerPrefix);
+        if (idx < 0) {
+            return false;
+        }
+        Range<Tuple> expanded = expandToFullSortKey(
+                ranges.get(idx).getRange(), sortKeyColumns, colocateColumnCount);
+        return expanded.contains(tabletRange);
+    }
 }

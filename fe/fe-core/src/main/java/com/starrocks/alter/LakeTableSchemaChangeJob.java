@@ -879,7 +879,7 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
                     List<VectorIndexBuildInfoPB> vectorIndexBuildInfos = new ArrayList<>();
                     Utils.sendAggregatePublishVersionRequest(request, 1, computeResource, null, null,
                             vectorIndexBuildInfos);
-                    VectorIndexBuildScheduler.onPublishComplete(vectorIndexBuildInfos);
+                    VectorIndexBuildScheduler.onPublishComplete(vectorIndexBuildInfos, /* fromCompaction= */ false);
                 }
             }
             return true;

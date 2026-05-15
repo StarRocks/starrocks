@@ -41,6 +41,7 @@ ADD_BE_LIB(ColumnCore
         column_helper.cpp
         column_helper_time.cpp
         datum_convert.cpp
+        logical_type_size.cpp
         runtime_type_traits.cpp
         column_viewer.cpp
         column_view/column_view_base.cpp

@@ -46,6 +46,8 @@ import com.google.gson.annotations.SerializedName;
 import com.staros.proto.PlacementPolicy;
 import com.starrocks.catalog.DistributionInfo.DistributionInfoType;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.Range;
+import com.starrocks.common.ThrowingSupplier;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.ColocatePropertyInfo;
 import com.starrocks.common.util.LogUtil;
@@ -54,6 +56,7 @@ import com.starrocks.common.util.concurrent.lock.AutoCloseableLock;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.persist.ColocatePersistInfo;
+import com.starrocks.persist.ColocateRangePersistInfo;
 import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.TablePropertyInfo;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
@@ -277,6 +280,9 @@ public class ColocateTableIndex implements Writable {
                                         0 /* partitionId: not partition-specific */,
                                         0 /* indexId: not index-specific */,
                                         PlacementPolicy.PACK);
+                        // In-memory only; OP_COLOCATE_RANGE_UPDATE is journaled from OlapTable.onCreate
+                        // after OP_CREATE_TABLE is durably written, so the range record cannot precede the
+                        // table-create record.
                         colocateRangeMgr.initColocateGroup(groupId.grpId, packShardGroupId);
                     }
                 } else if (distributionInfo instanceof HashDistributionInfo) {
@@ -423,6 +429,8 @@ public class ColocateTableIndex implements Writable {
             group2Tables.remove(groupId, tableId);
             if (!group2Tables.containsKey(groupId)) {
                 // all tables of this group are removed, remove the group
+                ColocateGroupSchema schema = group2Schema.get(groupId);
+                boolean wasRangeColocate = schema != null && schema.isRangeColocate();
                 group2BackendsPerBucketSeq.remove(groupId);
                 group2Schema.remove(groupId);
                 unstableGroups.remove(groupId);
@@ -436,6 +444,21 @@ public class ColocateTableIndex implements Writable {
                 }
                 if (fullGroupName != null) {
                     groupName2Id.remove(fullGroupName);
+                }
+                if (wasRangeColocate) {
+                    // colocateRangeMgr is keyed by grpId, which is shared across DBs for cross-DB
+                    // colocation. Only drop the entry when no other DB still holds a GroupId with
+                    // the same grpId; otherwise we would corrupt a peer DB's view.
+                    boolean otherDbStillHasGroup = false;
+                    for (GroupId otherGroupId : group2Schema.keySet()) {
+                        if (Objects.equals(otherGroupId.grpId, groupId.grpId)) {
+                            otherDbStillHasGroup = true;
+                            break;
+                        }
+                    }
+                    if (!otherDbStillHasGroup) {
+                        colocateRangeMgr.removeColocateGroup(groupId.grpId);
+                    }
                 }
             }
         } finally {
@@ -490,6 +513,26 @@ public class ColocateTableIndex implements Writable {
         }
     }
 
+    /**
+     * Returns the table's {@link GroupId} iff the table participates in a range-colocate group,
+     * or {@code null} otherwise. Wraps the {@code isColocateTable + getGroup + isRangeColocateGroup}
+     * triple under a single read lock.
+     */
+    @javax.annotation.Nullable
+    public GroupId getRangeColocateGroupId(long tableId) {
+        readLock();
+        try {
+            GroupId groupId = table2Group.get(tableId);
+            if (groupId == null) {
+                return null;
+            }
+            ColocateGroupSchema schema = group2Schema.get(groupId);
+            return (schema != null && schema.isRangeColocate()) ? groupId : null;
+        } finally {
+            readUnlock();
+        }
+    }
+
     public boolean isGroupExist(GroupId groupId) {
         readLock();
         try {
@@ -515,6 +558,20 @@ public class ColocateTableIndex implements Writable {
         readLock();
         try {
             return Sets.newHashSet(unstableGroups);
+        } finally {
+            readUnlock();
+        }
+    }
+
+    /**
+     * Cheap empty-check counterpart to {@link #getUnstableGroupIds()} that avoids the
+     * snapshot allocation. Intended for hot-path callers (e.g. {@code ColocateChecker})
+     * that want to fast-return when no unstable groups exist.
+     */
+    public boolean hasUnstableGroups() {
+        readLock();
+        try {
+            return !unstableGroups.isEmpty();
         } finally {
             readUnlock();
         }
@@ -724,6 +781,169 @@ public class ColocateTableIndex implements Writable {
     public void replayRemoveTable(ColocatePersistInfo info) {
         removeTable(info.getTableId(), null, true /* isReplay */);
     }
+
+    public void replayColocateRangeUpdate(ColocateRangePersistInfo info) {
+        writeLock();
+        try {
+            colocateRangeMgr.setColocateRanges(info.getColocateGroupId(), info.getColocateRanges());
+        } finally {
+            writeUnlock();
+        }
+    }
+
+    /**
+     * Mark every {@link GroupId} that shares the given {@code colocateGroupId} as unstable.
+     * Range colocate groups are keyed in {@link ColocateRangeMgr} by {@code colocateGroupId}
+     * alone, so a range-mgr mutation in one database affects every peer database that joined
+     * the same group; marking only the caller's own GroupId would leave peer DBs claiming
+     * "stable" while their tablets are mid-migration, allowing colocate joins to run against
+     * an unaligned layout.
+     */
+    public void markAllGroupsWithSameColocateGroupIdUnstable(long colocateGroupId, boolean needEditLog) {
+        writeLock();
+        try {
+            // markGroupUnstable / isGroupUnstable re-acquire the lock; ReentrantReadWriteLock
+            // is reentrant for the same thread.
+            peersOfColocateGroup(colocateGroupId).forEach(peer -> markGroupUnstable(peer, needEditLog));
+        } finally {
+            writeUnlock();
+        }
+    }
+
+    /**
+     * Symmetric counterpart to {@link #markAllGroupsWithSameColocateGroupIdUnstable}. Marks every
+     * {@link GroupId} that shares the given {@code colocateGroupId} as stable. Used by the
+     * colocate checker once every peer GroupId's tablet layout matches
+     * {@link ColocateRangeMgr#getColocateRanges} — marking only one peer GroupId would leave
+     * the others claiming unstable while the cluster is actually aligned.
+     */
+    public void markAllGroupsWithSameColocateGroupIdStable(long colocateGroupId, boolean needEditLog) {
+        writeLock();
+        try {
+            peersOfColocateGroup(colocateGroupId).forEach(peer -> markGroupStable(peer, needEditLog));
+        } finally {
+            writeUnlock();
+        }
+    }
+
+    /**
+     * Returns every {@link GroupId} that shares the given {@code colocateGroupId}, as a snapshot
+     * under the read lock. Useful for the colocate checker which needs to iterate cross-DB peers
+     * without holding the catalog lock for the duration of the cycle.
+     */
+    public List<GroupId> getAllGroupIdsWithSameColocateGroupId(long colocateGroupId) {
+        readLock();
+        try {
+            return peersOfColocateGroup(colocateGroupId);
+        } finally {
+            readUnlock();
+        }
+    }
+
+    /**
+     * Returns true iff any {@link GroupId} sharing the given {@code colocateGroupId} is unstable.
+     */
+    public boolean isAnyGroupWithSameColocateGroupIdUnstable(long colocateGroupId) {
+        readLock();
+        try {
+            return peersOfColocateGroup(colocateGroupId).stream().anyMatch(this::isGroupUnstable);
+        } finally {
+            readUnlock();
+        }
+    }
+
+    /**
+     * Snapshot of every {@link GroupId} that shares the given {@code colocateGroupId}. Caller
+     * is responsible for holding the appropriate lock (read for queries, write for mutations).
+     */
+    private List<GroupId> peersOfColocateGroup(long colocateGroupId) {
+        return group2Schema.keySet().stream()
+                .filter(g -> Objects.equals(g.grpId, colocateGroupId))
+                .collect(Collectors.toList());
+    }
+
+    /**
+     * Splice canonical-lower-bound boundaries into the colocate range manager and mark all peer
+     * GroupIds unstable. Idempotent on retry: if all observed boundaries already exist (e.g. a
+     * prior leader committed {@code OP_COLOCATE_RANGE_UPDATE} but crashed before
+     * {@code OP_COLOCATE_MARK_UNSTABLE_V2}), no new range update is journaled but the
+     * mark-unstable record is still emitted.
+     *
+     * @param packShardGroupSupplier called once per missing boundary to allocate a new PACK
+     *                               shard group; the same {@link ThrowingSupplier} pattern as
+     *                               other catalog → StarOS code paths so {@code DdlException}
+     *                               flows naturally.
+     */
+    public void applyRangeSplitResult(long grpId, Set<Tuple> observedCanonicalLowers,
+                                      int colocateColumnCount,
+                                      ThrowingSupplier<Long> packShardGroupSupplier) throws DdlException {
+        writeLock();
+        try {
+            List<ColocateRange> currentRanges = colocateRangeMgr.getColocateRanges(grpId);
+            List<ColocateRange> newRanges = spliceMissingBoundaries(
+                    currentRanges, observedCanonicalLowers, colocateColumnCount, packShardGroupSupplier);
+            if (!newRanges.equals(currentRanges)) {
+                GlobalStateMgr.getCurrentState().getEditLog().logColocateRangeUpdate(
+                        ColocateRangePersistInfo.create(grpId, newRanges),
+                        wal -> colocateRangeMgr.setColocateRanges(grpId, newRanges));
+            }
+            markAllGroupsWithSameColocateGroupIdUnstable(grpId, /* needEditLog */ true);
+        } finally {
+            writeUnlock();
+        }
+    }
+
+    /**
+     * Splice missing canonical boundaries into a working copy of {@code currentRanges}.
+     * Returns the working copy; if no boundary was missing the returned list is
+     * {@code equals()} to the input so the caller can skip the journal write.
+     *
+     * <p>The supplier is invoked only when a boundary actually needs allocation.
+     */
+    private List<ColocateRange> spliceMissingBoundaries(List<ColocateRange> currentRanges,
+                                                        Set<Tuple> observedCanonicalLowers,
+                                                        int colocateColumnCount,
+                                                        ThrowingSupplier<Long> packShardGroupSupplier)
+            throws DdlException {
+        if (observedCanonicalLowers.isEmpty()) {
+            return currentRanges;
+        }
+        List<ColocateRange> working = new ArrayList<>(currentRanges);
+        for (Tuple canonicalLower : observedCanonicalLowers) {
+            Tuple prefix = new Tuple(canonicalLower.getValues().subList(0, colocateColumnCount));
+            int idx = ColocateRangeMgr.indexOf(working, prefix);
+            if (idx < 0) {
+                // Prefix not covered — defensive; ColocateRangeMgr's contiguity invariant
+                // makes this unreachable in production.
+                continue;
+            }
+            if (ColocateRangeMgr.hasBoundaryAt(working, prefix)) {
+                // Boundary already present — idempotent skip.
+                continue;
+            }
+            ColocateRange owner = working.get(idx);
+            long newPackShardGroupId;
+            try {
+                newPackShardGroupId = packShardGroupSupplier.get();
+            } catch (DdlException e) {
+                throw e;
+            } catch (Exception e) {
+                throw new DdlException("Failed to allocate PACK shard group: " + e.getMessage(), e);
+            }
+            ColocateRange leftPart = new ColocateRange(
+                    Range.of(owner.getRange().getLowerBound(), prefix,
+                            owner.getRange().isLowerBoundIncluded(), false),
+                    owner.getShardGroupId());
+            ColocateRange rightPart = new ColocateRange(
+                    Range.of(prefix, owner.getRange().getUpperBound(),
+                            true, owner.getRange().isUpperBoundIncluded()),
+                    newPackShardGroupId);
+            working.set(idx, leftPart);
+            working.add(idx + 1, rightPart);
+        }
+        return working;
+    }
+
 
     // only for test
     public void clear() {
@@ -939,6 +1159,14 @@ public class ColocateTableIndex implements Writable {
                                                GroupId assignedGroupId) throws DdlException {
         if (!table.getDefaultDistributionInfo().supportColocate()) {
             throw new DdlException("Table " + table.getName() + " does not support colocation");
+        }
+        // Range colocate group membership is established at CREATE TABLE and tied to a PACK shard
+        // group that owns physical placement; ALTER ... colocate_with cannot atomically rewrite
+        // the OP_MODIFY_TABLE_COLOCATE_V2 + OP_COLOCATE_RANGE_UPDATE ordering, so a crash
+        // between them would leave a follower with schema but no range mgr entry.
+        if (table.isRangeDistribution()) {
+            throw new DdlException(
+                    "ALTER ... colocate_with is not supported for range distribution tables");
         }
 
         String oldGroup = table.getColocateGroup();

@@ -42,6 +42,7 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
+import java.sql.Statement;
 import java.sql.Types;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -62,6 +63,8 @@ public class JDBCMetadataTest {
     DatabaseMetaData metaData;
     @Mocked
     PreparedStatement preparedStatement;
+    @Mocked
+    Statement statement;
     @Mocked
     ResultSet queryResultSet;
     @Mocked
@@ -401,13 +404,16 @@ public class JDBCMetadataTest {
 
     @Test
     public void testGetTableFromQuery() throws SQLException {
+        String passThroughQuery = "SELECT 1 AS id, payload ? 'k' AS name FROM docs";
+        String metadataQuery = "SELECT * FROM (" + passThroughQuery + ") starrocks_query WHERE 1 = 0";
+
         new Expectations() {
             {
-                connection.prepareStatement("SELECT * FROM (SELECT 1 AS id, 'abc' AS name) starrocks_query WHERE 1 = 0");
-                result = preparedStatement;
+                connection.createStatement();
+                result = statement;
                 minTimes = 1;
 
-                preparedStatement.executeQuery();
+                statement.executeQuery(metadataQuery);
                 result = queryResultSet;
                 minTimes = 1;
 
@@ -460,11 +466,11 @@ public class JDBCMetadataTest {
         };
 
         JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog", dataSource);
-        Table table = jdbcMetadata.getTableFromQuery(new ConnectContext(), "test", "SELECT 1 AS id, 'abc' AS name;");
+        Table table = jdbcMetadata.getTableFromQuery(new ConnectContext(), "test", passThroughQuery + ";");
         Assertions.assertInstanceOf(JDBCTable.class, table);
         JDBCTable jdbcTable = (JDBCTable) table;
         Assertions.assertTrue(jdbcTable.isQueryTable());
-        Assertions.assertEquals("(SELECT 1 AS id, 'abc' AS name) starrocks_query", jdbcTable.getCatalogTableName());
+        Assertions.assertEquals("(" + passThroughQuery + ") starrocks_query", jdbcTable.getCatalogTableName());
         Assertions.assertEquals(2, jdbcTable.getFullSchema().size());
         Assertions.assertEquals("id", jdbcTable.getFullSchema().get(0).getName());
         Assertions.assertEquals(Types.INTEGER, jdbcTable.getOriginalJdbcColumnTypes().get("id"));

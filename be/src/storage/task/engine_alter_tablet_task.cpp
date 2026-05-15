@@ -34,7 +34,6 @@
 
 #include "storage/task/engine_alter_tablet_task.h"
 
-#include "agent/agent_metrics.h"
 #include "base/utility/defer_op.h"
 #include "common/config_storage_fwd.h"
 #include "io/core/io_profiler.h"
@@ -42,6 +41,7 @@
 #include "runtime/exec_env.h"
 #include "storage/lake/schema_change.h"
 #include "storage/schema_change.h"
+#include "storage/storage_metrics.h"
 
 namespace starrocks {
 
@@ -58,7 +58,7 @@ Status EngineAlterTabletTask::execute() {
     MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(_mem_tracker.get());
     DeferOp op([&] { tls_thread_status.set_mem_tracker(prev_tracker); });
 
-    AgentMetrics::instance()->create_rollup_requests_total.increment(1);
+    StorageMetrics::instance()->create_rollup_requests_total.increment(1);
 
     auto scope = IOProfiler::scope(IOProfiler::TAG_ALTER, _alter_tablet_req.new_tablet_id);
 
@@ -79,7 +79,7 @@ Status EngineAlterTabletTask::execute() {
         LOG(WARNING) << alter_msg_header << "failed to do alter task. status=" << res.to_string()
                      << " detail run msg: " << '\n'
                      << task_detail_msg;
-        AgentMetrics::instance()->create_rollup_requests_failed.increment(1);
+        StorageMetrics::instance()->create_rollup_requests_failed.increment(1);
         return res;
     }
 

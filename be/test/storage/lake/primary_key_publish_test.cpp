@@ -13,6 +13,7 @@
 // limitations under the License.
 
 #include <gtest/gtest.h>
+#include <unistd.h>
 
 #include <random>
 
@@ -171,7 +172,8 @@ public:
     }
 
 protected:
-    constexpr static const char* const kTestGroupPath = "test_lake_primary_key";
+    // Suffix with PID so concurrent processes (e.g. gtest-parallel) never share this dir.
+    inline static const std::string kTestGroupPath = "test_lake_primary_key_" + std::to_string(getpid());
     constexpr static const int kChunkSize = 12;
 
     std::shared_ptr<TabletMetadata> _tablet_metadata;

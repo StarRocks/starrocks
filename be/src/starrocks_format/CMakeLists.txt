@@ -43,13 +43,11 @@ set(STARROCKS_LIBS
     Rowset
     Runtime
     RuntimeCore
-    TypesCore
     Types
     Util
     Script
     StarRocksGen
     Webserver
-    TestUtil
     Cache
     ${WL_END_GROUP}
 )

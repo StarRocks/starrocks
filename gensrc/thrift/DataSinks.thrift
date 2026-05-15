@@ -273,6 +273,12 @@ struct TIcebergTableSink {
     9: optional string data_location
     // write mode: ROW_DELTA for UPDATE / MERGE (mixed delete + data files)
     10: optional TIcebergWriteMode write_mode
+    // Codec for position-delete files. `compression_type` is the codec for data
+    // files. Each sink populates only the field(s) it actually writes:
+    //   IcebergTableSink    (data only)   → compression_type
+    //   IcebergDeleteSink   (delete only) → delete_compression_type
+    //   IcebergRowDeltaSink (both)        → both
+    11: optional Types.TCompressionType delete_compression_type
 }
 
 struct THiveTableSink {

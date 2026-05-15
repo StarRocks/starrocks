@@ -32,8 +32,6 @@ void ServiceMetrics::install(MetricRegistry* registry) {
     }
     _registry = registry;
 
-    registry->register_metric("staros_shard_info_fallback_total", &staros_shard_info_fallback_total);
-    registry->register_metric("staros_shard_info_fallback_failed_total", &staros_shard_info_fallback_failed_total);
     registry->register_metric("short_circuit_request_total", &short_circuit_request_total);
     registry->register_metric("short_circuit_request_duration_us", &short_circuit_request_duration_us);
 }

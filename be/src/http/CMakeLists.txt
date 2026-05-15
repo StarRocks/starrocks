@@ -19,6 +19,7 @@ set(EXECUTABLE_OUTPUT_PATH "${BUILD_DIR}/src/http")
 
 set(HTTP_CORE_FILES
   http_metrics.cpp
+  http_auth.cpp
   http_headers.cpp
   http_method.cpp
   http_request.cpp
@@ -74,7 +75,7 @@ if(STARROCKS_JIT_ENABLE)
 endif()
 
 ADD_BE_LIB(Webserver ${WEB_SERVER_FILES})
-target_link_libraries(Webserver PUBLIC HttpCore)
+target_link_libraries(Webserver PUBLIC HttpCore PRIVATE Storage)
 
 # target_link_libraries(Webserver pthread dl Util)
 #ADD_BE_TEST(integer-array-test)

@@ -51,7 +51,8 @@ public:
     {
     }
 
-    Status replicate_lake_remote_storage(const TReplicateSnapshotRequest& request);
+    Status replicate_lake_remote_storage(const TReplicateSnapshotRequest& request,
+                                         ThreadPool* replicate_file_thread_pool);
 
     StatusOr<TabletMetadataPtr> build_source_tablet_meta(int64_t src_tablet_id, int64_t version,
                                                          const std::string& meta_dir,
@@ -109,11 +110,7 @@ public:
     static bool should_use_parallel_copy(size_t file_count, const ThreadPool* thread_pool);
 
 private:
-    ThreadPool* get_replicate_file_thread_pool();
-
     TabletManager* _tablet_manager;
-    // Non-owning pointer managed by AgentServer.
-    ThreadPool* _replicate_file_thread_pool = nullptr;
 #ifdef USE_STAROS
     // Used for non-S3 storage types to construct relative paths
     // S3 storage type uses full path provided by FE instead

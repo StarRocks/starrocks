@@ -711,6 +711,59 @@ public class MergeTabletJobTest {
         Assertions.assertThrows(StarRocksException.class, factory::createTabletReshardJob);
     }
 
+    /**
+     * pairThresh = ceil(0.8 * targetSize) is now distinct from mergeGroupCap = targetSize.
+     * A tablet whose size is in [pairThresh, targetSize) must be excluded from merging
+     * (it's already close enough to the target band that merging it produces an output that
+     * would land near or above splitThreshold = ceil(1.5 * targetSize)).
+     */
+    @Test
+    public void testMergeTabletJobFactoryExcludesTabletAtPairThreshold() throws Exception {
+        ensureTabletCount(4);
+        PhysicalPartition physicalPartition = table.getAllPhysicalPartitions().iterator().next();
+        MaterializedIndex oldIndex = physicalPartition.getLatestBaseIndex();
+
+        List<Tablet> orderedTablets = new ArrayList<>(oldIndex.getTablets());
+        long visibleVersionTime = physicalPartition.getVisibleVersionTime();
+        // targetSize = 100, pairThresh = 80, mergeCap = 100
+        // sizes: [40, 90, 30, 30]
+        // - 40 < 80, group=[40] size=40
+        // - 90 >= 80 (pairThresh), flush group of size 1 (dropped), reset
+        // - 30 < 80, group=[30] size=30
+        // - 30 < 80, group=[30,30] size=60
+        // - end: flush [30,30]
+        // Expected merge groups: [[30, 30]]; the 90-byte tablet is the exclusion under test.
+        long[] sizes = {40L, 90L, 30L, 30L};
+        for (int i = 0; i < orderedTablets.size(); i++) {
+            LakeTablet tablet = (LakeTablet) orderedTablets.get(i);
+            tablet.setDataSize(sizes[i]);
+            tablet.setDataSizeUpdateTime(visibleVersionTime);
+        }
+
+        MergeTabletClause clause = new MergeTabletClause();
+        clause.setTabletReshardTargetSize(100L);
+        MergeTabletJobFactory factory = new MergeTabletJobFactory(db, table, clause);
+        MergeTabletJob mergeJob = (MergeTabletJob) factory.createTabletReshardJob();
+
+        ReshardingPhysicalPartition reshardingPartition =
+                mergeJob.getReshardingPhysicalPartitions().get(physicalPartition.getId());
+        Assertions.assertNotNull(reshardingPartition);
+        ReshardingMaterializedIndex reshardingIndex =
+                reshardingPartition.getReshardingIndexes().get(oldIndex.getId());
+        Assertions.assertNotNull(reshardingIndex);
+
+        List<List<Long>> mergedTabletGroups = new ArrayList<>();
+        for (ReshardingTablet reshardingTablet : reshardingIndex.getReshardingTablets()) {
+            if (reshardingTablet.getMergingTablet() != null) {
+                mergedTabletGroups.add(reshardingTablet.getMergingTablet().getOldTabletIds());
+            }
+        }
+
+        Assertions.assertEquals(List.of(
+                        List.of(orderedTablets.get(2).getId(), orderedTablets.get(3).getId())),
+                mergedTabletGroups);
+    }
+
     @Test
     public void testMergeTabletJobFactoryRejectNegativeTargetSize() throws Exception {
         MergeTabletClause clause = new MergeTabletClause();

@@ -39,7 +39,6 @@
 #include <sstream>
 #include <utility>
 
-#include "agent/utils.h"
 #include "base/compression/compression_utils.h"
 #include "base/simd/simd.h"
 #include "base/uid_util.h"

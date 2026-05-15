@@ -51,6 +51,12 @@ public class TabletReshardJobMgr extends FrontendDaemon implements GsonPostProce
     // Original tablet id -> resharding tablet info
     protected final Map<Long, ReshardingTabletInfo> reshardingTabletInfos = Maps.newConcurrentMap();
 
+    // Colocate checker: stateless, invoked from this manager's tick. Owns no
+    // thread of its own — shares this manager's scheduler cadence
+    // ({@code tablet_reshard_job_scheduler_interval_ms}) and self-gates on shared-data-mode,
+    // leader status, and empty unstable-groups before doing any real work.
+    private final ColocateChecker colocateChecker = new ColocateChecker();
+
     public TabletReshardJobMgr() {
         super("tablet-reshard-job-mgr", Config.tablet_reshard_job_scheduler_interval_ms);
     }
@@ -166,6 +172,7 @@ public class TabletReshardJobMgr extends FrontendDaemon implements GsonPostProce
 
     @Override
     protected void runAfterCatalogReady() {
+        colocateChecker.runOneCycle();
         runTabletReshardJobs();
     }
 

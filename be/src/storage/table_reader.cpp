@@ -25,6 +25,7 @@
 #include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
 #include "serde/protobuf_serde.h"
+#include "storage/chunk_helper.h"
 #include "storage/local_tablet_reader.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet.h"
@@ -287,7 +288,7 @@ Status TableReader::_tablet_multi_get_rpc(const std::shared_ptr<PInternalService
     }
     auto& values_pb = result.values();
     TRY_CATCH_BAD_ALLOC({
-        StatusOr<Chunk> res = serde::deserialize_chunk_pb_with_schema(*value_schema, values_pb.data());
+        StatusOr<Chunk> res = ChunkHelper::deserialize_chunk_pb_with_schema(*value_schema, values_pb.data());
         if (!res.ok()) return res.status();
         values.columns().swap(res.value().columns());
     });

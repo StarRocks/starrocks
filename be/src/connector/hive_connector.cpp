@@ -23,6 +23,7 @@
 #include "common/config_scan_io_fwd.h"
 #include "connector/hive_chunk_sink.h"
 #include "exec/hdfs_scanner/cache_select_scanner.h"
+#include "exec/hdfs_scanner/hdfs_scanner_avro.h"
 #include "exec/hdfs_scanner/hdfs_scanner_json.h"
 #include "exec/hdfs_scanner/hdfs_scanner_orc.h"
 #include "exec/hdfs_scanner/hdfs_scanner_parquet.h"
@@ -304,15 +305,22 @@ Status HiveDataSource::_init_partition_values() {
                             _scan_range.partition_id, full_path, relative_path, table_name));
     }
 
-    const auto& partition_values = partition_desc->partition_key_value_evals();
-    _partition_values = partition_desc->partition_key_value_evals();
+    // Build partition_key ExprContexts in the fragment-local pool. ExprContext::prepare
+    // captures a fragment RuntimeState in its `_runtime_state` field, so the contexts
+    // must live and close within the fragment scope — they cannot be shared from the
+    // (query-scoped) HdfsPartitionDescriptor.
+    const auto& thrift_partition_key_exprs = partition_desc->thrift_partition_key_exprs();
+    RETURN_IF_ERROR(
+            ExprFactory::create_expr_trees(&_pool, thrift_partition_key_exprs, &_partition_values, _runtime_state));
+    RETURN_IF_ERROR(ExprExecutor::prepare(_partition_values, _runtime_state));
+    RETURN_IF_ERROR(ExprExecutor::open(_partition_values, _runtime_state));
 
     // init partition chunk
     auto partition_chunk = std::make_shared<Chunk>();
     for (int i = 0; i < _partition_slots.size(); i++) {
         SlotId slot_id = _partition_slots[i]->id();
         int partition_col_idx = _partition_index_in_hdfs_partition_columns[i];
-        ASSIGN_OR_RETURN(auto partition_value_col, partition_values[partition_col_idx]->evaluate(nullptr));
+        ASSIGN_OR_RETURN(auto partition_value_col, _partition_values[partition_col_idx]->evaluate(nullptr));
         DCHECK(partition_value_col->is_constant());
         partition_chunk->append_column(std::move(partition_value_col), slot_id);
     }
@@ -804,6 +812,9 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
     scanner_params.min_max_conjunct_ctxs = _min_max_conjunct_ctxs;
     scanner_params.min_max_tuple_desc = _min_max_tuple_desc;
     scanner_params.hive_column_names = &_hive_column_names;
+    if (const auto* hdfs_desc = dynamic_cast<const HdfsTableDescriptor*>(_hive_table)) {
+        scanner_params.avro_schema_json = hdfs_desc->get_avro_schema_json();
+    }
     scanner_params.case_sensitive = _case_sensitive;
     scanner_params.profile = &_profile;
     scanner_params.lazy_column_coalesce_counter = get_lazy_column_coalesce_counter();
@@ -875,6 +886,11 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
         use_kudu_jni_reader = scan_range.use_kudu_jni_reader;
     }
 
+    bool use_avro_jni_reader = false;
+    if (scan_range.__isset.use_avro_jni_reader) {
+        use_avro_jni_reader = scan_range.use_avro_jni_reader;
+    }
+
     JniScanner::CreateOptions jni_scanner_create_options = {.fs_options = &fsOptions,
                                                             .hive_table = _hive_table,
                                                             .scan_range = &scan_range,
@@ -927,8 +943,15 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
         } else {
             scanner = new HdfsTextScanner();
         }
-    } else if ((format == THdfsFileFormat::AVRO || format == THdfsFileFormat::RC_FILE ||
-                format == THdfsFileFormat::RC_TEXT || format == THdfsFileFormat::SEQUENCE_FILE) &&
+    } else if (format == THdfsFileFormat::AVRO && (dynamic_cast<const HdfsTableDescriptor*>(_hive_table) != nullptr ||
+                                                   dynamic_cast<const FileTableDescriptor*>(_hive_table) != nullptr)) {
+        if (use_avro_jni_reader) {
+            scanner = create_hive_jni_scanner(jni_scanner_create_options).release();
+        } else {
+            scanner = new HdfsAvroScanner();
+        }
+    } else if ((format == THdfsFileFormat::RC_FILE || format == THdfsFileFormat::RC_TEXT ||
+                format == THdfsFileFormat::SEQUENCE_FILE) &&
                (dynamic_cast<const HdfsTableDescriptor*>(_hive_table) != nullptr ||
                 dynamic_cast<const FileTableDescriptor*>(_hive_table) != nullptr)) {
         // THdfsFileFormat::RC_TEXT is deprecated. RCText and RCBinary are both mapped to RC_FILE in the frontend.
@@ -963,6 +986,7 @@ void HiveDataSource::close(RuntimeState* state) {
     }
     ExprExecutor::close(_min_max_conjunct_ctxs, state);
     ExprExecutor::close(_partition_conjunct_ctxs, state);
+    ExprExecutor::close(_partition_values, state);
     ExprExecutor::close(_scanner_conjunct_ctxs, state);
     for (auto& it : _conjunct_ctxs_by_slot) {
         ExprExecutor::close(it.second, state);

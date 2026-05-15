@@ -478,6 +478,12 @@ For more information on how to build a monitoring service for your StarRocks clu
 - Type: Cumulative
 - Description: Shared-data only. Subset of `starrocks_be_staros_shard_info_fallback_total` where the starmgr RPC returned a non-OK status. Use the ratio `failed_total / fallback_total` to alert on transient starmgr errors separately from routine successful fallbacks.
 
+## `starrocks_be_staros_shard_count`
+
+- Unit: Count
+- Type: Instantaneous
+- Description: Shared-data only. Number of shards currently assigned to this BE's StarOSWorker (size of the worker's local shard table). Updated synchronously inside `StarOSWorker::add_shard` and `StarOSWorker::remove_shard` (push-on-mutation), so the value reflects the last shard table mutation rather than being recomputed at scrape time. The gauge is not reset on BE shutdown and will retain its last value until the next mutation. Use it to observe shard distribution balance across BEs and to detect drift from the FE-side placement.
+
 ## `starrocks_fe_clone_task_copy_bytes`
 
 - Unit: Bytes
@@ -728,6 +734,26 @@ All transaction metrics share the following labels:
 
 - Unit: Bytes
 - Description: Memory used by storage page cache.
+
+## `spm_baseline_count`
+
+- Unit: Count
+- Type: Instantaneous
+- Description: Current number of global SQL Plan Management (SPM) baselines on the FE leader.
+
+## `spm_capture_candidate_total`
+
+- Unit: Count
+- Type: Cumulative
+- Labels: `result` (`captured`, `skipped_duplicate`, `skipped_table_count`, `skipped_table_missing`, `skipped_db_missing`, `skipped_pattern_mismatch`, or `failed`)
+- Description: Total number of SPM auto-capture candidate processing results. Each series records how query-history candidates are classified during auto-capture.
+
+## `spm_rewrite_total`
+
+- Unit: Count
+- Type: Cumulative
+- Labels: `result` (`hit`, `miss`, or `error`)
+- Description: Total number of SPM rewrite attempts by result. `hit` means a baseline is matched and applied successfully. `miss` means rewrite is attempted but no enabled baseline matches. `error` means rewrite falls back because an exception occurs during the SPM rewrite flow.
 
 ## `stream_load`
 

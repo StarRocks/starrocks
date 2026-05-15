@@ -56,6 +56,7 @@ public final class ProfileKeyDictionary {
     public static final String NON_DEFAULT_SESSION_VARIABLES = "NonDefaultSessionVariables";
     public static final String IS_PROFILE_ASYNC = "IsProfileAsync";
     public static final String HIT_MATERIALIZED_VIEWS = "HitMaterializedViews";
+    public static final String EXPLAIN_PLAN = "ExplainPlan";
 
     // --- Execution info-string keys ---
     public static final String TOPOLOGY = "Topology";
@@ -273,6 +274,7 @@ public final class ProfileKeyDictionary {
             NON_DEFAULT_SESSION_VARIABLES,
             IS_PROFILE_ASYNC,
             HIT_MATERIALIZED_VIEWS,
+            EXPLAIN_PLAN,
 
             // --- Execution info-string keys ---
             TOPOLOGY,

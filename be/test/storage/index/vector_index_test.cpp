@@ -14,6 +14,8 @@
 
 #include <gtest/gtest.h>
 
+#include <limits>
+
 #include "fs/fs_factory.h"
 
 #ifdef WITH_TENANN
@@ -409,5 +411,279 @@ TEST_F(VectorIndexWriterTest, array_column_writer_rejects_missing_dim) {
     ASSERT_TRUE(st.is_invalid_argument()) << st.to_string();
     ASSERT_NE(st.message().find("dim"), std::string_view::npos) << st.message();
 }
+
+#ifdef WITH_TENANN
+// --------------------------------------------------------------------------
+// Adaptive ef_search
+// --------------------------------------------------------------------------
+
+class AdaptiveEfSearchTest : public testing::Test {
+protected:
+    void SetUp() override {
+        _saved_enable = config::enable_vector_adaptive_search;
+        _saved_alpha = config::vector_adaptive_ef_alpha;
+        _saved_cap = config::vector_adaptive_ef_cap;
+        _saved_baseline = config::vector_adaptive_ef_baseline_rows;
+        config::enable_vector_adaptive_search = true;
+        config::vector_adaptive_ef_alpha = 1.0;
+        config::vector_adaptive_ef_cap = 8.0;
+        config::vector_adaptive_ef_baseline_rows = 100000;
+    }
+
+    void TearDown() override {
+        config::enable_vector_adaptive_search = _saved_enable;
+        config::vector_adaptive_ef_alpha = _saved_alpha;
+        config::vector_adaptive_ef_cap = _saved_cap;
+        config::vector_adaptive_ef_baseline_rows = _saved_baseline;
+    }
+
+    bool _saved_enable = true;
+    double _saved_alpha = 1.0;
+    double _saved_cap = 8.0;
+    int64_t _saved_baseline = 100000;
+};
+
+TEST_F(AdaptiveEfSearchTest, below_baseline_not_scaled) {
+    // rows <= baseline: use max(user_ef, k) without scaling.
+    EXPECT_EQ(100, compute_adaptive_ef_search(100, 100, 50000));
+    EXPECT_EQ(100, compute_adaptive_ef_search(100, 100, 100000));
+    // user_ef < k: floor at k.
+    EXPECT_EQ(100, compute_adaptive_ef_search(40, 100, 50000));
+    // user_ef > k: honor user_ef as the base.
+    EXPECT_EQ(200, compute_adaptive_ef_search(200, 100, 50000));
+}
+
+TEST_F(AdaptiveEfSearchTest, log_scaling_above_baseline) {
+    // 1M rows, baseline 100K, alpha=1.0 -> factor = 1 + log2(10) = 4.32.
+    // With base max(100,100)=100, expect ef ~ 432.
+    EXPECT_EQ(432, compute_adaptive_ef_search(100, 100, 1000000));
+    // 200K rows -> factor = 1 + log2(2) = 2.0 -> ef = 200.
+    EXPECT_EQ(200, compute_adaptive_ef_search(100, 100, 200000));
+    // 500K rows -> factor = 1 + log2(5) ~ 3.32 -> ef = 332.
+    EXPECT_EQ(332, compute_adaptive_ef_search(100, 100, 500000));
+}
+
+TEST_F(AdaptiveEfSearchTest, cap_applied_on_huge_segments) {
+    // 12.8M rows: factor = 1 + log2(128) = 8.0 -> at cap, ef = 800.
+    EXPECT_EQ(800, compute_adaptive_ef_search(100, 100, 12800000));
+    // 100M rows: factor would exceed cap (= 1 + ~10), clamped to 8, ef = 800.
+    EXPECT_EQ(800, compute_adaptive_ef_search(100, 100, 100000000));
+}
+
+TEST_F(AdaptiveEfSearchTest, result_clamped_to_int_max) {
+    // Pathological config: extremely large user_ef combined with a high cap
+    // could push `ef_base * factor` past INT_MAX. The cast must clamp instead
+    // of relying on UB float-to-int conversion.
+    config::vector_adaptive_ef_cap = 1e9;
+    const int huge_ef = std::numeric_limits<int>::max() / 2;
+    int result = compute_adaptive_ef_search(huge_ef, 1, /*rows=*/100000000);
+    EXPECT_EQ(std::numeric_limits<int>::max(), result);
+}
+
+TEST_F(AdaptiveEfSearchTest, nonfinite_config_falls_back_to_base) {
+    // `vector_adaptive_ef_alpha` / `vector_adaptive_ef_cap` are mutable doubles
+    // and `strtod` accepts "nan"/"inf". A non-finite factor must short-circuit
+    // before the float-to-int cast (which is UB on NaN).
+    config::vector_adaptive_ef_alpha = std::numeric_limits<double>::quiet_NaN();
+    EXPECT_EQ(100, compute_adaptive_ef_search(100, 100, 1000000));
+
+    config::vector_adaptive_ef_alpha = std::numeric_limits<double>::infinity();
+    EXPECT_EQ(100, compute_adaptive_ef_search(100, 100, 1000000));
+
+    config::vector_adaptive_ef_alpha = 1.0;
+    config::vector_adaptive_ef_cap = std::numeric_limits<double>::quiet_NaN();
+    EXPECT_EQ(100, compute_adaptive_ef_search(100, 100, 1000000));
+}
+
+TEST_F(AdaptiveEfSearchTest, respects_max_ef_k_floor) {
+    // query_k greater than user_ef: scaling base is query_k.
+    // 1M rows, base=100, factor=4.32 -> ef=432 regardless of user_ef=40.
+    EXPECT_EQ(432, compute_adaptive_ef_search(40, 100, 1000000));
+    // user_ef=200, k=100 -> base=200, 1M rows -> ef=200 * 4.32 = 864.
+    EXPECT_EQ(864, compute_adaptive_ef_search(200, 100, 1000000));
+}
+
+TEST_F(AdaptiveEfSearchTest, config_overrides_alpha_and_cap) {
+    config::vector_adaptive_ef_alpha = 1.5;
+    EXPECT_EQ(598, compute_adaptive_ef_search(100, 100, 1000000)); // 1 + 1.5*3.32 = 5.98
+
+    config::vector_adaptive_ef_alpha = 1.0;
+    config::vector_adaptive_ef_cap = 4.0;
+    EXPECT_EQ(400, compute_adaptive_ef_search(100, 100, 1000000)); // capped at 4.0
+}
+
+TEST_F(AdaptiveEfSearchTest, apply_writes_scaled_value_to_meta) {
+    tenann::IndexMeta meta;
+    meta.search_params()[starrocks::index::vector::EF_SEARCH] = 100;
+
+    apply_adaptive_ef_search(&meta, /*rows=*/1000000, /*k=*/100, /*user_set_ef=*/false);
+
+    EXPECT_EQ(432, meta.search_params()[starrocks::index::vector::EF_SEARCH].get<int>());
+}
+
+TEST_F(AdaptiveEfSearchTest, apply_skipped_when_disabled) {
+    config::enable_vector_adaptive_search = false;
+    tenann::IndexMeta meta;
+    meta.search_params()[starrocks::index::vector::EF_SEARCH] = 100;
+
+    apply_adaptive_ef_search(&meta, 1000000, 100, false);
+
+    EXPECT_EQ(100, meta.search_params()[starrocks::index::vector::EF_SEARCH].get<int>());
+}
+
+TEST_F(AdaptiveEfSearchTest, apply_skipped_when_user_set_ef) {
+    tenann::IndexMeta meta;
+    meta.search_params()[starrocks::index::vector::EF_SEARCH] = 100;
+
+    apply_adaptive_ef_search(&meta, 1000000, 100, /*user_set_ef=*/true);
+
+    EXPECT_EQ(100, meta.search_params()[starrocks::index::vector::EF_SEARCH].get<int>());
+}
+
+TEST_F(AdaptiveEfSearchTest, apply_noop_when_no_ef_in_meta) {
+    tenann::IndexMeta meta;
+    // No efSearch key set (non-HNSW index).
+    apply_adaptive_ef_search(&meta, 1000000, 100, false);
+    EXPECT_EQ(meta.search_params().find(starrocks::index::vector::EF_SEARCH), meta.search_params().end());
+}
+
+TEST_F(AdaptiveEfSearchTest, apply_noop_when_below_baseline) {
+    tenann::IndexMeta meta;
+    meta.search_params()[starrocks::index::vector::EF_SEARCH] = 100;
+
+    apply_adaptive_ef_search(&meta, /*rows=*/50000, 100, false);
+
+    EXPECT_EQ(100, meta.search_params()[starrocks::index::vector::EF_SEARCH].get<int>());
+}
+
+// ef_base = max(user_ef, query_k); when both are non-positive the helper must
+// short-circuit to 0 so downstream `static_cast<int>` never sees a negative
+// scaled value (which would then be clamped to INT_MAX by the cap check).
+TEST_F(AdaptiveEfSearchTest, compute_returns_zero_when_ef_base_nonpositive) {
+    EXPECT_EQ(0, compute_adaptive_ef_search(0, 0, 1000000));
+    EXPECT_EQ(0, compute_adaptive_ef_search(-5, -3, 1000000));
+    // Row count below baseline doesn't matter: the guard fires before baseline.
+    EXPECT_EQ(0, compute_adaptive_ef_search(0, 0, 50));
+}
+
+// A non-positive baseline disables scaling entirely. Defends against
+// pathological online retuning (`ADMIN SET FRONTEND CONFIG`-style edits to BE
+// configs that set baseline to 0 or a negative value).
+TEST_F(AdaptiveEfSearchTest, compute_no_scale_when_baseline_nonpositive) {
+    config::vector_adaptive_ef_baseline_rows = 0;
+    EXPECT_EQ(100, compute_adaptive_ef_search(100, 100, 10000000));
+
+    config::vector_adaptive_ef_baseline_rows = -1;
+    EXPECT_EQ(100, compute_adaptive_ef_search(100, 100, 10000000));
+}
+
+// alpha <= 0 produces factor <= 1.0 above baseline; we must NOT shrink ef
+// below the base (faiss already guarantees `ef = max(efSearch, k)` internally,
+// so shrinking would be silently overridden anyway).
+TEST_F(AdaptiveEfSearchTest, compute_no_scale_when_alpha_zero) {
+    config::vector_adaptive_ef_alpha = 0.0;
+    EXPECT_EQ(100, compute_adaptive_ef_search(100, 100, 1000000));
+    EXPECT_EQ(200, compute_adaptive_ef_search(200, 50, 100000000));
+}
+
+TEST_F(AdaptiveEfSearchTest, compute_no_scale_when_alpha_negative) {
+    // A negative alpha would mathematically yield factor < 1.0 above baseline.
+    // The `factor <= 1.0` guard must keep us at the floor.
+    config::vector_adaptive_ef_alpha = -1.0;
+    EXPECT_EQ(100, compute_adaptive_ef_search(100, 100, 1000000));
+    EXPECT_EQ(100, compute_adaptive_ef_search(100, 100, 100000000));
+}
+
+// segment_num_rows = 0 is unusual but legal: the baseline check (rows <=
+// baseline) short-circuits before any log2 is evaluated, avoiding log2(0) = -inf.
+TEST_F(AdaptiveEfSearchTest, compute_no_scale_when_rows_zero) {
+    EXPECT_EQ(100, compute_adaptive_ef_search(100, 100, 0));
+}
+
+// efSearch stored as a JSON string ("100") must still drive adaptive scaling.
+// tenann meta serialization can round-trip integers as strings depending on the
+// caller; apply_adaptive_ef_search must accept both shapes.
+TEST_F(AdaptiveEfSearchTest, apply_scales_when_ef_is_string) {
+    tenann::IndexMeta meta;
+    meta.search_params()[starrocks::index::vector::EF_SEARCH] = std::string("100");
+
+    apply_adaptive_ef_search(&meta, /*rows=*/1000000, /*k=*/100, /*user_set_ef=*/false);
+
+    // Effective ef is rewritten as an int (matches compute_adaptive_ef_search return).
+    EXPECT_EQ(432, meta.search_params()[starrocks::index::vector::EF_SEARCH].get<int>());
+}
+
+// A malformed string in efSearch must be tolerated: stoi throws, we swallow and
+// leave the original value alone rather than crashing the query path.
+TEST_F(AdaptiveEfSearchTest, apply_skipped_when_ef_string_invalid) {
+    tenann::IndexMeta meta;
+    meta.search_params()[starrocks::index::vector::EF_SEARCH] = std::string("not-a-number");
+
+    apply_adaptive_ef_search(&meta, 1000000, 100, false);
+
+    EXPECT_EQ("not-a-number", meta.search_params()[starrocks::index::vector::EF_SEARCH].get<std::string>());
+}
+
+// JSON value of an unexpected shape (float, bool, array) must be ignored so we
+// don't silently coerce non-integer types into ef_search.
+TEST_F(AdaptiveEfSearchTest, apply_skipped_when_ef_is_unsupported_type) {
+    {
+        // Float: is_number_integer() == false, is_string() == false.
+        tenann::IndexMeta meta;
+        meta.search_params()[starrocks::index::vector::EF_SEARCH] = 100.5;
+        apply_adaptive_ef_search(&meta, 1000000, 100, false);
+        EXPECT_DOUBLE_EQ(100.5, meta.search_params()[starrocks::index::vector::EF_SEARCH].get<double>());
+    }
+    {
+        tenann::IndexMeta meta;
+        meta.search_params()[starrocks::index::vector::EF_SEARCH] = true;
+        apply_adaptive_ef_search(&meta, 1000000, 100, false);
+        EXPECT_EQ(true, meta.search_params()[starrocks::index::vector::EF_SEARCH].get<bool>());
+    }
+    {
+        tenann::IndexMeta meta;
+        meta.search_params()[starrocks::index::vector::EF_SEARCH] = std::vector<int>{1, 2, 3};
+        apply_adaptive_ef_search(&meta, 1000000, 100, false);
+        EXPECT_TRUE(meta.search_params()[starrocks::index::vector::EF_SEARCH].is_array());
+    }
+}
+
+// efSearch present but non-positive: skip scaling and leave value alone. A
+// non-positive ef wouldn't survive faiss anyway, but the helper must not
+// rewrite it (e.g. into a scaled value that hides the real misconfiguration).
+TEST_F(AdaptiveEfSearchTest, apply_skipped_when_user_ef_nonpositive) {
+    {
+        tenann::IndexMeta meta;
+        meta.search_params()[starrocks::index::vector::EF_SEARCH] = 0;
+        apply_adaptive_ef_search(&meta, 1000000, 100, false);
+        EXPECT_EQ(0, meta.search_params()[starrocks::index::vector::EF_SEARCH].get<int>());
+    }
+    {
+        tenann::IndexMeta meta;
+        meta.search_params()[starrocks::index::vector::EF_SEARCH] = -10;
+        apply_adaptive_ef_search(&meta, 1000000, 100, false);
+        EXPECT_EQ(-10, meta.search_params()[starrocks::index::vector::EF_SEARCH].get<int>());
+    }
+}
+
+// When the formula produces a value identical to user_ef the helper must skip
+// the assignment entirely. We force this with alpha=0 + above-baseline rows so
+// factor==1.0 and compute returns the unmodified ef_base. The distinguishing
+// signal is the JSON value's type stability: we initialize with a string and
+// verify it stays a string (a redundant write would coerce it to int).
+TEST_F(AdaptiveEfSearchTest, apply_no_rewrite_when_effective_equals_user) {
+    config::vector_adaptive_ef_alpha = 0.0;
+    tenann::IndexMeta meta;
+    meta.search_params()[starrocks::index::vector::EF_SEARCH] = std::string("100");
+
+    apply_adaptive_ef_search(&meta, /*rows=*/10000000, /*k=*/100, /*user_set_ef=*/false);
+
+    // Still a string — the helper exited via the `eff_ef == user_ef` branch
+    // before assigning an int back to params.
+    EXPECT_TRUE(meta.search_params()[starrocks::index::vector::EF_SEARCH].is_string());
+    EXPECT_EQ("100", meta.search_params()[starrocks::index::vector::EF_SEARCH].get<std::string>());
+}
+
+#endif // WITH_TENANN
 
 } // namespace starrocks

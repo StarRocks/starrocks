@@ -1,0 +1,106 @@
+-- name: test_meta_scan_fast_schema_change_uncompacted_segment @native
+CREATE DATABASE test_meta_scan_schema_change_${uuid0};
+-- result:
+-- !result
+USE test_meta_scan_schema_change_${uuid0};
+-- result:
+-- !result
+CREATE TABLE meta_schema_change (
+    k1 INT,
+    c0 INT,
+    c_drop INT,
+    c_move INT,
+    v1 VARCHAR(20)
+)
+DUPLICATE KEY(k1)
+DISTRIBUTED BY HASH(k1) BUCKETS 1
+PROPERTIES (
+    "replication_num" = "1",
+    "fast_schema_evolution" = "true",
+    "base_compaction_forbidden_time_ranges" = "* * * * *"
+);
+-- result:
+-- !result
+INSERT INTO meta_schema_change VALUES
+(1, 10, 100, 1000, 'alpha'),
+(2, 20, 200, 2000, 'beta'),
+(3, 30, NULL, 3000, 'gamma');
+-- result:
+-- !result
+[UC]rowset_before=SELECT NUM_ROWSET FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'meta_schema_change' AND c.TABLE_SCHEMA = 'test_meta_scan_schema_change_${uuid0}';
+-- result:
+2
+-- !result
+[UC]segment_before=SELECT NUM_SEGMENT FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'meta_schema_change' AND c.TABLE_SCHEMA = 'test_meta_scan_schema_change_${uuid0}';
+-- result:
+1
+-- !result
+SELECT ${rowset_before} >= 1 AS has_rowset_before, ${segment_before} >= 1 AS has_segment_before;
+-- result:
+1	1
+-- !result
+ALTER TABLE meta_schema_change RENAME COLUMN c_move TO c_renamed;
+-- result:
+-- !result
+ALTER TABLE meta_schema_change DROP COLUMN c_drop;
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+ALTER TABLE meta_schema_change ADD COLUMN added_null INT NULL AFTER c0;
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+ALTER TABLE meta_schema_change ADD COLUMN added_default INT DEFAULT '7' AFTER added_null;
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+ALTER TABLE meta_schema_change MODIFY COLUMN c_renamed INT AFTER added_default;
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+[UC]rowset_after=SELECT NUM_ROWSET FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'meta_schema_change' AND c.TABLE_SCHEMA = 'test_meta_scan_schema_change_${uuid0}';
+-- result:
+2
+-- !result
+[UC]segment_after=SELECT NUM_SEGMENT FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'meta_schema_change' AND c.TABLE_SCHEMA = 'test_meta_scan_schema_change_${uuid0}';
+-- result:
+1
+-- !result
+SELECT ${rowset_after} = ${rowset_before} AND ${segment_after} = ${segment_before} AND ${segment_after} > 0 AS old_segment_uncompacted;
+-- result:
+1
+-- !result
+SELECT min(c_renamed), max(c_renamed), count(c_renamed),
+       min(added_null) IS NULL, max(added_null) IS NULL, count(added_null),
+       min(added_default), max(added_default), count(added_default)
+FROM meta_schema_change [_META_];
+-- result:
+1000	3000	3	1	1	0	7	7	3
+-- !result
+SELECT column_size(added_null), column_compressed_size(added_null),
+       column_size(added_default), column_compressed_size(added_default)
+FROM meta_schema_change [_META_];
+-- result:
+0	0	0	0
+-- !result
+SELECT k1, c0, added_null, added_default, c_renamed, v1 FROM meta_schema_change ORDER BY k1;
+-- result:
+1	10	None	7	1000	alpha
+2	20	None	7	2000	beta
+3	30	None	7	3000	gamma
+-- !result
+DROP DATABASE test_meta_scan_schema_change_${uuid0} FORCE;
+-- result:
+-- !result

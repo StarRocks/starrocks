@@ -176,6 +176,7 @@ set(STORAGE_FILES
     rowset_merger.cpp
     column_predicate_rewriter.cpp
     column_predicate_dict_conjuct.cpp
+    column_predicate_inverted_index_fallback.cpp
     compaction_task.cpp
     compaction_utils.cpp
     compaction_manager.cpp
@@ -209,6 +210,7 @@ set(STORAGE_FILES
     lake/tablet_reshard_helper.cpp
     lake/tablet_splitter.cpp
     lake/tablet_merger.cpp
+    lake/tablet_merger_split_family.cpp
     lake/tablet_reshard.cpp
     lake/replication_txn_manager.cpp
     lake/lake_replication_txn_manager.cpp
@@ -307,7 +309,8 @@ set(STORAGE_FILES
     index/inverted/builtin/builtin_inverted_writer.cpp
     index/inverted/builtin/builtin_inverted_reader.cpp
     index/inverted/builtin/builtin_inverted_index_iterator.cpp
-    index/inverted/builtin/builtin_simple_analyzer.cpp)
+    index/inverted/builtin/builtin_simple_analyzer.cpp
+    manual_compaction.cpp)
 
 if (NOT BUILD_FORMAT_LIB)
     list(APPEND STORAGE_FILES  lake/starlet_location_provider.cpp)
@@ -317,4 +320,4 @@ ADD_BE_LIB(Storage
     ${STORAGE_FILES}
 )
 
-target_link_libraries(Storage PUBLIC ExecCore)
+target_link_libraries(Storage PUBLIC ExecCore Serde)
