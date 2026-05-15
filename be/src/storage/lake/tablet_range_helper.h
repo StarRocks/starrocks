@@ -52,9 +52,27 @@ public:
 
     static StatusOr<TabletRangePB> convert_t_range_to_pb_range(const TTabletRange& t_range);
 
-private:
-    // check if the tablet range is closedOpen
-    static Status _validate_tablet_range(const TabletRangePB& tablet_range_pb);
+    // Check that a single tablet range is well-formed: closed-open semantics
+    // (lower_bound inclusive when set, upper_bound exclusive when set), with
+    // the corresponding `*_bound_included` flag explicitly present.
+    // Either or both bounds may be absent (unbounded).
+    static Status validate_tablet_range(const TabletRangePB& tablet_range_pb);
+
+    // Check that a list of new-tablet ranges tiles the old tablet range
+    // exactly: old range itself is well-formed; each new range is
+    // well-formed and non-zero-width (lower != upper by byte equality);
+    // adjacent ranges meet exactly with no gaps or overlaps; first.lower
+    // matches old.lower; last.upper matches old.upper. Used by the external boundaries
+    // pre-split path to validate FE-supplied ranges before BE commits to
+    // writing K new tablets.
+    //
+    // Note: strict semantic ordering (lower < upper, ranges monotonically
+    // increasing) requires a schema for type-aware comparison and is the
+    // caller's responsibility. This helper only does schema-free structural
+    // checks.
+    static Status validate_new_tablet_ranges(
+            const TabletRangePB& old_tablet_range,
+            const google::protobuf::RepeatedPtrField<TabletRangePB>& new_tablet_ranges);
 };
 
 } // namespace starrocks::lake
