@@ -121,11 +121,7 @@ TEST_F(VectorIndexSearchTest, test_search_vector_index) {
         auto status = get_vector_meta(tablet_index, empty_meta);
 
         CHECK_OK(status);
-<<<<<<< HEAD
-        auto meta = status.value();
-=======
         auto index_meta = std::make_shared<tenann::IndexMeta>(status.value());
->>>>>>> 50dbbc1aff ([UT] Fix the compile issues of VectorIndexSearchTest (backport #72074) (#73330))
 
         std::shared_ptr<VectorIndexReader> ann_reader;
         VectorIndexReaderFactory::create_from_file(index_path, index_meta, &ann_reader);
@@ -173,11 +169,7 @@ TEST_F(VectorIndexSearchTest, test_select_empty_mark) {
         auto status = get_vector_meta(tablet_index, empty_meta);
 
         CHECK_OK(status);
-<<<<<<< HEAD
-        auto meta = status.value();
-=======
         auto index_meta = std::make_shared<tenann::IndexMeta>(status.value());
->>>>>>> 50dbbc1aff ([UT] Fix the compile issues of VectorIndexSearchTest (backport #72074) (#73330))
 
         std::shared_ptr<VectorIndexReader> ann_reader;
         VectorIndexReaderFactory::create_from_file(index_path, index_meta, &ann_reader);
