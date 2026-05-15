@@ -40,6 +40,15 @@
 #include "serde/column_array_serde.h"
 
 namespace starrocks::spill {
+<<<<<<< HEAD
+=======
+DEFINE_FAIL_POINT(spill_restore_sleep);
+DEFINE_FAIL_POINT(spill_restore_error);
+
+TQueryType::type spill_query_type(RuntimeState* state) {
+    return state->query_options().query_type;
+}
+>>>>>>> 8a7b7d3342 ([BugFix] Propagate sort merge provider errors to fragment context  (#73337))
 
 SpillProcessMetrics::SpillProcessMetrics(RuntimeProfile* profile, std::atomic_int64_t* total_spill_bytes_) {
     DCHECK(profile != nullptr);
