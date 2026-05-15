@@ -57,7 +57,9 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.PatternMatcher;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.connector.BucketProperty;
+import com.starrocks.connector.iceberg.ScalarOperatorToIcebergExpr;
 import com.starrocks.connector.metadata.MetadataTable;
+import com.starrocks.connector.metadata.MetadataTableType;
 import com.starrocks.load.BrokerFileGroup;
 import com.starrocks.planner.AggregateInfo;
 import com.starrocks.planner.AggregationNode;
@@ -216,6 +218,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.LikePredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorUtil;
+import com.starrocks.sql.optimizer.operator.scalar.SubfieldOperator;
 import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
 import com.starrocks.sql.optimizer.rule.tree.prunesubfield.SubfieldAccessPathNormalizer;
 import com.starrocks.sql.optimizer.rule.tree.prunesubfield.SubfieldExpressionCollector;
@@ -231,6 +234,11 @@ import com.starrocks.type.TypeSerializer;
 import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.collections4.MapUtils;
+import org.apache.iceberg.Partitioning;
+import org.apache.iceberg.expressions.Expression;
+import org.apache.iceberg.expressions.Expressions;
+import org.apache.iceberg.types.Types;
+import org.apache.iceberg.util.SerializationUtil;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.jetbrains.annotations.NotNull;
@@ -1883,6 +1891,20 @@ public class PlanFragmentBuilder {
                         phCol.getUniqueId(), phCol.getType(), phCol.getName(), phCol.isAllowNull());
                 String icebergPredicate = "";
 
+                boolean isPartitionsMetadata =
+                        table.getMetadataTableType() == MetadataTableType.PARTITIONS;
+                Set<String> partitionFieldNames = new HashSet<>();
+                Types.StructType icebergPartitionType = null;
+                if (isPartitionsMetadata) {
+                    Pair<Types.StructType, Set<String>> partitionInfo =
+                            lookupIcebergPartitionFields(table);
+                    if (partitionInfo != null) {
+                        icebergPartitionType = partitionInfo.first;
+                        partitionFieldNames = partitionInfo.second;
+                    }
+                }
+
+                List<ScalarOperator> partitionConjuncts = new ArrayList<>();
                 for (ScalarOperator predicate : predicates) {
                     // exclude iceberg predicate
                     if (isColumnEqualConstant(predicate) && predicate.getChild(0).equivalent(placeHolderOp)) {
@@ -1890,6 +1912,32 @@ public class PlanFragmentBuilder {
                     } else {
                         metadataScanNode.getConjuncts().add(
                                 ScalarOperatorToExpr.buildExecExpression(predicate, formatterContext));
+                        if (isPartitionsMetadata
+                                && icebergPartitionType != null
+                                && allColumnsArePartitionValueSubfields(predicate)
+                                && partitionValueSubfieldsAllKnown(predicate, partitionFieldNames)) {
+                            partitionConjuncts.add(predicate);
+                        }
+                    }
+                }
+
+                if (!partitionConjuncts.isEmpty()) {
+                    if (!icebergPredicate.isEmpty()) {
+                        LOG.debug("placeholder iceberg predicate already set on PARTITIONS scan; " +
+                                "skipping partition_value push-down");
+                    } else {
+                        try {
+                            ScalarOperatorToIcebergExpr.IcebergContext partitionCtx =
+                                    new ScalarOperatorToIcebergExpr.IcebergContext(
+                                            icebergPartitionType, false, false, "partition_value");
+                            Expression expr = new ScalarOperatorToIcebergExpr()
+                                    .convert(partitionConjuncts, partitionCtx);
+                            if (expr != Expressions.alwaysTrue()) {
+                                icebergPredicate = SerializationUtil.serializeToBase64(expr);
+                            }
+                        } catch (Exception e) {
+                            LOG.debug("iceberg partition_value push-down: predicate conversion failed", e);
+                        }
                     }
                 }
 
@@ -1910,6 +1958,78 @@ public class PlanFragmentBuilder {
                     new PlanFragment(context.getNextFragmentId(), metadataScanNode, DataPartition.RANDOM);
             context.getFragments().add(fragment);
             return fragment;
+        }
+
+        // Returns the iceberg unified partition StructType and the set of partition field names,
+        // or null when the underlying iceberg table is unavailable. Used by the PARTITIONS
+        // metadata scan to translate partition_value.<X> predicates into iceberg expressions.
+        private static Pair<Types.StructType, Set<String>> lookupIcebergPartitionFields(MetadataTable table) {
+            try {
+                ConnectContext ctx = ConnectContext.get();
+                if (ctx == null) {
+                    return null;
+                }
+                com.starrocks.catalog.Table origin = GlobalStateMgr.getCurrentState().getMetadataMgr()
+                        .getTable(ctx, table.getCatalogName(), table.getOriginDb(), table.getOriginTable());
+                if (!(origin instanceof IcebergTable)) {
+                    return null;
+                }
+                org.apache.iceberg.Table nativeTable = ((IcebergTable) origin).getNativeTable();
+                Types.StructType partitionType = Partitioning.partitionType(nativeTable);
+                Set<String> names = new HashSet<>();
+                for (Types.NestedField field : partitionType.fields()) {
+                    names.add(field.name());
+                }
+                return Pair.create(partitionType, names);
+            } catch (Exception e) {
+                LOG.debug("iceberg partition_value push-down: native table lookup failed", e);
+                return null;
+            }
+        }
+
+        // True iff every column-ref leaf under `op` is a SubfieldOperator on `partition_value`.
+        // A bare top-level ColumnRefOperator (e.g. `record_count > 0`) returns false, so mixed
+        // conjuncts like `partition_value.k2 = 4 OR record_count > 10` are rejected for push-down.
+        private static boolean allColumnsArePartitionValueSubfields(ScalarOperator op) {
+            if (op == null) {
+                return true;
+            }
+            if (op instanceof ColumnRefOperator) {
+                return false;
+            }
+            if (op instanceof SubfieldOperator) {
+                ScalarOperator child = op.getChild(0);
+                return child instanceof ColumnRefOperator
+                        && "partition_value".equalsIgnoreCase(((ColumnRefOperator) child).getName());
+            }
+            for (ScalarOperator child : op.getChildren()) {
+                if (!allColumnsArePartitionValueSubfields(child)) {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        // True iff every partition_value subfield inside `op` (one-level only — iceberg partition
+        // fields are flat) references a name in `knownFieldNames`. Called after
+        // allColumnsArePartitionValueSubfields so we only encounter SubfieldOperator leaves here.
+        private static boolean partitionValueSubfieldsAllKnown(ScalarOperator op, Set<String> knownFieldNames) {
+            if (op == null) {
+                return true;
+            }
+            if (op instanceof SubfieldOperator) {
+                List<String> fieldNames = ((SubfieldOperator) op).getFieldNames();
+                if (fieldNames.size() != 1) {
+                    return false;
+                }
+                return knownFieldNames.contains(fieldNames.get(0));
+            }
+            for (ScalarOperator child : op.getChildren()) {
+                if (!partitionValueSubfieldsAllKnown(child, knownFieldNames)) {
+                    return false;
+                }
+            }
+            return true;
         }
 
         @Override

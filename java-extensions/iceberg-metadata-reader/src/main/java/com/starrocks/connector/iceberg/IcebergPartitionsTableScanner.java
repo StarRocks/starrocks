@@ -36,12 +36,16 @@ import org.apache.iceberg.Snapshot;
 import org.apache.iceberg.StructLike;
 import org.apache.iceberg.TableUtil;
 import org.apache.iceberg.data.GenericRecord;
+import org.apache.iceberg.expressions.Evaluator;
+import org.apache.iceberg.expressions.Expression;
+import org.apache.iceberg.expressions.Expressions;
 import org.apache.iceberg.io.CloseableIterable;
 import org.apache.iceberg.io.CloseableIterator;
 import org.apache.iceberg.types.Type;
 import org.apache.iceberg.types.Types;
 import org.apache.iceberg.util.Pair;
 import org.apache.iceberg.util.PartitionMap;
+import org.apache.iceberg.util.StructProjection;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -60,6 +64,7 @@ public class IcebergPartitionsTableScanner extends AbstractIcebergMetadataScanne
             ImmutableList.of("content", "partition", "file_size_in_bytes", "record_count");
 
     private final String manifestBean;
+    private final String predicateInfo;
     private ManifestFile manifestFile;
     private CloseableIterator<LiveEntry> entryReader;
     private List<PartitionField> partitionFields;
@@ -69,10 +74,18 @@ public class IcebergPartitionsTableScanner extends AbstractIcebergMetadataScanne
     private Iterator<PartitionStats> statsIterator;
     private boolean usingStatsFile;
     private Types.StructType unifiedPartitionType;
+    private Expression predicate;
+    private boolean predicateAlwaysTrue;
+    private Evaluator evaluator;
+    // Maps specId -> reusable StructProjection wrapping a per-spec partition into a
+    // unified-partition-type-shaped StructLike for the evaluator. Not thread-safe:
+    // wrap() mutates the projection. Safe under one-scanner-per-thread.
+    private final Map<Integer, StructProjection> manifestProjectionCache = new HashMap<>();
 
     public IcebergPartitionsTableScanner(int fetchSize, Map<String, String> params) {
         super(fetchSize, params);
         this.manifestBean = params.get("split_info");
+        this.predicateInfo = params.getOrDefault("serialized_predicate", "");
     }
 
     @Override
@@ -82,6 +95,13 @@ public class IcebergPartitionsTableScanner extends AbstractIcebergMetadataScanne
         this.partitionFields = IcebergPartitionUtils.getAllPartitionFields(table);
         this.reusedRecord = GenericRecord.create(getResultType());
         this.unifiedPartitionType = Partitioning.partitionType(table);
+        this.predicate = predicateInfo.isEmpty()
+                ? Expressions.alwaysTrue()
+                : deserializeFromBase64(predicateInfo);
+        this.predicateAlwaysTrue = predicate == Expressions.alwaysTrue();
+        if (!predicateAlwaysTrue) {
+            this.evaluator = new Evaluator(unifiedPartitionType, predicate, false);
+        }
 
         if (split instanceof PartitionStatsSplitBean) {
             this.usingStatsFile = true;
@@ -106,6 +126,9 @@ public class IcebergPartitionsTableScanner extends AbstractIcebergMetadataScanne
                     break;
                 }
                 PartitionStats stat = statsIterator.next();
+                if (!matchesPredicate(stat.specId(), stat.partition(), unifiedPartitionType)) {
+                    continue;
+                }
                 for (int i = 0; i < requiredFields.length; i++) {
                     Object fieldData = getFromStats(requiredFields[i], stat);
                     if (fieldData == null) {
@@ -121,6 +144,11 @@ public class IcebergPartitionsTableScanner extends AbstractIcebergMetadataScanne
                 }
                 LiveEntry entry = entryReader.next();
                 ContentFile<?> file = entry.file();
+                PartitionSpec entrySpec = table.specs().get(file.specId());
+                if (entrySpec == null
+                        || !matchesPredicate(file.specId(), file.partition(), entrySpec.partitionType())) {
+                    continue;
+                }
                 Snapshot snapshot = table.snapshot(entry.snapshotId());
                 Long lastUpdatedAt = snapshot != null ? snapshot.timestampMillis() : null;
                 Long lastUpdatedSnapshotId = snapshot != null ? snapshot.snapshotId() : null;
@@ -137,6 +165,23 @@ public class IcebergPartitionsTableScanner extends AbstractIcebergMetadataScanne
             numRows++;
         }
         return numRows;
+    }
+
+    /** Not thread-safe; assumes one scanner instance per thread and synchronous wrap+eval. */
+    private boolean matchesPredicate(int specId, StructLike partition, Types.StructType sourceType) {
+        if (predicateAlwaysTrue) {
+            return true;
+        }
+        StructLike evalData = partition;
+        if (!unifiedPartitionType.equals(sourceType)) {
+            // First arg = type of the row being wrapped (per-spec partition).
+            // Second arg = projected/result type the Evaluator is bound to (unified).
+            StructProjection projection = manifestProjectionCache.computeIfAbsent(
+                    specId,
+                    id -> StructProjection.createAllowMissing(sourceType, unifiedPartitionType));
+            evalData = projection.wrap(partition);
+        }
+        return evaluator.eval(evalData);
     }
 
     @Override

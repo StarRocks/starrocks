@@ -982,17 +982,23 @@ public class IcebergMetadata implements ConnectorMetadata {
         }
 
         long fallbackStartMs = System.currentTimeMillis();
+        // $iceberg_partitions_table push-down sends a predicate over the partition
+        // struct; filterManifests internally projects it via Projections.inclusive
+        // against the table schema, which throws on transformed partition fields.
+        // BE-side row filtering in IcebergPartitionsTableScanner applies the predicate.
+        Expression manifestFilter = metadataTableType == MetadataTableType.PARTITIONS
+                ? Expressions.alwaysTrue() : predicate;
         List<ManifestFile> dataManifests = snapshot.dataManifests(nativeTable.io());
 
         List<ManifestFile> matchingDataManifests =
-                filterManifests(dataManifests, nativeTable, predicate);
+                filterManifests(dataManifests, nativeTable, manifestFilter);
         for (ManifestFile file : matchingDataManifests) {
             remoteMetaSplits.add(IcebergMetaSplit.from(file));
         }
 
         List<ManifestFile> deleteManifests = snapshot.deleteManifests(nativeTable.io());
         List<ManifestFile> matchingDeleteManifests =
-                filterManifests(deleteManifests, nativeTable, predicate);
+                filterManifests(deleteManifests, nativeTable, manifestFilter);
         if (metadataTableType == MetadataTableType.FILES || metadataTableType == MetadataTableType.PARTITIONS) {
             for (ManifestFile file : matchingDeleteManifests) {
                 remoteMetaSplits.add(IcebergMetaSplit.from(file));

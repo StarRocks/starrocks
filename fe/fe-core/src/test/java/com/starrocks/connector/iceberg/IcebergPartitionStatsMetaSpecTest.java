@@ -33,6 +33,8 @@ import org.apache.iceberg.DataFiles;
 import org.apache.iceberg.ImmutableGenericPartitionStatisticsFile;
 import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.PartitionStatisticsFile;
+import org.apache.iceberg.expressions.Expression;
+import org.apache.iceberg.expressions.Expressions;
 import org.apache.iceberg.util.SerializationUtil;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
@@ -225,5 +227,53 @@ public class IcebergPartitionStatsMetaSpecTest extends TableTestBase {
                 .getSerializedMetaSpec("db", "tb", -1, null, MetadataTableType.PARTITIONS);
 
         Assertions.assertEquals(IcebergMetaSpec.EMPTY, spec);
+    }
+
+    @Test
+    public void partitionPredicate_fallbackPath_doesNotThrow() {
+        // Push-down sends a predicate over the partition struct. FE filterManifests would
+        // run Projections.inclusive(spec).project(filter) which throws on transformed
+        // partition fields; we gate it for PARTITIONS. SCHEMA_B/SPEC_B is identity-only
+        // so the API itself does not throw, but we still want to lock the gate in.
+        mockedNativeTableB.newAppend().appendFile(FILE_B_1).commit();
+        mockedNativeTableB.newAppend().appendFile(FILE_B_2).commit();
+        mockedNativeTableB.refresh();
+
+        Expression partitionPredicate = Expressions.equal("k2", 4);
+        String serialized = SerializationUtil.serializeToBase64(partitionPredicate);
+
+        IcebergMetaSpec spec = (IcebergMetaSpec) newMetadata(mockedNativeTableB)
+                .getSerializedMetaSpec("db", "tb", -1, serialized, MetadataTableType.PARTITIONS);
+
+        // Manifests are NOT filtered FE-side for PARTITIONS — BE applies the row filter.
+        // Both manifests must still surface as splits.
+        Assertions.assertEquals(2, spec.getSplits().size(),
+                "PARTITIONS fallback must skip FE manifest pruning regardless of partition predicate");
+    }
+
+    @Test
+    public void partitionPredicate_modeFullPath_doesNotThrow() {
+        // Stats file older than target snapshot → MODE_FULL split. Predicate must travel
+        // through the encoding path without breaking the existing bundle.
+        mockedNativeTableB.newAppend().appendFile(FILE_B_1).commit();
+        long statsSnapshotId = mockedNativeTableB.currentSnapshot().snapshotId();
+        attachStatsFile(mockedNativeTableB, statsSnapshotId);
+
+        mockedNativeTableB.newAppend().appendFile(FILE_B_2).commit();
+        mockedNativeTableB.newAppend().appendFile(FILE_B_3).commit();
+        mockedNativeTableB.refresh();
+
+        Expression partitionPredicate = Expressions.equal("k2", 4);
+        String serialized = SerializationUtil.serializeToBase64(partitionPredicate);
+
+        IcebergMetaSpec spec = (IcebergMetaSpec) newMetadata(mockedNativeTableB)
+                .getSerializedMetaSpec("db", "tb", -1, serialized, MetadataTableType.PARTITIONS);
+
+        Assertions.assertEquals(1, spec.getSplits().size(), "MODE_FULL is a single bundled split");
+        PartitionStatsSplitBean bean = deserializeStatsSplit(spec.getSplits().get(0));
+        Assertions.assertNotNull(bean);
+        Assertions.assertTrue(bean.isFullMode());
+        Assertions.assertEquals(2, bean.getIncrementalManifests().size(),
+                "incremental manifest bundle must not be FE-filtered by the partition predicate");
     }
 }

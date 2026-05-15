@@ -111,7 +111,7 @@ public class ScalarOperatorToIcebergExpr {
     public Expression convert(List<ScalarOperator> operators, IcebergContext context, boolean strict) {
         IcebergExprVisitor visitor = new IcebergExprVisitor();
         IcebergContext effectiveContext = strict && !context.isStrict()
-                ? new IcebergContext(context.getSchema(), context.isInsideNot(), true)
+                ? new IcebergContext(context.getSchema(), context.isInsideNot(), true, context.getStripSubfieldRoot())
                 : context;
         List<Expression> expressions = Lists.newArrayList();
         for (ScalarOperator operator : operators) {
@@ -146,15 +146,26 @@ public class ScalarOperatorToIcebergExpr {
         private final Types.StructType schema;
         private final boolean insideNot;
         private final boolean strict;
+        // When non-null, getColumnName strips "<stripSubfieldRoot>." from a
+        // SubfieldOperator chain so the remainder can be bound against `schema`
+        // directly. Used for $iceberg_partitions_table where SR exposes
+        // partition fields as `partition_value.<name>` subfields but iceberg
+        // expressions are over the flat partition struct.
+        private final String stripSubfieldRoot;
 
         public IcebergContext(Types.StructType schema) {
-            this(schema, false, false);
+            this(schema, false, false, null);
         }
 
         public IcebergContext(Types.StructType schema, boolean insideNot, boolean strict) {
+            this(schema, insideNot, strict, null);
+        }
+
+        public IcebergContext(Types.StructType schema, boolean insideNot, boolean strict, String stripSubfieldRoot) {
             this.schema = schema;
             this.insideNot = insideNot;
             this.strict = strict;
+            this.stripSubfieldRoot = stripSubfieldRoot;
         }
 
         public Types.StructType getSchema() {
@@ -169,8 +180,12 @@ public class ScalarOperatorToIcebergExpr {
             return strict;
         }
 
+        public String getStripSubfieldRoot() {
+            return stripSubfieldRoot;
+        }
+
         public IcebergContext withInsideNot() {
-            return new IcebergContext(schema, true, strict);
+            return new IcebergContext(schema, true, strict, stripSubfieldRoot);
         }
     }
 
@@ -240,7 +255,7 @@ public class ScalarOperatorToIcebergExpr {
 
         @Override
         public Expression visitIsNullPredicate(IsNullPredicateOperator operator, IcebergContext context) {
-            String columnName = getColumnName(operator.getChild(0));
+            String columnName = getColumnName(operator.getChild(0), context);
             if (columnName == null) {
                 return null;
             }
@@ -253,7 +268,7 @@ public class ScalarOperatorToIcebergExpr {
 
         @Override
         public Expression visitBinaryPredicate(BinaryPredicateOperator operator, IcebergContext context) {
-            String columnName = getColumnName(operator.getChild(0));
+            String columnName = getColumnName(operator.getChild(0), context);
             if (columnName == null) {
                 return null;
             }
@@ -293,7 +308,7 @@ public class ScalarOperatorToIcebergExpr {
 
         @Override
         public Expression visitInPredicate(InPredicateOperator operator, IcebergContext context) {
-            String columnName = getColumnName(operator.getChild(0));
+            String columnName = getColumnName(operator.getChild(0), context);
             if (columnName == null) {
                 return null;
             }
@@ -325,7 +340,7 @@ public class ScalarOperatorToIcebergExpr {
 
         @Override
         public Expression visitLikePredicateOperator(LikePredicateOperator operator, IcebergContext context) {
-            String columnName = getColumnName(operator.getChild(0));
+            String columnName = getColumnName(operator.getChild(0), context);
             if (columnName == null) {
                 return null;
             }
@@ -516,12 +531,18 @@ public class ScalarOperatorToIcebergExpr {
         }
     }
 
-    private static String getColumnName(ScalarOperator operator) {
+    private static String getColumnName(ScalarOperator operator, IcebergContext context) {
         if (operator == null) {
             return null;
         }
 
         String columnName = operator.accept(new ExtractColumnName(), null);
+        if (columnName != null && context != null && context.getStripSubfieldRoot() != null) {
+            String prefix = context.getStripSubfieldRoot() + ".";
+            if (columnName.startsWith(prefix)) {
+                columnName = columnName.substring(prefix.length());
+            }
+        }
         if (columnName == null || columnName.isEmpty()) {
             return null;
         }
