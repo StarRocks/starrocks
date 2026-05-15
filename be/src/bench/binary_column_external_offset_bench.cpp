@@ -74,6 +74,8 @@ namespace starrocks::bench {
 namespace {
 
 static constexpr const char* kSuite = "BinaryColumnExternalOffset";
+static constexpr size_t kExternalChunkRows = kBenchmarkChunkRows;
+static constexpr size_t kExternalPageRows = 65536;
 
 class StaticColumnExpr final : public Expr {
 public:
@@ -351,6 +353,10 @@ static SparseRange<> make_sparse_range(size_t rows, SparsePattern pattern) {
         break;
     }
     return range;
+}
+
+static size_t sparse_range_input_rows(size_t output_rows, SparsePattern pattern) {
+    return pattern == SparsePattern::CLUSTERED_50 ? output_rows * 2 : output_rows;
 }
 
 struct BinaryPageFixture {
@@ -680,13 +686,17 @@ static void bench_column_predicate_empty_ne(benchmark::State& state, size_t rows
     state.counters["input_bytes_per_iter"] = static_cast<double>(input_bytes);
 }
 
-static void bench_binary_plain_page_append_range(benchmark::State& state, size_t rows, size_t len, SparsePattern pattern,
+static void bench_binary_plain_page_append_range(benchmark::State& state, size_t page_rows, size_t chunk_rows,
+                                                 size_t len, SparsePattern pattern,
                                                  LenPattern len_pattern = LenPattern::FIXED) {
-    auto fixture = make_binary_page(rows, len, len_pattern);
+    const size_t range_input_rows = sparse_range_input_rows(chunk_rows, pattern);
+    CHECK_LE(range_input_rows, page_rows);
+    auto fixture = make_binary_page(page_rows, len, len_pattern);
     BinaryPlainPageDecoder<TYPE_VARCHAR> decoder(fixture.page.slice());
     auto st = decoder.init();
     CHECK(st.ok()) << st.to_string();
-    auto range = make_sparse_range(rows, pattern);
+    auto range = make_sparse_range(range_input_rows, pattern);
+    CHECK_EQ(range.span_size(), chunk_rows);
     const size_t range_bytes = bytes_for_sparse_range(fixture, range);
 
     for (auto _ : state) {
@@ -710,14 +720,18 @@ static void bench_binary_plain_page_append_range(benchmark::State& state, size_t
     state.SetBytesProcessed(static_cast<int64_t>(state.iterations() * range_bytes));
 }
 
-static void bench_binary_plain_page_with_filter(benchmark::State& state, size_t rows, size_t len, SparsePattern pattern,
-                                                bool nullable, LenPattern len_pattern = LenPattern::FIXED) {
-    CHECK_LE(rows, static_cast<size_t>(std::numeric_limits<uint16_t>::max()));
-    auto fixture = make_binary_page(rows, len, len_pattern);
+static void bench_binary_plain_page_with_filter(benchmark::State& state, size_t page_rows, size_t chunk_rows,
+                                                size_t len, SparsePattern pattern, bool nullable,
+                                                LenPattern len_pattern = LenPattern::FIXED) {
+    const size_t range_input_rows = sparse_range_input_rows(chunk_rows, pattern);
+    CHECK_LE(range_input_rows, page_rows);
+    CHECK_LE(range_input_rows, static_cast<size_t>(std::numeric_limits<uint16_t>::max()));
+    auto fixture = make_binary_page(page_rows, len, len_pattern);
     BinaryPlainPageDecoder<TYPE_VARCHAR> decoder(fixture.page.slice());
     auto st = decoder.init();
     CHECK(st.ok()) << st.to_string();
-    auto range = make_sparse_range(rows, pattern);
+    auto range = make_sparse_range(range_input_rows, pattern);
+    CHECK_EQ(range.span_size(), chunk_rows);
     const size_t range_bytes = bytes_for_sparse_range(fixture, range);
 
     std::string threshold(len, 'm');
@@ -2578,86 +2592,89 @@ static void bench_column_predicate_in_branchless_external(benchmark::State& stat
 }
 
 static void register_p0_core_cases() {
-    for (size_t rows : {65536UL, 262144UL}) {
-        for (size_t len : {4UL, 32UL}) {
-            register_case(ext_case_name("P0", "append_with_mask",
-                                        "rows:" + std::to_string(rows) + "/len:" + std::to_string(len) +
-                                                "/select:random50/positive:true"),
-                          [=](benchmark::State& state) {
-                              bench_append_with_mask_external<true>(state, rows, len, FilterPattern::RANDOM_50);
-                          });
-        }
+    constexpr size_t rows = kExternalChunkRows;
+    constexpr size_t page_rows = kExternalPageRows;
+    const auto rows_param = "rows:" + std::to_string(rows);
+    const auto page_chunk_param =
+            "page_rows:" + std::to_string(page_rows) + "/chunk_rows:" + std::to_string(rows);
+
+    for (size_t len : {4UL, 32UL}) {
+        register_case(ext_case_name("P0", "append_with_mask",
+                                    rows_param + "/len:" + std::to_string(len) + "/select:random50/positive:true"),
+                      [=](benchmark::State& state) {
+                          bench_append_with_mask_external<true>(state, rows, len, FilterPattern::RANDOM_50);
+                      });
     }
     for (size_t len : {4UL, 32UL, 128UL}) {
         register_case(ext_case_name("P0", "append_with_mask",
-                                    "rows:65536/len:" + std::to_string(len) + "/select:random10/positive:true"),
+                                    rows_param + "/len:" + std::to_string(len) + "/select:random10/positive:true"),
                       [=](benchmark::State& state) {
-                          bench_append_with_mask_external<true>(state, 65536, len, FilterPattern::RANDOM_10);
+                          bench_append_with_mask_external<true>(state, rows, len, FilterPattern::RANDOM_10);
                       });
         register_case(ext_case_name("P0", "append_with_mask",
-                                    "rows:65536/len:" + std::to_string(len) + "/select:random50/positive:false"),
+                                    rows_param + "/len:" + std::to_string(len) + "/select:random50/positive:false"),
                       [=](benchmark::State& state) {
-                          bench_append_with_mask_external<false>(state, 65536, len, FilterPattern::RANDOM_50);
+                          bench_append_with_mask_external<false>(state, rows, len, FilterPattern::RANDOM_50);
                       });
     }
-    register_case(ext_case_name("P0", "append_with_mask", "rows:65536/len:32/select:keep_all/positive:true"),
+    register_case(ext_case_name("P0", "append_with_mask", rows_param + "/len:32/select:keep_all/positive:true"),
                   [](benchmark::State& state) {
-                      bench_append_with_mask_external<true>(state, 65536, 32, FilterPattern::KEEP_ALL);
+                      bench_append_with_mask_external<true>(state, kExternalChunkRows, 32, FilterPattern::KEEP_ALL);
                   });
-    register_case(ext_case_name("P0", "append_with_mask", "rows:65536/len:32/select:keep_none/positive:true"),
+    register_case(ext_case_name("P0", "append_with_mask", rows_param + "/len:32/select:keep_none/positive:true"),
                   [](benchmark::State& state) {
-                      bench_append_with_mask_external<true>(state, 65536, 32, FilterPattern::KEEP_NONE);
+                      bench_append_with_mask_external<true>(state, kExternalChunkRows, 32, FilterPattern::KEEP_NONE);
                   });
     register_case(ext_case_name("P0", "append_with_mask",
-                                "rows:65536/len:128/dist:uniform/select:random50/positive:true"),
+                                rows_param + "/len:128/dist:uniform/select:random50/positive:true"),
                   [](benchmark::State& state) {
-                      bench_append_with_mask_external<true>(state, 65536, 128, FilterPattern::RANDOM_50,
+                      bench_append_with_mask_external<true>(state, kExternalChunkRows, 128, FilterPattern::RANDOM_50,
                                                             LenPattern::UNIFORM);
                   });
 
     for (size_t len : {4UL, 32UL, 128UL}) {
-        register_case(ext_case_name("P0", "column_hash", "rows:65536/len:" + std::to_string(len) + "/mode:range"),
-                      [=](benchmark::State& state) { bench_column_hash_external(state, 65536, len, HashMode::RANGE); });
+        register_case(ext_case_name("P0", "column_hash", rows_param + "/len:" + std::to_string(len) + "/mode:range"),
+                      [=](benchmark::State& state) { bench_column_hash_external(state, rows, len, HashMode::RANGE); });
         for (HashMode mode : {HashMode::SELECTION_RANDOM_50, HashMode::SELECTIVE_CLUSTERED}) {
             register_case(ext_case_name("P0", "column_hash",
-                                        "rows:65535/len:" + std::to_string(len) + "/mode:" + hash_mode_name(mode)),
-                          [=](benchmark::State& state) { bench_column_hash_external(state, 65535, len, mode); });
+                                        rows_param + "/len:" + std::to_string(len) + "/mode:" + hash_mode_name(mode)),
+                          [=](benchmark::State& state) { bench_column_hash_external(state, rows, len, mode); });
         }
     }
-    register_case(ext_case_name("P0", "column_hash", "rows:262144/len:4/mode:range"),
-                  [](benchmark::State& state) { bench_column_hash_external(state, 262144, 4, HashMode::RANGE); });
-    register_case(ext_case_name("P0", "column_hash", "rows:65536/len:128/dist:uniform/mode:range"),
+    register_case(ext_case_name("P0", "column_hash", rows_param + "/len:128/dist:uniform/mode:range"),
                   [](benchmark::State& state) {
-                      bench_column_hash_external(state, 65536, 128, HashMode::RANGE, LenPattern::UNIFORM);
+                      bench_column_hash_external(state, kExternalChunkRows, 128, HashMode::RANGE, LenPattern::UNIFORM);
                   });
-    register_case(ext_case_name("P0", "column_hash", "rows:65535/len:128/dist:uniform/mode:selection_random50"),
+    register_case(ext_case_name("P0", "column_hash", rows_param + "/len:128/dist:uniform/mode:selection_random50"),
                   [](benchmark::State& state) {
-                      bench_column_hash_external(state, 65535, 128, HashMode::SELECTION_RANDOM_50, LenPattern::UNIFORM);
+                      bench_column_hash_external(state, kExternalChunkRows, 128, HashMode::SELECTION_RANDOM_50,
+                                                 LenPattern::UNIFORM);
                   });
 
     for (size_t len : {4UL, 32UL, 128UL}) {
         for (PermutePattern pattern : {PermutePattern::SEQ, PermutePattern::RANDOM, PermutePattern::CLUSTERED}) {
             register_case(
                     ext_case_name("P0", "sort_permute",
-                                  "rows:65536/len:" + std::to_string(len) + "/perm:" + permute_pattern_name(pattern)),
-                    [=](benchmark::State& state) { bench_sort_permute_external(state, 65536, len, pattern); });
+                                  rows_param + "/len:" + std::to_string(len) + "/perm:" + permute_pattern_name(pattern)),
+                    [=](benchmark::State& state) { bench_sort_permute_external(state, rows, len, pattern); });
         }
     }
-    register_case(ext_case_name("P0", "sort_permute", "rows:65536/len:4/perm:reverse"), [](benchmark::State& state) {
-        bench_sort_permute_external(state, 65536, 4, PermutePattern::REVERSE);
+    register_case(ext_case_name("P0", "sort_permute", rows_param + "/len:4/perm:reverse"), [](benchmark::State& state) {
+        bench_sort_permute_external(state, kExternalChunkRows, 4, PermutePattern::REVERSE);
     });
-    register_case(ext_case_name("P0", "sort_permute", "rows:65536/len:128/dist:uniform/perm:random"),
+    register_case(ext_case_name("P0", "sort_permute", rows_param + "/len:128/dist:uniform/perm:random"),
                   [](benchmark::State& state) {
-                      bench_sort_permute_external(state, 65536, 128, PermutePattern::RANDOM, LenPattern::UNIFORM);
+                      bench_sort_permute_external(state, kExternalChunkRows, 128, PermutePattern::RANDOM,
+                                                  LenPattern::UNIFORM);
                   });
 
     for (bool nullable : {false, true}) {
         for (int empty_percent : {0, 50, 100}) {
             register_case(ext_case_name("P0", "column_predicate_ne_empty",
-                                        "rows:65535/len:4/nullable:" + std::to_string(nullable) +
+                                        rows_param + "/len:4/nullable:" + std::to_string(nullable) +
                                                 "/empty_percent:" + std::to_string(empty_percent)),
                           [=](benchmark::State& state) {
-                              bench_column_predicate_empty_ne(state, 65535, 4, empty_percent, nullable);
+                              bench_column_predicate_empty_ne(state, rows, 4, empty_percent, nullable);
                           });
         }
     }
@@ -2666,61 +2683,64 @@ static void register_p0_core_cases() {
         for (SparsePattern pattern : {SparsePattern::CONTIGUOUS, SparsePattern::CLUSTERED_50}) {
             register_case(
                     ext_case_name("P0", "binary_plain_page_next_batch",
-                                  "rows:65536/len:" + std::to_string(len) + "/range:" + sparse_pattern_name(pattern)),
-                    [=](benchmark::State& state) { bench_binary_plain_page_append_range(state, 65536, len, pattern); });
+                                  page_chunk_param + "/len:" + std::to_string(len) +
+                                          "/range:" + sparse_pattern_name(pattern)),
+                    [=](benchmark::State& state) {
+                        bench_binary_plain_page_append_range(state, page_rows, rows, len, pattern);
+                    });
         }
     }
     for (size_t len : {4UL, 32UL, 128UL}) {
         for (SparsePattern pattern : {SparsePattern::CONTIGUOUS, SparsePattern::CLUSTERED_50}) {
             register_case(ext_case_name("P0", "binary_plain_page_next_batch_with_filter",
-                                        "rows:65535/len:" + std::to_string(len) +
+                                        page_chunk_param + "/len:" + std::to_string(len) +
                                                 "/range:" + sparse_pattern_name(pattern) + "/nullable:false"),
                           [=](benchmark::State& state) {
-                              bench_binary_plain_page_with_filter(state, 65535, len, pattern, false);
+                              bench_binary_plain_page_with_filter(state, page_rows, rows, len, pattern, false);
                           });
             register_case(ext_case_name("P0", "binary_plain_page_next_batch_with_filter",
-                                        "rows:65535/len:" + std::to_string(len) +
+                                        page_chunk_param + "/len:" + std::to_string(len) +
                                                 "/range:" + sparse_pattern_name(pattern) + "/nullable:true"),
                           [=](benchmark::State& state) {
-                              bench_binary_plain_page_with_filter(state, 65535, len, pattern, true);
+                              bench_binary_plain_page_with_filter(state, page_rows, rows, len, pattern, true);
                           });
         }
     }
     register_case(ext_case_name("P0", "binary_plain_page_next_batch",
-                                "rows:65536/len:128/dist:uniform/range:clustered50"),
+                                page_chunk_param + "/len:128/dist:uniform/range:clustered50"),
                   [](benchmark::State& state) {
-                      bench_binary_plain_page_append_range(state, 65536, 128, SparsePattern::CLUSTERED_50,
+                      bench_binary_plain_page_append_range(state, kExternalPageRows, kExternalChunkRows, 128,
+                                                           SparsePattern::CLUSTERED_50,
                                                            LenPattern::UNIFORM);
                   });
     register_case(ext_case_name("P0", "binary_plain_page_next_batch_with_filter",
-                                "rows:65535/len:128/dist:uniform/range:clustered50/nullable:true"),
+                                page_chunk_param + "/len:128/dist:uniform/range:clustered50/nullable:true"),
                   [](benchmark::State& state) {
-                      bench_binary_plain_page_with_filter(state, 65535, 128, SparsePattern::CLUSTERED_50, true,
-                                                          LenPattern::UNIFORM);
+                      bench_binary_plain_page_with_filter(state, kExternalPageRows, kExternalChunkRows, 128,
+                                                          SparsePattern::CLUSTERED_50, true, LenPattern::UNIFORM);
                   });
     for (size_t len : {4UL, 32UL}) {
         register_case(ext_case_name("P0", "parquet_plain_decode",
-                                    "rows:65536/len:" + std::to_string(len) + "/nullable:false/nulls:none"),
+                                    rows_param + "/len:" + std::to_string(len) + "/nullable:false/nulls:none"),
                       [=](benchmark::State& state) {
-                          bench_parquet_plain_decode(state, 65536, len, false, FilterPattern::KEEP_NONE);
+                          bench_parquet_plain_decode(state, rows, len, false, FilterPattern::KEEP_NONE);
                       });
         register_case(ext_case_name("P0", "parquet_plain_decode",
-                                    "rows:65536/len:" + std::to_string(len) + "/nullable:true/nulls:random50"),
+                                    rows_param + "/len:" + std::to_string(len) + "/nullable:true/nulls:random50"),
                       [=](benchmark::State& state) {
-                          bench_parquet_plain_decode(state, 65536, len, true, FilterPattern::RANDOM_50);
+                          bench_parquet_plain_decode(state, rows, len, true, FilterPattern::RANDOM_50);
                       });
     }
 
     for (size_t len : {4UL, 32UL, 128UL}) {
-        const size_t rows = len == 4 ? 524288 : 65536;
         register_case(ext_case_name("P0", "parquet_plain_flba_decode",
-                                    "rows:" + std::to_string(rows) + "/len:" + std::to_string(len) +
+                                    rows_param + "/len:" + std::to_string(len) +
                                             "/nullable:false/nulls:none"),
                       [=](benchmark::State& state) {
                           bench_parquet_plain_flba_decode(state, rows, len, false, FilterPattern::KEEP_NONE);
                       });
         register_case(ext_case_name("P0", "parquet_plain_flba_decode",
-                                    "rows:" + std::to_string(rows) + "/len:" + std::to_string(len) +
+                                    rows_param + "/len:" + std::to_string(len) +
                                             "/nullable:true/nulls:random50"),
                       [=](benchmark::State& state) {
                           bench_parquet_plain_flba_decode(state, rows, len, true, FilterPattern::RANDOM_50);
@@ -2731,16 +2751,16 @@ static void register_p0_core_cases() {
         for (size_t cardinality : {16UL, 1024UL}) {
             register_case(
                     ext_case_name("P0", "parquet_dict_decode",
-                                  "rows:65536/len:" + std::to_string(len) +
+                                  rows_param + "/len:" + std::to_string(len) +
                                           "/cardinality:" + std::to_string(cardinality) + "/nullable:false/nulls:none"),
                     [=](benchmark::State& state) {
-                        bench_parquet_dict_decode(state, 65536, len, cardinality, false, FilterPattern::KEEP_NONE);
+                        bench_parquet_dict_decode(state, rows, len, cardinality, false, FilterPattern::KEEP_NONE);
                     });
             register_case(ext_case_name("P0", "parquet_dict_decode",
-                                        "rows:65536/len:" + std::to_string(len) + "/cardinality:" +
+                                        rows_param + "/len:" + std::to_string(len) + "/cardinality:" +
                                                 std::to_string(cardinality) + "/nullable:true/nulls:random50"),
                           [=](benchmark::State& state) {
-                              bench_parquet_dict_decode(state, 65536, len, cardinality, true, FilterPattern::RANDOM_50);
+                              bench_parquet_dict_decode(state, rows, len, cardinality, true, FilterPattern::RANDOM_50);
                           });
         }
     }
@@ -2750,84 +2770,83 @@ static void register_p0_core_cases() {
             for (bool nullable : {false, true}) {
                 register_case(
                         ext_case_name("P0", "orc_string_reader",
-                                      "rows:65536/len:" + std::to_string(len) + "/type:" + type_to_string(type) +
+                                      rows_param + "/len:" + std::to_string(len) + "/type:" + type_to_string(type) +
                                               "/nullable:" + std::to_string(nullable)),
-                        [=](benchmark::State& state) { bench_orc_string_reader(state, type, 65536, len, nullable); });
+                        [=](benchmark::State& state) { bench_orc_string_reader(state, type, rows, len, nullable); });
             }
         }
     }
 }
 
 static void register_p0_boundary_cases() {
-    for (size_t rows : {65536UL, 262144UL}) {
-        for (size_t len : {4UL, 32UL, 128UL}) {
-            register_case(ext_case_name("P0B", "column_array_serde",
-                                        "rows:" + std::to_string(rows) + "/len:" + std::to_string(len) +
-                                                "/mode:serialize/encode:0"),
-                          [=](benchmark::State& state) { bench_column_array_serde_serialize(state, rows, len, 0); });
-            register_case(ext_case_name("P0B", "column_array_serde",
-                                        "rows:" + std::to_string(rows) + "/len:" + std::to_string(len) +
-                                                "/mode:deserialize/encode:0"),
-                          [=](benchmark::State& state) { bench_column_array_serde_deserialize(state, rows, len, 0); });
-        }
+    constexpr size_t rows = kExternalChunkRows;
+    const auto rows_param = "rows:" + std::to_string(rows);
+
+    for (size_t len : {4UL, 32UL, 128UL}) {
+        register_case(ext_case_name("P0B", "column_array_serde",
+                                    rows_param + "/len:" + std::to_string(len) + "/mode:serialize/encode:0"),
+                      [=](benchmark::State& state) { bench_column_array_serde_serialize(state, rows, len, 0); });
+        register_case(ext_case_name("P0B", "column_array_serde",
+                                    rows_param + "/len:" + std::to_string(len) + "/mode:deserialize/encode:0"),
+                      [=](benchmark::State& state) { bench_column_array_serde_deserialize(state, rows, len, 0); });
     }
-    register_case(ext_case_name("P0B", "column_array_serde",
-                                "rows:524288/len:4/mode:serialize/encode:0"),
-                  [](benchmark::State& state) { bench_column_array_serde_serialize(state, 524288, 4, 0); });
-    register_case(ext_case_name("P0B", "column_array_serde",
-                                "rows:524288/len:4/mode:deserialize/encode:0"),
-                  [](benchmark::State& state) { bench_column_array_serde_deserialize(state, 524288, 4, 0); });
 
     for (size_t len : {4UL, 32UL}) {
         register_case(ext_case_name("P0B", "binary_plain_page_zero_copy_offsets_with_alloc",
-                                    "rows:65536/len:" + std::to_string(len)),
+                                    rows_param + "/len:" + std::to_string(len)),
                       [=](benchmark::State& state) {
-                          bench_binary_plain_page_zero_copy_offsets_with_alloc(state, 65536, len);
+                          bench_binary_plain_page_zero_copy_offsets_with_alloc(state, rows, len);
                       });
         register_case(ext_case_name("P0B", "binary_plain_page_zero_copy_offsets_reuse",
-                                    "rows:65536/len:" + std::to_string(len)),
+                                    rows_param + "/len:" + std::to_string(len)),
                       [=](benchmark::State& state) {
-                          bench_binary_plain_page_zero_copy_offsets_reuse(state, 65536, len);
+                          bench_binary_plain_page_zero_copy_offsets_reuse(state, rows, len);
                       });
     }
-    register_case(ext_case_name("P0B", "binary_plain_page_zero_copy_column_hash_consumer_only", "rows:65536/len:32"),
+    register_case(ext_case_name("P0B", "binary_plain_page_zero_copy_column_hash_consumer_only",
+                                rows_param + "/len:32"),
                   [](benchmark::State& state) {
-                      bench_binary_plain_page_zero_copy_column_hash_consumer_only(state, 65536, 32);
+                      bench_binary_plain_page_zero_copy_column_hash_consumer_only(state, kExternalChunkRows, 32);
                   });
 
     for (int encode_level : {2, 4, 6}) {
         register_case(
                 ext_case_name("P0B_EXTRA", "column_array_serde_encoded",
-                              "rows:65536/len:32/mode:serialize/encode:" + std::to_string(encode_level)),
-                [=](benchmark::State& state) { bench_column_array_serde_serialize(state, 65536, 32, encode_level); });
+                              rows_param + "/len:32/mode:serialize/encode:" + std::to_string(encode_level)),
+                [=](benchmark::State& state) { bench_column_array_serde_serialize(state, rows, 32, encode_level); });
         register_case(
                 ext_case_name("P0B_EXTRA", "column_array_serde_encoded",
-                              "rows:65536/len:32/mode:deserialize/encode:" + std::to_string(encode_level)),
-                [=](benchmark::State& state) { bench_column_array_serde_deserialize(state, 65536, 32, encode_level); });
+                              rows_param + "/len:32/mode:deserialize/encode:" + std::to_string(encode_level)),
+                [=](benchmark::State& state) { bench_column_array_serde_deserialize(state, rows, 32, encode_level); });
     }
     register_case(ext_case_name("P0B_EXTRA", "column_array_serde_encoded",
-                                "rows:65536/len:4/mode:serialize/encode:2"),
-                  [](benchmark::State& state) { bench_column_array_serde_serialize(state, 65536, 4, 2); });
+                                rows_param + "/len:4/mode:serialize/encode:2"),
+                  [](benchmark::State& state) { bench_column_array_serde_serialize(state, kExternalChunkRows, 4, 2); });
     register_case(ext_case_name("P0B_EXTRA", "column_array_serde_encoded",
-                                "rows:65536/len:4/mode:deserialize/encode:2"),
-                  [](benchmark::State& state) { bench_column_array_serde_deserialize(state, 65536, 4, 2); });
+                                rows_param + "/len:4/mode:deserialize/encode:2"),
+                  [](benchmark::State& state) {
+                      bench_column_array_serde_deserialize(state, kExternalChunkRows, 4, 2);
+                  });
 
 }
 
 static void register_p1_cases() {
     // P1 includes integration/regression coverage. Treat P0/P0B no-promote cases as the primary performance signal.
     // Keep these cases module-level: they call real StarRocks components instead of open-coded scalar offset loops.
+    constexpr size_t rows = kExternalChunkRows;
+    const auto rows_param = "rows:" + std::to_string(rows);
+
     for (const auto& spec : {std::tuple<size_t, size_t, bool>{4, 1, false},
                              std::tuple<size_t, size_t, bool>{32, 1, false},
                              std::tuple<size_t, size_t, bool>{4, 4, false},
                              std::tuple<size_t, size_t, bool>{4, 4, true}}) {
         const auto [len, value_columns, nullable] = spec;
         register_case(ext_case_name("P1_EXTRA", "row_store_encoder_simple_encode",
-                                    "rows:65536/len:" + std::to_string(len) +
+                                    rows_param + "/len:" + std::to_string(len) +
                                             "/value_cols:" + std::to_string(value_columns) +
                                             "/nullable:" + bool_name(nullable)),
                       [=](benchmark::State& state) {
-                          bench_row_store_encoder_simple_encode(state, 65536, len, value_columns, nullable);
+                          bench_row_store_encoder_simple_encode(state, rows, len, value_columns, nullable);
                       });
     }
 
@@ -2839,46 +2858,53 @@ static void register_p1_cases() {
                              std::tuple<size_t, size_t, bool>{4, 4, true}}) {
         const auto [len, value_columns, nullable] = spec;
         register_case(ext_case_name("P1_EXTRA", "exchange_perf_update",
-                                    "rows:65536/len:" + std::to_string(len) +
+                                    rows_param + "/len:" + std::to_string(len) +
                                             "/value_cols:" + std::to_string(value_columns) +
                                             "/nullable:" + bool_name(nullable)),
                       [=](benchmark::State& state) {
-                          bench_exchange_perf_update_external(state, 65536, len, value_columns, nullable);
+                          bench_exchange_perf_update_external(state, rows, len, value_columns, nullable);
                       });
     }
 
     register_case(ext_case_name("P1_EXTRA", "column_predicate_in_branchless",
-                                "rows:65535/len:4/select:random50/hit:50"),
-                  [](benchmark::State& state) { bench_column_predicate_in_branchless_external(state, 65535, 4); });
+                                rows_param + "/len:4/select:random50/hit:50"),
+                  [](benchmark::State& state) {
+                      bench_column_predicate_in_branchless_external(state, kExternalChunkRows, 4);
+                  });
     register_case(ext_case_name("P1_EXTRA", "column_predicate_in_branchless",
-                                "rows:65535/len:32/select:random50/hit:50"),
-                  [](benchmark::State& state) { bench_column_predicate_in_branchless_external(state, 65535, 32); });
+                                rows_param + "/len:32/select:random50/hit:50"),
+                  [](benchmark::State& state) {
+                      bench_column_predicate_in_branchless_external(state, kExternalChunkRows, 32);
+                  });
 
     register_case(ext_case_name("P1_EXTRA", "binary_plain_page_dict_filter_selection",
-                                "rows:70000/len:8/predicate:ge_mid"),
-                  [](benchmark::State& state) { bench_binary_plain_page_dict_filter_selection(state, 70000, 8); });
+                                rows_param + "/len:8/predicate:ge_mid"),
+                  [](benchmark::State& state) {
+                      bench_binary_plain_page_dict_filter_selection(state, kExternalChunkRows, 8);
+                  });
 
-    for (size_t rows : {4096UL, 65536UL}) {
-        for (size_t len : {4UL, 32UL, 128UL}) {
-            for (bool nullable : {false, true}) {
-                register_case(ext_case_name("P1", "nullable_binary_column_builder_append_build",
-                                            "rows:" + std::to_string(rows) + "/len:" + std::to_string(len) +
-                                                    "/nullable:" + bool_name(nullable)),
-                              [=](benchmark::State& state) {
-                                  bench_nullable_binary_column_builder(state, rows, len, nullable);
-                              });
-            }
+    for (size_t len : {4UL, 32UL, 128UL}) {
+        for (bool nullable : {false, true}) {
+            register_case(ext_case_name("P1", "nullable_binary_column_builder_append_build",
+                                        rows_param + "/len:" + std::to_string(len) +
+                                                "/nullable:" + bool_name(nullable)),
+                          [=](benchmark::State& state) {
+                              bench_nullable_binary_column_builder(state, rows, len, nullable);
+                          });
         }
     }
 
     for (size_t num_segments : {2UL, 8UL}) {
+        const size_t segment_rows = rows / num_segments;
         for (size_t len : {4UL, 32UL}) {
             for (IndexPattern pattern : {IndexPattern::RANDOM, IndexPattern::CLUSTERED}) {
                 register_case(ext_case_name("P1", "segmented_column_clone_selective",
-                                            "segments:" + std::to_string(num_segments) + "/segment_rows:8192/len:" +
+                                            "segments:" + std::to_string(num_segments) + "/segment_rows:" +
+                                                    std::to_string(segment_rows) + "/rows:" + std::to_string(rows) + "/len:" +
                                                     std::to_string(len) + "/select:" + index_pattern_name(pattern)),
                               [=](benchmark::State& state) {
-                                  bench_segmented_column_clone_selective(state, num_segments, 8192, len, pattern);
+                                  bench_segmented_column_clone_selective(state, num_segments, segment_rows, len,
+                                                                         pattern);
                               });
             }
         }
@@ -2889,11 +2915,11 @@ static void register_p1_cases() {
         for (size_t len : {4UL, 32UL}) {
             for (bool nullable : {false, true}) {
                 register_case(ext_case_name("P1", "arrow_string_converter",
-                                            "rows:65536/len:" + std::to_string(len) +
+                                            rows_param + "/len:" + std::to_string(len) +
                                                     "/arrow:" + arrow_string_kind_name(kind) +
                                                     "/nullable:" + std::to_string(nullable)),
                               [=](benchmark::State& state) {
-                                  bench_arrow_string_converter(state, kind, 65536, len, nullable);
+                                  bench_arrow_string_converter(state, kind, rows, len, nullable);
                               });
             }
         }
@@ -2902,16 +2928,16 @@ static void register_p1_cases() {
                                  ArrowStringKind::FIXED_SIZE_BINARY}) {
         for (bool nullable : {false, true}) {
             register_case(ext_case_name("P1", "arrow_string_converter_nonzero_source_offset",
-                                        "rows:65536/len:32/arrow:" + std::string(arrow_string_kind_name(kind)) +
+                                        rows_param + "/len:32/arrow:" + std::string(arrow_string_kind_name(kind)) +
                                                 "/source_offset:7/nullable:" + std::to_string(nullable)),
                           [=](benchmark::State& state) {
-                              bench_arrow_string_converter_nonzero_offset(state, kind, 65536, 32, nullable, false);
+                              bench_arrow_string_converter_nonzero_offset(state, kind, rows, 32, nullable, false);
                           });
             register_case(ext_case_name("P1", "arrow_string_converter_sliced_array_offset",
-                                        "rows:65536/len:32/arrow:" + std::string(arrow_string_kind_name(kind)) +
+                                        rows_param + "/len:32/arrow:" + std::string(arrow_string_kind_name(kind)) +
                                                 "/array_offset:7/nullable:" + std::to_string(nullable)),
                           [=](benchmark::State& state) {
-                              bench_arrow_string_converter_nonzero_offset(state, kind, 65536, 32, nullable, true);
+                              bench_arrow_string_converter_nonzero_offset(state, kind, rows, 32, nullable, true);
                           });
         }
     }
@@ -2922,25 +2948,23 @@ static void register_p1_cases() {
         for (size_t len : {4UL, 32UL, 128UL}) {
             register_case(
                     ext_case_name("P1_EXTRA", "string_function",
-                                  "rows:65536/len:" + std::to_string(len) + "/fn:" + string_function_case_name(fn)),
-                    [=](benchmark::State& state) { bench_string_function_external(state, fn, 65536, len); });
+                                  rows_param + "/len:" + std::to_string(len) + "/fn:" + string_function_case_name(fn)),
+                    [=](benchmark::State& state) { bench_string_function_external(state, fn, rows, len); });
         }
     }
 
     for (const auto& spec :
-         {std::tuple<size_t, size_t, size_t, bool, JoinKeyMode>{65536, 4, 1, false, JoinKeyMode::FIXED_SIZE},
-          std::tuple<size_t, size_t, size_t, bool, JoinKeyMode>{65536, 16, 1, true, JoinKeyMode::FIXED_SIZE},
-          std::tuple<size_t, size_t, size_t, bool, JoinKeyMode>{262144, 8, 1, false, JoinKeyMode::FIXED_SIZE},
-          std::tuple<size_t, size_t, size_t, bool, JoinKeyMode>{65536, 4, 2, false, JoinKeyMode::SERIALIZED_VARCHAR},
-          std::tuple<size_t, size_t, size_t, bool, JoinKeyMode>{65536, 32, 2, false, JoinKeyMode::SERIALIZED_VARCHAR},
-          std::tuple<size_t, size_t, size_t, bool, JoinKeyMode>{65536, 4, 2, true, JoinKeyMode::SERIALIZED_VARCHAR},
-          std::tuple<size_t, size_t, size_t, bool, JoinKeyMode>{65536, 4, 4, false,
-                                                                JoinKeyMode::SERIALIZED_VARCHAR}}) {
-        const auto [rows, len, key_columns, nullable, key_mode] = spec;
+         {std::tuple<size_t, size_t, bool, JoinKeyMode>{4, 1, false, JoinKeyMode::FIXED_SIZE},
+          std::tuple<size_t, size_t, bool, JoinKeyMode>{16, 1, true, JoinKeyMode::FIXED_SIZE},
+          std::tuple<size_t, size_t, bool, JoinKeyMode>{8, 1, false, JoinKeyMode::FIXED_SIZE},
+          std::tuple<size_t, size_t, bool, JoinKeyMode>{4, 2, false, JoinKeyMode::SERIALIZED_VARCHAR},
+          std::tuple<size_t, size_t, bool, JoinKeyMode>{32, 2, false, JoinKeyMode::SERIALIZED_VARCHAR},
+          std::tuple<size_t, size_t, bool, JoinKeyMode>{4, 2, true, JoinKeyMode::SERIALIZED_VARCHAR},
+          std::tuple<size_t, size_t, bool, JoinKeyMode>{4, 4, false, JoinKeyMode::SERIALIZED_VARCHAR}}) {
+        const auto [len, key_columns, nullable, key_mode] = spec;
         register_case(
                 ext_case_name("P1", "join_hash_table_binary_key_build_only",
-                              "rows:" + std::to_string(rows) + "/len:" + std::to_string(len) +
-                                      "/key_cols:" + std::to_string(key_columns) +
+                              rows_param + "/len:" + std::to_string(len) + "/key_cols:" + std::to_string(key_columns) +
                                       "/nullable:" + bool_name(nullable) +
                                       "/key_mode:" + join_key_mode_name(key_mode) +
                                       "/fixed_size_opt:" + bool_name(key_mode == JoinKeyMode::FIXED_SIZE) +
@@ -2953,27 +2977,29 @@ static void register_p1_cases() {
     for (AggConvertCase fn : {AggConvertCase::GROUP_CONCAT, AggConvertCase::MAX_BY}) {
         for (size_t len : {4UL, 32UL, 128UL}) {
             register_case(ext_case_name("P1", "agg_convert_to_serialize_format",
-                                        "rows:65536/len:" + std::to_string(len) + "/fn:" + agg_convert_case_name(fn)),
+                                        rows_param + "/len:" + std::to_string(len) + "/fn:" + agg_convert_case_name(fn)),
                           [=](benchmark::State& state) {
-                              bench_agg_convert_to_serialize_format_external(state, fn, 65536, len);
+                              bench_agg_convert_to_serialize_format_external(state, fn, rows, len);
                           });
         }
     }
     for (AggConvertCase fn : {AggConvertCase::AVG, AggConvertCase::VARIANCE}) {
         register_case(
                 ext_case_name("P1", "agg_convert_to_serialize_format",
-                              "rows:65536/len:na/fn:" + std::string(agg_convert_case_name(fn))),
-                [=](benchmark::State& state) { bench_agg_convert_to_serialize_format_external(state, fn, 65536, 0); });
+                              rows_param + "/len:na/fn:" + std::string(agg_convert_case_name(fn))),
+                [=](benchmark::State& state) { bench_agg_convert_to_serialize_format_external(state, fn, rows, 0); });
     }
     register_case(
-            ext_case_name("P1_EXTRA", "agg_convert_to_serialize_format", "rows:65536/len:na/fn:percentile_approx"),
+            ext_case_name("P1_EXTRA", "agg_convert_to_serialize_format", rows_param + "/len:na/fn:percentile_approx"),
             [](benchmark::State& state) {
-                bench_agg_convert_to_serialize_format_external(state, AggConvertCase::PERCENTILE_APPROX, 65536, 0);
+                bench_agg_convert_to_serialize_format_external(state, AggConvertCase::PERCENTILE_APPROX,
+                                                               kExternalChunkRows, 0);
             });
     register_case(
-            ext_case_name("P1_EXTRA", "agg_convert_to_serialize_format", "rows:65536/len:32/fn:ds_hll_count_distinct"),
+            ext_case_name("P1_EXTRA", "agg_convert_to_serialize_format", rows_param + "/len:32/fn:ds_hll_count_distinct"),
             [](benchmark::State& state) {
-                bench_agg_convert_to_serialize_format_external(state, AggConvertCase::DS_HLL_COUNT_DISTINCT, 65536, 32);
+                bench_agg_convert_to_serialize_format_external(state, AggConvertCase::DS_HLL_COUNT_DISTINCT,
+                                                               kExternalChunkRows, 32);
             });
 
     for (AggSerializeCase fn :
@@ -2981,36 +3007,39 @@ static void register_p1_cases() {
         for (size_t len : {4UL, 32UL, 128UL}) {
             register_case(
                     ext_case_name("P1_EXTRA", "agg_batch_serialize",
-                                  "rows:4096/len:" + std::to_string(len) + "/fn:" + agg_serialize_case_name(fn) +
+                                  rows_param + "/len:" + std::to_string(len) + "/fn:" + agg_serialize_case_name(fn) +
                                           "/values_per_state:4"),
-                    [=](benchmark::State& state) { bench_agg_batch_serialize_external(state, fn, 4096, len, 4); });
+                    [=](benchmark::State& state) { bench_agg_batch_serialize_external(state, fn, rows, len, 4); });
         }
         if (fn != AggSerializeCase::DS_HLL_COUNT_DISTINCT) {
             register_case(
                     ext_case_name(
                             "P1_EXTRA", "agg_batch_serialize",
-                            "rows:65536/len:32/fn:" + std::string(agg_serialize_case_name(fn)) + "/values_per_state:2"),
-                    [=](benchmark::State& state) { bench_agg_batch_serialize_external(state, fn, 65536, 32, 2); });
+                            rows_param + "/len:32/fn:" + std::string(agg_serialize_case_name(fn)) +
+                                    "/values_per_state:2"),
+                    [=](benchmark::State& state) { bench_agg_batch_serialize_external(state, fn, rows, 32, 2); });
         }
     }
     register_case(
-            ext_case_name("P1_EXTRA", "agg_batch_serialize", "rows:4096/len:8/fn:percentile_cont/values_per_state:16"),
+            ext_case_name("P1_EXTRA", "agg_batch_serialize",
+                          rows_param + "/len:8/fn:percentile_cont/values_per_state:16"),
             [](benchmark::State& state) {
-                bench_agg_batch_serialize_external(state, AggSerializeCase::PERCENTILE_CONT, 4096, 8, 16);
+                bench_agg_batch_serialize_external(state, AggSerializeCase::PERCENTILE_CONT, kExternalChunkRows, 8, 16);
             });
     register_case(
-            ext_case_name("P1_EXTRA", "agg_batch_serialize", "rows:65536/len:8/fn:percentile_cont/values_per_state:4"),
+            ext_case_name("P1_EXTRA", "agg_batch_serialize",
+                          rows_param + "/len:8/fn:percentile_cont/values_per_state:4"),
             [](benchmark::State& state) {
-                bench_agg_batch_serialize_external(state, AggSerializeCase::PERCENTILE_CONT, 65536, 8, 4);
+                bench_agg_batch_serialize_external(state, AggSerializeCase::PERCENTILE_CONT, kExternalChunkRows, 8, 4);
             });
 
     for (size_t len : {4UL, 32UL, 128UL}) {
         for (bool nullable : {false, true}) {
             register_case(
                     ext_case_name("P1", "parquet_level_builder_byte_array",
-                                  "rows:65536/len:" + std::to_string(len) + "/nullable:" + std::to_string(nullable)),
+                                  rows_param + "/len:" + std::to_string(len) + "/nullable:" + std::to_string(nullable)),
                     [=](benchmark::State& state) {
-                        bench_parquet_level_builder_byte_array(state, 65536, len, nullable);
+                        bench_parquet_level_builder_byte_array(state, rows, len, nullable);
                     });
         }
     }
@@ -3018,10 +3047,10 @@ static void register_p1_cases() {
     for (size_t len : {4UL, 32UL, 128UL}) {
         for (bool nullable : {false, true}) {
             register_case(ext_case_name("P1_EXTRA", "chunk_helper_padding_char_column",
-                                        "rows:65536/char_len:" + std::to_string(len) +
+                                        rows_param + "/char_len:" + std::to_string(len) +
                                                 "/nullable:" + std::to_string(nullable)),
                           [=](benchmark::State& state) {
-                              bench_chunk_helper_padding_char_column(state, 65536, len, nullable);
+                              bench_chunk_helper_padding_char_column(state, rows, len, nullable);
                           });
         }
     }
@@ -3029,16 +3058,16 @@ static void register_p1_cases() {
     for (size_t array_size : {4UL, 16UL}) {
         for (size_t len : {4UL, 32UL}) {
             register_case(ext_case_name("P1_EXTRA", "array_reverse_string",
-                                        "rows:65536/array_size:" + std::to_string(array_size) +
+                                        rows_param + "/array_size:" + std::to_string(array_size) +
                                                 "/len:" + std::to_string(len) + "/nullable:false"),
                           [=](benchmark::State& state) {
-                              bench_array_reverse_string_external(state, 65536, array_size, len, false);
+                              bench_array_reverse_string_external(state, rows, array_size, len, false);
                           });
             register_case(ext_case_name("P1_EXTRA", "array_reverse_string",
-                                        "rows:65536/array_size:" + std::to_string(array_size) +
+                                        rows_param + "/array_size:" + std::to_string(array_size) +
                                                 "/len:" + std::to_string(len) + "/nullable:true"),
                           [=](benchmark::State& state) {
-                              bench_array_reverse_string_external(state, 65536, array_size, len, true);
+                              bench_array_reverse_string_external(state, rows, array_size, len, true);
                           });
         }
     }
@@ -3048,8 +3077,8 @@ static void register_p1_cases() {
                                                 TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL64, 18, 2)};
     for (const auto& from_type : cast_from_types) {
         register_case(ext_case_name("P1_EXTRA", "cast_to_string",
-                                    "rows:65536/from:" + cast_type_case_name(from_type) + "/to:VARCHAR"),
-                      [=](benchmark::State& state) { bench_cast_to_string_external(state, from_type, 65536); });
+                                    rows_param + "/from:" + cast_type_case_name(from_type) + "/to:VARCHAR"),
+                      [=](benchmark::State& state) { bench_cast_to_string_external(state, from_type, rows); });
     }
 }
 
