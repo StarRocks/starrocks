@@ -22,10 +22,13 @@ import com.starrocks.http.BaseResponse;
 import com.starrocks.http.HttpConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.NodeMgr;
+import io.netty.channel.Channel;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.handler.codec.http.DefaultHttpHeaders;
 import io.netty.handler.codec.http.HttpHeaders;
 import io.netty.handler.codec.http.HttpRequest;
+
+import java.net.InetSocketAddress;
 import mockit.Expectations;
 import mockit.Mocked;
 import org.junit.jupiter.api.Test;
@@ -173,9 +176,18 @@ public class LoadActionInternalTokenTest {
         // tryInternalTokenBypass calls request.getConnectContext() and then
         // request.getContext() (for setNettyChannel) -- stub both so the ctx
         // setup completes without NPE.
+        //
+        // HttpConnectContext.setNettyChannel calls
+        // `nettyChannel.channel().remoteAddress().toString().substring(1)`,
+        // so we have to mock the full chain: ChannelHandlerContext -> Channel
+        // -> remoteAddress (which Netty exposes as SocketAddress).
         HttpConnectContext httpCtx = new HttpConnectContext();
         when(req.getConnectContext()).thenReturn(httpCtx);
-        when(req.getContext()).thenReturn(mock(ChannelHandlerContext.class));
+        ChannelHandlerContext channelCtx = mock(ChannelHandlerContext.class);
+        Channel channel = mock(Channel.class);
+        when(channelCtx.channel()).thenReturn(channel);
+        when(channel.remoteAddress()).thenReturn(new InetSocketAddress("127.0.0.1", 0));
+        when(req.getContext()).thenReturn(channelCtx);
 
         CapturingLoadAction action = new CapturingLoadAction();
         assertTrue(action.tryInternalTokenBypass(req, mock(BaseResponse.class)));
