@@ -2254,7 +2254,14 @@ roleList
     ;
 
 executeScriptStatement
-    : ADMIN EXECUTE ON (FRONTEND | INTEGER_VALUE) string
+    : ADMIN EXECUTE ON executeScriptTarget string
+    ;
+
+executeScriptTarget
+    : FRONTEND
+    | INTEGER_VALUE (',' INTEGER_VALUE)*
+    | ALL BACKENDS
+    | ALL COMPUTE NODES
     ;
 
 unsupportedStatement
