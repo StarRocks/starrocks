@@ -148,6 +148,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String IS_REPORT_SUCCESS = "is_report_success";
     public static final String COLOR_EXPLAIN_OUTPUT = "enable_color_explain_output";
     public static final String ENABLE_PROFILE = "enable_profile";
+    public static final String ENABLE_EXPLAIN_IN_PROFILE = "enable_explain_in_profile";
 
     public static final String ENABLE_LOAD_PROFILE = "enable_load_profile";
     public static final String PROFILING = "profiling";
@@ -1112,6 +1113,11 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // if true, need report to coordinator when plan fragment execute successfully.
     @VariableMgr.VarAttr(name = ENABLE_PROFILE, alias = IS_REPORT_SUCCESS)
     private boolean enableProfile = false;
+
+    // When true and a profile is built for the query, the EXPLAIN COSTS text
+    // of the executed plan is embedded in the profile's Summary section.
+    @VariableMgr.VarAttr(name = ENABLE_EXPLAIN_IN_PROFILE)
+    private boolean enableExplainInProfile = false;
 
     // Toggle ANSI color in explain output
     @VariableMgr.VarAttr(name = COLOR_EXPLAIN_OUTPUT)
@@ -3261,6 +3267,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setEnableProfile(boolean enableProfile) {
         this.enableProfile = enableProfile;
+    }
+
+    public boolean isEnableExplainInProfile() {
+        return enableExplainInProfile;
+    }
+
+    public void setEnableExplainInProfile(boolean enableExplainInProfile) {
+        this.enableExplainInProfile = enableExplainInProfile;
     }
 
     public boolean getColorExplainOutput() {

@@ -15,6 +15,8 @@
 package com.starrocks.qe;
 
 import com.starrocks.common.Config;
+import com.starrocks.common.FeConstants;
+import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.ProfileManager;
 import com.starrocks.common.util.RuntimeProfile;
 import com.starrocks.mysql.MysqlSerializer;
@@ -22,6 +24,8 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.parser.AstBuilder;
 import com.starrocks.sql.parser.SqlParser;
+import com.starrocks.sql.plan.ExecPlan;
+import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Mocked;
@@ -134,6 +138,70 @@ public class StmtExecutorTest {
         Assertions.assertEquals("Delete", executor.getExecType());
         Assertions.assertTrue(executor.isExecLoadType());
         Assertions.assertEquals(ConnectContext.get().getSessionVariable().getInsertTimeoutS(), executor.getExecTimeout());
+    }
+
+    @Test
+    public void testEmbedExplainPlanInProfileScenarios() throws Exception {
+        FeConstants.runningUnitTest = true;
+        UtFrameUtils.createMinStarRocksCluster();
+        ConnectContext setupCtx = UtFrameUtils.createDefaultCtx();
+        StarRocksAssert starRocksAssert = new StarRocksAssert(setupCtx);
+        String dbName = "test_explain_in_profile_db";
+        starRocksAssert.withDatabase(dbName).useDatabase(dbName);
+        starRocksAssert.withTable("CREATE TABLE `embed_explain_t` (\n" +
+                "  `k1` int NULL,\n" +
+                "  `k2` int NULL\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`k1`)\n" +
+                "DISTRIBUTED BY HASH(`k1`) BUCKETS 3\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ");");
+
+        String querySql = "SELECT k1, k2 FROM embed_explain_t WHERE k2 = 12345";
+
+        // Case 1: Flag off -> Summary must NOT carry ExplainPlan info-string.
+        ConnectContext offCtx = UtFrameUtils.createDefaultCtx();
+        offCtx.setDatabase(dbName);
+        ConnectContext.threadLocalInfo.set(offCtx);
+        offCtx.getSessionVariable().setEnableProfile(true);
+        offCtx.getSessionVariable().setEnableExplainInProfile(false);
+        ExecPlan offPlan = UtFrameUtils.getPlanAndFragment(offCtx, querySql).second;
+        StatementBase offStmt = SqlParser.parseSingleStatement(querySql, SqlModeHelper.MODE_DEFAULT);
+        StmtExecutor offExecutor = new StmtExecutor(offCtx, offStmt);
+        RuntimeProfile offProfile = Deencapsulation.invoke(offExecutor, "buildTopLevelProfile");
+        Deencapsulation.invoke(offExecutor, "maybeEmbedExplainPlanInProfile", offProfile, offPlan);
+        RuntimeProfile offSummary = offProfile.getChild("Summary");
+        Assertions.assertNotNull(offSummary);
+        Assertions.assertNull(offSummary.getInfoString("ExplainPlan"),
+                "ExplainPlan must be absent when enable_explain_in_profile is false");
+
+        // Case 2: Flag on -> Summary should carry ExplainPlan info-string with COSTS-level content
+        // produced by the real optimizer (not a synthetic plan).
+        ConnectContext onCtx = UtFrameUtils.createDefaultCtx();
+        onCtx.setDatabase(dbName);
+        ConnectContext.threadLocalInfo.set(onCtx);
+        onCtx.getSessionVariable().setEnableProfile(true);
+        onCtx.getSessionVariable().setEnableExplainInProfile(true);
+        ExecPlan onPlan = UtFrameUtils.getPlanAndFragment(onCtx, querySql).second;
+        StatementBase onStmt = SqlParser.parseSingleStatement(querySql, SqlModeHelper.MODE_DEFAULT);
+        StmtExecutor onExecutor = new StmtExecutor(onCtx, onStmt);
+        RuntimeProfile onProfile = Deencapsulation.invoke(onExecutor, "buildTopLevelProfile");
+        Deencapsulation.invoke(onExecutor, "maybeEmbedExplainPlanInProfile", onProfile, onPlan);
+        RuntimeProfile onSummary = onProfile.getChild("Summary");
+        Assertions.assertNotNull(onSummary);
+        String embedded = onSummary.getInfoString("ExplainPlan");
+        Assertions.assertNotNull(embedded,
+                "ExplainPlan must be embedded when enable_explain_in_profile is true");
+        Assertions.assertTrue(embedded.contains("PLAN FRAGMENT"),
+                "Embedded explain plan should contain rendered fragment headers");
+        Assertions.assertTrue(embedded.contains("OlapScanNode"),
+                "Embedded explain plan should describe the OLAP scan against the test table");
+        Assertions.assertTrue(embedded.contains("embed_explain_t"),
+                "Embedded explain plan should reference the table being scanned");
+        // COSTS-level output renders cardinality/column-statistics that NORMAL/VERBOSE-only paths skip.
+        Assertions.assertTrue(embedded.contains("cardinality:"),
+                "Embedded explain plan should render COSTS-level content (cardinality)");
     }
 
     @Test

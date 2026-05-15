@@ -1239,6 +1239,7 @@ public class StmtExecutor {
         // This process will get information from the context, so it must be executed synchronously.
         // Otherwise, the context may be changed, for example, containing the wrong query id.
         profile = buildTopLevelProfile();
+        maybeEmbedExplainPlanInProfile(profile, plan);
         // Capture the session timezone now so that the async profile task uses the same zone
         // as START_TIME (the context may change before the async task runs).
         java.time.ZoneId profileZoneForAsync = TimeUtils.getTimeZone().toZoneId();
@@ -1292,6 +1293,29 @@ public class StmtExecutor {
             }
         };
         return coord.tryProcessProfileAsync(task);
+    }
+
+    /**
+     * When the {@code enable_explain_in_profile} session variable is true and an executed plan is
+     * available, render its {@link TExplainLevel#COSTS} text and embed it into the profile's
+     * {@code Summary} section under the {@code "ExplainPlan"} key. Credential-bearing literals are
+     * stripped via {@link SqlCredentialRedactor} before the plan text is written into the profile.
+     * Any failure here is swallowed and logged so it never prevents the rest of profile processing.
+     */
+    private void maybeEmbedExplainPlanInProfile(RuntimeProfile profile, ExecPlan plan) {
+        SessionVariable sv = context.getSessionVariable();
+        if (plan == null || sv == null || !sv.isEnableExplainInProfile()) {
+            return;
+        }
+        try {
+            RuntimeProfile summaryProfile = profile.getChild("Summary");
+            String explainPlan = plan.getExplainString(TExplainLevel.COSTS);
+            // Strip credential-bearing literals (e.g. FILES("...") properties) before
+            // persisting the plan into the profile.
+            summaryProfile.addInfoString("ExplainPlan", SqlCredentialRedactor.redact(explainPlan));
+        } catch (Exception e) {
+            LOG.warn("Failed to embed explain plan in profile", e);
+        }
     }
 
     public void registerSubStmtExecutor(StmtExecutor subStmtExecutor) {
