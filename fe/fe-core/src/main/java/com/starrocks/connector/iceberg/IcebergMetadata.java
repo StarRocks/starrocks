@@ -68,12 +68,15 @@ import com.starrocks.connector.iceberg.cost.IcebergStatisticProvider;
 import com.starrocks.connector.iceberg.io.IcebergCachingFileIO;
 import com.starrocks.connector.iceberg.procedure.IcebergProcedureRegistry;
 import com.starrocks.connector.metadata.MetadataTableType;
+import com.starrocks.connector.share.iceberg.ManifestFileBean;
+import com.starrocks.connector.share.iceberg.PartitionStatsSplitBean;
 import com.starrocks.connector.share.iceberg.SerializableTable;
 import com.starrocks.connector.statistics.StatisticsUtils;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.metric.ConnectorMetricsMgr;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AlterTableStmt;
@@ -120,6 +123,7 @@ import org.apache.iceberg.MetricsModes;
 import org.apache.iceberg.PartitionField;
 import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.PartitionSpecParser;
+import org.apache.iceberg.PartitionStatisticsFile;
 import org.apache.iceberg.ReplacePartitions;
 import org.apache.iceberg.RewriteFiles;
 import org.apache.iceberg.RowDelta;
@@ -955,10 +959,8 @@ public class IcebergMetadata implements ConnectorMetadata {
         }
         Snapshot snapshot = nativeTable.snapshot(snapshotId);
 
-        Expression predicate = Expressions.alwaysTrue();
-        if (!Strings.isNullOrEmpty(serializedPredicate)) {
-            predicate = SerializationUtil.deserializeFromBase64(serializedPredicate);
-        }
+        Expression predicate = Strings.isNullOrEmpty(serializedPredicate) ? Expressions.alwaysTrue() :
+                SerializationUtil.deserializeFromBase64(serializedPredicate);
 
         FileIO fileIO = nativeTable.io();
         if (fileIO instanceof IcebergCachingFileIO) {
@@ -971,18 +973,38 @@ public class IcebergMetadata implements ConnectorMetadata {
             return new IcebergMetaSpec(serializedTable, List.of(IcebergMetaSplit.placeholderSplit()), false);
         }
 
+        if (metadataTableType == MetadataTableType.PARTITIONS && nativeTable.spec().isPartitioned()) {
+            IcebergMetaSpec statsSpec =
+                    buildPartitionStatsMetaSpec(nativeTable, snapshotId, serializedTable);
+            if (statsSpec != null) {
+                return statsSpec;
+            }
+        }
+
+        long fallbackStartMs = System.currentTimeMillis();
         List<ManifestFile> dataManifests = snapshot.dataManifests(nativeTable.io());
 
-        List<ManifestFile> matchingDataManifests = filterManifests(dataManifests, nativeTable, predicate);
+        List<ManifestFile> matchingDataManifests =
+                filterManifests(dataManifests, nativeTable, predicate);
         for (ManifestFile file : matchingDataManifests) {
             remoteMetaSplits.add(IcebergMetaSplit.from(file));
         }
 
         List<ManifestFile> deleteManifests = snapshot.deleteManifests(nativeTable.io());
-        List<ManifestFile> matchingDeleteManifests = filterManifests(deleteManifests, nativeTable, predicate);
+        List<ManifestFile> matchingDeleteManifests =
+                filterManifests(deleteManifests, nativeTable, predicate);
         if (metadataTableType == MetadataTableType.FILES || metadataTableType == MetadataTableType.PARTITIONS) {
             for (ManifestFile file : matchingDeleteManifests) {
                 remoteMetaSplits.add(IcebergMetaSplit.from(file));
+            }
+            if (metadataTableType == MetadataTableType.PARTITIONS) {
+                LOG.debug("Iceberg partitions fallback manifests. table={}, snapshot={}, predicate={}, " +
+                                "data_manifests={}, matched_data={}, delete_manifests={}, matched_delete={}, " +
+                                "total_splits={}, elapsed_ms={}",
+                        nativeTable.name(), snapshotId, predicate,
+                        dataManifests.size(), matchingDataManifests.size(),
+                        deleteManifests.size(), matchingDeleteManifests.size(),
+                        remoteMetaSplits.size(), System.currentTimeMillis() - fallbackStartMs);
             }
             return new IcebergMetaSpec(serializedTable, remoteMetaSplits, false);
         }
@@ -992,6 +1014,118 @@ public class IcebergMetadata implements ConnectorMetadata {
                         catalogProperties.enableDistributedPlanLoadColumnStatsWithEqDelete());
 
         return new IcebergMetaSpec(serializedTable, remoteMetaSplits, loadColumnStats);
+    }
+
+    private IcebergMetaSpec buildPartitionStatsMetaSpec(
+            org.apache.iceberg.Table nativeTable, long snapshotId, String serializedTable) {
+        SessionVariable sessionVariable = ConnectContext.getSessionVariableOrDefault();
+        if (!sessionVariable.enableIcebergPartitionStats()) {
+            LOG.debug("Iceberg partitions fallback to manifest scan. table={}, reason=disabled_by_session",
+                    nativeTable.name());
+            return null;
+        }
+        PartitionStatisticsFile statsFile = latestPartitionStatsFile(nativeTable, snapshotId);
+        if (statsFile == null) {
+            LOG.debug("Iceberg partitions fallback to manifest scan. table={}, reason=no_stats_file",
+                    nativeTable.name());
+            return null;
+        }
+
+        Snapshot targetSnapshot = nativeTable.snapshot(snapshotId);
+        if (targetSnapshot == null) {
+            LOG.debug("Iceberg partitions fallback to manifest scan. table={}, reason=missing_target_snapshot, snapshot={}",
+                    nativeTable.name(), snapshotId);
+            return null;
+        }
+
+        if (statsFile.snapshotId() != snapshotId) {
+            List<ManifestFileBean> incrementalManifests =
+                    collectIncrementalManifestBeans(nativeTable, statsFile.snapshotId(), snapshotId);
+            if (incrementalManifests == null) {
+                LOG.debug("Iceberg partitions stats merge fallback. table={}, reason=missing_snapshot_lineage, " +
+                                "stats_snapshot={}, target_snapshot={}",
+                        nativeTable.name(), statsFile.snapshotId(), snapshotId);
+                return null;
+            }
+            PartitionStatsSplitBean mergeSplit = new PartitionStatsSplitBean();
+            mergeSplit.setMode(PartitionStatsSplitBean.MODE_FULL);
+            mergeSplit.setStatsFilePath(statsFile.path());
+            mergeSplit.setStatsSnapshotId(statsFile.snapshotId());
+            mergeSplit.setTargetSnapshotId(snapshotId);
+            mergeSplit.setIncrementalManifests(incrementalManifests);
+            LOG.debug("Iceberg partitions stats merge split. table={}, stats_snapshot={}, target_snapshot={}, " +
+                            "manifests_to_apply={}",
+                    nativeTable.name(), statsFile.snapshotId(), snapshotId, incrementalManifests.size());
+            return new IcebergMetaSpec(serializedTable,
+                    List.of(IcebergMetaSplit.fromPartitionStatsSplit(mergeSplit)), false);
+        }
+
+        LOG.debug("Iceberg partitions stats file matches target. table={}, snapshot={}",
+                nativeTable.name(), snapshotId);
+        PartitionStatsSplitBean baseSplit = new PartitionStatsSplitBean();
+        baseSplit.setMode(PartitionStatsSplitBean.MODE_BASE);
+        baseSplit.setStatsFilePath(statsFile.path());
+        baseSplit.setStatsSnapshotId(statsFile.snapshotId());
+        baseSplit.setTargetSnapshotId(snapshotId);
+        return new IcebergMetaSpec(serializedTable,
+                List.of(IcebergMetaSplit.fromPartitionStatsSplit(baseSplit)), false);
+    }
+
+    // Iceberg's PartitionStatsHandler.latestStatsFile(table) only returns the file for the current
+    // snapshot; we need the latest file reachable from a specific snapshot in the ancestor chain
+    // (e.g. when answering $iceberg_partitions_table at a time-travel snapshot).
+    private static PartitionStatisticsFile latestPartitionStatsFile(org.apache.iceberg.Table table, long snapshotId) {
+        List<PartitionStatisticsFile> files = table.partitionStatisticsFiles();
+        if (files.isEmpty()) {
+            return null;
+        }
+        Map<Long, PartitionStatisticsFile> byId =
+                files.stream().collect(java.util.stream.Collectors.toMap(PartitionStatisticsFile::snapshotId, f -> f));
+        for (Snapshot ancestor : SnapshotUtil.ancestorsOf(snapshotId, table::snapshot)) {
+            PartitionStatisticsFile match = byId.get(ancestor.snapshotId());
+            if (match != null) {
+                return match;
+            }
+        }
+        return null;
+    }
+
+    private List<ManifestFileBean> collectIncrementalManifestBeans(
+            org.apache.iceberg.Table nativeTable,
+            long statsSnapshotId,
+            long targetSnapshotId) {
+        Snapshot baseSnapshot = nativeTable.snapshot(statsSnapshotId);
+        if (baseSnapshot == null) {
+            LOG.debug("Iceberg partitions stats merge skipped. table={}, reason=missing_stats_snapshot, snapshot={}",
+                    nativeTable.name(), statsSnapshotId);
+            return null;
+        }
+
+        List<ManifestFileBean> incrementalManifests = new ArrayList<>();
+        Set<String> seenPaths = new HashSet<>();
+        Iterable<Snapshot> snapshots =
+                SnapshotUtil.ancestorsBetween(targetSnapshotId, statsSnapshotId, nativeTable::snapshot);
+        boolean sawSnapshot = false;
+        for (Snapshot snapshot : snapshots) {
+            if (snapshot == null) {
+                continue;
+            }
+            sawSnapshot = true;
+            for (ManifestFile manifest : snapshot.dataManifests(nativeTable.io())) {
+                if (manifest.snapshotId() == snapshot.snapshotId() && seenPaths.add(manifest.path())) {
+                    incrementalManifests.add(ManifestFileBean.fromManifest(manifest));
+                }
+            }
+            for (ManifestFile manifest : snapshot.deleteManifests(nativeTable.io())) {
+                if (manifest.snapshotId() == snapshot.snapshotId() && seenPaths.add(manifest.path())) {
+                    incrementalManifests.add(ManifestFileBean.fromManifest(manifest));
+                }
+            }
+        }
+        if (!sawSnapshot) {
+            return null;
+        }
+        return incrementalManifests;
     }
 
     private void triggerIcebergPlanFilesIfNeeded(PredicateSearchKey key, Table table) {

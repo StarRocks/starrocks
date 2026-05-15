@@ -617,6 +617,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String ENABLE_READ_ICEBERG_PUFFIN_NDV = "enable_read_iceberg_puffin_ndv";
 
+    public static final String ENABLE_ICEBERG_PARTITION_STATS = "enable_iceberg_partition_stats";
+
     public static final String ENABLE_ICEBERG_COLUMN_STATISTICS = "enable_iceberg_column_statistics";
     public static final String ENABLE_READ_ICEBERG_EQUALITY_DELETE_WITH_PARTITION_EVOLUTION =
             "enable_read_iceberg_equality_delete_with_partition_evolution";
@@ -3205,6 +3207,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = ENABLE_READ_ICEBERG_PUFFIN_NDV)
     private boolean enableReadIcebergPuffinNdv = true;
 
+    @VarAttr(name = ENABLE_ICEBERG_PARTITION_STATS)
+    private boolean enableIcebergPartitionStats = true;
+
     @VarAttr(name = ENABLE_ICEBERG_COLUMN_STATISTICS)
     private boolean enableIcebergColumnStatistics = false;
 
@@ -3371,6 +3376,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return enableIcebergColumnStatistics;
     }
 
+    public boolean enableIcebergPartitionStats() {
+        return enableIcebergPartitionStats;
+    }
+
     public boolean enableReadIcebergEqDeleteWithPartitionEvolution() {
         return enableReadIcebergEqDeleteWithPartitionEvolution;
     }
@@ -3389,6 +3398,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setEnableIcebergColumnStatistics(boolean enableIcebergColumnStatistics) {
         this.enableIcebergColumnStatistics = enableIcebergColumnStatistics;
+    }
+
+    public void setEnableIcebergPartitionStats(boolean enableIcebergPartitionStats) {
+        this.enableIcebergPartitionStats = enableIcebergPartitionStats;
     }
 
     public boolean isEnableQueryTriggerAnalyze() {

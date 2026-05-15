@@ -16,6 +16,8 @@ package com.starrocks.connector.iceberg;
 
 import com.google.common.collect.ImmutableList;
 import com.starrocks.connector.share.iceberg.IcebergPartitionUtils;
+import com.starrocks.connector.share.iceberg.ManifestFileBean;
+import com.starrocks.connector.share.iceberg.PartitionStatsSplitBean;
 import com.starrocks.jni.connector.ColumnValue;
 import org.apache.iceberg.ContentFile;
 import org.apache.iceberg.FileContent;
@@ -25,22 +27,35 @@ import org.apache.iceberg.ManifestFile;
 import org.apache.iceberg.PartitionData;
 import org.apache.iceberg.PartitionField;
 import org.apache.iceberg.PartitionSpec;
+import org.apache.iceberg.PartitionStats;
+import org.apache.iceberg.PartitionStatsHandler;
+import org.apache.iceberg.PartitionStatsScanHelper;
+import org.apache.iceberg.Partitioning;
 import org.apache.iceberg.Schema;
 import org.apache.iceberg.Snapshot;
+import org.apache.iceberg.StructLike;
+import org.apache.iceberg.TableUtil;
 import org.apache.iceberg.data.GenericRecord;
+import org.apache.iceberg.io.CloseableIterable;
 import org.apache.iceberg.io.CloseableIterator;
 import org.apache.iceberg.types.Type;
 import org.apache.iceberg.types.Types;
+import org.apache.iceberg.util.Pair;
+import org.apache.iceberg.util.PartitionMap;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 
 import static org.apache.iceberg.util.SerializationUtil.deserializeFromBase64;
 
 public class IcebergPartitionsTableScanner extends AbstractIcebergMetadataScanner {
+    private static final Logger LOG = LogManager.getLogger(IcebergPartitionsTableScanner.class);
     protected static final List<String> SCAN_COLUMNS =
             ImmutableList.of("content", "partition", "file_size_in_bytes", "record_count");
 
@@ -51,6 +66,9 @@ public class IcebergPartitionsTableScanner extends AbstractIcebergMetadataScanne
     private Integer spedId;
     private Schema schema;
     private GenericRecord reusedRecord;
+    private Iterator<PartitionStats> statsIterator;
+    private boolean usingStatsFile;
+    private Types.StructType unifiedPartitionType;
 
     public IcebergPartitionsTableScanner(int fetchSize, Map<String, String> params) {
         super(fetchSize, params);
@@ -59,34 +77,64 @@ public class IcebergPartitionsTableScanner extends AbstractIcebergMetadataScanne
 
     @Override
     public void doOpen() {
-        this.manifestFile = deserializeFromBase64(manifestBean);
+        Object split = deserializeFromBase64(manifestBean);
         this.schema = table.schema();
-        this.spedId = manifestFile.partitionSpecId();
         this.partitionFields = IcebergPartitionUtils.getAllPartitionFields(table);
         this.reusedRecord = GenericRecord.create(getResultType());
+        this.unifiedPartitionType = Partitioning.partitionType(table);
+
+        if (split instanceof PartitionStatsSplitBean) {
+            this.usingStatsFile = true;
+            PartitionStatsSplitBean statsSplit = (PartitionStatsSplitBean) split;
+            LOG.debug("Iceberg partitions scanner using stats file. mode={}, stats_snapshot={}, target_snapshot={}, "
+                            + "has_incremental={}",
+                    statsSplit.getMode(), statsSplit.getStatsSnapshotId(), statsSplit.getTargetSnapshotId(),
+                    statsSplit.hasIncrementalManifests());
+            initStatsIterator(statsSplit);
+        } else {
+            this.manifestFile = (ManifestFile) split;
+            this.spedId = manifestFile.partitionSpecId();
+        }
     }
 
     @Override
     public int doGetNext() {
         int numRows = 0;
-        for (; numRows < getTableSize(); numRows++) {
-            if (!entryReader.hasNext()) {
-                break;
-            }
-            LiveEntry entry = entryReader.next();
-            ContentFile<?> file = entry.file();
-            Snapshot snapshot = table.snapshot(entry.snapshotId());
-            Long lastUpdatedAt = snapshot != null ? snapshot.timestampMillis() : null;
-            Long lastUpdatedSnapshotId = snapshot != null ? snapshot.snapshotId() : null;
-            for (int i = 0; i < requiredFields.length; i++) {
-                Object fieldData = get(requiredFields[i], file, lastUpdatedAt, lastUpdatedSnapshotId);
-                if (fieldData == null) {
-                    appendData(i, null);
-                } else {
-                    ColumnValue fieldValue = new IcebergMetadataColumnValue(fieldData, timezone);
-                    appendData(i, fieldValue);
+        while (numRows < getTableSize()) {
+            if (usingStatsFile) {
+                if (statsIterator == null || !statsIterator.hasNext()) {
+                    break;
+                }
+                PartitionStats stat = statsIterator.next();
+                for (int i = 0; i < requiredFields.length; i++) {
+                    Object fieldData = getFromStats(requiredFields[i], stat);
+                    if (fieldData == null) {
+                        appendData(i, null);
+                    } else {
+                        ColumnValue fieldValue = new IcebergMetadataColumnValue(fieldData, timezone);
+                        appendData(i, fieldValue);
+                    }
+                }
+            } else {
+                if (entryReader == null || !entryReader.hasNext()) {
+                    break;
+                }
+                LiveEntry entry = entryReader.next();
+                ContentFile<?> file = entry.file();
+                Snapshot snapshot = table.snapshot(entry.snapshotId());
+                Long lastUpdatedAt = snapshot != null ? snapshot.timestampMillis() : null;
+                Long lastUpdatedSnapshotId = snapshot != null ? snapshot.snapshotId() : null;
+                for (int i = 0; i < requiredFields.length; i++) {
+                    Object fieldData = get(requiredFields[i], file, lastUpdatedAt, lastUpdatedSnapshotId);
+                    if (fieldData == null) {
+                        appendData(i, null);
+                    } else {
+                        ColumnValue fieldValue = new IcebergMetadataColumnValue(fieldData, timezone);
+                        appendData(i, fieldValue);
+                    }
                 }
             }
+            numRows++;
         }
         return numRows;
     }
@@ -97,11 +145,13 @@ public class IcebergPartitionsTableScanner extends AbstractIcebergMetadataScanne
             entryReader.close();
         }
         reusedRecord = null;
-
     }
 
     @Override
     protected void initReader() {
+        if (usingStatsFile) {
+            return;
+        }
         Map<Integer, PartitionSpec> specs = table.specs();
         entryReader = ManifestEntryScanHelper.liveEntries(manifestFile, fileIO, specs, SCAN_COLUMNS).iterator();
     }
@@ -120,9 +170,11 @@ public class IcebergPartitionsTableScanner extends AbstractIcebergMetadataScanne
 
     private Object get(String columnName, ContentFile<?> file, Long lastUpdatedAt, Long lastUpdatedSnapshotId) {
         FileContent content = file.content();
+        PartitionSpec spec = table.specs().get(file.specId());
+        PartitionData partitionData = (PartitionData) file.partition();
         switch (columnName) {
             case "partition_value":
-                return getPartitionValues((PartitionData) file.partition());
+                return getPartitionValues(partitionData, spec.partitionType());
             case "spec_id":
                 return spedId;
             case "record_count":
@@ -148,8 +200,37 @@ public class IcebergPartitionsTableScanner extends AbstractIcebergMetadataScanne
         }
     }
 
-    private Object getPartitionValues(PartitionData partitionData) {
-        List<Types.NestedField> fileFields = partitionData.getPartitionType().fields();
+    private Object getFromStats(String columnName, PartitionStats stat) {
+        switch (columnName) {
+            case "partition_value":
+                return getPartitionValues(stat.partition(), unifiedPartitionType);
+            case "spec_id":
+                return stat.specId();
+            case "record_count":
+                return stat.dataRecordCount();
+            case "file_count":
+                return (long) stat.dataFileCount();
+            case "total_data_file_size_in_bytes":
+                return stat.totalDataFileSizeInBytes();
+            case "position_delete_record_count":
+                return stat.positionDeleteRecordCount();
+            case "position_delete_file_count":
+                return (long) stat.positionDeleteFileCount();
+            case "equality_delete_record_count":
+                return stat.equalityDeleteRecordCount();
+            case "equality_delete_file_count":
+                return (long) stat.equalityDeleteFileCount();
+            case "last_updated_at":
+                return stat.lastUpdatedAt();
+            case "last_updated_snapshot_id":
+                return stat.lastUpdatedSnapshotId();
+            default:
+                throw new IllegalArgumentException("Unrecognized column name " + columnName);
+        }
+    }
+
+    private Object getPartitionValues(StructLike partitionData, Types.StructType partitionType) {
+        List<Types.NestedField> fileFields = partitionType.fields();
         Map<Integer, Integer> fieldIdToPos = new HashMap<>();
         for (int i = 0; i < fileFields.size(); i++) {
             fieldIdToPos.put(fileFields.get(i).fieldId(), i);
@@ -160,10 +241,10 @@ public class IcebergPartitionsTableScanner extends AbstractIcebergMetadataScanne
             String name = partitionField.name();
             if (fieldIdToPos.containsKey(fieldId)) {
                 int pos = fieldIdToPos.get(fieldId);
-                Type fieldType = partitionData.getType(pos);
-                Object partitionValue = partitionData.get(pos);
+                Type fieldType = fileFields.get(pos).type();
+                Object partitionValue = partitionData.get(pos, Object.class);
                 if (partitionField.transform().isIdentity() && Types.TimestampType.withZone().equals(fieldType)) {
-                    partitionValue = ((long) partitionValue) / 1000;
+                    partitionValue = partitionValue == null ? null : ((long) partitionValue) / 1000;
                 }
                 reusedRecord.setField(name, partitionValue);
             } else {
@@ -171,5 +252,80 @@ public class IcebergPartitionsTableScanner extends AbstractIcebergMetadataScanne
             }
         }
         return reusedRecord;
+    }
+
+    private void initStatsIterator(PartitionStatsSplitBean statsSplit) {
+        long startMs = System.currentTimeMillis();
+        try {
+            PartitionMap<PartitionStats> statsMap = readStatsFileToMap(statsSplit.getStatsFilePath());
+            int baseCount = statsMap.size();
+            if (statsSplit.isBaseMode()) {
+                LOG.debug("Iceberg partitions stats base only. base_partitions={}, elapsed_ms={}",
+                        baseCount, System.currentTimeMillis() - startMs);
+                this.statsIterator = statsMap.values().iterator();
+                return;
+            }
+
+            if (statsSplit.hasIncrementalManifests()) {
+                List<ManifestFile> manifests = new ArrayList<>();
+                for (ManifestFileBean bean : statsSplit.getIncrementalManifests()) {
+                    manifests.add(bean);
+                }
+                LOG.debug("Iceberg partitions stats incremental apply. manifests_to_apply={}", manifests.size());
+                long deltaReadStartMs = System.currentTimeMillis();
+                PartitionMap<PartitionStats> incrementalMap =
+                        PartitionStatsScanHelper.computeStatsFromManifests(
+                                table, manifests, unifiedPartitionType, true);
+                long deltaReadMs = System.currentTimeMillis() - deltaReadStartMs;
+                int incrementalCount = incrementalMap.size();
+                long mergeStartMs = System.currentTimeMillis();
+                mergeIncrementalStats(statsMap, incrementalMap);
+                long mergeMs = System.currentTimeMillis() - mergeStartMs;
+                LOG.debug("Iceberg partitions stats incremental applied. base_partitions={}, incremental_partitions={}, "
+                                + "merged_partitions={}, delta_read_ms={}, merge_ms={}, elapsed_ms={}",
+                        baseCount, incrementalCount, statsMap.size(),
+                        deltaReadMs, mergeMs, System.currentTimeMillis() - startMs);
+            } else {
+                LOG.debug("Iceberg partitions stats file only. base_partitions={}, elapsed_ms={}",
+                        baseCount, System.currentTimeMillis() - startMs);
+            }
+            this.statsIterator = statsMap.values().iterator();
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to read partition stats", e);
+        }
+    }
+
+    private PartitionMap<PartitionStats> readStatsFileToMap(String statsFilePath) throws IOException {
+        int formatVersion = TableUtil.formatVersion(table);
+        Schema statsSchema = PartitionStatsHandler.schema(unifiedPartitionType, formatVersion);
+        PartitionMap<PartitionStats> statsMap = PartitionMap.create(table.specs());
+        try (CloseableIterable<PartitionStats> statsIterable =
+                     PartitionStatsHandler.readPartitionStatsFile(statsSchema, table.io().newInputFile(statsFilePath))) {
+            for (PartitionStats stat : statsIterable) {
+                statsMap.put(stat.specId(), stat.partition(), stat);
+            }
+        }
+        return statsMap;
+    }
+
+    private void mergeIncrementalStats(
+            PartitionMap<PartitionStats> base, PartitionMap<PartitionStats> incremental) {
+        incremental.forEach(
+                (key, value) ->
+                        base.merge(
+                                Pair.of(key.first(), partitionDataToRecord((PartitionData) key.second())),
+                                value,
+                                (existingEntry, newEntry) -> {
+                                    existingEntry.appendStats(newEntry);
+                                    return existingEntry;
+                                }));
+    }
+
+    private GenericRecord partitionDataToRecord(PartitionData data) {
+        GenericRecord record = GenericRecord.create(data.getPartitionType());
+        for (int index = 0; index < record.size(); index++) {
+            record.set(index, data.get(index));
+        }
+        return record;
     }
 }
