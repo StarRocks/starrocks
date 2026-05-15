@@ -114,8 +114,13 @@ Status ParquetScanner::append_batch_to_src_chunk(ChunkPtr* chunk) {
         if (array_ptr == nullptr) {
             (void)column->append_nulls(_batch->num_rows());
         } else {
-            RETURN_IF_ERROR(convert_array_to_column(_conv_funcs[i].get(), num_elements, array_ptr.get(), column,
-                                                    _batch_start_idx, _chunk_start_idx, &_chunk_filter, &_conv_ctx));
+            auto st = convert_array_to_column(_conv_funcs[i].get(), num_elements, array_ptr.get(), column,
+                                              _batch_start_idx, _chunk_start_idx, &_chunk_filter, &_conv_ctx);
+            if (!st.ok()) {
+                return st.clone_and_prepend(strings::Substitute("file=$0 column=$1 batch_row_range=[$2,$3)",
+                                                                _conv_ctx.current_file, slot_desc->col_name(),
+                                                                _batch_start_idx, _batch_start_idx + num_elements));
+            }
         }
     }
 
