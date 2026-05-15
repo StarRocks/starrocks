@@ -1,0 +1,25 @@
+-- name: test_colocate_range_group_by_prefix @cloud @sequential
+-- SQL integration: GROUP BY on the colocate-prefix column. Verifies aggregate
+-- results are correct on a range-colocate table.
+set enable_range_distribution = true;
+
+create database db_${uuid0};
+use db_${uuid0};
+
+create table t (k1 int, k2 int, v int)
+    order by(k1, k2)
+    properties('replication_num' = '1', 'colocate_with' = 'grp_agg_${uuid0}:k1');
+
+-- 4 keys × 10 rows each = 40 rows; per-group sum is deterministic.
+insert into t (k1, k2, v)
+select cast(x % 4 as int), x, x from table(generate_series(1, 40)) as g(x);
+
+-- count per colocate-prefix value
+select k1, count(*) from t group by k1 order by k1;
+-- sum per colocate-prefix value
+select k1, sum(v) from t group by k1 order by k1;
+-- total
+select count(*) from t;
+
+drop table t;
+drop database db_${uuid0};
