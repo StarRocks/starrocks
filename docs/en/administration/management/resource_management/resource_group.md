@@ -4,6 +4,10 @@ sidebar_position: 10
 keywords: ['resource groups', 'isolation']
 ---
 
+import ScopeParam from '../../../_assets/commonMarkdown/rg_scope_param.mdx'
+import WhSyntaxExample from '../../../_assets/commonMarkdown/rg_wh_syntax_example.mdx'
+import WhAlterSyntax from '../../../_assets/commonMarkdown/rg_wh_alter_syntax.mdx'
+
 # Resource group
 
 This topic describes the resource group feature of StarRocks.
@@ -40,7 +44,9 @@ You can specify CPU and memory resource quotas for a resource group on a BE by u
 | Parameter                  | Description                                                    | Value Range                                                    | Default |
 | -------------------------- | -------------------------------------------------------------- | -------------------------------------------------------------- | ------- |
 | cpu_weight                 | The CPU scheduling weight of this resource group on a BE node. | (0, `avg_be_cpu_cores`] (takes effect when greater than 0)     | 0       |
+| cpu_weight_percent         | The CPU scheduling weight percentage of this resource group on a BE node. Supported from v4.1. | [0, 100] (takes effect when greater than 0)     | 0       |
 | exclusive_cpu_cores        | CPU hard isolation parameter for this resource group.          | (0, `min_be_cpu_cores - 1`] (takes effect when greater than 0) | 0       |
+| exclusive_cpu_percent      | CPU hard isolation percentage for this resource group. Supported from v4.1. | [0, 100] (takes effect when greater than 0) | 0       |
 | mem_limit                  | The percentage of memory available for queries by this resource group on the current BE node. | (0, 1] (required)               | -       |
 | mem_pool                   | Groups resource groups to share a memory limit.                | String                                                         | default_mem_pool |
 | spill_mem_limit_threshold  | Memory usage threshold that triggers spilling to disk.         | (0, 1]                                                         | 1.0     |
@@ -51,39 +57,53 @@ You can specify CPU and memory resource quotas for a resource group on a BE by u
 
 #### CPU resource parameters
 
-##### `cpu_weight`
+##### `cpu_weight` and `cpu_weight_percent`
 
-This parameter specifies the CPU scheduling weight of a resource group on a single BE node, determining the relative share of CPU time allocated to tasks from this group. Before v3.3.5, this was referred to as `cpu_core_limit`.
+These parameters specify the CPU scheduling weight of a resource group on a single BE node, determining the relative share of CPU time allocated to tasks from this group. Before v3.3.5, they were referred to as `cpu_core_limit`.
 
-Its value range is (0, `avg_be_cpu_cores`], where `avg_be_cpu_cores` is the average number of CPU cores across all BE nodes. The parameter is effective only when it is set to greater than 0. Either cpu_weight or exclusive_cpu_cores must be greater than 0, but not both.
+You can use one of the following parameters to set the CPU scheduling weight:
+
+- `cpu_weight`: Directly sets the CPU scheduling weight. Its value range is (0, `avg_be_cpu_cores`], where `avg_be_cpu_cores` is the average number of CPU cores across all BE nodes. The parameter is effective only when it is set to greater than 0.
+- `cpu_weight_percent`: Supported from v4.1. Sets the CPU scheduling weight as a percentage. Its value range is [0, 100]. The parameter is effective only when it is set to greater than 0. If `min_be_cpu_cores * cpu_weight_percent / 100 < 1`, the system returns an error, where `min_be_cpu_cores` is the minimum number of CPU cores across all BE nodes.
+
+At runtime, each BE converts `cpu_weight_percent` to the actual `cpu_weight` based on the number of CPU cores on that BE (`be_cpu_cores`): `cpu_weight = be_cpu_cores * cpu_weight_percent / 100`.
+
+Only one of `cpu_weight`, `cpu_weight_percent`, `exclusive_cpu_cores`, and `exclusive_cpu_percent` can be greater than 0.
 
 > **NOTE**
 >
 > For example, suppose three resource groups, rg1, rg2, and rg3, have cpu_weight values of 2, 6, and 8, respectively. On a fully loaded BE node, these groups would receive 12.5%, 37.5%, and 50% of the CPU time. If the node is not fully loaded and rg1 and rg2 are under load while rg3 is idle, rg1 and rg2 would receive 25% and 75% of the CPU time, respectively.
 
-##### `exclusive_cpu_cores`
+##### `exclusive_cpu_cores` and `exclusive_cpu_percent`
 
-This parameter defines CPU hard hard limit for a resource group. It has two implications:
+These parameters define CPU hard isolation for a resource group. It has two implications:
 
-- **Exclusive**: Reserves `exclusive_cpu_cores` CPU cores exclusively for this resource group, making them unavailable to other groups, even when idle.
+- **Exclusive**: Reserves a specified number of CPU cores exclusively for this resource group, making them unavailable to other groups, even when idle.
 - **Quota**: Limits the resource group to only using these reserved CPU cores, preventing it from using available CPU resources from other groups.
 
-The value range is (0, `min_be_cpu_cores - 1`], where `min_be_cpu_cores` is the minimum number of CPU cores across all BE nodes. It takes effect only when greater than 0. Only one of `cpu_weight` or `exclusive_cpu_cores` can be set to greater than 0.
+You can use one of the following parameters to set CPU hard isolation:
 
-- Resource groups with `exclusive_cpu_cores` greater than 0 are called Exclusive resource groups, and the CPU cores allocated to them are called Exclusive Cores. Other groups are called Shared resource groups and run on Shared Cores.
-- The total number of `exclusive_cpu_cores` across all resource groups cannot exceed `min_be_cpu_cores - 1`. The upper limit is set to leave at least one Shared Core available.
+- `exclusive_cpu_cores`: Directly sets the number of reserved CPU cores. Its value range is (0, `min_be_cpu_cores - 1`]. The parameter is effective only when it is set to greater than 0.
+- `exclusive_cpu_percent`: Supported from v4.1. Sets the number of reserved CPU cores as a percentage. Its value range is [0, 100]. The parameter is effective only when it is set to greater than 0. If `min_be_cpu_cores * exclusive_cpu_percent / 100 < 1`, the system returns an error.
 
-The relationship between `exclusive_cpu_cores` and `cpu_weight`:
+At runtime, each BE converts `exclusive_cpu_percent` to the actual `exclusive_cpu_cores` based on the number of CPU cores on that BE (`be_cpu_cores`): `exclusive_cpu_cores = be_cpu_cores * exclusive_cpu_percent / 100`.
 
-Only one of `cpu_weight` or `exclusive_cpu_cores` can be active at a time. Exclusive resource groups operate on their own reserved Exclusive Cores without requiring a share of CPU time through `cpu_weight`.
+- Resource groups with `exclusive_cpu_cores` or `exclusive_cpu_percent` greater than 0 are called Exclusive Resource Groups, and the CPU cores allocated to them are called Exclusive Cores. Other groups are called Shared Resource Groups and run on Shared Cores.
+- The total number of `exclusive_cpu_cores` across all Exclusive Resource Groups cannot exceed `min_be_cpu_cores - 1`. If `exclusive_cpu_percent` is used, the system first converts it to CPU cores based on `min_be_cpu_cores * exclusive_cpu_percent / 100` and then calculates the total. The upper limit is set to leave at least one Shared Core available.
 
-You can configure whether Shared resource groups can borrow Exclusive Cores from Exclusive resource groups using the BE configuration `enable_resource_group_cpu_borrowing`. When set to `true` (default), Shared groups can borrow CPU resources when Exclusive groups are idle.
+The relationship between `exclusive_cpu_cores`, `exclusive_cpu_percent`, `cpu_weight`, and `cpu_weight_percent`:
+
+Only one of `cpu_weight`, `cpu_weight_percent`, `exclusive_cpu_cores`, and `exclusive_cpu_percent` can be active at a time. Exclusive Resource Groups operate on their own reserved Exclusive Cores without requiring a share of CPU time through `cpu_weight` or `cpu_weight_percent`.
+
+You can configure whether Shared Resource Groups can borrow Exclusive Cores from Exclusive Resource Groups using the BE configuration `enable_resource_group_cpu_borrowing`. When set to `true` (default), Shared Resouce Groups can borrow CPU resources when Exclusive Resouce Groups are idle.
 
 To modify this configuration dynamically, use the following command:
 
 ```SQL
 UPDATE information_schema.be_configs SET VALUE = "false" WHERE NAME = "enable_resource_group_cpu_borrowing";
 ```
+
+<ScopeParam />
 
 #### Memory resource parameters
 
@@ -265,40 +285,7 @@ SET GLOBAL enable_pipeline_engine = true;
 
 Execute the following statement to create a resource group, associate the resource group with a classifier, and allocate computing resources to the resource group:
 
-```SQL
-CREATE RESOURCE GROUP <group_name> 
-TO (
-    user='string', 
-    role='string', 
-    query_type in ('select'), 
-    source_ip='cidr'
-) --Create a classifier. If you create more than one classifier, separate the classifiers with commas (`,`).
-WITH (
-    "{ cpu_weight | exclusive_cpu_cores }" = "INT",
-    "mem_limit" = "m%",
-    "concurrency_limit" = "INT",
-    "type" = "str" --The type of the resource group. Set the value to normal.
-);
-```
-
-Example:
-
-```SQL
-CREATE RESOURCE GROUP rg1
-TO 
-    (user='rg1_user1', role='rg1_role1', query_type in ('select'), source_ip='192.168.x.x/24'),
-    (user='rg1_user2', query_type in ('select'), source_ip='192.168.x.x/24'),
-    (user='rg1_user3', source_ip='192.168.x.x/24'),
-    (user='rg1_user4'),
-    (db='db1')
-WITH (
-    'exclusive_cpu_cores' = '10',
-    'mem_limit' = '20%',
-    'big_query_cpu_second_limit' = '100',
-    'big_query_scan_rows_limit' = '100000',
-    'big_query_mem_limit' = '1073741824'
-);
-```
+<WhSyntaxExample />
 
 ### Specify resource group (Optional)
 
@@ -363,12 +350,7 @@ You can modify the resource quotas for each resource group. You can also add or 
 
 Execute the following statement to modify the resource quotas for an existing resource group:
 
-```SQL
-ALTER RESOURCE GROUP group_name WITH (
-    'cpu_core_limit' = 'INT',
-    'mem_limit' = 'm%'
-);
-```
+<WhAlterSyntax />
 
 Execute the following statement to delete a resource group:
 

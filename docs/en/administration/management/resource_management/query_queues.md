@@ -7,9 +7,16 @@ sidebar_position: 20
 
 This topic describes how to manage query queues in StarRocks.
 
-From v2.5, StarRocks supports query queues. With query queues enabled, StarRocks automatically queues the incoming queries when the concurrency threshold or resource limit is reached, thereby avoiding the overload deteriorating. Pending queries wait in a queue until there is enough compute resources available to begin execution. From v3.1.4 onwards, StarRocks supports setting query queues on the resource group level.
+From v2.5, StarRocks supports query queues. With query queues enabled, StarRocks automatically queues the incoming queries when the concurrency threshold or resource limit is reached, thereby avoiding the overload deteriorating. Pending queries wait in a queue until there is enough compute resources available to begin execution.
 
-You can set thresholds on CPU usage, memory usage, and query concurrency to trigger query queues.
+The Query Queue feature has two versions:
+
+- **Query Queue v1**: Triggers queuing based on query concurrency, BE memory usage, and BE CPU usage. The original query queue configurations and behaviors in this topic belong to v1. From v3.1.4 onwards, v1 supports setting query queues on the resource group level.
+- **Query Queue v2**: Supported from v3.3 onwards. v2 estimates the BE resources consumed by each query, represents BE resources as logical slots, and queues and schedules queries based on the number of slots each query needs.
+
+## Query Queue v1
+
+Query Queue v1 supports setting thresholds on CPU usage, memory usage, and query concurrency to trigger query queues.
 
 **Roadmap**:
 
@@ -18,11 +25,11 @@ You can set thresholds on CPU usage, memory usage, and query concurrency to trig
 | v2.5    | ✅                 | ❌                                | ❌                                | ❌                              |
 | v3.1.4  | ✅                 | ✅                                | ✅                                | ✅                              |
 
-## Enable query queues
+### Enable Query Queue v1
 
 Query queues are disabled by default. You can enable global or resource group-level query queues for INSERT loading, SELECT queries, and statistics queries by setting corresponding global session variables.
 
-### Enable global query queues
+#### Enable global query queues
 
 - Enable query queues for loading tasks:
 
@@ -42,7 +49,7 @@ SET GLOBAL enable_query_queue_select = true;
 SET GLOBAL enable_query_queue_statistic = true;
 ```
 
-### Enable resource group-level query queues
+#### Enable resource group-level query queues
 
 From v3.1.4 onwards, StarRocks supports setting query queues on the resource group level.
 
@@ -52,9 +59,9 @@ To enable the resource group-level query queues, you also need to set `enable_gr
 SET GLOBAL enable_group_level_query_queue = true;
 ```
 
-## Specify resource thresholds
+### Specify resource thresholds
 
-### Specify resource thresholds for global query queues
+#### Specify resource thresholds for global query queues
 
 You can set the thresholds that trigger query queues via the following global session variables:
 
@@ -64,11 +71,14 @@ You can set the thresholds that trigger query queues via the following global se
 | query_queue_mem_used_pct_limit      | 0           | The upper limit of memory usage percentage on a BE. It takes effect only after being set greater than `0`. Setting it to `0` indicates no limit is imposed. Range: [0, 1] |
 | query_queue_cpu_used_permille_limit | 0           | The upper limit of CPU usage permille (CPU usage * 1000) on a BE. It takes effect only after being set greater than `0`. Setting it to `0` indicates no limit is imposed. Range: [0, 1000] |
 
-> **NOTE**
->
-> By default, BE reports resource usage to FE at one-second intervals. You can change this interval by setting the BE configuration item `report_resource_usage_interval_ms`.
+:::note
 
-### Specify resource thresholds for resource group-level query queues
+- These three threshold parameters apply only to Query Queue v1. After Query Queue v2 is enabled, `query_queue_concurrency_limit`, `query_queue_mem_used_pct_limit`, and `query_queue_cpu_used_permille_limit` are no longer supported for queue triggering.
+- By default, BE reports resource usage to FE at one-second intervals. You can change this interval by setting the BE configuration item `report_resource_usage_interval_ms`.
+
+:::
+
+#### Specify resource thresholds for resource group-level query queues
 
 From v3.1.4 onwards, you can set individual concurrency limits (`concurrency_limit`) and CPU core limits (`max_cpu_cores`) when creating a resource group. When a query is initiated, if any of the resource consumptions exceed the resource threshold at either the global or resource group level, the query will be placed in queue until all resource consumptions are within the threshold.
 
@@ -79,7 +89,7 @@ From v3.1.4 onwards, you can set individual concurrency limits (`concurrency_lim
 
 You can use SHOW USAGE RESOURCE GROUPS to view the resource usage information for each resource group on each BE node, as described in [View Resource Group Usage Information](./resource_group.md#view-resource-group-usage-information).
 
-### Manage query concurrency
+#### Manage query concurrency
 
 When the number of running queries (`num_running_queries`) exceeds the global or resource group's `concurrency_limit`, incoming queries are placed in the queue. The way to obtain `num_running_queries` differs between versions &lt; v3.1.4 and &ge; v3.1.4.
 
@@ -87,7 +97,7 @@ When the number of running queries (`num_running_queries`) exceeds the global or
 
 - In versions &ge; v3.1.4, all running queries are collectively managed by the Leader FE. Each Follower FE notifies the Leader FE when initiating or finishing a query, allowing the StarRocks to handle scenarios where there is a sudden increase in queries exceeding the `concurrency_limit`.
 
-## Configure query queues
+### Configure Query Queue v1
 
 You can set the capacity of a query queue and the maximum timeout of queries in queues via the following global session variables:
 
@@ -96,7 +106,7 @@ You can set the capacity of a query queue and the maximum timeout of queries in 
 | query_queue_max_queued_queries     | 1024        | The upper limit of queries in a queue. When this threshold is reached, incoming queries are rejected. It takes effect only after being set greater than `0`. |
 | query_queue_pending_timeout_second | 300         | The maximum timeout of a pending query in a queue. When this threshold is reached, the corresponding query is rejected. Unit: second. |
 
-## Configure dynamic adjustment of query concurrency
+### Configure dynamic adjustment of query concurrency
 
 Starting from version v3.1.4, for queries managed by the query queue and run by the Pipeline Engine, StarRocks can dynamically adjust the query concurrency `pipeline_dop` for incoming queries based on the current number of running queries `num_running_queries`, the number of fragments `num_fragments`, and the query concurrency `pipeline_dop`. This allows you to dynamically control query concurrency while minimizing scheduling overhead, ensuring optimal BE resource utilization. For more information about fragments and query concurrency `pipeline_dop`, see [Query Management - Adjusting Query Concurrency](./Query_management.md).
 
@@ -111,6 +121,38 @@ You can configure the dynamic adjustment of query concurrency `pipeline_dop` usi
 | ----------------------------- | ----------- | ----------------------------------------------------------- |
 | query_queue_driver_high_water | -1          | The high water limit of concurrent drivers for a query. It takes effect only when it is set to a non-negative value. When set to `0`, it is equivalent to `avg_be_cpu_cores * 16`, where `avg_be_cpu_cores` represents the average number of CPU cores across all BE nodes. When set to a value greater than `0`, that value is used directly. |
 | query_queue_driver_low_water  | -1          | The lower limit of concurrent drivers for queries. It takes effect only when it is set to a non-negative value. When set to `0`, it is equivalent to `avg_be_cpu_cores * 8`. When set to a value greater than `0`, that value is used directly. |
+
+## Query Queue v2
+
+From v3.3 onwards, StarRocks supports Query Queue v2. In Query Queue v2, query queues are no longer triggered based on fixed thresholds for query concurrency, BE memory usage, or BE CPU usage. Instead, it estimates the BE resources required by each query and queues and schedules queries based on logical slots.
+
+### Configure Query Queue v2
+
+Query Queue v2 is enabled and tuned through FE configuration items. Changes to `enable_query_queue_v2` require restarting FE nodes to take effect.
+
+| Configuration item | Default | Description |
+| ------------------ | ------- | ----------- |
+| `enable_query_queue_v2` | `false` (v3.3 to v4.0)<br />`true` (from v4.1 onwards) | Whether to enable Query Queue v2. When this item is set to `true`, StarRocks uses the v2 slot-based query scheduling mechanism. |
+| `query_queue_v2_concurrency_level` | `4` | The logical concurrency level used by Query Queue v2 to calculate the total number of cluster slots. A larger value allows the system to admit more queries. This is a relative tuning parameter. |
+
+:::note
+
+`query_queue_concurrency_limit`, `query_queue_mem_used_pct_limit`, and `query_queue_cpu_used_permille_limit` apply only to Query Queue v1. After Query Queue v2 is enabled, these parameters no longer take effect.
+
+:::
+
+### Resource slots
+
+Query Queue v2 represents BE resources as logical slots:
+
+- **Total cluster slots**: StarRocks sets a logical total number of slots for the entire cluster. This total is positively correlated with the number of BEs and BE CPU cores, and is also affected by `query_queue_v2_concurrency_level`.
+- **Slots required by a query**: StarRocks estimates the number of slots required by each query. The estimation is based on factors such as statistics, query complexity, the number of fragments, estimated input and output data volumes of complex operators, and DOP.
+
+### Queuing logic
+
+When the number of slots required by a query exceeds the current number of remaining slots, the query waits in the queue. Query Queue v2 preferentially satisfies queries that require fewer slots, allowing small queries to obtain resources first and avoiding head-of-line blocking where a large query at the head of the queue blocks later small queries.
+
+The entire queuing logic is completed on FE, including setting the total number of cluster slots, estimating the number of slots required by a query, and deciding which query's slot requirement to satisfy first. Query Queue v2 does not schedule based on the actual resource usage of BEs.
 
 ## Monitor query queues
 
@@ -169,7 +211,7 @@ From v3.1.4 onwards, StarRocks supports the SQL statement `SHOW RUNNING QUERIES`
 - `PendingTimeout`: The time when the PENDING query will time out in the queue.
 - `QueryTimeout`: The time when the query times out.
 - `State`: The queue state of the query, where "PENDING" indicates it is in the queue, and "RUNNING" indicates it is currently executing.
-- `Slots`: The logical resource quantity requested by the query, currently fixed at `1`.
+- `Slots`: The logical resource quantity requested by the query. In Query Queue v1, this value is usually `1`. In Query Queue v2, this value is the estimated number of slots for the query.
 - `Frontend`: The FE node that initiated the query.
 - `FeStartTime`: The start time of the FE node that initiated the query.
 
