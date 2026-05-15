@@ -32,12 +32,13 @@
 // specific language governing permissions and limitations
 // under the License.
 
+#include "common/bloom_filter.h"
+
 #include <gtest/gtest.h>
 
 #include <memory>
 
 #include "base/string/slice.h"
-#include "util/bloom_filter.h"
 
 namespace starrocks {
 

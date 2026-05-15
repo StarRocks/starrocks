@@ -20,8 +20,6 @@ set(EXECUTABLE_OUTPUT_PATH "${BUILD_DIR}/src/util")
 set(UTIL_FILES
   arrow/row_batch.cpp
   arrow/starrocks_column_to_arrow.cpp
-  bloom_filter.cpp
-  block_split_bloom_filter.cpp
   download_util.cpp
   json_util.cpp
   json_flattener.cpp

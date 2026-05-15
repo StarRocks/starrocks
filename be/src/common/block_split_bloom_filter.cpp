@@ -32,7 +32,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "util/block_split_bloom_filter.h"
+#include "common/block_split_bloom_filter.h"
 
 #include "common/util/debug_util.h"
 

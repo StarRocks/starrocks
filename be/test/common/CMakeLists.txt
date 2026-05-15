@@ -16,6 +16,7 @@ set(COMMON_TEST_FILES
     ../base/cxa_throw_wrap.cpp
     process_metrics_registry_test.cpp
     backend_options_test.cpp
+    bloom_filter_test.cpp
     config_test.cpp
     cow_test.cpp
     greplog_test.cpp
