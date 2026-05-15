@@ -615,9 +615,6 @@ Status DescriptorTbl::create(RuntimeState* state, ObjectPool* pool, const TDescr
     for (const auto& tdesc : thrift_tbl.slotDescriptors) {
         SlotDescriptor* slot_d = ALLOC_DESC(SlotDescriptor, tdesc, mr);
         (*tbl)->_slot_desc_map[tdesc.id] = slot_d;
-        if (!slot_d->col_name().empty()) {
-            (*tbl)->_slot_with_column_name_map[tdesc.id] = slot_d;
-        }
         // link to parent
         auto entry = (*tbl)->_tuple_desc_map.find(tdesc.parent);
 
