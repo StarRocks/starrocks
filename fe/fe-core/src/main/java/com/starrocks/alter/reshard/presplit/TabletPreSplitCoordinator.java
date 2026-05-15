@@ -23,7 +23,10 @@ import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.common.Config;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.DebugUtil;
+import com.starrocks.metric.MetricRepo;
 import com.starrocks.qe.ConnectContext;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.time.Duration;
 import java.util.List;
@@ -43,6 +46,8 @@ import java.util.Optional;
  * phases described in the design doc.
  */
 public final class TabletPreSplitCoordinator {
+
+    private static final Logger LOG = LogManager.getLogger(TabletPreSplitCoordinator.class);
 
     /** Tier-2 sample byte budget when no Config gate is wired up. 16 MiB ≈ 10k 1.5 KB tuples. */
     private static final long DEFAULT_SAMPLE_BYTE_LIMIT = 16L * DebugUtil.MEGABYTE;
@@ -161,11 +166,16 @@ public final class TabletPreSplitCoordinator {
         try {
             prepared = pipeline.preSubmit(sampleRequest, activeComputeNodeCount, preSubmitTimeout);
         } catch (PreSplitPreSubmitTimeoutException timeout) {
+            LOG.info("Pre-split skipped for table {}: pre-submit phase exceeded {}s — {}",
+                    table.getName(), preSubmitTimeout.toSeconds(), timeout.getMessage());
             return new PreSplitOutcome.Skipped(SkipReason.TIMEOUT_PRE_SUBMIT);
         } catch (StarRocksException sampleFailure) {
+            LOG.warn("Pre-split skipped for table {}: sampling/planning failed — {}",
+                    table.getName(), sampleFailure.getMessage());
             return new PreSplitOutcome.Skipped(SkipReason.SAMPLE_FAILED);
         }
         if (prepared.isEmpty()) {
+            LOG.info("Pre-split skipped for table {}: planner found no useful cuts", table.getName());
             return new PreSplitOutcome.Skipped(SkipReason.NO_USEFUL_CUTS);
         }
 
@@ -173,15 +183,28 @@ public final class TabletPreSplitCoordinator {
         try {
             pipeline.submit(preparedJob);
         } catch (StarRocksException submitFailure) {
+            // Surfaces the structured error so operators can diagnose admission failures
+            // (table-state changed, journal write rejected, job-id collision, etc.).
+            LOG.warn("Pre-split skipped for table {}: TabletReshardJobMgr rejected admission — {}",
+                    table.getName(), submitFailure.getMessage());
             return new PreSplitOutcome.Skipped(SkipReason.SUBMIT_FAILED);
         }
 
         try {
             pipeline.awaitFinished(preparedJob, postSubmitTimeout);
         } catch (PreSplitPostSubmitTimeoutException timeout) {
-            // Propagate so the load executor aborts the transaction.
+            // Re-throw so the load transaction aborts — committing against stale tablet
+            // metadata is unsafe. Record the hard-cap event first so operator dashboards
+            // see the abort.
+            if (MetricRepo.hasInit) {
+                MetricRepo.COUNTER_TABLET_PRE_SPLIT_POST_SUBMIT_HARD_CAP.increase(1L);
+            }
+            LOG.warn("Pre-split post-submit timeout for table {} after {}s — load transaction will abort: {}",
+                    table.getName(), postSubmitTimeout.toSeconds(), timeout.getMessage());
             throw timeout;
         } catch (StarRocksException waitFailure) {
+            LOG.warn("Pre-split skipped for table {}: admitted job entered terminal-error state — {}",
+                    table.getName(), waitFailure.getMessage());
             return new PreSplitOutcome.Skipped(SkipReason.JOB_FAILED_BEFORE_FINISH);
         }
         return new PreSplitOutcome.Finished();

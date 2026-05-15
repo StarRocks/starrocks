@@ -328,6 +328,11 @@ public final class MetricRepo {
     public static LongCounterMetric COUNTER_TABLET_RESHARD_SPLIT_JOB_ABORTED;
     public static LongCounterMetric COUNTER_TABLET_RESHARD_MERGE_JOB_ABORTED;
 
+    // Sample-Based Tablet Pre-Split: post-submit hard-cap aborts. Incremented when an admitted
+    // reshard job did not reach FINISHED within tablet_pre_split_post_submit_wait_seconds and
+    // the coordinator re-throws to abort the load transaction.
+    public static LongCounterMetric COUNTER_TABLET_PRE_SPLIT_POST_SUBMIT_HARD_CAP;
+
     public static Histogram HISTO_QUERY_LATENCY;
 
     // Per-catalog-type query latency histograms
@@ -913,6 +918,11 @@ public final class MetricRepo {
                 MetricUnit.REQUESTS, "total tablet reshard merge jobs aborted");
         COUNTER_TABLET_RESHARD_MERGE_JOB_ABORTED.addLabel(new MetricLabel("type", "merge"));
         STARROCKS_METRIC_REGISTER.addMetric(COUNTER_TABLET_RESHARD_MERGE_JOB_ABORTED);
+
+        COUNTER_TABLET_PRE_SPLIT_POST_SUBMIT_HARD_CAP = new LongCounterMetric(
+                "tablet_pre_split_post_submit_hard_cap", MetricUnit.REQUESTS,
+                "total Sample-Based Tablet Pre-Split post-submit hard-cap events (load transaction aborted)");
+        STARROCKS_METRIC_REGISTER.addMetric(COUNTER_TABLET_PRE_SPLIT_POST_SUBMIT_HARD_CAP);
 
         // 3. histogram
         HISTO_QUERY_LATENCY = METRIC_REGISTER.histogram(MetricRegistry.name("query", "latency", "ms"));

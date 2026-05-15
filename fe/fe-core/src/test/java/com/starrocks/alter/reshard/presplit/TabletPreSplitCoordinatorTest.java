@@ -24,6 +24,9 @@ import com.starrocks.catalog.Tablet;
 import com.starrocks.common.Config;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.DebugUtil;
+import com.starrocks.metric.LongCounterMetric;
+import com.starrocks.metric.Metric.MetricUnit;
+import com.starrocks.metric.MetricRepo;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.type.IntegerType;
@@ -374,6 +377,62 @@ public class TabletPreSplitCoordinatorTest {
         // Caller (load executor) is expected to catch this and abort the load txn.
         Assertions.assertThrows(PreSplitPostSubmitTimeoutException.class,
                 () -> invokeRunPreSplit(pipeline));
+    }
+
+    @Test
+    public void testRunPreSplitPostSubmitTimeoutRecordsHardCapMetric() {
+        withHardCapCounter(counter -> {
+            FakePipeline pipeline = new FakePipeline();
+            pipeline.awaitThrow = new PreSplitPostSubmitTimeoutException("job did not finish in 300s");
+
+            Assertions.assertThrows(PreSplitPostSubmitTimeoutException.class,
+                    () -> invokeRunPreSplit(pipeline));
+            Assertions.assertEquals(1L, counter.getValue().longValue(),
+                    "post-submit timeout should record one hard-cap event");
+        });
+    }
+
+    /**
+     * Wire the counter in and execute {@code body}; restore previous state in a finally block
+     * so other tests are not affected by the touched static fields.
+     */
+    private static void withHardCapCounter(java.util.function.Consumer<LongCounterMetric> body) {
+        LongCounterMetric counter = new LongCounterMetric(
+                "tablet_pre_split_post_submit_hard_cap", MetricUnit.REQUESTS, "hard-cap events");
+        LongCounterMetric savedCounter = MetricRepo.COUNTER_TABLET_PRE_SPLIT_POST_SUBMIT_HARD_CAP;
+        boolean savedHasInit = MetricRepo.hasInit;
+        MetricRepo.COUNTER_TABLET_PRE_SPLIT_POST_SUBMIT_HARD_CAP = counter;
+        MetricRepo.hasInit = true;
+        try {
+            body.accept(counter);
+        } finally {
+            MetricRepo.hasInit = savedHasInit;
+            MetricRepo.COUNTER_TABLET_PRE_SPLIT_POST_SUBMIT_HARD_CAP = savedCounter;
+        }
+    }
+
+    @Test
+    public void testRunPreSplitSubmitFailureDoesNotRecordHardCapMetric() {
+        withHardCapCounter(counter -> {
+            FakePipeline pipeline = new FakePipeline();
+            pipeline.submitThrow = new StarRocksException("submit rejected");
+
+            Assertions.assertDoesNotThrow(() -> invokeRunPreSplit(pipeline));
+            Assertions.assertEquals(0L, counter.getValue().longValue(),
+                    "submit failure must not touch the hard-cap counter");
+        });
+    }
+
+    @Test
+    public void testRunPreSplitJobFailureBeforeFinishDoesNotRecordHardCapMetric() {
+        withHardCapCounter(counter -> {
+            FakePipeline pipeline = new FakePipeline();
+            pipeline.awaitThrow = new StarRocksException("job CANCELLED");
+
+            Assertions.assertDoesNotThrow(() -> invokeRunPreSplit(pipeline));
+            Assertions.assertEquals(0L, counter.getValue().longValue(),
+                    "non-timeout terminal-state failure must not touch the hard-cap counter");
+        });
     }
 
     @Test
