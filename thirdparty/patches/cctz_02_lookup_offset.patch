@@ -1,18 +1,16 @@
-diff --git a/CMakeLists.txt b/CMakeLists.txt
-index e8b2f34..97b34ac 100644
---- a/CMakeLists.txt
-+++ b/CMakeLists.txt
-@@ -178,3 +178,5 @@ install(FILES cmake/${PROJECT_NAME}-config.cmake
-   )
+diff -Naur cctz-2.4-step1/CMakeLists.txt cctz-2.4-final/CMakeLists.txt
+--- cctz-2.4-step1/CMakeLists.txt	2026-03-26 10:51:44.734670986 +0000
++++ cctz-2.4-final/CMakeLists.txt	2026-03-26 10:50:03.612066877 +0000
+@@ -196,3 +196,5 @@
+ endif()
  
- feature_summary(WHAT ALL FATAL_ON_MISSING_REQUIRED_PACKAGES)
+ feature_summary(WHAT ALL FATAL_ON_MISSING_REQUIRED_PACKAGES ${quiet_on_empty})
 +
 +SET(CMAKE_CXX_FLAGS "-fno-omit-frame-pointer -O3 -g -gdwarf-4  ${CMAKE_CXX_FLAGS}")
-diff --git a/include/cctz/civil_time_detail.h b/include/cctz/civil_time_detail.h
-index decc5f2..3f7d6c8 100644
---- a/include/cctz/civil_time_detail.h
-+++ b/include/cctz/civil_time_detail.h
-@@ -186,13 +186,13 @@ CONSTEXPR_F fields n_min(year_t y, diff_t m, diff_t d, diff_t hh, diff_t ch,
+diff -Naur cctz-2.4-step1/include/cctz/civil_time_detail.h cctz-2.4-final/include/cctz/civil_time_detail.h
+--- cctz-2.4-step1/include/cctz/civil_time_detail.h	2026-03-26 10:51:44.735702301 +0000
++++ cctz-2.4-final/include/cctz/civil_time_detail.h	2026-03-26 10:50:03.611905816 +0000
+@@ -200,13 +200,13 @@
  CONSTEXPR_F fields n_sec(year_t y, diff_t m, diff_t d, diff_t hh, diff_t mm,
                           diff_t ss) noexcept {
    // Optimization for when (non-constexpr) fields are already normalized.
@@ -30,11 +28,10 @@ index decc5f2..3f7d6c8 100644
            const day_t nd = static_cast<day_t>(d);
            const month_t nm = static_cast<month_t>(m);
            return fields(y, nm, nd, nhh, nmm, nss);
-diff --git a/include/cctz/time_zone.h b/include/cctz/time_zone.h
-index f97ea26..cdbd6a9 100644
---- a/include/cctz/time_zone.h
-+++ b/include/cctz/time_zone.h
-@@ -104,6 +104,14 @@ class time_zone {
+diff -Naur cctz-2.4-step1/include/cctz/time_zone.h cctz-2.4-final/include/cctz/time_zone.h
+--- cctz-2.4-step1/include/cctz/time_zone.h	2026-03-26 10:51:44.735758716 +0000
++++ cctz-2.4-final/include/cctz/time_zone.h	2026-03-26 10:50:03.611518573 +0000
+@@ -95,6 +95,14 @@
      return lookup(detail::split_seconds(tp).first);
    }
  
@@ -49,13 +46,12 @@ index f97ea26..cdbd6a9 100644
    // A civil_lookup represents the absolute time(s) (time_point) that
    // correspond to the given civil time (cctz::civil_second) within this
    // time_zone. Usually the given civil time represents a unique instant
-diff --git a/src/cctz_benchmark.cc b/src/cctz_benchmark.cc
-index 179ae50..168cba5 100644
---- a/src/cctz_benchmark.cc
-+++ b/src/cctz_benchmark.cc
-@@ -797,6 +797,24 @@ void BM_Time_ToCivil_CCTZ(benchmark::State& state) {
+diff -Naur cctz-2.4-step1/src/cctz_benchmark.cc cctz-2.4-final/src/cctz_benchmark.cc
+--- cctz-2.4-step1/src/cctz_benchmark.cc	2026-03-26 10:51:44.776493135 +0000
++++ cctz-2.4-final/src/cctz_benchmark.cc	2026-03-26 10:50:18.447282072 +0000
+@@ -754,6 +754,24 @@
  }
- BENCHMARK(BM_Time_ToCivil_CCTZ);
+ BENCHMARK(BM_Time_ToCivil_Cached);
  
 +void BM_Time_ToCivil_LookupOffset_Batch1024(benchmark::State &state) {
 +  const cctz::time_zone tz = TestTimeZone();
@@ -78,11 +74,10 @@ index 179ae50..168cba5 100644
  void BM_Time_ToCivil_Libc(benchmark::State& state) {
    // No timezone support, so just use localtime.
    time_t t = 1384569027;
-diff --git a/src/time_zone_if.h b/src/time_zone_if.h
-index f925c6c..01af988 100644
---- a/src/time_zone_if.h
-+++ b/src/time_zone_if.h
-@@ -36,6 +36,10 @@ class TimeZoneIf {
+diff -Naur cctz-2.4-step1/src/time_zone_if.h cctz-2.4-final/src/time_zone_if.h
+--- cctz-2.4-step1/src/time_zone_if.h	2026-03-26 10:51:44.736515659 +0000
++++ cctz-2.4-final/src/time_zone_if.h	2026-03-26 10:50:03.611032085 +0000
+@@ -37,6 +37,10 @@
  
    virtual time_zone::absolute_lookup BreakTime(
        const time_point<seconds>& tp) const = 0;
@@ -93,11 +88,10 @@ index f925c6c..01af988 100644
    virtual time_zone::civil_lookup MakeTime(
        const civil_second& cs) const = 0;
  
-diff --git a/src/time_zone_impl.h b/src/time_zone_impl.h
-index 23fcddb..16f26ec 100644
---- a/src/time_zone_impl.h
-+++ b/src/time_zone_impl.h
-@@ -50,6 +50,10 @@ class time_zone::Impl {
+diff -Naur cctz-2.4-step1/src/time_zone_impl.h cctz-2.4-final/src/time_zone_impl.h
+--- cctz-2.4-step1/src/time_zone_impl.h	2026-03-26 10:51:44.736616578 +0000
++++ cctz-2.4-final/src/time_zone_impl.h	2026-03-26 10:50:03.611202162 +0000
+@@ -50,6 +50,10 @@
      return zone_->BreakTime(tp);
    }
  
@@ -108,12 +102,11 @@ index 23fcddb..16f26ec 100644
    // Converts the civil-time components in this time zone into a time_point.
    // That is, the opposite of BreakTime(). The requested civil time may be
    // ambiguous or illegal due to a change of UTC offset.
-diff --git a/src/time_zone_info.cc b/src/time_zone_info.cc
-index eb1cd8a..031c8c4 100644
---- a/src/time_zone_info.cc
-+++ b/src/time_zone_info.cc
-@@ -751,6 +751,64 @@ time_zone::absolute_lookup TimeZoneInfo::LocalTime(
-           tt.utc_offset, tt.is_dst, &abbreviations_[tt.abbr_index]};
+diff -Naur cctz-2.4-step1/src/time_zone_info.cc cctz-2.4-final/src/time_zone_info.cc
+--- cctz-2.4-step1/src/time_zone_info.cc	2026-03-26 10:51:44.776300566 +0000
++++ cctz-2.4-final/src/time_zone_info.cc	2026-03-26 10:49:28.751771964 +0000
+@@ -884,6 +884,64 @@
+   return (r < 0) ? q - 1 : q;
  }
  
 +time_zone::absolute_lookup
@@ -175,13 +168,12 @@ index eb1cd8a..031c8c4 100644
 +}
 +
  // BreakTime() translation for a particular transition.
- time_zone::absolute_lookup TimeZoneInfo::LocalTime(
-     std::int_fast64_t unix_time, const Transition& tr) const {
-diff --git a/src/time_zone_info.h b/src/time_zone_info.h
-index 4657a2d..dea4431 100644
---- a/src/time_zone_info.h
-+++ b/src/time_zone_info.h
-@@ -70,6 +70,8 @@ class TimeZoneInfo : public TimeZoneIf {
+ time_zone::absolute_lookup TimeZoneInfo::LocalTime(std::int_fast64_t unix_time,
+                                                    const Transition &tr) const {
+diff -Naur cctz-2.4-step1/src/time_zone_info.h cctz-2.4-final/src/time_zone_info.h
+--- cctz-2.4-step1/src/time_zone_info.h	2026-03-26 10:51:44.736764744 +0000
++++ cctz-2.4-final/src/time_zone_info.h	2026-03-26 10:50:03.611352463 +0000
+@@ -68,6 +68,8 @@
    // TimeZoneIf implementations.
    time_zone::absolute_lookup BreakTime(
        const time_point<seconds>& tp) const override;
@@ -190,8 +182,8 @@ index 4657a2d..dea4431 100644
    time_zone::civil_lookup MakeTime(
        const civil_second& cs) const override;
    bool NextTransition(const time_point<seconds>& tp,
-@@ -103,8 +105,13 @@ class TimeZoneInfo : public TimeZoneIf {
-   bool Load(const std::string& name, ZoneInfoSource* zip);
+@@ -93,8 +95,13 @@
+   bool Load(ZoneInfoSource* zip);
  
    // Helpers for BreakTime() and MakeTime().
 +  time_zone::absolute_lookup Offset(std::int_fast64_t unix_time,
@@ -205,11 +197,10 @@ index 4657a2d..dea4431 100644
    time_zone::absolute_lookup LocalTime(std::int_fast64_t unix_time,
                                         const Transition& tr) const;
    time_zone::civil_lookup TimeLocal(const civil_second& cs,
-diff --git a/src/time_zone_lookup.cc b/src/time_zone_lookup.cc
-index 2a38a9b..a97ac2f 100644
---- a/src/time_zone_lookup.cc
-+++ b/src/time_zone_lookup.cc
-@@ -73,6 +73,11 @@ time_zone::absolute_lookup time_zone::lookup(
+diff -Naur cctz-2.4-step1/src/time_zone_lookup.cc cctz-2.4-final/src/time_zone_lookup.cc
+--- cctz-2.4-step1/src/time_zone_lookup.cc	2026-03-26 10:51:44.736896480 +0000
++++ cctz-2.4-final/src/time_zone_lookup.cc	2026-03-26 10:50:03.611718867 +0000
+@@ -173,6 +173,11 @@
    return effective_impl().BreakTime(tp);
  }
  

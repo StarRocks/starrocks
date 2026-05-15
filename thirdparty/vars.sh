@@ -277,10 +277,10 @@ JEMALLOC_SOURCE="jemalloc-5.3.0"
 JEMALLOC_MD5SUM="09a8328574dab22a7df848eae6dbbf53"
 
 # CCTZ
-CCTZ_DOWNLOAD="https://github.com/google/cctz/archive/v2.3.tar.gz"
-CCTZ_NAME="cctz-2.3.tar.gz"
-CCTZ_SOURCE="cctz-2.3"
-CCTZ_MD5SUM="209348e50b24dbbdec6d961059c2fc92"
+CCTZ_DOWNLOAD="https://github.com/google/cctz/archive/v2.4.tar.gz"
+CCTZ_NAME="cctz-2.4.tar.gz"
+CCTZ_SOURCE="cctz-2.4"
+CCTZ_MD5SUM="dcae652e5a79c03b25da9561aba01aed"
 
 # FMT
 FMT_DOWNLOAD="https://github.com/fmtlib/fmt/releases/download/8.1.1/fmt-8.1.1.zip"

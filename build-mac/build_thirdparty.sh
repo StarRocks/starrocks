@@ -302,11 +302,11 @@ FMT_SOURCE="fmt-8.1.1"
 FMT_MD5SUM="16dcd48ecc166f10162450bb28aabc87"
 
 # CCTZ (Google's C++ time zone library)
-CCTZ_VERSION="2.3"
-CCTZ_DOWNLOAD="https://github.com/google/cctz/archive/v2.3.tar.gz"
-CCTZ_NAME="cctz-2.3.tar.gz"
-CCTZ_SOURCE="cctz-2.3"
-CCTZ_MD5SUM="209348e50b24dbbdec6d961059c2fc92"
+CCTZ_VERSION="2.4"
+CCTZ_DOWNLOAD="https://github.com/google/cctz/archive/v2.4.tar.gz"
+CCTZ_NAME="cctz-2.4.tar.gz"
+CCTZ_SOURCE="cctz-2.4"
+CCTZ_MD5SUM="dcae652e5a79c03b25da9561aba01aed"
 
 download_source() {
     local name="$1"

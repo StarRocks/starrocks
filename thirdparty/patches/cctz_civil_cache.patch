@@ -1,8 +1,7 @@
-diff --git a/src/cctz_benchmark.cc b/src/cctz_benchmark.cc
-index 179ae50..87a7722 100644
---- a/src/cctz_benchmark.cc
-+++ b/src/cctz_benchmark.cc
-@@ -797,6 +797,20 @@ void BM_Time_ToCivil_CCTZ(benchmark::State& state) {
+diff -Naur cctz-2.4/src/cctz_benchmark.cc cctz-2.4-step1/src/cctz_benchmark.cc
+--- cctz-2.4/src/cctz_benchmark.cc	2024-02-02 18:34:46.000000000 +0000
++++ cctz-2.4-step1/src/cctz_benchmark.cc	2026-03-26 10:51:44.776493135 +0000
+@@ -740,6 +740,20 @@
  }
  BENCHMARK(BM_Time_ToCivil_CCTZ);
  
@@ -23,18 +22,18 @@ index 179ae50..87a7722 100644
  void BM_Time_ToCivil_Libc(benchmark::State& state) {
    // No timezone support, so just use localtime.
    time_t t = 1384569027;
-diff --git a/src/time_zone_info.cc b/src/time_zone_info.cc
-index eb1cd8a..6258c27 100644
---- a/src/time_zone_info.cc
-+++ b/src/time_zone_info.cc
-@@ -41,12 +41,14 @@
+diff -Naur cctz-2.4/src/time_zone_info.cc cctz-2.4-step1/src/time_zone_info.cc
+--- cctz-2.4/src/time_zone_info.cc	2024-02-02 18:34:46.000000000 +0000
++++ cctz-2.4-step1/src/time_zone_info.cc	2026-03-26 10:51:44.776300566 +0000
+@@ -41,6 +41,7 @@
  #include <cstring>
+ #include <fstream>
  #include <functional>
- #include <iostream>
 +#include <mutex>
  #include <memory>
  #include <sstream>
  #include <string>
+@@ -49,6 +50,7 @@
  
  #include "cctz/civil_time.h"
  #include "time_zone_fixed.h"
@@ -42,7 +41,7 @@ index eb1cd8a..6258c27 100644
  #include "time_zone_posix.h"
  
  namespace cctz {
-@@ -79,6 +81,21 @@ const std::int_least32_t kSecsPerYear[2] = {
+@@ -81,6 +83,21 @@
    366 * kSecsPerDay,
  };
  
@@ -61,10 +60,10 @@ index eb1cd8a..6258c27 100644
 +}
 +
 +
- // Single-byte, unsigned numeric values are encoded directly.
- inline std::uint_fast8_t Decode8(const char* cp) {
-   return static_cast<std::uint_fast8_t>(*cp) & 0xff;
-@@ -751,14 +768,56 @@ time_zone::absolute_lookup TimeZoneInfo::LocalTime(
+ // Convert a cctz::weekday to a POSIX TZ weekday number (0==Sun, ..., 6=Sat).
+ inline int ToPosixWeekday(weekday wd) {
+   switch (wd) {
+@@ -861,14 +878,56 @@
            tt.utc_offset, tt.is_dst, &abbreviations_[tt.abbr_index]};
  }
  

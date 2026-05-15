@@ -38,3 +38,39 @@ select convert_tz('2019-08-01 13:21:03.001', 'Asia/Shanghai', 'America/Los_Angel
 -- result:
 2019-07-31 22:21:03.001000
 -- !result
+-- name: test_convert_tz_africa_timezones
+-- Test Africa/Casablanca and Africa/El_Aaiun which use year-round DST POSIX TZ encoding
+-- (requires cctz v2.4+ AllYearDST support; previously returned NULL in the BE column path)
+create table dt_africa_test(
+    c1 datetime
+) duplicate key(c1)
+PROPERTIES("replication_num" = "1");
+-- result:
+-- !result
+insert into dt_africa_test values
+('2020-01-01 00:00:00'),
+('2020-06-15 12:00:00'),
+('2026-01-15 12:00:00');
+-- result:
+-- !result
+-- Africa/Casablanca is UTC+1 year-round; results must be non-NULL
+select c1, convert_tz(c1, 'UTC', 'Africa/Casablanca') from dt_africa_test order by c1;
+-- result:
+2020-01-01 00:00:00	2020-01-01 01:00:00
+2020-06-15 12:00:00	2020-06-15 13:00:00
+2026-01-15 12:00:00	2026-01-15 13:00:00
+-- !result
+-- Africa/El_Aaiun is UTC+1 year-round; results must be non-NULL
+select c1, convert_tz(c1, 'UTC', 'Africa/El_Aaiun') from dt_africa_test order by c1;
+-- result:
+2020-01-01 00:00:00	2020-01-01 01:00:00
+2020-06-15 12:00:00	2020-06-15 13:00:00
+2026-01-15 12:00:00	2026-01-15 13:00:00
+-- !result
+-- Asia/Calcutta (Kolkata) offset UTC+5:30; results must be non-NULL
+select c1, convert_tz(c1, 'UTC', 'Asia/Calcutta') from dt_africa_test order by c1;
+-- result:
+2020-01-01 00:00:00	2020-01-01 05:30:00
+2020-06-15 12:00:00	2020-06-15 17:30:00
+2026-01-15 12:00:00	2026-01-15 17:30:00
+-- !result
