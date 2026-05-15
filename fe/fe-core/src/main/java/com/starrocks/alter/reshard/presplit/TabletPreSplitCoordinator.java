@@ -69,37 +69,46 @@ public final class TabletPreSplitCoordinator {
 
         SkipReason gateReason = checkConfigAndSession(loadKind);
         if (gateReason != null) {
-            return new PreSplitOutcome.Skipped(gateReason);
+            return skipEligibility(gateReason);
         }
         if (!table.isRangeDistribution()) {
-            return new PreSplitOutcome.Skipped(SkipReason.NOT_RANGE_DISTRIBUTION);
+            return skipEligibility(SkipReason.NOT_RANGE_DISTRIBUTION);
         }
         if (table.getState() != OlapTable.OlapTableState.NORMAL) {
-            return new PreSplitOutcome.Skipped(SkipReason.TABLE_NOT_NORMAL);
+            return skipEligibility(SkipReason.TABLE_NOT_NORMAL);
         }
         if (table.getVisibleIndexMetas().size() != 1) {
-            return new PreSplitOutcome.Skipped(SkipReason.HAS_MATERIALIZED_VIEW_OR_ROLLUP);
+            return skipEligibility(SkipReason.HAS_MATERIALIZED_VIEW_OR_ROLLUP);
         }
         if (!isFirstSortKeyColumnSupported(table)) {
-            return new PreSplitOutcome.Skipped(SkipReason.UNSUPPORTED_SORT_KEY);
+            return skipEligibility(SkipReason.UNSUPPORTED_SORT_KEY);
         }
 
         PhysicalPartition partition = table.getPhysicalPartition(physicalPartitionId);
         if (partition == null) {
-            return new PreSplitOutcome.Skipped(SkipReason.METADATA_NOT_RESOLVED);
+            return skipEligibility(SkipReason.METADATA_NOT_RESOLVED);
         }
         MaterializedIndex baseIndex = partition.getIndex(table.getBaseIndexMetaId());
         if (baseIndex == null) {
-            return new PreSplitOutcome.Skipped(SkipReason.METADATA_NOT_RESOLVED);
+            return skipEligibility(SkipReason.METADATA_NOT_RESOLVED);
         }
         if (baseIndex.getTablets().size() != 1) {
-            return new PreSplitOutcome.Skipped(SkipReason.MULTIPLE_BASE_INDEX_TABLETS);
+            return skipEligibility(SkipReason.MULTIPLE_BASE_INDEX_TABLETS);
         }
         if (baseIndex.getRowCount() > 0) {
-            return new PreSplitOutcome.Skipped(SkipReason.PARTITION_NOT_EMPTY);
+            return skipEligibility(SkipReason.PARTITION_NOT_EMPTY);
         }
 
         return new PreSplitOutcome.Eligible();
+    }
+
+    /** Build a {@code Skipped} outcome and bump the eligibility-skipped counter for the given reason. */
+    private static PreSplitOutcome.Skipped skipEligibility(SkipReason reason) {
+        if (MetricRepo.hasInit) {
+            MetricRepo.COUNTER_TABLET_PRE_SPLIT_ELIGIBILITY_SKIPPED
+                    .getMetric(reason.name().toLowerCase()).increase(1L);
+        }
+        return new PreSplitOutcome.Skipped(reason);
     }
 
     /**
@@ -167,6 +176,7 @@ public final class TabletPreSplitCoordinator {
         Duration postSubmitTimeout = Duration.ofSeconds(Config.tablet_pre_split_post_submit_wait_seconds);
 
         Optional<PreSplitPipeline.PreparedReshardJob> prepared;
+        long preSubmitStartMillis = System.currentTimeMillis();
         try {
             prepared = pipeline.preSubmit(sampleRequest, activeComputeNodeCount, preSubmitTimeout);
         } catch (PreSplitPreSubmitTimeoutException timeout) {
@@ -177,6 +187,11 @@ public final class TabletPreSplitCoordinator {
             LOG.warn("Pre-split skipped for table {}: sampling/planning failed — {}",
                     table.getName(), sampleFailure.getMessage());
             return new PreSplitOutcome.Skipped(SkipReason.SAMPLE_FAILED);
+        } finally {
+            if (MetricRepo.hasInit) {
+                MetricRepo.HISTO_TABLET_PRE_SPLIT_PRE_SUBMIT_WAIT_MS.update(
+                        System.currentTimeMillis() - preSubmitStartMillis);
+            }
         }
         if (prepared.isEmpty()) {
             LOG.info("Pre-split skipped for table {}: planner found no useful cuts", table.getName());
@@ -194,6 +209,7 @@ public final class TabletPreSplitCoordinator {
             return new PreSplitOutcome.Skipped(SkipReason.SUBMIT_FAILED);
         }
 
+        long postSubmitStartMillis = System.currentTimeMillis();
         try {
             pipeline.awaitFinished(preparedJob, postSubmitTimeout);
         } catch (TimeoutException timeout) {
@@ -203,6 +219,7 @@ public final class TabletPreSplitCoordinator {
             // timeouts into the dedicated type so the load executor's catch matches.
             if (MetricRepo.hasInit) {
                 MetricRepo.COUNTER_TABLET_PRE_SPLIT_POST_SUBMIT_HARD_CAP.increase(1L);
+                MetricRepo.COUNTER_TABLET_PRE_SPLIT_LOAD_ABORT.increase(1L);
             }
             LOG.warn("Pre-split post-submit timeout for table {} after {}s — load transaction will abort: {}",
                     table.getName(), postSubmitTimeout.toSeconds(), timeout.getMessage());
@@ -211,6 +228,11 @@ public final class TabletPreSplitCoordinator {
             LOG.warn("Pre-split skipped for table {}: admitted job entered terminal-error state — {}",
                     table.getName(), waitFailure.getMessage());
             return new PreSplitOutcome.Skipped(SkipReason.JOB_FAILED_BEFORE_FINISH);
+        } finally {
+            if (MetricRepo.hasInit) {
+                MetricRepo.HISTO_TABLET_PRE_SPLIT_POST_SUBMIT_WAIT_MS.update(
+                        System.currentTimeMillis() - postSubmitStartMillis);
+            }
         }
         return new PreSplitOutcome.Finished();
     }

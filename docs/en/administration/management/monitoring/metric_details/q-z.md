@@ -658,6 +658,63 @@ All transaction metrics share the following labels:
 - Unit: Count
 - Description: The number of times blacklisted SQL has been intercepted.
 
+## `starrocks_fe_tablet_pre_split_eligibility_skipped`
+
+- Unit: Count
+- Type: Cumulative
+- Labels: `reason` — the SkipReason enum value (lower-cased), e.g. `not_range_distribution`, `table_not_normal`, `has_materialized_view_or_rollup`, `unsupported_sort_key`, `metadata_not_resolved`, `multiple_base_index_tablets`, `partition_not_empty`, `disabled_by_config`, `disabled_by_session`.
+- Description: Total Sample-Based Tablet Pre-Split invocations that the FE-side eligibility gate declined, broken down by the specific reason. Operators can use this counter to attribute "pre-split not running" to a single eligibility branch at a glance.
+
+## `starrocks_fe_tablet_pre_split_sampler_invocations`
+
+- Unit: Count
+- Type: Cumulative
+- Description: Total sampler invocations driven by Sample-Based Tablet Pre-Split. Incremented by the production sampler pipeline.
+
+## `starrocks_fe_tablet_pre_split_sampler_failed`
+
+- Unit: Count
+- Type: Cumulative
+- Labels: `reason` — the sampler-failure category (e.g. `tier1_unavailable`, `connector_error`).
+- Description: Total sampler failures broken down by reason. The Tier 1 → Tier 2 fallback path is tracked separately from generic connector/IO failures.
+
+## `starrocks_fe_tablet_pre_split_tier_used`
+
+- Unit: Count
+- Type: Cumulative
+- Labels: `tier` — `tier1` (Parquet/ORC row-group metadata) or `tier2` (row sampling via reservoir sampler).
+- Description: Total Sample-Based Tablet Pre-Split invocations by which sampler tier produced the boundaries.
+
+## `starrocks_fe_tablet_pre_split_boundaries_planned`
+
+- Unit: Count
+- Type: Histogram
+- Description: Number of boundary tuples produced by the planner, per invocation. Equals `effectiveTabletCount - 1`.
+
+## `starrocks_fe_tablet_pre_split_pre_submit_wait_ms`
+
+- Unit: ms
+- Type: Histogram
+- Description: Wall-clock time spent in the pre-submit phase of Sample-Based Tablet Pre-Split (sample + plan + build reshard job). Capped by `tablet_pre_split_pre_submit_timeout_seconds`.
+
+## `starrocks_fe_tablet_pre_split_post_submit_wait_ms`
+
+- Unit: ms
+- Type: Histogram
+- Description: Wall-clock time the coordinator spent awaiting `FINISHED` on the admitted Sample-Based Tablet Pre-Split reshard job. Capped by `tablet_pre_split_post_submit_wait_seconds`.
+
+## `starrocks_fe_tablet_pre_split_post_submit_hard_cap`
+
+- Unit: Count
+- Type: Cumulative
+- Description: Total Sample-Based Tablet Pre-Split post-submit hard-cap events. Incremented when an admitted reshard job did not reach `FINISHED` within `tablet_pre_split_post_submit_wait_seconds`, after which the coordinator re-throws to abort the load transaction.
+
+## `starrocks_fe_tablet_pre_split_load_abort`
+
+- Unit: Count
+- Type: Cumulative
+- Description: Total load transactions aborted because Sample-Based Tablet Pre-Split could not confirm the admitted reshard job reached `FINISHED` in time. Sibling counter of `tablet_pre_split_post_submit_hard_cap` on the same code path; surfaces the user-impact view of the hard-cap event.
+
 ## `starrocks_fe_tablet_max_compaction_score`
 
 - Unit: Count

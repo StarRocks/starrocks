@@ -328,10 +328,28 @@ public final class MetricRepo {
     public static LongCounterMetric COUNTER_TABLET_RESHARD_SPLIT_JOB_ABORTED;
     public static LongCounterMetric COUNTER_TABLET_RESHARD_MERGE_JOB_ABORTED;
 
-    // Sample-Based Tablet Pre-Split: post-submit hard-cap aborts. Incremented when an admitted
-    // reshard job did not reach FINISHED within tablet_pre_split_post_submit_wait_seconds and
-    // the coordinator re-throws to abort the load transaction.
+    // Sample-Based Tablet Pre-Split metrics. The coordinator wires the eligibility-skip,
+    // post-submit hard-cap, load-abort counters and the two wait-time histograms. The
+    // sampler/tier/boundaries counters are wired by the production PreSplitPipeline
+    // implementation that ships with the load-integration commits.
     public static LongCounterMetric COUNTER_TABLET_PRE_SPLIT_POST_SUBMIT_HARD_CAP;
+    public static LongCounterMetric COUNTER_TABLET_PRE_SPLIT_LOAD_ABORT;
+    public static LongCounterMetric COUNTER_TABLET_PRE_SPLIT_SAMPLER_INVOCATIONS;
+    public static final MetricWithLabelGroup<LongCounterMetric> COUNTER_TABLET_PRE_SPLIT_SAMPLER_FAILED =
+            new MetricWithLabelGroup<>("reason",
+                    () -> new LongCounterMetric("tablet_pre_split_sampler_failed",
+                            MetricUnit.REQUESTS, "total sampler failures by reason"));
+    public static final MetricWithLabelGroup<LongCounterMetric> COUNTER_TABLET_PRE_SPLIT_TIER_USED =
+            new MetricWithLabelGroup<>("tier",
+                    () -> new LongCounterMetric("tablet_pre_split_tier_used",
+                            MetricUnit.REQUESTS, "total Sample-Based Tablet Pre-Split invocations by tier"));
+    public static final MetricWithLabelGroup<LongCounterMetric> COUNTER_TABLET_PRE_SPLIT_ELIGIBILITY_SKIPPED =
+            new MetricWithLabelGroup<>("reason",
+                    () -> new LongCounterMetric("tablet_pre_split_eligibility_skipped",
+                            MetricUnit.REQUESTS, "total eligibility-gate skips by reason"));
+    public static Histogram HISTO_TABLET_PRE_SPLIT_PRE_SUBMIT_WAIT_MS;
+    public static Histogram HISTO_TABLET_PRE_SPLIT_POST_SUBMIT_WAIT_MS;
+    public static Histogram HISTO_TABLET_PRE_SPLIT_BOUNDARIES_PLANNED;
 
     public static Histogram HISTO_QUERY_LATENCY;
 
@@ -924,6 +942,16 @@ public final class MetricRepo {
                 "total Sample-Based Tablet Pre-Split post-submit hard-cap events (load transaction aborted)");
         STARROCKS_METRIC_REGISTER.addMetric(COUNTER_TABLET_PRE_SPLIT_POST_SUBMIT_HARD_CAP);
 
+        COUNTER_TABLET_PRE_SPLIT_LOAD_ABORT = new LongCounterMetric(
+                "tablet_pre_split_load_abort", MetricUnit.REQUESTS,
+                "total load transactions aborted because of Sample-Based Tablet Pre-Split");
+        STARROCKS_METRIC_REGISTER.addMetric(COUNTER_TABLET_PRE_SPLIT_LOAD_ABORT);
+
+        COUNTER_TABLET_PRE_SPLIT_SAMPLER_INVOCATIONS = new LongCounterMetric(
+                "tablet_pre_split_sampler_invocations", MetricUnit.REQUESTS,
+                "total sampler invocations driven by Sample-Based Tablet Pre-Split");
+        STARROCKS_METRIC_REGISTER.addMetric(COUNTER_TABLET_PRE_SPLIT_SAMPLER_INVOCATIONS);
+
         // 3. histogram
         HISTO_QUERY_LATENCY = METRIC_REGISTER.histogram(MetricRegistry.name("query", "latency", "ms"));
         HISTO_EDIT_LOG_WRITE_LATENCY =
@@ -939,6 +967,12 @@ public final class MetricRepo {
                 MetricRegistry.name("deploy_plan_fragments", "latency", "ms"));
         HISTO_TABLET_RESHARD_JOB_DURATION = METRIC_REGISTER.histogram(
                 MetricRegistry.name("tablet_reshard_job", "duration", "ms"));
+        HISTO_TABLET_PRE_SPLIT_PRE_SUBMIT_WAIT_MS = METRIC_REGISTER.histogram(
+                MetricRegistry.name("tablet_pre_split", "pre_submit_wait", "ms"));
+        HISTO_TABLET_PRE_SPLIT_POST_SUBMIT_WAIT_MS = METRIC_REGISTER.histogram(
+                MetricRegistry.name("tablet_pre_split", "post_submit_wait", "ms"));
+        HISTO_TABLET_PRE_SPLIT_BOUNDARIES_PLANNED = METRIC_REGISTER.histogram(
+                MetricRegistry.name("tablet_pre_split", "boundaries_planned"));
 
         // init system metrics
         initSystemMetrics();

@@ -14,6 +14,8 @@
 
 package com.starrocks.alter.reshard.presplit;
 
+import com.codahale.metrics.Histogram;
+import com.codahale.metrics.MetricRegistry;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
@@ -442,7 +444,7 @@ public class TabletPreSplitCoordinatorTest {
 
     @Test
     public void testRunPreSplitPostSubmitTimeoutRecordsHardCapMetric() {
-        withHardCapCounter(counter -> {
+        withCoordinatorMetricsWired(counter -> {
             FakePipeline pipeline = new FakePipeline();
             pipeline.awaitThrow = new PreSplitPostSubmitTimeoutException("job did not finish in 300s");
 
@@ -454,27 +456,44 @@ public class TabletPreSplitCoordinatorTest {
     }
 
     /**
-     * Wire the counter in and execute {@code body}; restore previous state in a finally block
-     * so other tests are not affected by the touched static fields.
+     * Wire every coordinator-side pre-split metric and execute {@code body}. The hard-cap counter
+     * is passed to {@code body} for the common-case assertion; the sibling load-abort counter and
+     * the two wait-time histograms are also stood up so that
+     * {@link MetricRepo#hasInit} = true does not NPE when the coordinator touches them. Previous
+     * state is restored in a finally block so other tests stay isolated.
      */
-    private static void withHardCapCounter(java.util.function.Consumer<LongCounterMetric> body) {
-        LongCounterMetric counter = new LongCounterMetric(
+    private static void withCoordinatorMetricsWired(java.util.function.Consumer<LongCounterMetric> body) {
+        LongCounterMetric hardCap = new LongCounterMetric(
                 "tablet_pre_split_post_submit_hard_cap", MetricUnit.REQUESTS, "hard-cap events");
-        LongCounterMetric savedCounter = MetricRepo.COUNTER_TABLET_PRE_SPLIT_POST_SUBMIT_HARD_CAP;
+        LongCounterMetric loadAbort = new LongCounterMetric(
+                "tablet_pre_split_load_abort", MetricUnit.REQUESTS, "load aborts");
+        MetricRegistry localRegistry = new MetricRegistry();
+
+        LongCounterMetric savedHardCap = MetricRepo.COUNTER_TABLET_PRE_SPLIT_POST_SUBMIT_HARD_CAP;
+        LongCounterMetric savedLoadAbort = MetricRepo.COUNTER_TABLET_PRE_SPLIT_LOAD_ABORT;
+        Histogram savedPreSubmitHistogram = MetricRepo.HISTO_TABLET_PRE_SPLIT_PRE_SUBMIT_WAIT_MS;
+        Histogram savedPostSubmitHistogram = MetricRepo.HISTO_TABLET_PRE_SPLIT_POST_SUBMIT_WAIT_MS;
         boolean savedHasInit = MetricRepo.hasInit;
-        MetricRepo.COUNTER_TABLET_PRE_SPLIT_POST_SUBMIT_HARD_CAP = counter;
+
+        MetricRepo.COUNTER_TABLET_PRE_SPLIT_POST_SUBMIT_HARD_CAP = hardCap;
+        MetricRepo.COUNTER_TABLET_PRE_SPLIT_LOAD_ABORT = loadAbort;
+        MetricRepo.HISTO_TABLET_PRE_SPLIT_PRE_SUBMIT_WAIT_MS = localRegistry.histogram("pre_submit_wait_ms");
+        MetricRepo.HISTO_TABLET_PRE_SPLIT_POST_SUBMIT_WAIT_MS = localRegistry.histogram("post_submit_wait_ms");
         MetricRepo.hasInit = true;
         try {
-            body.accept(counter);
+            body.accept(hardCap);
         } finally {
             MetricRepo.hasInit = savedHasInit;
-            MetricRepo.COUNTER_TABLET_PRE_SPLIT_POST_SUBMIT_HARD_CAP = savedCounter;
+            MetricRepo.COUNTER_TABLET_PRE_SPLIT_POST_SUBMIT_HARD_CAP = savedHardCap;
+            MetricRepo.COUNTER_TABLET_PRE_SPLIT_LOAD_ABORT = savedLoadAbort;
+            MetricRepo.HISTO_TABLET_PRE_SPLIT_PRE_SUBMIT_WAIT_MS = savedPreSubmitHistogram;
+            MetricRepo.HISTO_TABLET_PRE_SPLIT_POST_SUBMIT_WAIT_MS = savedPostSubmitHistogram;
         }
     }
 
     @Test
     public void testRunPreSplitSubmitFailureDoesNotRecordHardCapMetric() {
-        withHardCapCounter(counter -> {
+        withCoordinatorMetricsWired(counter -> {
             FakePipeline pipeline = new FakePipeline();
             pipeline.submitThrow = new StarRocksException("submit rejected");
 
@@ -486,7 +505,7 @@ public class TabletPreSplitCoordinatorTest {
 
     @Test
     public void testRunPreSplitJobFailureBeforeFinishDoesNotRecordHardCapMetric() {
-        withHardCapCounter(counter -> {
+        withCoordinatorMetricsWired(counter -> {
             FakePipeline pipeline = new FakePipeline();
             pipeline.awaitThrow = new StarRocksException("job CANCELLED");
 
@@ -521,13 +540,54 @@ public class TabletPreSplitCoordinatorTest {
     }
 
     @Test
+    public void testEligibilitySkipRecordsLabelledMetric() {
+        // MetricWithLabelGroup lazily creates a per-label counter on first .getMetric() call and
+        // caches it, so we can read the baseline + the post-skip value without touching the final
+        // static field at all. Other tests may have already populated other label buckets — that
+        // is fine because we read only the NOT_RANGE_DISTRIBUTION bucket.
+        boolean savedHasInit = MetricRepo.hasInit;
+        MetricRepo.hasInit = true;
+        try {
+            String label = SkipReason.NOT_RANGE_DISTRIBUTION.name().toLowerCase();
+            long baseline = MetricRepo.COUNTER_TABLET_PRE_SPLIT_ELIGIBILITY_SKIPPED
+                    .getMetric(label).getValue();
+
+            when(table.isRangeDistribution()).thenReturn(false);
+            assertSkipped(invokeMaybeAct(), SkipReason.NOT_RANGE_DISTRIBUTION);
+
+            Assertions.assertEquals(baseline + 1L,
+                    MetricRepo.COUNTER_TABLET_PRE_SPLIT_ELIGIBILITY_SKIPPED.getMetric(label).getValue().longValue(),
+                    "eligibility skip should bump the reason-specific bucket");
+        } finally {
+            MetricRepo.hasInit = savedHasInit;
+        }
+    }
+
+    @Test
+    public void testRunPreSplitPostSubmitTimeoutBumpsLoadAbortCounter() {
+        // hard-cap and load-abort are sibling counters incremented on the same post-submit
+        // timeout path; withCoordinatorMetricsWired stands both up.
+        withCoordinatorMetricsWired(hardCap -> {
+            FakePipeline pipeline = new FakePipeline();
+            pipeline.awaitThrow = new PreSplitPostSubmitTimeoutException("job did not finish in 300s");
+
+            Assertions.assertThrows(PreSplitPostSubmitTimeoutException.class,
+                    () -> invokeRunPreSplit(pipeline));
+            Assertions.assertEquals(1L, hardCap.getValue().longValue());
+            Assertions.assertEquals(1L,
+                    MetricRepo.COUNTER_TABLET_PRE_SPLIT_LOAD_ABORT.getValue().longValue(),
+                    "post-submit timeout should also bump the load-abort counter");
+        });
+    }
+
+    @Test
     public void testRunPreSplitBareTimeoutExceptionMapsToHardCap() {
         // Defense in depth: even if the pipeline throws a generic TimeoutException (the
         // parent class) rather than the typed PreSplitPostSubmitTimeoutException, the
         // coordinator must treat it as a post-submit hard-cap event and propagate (load
         // txn aborts). Otherwise the bare timeout would fall into the StarRocksException
         // catch and the load would proceed against unfinished tablet metadata.
-        withHardCapCounter(counter -> {
+        withCoordinatorMetricsWired(counter -> {
             FakePipeline pipeline = new FakePipeline();
             pipeline.awaitThrow = new TimeoutException("bare timeout from deeper await");
 
