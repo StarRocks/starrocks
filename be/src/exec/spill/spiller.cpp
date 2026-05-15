@@ -42,6 +42,7 @@
 
 namespace starrocks::spill {
 DEFINE_FAIL_POINT(spill_restore_sleep);
+DEFINE_FAIL_POINT(spill_restore_error);
 
 TQueryType::type spill_query_type(RuntimeState* state) {
     return state->query_options().query_type;
