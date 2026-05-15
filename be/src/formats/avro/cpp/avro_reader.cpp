@@ -16,7 +16,6 @@
 
 #include <fmt/format.h>
 #include <rapidjson/document.h>
-#include <limits>
 #include <rapidjson/stringbuffer.h>
 #include <rapidjson/writer.h>
 
@@ -24,6 +23,7 @@
 #include <avrocpp/NodeImpl.hh>
 #include <avrocpp/Types.hh>
 #include <avrocpp/ValidSchema.hh>
+#include <limits>
 
 #include "column/adaptive_nullable_column.h"
 #include "column/chunk.h"
