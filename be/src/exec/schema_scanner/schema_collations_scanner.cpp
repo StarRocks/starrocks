@@ -38,6 +38,10 @@ SchemaCollationsScanner::CollationStruct SchemaCollationsScanner::_s_collations[
         {nullptr, nullptr, 0, nullptr, nullptr, 0, nullptr},
 };
 
+const SchemaCollationsScanner::CollationStruct* SchemaCollationsScanner::collations() {
+    return _s_collations;
+}
+
 SchemaCollationsScanner::SchemaCollationsScanner()
         : SchemaScanner(_s_cols_columns, sizeof(_s_cols_columns) / sizeof(SchemaScanner::ColumnDesc)) {}
 

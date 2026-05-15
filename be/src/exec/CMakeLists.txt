@@ -87,6 +87,7 @@ set(EXEC_SCHEMA_SCANNER_FILES
     schema_scanner/schema_be_configs_scanner.cpp
     schema_scanner/schema_be_threads_scanner.cpp
     schema_scanner/schema_charsets_scanner.cpp
+    schema_scanner/schema_collation_character_set_applicability_scanner.cpp
     schema_scanner/schema_collations_scanner.cpp
     schema_scanner/schema_dummy_scanner.cpp
     schema_scanner/schema_events_scanner.cpp

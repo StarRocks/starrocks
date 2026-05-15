@@ -58,6 +58,7 @@ information_schema	collations
 information_schema	table_constraints
 information_schema	engines
 information_schema	user_privileges
+information_schema	collation_character_set_applicability
 information_schema	schema_privileges
 information_schema	statistics
 information_schema	triggers
@@ -127,29 +128,38 @@ information_schema	routines	ROUTINE_CATALOG	2
 information_schema	routines	ROUTINE_SCHEMA	3
 information_schema	routines	ROUTINE_NAME	4
 information_schema	routines	ROUTINE_TYPE	5
-information_schema	routines	DTD_IDENTIFIER	6
-information_schema	routines	ROUTINE_BODY	7
-information_schema	routines	ROUTINE_DEFINITION	8
-information_schema	routines	EXTERNAL_NAME	9
-information_schema	routines	EXTERNAL_LANGUAGE	10
-information_schema	routines	PARAMETER_STYLE	11
-information_schema	routines	IS_DETERMINISTIC	12
-information_schema	routines	SQL_DATA_ACCESS	13
-information_schema	routines	SQL_PATH	14
-information_schema	routines	SECURITY_TYPE	15
-information_schema	routines	CREATED	16
-information_schema	routines	LAST_ALTERED	17
-information_schema	routines	SQL_MODE	18
-information_schema	routines	ROUTINE_COMMENT	19
-information_schema	routines	DEFINER	20
-information_schema	routines	CHARACTER_SET_CLIENT	21
-information_schema	routines	COLLATION_CONNECTION	22
-information_schema	routines	DATABASE_COLLATION	23
+information_schema	routines	DATA_TYPE	6
+information_schema	routines	CHARACTER_MAXIMUM_LENGTH	7
+information_schema	routines	CHARACTER_OCTET_LENGTH	8
+information_schema	routines	NUMERIC_PRECISION	9
+information_schema	routines	NUMERIC_SCALE	10
+information_schema	routines	DATETIME_PRECISION	11
+information_schema	routines	CHARACTER_SET_NAME	12
+information_schema	routines	COLLATION_NAME	13
+information_schema	routines	DTD_IDENTIFIER	14
+information_schema	routines	ROUTINE_BODY	15
+information_schema	routines	ROUTINE_DEFINITION	16
+information_schema	routines	EXTERNAL_NAME	17
+information_schema	routines	EXTERNAL_LANGUAGE	18
+information_schema	routines	PARAMETER_STYLE	19
+information_schema	routines	IS_DETERMINISTIC	20
+information_schema	routines	SQL_DATA_ACCESS	21
+information_schema	routines	SQL_PATH	22
+information_schema	routines	SECURITY_TYPE	23
+information_schema	routines	CREATED	24
+information_schema	routines	LAST_ALTERED	25
+information_schema	routines	SQL_MODE	26
+information_schema	routines	ROUTINE_COMMENT	27
+information_schema	routines	DEFINER	28
+information_schema	routines	CHARACTER_SET_CLIENT	29
+information_schema	routines	COLLATION_CONNECTION	30
+information_schema	routines	DATABASE_COLLATION	31
 information_schema	schemata	CATALOG_NAME	1
 information_schema	schemata	SCHEMA_NAME	2
 information_schema	schemata	DEFAULT_CHARACTER_SET_NAME	3
 information_schema	schemata	DEFAULT_COLLATION_NAME	4
 information_schema	schemata	SQL_PATH	5
+information_schema	schemata	DEFAULT_ENCRYPTION	6
 information_schema	columns	TABLE_CATALOG	1
 information_schema	columns	TABLE_SCHEMA	2
 information_schema	columns	TABLE_NAME	3
@@ -184,6 +194,7 @@ information_schema	collations	ID	3
 information_schema	collations	IS_DEFAULT	4
 information_schema	collations	IS_COMPILED	5
 information_schema	collations	SORTLEN	6
+information_schema	collations	PAD_ATTRIBUTE	7
 information_schema	table_constraints	CONSTRAINT_CATALOG	1
 information_schema	table_constraints	CONSTRAINT_SCHEMA	2
 information_schema	table_constraints	CONSTRAINT_NAME	3
@@ -201,6 +212,8 @@ information_schema	user_privileges	GRANTEE	1
 information_schema	user_privileges	TABLE_CATALOG	2
 information_schema	user_privileges	PRIVILEGE_TYPE	3
 information_schema	user_privileges	IS_GRANTABLE	4
+information_schema	collation_character_set_applicability	COLLATION_NAME	1
+information_schema	collation_character_set_applicability	CHARACTER_SET_NAME	2
 information_schema	schema_privileges	GRANTEE	1
 information_schema	schema_privileges	TABLE_CATALOG	2
 information_schema	schema_privileges	TABLE_SCHEMA	3
@@ -222,7 +235,8 @@ information_schema	statistics	NULLABLE	13
 information_schema	statistics	INDEX_TYPE	14
 information_schema	statistics	COMMENT	15
 information_schema	statistics	INDEX_COMMENT	16
-information_schema	statistics	EXPRESSION	17
+information_schema	statistics	IS_VISIBLE	17
+information_schema	statistics	EXPRESSION	18
 information_schema	triggers	TRIGGER_CATALOG	1
 information_schema	triggers	TRIGGER_SCHEMA	2
 information_schema	triggers	TRIGGER_NAME	3
