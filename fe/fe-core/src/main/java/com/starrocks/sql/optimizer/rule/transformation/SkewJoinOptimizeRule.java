@@ -171,7 +171,8 @@ public class SkewJoinOptimizeRule extends TransformationRule {
         // Idea: the most frequent composite tuple (k_1, k_2, ..., k_n) is bounded by the most
         // frequent value of each individual key. If any key k_i is not skewed (no value exceeds
         // the threshold), then no composite tuple can exceed it either, so no partition is skewed.
-        record PredicateSkewInfo(ColumnRefOperator column, DataSkew.SkewInfo skewInfo) {}
+        record PredicateSkewInfo(ColumnRefOperator column, ColumnRefOperator otherColumn, DataSkew.SkewInfo skewInfo) {
+        }
 
         List<PredicateSkewInfo> skewedPredicates = new ArrayList<>();
         for (BinaryPredicateOperator equalConj : equalConjs) {
@@ -183,7 +184,8 @@ public class SkewJoinOptimizeRule extends TransformationRule {
             if (!skewInfoOpt.get().isSkewed()) {
                 return false;
             }
-            skewedPredicates.add(new PredicateSkewInfo(columnOpt.get(), skewInfoOpt.get()));
+            final var otherColumn = (ColumnRefOperator) equalConj.getChild(1);
+            skewedPredicates.add(new PredicateSkewInfo(columnOpt.get(), otherColumn, skewInfoOpt.get()));
         }
 
         for (final var skewPredicate : skewedPredicates) {
@@ -217,10 +219,9 @@ public class SkewJoinOptimizeRule extends TransformationRule {
             // cardinality blow up. We only check for MCVs since for NULLs this is not an issue as NULL does not join.
             final var skewInfoMcvs = skewInfo.getMcvs();
             if (skewInfo.type() == DataSkew.SkewType.SKEWED_MCV && skewInfoMcvs.isPresent()) {
-                final var otherColumn = skewJoinColumn.equals(leftColumn) ? rightColumn : leftColumn;
                 final var rightChildStats = input.inputAt(1).getStatistics();
-                if (rightChildStats != null && rightChildStats.getColumnStatistics().containsKey(otherColumn)) {
-                    final var otherColumnStats = rightChildStats.getColumnStatistic(otherColumn);
+                if (rightChildStats != null && rightChildStats.getColumnStatistics().containsKey(skewPredicate.otherColumn)) {
+                    final var otherColumnStats = rightChildStats.getColumnStatistic(skewPredicate.otherColumn);
                     if (otherColumnStats != null && otherColumnStats.getHistogram() != null) {
                         final var maxOverlapRowCount = context.getSessionVariable().getSkewJoinMaxOtherSideOverlapRowCount();
                         final var overlapRows = DataSkew.getOverlappingMcvRowCount(otherColumnStats.getHistogram().getMCV(),
