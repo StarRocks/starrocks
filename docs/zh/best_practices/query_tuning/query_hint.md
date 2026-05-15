@@ -53,15 +53,6 @@ WITH t AS (SELECT region, sales_amount FROM sales_orders)
 SELECT /*+ SET_VAR (streaming_preaggregation_mode = 'force_streaming', new_planner_agg_stage = '2') */  
        SUM(sales_amount) AS total_sales_amount  
 FROM t;
-
--- 在子查询中指定 Hint
-WITH t AS (  
-  SELECT /*+ SET_VAR (streaming_preaggregation_mode = 'force_streaming') */  
-         region, sales_amount  
-  FROM sales_orders  
-)  
-SELECT SUM(sales_amount) AS total_sales_amount  
-FROM t;
 ```
 
 ## 用户自定义变量提示
