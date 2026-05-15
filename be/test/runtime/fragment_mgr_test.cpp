@@ -46,12 +46,12 @@
 #include "gen_cpp/QueryPlanExtra_types.h"
 #include "gen_cpp/StarrocksExternalService_types.h"
 #include "gen_cpp/Types_types.h"
-#include "testutil/assert.h"
-#include "util/thrift_util.h"
-#include "util/url_coding.h"
 #include "runtime/exec_env.h"
 #include "runtime/plan_fragment_executor.h"
+#include "testutil/assert.h"
 #include "util/monotime.h"
+#include "util/thrift_util.h"
+#include "util/url_coding.h"
 
 namespace starrocks {
 
