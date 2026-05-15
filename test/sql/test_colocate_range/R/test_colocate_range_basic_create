@@ -1,0 +1,43 @@
+-- name: test_colocate_range_basic_create @cloud @sequential
+set enable_range_distribution = true;
+-- result:
+-- !result
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+create table t1 (k1 int, k2 int)
+    order by(k1, k2)
+    properties('replication_num' = '1', 'colocate_with' = 'grp_basic_${uuid0}:k1');
+-- result:
+-- !result
+create table t2 (k1 int, k2 int)
+    order by(k1, k2)
+    properties('replication_num' = '1', 'colocate_with' = 'grp_basic_${uuid0}:k1');
+-- result:
+-- !result
+insert into t1 values (1, 10), (2, 20);
+-- result:
+-- !result
+insert into t2 values (1, 100), (2, 200);
+-- result:
+-- !result
+select count(*) from t1;
+-- result:
+2
+-- !result
+select count(*) from t2;
+-- result:
+2
+-- !result
+drop table t2;
+-- result:
+-- !result
+drop table t1;
+-- result:
+-- !result
+drop database db_${uuid0};
+-- result:
+-- !result

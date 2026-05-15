@@ -1,0 +1,54 @@
+-- name: test_colocate_range_three_way_join @cloud @sequential
+set enable_range_distribution = true;
+-- result:
+-- !result
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+create table a (k1 int, k2 int)
+    order by(k1, k2)
+    properties('replication_num' = '1', 'colocate_with' = 'grp_three_${uuid0}:k1');
+-- result:
+-- !result
+create table b (k1 int, k2 int)
+    order by(k1, k2)
+    properties('replication_num' = '1', 'colocate_with' = 'grp_three_${uuid0}:k1');
+-- result:
+-- !result
+create table c (k1 int, k2 int)
+    order by(k1, k2)
+    properties('replication_num' = '1', 'colocate_with' = 'grp_three_${uuid0}:k1');
+-- result:
+-- !result
+insert into a values (1, 10), (2, 20), (3, 30);
+-- result:
+-- !result
+insert into b values (1, 100), (2, 200), (3, 300);
+-- result:
+-- !result
+insert into c values (1, 1000), (2, 2000), (3, 3000);
+-- result:
+-- !result
+select count(*) from a join b on a.k1 = b.k1 join c on a.k1 = c.k1;
+-- result:
+3
+-- !result
+select count(*) from a join b on a.k1 = b.k1 join c on b.k1 = c.k1;
+-- result:
+3
+-- !result
+drop table c;
+-- result:
+-- !result
+drop table b;
+-- result:
+-- !result
+drop table a;
+-- result:
+-- !result
+drop database db_${uuid0};
+-- result:
+-- !result

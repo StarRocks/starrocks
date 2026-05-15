@@ -26,12 +26,14 @@ import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Tablet;
+import com.starrocks.catalog.TabletRange;
 import com.starrocks.catalog.Tuple;
 import com.starrocks.common.Range;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.common.MetaUtils;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -134,6 +136,124 @@ public final class RangeColocateScanDispatch {
                         colocateGroupId, physicalPartition.getId()));
             }
         }
+    }
+
+    /**
+     * Static counterpart to {@link #computeBucketSeq} that just returns the aligned /
+     * not-aligned boolean. Used by {@link com.starrocks.alter.reshard.ColocateChecker}
+     * to decide whether a partition / index needs an alignment split.
+     *
+     * <p>Same rules as the dispatch path's transient-state detection: every tablet's range
+     * must be contained in exactly one expanded {@link ColocateRange}, and every
+     * {@link ColocateRange} must have at least one covering tablet. Caller passes in the
+     * snapshot of {@code expectedRanges} so a single cycle of the checker sees a stable
+     * view across all peers.
+     */
+    public static boolean isTabletRangesAligned(MaterializedIndex selectedIndex, List<Column> sortKeyColumns,
+                                                 List<ColocateRange> expectedRanges, int colocateColumnCount) {
+        Preconditions.checkArgument(!expectedRanges.isEmpty(),
+                "expectedRanges must not be empty for range colocate alignment check");
+        List<Range<Tuple>> expandedRanges = new ArrayList<>(expectedRanges.size());
+        for (ColocateRange colocateRange : expectedRanges) {
+            expandedRanges.add(ColocateRangeUtils.expandToFullSortKey(
+                    colocateRange.getRange(), sortKeyColumns, colocateColumnCount));
+        }
+        Set<Integer> coveredBucketSeqs = new HashSet<>();
+        for (Tablet tablet : selectedIndex.getTablets()) {
+            if (tablet.getRange() == null) {
+                // P0/P1 invariant: every tablet of a range-colocate table has a TabletRange.
+                // A missing range is a deeper bug than misalignment — return false so the
+                // checker does not try to fix it and the dispatch guard still fires.
+                return false;
+            }
+            Range<Tuple> tabletRange = tablet.getRange().getRange();
+            Tuple prefix = ColocateRangeUtils.extractColocatePrefix(tabletRange, colocateColumnCount);
+            int bucketSeq = ColocateRangeMgr.indexOf(expectedRanges, prefix);
+            if (bucketSeq < 0 || !expandedRanges.get(bucketSeq).contains(tabletRange)) {
+                return false;
+            }
+            coveredBucketSeqs.add(bucketSeq);
+        }
+        return coveredBucketSeqs.size() == expectedRanges.size();
+    }
+
+    /**
+     * Returns the canonical colocate boundaries strictly inside {@code tabletRange} (i.e.
+     * the {@link ColocateRange} lower bounds, expanded to full sort key, that fall between
+     * the tablet's lower and upper bounds, exclusive on both sides). These are the
+     * boundaries an alignment split of this tablet must use.
+     *
+     * <p>If the returned list is empty, the tablet either is already aligned to the colocate
+     * range topology or is contained in a single {@link ColocateRange} — caller decides which
+     * by composing with {@link #isTabletRangesAligned}.
+     */
+    public static List<Tuple> computeForcedAlignmentBoundaries(Range<Tuple> tabletRange, List<Column> sortKeyColumns,
+                                                                List<ColocateRange> expectedRanges,
+                                                                int colocateColumnCount) {
+        List<Tuple> boundaries = new ArrayList<>();
+        for (ColocateRange colocateRange : expectedRanges) {
+            Range<Tuple> cr = colocateRange.getRange();
+            if (cr.isMinimum()) {
+                continue; // No canonical boundary at -inf.
+            }
+            // ColocateRangeMgr canonicalizes every non-minimum range to inclusive lower; a
+            // non-inclusive lower here means upstream constructed an unsupported range and
+            // the alignment math would silently drop boundaries, leaving the group livelocked.
+            Preconditions.checkState(cr.isLowerBoundIncluded(),
+                    "ColocateRange with non-inclusive lower bound is not supported: %s", cr);
+            Range<Tuple> expanded = ColocateRangeUtils.expandToFullSortKey(cr, sortKeyColumns, colocateColumnCount);
+            Tuple canonicalLower = expanded.getLowerBound();
+            // Strictly inside tabletRange: tablet lower < boundary < tablet upper.
+            boolean strictlyAboveLower = tabletRange.isMinimum()
+                    || tabletRange.getLowerBound().compareTo(canonicalLower) < 0
+                    || (tabletRange.getLowerBound().equals(canonicalLower) && !tabletRange.isLowerBoundIncluded());
+            boolean strictlyBelowUpper = tabletRange.isMaximum()
+                    || canonicalLower.compareTo(tabletRange.getUpperBound()) < 0;
+            if (strictlyAboveLower && strictlyBelowUpper) {
+                boundaries.add(canonicalLower);
+            }
+        }
+        return boundaries;
+    }
+
+    /**
+     * Converts the canonical-boundary list returned by {@link #computeForcedAlignmentBoundaries}
+     * into the per-new-tablet {@link TabletRange} list that the external boundaries
+     * {@code SplitTabletJobFactory.forExternalBoundaries} family of entries consumes
+     * (or, for colocate alignment, the checker's per-new-tablet PACK assignment path).
+     *
+     * <p>For an old tablet with range {@code [lower, upper)} and K-1 canonical boundaries
+     * {@code [b[0], ..., b[K-2]]} (strictly inside the old range, strictly increasing), the
+     * children tile the old range as:
+     * <pre>
+     *   child 0     : [lower, b[0])
+     *   child i ∈ (0, K-1) : [b[i-1], b[i])
+     *   child K-1   : [b[K-2], upper)  (preserves old upper-bound inclusion)
+     * </pre>
+     * Returns {@link Collections#emptyList()} when no boundary is supplied — caller treats this
+     * as "tablet already aligned, no split needed".
+     */
+    public static List<TabletRange> computeAlignedTabletRanges(Range<Tuple> tabletRange,
+                                                                List<Column> sortKeyColumns,
+                                                                List<ColocateRange> expectedRanges,
+                                                                int colocateColumnCount) {
+        List<Tuple> boundaries = computeForcedAlignmentBoundaries(
+                tabletRange, sortKeyColumns, expectedRanges, colocateColumnCount);
+        if (boundaries.isEmpty()) {
+            return Collections.emptyList();
+        }
+        List<TabletRange> result = new ArrayList<>(boundaries.size() + 1);
+        Tuple prevLower = tabletRange.isMinimum() ? null : tabletRange.getLowerBound();
+        boolean prevLowerInc = !tabletRange.isMinimum() && tabletRange.isLowerBoundIncluded();
+        for (Tuple boundary : boundaries) {
+            result.add(new TabletRange(Range.of(prevLower, boundary, prevLowerInc, false)));
+            prevLower = boundary;
+            prevLowerInc = true;
+        }
+        Tuple oldUpper = tabletRange.isMaximum() ? null : tabletRange.getUpperBound();
+        boolean oldUpperInc = !tabletRange.isMaximum() && tabletRange.isUpperBoundIncluded();
+        result.add(new TabletRange(Range.of(prevLower, oldUpper, prevLowerInc, oldUpperInc)));
+        return result;
     }
 
     /**
