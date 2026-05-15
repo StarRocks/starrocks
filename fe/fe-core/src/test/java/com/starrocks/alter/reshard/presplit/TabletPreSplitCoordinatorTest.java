@@ -315,7 +315,7 @@ public class TabletPreSplitCoordinatorTest {
                 () -> TabletPreSplitCoordinator.selectTabletCount(anyEstimates, 3));
     }
 
-    // ---- runPreSplit pipeline orchestration (B3) ----
+    // ---- runPreSplit pipeline orchestration ----
 
     private static final PreSplitPipeline.PreparedReshardJob FAKE_PREPARED_JOB =
             new PreSplitPipeline.PreparedReshardJob(new Object());

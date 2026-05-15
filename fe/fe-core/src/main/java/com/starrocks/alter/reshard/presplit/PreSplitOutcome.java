@@ -15,18 +15,26 @@
 package com.starrocks.alter.reshard.presplit;
 
 /**
- * Outcome of {@link TabletPreSplitCoordinator#maybeAct}. Sealed so callers
- * cannot silently miss a new case when later stages add planning/submission
- * outcomes.
+ * Outcome of {@link TabletPreSplitCoordinator}'s entry points. Sealed so
+ * callers cannot silently miss a new case when later stages add planning /
+ * submission outcomes.
  */
 public sealed interface PreSplitOutcome
-        permits PreSplitOutcome.Skipped, PreSplitOutcome.Eligible, PreSplitOutcome.Finished {
+        permits PreSplitOutcome.Skipped, PreSplitOutcome.Eligible,
+                PreSplitOutcome.Submitted, PreSplitOutcome.Finished {
 
     /** Eligibility check failed or a recoverable pipeline failure occurred; load proceeds against the original tablet. */
     record Skipped(SkipReason reason) implements PreSplitOutcome { }
 
     /** All eligibility checks passed. Returned by the eligibility-only entry point. */
     record Eligible() implements PreSplitOutcome { }
+
+    /**
+     * The reshard job was admitted to {@code TabletReshardJobMgr} and is
+     * running asynchronously. The reshard daemon will drive it through to
+     * FINISHED at its own pace; the load that submitted it does not wait.
+     */
+    record Submitted(PreSplitPipeline.PreparedReshardJob preparedJob) implements PreSplitOutcome { }
 
     /** Pre-split completed: the reshard job was submitted and reached the FINISHED state. */
     record Finished() implements PreSplitOutcome { }

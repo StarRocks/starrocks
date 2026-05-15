@@ -53,7 +53,7 @@ public final class TabletPreSplitCoordinator {
     }
 
     /**
-     * @param db                   table's database (carried through for the submission stage).
+     * @param database             table's database (carried through for the submission stage).
      * @param table                target table.
      * @param physicalPartitionId  load-target physical partition.
      * @param scanContext          integration-point scan context (used by the sampling stage).
@@ -61,8 +61,8 @@ public final class TabletPreSplitCoordinator {
      *                             per-path FE Config flag for the eligibility gate.
      */
     public static PreSplitOutcome maybeAct(
-            Database db, OlapTable table, long physicalPartitionId, ScanContext scanContext, LoadKind loadKind) {
-        Objects.requireNonNull(db, "db");
+            Database database, OlapTable table, long physicalPartitionId, ScanContext scanContext, LoadKind loadKind) {
+        Objects.requireNonNull(database, "database");
         Objects.requireNonNull(table, "table");
         Objects.requireNonNull(scanContext, "scanContext");
         Objects.requireNonNull(loadKind, "loadKind");
@@ -102,7 +102,7 @@ public final class TabletPreSplitCoordinator {
         return new PreSplitOutcome.Eligible();
     }
 
-    /** Build a {@code Skipped} outcome and bump the eligibility-skipped counter for the given reason. */
+    /** Build a {@code Skipped} outcome and record the eligibility-skipped counter for the given reason. */
     private static PreSplitOutcome.Skipped skipEligibility(SkipReason reason) {
         if (MetricRepo.hasInit) {
             MetricRepo.COUNTER_TABLET_PRE_SPLIT_ELIGIBILITY_SKIPPED
@@ -141,30 +141,33 @@ public final class TabletPreSplitCoordinator {
     }
 
     /**
-     * Run eligibility, then drive the pipeline through the three pre-split phases.
+     * Run eligibility, sample, plan, and admit the reshard job to
+     * {@link com.starrocks.alter.reshard.TabletReshardJobMgr}, then return
+     * immediately — the reshard daemon completes the split asynchronously.
+     *
+     * <p>This is the fire-and-forget entry point used by the integrating load
+     * path. The synchronous-await variant is {@link #runPreSplit}; that one
+     * cannot be used from inside the planner because the daemon's
+     * {@code TABLET_RESHARD} write-lock acquisition would deadlock with the
+     * planner's read-lock.
      *
      * <p>Failures are mapped to {@link PreSplitOutcome.Skipped} with a specific
      * {@link SkipReason} so the load proceeds against the original single tablet:
      * {@link SkipReason#TIMEOUT_PRE_SUBMIT}, {@link SkipReason#SAMPLE_FAILED},
      * {@link SkipReason#NO_USEFUL_CUTS}, {@link SkipReason#SUBMIT_FAILED}.
-     * On post-submit timeout the method throws
-     * {@link PreSplitPostSubmitTimeoutException} so the load executor's DML
-     * try/catch can abort the transaction — committing against stale tablet
-     * metadata is unsafe.
      *
      * @param activeComputeNodeCount compute nodes available to the load after
      *                               warehouse/blocklist filtering (passed to the
      *                               pipeline's internal tablet-count selector).
      */
-    public static PreSplitOutcome runPreSplit(
-            Database db, OlapTable table, long physicalPartitionId, ScanContext scanContext,
-            LoadKind loadKind, PreSplitPipeline pipeline, int activeComputeNodeCount)
-            throws PreSplitPostSubmitTimeoutException {
+    public static PreSplitOutcome submitAsynchronously(
+            Database database, OlapTable table, long physicalPartitionId, ScanContext scanContext,
+            LoadKind loadKind, PreSplitPipeline pipeline, int activeComputeNodeCount) {
         Objects.requireNonNull(pipeline, "pipeline");
         Preconditions.checkArgument(activeComputeNodeCount >= 1,
                 "activeComputeNodeCount must be >= 1, was %s", activeComputeNodeCount);
 
-        PreSplitOutcome eligibility = maybeAct(db, table, physicalPartitionId, scanContext, loadKind);
+        PreSplitOutcome eligibility = maybeAct(database, table, physicalPartitionId, scanContext, loadKind);
         if (!(eligibility instanceof PreSplitOutcome.Eligible)) {
             return eligibility;
         }
@@ -173,7 +176,6 @@ public final class TabletPreSplitCoordinator {
                 scanContext, table.getKeyColumnsInOrder(),
                 Config.tablet_pre_split_sample_byte_limit, /*seed*/ 0L);
         Duration preSubmitTimeout = Duration.ofSeconds(Config.tablet_pre_split_pre_submit_timeout_seconds);
-        Duration postSubmitTimeout = Duration.ofSeconds(Config.tablet_pre_split_post_submit_wait_seconds);
 
         Optional<PreSplitPipeline.PreparedReshardJob> prepared;
         long preSubmitStartMillis = System.currentTimeMillis();
@@ -208,20 +210,37 @@ public final class TabletPreSplitCoordinator {
                     table.getName(), submitFailure.getMessage());
             return new PreSplitOutcome.Skipped(SkipReason.SUBMIT_FAILED);
         }
+        return new PreSplitOutcome.Submitted(preparedJob);
+    }
 
+    /**
+     * Submit pre-split and synchronously wait for FINISHED. Convenience entry
+     * point retained for callers that want the full lifecycle (e.g. tests, or
+     * future synchronous integrations). The integrating load path uses
+     * {@link #submitAsynchronously} instead — running pre-split synchronously
+     * while the planner holds metadata locks deadlocks with the reshard
+     * daemon's table-state-transition write lock.
+     */
+    public static PreSplitOutcome runPreSplit(
+            Database database, OlapTable table, long physicalPartitionId, ScanContext scanContext,
+            LoadKind loadKind, PreSplitPipeline pipeline, int activeComputeNodeCount)
+            throws PreSplitPostSubmitTimeoutException {
+        PreSplitOutcome outcome = submitAsynchronously(database, table, physicalPartitionId, scanContext,
+                loadKind, pipeline, activeComputeNodeCount);
+        // submitAsynchronously only emits Skipped or Submitted — Finished is reached after the await below.
+        if (!(outcome instanceof PreSplitOutcome.Submitted submitted)) {
+            return outcome;
+        }
+        Duration postSubmitTimeout = Duration.ofSeconds(Config.tablet_pre_split_post_submit_wait_seconds);
         long postSubmitStartMillis = System.currentTimeMillis();
         try {
-            pipeline.awaitFinished(preparedJob, postSubmitTimeout);
+            pipeline.awaitFinished(submitted.preparedJob(), postSubmitTimeout);
         } catch (TimeoutException timeout) {
-            // Any post-submit timeout — typed or bare — means we never confirmed FINISHED;
-            // committing against stale tablet metadata is unsafe. Record the hard-cap event
-            // and propagate. PreSplitPostSubmitTimeoutException.from normalizes bare
-            // timeouts into the dedicated type so the load executor's catch matches.
             if (MetricRepo.hasInit) {
                 MetricRepo.COUNTER_TABLET_PRE_SPLIT_POST_SUBMIT_HARD_CAP.increase(1L);
                 MetricRepo.COUNTER_TABLET_PRE_SPLIT_LOAD_ABORT.increase(1L);
             }
-            LOG.warn("Pre-split post-submit timeout for table {} after {}s — load transaction will abort: {}",
+            LOG.warn("Pre-split post-submit timeout for table {} after {}s: {}",
                     table.getName(), postSubmitTimeout.toSeconds(), timeout.getMessage());
             throw PreSplitPostSubmitTimeoutException.from(timeout);
         } catch (StarRocksException waitFailure) {
