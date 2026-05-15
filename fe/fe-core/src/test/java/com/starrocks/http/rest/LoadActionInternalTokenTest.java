@@ -16,9 +16,13 @@ package com.starrocks.http.rest;
 
 import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.common.DdlException;
+import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseRequest;
+import com.starrocks.http.BaseResponse;
+import com.starrocks.http.HttpConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.NodeMgr;
+import io.netty.channel.ChannelHandlerContext;
 import io.netty.handler.codec.http.DefaultHttpHeaders;
 import io.netty.handler.codec.http.HttpHeaders;
 import io.netty.handler.codec.http.HttpRequest;
@@ -27,6 +31,7 @@ import mockit.Mocked;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -126,5 +131,54 @@ public class LoadActionInternalTokenTest {
         };
         BaseRequest req = stubRequest("any-token", "_statistics_", "rejected_records");
         assertFalse(newAction().tryInternalTokenBypass(req, null));
+    }
+
+    /**
+     * Test seam: capture the executeWithoutPassword invocation so the success
+     * path of tryInternalTokenBypass can be exercised without standing up the
+     * full HTTP server. The override deliberately does nothing -- we only want
+     * to assert that the bypass dispatched here rather than falling through to
+     * Basic auth.
+     */
+    private static class CapturingLoadAction extends LoadAction {
+        boolean invoked = false;
+        CapturingLoadAction() {
+            super((ActionController) null);
+        }
+        @Override
+        public void executeWithoutPassword(BaseRequest request, BaseResponse response) {
+            invoked = true;
+        }
+    }
+
+    @Test
+    public void validTokenDispatchesAsRoot(@Mocked GlobalStateMgr globalStateMgr,
+                                           @Mocked NodeMgr nodeMgr) throws DdlException, AccessDeniedException {
+        // Success branch: token matches, table matches, daemon is dispatched
+        // as ROOT through executeWithoutPassword. Verifies the inner ctx
+        // setup compiles end-to-end (setCurrentUserIdentity, bindScope) and
+        // that tryInternalTokenBypass returns true so execute() short-
+        // circuits before super.execute() runs the Basic-auth pipeline.
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState();
+                result = globalStateMgr;
+                globalStateMgr.getNodeMgr();
+                result = nodeMgr;
+                nodeMgr.getToken();
+                result = "cluster-token";
+            }
+        };
+        BaseRequest req = stubRequest("cluster-token", "_statistics_", "rejected_records");
+        // tryInternalTokenBypass calls request.getConnectContext() and then
+        // request.getContext() (for setNettyChannel) -- stub both so the ctx
+        // setup completes without NPE.
+        HttpConnectContext httpCtx = new HttpConnectContext();
+        when(req.getConnectContext()).thenReturn(httpCtx);
+        when(req.getContext()).thenReturn(mock(ChannelHandlerContext.class));
+
+        CapturingLoadAction action = new CapturingLoadAction();
+        assertTrue(action.tryInternalTokenBypass(req, mock(BaseResponse.class)));
+        assertTrue(action.invoked, "executeWithoutPassword should have been called on the success branch");
     }
 }

@@ -1149,7 +1149,11 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     // for the HTTP entry; this thrift entry mirrors it. Returns false
     // for any other table or any other token value -- never opens up a
     // privilege escalation path for non-system tables.
-    private boolean isAuthorizedByInternalToken(String token, String db, String tbl) {
+    //
+    // Package-private for testability (FrontendServiceImplTest exercises
+    // each fall-through branch directly rather than through the full
+    // requestMergeCommit RPC).
+    boolean isAuthorizedByInternalToken(String token, String db, String tbl) {
         if (token == null || token.isEmpty()) {
             return false;
         }
