@@ -1,0 +1,75 @@
+// JsxCloserNeedsBlankLine.tengo
+//
+// Detect </Tabs>, </TabItem>, and </details> closing tags that are not
+// preceded by a blank line.
+//
+// Docusaurus MDX requires a blank line before these closers. Without it, the
+// MDX parser may treat the closing tag as a continuation of a preceding list
+// item, paragraph, or admonition block, producing a parse error such as:
+//   "Expected the closing tag </TabItem> either after the end of `listItem`"
+//
+// The translator preserves blank lines from the source, so a missing blank
+// line in the source propagates into translated output and breaks the build.
+//
+// Fix: add a blank line before the closing tag:
+//   Bad:
+//     - Last list item
+//     </TabItem>
+//
+//   Good:
+//     - Last list item
+//
+//     </TabItem>
+//
+// Not flagged:
+//   - A closing tag immediately after another closing tag (</TabItem>\n</Tabs>
+//     is valid without a blank line between them).
+//   - A closing tag immediately after an opening tag (empty block).
+//
+// Code regions excluded from flagging:
+//   - Backtick fenced code blocks:  ```[lang]\n...\n```
+//   - Tilde fenced code blocks:     ~~~[lang]\n...\n~~~
+
+text := import("text")
+
+code_regions := []
+
+for groups in text.re_find("(?s)```[^\n]*\n.*?\n[ \t]*```[ \t]*(?:\n|$)", scope, -1) {
+    m := groups[0]
+    code_regions = append(code_regions, [m.begin, m.end])
+}
+
+for groups in text.re_find("(?s)~~~[^\n]*\n.*?\n[ \t]*~~~[ \t]*(?:\n|$)", scope, -1) {
+    m := groups[0]
+    code_regions = append(code_regions, [m.begin, m.end])
+}
+
+// Capture the preceding line and the closer separately so we can inspect the
+// preceding line content and skip false positives.
+matches := []
+for groups in text.re_find(`([^\n]*)\n([ \t]*</(Tabs|TabItem|details)[ \t]*>)`, scope, -1) {
+    preceding := groups[1]
+    closer    := groups[2]
+
+    preceding_text := scope[preceding.begin:preceding.end]
+    trimmed := text.trim_space(preceding_text)
+
+    // No blank line needed when the preceding line is:
+    //   - blank (closer is already properly separated)
+    //   - another JSX closer (</TabItem> directly before </Tabs> is fine)
+    //   - a JSX opener (empty block like <details></details> is unusual but valid)
+    if trimmed == "" || text.has_prefix(trimmed, "</") || text.has_prefix(trimmed, "<") {
+        continue
+    }
+
+    inside := false
+    for r in code_regions {
+        if closer.begin >= r[0] && closer.begin < r[1] {
+            inside = true
+            break
+        }
+    }
+    if !inside {
+        matches = append(matches, {begin: closer.begin, end: closer.end})
+    }
+}
