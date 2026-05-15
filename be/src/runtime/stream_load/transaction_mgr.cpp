@@ -33,7 +33,6 @@
 #include "common/logging.h"
 #include "common/util/debug_util.h"
 #include "common/util/misc.h"
-#include "common/utils.h"
 #include "gen_cpp/FrontendService.h"
 #include "gen_cpp/FrontendService_types.h"
 #include "gen_cpp/HeartbeatService_types.h"

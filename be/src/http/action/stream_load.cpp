@@ -46,6 +46,7 @@
 #include <rapidjson/prettywriter.h>
 #include <thrift/protocol/TDebugProtocol.h>
 
+#include "base/auth/auth_info.h"
 #include "base/string/string_parser.hpp"
 #include "base/time/time.h"
 #include "base/uid_util.h"
@@ -56,7 +57,6 @@
 #include "common/process_exit.h"
 #include "common/system/master_info.h"
 #include "common/util/debug_util.h"
-#include "common/utils.h"
 #include "gen_cpp/FrontendService.h"
 #include "gen_cpp/FrontendService_types.h"
 #include "gen_cpp/HeartbeatService_types.h"

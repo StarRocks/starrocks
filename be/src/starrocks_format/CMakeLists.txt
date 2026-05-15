@@ -35,7 +35,6 @@ set(STARROCKS_LIBS
     Formats
     orc
     Gutil
-    HttpClient
     HttpCore
     IO
     Serde

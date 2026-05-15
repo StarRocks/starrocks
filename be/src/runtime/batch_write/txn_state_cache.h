@@ -21,11 +21,11 @@
 #include <utility>
 #include <vector>
 
+#include "base/auth/auth_info.h"
 #include "base/concurrency/bthread_shared_mutex.h"
 #include "base/concurrency/countdown_latch.h"
 #include "base/testutil/sync_point.h"
 #include "common/thread/threadpool.h"
-#include "common/utils.h"
 #include "gen_cpp/Status_types.h"
 #include "util/dynamic_cache.h"
 

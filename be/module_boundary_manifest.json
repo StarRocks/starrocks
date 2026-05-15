@@ -96,6 +96,7 @@
         "be/src/http/http_parser.*",
         "be/src/http/http_channel.*",
         "be/src/http/http_stream_channel.*",
+        "be/src/http/http_client.*",
         "be/src/http/ev_http_server.*"
       ],
       "allowed_include_prefixes": ["http/", "common/", "base/", "gutil/", "gen_cpp/"],
