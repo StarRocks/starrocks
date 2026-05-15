@@ -17,6 +17,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.system.SystemId;
 import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.type.DateType;
+import com.starrocks.type.IntegerType;
 import com.starrocks.type.TypeFactory;
 
 import static com.starrocks.catalog.system.SystemTable.NAME_CHAR_LEN;
@@ -38,6 +39,14 @@ public class RoutinesSystemTable {
                         .column("ROUTINE_SCHEMA", TypeFactory.createVarcharType(NAME_CHAR_LEN))
                         .column("ROUTINE_NAME", TypeFactory.createVarcharType(NAME_CHAR_LEN))
                         .column("ROUTINE_TYPE", TypeFactory.createVarcharType(NAME_CHAR_LEN))
+                        .column("DATA_TYPE", TypeFactory.createVarcharType(NAME_CHAR_LEN))
+                        .column("CHARACTER_MAXIMUM_LENGTH", IntegerType.BIGINT)
+                        .column("CHARACTER_OCTET_LENGTH", IntegerType.BIGINT)
+                        .column("NUMERIC_PRECISION", IntegerType.BIGINT)
+                        .column("NUMERIC_SCALE", IntegerType.BIGINT)
+                        .column("DATETIME_PRECISION", IntegerType.BIGINT)
+                        .column("CHARACTER_SET_NAME", TypeFactory.createVarcharType(NAME_CHAR_LEN))
+                        .column("COLLATION_NAME", TypeFactory.createVarcharType(NAME_CHAR_LEN))
                         .column("DTD_IDENTIFIER", TypeFactory.createVarcharType(NAME_CHAR_LEN))
                         .column("ROUTINE_BODY", TypeFactory.createVarcharType(NAME_CHAR_LEN))
                         .column("ROUTINE_DEFINITION", TypeFactory.createVarcharType(NAME_CHAR_LEN))
