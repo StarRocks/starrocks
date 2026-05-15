@@ -36,6 +36,12 @@ ice_hadoop_db1
 ice_hadoop_db2
 information_schema
 -- !result
+select SCHEMA_NAME, DEFAULT_ENCRYPTION from ice_hadoop${uuid0}.information_schema.schemata;
+-- result:
+ice_hadoop_db1	NO
+ice_hadoop_db2	NO
+information_schema	NO
+-- !result
 select TABLE_SCHEMA, TABLE_NAME from ice_hadoop${uuid0}.information_schema.tables;
 -- result:
 ice_hadoop_db1	test
