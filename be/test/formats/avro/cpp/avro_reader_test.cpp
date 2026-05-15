@@ -928,4 +928,90 @@ TEST_F(AvroReaderTest, test_count_avro_blocks_split) {
     ASSERT_EQ(50, batch);
 }
 
+// Direct path with split boundaries: open multiblock.avro with split_offset=200,
+// split_length=168 (covers block 2 only).  Validate the direct path is active
+// and returns exactly the 10 records from block 2 (records 10..19).
+TEST_F(AvroReaderTest, test_direct_path_split) {
+    const std::string filename = "multiblock.avro";
+    // Same layout as test_split_seek_to_second_block:
+    // split_offset=200 (inside block 1 data), split_length=168 → split_end=368.
+    // Sync scans to block 2 (records 10..19).  pastSync(368) stops after block 2.
+    std::vector<SlotDescriptor> descs;
+    std::vector<SlotDescriptor*> slot_descs;
+    auto reader = create_split_reader(filename, 200, 168, &descs, &slot_descs);
+    ASSERT_TRUE(reader->TEST_use_direct_path());
+
+    auto rows = drain_rows(*reader, slot_descs);
+    ASSERT_EQ(10, rows.size());
+    for (int i = 0; i < 10; ++i) {
+        ASSERT_EQ(10 + i, rows[i].first);
+    }
+}
+
+// Direct path disabled: verify fallback to GenericDatum path produces correct
+// results.  allow_direct_path=false forces the old code path.
+TEST_F(AvroReaderTest, test_direct_path_disabled_fallback_to_generic) {
+    const std::string filename = "multiblock.avro";
+
+    auto schema_reader = create_avro_reader(filename);
+    std::vector<SlotDescriptor> descs;
+    ASSERT_OK(schema_reader->get_schema(&descs));
+
+    std::vector<SlotDescriptor*> slot_descs;
+    for (auto& d : descs) slot_descs.push_back(&d);
+    create_column_readers(slot_descs, _timezone, false);
+
+    auto file_or = FileSystem::Default()->new_random_access_file(_test_exec_dir + filename);
+    ASSERT_OK(file_or.status());
+    auto avro_reader = std::make_unique<AvroReader>();
+    ASSERT_OK(avro_reader->init(std::make_unique<AvroBufferInputStream>(
+                                        std::move(file_or.value()), config::avro_reader_buffer_size_bytes, _counter),
+                                filename, _state.get(), _counter, &slot_descs, &_column_readers,
+                                /*col_not_found_as_null=*/false, nullptr, 0, 0, 0, "",
+                                /*invalid_as_null=*/false, /*allow_direct_path=*/false));
+    ASSERT_FALSE(avro_reader->TEST_use_direct_path());
+
+    auto chunk = create_src_chunk(slot_descs);
+    ASSERT_OK(avro_reader->read_chunk(chunk, 32));
+    materialize_src_chunk_adaptive_nullable_column(chunk);
+    ASSERT_GT(chunk->num_rows(), 0);
+    ASSERT_EQ("[0, 'name_0']", chunk->debug_row(0));
+}
+
+// Direct path error recovery across multiple rows.
+// Uses direct_reader_matrix.avro (2 rows), reads enum_as_string as VARCHAR(3).
+// Row 0: enum_as_string = "BLUE" (4 chars > 3 → DataQualityError → drained + rolled back)
+// Row 1: enum_as_string = "RED"  (3 chars ≤ 3 → OK), nullable_int = 7 → OK
+// Expect 1 successful row and 1 filtered row.
+TEST_F(AvroReaderTest, test_direct_path_error_recovery_multi_row) {
+    const std::string filename = "direct_reader_matrix.avro";
+
+    std::vector<SlotDescriptor> descs;
+    descs.emplace_back(1, "bool_from_int", TypeDescriptor::from_logical_type(TYPE_BOOLEAN));
+    descs.emplace_back(7, "enum_as_string", TypeDescriptor::create_varchar_type(3));
+    descs.emplace_back(8, "nullable_int", TypeDescriptor::from_logical_type(TYPE_INT));
+    std::vector<SlotDescriptor*> slot_descs;
+    for (auto& desc : descs) {
+        slot_descs.emplace_back(&desc);
+    }
+    create_column_readers(slot_descs, _timezone, false);
+
+    auto file_or = FileSystem::Default()->new_random_access_file(_test_exec_dir + filename);
+    ASSERT_OK(file_or.status());
+    auto avro_reader = std::make_unique<AvroReader>();
+    ASSERT_OK(avro_reader->init(std::make_unique<AvroBufferInputStream>(
+                                        std::move(file_or.value()), config::avro_reader_buffer_size_bytes, _counter),
+                                filename, _state.get(), _counter, &slot_descs, &_column_readers,
+                                /*col_not_found_as_null=*/false));
+    ASSERT_TRUE(avro_reader->TEST_use_direct_path());
+
+    auto chunk = create_src_chunk(slot_descs);
+    ASSERT_OK(avro_reader->read_chunk(chunk, 8));
+    materialize_src_chunk_adaptive_nullable_column(chunk);
+
+    ASSERT_EQ(1, chunk->num_rows());
+    ASSERT_EQ("[0, 'RED', 7]", chunk->debug_row(0));
+    ASSERT_EQ(1, _counter->num_rows_filtered);
+}
+
 } // namespace starrocks

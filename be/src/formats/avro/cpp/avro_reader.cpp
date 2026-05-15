@@ -16,6 +16,7 @@
 
 #include <fmt/format.h>
 #include <rapidjson/document.h>
+#include <limits>
 #include <rapidjson/stringbuffer.h>
 #include <rapidjson/writer.h>
 
