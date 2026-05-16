@@ -1,12 +1,9 @@
 # Temporary allowlist for direct common/config.h includes during the forward-header migration.
 # Paths are relative to be/. Remove entries as files switch to config_<domain>_fwd.h.
 
-src/common/config.cpp
-src/http/action/update_config_action.cpp
-
 src/agent/agent_server.cpp
+src/common/config.cpp
 src/fs/key_cache.cpp
 src/runtime/exec_env.cpp
-src/service/staros_worker.cpp
 src/storage/lake/tablet_warmup_manager.cpp
 test/common/path/path_util_test.cpp

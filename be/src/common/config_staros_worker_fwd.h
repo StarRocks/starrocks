@@ -106,6 +106,8 @@ CONF_mInt32(starlet_filesystem_instance_cache_capacity, "10000");
 
 CONF_mInt32(starlet_filesystem_instance_cache_ttl_sec, "86400");
 
+CONF_mInt32(tablet_warmup_max_threads, "4");
+
 #endif
 
 } // namespace starrocks::config

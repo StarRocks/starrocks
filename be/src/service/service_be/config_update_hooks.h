@@ -12,23 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "runtime/command_executor.h"
-
-#include <gtest/gtest.h>
-
-#include <string>
+#pragma once
 
 namespace starrocks {
 
-TEST(CommandExecutorTest, not_support) {
-    std::string result;
-    EXPECT_TRUE(execute_command("set_config_11", "{}", &result).is_not_supported());
-}
+class ExecEnv;
 
-TEST(CommandExecutorTest, set_config_rejects_invalid_json_shape) {
-    std::string result;
-    auto st = execute_command("set_config", R"({"name":1,"value":"x"})", &result);
-    EXPECT_TRUE(st.is_invalid_argument()) << st;
-}
+void register_config_update_hooks(ExecEnv* exec_env);
 
 } // namespace starrocks

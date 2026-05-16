@@ -12,8 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "http/action/update_config_action.h"
-
 #include <gtest/gtest.h>
 
 #include "agent/agent_server.h"
@@ -25,27 +23,33 @@
 #include "cache/disk_cache/test_cache_utils.h"
 #include "common/config_cache_fwd.h"
 #include "common/config_lake_fwd.h"
+#include "common/config_update_registry.h"
 #include "common/system/cpu_info.h"
 #include "common/util/bthreads/executor.h"
 #include "fs/fs_util.h"
 #include "gen_cpp/Types_types.h"
 #include "runtime/exec_env.h"
+#include "service/service_be/config_update_hooks.h"
 #include "storage/persistent_index_load_executor.h"
 #include "storage/storage_engine.h"
 #include "storage/update_manager.h"
 
 namespace starrocks {
 
-class UpdateConfigActionTest : public testing::Test {
+class ConfigUpdateHooksTest : public testing::Test {
 public:
-    UpdateConfigActionTest() = default;
-    ~UpdateConfigActionTest() override = default;
+    ConfigUpdateHooksTest() = default;
+    ~ConfigUpdateHooksTest() override = default;
 
-    void SetUp() override {}
-    void TearDown() override {}
+    void SetUp() override {
+        ConfigUpdateRegistry::instance()->TEST_reset();
+        register_config_update_hooks(ExecEnv::GetInstance());
+        ConfigUpdateRegistry::instance()->set_ready();
+    }
+    void TearDown() override { ConfigUpdateRegistry::instance()->TEST_reset(); }
 };
 
-TEST_F(UpdateConfigActionTest, update_datacache_config) {
+TEST_F(ConfigUpdateHooksTest, update_datacache_config) {
     SCOPED_UPDATE(bool, config::enable_datacache_disk_auto_adjust, false);
     const std::string cache_dir = "./block_cache_for_update_config";
     ASSERT_TRUE(fs::create_directories(cache_dir).ok());
@@ -56,13 +60,11 @@ TEST_F(UpdateConfigActionTest, update_datacache_config) {
     ASSERT_OK(cache->init(options));
     DataCache::GetInstance()->set_local_disk_cache(cache);
 
-    UpdateConfigAction action(ExecEnv::GetInstance());
-
     // update disk size
-    ASSERT_ERROR(action.update_config("datacache_disk_size", "-200"));
-    ASSERT_OK(action.update_config("datacache_disk_size", "100000000"));
+    ASSERT_ERROR(ConfigUpdateRegistry::instance()->update_config("datacache_disk_size", "-200"));
+    ASSERT_OK(ConfigUpdateRegistry::instance()->update_config("datacache_disk_size", "100000000"));
     // update inline cache limit
-    ASSERT_OK(action.update_config("datacache_inline_item_count_limit", "260344"));
+    ASSERT_OK(ConfigUpdateRegistry::instance()->update_config("datacache_inline_item_count_limit", "260344"));
 
     std::vector<DirSpace> spaces;
     cache->disk_spaces(&spaces);
@@ -72,64 +74,55 @@ TEST_F(UpdateConfigActionTest, update_datacache_config) {
     fs::remove_all(cache_dir).ok();
 }
 
-TEST_F(UpdateConfigActionTest, test_update_pindex_load_thread_pool_num_max) {
-    UpdateConfigAction action(ExecEnv::GetInstance());
-
-    ASSERT_OK(action.update_config("pindex_load_thread_pool_num_max", "16"));
+TEST_F(ConfigUpdateHooksTest, test_update_pindex_load_thread_pool_num_max) {
+    ASSERT_OK(ConfigUpdateRegistry::instance()->update_config("pindex_load_thread_pool_num_max", "16"));
 
     auto* load_pool = StorageEngine::instance()->update_manager()->get_pindex_load_executor()->TEST_get_load_pool();
     ASSERT_EQ(16, load_pool->max_threads());
 }
 
-TEST_F(UpdateConfigActionTest, test_update_number_tablet_writer_threads) {
-    UpdateConfigAction action(ExecEnv::GetInstance());
+TEST_F(ConfigUpdateHooksTest, test_update_number_tablet_writer_threads) {
     auto* executor =
             static_cast<bthreads::ThreadPoolExecutor*>(StorageEngine::instance()->async_delta_writer_executor());
     auto* pool = executor->get_thread_pool();
 
     {
-        auto st = action.update_config("number_tablet_writer_threads", "8");
+        auto st = ConfigUpdateRegistry::instance()->update_config("number_tablet_writer_threads", "8");
         CHECK_OK(st);
         ASSERT_EQ(8, pool->max_threads());
     }
 
     {
-        auto st = action.update_config("number_tablet_writer_threads", "0");
+        auto st = ConfigUpdateRegistry::instance()->update_config("number_tablet_writer_threads", "0");
         CHECK_OK(st);
         ASSERT_EQ(CpuInfo::num_cores() / 2, pool->max_threads());
     }
 }
 
-TEST_F(UpdateConfigActionTest, test_update_transaction_publish_version_worker_count) {
-    UpdateConfigAction action(ExecEnv::GetInstance());
-
-    auto st = action.update_config("transaction_publish_version_worker_count", "8");
+TEST_F(ConfigUpdateHooksTest, test_update_transaction_publish_version_worker_count) {
+    auto st = ConfigUpdateRegistry::instance()->update_config("transaction_publish_version_worker_count", "8");
     CHECK_OK(st);
     ASSERT_EQ(8, ExecEnv::GetInstance()->put_aggregate_metadata_thread_pool()->max_threads());
 }
 
-TEST_F(UpdateConfigActionTest, test_update_tablet_meta_info_worker_count) {
-    UpdateConfigAction action(ExecEnv::GetInstance());
-
+TEST_F(ConfigUpdateHooksTest, test_update_tablet_meta_info_worker_count) {
     auto* thread_pool = ExecEnv::GetInstance()->agent_server()->get_thread_pool(TTaskType::UPDATE_TABLET_META_INFO);
     ASSERT_NE(nullptr, thread_pool);
 
-    auto st = action.update_config("update_tablet_meta_info_worker_count", "4");
+    auto st = ConfigUpdateRegistry::instance()->update_config("update_tablet_meta_info_worker_count", "4");
     CHECK_OK(st);
     ASSERT_EQ(4, thread_pool->max_threads());
 
-    st = action.update_config("update_tablet_meta_info_worker_count", "0");
+    st = ConfigUpdateRegistry::instance()->update_config("update_tablet_meta_info_worker_count", "0");
     CHECK_OK(st);
     ASSERT_EQ(1, thread_pool->max_threads());
 }
 
-TEST_F(UpdateConfigActionTest, test_update_parallel_clone_task_per_path) {
-    UpdateConfigAction action(ExecEnv::GetInstance());
-
+TEST_F(ConfigUpdateHooksTest, test_update_parallel_clone_task_per_path) {
     auto* thread_pool = ExecEnv::GetInstance()->agent_server()->get_thread_pool(TTaskType::CLONE);
     ASSERT_NE(nullptr, thread_pool);
 
-    auto st = action.update_config("parallel_clone_task_per_path", "4");
+    auto st = ConfigUpdateRegistry::instance()->update_config("parallel_clone_task_per_path", "4");
     CHECK_OK(st);
 
     int expected_max_threads = static_cast<int>(ExecEnv::GetInstance()->store_paths().size()) * 4;
@@ -137,9 +130,7 @@ TEST_F(UpdateConfigActionTest, test_update_parallel_clone_task_per_path) {
     ASSERT_EQ(expected_max_threads, thread_pool->max_threads());
 }
 
-TEST_F(UpdateConfigActionTest, test_update_parallel_clone_task_per_path_with_missing_clone_pool) {
-    UpdateConfigAction action(ExecEnv::GetInstance());
-
+TEST_F(ConfigUpdateHooksTest, test_update_parallel_clone_task_per_path_with_missing_clone_pool) {
     SyncPoint::GetInstance()->SetCallBack("AgentServer::Impl::get_thread_pool:1",
                                           [](void* arg) { *(ThreadPool**)arg = nullptr; });
     SyncPoint::GetInstance()->EnableProcessing();
@@ -148,23 +139,21 @@ TEST_F(UpdateConfigActionTest, test_update_parallel_clone_task_per_path_with_mis
         SyncPoint::GetInstance()->DisableProcessing();
     });
 
-    auto st = action.update_config("parallel_clone_task_per_path", "4");
+    auto st = ConfigUpdateRegistry::instance()->update_config("parallel_clone_task_per_path", "4");
     CHECK_OK(st);
 }
 
-TEST_F(UpdateConfigActionTest, test_update_lake_metadata_fetch_thread_count) {
-    UpdateConfigAction action(ExecEnv::GetInstance());
-
+TEST_F(ConfigUpdateHooksTest, test_update_lake_metadata_fetch_thread_count) {
     auto* thread_pool = ExecEnv::GetInstance()->lake_metadata_fetch_thread_pool();
     ASSERT_NE(nullptr, thread_pool);
     ASSERT_EQ(std::max(1, config::lake_metadata_fetch_thread_count), thread_pool->max_threads());
 
-    auto st = action.update_config("lake_metadata_fetch_thread_count", "8");
+    auto st = ConfigUpdateRegistry::instance()->update_config("lake_metadata_fetch_thread_count", "8");
     CHECK_OK(st);
     ASSERT_EQ(8, thread_pool->max_threads());
 
     // Verify clamped to at least 1
-    st = action.update_config("lake_metadata_fetch_thread_count", "0");
+    st = ConfigUpdateRegistry::instance()->update_config("lake_metadata_fetch_thread_count", "0");
     CHECK_OK(st);
     ASSERT_EQ(1, thread_pool->max_threads());
 }

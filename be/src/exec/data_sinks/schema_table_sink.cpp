@@ -21,6 +21,7 @@
 #include "base/utility/defer_op.h"
 #include "column/chunk.h"
 #include "common/brpc/brpc_stub_cache.h"
+#include "common/config_update_registry.h"
 #include "common/configbase.h"
 #include "common/runtime_profile.h"
 #include "common/system/master_info.h"
@@ -30,7 +31,6 @@
 #include "exprs/expr_executor.h"
 #include "exprs/expr_factory.h"
 #include "gutil/strings/substitute.h"
-#include "http/action/update_config_action.h"
 #include "runtime/runtime_state.h"
 #include "runtime/service_contexts.h"
 #include "types/datum.h"
@@ -111,11 +111,6 @@ static Status write_be_configs_table(const StarRocksNodesInfo& nodes_info, BrpcS
     if (columns.size() < 3) {
         return Status::InternalError("write be_configs table should have at least 3 columns");
     }
-    auto update_config = UpdateConfigAction::instance();
-    if (update_config == nullptr) {
-        LOG(WARNING) << "write_be_configs_table ignored: UpdateConfigAction is not inited";
-        return Status::OK();
-    }
     Status ret;
     for (size_t i = 0; i < columns[0]->size(); ++i) {
         int64_t be_id = columns[0]->get(i).get_int64();
@@ -127,7 +122,7 @@ static Status write_be_configs_table(const StarRocksNodesInfo& nodes_info, BrpcS
             LOG(INFO) << strings::Substitute("set_config ignored: be_id=-1 name:$0 value:$1", name, value);
             continue;
         } else if (self_be_id == be_id) {
-            s = update_config->update_config(name, value);
+            s = ConfigUpdateRegistry::instance()->update_config(name, value);
             mode = "local";
         } else {
             s = set_config_remote(nodes_info, brpc_stub_cache, be_id, name, value);

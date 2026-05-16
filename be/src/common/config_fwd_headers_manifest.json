@@ -647,7 +647,8 @@
         "starlet_star_cache_disk_size_percent",
         "starlet_star_cache_mem_size_bytes",
         "starlet_star_cache_mem_size_percent",
-        "starlet_use_star_cache"
+        "starlet_use_star_cache",
+        "tablet_warmup_max_threads"
       ]
     },
     {
