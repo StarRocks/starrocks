@@ -31,7 +31,7 @@
 #include "common/config_ingest_fwd.h"
 #include "common/config_lake_fwd.h"
 #include "common/logging.h"
-#include "exec/pipeline/scan/morsel.h"
+#include "exec/pipeline/scan/scan_split_context.h"
 #include "storage/chunk_helper.h"
 #include "storage/lake/tablet.h"
 #include "storage/lake/tablet_manager.h"

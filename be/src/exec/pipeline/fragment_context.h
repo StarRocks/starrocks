@@ -27,7 +27,7 @@
 #include "exec/pipeline/pipeline.h"
 #include "exec/pipeline/pipeline_fwd.h"
 #include "exec/pipeline/runtime_filter_types.h"
-#include "exec/pipeline/scan/morsel.h"
+#include "exec/pipeline/scan/morsel_fwd.h"
 #include "exec/query_cache/cache_param.h"
 #include "gen_cpp/FrontendService.h"
 #include "gen_cpp/HeartbeatService.h"

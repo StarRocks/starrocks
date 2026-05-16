@@ -32,6 +32,8 @@
 #include "exec/pipeline/pipeline_driver_executor.h"
 #include "exec/pipeline/pipeline_metrics.h"
 #include "exec/pipeline/query_context.h"
+#include "exec/pipeline/scan/bucket_sequence_morsel_queue.h"
+#include "exec/pipeline/scan/morsel_queue.h"
 #include "exec/pipeline/scan/olap_scan_operator.h"
 #include "exec/pipeline/scan/scan_operator.h"
 #include "exec/pipeline/schedule/timeout_tasks.h"

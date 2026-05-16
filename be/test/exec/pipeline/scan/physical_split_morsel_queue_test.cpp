@@ -14,7 +14,8 @@
 
 #include <gtest/gtest.h>
 
-#include "exec/pipeline/scan/morsel.h"
+#include "exec/pipeline/scan/scan_morsel.h"
+#include "exec/pipeline/scan/split_morsel_queue.h"
 #include "gen_cpp/InternalService_types.h"
 #include "storage/lake/tablet.h"
 

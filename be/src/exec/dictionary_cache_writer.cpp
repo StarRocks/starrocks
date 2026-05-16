@@ -15,6 +15,7 @@
 #include "exec/dictionary_cache_writer.h"
 
 #include "base/compression/block_compression.h"
+#include "base/string/faststring.h"
 #include "common/brpc/brpc_stub_cache.h"
 #include "common/brpc_helper.h"
 #include "common/config_exec_flow_fwd.h"

@@ -15,25 +15,20 @@
 #pragma once
 
 #include <memory>
-#include <utility>
-#include <vector>
-
-#include "exec/pipeline/scan/scan_morsel.h"
 
 namespace starrocks::pipeline {
-class DriverSource;
-using DriverSourcePtr = std::unique_ptr<DriverSource>;
-using DriverSources = std::vector<DriverSourcePtr>;
-class DriverSource {
+
+class ScanSplitContext {
 public:
-    DriverSource(Morsels morsels, int32_t source_id) : _morsels(std::move(morsels)), _source_id(source_id) {}
+    virtual ~ScanSplitContext() = default;
 
-    const Morsels& get_morsels() const { return _morsels; }
-
-    int32_t get_source_id() const { return _source_id; }
+    void set_last_split(bool v) { _is_last_split = v; }
+    bool is_last_split() const { return _is_last_split; }
 
 private:
-    Morsels _morsels;
-    int32_t _source_id;
+    bool _is_last_split = false;
 };
+
+using ScanSplitContextPtr = std::unique_ptr<ScanSplitContext>;
+
 } // namespace starrocks::pipeline

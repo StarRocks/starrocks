@@ -21,7 +21,7 @@
 #include "common/config_exec_fwd.h"
 #include "common/config_metrics_fwd.h"
 #include "exec/exec_factory.h"
-#include "exec/pipeline/scan/morsel.h"
+#include "exec/pipeline/scan/morsel_queue_factory.h"
 #include "gen_cpp/PlanNodes_types.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/exec_env.h"

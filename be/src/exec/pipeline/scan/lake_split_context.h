@@ -15,25 +15,21 @@
 #pragma once
 
 #include <memory>
-#include <utility>
-#include <vector>
 
-#include "exec/pipeline/scan/scan_morsel.h"
+#include "exec/pipeline/scan/scan_split_context.h"
+#include "storage/rowset/rowid_range_option.h"
+#include "storage/rowset/short_key_range_option.h"
 
 namespace starrocks::pipeline {
-class DriverSource;
-using DriverSourcePtr = std::unique_ptr<DriverSource>;
-using DriverSources = std::vector<DriverSourcePtr>;
-class DriverSource {
-public:
-    DriverSource(Morsels morsels, int32_t source_id) : _morsels(std::move(morsels)), _source_id(source_id) {}
 
-    const Morsels& get_morsels() const { return _morsels; }
+class SplitMorselQueue;
 
-    int32_t get_source_id() const { return _source_id; }
-
-private:
-    Morsels _morsels;
-    int32_t _source_id;
+struct LakeSplitContext : public ScanSplitContext {
+    // physical split
+    RowidRangeOptionPtr rowid_range;
+    // logical split
+    ShortKeyRangesOptionPtr short_key_range;
+    std::shared_ptr<SplitMorselQueue> split_morsel_queue = nullptr;
 };
+
 } // namespace starrocks::pipeline

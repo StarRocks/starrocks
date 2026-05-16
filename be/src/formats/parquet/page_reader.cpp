@@ -20,8 +20,10 @@
 #include <ostream>
 #include <vector>
 
+#include "base/compression/block_compression.h"
 #include "base/container/raw_container.h"
 #include "cache/datacache.h"
+#include "cache/mem_cache/page_cache.h"
 #include "common/compiler_util.h"
 #include "common/config_scan_io_fwd.h"
 #include "common/status.h"

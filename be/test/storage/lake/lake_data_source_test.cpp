@@ -33,7 +33,7 @@
 #include "connector/lake_connector.h"
 #include "exec/connector_scan_node.h"
 #include "exec/pipeline/fragment_context.h"
-#include "exec/pipeline/scan/morsel.h"
+#include "exec/pipeline/scan/scan_morsel.h"
 #include "fs/fs_util.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/descriptors.h"

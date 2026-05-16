@@ -24,6 +24,10 @@
 #include "storage/rowset/page_handle_fwd.h"
 #include "types/logical_type.h"
 
+namespace starrocks {
+class StoragePageCache;
+}
+
 namespace starrocks::parquet {
 
 enum SortOrder {

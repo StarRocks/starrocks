@@ -22,7 +22,7 @@
 #include "common/runtime_profile.h"
 #include "connector/deletion_vector/deletion_bitmap.h"
 #include "exec/olap_scan_prepare.h"
-#include "exec/pipeline/scan/morsel.h"
+#include "exec/pipeline/scan/scan_split_context.h"
 #include "exec/runtime_filter/runtime_filter_probe.h"
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
@@ -30,7 +30,9 @@
 #include "io/cache_input_stream.h"
 #include "io/shared_buffered_input_stream.h"
 #include "runtime/descriptors.h"
+#include "runtime/global_dict/types.h"
 #include "runtime/runtime_state_fwd.h"
+#include "storage/predicate_tree/predicate_tree.hpp"
 
 namespace starrocks {
 

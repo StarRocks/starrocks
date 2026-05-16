@@ -36,7 +36,11 @@
 
 #include "common/config_scan_io_fwd.h"
 #include "exec/pipeline/query_context.h"
-#include "exec/pipeline/scan/morsel.h"
+#include "exec/pipeline/scan/morsel_queue.h"
+#include "exec/pipeline/scan/morsel_queue_factory.h"
+#include "exec/pipeline/scan/olap_morsel_queue.h"
+#include "exec/pipeline/scan/scan_morsel.h"
+#include "exec/pipeline/scan/split_morsel_queue.h"
 #include "exprs/expr_factory.h"
 #include "runtime/runtime_state.h"
 

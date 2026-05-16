@@ -237,7 +237,13 @@ set(PIPELINE_OPERATORS_BATCH_SRCS
     pipeline/scan/glm_manager.cpp
     pipeline/scan/balanced_chunk_buffer.cpp
     pipeline/scan/chunk_source.cpp
-    pipeline/scan/morsel.cpp
+    pipeline/scan/bucket_sequence_morsel_queue.cpp
+    pipeline/scan/morsel_queue.cpp
+    pipeline/scan/morsel_queue_factory.cpp
+    pipeline/scan/olap_morsel_queue.cpp
+    pipeline/scan/scan_morsel.cpp
+    pipeline/scan/split_morsel_queue.cpp
+    pipeline/scan/split_scan_morsel.cpp
     pipeline/scan/scan_operator.cpp
     pipeline/scan/olap_chunk_source.cpp
     pipeline/scan/olap_scan_operator.cpp

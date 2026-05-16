@@ -18,14 +18,14 @@
 
 #include "base/utility/exclusive_ptr.h"
 #include "column/vectorized_fwd.h"
+#include "common/runtime_profile.h"
 #include "common/statusor.h"
-#include "exec/pipeline/scan/morsel.h"
+#include "exec/pipeline/scan/scan_morsel.h"
 #include "exec/workgroup/work_group_fwd.h"
 
 namespace starrocks {
 
 class RuntimeState;
-class RuntimeProfile;
 
 namespace pipeline {
 

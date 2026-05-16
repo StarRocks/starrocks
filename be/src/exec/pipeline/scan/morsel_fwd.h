@@ -14,26 +14,25 @@
 
 #pragma once
 
+#include <cstdint>
 #include <memory>
-#include <utility>
+#include <unordered_map>
 #include <vector>
 
-#include "exec/pipeline/scan/scan_morsel.h"
-
 namespace starrocks::pipeline {
-class DriverSource;
-using DriverSourcePtr = std::unique_ptr<DriverSource>;
-using DriverSources = std::vector<DriverSourcePtr>;
-class DriverSource {
-public:
-    DriverSource(Morsels morsels, int32_t source_id) : _morsels(std::move(morsels)), _source_id(source_id) {}
 
-    const Morsels& get_morsels() const { return _morsels; }
+class ScanMorsel;
+using Morsel = ScanMorsel;
+using MorselPtr = std::unique_ptr<Morsel>;
+using Morsels = std::vector<MorselPtr>;
 
-    int32_t get_source_id() const { return _source_id; }
+class MorselQueue;
+class SplitMorselQueue;
+using MorselQueuePtr = std::unique_ptr<MorselQueue>;
+using MorselQueueMap = std::unordered_map<int32_t, MorselQueuePtr>;
 
-private:
-    Morsels _morsels;
-    int32_t _source_id;
-};
+class MorselQueueFactory;
+using MorselQueueFactoryPtr = std::unique_ptr<MorselQueueFactory>;
+using MorselQueueFactoryMap = std::unordered_map<int32_t, MorselQueueFactoryPtr>;
+
 } // namespace starrocks::pipeline

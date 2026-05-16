@@ -15,7 +15,9 @@
 #include "exec/pipeline/scan/olap_scan_prepare_operator.h"
 
 #include "exec/olap_scan_node.h"
+#include "exec/pipeline/scan/olap_morsel_queue.h"
 #include "exprs/expr_executor.h"
+#include "gutil/casts.h"
 #include "runtime/runtime_state.h"
 #include "storage/storage_engine.h"
 
@@ -47,7 +49,8 @@ Status OlapScanPrepareOperator::prepare(RuntimeState* state) {
     RuntimeProfile::Counter* capture_tablet_rowsets_timer = ADD_TIMER(_unique_metrics, "CaptureTabletRowsetsTime");
     {
         SCOPED_TIMER(capture_tablet_rowsets_timer);
-        RETURN_IF_ERROR(_ctx->capture_tablet_rowsets(state, _morsel_queue->prepare_olap_scan_ranges()));
+        auto* olap_morsel_queue = down_cast<OlapMorselQueue*>(_morsel_queue);
+        RETURN_IF_ERROR(_ctx->capture_tablet_rowsets(state, olap_morsel_queue->prepare_olap_scan_ranges()));
     }
 
     return Status::OK();
@@ -68,13 +71,14 @@ bool OlapScanPrepareOperator::is_finished() const {
 StatusOr<ChunkPtr> OlapScanPrepareOperator::pull_chunk(RuntimeState* state) {
     Status status = _ctx->parse_conjuncts(state, runtime_in_filters(), get_factory()->get_runtime_bloom_filters(),
                                           _driver_sequence);
+    auto* olap_morsel_queue = down_cast<OlapMorselQueue*>(_morsel_queue);
 
-    _morsel_queue->set_key_ranges(_ctx->key_ranges());
+    olap_morsel_queue->set_key_ranges(_ctx->key_ranges());
     std::vector<BaseTabletSharedPtr> tablets;
     for (auto& tablet : _ctx->tablets()) {
         tablets.emplace_back(tablet);
     }
-    _morsel_queue->set_tablets(tablets);
+    olap_morsel_queue->set_tablets(tablets);
 
     std::vector<std::vector<BaseRowsetSharedPtr>> tablet_rowsets;
     for (auto& rowsets : _ctx->tablet_rowsets()) {
@@ -84,10 +88,10 @@ StatusOr<ChunkPtr> OlapScanPrepareOperator::pull_chunk(RuntimeState* state) {
             rss.emplace_back(rowset);
         }
     }
-    _morsel_queue->set_tablet_rowsets(tablet_rowsets);
+    olap_morsel_queue->set_tablet_rowsets(tablet_rowsets);
 
     if (!tablets.empty()) {
-        _morsel_queue->set_tablet_schema(tablets[0]->tablet_schema());
+        olap_morsel_queue->set_tablet_schema(tablets[0]->tablet_schema());
     }
 
     DeferOp defer([&]() {

@@ -27,7 +27,7 @@
 #include "exec/pipeline/operator_with_dependency.h"
 #include "exec/pipeline/pipeline_fwd.h"
 #include "exec/pipeline/runtime_filter_types.h"
-#include "exec/pipeline/scan/morsel.h"
+#include "exec/pipeline/scan/morsel_fwd.h"
 #include "exec/pipeline/scan/scan_operator.h"
 #include "exec/pipeline/schedule/common.h"
 #include "exec/pipeline/schedule/observer.h"
