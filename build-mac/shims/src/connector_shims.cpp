@@ -16,6 +16,7 @@
 // under the License.
 
 #include "connector/connector.h"
+#include "connector/connector_bootstrap.h"
 #include "connector/hive_connector.h"
 
 namespace starrocks::connector {
@@ -30,6 +31,10 @@ const Connector* ConnectorRegistry::get(const std::string& /*name*/) {
     return nullptr;
 }
 void ConnectorRegistry::put(const std::string& /*name*/, std::unique_ptr<Connector> /*connector*/) {}
+
+ConnectorRegistry* get_builtin_connector_registry() {
+    return ConnectorRegistry::default_instance();
+}
 
 // DataSource implementations (from connector_core_shim.cpp)
 const std::string DataSource::PROFILE_NAME = "DataSource";
