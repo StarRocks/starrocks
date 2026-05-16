@@ -102,6 +102,14 @@ Core shared infrastructure above Base/Gutil and generated code only. Higher-leve
 - Core tests: `common_test`
 - Remediation: Move the dependency upward or add a lower-level abstraction; Common may only depend on Base, Gutil, and generated code.
 
+### ConnectorCore (`connectorcore`)
+Connector interface contracts, shared data source/provider defaults, and connector registry storage without concrete connector implementations, bootstrap registration, service integration, or ExecEnv coupling.
+- Targets: `ConnectorCore`
+- Allowed internal include prefixes: `connector/connector.h`, `connector/connector_registry.h`, `connector/connector_sink_provider.h`, `connector/connector_type.h`, `connector/data_source.h`, `connector/data_source_provider.h`, `exec/pipeline/scan/morsel.h`, `exec/runtime_filter/`, `runtime/runtime_state_fwd.h`, `runtime/runtime_fwd.h`, `storage/chunk_helper.h`, `column/`, `types/`, `common/`, `base/`, `gutil/`, `gen_cpp/`
+- Allowed target deps: `ExecCore`, `RuntimeCore`, `Storage`, `ChunkCore`, `ColumnCore`, `Types`, `Common`, `Base`, `Gutil`, `StarRocksGen`
+- Core tests: `connector_core_test`
+- Remediation: Keep ConnectorCore limited to connector-facing contracts and registry storage; move concrete connector behavior and bootstrap registration into the Connector module.
+
 ### Cache (`cache`)
 Cache implementation module for DataCache facade, cache engines, monitors, metrics, utilities, StarCache integration, and peer-cache RPC reads without service/bootstrap or ExecEnv singleton coupling.
 - Targets: `Cache`

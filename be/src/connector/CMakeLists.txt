@@ -14,8 +14,27 @@
 
 set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/connector")
 
+ADD_BE_LIB(ConnectorCore
+        data_source.cpp
+        data_source_provider.cpp
+        connector_registry.cpp
+)
+target_link_libraries(ConnectorCore PUBLIC
+        ExecCore
+        RuntimeCore
+        Storage
+        ChunkCore
+        ColumnCore
+        Types
+        Common
+        Base
+        Gutil
+        StarRocksGen
+)
+
 ADD_BE_LIB(Connector
-        connector.cpp
+        connector_defaults.cpp
+        connector_bootstrap.cpp
         hive_connector.cpp
         es_connector.cpp
         jdbc_connector.cpp
@@ -40,3 +59,4 @@ ADD_BE_LIB(Connector
         iceberg_delete_sink.cpp
         iceberg_row_delta_sink.cpp
 )
+target_link_libraries(Connector PUBLIC ConnectorCore)

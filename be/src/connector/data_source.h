@@ -1,0 +1,113 @@
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+#pragma once
+
+#include <memory>
+#include <string>
+#include <vector>
+
+#include "column/vectorized_fwd.h"
+#include "common/status.h"
+#include "common/statusor.h"
+#include "exec/pipeline/scan/morsel.h"
+#include "exec/runtime_filter/runtime_filter_probe.h"
+#include "runtime/runtime_state_fwd.h"
+
+namespace starrocks {
+
+class ExprContext;
+class RuntimeFilterProbeCollector;
+
+namespace connector {
+
+// DataSource defines how to read data from a single scan range.
+class DataSource {
+public:
+    virtual ~DataSource() = default;
+    virtual std::string name() const = 0;
+    virtual Status open(RuntimeState* state);
+    virtual void close(RuntimeState* state);
+    virtual Status get_next(RuntimeState* state, ChunkPtr* chunk);
+    virtual bool has_any_predicate() const { return _has_any_predicate; }
+
+    // how many rows read from storage
+    virtual int64_t raw_rows_read() const = 0;
+    // how many rows returned after filtering.
+    virtual int64_t num_rows_read() const = 0;
+    // how many bytes read from external
+    virtual int64_t num_bytes_read() const = 0;
+    // CPU time of this data source
+    virtual int64_t cpu_time_spent() const = 0;
+    // IO time of this data source
+    virtual int64_t io_time_spent() const;
+    virtual bool can_estimate_mem_usage() const;
+    virtual int64_t estimated_mem_usage() const;
+
+    static const std::string PROFILE_NAME;
+    void set_runtime_profile(RuntimeProfile* parent) {
+        _runtime_profile = parent->create_child(PROFILE_NAME);
+        _runtime_profile->add_info_string("DataSourceType", name());
+    }
+    void set_predicates(const std::vector<ExprContext*>& predicates) { _conjunct_ctxs = predicates; }
+    void set_runtime_filters(RuntimeFilterProbeCollector* runtime_filters) { _runtime_filters = runtime_filters; }
+    void set_read_limit(const uint64_t limit) { _read_limit = limit; }
+    void set_split_context(pipeline::ScanSplitContext* split_context) { _split_context = split_context; }
+    virtual Status parse_runtime_filters(RuntimeState* state);
+    void update_has_any_predicate();
+    // Called frequently, don't do heavy work
+    virtual const std::string get_custom_coredump_msg() const;
+    virtual void get_split_tasks(std::vector<pipeline::ScanSplitContextPtr>* split_tasks);
+
+    struct Profile {
+        int mem_alloc_failed_count;
+    };
+    void update_profile(const Profile& profile);
+    void set_morsel(pipeline::ScanMorsel* morsel) { _morsel = morsel; }
+
+    void set_driver_sequence(size_t driver_sequence) {
+        runtime_membership_filter_eval_context.driver_sequence = driver_sequence;
+    }
+
+protected:
+    int64_t _read_limit = -1; // no limit
+    bool _has_any_predicate = false;
+    std::vector<ExprContext*> _conjunct_ctxs;
+    RuntimeFilterProbeCollector* _runtime_filters = nullptr;
+    RuntimeMembershipFilterEvalContext runtime_membership_filter_eval_context;
+    RuntimeProfile* _runtime_profile = nullptr;
+    TupleDescriptor* _tuple_desc = nullptr;
+    pipeline::ScanSplitContext* _split_context = nullptr;
+
+    virtual Status _init_chunk_if_needed(ChunkPtr* chunk, size_t n);
+
+    pipeline::ScanMorsel* _morsel = nullptr;
+};
+
+class StreamDataSource : public DataSource {
+public:
+    virtual Status set_offset(int64_t table_version, int64_t changelog_id) = 0;
+    virtual Status reset_status() = 0;
+
+    // how many rows returned in the current epoch.
+    virtual int64_t num_rows_read_in_epoch() const = 0;
+
+    // CPU time of this data source in the current epoch.
+    virtual int64_t cpu_time_spent_in_epoch() const = 0;
+};
+
+using DataSourcePtr = std::unique_ptr<DataSource>;
+
+} // namespace connector
+} // namespace starrocks

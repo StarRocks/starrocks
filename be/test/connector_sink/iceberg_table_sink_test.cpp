@@ -92,7 +92,7 @@ TEST_F(IcebergTableSinkTest, decompose_to_pipeline) {
 
     std::vector<starrocks::TExpr> exprs = {};
     IcebergTableSink sink(&_pool, exprs);
-    auto connector = connector::ConnectorManager::default_instance()->get(connector::Connector::ICEBERG);
+    auto connector = connector::ConnectorRegistry::default_instance()->get(connector::Connector::ICEBERG);
     auto sink_provider = connector->create_data_sink_provider();
     pipeline::OpFactories prev_operators{std::make_shared<pipeline::EmptySetOperatorFactory>(1, 1)};
 

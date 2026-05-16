@@ -134,7 +134,7 @@ Status TableFunctionTableSink::decompose_to_pipeline(pipeline::OpFactories prev_
         sink_ctx->options[formats::ParquetWriterOptions::VERSION] = target_table.parquet_options.version;
     }
 
-    auto connector = connector::ConnectorManager::default_instance()->get(connector::Connector::FILE);
+    auto connector = connector::ConnectorRegistry::default_instance()->get(connector::Connector::FILE);
     auto sink_provider = connector->create_data_sink_provider();
     auto op = std::make_shared<pipeline::ConnectorSinkOperatorFactory>(
             context->next_operator_id(), std::move(sink_provider), sink_ctx, fragment_ctx);

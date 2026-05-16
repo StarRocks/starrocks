@@ -382,6 +382,29 @@ add_subdirectory(serde)
 add_subdirectory(spill)
 add_subdirectory(staros_integration)
 
+set(CONNECTOR_CORE_TEST_LINK_LIBS
+    ConnectorCore
+    ExecCore
+    RuntimeCore
+    ChunkCore
+    ColumnCore
+    Types
+    Common
+    Base
+    Gutil
+    StarRocksGen
+    ${STARROCKS_DEPENDENCIES}
+    ${STARROCKS_STATIC_LINK_LIBS}
+    ${WL_LINK_DYNAMIC} ${STARROCKS_SYSTEM_LINK_LIBS} ${WRAP_LINKER_FLAGS}
+    ${WL_START_GROUP}
+    gmock
+    gtest
+    ${WL_END_GROUP}
+)
+
+add_executable(connector_core_test connector/connector_core_test.cpp)
+target_link_libraries(connector_core_test ${CONNECTOR_CORE_TEST_LINK_LIBS} gtest_main)
+
 if (APPLE)
     set(TEST_EXTRA_SOURCES ${CMAKE_SOURCE_DIR}/test/base/macos_link_stubs.cpp)
 endif ()

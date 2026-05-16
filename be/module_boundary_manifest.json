@@ -37,6 +37,86 @@
       "remediation": "Move the dependency upward or add a lower-level abstraction; Common may only depend on Base, Gutil, and generated code."
     },
     {
+      "id": "connectorcore",
+      "doc_label": "ConnectorCore",
+      "summary": "Connector interface contracts, shared data source/provider defaults, and connector registry storage without concrete connector implementations, bootstrap registration, service integration, or ExecEnv coupling.",
+      "owned_targets": ["ConnectorCore"],
+      "owned_globs": [
+        "be/src/connector/connector.h",
+        "be/src/connector/connector_registry.h",
+        "be/src/connector/connector_sink_provider.h",
+        "be/src/connector/connector_type.h",
+        "be/src/connector/data_source.h",
+        "be/src/connector/data_source_provider.h"
+      ],
+      "allowed_include_prefixes": [
+        "connector/connector.h",
+        "connector/connector_registry.h",
+        "connector/connector_sink_provider.h",
+        "connector/connector_type.h",
+        "connector/data_source.h",
+        "connector/data_source_provider.h",
+        "exec/pipeline/scan/morsel.h",
+        "exec/runtime_filter/",
+        "runtime/runtime_state_fwd.h",
+        "runtime/runtime_fwd.h",
+        "storage/chunk_helper.h",
+        "column/",
+        "types/",
+        "common/",
+        "base/",
+        "gutil/",
+        "gen_cpp/"
+      ],
+      "forbidden_include_prefixes": [
+        "connector/",
+        "service/",
+        "http/",
+        "cache/",
+        "util/"
+      ],
+      "forbidden_includes": [
+        "runtime/exec_env.h",
+        "connector/benchmark_connector.h",
+        "connector/cache_stats_connector.h",
+        "connector/es_connector.h",
+        "connector/file_connector.h",
+        "connector/hive_connector.h",
+        "connector/iceberg_connector.h",
+        "connector/jdbc_connector.h",
+        "connector/lake_connector.h",
+        "connector/mysql_connector.h",
+        "connector/connector_chunk_sink.h"
+      ],
+      "allowed_target_deps": [
+        "ExecCore",
+        "RuntimeCore",
+        "Storage",
+        "ChunkCore",
+        "ColumnCore",
+        "Types",
+        "Common",
+        "Base",
+        "Gutil",
+        "StarRocksGen"
+      ],
+      "allowed_test_targets": ["connector_core_test"],
+      "allowed_test_link_deps": [
+        "ConnectorCore",
+        "ExecCore",
+        "RuntimeCore",
+        "Storage",
+        "ChunkCore",
+        "ColumnCore",
+        "Types",
+        "Common",
+        "Base",
+        "Gutil",
+        "StarRocksGen"
+      ],
+      "remediation": "Keep ConnectorCore limited to connector-facing contracts and registry storage; move concrete connector behavior and bootstrap registration into the Connector module."
+    },
+    {
       "id": "cache",
       "doc_label": "Cache",
       "summary": "Cache implementation module for DataCache facade, cache engines, monitors, metrics, utilities, StarCache integration, and peer-cache RPC reads without service/bootstrap or ExecEnv singleton coupling.",
