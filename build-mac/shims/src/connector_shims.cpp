@@ -20,28 +20,16 @@
 
 namespace starrocks::connector {
 
-// Define connector name constants to satisfy references
-const std::string Connector::HIVE = "hive";
-const std::string Connector::ES = "es";
-const std::string Connector::JDBC = "jdbc";
-const std::string Connector::MYSQL = "mysql";
-const std::string Connector::FILE = "file";
-const std::string Connector::LAKE = "lake";
-const std::string Connector::BINLOG = "binlog";
-const std::string Connector::ICEBERG = "iceberg";
-const std::string Connector::BENCHMARK = "benchmark";
-const std::string Connector::CACHE_STATS = "cache_stats";
-
-// Minimal ConnectorManager that returns no connectors on macOS
-ConnectorManager* ConnectorManager::default_instance() {
-    static ConnectorManager instance;
+// Minimal ConnectorRegistry that returns no connectors on macOS.
+ConnectorRegistry* ConnectorRegistry::default_instance() {
+    static ConnectorRegistry instance;
     return &instance;
 }
 
-const Connector* ConnectorManager::get(const std::string& /*name*/) {
+const Connector* ConnectorRegistry::get(const std::string& /*name*/) {
     return nullptr;
 }
-void ConnectorManager::put(const std::string& /*name*/, std::unique_ptr<Connector> /*connector*/) {}
+void ConnectorRegistry::put(const std::string& /*name*/, std::unique_ptr<Connector> /*connector*/) {}
 
 // DataSource implementations (from connector_core_shim.cpp)
 const std::string DataSource::PROFILE_NAME = "DataSource";
