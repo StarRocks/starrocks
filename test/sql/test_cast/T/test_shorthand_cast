@@ -21,3 +21,38 @@ select 3 < '4'::int;
 select '[1,2,3]'::array<int>;
 select '[1,2,3]'::array<int>[1];
 select cast('{"a":1}' as json)::string;
+
+-- name: test_shorthand_cast_query_contexts
+create database shorthand_cast_${uuid0};
+use shorthand_cast_${uuid0};
+create table src (
+    id int,
+    x varchar(20)
+) properties ("replication_num" = "1");
+create table dst (
+    id int,
+    xi int
+) properties ("replication_num" = "1");
+create table dim (
+    k int,
+    y varchar(20)
+) properties ("replication_num" = "1");
+insert into src values
+    (1, '1'),
+    (2, '2'),
+    (3, '-1'),
+    (4, 'bad'),
+    (5, '10');
+insert into dim values
+    (1, '1'),
+    (2, '10'),
+    (3, '100');
+insert into dst select id, x::int from src where x::int is not null;
+[ORDER]select * from dst order by id;
+create table ctas_dst properties ("replication_num" = "1") as
+    select id, x::int as xi from src where x::int > 0;
+[ORDER]select * from ctas_dst order by id;
+[ORDER]select id, x::int from src where x::int > 0 order by id;
+[ORDER]select src.id, src.x::int, dim.k from src join dim on src.x::int = dim.y::int order by src.id, dim.k;
+[ORDER]select id, x::int from src where x::int in (select y::int from dim) order by id;
+drop database shorthand_cast_${uuid0};
