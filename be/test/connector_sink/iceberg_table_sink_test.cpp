@@ -22,6 +22,7 @@
 
 #include "base/testutil/assert.h"
 #include "common/config_exec_fwd.h"
+#include "connector/builtin_connector_registry.h"
 #include "connector/connector_registry.h"
 #include "connector/iceberg_row_delta_sink.h"
 #include "exec/pipeline/empty_set_operator.h"
@@ -45,6 +46,7 @@ protected:
         auto* exec_env = ExecEnv::GetInstance();
         _runtime_state->set_exec_env(exec_env);
         _runtime_state->set_query_execution_services(&exec_env->query_execution_services());
+        ASSERT_OK(connector::install_builtin_connectors(connector::ConnectorRegistry::default_instance()));
     }
 
     void TearDown() override {}

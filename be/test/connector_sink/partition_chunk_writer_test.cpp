@@ -34,6 +34,7 @@
 #include "formats/parquet/parquet_test_util/util.h"
 #include "formats/utils.h"
 #include "runtime/exec_env.h"
+#include "storage/chunk_helper.h"
 
 namespace starrocks::connector {
 namespace {

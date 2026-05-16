@@ -13,6 +13,7 @@
 // limitations under the License.
 
 #include "connector/benchmark_connector.h"
+#include "connector/builtin_connector_registry.h"
 #include "connector/cache_stats_connector.h"
 #include "connector/connector_registry.h"
 #include "connector/es_connector.h"
@@ -27,24 +28,31 @@
 
 namespace starrocks::connector {
 
-class ConnectorRegistryInit {
-public:
-    ConnectorRegistryInit() {
-        ConnectorRegistry* registry = ConnectorRegistry::default_instance();
-        registry->put(Connector::HIVE, std::make_unique<HiveConnector>());
-        registry->put(Connector::ES, std::make_unique<ESConnector>());
-        registry->put(Connector::JDBC, std::make_unique<JDBCConnector>());
-        registry->put(Connector::MYSQL, std::make_unique<MySQLConnector>());
-        registry->put(Connector::BENCHMARK, std::make_unique<BenchmarkConnector>());
-        registry->put(Connector::CACHE_STATS, std::make_unique<CacheStatsConnector>());
-        registry->put(Connector::FILE, std::make_unique<FileConnector>());
-        registry->put(Connector::LAKE, std::make_unique<LakeConnector>());
-#ifndef __APPLE__
-        registry->put(Connector::ICEBERG, std::make_unique<IcebergConnector>());
-#endif
-    }
-};
+namespace {
 
-static ConnectorRegistryInit _init;
+template <typename ConnectorT>
+void install_if_absent(ConnectorRegistry* registry, const std::string& name) {
+    if (registry->get(name) == nullptr) {
+        registry->put(name, std::make_unique<ConnectorT>());
+    }
+}
+
+} // namespace
+
+Status install_builtin_connectors(ConnectorRegistry* registry) {
+    DCHECK(registry != nullptr);
+    install_if_absent<HiveConnector>(registry, Connector::HIVE);
+    install_if_absent<ESConnector>(registry, Connector::ES);
+    install_if_absent<JDBCConnector>(registry, Connector::JDBC);
+    install_if_absent<MySQLConnector>(registry, Connector::MYSQL);
+    install_if_absent<BenchmarkConnector>(registry, Connector::BENCHMARK);
+    install_if_absent<CacheStatsConnector>(registry, Connector::CACHE_STATS);
+    install_if_absent<FileConnector>(registry, Connector::FILE);
+    install_if_absent<LakeConnector>(registry, Connector::LAKE);
+#ifndef __APPLE__
+    install_if_absent<IcebergConnector>(registry, Connector::ICEBERG);
+#endif
+    return Status::OK();
+}
 
 } // namespace starrocks::connector
