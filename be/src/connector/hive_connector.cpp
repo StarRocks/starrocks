@@ -37,11 +37,13 @@
 #include "exprs/expr.h"
 #include "exprs/expr_executor.h"
 #include "exprs/expr_factory.h"
+#include "exprs/runtime_filter.h"
 #include "fs/fs_factory.h"
 #include "runtime/descriptors_ext.h"
 #include "runtime/global_dict/fragment_dict_state.h"
 #include "runtime/runtime_state.h"
 #include "storage/chunk_helper.h"
+#include "types/logical_type_infra.h"
 
 namespace starrocks::connector {
 
@@ -88,6 +90,82 @@ HiveDataSource::HiveDataSource(const HiveDataSourceProvider* provider, const TSc
 
 HiveDataSource::HiveDataSource(const HiveDataSourceProvider* provider, const THdfsScanRange& hdfs_scan_range)
         : _provider(provider), _scan_range(hdfs_scan_range) {}
+
+// Functor used with type_dispatch_filter to check whether a file's column range
+// [file_min, file_max] (from THdfsScanRange.min_max_values) overlaps with the
+// runtime filter's range [rf_min, rf_max].  Returns true if the file can be pruned
+// (i.e. there is definitely NO overlap).
+struct RfMinMaxFileStatsChecker {
+    const RuntimeFilter* _mmf;
+    const TExprMinMaxValue& _fstats;
+
+    template <LogicalType ltype>
+    bool operator()() {
+        using CppType = RunTimeCppType<ltype>;
+
+        // No min/max support for strings or exotic types.
+        if constexpr (IsSlice<CppType>) return false;
+
+        const auto* mm = down_cast<const MinMaxRuntimeFilter<ltype>*>(_mmf);
+        if (!mm->has_min_max() || mm->always_true()) return false;
+        if (_fstats.all_null) return false; // all-null file: can't prune safely
+
+        if constexpr (std::is_integral_v<CppType>) {
+            int64_t rf_min = static_cast<int64_t>(mm->min_raw());
+            int64_t rf_max = static_cast<int64_t>(mm->max_raw());
+            int64_t f_min = _fstats.min_int_value;
+            int64_t f_max = _fstats.max_int_value;
+            return (f_max < rf_min || f_min > rf_max);
+        }
+
+        if constexpr (IsDate<CppType>) {
+            // DateValue stores Julian day; TExprMinMaxValue stores days-since-Unix-epoch.
+            // date::UNIX_EPOCH_JULIAN == 2440588
+            constexpr int64_t kEpochJulian = 2440588LL;
+            int64_t rf_min = static_cast<int64_t>(mm->min_raw().julian()) - kEpochJulian;
+            int64_t rf_max = static_cast<int64_t>(mm->max_raw().julian()) - kEpochJulian;
+            int64_t f_min = _fstats.min_int_value;
+            int64_t f_max = _fstats.max_int_value;
+            return (f_max < rf_min || f_min > rf_max);
+        }
+
+        if constexpr (std::is_floating_point_v<CppType>) {
+            double rf_min = static_cast<double>(mm->min_raw());
+            double rf_max = static_cast<double>(mm->max_raw());
+            double f_min = _fstats.min_float_value;
+            double f_max = _fstats.max_float_value;
+            return (f_max < rf_min || f_min > rf_max);
+        }
+
+        return false;
+    }
+};
+
+bool HiveDataSource::should_prune_by_rf_min_max_stats() const {
+    if (_runtime_filters == nullptr || _runtime_filters->size() == 0) return false;
+    if (_scan_range.min_max_values.empty()) return false;
+
+    for (const auto& [_, probe] : _runtime_filters->descriptors()) {
+        const RuntimeFilter* filter = probe->runtime_filter(runtime_membership_filter_eval_context.driver_sequence);
+        if (filter == nullptr) continue;
+
+        const RuntimeFilter* mmf = filter->get_min_max_filter();
+        if (mmf == nullptr || mmf->always_true()) continue;
+
+        SlotId slot_id;
+        if (!probe->is_probe_slot_ref(&slot_id)) continue;
+
+        auto it = _scan_range.min_max_values.find(slot_id);
+        if (it == _scan_range.min_max_values.end()) continue;
+
+        LogicalType slot_type = probe->probe_expr_type();
+        RfMinMaxFileStatsChecker checker{mmf, it->second};
+        if (type_dispatch_filter(slot_type, false, checker)) {
+            return true;
+        }
+    }
+    return false;
+}
 
 Status HiveDataSource::_check_all_slots_nullable() {
     for (const auto* slot : _tuple_desc->slots()) {

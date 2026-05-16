@@ -183,6 +183,10 @@ private:
     bool _closed = false;
     bool _is_split_source_morsel = false;
     bool _split_source_morsel_reported = false;
+    // Set in prepare() after parse_runtime_filters(). When true, _read_chunk() returns
+    // EndOfFile immediately without opening the file (DPP file-skip via RF min/max stats).
+    bool _skip_by_rf_stats = false;
+    RuntimeProfile::Counter* _rf_min_max_pruned_files_counter = nullptr;
     uint64_t _chunk_rows_read = 0;
     uint64_t _chunk_mem_bytes = 0;
     int64_t _request_mem_tracker_bytes = 0;

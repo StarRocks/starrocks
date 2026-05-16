@@ -674,6 +674,8 @@ Status ConnectorChunkSource::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(ChunkSource::prepare(state));
     _runtime_state = state;
     RETURN_IF_ERROR(_data_source->parse_runtime_filters(state));
+    _rf_min_max_pruned_files_counter = ADD_COUNTER(_runtime_profile, "RfMinMaxPrunedFiles", TUnit::UNIT);
+    _skip_by_rf_stats = _data_source->should_prune_by_rf_min_max_stats();
     return Status::OK();
 }
 
@@ -821,6 +823,10 @@ Status ConnectorChunkSource::_open_data_source(RuntimeState* state, bool* mem_al
 }
 
 Status ConnectorChunkSource::_read_chunk(RuntimeState* state, ChunkPtr* chunk) {
+    if (_skip_by_rf_stats) {
+        COUNTER_UPDATE(_rf_min_max_pruned_files_counter, 1);
+        return Status::EndOfFile("pruned by runtime filter min/max stats");
+    }
     ConnectorScanOperator* scan_op = down_cast<ConnectorScanOperator*>(_scan_op);
     ConnectorScanOperatorAdaptiveProcessor& P = *(scan_op->adaptive_processor());
 

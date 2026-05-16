@@ -21,7 +21,9 @@
 #include "connector/connector.h"
 #include "exec/connector_scan_node.h"
 #include "exec/hdfs_scanner/hdfs_scanner.h"
+#include "exprs/runtime_filter.h"
 #include "hive_chunk_sink.h"
+#include "types/logical_type_infra.h"
 
 namespace starrocks {
 class HiveTableDescriptor;
@@ -93,6 +95,7 @@ public:
 
     void get_split_tasks(std::vector<pipeline::ScanSplitContextPtr>* split_tasks) override;
     Status _init_chunk_if_needed(ChunkPtr* chunk, size_t n) override;
+    bool should_prune_by_rf_min_max_stats() const override;
 
 private:
     const HiveDataSourceProvider* _provider;
@@ -201,6 +204,56 @@ private:
     // ======================================
     // The following are profile metrics
     HdfsScanProfile _profile;
+};
+
+// Functor used with type_dispatch_filter to check whether a file's column range
+// [file_min, file_max] (from THdfsScanRange.min_max_values) overlaps with the
+// runtime filter's range [rf_min, rf_max].  Returns true if the file can be pruned
+// (i.e. there is definitely NO overlap).
+struct RfMinMaxFileStatsChecker {
+    const RuntimeFilter* _mmf;
+    const TExprMinMaxValue& _fstats;
+
+    template <LogicalType ltype>
+    bool operator()() {
+        using CppType = RunTimeCppType<ltype>;
+
+        // No min/max support for strings or exotic types.
+        if constexpr (IsSlice<CppType>) return false;
+
+        const auto* mm = down_cast<const MinMaxRuntimeFilter<ltype>*>(_mmf);
+        if (!mm->has_min_max() || mm->always_true()) return false;
+        if (_fstats.all_null) return false; // all-null file: can't prune safely
+
+        if constexpr (std::is_integral_v<CppType>) {
+            int64_t rf_min = static_cast<int64_t>(mm->min_raw());
+            int64_t rf_max = static_cast<int64_t>(mm->max_raw());
+            int64_t f_min = _fstats.min_int_value;
+            int64_t f_max = _fstats.max_int_value;
+            return (f_max < rf_min || f_min > rf_max);
+        }
+
+        if constexpr (IsDate<CppType>) {
+            // DateValue stores Julian day; TExprMinMaxValue stores days-since-Unix-epoch.
+            // date::UNIX_EPOCH_JULIAN == 2440588
+            constexpr int64_t kEpochJulian = 2440588LL;
+            int64_t rf_min = static_cast<int64_t>(mm->min_raw().julian()) - kEpochJulian;
+            int64_t rf_max = static_cast<int64_t>(mm->max_raw().julian()) - kEpochJulian;
+            int64_t f_min = _fstats.min_int_value;
+            int64_t f_max = _fstats.max_int_value;
+            return (f_max < rf_min || f_min > rf_max);
+        }
+
+        if constexpr (std::is_floating_point_v<CppType>) {
+            double rf_min = static_cast<double>(mm->min_raw());
+            double rf_max = static_cast<double>(mm->max_raw());
+            double f_min = _fstats.min_float_value;
+            double f_max = _fstats.max_float_value;
+            return (f_max < rf_min || f_min > rf_max);
+        }
+
+        return false;
+    }
 };
 
 } // namespace starrocks::connector

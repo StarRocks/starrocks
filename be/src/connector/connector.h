@@ -77,6 +77,10 @@ public:
     void set_split_context(pipeline::ScanSplitContext* split_context) { _split_context = split_context; }
     virtual Status parse_runtime_filters(RuntimeState* state);
     void update_has_any_predicate();
+    // Returns true if this file/split can be skipped based on runtime filter min/max
+    // vs per-file column statistics from the Iceberg manifest (THdfsScanRange.min_max_values).
+    // Called after parse_runtime_filters(), before open(). Default: no pruning.
+    virtual bool should_prune_by_rf_min_max_stats() const { return false; }
     // Called frequently, don't do heavy work
     virtual const std::string get_custom_coredump_msg() const { return ""; }
     virtual void get_split_tasks(std::vector<pipeline::ScanSplitContextPtr>* split_tasks) {}
