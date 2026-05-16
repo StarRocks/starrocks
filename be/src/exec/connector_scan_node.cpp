@@ -21,6 +21,7 @@
 #include "common/config_scan_io_fwd.h"
 #include "common/thread/priority_thread_pool.hpp"
 #include "common/thread/threadpool.h"
+#include "connector/connector_registry.h"
 #include "exec/pipeline/exec_node_pipeline_adapter.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/query_context.h"
@@ -38,7 +39,7 @@ static constexpr double kChunkBufferMemRatio = pipeline::ConnectorScanOperatorMe
 ConnectorScanNode::ConnectorScanNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs)
         : ScanNode(pool, tnode, descs) {
     _name = "connector_scan";
-    auto c = connector::ConnectorManager::default_instance()->get(tnode.connector_scan_node.connector_name);
+    auto c = connector::ConnectorRegistry::default_instance()->get(tnode.connector_scan_node.connector_name);
     _connector_type = c->connector_type();
     if (tnode.connector_scan_node.__isset.catalog_type) {
         _catalog_type = tnode.connector_scan_node.catalog_type;
