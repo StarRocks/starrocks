@@ -12,13 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "connector/connector.h"
-
 #include <gtest/gtest.h>
 
 #include <memory>
 #include <string>
 #include <type_traits>
+
+#include "connector/connector.h"
 
 namespace starrocks::connector {
 

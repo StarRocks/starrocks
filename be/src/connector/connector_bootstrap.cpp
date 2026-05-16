@@ -12,10 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "connector/connector.h"
+#include "connector/connector_bootstrap.h"
 
 #include "connector/benchmark_connector.h"
 #include "connector/cache_stats_connector.h"
+#include "connector/connector.h"
 #include "connector/es_connector.h"
 #include "connector/file_connector.h"
 #include "connector/hive_connector.h"
@@ -28,24 +29,31 @@
 
 namespace starrocks::connector {
 
-class ConnectorBootstrap {
-public:
-    ConnectorBootstrap() {
-        ConnectorRegistry* cm = ConnectorRegistry::default_instance();
-        cm->put(Connector::HIVE, std::make_unique<HiveConnector>());
-        cm->put(Connector::ES, std::make_unique<ESConnector>());
-        cm->put(Connector::JDBC, std::make_unique<JDBCConnector>());
-        cm->put(Connector::MYSQL, std::make_unique<MySQLConnector>());
-        cm->put(Connector::BENCHMARK, std::make_unique<BenchmarkConnector>());
-        cm->put(Connector::CACHE_STATS, std::make_unique<CacheStatsConnector>());
-        cm->put(Connector::FILE, std::make_unique<FileConnector>());
-        cm->put(Connector::LAKE, std::make_unique<LakeConnector>());
-#ifndef __APPLE__
-        cm->put(Connector::ICEBERG, std::make_unique<IcebergConnector>());
-#endif
-    }
-};
+namespace {
 
-static ConnectorBootstrap _init;
+void register_builtin_connectors(ConnectorRegistry* registry) {
+    registry->put(Connector::HIVE, std::make_unique<HiveConnector>());
+    registry->put(Connector::ES, std::make_unique<ESConnector>());
+    registry->put(Connector::JDBC, std::make_unique<JDBCConnector>());
+    registry->put(Connector::MYSQL, std::make_unique<MySQLConnector>());
+    registry->put(Connector::BENCHMARK, std::make_unique<BenchmarkConnector>());
+    registry->put(Connector::CACHE_STATS, std::make_unique<CacheStatsConnector>());
+    registry->put(Connector::FILE, std::make_unique<FileConnector>());
+    registry->put(Connector::LAKE, std::make_unique<LakeConnector>());
+#ifndef __APPLE__
+    registry->put(Connector::ICEBERG, std::make_unique<IcebergConnector>());
+#endif
+}
+
+} // namespace
+
+ConnectorRegistry* get_builtin_connector_registry() {
+    static const bool registered = []() {
+        register_builtin_connectors(ConnectorRegistry::default_instance());
+        return true;
+    }();
+    (void)registered;
+    return ConnectorRegistry::default_instance();
+}
 
 } // namespace starrocks::connector

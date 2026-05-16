@@ -12,25 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "connector/connector_registry.h"
-
-#include "connector/connector.h"
+#pragma once
 
 namespace starrocks::connector {
 
-const Connector* ConnectorRegistry::get(const std::string& name) {
-    auto it = _connectors.find(name);
-    if (it == _connectors.end()) return nullptr;
-    return it->second.get();
-}
+class ConnectorRegistry;
 
-void ConnectorRegistry::put(const std::string& name, std::unique_ptr<Connector> connector) {
-    _connectors.emplace(name, std::move(connector));
-}
-
-ConnectorRegistry* ConnectorRegistry::default_instance() {
-    static ConnectorRegistry registry;
-    return &registry;
-}
+ConnectorRegistry* get_builtin_connector_registry();
 
 } // namespace starrocks::connector

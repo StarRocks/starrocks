@@ -20,8 +20,8 @@
 
 #include "column/vectorized_fwd.h"
 #include "common/status.h"
-#include "connector/connector_sink_provider.h"
 #include "connector/connector_sink_profile.h"
+#include "connector/connector_sink_provider.h"
 #include "connector/partition_chunk_writer.h"
 #include "connector/utils.h"
 #include "runtime/runtime_fwd.h"
