@@ -416,7 +416,7 @@ Status FragmentExecutor::add_scan_ranges_partition_values(RuntimeState* runtime_
         if (table == nullptr) continue;
         // only HiveTableDescriptor(includes hive,iceberg,hudi,deltalake etc) supports this feature.
         HiveTableDescriptor* hive_table = down_cast<HiveTableDescriptor*>(table);
-        RETURN_IF_ERROR(hive_table->add_partition_value(runtime_state, obj_pool, hdfs_scan_range.partition_id,
+        RETURN_IF_ERROR(hive_table->add_partition_value(obj_pool, hdfs_scan_range.partition_id,
                                                         hdfs_scan_range.partition_value));
     }
     return Status::OK();

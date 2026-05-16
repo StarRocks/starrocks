@@ -304,15 +304,22 @@ Status HiveDataSource::_init_partition_values() {
                             _scan_range.partition_id, full_path, relative_path, table_name));
     }
 
-    const auto& partition_values = partition_desc->partition_key_value_evals();
-    _partition_values = partition_desc->partition_key_value_evals();
+    // Build partition_key ExprContexts in the fragment-local pool. ExprContext::prepare
+    // captures a fragment RuntimeState in its `_runtime_state` field, so the contexts
+    // must live and close within the fragment scope — they cannot be shared from the
+    // (query-scoped) HdfsPartitionDescriptor.
+    const auto& thrift_partition_key_exprs = partition_desc->thrift_partition_key_exprs();
+    RETURN_IF_ERROR(
+            ExprFactory::create_expr_trees(&_pool, thrift_partition_key_exprs, &_partition_values, _runtime_state));
+    RETURN_IF_ERROR(ExprExecutor::prepare(_partition_values, _runtime_state));
+    RETURN_IF_ERROR(ExprExecutor::open(_partition_values, _runtime_state));
 
     // init partition chunk
     auto partition_chunk = std::make_shared<Chunk>();
     for (int i = 0; i < _partition_slots.size(); i++) {
         SlotId slot_id = _partition_slots[i]->id();
         int partition_col_idx = _partition_index_in_hdfs_partition_columns[i];
-        ASSIGN_OR_RETURN(auto partition_value_col, partition_values[partition_col_idx]->evaluate(nullptr));
+        ASSIGN_OR_RETURN(auto partition_value_col, _partition_values[partition_col_idx]->evaluate(nullptr));
         DCHECK(partition_value_col->is_constant());
         partition_chunk->append_column(std::move(partition_value_col), slot_id);
     }
@@ -963,6 +970,7 @@ void HiveDataSource::close(RuntimeState* state) {
     }
     ExprExecutor::close(_min_max_conjunct_ctxs, state);
     ExprExecutor::close(_partition_conjunct_ctxs, state);
+    ExprExecutor::close(_partition_values, state);
     ExprExecutor::close(_scanner_conjunct_ctxs, state);
     for (auto& it : _conjunct_ctxs_by_slot) {
         ExprExecutor::close(it.second, state);

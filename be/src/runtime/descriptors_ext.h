@@ -27,8 +27,6 @@
 
 namespace starrocks {
 
-class ExprContext;
-
 class HdfsPartitionDescriptor {
 public:
     HdfsPartitionDescriptor(const THdfsPartition& thrift_partition,
@@ -36,13 +34,14 @@ public:
     int64_t id() const { return _id; }
     THdfsFileFormat::type file_format() { return _file_format; }
     std::string_view location() { return _location; }
-    // ExprContext is constant/literal for sure
-    // such as hdfs://path/x=1/y=2/zzz, then
-    // partition slots would be [x, y]
-    // partition key values wold be [1, 2]
-    std::vector<ExprContext*>& partition_key_value_evals() { return _partition_key_value_evals; }
+    // Thrift partition-key expressions (constant/literal, e.g. for hdfs://path/x=1/y=2/zzz
+    // the partition slots are [x, y] and the partition key values are [1, 2]).
+    //
+    // Opened ExprContexts are not stored on the descriptor: ExprContext::prepare captures
+    // a fragment RuntimeState, so the live evaluators must be built and closed within
+    // fragment scope. Consumers (see HiveDataSource::_init_partition_values) build their
+    // own ExprContexts from this thrift in a fragment-local pool.
     const std::vector<TExpr>& thrift_partition_key_exprs() const { return _thrift_partition_key_exprs; }
-    Status create_part_key_exprs(RuntimeState* state, ObjectPool* pool);
     std::string debug_string() const;
 
 private:
@@ -50,9 +49,7 @@ private:
     THdfsFileFormat::type _file_format;
     std::pmr::string _location;
 
-    // holding thrift exprs for partition keys for duplication check during runtime
     const std::vector<TExpr> _thrift_partition_key_exprs;
-    std::vector<ExprContext*> _partition_key_value_evals;
 };
 
 class HiveTableDescriptor : public TableDescriptor {
@@ -66,18 +63,10 @@ public:
     virtual bool has_base_path() const { return false; }
     virtual std::string_view get_base_path() const { return _table_location; }
 
-    Status create_key_exprs(RuntimeState* state, ObjectPool* pool) {
-        for (auto& part : _partition_id_to_desc_map) {
-            RETURN_IF_ERROR(part.second->create_part_key_exprs(state, pool));
-        }
-        return Status::OK();
-    }
-
     StatusOr<TPartitionMap*> deserialize_partition_map(const TCompressedPartitionMap& compressed_partition_map,
                                                        ObjectPool* pool);
 
-    Status add_partition_value(RuntimeState* runtime_state, ObjectPool* pool, int64_t id,
-                               const THdfsPartition& thrift_partition);
+    Status add_partition_value(ObjectPool* pool, int64_t id, const THdfsPartition& thrift_partition);
     std::optional<std::string> get_column_default_value(const SlotDescriptor* slot) const;
 
 protected:
