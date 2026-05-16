@@ -312,13 +312,13 @@ StatusOr<TabletMetadataPtr> TabletManager::construct_initial_metadata(int64_t ta
     // that callers treat cn-free fallback as a normal "tablet not found" case.
     return Status::NotFound(fmt::format("cn-free tablet creation disabled in unit test, tablet_id: {}", tablet_id));
 #endif
+#if defined(USE_STAROS) && !defined(BUILD_FORMAT_LIB)
     // Get (table_id, partition_id, index_id) from shard info.
     // These are used for the FE RPC request and for SingleFlight grouping by (table_id, index_id),
     // so concurrent requests for different tablets under the same index share one RPC.
     int64_t table_id = -1;
     int64_t partition_id = -1;
     int64_t index_id = -1;
-#if defined(USE_STAROS) && !defined(BUILD_FORMAT_LIB)
     auto worker = get_staros_worker();
     if (worker == nullptr) {
         // Fallback prerequisite not available; degrade to NOT_FOUND so the caller
