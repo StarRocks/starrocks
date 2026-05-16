@@ -15,7 +15,7 @@
 
 set -eo pipefail
 
-# build.sh sources env_macos.sh before calling us (directly or via the auto-
+# build.sh sources build-support/darwin_build_env.sh before calling us (directly or via the auto-
 # trigger when thirdparty is not yet built), which exports a batch of CMake
 # behavior-control vars intended for the BE build only. They leak into
 # thirdparty subprocesses and break bundled cmake logic

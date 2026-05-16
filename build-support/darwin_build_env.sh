@@ -1,6 +1,6 @@
 #!/bin/bash
-# StarRocks BE macOS Environment Configuration
-# This file sets up all environment variables required for building StarRocks BE on macOS ARM64
+# StarRocks macOS build environment configuration.
+# This file sets up environment variables required by the root build on macOS ARM64.
 
 # Prevent multiple sourcing
 if [[ -n "${STARROCKS_MACOS_ENV_LOADED:-}" ]]; then
@@ -42,7 +42,6 @@ detect_parallelism() {
 # ============================================================================
 export STARROCKS_HOME="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 export STARROCKS_BE_HOME="$STARROCKS_HOME/be"
-export STARROCKS_BUILD_MAC="$STARROCKS_HOME/build-mac"
 
 # Respect a pre-set STARROCKS_THIRDPARTY so callers can point to a shared deps dir
 if [[ -z "${STARROCKS_THIRDPARTY:-}" ]]; then
@@ -287,7 +286,6 @@ Compilers:
 Paths:
   StarRocks:        $STARROCKS_HOME
   Third-party:      $STARROCKS_THIRDPARTY
-  Build-mac:        $STARROCKS_BUILD_MAC
 
 Build Configuration:
   Build Type:       $CMAKE_BUILD_TYPE
