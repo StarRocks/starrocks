@@ -12,10 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "connector/connector.h"
-
 #include "connector/benchmark_connector.h"
 #include "connector/cache_stats_connector.h"
+#include "connector/connector.h"
 #include "connector/es_connector.h"
 #include "connector/file_connector.h"
 #include "connector/hive_connector.h"
