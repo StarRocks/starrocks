@@ -356,7 +356,10 @@ class ParserTest {
         }
 
         // :: with hints should not confuse the hint pre-pass
-        SqlParser.parse("select /*+ SET_VAR(query_timeout=10) */ x::int from t", sessionVariable);
+        StatementBase hintStatement =
+                SqlParser.parse("select /*+ SET_VAR(query_timeout=10) */ x::int from t", sessionVariable).get(0);
+        Assertions.assertTrue(hintStatement.isExistQueryScopeHint());
+        assertEquals("10", hintStatement.getAllQueryScopeHints().get(0).getValue().get("query_timeout"));
 
         // :: must bind tighter than || under PIPES_AS_CONCAT
         SessionVariable concatSession = new SessionVariable();
