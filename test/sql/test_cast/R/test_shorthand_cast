@@ -41,10 +41,26 @@ select -1::int;
 -- result:
 -1
 -- !result
+select -2147483648::int;
+-- result:
+None
+-- !result
+select '4'::int < 5;
+-- result:
+1
+-- !result
+select 3 < '4'::int;
+-- result:
+1
+-- !result
 -- name: test_shorthand_cast_complex_types
 select '[1,2,3]'::array<int>;
 -- result:
 [1,2,3]
+-- !result
+select '[1,2,3]'::array<int>[1];
+-- result:
+1
 -- !result
 select cast('{"a":1}' as json)::string;
 -- result:

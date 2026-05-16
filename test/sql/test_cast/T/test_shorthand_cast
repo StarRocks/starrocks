@@ -13,7 +13,11 @@ select '3.14'::decimal(10,2)::string;
 select 1 + 2::int;
 select 10 - 3::int;
 select -1::int;
+select -2147483648::int;
+select '4'::int < 5;
+select 3 < '4'::int;
 
 -- name: test_shorthand_cast_complex_types
 select '[1,2,3]'::array<int>;
+select '[1,2,3]'::array<int>[1];
 select cast('{"a":1}' as json)::string;

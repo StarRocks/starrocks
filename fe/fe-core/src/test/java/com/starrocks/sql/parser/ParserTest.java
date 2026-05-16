@@ -325,11 +325,15 @@ class ParserTest {
                 {"select x::int::string from t", "select cast(cast(x as int) as string) from t"},
                 {"select a + b::int from t", "select a + cast(b as int) from t"},
                 {"select -1::int", "select -cast(1 as int)"},
+                {"select -2147483648::int", "select -cast(2147483648 as int)"},
+                {"select x::int < 5 from t", "select cast(x as int) < 5 from t"},
+                {"select a < b::int from t", "select a < cast(b as int) from t"},
                 {"select (a+b)::decimal(10,2) from t", "select cast((a+b) as decimal(10,2)) from t"},
                 {"select t.col::int from t", "select cast(t.col as int) from t"},
                 {"select cast(x as int)::string from t", "select cast(cast(x as int) as string) from t"},
                 {"select x::array<int>, y::map<string,int> from t",
                         "select cast(x as array<int>), cast(y as map<string,int>) from t"},
+                {"select x::array<int>[1] from t", "select cast(x as array<int>)[1] from t"},
                 {"select get_json_string(j,'$.a')::int from t",
                         "select cast(get_json_string(j,'$.a') as int) from t"},
                 {"select x::int from t where x::bigint > 0",
@@ -354,6 +358,8 @@ class ParserTest {
                         "select item " + i + " differs for: " + pair[0]);
             }
         }
+
+        SqlParser.parse("select foo::int.col from t", sessionVariable).get(0);
 
         // :: with hints should not confuse the hint pre-pass
         StatementBase hintStatement =
