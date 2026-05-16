@@ -12,19 +12,24 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#pragma once
+
+#include <memory>
+#include <string>
+#include <unordered_map>
+
 #include "connector/connector.h"
 
 namespace starrocks::connector {
 
-const std::string Connector::HIVE = "hive";
-const std::string Connector::ES = "es";
-const std::string Connector::JDBC = "jdbc";
-const std::string Connector::MYSQL = "mysql";
-const std::string Connector::FILE = "file";
-const std::string Connector::LAKE = "lake";
-const std::string Connector::BINLOG = "binlog";
-const std::string Connector::ICEBERG = "iceberg";
-const std::string Connector::BENCHMARK = "benchmark";
-const std::string Connector::CACHE_STATS = "cache_stats";
+class ConnectorRegistry {
+public:
+    static ConnectorRegistry* default_instance();
+    const Connector* get(const std::string& name);
+    void put(const std::string& name, std::unique_ptr<Connector> connector);
+
+private:
+    std::unordered_map<std::string, std::unique_ptr<Connector>> _connectors;
+};
 
 } // namespace starrocks::connector

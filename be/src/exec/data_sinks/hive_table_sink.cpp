@@ -15,6 +15,7 @@
 #include "exec/data_sinks/hive_table_sink.h"
 
 #include "common/runtime_profile.h"
+#include "connector/connector_registry.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/pipeline_builder.h"
 #include "exprs/expr.h"
@@ -109,7 +110,7 @@ Status HiveTableSink::decompose_to_pipeline(pipeline::OpFactories prev_operators
     }
     sink_ctx->fragment_context = fragment_ctx;
 
-    auto connector = connector::ConnectorManager::default_instance()->get(connector::Connector::HIVE);
+    auto connector = connector::ConnectorRegistry::default_instance()->get(connector::Connector::HIVE);
     auto sink_provider = connector->create_data_sink_provider();
     auto op = std::make_shared<pipeline::ConnectorSinkOperatorFactory>(
             context->next_operator_id(), std::move(sink_provider), sink_ctx, fragment_ctx);

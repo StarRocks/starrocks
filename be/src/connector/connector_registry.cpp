@@ -12,19 +12,24 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "connector/connector.h"
+#include "connector/connector_registry.h"
 
 namespace starrocks::connector {
 
-const std::string Connector::HIVE = "hive";
-const std::string Connector::ES = "es";
-const std::string Connector::JDBC = "jdbc";
-const std::string Connector::MYSQL = "mysql";
-const std::string Connector::FILE = "file";
-const std::string Connector::LAKE = "lake";
-const std::string Connector::BINLOG = "binlog";
-const std::string Connector::ICEBERG = "iceberg";
-const std::string Connector::BENCHMARK = "benchmark";
-const std::string Connector::CACHE_STATS = "cache_stats";
+static ConnectorRegistry _global_default_instance;
+
+const Connector* ConnectorRegistry::get(const std::string& name) {
+    auto it = _connectors.find(name);
+    if (it == _connectors.end()) return nullptr;
+    return it->second.get();
+}
+
+void ConnectorRegistry::put(const std::string& name, std::unique_ptr<Connector> connector) {
+    _connectors.emplace(name, std::move(connector));
+}
+
+ConnectorRegistry* ConnectorRegistry::default_instance() {
+    return &_global_default_instance;
+}
 
 } // namespace starrocks::connector
