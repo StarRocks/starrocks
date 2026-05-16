@@ -15,6 +15,7 @@
 set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/connector")
 
 ADD_BE_LIB(ConnectorCore
+        connector_defaults.cpp
         data_source.cpp
         data_source_provider.cpp
         connector_registry.cpp
@@ -33,7 +34,6 @@ target_link_libraries(ConnectorCore PUBLIC
 )
 
 ADD_BE_LIB(Connector
-        connector_defaults.cpp
         connector_bootstrap.cpp
         hive_connector.cpp
         es_connector.cpp

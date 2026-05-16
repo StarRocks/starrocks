@@ -22,26 +22,22 @@
 
 namespace starrocks::connector {
 
-class TestConnector final : public Connector {
+class ScanOnlyConnector final : public Connector {
 public:
     DataSourceProviderPtr create_data_source_provider(ConnectorScanNode* scan_node,
                                                       const TPlanNode& plan_node) const override {
         return nullptr;
     }
 
-    std::unique_ptr<ConnectorChunkSinkProvider> create_data_sink_provider() const override { return nullptr; }
-
-    std::unique_ptr<ConnectorChunkSinkProvider> create_delete_sink_provider() const override { return nullptr; }
-
-    std::unique_ptr<ConnectorChunkSinkProvider> create_row_delta_sink_provider() const override { return nullptr; }
-
     ConnectorType connector_type() const override { return ConnectorType::FILE; }
 };
 
 TEST(ConnectorCoreTest, ConnectorContractHeadersCompileWithoutConcreteConnector) {
-    static_assert(std::is_base_of_v<Connector, TestConnector>);
-    static_assert(std::is_same_v<decltype(std::declval<const TestConnector&>().connector_type()), ConnectorType>);
+    static_assert(std::is_base_of_v<Connector, ScanOnlyConnector>);
+    static_assert(std::is_same_v<decltype(std::declval<const ScanOnlyConnector&>().connector_type()), ConnectorType>);
 
+    ScanOnlyConnector connector;
+    EXPECT_EQ(ConnectorType::FILE, connector.connector_type());
     EXPECT_EQ("file", Connector::FILE);
 }
 
