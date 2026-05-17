@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "util/download_util.h"
+#include "platform/download_util.h"
 
 #include <gtest/gtest.h>
 

@@ -557,6 +557,7 @@ set(STARROCKS_LINK_LIBS
     Serde
     $<TARGET_FILE:Cache>
     RuntimeCore
+    Platform
     $<TARGET_FILE:HttpCore>
     $<TARGET_FILE:ChunkCore>
     $<TARGET_FILE:ColumnCore>
@@ -963,6 +964,7 @@ add_subdirectory(${SRC_DIR}/geo)
 add_subdirectory(${SRC_DIR}/gutil)
 add_subdirectory(${SRC_DIR}/http)
 add_subdirectory(${SRC_DIR}/io)
+add_subdirectory(${SRC_DIR}/platform)
 add_subdirectory(${SRC_DIR}/storage)
 add_subdirectory(${SRC_DIR}/runtime)
 add_subdirectory(${SRC_DIR}/serde)

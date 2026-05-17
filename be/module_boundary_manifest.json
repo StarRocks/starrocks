@@ -161,6 +161,18 @@
       "remediation": "Keep FSCore limited to IOCore plus core FS abstractions; move backend-specific behavior into FileSystem."
     },
     {
+      "id": "platform",
+      "doc_label": "Platform",
+      "summary": "Shared BE platform utilities above IO/FS/Common and below Runtime/Exec/Storage/Service.",
+      "owned_targets": ["Platform"],
+      "owned_roots": ["be/src/platform"],
+      "allowed_include_prefixes": ["platform/", "http/", "fs/", "io/core/", "common/", "base/", "gutil/", "gen_cpp/"],
+      "allowed_target_deps": ["HttpCore", "FSCore", "IOCore", "Common", "Base", "Gutil", "StarRocksGen"],
+      "allowed_test_targets": ["platform_test"],
+      "allowed_test_link_deps": ["Platform"],
+      "remediation": "Keep Platform limited to reusable host, filesystem-adjacent, download, temp-file, environment, retry, and platform-level helpers; move runtime, exec, storage, and service integration upward."
+    },
+    {
       "id": "spillcore",
       "doc_label": "SpillCore",
       "summary": "Core spill block, directory, query-local spill, and spill memory-resource primitives without pipeline/runtime-service coupling.",
@@ -279,7 +291,7 @@
         "be/src/runtime/service_contexts.h",
         "be/src/runtime/memory/*.h"
       ],
-      "allowed_include_prefixes": ["runtime/", "column/", "types/", "common/", "base/", "gutil/", "gen_cpp/"],
+      "allowed_include_prefixes": ["runtime/", "platform/", "column/", "types/", "common/", "base/", "gutil/", "gen_cpp/"],
       "forbidden_include_prefixes": [
         "runtime/batch_write/",
         "runtime/routine_load/",
@@ -332,9 +344,9 @@
         "runtime/user_function_cache.h",
         "runtime/variable_result_writer.h"
       ],
-      "allowed_target_deps": ["ChunkCore", "ColumnCore", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
+      "allowed_target_deps": ["Platform", "ChunkCore", "ColumnCore", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
       "allowed_test_targets": ["runtime_core_test"],
-      "allowed_test_link_deps": ["RuntimeCore", "ChunkCore", "ColumnCore", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
+      "allowed_test_link_deps": ["RuntimeCore", "Platform", "ChunkCore", "ColumnCore", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
       "remediation": "Keep RuntimeCore restricted to core runtime infrastructure; move service/storage/stream-load/integration code into Runtime."
     },
     {
