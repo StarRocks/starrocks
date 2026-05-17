@@ -32,12 +32,11 @@ static const char* const kSegmentDirectoryName = "data";
 // before the txn_id-scoped layout was introduced; new code only reclaims it via
 // vacuum_load_spill() when its cleanup_legacy_load_spill flag is set.
 static const char* const kLoadSpillDirectoryName = "load_spill";
-// Active load_spill layout (flat): all spill files written by Lake DeltaWriterImpl
-// (vacuum-cleanup mode) live directly under <root>/load_spill_txns/ with names
-// "<txn_id_hex>_<load_id>_<frag_id>_<seq>". vacuum_load_spill() reclaims expired files
-// by parsing the leading hex txn_id and comparing it against min_active_txn_id; no
-// per-txn subdirectory, so vacuum needs only a single paginated list over this dir.
-// Non-lake callers (connector / SpillPartitionChunkWriter) still use kLoadSpillDirectoryName above.
+// Active load_spill layout (flat). All spill files from Lake DeltaWriterImpl live
+// directly under <root>/load_spill_txns/ with names "<txn_id_hex>_<load_id>_<frag_id>_<seq>";
+// vacuum_load_spill() reclaims expired files by parsing the leading hex txn_id, so a
+// single paginated list over this dir is sufficient. Non-Lake callers (connector /
+// SpillPartitionChunkWriter) keep using kLoadSpillDirectoryName above.
 static const char* const kLoadSpillTxnsDirectoryName = "load_spill_txns";
 
 class LocationProvider {

@@ -177,15 +177,12 @@ StatusOr<spill::BlockPtr> LoadSpillBlockManager::acquire_block(size_t block_size
     // Parent path deletion is handled explicitly by the caller via clear_parent_path(),
     // so skip it at the block layer to avoid races with files still in use.
     opts.skip_parent_path_deletion = true;
-    // Vacuum-cleanup mode: per-file deletion is moved to the merge task hot-delete path
-    // (primary, see TabletInternalParallelMergeTask) and the offline vacuum_full job
-    // (safety net), eliminating S3 DeleteObject calls on the write hot path.
-    opts.skip_file_deletion = _enable_vacuum_cleanup;
-    if (_enable_vacuum_cleanup) {
-        // Flat layout: all spill files live directly under <root>/load_spill_txns/, named
-        // "<txn_id_hex>_<load_id_uuid>_<frag_id_uuid>_<seq>". The prefix uniquely identifies
-        // this fragment instance and lets vacuum reclaim expired files by parsing the leading
-        // hex txn_id without any per-subdir list.
+    // In flat layout, per-file deletion is delegated to the merge hot-delete path
+    // and vacuum_full (eliminating S3 DeleteObject on the write hot path).
+    opts.skip_file_deletion = _enable_flat_layout;
+    if (_enable_flat_layout) {
+        // Encode <txn_id_hex>_<load_id>_<frag_id> into the file name so vacuum can
+        // reclaim by parsing the leading hex segment alone. See class-level comment.
         opts.flat_layout = true;
         opts.flat_name_prefix =
                 fmt::format("{:016x}_{}_{}", _txn_id, print_id(_load_id), print_id(_fragment_instance_id));

@@ -630,17 +630,12 @@ Status vacuum_load_spill(std::string_view root_location, int64_t min_active_txn_
         return name;
     };
 
-    // ---- (1) Active layout: <root>/load_spill_txns/<txn_id_hex>_<load_id>_<frag_id>_<seq> ----
-    //
-    // Flat layout: every spill file lives directly under load_spill_txns/. We parse the
-    // leading hex segment (txn_id) from each file name and delete the file if the txn is
-    // no longer active. No per-subdir list — only one paginated iterate_dir2 over the flat
-    // directory. See design-doc/2026-05-13-load-spill-flat-layout.md §3.7.1.
+    // ---- (1) Active flat layout: <root>/load_spill_txns/<txn_id_hex>_..._<seq> ----
+    // One paginated list over the flat dir; reclaim by parsing the leading hex segment.
     auto load_spill_txns_dir = join_path(root_location, kLoadSpillTxnsDirectoryName);
 
-    // Parse the leading hex txn_id from a flat file name "<hex>_<load_id>_<frag_id>_<seq>".
-    // Returns nullopt for anything that does not start with "<hex_digits>_". The hex segment
-    // is at most 16 chars (int64 max = 0xffffffffffffffff).
+    // Parse the leading hex segment from "<hex>_...". Returns nullopt unless the name
+    // starts with "<1..16 hex digits>_" decoding to a positive int64.
     auto parse_hex_txn_id_prefix = [](std::string_view name) -> std::optional<int64_t> {
         auto sep = name.find('_');
         if (sep == std::string_view::npos || sep == 0 || sep > 16) return std::nullopt;
@@ -676,9 +671,8 @@ Status vacuum_load_spill(std::string_view root_location, int64_t min_active_txn_
         std::string_view name = normalize_entry_name(entry);
         if (name.empty()) return true;
 
-        // Defensive: skip directory entries (residual from the abandoned hex-dir layout, if any).
-        // They should not exist in flat layout; warn but do not auto-delete to avoid wiping
-        // active data on a misconfigured deployment.
+        // Defensive: residual sub-directory from any abandoned nested layout. Warn but do
+        // not auto-delete to avoid wiping active data on a misconfigured deployment.
         if (entry.is_dir.has_value() && entry.is_dir.value()) {
             LOG_EVERY_N(WARNING, 100) << "Unexpected sub-directory under flat load_spill_txns: "
                                       << join_path(load_spill_txns_dir, std::string(name));
@@ -704,29 +698,37 @@ Status vacuum_load_spill(std::string_view root_location, int64_t min_active_txn_
     ret.update(txns_iter_st);
 
     // ---- (2) Legacy layout: <root>/load_spill/<load_id>/ ----
+    //
+    // Safe to wipe in one shot when the caller opts in:
+    //   - Post-upgrade Lake writers all use the flat layout above, so no in-flight writer
+    //     produces new entries here.
+    //   - Non-Lake callers (connector / SpillPartitionChunkWriter) write under a different
+    //     LocationProvider root, never reachable via |root_location| of this function.
     auto legacy_dir = join_path(root_location, kLoadSpillDirectoryName);
     if (!cleanup_legacy_load_spill) {
         LOG_EVERY_N(INFO, 1000) << "Skip legacy load_spill tree (caller did not opt in): " << legacy_dir;
     } else {
-        auto legacy_iter_st = ignore_not_found(fs->iterate_dir2(legacy_dir, [&](DirEntry entry) {
-            std::string_view name = normalize_entry_name(entry);
-            if (name.empty()) {
-                return true;
+        // Probe first: |delete_dir_recursive| swallows NotFound on some FS impls (e.g.
+        // PosixFileSystem returns OK), so we cannot distinguish "really deleted a tree"
+        // from "tree never existed" by looking at its return status alone. Avoid the
+        // false +1 by skipping the call entirely when the legacy root is absent.
+        auto exists_st = fs->path_exists(legacy_dir);
+        if (exists_st.is_not_found()) {
+            // Legacy tree never materialized on this root — common path, not a deletion.
+        } else if (!exists_st.ok()) {
+            LOG(WARNING) << "Fail to stat legacy load_spill tree " << legacy_dir << ": " << exists_st;
+            ret.update(exists_st);
+        } else {
+            auto legacy_st = fs->delete_dir_recursive(legacy_dir);
+            if (!legacy_st.ok()) {
+                LOG(WARNING) << "Fail to delete legacy load_spill tree " << legacy_dir << ": " << legacy_st;
+                ret.update(legacy_st);
+            } else {
+                // Recursive delete reclaims the whole subtree in one FS call; account it
+                // as a single logical reclamation unit (per-file count is not surfaced).
+                ++local_deleted;
             }
-            auto sub_path = join_path(legacy_dir, std::string(name));
-            // is_dir is optional on some FS impls; default to dir-recursive when unknown.
-            const bool is_file = entry.is_dir.has_value() && !entry.is_dir.value();
-            auto st = is_file ? ignore_not_found(fs->delete_file(sub_path))
-                              : ignore_not_found(fs->delete_dir_recursive(sub_path));
-            if (!st.ok()) {
-                LOG(WARNING) << "Fail to delete legacy load spill entry " << sub_path << ": " << st;
-                ret.update(st);
-                return false;
-            }
-            ++local_deleted;
-            return true;
-        }));
-        ret.update(legacy_iter_st);
+        }
     }
 
     auto t1 = butil::gettimeofday_s();
@@ -1535,10 +1537,11 @@ static StatusOr<std::pair<int64_t, int64_t>> path_datafile_gc(std::string_view r
                             name.remove_suffix(1);
                         }
 
-                        // load_spill/ is reclaimed by vacuum_load_spill (which knows about
-                        // active txn_ids); the data-file GC path would mistake live spill
-                        // files for orphans, so skip the whole subtree.
-                        if (name == kLoadSpillDirectoryName) {
+                        // Both load_spill/ (legacy) and load_spill_txns/ (active flat layout)
+                        // are reclaimed by vacuum_load_spill (which understands txn-id encoded
+                        // in flat file names and the legacy opt-in flag); the data-file GC path
+                        // would mistake live spill files for orphans, so skip the whole subtree.
+                        if (name == kLoadSpillTxnsDirectoryName || name == kLoadSpillDirectoryName) {
                             return true;
                         }
 

@@ -47,7 +47,7 @@ public:
         // to delete the parent directory while the spill file is still present on remote
         // storage, causing the delete_dir call to fail on non-empty directories and leaving
         // garbage on the object store.
-        // The caller (currently LoadSpillBlockManager in Lake-vacuum-cleanup mode) already sets
+        // The caller (currently LoadSpillBlockManager in Lake flat-layout mode) already sets
         // both flags together, so we only need to guard the illegal combination via DCHECK.
         DCHECK(!_skip_file_deletion || _skip_parent_path_deletion)
                 << "skip_file_deletion requires skip_parent_path_deletion to be true; otherwise "
@@ -148,7 +148,7 @@ private:
     // The caller (e.g. LoadSpillBlockManager) is responsible for cleaning up the parent path.
     bool _skip_parent_path_deletion = false;
     // When true, skip calling `delete_file(path())` in destructor. Used by Lake write path
-    // (LoadSpillBlockManager with vacuum-cleanup mode) to defer file deletion to the offline
+    // (LoadSpillBlockManager with flat-layout mode) to defer file deletion to the offline
     // `vacuum_load_spill` job, eliminating S3 DeleteObject calls on the write hot path.
     bool _skip_file_deletion = false;
     // When true, files are written directly under `_dir->dir()` (no <query_id>/ subdir),

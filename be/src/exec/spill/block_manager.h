@@ -157,7 +157,7 @@ struct AcquireBlockOptions {
     // remote FileBlockManager.
     bool skip_file_deletion = false;
 
-    // ----- Flat layout options (Lake load-spill, vacuum-cleanup mode) -----
+    // ----- Flat layout options (Lake load-spill, flat-layout mode) -----
     //
     // When true, the FileBlockManager creates each block as a flat file directly under
     // the dir root (no per-query subdirectory). The file name is composed by the caller

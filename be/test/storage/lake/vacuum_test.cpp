@@ -2358,6 +2358,39 @@ TEST_P(LakeVacuumTest, test_datafile_gc) {
     EXPECT_TRUE(file_exist("0000000000022222_a542395a-bff5-48a7-a3a7-2ed05691b58c.sst"));
 }
 
+// Regression guard for path_datafile_gc: both load_spill/ (legacy) and
+// load_spill_txns/ (active flat layout) must be skipped, otherwise datafile_gc
+// would mistake live spill files for orphans and delete them. Reclamation of
+// these subtrees is the exclusive responsibility of vacuum_load_spill.
+TEST_P(LakeVacuumTest, test_datafile_gc_skips_load_spill_dirs) {
+    // Plant a file under each spill subtree. Names are deliberately unrecognized
+    // by the lake data-file naming convention so that, were the skip logic to
+    // regress, datafile_gc would happily classify them as orphans.
+    auto legacy_file = join_path(kTestDir, "load_spill/some_load_uuid/data.bin");
+    auto flat_file = join_path(kTestDir, "load_spill_txns/100_aaaa_bbbb_0");
+    {
+        auto dir = legacy_file.substr(0, legacy_file.find_last_of('/'));
+        ASSERT_OK(FileSystem::Default()->create_dir_recursive(dir));
+        ASSIGN_OR_ABORT(auto f, FileSystem::Default()->new_writable_file(legacy_file));
+        ASSERT_OK(f->close());
+    }
+    {
+        auto dir = flat_file.substr(0, flat_file.find_last_of('/'));
+        ASSERT_OK(FileSystem::Default()->create_dir_recursive(dir));
+        ASSIGN_OR_ABORT(auto f, FileSystem::Default()->new_writable_file(flat_file));
+        ASSERT_OK(f->close());
+    }
+
+    // Run datafile_gc with do_delete=true and a 0-second expiry so anything
+    // not skipped becomes a deletion candidate.
+    ASSERT_OK(datafile_gc(kTestDir, /*audit_file_path=*/"", /*expired_seconds=*/0, /*do_delete=*/true));
+
+    auto legacy_st = FileSystem::Default()->path_exists(legacy_file);
+    auto flat_st = FileSystem::Default()->path_exists(flat_file);
+    ASSERT_TRUE(legacy_st.ok()) << "datafile_gc must not touch legacy load_spill/, got: " << legacy_st;
+    ASSERT_TRUE(flat_st.ok()) << "datafile_gc must not touch flat load_spill_txns/, got: " << flat_st;
+}
+
 TEST_P(LakeVacuumTest, test_datafile_gc_with_bundle_metadata) {
     WritableFileOptions options;
     options.mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE;
@@ -5221,8 +5254,10 @@ TEST_P(LakeVacuumTest, vacuum_load_spill_legacy_skipped_by_default) {
     EXPECT_EQ(0, deleted);
 }
 
-// Legacy tree is fully reclaimed when cleanup_legacy_load_spill = true,
-// regardless of min_active_txn_id (the legacy layout has no txn_id metadata).
+// Legacy tree is fully reclaimed in one shot (delete_dir_recursive) when
+// cleanup_legacy_load_spill = true, regardless of min_active_txn_id (the legacy
+// layout has no txn_id metadata). The deleted-files counter is incremented by 1
+// logical unit — the recursive delete does not surface a per-file count.
 TEST_P(LakeVacuumTest, vacuum_load_spill_legacy_cleanup_when_optin) {
     auto legacy_dir = join_path(kTestDir, "load_spill");
     auto legacy_subdir = join_path(legacy_dir, "load_uuid_a");
@@ -5237,7 +5272,8 @@ TEST_P(LakeVacuumTest, vacuum_load_spill_legacy_cleanup_when_optin) {
     EXPECT_FALSE(path_exists(legacy_file));
     EXPECT_FALSE(path_exists(legacy_subdir));
     EXPECT_FALSE(path_exists(legacy_topfile));
-    EXPECT_EQ(2, deleted); // one subdir-recursive + one top-level file
+    EXPECT_FALSE(path_exists(legacy_dir));
+    EXPECT_EQ(1, deleted); // one logical unit for the recursive subtree delete
 }
 
 // vacuum is idempotent / no-op when neither directory exists.
@@ -5254,7 +5290,9 @@ TEST_P(LakeVacuumTest, vacuum_load_spill_idempotent_on_missing_dir) {
     EXPECT_EQ(42, deleted);
 }
 
-// |*deleted_files| accumulates across both layouts in a single call.
+// |*deleted_files| accumulates across both layouts in a single call. The legacy
+// subtree contributes 1 logical unit (one delete_dir_recursive call), regardless
+// of how many files lived underneath.
 TEST_P(LakeVacuumTest, vacuum_load_spill_increments_deleted_files_counter) {
     auto txns_dir = join_path(kTestDir, "load_spill_txns");
     auto legacy_dir = join_path(kTestDir, "load_spill");
@@ -5265,7 +5303,7 @@ TEST_P(LakeVacuumTest, vacuum_load_spill_increments_deleted_files_counter) {
     int64_t deleted = 100; // pre-existing counter — must accumulate, not reset
     ASSERT_OK(vacuum_load_spill(kTestDir, /*min_active_txn_id=*/INT64_MAX,
                                 /*cleanup_legacy_load_spill=*/true, &deleted));
-    // 2 flat files + 1 legacy subdir = 3 deletions, accumulated on top of 100.
+    // 2 flat files + 1 legacy-subtree logical unit = 3 deletions, on top of 100.
     EXPECT_EQ(103, deleted);
 }
 

@@ -64,21 +64,19 @@ StatusOr<int64_t> garbage_file_check(std::string_view root_location);
 Status vacuum_txn_log(std::string_view root_location, int64_t min_active_txn_id, int64_t* vacuumed_files,
                       int64_t* vacuumed_file_size);
 
-// Reclaim expired load_spill directories under |root_location|.
+// Reclaim expired load_spill files under |root_location|.
 //
 // Two layouts coexist and are scanned at distinct paths:
-//   - Active layout `<root>/load_spill_txns/<txn_id_hex>/<load_id>/`: always
-//     scanned; gated by |min_active_txn_id|. A subdir is reclaimable iff its
-//     txn_id < min_active_txn_id.
-//   - Legacy layout `<root>/load_spill/<load_id_uuid>/` (no txn_id layer): gated
-//     by |cleanup_legacy_load_spill|. When false, the legacy tree is skipped
-//     entirely (with a throttled warning) because the caller cannot prove its
-//     subdirs are inactive. When true, every legacy subdir is unconditionally
-//     reclaimed. Legacy directories are written only by older BE versions before
-//     the txn_id layer was introduced.
+//   - Active flat layout `<root>/load_spill_txns/<txn_id_hex>_..._<seq>`: always scanned.
+//     A file is reclaimable iff its parsed leading hex txn_id < |min_active_txn_id|.
+//     Subdirectories under load_spill_txns/ are unexpected and only logged, never deleted.
+//   - Legacy `<root>/load_spill/<load_id_uuid>/`: scanned only when |cleanup_legacy_load_spill|
+//     is true; in that case the entire subtree is reclaimed in one shot. When false the tree
+//     is skipped (a throttled INFO is logged). See implementation for the safety argument.
 //
-// |*deleted_files|, if non-null, is incremented by the number of flat-layout files
-// reclaimed under load_spill_txns/ (plus any legacy entries when cleanup_legacy_load_spill).
+// |*deleted_files|, if non-null, is incremented by the number of flat-layout files reclaimed,
+// plus 1 logical unit when the legacy subtree was recursively reclaimed (the recursive delete
+// does not surface a per-file count).
 Status vacuum_load_spill(std::string_view root_location, int64_t min_active_txn_id, bool cleanup_legacy_load_spill,
                          int64_t* deleted_files = nullptr);
 
