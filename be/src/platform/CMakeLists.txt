@@ -12,31 +12,18 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/util")
+set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/platform")
 
 # where to put generated binaries
-set(EXECUTABLE_OUTPUT_PATH "${BUILD_DIR}/src/util")
+set(EXECUTABLE_OUTPUT_PATH "${BUILD_DIR}/src/platform")
 
-set(UTIL_FILES
-  arrow/row_batch.cpp
-  arrow/starrocks_column_to_arrow.cpp
-  json_util.cpp
-  json_flattener.cpp
-# TODO: not supported on RHEL 5
-# perf-counters.cpp
-  static_asserts.cpp
-  time_guard.cpp
-  system_metrics.cpp
-# coding_util.cpp
-  debug/query_trace_impl.cpp
-  memory_lock.cpp
-  byte_buffer.cpp
-  hdfs_util.cpp
-  jvm_metrics.cpp
-  llm_cache.cpp
-  llm_query_service.cpp
+set(PLATFORM_FILES
+  download_util.cpp
+  udf_downloader.cpp
 )
 
-ADD_BE_LIB(Util
-    ${UTIL_FILES}
+ADD_BE_LIB(Platform
+    ${PLATFORM_FILES}
 )
+
+target_link_libraries(Platform PUBLIC HttpCore FSCore IOCore Common Base Gutil StarRocksGen)
