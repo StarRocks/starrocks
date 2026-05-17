@@ -227,6 +227,11 @@ private:
     ColumnPtr static haystack_vector_and_needle_const(const ColumnPtr& haystack_column, std::vector<NgramHash>& map,
                                                       FunctionContext* context, size_t gram_num) {
         std::vector<NgramHash> map_restore_helper(MAX_STRING_SIZE, 0);
+        // Hoisted per-row scratch for UTF-8 path: lowered haystack and character offsets.
+        // Default-constructed strings/vectors don't allocate, and clear() preserves capacity,
+        // so the ASCII path pays nothing and the UTF-8 path amortizes after the first row.
+        std::string lower_buf;
+        std::vector<size_t> positions;
 
         NullColumnPtr res_null = nullptr;
         ColumnPtr haystackPtr = nullptr;
@@ -261,7 +266,7 @@ private:
             }
 
             size_t needle_not_overlap_with_haystack = calculateDistanceWithHaystack<true>(
-                    map, cur_haystack_str, map_restore_helper, needle_gram_count, gram_num);
+                    map, cur_haystack_str, map_restore_helper, lower_buf, positions, needle_gram_count, gram_num);
             DCHECK(needle_not_overlap_with_haystack <= needle_gram_count);
 
             // now get the result
@@ -280,6 +285,8 @@ private:
     float static haystack_const_and_needle_const(const Slice& haystack, std::vector<NgramHash>& map,
                                                  FunctionContext* context, size_t gram_num) {
         std::vector<NgramHash> map_restore_helper{};
+        std::string lower_buf;
+        std::vector<size_t> positions;
         // if haystack is too large, we can say they are not similar at all
         if (haystack.get_size() > MAX_STRING_SIZE) {
             return 0;
@@ -300,7 +307,7 @@ private:
         // needle_gram_count may be zero because needle is empty or N is too large for needle
         size_t needle_gram_count = state->needle_gram_count;
         size_t needle_not_overlap_with_haystack = calculateDistanceWithHaystack<false>(
-                map, cur_haystack, map_restore_helper, needle_gram_count, gram_num);
+                map, cur_haystack, map_restore_helper, lower_buf, positions, needle_gram_count, gram_num);
         float result = 1.0f - (needle_not_overlap_with_haystack)*1.0f / std::max(needle_gram_count, (size_t)1);
         DCHECK(needle_not_overlap_with_haystack <= needle_gram_count);
         return result;
@@ -309,14 +316,18 @@ private:
     // traverse haystack's every gram, find whether this gram is in needle or not using gram's hash
     // 16bit hash value may cause hash collision, but because we just calculate the similarity of two string
     // so don't need to be so accurate.
+    // lower_buf and positions are caller-owned scratch buffers reused across rows; only the UTF-8 path
+    // touches them. clear() on entry preserves capacity for the next row.
     template <bool need_recovery_map>
     size_t static calculateDistanceWithHaystack(std::vector<NgramHash>& map, const Slice& haystack,
                                                 [[maybe_unused]] std::vector<NgramHash>& map_restore_helper,
+                                                [[maybe_unused]] std::string& lower_buf,
+                                                [[maybe_unused]] std::vector<size_t>& positions,
                                                 size_t needle_gram_count, size_t gram_num) {
         // For UTF-8 case-insensitive mode in vector processing, we need to convert here
-        std::string lower_buf;
         Slice cur_haystack = haystack;
         if constexpr (case_insensitive && use_utf_8) {
+            lower_buf.clear();
             tolower_utf8(haystack, lower_buf);
             cur_haystack = Slice(lower_buf.c_str(), lower_buf.size());
         }
@@ -326,12 +337,17 @@ private:
 
         if constexpr (use_utf_8) {
             // UTF-8 mode: iterate by characters
-            std::vector<size_t> positions;
             get_utf8_positions(data, len, positions);
 
             size_t num_chars = positions.size();
             if (num_chars < gram_num) {
                 return needle_gram_count;
+            }
+            // Defensive: map_restore_helper is sized in bytes (MAX_STRING_SIZE); character count
+            // could in principle exceed that after ICU folds (e.g. ligatures expanding). Skip
+            // rather than indexing out of bounds.
+            if constexpr (need_recovery_map) {
+                if (num_chars > MAX_STRING_SIZE) return needle_gram_count;
             }
 
             // For UTF-8 mode, we use positions as indices in map_restore_helper
