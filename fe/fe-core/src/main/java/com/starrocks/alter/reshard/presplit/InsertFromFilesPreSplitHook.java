@@ -14,17 +14,12 @@
 
 package com.starrocks.alter.reshard.presplit;
 
-import com.starrocks.alter.reshard.TabletReshardJobMgr;
 import com.starrocks.catalog.Database;
-import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
-import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableFunctionTable;
 import com.starrocks.catalog.TableName;
-import com.starrocks.catalog.Tablet;
 import com.starrocks.common.Config;
-import com.starrocks.common.StarRocksException;
 import com.starrocks.planner.LoadScanNode;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
@@ -44,10 +39,6 @@ import com.starrocks.thrift.TBrokerFileStatus;
 import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-
-import java.time.Clock;
-import java.util.Collection;
-import java.util.List;
 
 /**
  * StmtExecutor → coordinator bridge for Sample-Based Tablet Pre-Split on the
@@ -74,11 +65,11 @@ import java.util.List;
  * lists, and multi-source variants are rejected because the sampler-driven
  * boundaries would only represent a subset of the inserted rows.
  *
- * <p>The Tier 1 / Tier 2 sampler executors are currently placeholders — see
- * {@link PendingRowGroupStatisticsProvider} and
- * {@link PendingSampleSubqueryExecutor}. The per-path Config flag defaults
- * to {@code false}, so the hook never reaches them until production wiring
- * lands.
+ * <p>The Tier 1 / Tier 2 sampler executors are currently placeholders
+ * supplied by
+ * {@link DefaultPreSplitPipeline#withPendingExecutors}. The per-path Config
+ * flag defaults to {@code false}, so the hook never reaches them until
+ * production wiring lands.
  */
 public final class InsertFromFilesPreSplitHook {
 
@@ -113,7 +104,7 @@ public final class InsertFromFilesPreSplitHook {
         if (filesRelation == null) {
             return;
         }
-        EligibleTarget target = resolveEligibleTarget(insertStmt, context);
+        PreSplitTargets.EligibleTarget target = resolveEligibleTarget(insertStmt, context);
         if (target == null) {
             return;
         }
@@ -186,10 +177,11 @@ public final class InsertFromFilesPreSplitHook {
      * that the eligibility gate inside {@link TabletPreSplitCoordinator} would
      * also reject — checking here avoids paying for the FILES() schema RPC.
      *
-     * @return the resolved {@link EligibleTarget}, or {@code null} when target
-     *         resolution or any cheap eligibility check fails (caller no-ops).
+     * @return the resolved {@link PreSplitTargets.EligibleTarget}, or {@code null}
+     *         when target resolution or any cheap eligibility check fails
+     *         (caller no-ops).
      */
-    private static EligibleTarget resolveEligibleTarget(InsertStmt insertStmt, ConnectContext context) {
+    private static PreSplitTargets.EligibleTarget resolveEligibleTarget(InsertStmt insertStmt, ConnectContext context) {
         TableRef normalizedTableRef = normalizeTableRefOrNull(insertStmt, context);
         if (normalizedTableRef == null) {
             return null;
@@ -202,19 +194,7 @@ public final class InsertFromFilesPreSplitHook {
         if (olapTable == null) {
             return null;
         }
-        PhysicalPartition uniquePartition = findUniquePhysicalPartition(olapTable);
-        if (uniquePartition == null) {
-            return null;
-        }
-        long oldTabletId = findSingleBaseTabletId(olapTable, uniquePartition);
-        if (oldTabletId < 0) {
-            return null;
-        }
-        return new EligibleTarget(database, olapTable, uniquePartition.getId(), oldTabletId);
-    }
-
-    /** Bundles the resolved target so {@link #tryRunPreSplit} can pass it as a single value. */
-    private record EligibleTarget(Database database, OlapTable olapTable, long partitionId, long oldTabletId) {
+        return PreSplitTargets.findEligibleTarget(database, olapTable);
     }
 
     /**
@@ -237,14 +217,16 @@ public final class InsertFromFilesPreSplitHook {
     }
 
     private static void submitToCoordinator(
-            EligibleTarget target, TableFunctionTable sourceTable, ConnectContext context) {
+            PreSplitTargets.EligibleTarget target, TableFunctionTable sourceTable, ConnectContext context) {
         ComputeResource computeResource = context.getCurrentComputeResource();
         InsertFromFilesScanContext scanContext = new InsertFromFilesScanContext(sourceTable, computeResource);
         int activeComputeNodeCount = Math.max(1,
                 LoadScanNode.getAvailableComputeNodes(computeResource).size());
         long fileTotalBytes = sumFileBytes(sourceTable);
 
-        DefaultPreSplitPipeline pipeline = buildPipeline(target, fileTotalBytes);
+        DefaultPreSplitPipeline pipeline = DefaultPreSplitPipeline.withPendingExecutors(
+                target.database(), target.olapTable(), target.oldTabletId(), fileTotalBytes,
+                LoadKind.INSERT_FROM_FILES);
 
         PreSplitOutcome outcome = TabletPreSplitCoordinator.submitAsynchronously(
                 target.database(), target.olapTable(), target.partitionId(), scanContext,
@@ -289,33 +271,6 @@ public final class InsertFromFilesPreSplitHook {
         return table instanceof OlapTable olapTable ? olapTable : null;
     }
 
-    /**
-     * @return the unique physical partition of {@code table}, or {@code null}
-     *         if the table has zero or multiple partitions. Multi-partition
-     *         INSERT-from-FILES is out of scope for P1; per-row partition
-     *         routing makes the target-partition set unknowable until exec.
-     */
-    private static PhysicalPartition findUniquePhysicalPartition(OlapTable table) {
-        Collection<PhysicalPartition> partitions = table.getPhysicalPartitions();
-        if (partitions.size() != 1) {
-            return null;
-        }
-        return partitions.iterator().next();
-    }
-
-    /** @return the single base-index tablet's id, or {@code -1} if the count isn't exactly one. */
-    private static long findSingleBaseTabletId(OlapTable table, PhysicalPartition partition) {
-        MaterializedIndex baseIndex = partition.getIndex(table.getBaseIndexMetaId());
-        if (baseIndex == null) {
-            return -1L;
-        }
-        List<Tablet> tablets = baseIndex.getTablets();
-        if (tablets.size() != 1) {
-            return -1L;
-        }
-        return tablets.get(0).getId();
-    }
-
     private static long sumFileBytes(TableFunctionTable sourceTable) {
         long total = 0L;
         for (TBrokerFileStatus fileStatus : sourceTable.loadFileList()) {
@@ -326,43 +281,8 @@ public final class InsertFromFilesPreSplitHook {
         return total;
     }
 
-    private static DefaultPreSplitPipeline buildPipeline(EligibleTarget target, long fileTotalBytes) {
-        ParquetMetadataSampler tier1Sampler = new ParquetMetadataSampler(new PendingRowGroupStatisticsProvider());
-        Sampler tier2Sampler = new ReservoirSampler(new PendingSampleSubqueryExecutor());
-        TabletReshardJobMgr tabletReshardJobManager = GlobalStateMgr.getCurrentState().getTabletReshardJobMgr();
-        return new DefaultPreSplitPipeline(
-                tier1Sampler::tryPlan, tier2Sampler, tabletReshardJobManager,
-                target.database(), target.olapTable(), target.oldTabletId(), fileTotalBytes,
-                DefaultPreSplitPipeline.DEFAULT_POLL_INTERVAL, Clock.systemUTC());
-    }
-
     private static String targetNameForLog(InsertStmt insertStmt) {
         TableRef tableRef = insertStmt.getTableRef();
         return tableRef == null ? "<unknown>" : tableRef.getTableName();
-    }
-
-    /**
-     * Placeholder Tier 1 statistics provider: reports Tier 1 unavailable so the
-     * pipeline falls through to Tier 2. The production implementation reads
-     * Parquet/ORC footers.
-     */
-    static final class PendingRowGroupStatisticsProvider implements RowGroupStatisticsProvider {
-        @Override
-        public List<RowGroupStatistics> fetch(SampleRequest request) throws Tier1UnavailableException {
-            throw new Tier1UnavailableException("row-group statistics provider not yet wired for INSERT-from-FILES");
-        }
-    }
-
-    /**
-     * Placeholder Tier 2 sub-query executor: throws so the coordinator returns
-     * {@link SkipReason#SAMPLE_FAILED} and the load proceeds without pre-split.
-     * The production implementation builds a sampling sub-query on top of a
-     * {@code FileScanNode}.
-     */
-    static final class PendingSampleSubqueryExecutor implements SampleSubqueryExecutor {
-        @Override
-        public SampleExecution execute(SampleRequest request) throws StarRocksException {
-            throw new StarRocksException("sample sub-query executor not yet wired for INSERT-from-FILES");
-        }
     }
 }

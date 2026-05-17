@@ -36,6 +36,7 @@ package com.starrocks.load.loadv2;
 
 import com.google.common.base.Joiner;
 import com.google.common.collect.Lists;
+import com.starrocks.alter.reshard.presplit.BrokerLoadPreSplitHook;
 import com.starrocks.authentication.UserIdentityUtils;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
@@ -68,6 +69,7 @@ import com.starrocks.persist.AlterLoadJobOperationLog;
 import com.starrocks.persist.BrokerPropertiesPersistInfo;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QeProcessorImpl;
+import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.scheduler.Coordinator;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.FrontendOptions;
@@ -75,6 +77,7 @@ import com.starrocks.sql.ast.AlterLoadStmt;
 import com.starrocks.sql.ast.BrokerDesc;
 import com.starrocks.sql.ast.LoadStmt;
 import com.starrocks.task.PriorityLeaderTask;
+import com.starrocks.thrift.TBrokerFileStatus;
 import com.starrocks.thrift.TLoadJobType;
 import com.starrocks.thrift.TPartialUpdateMode;
 import com.starrocks.thrift.TReportExecStatusParams;
@@ -89,6 +92,7 @@ import com.starrocks.warehouse.WarehouseIdleChecker;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -252,6 +256,9 @@ public class BrokerLoadJob extends BulkLoadJob {
 
     private void createLoadingTask(Database db, BrokerPendingTaskAttachment attachment) throws StarRocksException {
         // divide job into broker loading task by table
+        BrokerDesc brokerDesc = brokerPersistInfo == null ? null :
+                new BrokerDesc(brokerPersistInfo.getName(), brokerPersistInfo.getProperties());
+        List<PreSplitHookInput> preSplitInputs = new ArrayList<>();
         Locker locker = new Locker();
         locker.lockDatabase(db.getId(), LockType.READ);
         try {
@@ -293,12 +300,12 @@ public class BrokerLoadJob extends BulkLoadJob {
                     mode = TPartialUpdateMode.ROW_MODE;
                 }
                 TUniqueId loadId = UUIDUtil.genTUniqueId();
+                List<List<TBrokerFileStatus>> fileStatuses = attachment.getFileStatusByTable(aggKey);
 
                 LoadLoadingTask task = new LoadLoadingTask.Builder()
                         .setDb(db)
                         .setTable(table)
-                        .setBrokerDesc(brokerPersistInfo == null ? null :
-                                new BrokerDesc(brokerPersistInfo.getName(), brokerPersistInfo.getProperties()))
+                        .setBrokerDesc(brokerDesc)
                         .setFileGroups(brokerFileGroups)
                         .setJobDeadlineMs(getDeadlineMs())
                         .setExecMemLimit(loadMemLimit)
@@ -316,7 +323,7 @@ public class BrokerLoadJob extends BulkLoadJob {
                         .setOriginStmt(originStmt)
                         .setLoadStmt(stmt)
                         .setPartialUpdateMode(mode)
-                        .setFileStatusList(attachment.getFileStatusByTable(aggKey))
+                        .setFileStatusList(fileStatuses)
                         .setFileNum(attachment.getFileNumByTable(aggKey))
                         .setLoadId(loadId)
                         .setJSONOptions(jsonOptions)
@@ -332,15 +339,44 @@ public class BrokerLoadJob extends BulkLoadJob {
                 // use newLoadingTasks to save new created loading tasks and submit them later.
                 newLoadingTasks.add(task);
                 // load id will be added to loadStatistic when executing this task
+
+                // Snapshot the inputs the Sample-Based Tablet Pre-Split hook needs so the hook
+                // can fire OUTSIDE the database lock — future real samplers will perform remote
+                // sampling/planning work that must not hold metadata read locks.
+                preSplitInputs.add(new PreSplitHookInput(table, brokerFileGroups, fileStatuses));
             }
         } finally {
             locker.unLockDatabase(db.getId(), LockType.READ);
+        }
+
+        // Pre-split is fire-and-forget; bind the job's ConnectContext so the coordinator's
+        // session-var check sees the load's session, not whatever stale thread-local is set.
+        // Apply the persisted opt-out value too so the user's submit-time `SET enable_tablet_pre_split = false`
+        // survives FE failover (the recreated context above otherwise has the default value).
+        if (!preSplitInputs.isEmpty()) {
+            String persistedPreSplitOptOut = sessionVariables.get(SessionVariable.ENABLE_TABLET_PRE_SPLIT);
+            if (persistedPreSplitOptOut != null) {
+                context.getSessionVariable().setEnableTabletPreSplit(Boolean.parseBoolean(persistedPreSplitOptOut));
+            }
+            try (ConnectContext.ScopeGuard ignored = context.bindScope()) {
+                for (PreSplitHookInput input : preSplitInputs) {
+                    BrokerLoadPreSplitHook.maybeRunPreSplit(
+                            db, input.targetTable(), brokerDesc,
+                            input.fileGroups(), input.fileStatuses(), computeResource);
+                }
+            }
         }
 
         // Submit task outside the database lock, cause it may take a while if task queue is full.
         for (LoadTask loadTask : newLoadingTasks) {
             submitTask(GlobalStateMgr.getCurrentState().getLoadingLoadTaskScheduler(), loadTask);
         }
+    }
+
+    /** Per-table inputs captured under the DB read lock so the pre-split hook can fire outside it. */
+    private record PreSplitHookInput(
+            OlapTable targetTable, List<BrokerFileGroup> fileGroups,
+            List<List<TBrokerFileStatus>> fileStatuses) {
     }
 
     @Override

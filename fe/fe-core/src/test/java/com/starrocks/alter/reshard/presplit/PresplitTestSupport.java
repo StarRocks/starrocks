@@ -19,8 +19,15 @@ import com.starrocks.catalog.Tuple;
 import com.starrocks.catalog.Variant;
 import com.starrocks.type.IntegerType;
 import com.starrocks.type.VarcharType;
+import org.mockito.MockedStatic;
+import org.mockito.Mockito;
 
 import java.util.List;
+
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.Mockito.never;
 
 /**
  * Shared test fixtures for the presplit package. Centralizes the
@@ -61,5 +68,26 @@ final class PresplitTestSupport {
         return List.of(
                 Variant.of(VarcharType.VARCHAR, tenant),
                 Variant.of(IntegerType.BIGINT, Long.toString(position)));
+    }
+
+    /**
+     * Wraps {@code invocation} with a {@code MockedStatic} so a hook test can
+     * assert the hook never reached
+     * {@link TabletPreSplitCoordinator#submitAsynchronously}. "No throw" alone
+     * is too weak — every hook swallows internal throws by design.
+     */
+    static void assertHookDoesNotDelegate(HookInvocation invocation) throws Exception {
+        try (MockedStatic<TabletPreSplitCoordinator> coordinator =
+                     Mockito.mockStatic(TabletPreSplitCoordinator.class)) {
+            invocation.run();
+            coordinator.verify(() -> TabletPreSplitCoordinator.submitAsynchronously(
+                    any(), any(), anyLong(), any(), any(), any(), anyInt()), never());
+        }
+    }
+
+    /** Functional-interface signature for {@link #assertHookDoesNotDelegate} lambdas. */
+    @FunctionalInterface
+    interface HookInvocation {
+        void run() throws Exception;
     }
 }

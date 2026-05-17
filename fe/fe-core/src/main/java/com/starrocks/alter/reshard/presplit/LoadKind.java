@@ -23,6 +23,17 @@ package com.starrocks.alter.reshard.presplit;
  * INSERT-from-FILES callers through (and vice versa).
  */
 public enum LoadKind {
-    INSERT_FROM_FILES,
-    BROKER_LOAD,
+    INSERT_FROM_FILES("INSERT-from-FILES"),
+    BROKER_LOAD("Broker Load");
+
+    private final String displayName;
+
+    LoadKind(String displayName) {
+        this.displayName = displayName;
+    }
+
+    /** Human-readable name used in operator-facing log/error messages. */
+    public String displayName() {
+        return displayName;
+    }
 }

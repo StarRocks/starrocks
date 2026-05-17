@@ -38,12 +38,10 @@ import org.mockito.Mockito;
 
 import java.util.List;
 
+import static com.starrocks.alter.reshard.presplit.PresplitTestSupport.assertHookDoesNotDelegate;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyInt;
-import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.when;
 
 /**
@@ -203,26 +201,6 @@ public class InsertFromFilesPreSplitHookTest {
 
         assertHookDoesNotDelegate(() ->
                 InsertFromFilesPreSplitHook.maybeRunPreSplit(stmt, mock(ConnectContext.class)));
-    }
-
-    /**
-     * Wraps {@code invocation} with a {@code MockedStatic} so the test can
-     * assert the hook never reached
-     * {@link TabletPreSplitCoordinator#submitAsynchronously}. "No throw" alone
-     * is too weak — the public hook always swallows throws.
-     */
-    private static void assertHookDoesNotDelegate(HookInvocation invocation) throws Exception {
-        try (MockedStatic<TabletPreSplitCoordinator> coordinator =
-                     Mockito.mockStatic(TabletPreSplitCoordinator.class)) {
-            invocation.run();
-            coordinator.verify(() -> TabletPreSplitCoordinator.submitAsynchronously(
-                    any(), any(), anyLong(), any(), any(), any(), anyInt()), never());
-        }
-    }
-
-    @FunctionalInterface
-    private interface HookInvocation {
-        void run() throws Exception;
     }
 
     private static InsertStmt simpleFilesInsertStmt() {

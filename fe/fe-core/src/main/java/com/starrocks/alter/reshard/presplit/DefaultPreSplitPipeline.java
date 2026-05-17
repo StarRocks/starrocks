@@ -25,6 +25,7 @@ import com.starrocks.catalog.Tuple;
 import com.starrocks.common.Range;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.metric.MetricRepo;
+import com.starrocks.server.GlobalStateMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -100,6 +101,24 @@ public final class DefaultPreSplitPipeline implements PreSplitPipeline {
         this.fileTotalBytes = fileTotalBytes;
         this.pollInterval = Objects.requireNonNull(pollInterval, "pollInterval");
         this.clock = Objects.requireNonNull(clock, "clock");
+    }
+
+    /**
+     * Build a pipeline wired with the placeholder Tier 1 / Tier 2 executors
+     * the load-path hooks use today. Centralizes the construction so all
+     * hooks (D1 INSERT-from-FILES, D2 Broker Load, and any D3+ caller) share
+     * the same plumbing. When real sampler executors land per load kind,
+     * this factory is the single edit site.
+     */
+    public static DefaultPreSplitPipeline withPendingExecutors(
+            Database database, OlapTable table, long oldTabletId, long fileTotalBytes, LoadKind loadKind) {
+        ParquetMetadataSampler tier1Sampler = new ParquetMetadataSampler(new PendingRowGroupStatisticsProvider(loadKind));
+        Sampler tier2Sampler = new ReservoirSampler(new PendingSampleSubqueryExecutor(loadKind));
+        TabletReshardJobMgr tabletReshardJobManager = GlobalStateMgr.getCurrentState().getTabletReshardJobMgr();
+        return new DefaultPreSplitPipeline(
+                tier1Sampler::tryPlan, tier2Sampler, tabletReshardJobManager,
+                database, table, oldTabletId, fileTotalBytes,
+                DEFAULT_POLL_INTERVAL, Clock.systemUTC());
     }
 
     @Override
