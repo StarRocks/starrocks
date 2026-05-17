@@ -48,6 +48,7 @@ ADD_BE_LIB(Formats
         avro/cpp/column_reader.cpp
         avro/cpp/complex_column_reader.cpp
         avro/cpp/date_column_reader.cpp
+        avro/cpp/direct_column_reader.cpp
         avro/cpp/nullable_column_reader.cpp
         avro/cpp/numeric_column_reader.cpp
         avro/cpp/utils.cpp
