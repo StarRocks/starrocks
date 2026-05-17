@@ -142,8 +142,19 @@ public:
     size_t type_size() const override { return sizeof(Slice); }
 
     size_t byte_size() const override {
-        size_t data_size = _resource.empty() ? _bytes.size() : _offsets.back();
-        return data_size * sizeof(uint8_t) + _offsets.size() * _offsets.element_size();
+        if (LIKELY(_resource.empty())) {
+            if (LIKELY(!_offsets.is_large())) {
+                const auto& offsets = _offsets.small_storage();
+                return _bytes.size() + offsets.size() * sizeof(uint32_t);
+            }
+            const auto& offsets = _offsets.large_storage();
+            return _bytes.size() + offsets.size() * sizeof(uint64_t);
+        }
+
+        return _offsets.visit_storage([&](const auto& offsets) -> size_t {
+            using OffsetValue = typename std::decay_t<decltype(offsets)>::value_type;
+            return offsets.back() + offsets.size() * sizeof(OffsetValue);
+        });
     }
 
     size_t byte_size(size_t from, size_t size) const override {
@@ -159,7 +170,10 @@ public:
 
     Slice get_slice(size_t idx) const {
         const uint8_t* base = _data_base();
-        return Slice(base + _offsets[idx], _offsets[idx + 1] - _offsets[idx]);
+        return _offsets.visit_storage([&](const auto& offsets) -> Slice {
+            const auto offset = offsets[idx];
+            return Slice(base + offset, offsets[idx + 1] - offset);
+        });
     }
 
     const char* get_string_begin() const { return reinterpret_cast<const char*>(_data_base()); }
@@ -244,15 +258,17 @@ public:
 
     ALWAYS_INLINE uint32_t serialize(size_t idx, uint8_t* pos) const override {
         // max size of one string is 2^32, so use uint32_t not T
-        const auto offset = _offsets[idx];
-        const auto next_offset = _offsets[idx + 1];
-        auto binary_size = static_cast<uint32_t>(next_offset - offset);
         const uint8_t* base = _data_base();
+        return _offsets.visit_storage([&](const auto& offsets) -> uint32_t {
+            const auto offset = offsets[idx];
+            const auto next_offset = offsets[idx + 1];
+            auto binary_size = static_cast<uint32_t>(next_offset - offset);
 
-        strings::memcpy_inlined(pos, &binary_size, sizeof(uint32_t));
-        strings::memcpy_inlined(pos + sizeof(uint32_t), base + offset, binary_size);
+            strings::memcpy_inlined(pos, &binary_size, sizeof(uint32_t));
+            strings::memcpy_inlined(pos + sizeof(uint32_t), base + offset, binary_size);
 
-        return sizeof(uint32_t) + binary_size;
+            return sizeof(uint32_t) + binary_size;
+        });
     }
 
     size_t serialize_batch_at_interval(uint8_t* dst, size_t byte_offset, size_t byte_interval, uint32_t max_row_size,

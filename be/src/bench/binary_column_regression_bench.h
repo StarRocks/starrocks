@@ -1068,7 +1068,7 @@ static void bench_byte_size_scan(benchmark::State& state, size_t rows, size_t le
         uint64_t total_size = 0;
         for (size_t r = 0; r < repeat; ++r) {
             for (size_t i = 0; i < rows; ++i) {
-                total_size += src->byte_size(i);
+                total_size += static_cast<uint32_t>(src->byte_size(i));
             }
             total_size += src->byte_size(0, rows);
         }

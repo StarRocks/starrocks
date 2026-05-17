@@ -32,6 +32,106 @@
 #include "gutil/strings/substitute.h"
 
 namespace starrocks {
+
+template <bool IsNullable, typename Offset>
+__attribute__((noinline)) static void serialize_binary_batch_at_interval_impl(
+        uint8_t* dst, size_t byte_interval, uint32_t max_row_size, size_t start, size_t count,
+        const uint8_t* null_masks, const uint8_t* bytes, const Offset* __restrict offsets) {
+    uint64_t begin = offsets[start];
+    const size_t end_index = start + count;
+    for (size_t i = start; i < end_index; ++i, dst += byte_interval) {
+        const uint64_t end = offsets[i + 1];
+        if constexpr (IsNullable) {
+            if (null_masks[i]) {
+                *dst = 0xFF; // Invalid UTF-8 string.
+                begin = end;
+                continue;
+            }
+        }
+
+        const size_t length = end - begin;
+        if (length > max_row_size) {
+            *dst = 0xFF;
+        } else if (length > 0 && bytes[end - 1] == 0) {
+            *dst = 0xFF;
+        } else {
+            strings::memcpy_inlined(dst, bytes + begin, length);
+        }
+        begin = end;
+    }
+}
+
+template <typename Offset>
+__attribute__((noinline)) static void serialize_binary_batch_at_interval_reject_path(uint8_t* dst, size_t byte_interval,
+                                                                                    uint32_t max_row_size,
+                                                                                    size_t start, size_t count,
+                                                                                    const uint8_t* bytes,
+                                                                                    const Offset* __restrict offsets) {
+    uint64_t begin = offsets[start];
+    const size_t end_index = start + count;
+    for (size_t i = start; i < end_index; ++i, dst += byte_interval) {
+        const uint64_t end = offsets[i + 1];
+        const size_t length = end - begin;
+        if (length > max_row_size) {
+            *dst = 0xFF;
+        } else if (length > 0 && bytes[end - 1] == 0) {
+            *dst = 0xFF;
+        } else {
+            strings::memcpy_inlined(dst, bytes + begin, length);
+        }
+        begin = end;
+    }
+}
+
+template <typename T>
+__attribute__((noinline)) static bool rebuild_small_binary_column_direct(
+        BinaryColumnBase<T>* column, const typename BinaryColumnBase<T>::Offsets::Small& dst_offsets_buf,
+        const typename BinaryColumnBase<T>::Offsets::Small& src_offsets_buf, const uint8_t* dst_bytes,
+        const uint8_t* src_bytes, const uint32_t* indexes, size_t replace_num, size_t row_count) {
+    uint64_t total_bytes = dst_offsets_buf.back();
+    for (size_t i = 0; i < replace_num; ++i) {
+        const uint32_t row = indexes[i];
+        total_bytes -= dst_offsets_buf[row + 1] - dst_offsets_buf[row];
+        total_bytes += src_offsets_buf[i + 1] - src_offsets_buf[i];
+    }
+
+    if (UNLIKELY(total_bytes > std::numeric_limits<uint32_t>::max())) {
+        return false;
+    }
+
+    auto new_binary_column = BinaryColumnBase<T>::create();
+    auto& new_bytes = new_binary_column->get_bytes();
+    new_bytes.resize(total_bytes);
+
+    typename BinaryColumnBase<T>::Offsets::Small new_offsets;
+    raw::stl_vector_resize_uninitialized(&new_offsets, row_count + 1);
+
+    auto* __restrict new_bytes_data = new_bytes.data();
+    uint64_t pos = 0;
+    size_t replace_idx = 0;
+    new_offsets[0] = 0;
+    for (size_t row = 0; row < row_count; ++row) {
+        const uint8_t* copy_base = dst_bytes;
+        uint64_t begin = dst_offsets_buf[row];
+        uint64_t end = dst_offsets_buf[row + 1];
+        if (replace_idx < replace_num && indexes[replace_idx] == row) {
+            copy_base = src_bytes;
+            begin = src_offsets_buf[replace_idx];
+            end = src_offsets_buf[replace_idx + 1];
+            ++replace_idx;
+        }
+
+        const uint64_t copy_bytes = end - begin;
+        strings::memcpy_inlined(new_bytes_data + pos, copy_base + begin, copy_bytes);
+        pos += copy_bytes;
+        new_offsets[row + 1] = static_cast<uint32_t>(pos);
+    }
+
+    new_binary_column->get_offset().set_small_buffer(std::move(new_offsets));
+    column->swap_column(*new_binary_column);
+    return true;
+}
+
 template <typename T>
 BinaryColumnBase<T>::BinaryColumnBase(ContainerResource resource, Offsets offsets)
         : _bytes(), _offsets(std::move(offsets)), _resource(std::move(resource)) {
@@ -192,7 +292,38 @@ void BinaryColumnBase<T>::append_selective(const Column& src, const uint32_t* in
     // Reuse destination offsets as the temporary [src_begin, src_end] range buffer only when source offsets
     // are physically uint32_t. Large source offsets may exceed the destination's final offset range; storing
     // them in _offsets as scratch data could force an unnecessary promotion to uint64_t.
-    if (used_dst_offsets_as_ranges) {
+    if (LIKELY(!_offsets.is_large() && !src_offsets.is_large())) {
+        _offsets.resize_uninitialized(prev_num_offsets + static_cast<size_t>(size) * 2);
+        auto* range_data = _offsets.small_storage().data() + prev_num_offsets;
+        const auto* __restrict src_offset_data = src_offsets.small_storage().data();
+
+        uint64_t append_bytes = 0;
+        for (size_t i = 0; i < size; ++i) {
+            const uint32_t src_idx = indexes[i];
+            range_data[i * 2] = src_offset_data[src_idx];
+            range_data[i * 2 + 1] = src_offset_data[src_idx + 1];
+            append_bytes += range_data[i * 2 + 1] - range_data[i * 2];
+        }
+
+        const uint64_t dst_end = dst_begin + append_bytes;
+        if (LIKELY(dst_end <= std::numeric_limits<uint32_t>::max())) {
+            bytes.resize(dst_end);
+            const auto* __restrict src_bytes = src_column._data_base();
+            auto* __restrict dest_bytes = bytes.data();
+            copy_ranges_and_write_offsets(range_data, dest_bytes, src_bytes, range_data);
+            _offsets.resize(prev_num_offsets + size);
+            invalidate_slice_cache();
+            return;
+        }
+
+        _offsets.ensure_width_for_value(dst_end);
+        bytes.resize(dst_end);
+        const auto* __restrict src_bytes = src_column._data_base();
+        auto* __restrict dest_bytes = bytes.data();
+        auto* large_range_data = _offsets.large_storage().data() + prev_num_offsets;
+        copy_ranges_and_write_offsets(large_range_data, dest_bytes, src_bytes, large_range_data);
+        _offsets.resize(prev_num_offsets + size);
+    } else if (used_dst_offsets_as_ranges) {
         // resize for scratch data
         _offsets.resize_uninitialized(prev_num_offsets + static_cast<size_t>(size) * 2);
 
@@ -306,6 +437,9 @@ void BinaryColumnBase<T>::append_value_multiple_times(const Column& src, uint32_
 template <typename T>
 StatusOr<MutableColumnPtr> BinaryColumnBase<T>::replicate(const Buffer<uint32_t>& offsets) {
     const size_t src_rows = offsets.size() - 1; // this->size() may be larger than offsets->size() - 1
+    if (UNLIKELY(offsets.back() == 0)) {
+        return BinaryColumnBase<T>::create();
+    }
     const auto* __restrict repeat_offsets = offsets.data();
 
     // Fast path for the common no-promote case. Build a plain uint32_t offset buffer locally,
@@ -417,13 +551,50 @@ bool BinaryColumnBase<T>::append_strings(const Slice* data, size_t size) {
     const size_t prev_num_offsets = _offsets.size();
     const uint64_t dst_begin = _offsets.back();
     const uint64_t dst_end = dst_begin + append_bytes;
+    if (LIKELY(!_offsets.is_large() && dst_end <= std::numeric_limits<uint32_t>::max())) {
+        auto& offsets = _offsets.small_storage();
+        raw::stl_vector_resize_uninitialized(&offsets, prev_num_offsets + size);
+        bytes.resize(dst_end);
+
+        auto* bytes_ptr = bytes.data();
+        auto* __restrict dst_offsets = offsets.data() + prev_num_offsets;
+        const bool small_payload = append_bytes / size <= 16;
+        uint64_t cur_offset = dst_begin;
+
+        if (small_payload) {
+            for (size_t i = 0; i < size; ++i) {
+                const size_t str_size = data[i].size;
+                const auto* const p = reinterpret_cast<const Bytes::value_type*>(data[i].data);
+                strings::memcpy_inlined(bytes_ptr + cur_offset, p, str_size);
+                cur_offset += str_size;
+                dst_offsets[i] = static_cast<uint32_t>(cur_offset);
+            }
+        } else {
+            for (size_t i = 0; i < size; ++i) {
+                cur_offset += data[i].size;
+                dst_offsets[i] = static_cast<uint32_t>(cur_offset);
+            }
+
+            cur_offset = dst_begin;
+            for (size_t i = 0; i < size; ++i) {
+                const size_t str_size = data[i].size;
+                const auto* const p = reinterpret_cast<const Bytes::value_type*>(data[i].data);
+                strings::memcpy_inlined(bytes_ptr + cur_offset, p, str_size);
+                cur_offset += str_size;
+            }
+        }
+
+        invalidate_slice_cache();
+        return true;
+    }
+
     _offsets.resize_uninitialized(prev_num_offsets + size, dst_end);
     bytes.resize(dst_end);
 
     auto* bytes_ptr = bytes.data();
     const bool small_payload = append_bytes / size <= 16;
 
-    _offsets.visit_storage([&](auto& dst_buf) {
+    auto append_to_offsets = [&](auto& dst_buf) {
         using DstValue = typename std::decay_t<decltype(dst_buf)>::value_type;
         auto* __restrict dst_offsets = dst_buf.data() + prev_num_offsets;
         uint64_t cur_offset = dst_begin;
@@ -442,7 +613,13 @@ bool BinaryColumnBase<T>::append_strings(const Slice* data, size_t size) {
                 dst_offsets[i] = static_cast<DstValue>(cur_offset);
             }
         }
-    });
+    };
+
+    if (LIKELY(!_offsets.is_large())) {
+        append_to_offsets(_offsets.small_storage());
+    } else {
+        append_to_offsets(_offsets.large_storage());
+    }
 
     if (!small_payload) {
         uint64_t cur_offset = dst_begin;
@@ -760,34 +937,8 @@ void BinaryColumnBase<T>::update_rows(const Column& src, const uint32_t* indexes
 
     const auto& dst_offsets_ref = _offsets;
     const auto& src_offsets_ref = src_column._offsets;
-    Offsets::visit_storage_pair(dst_offsets_ref, src_offsets_ref, [&](const auto& dst_buf, const auto& src_buf) {
-        const auto* __restrict dst_offsets = dst_buf.data();
-        const auto* __restrict src_offsets = src_buf.data();
-        for (size_t i = 0; i < replace_num; ++i) {
-            DCHECK_LT(indexes[i], _offsets.size());
-            const size_t cur_len = dst_offsets[indexes[i] + 1] - dst_offsets[indexes[i]];
-            const size_t new_len = src_offsets[i + 1] - src_offsets[i];
-            if (cur_len != new_len) {
-                need_resize = true;
-                break;
-            }
-        }
-    });
 
-    if (!need_resize) {
-        auto& bytes = get_bytes();
-        auto* dest_bytes = bytes.data();
-        const uint8_t* src_bytes = src_column._data_base();
-        Offsets::visit_storage_pair(dst_offsets_ref, src_offsets_ref, [&](const auto& dst_buf, const auto& src_buf) {
-            const auto* __restrict dst_offsets = dst_buf.data();
-            const auto* __restrict src_offsets = src_buf.data();
-            for (size_t i = 0; i < replace_num; ++i) {
-                const size_t src_offset = src_offsets[i];
-                const size_t str_size = src_offsets[i + 1] - src_offset;
-                strings::memcpy_inlined(dest_bytes + dst_offsets[indexes[i]], src_bytes + src_offset, str_size);
-            }
-        });
-    } else {
+    auto rebuild_column = [&]() {
         auto new_binary_column = BinaryColumnBase<T>::create();
         size_t idx_begin = 0;
         for (size_t i = 0; i < replace_num; i++) {
@@ -802,7 +953,71 @@ void BinaryColumnBase<T>::update_rows(const Column& src, const uint32_t* indexes
             new_binary_column->append(*this, indexes[replace_num - 1] + 1, remain_count);
         }
         swap_column(*new_binary_column);
+    };
+
+    if (LIKELY(!_offsets.is_large() && !src_column._offsets.is_large())) {
+        const auto* __restrict dst_offsets = _offsets.small_storage().data();
+        const auto* __restrict src_offsets = src_column._offsets.small_storage().data();
+        for (size_t i = 0; i < replace_num; ++i) {
+            DCHECK_LT(indexes[i], _offsets.size());
+            const size_t cur_len = dst_offsets[indexes[i] + 1] - dst_offsets[indexes[i]];
+            const size_t new_len = src_offsets[i + 1] - src_offsets[i];
+            if (cur_len != new_len) {
+                need_resize = true;
+                break;
+            }
+        }
+
+        if (!need_resize) {
+            auto& bytes = get_bytes();
+            auto* dest_bytes = bytes.data();
+            const uint8_t* src_bytes = src_column._data_base();
+            for (size_t i = 0; i < replace_num; ++i) {
+                const size_t src_offset = src_offsets[i];
+                const size_t str_size = src_offsets[i + 1] - src_offset;
+                strings::memcpy_inlined(dest_bytes + dst_offsets[indexes[i]], src_bytes + src_offset, str_size);
+            }
+            return;
+        }
+
+        if (rebuild_small_binary_column_direct(this, _offsets.small_storage(), src_column._offsets.small_storage(),
+                                               _data_base(), src_column._data_base(), indexes, replace_num, size())) {
+            return;
+        }
+    } else {
+        Offsets::visit_storage_pair(dst_offsets_ref, src_offsets_ref, [&](const auto& dst_buf, const auto& src_buf) {
+            const auto* __restrict dst_offsets = dst_buf.data();
+            const auto* __restrict src_offsets = src_buf.data();
+            for (size_t i = 0; i < replace_num; ++i) {
+                DCHECK_LT(indexes[i], _offsets.size());
+                const size_t cur_len = dst_offsets[indexes[i] + 1] - dst_offsets[indexes[i]];
+                const size_t new_len = src_offsets[i + 1] - src_offsets[i];
+                if (cur_len != new_len) {
+                    need_resize = true;
+                    break;
+                }
+            }
+        });
+
+        if (!need_resize) {
+            auto& bytes = get_bytes();
+            auto* dest_bytes = bytes.data();
+            const uint8_t* src_bytes = src_column._data_base();
+            Offsets::visit_storage_pair(dst_offsets_ref, src_offsets_ref, [&](const auto& dst_buf,
+                                                                              const auto& src_buf) {
+                const auto* __restrict dst_offsets = dst_buf.data();
+                const auto* __restrict src_offsets = src_buf.data();
+                for (size_t i = 0; i < replace_num; ++i) {
+                    const size_t src_offset = src_offsets[i];
+                    const size_t str_size = src_offsets[i + 1] - src_offset;
+                    strings::memcpy_inlined(dest_bytes + dst_offsets[indexes[i]], src_bytes + src_offset, str_size);
+                }
+            });
+            return;
+        }
     }
+
+    rebuild_column();
 }
 
 template <typename T>
@@ -1019,6 +1234,27 @@ size_t BinaryColumnBase<T>::serialize_batch_at_interval_with_null_masks(uint8_t*
         }
 
         const uint8_t* bytes = _data_base();
+        if constexpr (!IsNullable) {
+            if (LIKELY(_offsets[start + 1] - _offsets[start] <= max_row_size)) {
+                if (LIKELY(!_offsets.is_large())) {
+                    serialize_binary_batch_at_interval_impl<false>(dst, byte_interval, max_row_size, start, count,
+                                                                   null_masks, bytes, _offsets.small_storage().data());
+                } else {
+                    serialize_binary_batch_at_interval_impl<false>(dst, byte_interval, max_row_size, start, count,
+                                                                   null_masks, bytes, _offsets.large_storage().data());
+                }
+                return max_row_size;
+            }
+            if (LIKELY(!_offsets.is_large())) {
+                serialize_binary_batch_at_interval_reject_path(dst, byte_interval, max_row_size, start, count, bytes,
+                                                               _offsets.small_storage().data());
+            } else {
+                serialize_binary_batch_at_interval_reject_path(dst, byte_interval, max_row_size, start, count, bytes,
+                                                               _offsets.large_storage().data());
+            }
+            return max_row_size;
+        }
+
         _offsets.visit_storage([&](const auto& offsets_buf) {
             const auto* __restrict offsets = offsets_buf.data();
             auto begin = offsets[start];
@@ -1153,7 +1389,7 @@ void BinaryColumnBase<T>::serialize_batch_with_null_masks(uint8_t* dst, Buffer<u
 
     if (!has_null) {
         const bool null_flag = false;
-        _offsets.visit_storage([&](const auto& offsets_buf) {
+        auto serialize_no_null = [&](const auto& offsets_buf) {
             const auto* __restrict offsets_data = offsets_buf.data();
             uint64_t offset = offsets_data[0];
             for (size_t i = 0; i < chunk_size; ++i) {
@@ -1168,7 +1404,13 @@ void BinaryColumnBase<T>::serialize_batch_with_null_masks(uint8_t* dst, Buffer<u
                 sizes[i] += sizeof(bool) + sizeof(uint32_t) + binary_size;
                 offset = next_offset;
             }
-        });
+        };
+
+        if (LIKELY(!_offsets.is_large())) {
+            serialize_no_null(_offsets.small_storage());
+        } else {
+            serialize_no_null(_offsets.large_storage());
+        }
     } else {
         if (std::memchr(null_masks, 0, chunk_size) == nullptr) {
             // All rows are null, so only null flags are serialized; offsets/bytes are not needed.
@@ -1181,7 +1423,7 @@ void BinaryColumnBase<T>::serialize_batch_with_null_masks(uint8_t* dst, Buffer<u
             return;
         }
 
-        _offsets.visit_storage([&](const auto& offsets_buf) {
+        auto serialize_nullable = [&](const auto& offsets_buf) {
             const auto* __restrict offsets_data = offsets_buf.data();
             uint64_t offset = offsets_data[0];
             for (size_t i = 0; i < chunk_size; ++i) {
@@ -1199,7 +1441,13 @@ void BinaryColumnBase<T>::serialize_batch_with_null_masks(uint8_t* dst, Buffer<u
                 }
                 offset = next_offset;
             }
-        });
+        };
+
+        if (LIKELY(!_offsets.is_large())) {
+            serialize_nullable(_offsets.small_storage());
+        } else {
+            serialize_nullable(_offsets.large_storage());
+        }
     }
 }
 
