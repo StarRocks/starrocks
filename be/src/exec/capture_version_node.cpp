@@ -16,6 +16,8 @@
 
 #include "exec/pipeline/capture_version_operator.h"
 #include "exec/pipeline/pipeline_builder.h"
+#include "exec/pipeline/scan/morsel.h"
+#include "exec/pipeline/scan/scan_morsel.h"
 
 namespace starrocks {
 

@@ -12,28 +12,18 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#pragma once
+#include "exec/pipeline/scan/split_scan_morsel.h"
 
-#include <memory>
-#include <utility>
-#include <vector>
-
-#include "exec/pipeline/scan/scan_morsel.h"
+#include "storage/tablet_reader_params.h"
 
 namespace starrocks::pipeline {
-class DriverSource;
-using DriverSourcePtr = std::unique_ptr<DriverSource>;
-using DriverSources = std::vector<DriverSourcePtr>;
-class DriverSource {
-public:
-    DriverSource(Morsels morsels, int32_t source_id) : _morsels(std::move(morsels)), _source_id(source_id) {}
 
-    const Morsels& get_morsels() const { return _morsels; }
+void PhysicalSplitScanMorsel::init_tablet_reader_params(TabletReaderParams* params) {
+    params->rowid_range_option = _rowid_range_option;
+}
 
-    int32_t get_source_id() const { return _source_id; }
+void LogicalSplitScanMorsel::init_tablet_reader_params(TabletReaderParams* params) {
+    params->short_key_ranges_option = _short_key_ranges_option;
+}
 
-private:
-    Morsels _morsels;
-    int32_t _source_id;
-};
 } // namespace starrocks::pipeline

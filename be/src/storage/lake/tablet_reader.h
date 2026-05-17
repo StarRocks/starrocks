@@ -14,7 +14,7 @@
 
 #pragma once
 
-#include "exec/pipeline/scan/morsel.h"
+#include "exec/pipeline/scan/scan_morsel.h"
 #include "runtime/mem_pool.h"
 #include "storage/chunk_iterator.h"
 #include "storage/delete_predicates.h"

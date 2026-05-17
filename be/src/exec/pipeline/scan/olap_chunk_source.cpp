@@ -36,6 +36,7 @@
 #include "exec/pipeline/query_context.h"
 #include "exec/pipeline/scan/glm_manager.h"
 #include "exec/pipeline/scan/olap_scan_context.h"
+#include "exec/pipeline/scan/scan_morsel.h"
 #include "exec/pipeline/scan/scan_operator.h"
 #include "exec/query_scan_metrics.h"
 #include "exec/workgroup/work_group.h"

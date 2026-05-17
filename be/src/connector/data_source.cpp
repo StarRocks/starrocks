@@ -17,6 +17,8 @@
 #include <algorithm>
 #include <functional>
 
+#include "exec/pipeline/scan/morsel.h"
+#include "exec/pipeline/scan/scan_morsel.h"
 #include "exec/runtime_filter/runtime_filter_helper.h"
 #include "exprs/expr_context.h"
 #include "runtime/runtime_state.h"
