@@ -58,6 +58,9 @@ HdfsTableDescriptor::HdfsTableDescriptor(const TTableDescriptor& tdesc, ObjectPo
           _hive_column_names(tdesc.hdfsTable.hive_column_names, mr),
           _hive_column_types(tdesc.hdfsTable.hive_column_types, mr),
           _serde_properties(tdesc.hdfsTable.serde_properties),
+          _avro_schema_json(tdesc.hdfsTable.__isset.avro_schema_json
+                                    ? std::pmr::string(tdesc.hdfsTable.avro_schema_json, mr)
+                                    : std::pmr::string(mr)),
           _time_zone(tdesc.hdfsTable.time_zone, mr) {
     _hdfs_base_path.assign(tdesc.hdfsTable.hdfs_base_dir);
     _columns = tdesc.hdfsTable.columns;
@@ -86,6 +89,10 @@ std::string_view HdfsTableDescriptor::get_serde_lib() const {
 
 const std::map<std::string, std::string> HdfsTableDescriptor::get_serde_properties() const {
     return _serde_properties;
+}
+
+std::string_view HdfsTableDescriptor::get_avro_schema_json() const {
+    return _avro_schema_json;
 }
 
 std::string_view HdfsTableDescriptor::get_time_zone() const {

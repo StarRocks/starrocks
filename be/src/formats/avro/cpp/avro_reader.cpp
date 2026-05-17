@@ -300,7 +300,8 @@ AvroReader::~AvroReader() {
 Status AvroReader::init(std::unique_ptr<avro::InputStream> input_stream, const std::string& filename,
                         RuntimeState* state, ScannerCounter* counter, const std::vector<SlotDescriptor*>* slot_descs,
                         const std::vector<avrocpp::ColumnReaderUniquePtr>* column_readers, bool col_not_found_as_null,
-                        RandomAccessFile* raw_file, size_t buffer_size, int64_t split_offset, int64_t split_length) {
+                        RandomAccessFile* raw_file, size_t buffer_size, int64_t split_offset, int64_t split_length,
+                        const std::string& reader_schema_json) {
     if (_is_inited) {
         return Status::OK();
     }
@@ -320,6 +321,8 @@ Status AvroReader::init(std::unique_ptr<avro::InputStream> input_stream, const s
         // and apply column projection before setting up the decoder.
         auto base = std::make_unique<avro::DataFileReaderBase>(std::move(input_stream));
         const auto& writer_schema = base->dataSchema();
+        avro::ValidSchema reader_schema =
+                reader_schema_json.empty() ? writer_schema : avro::compileJsonSchemaFromString(reader_schema_json);
 
         // Collect the column names that actually need to be decoded.
         std::set<std::string> needed_cols;
@@ -334,17 +337,20 @@ Status AvroReader::init(std::unique_ptr<avro::InputStream> input_stream, const s
         // Build a projected reader schema that contains only the needed columns.
         // The ResolvingDecoder will then skip unwanted fields at the binary level,
         // saving CPU deserialization work — the Trino-equivalent of maskColumnsFromTableSchema.
-        avro::ValidSchema projected = build_projected_schema(writer_schema, needed_cols);
-        bool using_projection = !needed_cols.empty() && projected.root()->leaves() < writer_schema.root()->leaves();
+        avro::ValidSchema projected = build_projected_schema(reader_schema, needed_cols);
+        bool using_projection = !needed_cols.empty() && projected.root()->leaves() < reader_schema.root()->leaves();
 
         if (using_projection) {
             _file_reader = std::make_unique<avro::DataFileReader<avro::GenericDatum>>(std::move(base), projected);
+        } else if (!reader_schema_json.empty()) {
+            _file_reader = std::make_unique<avro::DataFileReader<avro::GenericDatum>>(std::move(base), reader_schema);
         } else {
             _file_reader = std::make_unique<avro::DataFileReader<avro::GenericDatum>>(std::move(base));
         }
 
         // The datum must match the schema the decoder will produce values for.
-        const auto& effective_schema = using_projection ? _file_reader->readerSchema() : writer_schema;
+        const auto& effective_schema =
+                (using_projection || !reader_schema_json.empty()) ? _file_reader->readerSchema() : writer_schema;
         _datum = std::make_unique<avro::GenericDatum>(effective_schema);
 
         // Split handling.

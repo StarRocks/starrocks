@@ -78,9 +78,10 @@ public class HiveMetadataFactory {
 
     public HiveMetadata create() {
         HiveMetastoreOperations hiveMetastoreOperations = new HiveMetastoreOperations(
-                createQueryLevelInstance(metastore, perQueryMetastoreMaxNum),
-                metastore instanceof CachingHiveMetastore,
-                hdfsEnvironment.getConfiguration(), metastoreType, catalogName);
+                createQueryLevelInstance(metastore, perQueryMetastoreMaxNum,
+                        Optional.of(new AvroSchemaResolver(hdfsEnvironment.getConfiguration()))),
+                metastore instanceof CachingHiveMetastore, hdfsEnvironment.getConfiguration(), metastoreType,
+                catalogName);
         RemoteFileOperations remoteFileOperations = new RemoteFileOperations(
                 CachingRemoteFileIO.createQueryLevelInstance(remoteFileIO, perQueryCacheRemotePathMaxMemoryRatio),
                 pullRemoteFileExecutor,

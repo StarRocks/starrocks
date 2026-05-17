@@ -90,6 +90,7 @@ public:
     std::string_view get_input_format() const;
     std::string_view get_serde_lib() const;
     const std::map<std::string, std::string> get_serde_properties() const;
+    std::string_view get_avro_schema_json() const;
     std::string_view get_time_zone() const;
 
 private:
@@ -98,6 +99,7 @@ private:
     std::pmr::string _hive_column_names;
     std::pmr::string _hive_column_types;
     std::map<std::string, std::string> _serde_properties;
+    std::pmr::string _avro_schema_json;
     std::pmr::string _time_zone;
 };
 

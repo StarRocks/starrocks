@@ -259,6 +259,7 @@ struct HdfsScannerParams {
     const TupleDescriptor* min_max_tuple_desc = nullptr;
 
     std::vector<std::string>* hive_column_names = nullptr;
+    std::string avro_schema_json;
 
     bool case_sensitive = false;
 
