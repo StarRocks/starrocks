@@ -326,7 +326,6 @@ set(EXEC_FILES
         ./util/simdjson_util_test.cpp
         ./util/starrocks_metrics_test.cpp
         ./util/system_metrics_test.cpp
-        ./util/download_util_test.cpp
         ./gutil/cpu_test.cc
         service/backend_base_test.cpp
         ./service/mem_hook_test.cpp
@@ -375,6 +374,7 @@ add_subdirectory(runtime)
 add_subdirectory(exprs)
 add_subdirectory(io)
 add_subdirectory(fs)
+add_subdirectory(platform)
 add_subdirectory(http)
 add_subdirectory(geo)
 add_subdirectory(cache)

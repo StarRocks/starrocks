@@ -42,6 +42,7 @@ INTERNAL_INCLUDE_PREFIXES = {
     "gutil",
     "http",
     "io",
+    "platform",
     "runtime",
     "script",
     "serde",

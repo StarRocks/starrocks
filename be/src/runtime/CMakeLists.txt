@@ -122,4 +122,4 @@ ADD_BE_LIB(Runtime
     ${RUNTIME_FILES}
     )
 
-target_link_libraries(Runtime PUBLIC RuntimeCore ExecCore ExecSinkCore ExecSortingCore)
+target_link_libraries(Runtime PUBLIC RuntimeCore ExecCore ExecSinkCore ExecSortingCore Platform)

@@ -134,6 +134,14 @@ Minimal filesystem core on top of IOCore.
 - Core tests: `fs_core_test`
 - Remediation: Keep FSCore limited to IOCore plus core FS abstractions; move backend-specific behavior into FileSystem.
 
+### Platform (`platform`)
+Shared BE platform utilities above IO/FS/Common and below Runtime/Exec/Storage/Service.
+- Targets: `Platform`
+- Allowed internal include prefixes: `platform/`, `http/`, `fs/`, `io/core/`, `common/`, `base/`, `gutil/`, `gen_cpp/`
+- Allowed target deps: `HttpCore`, `FSCore`, `IOCore`, `Common`, `Base`, `Gutil`, `StarRocksGen`
+- Core tests: `platform_test`
+- Remediation: Keep Platform limited to reusable host, filesystem-adjacent, download, temp-file, environment, retry, and platform-level helpers; move runtime, exec, storage, and service integration upward.
+
 ### SpillCore (`spillcore`)
 Core spill block, directory, query-local spill, and spill memory-resource primitives without pipeline/runtime-service coupling.
 - Targets: `SpillCore`
@@ -169,8 +177,8 @@ Core chunk, schema, field, and chunk-adjacent helpers on top of ColumnCore.
 ### RuntimeCore (`runtimecore`)
 Core runtime building blocks without full Runtime/Exec/Storage coupling.
 - Targets: `RuntimeCore`
-- Allowed internal include prefixes: `runtime/`, `column/`, `types/`, `common/`, `base/`, `gutil/`, `gen_cpp/`
-- Allowed target deps: `ChunkCore`, `ColumnCore`, `Types`, `Common`, `Base`, `Gutil`, `StarRocksGen`
+- Allowed internal include prefixes: `runtime/`, `platform/`, `column/`, `types/`, `common/`, `base/`, `gutil/`, `gen_cpp/`
+- Allowed target deps: `Platform`, `ChunkCore`, `ColumnCore`, `Types`, `Common`, `Base`, `Gutil`, `StarRocksGen`
 - Core tests: `runtime_core_test`
 - Remediation: Keep RuntimeCore restricted to core runtime infrastructure; move service/storage/stream-load/integration code into Runtime.
 
