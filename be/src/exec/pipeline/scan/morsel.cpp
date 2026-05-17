@@ -21,6 +21,7 @@
 
 #include "common/statusor.h"
 #include "exec/olap_utils.h"
+#include "exec/pipeline/scan/split_scan_morsel.h"
 #include "storage/chunk_helper.h"
 #include "storage/lake/tablet_reader.h"
 #include "storage/range.h"
@@ -32,49 +33,6 @@
 #include "storage/tablet_reader_params.h"
 
 namespace starrocks::pipeline {
-
-/// Morsel.
-
-const std::vector<BaseRowsetSharedPtr> ScanMorselX::kEmptyRowsets;
-
-void ScanMorsel::build_scan_morsels(int node_id, const std::vector<TScanRangeParams>& scan_ranges,
-                                    bool accept_empty_scan_ranges, pipeline::Morsels* ptr_morsels,
-                                    bool* has_more_morsel) {
-    pipeline::Morsels& morsels = *ptr_morsels;
-    *has_more_morsel = false;
-    for (const auto& scan_range : scan_ranges) {
-        if (scan_range.__isset.empty && scan_range.empty) {
-            if (scan_range.__isset.has_more) {
-                *has_more_morsel = scan_range.has_more;
-            }
-            continue;
-        }
-        morsels.emplace_back(std::make_unique<pipeline::ScanMorsel>(node_id, scan_range));
-    }
-
-    if (morsels.empty() && !accept_empty_scan_ranges) {
-        morsels.emplace_back(std::make_unique<pipeline::ScanMorsel>(node_id, TScanRangeParams()));
-    }
-}
-bool ScanMorsel::has_more_scan_ranges(const std::vector<TScanRangeParams>& scan_ranges) {
-    bool has_more = false;
-    for (const auto& scan_range : scan_ranges) {
-        if (scan_range.__isset.empty && scan_range.empty) {
-            if (scan_range.__isset.has_more) {
-                has_more = scan_range.has_more;
-            }
-        }
-    }
-    return has_more;
-}
-
-void PhysicalSplitScanMorsel::init_tablet_reader_params(TabletReaderParams* params) {
-    params->rowid_range_option = _rowid_range_option;
-}
-
-void LogicalSplitScanMorsel::init_tablet_reader_params(TabletReaderParams* params) {
-    params->short_key_ranges_option = _short_key_ranges_option;
-}
 
 /// MorselQueueFactory.
 
