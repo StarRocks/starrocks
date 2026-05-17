@@ -623,3 +623,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 1. 将 `enable_tablet_pre_split_for_insert_from_files = false` 和 `enable_tablet_pre_split_for_broker_load = false` 同时设为 `false`，新导入将立即跳过预分裂。
 2. 等待预分裂创建的在途 reshard 作业排空。用 `SHOW TABLET RESHARD JOB` 监控；当没有 `RUNNING` 或 `PENDING` 行后回滚完成。
 3. 继续降级流程。底层基础设施（External-Boundaries Tablet Split）与预分裂特性开关解耦，无论开关如何都可用。
+
+#### 生产部署建议
+
+生产集群应将 `enable_execute_script_on_frontend = false`。基于采样的 Tablet 预分裂没有任何 SQL 入口依赖 FE 端脚本执行——生产路径通过连接器 + 规划器直接采样。把 `enable_execute_script_on_frontend = true` 留在打开状态只会扩大 FE 攻击面，并不带来任何预分裂功能；生产集群的安全默认值是关闭。
