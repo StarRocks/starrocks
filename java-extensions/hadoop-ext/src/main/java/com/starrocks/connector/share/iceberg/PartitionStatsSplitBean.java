@@ -19,14 +19,14 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class PartitionStatsSplitBean implements Serializable {
-    public static final String MODE_FULL = "full";
     public static final String MODE_BASE = "base";
+    public static final String MODE_INCREMENTAL = "incremental";
 
     private String statsFilePath;
     private Long statsSnapshotId;
     private Long targetSnapshotId;
     private List<ManifestFileBean> incrementalManifests = new ArrayList<>();
-    private String mode = MODE_FULL;
+    private String mode = MODE_INCREMENTAL;
 
     public String getStatsFilePath() {
         return statsFilePath;
@@ -76,7 +76,7 @@ public class PartitionStatsSplitBean implements Serializable {
         return MODE_BASE.equalsIgnoreCase(mode);
     }
 
-    public boolean isFullMode() {
-        return mode == null || MODE_FULL.equalsIgnoreCase(mode);
+    public boolean isIncrementalMode() {
+        return mode == null || MODE_INCREMENTAL.equalsIgnoreCase(mode);
     }
 }

@@ -21,6 +21,7 @@ import com.starrocks.connector.share.iceberg.PartitionStatsSplitBean;
 import com.starrocks.jni.connector.ColumnValue;
 import org.apache.iceberg.ContentFile;
 import org.apache.iceberg.FileContent;
+import org.apache.iceberg.IcebergPartitionStatsHelper;
 import org.apache.iceberg.ManifestEntryScanHelper;
 import org.apache.iceberg.ManifestEntryScanHelper.LiveEntry;
 import org.apache.iceberg.ManifestFile;
@@ -28,22 +29,17 @@ import org.apache.iceberg.PartitionData;
 import org.apache.iceberg.PartitionField;
 import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.PartitionStats;
-import org.apache.iceberg.PartitionStatsHandler;
-import org.apache.iceberg.PartitionStatsScanHelper;
 import org.apache.iceberg.Partitioning;
 import org.apache.iceberg.Schema;
 import org.apache.iceberg.Snapshot;
 import org.apache.iceberg.StructLike;
-import org.apache.iceberg.TableUtil;
 import org.apache.iceberg.data.GenericRecord;
 import org.apache.iceberg.expressions.Evaluator;
 import org.apache.iceberg.expressions.Expression;
 import org.apache.iceberg.expressions.Expressions;
-import org.apache.iceberg.io.CloseableIterable;
 import org.apache.iceberg.io.CloseableIterator;
 import org.apache.iceberg.types.Type;
 import org.apache.iceberg.types.Types;
-import org.apache.iceberg.util.Pair;
 import org.apache.iceberg.util.PartitionMap;
 import org.apache.iceberg.util.StructProjection;
 import org.apache.logging.log4j.LogManager;
@@ -302,7 +298,8 @@ public class IcebergPartitionsTableScanner extends AbstractIcebergMetadataScanne
     private void initStatsIterator(PartitionStatsSplitBean statsSplit) {
         long startMs = System.currentTimeMillis();
         try {
-            PartitionMap<PartitionStats> statsMap = readStatsFileToMap(statsSplit.getStatsFilePath());
+            PartitionMap<PartitionStats> statsMap = IcebergPartitionStatsHelper.readPartitionStatsFileAsMap(
+                    table, statsSplit.getStatsFilePath(), unifiedPartitionType);
             int baseCount = statsMap.size();
             if (statsSplit.isBaseMode()) {
                 LOG.debug("Iceberg partitions stats base only. base_partitions={}, elapsed_ms={}",
@@ -319,12 +316,12 @@ public class IcebergPartitionsTableScanner extends AbstractIcebergMetadataScanne
                 LOG.debug("Iceberg partitions stats incremental apply. manifests_to_apply={}", manifests.size());
                 long deltaReadStartMs = System.currentTimeMillis();
                 PartitionMap<PartitionStats> incrementalMap =
-                        PartitionStatsScanHelper.computeStatsFromManifests(
-                                table, manifests, unifiedPartitionType, true);
+                        IcebergPartitionStatsHelper.computeStatsFromManifests(
+                                table, manifests, unifiedPartitionType);
                 long deltaReadMs = System.currentTimeMillis() - deltaReadStartMs;
                 int incrementalCount = incrementalMap.size();
                 long mergeStartMs = System.currentTimeMillis();
-                mergeIncrementalStats(statsMap, incrementalMap);
+                IcebergPartitionStatsHelper.mergeIncrementalStats(statsMap, incrementalMap);
                 long mergeMs = System.currentTimeMillis() - mergeStartMs;
                 LOG.debug("Iceberg partitions stats incremental applied. base_partitions={}, incremental_partitions={}, "
                                 + "merged_partitions={}, delta_read_ms={}, merge_ms={}, elapsed_ms={}",
@@ -340,37 +337,4 @@ public class IcebergPartitionsTableScanner extends AbstractIcebergMetadataScanne
         }
     }
 
-    private PartitionMap<PartitionStats> readStatsFileToMap(String statsFilePath) throws IOException {
-        int formatVersion = TableUtil.formatVersion(table);
-        Schema statsSchema = PartitionStatsHandler.schema(unifiedPartitionType, formatVersion);
-        PartitionMap<PartitionStats> statsMap = PartitionMap.create(table.specs());
-        try (CloseableIterable<PartitionStats> statsIterable =
-                     PartitionStatsHandler.readPartitionStatsFile(statsSchema, table.io().newInputFile(statsFilePath))) {
-            for (PartitionStats stat : statsIterable) {
-                statsMap.put(stat.specId(), stat.partition(), stat);
-            }
-        }
-        return statsMap;
-    }
-
-    private void mergeIncrementalStats(
-            PartitionMap<PartitionStats> base, PartitionMap<PartitionStats> incremental) {
-        incremental.forEach(
-                (key, value) ->
-                        base.merge(
-                                Pair.of(key.first(), partitionDataToRecord((PartitionData) key.second())),
-                                value,
-                                (existingEntry, newEntry) -> {
-                                    existingEntry.appendStats(newEntry);
-                                    return existingEntry;
-                                }));
-    }
-
-    private GenericRecord partitionDataToRecord(PartitionData data) {
-        GenericRecord record = GenericRecord.create(data.getPartitionType());
-        for (int index = 0; index < record.size(); index++) {
-            record.set(index, data.get(index));
-        }
-        return record;
-    }
 }

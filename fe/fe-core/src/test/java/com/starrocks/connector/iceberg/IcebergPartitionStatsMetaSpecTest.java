@@ -155,10 +155,10 @@ public class IcebergPartitionStatsMetaSpecTest extends TableTestBase {
         IcebergMetaSpec spec = (IcebergMetaSpec) newMetadata(mockedNativeTableB)
                 .getSerializedMetaSpec("db", "tb", -1, null, MetadataTableType.PARTITIONS);
 
-        Assertions.assertEquals(1, spec.getSplits().size(), "MODE_FULL is a single split bundling stats + incrementals");
+        Assertions.assertEquals(1, spec.getSplits().size(), "MODE_INCREMENTAL is a single split bundling stats + incrementals");
         PartitionStatsSplitBean bean = deserializeStatsSplit(spec.getSplits().get(0));
         Assertions.assertNotNull(bean);
-        Assertions.assertTrue(bean.isFullMode());
+        Assertions.assertTrue(bean.isIncrementalMode());
         Assertions.assertEquals(statsSnapshotId, bean.getStatsSnapshotId().longValue());
         Assertions.assertEquals(targetSnapshotId, bean.getTargetSnapshotId().longValue());
         Assertions.assertTrue(bean.hasIncrementalManifests());
@@ -253,7 +253,7 @@ public class IcebergPartitionStatsMetaSpecTest extends TableTestBase {
 
     @Test
     public void partitionPredicate_modeFullPath_doesNotThrow() {
-        // Stats file older than target snapshot → MODE_FULL split. Predicate must travel
+        // Stats file older than target snapshot → MODE_INCREMENTAL split. Predicate must travel
         // through the encoding path without breaking the existing bundle.
         mockedNativeTableB.newAppend().appendFile(FILE_B_1).commit();
         long statsSnapshotId = mockedNativeTableB.currentSnapshot().snapshotId();
@@ -269,10 +269,10 @@ public class IcebergPartitionStatsMetaSpecTest extends TableTestBase {
         IcebergMetaSpec spec = (IcebergMetaSpec) newMetadata(mockedNativeTableB)
                 .getSerializedMetaSpec("db", "tb", -1, serialized, MetadataTableType.PARTITIONS);
 
-        Assertions.assertEquals(1, spec.getSplits().size(), "MODE_FULL is a single bundled split");
+        Assertions.assertEquals(1, spec.getSplits().size(), "MODE_INCREMENTAL is a single bundled split");
         PartitionStatsSplitBean bean = deserializeStatsSplit(spec.getSplits().get(0));
         Assertions.assertNotNull(bean);
-        Assertions.assertTrue(bean.isFullMode());
+        Assertions.assertTrue(bean.isIncrementalMode());
         Assertions.assertEquals(2, bean.getIncrementalManifests().size(),
                 "incremental manifest bundle must not be FE-filtered by the partition predicate");
     }

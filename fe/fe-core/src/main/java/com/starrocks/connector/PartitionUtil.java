@@ -78,7 +78,6 @@ import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.Partitioning;
 import org.apache.iceberg.StructLike;
 import org.apache.iceberg.types.Types;
-import org.apache.iceberg.util.StructProjection;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -468,7 +467,7 @@ public class PartitionUtil {
     // if the partition field is not identity transform, column name is appended by its transform name (e.g. col1_hour)
     // if all partition fields are no longer active (dropped by partition evolution), return "ICEBERG_DEFAULT_PARTITION"
     public static String convertIcebergPartitionToPartitionName(org.apache.iceberg.Table table, PartitionSpec spec,
-                                                                StructProjection partition) {
+                                                                StructLike partition) {
         StringBuilder sb = new StringBuilder();
         // partition have all active partition types, so we need to get full partition type from table
         Types.StructType partitionType = Partitioning.partitionType(table);

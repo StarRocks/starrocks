@@ -132,7 +132,7 @@ public class IcebergCatalogTest {
         new MockUp<com.starrocks.connector.PartitionUtil>() {
             @Mock
             public String convertIcebergPartitionToPartitionName(Table table, PartitionSpec spec,
-                                                                 StructProjection partition) {
+                                                                 StructLike partition) {
                 return "dt=2023-12-04";
             }
         };
