@@ -358,9 +358,18 @@ size_t AggHashMapVariant::reserved_memory_usage(const MemPool* pool) const {
 
 size_t AggHashMapVariant::allocated_memory_usage(const MemPool* pool) const {
     return visit([pool](const auto& hash_map_with_key) {
-        return sizeof(typename decltype(hash_map_with_key->hash_map)::key_type) *
-                       hash_map_with_key->hash_map.capacity() +
-               pool->total_allocated_bytes();
+        using HashMap = std::remove_reference_t<decltype(hash_map_with_key->hash_map)>;
+        size_t hash_map_bytes;
+        if constexpr (requires { HashMap::bucket_byte_size(); }) {
+            // SmallFixedSizeHashMap pre-allocates a dense pointer array; the
+            // SMALLINT path is ~512 KiB and must be reported as such, not as
+            // sizeof(KeyType) * capacity.
+            hash_map_bytes = HashMap::bucket_byte_size();
+        } else {
+            hash_map_bytes = sizeof(typename HashMap::key_type) * hash_map_with_key->hash_map.capacity();
+        }
+        const size_t pool_bytes = (pool != nullptr) ? pool->total_allocated_bytes() : 0;
+        return hash_map_bytes + pool_bytes;
     });
 }
 
@@ -447,9 +456,15 @@ size_t AggHashSetVariant::reserved_memory_usage(const MemPool* pool) const {
 
 size_t AggHashSetVariant::allocated_memory_usage(const MemPool* pool) const {
     return visit([&](auto& hash_set_with_key) {
-        return sizeof(typename decltype(hash_set_with_key->hash_set)::key_type) *
-                       hash_set_with_key->hash_set.capacity() +
-               pool->total_allocated_bytes();
+        using HashSet = std::remove_reference_t<decltype(hash_set_with_key->hash_set)>;
+        size_t hash_set_bytes;
+        if constexpr (requires { HashSet::bucket_byte_size(); }) {
+            hash_set_bytes = HashSet::bucket_byte_size();
+        } else {
+            hash_set_bytes = sizeof(typename HashSet::key_type) * hash_set_with_key->hash_set.capacity();
+        }
+        const size_t pool_bytes = (pool != nullptr) ? pool->total_allocated_bytes() : 0;
+        return hash_set_bytes + pool_bytes;
     });
 }
 

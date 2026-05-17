@@ -38,7 +38,14 @@ public:
     static constexpr int hash_table_size = 1 << sizeof(KeyType) * 8;
 
     using key_type = KeyType;
+    using mapped_type = ValueType;
     using search_key_type = typename std::make_unsigned<KeyType>::type;
+
+    // Real heap footprint of the dense pointer array. Used by aggregator
+    // memory accounting so spill/streaming budgets do not under-count the
+    // 64K-cell SMALLINT path (~512 KiB) as if it stored only `KeyType` per
+    // slot.
+    static constexpr size_t bucket_byte_size() { return sizeof(ValueType) * (hash_table_size + 1); }
 
     SmallFixedSizeHashMap() {
         memset(_hash_table, 0, sizeof(ValueType) * hash_table_size);
@@ -121,7 +128,10 @@ public:
 
     size_t capacity() { return hash_table_size; }
 
-    size_t dump_bound() { return hash_table_size; }
+    // Byte footprint of the dense pointer table. Matches the byte-based
+    // semantics used by phmap so spill/serialization callers measure real
+    // memory rather than a slot count.
+    size_t dump_bound() { return bucket_byte_size(); }
 
     void clear() {
         memset(_hash_table, 0, sizeof(ValueType) * hash_table_size);
@@ -141,6 +151,8 @@ public:
 
     using key_type = KeyType;
     using search_key_type = typename std::make_unsigned<KeyType>::type;
+
+    static constexpr size_t bucket_byte_size() { return sizeof(uint8_t) * (hash_table_size + 1); }
 
     class iterator {
     public:
@@ -190,7 +202,10 @@ public:
 
     bool contains(KeyType key) { return _hash_table[static_cast<search_key_type>(key)]; }
 
-    size_t dump_bound() { return hash_table_size; }
+    // Byte footprint of the dense byte table. Matches the byte-based
+    // semantics used by phmap so spill/serialization callers measure real
+    // memory rather than a slot count.
+    size_t dump_bound() { return bucket_byte_size(); }
 
     size_t size() { return _size; }
 
