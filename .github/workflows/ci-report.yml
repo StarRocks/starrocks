@@ -44,6 +44,20 @@ jobs:
       BUCKET_PREFIX: ${{ steps.bucket_info.outputs.bucket_prefix }}
       SKIP_COV: ${{ steps.pr_details.outputs.SKIP_COV }}
     steps:
+      - name: Surface parent CI PIPELINE link
+        env:
+          PARENT_RUN_ID: ${{ github.event.workflow_run.id }}
+          PARENT_RUN_URL: ${{ github.event.workflow_run.html_url }}
+          HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          {
+            echo "## Parent CI PIPELINE run"
+            echo ""
+            printf '[Run #%s](%s) - branch `%s` @ `%s`\n' \
+              "$PARENT_RUN_ID" "$PARENT_RUN_URL" "$HEAD_BRANCH" "$HEAD_SHA"
+          } >> "$GITHUB_STEP_SUMMARY"
+
       - run: |
           sleep 10
 
