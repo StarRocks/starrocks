@@ -14,18 +14,9 @@ From v2.4, StarRocks supports conversion to the ARRAY type.
 ## Syntax
 
 ```Haskell
-cast (input as type)
-```
-
-StarRocks also supports the PostgreSQL-style `::` shorthand:
-
-```Haskell
+cast(input as type)
 input :: type
 ```
-
-`input :: type` is fully equivalent to `cast(input as type)` — they produce the same AST and the same query plan. The shorthand binds tighter than binary operators, so `a + b::INT` parses as `a + (b::INT)`. It can be chained: `x::INT::STRING` is equivalent to `cast(cast(x as int) as string)`.
-
-Note: `EXPLAIN`, `SHOW CREATE VIEW`, and audit logs always print the canonical `CAST(... AS ...)` form, regardless of which syntax was used in the original query.
 
 ## Parameters
 

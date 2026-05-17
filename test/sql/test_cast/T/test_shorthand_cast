@@ -56,3 +56,19 @@ create table ctas_dst properties ("replication_num" = "1") as
 [ORDER]select src.id, src.x::int, dim.k from src join dim on src.x::int = dim.y::int order by src.id, dim.k;
 [ORDER]select id, x::int from src where x::int in (select y::int from dim) order by id;
 drop database shorthand_cast_${uuid0};
+
+-- name: test_shorthand_cast_view_mv_canonicalization @native
+create database shorthand_cast_catalog_${uuid0};
+use shorthand_cast_catalog_${uuid0};
+create table src (
+    id int,
+    x varchar(20)
+) properties ("replication_num" = "1");
+create view shorthand_cast_view as select id, x::int as x_int from src;
+show create view shorthand_cast_view;
+create materialized view shorthand_cast_mv
+distributed by hash(id)
+refresh deferred manual
+as select id, x::int as x_int from src;
+show create materialized view shorthand_cast_mv;
+drop database shorthand_cast_catalog_${uuid0};

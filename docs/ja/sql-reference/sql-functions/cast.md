@@ -12,18 +12,9 @@ sidebar_position: 0.9
 ## 構文
 
 ```Haskell
-cast (input as type)
-```
-
-StarRocks は PostgreSQL スタイルの `::` 短縮記法もサポートしています:
-
-```Haskell
+cast(input as type)
 input :: type
 ```
-
-`input :: type` は `cast(input as type)` と完全に等価で、同じ AST と同じ実行計画を生成します。`::` は二項演算子よりも結合が強いため、`a + b::INT` は `a + (b::INT)` として解析されます。チェーン記述も可能で、`x::INT::STRING` は `cast(cast(x as int) as string)` と等価です。
-
-注意: 元のクエリでどの構文を使用しても、`EXPLAIN`、`SHOW CREATE VIEW`、および監査ログは常に正規形式の `CAST(... AS ...)` で出力します。
 
 ## パラメータ
 

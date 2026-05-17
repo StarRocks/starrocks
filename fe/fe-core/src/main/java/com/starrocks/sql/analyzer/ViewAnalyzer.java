@@ -91,7 +91,8 @@ public class ViewAnalyzer {
             Preconditions.checkArgument(originalViewDef != null, "View's original view definition is null");
             Preconditions.checkArgument(stmt.getQueryStartIndex() >= 0 && stmt.getQueryStopIndex() >= stmt.getQueryStartIndex(),
                     "View's query start or stop index is invalid");
-            stmt.setOriginalViewDefineSql(originalViewDef.substring(stmt.getQueryStartIndex(), stmt.getQueryStopIndex()));
+            String originalDefineSql = originalViewDef.substring(stmt.getQueryStartIndex(), stmt.getQueryStopIndex());
+            stmt.setOriginalViewDefineSql(canonicalizeShorthandCast(originalDefineSql, viewSql));
             return null;
         }
 
@@ -144,9 +145,17 @@ public class ViewAnalyzer {
             Preconditions.checkArgument(alterViewClause.getQueryStartIndex() >= 0 &&
                             alterViewClause.getQueryStopIndex() >= alterViewClause.getQueryStartIndex(),
                     "View's query start or stop index is invalid");
-            alterViewClause.setOriginalViewDefineSql(
-                    originalViewDef.substring(alterViewClause.getQueryStartIndex(), alterViewClause.getQueryStopIndex()));
+            String originalDefineSql = originalViewDef.substring(alterViewClause.getQueryStartIndex(),
+                    alterViewClause.getQueryStopIndex());
+            alterViewClause.setOriginalViewDefineSql(canonicalizeShorthandCast(originalDefineSql, viewSql));
             return null;
+        }
+
+        private String canonicalizeShorthandCast(String originalDefineSql, String canonicalDefineSql) {
+            if (originalDefineSql.contains("::")) {
+                return canonicalDefineSql;
+            }
+            return originalDefineSql;
         }
 
         private List<Column> analyzeViewColumns(QueryRelation queryRelation, List<ColWithComment> colWithComments) {

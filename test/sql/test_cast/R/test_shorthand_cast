@@ -144,3 +144,46 @@ create table ctas_dst properties ("replication_num" = "1") as
 drop database shorthand_cast_${uuid0};
 -- result:
 -- !result
+-- name: test_shorthand_cast_view_mv_canonicalization @native
+create database shorthand_cast_catalog_${uuid0};
+-- result:
+-- !result
+use shorthand_cast_catalog_${uuid0};
+-- result:
+-- !result
+create table src (
+    id int,
+    x varchar(20)
+) properties ("replication_num" = "1");
+-- result:
+-- !result
+create view shorthand_cast_view as select id, x::int as x_int from src;
+-- result:
+-- !result
+show create view shorthand_cast_view;
+-- result:
+[REGEX]shorthand_cast_view\s+CREATE VIEW `shorthand_cast_view` \(`id`, `x_int`\) SECURITY NONE AS SELECT `shorthand_cast_catalog_[0-9a-f]{32}`\.`src`\.`id`, CAST\(`shorthand_cast_catalog_[0-9a-f]{32}`\.`src`\.`x` AS INT\) AS `x_int`
+FROM `shorthand_cast_catalog_[0-9a-f]{32}`\.`src`;\s+utf8\s+utf8_general_ci
+-- !result
+create materialized view shorthand_cast_mv
+distributed by hash(id)
+refresh deferred manual
+as select id, x::int as x_int from src;
+-- result:
+-- !result
+show create materialized view shorthand_cast_mv;
+-- result:
+[REGEX]shorthand_cast_mv\s+CREATE MATERIALIZED VIEW `shorthand_cast_mv` \(`id`, `x_int`\)
+DISTRIBUTED BY HASH\(`id`\)
+REFRESH DEFERRED MANUAL
+PROPERTIES \(
+"replicated_storage" = "true",
+"replication_num" = "1",
+"storage_medium" = "HDD"
+\)
+AS SELECT `shorthand_cast_catalog_[0-9a-f]{32}`\.`src`\.`id`, CAST\(`shorthand_cast_catalog_[0-9a-f]{32}`\.`src`\.`x` AS INT\) AS `x_int`
+FROM `shorthand_cast_catalog_[0-9a-f]{32}`\.`src`;
+-- !result
+drop database shorthand_cast_catalog_${uuid0};
+-- result:
+-- !result

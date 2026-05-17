@@ -14,17 +14,8 @@ displayed_sidebar: docs
 
 ```Haskell
 cast(input as type)
-```
-
-StarRocks 同时支持 PostgreSQL 风格的 `::` 简写形式：
-
-```Haskell
 input :: type
 ```
-
-`input :: type` 与 `cast(input as type)` 完全等价，生成相同的 AST 和查询计划。`::` 的优先级高于二元运算符，因此 `a + b::INT` 解析为 `a + (b::INT)`。它支持链式写法：`x::INT::STRING` 等价于 `cast(cast(x as int) as string)`。
-
-注意：无论原始查询使用哪种语法，`EXPLAIN`、`SHOW CREATE VIEW` 和审计日志都会输出标准的 `CAST(... AS ...)` 形式。
 
 ## 参数说明
 

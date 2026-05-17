@@ -14,8 +14,11 @@
 
 package com.starrocks.sql.plan;
 
+import com.starrocks.catalog.View;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
+
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
@@ -45,5 +48,24 @@ public class ShorthandCastPlanTest extends PlanTestBase {
     public void testDereferenceAfterScalarCastFailsCleanly() {
         Exception exception = Assertions.assertThrows(Exception.class, () -> getFragmentPlan("select v1::int.col from t0"));
         assertContains(exception.getMessage(), "must be a struct type");
+    }
+
+    @Test
+    public void testCreateViewPersistsCanonicalCast() throws Exception {
+        String viewName = "shorthand_cast_view";
+        starRocksAssert.withView("create or replace view " + viewName + " as select v1::int as c1 from t0");
+
+        View view = (View) starRocksAssert.getTable("test", viewName);
+        Assertions.assertTrue(view.getInlineViewDef().contains("CAST("));
+        Assertions.assertFalse(view.getInlineViewDef().contains("::"));
+        Assertions.assertTrue(view.getDDLViewDef().contains("CAST("));
+        Assertions.assertFalse(view.getDDLViewDef().contains("::"));
+
+        List<List<String>> result = starRocksAssert.show("show create view " + viewName);
+        assertEquals(1, result.size());
+        String showCreateView = result.get(0).get(1);
+        Assertions.assertTrue(showCreateView.contains("CAST("));
+        Assertions.assertTrue(showCreateView.contains(" AS INT)"));
+        Assertions.assertFalse(showCreateView.contains("::"));
     }
 }
