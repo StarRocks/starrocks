@@ -22,22 +22,12 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.LocalFileSystem;
 import org.apache.hadoop.fs.Path;
-import org.apache.parquet.example.data.Group;
-import org.apache.parquet.example.data.simple.SimpleGroupFactory;
-import org.apache.parquet.hadoop.ParquetFileWriter;
-import org.apache.parquet.hadoop.ParquetWriter;
-import org.apache.parquet.hadoop.example.ExampleParquetWriter;
-import org.apache.parquet.hadoop.metadata.CompressionCodecName;
-import org.apache.parquet.schema.MessageType;
-import org.apache.parquet.schema.MessageTypeParser;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.io.IOException;
-import java.nio.file.Files;
 import java.util.List;
-import java.util.function.BiConsumer;
 
 class ParquetRowGroupStatisticsReaderTest {
 
@@ -54,22 +44,22 @@ class ParquetRowGroupStatisticsReaderTest {
                 /*rowCount=*/ 64,
                 (group, rowIndex) -> group.append("sort_key", (long) rowIndex));
 
-        List<RowGroupStatistics> stats = ParquetRowGroupStatisticsReader.read(
-                statusOf(parquetPath), newConfiguration(), new Column("sort_key", IntegerType.BIGINT));
+        List<RowGroupStatistics> rowGroupStatistics = ParquetRowGroupStatisticsReader.read(
+                statusOf(parquetPath), new Configuration(), new Column("sort_key", IntegerType.BIGINT));
 
-        Assertions.assertFalse(stats.isEmpty());
+        Assertions.assertFalse(rowGroupStatistics.isEmpty());
         long totalRowCount = 0L;
         long globalMin = Long.MAX_VALUE;
         long globalMax = Long.MIN_VALUE;
-        for (RowGroupStatistics rg : stats) {
-            Assertions.assertNotNull(rg.getMinTuple());
-            Assertions.assertNotNull(rg.getMaxTuple());
-            Assertions.assertFalse(rg.isTruncated());
-            long minValue = Long.parseLong(rg.getMinTuple().getValues().get(0).getStringValue());
-            long maxValue = Long.parseLong(rg.getMaxTuple().getValues().get(0).getStringValue());
+        for (RowGroupStatistics rowGroup : rowGroupStatistics) {
+            Assertions.assertNotNull(rowGroup.getMinTuple());
+            Assertions.assertNotNull(rowGroup.getMaxTuple());
+            Assertions.assertFalse(rowGroup.isTruncated());
+            long minValue = Long.parseLong(rowGroup.getMinTuple().getValues().get(0).getStringValue());
+            long maxValue = Long.parseLong(rowGroup.getMaxTuple().getValues().get(0).getStringValue());
             Assertions.assertTrue(minValue <= maxValue,
                     "row-group min " + minValue + " > max " + maxValue);
-            totalRowCount += rg.getRowCount();
+            totalRowCount += rowGroup.getRowCount();
             globalMin = Math.min(globalMin, minValue);
             globalMax = Math.max(globalMax, maxValue);
         }
@@ -85,18 +75,18 @@ class ParquetRowGroupStatisticsReaderTest {
                 /*rowCount=*/ 16,
                 (group, rowIndex) -> group.append("tenant", String.format("tenant-%02d", rowIndex)));
 
-        List<RowGroupStatistics> stats = ParquetRowGroupStatisticsReader.read(
-                statusOf(parquetPath), newConfiguration(), new Column("tenant", VarcharType.VARCHAR));
+        List<RowGroupStatistics> rowGroupStatistics = ParquetRowGroupStatisticsReader.read(
+                statusOf(parquetPath), new Configuration(), new Column("tenant", VarcharType.VARCHAR));
 
-        Assertions.assertFalse(stats.isEmpty());
+        Assertions.assertFalse(rowGroupStatistics.isEmpty());
         String globalMin = null;
         String globalMax = null;
-        for (RowGroupStatistics rg : stats) {
+        for (RowGroupStatistics rowGroup : rowGroupStatistics) {
             // Binary stats are conservatively marked truncated so string sort keys
             // route through Tier 2 — see the class javadoc for rationale.
-            Assertions.assertTrue(rg.isTruncated());
-            String minValue = rg.getMinTuple().getValues().get(0).getStringValue();
-            String maxValue = rg.getMaxTuple().getValues().get(0).getStringValue();
+            Assertions.assertTrue(rowGroup.isTruncated());
+            String minValue = rowGroup.getMinTuple().getValues().get(0).getStringValue();
+            String maxValue = rowGroup.getMaxTuple().getValues().get(0).getStringValue();
             Assertions.assertTrue(minValue.compareTo(maxValue) <= 0);
             globalMin = (globalMin == null || minValue.compareTo(globalMin) < 0) ? minValue : globalMin;
             globalMax = (globalMax == null || maxValue.compareTo(globalMax) > 0) ? maxValue : globalMax;
@@ -117,7 +107,7 @@ class ParquetRowGroupStatisticsReaderTest {
 
         Assertions.assertThrows(Tier1UnavailableException.class, () ->
                 ParquetRowGroupStatisticsReader.read(
-                        statusOf(parquetPath), newConfiguration(),
+                        statusOf(parquetPath), new Configuration(),
                         new Column("event_day", IntegerType.BIGINT)));
     }
 
@@ -133,7 +123,7 @@ class ParquetRowGroupStatisticsReaderTest {
 
         Assertions.assertThrows(Tier1UnavailableException.class, () ->
                 ParquetRowGroupStatisticsReader.read(
-                        statusOf(parquetPath), newConfiguration(),
+                        statusOf(parquetPath), new Configuration(),
                         new Column("opaque_bytes", VarcharType.VARCHAR)));
     }
 
@@ -144,12 +134,12 @@ class ParquetRowGroupStatisticsReaderTest {
                 /*rowCount=*/ 5,
                 (group, rowIndex) -> group.append("region_id", rowIndex + 100));
 
-        List<RowGroupStatistics> stats = ParquetRowGroupStatisticsReader.read(
-                statusOf(parquetPath), newConfiguration(), new Column("region_id", IntegerType.INT));
+        List<RowGroupStatistics> rowGroupStatistics = ParquetRowGroupStatisticsReader.read(
+                statusOf(parquetPath), new Configuration(), new Column("region_id", IntegerType.INT));
 
-        Assertions.assertEquals(1, stats.size());
-        Assertions.assertEquals("100", stats.get(0).getMinTuple().getValues().get(0).getStringValue());
-        Assertions.assertEquals("104", stats.get(0).getMaxTuple().getValues().get(0).getStringValue());
+        Assertions.assertEquals(1, rowGroupStatistics.size());
+        Assertions.assertEquals("100", rowGroupStatistics.get(0).getMinTuple().getValues().get(0).getStringValue());
+        Assertions.assertEquals("104", rowGroupStatistics.get(0).getMaxTuple().getValues().get(0).getStringValue());
     }
 
     @Test
@@ -159,11 +149,11 @@ class ParquetRowGroupStatisticsReaderTest {
                 /*rowCount=*/ 2,
                 (group, rowIndex) -> group.append("flag", rowIndex % 2 == 0));
 
-        List<RowGroupStatistics> stats = ParquetRowGroupStatisticsReader.read(
-                statusOf(parquetPath), newConfiguration(), new Column("flag", BooleanType.BOOLEAN));
+        List<RowGroupStatistics> rowGroupStatistics = ParquetRowGroupStatisticsReader.read(
+                statusOf(parquetPath), new Configuration(), new Column("flag", BooleanType.BOOLEAN));
 
-        Assertions.assertEquals(1, stats.size());
-        Assertions.assertEquals(2L, stats.get(0).getRowCount());
+        Assertions.assertEquals(1, rowGroupStatistics.size());
+        Assertions.assertEquals(2L, rowGroupStatistics.get(0).getRowCount());
     }
 
     @Test
@@ -175,7 +165,7 @@ class ParquetRowGroupStatisticsReaderTest {
 
         Assertions.assertThrows(Tier1UnavailableException.class, () ->
                 ParquetRowGroupStatisticsReader.read(
-                        statusOf(parquetPath), newConfiguration(),
+                        statusOf(parquetPath), new Configuration(),
                         new Column("missing_sort_key", IntegerType.BIGINT)));
     }
 
@@ -190,7 +180,7 @@ class ParquetRowGroupStatisticsReaderTest {
         // mapping window — caller should fall through to reservoir sampling.
         Assertions.assertThrows(Tier1UnavailableException.class, () ->
                 ParquetRowGroupStatisticsReader.read(
-                        statusOf(parquetPath), newConfiguration(),
+                        statusOf(parquetPath), new Configuration(),
                         new Column("payload", IntegerType.BIGINT)));
     }
 
@@ -204,7 +194,7 @@ class ParquetRowGroupStatisticsReaderTest {
         // Parquet INT32 cannot route into a VARCHAR sort-key column.
         Assertions.assertThrows(Tier1UnavailableException.class, () ->
                 ParquetRowGroupStatisticsReader.read(
-                        statusOf(parquetPath), newConfiguration(),
+                        statusOf(parquetPath), new Configuration(),
                         new Column("region_id", VarcharType.VARCHAR)));
     }
 
@@ -223,7 +213,7 @@ class ParquetRowGroupStatisticsReaderTest {
 
         Assertions.assertThrows(Tier1UnavailableException.class, () ->
                 ParquetRowGroupStatisticsReader.read(
-                        statusOf(parquetPath), newConfiguration(),
+                        statusOf(parquetPath), new Configuration(),
                         new Column("sort_key", IntegerType.BIGINT)));
     }
 
@@ -239,7 +229,7 @@ class ParquetRowGroupStatisticsReaderTest {
 
         Assertions.assertThrows(Tier1UnavailableException.class, () ->
                 ParquetRowGroupStatisticsReader.read(
-                        statusOf(parquetPath), newConfiguration(),
+                        statusOf(parquetPath), new Configuration(),
                         new Column("wide_value", IntegerType.TINYINT)));
     }
 
@@ -253,44 +243,21 @@ class ParquetRowGroupStatisticsReaderTest {
                 /*rowCount=*/ 3,
                 (group, rowIndex) -> group.append("keepalive", (long) rowIndex));
 
-        List<RowGroupStatistics> stats = ParquetRowGroupStatisticsReader.read(
-                statusOf(parquetPath), newConfiguration(), new Column("sort_key", IntegerType.BIGINT));
+        List<RowGroupStatistics> rowGroupStatistics = ParquetRowGroupStatisticsReader.read(
+                statusOf(parquetPath), new Configuration(), new Column("sort_key", IntegerType.BIGINT));
 
-        Assertions.assertEquals(1, stats.size());
-        RowGroupStatistics only = stats.get(0);
+        Assertions.assertEquals(1, rowGroupStatistics.size());
+        RowGroupStatistics only = rowGroupStatistics.get(0);
         Assertions.assertEquals(3L, only.getRowCount());
         Assertions.assertNull(only.getMinTuple());
         Assertions.assertNull(only.getMaxTuple());
     }
 
-    private Path writeParquet(String schemaText, int rowCount, BiConsumer<Group, Integer> rowFiller)
+    private Path writeParquet(
+            String schemaText, int rowCount,
+            java.util.function.BiConsumer<org.apache.parquet.example.data.Group, Integer> rowFiller)
             throws IOException {
-        java.nio.file.Path file = Files.createTempFile(tempDirectory, "presplit-tier1-", ".parquet");
-        Path outputPath = new Path(file.toUri());
-        MessageType schema = MessageTypeParser.parseMessageType(schemaText);
-        SimpleGroupFactory groupFactory = new SimpleGroupFactory(schema);
-        try (ParquetWriter<Group> writer = ExampleParquetWriter.builder(outputPath)
-                .withType(schema)
-                .withConf(newConfiguration())
-                .withCompressionCodec(CompressionCodecName.UNCOMPRESSED)
-                .withWriteMode(ParquetFileWriter.Mode.OVERWRITE)
-                .build()) {
-            for (int rowIndex = 0; rowIndex < rowCount; rowIndex++) {
-                Group group = groupFactory.newGroup();
-                rowFiller.accept(group, rowIndex);
-                writer.write(group);
-            }
-        }
-        return outputPath;
-    }
-
-    private static Configuration newConfiguration() {
-        Configuration configuration = new Configuration();
-        // Tiny page/block sizes coax the writer into emitting multiple row
-        // groups even for the small fixtures the tests need.
-        configuration.setLong("parquet.block.size", 256);
-        configuration.setLong("parquet.page.size", 64);
-        return configuration;
+        return PresplitTestSupport.writeParquetFixture(tempDirectory, schemaText, rowCount, rowFiller);
     }
 
     private static FileStatus statusOf(Path path) throws IOException {

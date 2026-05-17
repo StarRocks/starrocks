@@ -39,11 +39,12 @@ import java.util.List;
  * for FINISHED would deadlock the reshard daemon's cleanup-phase prev-txn
  * wait against this same load txn.
  *
- * <p>The Tier 1 / Tier 2 sampler executors are currently placeholders
- * supplied by
- * {@link DefaultPreSplitPipeline#withPendingExecutors}. The per-path Config
- * flag {@code enable_tablet_pre_split_for_broker_load} defaults to
- * {@code false}, so the hook never reaches them until production wiring lands.
+ * <p>Sampler-executor selection is delegated to
+ * {@link DefaultPreSplitPipeline#forLoadKind}: both Tier 1 and Tier 2 are
+ * still placeholders for {@link LoadKind#BROKER_LOAD} until the Broker Load
+ * provider commit lands. The per-path Config flag
+ * {@code enable_tablet_pre_split_for_broker_load} defaults to {@code false},
+ * so the hook never reaches the executors until the operator opts in.
  */
 public final class BrokerLoadPreSplitHook {
 
@@ -103,7 +104,7 @@ public final class BrokerLoadPreSplitHook {
                 LoadScanNode.getAvailableComputeNodes(computeResource).size());
         long fileTotalBytes = sumFileBytes(fileStatuses);
 
-        DefaultPreSplitPipeline pipeline = DefaultPreSplitPipeline.withPendingExecutors(
+        DefaultPreSplitPipeline pipeline = DefaultPreSplitPipeline.forLoadKind(
                 target.database(), target.olapTable(), target.oldTabletId(), fileTotalBytes,
                 LoadKind.BROKER_LOAD);
 

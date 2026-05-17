@@ -19,10 +19,23 @@ import com.starrocks.catalog.Tuple;
 import com.starrocks.catalog.Variant;
 import com.starrocks.type.IntegerType;
 import com.starrocks.type.VarcharType;
+import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.Path;
+import org.apache.parquet.example.data.Group;
+import org.apache.parquet.example.data.simple.SimpleGroupFactory;
+import org.apache.parquet.hadoop.ParquetFileWriter;
+import org.apache.parquet.hadoop.ParquetWriter;
+import org.apache.parquet.hadoop.example.ExampleParquetWriter;
+import org.apache.parquet.hadoop.metadata.CompressionCodecName;
+import org.apache.parquet.schema.MessageType;
+import org.apache.parquet.schema.MessageTypeParser;
 import org.mockito.MockedStatic;
 import org.mockito.Mockito;
 
+import java.io.IOException;
+import java.nio.file.Files;
 import java.util.List;
+import java.util.function.BiConsumer;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
@@ -89,5 +102,38 @@ final class PresplitTestSupport {
     @FunctionalInterface
     interface HookInvocation {
         void run() throws Exception;
+    }
+
+    /**
+     * Write a small Parquet fixture into {@code tempDirectory} for tests that
+     * exercise the Tier-1 reader / provider. Tiny page/block sizes coax the
+     * writer into emitting multiple row groups even at row counts well below
+     * a normal block boundary.
+     */
+    static Path writeParquetFixture(
+            java.nio.file.Path tempDirectory,
+            String schemaText,
+            int rowCount,
+            BiConsumer<Group, Integer> rowFiller) throws IOException {
+        java.nio.file.Path file = Files.createTempFile(tempDirectory, "presplit-fixture-", ".parquet");
+        Path outputPath = new Path(file.toUri());
+        MessageType schema = MessageTypeParser.parseMessageType(schemaText);
+        SimpleGroupFactory groupFactory = new SimpleGroupFactory(schema);
+        Configuration configuration = new Configuration();
+        configuration.setLong("parquet.block.size", 256);
+        configuration.setLong("parquet.page.size", 64);
+        try (ParquetWriter<Group> writer = ExampleParquetWriter.builder(outputPath)
+                .withType(schema)
+                .withConf(configuration)
+                .withCompressionCodec(CompressionCodecName.UNCOMPRESSED)
+                .withWriteMode(ParquetFileWriter.Mode.OVERWRITE)
+                .build()) {
+            for (int rowIndex = 0; rowIndex < rowCount; rowIndex++) {
+                Group group = groupFactory.newGroup();
+                rowFiller.accept(group, rowIndex);
+                writer.write(group);
+            }
+        }
+        return outputPath;
     }
 }

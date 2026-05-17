@@ -65,11 +65,11 @@ import org.apache.logging.log4j.Logger;
  * lists, and multi-source variants are rejected because the sampler-driven
  * boundaries would only represent a subset of the inserted rows.
  *
- * <p>The Tier 1 / Tier 2 sampler executors are currently placeholders
- * supplied by
- * {@link DefaultPreSplitPipeline#withPendingExecutors}. The per-path Config
- * flag defaults to {@code false}, so the hook never reaches them until
- * production wiring lands.
+ * <p>Sampler-executor selection is delegated to
+ * {@link DefaultPreSplitPipeline#forLoadKind}: Tier 1 uses the production
+ * {@link InsertFromFilesRowGroupStatisticsProvider}; Tier 2 is still a
+ * placeholder. The per-path Config flag defaults to {@code false}, so the
+ * hook never reaches the executors until the operator opts in.
  */
 public final class InsertFromFilesPreSplitHook {
 
@@ -224,7 +224,7 @@ public final class InsertFromFilesPreSplitHook {
                 LoadScanNode.getAvailableComputeNodes(computeResource).size());
         long fileTotalBytes = sumFileBytes(sourceTable);
 
-        DefaultPreSplitPipeline pipeline = DefaultPreSplitPipeline.withPendingExecutors(
+        DefaultPreSplitPipeline pipeline = DefaultPreSplitPipeline.forLoadKind(
                 target.database(), target.olapTable(), target.oldTabletId(), fileTotalBytes,
                 LoadKind.INSERT_FROM_FILES);
 

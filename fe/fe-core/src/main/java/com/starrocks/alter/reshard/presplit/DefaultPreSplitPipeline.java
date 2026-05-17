@@ -104,21 +104,39 @@ public final class DefaultPreSplitPipeline implements PreSplitPipeline {
     }
 
     /**
-     * Build a pipeline wired with the placeholder Tier 1 / Tier 2 executors
-     * the load-path hooks use today. Centralizes the construction so all
-     * hooks (D1 INSERT-from-FILES, D2 Broker Load, and any D3+ caller) share
-     * the same plumbing. When real sampler executors land per load kind,
-     * this factory is the single edit site.
+     * Build a pipeline wired with the executors appropriate for {@code loadKind}.
+     * Centralizes the construction so all hooks (D1 INSERT-from-FILES, D2
+     * Broker Load, future callers) share the same plumbing.
+     *
+     * <p>Tier 1 dispatch (production vs. placeholder) is per load kind so
+     * provider work can land independently:
+     * <ul>
+     *   <li>{@link LoadKind#INSERT_FROM_FILES}: production
+     *       {@link InsertFromFilesRowGroupStatisticsProvider} (reads Parquet
+     *       footers via {@link ParquetRowGroupStatisticsReader}).</li>
+     *   <li>{@link LoadKind#BROKER_LOAD}: placeholder
+     *       {@link PendingRowGroupStatisticsProvider} until the Broker Load
+     *       provider commit lands.</li>
+     * </ul>
+     * Tier 2 remains a placeholder for both load kinds until the sub-query
+     * executor commit lands.
      */
-    public static DefaultPreSplitPipeline withPendingExecutors(
+    public static DefaultPreSplitPipeline forLoadKind(
             Database database, OlapTable table, long oldTabletId, long fileTotalBytes, LoadKind loadKind) {
-        ParquetMetadataSampler tier1Sampler = new ParquetMetadataSampler(new PendingRowGroupStatisticsProvider(loadKind));
+        ParquetMetadataSampler tier1Sampler = new ParquetMetadataSampler(rowGroupStatisticsProviderFor(loadKind));
         Sampler tier2Sampler = new ReservoirSampler(new PendingSampleSubqueryExecutor(loadKind));
         TabletReshardJobMgr tabletReshardJobManager = GlobalStateMgr.getCurrentState().getTabletReshardJobMgr();
         return new DefaultPreSplitPipeline(
                 tier1Sampler::tryPlan, tier2Sampler, tabletReshardJobManager,
                 database, table, oldTabletId, fileTotalBytes,
                 DEFAULT_POLL_INTERVAL, Clock.systemUTC());
+    }
+
+    private static RowGroupStatisticsProvider rowGroupStatisticsProviderFor(LoadKind loadKind) {
+        return switch (loadKind) {
+            case INSERT_FROM_FILES -> new InsertFromFilesRowGroupStatisticsProvider();
+            case BROKER_LOAD -> new PendingRowGroupStatisticsProvider(loadKind);
+        };
     }
 
     @Override
