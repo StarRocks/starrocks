@@ -1,5 +1,10 @@
 name: CI Report
-run-name: CI Report(#${{ github.event.workflow_run.id }})
+run-name: >-
+  CI Report —
+  ${{ github.event.workflow_run.pull_requests[0].number
+      && format('PR #{0} ({1})', github.event.workflow_run.pull_requests[0].number, github.event.workflow_run.head_branch)
+      || github.event.workflow_run.head_branch }}
+  (parent #${{ github.event.workflow_run.id }})
 
 on:
   workflow_run:
