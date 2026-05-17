@@ -15,11 +15,13 @@
 #pragma once
 
 #include <arrow/array.h>
-#include <arrow/status.h>
+#include <arrow/type.h>
+#include <arrow/type_traits.h>
 
+#include <cstdint>
 #include <string_view>
+#include <type_traits>
 
-#include "arrow/type.h"
 #include "base/utility/pred_guard.h"
 
 namespace starrocks {

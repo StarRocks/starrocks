@@ -29,7 +29,6 @@
 #include "column/vectorized_fwd.h"
 #include "common/status.h"
 #include "common/statusor.h"
-#include "exec/arrow_type_traits.h"
 #ifndef __APPLE__
 #include "exec/file_scanner/parquet_scanner.h"
 #endif
