@@ -56,6 +56,8 @@ void DataCacheMetrics::install(MetricRegistry* registry) {
     registry->register_metric("datacache_meta_used_bytes", &datacache_meta_used_bytes);
     registry->register_metric("block_cache_hit_bytes", &block_cache_hit_bytes);
     registry->register_metric("block_cache_miss_bytes", &block_cache_miss_bytes);
+    registry->register_metric("datacache_block_cache_write_bytes", &datacache_block_cache_write_bytes);
+    registry->register_metric("datacache_block_cache_evict_bytes", &datacache_block_cache_evict_bytes);
 }
 
 void DataCacheMetrics::enable_update_hook(bool use_same_instance) {
@@ -99,6 +101,18 @@ void DataCacheMetrics::update() {
     datacache_disk_quota_bytes.set_value(disk_metrics.disk_quota_bytes);
     datacache_disk_used_bytes.set_value(disk_metrics.disk_used_bytes);
     datacache_meta_used_bytes.set_value(meta_used_bytes);
+
+    // Starcache detail_l2 carries cumulative populate (write_bytes) and eviction (remove_bytes)
+    // totals. Sample them so dashboards can derive eviction pressure (evict-rate vs write-rate)
+    // without scraping the HTTP /api/datacache/stat endpoint.
+    if (local_disk_cache != nullptr && local_disk_cache->is_initialized()) {
+        auto* starcache = static_cast<StarCacheEngine*>(local_disk_cache);
+        auto detail_metrics = starcache->starcache_metrics(2);
+        if (detail_metrics.detail_l2 != nullptr) {
+            datacache_block_cache_write_bytes.set_value(detail_metrics.detail_l2->write_bytes);
+            datacache_block_cache_evict_bytes.set_value(detail_metrics.detail_l2->remove_bytes);
+        }
+    }
 
     // Update hit rate metrics from DataCacheHitRateCounter
     auto* hit_rate_counter = DataCacheHitRateCounter::instance();

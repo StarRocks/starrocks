@@ -31,6 +31,12 @@ public:
     METRIC_DEFINE_INT_GAUGE(query_scan_bytes_per_second, MetricUnit::BYTES);
     METRIC_DEFINE_INT_COUNTER(query_scan_bytes, MetricUnit::BYTES);
     METRIC_DEFINE_INT_COUNTER(query_scan_rows, MetricUnit::ROWS);
+    // Parquet footer page-cache hit/miss counts, aggregated from per-scan HdfsScanStats. Lets
+    // dashboards observe footer hit-rate independently of other page-cache users (column
+    // indexes, ORC stripe footers, etc.) and verify the iceberg metadata refresh footer
+    // prefetch feature actually warmed the cache before the first user query.
+    METRIC_DEFINE_INT_COUNTER(parquet_footer_cache_hit_count, MetricUnit::OPERATIONS);
+    METRIC_DEFINE_INT_COUNTER(parquet_footer_cache_miss_count, MetricUnit::OPERATIONS);
 
 private:
     MetricRegistry* _registry = nullptr;

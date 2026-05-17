@@ -44,6 +44,12 @@ public:
     METRIC_DEFINE_INT_GAUGE(datacache_meta_used_bytes, MetricUnit::BYTES);
     METRIC_DEFINE_INT_ATOMIC_COUNTER(block_cache_hit_bytes, MetricUnit::BYTES);
     METRIC_DEFINE_INT_ATOMIC_COUNTER(block_cache_miss_bytes, MetricUnit::BYTES);
+    // Starcache-internal cumulative populate/eviction byte totals (detail_l2). Snapshot semantics:
+    // gauges set to absolute cumulative bytes; Prom rate() over them gives per-second populate
+    // and eviction pressure for datacache health dashboards (alerts when evict-rate approaches
+    // write-rate, indicating cache churn).
+    METRIC_DEFINE_INT_GAUGE(datacache_block_cache_write_bytes, MetricUnit::BYTES);
+    METRIC_DEFINE_INT_GAUGE(datacache_block_cache_evict_bytes, MetricUnit::BYTES);
 
 private:
     MetricRegistry* _registry = nullptr;

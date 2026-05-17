@@ -170,6 +170,9 @@ public class IcebergConnector implements Connector {
     public void shutdown() {
         GlobalStateMgr.getCurrentState().getConnectorTableMetadataProcessor()
                 .unRegisterCachingIcebergCatalog(catalogName);
+        if (icebergNativeCatalog instanceof CachingIcebergCatalog) {
+            ((CachingIcebergCatalog) icebergNativeCatalog).shutdown();
+        }
         if (icebergJobPlanningExecutor != null) {
             icebergJobPlanningExecutor.shutdown();
         }

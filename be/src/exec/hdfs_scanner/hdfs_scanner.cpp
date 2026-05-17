@@ -24,6 +24,7 @@
 #include "common/config_scan_io_fwd.h"
 #include "connector/deletion_vector/deletion_vector.h"
 #include "exec/pipeline/fragment_context.h"
+#include "exec/query_scan_metrics.h"
 #include "exprs/chunk_predicate_evaluator.h"
 #include "fs/hdfs/fs_hdfs.h"
 #include "io/cache_select_input_stream.hpp"
@@ -35,6 +36,7 @@
 #include "storage/type_info_allocator_adapter.h"
 #include "storage/types.h"
 #include "types/timestamp_value.h"
+
 namespace starrocks {
 
 static const std::string kCountOptColumnName = "___count___";
@@ -376,6 +378,22 @@ StatusOr<std::unique_ptr<RandomAccessFile>> HdfsScanner::create_random_access_fi
         if (datacache_options.enable_cache_select) {
             cache_input_stream = std::make_shared<io::CacheSelectInputStream>(
                     shared_buffered_input_stream, filename, file_size, datacache_options.modification_time);
+            // CacheSelectInputStream is probe-only — its _read_block_from_local checks existence
+            // without copying bytes and _read_blocks_from_remote populates without filling `out`.
+            // It cannot serve real reads. Wrap input_stream in a regular CacheInputStream so
+            // reads through _file (e.g. parquet reader->init footer read) actually return bytes
+            // AND populate the block_cache. Without this, CACHE SELECT only populates the column
+            // ranges explicitly fed to CacheSelectInputStream via _write_disk_ranges; the footer
+            // read goes straight to raw storage every time.
+            auto populate_stream = std::make_shared<io::CacheInputStream>(
+                    shared_buffered_input_stream, filename, file_size, datacache_options.modification_time);
+            populate_stream->set_enable_populate_cache(datacache_options.enable_populate_datacache);
+            populate_stream->set_enable_async_populate_mode(datacache_options.enable_datacache_async_populate_mode);
+            populate_stream->set_enable_cache_io_adaptor(datacache_options.enable_datacache_io_adaptor);
+            populate_stream->set_enable_block_buffer(config::datacache_block_buffer_enable);
+            populate_stream->set_priority(datacache_options.datacache_priority);
+            populate_stream->set_ttl_seconds(datacache_options.datacache_ttl_seconds);
+            input_stream = populate_stream;
         } else {
             cache_input_stream = std::make_shared<io::CacheInputStream>(shared_buffered_input_stream, filename,
                                                                         file_size, datacache_options.modification_time);
@@ -543,6 +561,15 @@ void HdfsScanner::update_counter() {
 
     DataCacheHitRateCounter::instance()->update_page_cache_stat(_app_stats.page_cache_read_counter,
                                                                 _app_stats.page_read_counter);
+
+    // Per-scan parquet footer hit/miss → BE-global counters. footer_cache_read_count is hits
+    // (page-cache lookup returned cached FileMetaData); footer_cache_write_count is misses that
+    // resulted in a parse + populate; footer_cache_write_fail_count is a miss that failed to
+    // populate. All three count as "had to go through _parse_footer", so both write counters
+    // contribute to the miss aggregate.
+    QueryScanMetrics::instance()->parquet_footer_cache_hit_count.increment(_app_stats.footer_cache_read_count);
+    QueryScanMetrics::instance()->parquet_footer_cache_miss_count.increment(_app_stats.footer_cache_write_count +
+                                                                            _app_stats.footer_cache_write_fail_count);
 
     if (_scanner_params.datacache_options.enable_datacache && _cache_input_stream) {
         const io::CacheInputStream::Stats& stats = _cache_input_stream->stats();

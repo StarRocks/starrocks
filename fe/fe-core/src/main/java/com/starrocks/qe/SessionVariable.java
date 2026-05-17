@@ -742,6 +742,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String PAIMON_FORCE_JNI_READER = "paimon_force_jni_reader";
     public static final String AVRO_USE_JNI_READER = "avro_use_jni_reader";
     public static final String ENABLE_DYNAMIC_PRUNE_SCAN_RANGE = "enable_dynamic_prune_scan_range";
+    public static final String ENABLE_ICEBERG_METADATA_REFRESH_FOOTER_PREFETCH =
+            "enable_iceberg_metadata_refresh_footer_prefetch";
+    // Internal, set only by IcebergMetadataRefreshFooterPrefetcher.warmup() on its own cloned
+    // ConnectContext to tell BE CacheSelectScanner to stop after the file footer is in
+    // block_cache and skip the column data + Iceberg delete-file fetch. Users opting into the
+    // feature via `enable_iceberg_metadata_refresh_footer_prefetch` must not affect plain
+    // CACHE SELECT semantics for ordinary queries on their session.
+    public static final String CACHE_SELECT_FOOTER_ONLY = "cache_select_footer_only";
     public static final String IO_TASKS_PER_SCAN_OPERATOR = "io_tasks_per_scan_operator";
     public static final String CONNECTOR_IO_TASKS_PER_SCAN_OPERATOR = "connector_io_tasks_per_scan_operator";
     public static final String ENABLE_CONNECTOR_ADAPTIVE_IO_TASKS = "enable_connector_adaptive_io_tasks";
@@ -2722,6 +2730,12 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     private boolean enableCacheSelect = false;
 
+    @VariableMgr.VarAttr(name = ENABLE_ICEBERG_METADATA_REFRESH_FOOTER_PREFETCH)
+    private boolean enableIcebergMetadataRefreshFooterPrefetch = false;
+
+    @VariableMgr.VarAttr(name = CACHE_SELECT_FOOTER_ONLY, flag = VariableMgr.INVISIBLE)
+    private boolean cacheSelectFooterOnly = false;
+
     @VariableMgr.VarAttr(name = ENABLE_DYNAMIC_PRUNE_SCAN_RANGE)
     private boolean enableDynamicPruneScanRange = true;
 
@@ -3717,6 +3731,22 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public boolean isEnableCacheSelect() {
         return enableCacheSelect;
+    }
+
+    public void setEnableIcebergMetadataRefreshFooterPrefetch(boolean v) {
+        this.enableIcebergMetadataRefreshFooterPrefetch = v;
+    }
+
+    public boolean isEnableIcebergMetadataRefreshFooterPrefetch() {
+        return enableIcebergMetadataRefreshFooterPrefetch;
+    }
+
+    public void setCacheSelectFooterOnly(boolean v) {
+        this.cacheSelectFooterOnly = v;
+    }
+
+    public boolean isCacheSelectFooterOnly() {
+        return cacheSelectFooterOnly;
     }
 
     public void setConnectorIoTasksPerScanOperator(int connectorIoTasksPerScanOperator) {
@@ -6421,6 +6451,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         tResult.setDatacache_priority(datacachePriority);
         tResult.setDatacache_ttl_seconds(datacacheTTLSeconds);
         tResult.setEnable_cache_select(enableCacheSelect);
+        tResult.setCache_select_footer_only(cacheSelectFooterOnly);
         tResult.setEnable_file_metacache(enableFileMetaCache);
         tResult.setEnable_file_pagecache(enableFilePageCache);
         tResult.setHudi_mor_force_jni_reader(hudiMORForceJNIReader);

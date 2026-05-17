@@ -35,6 +35,8 @@ void QueryScanMetrics::install(MetricRegistry* registry) {
     registry->register_metric("query_scan_bytes", &query_scan_bytes);
     registry->register_metric("query_scan_rows", &query_scan_rows);
     registry->register_metric("query_scan_bytes_per_second", &query_scan_bytes_per_second);
+    registry->register_metric("parquet_footer_cache_hit_count", &parquet_footer_cache_hit_count);
+    registry->register_metric("parquet_footer_cache_miss_count", &parquet_footer_cache_miss_count);
 }
 
 } // namespace starrocks

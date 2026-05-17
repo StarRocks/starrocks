@@ -20,6 +20,7 @@
 #include "formats/parquet/file_reader.h"
 #include "fs/fs.h"
 #include "io/shared_buffered_input_stream.h"
+#include "runtime/runtime_state.h"
 
 namespace starrocks {
 
@@ -68,7 +69,10 @@ Status CacheSelectScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* ch
     }
 
     // handle iceberg delete files
-    if (!_scanner_params.deletes.empty()) {
+    // Skip delete-file fetching in footer-only warm-up mode: this path is the iceberg metadata
+    // refresh footer prefetch, which only needs the parquet footer in block_cache. Delete files
+    // are read by real query execution as needed.
+    if (!_scanner_params.deletes.empty() && !runtime_state->query_options().cache_select_footer_only) {
         RETURN_IF_ERROR(_fetch_iceberg_delete_files());
     }
 
@@ -87,6 +91,14 @@ Status CacheSelectScanner::_fetch_orc() {
     } catch (std::exception& e) {
         return Status::InternalError(
                 strings::Substitute("CacheSelectScanner::_fetch_orc failed. reason = $0", e.what()));
+    }
+
+    // Footer-only warm-up: createReader above already read the ORC postscript + file footer
+    // through the wrapping CacheInputStream, populating block_cache. Stripe data ranges are not
+    // needed; skip the per-column resolution and stripe IO collection. Symmetric to the
+    // parquet branch.
+    if (_runtime_state->query_options().cache_select_footer_only) {
+        return Status::OK();
     }
 
     // prepare SlotDescriptor
@@ -184,6 +196,15 @@ Status CacheSelectScanner::_fetch_parquet() {
 
     RETURN_IF_ERROR(reader->init(&_scanner_ctx));
 
+    // Footer-only warm-up for the iceberg metadata refresh prefetch path: reader->init above
+    // already read the footer through the CacheInputStream wrapping _file (created in
+    // HdfsScanner::create_random_access_file when enable_cache_select is on), which populates
+    // block_cache with the footer bytes. Column ranges are not needed; skip the per-column
+    // io-range collection and explicit _write_disk_ranges.
+    if (_runtime_state->query_options().cache_select_footer_only) {
+        return Status::OK();
+    }
+
     std::vector<io::SharedBufferedInputStream::IORange> io_ranges{};
     RETURN_IF_ERROR(reader->collect_scan_io_ranges(&io_ranges));
 
@@ -198,6 +219,13 @@ Status CacheSelectScanner::_fetch_parquet() {
 
 // Split text into multiply disk ranges, then fetch it
 Status CacheSelectScanner::_fetch_textfile() {
+    // Footer-only warm-up has no meaning for row-oriented text files (there is no footer to
+    // populate). The flag is set by the iceberg metadata refresh prefetch path, which only ever
+    // targets parquet/orc; skip entirely if it leaks onto a text format.
+    if (_runtime_state->query_options().cache_select_footer_only) {
+        return Status::OK();
+    }
+
     // If it's compressed file, we only handle scan range whose offset == 0.
     if (get_compression_type_from_path(_scanner_params.path) != UNKNOWN_COMPRESSION &&
         _scanner_params.scan_range->offset != 0) {

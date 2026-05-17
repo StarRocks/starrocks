@@ -19,6 +19,7 @@ import com.github.benmanes.caffeine.cache.RemovalCause;
 import com.github.benmanes.caffeine.cache.Weigher;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
+import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.common.Config;
@@ -66,6 +67,7 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.stream.Collectors;
 
 import static java.util.concurrent.TimeUnit.SECONDS;
@@ -85,6 +87,10 @@ public class CachingIcebergCatalog implements IcebergCatalog {
     private final ExecutorService backgroundExecutor;
 
     private final IcebergCatalogProperties icebergProperties;
+    // Single-thread daemon executor for fire-and-forget cache_select dispatch from
+    // IcebergMetadataRefreshFooterPrefetcher.warmup. cache_select itself blocks on
+    // coordinator.join, so we must not run it inline on the refresh thread.
+    private final ExecutorService footerPrefetchOrchestratorExecutor;
     private final com.github.benmanes.caffeine.cache.Cache<String, Set<DataFile>> dataFileCache;
     private final com.github.benmanes.caffeine.cache.Cache<String, Set<DeleteFile>> deleteFileCache;
     private final Map<IcebergTableName, Set<String>> metaFileCacheMap = new ConcurrentHashMap<>(); // table -> metadata file paths
@@ -107,6 +113,9 @@ public class CachingIcebergCatalog implements IcebergCatalog {
         this.databases = newCacheBuilderWithMaximumSize(
                 icebergProperties.getIcebergMetaCacheTtlSec(),
                 NEVER_CACHE, DEFAULT_CACHE_NUM).build();
+        ThreadFactoryBuilder tfb = new ThreadFactoryBuilder().setDaemon(true);
+        this.footerPrefetchOrchestratorExecutor = Executors.newSingleThreadExecutor(
+                tfb.setNameFormat("iceberg-footer-prefetch-" + catalogName).build());
         this.tables = newCacheBuilder(
                 icebergProperties.getIcebergMetaCacheTtlSec(),
                 icebergProperties.getIcebergTableCacheRefreshIntervalSec())
@@ -402,6 +411,11 @@ public class CachingIcebergCatalog implements IcebergCatalog {
         Table cachedTable = tables.getIfPresent(icebergTableName);
         if (cachedTable == null) {
             partitionCache.invalidate(icebergTableName);
+            // Cold-start path: table wasn't cached yet (first refresh after FE restart).
+            // Trigger footer warmup here too so the first user query doesn't pay S3 for the
+            // footer. Skips internally if the session var is off.
+            IcebergMetadataRefreshFooterPrefetcher.warmup(
+                    catalogName, dbName, tableName, ctx, footerPrefetchOrchestratorExecutor);
         } else {
             BaseTable currentTable = (BaseTable) cachedTable;
             BaseTable updateTable = (BaseTable) delegate.getTable(ctx, dbName, tableName);
@@ -479,6 +493,9 @@ public class CachingIcebergCatalog implements IcebergCatalog {
 
         tableLatestRefreshTime.put(new IcebergTableName(dbName, tableName), System.currentTimeMillis());
         LOG.info("Refreshed {} iceberg manifests on the table [{}.{}]", manifestFiles.size(), dbName, tableName);
+
+        IcebergMetadataRefreshFooterPrefetcher.warmup(
+                catalogName, dbName, tableName, ctx, footerPrefetchOrchestratorExecutor);
     }
 
     public void refreshCatalog() {
@@ -531,6 +548,12 @@ public class CachingIcebergCatalog implements IcebergCatalog {
         if (paths != null && !paths.isEmpty()) {
             dataFileCache.invalidateAll(paths);
             deleteFileCache.invalidateAll(paths);
+        }
+    }
+
+    public void shutdown() {
+        if (footerPrefetchOrchestratorExecutor != null) {
+            footerPrefetchOrchestratorExecutor.shutdown();
         }
     }
 
