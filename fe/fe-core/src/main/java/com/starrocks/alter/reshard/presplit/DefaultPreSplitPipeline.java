@@ -112,13 +112,16 @@ public final class DefaultPreSplitPipeline implements PreSplitPipeline {
      * {@link InsertFromFilesRowGroupStatisticsProvider} for
      * {@link LoadKind#INSERT_FROM_FILES} and
      * {@link BrokerLoadRowGroupStatisticsProvider} for
-     * {@link LoadKind#BROKER_LOAD}. Tier 2 remains a placeholder for both
-     * load kinds until the sub-query executor commit lands.
+     * {@link LoadKind#BROKER_LOAD}. Tier 2 is production for
+     * {@link LoadKind#INSERT_FROM_FILES} via
+     * {@link InsertFromFilesSampleSubqueryExecutor}; the Broker Load path
+     * keeps the {@link PendingSampleSubqueryExecutor} placeholder until a
+     * Broker-Load-specific sampler lands.
      */
     public static DefaultPreSplitPipeline forLoadKind(
             Database database, OlapTable table, long oldTabletId, long fileTotalBytes, LoadKind loadKind) {
         ParquetMetadataSampler tier1Sampler = new ParquetMetadataSampler(rowGroupStatisticsProviderFor(loadKind));
-        Sampler tier2Sampler = new ReservoirSampler(new PendingSampleSubqueryExecutor(loadKind));
+        Sampler tier2Sampler = new ReservoirSampler(sampleSubqueryExecutorFor(loadKind));
         TabletReshardJobMgr tabletReshardJobManager = GlobalStateMgr.getCurrentState().getTabletReshardJobMgr();
         return new DefaultPreSplitPipeline(
                 tier1Sampler::tryPlan, tier2Sampler, tabletReshardJobManager,
@@ -130,6 +133,13 @@ public final class DefaultPreSplitPipeline implements PreSplitPipeline {
         return switch (loadKind) {
             case INSERT_FROM_FILES -> new InsertFromFilesRowGroupStatisticsProvider();
             case BROKER_LOAD -> new BrokerLoadRowGroupStatisticsProvider();
+        };
+    }
+
+    private static SampleSubqueryExecutor sampleSubqueryExecutorFor(LoadKind loadKind) {
+        return switch (loadKind) {
+            case INSERT_FROM_FILES -> new InsertFromFilesSampleSubqueryExecutor();
+            case BROKER_LOAD -> new PendingSampleSubqueryExecutor(loadKind);
         };
     }
 
