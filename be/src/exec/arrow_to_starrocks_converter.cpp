@@ -15,12 +15,14 @@
 #include "exec/arrow_to_starrocks_converter.h"
 
 #include <arrow/array.h>
+#include <arrow/compute/api.h>
 
 #include "arrow/array/array_binary.h"
 #include "arrow/array/array_nested.h"
 #include "arrow/scalar.h"
 #include "arrow/type_fwd.h"
 #include "arrow/type_traits.h"
+#include "base/utility/pred_guard.h"
 #include "column/array_column.h"
 #include "column/map_column.h"
 #include "column/nullable_column.h"
@@ -29,10 +31,6 @@
 #include "column/vectorized_fwd.h"
 #include "common/status.h"
 #include "common/statusor.h"
-#ifndef __APPLE__
-#include "exec/file_scanner/parquet_scanner.h"
-#endif
-#include "base/utility/pred_guard.h"
 #include "gutil/strings/fastmem.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/descriptors.h"
@@ -103,6 +101,54 @@ void fill_filter(const arrow::Array* array, size_t array_start_idx, size_t num_e
     if (UNLIKELY(!all_invalid)) {
         ctx->report_error_message("column type is not null but data is null", "");
     }
+}
+
+Status convert_arrow_array_to_column(ConvertFuncTree* conv_func, size_t num_elements, const arrow::Array* array,
+                                     Column* column, size_t batch_start_idx, size_t chunk_start_idx,
+                                     Filter* chunk_filter, ArrowConvertContext* conv_ctx) {
+    if (array->type_id() == ArrowTypeId::DICTIONARY) {
+        auto* dictionary_type = down_cast<const arrow::DictionaryType*>(array->type().get());
+        auto sliced_array = array->Slice(batch_start_idx, num_elements);
+        auto decoded_array_res = arrow::compute::Cast(*sliced_array, dictionary_type->value_type());
+        if (!decoded_array_res.ok()) {
+            return Status::InternalError(decoded_array_res.status().ToString());
+        }
+        return convert_arrow_array_to_column(conv_func, num_elements, decoded_array_res->get(), column, 0,
+                                             chunk_start_idx, chunk_filter, conv_ctx);
+    }
+
+    // for timestamp type, state->timezone which is specified by user. convert function
+    // obtains timezone from array. thus timezone in array should be rectified to
+    // state->timezone.
+    if (array->type_id() == ArrowTypeId::TIMESTAMP) {
+        auto* timestamp_type = down_cast<arrow::TimestampType*>(array->type().get());
+        auto& mutable_timezone = (std::string&)timestamp_type->timezone();
+        mutable_timezone = conv_ctx->state->timezone();
+    }
+
+    uint8_t* null_data;
+    Column* data_column;
+    if (column->is_nullable()) {
+        auto nullable_column = down_cast<NullableColumn*>(column);
+        auto null_column = nullable_column->null_column_raw_ptr();
+        size_t null_count = fill_null_column(array, batch_start_idx, num_elements, null_column, chunk_start_idx);
+        nullable_column->set_has_null(null_count != 0);
+        null_data = &null_column->get_data().front() + chunk_start_idx;
+        data_column = nullable_column->data_column_raw_ptr();
+    } else {
+        null_data = nullptr;
+        // Fill nullable array into not-nullable column, positions of NULLs is marked as 1
+        fill_filter(array, batch_start_idx, num_elements, chunk_filter, chunk_start_idx, conv_ctx);
+        data_column = column;
+    }
+
+    auto st = conv_func->func(array, batch_start_idx, num_elements, data_column, chunk_start_idx, null_data,
+                              chunk_filter, conv_ctx, conv_func);
+    if (st.ok() && column->is_nullable()) {
+        // in some scene such as string length exceeds limit, the column will be set NULL, so we need reset has_null
+        down_cast<NullableColumn*>(column)->update_has_null();
+    }
+    return st;
 }
 // A general arrow converter for fixed length type
 //
@@ -947,13 +993,9 @@ struct ArrowConverter<AT, LT, is_nullable, is_strict, ArrayGuard<LT>> {
         Filter child_chunk_filter;
         auto* elements_col = col_array->elements_column_raw_ptr();
         child_chunk_filter.resize(elements_col->size() + child_array_num_elements, 1);
-#ifndef __APPLE__
-        return ParquetScanner::convert_array_to_column(conv_func->children[0].get(), child_array_num_elements,
-                                                       child_array, elements_col, child_array_start_idx,
-                                                       elements_col->size(), &child_chunk_filter, ctx);
-#else
-        return Status::NotSupported("Parquet nested type conversion is not supported on this build");
-#endif
+        return convert_arrow_array_to_column(conv_func->children[0].get(), child_array_num_elements, child_array,
+                                             elements_col, child_array_start_idx, elements_col->size(),
+                                             &child_chunk_filter, ctx);
     }
 };
 
@@ -967,12 +1009,10 @@ struct ArrowConverter<AT, LT, is_nullable, is_strict, MapGuard<LT>> {
         UInt32Column* col_offsets = col_map->offsets_column_raw_ptr();
         list_map_offsets_copy<arrow::MapType>(array, array_start_idx, num_elements, col_offsets);
         // keys, values
-#ifndef __APPLE__
         auto* keys_column = col_map->keys_column_raw_ptr();
         auto* values_column = col_map->values_column_raw_ptr();
         Column* kv_columns[] = {keys_column, values_column};
         size_t kv_size[] = {keys_column->size(), values_column->size()};
-#endif
         for (auto i = 0; i < 2; ++i) {
             size_t child_array_start_idx;
             size_t child_array_num_elements;
@@ -982,15 +1022,11 @@ struct ArrowConverter<AT, LT, is_nullable, is_strict, MapGuard<LT>> {
                 return Status::InternalError(fmt::format("Unnest arrow array type({}) fail", array->type()->name()));
             }
 
-#ifndef __APPLE__
             Filter child_chunk_filter;
             child_chunk_filter.resize(kv_size[i] + child_array_num_elements, 1);
-            RETURN_IF_ERROR(ParquetScanner::convert_array_to_column(
-                    conv_func->children[i].get(), child_array_num_elements, child_array, kv_columns[i],
-                    child_array_start_idx, kv_size[i], &child_chunk_filter, ctx));
-#else
-            return Status::NotSupported("Parquet nested type conversion is not supported on this build");
-#endif
+            RETURN_IF_ERROR(convert_arrow_array_to_column(conv_func->children[i].get(), child_array_num_elements,
+                                                          child_array, kv_columns[i], child_array_start_idx, kv_size[i],
+                                                          &child_chunk_filter, ctx));
         }
         return Status::OK();
     }
@@ -1017,13 +1053,9 @@ struct ArrowConverter<AT, LT, is_nullable, is_strict, StructGurad<LT>> {
                 continue;
             }
 
-#ifndef __APPLE__
-            RETURN_IF_ERROR(ParquetScanner::convert_array_to_column(conv_func->children[i].get(), num_elements,
-                                                                    child_array.get(), child_col, array_start_idx,
-                                                                    chunk_start_idx, chunk_filter, ctx));
-#else
-            return Status::NotSupported("Parquet nested type conversion is not supported on this build");
-#endif
+            RETURN_IF_ERROR(convert_arrow_array_to_column(conv_func->children[i].get(), num_elements, child_array.get(),
+                                                          child_col, array_start_idx, chunk_start_idx, chunk_filter,
+                                                          ctx));
         }
 
         return Status::OK();

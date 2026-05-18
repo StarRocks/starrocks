@@ -93,10 +93,9 @@ Status BenchmarkScanner::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eo
         }
 
         _conv_ctx.current_slot = slot_desc;
-        RETURN_IF_ERROR(
-                ParquetScanner::convert_array_to_column(_conv_funcs[i].get(), num_elements, array.get(),
-                                                        raw_chunk->get_column_raw_ptr_by_slot_id(slot_desc->id()),
-                                                        _batch_start_idx, 0, &_chunk_filter, &_conv_ctx));
+        RETURN_IF_ERROR(convert_arrow_array_to_column(_conv_funcs[i].get(), num_elements, array.get(),
+                                                      raw_chunk->get_column_raw_ptr_by_slot_id(slot_desc->id()),
+                                                      _batch_start_idx, 0, &_chunk_filter, &_conv_ctx));
     }
 
     raw_chunk->filter(_chunk_filter);
