@@ -177,6 +177,91 @@ Status TimeFunctions::convert_tz_close(FunctionContext* context, FunctionContext
     return Status::OK();
 }
 
+namespace {
+
+cctz::time_zone get_iceberg_timestamptz_session_timezone(FunctionContext* context) {
+    if (context != nullptr && context->state() != nullptr) {
+        return context->state()->timezone_obj();
+    }
+    return cctz::utc_time_zone();
+}
+
+bool should_use_iceberg_timestamptz_utc_fast_path(const cctz::time_zone& timezone) {
+    return timezone == cctz::utc_time_zone();
+}
+
+bool normalize_iceberg_timestamptz_to_utc(FunctionContext* context, const TimestampValue& timestamp,
+                                          TimestampValue* normalized_timestamp) {
+    int year, month, day, hour, minute, second, usec;
+    timestamp.to_timestamp(&year, &month, &day, &hour, &minute, &second, &usec);
+    DateTimeValue datetime(TIME_DATETIME, year, month, day, hour, minute, second, usec);
+
+    int64_t unix_second;
+    if (!datetime.unix_timestamp(&unix_second, get_iceberg_timestamptz_session_timezone(context))) {
+        return false;
+    }
+
+    normalized_timestamp->from_unixtime(unix_second, usec, cctz::utc_time_zone());
+    return true;
+}
+
+int64_t floor_div_microseconds(int64_t micros, int64_t unit_micros) {
+    int64_t quotient = micros / unit_micros;
+    int64_t remainder = micros % unit_micros;
+    if (remainder != 0 && ((remainder < 0) != (unit_micros < 0))) {
+        --quotient;
+    }
+    return quotient;
+}
+
+int64_t iceberg_microseconds_since_epoch(const TimestampValue& timestamp) {
+    return timestamp.diff_microsecond(TimeFunctions::unix_epoch);
+}
+
+int64_t iceberg_days_since_epoch(const TimestampValue& timestamp) {
+    return floor_div_microseconds(iceberg_microseconds_since_epoch(timestamp), USECS_PER_DAY);
+}
+
+int64_t iceberg_hours_since_epoch(const TimestampValue& timestamp) {
+    return floor_div_microseconds(iceberg_microseconds_since_epoch(timestamp), USECS_PER_HOUR);
+}
+
+template <typename TransformFn>
+StatusOr<ColumnPtr> evaluate_iceberg_timestamptz_transform(FunctionContext* context, const Columns& columns,
+                                                           TransformFn transform_fn) {
+    DCHECK_EQ(columns.size(), 1);
+
+    auto datetime_viewer = ColumnViewer<TYPE_DATETIME>(columns[0]);
+    auto size = columns[0]->size();
+    ColumnBuilder<TYPE_BIGINT> result(size);
+    bool use_utc_fast_path =
+            should_use_iceberg_timestamptz_utc_fast_path(get_iceberg_timestamptz_session_timezone(context));
+
+    for (int row = 0; row < size; ++row) {
+        if (datetime_viewer.is_null(row)) {
+            result.append_null();
+            continue;
+        }
+
+        if (use_utc_fast_path) {
+            result.append(transform_fn(datetime_viewer.value(row)));
+            continue;
+        }
+
+        TimestampValue normalized_timestamp;
+        if (!normalize_iceberg_timestamptz_to_utc(context, datetime_viewer.value(row), &normalized_timestamp)) {
+            result.append_null();
+            continue;
+        }
+
+        result.append(transform_fn(normalized_timestamp));
+    }
+
+    return result.build(ColumnHelper::is_all_const(columns));
+}
+
+} // namespace
+
 StatusOr<ColumnPtr> TimeFunctions::convert_tz_general(FunctionContext* context, const Columns& columns) {
     auto time_viewer = ColumnViewer<TYPE_DATETIME>(columns[0]);
     auto from_str = ColumnViewer<TYPE_VARCHAR>(columns[1]);
@@ -3285,6 +3370,13 @@ StatusOr<ColumnPtr> TimeFunctions::iceberg_years_since_epoch_datetime(FunctionCo
             VECTORIZED_FN_ARGS(0));
 }
 
+StatusOr<ColumnPtr> TimeFunctions::iceberg_timestamptz_years_since_epoch_datetime(FunctionContext* context,
+                                                                                  const starrocks::Columns& columns) {
+    return evaluate_iceberg_timestamptz_transform(context, columns, [](const TimestampValue& timestamp) {
+        return years_diff_v2Impl::apply<TimestampValue, TimestampValue, int64_t>(timestamp, TimeFunctions::unix_epoch);
+    });
+}
+
 DEFINE_UNARY_FN_WITH_IMPL(iceberg_months_since_epoch_dateImpl, v) {
     int y, m, d;
     ((DateValue)v).to_date(&y, &m, &d);
@@ -3308,15 +3400,22 @@ StatusOr<ColumnPtr> TimeFunctions::iceberg_months_since_epoch_datetime(FunctionC
             VECTORIZED_FN_ARGS(0));
 }
 
+StatusOr<ColumnPtr> TimeFunctions::iceberg_timestamptz_months_since_epoch_datetime(FunctionContext* context,
+                                                                                   const starrocks::Columns& columns) {
+    return evaluate_iceberg_timestamptz_transform(context, columns, [](const TimestampValue& timestamp) {
+        return months_diff_v2Impl::apply<TimestampValue, TimestampValue, int64_t>(timestamp, TimeFunctions::unix_epoch);
+    });
+}
+
 DEFINE_UNARY_FN_WITH_IMPL(iceberg_days_since_epoch_dateImpl, v) {
     int y, m, d;
     ((DateValue)v).to_date(&y, &m, &d);
     auto ts = TimestampValue::create(y, m, d, 0, 0, 0, 0);
-    return days_diffImpl::apply<TimestampValue, TimestampValue, int64_t>(ts, TimeFunctions::unix_epoch);
+    return iceberg_days_since_epoch(ts);
 }
 
 DEFINE_UNARY_FN_WITH_IMPL(iceberg_days_since_epoch_datetimeImpl, v) {
-    return days_diffImpl::apply<TimestampValue, TimestampValue, int64_t>(v, TimeFunctions::unix_epoch);
+    return iceberg_days_since_epoch(v);
 }
 
 StatusOr<ColumnPtr> TimeFunctions::iceberg_days_since_epoch_date(FunctionContext* context,
@@ -3331,14 +3430,26 @@ StatusOr<ColumnPtr> TimeFunctions::iceberg_days_since_epoch_datetime(FunctionCon
             VECTORIZED_FN_ARGS(0));
 }
 
+StatusOr<ColumnPtr> TimeFunctions::iceberg_timestamptz_days_since_epoch_datetime(FunctionContext* context,
+                                                                                 const starrocks::Columns& columns) {
+    return evaluate_iceberg_timestamptz_transform(
+            context, columns, [](const TimestampValue& timestamp) { return iceberg_days_since_epoch(timestamp); });
+}
+
 DEFINE_UNARY_FN_WITH_IMPL(iceberg_hours_since_epoch_datetimeImpl, v) {
-    return hours_diffImpl::apply<TimestampValue, TimestampValue, int64_t>(v, TimeFunctions::unix_epoch);
+    return iceberg_hours_since_epoch(v);
 }
 
 StatusOr<ColumnPtr> TimeFunctions::iceberg_hours_since_epoch_datetime(FunctionContext* context,
                                                                       const starrocks::Columns& columns) {
     return VectorizedStrictUnaryFunction<iceberg_hours_since_epoch_datetimeImpl>::evaluate<TYPE_DATETIME, TYPE_BIGINT>(
             VECTORIZED_FN_ARGS(0));
+}
+
+StatusOr<ColumnPtr> TimeFunctions::iceberg_timestamptz_hours_since_epoch_datetime(FunctionContext* context,
+                                                                                  const starrocks::Columns& columns) {
+    return evaluate_iceberg_timestamptz_transform(
+            context, columns, [](const TimestampValue& timestamp) { return iceberg_hours_since_epoch(timestamp); });
 }
 
 // used as start point of time_slice.

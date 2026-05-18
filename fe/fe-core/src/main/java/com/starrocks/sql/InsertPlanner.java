@@ -133,6 +133,7 @@ import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.SortDirection;
 import org.apache.iceberg.SortField;
 import org.apache.iceberg.SortOrder;
+import org.apache.iceberg.types.Types;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -317,9 +318,9 @@ public class InsertPlanner {
                     && IcebergRowLineageUtils.shouldWriteRowLineageColumns(insertStmt, (IcebergTable) targetTable);
             Set<String> columnsToFilter = preserveRowLineage
                     ? IcebergTable.ICEBERG_META_COLUMNS.stream()
-                            .filter(col -> !col.equals(IcebergTable.ROW_ID)
-                                    && !col.equals(IcebergTable.LAST_UPDATED_SEQUENCE_NUMBER))
-                            .collect(Collectors.toSet())
+                    .filter(col -> !col.equals(IcebergTable.ROW_ID)
+                            && !col.equals(IcebergTable.LAST_UPDATED_SEQUENCE_NUMBER))
+                    .collect(Collectors.toSet())
                     : IcebergTable.ICEBERG_META_COLUMNS;
             outputBaseSchema = outputBaseSchema.stream().filter(col ->
                     !columnsToFilter.contains(col.getName())).toList();
@@ -1010,6 +1011,8 @@ public class InsertPlanner {
 
         for (PartitionField field : spec.fields()) {
             String sourceColumnName = icebergSchema.findColumnName(field.sourceId());
+            boolean isTimestampWithZone =
+                    icebergSchema.findType(field.sourceId()).equals(Types.TimestampType.withZone());
             int sourceColumnIndex = -1;
             for (int i = 0; i < fullSchema.size(); i++) {
                 if (fullSchema.get(i).getName().equalsIgnoreCase(sourceColumnName)) {
@@ -1034,7 +1037,7 @@ public class InsertPlanner {
                 case DAY:
                 case HOUR: {
                     String funcName = FeConstants.ICEBERG_TRANSFORM_EXPRESSION_PREFIX +
-                            transform.name().toLowerCase();
+                            (isTimestampWithZone ? "timestamptz_" : "") + transform.name().toLowerCase();
                     Type[] argTypes = new Type[] {sourceRef.getType()};
                     Function fn = ExprUtils.getBuiltinFunction(funcName, argTypes,
                             Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
@@ -1057,7 +1060,9 @@ public class InsertPlanner {
                         partitionColumnIDs.add(sourceRef.getId());
                         break;
                     }
-                    String funcName = FunctionSet.ICEBERG_TRANSFORM_BUCKET;
+                    String funcName = isTimestampWithZone
+                            ? FeConstants.ICEBERG_TRANSFORM_EXPRESSION_PREFIX + "timestamptz_bucket"
+                            : FunctionSet.ICEBERG_TRANSFORM_BUCKET;
                     Type[] argTypes = new Type[] {sourceRef.getType(), com.starrocks.type.IntegerType.INT};
                     Function fn = ExprUtils.getBuiltinFunction(funcName, argTypes,
                             Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
