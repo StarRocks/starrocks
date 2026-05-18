@@ -19,6 +19,7 @@
 #include "exprs/function_context.h"
 #include "exprs/string_functions.h"
 #include "gutil/strings/fastmem.h"
+#include "runtime/runtime_state.h"
 
 namespace starrocks {
 static constexpr size_t MAX_STRING_SIZE = 1 << 15;
