@@ -33,6 +33,7 @@ import com.starrocks.sql.InsertPlanner;
 import com.starrocks.sql.StatementPlanner;
 import com.starrocks.sql.analyzer.AstToSQLBuilder;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.IcebergRewriteStmt;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.common.MetaUtils;
@@ -425,6 +426,15 @@ public class InsertPlanTest extends PlanTestBase {
 
         String ret = execPlan.getExplainString(TExplainLevel.NORMAL);
         return ret;
+    }
+
+    private static String getInsertExecPlan(StatementBase statementBase, String originStmt) throws Exception {
+        connectContext.setQueryId(UUIDUtil.genUUID());
+        connectContext.setExecutionId(UUIDUtil.toTUniqueId(connectContext.getQueryId()));
+        connectContext.setDumpInfo(new QueryDumpInfo(connectContext));
+        connectContext.getDumpInfo().setOriginStmt(originStmt);
+        ExecPlan execPlan = new StatementPlanner().plan(statementBase, connectContext);
+        return execPlan.getExplainString(TExplainLevel.NORMAL);
     }
 
     public static void containsKeywords(String plan, String... keywords) throws Exception {
@@ -940,6 +950,116 @@ public class InsertPlanTest extends PlanTestBase {
                 "     constant exprs: \n" +
                 "         NULL\n";
         Assertions.assertEquals(expected, actualRes);
+    }
+
+    @Test
+    public void testInsertIcebergRewritePreservesRowLineageColumns() throws Exception {
+        String createIcebergCatalogStmt = "create external catalog iceberg_catalog_lineage properties " +
+                "(\"type\"=\"iceberg\", " +
+                "\"hive.metastore.uris\"=\"thrift://hms:9083\", \"iceberg.catalog.type\"=\"hive\")";
+        starRocksAssert.withCatalog(createIcebergCatalogStmt);
+        MetadataMgr metadata = starRocksAssert.getCtx().getGlobalStateMgr().getMetadataMgr();
+
+        Table nativeTable = new BaseTable(null, null);
+
+        Column k1 = new Column("k1", IntegerType.INT);
+        Column k2 = new Column("k2", IntegerType.INT);
+        Column rowId = new Column(IcebergTable.ROW_ID, IntegerType.BIGINT);
+        Column lastUpdatedSequenceNumber =
+                new Column(IcebergTable.LAST_UPDATED_SEQUENCE_NUMBER, IntegerType.BIGINT);
+        Column filePath = new Column(IcebergTable.FILE_PATH, StringType.STRING, true);
+
+        IcebergTable.Builder builder = IcebergTable.builder();
+        builder.setCatalogName("iceberg_catalog_lineage");
+        builder.setCatalogDBName("iceberg_db");
+        builder.setCatalogTableName("iceberg_lineage_table");
+        builder.setSrTableName("iceberg_lineage_table");
+        builder.setFullSchema(Lists.newArrayList(k1, k2, rowId, lastUpdatedSequenceNumber, filePath));
+        builder.setNativeTable(nativeTable);
+        IcebergTable icebergTable = builder.build();
+
+        new Expectations(icebergTable) {
+            {
+                icebergTable.getUUID();
+                result = 12345578;
+                minTimes = 0;
+
+                icebergTable.isUnPartitioned();
+                result = true;
+                minTimes = 0;
+
+                icebergTable.getPartitionColumnNames();
+                result = new ArrayList<>();
+                minTimes = 0;
+
+                icebergTable.getPartitionColumns();
+                result = new ArrayList<>();
+                minTimes = 0;
+
+                icebergTable.getFormatVersion();
+                result = 3;
+                minTimes = 0;
+            }
+        };
+
+        new Expectations(nativeTable) {
+            {
+                nativeTable.sortOrder();
+                result = SortOrder.unsorted();
+                minTimes = 0;
+
+                nativeTable.location();
+                result = "hdfs://fake_location";
+                minTimes = 0;
+
+                nativeTable.properties();
+                result = new HashMap<String, String>();
+                minTimes = 0;
+
+                nativeTable.io();
+                result = new HadoopFileIO();
+                minTimes = 0;
+
+                nativeTable.spec();
+                result = PartitionSpec.unpartitioned();
+                minTimes = 0;
+            }
+        };
+
+        new Expectations(metadata) {
+            {
+                metadata.getDb((ConnectContext) any, "iceberg_catalog_lineage", "iceberg_db");
+                result = new Database(12345578, "iceberg_db");
+                minTimes = 0;
+
+                metadata.getTable((ConnectContext) any, "iceberg_catalog_lineage", "iceberg_db",
+                        "iceberg_lineage_table");
+                result = icebergTable;
+                minTimes = 0;
+            }
+        };
+
+        new MockUp<MetaUtils>() {
+            @Mock
+            public Database getDatabase(String catalogName, String tableName) {
+                return new Database(12345578, "iceberg_db");
+            }
+
+            @Mock
+            public com.starrocks.catalog.Table getSessionAwareTable(
+                    ConnectContext context, Database database, TableName tableName) {
+                return icebergTable;
+            }
+        };
+
+        String sql = "insert into iceberg_catalog_lineage.iceberg_db.iceberg_lineage_table select 1, 2, 3, 4";
+        InsertStmt insertStmt = (InsertStmt) SqlParser.parse(sql, connectContext.getSessionVariable().getSqlMode()).get(0);
+        IcebergRewriteStmt rewriteStmt = new IcebergRewriteStmt(insertStmt, true, true);
+
+        String actualRes = getInsertExecPlan(rewriteStmt, sql);
+        Assertions.assertTrue(actualRes.contains(IcebergTable.ROW_ID), actualRes);
+        Assertions.assertTrue(actualRes.contains(IcebergTable.LAST_UPDATED_SEQUENCE_NUMBER), actualRes);
+        Assertions.assertFalse(actualRes.contains(IcebergTable.FILE_PATH), actualRes);
     }
 
     @Test
