@@ -109,8 +109,6 @@ import com.starrocks.type.IntegerType;
 import com.starrocks.type.NullType;
 import com.starrocks.type.Type;
 import org.apache.commons.collections.CollectionUtils;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayDeque;
 import java.util.ArrayList;
@@ -141,8 +139,6 @@ import static com.starrocks.thrift.PlanNodesConstants.CACHE_STATS_TOTAL_BYTES_CO
 public class QueryAnalyzer {
     private static final String JDBC_QUERY_TABLE_FUNCTION_USAGE =
             "JDBC query table function only supports TABLE(<catalog>.native_query('<sql>'))";
-    private static final Logger LOG = LogManager.getLogger(QueryAnalyzer.class);
-
     private final ConnectContext session;
     private final MetadataMgr metadataMgr;
 
@@ -176,8 +172,8 @@ public class QueryAnalyzer {
     /**
      * Pre-resolve external tables without touching internal table metadata.
      * When {@code refreshFilesystemExternalTables} is true, filesystem-backed external tables referenced from an
-     * INSERT query are refreshed before lock acquisition. If refresh fails after we have already resolved a table,
-     * we keep the resolved table as a stale-cache fallback for this statement.
+     * INSERT query are refreshed before lock acquisition so connector/filesystem metadata I/O stays out of the
+     * internal meta-lock critical path.
      */
     public void analyzeExternalTablesOnly(StatementBase node, boolean refreshFilesystemExternalTables) {
         new ExternalTablesOnlyVisitor(refreshFilesystemExternalTables).process(node);
@@ -2141,15 +2137,9 @@ public class QueryAnalyzer {
 
         private Table refreshFilesystemExternalTable(String catalogName, String dbName,
                                                      TableName tableName, Table resolvedTable) {
-            try {
-                metadataMgr.refreshTable(catalogName, dbName, resolvedTable, Lists.newArrayList(), false);
-                Table refreshedTable = metadataMgr.getTable(session, catalogName, dbName, tableName.getTbl());
-                return refreshedTable != null ? refreshedTable : resolvedTable;
-            } catch (RuntimeException e) {
-                LOG.warn("Failed to refresh external table {}.{}.{} before lock, fallback to existing metadata",
-                        catalogName, dbName, tableName.getTbl(), e);
-                return resolvedTable;
-            }
+            metadataMgr.refreshTable(catalogName, dbName, resolvedTable, Lists.newArrayList(), false);
+            Table refreshedTable = metadataMgr.getTable(session, catalogName, dbName, tableName.getTbl());
+            return refreshedTable != null ? refreshedTable : resolvedTable;
         }
 
         @Override

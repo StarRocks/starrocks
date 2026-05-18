@@ -255,6 +255,10 @@ public class StatementPlanner {
                     deferredLock = true;
                 }
 
+                // This external-table-only pre-pass is orthogonal to deferredLock.
+                // Even when the statement still needs the normal locked analyzer path,
+                // we can pre-resolve or pre-refresh external source tables here so slow
+                // connector/filesystem metadata I/O does not remain on the lock critical path.
                 if (Config.enable_experimental_external_table_preparse ||
                         session.getSessionVariable().isEnableInsertSelectExternalAutoRefresh()) {
                     new QueryAnalyzer(session).analyzeExternalTablesOnly(statement,

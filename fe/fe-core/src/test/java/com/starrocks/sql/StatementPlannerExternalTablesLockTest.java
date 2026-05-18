@@ -463,18 +463,24 @@ public class StatementPlannerExternalTablesLockTest extends ConnectorPlanTestBas
             }
         });
         t.start();
-
-        Assertions.assertTrue(refreshStarted.await(10, TimeUnit.SECONDS));
-        Assertions.assertFalse(lockCalled.get(),
-                "Meta lock was acquired while filesystem external refresh was blocked.");
-
-        allowRefresh.countDown();
-        t.join(TimeUnit.SECONDS.toMillis(20));
+        try {
+            Assertions.assertTrue(refreshStarted.await(10, TimeUnit.SECONDS));
+            Assertions.assertFalse(lockCalled.get(),
+                    "Meta lock was acquired while filesystem external refresh was blocked.");
+        } finally {
+            allowRefresh.countDown();
+            t.join(TimeUnit.SECONDS.toMillis(20));
+            if (t.isAlive()) {
+                t.interrupt();
+                t.join(TimeUnit.SECONDS.toMillis(5));
+            }
+        }
 
         if (error.get() != null) {
             throw new RuntimeException("INSERT ... SELECT failed: " + error.get().getMessage(), error.get());
         }
 
+        Assertions.assertFalse(t.isAlive(), "background analyze thread should exit after refresh is released");
         Assertions.assertTrue(finished.get(), "INSERT ... SELECT did not finish");
         Assertions.assertTrue(lockCalled.get(), "Meta lock was never acquired after refresh completed");
         Assertions.assertEquals(1, refreshCalls.get(), "filesystem external refresh should run exactly once");
@@ -483,7 +489,7 @@ public class StatementPlannerExternalTablesLockTest extends ConnectorPlanTestBas
     }
 
     @Test
-    public void testInsertSelectFilesystemRefreshFailureFallsBackToResolvedTable() throws Exception {
+    public void testInsertSelectFilesystemRefreshFailurePropagatesError() throws Exception {
         AtomicInteger getTableCalls = new AtomicInteger();
         AtomicInteger refreshCalls = new AtomicInteger();
 
@@ -495,10 +501,10 @@ public class StatementPlannerExternalTablesLockTest extends ConnectorPlanTestBas
         String sql = "insert into t0 (v1, v2) select l_orderkey, l_partkey from hive0.tpch.lineitem";
         StatementBase stmt = UtFrameUtils.parseStmtWithNewParserNotIncludeAnalyzer(sql, connectContext);
 
-        Assertions.assertDoesNotThrow(() -> StatementPlanner.plan(stmt, connectContext));
+        Assertions.assertThrows(RuntimeException.class, () -> StatementPlanner.plan(stmt, connectContext));
         Assertions.assertEquals(1, refreshCalls.get(), "filesystem external refresh should still be attempted once");
-        Assertions.assertTrue(getTableCalls.get() >= 1,
-                "planner should resolve the external table and continue after refresh failure");
+        Assertions.assertEquals(1, getTableCalls.get(),
+                "planner should stop after the first pre-lock resolution when refresh fails");
     }
 
     @Test
@@ -593,19 +599,24 @@ public class StatementPlannerExternalTablesLockTest extends ConnectorPlanTestBas
                 Assertions.assertTrue(refreshStarted.await(10, TimeUnit.SECONDS));
                 Assertions.assertFalse(lockCalled.get(),
                         "Meta lock was acquired while refreshing an unqualified external table.");
-
-                if (error.get() != null) {
-                    throw new RuntimeException("INSERT ... SELECT failed: " + error.get().getMessage(), error.get());
-                }
-
-                Assertions.assertTrue(finished.get(), "INSERT ... SELECT did not finish");
-                Assertions.assertEquals(1, refreshCalls.get(), "unqualified external table should still refresh once");
-                Assertions.assertEquals(2, getTableCalls.get(),
-                        "unqualified external table should be resolved before and after refresh");
             } finally {
                 allowRefresh.countDown();
                 t.join(TimeUnit.SECONDS.toMillis(20));
+                if (t.isAlive()) {
+                    t.interrupt();
+                    t.join(TimeUnit.SECONDS.toMillis(5));
+                }
             }
+
+            if (error.get() != null) {
+                throw new RuntimeException("INSERT ... SELECT failed: " + error.get().getMessage(), error.get());
+            }
+
+            Assertions.assertFalse(t.isAlive(), "background analyze thread should exit after refresh is released");
+            Assertions.assertTrue(finished.get(), "INSERT ... SELECT did not finish");
+            Assertions.assertEquals(1, refreshCalls.get(), "unqualified external table should still refresh once");
+            Assertions.assertEquals(2, getTableCalls.get(),
+                    "unqualified external table should be resolved before and after refresh");
         } finally {
             connectContext.setCurrentCatalog(originalCatalog);
             connectContext.setDatabase(originalDb);
