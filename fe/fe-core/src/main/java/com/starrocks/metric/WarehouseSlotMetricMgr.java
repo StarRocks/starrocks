@@ -39,6 +39,8 @@ public class WarehouseSlotMetricMgr {
     private static final Map<Long, GaugeMetricImpl<Long>> PENDING_BIG_CNT = new ConcurrentHashMap<>();
     private static final Map<Long, LongCounterMetric> BIG_QUERY_TOTAL = new ConcurrentHashMap<>();
     private static final Map<Long, HistogramMetric> BIG_WAIT_HIST = new ConcurrentHashMap<>();
+    private static final Map<Long, LongCounterMetric> PRE_SCALE_WAIT_TOTAL = new ConcurrentHashMap<>();
+    private static final Map<Long, HistogramMetric> PRE_SCALE_WAIT_HIST = new ConcurrentHashMap<>();
 
     private WarehouseSlotMetricMgr() {
     }
@@ -93,6 +95,18 @@ public class WarehouseSlotMetricMgr {
     public static HistogramMetric getBigQueryWaitHistogram(Long whId) {
         return getOrCreateHistogram(whId, BIG_WAIT_HIST, () ->
                 new HistogramMetric("query_queue_pending_big_query_wait_ms"));
+    }
+
+    public static LongCounterMetric getPreScaleWaitCounter(Long whId) {
+        return getOrCreateMetric(whId, PRE_SCALE_WAIT_TOTAL, () ->
+                new LongCounterMetric("query_queue_pre_scale_wait_total",
+                        Metric.MetricUnit.REQUESTS,
+                        "cumulative count of pre-scale wait gate firings per warehouse"));
+    }
+
+    public static HistogramMetric getPreScaleWaitHistogram(Long whId) {
+        return getOrCreateHistogram(whId, PRE_SCALE_WAIT_HIST, () ->
+                new HistogramMetric("query_queue_pre_scale_wait_ms"));
     }
 
     private static <T extends Metric<?>> T getOrCreateMetric(Long whId, Map<Long, T> map, Supplier<T> creator) {

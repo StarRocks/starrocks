@@ -109,6 +109,7 @@ public class QueryQueueManager {
                 if (Config.query_queue_pre_scale_max_wait_ms > 0L) {
                     double gateRatio = Config.query_queue_pre_scale_slot_threshold_ratio;
                     if (estimate.rawSlots() > totalSlots * gateRatio) {
+                        // Reserve 1s headroom before pending deadline so the slot provider has time to admit after wait.
                         long capWaitMs = Math.min(
                                 Config.query_queue_pre_scale_max_wait_ms,
                                 Math.max(0L, slotRequirement.getExpiredPendingTimeMs() - System.currentTimeMillis() - 1000L));
@@ -119,9 +120,12 @@ public class QueryQueueManager {
                                 gateRatio,
                                 capWaitMs);
                         long waitedMs = System.currentTimeMillis() - preScaleStartMs;
-                        LOG.info("Pre-scale wait for queryId={}, raw={}, totalSlotsAtStart={}, waited={}ms, satisfied={}",
+                        WarehouseSlotMetricMgr.getPreScaleWaitCounter(warehouseId).increase(1L);
+                        WarehouseSlotMetricMgr.getPreScaleWaitHistogram(warehouseId).update(waitedMs);
+                        LOG.info("Pre-scale wait for queryId={}, raw={}, totalSlotsAtStart={}, capWaitMs={}, "
+                                        + "waited={}ms, satisfied={}",
                                 UUIDUtil.fromTUniqueid(coord.getQueryId()), estimate.rawSlots(),
-                                totalSlots, waitedMs, satisfied);
+                                totalSlots, capWaitMs, waitedMs, satisfied);
                     }
                 }
             }

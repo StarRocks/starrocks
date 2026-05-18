@@ -428,6 +428,40 @@ public class QueryQueueManagerPreScaleTest extends SchedulerTestBase {
     }
 
     /**
+     * When the pre-scale wait gate fires (C4), both the counter and the histogram metrics
+     * must be bumped. The counter increments by 1 per gate firing; the histogram records
+     * one sample (waitedMs) per firing, regardless of whether capacity was satisfied.
+     */
+    @Test
+    public void testPreScaleWaitMetricsBumpedOnGateFiring() throws Exception {
+        Config.enable_query_queue_v2 = true;
+        GlobalVariable.setEnableQueryQueueSelect(true);
+        GlobalVariable.setQueryQueueConcurrencyLimit(8);
+        GlobalVariable.setQueryQueueMaxQueuedQueries(8);
+
+        BackendResourceStat.getInstance().setNumCoresOfBe(WAREHOUSE_ID, 1, 8);
+        BackendResourceStat.getInstance().setMemLimitBytesOfBe(WAREHOUSE_ID, 1, 64L * 1024 * 1024 * 1024);
+
+        // Enable pre-scale wait with a short window; threshold ratio = 0.0 forces the gate to fire.
+        Config.query_queue_pre_scale_max_wait_ms = 300L;
+        Config.query_queue_pre_scale_slot_threshold_ratio = 0.0;
+
+        long counterBaseline = WarehouseSlotMetricMgr.getPreScaleWaitCounter(WAREHOUSE_ID).getValue();
+        long histogramBaseline = WarehouseSlotMetricMgr.getPreScaleWaitHistogram(WAREHOUSE_ID).getCount();
+
+        DefaultCoordinator coord = getSchedulerWithQueryId("select count(1) from lineitem");
+        manager.maybeWait(connectContext, coord);
+        Assertions.assertEquals(LogicalSlot.State.ALLOCATED, coord.getSlot().getState());
+
+        assertThat(WarehouseSlotMetricMgr.getPreScaleWaitCounter(WAREHOUSE_ID).getValue())
+                .isEqualTo(counterBaseline + 1);
+        assertThat(WarehouseSlotMetricMgr.getPreScaleWaitHistogram(WAREHOUSE_ID).getCount())
+                .isEqualTo(histogramBaseline + 1);
+
+        coord.onFinished();
+    }
+
+    /**
      * The tracker is a process-wide singleton; tests in this class operate on the default
      * warehouse and can leak entries across runs. Reach in via reflection to reset the map so
      * each test starts from a clean baseline.

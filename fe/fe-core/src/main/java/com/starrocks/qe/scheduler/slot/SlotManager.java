@@ -97,6 +97,8 @@ public class SlotManager extends BaseSlotManager {
             visitor.visit(WarehouseSlotMetricMgr.getPendingBigQueryCountGauge(whId));
             visitor.visit(WarehouseSlotMetricMgr.getBigQueryCounter(whId));
             visitor.visitHistogram(WarehouseSlotMetricMgr.getBigQueryWaitHistogram(whId));
+            visitor.visit(WarehouseSlotMetricMgr.getPreScaleWaitCounter(whId));
+            visitor.visitHistogram(WarehouseSlotMetricMgr.getPreScaleWaitHistogram(whId));
         }
     }
 

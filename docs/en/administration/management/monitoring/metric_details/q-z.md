@@ -93,6 +93,20 @@ For more information on how to build a monitoring service for your StarRocks clu
 - Labels: `warehouse_id`, `warehouse_name`
 - Description: Sum of raw (un-clamped) estimated slot counts across pending queries per warehouse. Use to detect breadth-of-demand pressure when multiple medium queries queue up simultaneously.
 
+## `query_queue_pre_scale_wait_ms`
+
+- Unit: Milliseconds
+- Type: Histogram
+- Labels: `warehouse_id`, `warehouse_name`
+- Description: Distribution of actual wait durations (milliseconds) for pre-scale wait gate firings per warehouse. Recorded once per gate firing, regardless of whether capacity was satisfied or the timeout elapsed.
+
+## `query_queue_pre_scale_wait_total`
+
+- Unit: Count
+- Type: Counter
+- Labels: `warehouse_id`, `warehouse_name`
+- Description: Cumulative count of pre-scale wait gate firings per warehouse. Useful for monitoring how often big queries are being held by the autoscaling-friendly admission delay.
+
 ## `query_queue_required_compute_node_count`
 
 - Unit: Count
