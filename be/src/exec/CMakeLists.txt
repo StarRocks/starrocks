@@ -407,7 +407,6 @@ set(EXEC_NON_PIPELINE_FILES
     except_hash_set.cpp
     except_node.cpp
     arrow_to_starrocks_converter.cpp
-    arrow_to_json_converter.cpp
     parquet_schema_builder.cpp
     parquet_reader.cpp
     parquet_writer.cpp
