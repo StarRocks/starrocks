@@ -46,10 +46,9 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
-public class ChangesScanNode extends ScanNode {
+public class ChangesScanNode extends AbstractOlapTableScanNode {
     private static final Logger LOG = LogManager.getLogger(ChangesScanNode.class);
 
-    private final OlapTable table;
     private final BookmarkChange delta;
     private final Bookmark base;
     private final Bookmark head;
@@ -57,8 +56,7 @@ public class ChangesScanNode extends ScanNode {
 
     public ChangesScanNode(PlanNodeId id, TupleDescriptor desc, OlapTable table,
                            BookmarkChange delta, Bookmark base, Bookmark head) {
-        super(id, desc, "ChangesScanNode");
-        this.table = table;
+        super(id, desc, "ChangesScanNode", table, table.getBaseIndexMetaId());
         this.delta = delta;
         this.base = base;
         this.head = head;
@@ -97,7 +95,7 @@ public class ChangesScanNode extends ScanNode {
                     continue;
                 }
                 long ppId = change.getPhysicalPartitionId();
-                PhysicalPartition partition = table.getPhysicalPartition(ppId);
+                PhysicalPartition partition = olapTable.getPhysicalPartition(ppId);
                 if (partition == null) {
                     continue;
                 }
@@ -166,7 +164,7 @@ public class ChangesScanNode extends ScanNode {
     @Override
     protected String getNodeExplainString(String prefix, TExplainLevel detailLevel) {
         StringBuilder output = new StringBuilder();
-        output.append(prefix).append("TABLE: ").append(table.getName()).append("\n");
+        output.append(prefix).append("TABLE: ").append(olapTable.getName()).append("\n");
 
         int totalPartitions = delta.getChanges().size();
         output.append(prefix).append(String.format("partitions=%s/%s\n", totalPartitions, totalPartitions));
@@ -180,7 +178,7 @@ public class ChangesScanNode extends ScanNode {
                         && type != BookmarkChange.ChangeType.DATA_CHANGED) {
                     continue;
                 }
-                PhysicalPartition pp = table.getPhysicalPartition(change.getPhysicalPartitionId());
+                PhysicalPartition pp = olapTable.getPhysicalPartition(change.getPhysicalPartitionId());
                 if (pp != null) {
                     totalTablets += pp.getLatestBaseIndex().getTablets().size();
                 }
@@ -203,7 +201,9 @@ public class ChangesScanNode extends ScanNode {
 
         TChangesScanNode scanNode = new TChangesScanNode();
         scanNode.setTuple_id(desc.getId().asInt());
-        scanNode.setTable_type(toThriftKeysType(table.getKeysType()));
+        scanNode.setTable_type(toThriftKeysType(olapTable.getKeysType()));
+        // BE fetches the live read schema via TableSchemaService keyed by this triple.
+        scanNode.setSchema_key(getSchemaKey());
 
         msg.changes_scan_node = scanNode;
     }

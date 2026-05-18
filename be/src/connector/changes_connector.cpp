@@ -22,19 +22,104 @@
 
 #include "column/nullable_column.h"
 #include "exec/connector_scan_node.h"
-#include "fs/fs.h"
-#include "fs/fs_factory.h"
+#include "exec/pipeline/fragment_context.h"
 #include "gen_cpp/PlanNodes_types.h"
+#include "gen_cpp/tablet_schema.pb.h"
 #include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
 #include "storage/chunk_helper.h"
+#include "storage/empty_iterator.h"
+#include "storage/lake/rowset.h"
+#include "storage/lake/table_schema_service.h"
 #include "storage/lake/tablet_manager.h"
-#include "storage/rowset/segment.h"
-#include "storage/rowset/segment_options.h"
-#include "storage/tablet_schema_map.h"
+#include "storage/rowset/rowset_options.h"
+#include "storage/union_iterator.h"
 
 namespace starrocks::connector {
+
+namespace {
+
+// Wraps a per-segment ChunkIterator and stamps the two CDC metadata columns
+// (__CHANGE_TYPE__, __ROW_VERSION__) onto each chunk before it surfaces to
+// the union iterator above. Each instance carries its source rowset's
+// version, so a union over multiple wrappers can fan all segments into a
+// single chunk stream without losing per-rowset version information.
+class CdcStampingIterator final : public ChunkIterator {
+public:
+    CdcStampingIterator(ChunkIteratorPtr inner, int64_t version,
+                        const std::vector<SlotDescriptor*>& data_slots,
+                        std::optional<int> change_type_slot_id, bool change_type_nullable,
+                        std::optional<int> row_version_slot_id, bool row_version_nullable)
+            : ChunkIterator(inner->schema(), inner->chunk_size()),
+              _inner(std::move(inner)),
+              _version(version),
+              _data_slots(&data_slots),
+              _change_type_slot_id(change_type_slot_id),
+              _change_type_nullable(change_type_nullable),
+              _row_version_slot_id(row_version_slot_id),
+              _row_version_nullable(row_version_nullable) {}
+
+    void close() override {
+        if (_inner != nullptr) {
+            _inner->close();
+            _inner.reset();
+        }
+    }
+
+protected:
+    Status do_get_next(Chunk* chunk) override {
+        RETURN_IF_ERROR(_inner->get_next(chunk));
+        // Map data-slot ids onto the chunk so post-read predicate evaluation
+        // can resolve SlotRef references by id.
+        for (auto* slot : *_data_slots) {
+            size_t col_idx = chunk->schema()->get_field_index_by_name(slot->col_name());
+            if (col_idx != -1UL) {
+                chunk->set_slot_id_to_index(slot->id(), col_idx);
+            }
+        }
+        size_t nrows = chunk->num_rows();
+        // spec §2 enum: 0 = INSERT.
+        if (_change_type_slot_id.has_value()) {
+            auto val_col = Int8Column::create();
+            val_col->reserve(nrows);
+            for (size_t r = 0; r < nrows; r++) {
+                val_col->append(0);
+            }
+            ColumnPtr col = std::move(val_col);
+            if (_change_type_nullable) {
+                auto null_col = NullColumn::create(nrows, 0);
+                col = NullableColumn::create(std::move(col), std::move(null_col));
+            }
+            chunk->append_column(std::move(col), _change_type_slot_id.value());
+        }
+        if (_row_version_slot_id.has_value()) {
+            auto val_col = Int64Column::create();
+            val_col->reserve(nrows);
+            for (size_t r = 0; r < nrows; r++) {
+                val_col->append(_version);
+            }
+            ColumnPtr col = std::move(val_col);
+            if (_row_version_nullable) {
+                auto null_col = NullColumn::create(nrows, 0);
+                col = NullableColumn::create(std::move(col), std::move(null_col));
+            }
+            chunk->append_column(std::move(col), _row_version_slot_id.value());
+        }
+        return Status::OK();
+    }
+
+private:
+    ChunkIteratorPtr _inner;
+    int64_t _version;
+    const std::vector<SlotDescriptor*>* _data_slots;
+    std::optional<int> _change_type_slot_id;
+    bool _change_type_nullable;
+    std::optional<int> _row_version_slot_id;
+    bool _row_version_nullable;
+};
+
+} // namespace
 
 // --- ChangesConnector ---
 
@@ -92,20 +177,52 @@ Status ChangesDataSource::open(RuntimeState* state) {
         }
     }
 
-    RETURN_IF_ERROR(_read_head_metadata());
-
-    // Phase 1: metadata traversal
+    auto* tablet_mgr = ExecEnv::GetInstance()->lake_tablet_manager();
+    if (tablet_mgr == nullptr) {
+        return Status::InternalError("lake tablet manager not available");
+    }
+    ASSIGN_OR_RETURN(_head_metadata, tablet_mgr->get_tablet_metadata(_tablet_id, _head_version));
+    RETURN_IF_ERROR(_init_read_schema());
     RETURN_IF_ERROR(_do_metadata_traversal());
+
+    if (_has_delete_predicate) {
+        return Status::NotSupported(fmt::format(
+                "DELETE_PREDICATE_FOUND: CDC not supported for DELETE operations on tablet {}",
+                _tablet_id));
+    }
+
+    // Build the unified chunk stream: per-rowset segment iterators get wrapped
+    // in CdcStampingIterator so each chunk carries its source rowset's version
+    // and CDC metadata columns; the union iterator then drains them in order.
+    RowsetReadOptions opts;
+    opts.stats = &_read_stats;
+    opts.chunk_size = _runtime_state->chunk_size();
+    opts.tablet_schema = _tablet_schema;
+    opts.use_page_cache = false;
+    // CDC MVP: no predicate / runtime-filter / delvec / range pushdown.
+
+    std::vector<ChunkIteratorPtr> seg_iters;
+    for (auto& rowset : _changes_rowsets) {
+        ASSIGN_OR_RETURN(auto iters, rowset->read(_read_schema, opts));
+        for (auto& it : iters) {
+            seg_iters.push_back(std::make_shared<CdcStampingIterator>(
+                    std::move(it), rowset->version(), _data_slots,
+                    _change_type_slot_id, _change_type_slot_is_nullable,
+                    _row_version_slot_id, _row_version_slot_is_nullable));
+        }
+    }
+    _chunk_iter = seg_iters.empty()
+                          ? new_empty_iterator(_read_schema, _runtime_state->chunk_size())
+                          : new_union_iterator(std::move(seg_iters));
 
     return Status::OK();
 }
 
 void ChangesDataSource::close(RuntimeState* state) {
-    if (_segment_iter) {
-        _segment_iter->close();
-        _segment_iter.reset();
+    if (_chunk_iter != nullptr) {
+        _chunk_iter->close();
+        _chunk_iter.reset();
     }
-    _fs.reset();
     _head_metadata.reset();
     _tablet_schema.reset();
     _changes_rowsets.clear();
@@ -127,14 +244,8 @@ Status ChangesDataSource::_do_metadata_traversal() {
     }
 
     auto* tablet_mgr = ExecEnv::GetInstance()->lake_tablet_manager();
-    if (tablet_mgr == nullptr) {
-        return Status::InternalError("lake tablet manager not available");
-    }
-
-    // _head_metadata may already have been loaded by open() → _read_head_metadata().
-    if (_head_metadata == nullptr) {
-        ASSIGN_OR_RETURN(_head_metadata, tablet_mgr->get_tablet_metadata(_tablet_id, _head_version));
-    }
+    DCHECK(tablet_mgr != nullptr);
+    DCHECK(_head_metadata != nullptr);
     // Phase 1 traversal state — local to this method.
     // seen_rowset_ids: rowset.id() set, dedupes the same rowset reappearing across ancestor metadata.
     // discovered_versions: distinct rowset versions in (V_base, V_head] — used as the early-stop count.
@@ -147,7 +258,7 @@ Status ChangesDataSource::_do_metadata_traversal() {
     int64_t current_version = _head_version;
 
     while (current_version > _base_version) {
-        _scan_metadata_for_changes_rowsets(*current_meta, seen_rowset_ids, discovered_versions);
+        _scan_metadata_for_changes_rowsets(current_meta, seen_rowset_ids, discovered_versions);
 
         // The size check is a one-way termination hint: equal-or-more means
         // (V_base, V_head] is fully covered. Less is inconclusive — versions
@@ -180,7 +291,7 @@ Status ChangesDataSource::_do_metadata_traversal() {
         // ancestor chain.
         for (int64_t v : versions_to_read) {
             ASSIGN_OR_RETURN(auto meta, tablet_mgr->get_tablet_metadata(_tablet_id, v));
-            _scan_metadata_for_changes_rowsets(*meta, seen_rowset_ids, discovered_versions);
+            _scan_metadata_for_changes_rowsets(meta, seen_rowset_ids, discovered_versions);
 
             current_meta = meta;
             current_version = v;
@@ -198,49 +309,89 @@ Status ChangesDataSource::_do_metadata_traversal() {
     return Status::OK();
 }
 
-void ChangesDataSource::_scan_metadata_for_changes_rowsets(const TabletMetadataPB& meta,
+void ChangesDataSource::_scan_metadata_for_changes_rowsets(const TabletMetadataPtr& meta,
                                                             std::unordered_set<uint32_t>& seen_rowset_ids,
                                                             std::unordered_set<int64_t>& discovered_versions) {
-    auto process_rowset = [&](const RowsetMetadataPB& r) {
+    auto* tablet_mgr = ExecEnv::GetInstance()->lake_tablet_manager();
+
+    for (int rowset_index = 0; rowset_index < meta->rowsets_size(); ++rowset_index) {
+        const auto& r = meta->rowsets(rowset_index);
         if (!r.has_version() || r.version() <= _base_version) {
-            return;
+            continue;
         }
         if (seen_rowset_ids.count(r.id()) > 0) {
-            return;
+            continue;
         }
         seen_rowset_ids.insert(r.id());
         discovered_versions.insert(r.version());
 
         if (r.has_delete_predicate()) {
             _has_delete_predicate = true;
-            return;
+            continue;
         }
-
         if (r.has_max_compact_input_rowset_id()) {
-            return;
+            continue;
         }
 
-        ChangesRowset changes_rs;
-        changes_rs.version = r.version();
-        for (const auto& seg : r.segments()) {
-            changes_rs.segments.push_back(seg);
-        }
-        _changes_rowsets.push_back(std::move(changes_rs));
-    };
-
-    for (const auto& r : meta.rowsets()) {
-        process_rowset(r);
-    }
-    for (const auto& r : meta.compaction_inputs()) {
-        process_rowset(r);
+        // Use lake::Rowset's standard ctor (the one Rowset::get_rowsets uses).
+        // It keeps |meta| alive internally and derives the rowset's write
+        // schema from meta->rowset_to_schema() / historical_schemas / fallback
+        // meta->schema(). compaction_segment_limit=0 means "all segments".
+        _changes_rowsets.push_back(std::make_shared<lake::Rowset>(
+                tablet_mgr, meta, rowset_index, /*compaction_segment_limit=*/0));
     }
 }
 
-Schema ChangesDataSource::_build_read_schema() {
-    DCHECK(_head_metadata != nullptr);
-    if (_tablet_schema == nullptr) {
-        _tablet_schema = GlobalTabletSchemaMap::Instance()->emplace(_head_metadata->schema()).first;
+
+Status ChangesDataSource::_read_next_chunk(ChunkPtr* chunk) {
+    DCHECK(_chunk_iter != nullptr);
+    while (true) {
+        auto data_chunk = ChunkHelper::new_chunk(_read_schema, _runtime_state->chunk_size());
+        Status st = _chunk_iter->get_next(data_chunk.get());
+        if (st.is_end_of_file()) {
+            return Status::EndOfFile("end of changes data");
+        }
+        RETURN_IF_ERROR(st);
+        if (data_chunk->num_rows() == 0) {
+            continue;
+        }
+        // Post-read fallback: evaluate the full _conjunct_ctxs list as a correctness
+        // backstop. Must run after every column (data + metadata) is populated.
+        if (!_conjunct_ctxs.empty()) {
+            RETURN_IF_ERROR(ChunkPredicateEvaluator::eval_conjuncts(_conjunct_ctxs, data_chunk.get()));
+            if (data_chunk->num_rows() == 0) {
+                continue;
+            }
+        }
+        _rows_read += data_chunk->num_rows();
+        _bytes_read += data_chunk->bytes_usage();
+        *chunk = std::move(data_chunk);
+        return Status::OK();
     }
+}
+
+// Resolve the read schema for Phase 2 + pre-compute the projected Schema reused
+// across every rowset. Two layers:
+// 1. `_tablet_schema` — the live read schema, fetched via TableSchemaService
+//    keyed by the FE-supplied schema_key (mirrors LakeDataSource::get_tablet,
+//    lake_connector.cpp:233-247). Head-metadata's embedded schema would lag FE
+//    when a commit creates a new schema version before the matching tablet
+//    metadata is published.
+// 2. `_read_schema` — the projection over `_tablet_schema` selecting only
+//    the slots the caller asked for (`_data_slots`).
+Status ChangesDataSource::_init_read_schema() {
+    DCHECK(_head_metadata != nullptr);
+
+    auto* tablet_mgr = ExecEnv::GetInstance()->lake_tablet_manager();
+    const auto& t_schema_key = _provider->_changes_scan_node.schema_key;
+    TableSchemaKeyPB schema_key_pb;
+    schema_key_pb.set_db_id(t_schema_key.db_id);
+    schema_key_pb.set_table_id(t_schema_key.table_id);
+    schema_key_pb.set_schema_id(t_schema_key.schema_id);
+    ASSIGN_OR_RETURN(_tablet_schema,
+                     tablet_mgr->table_schema_service()->get_schema_for_scan(
+                             schema_key_pb, _tablet_id, _runtime_state->query_id(),
+                             _runtime_state->fragment_ctx()->fe_addr(), _head_metadata));
 
     std::vector<uint32_t> column_indices;
     for (auto* slot : _data_slots) {
@@ -249,178 +400,8 @@ Schema ChangesDataSource::_build_read_schema() {
             column_indices.push_back(static_cast<uint32_t>(index));
         }
     }
-
     std::sort(column_indices.begin(), column_indices.end());
-
-    return ChunkHelper::convert_schema(_tablet_schema, column_indices);
-}
-
-Status ChangesDataSource::_open_next_segment() {
-    DCHECK(_current_rowset_index < _changes_rowsets.size());
-    const auto& changes_rs = _changes_rowsets[_current_rowset_index];
-    DCHECK(_current_segment_index < changes_rs.segments.size());
-
-    auto* tablet_mgr = ExecEnv::GetInstance()->lake_tablet_manager();
-    if (tablet_mgr == nullptr) {
-        return Status::InternalError("lake tablet manager not available");
-    }
-
-    if (_fs == nullptr) {
-        auto root_loc = tablet_mgr->tablet_root_location(_tablet_id);
-        ASSIGN_OR_RETURN(_fs, FileSystemFactory::CreateSharedFromString(root_loc));
-    }
-
-    // Build read schema first (initializes _tablet_schema needed by load_segment)
-    if (!_cached_read_schema.has_value()) {
-        _cached_read_schema = _build_read_schema();
-    }
-    const Schema& schema = _cached_read_schema.value();
-
-    const std::string& seg_name = changes_rs.segments[_current_segment_index];
-    std::string segment_path = tablet_mgr->segment_location(_tablet_id, seg_name);
-    FileInfo file_info{.path = segment_path, .fs = _fs};
-    uint32_t segment_id = static_cast<uint32_t>(_current_segment_index);
-    LakeIOOptions lake_io_opts;
-    auto segment_or = tablet_mgr->load_segment(file_info, segment_id, lake_io_opts,
-                                               /*fill_meta_cache=*/true, _tablet_schema);
-    if (!segment_or.ok()) {
-        return Status::InternalError(
-                fmt::format("CHANGES failed to load segment '{}' for tablet {}: {}",
-                            segment_path, _tablet_id, segment_or.status().to_string()));
-    }
-    auto segment = std::move(segment_or).value();
-
-    SegmentReadOptions seg_options;
-    seg_options.fs = _fs;
-    seg_options.stats = &_seg_stats;
-    seg_options.chunk_size = _runtime_state->chunk_size();
-
-    auto iter_or = segment->new_iterator(schema, seg_options);
-    if (iter_or.status().is_end_of_file()) {
-        _segment_iter = nullptr;
-        return Status::OK();
-    }
-    RETURN_IF_ERROR(iter_or.status());
-    _segment_iter = std::move(iter_or).value();
-
-    return Status::OK();
-}
-
-Status ChangesDataSource::_read_next_chunk(ChunkPtr* chunk) {
-    if (_has_delete_predicate) {
-        return Status::NotSupported(fmt::format(
-                "DELETE_PREDICATE_FOUND: CDC not supported for DELETE operations on tablet {}",
-                _tablet_id));
-    }
-
-    while (_current_rowset_index < _changes_rowsets.size()) {
-        const auto& changes_rs = _changes_rowsets[_current_rowset_index];
-
-        if (_segment_iter == nullptr) {
-            if (_current_segment_index >= changes_rs.segments.size()) {
-                _current_rowset_index++;
-                _current_segment_index = 0;
-                continue;
-            }
-            RETURN_IF_ERROR(_open_next_segment());
-            if (_segment_iter == nullptr) {
-                _current_segment_index++;
-                continue;
-            }
-        }
-
-        if (!_cached_read_schema.has_value()) {
-            _cached_read_schema = _build_read_schema();
-        }
-        const Schema& read_schema = _cached_read_schema.value();
-
-        auto data_chunk = ChunkHelper::new_chunk(read_schema, _runtime_state->chunk_size());
-
-        Status st = _segment_iter->get_next(data_chunk.get());
-        if (st.is_end_of_file()) {
-            _segment_iter->close();
-            _segment_iter.reset();
-            _current_segment_index++;
-            continue;
-        }
-        RETURN_IF_ERROR(st);
-
-        size_t nrows = data_chunk->num_rows();
-        if (nrows == 0) {
-            continue;
-        }
-
-        // Map SlotIds for data columns
-        for (auto* slot : _data_slots) {
-            size_t col_idx = data_chunk->schema()->get_field_index_by_name(slot->col_name());
-            if (col_idx != -1UL) {
-                data_chunk->set_slot_id_to_index(slot->id(), col_idx);
-            }
-        }
-
-        _append_metadata_columns(data_chunk.get(), changes_rs.version);
-
-        // Post-read fallback: evaluate the full _conjunct_ctxs list as a correctness backstop.
-        // Ordering constraint: this must run after every column (data + metadata) is populated.
-        if (!_conjunct_ctxs.empty()) {
-            RETURN_IF_ERROR(ChunkPredicateEvaluator::eval_conjuncts(_conjunct_ctxs, data_chunk.get()));
-            if (data_chunk->num_rows() == 0) {
-                _cpu_time_ns += _seg_stats.block_fetch_ns - _prev_block_fetch_ns;
-                _prev_block_fetch_ns = _seg_stats.block_fetch_ns;
-                continue;
-            }
-        }
-
-        _rows_read += data_chunk->num_rows();
-        _bytes_read += data_chunk->bytes_usage();
-        _cpu_time_ns += _seg_stats.block_fetch_ns - _prev_block_fetch_ns;
-        _prev_block_fetch_ns = _seg_stats.block_fetch_ns;
-
-        *chunk = std::move(data_chunk);
-        return Status::OK();
-    }
-
-    return Status::EndOfFile("end of changes data");
-}
-
-void ChangesDataSource::_append_metadata_columns(Chunk* chunk, int64_t version) {
-    size_t nrows = chunk->num_rows();
-
-    // __CHANGE_TYPE__: INSERT for all rows
-    if (_change_type_slot_id.has_value()) {
-        auto val_col = Int8Column::create();
-        val_col->reserve(nrows);
-        for (size_t r = 0; r < nrows; r++) {
-            val_col->append(kChangeTypeInsert);
-        }
-        ColumnPtr col = std::move(val_col);
-        if (_change_type_slot_is_nullable) {
-            auto null_col = NullColumn::create(nrows, 0);
-            col = NullableColumn::create(std::move(col), std::move(null_col));
-        }
-        chunk->append_column(std::move(col), _change_type_slot_id.value());
-    }
-
-    // __ROW_VERSION__: rowset version for all rows
-    if (_row_version_slot_id.has_value()) {
-        auto val_col = Int64Column::create();
-        val_col->reserve(nrows);
-        for (size_t r = 0; r < nrows; r++) {
-            val_col->append(version);
-        }
-        ColumnPtr col = std::move(val_col);
-        if (_row_version_slot_is_nullable) {
-            auto null_col = NullColumn::create(nrows, 0);
-            col = NullableColumn::create(std::move(col), std::move(null_col));
-        }
-        chunk->append_column(std::move(col), _row_version_slot_id.value());
-    }
-}
-
-Status ChangesDataSource::_read_head_metadata() {
-    auto* tablet_mgr = ExecEnv::GetInstance()->lake_tablet_manager();
-    ASSIGN_OR_RETURN(_head_metadata, tablet_mgr->get_tablet_metadata(_tablet_id, _head_version));
-    _tablet_schema = GlobalTabletSchemaMap::Instance()->emplace(_head_metadata->schema()).first;
+    _read_schema = ChunkHelper::convert_schema(_tablet_schema, column_indices);
     return Status::OK();
 }
 

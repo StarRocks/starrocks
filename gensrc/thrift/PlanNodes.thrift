@@ -491,6 +491,11 @@ struct TChangesScanRange {
 struct TChangesScanNode {
     1: optional Types.TTupleId tuple_id
     2: optional Types.TKeysType table_type
+    // FE-supplied current-schema identifier, mirrors TLakeScanNode.schema_key.
+    // BE uses it to fetch the live read schema via TableSchemaService instead of
+    // the head-metadata schema, so CDC observes the same schema-evolution
+    // semantics as a regular shared-data scan.
+    3: optional Descriptors.TTableSchemaKey schema_key
 }
 
 // Specification of an individual data range which is held in its entirety

@@ -25,13 +25,13 @@
 #include "column/column.h"
 #include "connector/connector.h"
 #include "exec/pipeline/scan/morsel.h"
-#include "fs/fs.h"
 #include "storage/chunk_iterator.h"
+#include "storage/lake/tablet_metadata.h"
+#include "storage/lake/types_fwd.h"
 #include "storage/olap_common.h"
 #include "storage/tablet_schema.h"
 
 namespace starrocks {
-class Segment;
 class TabletMetadataPB;
 class RowsetMetadataPB;
 namespace lake {
@@ -78,18 +78,13 @@ protected:
     const TChangesScanNode _changes_scan_node;
 };
 
-struct ChangesRowset {
-    int64_t version;
-    std::vector<std::string> segments;
-};
-
 /// CDC data source implementing the Delta Replay algorithm for
 /// duplicate-key and aggregate-key tables.
 ///
 /// Two-phase execution:
 ///   Phase 1 (_do_metadata_traversal): Walk tablet metadata backwards via
 ///     metadata_ancestors, discovering LOAD rowsets in (base_version, head_version].
-///   Phase 2 (_read_next_chunk): Read segment data from discovered rowsets,
+///   Phase 2 (_read_next_chunk): Read rowsets via lake::Rowset::read(),
 ///     attach __CHANGE_TYPE__(INSERT=0) and __ROW_VERSION__ metadata columns.
 class ChangesDataSource final : public DataSource {
 public:
@@ -108,22 +103,16 @@ public:
     int64_t cpu_time_spent() const override { return _cpu_time_ns; }
 
 private:
-    // spec §2 enum: 0 = INSERT, 1 = DELETE (reserved for PK / delete-predicate phase)
-    static constexpr int8_t kChangeTypeInsert = 0;
-
     // Phase 1: metadata traversal
     Status _do_metadata_traversal();
-    void _scan_metadata_for_changes_rowsets(const TabletMetadataPB& meta,
+    void _scan_metadata_for_changes_rowsets(const TabletMetadataPtr& meta,
                                             std::unordered_set<uint32_t>& seen_rowset_ids,
                                             std::unordered_set<int64_t>& discovered_versions);
 
-    // Phase 2: segment reading
+    // Phase 2: rowset reading
     Status _read_next_chunk(ChunkPtr* chunk);
-    Status _open_next_segment();
-    Schema _build_read_schema();
-    void _append_metadata_columns(Chunk* chunk, int64_t version);
 
-    Status _read_head_metadata();
+    Status _init_read_schema();
 
     // --- Inputs (immutable after open) ---
     const ChangesDataSourceProvider* _provider;
@@ -145,19 +134,19 @@ private:
     // --- Phase 1: metadata traversal output ---
     std::shared_ptr<const TabletMetadataPB> _head_metadata;
     TabletSchemaCSPtr _tablet_schema;
-    std::vector<ChangesRowset> _changes_rowsets;
+    std::vector<lake::RowsetPtr> _changes_rowsets;
     // Fail-fast gate: any in-range rowset with a DELETE predicate aborts
     // Phase 2. Spec §2 reserves DELETE for the PK stage.
     bool _has_delete_predicate = false;
 
-    // --- Phase 2: segment-read cursor and IO state ---
-    size_t _current_rowset_index = 0;
-    size_t _current_segment_index = 0;
-    ChunkIteratorPtr _segment_iter;
-    std::shared_ptr<FileSystem> _fs;
-    std::optional<Schema> _cached_read_schema;
-    OlapReaderStatistics _seg_stats;
-    int64_t _prev_block_fetch_ns = 0;
+    // --- Phase 2: read cursor and per-rowset iterator buffer ---
+    // _chunk_iter unions every rowset's segment iterators behind a single
+    // ChunkIterator; each segment iterator is wrapped by a stamping iterator
+    // that appends __CHANGE_TYPE__ / __ROW_VERSION__ columns onto the chunk
+    // before it surfaces here.
+    ChunkIteratorPtr _chunk_iter;
+    Schema _read_schema;
+    OlapReaderStatistics _read_stats;
 
     // --- Counters exposed via the DataSource interface ---
     int64_t _rows_read = 0;
