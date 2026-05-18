@@ -40,11 +40,11 @@ import java.util.List;
  * wait against this same load txn.
  *
  * <p>Sampler-executor selection is delegated to
- * {@link DefaultPreSplitPipeline#forLoadKind}: both Tier 1 and Tier 2 are
- * still placeholders for {@link LoadKind#BROKER_LOAD} until the Broker Load
- * provider commit lands. The per-path Config flag
- * {@code enable_tablet_pre_split_for_broker_load} defaults to {@code false},
- * so the hook never reaches the executors until the operator opts in.
+ * {@link DefaultPreSplitPipeline#forLoadKind}: Tier 1 uses the production
+ * {@link BrokerLoadRowGroupStatisticsProvider}; Tier 2 is still a placeholder.
+ * The per-path Config flag {@code enable_tablet_pre_split_for_broker_load}
+ * defaults to {@code false}, so the hook never reaches the executors until
+ * the operator opts in.
  */
 public final class BrokerLoadPreSplitHook {
 
@@ -99,7 +99,8 @@ public final class BrokerLoadPreSplitHook {
             PreSplitTargets.EligibleTarget target, BrokerDesc brokerDesc,
             List<BrokerFileGroup> fileGroups, List<List<TBrokerFileStatus>> fileStatuses,
             ComputeResource computeResource) {
-        BrokerLoadScanContext scanContext = new BrokerLoadScanContext(brokerDesc, fileGroups, computeResource);
+        BrokerLoadScanContext scanContext = new BrokerLoadScanContext(
+                brokerDesc, fileGroups, fileStatuses, computeResource);
         int activeComputeNodeCount = Math.max(1,
                 LoadScanNode.getAvailableComputeNodes(computeResource).size());
         long fileTotalBytes = sumFileBytes(fileStatuses);

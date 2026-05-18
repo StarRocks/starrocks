@@ -108,18 +108,12 @@ public final class DefaultPreSplitPipeline implements PreSplitPipeline {
      * Centralizes the construction so all hooks (D1 INSERT-from-FILES, D2
      * Broker Load, future callers) share the same plumbing.
      *
-     * <p>Tier 1 dispatch (production vs. placeholder) is per load kind so
-     * provider work can land independently:
-     * <ul>
-     *   <li>{@link LoadKind#INSERT_FROM_FILES}: production
-     *       {@link InsertFromFilesRowGroupStatisticsProvider} (reads Parquet
-     *       footers via {@link ParquetRowGroupStatisticsReader}).</li>
-     *   <li>{@link LoadKind#BROKER_LOAD}: placeholder
-     *       {@link PendingRowGroupStatisticsProvider} until the Broker Load
-     *       provider commit lands.</li>
-     * </ul>
-     * Tier 2 remains a placeholder for both load kinds until the sub-query
-     * executor commit lands.
+     * <p>Tier 1 is production for both load kinds:
+     * {@link InsertFromFilesRowGroupStatisticsProvider} for
+     * {@link LoadKind#INSERT_FROM_FILES} and
+     * {@link BrokerLoadRowGroupStatisticsProvider} for
+     * {@link LoadKind#BROKER_LOAD}. Tier 2 remains a placeholder for both
+     * load kinds until the sub-query executor commit lands.
      */
     public static DefaultPreSplitPipeline forLoadKind(
             Database database, OlapTable table, long oldTabletId, long fileTotalBytes, LoadKind loadKind) {
@@ -135,7 +129,7 @@ public final class DefaultPreSplitPipeline implements PreSplitPipeline {
     private static RowGroupStatisticsProvider rowGroupStatisticsProviderFor(LoadKind loadKind) {
         return switch (loadKind) {
             case INSERT_FROM_FILES -> new InsertFromFilesRowGroupStatisticsProvider();
-            case BROKER_LOAD -> new PendingRowGroupStatisticsProvider(loadKind);
+            case BROKER_LOAD -> new BrokerLoadRowGroupStatisticsProvider();
         };
     }
 

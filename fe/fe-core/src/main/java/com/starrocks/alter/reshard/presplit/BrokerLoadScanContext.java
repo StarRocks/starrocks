@@ -16,6 +16,7 @@ package com.starrocks.alter.reshard.presplit;
 
 import com.starrocks.load.BrokerFileGroup;
 import com.starrocks.sql.ast.BrokerDesc;
+import com.starrocks.thrift.TBrokerFileStatus;
 import com.starrocks.warehouse.cngroup.ComputeResource;
 
 import java.util.List;
@@ -28,6 +29,12 @@ import java.util.Objects;
  * {@link BrokerDesc}, the {@link BrokerFileGroup} list, and the
  * {@link ComputeResource}; the pipeline itself does not introspect.
  *
+ * <p>{@code fileStatusesPerGroup} carries the file-status snapshot the load
+ * pending task already resolved, parallel to {@link #fileGroups()}. Tier 1
+ * reads exactly this snapshot rather than re-globbing — re-listing would
+ * race with the load's own enumeration and risk planning quantile cuts
+ * from a different file set than the one actually loaded.
+ *
  * <p>The {@code brokerDesc} may be {@code null} for HDFS-style direct loads
  * that don't go through a broker — matching the same nullability rule the
  * load planner already follows.
@@ -35,10 +42,17 @@ import java.util.Objects;
 public record BrokerLoadScanContext(
         BrokerDesc brokerDesc,
         List<BrokerFileGroup> fileGroups,
+        List<List<TBrokerFileStatus>> fileStatusesPerGroup,
         ComputeResource computeResource) implements ScanContext {
 
     public BrokerLoadScanContext {
         Objects.requireNonNull(fileGroups, "fileGroups");
+        Objects.requireNonNull(fileStatusesPerGroup, "fileStatusesPerGroup");
         Objects.requireNonNull(computeResource, "computeResource");
+        if (fileGroups.size() != fileStatusesPerGroup.size()) {
+            throw new IllegalArgumentException(String.format(
+                    "fileGroups size %d != fileStatusesPerGroup size %d",
+                    fileGroups.size(), fileStatusesPerGroup.size()));
+        }
     }
 }

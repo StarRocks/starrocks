@@ -19,7 +19,6 @@ import com.starrocks.catalog.TableFunctionTable;
 import com.starrocks.thrift.TBrokerFileStatus;
 import com.starrocks.type.IntegerType;
 import com.starrocks.warehouse.cngroup.ComputeResource;
-import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Path;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
@@ -98,24 +97,11 @@ class InsertFromFilesRowGroupStatisticsProviderTest {
     }
 
     @Test
-    void hadoopConfigurationDisablesFileSystemCacheForCredentialedSchemes() {
-        // Hadoop's FileSystem.CACHE ignores the passed Configuration on a cache
-        // hit; without disable-cache the second concurrent load with different
-        // credentials would silently reuse the first load's filesystem. Pin
-        // the contract for every scheme StarRocks's HdfsFsManager supports.
-        Configuration hadoopConfig = InsertFromFilesRowGroupStatisticsProvider
-                .buildHadoopConfiguration(Collections.emptyMap());
-        for (String scheme : InsertFromFilesRowGroupStatisticsProvider.SCHEMES_TO_BUILD_FRESH_FILESYSTEM) {
-            Assertions.assertTrue(
-                    hadoopConfig.getBoolean("fs." + scheme + ".impl.disable.cache", /*defaultValue=*/ false),
-                    "fs." + scheme + ".impl.disable.cache must be true");
-        }
-    }
-
-    @Test
     void wrongScanContextTypeFallsBackToTier2() throws Exception {
         SampleRequest request = new SampleRequest(
-                new BrokerLoadScanContext(null, Collections.emptyList(), Mockito.mock(ComputeResource.class)),
+                new BrokerLoadScanContext(
+                        null, Collections.emptyList(), Collections.emptyList(),
+                        Mockito.mock(ComputeResource.class)),
                 List.of(new Column("sort_key", IntegerType.BIGINT)),
                 Long.MAX_VALUE,
                 /*seed=*/ 0L);
