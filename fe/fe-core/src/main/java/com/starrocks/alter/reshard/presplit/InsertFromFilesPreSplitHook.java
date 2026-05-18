@@ -128,14 +128,10 @@ public final class InsertFromFilesPreSplitHook {
         if (filesRelation == null) {
             return;
         }
-        // Honor the per-session opt-out after the cheap AST-shape filters so a
-        // load with SET enable_tablet_pre_split=false does NOT pay the
-        // eligibility-target walk + FILES schema inference. The
-        // eligibility-skip counter is recorded explicitly here — the coordinator
-        // never sees this skip otherwise, but operators still need to observe
-        // the disabled_by_session reason in metrics.
-        if (!context.getSessionVariable().isEnableTabletPreSplit()) {
-            PreSplitMetrics.recordEligibilitySkip(SkipReason.DISABLED_BY_SESSION);
+        // Honor the per-session opt-out before target resolution + FILES schema
+        // inference. The helper bumps the disabled_by_session bvar — the
+        // coordinator never sees this skip, but operators still need the bvar.
+        if (PreSplitMetrics.shortCircuitOnSessionOptOut(context.getSessionVariable())) {
             return;
         }
         PreSplitTargets.EligibleTarget target = resolveEligibleTarget(insertStmt, context);

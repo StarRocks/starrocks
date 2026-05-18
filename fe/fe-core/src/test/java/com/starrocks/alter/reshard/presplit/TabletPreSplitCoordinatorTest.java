@@ -42,6 +42,7 @@ import org.junit.jupiter.api.Test;
 import java.time.Duration;
 import java.util.List;
 import java.util.Optional;
+import java.util.function.Consumer;
 
 import static com.starrocks.alter.reshard.presplit.PresplitTestSupport.DUMMY_CONTEXT;
 import static org.mockito.Mockito.mock;
@@ -568,11 +569,11 @@ public class TabletPreSplitCoordinatorTest {
         // Three post-eligibility failure modes (sampler attempted, never produced
         // an admitted reshard job) each bump tablet_pre_split_sampler_failed
         // under their lower-cased SkipReason label. Distinct from
-        // tablet_pre_split_eligibility_skipped which counts skips that never
-        // got past the pre-sampler gate. withCoordinatorMetricsWired stands up
-        // the histograms the coordinator touches in its finally block so this
-        // doesn't NPE when MetricRepo.init() hasn't run.
-        withCoordinatorMetricsWired(unusedHardCapCounter -> {
+        // tablet_pre_split_eligibility_skipped (sampler never ran).
+        // withCoordinatorMetricsWired stands up the histograms the coordinator
+        // touches in its finally block so this doesn't NPE without
+        // MetricRepo.init().
+        withCoordinatorMetricsWired(ignoredHardCapCounter -> {
             assertSamplerFailedBucketIncrementsBy1(SkipReason.SAMPLE_FAILED, pipeline ->
                     pipeline.preSubmitThrow = new StarRocksException("connector unavailable"));
             assertSamplerFailedBucketIncrementsBy1(SkipReason.TIMEOUT_PRE_SUBMIT, pipeline ->
@@ -583,19 +584,23 @@ public class TabletPreSplitCoordinatorTest {
     }
 
     private void assertSamplerFailedBucketIncrementsBy1(
-            SkipReason reason, java.util.function.Consumer<FakePipeline> pipelineConfigurer) {
+            SkipReason reason, Consumer<FakePipeline> pipelineConfigurer) {
         String label = reason.name().toLowerCase();
         long baseline = MetricRepo.COUNTER_TABLET_PRE_SPLIT_SAMPLER_FAILED
                 .getMetric(label).getValue();
 
         FakePipeline pipeline = new FakePipeline();
         pipelineConfigurer.accept(pipeline);
+        // Caller drives only pre-submit / submit failure modes, so runPreSplit
+        // never reaches awaitFinished where PreSplitPostSubmitTimeoutException
+        // could fire. Wrap so a Consumer lambda body type-checks.
+        PreSplitOutcome outcome;
         try {
-            PreSplitOutcome outcome = invokeRunPreSplit(pipeline);
-            assertSkipped(outcome, reason);
+            outcome = invokeRunPreSplit(pipeline);
         } catch (PreSplitPostSubmitTimeoutException impossible) {
             throw new AssertionError("post-submit timeout cannot fire on a pre-submit failure path", impossible);
         }
+        assertSkipped(outcome, reason);
 
         Assertions.assertEquals(baseline + 1L,
                 MetricRepo.COUNTER_TABLET_PRE_SPLIT_SAMPLER_FAILED.getMetric(label).getValue().longValue(),

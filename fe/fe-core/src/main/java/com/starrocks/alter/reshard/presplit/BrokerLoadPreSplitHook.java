@@ -87,16 +87,12 @@ public final class BrokerLoadPreSplitHook {
         if (!Config.enable_tablet_pre_split_for_broker_load) {
             return;
         }
-        // Honor the per-session opt-out here so a load with
-        // SET enable_tablet_pre_split=false does NOT pay the eligibility-target
-        // walk and scan-context build. The session variable is bound by the
-        // caller (BrokerLoadJob.createLoadingTask wraps this in
-        // context.bindScope()). The eligibility-skip counter is recorded
-        // explicitly so operators still observe the disabled_by_session
-        // reason in metrics — the coordinator never sees this skip otherwise.
-        ConnectContext context = ConnectContext.get();
-        if (context != null && !context.getSessionVariable().isEnableTabletPreSplit()) {
-            PreSplitMetrics.recordEligibilitySkip(SkipReason.DISABLED_BY_SESSION);
+        // Honor the per-session opt-out before target resolution + scan-context
+        // build. BrokerLoadJob.createLoadingTask wraps this hook call in
+        // context.bindScope() so getSessionVariableOrDefault reads the load's
+        // session. The helper bumps the disabled_by_session bvar — the
+        // coordinator never sees this skip, but operators still need the bvar.
+        if (PreSplitMetrics.shortCircuitOnSessionOptOut(ConnectContext.getSessionVariableOrDefault())) {
             return;
         }
         // BrokerLoadJob.createLoadingTask guarantees database / targetTable / computeResource are

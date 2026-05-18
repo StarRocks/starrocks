@@ -23,6 +23,7 @@ import com.starrocks.common.Config;
 import com.starrocks.load.BrokerFileGroup;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.ast.BrokerDesc;
 import com.starrocks.thrift.TBrokerFileStatus;
 import com.starrocks.warehouse.cngroup.ComputeResource;
@@ -35,7 +36,6 @@ import org.mockito.Mockito;
 import java.util.List;
 
 import static com.starrocks.alter.reshard.presplit.PresplitTestSupport.assertHookDoesNotDelegate;
-import static com.starrocks.alter.reshard.presplit.PresplitTestSupport.mockConnectContextWithSessionPreSplit;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -74,13 +74,13 @@ public class BrokerLoadPreSplitHookTest {
     public void testSessionOptOutShortCircuits() throws Exception {
         // SET enable_tablet_pre_split=false on the session must short-circuit
         // before the eligibility-target walk AND record the eligibility-skip
-        // counter under disabled_by_session. The hook reads ConnectContext.get()
-        // (BrokerLoadJob binds the load's ConnectContext via context.bindScope()
-        // around this call in production), so stub the thread-local lookup here.
-        // Resolve the inner context mock before the outer mockStatic.when() —
-        // Mockito's per-thread stubbing state does not tolerate nested
-        // mock()/when() inside another when() argument.
-        ConnectContext optedOutContext = mockConnectContextWithSessionPreSplit(false);
+        // counter under disabled_by_session. The hook reads
+        // ConnectContext.getSessionVariableOrDefault() (a static), so stub
+        // that directly. Resolve the SessionVariable mock before the outer
+        // mockStatic.when() — Mockito's per-thread stubbing state does not
+        // tolerate nested mock()/when() inside another when() argument.
+        SessionVariable optedOutSessionVariable = Mockito.mock(SessionVariable.class);
+        Mockito.when(optedOutSessionVariable.isEnableTabletPreSplit()).thenReturn(false);
         boolean savedHasInit = MetricRepo.hasInit;
         MetricRepo.hasInit = true;
         try {
@@ -89,7 +89,7 @@ public class BrokerLoadPreSplitHookTest {
                     .getMetric(label).getValue();
 
             try (MockedStatic<ConnectContext> contextStatic = Mockito.mockStatic(ConnectContext.class)) {
-                contextStatic.when(ConnectContext::get).thenReturn(optedOutContext);
+                contextStatic.when(ConnectContext::getSessionVariableOrDefault).thenReturn(optedOutSessionVariable);
                 assertHookDoesNotDelegate(() ->
                         invokeHook(singlePartitionOlapTable(), List.of(), List.of()));
             }

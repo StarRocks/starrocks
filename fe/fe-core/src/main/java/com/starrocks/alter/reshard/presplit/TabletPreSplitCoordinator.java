@@ -218,10 +218,7 @@ public final class TabletPreSplitCoordinator {
      * the sampler never ran.
      */
     private static PreSplitOutcome.Skipped skipPostEligibility(SkipReason reason) {
-        if (MetricRepo.hasInit) {
-            MetricRepo.COUNTER_TABLET_PRE_SPLIT_SAMPLER_FAILED
-                    .getMetric(reason.name().toLowerCase()).increase(1L);
-        }
+        PreSplitMetrics.recordSamplerFailed(reason);
         return new PreSplitOutcome.Skipped(reason);
     }
 

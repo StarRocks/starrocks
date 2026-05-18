@@ -15,29 +15,51 @@
 package com.starrocks.alter.reshard.presplit;
 
 import com.starrocks.metric.MetricRepo;
+import com.starrocks.qe.SessionVariable;
 
-/**
- * Centralized increment helpers for Sample-Based Tablet Pre-Split metrics.
- * Lives outside {@link TabletPreSplitCoordinator} so the load-path hooks can
- * record metrics on an early short-circuit without {@code MockedStatic} test
- * stubs (that target the coordinator's submit surface) silently swallowing
- * the increment.
- */
+/** Shared Sample-Based Tablet Pre-Split metric writers. */
 final class PreSplitMetrics {
 
     private PreSplitMetrics() {
     }
 
     /**
-     * Increment the eligibility-skipped counter under the {@link SkipReason}'s
-     * lower-cased name as the {@code reason} label. Called both by the
-     * coordinator's eligibility branches and by the load-path hooks when they
-     * short-circuit ahead of the coordinator, so operators observe a single
-     * unified counter regardless of where the skip was decided.
+     * If the session has opted out via {@code SET enable_tablet_pre_split=false},
+     * record the {@link SkipReason#DISABLED_BY_SESSION} bucket and return
+     * {@code true} so the caller short-circuits. Centralizes the bvar contract
+     * so the two load-path hooks (which both want to skip early without
+     * paying any resolution work) record one unified counter regardless of
+     * which hook decided to skip.
+     */
+    static boolean shortCircuitOnSessionOptOut(SessionVariable sessionVariable) {
+        if (sessionVariable.isEnableTabletPreSplit()) {
+            return false;
+        }
+        recordEligibilitySkip(SkipReason.DISABLED_BY_SESSION);
+        return true;
+    }
+
+    /**
+     * Record an eligibility-skip under the {@link SkipReason}'s lower-cased
+     * name. Called by the coordinator's eligibility branches and by the
+     * load-path hooks that short-circuit ahead of the coordinator, so
+     * operators observe one unified counter regardless of where the skip
+     * was decided.
      */
     static void recordEligibilitySkip(SkipReason reason) {
         if (MetricRepo.hasInit) {
             MetricRepo.COUNTER_TABLET_PRE_SPLIT_ELIGIBILITY_SKIPPED
+                    .getMetric(reason.name().toLowerCase()).increase(1L);
+        }
+    }
+
+    /**
+     * Record a sampler-failure (sampler attempted but did not produce an
+     * admitted reshard job) under the {@link SkipReason}'s lower-cased name.
+     */
+    static void recordSamplerFailed(SkipReason reason) {
+        if (MetricRepo.hasInit) {
+            MetricRepo.COUNTER_TABLET_PRE_SPLIT_SAMPLER_FAILED
                     .getMetric(reason.name().toLowerCase()).increase(1L);
         }
     }
