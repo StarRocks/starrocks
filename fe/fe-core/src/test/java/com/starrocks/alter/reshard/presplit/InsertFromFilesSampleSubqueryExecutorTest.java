@@ -21,7 +21,6 @@ import com.starrocks.catalog.Variant;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.thrift.TBrokerFileStatus;
-import com.starrocks.thrift.TResultBatch;
 import com.starrocks.type.IntegerType;
 import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.junit.jupiter.api.Assertions;
@@ -29,14 +28,14 @@ import org.junit.jupiter.api.Test;
 import org.mockito.InOrder;
 import org.mockito.Mockito;
 
-import java.nio.ByteBuffer;
-import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
 import static com.starrocks.alter.reshard.presplit.PresplitTestSupport.bigintColumn;
+import static com.starrocks.alter.reshard.presplit.PresplitTestSupport.brokerFileStatus;
+import static com.starrocks.alter.reshard.presplit.PresplitTestSupport.jsonResultBatch;
 
 class InsertFromFilesSampleSubqueryExecutorTest {
 
@@ -161,11 +160,10 @@ class InsertFromFilesSampleSubqueryExecutorTest {
         Map<String, String> properties = new LinkedHashMap<>();
         properties.put("path", "s3://bucket/has\"quote/file*.parquet");
         properties.put("aws.s3.secret_key", "back\\slash");
-        TableFunctionTable sourceTable = mockSourceTable(properties, List.of());
         Column sortKeyColumn = new Column("weird`name", IntegerType.BIGINT);
 
-        String sql = InsertFromFilesSampleSubqueryExecutor.buildSampleSql(
-                sourceTable, sortKeyColumn, /*samplingRate=*/ 0.1, /*rowLimit=*/ 200_000, /*seed=*/ 42L);
+        String sql = FilesSampleSubqueryExecutor.buildSampleSql(
+                properties, sortKeyColumn, /*samplingRate=*/ 0.1, /*rowLimit=*/ 200_000, /*seed=*/ 42L);
 
         Assertions.assertTrue(sql.contains("`weird``name`"), "backtick in identifier must be doubled: " + sql);
         // Both double-quote AND backslash must be escaped inside the property's
@@ -299,7 +297,7 @@ class InsertFromFilesSampleSubqueryExecutorTest {
         ComputeResource computeResource = Mockito.mock(ComputeResource.class);
         Mockito.when(computeResource.getWarehouseId()).thenReturn(42L);
 
-        ConnectContext returned = InsertFromFilesSampleSubqueryExecutor.configureSampleContext(
+        ConnectContext returned = FilesSampleSubqueryExecutor.configureSampleContext(
                 sampleContext, computeResource);
 
         Assertions.assertSame(sampleContext, returned);
@@ -342,17 +340,4 @@ class InsertFromFilesSampleSubqueryExecutorTest {
                 /*seed=*/ 0L);
     }
 
-    private static TBrokerFileStatus brokerFileStatus(String path, long size) {
-        return new TBrokerFileStatus(path, /*isDir=*/ false, size, /*isSplitable=*/ true);
-    }
-
-    private static TResultBatch jsonResultBatch(String... rowJsons) {
-        List<ByteBuffer> rows = new ArrayList<>(rowJsons.length);
-        for (String rowJson : rowJsons) {
-            rows.add(ByteBuffer.wrap(rowJson.getBytes(StandardCharsets.UTF_8)));
-        }
-        TResultBatch resultBatch = new TResultBatch();
-        resultBatch.setRows(rows);
-        return resultBatch;
-    }
 }

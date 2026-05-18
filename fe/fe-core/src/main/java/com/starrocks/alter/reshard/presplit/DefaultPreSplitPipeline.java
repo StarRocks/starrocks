@@ -108,15 +108,12 @@ public final class DefaultPreSplitPipeline implements PreSplitPipeline {
      * Centralizes the construction so all hooks (D1 INSERT-from-FILES, D2
      * Broker Load, future callers) share the same plumbing.
      *
-     * <p>Tier 1 is production for both load kinds:
-     * {@link InsertFromFilesRowGroupStatisticsProvider} for
-     * {@link LoadKind#INSERT_FROM_FILES} and
-     * {@link BrokerLoadRowGroupStatisticsProvider} for
-     * {@link LoadKind#BROKER_LOAD}. Tier 2 is production for
-     * {@link LoadKind#INSERT_FROM_FILES} via
-     * {@link InsertFromFilesSampleSubqueryExecutor}; the Broker Load path
-     * keeps the {@link PendingSampleSubqueryExecutor} placeholder until a
-     * Broker-Load-specific sampler lands.
+     * <p>Tier 1 and Tier 2 are both production for both load kinds:
+     * {@link InsertFromFilesRowGroupStatisticsProvider} +
+     * {@link InsertFromFilesSampleSubqueryExecutor} for
+     * {@link LoadKind#INSERT_FROM_FILES};
+     * {@link BrokerLoadRowGroupStatisticsProvider} +
+     * {@link BrokerLoadSampleSubqueryExecutor} for {@link LoadKind#BROKER_LOAD}.
      */
     public static DefaultPreSplitPipeline forLoadKind(
             Database database, OlapTable table, long oldTabletId, long fileTotalBytes, LoadKind loadKind) {
@@ -139,7 +136,7 @@ public final class DefaultPreSplitPipeline implements PreSplitPipeline {
     private static SampleSubqueryExecutor sampleSubqueryExecutorFor(LoadKind loadKind) {
         return switch (loadKind) {
             case INSERT_FROM_FILES -> new InsertFromFilesSampleSubqueryExecutor();
-            case BROKER_LOAD -> new PendingSampleSubqueryExecutor(loadKind);
+            case BROKER_LOAD -> new BrokerLoadSampleSubqueryExecutor();
         };
     }
 

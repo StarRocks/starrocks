@@ -40,11 +40,12 @@ import java.util.List;
  * wait against this same load txn.
  *
  * <p>Sampler-executor selection is delegated to
- * {@link DefaultPreSplitPipeline#forLoadKind}: Tier 1 uses the production
- * {@link BrokerLoadRowGroupStatisticsProvider}; Tier 2 is still a placeholder.
- * The per-path Config flag {@code enable_tablet_pre_split_for_broker_load}
- * defaults to {@code false}, so the hook never reaches the executors until
- * the operator opts in.
+ * {@link DefaultPreSplitPipeline#forLoadKind}: Tier 1 uses
+ * {@link BrokerLoadRowGroupStatisticsProvider}, Tier 2 uses
+ * {@link BrokerLoadSampleSubqueryExecutor}. The per-path Config flag
+ * {@code enable_tablet_pre_split_for_broker_load} defaults to
+ * {@code false}, so the hook never reaches the executors until the
+ * operator opts in.
  */
 public final class BrokerLoadPreSplitHook {
 

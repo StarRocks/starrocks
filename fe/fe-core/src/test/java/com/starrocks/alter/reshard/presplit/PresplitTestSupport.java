@@ -17,6 +17,8 @@ package com.starrocks.alter.reshard.presplit;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Tuple;
 import com.starrocks.catalog.Variant;
+import com.starrocks.thrift.TBrokerFileStatus;
+import com.starrocks.thrift.TResultBatch;
 import com.starrocks.type.IntegerType;
 import com.starrocks.type.VarcharType;
 import org.apache.hadoop.conf.Configuration;
@@ -33,7 +35,10 @@ import org.mockito.MockedStatic;
 import org.mockito.Mockito;
 
 import java.io.IOException;
+import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.function.BiConsumer;
 
@@ -81,6 +86,25 @@ final class PresplitTestSupport {
         return List.of(
                 Variant.of(VarcharType.VARCHAR, tenant),
                 Variant.of(IntegerType.BIGINT, Long.toString(position)));
+    }
+
+    static TBrokerFileStatus brokerFileStatus(String path, long size) {
+        return new TBrokerFileStatus(path, /*isDir=*/ false, size, /*isSplitable=*/ true);
+    }
+
+    /**
+     * Builds a {@link TResultBatch} carrying {@code rowJsons} as UTF-8 row
+     * buffers — matches the HTTP_PROTOCAL sink shape the Tier 2 executors
+     * decode in production.
+     */
+    static TResultBatch jsonResultBatch(String... rowJsons) {
+        List<ByteBuffer> rows = new ArrayList<>(rowJsons.length);
+        for (String rowJson : rowJsons) {
+            rows.add(ByteBuffer.wrap(rowJson.getBytes(StandardCharsets.UTF_8)));
+        }
+        TResultBatch resultBatch = new TResultBatch();
+        resultBatch.setRows(rows);
+        return resultBatch;
     }
 
     /**
