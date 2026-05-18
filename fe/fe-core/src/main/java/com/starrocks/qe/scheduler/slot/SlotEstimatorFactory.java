@@ -32,7 +32,6 @@ import org.apache.commons.lang3.EnumUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -255,6 +254,11 @@ public class SlotEstimatorFactory {
     public static class MemoryBasedSlotsEstimator implements SlotEstimator {
         @Override
         public int estimateSlots(QueryQueueOptions opts, ConnectContext context, DefaultCoordinator coord) {
+            return estimateBoth(opts, context, coord).clampedSlots();
+        }
+
+        @Override
+        public SlotEstimate estimateBoth(QueryQueueOptions opts, ConnectContext context, DefaultCoordinator coord) {
             long memCost;
             boolean isCostPredictorAvailable = CostPredictor.getServiceBasedCostPredictor().isAvailable();
             if (isCostPredictorAvailable && coord.getPredictedCost() > 0) {
@@ -276,19 +280,28 @@ public class SlotEstimatorFactory {
 
             long numSlots = numSlotsPerWorker * opts.v2().getNumWorkers();
             numSlots = Math.max(numSlots, 1);
-            numSlots = Math.min(numSlots, opts.v2().getTotalSlots());
+            int rawSlots = (int) Math.min(numSlots, Integer.MAX_VALUE);
+            int clampedSlots = (int) Math.min(numSlots, opts.v2().getTotalSlots());
 
-            return (int) numSlots;
+            return new SlotEstimate(rawSlots, clampedSlots);
         }
     }
 
     public static class ParallelismBasedSlotsEstimator implements SlotEstimator {
         @Override
         public int estimateSlots(QueryQueueOptions opts, ConnectContext context, DefaultCoordinator coord) {
+            return estimateBoth(opts, context, coord).clampedSlots();
+        }
+
+        @Override
+        public SlotEstimate estimateBoth(QueryQueueOptions opts, ConnectContext context, DefaultCoordinator coord) {
             Map<PlanFragmentId, FragmentContext> fragmentContexts = collectFragmentContexts(opts, coord);
-            int numSlots = fragmentContexts.values().stream()
-                    .mapToInt(fragmentContext -> estimateFragmentSlots(opts, fragmentContext))
+            // rawMax is the max per-fragment demand BEFORE the totalSlots cap is applied.
+            int rawMax = fragmentContexts.values().stream()
+                    .mapToInt(fragmentContext -> estimateFragmentSlotsRaw(opts, fragmentContext))
                     .max().orElse(1);
+            int totalSlots = opts.v2().getTotalSlots();
+            int numSlots = Math.min(rawMax, totalSlots);
 
             final int numWorkers = fragmentContexts.values().stream()
                     .mapToInt(fragmentContext -> fragmentContext.numWorkers)
@@ -298,10 +311,13 @@ public class SlotEstimatorFactory {
             numSlotsByCpuCosts = Math.max(1, numSlotsByCpuCosts / numWorkers) * numWorkers;
 
             // Restrict numSlotsByCpuCosts to be within [numSlots / 2, numSlots].
-            return Math.min(Math.max(numSlots / 2, numSlotsByCpuCosts), numSlots);
+            int clamped = Math.min(Math.max(numSlots / 2, numSlotsByCpuCosts), numSlots);
+
+            // Invariant: clamped <= numSlots = min(rawMax, totalSlots) <= rawMax, so rawMax >= clamped.
+            return new SlotEstimate(rawMax, clamped);
         }
 
-        private static int estimateFragmentSlots(QueryQueueOptions opts, FragmentContext context) {
+        private static int estimateFragmentSlotsRaw(QueryQueueOptions opts, FragmentContext context) {
             int numSlots = 1;
             for (PlanNode sourceNode : context.sourceNodes) {
                 int curNumSlots = estimateNumSlotsBySourceNode(opts, sourceNode);
@@ -311,7 +327,9 @@ public class SlotEstimatorFactory {
                 curNumSlots = Math.min(curNumSlots, context.fragment.getPipelineDop());
 
                 curNumSlots *= context.numWorkers;
-                curNumSlots = Math.min(curNumSlots, opts.v2().getTotalSlots());
+                // NOTE: deliberately omits the per-fragment `min(curNumSlots, totalSlots)` clamp.
+                // estimateBoth applies the totalSlots cap once at the top level after taking the
+                // max across fragments, so the pre-clamp demand survives here.
 
                 numSlots = Math.max(numSlots, curNumSlots);
             }
@@ -402,10 +420,22 @@ public class SlotEstimatorFactory {
 
         @Override
         public int estimateSlots(QueryQueueOptions opts, ConnectContext context, DefaultCoordinator coord) {
-            return Arrays.stream(estimators)
-                    .mapToInt(estimator -> estimator.estimateSlots(opts, context, coord))
-                    .max()
-                    .orElse(1);
+            return estimateBoth(opts, context, coord).clampedSlots();
+        }
+
+        @Override
+        public SlotEstimate estimateBoth(QueryQueueOptions opts, ConnectContext context, DefaultCoordinator coord) {
+            // Aggregate component-wise: child estimates each satisfy rawSlots >= clampedSlots,
+            // and for the i* that achieves max(c), c_{i*} <= r_{i*} <= max(r), so the invariant
+            // max(r) >= max(c) carries through.
+            int maxRaw = 1;
+            int maxClamped = 1;
+            for (SlotEstimator estimator : estimators) {
+                SlotEstimate est = estimator.estimateBoth(opts, context, coord);
+                maxRaw = Math.max(maxRaw, est.rawSlots());
+                maxClamped = Math.max(maxClamped, est.clampedSlots());
+            }
+            return new SlotEstimate(maxRaw, maxClamped);
         }
     }
 
@@ -418,10 +448,25 @@ public class SlotEstimatorFactory {
 
         @Override
         public int estimateSlots(QueryQueueOptions opts, ConnectContext context, DefaultCoordinator coord) {
-            return Arrays.stream(estimators)
-                    .mapToInt(estimator -> estimator.estimateSlots(opts, context, coord))
-                    .min()
-                    .orElse(1);
+            return estimateBoth(opts, context, coord).clampedSlots();
+        }
+
+        @Override
+        public SlotEstimate estimateBoth(QueryQueueOptions opts, ConnectContext context, DefaultCoordinator coord) {
+            // Aggregate component-wise: for each i, r_i >= c_i, so min(c_i) <= c_i <= r_i for every i,
+            // which means min(c_i) <= min(r_i). The invariant rawSlots >= clampedSlots carries through.
+            int minRaw = Integer.MAX_VALUE;
+            int minClamped = Integer.MAX_VALUE;
+            for (SlotEstimator estimator : estimators) {
+                SlotEstimate est = estimator.estimateBoth(opts, context, coord);
+                minRaw = Math.min(minRaw, est.rawSlots());
+                minClamped = Math.min(minClamped, est.clampedSlots());
+            }
+            if (minRaw == Integer.MAX_VALUE) {
+                minRaw = 1;
+                minClamped = 1;
+            }
+            return new SlotEstimate(minRaw, minClamped);
         }
     }
 }
