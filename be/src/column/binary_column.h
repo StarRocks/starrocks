@@ -415,6 +415,8 @@ public:
 
 private:
     void _append_binary_impl(const Offsets& src_offsets, const uint8_t* src_base, size_t offset, size_t count);
+    void _append_selective_slow(const BinaryColumnBase<T>& src_column, const uint32_t* indexes, uint32_t size,
+                                size_t prev_num_offsets, uint64_t dst_begin, uint64_t src_bytes_size);
 
     void _build_german_strings() const;
     void _ensure_materialized();

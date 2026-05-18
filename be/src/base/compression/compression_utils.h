@@ -20,7 +20,7 @@
 #include "base/statusor.h"
 #include "gen_cpp/Types_types.h"
 #include "gen_cpp/types.pb.h"
-#include "util/compression/block_compression.h"
+#include "base/compression/block_compression.h"
 
 namespace starrocks {
 
