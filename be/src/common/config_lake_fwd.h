@@ -79,13 +79,16 @@ CONF_mInt64(lake_vacuum_retry_min_delay_ms, "100");
 
 CONF_mInt64(lake_max_garbage_version_distance, "100");
 
+// Number of historical tablet-metadata ancestor versions retained per tablet;
+// sets the trackable horizon for CHANGES queries. A larger value lets CHANGES
+// reach further-back base versions at the cost of metadata storage.
+CONF_mInt32(cloud_native_tablet_metadata_ancestors_recorded, "10");
+
 // Enable cleanup of orphan delvec entries during compaction.
 // Orphan delvecs are leaked metadata entries from a historical bug that reference
 // non-existent segments and prevent delvec file garbage collection.
 // Turn this on after upgrade to clean up existing orphans, then turn it off once done.
 CONF_mBool(lake_enable_orphan_delvec_cleanup_on_compaction, "false");
-
-CONF_mInt32(cloud_native_tablet_metadata_ancestors_recorded, "10");
 
 CONF_mBool(enable_strict_delvec_crc_check, "true");
 

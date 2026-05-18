@@ -108,20 +108,20 @@ Status ChangesDataSource::open(RuntimeState* state) {
         }
     }
 
-    // 分离数据列谓词和元数据列谓词（为 Task 3 存储层下推做准备）
-    // 不改变 post-read 行为——仍全量求值 _conjunct_ctxs
+    // Split data-column and metadata-column predicates for storage-layer pushdown.
+    // Post-read behavior is unchanged: _conjunct_ctxs is still fully evaluated.
     _classify_predicates();
 
-    // Profile 计数器（必须在 _init_predicate_tree 之前初始化，因其内部使用 COUNTER_SET）
+    // Profile counters — must be initialized before _init_predicate_tree, which uses COUNTER_SET internally.
     _expr_filter_timer = ADD_TIMER(_runtime_profile, "ExprFilterTime");
     _expr_filter_counter = ADD_COUNTER(_runtime_profile, "ExprFilterRows", TUnit::UNIT);
     _pred_pushdown_counter = ADD_COUNTER(_runtime_profile, "PredPushdownToStorage", TUnit::UNIT);
     _rowset_skipped_counter = ADD_COUNTER(_runtime_profile, "RowsetSkippedByVersionFilter", TUnit::UNIT);
 
-    // 提前读取 head metadata — _tablet_schema 和 _key_column_names 在此初始化
+    // Read head metadata up front — _tablet_schema and _key_column_names are initialized here.
     RETURN_IF_ERROR(_read_head_metadata());
 
-    // 初始化谓词树（需要 _tablet_schema，已在 _read_head_metadata 中就绪）
+    // Initialize the predicate tree (requires _tablet_schema, ready after _read_head_metadata).
     RETURN_IF_ERROR(_init_predicate_tree());
 
     // Phase 1: metadata traversal
@@ -181,7 +181,7 @@ Status ChangesDataSource::_do_metadata_traversal() {
         return Status::InternalError("lake tablet manager not available");
     }
 
-    // _head_metadata 可能已在 open() → _read_head_metadata() 中读取
+    // _head_metadata may already have been loaded by open() → _read_head_metadata().
     if (_head_metadata == nullptr) {
         ASSIGN_OR_RETURN(_head_metadata, tablet_mgr->get_tablet_metadata(_tablet_id, _head_version));
     }
@@ -360,11 +360,11 @@ Status ChangesDataSource::_open_next_segment() {
     seg_options.stats = &_seg_stats;
     seg_options.chunk_size = _runtime_state->chunk_size();
 
-    // 存储层谓词下推
+    // Storage-layer predicate pushdown.
     seg_options.pred_tree = _cached_pred_tree;
     seg_options.runtime_range_pruner = _runtime_range_pruner;
 
-    // Runtime filter predicates：per-segment 重新获取，捕获晚到达的 bloom filter
+    // Runtime filter predicates: re-fetched per segment to capture late-arriving bloom filters.
     if (_conjuncts_manager && _runtime_state->enable_join_runtime_filter_pushdown()) {
         auto rf_or = _conjuncts_manager->get_runtime_filter_predicates(&_obj_pool, _parser);
         if (rf_or.ok()) {
@@ -439,23 +439,23 @@ Status ChangesDataSource::_read_next_chunk(ChunkPtr* chunk) {
 
         _append_metadata_columns(data_chunk.get(), commit_ver);
 
-        // Post-read 兜底求值：对全部 _conjunct_ctxs 求值
-        // 这是正确性保障——即使存储层下推未启用，所有谓词在此被求值
-        // 时序约束：必须在所有列（数据列 + 元数据列）填充完成后
+        // Post-read fallback: evaluate the full _conjunct_ctxs list as a correctness backstop —
+        // every predicate is evaluated here even if storage-layer pushdown was not enabled.
+        // Ordering constraint: this must run after every column (data + metadata) is populated.
         if (!_conjunct_ctxs.empty()) {
             SCOPED_TIMER(_expr_filter_timer);
             size_t before = data_chunk->num_rows();
             RETURN_IF_ERROR(ChunkPredicateEvaluator::eval_conjuncts(_conjunct_ctxs, data_chunk.get()));
             COUNTER_UPDATE(_expr_filter_counter, before - data_chunk->num_rows());
             if (data_chunk->num_rows() == 0) {
-                // 全部被过滤，继续读下一批
+                // All rows filtered out — read the next chunk.
                 _cpu_time_ns += _seg_stats.block_fetch_ns - _prev_block_fetch_ns;
                 _prev_block_fetch_ns = _seg_stats.block_fetch_ns;
                 continue;
             }
         }
 
-        // 统计更新（过滤后）
+        // Stat updates (post-filter).
         _rows_read += data_chunk->num_rows();
         _bytes_read += data_chunk->bytes_usage();
         _cpu_time_ns += _seg_stats.block_fetch_ns - _prev_block_fetch_ns;
@@ -521,13 +521,13 @@ void ChangesDataSource::_try_extract_row_version_predicate(ExprContext* ctx) {
     } else if (left->is_literal() && right->is_slotref()) {
         slot_expr = right;
         const_expr = left;
-        // const <op> slot → 翻转操作符
+        // const <op> slot → flip the comparison operator.
         switch (op) {
         case TExprOpcode::LT: op = TExprOpcode::GT; break;
         case TExprOpcode::LE: op = TExprOpcode::GE; break;
         case TExprOpcode::GT: op = TExprOpcode::LT; break;
         case TExprOpcode::GE: op = TExprOpcode::LE; break;
-        default: break; // EQ, NE 不变
+        default: break; // EQ / NE are symmetric.
         }
     } else {
         return;
@@ -536,7 +536,7 @@ void ChangesDataSource::_try_extract_row_version_predicate(ExprContext* ctx) {
     auto* col_ref = static_cast<ColumnRef*>(slot_expr);
     if (col_ref->slot_id() != _row_version_slot_id.value()) return;
 
-    // 提取常量值
+    // Extract the constant value.
     auto* literal = static_cast<VectorizedLiteral*>(const_expr);
     ColumnPtr col = literal->value();
     if (col == nullptr || col->size() == 0) return;
@@ -550,7 +550,7 @@ Status ChangesDataSource::_read_head_metadata() {
     ASSIGN_OR_RETURN(_head_metadata, tablet_mgr->get_tablet_metadata(_tablet_id, _head_version));
     _tablet_schema = GlobalTabletSchemaMap::Instance()->emplace(_head_metadata->schema()).first;
 
-    // 提取 key column names，ScanConjunctsManager 构建 pred_tree 时需要
+    // Capture key column names — ScanConjunctsManager needs them when building the pred_tree.
     for (auto idx : _tablet_schema->sort_key_idxes()) {
         _key_column_names.emplace_back(_tablet_schema->column(idx).name());
     }
@@ -578,7 +578,7 @@ Status ChangesDataSource::_init_predicate_tree() {
 
     _parser = _obj_pool.add(new OlapPredicateParser(_tablet_schema));
 
-    // 获取完整谓词树，然后按存储层能力分区
+    // Fetch the full predicate tree, then partition by storage-layer pushdown capability.
     ASSIGN_OR_RETURN(auto full_pred_tree, _conjuncts_manager->get_predicate_tree(_parser, _col_preds_owner));
     PredicateAndNode pushdown_root;
     PredicateAndNode non_pushdown_root;
@@ -586,7 +586,7 @@ Status ChangesDataSource::_init_predicate_tree() {
         [this](const auto& node) { return _parser->can_pushdown(node); },
         &pushdown_root, &non_pushdown_root);
     _cached_pred_tree = PredicateTree::create(std::move(pushdown_root));
-    // non_pushdown_root 在 Phase 1 不使用 — 兜底 _conjunct_ctxs 全量求值覆盖
+    // non_pushdown_root is unused in Phase 1 — the post-read _conjunct_ctxs fallback covers it.
 
     _runtime_range_pruner = RuntimeScanRangePruner(_parser, _conjuncts_manager->unarrived_runtime_filters());
 
@@ -612,7 +612,7 @@ void ChangesDataSource::_classify_predicates() {
             _data_column_conjuncts.push_back(ctx);
         }
 
-        // 尝试提取 __ROW_VERSION__ 简单谓词用于 rowset 跳过
+        // Try to extract a simple __ROW_VERSION__ predicate for rowset skipping.
         if (_row_version_slot_id.has_value()) {
             for (auto slot_id : slot_ids) {
                 if (slot_id == _row_version_slot_id.value()) {

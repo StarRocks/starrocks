@@ -215,23 +215,23 @@ private:
     int64_t _bytes_read = 0;
     int64_t _cpu_time_ns = 0;
 
-    // --- Profile 计数器（谓词过滤） ---
+    // --- Profile counters (predicate filtering) ---
     RuntimeProfile::Counter* _expr_filter_timer = nullptr;
     RuntimeProfile::Counter* _expr_filter_counter = nullptr;
 
-    // --- 谓词分类 ---
-    std::vector<ExprContext*> _data_column_conjuncts;  // 可下推到存储层的数据列谓词
+    // --- Predicate classification ---
+    std::vector<ExprContext*> _data_column_conjuncts;  // data-column predicates pushable to the storage layer
     std::vector<RowVersionFilter> _row_version_filters;
     RuntimeProfile::Counter* _rowset_skipped_counter = nullptr;
 
-    ObjectPool _obj_pool;                              // 声明最先 → 析构最后（_parser 等由其管理）
+    ObjectPool _obj_pool;                              // declared first → destroyed last (owns _parser etc.)
     std::unique_ptr<ScanConjunctsManager> _conjuncts_manager;
-    PredicateParser* _parser = nullptr;                 // _obj_pool 管理生命周期
-    PredicateTree _cached_pred_tree;                   // 可推到存储层的谓词
+    PredicateParser* _parser = nullptr;                 // lifetime owned by _obj_pool
+    PredicateTree _cached_pred_tree;                   // predicates pushable to the storage layer
     RuntimeScanRangePruner _runtime_range_pruner;
     ColumnPredicatePtrs _col_preds_owner;
 
-    // --- Profile 计数器（存储层下推） ---
+    // --- Profile counters (storage-layer pushdown) ---
     RuntimeProfile::Counter* _pred_pushdown_counter = nullptr;
 
     const TupleDescriptor* _tuple_desc = nullptr;
