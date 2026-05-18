@@ -1922,10 +1922,19 @@ public class IcebergMetadata implements ConnectorMetadata {
             rowDelta.addDeletes(deleteFile);
         }
 
-        // Validate from snapshot if table has current snapshot
-        Snapshot currentSnapshot = nativeTbl.currentSnapshot();
-        if (currentSnapshot != null) {
-            rowDelta.validateFromSnapshot(currentSnapshot.snapshotId());
+        // Use the base snapshot id frozen at plan time so conflict detection covers
+        // every commit landed between scan and commit. Falling back to currentSnapshot
+        // here would silently skip that window and defeat SERIALIZABLE isolation.
+        Long baseSnapshotId = extra instanceof IcebergSinkExtra
+                ? ((IcebergSinkExtra) extra).getBaseSnapshotId() : null;
+        if (baseSnapshotId == null) {
+            Snapshot currentSnapshot = nativeTbl.currentSnapshot();
+            if (currentSnapshot != null) {
+                baseSnapshotId = currentSnapshot.snapshotId();
+            }
+        }
+        if (baseSnapshotId != null) {
+            rowDelta.validateFromSnapshot(baseSnapshotId);
         }
 
         // Validate that referenced data files exist and haven't been deleted
@@ -2211,6 +2220,10 @@ public class IcebergMetadata implements ConnectorMetadata {
         private final Set<DataFile> scannedDataFiles;
         private final Set<DeleteFile> appliedDeleteFiles;
         private Expression conflictDetectionFilter;
+        // Base snapshot id frozen at plan time. Used by RowDelta.validateFromSnapshot
+        // so conflict detection covers the window between scan and commit, not a fresher
+        // snapshot re-read at commit time.
+        private Long baseSnapshotId;
 
         public IcebergSinkExtra() {
             this.scannedDataFiles = new HashSet<>();
@@ -2239,6 +2252,14 @@ public class IcebergMetadata implements ConnectorMetadata {
 
         public Expression getConflictDetectionFilter() {
             return conflictDetectionFilter;
+        }
+
+        public void setBaseSnapshotId(Long baseSnapshotId) {
+            this.baseSnapshotId = baseSnapshotId;
+        }
+
+        public Long getBaseSnapshotId() {
+            return baseSnapshotId;
         }
     }
 

@@ -241,10 +241,12 @@ public class UpdatePlanner {
         dataSink.init();
 
         IcebergMetadata.IcebergSinkExtra icebergSinkExtra = new IcebergMetadata.IcebergSinkExtra();
-        org.apache.iceberg.expressions.Expression filterExpr = IcebergPlannerUtils.buildIcebergFilterExpr(execPlan);
+        org.apache.iceberg.expressions.Expression filterExpr =
+                IcebergPlannerUtils.buildIcebergFilterExpr(execPlan, icebergTable);
         if (filterExpr != null) {
             icebergSinkExtra.setConflictDetectionFilter(filterExpr);
         }
+        icebergSinkExtra.setBaseSnapshotId(IcebergPlannerUtils.extractBaseSnapshotId(execPlan, icebergTable));
         dataSink.setSinkExtraInfo(icebergSinkExtra);
 
         execPlan.getFragments().get(0).setSink(dataSink);

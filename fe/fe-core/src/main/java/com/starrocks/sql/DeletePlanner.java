@@ -313,11 +313,15 @@ public class DeletePlanner {
         dataSink.init();
         // Create IcebergSinkExtra for DELETE operations
         IcebergMetadata.IcebergSinkExtra icebergSinkExtra = new IcebergMetadata.IcebergSinkExtra();
-        // Build Iceberg filter expression from scan node for conflict detection
-        org.apache.iceberg.expressions.Expression filterExpr = IcebergPlannerUtils.buildIcebergFilterExpr(execPlan);
+        // Build Iceberg filter expression from scan node for conflict detection.
+        // Both helpers filter by the target table so subqueries over other Iceberg tables
+        // don't leak their scan's predicate / snapshot id into the target's commit.
+        org.apache.iceberg.expressions.Expression filterExpr =
+                IcebergPlannerUtils.buildIcebergFilterExpr(execPlan, icebergTable);
         if (filterExpr != null) {
             icebergSinkExtra.setConflictDetectionFilter(filterExpr);
         }
+        icebergSinkExtra.setBaseSnapshotId(IcebergPlannerUtils.extractBaseSnapshotId(execPlan, icebergTable));
         // Set the sink extra info to be used during commit
         dataSink.setSinkExtraInfo(icebergSinkExtra);
 

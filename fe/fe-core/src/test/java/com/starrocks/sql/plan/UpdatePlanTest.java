@@ -515,14 +515,16 @@ public class UpdatePlanTest extends PlanTestBase {
 
     @Test
     public void testIcebergPlannerUtilsBuildIcebergFilterExprNullPlan() {
-        // Null exec plan returns null without NPE.
-        assertNull(IcebergPlannerUtils.buildIcebergFilterExpr(null));
+        // Null exec plan returns null without NPE. Target table is irrelevant — the
+        // null-plan guard short-circuits before the target filter ever runs.
+        assertNull(IcebergPlannerUtils.buildIcebergFilterExpr(null, null));
     }
 
     @Test
     public void testIcebergPlannerUtilsBuildIcebergFilterExprNoIcebergScan() throws Exception {
-        // OLAP update plan has no IcebergScanNode, so the helper finds no predicate
-        // and short-circuits to null.
+        // OLAP update plan has no IcebergScanNode, so the helper finds no scan over the
+        // target and short-circuits to null. Passing null target also hits the null-target
+        // guard — either way the result is null for a non-Iceberg plan.
         String sql = "update tprimary set v2 = v2 + 1 where v1 = 'aaa'";
         connectContext.setQueryId(UUIDUtil.genUUID());
         connectContext.setExecutionId(UUIDUtil.toTUniqueId(connectContext.getQueryId()));
@@ -531,7 +533,7 @@ public class UpdatePlanTest extends PlanTestBase {
                 sql, connectContext.getSessionVariable().getSqlMode()).get(0);
         connectContext.getDumpInfo().setOriginStmt(sql);
         ExecPlan execPlan = new StatementPlanner().plan(stmt, connectContext);
-        assertNull(IcebergPlannerUtils.buildIcebergFilterExpr(execPlan));
+        assertNull(IcebergPlannerUtils.buildIcebergFilterExpr(execPlan, null));
     }
 
     @Test
