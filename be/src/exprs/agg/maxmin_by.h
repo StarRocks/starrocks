@@ -402,6 +402,8 @@ public:
         }
     }
 
+    bool support_nullable_immediate_input() const override { return true; }
+
     void merge(FunctionContext* ctx, const Column* column, AggDataPtr __restrict state, size_t row_num) const override {
         Slice src;
         if (column->only_null() || column->is_null(row_num)) {
@@ -662,6 +664,8 @@ public:
             update(ctx, columns, state, i);
         }
     }
+
+    bool support_nullable_immediate_input() const override { return true; }
 
     void merge(FunctionContext* ctx, const Column* column, AggDataPtr __restrict state, size_t row_num) const override {
         if (column->only_null() || column->is_null(row_num)) {

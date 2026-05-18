@@ -334,9 +334,12 @@ public class DecodeRewriter extends OptExpressionVisitor<OptExpression, ColumnRe
                         aggregate.isSplit(), aggregate.getLimit(), predicate,
                         projection);
         op.setMergedLocalAgg(aggregate.isMergedLocalAgg());
+        op.setTopNLocalAgg(aggregate.isTopNLocalAgg());
         op.setUseSortAgg(aggregate.isUseSortAgg());
         op.setUsePerBucketOptmize(aggregate.isUsePerBucketOptmize());
         op.setWithoutColocateRequirement(aggregate.isWithoutColocateRequirement());
+        op.setDistinctColumnDataSkew(aggregate.getDistinctColumnDataSkew());
+        op.setForcePreAggregation(aggregate.isForcePreAggregation());
         op.setLocalLimit(aggregate.getLocalLimit());
         return rewriteOptExpression(optExpression, op, info.outputStringColumns);
     }
