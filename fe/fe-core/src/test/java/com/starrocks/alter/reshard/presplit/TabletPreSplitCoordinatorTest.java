@@ -564,6 +564,45 @@ public class TabletPreSplitCoordinatorTest {
     }
 
     @Test
+    public void testSamplerFailedCounterIncrementsForPostEligibilitySkips() {
+        // Three post-eligibility failure modes (sampler attempted, never produced
+        // an admitted reshard job) each bump tablet_pre_split_sampler_failed
+        // under their lower-cased SkipReason label. Distinct from
+        // tablet_pre_split_eligibility_skipped which counts skips that never
+        // got past the pre-sampler gate. withCoordinatorMetricsWired stands up
+        // the histograms the coordinator touches in its finally block so this
+        // doesn't NPE when MetricRepo.init() hasn't run.
+        withCoordinatorMetricsWired(unusedHardCapCounter -> {
+            assertSamplerFailedBucketIncrementsBy1(SkipReason.SAMPLE_FAILED, pipeline ->
+                    pipeline.preSubmitThrow = new StarRocksException("connector unavailable"));
+            assertSamplerFailedBucketIncrementsBy1(SkipReason.TIMEOUT_PRE_SUBMIT, pipeline ->
+                    pipeline.preSubmitThrow = new PreSplitPreSubmitTimeoutException("sampler exceeded budget"));
+            assertSamplerFailedBucketIncrementsBy1(SkipReason.SUBMIT_FAILED, pipeline ->
+                    pipeline.submitThrow = new StarRocksException("table state changed during submit"));
+        });
+    }
+
+    private void assertSamplerFailedBucketIncrementsBy1(
+            SkipReason reason, java.util.function.Consumer<FakePipeline> pipelineConfigurer) {
+        String label = reason.name().toLowerCase();
+        long baseline = MetricRepo.COUNTER_TABLET_PRE_SPLIT_SAMPLER_FAILED
+                .getMetric(label).getValue();
+
+        FakePipeline pipeline = new FakePipeline();
+        pipelineConfigurer.accept(pipeline);
+        try {
+            PreSplitOutcome outcome = invokeRunPreSplit(pipeline);
+            assertSkipped(outcome, reason);
+        } catch (PreSplitPostSubmitTimeoutException impossible) {
+            throw new AssertionError("post-submit timeout cannot fire on a pre-submit failure path", impossible);
+        }
+
+        Assertions.assertEquals(baseline + 1L,
+                MetricRepo.COUNTER_TABLET_PRE_SPLIT_SAMPLER_FAILED.getMetric(label).getValue().longValue(),
+                "sampler-failed counter should bump the " + label + " bucket");
+    }
+
+    @Test
     public void testRunPreSplitPostSubmitTimeoutBumpsLoadAbortCounter() {
         // hard-cap and load-abort are sibling counters incremented on the same post-submit
         // timeout path; withCoordinatorMetricsWired stands both up.
