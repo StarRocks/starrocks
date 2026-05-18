@@ -183,7 +183,7 @@ TEST_F(ChangesConnectorTest, AncestorChainExhaustedReportsCdcError) {
 
 TEST_F(ChangesConnectorTest, test_cdc_rowset_version_filter) {
     struct TestRowset {
-        int64_t commit_version;
+        int64_t version;
     };
     std::vector<TestRowset> rowsets = {{1}, {2}, {3}, {5}, {8}};
 
@@ -196,14 +196,14 @@ TEST_F(ChangesConnectorTest, test_cdc_rowset_version_filter) {
                            [&](const TestRowset& rs) {
                                return std::any_of(filters.begin(), filters.end(),
                                                   [&](const RowVersionFilter& f) {
-                                                      return !f.evaluate(rs.commit_version);
+                                                      return !f.evaluate(rs.version);
                                                   });
                            }),
             rowsets.end());
 
     ASSERT_EQ(rowsets.size(), 2);
-    EXPECT_EQ(rowsets[0].commit_version, 3);
-    EXPECT_EQ(rowsets[1].commit_version, 5);
+    EXPECT_EQ(rowsets[0].version, 3);
+    EXPECT_EQ(rowsets[1].version, 5);
 }
 
 } // namespace starrocks::connector

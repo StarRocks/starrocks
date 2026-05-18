@@ -130,7 +130,7 @@ Status ChangesDataSource::open(RuntimeState* state) {
     // Sort and RowVersionFilter
     std::sort(_changes_rowsets.begin(), _changes_rowsets.end(),
               [](const ChangesRowset& a, const ChangesRowset& b) {
-                  return a.commit_version < b.commit_version;
+                  return a.version < b.version;
               });
 
     if (!_row_version_filters.empty()) {
@@ -140,7 +140,7 @@ Status ChangesDataSource::open(RuntimeState* state) {
                                [this](const ChangesRowset& rs) {
                                    return std::any_of(
                                            _row_version_filters.begin(), _row_version_filters.end(),
-                                           [&](const RowVersionFilter& f) { return !f.evaluate(rs.commit_version); });
+                                           [&](const RowVersionFilter& f) { return !f.evaluate(rs.version); });
                                }),
                 _changes_rowsets.end());
         COUNTER_UPDATE(_rowset_skipped_counter, before - _changes_rowsets.size());
@@ -245,14 +245,14 @@ Status ChangesDataSource::_do_metadata_traversal() {
 
 void ChangesDataSource::_scan_metadata_for_changes_rowsets(const TabletMetadataPB& meta) {
     auto process_rowset = [&](const RowsetMetadataPB& r) {
-        if (!r.has_commit_version() || r.commit_version() <= _base_version) {
+        if (!r.has_version() || r.version() <= _base_version) {
             return;
         }
         if (_found_ids.count(r.id()) > 0) {
             return;
         }
         _found_ids.insert(r.id());
-        _found_cv.insert(r.commit_version());
+        _found_cv.insert(r.version());
 
         if (r.has_delete_predicate()) {
             _stats.has_delete_predicate = true;
@@ -266,7 +266,7 @@ void ChangesDataSource::_scan_metadata_for_changes_rowsets(const TabletMetadataP
 
         ChangesRowset changes_rs;
         changes_rs.id = r.id();
-        changes_rs.commit_version = r.commit_version();
+        changes_rs.version = r.version();
 
         changes_rs.num_rows = r.num_rows();
         changes_rs.data_size = r.data_size();
@@ -435,9 +435,7 @@ Status ChangesDataSource::_read_next_chunk(ChunkPtr* chunk) {
             }
         }
 
-        int64_t commit_ver = changes_rs.commit_version;
-
-        _append_metadata_columns(data_chunk.get(), commit_ver);
+        _append_metadata_columns(data_chunk.get(), changes_rs.version);
 
         // Post-read fallback: evaluate the full _conjunct_ctxs list as a correctness backstop —
         // every predicate is evaluated here even if storage-layer pushdown was not enabled.
@@ -468,7 +466,7 @@ Status ChangesDataSource::_read_next_chunk(ChunkPtr* chunk) {
     return Status::EndOfFile("end of changes data");
 }
 
-void ChangesDataSource::_append_metadata_columns(Chunk* chunk, int64_t commit_version) {
+void ChangesDataSource::_append_metadata_columns(Chunk* chunk, int64_t version) {
     size_t nrows = chunk->num_rows();
 
     // __CHANGE_TYPE__: INSERT for all rows
@@ -486,12 +484,12 @@ void ChangesDataSource::_append_metadata_columns(Chunk* chunk, int64_t commit_ve
         chunk->append_column(std::move(col), _change_type_slot_id.value());
     }
 
-    // __ROW_VERSION__: commit_version for all rows
+    // __ROW_VERSION__: rowset version for all rows
     if (_row_version_slot_id.has_value()) {
         auto val_col = Int64Column::create();
         val_col->reserve(nrows);
         for (size_t r = 0; r < nrows; r++) {
-            val_col->append(commit_version);
+            val_col->append(version);
         }
         ColumnPtr col = std::move(val_col);
         if (_row_version_slot_is_nullable) {

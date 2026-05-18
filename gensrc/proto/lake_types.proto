@@ -187,10 +187,7 @@ message RowsetMetadataPB {
     repeated SegmentMetadataPB segment_metas = 17;
     // Indicates the effective sort key range of this rowset for range distribution table.
     optional TabletRangePB range = 18;
-    // CDC: the transaction commit version that produced this rowset.
-    // For individual publish: equals metadata version.
-    // For batch publish: base_version + txn_index + 1.
-    optional int64 commit_version = 19;
+    reserved 19;
 }
 
 // At present, the lake persistent index reuses the logic of the persistent index,

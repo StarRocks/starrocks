@@ -111,20 +111,21 @@ struct ChangesStats {
     int64_t head_version_segment_count = 0;
 };
 
+/// Predicate over the `__ROW_VERSION__` metadata column (rowset version).
 struct RowVersionFilter {
     TExprOpcode::type op;
     int64_t value;
 
     RowVersionFilter(TExprOpcode::type op, int64_t value) : op(op), value(value) {}
 
-    bool evaluate(int64_t commit_version) const {
+    bool evaluate(int64_t version) const {
         switch (op) {
-        case TExprOpcode::EQ: return commit_version == value;
-        case TExprOpcode::NE: return commit_version != value;
-        case TExprOpcode::LT: return commit_version < value;
-        case TExprOpcode::LE: return commit_version <= value;
-        case TExprOpcode::GT: return commit_version > value;
-        case TExprOpcode::GE: return commit_version >= value;
+        case TExprOpcode::EQ: return version == value;
+        case TExprOpcode::NE: return version != value;
+        case TExprOpcode::LT: return version < value;
+        case TExprOpcode::LE: return version <= value;
+        case TExprOpcode::GT: return version > value;
+        case TExprOpcode::GE: return version >= value;
         default: return true;
         }
     }
@@ -132,7 +133,7 @@ struct RowVersionFilter {
 
 struct ChangesRowset {
     uint32_t id;
-    int64_t commit_version;
+    int64_t version;
     int64_t num_rows;       // total rowset rows
     int64_t data_size;
     std::vector<std::string> segments;  // segment filenames
@@ -190,7 +191,7 @@ private:
     Status _read_next_chunk(ChunkPtr* chunk);
     Status _open_next_segment();
     Schema _build_read_schema();
-    void _append_metadata_columns(Chunk* chunk, int64_t commit_version);
+    void _append_metadata_columns(Chunk* chunk, int64_t version);
 
     void _classify_predicates();
     void _try_extract_row_version_predicate(ExprContext* ctx);

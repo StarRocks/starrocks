@@ -1014,7 +1014,6 @@ public:
         // Set rowset ID and update next_rowset_id
         merged_rowset->set_id(_metadata->next_rowset_id());
         merged_rowset->set_version(_new_version);
-        merged_rowset->set_commit_version(_new_version);
         _metadata->set_next_rowset_id(_metadata->next_rowset_id() + get_rowset_id_step(*merged_rowset));
         VLOG(2) << "Set rowset id to " << merged_rowset->id() << " and updated next_rowset_id to "
                 << _metadata->next_rowset_id() << " for tablet " << _tablet.id();
@@ -1053,7 +1052,6 @@ private:
             rowset->CopyFrom(op_write.rowset());
             rowset->set_id(_metadata->next_rowset_id());
             rowset->set_version(_new_version);
-            rowset->set_commit_version(_new_version);
             _metadata->set_next_rowset_id(_metadata->next_rowset_id() + get_rowset_id_step(*rowset));
             if (!_metadata->rowset_to_schema().empty()) {
                 auto schema_id = _metadata->schema().id();
@@ -1166,7 +1164,6 @@ private:
             output_rowset->CopyFrom(op_compaction.output_rowset());
             output_rowset->set_id(_metadata->next_rowset_id());
             output_rowset->set_version(_new_version);
-            output_rowset->set_commit_version(_new_version);
             // CDC: set max_compact_input_rowset_id for non-PK compaction
             // This marks the rowset as compaction output, allowing CDC to
             // distinguish LOAD rowsets from compaction rowsets.
