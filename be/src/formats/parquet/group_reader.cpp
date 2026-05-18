@@ -962,6 +962,7 @@ VariantShreddedReadHints GroupReader::_get_variant_shredded_hints(std::string_vi
 
 Status GroupReader::_create_column_readers() {
     SCOPED_RAW_TIMER(&_param.stats->column_reader_init_ns);
+    _global_dict_applied_in_group = false;
     // ColumnReaderOptions is used by all column readers in one row group
     ColumnReaderOptions& opts = _column_reader_opts;
     opts.file_meta_data = _param.file_metadata;
@@ -1132,6 +1133,13 @@ Status GroupReader::_create_column_readers() {
                                                                               projection.target_type));
     }
 
+    if (_param.stats != nullptr) {
+        _param.stats->global_dict_total_row_groups++;
+        if (_global_dict_applied_in_group) {
+            _param.stats->global_dict_applied_row_groups++;
+        }
+    }
+
     return Status::OK();
 }
 
@@ -1153,10 +1161,20 @@ StatusOr<ColumnReaderPtr> GroupReader::_create_column_reader(const GroupReaderPa
                                                          column.t_lake_schema_field));
         }
         if (_param.global_dictmaps->contains(column.slot_id())) {
+            GlobalDictReaderKind kind = GlobalDictReaderKind::kNone;
             ASSIGN_OR_RETURN(
                     column_reader,
                     ColumnReaderFactory::create(std::move(column_reader), _param.global_dictmaps->at(column.slot_id()),
-                                                column.slot_id(), _row_group_metadata->num_rows));
+                                                column.slot_id(), _row_group_metadata->num_rows, &kind));
+            if (_param.stats != nullptr && kind != GlobalDictReaderKind::kNone) {
+                _param.stats->global_dict_applied_slots++;
+                if (kind == GlobalDictReaderKind::kDictCode) {
+                    _param.stats->global_dict_dict_code_reader_slots++;
+                } else if (kind == GlobalDictReaderKind::kLowRowsEncode) {
+                    _param.stats->global_dict_encode_reader_slots++;
+                }
+                _global_dict_applied_in_group = true;
+            }
         }
         if (column_reader == nullptr) {
             // this shouldn't happen but guard
