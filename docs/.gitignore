@@ -1,3 +1,7 @@
+<<<<<<< HEAD
 celerdata-registry-config.json
 password.txt
 
+=======
+**/*\.invalid
+>>>>>>> 5fc35d98409... [Doc] Revise Doc for Shared-data Migration (backport #73162) (#73311)
