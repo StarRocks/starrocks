@@ -104,6 +104,26 @@ public class QueryQueueManager {
                 if (isBigQuery) {
                     WarehouseSlotMetricMgr.getBigQueryCounter(warehouseId).increase(1L);
                 }
+
+                // Pre-scale wait: hold big query briefly to give external auto-scaler a chance to add CN capacity.
+                if (Config.query_queue_pre_scale_max_wait_ms > 0L) {
+                    double gateRatio = Config.query_queue_pre_scale_slot_threshold_ratio;
+                    if (estimate.rawSlots() > totalSlots * gateRatio) {
+                        long capWaitMs = Math.min(
+                                Config.query_queue_pre_scale_max_wait_ms,
+                                Math.max(0L, slotRequirement.getExpiredPendingTimeMs() - System.currentTimeMillis() - 1000L));
+                        long preScaleStartMs = System.currentTimeMillis();
+                        boolean satisfied = WarehouseInFlightTracker.getInstance().awaitCapacity(
+                                estimate.rawSlots(),
+                                () -> QueryQueueOptions.createFromEnv(warehouseId).v2().getTotalSlots(),
+                                gateRatio,
+                                capWaitMs);
+                        long waitedMs = System.currentTimeMillis() - preScaleStartMs;
+                        LOG.info("Pre-scale wait for queryId={}, raw={}, totalSlotsAtStart={}, waited={}ms, satisfied={}",
+                                UUIDUtil.fromTUniqueid(coord.getQueryId()), estimate.rawSlots(),
+                                totalSlots, waitedMs, satisfied);
+                    }
+                }
             }
 
             // LocalSlotProvider does not need to queue, just return directly. Currently, it is only used to adjust DOP

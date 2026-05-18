@@ -62,6 +62,8 @@ public class QueryQueueManagerPreScaleTest extends SchedulerTestBase {
     private int prevQueueMaxQueuedQueries;
     private int prevQueueTimeoutSecond;
     private double prevBigQueryThresholdRatio;
+    private long prevPreScaleMaxWaitMs;
+    private double prevPreScaleThresholdRatio;
 
     @BeforeAll
     public static void beforeClass() throws Exception {
@@ -81,6 +83,8 @@ public class QueryQueueManagerPreScaleTest extends SchedulerTestBase {
         prevQueueMaxQueuedQueries = GlobalVariable.getQueryQueueMaxQueuedQueries();
         prevQueueTimeoutSecond = connectContext.getSessionVariable().getQueryTimeoutS();
         prevBigQueryThresholdRatio = Config.query_queue_big_query_slot_threshold_ratio;
+        prevPreScaleMaxWaitMs = Config.query_queue_pre_scale_max_wait_ms;
+        prevPreScaleThresholdRatio = Config.query_queue_pre_scale_slot_threshold_ratio;
 
         GlobalVariable.setQueryQueuePendingTimeoutSecond(Config.max_load_timeout_second);
         connectContext.getSessionVariable().setQueryTimeoutS(Config.max_load_timeout_second);
@@ -123,6 +127,8 @@ public class QueryQueueManagerPreScaleTest extends SchedulerTestBase {
         GlobalVariable.setQueryQueueMaxQueuedQueries(prevQueueMaxQueuedQueries);
         connectContext.getSessionVariable().setQueryTimeoutS(prevQueueTimeoutSecond);
         Config.query_queue_big_query_slot_threshold_ratio = prevBigQueryThresholdRatio;
+        Config.query_queue_pre_scale_max_wait_ms = prevPreScaleMaxWaitMs;
+        Config.query_queue_pre_scale_slot_threshold_ratio = prevPreScaleThresholdRatio;
     }
 
     /**
@@ -356,6 +362,69 @@ public class QueryQueueManagerPreScaleTest extends SchedulerTestBase {
                 () -> WarehouseSlotMetricMgr.getBigQueryWaitHistogram(WAREHOUSE_ID).getCount() > baseline);
         assertThat(WarehouseSlotMetricMgr.getBigQueryWaitHistogram(WAREHOUSE_ID).getCount())
                 .isGreaterThan(baseline);
+    }
+
+    /**
+     * Pre-scale wait (C3) triggers when configured + big query + GlobalSlotProvider + QQv2.
+     * With {@code pre_scale_max_wait_ms = 1000} and threshold ratio = 0.0 (every query qualifies),
+     * BackendResourceStat doesn't change during the test, so awaitCapacity never satisfies the gate
+     * and exhausts the full wait window. The {@code maybeWait} call should therefore take ~1s longer
+     * than an immediate admission.
+     */
+    @Test
+    public void testPreScaleWaitTriggeredForBigQuery() throws Exception {
+        Config.enable_query_queue_v2 = true;
+        GlobalVariable.setEnableQueryQueueSelect(true);
+        GlobalVariable.setQueryQueueConcurrencyLimit(8);
+        GlobalVariable.setQueryQueueMaxQueuedQueries(8);
+
+        BackendResourceStat.getInstance().setNumCoresOfBe(WAREHOUSE_ID, 1, 8);
+        BackendResourceStat.getInstance().setMemLimitBytesOfBe(WAREHOUSE_ID, 1, 64L * 1024 * 1024 * 1024);
+
+        // Enable pre-scale wait. Threshold ratio = 0.0 forces the gate to fire for any non-zero rawSlots.
+        Config.query_queue_pre_scale_max_wait_ms = 1000L;
+        Config.query_queue_pre_scale_slot_threshold_ratio = 0.0;
+
+        DefaultCoordinator coord = getSchedulerWithQueryId("select count(1) from lineitem");
+        long start = System.currentTimeMillis();
+        manager.maybeWait(connectContext, coord);
+        long elapsed = System.currentTimeMillis() - start;
+
+        Assertions.assertEquals(LogicalSlot.State.ALLOCATED, coord.getSlot().getState());
+        // Allow margin for jitter; pre-scale wait should have consumed roughly the configured window.
+        assertThat(elapsed).isGreaterThanOrEqualTo(800L);
+
+        coord.onFinished();
+    }
+
+    /**
+     * With {@code pre_scale_max_wait_ms = 0} (default), the pre-scale gate is skipped entirely.
+     * A query that would otherwise qualify must admit immediately.
+     */
+    @Test
+    public void testPreScaleWaitDisabledWhenConfigZero() throws Exception {
+        Config.enable_query_queue_v2 = true;
+        GlobalVariable.setEnableQueryQueueSelect(true);
+        GlobalVariable.setQueryQueueConcurrencyLimit(8);
+        GlobalVariable.setQueryQueueMaxQueuedQueries(8);
+
+        BackendResourceStat.getInstance().setNumCoresOfBe(WAREHOUSE_ID, 1, 8);
+        BackendResourceStat.getInstance().setMemLimitBytesOfBe(WAREHOUSE_ID, 1, 64L * 1024 * 1024 * 1024);
+
+        // Pre-scale disabled (default). Even with a ratio that would otherwise trigger, no wait.
+        Config.query_queue_pre_scale_max_wait_ms = 0L;
+        Config.query_queue_pre_scale_slot_threshold_ratio = 0.0;
+
+        DefaultCoordinator coord = getSchedulerWithQueryId("select count(1) from lineitem");
+        long start = System.currentTimeMillis();
+        manager.maybeWait(connectContext, coord);
+        long elapsed = System.currentTimeMillis() - start;
+
+        Assertions.assertEquals(LogicalSlot.State.ALLOCATED, coord.getSlot().getState());
+        // Should return promptly; allow generous margin to absorb scheduling overhead in CI.
+        assertThat(elapsed).isLessThan(800L);
+
+        coord.onFinished();
     }
 
     /**
