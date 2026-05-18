@@ -560,6 +560,62 @@ public class HdfsFsManagerTest {
     }
 
     /**
+     * Regression for cluster snapshot upload error reporting: copyToLocal wraps the
+     * underlying Hadoop exception in a StarRocksException, and the wrapper message
+     * must include the cause's message so callers that surface only
+     * StarRocksException#getMessage (e.g. ClusterSnapshotJob.error_message) still
+     * see the real reason (AccessDenied, NoSuchBucket, timeout, etc.).
+     */
+    @Test
+    public void testCopyToLocalIncludesCauseMessage() throws Exception {
+        HdfsFsManager mgr = Mockito.spy(fileSystemManager);
+        FileSystem fs = Mockito.mock(FileSystem.class);
+        HdfsFs hdfs = Mockito.mock(HdfsFs.class);
+        Mockito.when(hdfs.getDFSFileSystem()).thenReturn(fs);
+        Mockito.doReturn(hdfs).when(mgr)
+                .getFileSystem(Mockito.anyString(), Mockito.anyMap(), Mockito.isNull());
+
+        String causeMsg = "AccessDenied: anonymous is not authorized to perform s3:GetObject";
+        Mockito.doThrow(new IOException(causeMsg))
+                .when(fs).copyToLocalFile(Mockito.anyBoolean(), Mockito.any(Path.class),
+                        Mockito.any(Path.class), Mockito.anyBoolean());
+
+        StarRocksException ex = Assertions.assertThrows(StarRocksException.class,
+                () -> mgr.copyToLocal("s3a://bucket/key", "/tmp/dest", new HashMap<>()));
+        Assertions.assertTrue(ex.getMessage().contains(causeMsg),
+                "wrapper message must include cause: " + ex.getMessage());
+        Assertions.assertTrue(ex.getMessage().contains("Failed to copy s3a://bucket/key to local /tmp/dest"),
+                "wrapper message must include both paths: " + ex.getMessage());
+        Assertions.assertNotNull(ex.getCause(), "cause must still be attached");
+    }
+
+    /**
+     * Companion to {@link #testCopyToLocalIncludesCauseMessage()} for copyFromLocal.
+     * Uses a non-existent local source so FileUtil.copy throws naturally, then checks
+     * that the wrapper message preserves the underlying message.
+     */
+    @Test
+    public void testCopyFromLocalIncludesCauseMessage() throws Exception {
+        HdfsFsManager mgr = Mockito.spy(fileSystemManager);
+        FileSystem fs = Mockito.mock(FileSystem.class);
+        HdfsFs hdfs = Mockito.mock(HdfsFs.class);
+        Mockito.when(hdfs.getDFSFileSystem()).thenReturn(fs);
+        Mockito.doReturn(hdfs).when(mgr)
+                .getFileSystem(Mockito.anyString(), Mockito.anyMap(), Mockito.isNull());
+
+        String nonExistentSrc = "/this/path/should/not/exist/" + System.nanoTime();
+        StarRocksException ex = Assertions.assertThrows(StarRocksException.class,
+                () -> mgr.copyFromLocal(nonExistentSrc, "s3a://bucket/key", new HashMap<>()));
+        Assertions.assertNotNull(ex.getCause(), "cause must still be attached");
+        Assertions.assertNotNull(ex.getCause().getMessage(), "cause must carry a message");
+        Assertions.assertTrue(ex.getMessage().contains(ex.getCause().getMessage()),
+                "wrapper message must include cause's message: " + ex.getMessage());
+        Assertions.assertTrue(ex.getMessage().contains("Failed to copy local " + nonExistentSrc
+                        + " to s3a://bucket/key"),
+                "wrapper message must include both paths: " + ex.getMessage());
+    }
+
+    /**
      * Fallback thread watchdog: when the close pool is full and the fallback daemon thread
      * hangs, the watchdog interrupts it after the configured timeout so stuck threads
      * don't accumulate.
