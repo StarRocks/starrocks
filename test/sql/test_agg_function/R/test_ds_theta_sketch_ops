@@ -5,22 +5,33 @@ CREATE TABLE t1 (
 )
 DUPLICATE KEY(id)
 DISTRIBUTED BY HASH(id) BUCKETS 4;
-
+-- result:
+-- !result
 insert into t1 select generate_series, "A" from table(generate_series(1, 50000));
+-- result:
+-- !result
 insert into t1 select generate_series, "B" from table(generate_series(25001, 75000));
-
+-- result:
+-- !result
 -- accumulate: produces serialized compact theta sketch per group
 select grp, cast(length(ds_theta_accumulate(id)) > 0 as int) from t1 group by grp order by grp;
-
+-- result:
+A	1
+B	1
+-- !result
 -- estimate(accumulate) == count_distinct (within theta error)
 select cast(abs(ds_theta_estimate(ds_theta_accumulate(id)) - ds_theta_count_distinct(id)) < 5000 as int) from t1;
-
+-- result:
+1
+-- !result
 -- combine: union sketches at the agg layer, estimate matches union of inputs
 with sk as (
   select grp, ds_theta_accumulate(id) as s from t1 group by grp
 )
 select cast(ds_theta_estimate(ds_theta_combine(s)) between 70000 and 80000 as int) from sk;
-
+-- result:
+1
+-- !result
 -- pairwise scalar union
 with sk as (
   select grp, ds_theta_accumulate(id) as s from t1 group by grp
@@ -29,7 +40,9 @@ pivoted as (
   select max(case when grp='A' then s end) as a, max(case when grp='B' then s end) as b from sk
 )
 select cast(ds_theta_estimate(ds_theta_union(a, b)) between 70000 and 80000 as int) from pivoted;
-
+-- result:
+1
+-- !result
 -- pairwise scalar intersection
 with sk as (
   select grp, ds_theta_accumulate(id) as s from t1 group by grp
@@ -38,7 +51,9 @@ pivoted as (
   select max(case when grp='A' then s end) as a, max(case when grp='B' then s end) as b from sk
 )
 select cast(ds_theta_estimate(ds_theta_intersect(a, b)) between 22500 and 27500 as int) from pivoted;
-
+-- result:
+1
+-- !result
 -- pairwise A-not-B
 with sk as (
   select grp, ds_theta_accumulate(id) as s from t1 group by grp
@@ -47,8 +62,19 @@ pivoted as (
   select max(case when grp='A' then s end) as a, max(case when grp='B' then s end) as b from sk
 )
 select cast(ds_theta_estimate(ds_theta_a_not_b(a, b)) between 22500 and 27500 as int) from pivoted;
-
+-- result:
+1
+-- !result
 -- NULL propagation: all set ops return NULL when either input is NULL
 select ds_theta_estimate(ds_theta_union(NULL, ds_theta_accumulate(id))) from t1;
+-- result:
+None
+-- !result
 select cast(ds_theta_intersect(NULL, NULL) is NULL as int);
+-- result:
+1
+-- !result
 select cast(ds_theta_a_not_b(NULL, ds_theta_accumulate(id)) is NULL as int) from t1;
+-- result:
+1
+-- !result
