@@ -20,10 +20,10 @@ import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.common.FeConstants;
 import com.starrocks.lake.bookmark.Bookmark;
 import com.starrocks.lake.bookmark.BookmarkChange;
+import com.starrocks.lake.bookmark.BookmarkHolder;
 import com.starrocks.lake.bookmark.BookmarkManager;
 import com.starrocks.lake.bookmark.BookmarkTestBase;
 import com.starrocks.lake.bookmark.PhysicalPartitionMeta;
-import com.starrocks.lake.bookmark.ReferenceHolder;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.optimizer.OptExpression;
@@ -126,8 +126,8 @@ public class ChangesBookmarkResolutionTest extends BookmarkTestBase {
         t.maySetDatabaseId(dbId);
 
         BookmarkManager bm = GlobalStateMgr.getCurrentState().getBookmarkManager();
-        ReferenceHolder h1 = new ReferenceHolder.Custom("base_later_than_head_1");
-        ReferenceHolder h2 = new ReferenceHolder.Custom("base_later_than_head_2");
+        BookmarkHolder h1 = BookmarkHolder.forEmptyInfo("base_later_than_head_1");
+        BookmarkHolder h2 = BookmarkHolder.forEmptyInfo("base_later_than_head_2");
         Bookmark b1 = bm.create(dbId, tableId, h1);
         bumpVisibleVersion(t, 3L);
         Bookmark b2 = bm.create(dbId, tableId, h2);
@@ -142,8 +142,8 @@ public class ChangesBookmarkResolutionTest extends BookmarkTestBase {
             assertTrue(ex.getMessage().contains("CHANGES base must not be later than head"),
                     "expected spec wording 'CHANGES base must not be later than head', got: " + ex.getMessage());
         } finally {
-            bm.releaseReference(dbId, tableId, b1.getBookmarkId(), h1);
-            bm.releaseReference(dbId, tableId, b2.getBookmarkId(), h2);
+            bm.releaseReference(dbId, tableId, b1.getBookmarkId(), h1.getHolderId());
+            bm.releaseReference(dbId, tableId, b2.getBookmarkId(), h2.getHolderId());
         }
     }
 
@@ -158,8 +158,8 @@ public class ChangesBookmarkResolutionTest extends BookmarkTestBase {
         t.maySetDatabaseId(dbId);
 
         BookmarkManager bm = GlobalStateMgr.getCurrentState().getBookmarkManager();
-        ReferenceHolder h1 = new ReferenceHolder.Custom("base_after_head_1");
-        ReferenceHolder h2 = new ReferenceHolder.Custom("base_after_head_2");
+        BookmarkHolder h1 = BookmarkHolder.forEmptyInfo("base_after_head_1");
+        BookmarkHolder h2 = BookmarkHolder.forEmptyInfo("base_after_head_2");
         Bookmark b1 = bm.create(dbId, tableId, h1);
         // Bump visible version so the next create() observes a state change and
         // returns a distinct bookmark id. PARTITION_INIT_VERSION is 1, so any
@@ -177,8 +177,8 @@ public class ChangesBookmarkResolutionTest extends BookmarkTestBase {
             assertTrue(ex.getMessage().contains("CHANGES base must not be later than head"),
                     "expected order-check message, got: " + ex.getMessage());
         } finally {
-            bm.releaseReference(dbId, tableId, b1.getBookmarkId(), h1);
-            bm.releaseReference(dbId, tableId, b2.getBookmarkId(), h2);
+            bm.releaseReference(dbId, tableId, b1.getBookmarkId(), h1.getHolderId());
+            bm.releaseReference(dbId, tableId, b2.getBookmarkId(), h2.getHolderId());
         }
     }
 
@@ -191,8 +191,8 @@ public class ChangesBookmarkResolutionTest extends BookmarkTestBase {
         t.maySetDatabaseId(dbId);
 
         BookmarkManager bm = GlobalStateMgr.getCurrentState().getBookmarkManager();
-        ReferenceHolder hBase = new ReferenceHolder.Custom("trackable_base");
-        ReferenceHolder hHead = new ReferenceHolder.Custom("trackable_head");
+        BookmarkHolder hBase = BookmarkHolder.forEmptyInfo("trackable_base");
+        BookmarkHolder hHead = BookmarkHolder.forEmptyInfo("trackable_head");
 
         Bookmark base = bm.create(dbId, tableId, hBase);
         // Advance visibleVersion so the head bookmark differs from base; the
@@ -217,8 +217,8 @@ public class ChangesBookmarkResolutionTest extends BookmarkTestBase {
                     "expected LogicalChangesScan in transformed plan, got root op: "
                             + plan.getRoot().getOp().getOpType());
         } finally {
-            bm.releaseReference(dbId, tableId, base.getBookmarkId(), hBase);
-            bm.releaseReference(dbId, tableId, head.getBookmarkId(), hHead);
+            bm.releaseReference(dbId, tableId, base.getBookmarkId(), hBase.getHolderId());
+            bm.releaseReference(dbId, tableId, head.getBookmarkId(), hHead.getHolderId());
         }
     }
 
@@ -231,8 +231,8 @@ public class ChangesBookmarkResolutionTest extends BookmarkTestBase {
         live.maySetDatabaseId(dbId);
 
         BookmarkManager bm = GlobalStateMgr.getCurrentState().getBookmarkManager();
-        ReferenceHolder hBase = new ReferenceHolder.Custom("scoped_base");
-        ReferenceHolder hHead = new ReferenceHolder.Custom("scoped_head");
+        BookmarkHolder hBase = BookmarkHolder.forEmptyInfo("scoped_base");
+        BookmarkHolder hHead = BookmarkHolder.forEmptyInfo("scoped_head");
 
         Bookmark base = bm.create(dbId, tableId, hBase);
         bumpVisibleVersion(live, 7L);
@@ -275,8 +275,8 @@ public class ChangesBookmarkResolutionTest extends BookmarkTestBase {
             }
             assertEquals(expected, actual);
         } finally {
-            bm.releaseReference(dbId, tableId, base.getBookmarkId(), hBase);
-            bm.releaseReference(dbId, tableId, head.getBookmarkId(), hHead);
+            bm.releaseReference(dbId, tableId, base.getBookmarkId(), hBase.getHolderId());
+            bm.releaseReference(dbId, tableId, head.getBookmarkId(), hHead.getHolderId());
         }
     }
 
