@@ -17,6 +17,7 @@
 #include <gtest/gtest.h>
 
 #include <any>
+#include <cstring>
 
 #include "column/column_helper.h"
 #include "column/nullable_column.h"
@@ -177,6 +178,54 @@ TEST(HashMapTest, TwoLevelConvert) {
         ASSERT_TRUE(two_level_set.contains(key));
     }
 }
+
+// Codes above 127 must survive the int32->uint8->int32 round-trip exposed by
+// reinterpret_cast on the state block. int8_t would yield negative results.
+TEST(LowCardDictAggHashMapTest, RoundTripHighCodes) {
+    RuntimeProfile profile("LowCardDictAggHashMapTest");
+    AggStatistics statis(&profile);
+
+    using HashMapWithKey = LowCardDictAggHashMapWithKey<PhmapSeed1>;
+    HashMapWithKey hash_map_with_key(1024, &statis);
+
+    MemPool pool;
+    const int32_t chunk_size = 4;
+    Buffer<AggDataPtr> agg_states(chunk_size);
+
+    auto col = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), false);
+    col->append_datum(Datum(int32_t{0}));
+    col->append_datum(Datum(int32_t{1}));
+    col->append_datum(Datum(int32_t{200}));
+    col->append_datum(Datum(int32_t{255}));
+
+    Columns key_columns;
+    key_columns.emplace_back(std::move(col));
+
+    // mirrors AllocateState in aggregator.cpp: leading bytes of the state block
+    // hold the key. This is the read path the iteration loop relies on.
+    auto allocate_func = [&pool](const auto& key) {
+        AggDataPtr p = pool.allocate(16);
+        std::memset(p, 0, 16);
+        if constexpr (!std::is_same_v<std::decay_t<decltype(key)>, std::nullptr_t>) {
+            using K = std::decay_t<decltype(key)>;
+            *reinterpret_cast<K*>(p) = key;
+        }
+        return p;
+    };
+    hash_map_with_key.build_hash_map(chunk_size, key_columns, &pool, allocate_func, &agg_states);
+
+    ASSERT_EQ(hash_map_with_key.hash_map.size(), 4);
+    // simulate the readback path that aggregator.cpp uses on iteration
+    auto read_key = [](AggDataPtr state) -> int32_t {
+        using KeyType = typename HashMapWithKey::HashMapType::key_type;
+        return static_cast<int32_t>(*reinterpret_cast<KeyType*>(state));
+    };
+    ASSERT_EQ(read_key(agg_states[0]), 0);
+    ASSERT_EQ(read_key(agg_states[1]), 1);
+    ASSERT_EQ(read_key(agg_states[2]), 200);
+    ASSERT_EQ(read_key(agg_states[3]), 255);
+}
+
 
 class AggHashMapKeyNotFoundsTest : public ::testing::Test {
 public:

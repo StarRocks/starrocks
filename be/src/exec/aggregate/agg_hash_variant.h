@@ -109,6 +109,12 @@ using SerializedKeyFixedSize8AggHashMap = AggHashMapWithSerializedKeyFixedSize<F
 template <PhmapSeed seed>
 using SerializedKeyFixedSize16AggHashMap = AggHashMapWithSerializedKeyFixedSize<FixedSize16SliceAggHashMap<seed>>;
 
+// low-cardinality global-dict GROUP BY key (Int32Column of codes in [0, 256))
+template <PhmapSeed seed>
+using LowCardDictAggHashMapWithKey = AggHashMapWithOneLowCardDictKey<LowCardDictUInt8AggHashMap<seed>>;
+template <PhmapSeed seed>
+using NullLowCardDictAggHashMapWithKey = AggHashMapWithOneNullableLowCardDictKey<LowCardDictUInt8AggHashMap<seed>>;
+
 // fixed compress key
 template <PhmapSeed seed>
 using CompressedFixedSize1AggHashMap = AggHashMapWithCompressedKeyFixedSize<Int8AggHashMap<seed>>;
@@ -304,6 +310,8 @@ using AggHashMapWithKeyPtr = std::variant<
         std::unique_ptr<CompressedFixedSize4AggHashMap<PhmapSeed1>>,
         std::unique_ptr<CompressedFixedSize8AggHashMap<PhmapSeed1>>,
         std::unique_ptr<CompressedFixedSize16AggHashMap<PhmapSeed1>>,
+        std::unique_ptr<LowCardDictAggHashMapWithKey<PhmapSeed1>>,
+        std::unique_ptr<NullLowCardDictAggHashMapWithKey<PhmapSeed1>>,
         std::unique_ptr<UInt8AggHashMapWithOneNumberKey<PhmapSeed2>>,
         std::unique_ptr<Int8AggHashMapWithOneNumberKey<PhmapSeed2>>,
         std::unique_ptr<Int16AggHashMapWithOneNumberKey<PhmapSeed2>>,
@@ -340,7 +348,9 @@ using AggHashMapWithKeyPtr = std::variant<
         std::unique_ptr<CompressedFixedSize1AggHashMap<PhmapSeed2>>,
         std::unique_ptr<CompressedFixedSize4AggHashMap<PhmapSeed2>>,
         std::unique_ptr<CompressedFixedSize8AggHashMap<PhmapSeed2>>,
-        std::unique_ptr<CompressedFixedSize16AggHashMap<PhmapSeed2>>>;
+        std::unique_ptr<CompressedFixedSize16AggHashMap<PhmapSeed2>>,
+        std::unique_ptr<LowCardDictAggHashMapWithKey<PhmapSeed2>>,
+        std::unique_ptr<NullLowCardDictAggHashMapWithKey<PhmapSeed2>>>;
 
 using AggHashSetWithKeyPtr = std::variant<
         std::unique_ptr<UInt8AggHashSetOfOneNumberKey<PhmapSeed1>>,
@@ -462,6 +472,9 @@ struct AggHashMapVariant {
         phase1_slice_cx8,
         phase1_slice_cx16,
 
+        phase1_low_card_dict_uint8,
+        phase1_null_low_card_dict_uint8,
+
         phase2_uint8,
         phase2_int8,
         phase2_int16,
@@ -502,6 +515,9 @@ struct AggHashMapVariant {
         phase2_slice_cx4,
         phase2_slice_cx8,
         phase2_slice_cx16,
+
+        phase2_low_card_dict_uint8,
+        phase2_null_low_card_dict_uint8,
     };
 
     detail::AggHashMapWithKeyPtr hash_map_with_key;

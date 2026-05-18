@@ -225,6 +225,10 @@ struct AggregatorParams {
     std::vector<TExpr> intermediate_aggr_exprs;
     std::vector<TExpr> grouping_min_max;
 
+    // SlotIds whose corresponding group-by key is a global-dict code (TYPE_INT
+    // bounded by DICT_DECODE_MAX_SIZE). Routes to a direct array-table.
+    std::vector<int32_t> low_card_dict_group_by_slots;
+
     // Incremental MV
     // Whether it's testing, use MemStateTable in testing, instead use IMTStateTable.
     bool is_testing;

@@ -34,12 +34,14 @@
 #include "exprs/agg/aggregate_factory.h"
 #include "exprs/agg/aggregate_state_allocator.h"
 #include "exprs/agg/combinator/agg_state_utils.h"
+#include "exprs/column_ref.h"
 #include "exprs/expr_executor.h"
 #include "exprs/expr_factory.h"
 #include "exprs/literal.h"
 #include "gen_cpp/PlanNodes_types.h"
 #include "runtime/current_thread.h"
 #include "runtime/descriptors.h"
+#include "runtime/global_dict/config.h"
 #include "runtime/runtime_state.h"
 #include "types/logical_type.h"
 #ifndef __APPLE__
@@ -193,6 +195,10 @@ AggregatorParamsPtr convert_to_aggregator_params(const TPlanNode& tnode) {
                 tnode.agg_node.__isset.enable_pipeline_share_limit ? tnode.agg_node.enable_pipeline_share_limit : false;
         params->grouping_min_max =
                 tnode.agg_node.__isset.group_by_min_max ? tnode.agg_node.group_by_min_max : std::vector<TExpr>{};
+        if (tnode.agg_node.__isset.low_card_dict_group_by_slots) {
+            params->low_card_dict_group_by_slots.assign(tnode.agg_node.low_card_dict_group_by_slots.begin(),
+                                                        tnode.agg_node.low_card_dict_group_by_slots.end());
+        }
 
         break;
     }
@@ -471,6 +477,16 @@ Status Aggregator::prepare(RuntimeState* state, RuntimeProfile* runtime_profile)
     _group_by_columns.resize(group_by_size);
     _group_by_types = _params->group_by_types;
     _has_nullable_key = _params->has_nullable_key;
+
+    // Surface global-dict GROUP BY routing in the Aggregator profile so a
+    // profile diff makes it obvious which queries qualified for the
+    // array-table path even when FE-side marker analysis missed (the BE
+    // routing decision in _get_hash_table_type() is the authoritative one,
+    // but this info string is the visible signal).
+    if (_runtime_profile != nullptr && !_params->low_card_dict_group_by_slots.empty()) {
+        _runtime_profile->add_info_string("LowCardDictGroupBySlots",
+                                          std::to_string(_params->low_card_dict_group_by_slots.size()));
+    }
 
     _tmp_agg_states.resize(_state->chunk_size());
 
@@ -1494,8 +1510,31 @@ typename HashVariantType::Type Aggregator::_get_hash_table_type() {
     // using one key hash table
     if (_group_by_types.size() == 1) {
         bool nullable = _group_by_types[0].is_nullable;
-        LogicalType type = _group_by_types[0].result_type.type;
-        return HashVariantResolver<HashVariantType>::instance().get_unary_type(_aggr_phase, type, nullable);
+        LogicalType ltype = _group_by_types[0].result_type.type;
+
+        // Single low-cardinality global-dict GROUP BY: route to a direct
+        // array-table (SmallFixedSizeHashMap<uint8_t,...>). FE marks the slot
+        // explicitly; we verify the lone group-by expression is a bare
+        // SlotRef matching that slot.
+        if constexpr (std::is_same_v<HashVariantType, AggHashMapVariant>) {
+            const bool session_gate = _state == nullptr || _state->enable_agg_low_card_dict_array_table();
+            if (session_gate && ltype == LowCardDictType && !_params->low_card_dict_group_by_slots.empty() &&
+                _group_by_expr_ctxs.size() == 1 && _group_by_expr_ctxs[0]->root()->is_slotref()) {
+                auto* ref = down_cast<ColumnRef*>(_group_by_expr_ctxs[0]->root());
+                SlotId sid = ref->slot_id();
+                if (std::find(_params->low_card_dict_group_by_slots.begin(),
+                              _params->low_card_dict_group_by_slots.end(),
+                              sid) != _params->low_card_dict_group_by_slots.end()) {
+                    return _aggr_phase == AggrPhase1
+                                   ? (nullable ? HashVariantType::Type::phase1_null_low_card_dict_uint8
+                                               : HashVariantType::Type::phase1_low_card_dict_uint8)
+                                   : (nullable ? HashVariantType::Type::phase2_null_low_card_dict_uint8
+                                               : HashVariantType::Type::phase2_low_card_dict_uint8);
+                }
+            }
+        }
+
+        return HashVariantResolver<HashVariantType>::instance().get_unary_type(_aggr_phase, ltype, nullable);
     }
     return type;
 }
@@ -1601,11 +1640,27 @@ template <typename HashVariantType>
 void Aggregator::_init_agg_hash_variant(HashVariantType& hash_variant) {
     auto type = _get_hash_table_type<HashVariantType>();
 
+    // The low-card global-dict array-table is a more specific choice than
+    // bit-compressed key: ApplyMinMaxStatisticRule fills 0..dictSize ranges
+    // for the same group-by, which makes _try_to_apply_compressed_key_opt
+    // overwrite the dict-uint8 routing back to slice_cx1/cx4 and trade a
+    // direct 256-cell lookup for a phmap-on-compressed-key path. Skip the
+    // compression rewrite when we already picked the low-card map.
+    bool is_low_card_dict_path = false;
+    if constexpr (std::is_same_v<HashVariantType, AggHashMapVariant>) {
+        using T = typename HashVariantType::Type;
+        is_low_card_dict_path =
+                (type == T::phase1_low_card_dict_uint8 || type == T::phase2_low_card_dict_uint8 ||
+                 type == T::phase1_null_low_card_dict_uint8 || type == T::phase2_null_low_card_dict_uint8);
+    }
+
     CompressKeyContext compress_key_ctx;
     bool apply_compress_key_opt = false;
     typename HashVariantType::Type prev_type = type;
-    type = _try_to_apply_compressed_key_opt<HashVariantType>(type, &compress_key_ctx);
-    apply_compress_key_opt = prev_type != type;
+    if (!is_low_card_dict_path) {
+        type = _try_to_apply_compressed_key_opt<HashVariantType>(type, &compress_key_ctx);
+        apply_compress_key_opt = prev_type != type;
+    }
     if (apply_compress_key_opt) {
         // build with compressed key
         VLOG_ROW << "apply compressed key";

@@ -509,6 +509,13 @@ public:
                _query_options.enable_hash_join_serialize_fixed_size_string;
     }
 
+    // Aggregation: single-key low-cardinality global-dict array-table routing.
+    bool enable_agg_low_card_dict_array_table() const {
+        return !_query_options.__isset.enable_agg_low_card_dict_array_table ||
+               _query_options.enable_agg_low_card_dict_array_table;
+    }
+
+
     const std::vector<TTabletCommitInfo>& tablet_commit_infos() const { return _tablet_commit_infos; }
 
     std::vector<TTabletCommitInfo>& tablet_commit_infos() { return _tablet_commit_infos; }

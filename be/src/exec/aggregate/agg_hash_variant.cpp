@@ -100,6 +100,16 @@
     M(phase2_slice_cx8)              \
     M(phase2_slice_cx16)
 
+#define APPLY_FOR_AGG_MAP_VARIANT_EXTRA(M) \
+    M(phase1_low_card_dict_uint8)          \
+    M(phase1_null_low_card_dict_uint8)     \
+    M(phase2_low_card_dict_uint8)          \
+    M(phase2_null_low_card_dict_uint8)
+
+#define APPLY_FOR_AGG_MAP_VARIANT_ALL(M) \
+    APPLY_FOR_AGG_VARIANT_ALL(M)         \
+    APPLY_FOR_AGG_MAP_VARIANT_EXTRA(M)
+
 namespace starrocks {
 namespace detail {
 template <AggHashMapVariant::Type>
@@ -187,6 +197,11 @@ DEFINE_MAP_TYPE(AggHashMapVariant::Type::phase2_slice_cx1, CompressedFixedSize1A
 DEFINE_MAP_TYPE(AggHashMapVariant::Type::phase2_slice_cx4, CompressedFixedSize4AggHashMap<PhmapSeed2>);
 DEFINE_MAP_TYPE(AggHashMapVariant::Type::phase2_slice_cx8, CompressedFixedSize8AggHashMap<PhmapSeed2>);
 DEFINE_MAP_TYPE(AggHashMapVariant::Type::phase2_slice_cx16, CompressedFixedSize16AggHashMap<PhmapSeed2>);
+
+DEFINE_MAP_TYPE(AggHashMapVariant::Type::phase1_low_card_dict_uint8, LowCardDictAggHashMapWithKey<PhmapSeed1>);
+DEFINE_MAP_TYPE(AggHashMapVariant::Type::phase1_null_low_card_dict_uint8, NullLowCardDictAggHashMapWithKey<PhmapSeed1>);
+DEFINE_MAP_TYPE(AggHashMapVariant::Type::phase2_low_card_dict_uint8, LowCardDictAggHashMapWithKey<PhmapSeed2>);
+DEFINE_MAP_TYPE(AggHashMapVariant::Type::phase2_null_low_card_dict_uint8, NullLowCardDictAggHashMapWithKey<PhmapSeed2>);
 
 template <AggHashSetVariant::Type>
 struct AggHashSetVariantTypeTraits;
@@ -287,7 +302,7 @@ void AggHashMapVariant::init(RuntimeState* state, Type type, AggStatistics* agg_
         hash_map_with_key = std::make_unique<detail::AggHashMapVariantTypeTraits<Type::NAME>::HashMapWithKeyType>( \
                 state->chunk_size(), _agg_stat);                                                                   \
         break;
-        APPLY_FOR_AGG_VARIANT_ALL(M)
+        APPLY_FOR_AGG_MAP_VARIANT_ALL(M)
 #undef M
     }
 }

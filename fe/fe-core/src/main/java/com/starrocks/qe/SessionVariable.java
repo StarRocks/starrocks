@@ -596,6 +596,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_JOIN_RUNTIME_FILTER_PUSH_DOWN = "enable_join_runtime_filter_push_down";
     public static final String ENABLE_JOIN_RUNTIME_BITSET_FILTER = "enable_join_runtime_bitset_filter";
 
+    public static final String ENABLE_AGG_LOW_CARD_DICT_ARRAY_TABLE = "enable_agg_low_card_dict_array_table";
+
+
     public static final String ENABLE_HASH_JOIN_RANGE_DIRECT_MAPPING_OPT = "enable_hash_join_range_direct_mapping_opt";
     public static final String ENABLE_HASH_JOIN_LINEAR_CHAINED_OPT = "enable_hash_join_linear_chained_opt";
     public static final String ENABLE_HASH_JOIN_SERIALIZE_FIXED_SIZE_STRING = "enable_hash_join_serialize_fixed_size_string";
@@ -1994,6 +1997,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     private boolean enableJoinRuntimeFilterPushDown = true;
     @VariableMgr.VarAttr(name = ENABLE_JOIN_RUNTIME_BITSET_FILTER, flag = VariableMgr.INVISIBLE)
     private boolean enableJoinRuntimeBitsetFilter = true;
+
+    @VarAttr(name = ENABLE_AGG_LOW_CARD_DICT_ARRAY_TABLE)
+    private boolean enableAggLowCardDictArrayTable = true;
+
+    public boolean isEnableAggLowCardDictArrayTable() {
+        return enableAggLowCardDictArrayTable;
+    }
+
 
     @VarAttr(name = ENABLE_HASH_JOIN_RANGE_DIRECT_MAPPING_OPT)
     private boolean enableHashJoinRangeDirectMappingOpt = true;
@@ -6482,6 +6493,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         tResult.setEnable_hash_join_range_direct_mapping_opt(enableHashJoinRangeDirectMappingOpt);
         tResult.setEnable_hash_join_linear_chained_opt(enableHashJoinLinearChainedOpt);
         tResult.setEnable_hash_join_serialize_fixed_size_string(enableHashJoinSerializeFixedSizeString);
+        tResult.setEnable_agg_low_card_dict_array_table(enableAggLowCardDictArrayTable);
 
         // http_request function SSL verification (admin-enforced setting from Config)
         tResult.setHttp_request_ssl_verification_required(Config.http_request_ssl_verification_required);

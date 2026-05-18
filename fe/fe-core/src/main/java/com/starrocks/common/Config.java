@@ -2466,6 +2466,15 @@ public class Config extends ConfigBase {
     @ConfField
     public static int dict_collect_thread_pool_for_lake_size = 4;
 
+    // WARNING: BE's low-card-dict array-table aggregation path narrows dict
+    // codes to uint8_t (256-cell direct array, mirroring ClickHouse's
+    // low_cardinality_key8).  Raising this above 255 would let codes 256+
+    // silently collapse onto the same bucket and return wrong GROUP BY
+    // results.  PlanFragmentBuilder gates the FE-side slot marking on
+    // `low_cardinality_threshold <= 255` so the BE never sees a slot that
+    // it cannot represent, but if you change the upper bound here you must
+    // also revisit `AggHashMapWithLowCardDictKey` and the FE guard in
+    // PlanFragmentBuilder.visitPhysicalHashAggregate.
     @ConfField
     public static int low_cardinality_threshold = 255;
 

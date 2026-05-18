@@ -2675,6 +2675,31 @@ public class PlanFragmentBuilder {
             aggregationNode.computeStatistics(optExpr.getStatistics());
             aggregationNode.setGroupByMinMaxStats(node.getGroupByMinMaxStatistic());
 
+            // Flag group-by slots that are physically dict-encoded codes (TYPE_INT
+            // in [0, DICT_DECODE_MAX_SIZE)). BE uses this to route a single-key
+            // aggregation into a direct array-table indexed by uint8_t code, so
+            // dictionaries that can hold codes >= 256 would silently narrow and
+            // collapse distinct values; require the FE-side threshold to stay
+            // within that range.
+            // Session-gated so it can be bisected against a regression.
+            if (ConnectContext.get().getSessionVariable().isEnableAggLowCardDictArrayTable()
+                    && Config.low_cardinality_threshold <= 255
+                    && groupBys != null && !groupBys.isEmpty()
+                    && inputFragment.getQueryGlobalDicts() != null
+                    && !inputFragment.getQueryGlobalDicts().isEmpty()) {
+                Set<Integer> dictColumnIds = inputFragment.getQueryGlobalDicts().stream()
+                        .map(p -> p.first).collect(Collectors.toSet());
+                List<Integer> lowCardDictSlots = Lists.newArrayList();
+                for (ColumnRefOperator gb : groupBys) {
+                    if (gb.getType().isInt() && dictColumnIds.contains(gb.getId())) {
+                        lowCardDictSlots.add(gb.getId());
+                    }
+                }
+                if (!lowCardDictSlots.isEmpty()) {
+                    aggregationNode.setLowCardDictGroupBySlots(lowCardDictSlots);
+                }
+            }
+
             if (node.isOnePhaseAgg() || node.isMergedLocalAgg() || node.getType().isDistinctGlobal() ||
                     node.getType().isGlobal()) {
                 // For ScanNode->LocalShuffle->AggNode, we needn't assign scan ranges per driver sequence.

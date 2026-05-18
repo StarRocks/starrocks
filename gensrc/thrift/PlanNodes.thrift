@@ -953,6 +953,12 @@ struct TAggregationNode {
 
   31: optional list<Exprs.TExpr> group_by_min_max
 
+  // SlotIds of group-by keys that are physically encoded as global-dict codes
+  // (TYPE_INT in range [0, DICT_DECODE_MAX_SIZE)). BE uses this to route a
+  // single-key aggregation into a direct array-table (SmallFixedSizeHashMap)
+  // instead of a hash map.
+  32: optional list<i32> low_card_dict_group_by_slots
+
 }
 
 struct TRepeatNode {

@@ -359,6 +359,7 @@ struct TQueryOptions {
   162: optional bool enable_hash_join_range_direct_mapping_opt;
   163: optional bool enable_hash_join_linear_chained_opt;
   164: optional bool enable_hash_join_serialize_fixed_size_string;
+  165: optional bool enable_agg_low_card_dict_array_table;
 
   170: optional bool enable_parquet_reader_bloom_filter;
   171: optional bool enable_parquet_reader_page_index;

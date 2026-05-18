@@ -119,6 +119,10 @@ public class AggregationNode extends PlanNode implements RuntimeFilterBuildNode 
     private SortInfo topNSortInfo;
     private long topNLimit = -1;
 
+    // SlotIds of group-by keys that are physically encoded as global-dict codes.
+    // Routes the BE aggregator to a direct array-table for the single-key case.
+    private List<Integer> lowCardDictGroupBySlots = Lists.newArrayList();
+
     /**
      * Create an agg node that is not an intermediate node.
      * isIntermediate is true if it is a slave node in a 2-part agg plan.
@@ -188,6 +192,10 @@ public class AggregationNode extends PlanNode implements RuntimeFilterBuildNode 
 
     public void setGroupByMinMaxStats(List<Pair<ConstantOperator, ConstantOperator>> groupByMinMaxStats) {
         this.groupByMinMaxStats = groupByMinMaxStats;
+    }
+
+    public void setLowCardDictGroupBySlots(List<Integer> slots) {
+        this.lowCardDictGroupBySlots = slots;
     }
 
     @Override
@@ -332,6 +340,10 @@ public class AggregationNode extends PlanNode implements RuntimeFilterBuildNode 
             List<TRuntimeFilterDescription> tRuntimeFilterDescriptions =
                     RuntimeFilterDescription.toThriftRuntimeFilterDescriptions(buildRuntimeFilters);
             msg.agg_node.setBuild_runtime_filters(tRuntimeFilterDescriptions);
+        }
+
+        if (lowCardDictGroupBySlots != null && !lowCardDictGroupBySlots.isEmpty()) {
+            msg.agg_node.setLow_card_dict_group_by_slots(lowCardDictGroupBySlots);
         }
 
         msg.agg_node.setHas_outer_join_child(hasNullableGenerateChild);
