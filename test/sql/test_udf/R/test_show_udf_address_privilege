@@ -1,0 +1,153 @@
+-- name: test_show_udf_address_privilege @no_arrow_flight_sql
+create database db_udf_priv_${uuid0};
+-- result:
+-- !result
+use db_udf_priv_${uuid0};
+-- result:
+-- !result
+drop user if exists u_udf_usage_${uuid0};
+-- result:
+-- !result
+drop user if exists u_udf_create_${uuid0};
+-- result:
+-- !result
+drop user if exists u_global_drop_${uuid0};
+-- result:
+-- !result
+drop user if exists u_global_create_${uuid0};
+-- result:
+-- !result
+create user u_udf_usage_${uuid0};
+-- result:
+-- !result
+create user u_udf_create_${uuid0};
+-- result:
+-- !result
+create user u_global_drop_${uuid0};
+-- result:
+-- !result
+create user u_global_create_${uuid0};
+-- result:
+-- !result
+grant impersonate on user root to u_udf_usage_${uuid0};
+-- result:
+-- !result
+grant impersonate on user root to u_udf_create_${uuid0};
+-- result:
+-- !result
+grant impersonate on user root to u_global_drop_${uuid0};
+-- result:
+-- !result
+grant impersonate on user root to u_global_create_${uuid0};
+-- result:
+-- !result
+CREATE FUNCTION udf_priv_echo_${uuid0}(int)
+RETURNS int
+symbol = "Echoint"
+type = "StarrocksJar"
+file = "${udf_url}/starrocks-jdbc/udf.jar";
+-- result:
+-- !result
+CREATE GLOBAL FUNCTION global_udf_priv_echo_${uuid0}(int)
+RETURNS int
+symbol = "Echoint"
+type = "StarrocksJar"
+file = "${udf_url}/starrocks-jdbc/udf.jar";
+-- result:
+-- !result
+show full functions from db_udf_priv_${uuid0} like 'udf_priv_echo_${uuid0}';
+-- result:
+[REGEX]udf_priv_echo_[0-9a-f]+\(INT\)\tINT\tScalar\tNULL\t.*"file":"[^"]*starrocks-jdbc/udf.jar".*
+-- !result
+show full global functions like 'global_udf_priv_echo_${uuid0}';
+-- result:
+[REGEX]global_udf_priv_echo_[0-9a-f]+\(INT\)\tINT\tScalar\tNULL\t.*"file":"[^"]*starrocks-jdbc/udf.jar".*
+-- !result
+execute as u_udf_usage_${uuid0} with no revert;
+-- result:
+-- !result
+show full functions from db_udf_priv_${uuid0} like 'udf_priv_echo_${uuid0}';
+-- result:
+-- !result
+execute as root with no revert;
+-- result:
+-- !result
+grant usage on function db_udf_priv_${uuid0}.udf_priv_echo_${uuid0}(int) to u_udf_usage_${uuid0};
+-- result:
+-- !result
+grant create function on database db_udf_priv_${uuid0} to u_udf_create_${uuid0};
+-- result:
+-- !result
+execute as u_udf_usage_${uuid0} with no revert;
+-- result:
+-- !result
+show full functions from db_udf_priv_${uuid0} like 'udf_priv_echo_${uuid0}';
+-- result:
+[REGEX]udf_priv_echo_[0-9a-f]+\(INT\)\tINT\tScalar\tNULL\t.*"file":"\*\*\*".*
+-- !result
+execute as root with no revert;
+-- result:
+-- !result
+execute as u_udf_create_${uuid0} with no revert;
+-- result:
+-- !result
+show full functions from db_udf_priv_${uuid0} like 'udf_priv_echo_${uuid0}';
+-- result:
+[REGEX]udf_priv_echo_[0-9a-f]+\(INT\)\tINT\tScalar\tNULL\t.*"file":"[^"]*starrocks-jdbc/udf.jar".*
+-- !result
+execute as root with no revert;
+-- result:
+-- !result
+execute as u_global_drop_${uuid0} with no revert;
+-- result:
+-- !result
+show full global functions like 'global_udf_priv_echo_${uuid0}';
+-- result:
+-- !result
+execute as root with no revert;
+-- result:
+-- !result
+grant drop on global function global_udf_priv_echo_${uuid0}(int) to u_global_drop_${uuid0};
+-- result:
+-- !result
+grant create global function on system to u_global_create_${uuid0};
+-- result:
+-- !result
+execute as u_global_drop_${uuid0} with no revert;
+-- result:
+-- !result
+show full global functions like 'global_udf_priv_echo_${uuid0}';
+-- result:
+[REGEX]global_udf_priv_echo_[0-9a-f]+\(INT\)\tINT\tScalar\tNULL\t.*"file":"\*\*\*".*
+-- !result
+execute as root with no revert;
+-- result:
+-- !result
+execute as u_global_create_${uuid0} with no revert;
+-- result:
+-- !result
+show full global functions like 'global_udf_priv_echo_${uuid0}';
+-- result:
+[REGEX]global_udf_priv_echo_[0-9a-f]+\(INT\)\tINT\tScalar\tNULL\t.*"file":"[^"]*starrocks-jdbc/udf.jar".*
+-- !result
+execute as root with no revert;
+-- result:
+-- !result
+drop global function global_udf_priv_echo_${uuid0}(int);
+-- result:
+-- !result
+drop database db_udf_priv_${uuid0} force;
+-- result:
+-- !result
+drop user u_udf_usage_${uuid0};
+-- result:
+-- !result
+drop user u_udf_create_${uuid0};
+-- result:
+-- !result
+drop user u_global_drop_${uuid0};
+-- result:
+-- !result
+drop user u_global_create_${uuid0};
+-- result:
+-- !result
