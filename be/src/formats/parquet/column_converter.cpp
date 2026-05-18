@@ -682,8 +682,14 @@ Status parquet::Int32ToDateConverter::convert(const Column* src, Column* dst) {
 
     size_t size = dst_null_data.size();
     memcpy(dst_null_data.data(), src_null_data.data(), size);
+    // DateValue's storage is a single int32_t (_julian), so we can stride through
+    // dst_data as raw int32 and add the epoch with SIMD.
+    const int32_t* src_ptr = src_data.data();
+    int32_t* dst_ptr = reinterpret_cast<int32_t*>(dst_data.data());
+    const int32_t epoch = date::UNIX_EPOCH_JULIAN;
+    // Compiler auto-vectorises the broadcast-add.
     for (size_t i = 0; i < size; i++) {
-        dst_data[i]._julian = src_data[i] + date::UNIX_EPOCH_JULIAN;
+        dst_ptr[i] = src_ptr[i] + epoch;
     }
     dst_nullable_column->set_has_null(src_nullable_column->has_null());
     return Status::OK();
