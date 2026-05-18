@@ -548,6 +548,10 @@ public class IcebergScanNodeTest {
 
         Assertions.assertTrue(sinkExtra.getScannedDataFiles().contains(df));
         Assertions.assertTrue(sinkExtra.getAppliedDeleteFiles().contains(del));
+
+        Assertions.assertNull(sinkExtra.getBaseSnapshotId());
+        sinkExtra.setBaseSnapshotId(42L);
+        Assertions.assertEquals(42L, sinkExtra.getBaseSnapshotId());
     }
 
     @Test
@@ -598,6 +602,114 @@ public class IcebergScanNodeTest {
         // 8. Assert
         Assertions.assertTrue(info1.isIs_rewrite());
         Assertions.assertTrue(info2.isIs_rewrite());
+    }
+
+    @Test
+    public void testExtractBaseSnapshotIdFromExecPlan() {
+        IcebergTable target = Mockito.mock(IcebergTable.class);
+        Mockito.when(target.getId()).thenReturn(42L);
+
+        IcebergScanNode scanNode = Mockito.mock(IcebergScanNode.class);
+        Mockito.when(scanNode.getIcebergTable()).thenReturn(target);
+        Mockito.when(scanNode.getBaseSnapshotId()).thenReturn(Optional.of(777L));
+
+        ExecPlan execPlan = Mockito.mock(ExecPlan.class);
+        Mockito.when(execPlan.getScanNodes()).thenReturn(new ArrayList<>(List.of(scanNode)));
+
+        Assertions.assertEquals(777L,
+                com.starrocks.sql.IcebergPlannerUtils.extractBaseSnapshotId(execPlan, target));
+
+        // Empty plan -> null.
+        ExecPlan empty = Mockito.mock(ExecPlan.class);
+        Mockito.when(empty.getScanNodes()).thenReturn(new ArrayList<>());
+        Assertions.assertNull(
+                com.starrocks.sql.IcebergPlannerUtils.extractBaseSnapshotId(empty, target));
+
+        // Scan over the target but with no plan-time snapshot -> null.
+        IcebergScanNode noSnap = Mockito.mock(IcebergScanNode.class);
+        Mockito.when(noSnap.getIcebergTable()).thenReturn(target);
+        Mockito.when(noSnap.getBaseSnapshotId()).thenReturn(Optional.empty());
+        ExecPlan planNoSnap = Mockito.mock(ExecPlan.class);
+        Mockito.when(planNoSnap.getScanNodes()).thenReturn(new ArrayList<>(List.of(noSnap)));
+        Assertions.assertNull(
+                com.starrocks.sql.IcebergPlannerUtils.extractBaseSnapshotId(planNoSnap, target));
+    }
+
+    @Test
+    public void testBuildIcebergFilterExprSkipsNonTargetIcebergScans() {
+        // Symmetric to testExtractBaseSnapshotIdSkipsNonTargetIcebergScans: same fix
+        // applies to buildIcebergFilterExpr, which previously picked the first
+        // IcebergScanNode regardless of which table it scanned. With a non-target
+        // source scan listed first, the helper must still consult only the target's
+        // scan. Verified two ways:
+        //   (1) the result is null because the target's predicate is null
+        //       (legacy code would have produced a non-null filter from the source's
+        //       predicate);
+        //   (2) Mockito.verify confirms the source's predicate getter is never called.
+        IcebergTable target = Mockito.mock(IcebergTable.class);
+        Mockito.when(target.getId()).thenReturn(100L);
+        Table nativeTable = Mockito.mock(Table.class);
+        Schema nativeSchema = Mockito.mock(Schema.class);
+        Mockito.when(target.getNativeTable()).thenReturn(nativeTable);
+        Mockito.when(nativeTable.schema()).thenReturn(nativeSchema);
+
+        IcebergTable source = Mockito.mock(IcebergTable.class);
+        Mockito.when(source.getId()).thenReturn(200L);
+
+        IcebergScanNode sourceScan = Mockito.mock(IcebergScanNode.class);
+        Mockito.when(sourceScan.getIcebergTable()).thenReturn(source);
+
+        IcebergScanNode targetScan = Mockito.mock(IcebergScanNode.class);
+        Mockito.when(targetScan.getIcebergTable()).thenReturn(target);
+        Mockito.when(targetScan.getIcebergJobPlanningPredicate()).thenReturn(null);
+
+        ExecPlan execPlan = Mockito.mock(ExecPlan.class);
+        Mockito.when(execPlan.getScanNodes())
+                .thenReturn(new ArrayList<>(List.of(sourceScan, targetScan)));
+
+        Assertions.assertNull(
+                com.starrocks.sql.IcebergPlannerUtils.buildIcebergFilterExpr(execPlan, target));
+        Mockito.verify(targetScan).getIcebergJobPlanningPredicate();
+        Mockito.verify(sourceScan, Mockito.never()).getIcebergJobPlanningPredicate();
+    }
+
+    @Test
+    public void testExtractBaseSnapshotIdSkipsNonTargetIcebergScans() {
+        // Simulates `UPDATE target SET ... WHERE id IN (SELECT id FROM source_iceberg)`:
+        // the plan contains two IcebergScanNodes (target + source). The helper must
+        // return the TARGET's plan-time snapshot id, not the source's — passing the
+        // source snapshot id into RowDelta.validateFromSnapshot would either be rejected
+        // by Iceberg (snapshot missing from target's history) or validate against an
+        // unrelated window.
+        IcebergTable target = Mockito.mock(IcebergTable.class);
+        Mockito.when(target.getId()).thenReturn(100L);
+        IcebergTable source = Mockito.mock(IcebergTable.class);
+        Mockito.when(source.getId()).thenReturn(200L);
+
+        // Source scan appears FIRST in the plan — the legacy "first IcebergScan wins"
+        // logic would have returned 999L, the wrong snapshot id.
+        IcebergScanNode sourceScan = Mockito.mock(IcebergScanNode.class);
+        Mockito.when(sourceScan.getIcebergTable()).thenReturn(source);
+        Mockito.when(sourceScan.getBaseSnapshotId()).thenReturn(Optional.of(999L));
+
+        IcebergScanNode targetScan = Mockito.mock(IcebergScanNode.class);
+        Mockito.when(targetScan.getIcebergTable()).thenReturn(target);
+        Mockito.when(targetScan.getBaseSnapshotId()).thenReturn(Optional.of(123L));
+
+        ExecPlan execPlan = Mockito.mock(ExecPlan.class);
+        Mockito.when(execPlan.getScanNodes())
+                .thenReturn(new ArrayList<>(List.of(sourceScan, targetScan)));
+
+        Assertions.assertEquals(123L,
+                com.starrocks.sql.IcebergPlannerUtils.extractBaseSnapshotId(execPlan, target));
+
+        // No scan matches the target (e.g. target is referenced only by the sink, not by
+        // any scan) -> null.
+        ExecPlan onlySource = Mockito.mock(ExecPlan.class);
+        Mockito.when(onlySource.getScanNodes())
+                .thenReturn(new ArrayList<>(List.of(sourceScan)));
+        Assertions.assertNull(
+                com.starrocks.sql.IcebergPlannerUtils.extractBaseSnapshotId(onlySource, target));
     }
 
     @Test
