@@ -18,8 +18,10 @@ import com.google.common.base.Preconditions;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.extension.Inject;
 import com.starrocks.metric.MetricVisitor;
+import com.starrocks.metric.WarehouseSlotMetricMgr;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.system.BackendResourceStat;
 import com.starrocks.thrift.TStatus;
 import com.starrocks.thrift.TStatusCode;
 import org.apache.commons.compress.utils.Lists;
@@ -60,7 +62,42 @@ public class SlotManager extends BaseSlotManager {
 
     @Override
     public void collectWarehouseMetrics(MetricVisitor visitor) {
-        // do nothing
+        WarehouseInFlightTracker tracker = WarehouseInFlightTracker.getInstance();
+        for (Long whId : tracker.getTrackedWarehouseIds()) {
+            QueryQueueOptions opts;
+            try {
+                opts = QueryQueueOptions.createFromEnv(whId);
+            } catch (Exception e) {
+                LOG.debug("[Slot] skip warehouse {} during metric scrape: {}", whId, e.getMessage());
+                continue;
+            }
+            if (!opts.isEnableQueryQueueV2()) {
+                continue;
+            }
+            int totalSlots = opts.v2().getTotalSlots();
+            int numBes = Math.max(1, BackendResourceStat.getInstance().getNumBes(whId));
+            int slotsPerCn = Math.max(1, totalSlots / numBes);
+
+            int maxRaw = tracker.getMaxRawSlots(whId);
+            long sumRaw = tracker.getSumRawSlots(whId);
+            int bigCnt = tracker.getBigQueryCount(whId);
+            long requiredCn = (maxRaw <= 0) ? 0L : (long) Math.ceil((double) maxRaw / slotsPerCn);
+            double ratio = (totalSlots <= 0) ? 0.0 : (double) maxRaw / totalSlots;
+
+            WarehouseSlotMetricMgr.getMaxRawSlotsGauge(whId).setValue((long) maxRaw);
+            WarehouseSlotMetricMgr.getSumRawSlotsGauge(whId).setValue(sumRaw);
+            WarehouseSlotMetricMgr.getRequiredComputeNodeGauge(whId).setValue(requiredCn);
+            WarehouseSlotMetricMgr.getMaxRawSlotsRatioGauge(whId).setValue(ratio);
+            WarehouseSlotMetricMgr.getPendingBigQueryCountGauge(whId).setValue((long) bigCnt);
+
+            visitor.visit(WarehouseSlotMetricMgr.getMaxRawSlotsGauge(whId));
+            visitor.visit(WarehouseSlotMetricMgr.getSumRawSlotsGauge(whId));
+            visitor.visit(WarehouseSlotMetricMgr.getRequiredComputeNodeGauge(whId));
+            visitor.visit(WarehouseSlotMetricMgr.getMaxRawSlotsRatioGauge(whId));
+            visitor.visit(WarehouseSlotMetricMgr.getPendingBigQueryCountGauge(whId));
+            visitor.visit(WarehouseSlotMetricMgr.getBigQueryCounter(whId));
+            visitor.visitHistogram(WarehouseSlotMetricMgr.getBigQueryWaitHistogram(whId));
+        }
     }
 
     @Override
