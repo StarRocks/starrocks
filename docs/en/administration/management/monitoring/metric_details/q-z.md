@@ -98,14 +98,14 @@ For more information on how to build a monitoring service for your StarRocks clu
 - Unit: Milliseconds
 - Type: Histogram
 - Labels: `warehouse_id`, `warehouse_name`
-- Description: Distribution of actual wait durations (milliseconds) for pre-scale wait gate firings per warehouse. Recorded once per gate firing, regardless of whether capacity was satisfied or the timeout elapsed.
+- Description: Distribution of actual wait durations (milliseconds) for pre-scale wait gate firings per warehouse. Recorded once per gate firing, regardless of whether capacity was satisfied or the timeout elapsed, excluding interrupted waits.
 
 ## `query_queue_pre_scale_wait_total`
 
 - Unit: Count
 - Type: Counter
 - Labels: `warehouse_id`, `warehouse_name`
-- Description: Cumulative count of pre-scale wait gate firings per warehouse. Useful for monitoring how often big queries are being held by the autoscaling-friendly admission delay.
+- Description: Cumulative count of pre-scale wait gate firings per warehouse. Useful for monitoring how often big queries are being held by the autoscaling-friendly admission delay, excluding interrupted waits.
 
 ## `query_queue_required_compute_node_count`
 

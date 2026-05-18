@@ -173,8 +173,4 @@ public class WarehouseSlotMetricMgr {
             return "unknown";
         }
     }
-
-    static Map<Long, HistogramMetric> getAllHistograms() {
-        return BIG_WAIT_HIST;
-    }
 }

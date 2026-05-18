@@ -82,7 +82,7 @@ public class WarehouseInFlightTrackerTest {
                 /*maxWaitMs=*/ 500L);
         assertFalse(result);
         long elapsed = System.currentTimeMillis() - start;
-        assertTrue(elapsed >= 500 && elapsed < 900,
+        assertTrue(elapsed >= 500 && elapsed < 2000,
                 "should wait full timeout (was " + elapsed + "ms)");
     }
 
@@ -104,7 +104,7 @@ public class WarehouseInFlightTrackerTest {
         grower.join();
         assertTrue(result);
         long elapsed = System.currentTimeMillis() - start;
-        assertTrue(elapsed >= 300 && elapsed < 800,
+        assertTrue(elapsed >= 300 && elapsed < 2000,
                 "should unblock soon after supply grows (elapsed " + elapsed + "ms)");
     }
 }

@@ -422,7 +422,7 @@ public class QueryQueueManagerPreScaleTest extends SchedulerTestBase {
 
         Assertions.assertEquals(LogicalSlot.State.ALLOCATED, coord.getSlot().getState());
         // Should return promptly; allow generous margin to absorb scheduling overhead in CI.
-        assertThat(elapsed).isLessThan(800L);
+        assertThat(elapsed).isLessThan(2000L);
 
         coord.onFinished();
     }

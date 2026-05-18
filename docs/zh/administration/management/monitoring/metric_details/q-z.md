@@ -97,15 +97,15 @@ description: "Alphabetical q - z"
 
 - 单位：毫秒
 - 类型：Histogram
-- 标签：`warehouse_id`, `warehouse_name`
-- 描述：每个仓库内 pre-scale 等待门控触发的实际等待时长（毫秒）分布。每次门控触发记录一次，无论是否最终满足容量条件。
+- 标签：`warehouse_id`、`warehouse_name`
+- 描述：每个仓库内 pre-scale 等待门控触发的实际等待时长（毫秒）分布。每次门控触发记录一次，无论是否最终满足容量条件，但被中断（InterruptedException）的等待除外。
 
 ## `query_queue_pre_scale_wait_total`
 
 - 单位：次
 - 类型：Counter
-- 标签：`warehouse_id`, `warehouse_name`
-- 描述：每个仓库内 pre-scale 等待门控触发的累计次数。用于监控大查询被自动扩容友好的准入延迟所阻塞的频次。
+- 标签：`warehouse_id`、`warehouse_name`
+- 描述：每个仓库内 pre-scale 等待门控触发的累计次数。用于监控大查询被自动扩容友好的准入延迟所阻塞的频次，但被中断（InterruptedException）的等待除外。
 
 ## `query_queue_required_compute_node_count`
 

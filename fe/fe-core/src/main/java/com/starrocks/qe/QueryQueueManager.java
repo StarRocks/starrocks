@@ -108,7 +108,7 @@ public class QueryQueueManager {
                 // Pre-scale wait: hold big query briefly to give external auto-scaler a chance to add CN capacity.
                 if (Config.query_queue_pre_scale_max_wait_ms > 0L) {
                     double gateRatio = Config.query_queue_pre_scale_slot_threshold_ratio;
-                    if (estimate.rawSlots() > totalSlots * gateRatio) {
+                    if (estimate.rawSlots() > (long) Math.ceil(totalSlots * gateRatio)) {
                         // Reserve 1s headroom before pending deadline so the slot provider has time to admit after wait.
                         long capWaitMs = Math.min(
                                 Config.query_queue_pre_scale_max_wait_ms,
