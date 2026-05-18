@@ -185,14 +185,20 @@ public class CreateViewTest extends StarRocksTestBase  {
                 "\"replication_num\" = \"1\"" +
                 ");");
 
-        // create non existed view
-        starRocksAssert.withView("create or replace view test_view1 as select \n" +
-                "`event_day` -- This is a comment from user\n" +
-                "from test_table1;");
+        boolean oldValue = connectContext.getSessionVariable().isEnablePersistCanonicalViewSql();
+        try {
+            connectContext.getSessionVariable().setEnablePersistCanonicalViewSql(false);
+            // create non existed view
+            starRocksAssert.withView("create or replace view test_view1 as select \n" +
+                    "`event_day` -- This is a comment from user\n" +
+                    "from test_table1;");
 
-        List<List<String>> result = starRocksAssert.show("show create view test_view1;");
-        Assertions.assertEquals(1, result.size());
-        String createViewSql = result.get(0).get(1);
-        Assertions.assertTrue(createViewSql.contains("-- This is a comment from user"));
+            List<List<String>> result = starRocksAssert.show("show create view test_view1;");
+            Assertions.assertEquals(1, result.size());
+            String createViewSql = result.get(0).get(1);
+            Assertions.assertTrue(createViewSql.contains("-- This is a comment from user"));
+        } finally {
+            connectContext.getSessionVariable().setEnablePersistCanonicalViewSql(oldValue);
+        }
     }
 }
