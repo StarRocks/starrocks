@@ -508,7 +508,83 @@ Status publish_log_version(TabletManager* tablet_mgr, int64_t tablet_id, std::sp
                            const int64_t* log_versions) {
     auto files_to_delete = std::vector<std::string>{};
     for (int i = 0; i < txn_infos.size(); i++) {
-        if (!txn_infos[i].combined_txn_log()) {
+        if (txn_infos[i].load_ids_size() > 0) {
+            // Multi-statement transaction: each statement writes its own .log file at the
+            // 4-segment path that encodes load_id. Read every per-load_id .log via
+            // load_txn_log (which already understands this layout) and merge them into a
+            // single TxnLog before persisting as the version-keyed .vlog.
+            //
+            // Without this branch, publish_log_version would fall back to the 2-segment
+            // path and fail with NotFound during schema change, leaving the txn stuck in
+            // COMMITTED and blocking the alter at FINISHED_REWRITING (see RCA: schema
+            // change deadlock on publish_log_version load_ids).
+            auto txn_id = txn_infos[i].txn_id();
+            auto log_version = log_versions[i];
+            ASSIGN_OR_RETURN(auto txn_logs_vector, load_txn_log(tablet_mgr, {tablet_id}, txn_infos[i]));
+            auto& txn_logs = txn_logs_vector[0];
+
+            if (txn_logs.empty()) {
+                // All per-load_id source files are missing. This is the same idempotent
+                // situation the non-load_id branch below guards against: if the target
+                // .vlog already exists treat the call as a no-op, otherwise surface
+                // NotFound so FE retries / fails the publish deterministically.
+                auto txn_vlog_path = tablet_mgr->txn_vlog_location(tablet_id, log_version);
+                ASSIGN_OR_RETURN(auto fs, FileSystemFactory::CreateSharedFromString(txn_vlog_path));
+                auto check_st = fs->path_exists(txn_vlog_path);
+                if (check_st.ok()) {
+                    continue;
+                }
+                LOG_IF(WARNING, !check_st.is_not_found())
+                        << "Fail to check the existance of " << txn_vlog_path << ": " << check_st;
+                return Status::NotFound(
+                        fmt::format("no per-load_id txn log found for tablet {} txn {} ({} load_ids checked)",
+                                    tablet_id, txn_id, txn_infos[i].load_ids_size()));
+            }
+
+            auto merged = std::make_shared<TxnLogPB>(*txn_logs[0]);
+            // The materialized .vlog spans every per-load_id source log, so the
+            // single load_id field carried over from the first source no longer applies.
+            merged->clear_load_id();
+            if (txn_logs.size() > 1) {
+                // MergeFrom appends repeated fields (segments, dels, segment_size, ...)
+                // and recursively merges optional message fields, which is what we want
+                // for the per-segment lists. But it overwrites scalar accumulators with
+                // the last source's value, so sum num_rows / data_size / num_dels back
+                // up afterwards to reflect the full transaction.
+                for (size_t k = 1; k < txn_logs.size(); ++k) {
+                    merged->MergeFrom(*txn_logs[k]);
+                }
+                merged->clear_load_id();
+                if (merged->has_op_write() && merged->op_write().has_rowset()) {
+                    auto* rowset = merged->mutable_op_write()->mutable_rowset();
+                    int64_t num_rows = 0;
+                    int64_t data_size = 0;
+                    int64_t num_dels = 0;
+                    for (const auto& log : txn_logs) {
+                        if (log->has_op_write() && log->op_write().has_rowset()) {
+                            const auto& src = log->op_write().rowset();
+                            num_rows += src.num_rows();
+                            data_size += src.data_size();
+                            num_dels += src.num_dels();
+                        }
+                    }
+                    rowset->set_num_rows(num_rows);
+                    rowset->set_data_size(data_size);
+                    rowset->set_num_dels(num_dels);
+                    rowset->set_overlapped(rowset->segments_size() > 1);
+                }
+            }
+
+            RETURN_IF_ERROR(tablet_mgr->put_txn_vlog(merged, log_version));
+
+            // Stage every per-load_id source .log for async deletion, mirroring what
+            // publish_version does for the non-shadow path on the same txn shape.
+            for (const auto& load_id : txn_infos[i].load_ids()) {
+                auto txn_log_path = tablet_mgr->txn_log_location(tablet_id, txn_id, load_id);
+                files_to_delete.emplace_back(txn_log_path);
+                tablet_mgr->metacache()->erase(txn_log_path);
+            }
+        } else if (!txn_infos[i].combined_txn_log()) {
             auto txn_id = txn_infos[i].txn_id();
             auto log_version = log_versions[i];
             auto txn_log_path = tablet_mgr->txn_log_location(tablet_id, txn_id);
@@ -578,7 +654,14 @@ void collect_files_in_log(TabletManager* tablet_mgr, const TxnLog& txn_log, std:
         }
     }
 
-    tablet_mgr->metacache()->erase(tablet_mgr->txn_log_location(tablet_id, txn_log.txn_id()));
+    // Multi-statement transactions cache the .log under the 4-segment key; use the
+    // same path here so the cache entry actually drops.
+    if (txn_log.has_load_id()) {
+        tablet_mgr->metacache()->erase(
+                tablet_mgr->txn_log_location(tablet_id, txn_log.txn_id(), txn_log.load_id()));
+    } else {
+        tablet_mgr->metacache()->erase(tablet_mgr->txn_log_location(tablet_id, txn_log.txn_id()));
+    }
     tablet_mgr->update_mgr()->try_remove_cache(tablet_id, txn_log.txn_id());
 }
 
@@ -594,7 +677,24 @@ void abort_txn(TabletManager* tablet_mgr, int64_t tablet_id, std::span<const Txn
             clear_remote_snapshot_async(tablet_mgr, tablet_id, txn_id, &files_to_delete);
         }
 
-        if (!txns[i].combined_txn_log()) {
+        if (txns[i].load_ids_size() > 0) {
+            // Multi-statement transaction: each statement's .log lives at the
+            // 4-segment load_id path. Walking only the 2-segment path here would
+            // silently leak per-statement .log files plus every segment / del they
+            // reference, mirroring the shape of the publish_log_version bug.
+            for (const auto& load_id : txns[i].load_ids()) {
+                auto log_path = tablet_mgr->txn_log_location(tablet_id, txn_id, load_id);
+                auto txn_log_or = tablet_mgr->get_txn_log(log_path, false);
+                if (!txn_log_or.ok()) {
+                    LOG_IF(WARNING, !txn_log_or.status().is_not_found())
+                            << "Fail to get txn log " << log_path << ": " << txn_log_or.status();
+                    continue;
+                }
+                TxnLogPtr txn_log = std::move(txn_log_or).value();
+                collect_files_in_log(tablet_mgr, *txn_log, &files_to_delete);
+                files_to_delete.emplace_back(log_path);
+            }
+        } else if (!txns[i].combined_txn_log()) {
             auto log_path = tablet_mgr->txn_log_location(tablet_id, txn_id);
             auto txn_log_or = tablet_mgr->get_txn_log(log_path, false);
             if (!txn_log_or.ok()) {

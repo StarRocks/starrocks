@@ -2509,6 +2509,209 @@ TEST_F(LakeServiceTest, test_publish_log_version) {
     }
 }
 
+// Regression coverage for the schema-change deadlock caused by
+// publish_log_version ignoring TxnInfoPB.load_ids: when an explicit
+// (BEGIN; INSERT; COMMIT;) transaction lands on a shadow tablet during
+// alter, each statement persists its .log at the 4-segment path that
+// encodes load_id. publish_log_version must follow load_ids to find them,
+// merge the per-statement logs into a single .vlog, and clean up the
+// sources -- otherwise FE retries forever and the alter never finishes.
+TEST_F(LakeServiceTest, test_publish_log_version_with_load_ids) {
+    auto txn_id = next_id();
+    PUniqueId load_id_1;
+    load_id_1.set_hi(0x1111111111111111LL);
+    load_id_1.set_lo(0x2222222222222222LL);
+    PUniqueId load_id_2;
+    load_id_2.set_hi(0x3333333333333333LL);
+    load_id_2.set_lo(0x4444444444444444LL);
+
+    // Two per-statement .log files for the same (tablet, txn) pair, routed to
+    // the 4-segment path via the load_id-aware put_txn_log overload.
+    {
+        TxnLog log;
+        log.set_tablet_id(_tablet_id);
+        log.set_txn_id(txn_id);
+        log.mutable_load_id()->CopyFrom(load_id_1);
+        log.mutable_op_write()->mutable_rowset()->set_overlapped(false);
+        log.mutable_op_write()->mutable_rowset()->set_num_rows(11);
+        log.mutable_op_write()->mutable_rowset()->set_data_size(110);
+        log.mutable_op_write()->mutable_rowset()->add_segments("stmt1_seg1.dat");
+        log.mutable_op_write()->mutable_rowset()->add_segments("stmt1_seg2.dat");
+        ASSERT_OK(_tablet_mgr->put_txn_log(log));
+    }
+    {
+        TxnLog log;
+        log.set_tablet_id(_tablet_id);
+        log.set_txn_id(txn_id);
+        log.mutable_load_id()->CopyFrom(load_id_2);
+        log.mutable_op_write()->mutable_rowset()->set_overlapped(false);
+        log.mutable_op_write()->mutable_rowset()->set_num_rows(22);
+        log.mutable_op_write()->mutable_rowset()->set_data_size(220);
+        log.mutable_op_write()->mutable_rowset()->add_segments("stmt2_seg1.dat");
+        ASSERT_OK(_tablet_mgr->put_txn_log(log));
+    }
+
+    // Sanity: the source files live at the 4-segment path, NOT the 2-segment one.
+    EXPECT_TRUE(fs::path_exist(_tablet_mgr->txn_log_location(_tablet_id, txn_id, load_id_1)));
+    EXPECT_TRUE(fs::path_exist(_tablet_mgr->txn_log_location(_tablet_id, txn_id, load_id_2)));
+    EXPECT_FALSE(fs::path_exist(_tablet_mgr->txn_log_location(_tablet_id, txn_id)));
+
+    const int64_t version = 20;
+    {
+        PublishLogVersionRequest request;
+        PublishLogVersionResponse response;
+        request.add_tablet_ids(_tablet_id);
+        request.set_version(version);
+        auto* txn_info = request.mutable_txn_info();
+        txn_info->set_txn_id(txn_id);
+        txn_info->set_combined_txn_log(false);
+        txn_info->set_txn_type(TXN_NORMAL);
+        txn_info->set_commit_time(::time(nullptr));
+        txn_info->add_load_ids()->CopyFrom(load_id_1);
+        txn_info->add_load_ids()->CopyFrom(load_id_2);
+
+        brpc::Controller cntl;
+        _lake_service.publish_log_version(&cntl, &request, &response, nullptr);
+        ASSERT_FALSE(cntl.Failed()) << cntl.ErrorText();
+        ASSERT_EQ(0, response.failed_tablets_size());
+    }
+
+    ExecEnv::GetInstance()->delete_file_thread_pool()->wait();
+
+    // The materialized .vlog must exist and contain the merged segments and
+    // accumulated counters across both statements.
+    EXPECT_TRUE(fs::path_exist(_tablet_mgr->txn_vlog_location(_tablet_id, version)));
+    EXPECT_FALSE(fs::path_exist(_tablet_mgr->txn_log_location(_tablet_id, txn_id, load_id_1)));
+    EXPECT_FALSE(fs::path_exist(_tablet_mgr->txn_log_location(_tablet_id, txn_id, load_id_2)));
+
+    _tablet_mgr->prune_metacache();
+    ASSIGN_OR_ABORT(auto vlog, _tablet_mgr->get_txn_vlog(_tablet_id, version));
+    ASSERT_EQ(_tablet_id, vlog->tablet_id());
+    ASSERT_EQ(txn_id, vlog->txn_id());
+    EXPECT_FALSE(vlog->has_load_id());
+    ASSERT_TRUE(vlog->has_op_write());
+    ASSERT_TRUE(vlog->op_write().has_rowset());
+    const auto& rowset = vlog->op_write().rowset();
+    EXPECT_EQ(33, rowset.num_rows());
+    EXPECT_EQ(330, rowset.data_size());
+    ASSERT_EQ(3, rowset.segments_size());
+    EXPECT_EQ("stmt1_seg1.dat", rowset.segments(0));
+    EXPECT_EQ("stmt1_seg2.dat", rowset.segments(1));
+    EXPECT_EQ("stmt2_seg1.dat", rowset.segments(2));
+    EXPECT_TRUE(rowset.overlapped());
+
+    // Replaying the same request after the sources have been deleted should be a
+    // no-op (FE retries should not see spurious failures).
+    {
+        PublishLogVersionRequest request;
+        PublishLogVersionResponse response;
+        request.add_tablet_ids(_tablet_id);
+        request.set_version(version);
+        auto* txn_info = request.mutable_txn_info();
+        txn_info->set_txn_id(txn_id);
+        txn_info->set_combined_txn_log(false);
+        txn_info->set_txn_type(TXN_NORMAL);
+        txn_info->set_commit_time(::time(nullptr));
+        txn_info->add_load_ids()->CopyFrom(load_id_1);
+        txn_info->add_load_ids()->CopyFrom(load_id_2);
+
+        brpc::Controller cntl;
+        _lake_service.publish_log_version(&cntl, &request, &response, nullptr);
+        ASSERT_FALSE(cntl.Failed()) << cntl.ErrorText();
+        ASSERT_EQ(0, response.failed_tablets_size());
+    }
+
+    // Calling for a fresh version where no source .log files ever existed
+    // should report failure cleanly (NotFound surfaced to FE).
+    {
+        PublishLogVersionRequest request;
+        PublishLogVersionResponse response;
+        request.add_tablet_ids(_tablet_id);
+        request.set_version(version + 1);
+        auto* txn_info = request.mutable_txn_info();
+        txn_info->set_txn_id(next_id());
+        txn_info->set_combined_txn_log(false);
+        txn_info->set_txn_type(TXN_NORMAL);
+        txn_info->set_commit_time(::time(nullptr));
+        txn_info->add_load_ids()->CopyFrom(load_id_1);
+
+        brpc::Controller cntl;
+        _lake_service.publish_log_version(&cntl, &request, &response, nullptr);
+        ASSERT_FALSE(cntl.Failed());
+        ASSERT_EQ(1, response.failed_tablets_size());
+        ASSERT_EQ(_tablet_id, response.failed_tablets(0));
+    }
+}
+
+// abort_txn shares the same load_ids anti-pattern as publish_log_version:
+// without walking the 4-segment paths it silently leaks the per-statement
+// .log files plus every segment they reference into shared storage.
+TEST_F(LakeServiceTest, test_abort_with_load_ids) {
+    auto txn_id = next_id();
+    PUniqueId load_id_1;
+    load_id_1.set_hi(0xAAAA000000000001LL);
+    load_id_1.set_lo(0xBBBB000000000001LL);
+    PUniqueId load_id_2;
+    load_id_2.set_hi(0xAAAA000000000002LL);
+    load_id_2.set_lo(0xBBBB000000000002LL);
+
+    std::string seg_a = generate_segment_file(txn_id);
+    std::string seg_b = generate_segment_file(txn_id);
+    std::string seg_c = generate_segment_file(txn_id);
+
+    {
+        TxnLog log;
+        log.set_tablet_id(_tablet_id);
+        log.set_txn_id(txn_id);
+        log.mutable_load_id()->CopyFrom(load_id_1);
+        log.mutable_op_write()->mutable_rowset()->add_segments(seg_a);
+        log.mutable_op_write()->mutable_rowset()->add_segments(seg_b);
+        log.mutable_op_write()->mutable_rowset()->set_data_size(4096);
+        log.mutable_op_write()->mutable_rowset()->set_num_rows(101);
+        ASSERT_OK(_tablet_mgr->put_txn_log(log));
+    }
+    {
+        TxnLog log;
+        log.set_tablet_id(_tablet_id);
+        log.set_txn_id(txn_id);
+        log.mutable_load_id()->CopyFrom(load_id_2);
+        log.mutable_op_write()->mutable_rowset()->add_segments(seg_c);
+        log.mutable_op_write()->mutable_rowset()->set_data_size(2048);
+        log.mutable_op_write()->mutable_rowset()->set_num_rows(50);
+        ASSERT_OK(_tablet_mgr->put_txn_log(log));
+    }
+
+    EXPECT_TRUE(fs::path_exist(_tablet_mgr->segment_location(_tablet_id, seg_a)));
+    EXPECT_TRUE(fs::path_exist(_tablet_mgr->segment_location(_tablet_id, seg_b)));
+    EXPECT_TRUE(fs::path_exist(_tablet_mgr->segment_location(_tablet_id, seg_c)));
+    EXPECT_TRUE(fs::path_exist(_tablet_mgr->txn_log_location(_tablet_id, txn_id, load_id_1)));
+    EXPECT_TRUE(fs::path_exist(_tablet_mgr->txn_log_location(_tablet_id, txn_id, load_id_2)));
+
+    AbortTxnRequest request;
+    request.add_tablet_ids(_tablet_id);
+    request.set_skip_cleanup(false);
+    auto* txn_info = request.add_txn_infos();
+    txn_info->set_txn_id(txn_id);
+    txn_info->set_combined_txn_log(false);
+    txn_info->set_txn_type(TXN_NORMAL);
+    txn_info->set_commit_time(::time(nullptr));
+    txn_info->add_load_ids()->CopyFrom(load_id_1);
+    txn_info->add_load_ids()->CopyFrom(load_id_2);
+
+    AbortTxnResponse response;
+    _lake_service.abort_txn(nullptr, &request, &response, nullptr);
+
+    ExecEnv::GetInstance()->delete_file_thread_pool()->wait();
+
+    // Every per-load_id .log file and every segment they referenced must be
+    // gone -- nothing should be left in shared storage from this txn.
+    EXPECT_FALSE(fs::path_exist(_tablet_mgr->txn_log_location(_tablet_id, txn_id, load_id_1)));
+    EXPECT_FALSE(fs::path_exist(_tablet_mgr->txn_log_location(_tablet_id, txn_id, load_id_2)));
+    EXPECT_FALSE(fs::path_exist(_tablet_mgr->segment_location(_tablet_id, seg_a)));
+    EXPECT_FALSE(fs::path_exist(_tablet_mgr->segment_location(_tablet_id, seg_b)));
+    EXPECT_FALSE(fs::path_exist(_tablet_mgr->segment_location(_tablet_id, seg_c)));
+}
+
 TEST_F(LakeServiceTest, test_publish_log_version_batch) {
     {
         TxnLog txnlog;
