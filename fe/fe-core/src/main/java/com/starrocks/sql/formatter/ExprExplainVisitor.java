@@ -17,6 +17,7 @@ package com.starrocks.sql.formatter;
 import com.google.common.base.Joiner;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.TableName;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.AstToStringBuilder;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.OrderByElement;
@@ -191,6 +192,10 @@ public class ExprExplainVisitor implements AstVisitorExtendInterface<String, Voi
     // ========================================= References and Function Calls =========================================
     @Override
     public String visitSlot(SlotRef node, Void context) {
+        ConnectContext ctx = ConnectContext.get();
+        if (ctx != null && ctx.isExplainMockColumnNames() && node.getDesc() != null) {
+            return "mock_col_" + node.getDesc().getId().asInt();
+        }
         StringBuilder sb = new StringBuilder();
         TableName tblName = node.getTblName();
 

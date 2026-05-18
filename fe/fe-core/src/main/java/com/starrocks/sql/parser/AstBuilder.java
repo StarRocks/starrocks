@@ -2480,8 +2480,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
                         createPos(context));
 
         if (context.explainDesc() != null) {
-            StatementBase.ExplainLevel explainLevel = getExplainType(context.explainDesc());
-            statement.setIsExplain(true, explainLevel);
+            applyExplainDesc(statement, context.explainDesc());
         }
 
         if (context.optimizerTrace() != null) {
@@ -2578,7 +2577,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
         }
 
         if (context.explainDesc() != null) {
-            queryStatement.setIsExplain(true, getExplainType(context.explainDesc()));
+            applyExplainDesc(queryStatement, context.explainDesc());
         }
 
         if (context.qualifiedName() != null) {
@@ -2673,7 +2672,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
         Expr where = context.where != null ? (Expr) visit(context.where) : null;
         UpdateStmt ret = new UpdateStmt(tableRef, assignments, fromRelations, where, ctes, createPos(context));
         if (context.explainDesc() != null) {
-            ret.setIsExplain(true, getExplainType(context.explainDesc()));
+            applyExplainDesc(ret, context.explainDesc());
             if (StatementBase.ExplainLevel.ANALYZE.equals(ret.getExplainLevel())) {
                 throw new ParsingException(PARSER_ERROR_MSG.unsupportedOp("analyze"));
             }
@@ -2699,7 +2698,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
         DeleteStmt ret =
                 new DeleteStmt(tableRef, partitionNames, usingRelations, where, ctes, createPos(context));
         if (context.explainDesc() != null) {
-            ret.setIsExplain(true, getExplainType(context.explainDesc()));
+            applyExplainDesc(ret, context.explainDesc());
             if (StatementBase.ExplainLevel.ANALYZE.equals(ret.getExplainLevel())) {
                 throw new ParsingException(PARSER_ERROR_MSG.unsupportedOp("analyze"));
             }
@@ -5991,7 +5990,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
         }
 
         if (context.explainDesc() != null) {
-            queryStatement.setIsExplain(true, getExplainType(context.explainDesc()));
+            applyExplainDesc(queryStatement, context.explainDesc());
         }
 
         if (context.optimizerTrace() != null) {
@@ -9137,6 +9136,14 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
             explainLevel = StatementBase.ExplainLevel.SCHEDULER;
         }
         return explainLevel;
+    }
+
+    private static void applyExplainDesc(StatementBase statement,
+                                         com.starrocks.sql.parser.StarRocksParser.ExplainDescContext context) {
+        statement.setIsExplain(true, getExplainType(context));
+        if (context.MOCK() != null) {
+            statement.setMockColumnNames(true);
+        }
     }
 
     public static SetType getVariableType(com.starrocks.sql.parser.StarRocksParser.VarTypeContext context) {

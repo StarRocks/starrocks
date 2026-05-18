@@ -101,6 +101,43 @@ public class ExplainTest extends PlanTestBase {
     }
 
     @Test
+    public void testExplainCostsMockSyntax() throws Exception {
+        String sql = "EXPLAIN COSTS MOCK SELECT t0.v1 FROM t0";
+        StatementBase stmt = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+        Assertions.assertTrue(stmt.isExplain());
+        Assertions.assertEquals(StatementBase.ExplainLevel.COSTS, stmt.getExplainLevel());
+        Assertions.assertTrue(stmt.isMockColumnNames());
+
+        sql = "EXPLAIN COSTS SELECT t0.v1 FROM t0";
+        stmt = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+        Assertions.assertTrue(stmt.isExplain());
+        Assertions.assertEquals(StatementBase.ExplainLevel.COSTS, stmt.getExplainLevel());
+        Assertions.assertFalse(stmt.isMockColumnNames());
+
+        sql = "EXPLAIN MOCK SELECT t0.v1 FROM t0";
+        stmt = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+        Assertions.assertTrue(stmt.isExplain());
+        Assertions.assertTrue(stmt.isMockColumnNames());
+    }
+
+    @Test
+    public void testExplainCostsMockOutput() throws Exception {
+        String sql = "SELECT DISTINCT t0.v1 FROM t0 LEFT JOIN t1 ON t0.v1 = t1.v4";
+        boolean prev = connectContext.isExplainMockColumnNames();
+        try {
+            connectContext.setExplainMockColumnNames(true);
+            String plan = getCostExplain(sql);
+            // Real column names should not leak; mock names should appear instead.
+            Assertions.assertTrue(plan.contains("mock_col_1"), plan);
+            Assertions.assertFalse(plan.contains(" v1-->"), plan);
+            Assertions.assertFalse(plan.contains(" v4-->"), plan);
+            Assertions.assertFalse(plan.contains("[1: v1,"), plan);
+        } finally {
+            connectContext.setExplainMockColumnNames(prev);
+        }
+    }
+
+    @Test
     public void testExplainCostsWithLabels() throws Exception {
         String sql = "SELECT DISTINCT t0.v1 FROM t0 LEFT JOIN t1 ON t0.v1 = t1.v4";
         String plan = getCostExplainWithLabels(sql);

@@ -284,6 +284,10 @@ public class ConnectContext {
     // Track if current write is CTAS (Create Table As Select)
     private boolean isCTAS = false;
 
+    // When true, EXPLAIN rendering substitutes column references with mock names
+    // (e.g. `mock_col_<id>`). Set transiently around explain output generation.
+    private boolean explainMockColumnNames = false;
+
     public void setTxnId(long txnId) {
         this.txnId = txnId;
     }
@@ -1009,6 +1013,14 @@ public class ConnectContext {
 
     public void setExplainLevel(StatementBase.ExplainLevel explainLevel) {
         this.explainLevel = explainLevel;
+    }
+
+    public boolean isExplainMockColumnNames() {
+        return explainMockColumnNames;
+    }
+
+    public void setExplainMockColumnNames(boolean explainMockColumnNames) {
+        this.explainMockColumnNames = explainMockColumnNames;
     }
 
     public TWorkGroup getResourceGroup() {

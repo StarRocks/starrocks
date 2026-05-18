@@ -2788,7 +2788,15 @@ public class StmtExecutor {
                 explainString += buildQueryQueueExplainString(execPlan, context, queryType);
             }
             if (execPlan != null) {
-                explainString += execPlan.getExplainString(explainLevel);
+                boolean prevMock = context.isExplainMockColumnNames();
+                try {
+                    if (parsedStmt.isMockColumnNames()) {
+                        context.setExplainMockColumnNames(true);
+                    }
+                    explainString += execPlan.getExplainString(explainLevel);
+                } finally {
+                    context.setExplainMockColumnNames(prevMock);
+                }
             }
         }
 
