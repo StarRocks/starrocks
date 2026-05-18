@@ -138,7 +138,7 @@ public final class MethodReflection {
 
     /**
      * Get method with {@methodName String} and {@argTypes Class<?>[]} from {@theClass Class<?>} as well as its super class.
-     * If more than one method is found, choose the more specify one.
+     * If more than one method is found, choose the more specific one.
      * (i.e. choose the method with parameters that have more concrete types)
      */
     private static Method findCompatibleMethodIfAvailable(Class<?> theClass, String methodName, Class<?>[] argTypes) {

@@ -2146,8 +2146,8 @@ public class QueryAnalyzer {
                 Table refreshedTable = metadataMgr.getTable(session, catalogName, dbName, tableName.getTbl());
                 return refreshedTable != null ? refreshedTable : resolvedTable;
             } catch (RuntimeException e) {
-                LOG.warn("Failed to refresh external table {}.{}.{} before lock, fallback to existing metadata: {}",
-                        catalogName, dbName, tableName.getTbl(), e.getMessage());
+                LOG.warn("Failed to refresh external table {}.{}.{} before lock, fallback to existing metadata",
+                        catalogName, dbName, tableName.getTbl(), e);
                 return resolvedTable;
             }
         }

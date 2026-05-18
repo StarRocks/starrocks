@@ -589,22 +589,23 @@ public class StatementPlannerExternalTablesLockTest extends ConnectorPlanTestBas
                 }
             });
             t.start();
+            try {
+                Assertions.assertTrue(refreshStarted.await(10, TimeUnit.SECONDS));
+                Assertions.assertFalse(lockCalled.get(),
+                        "Meta lock was acquired while refreshing an unqualified external table.");
 
-            Assertions.assertTrue(refreshStarted.await(10, TimeUnit.SECONDS));
-            Assertions.assertFalse(lockCalled.get(),
-                    "Meta lock was acquired while refreshing an unqualified external table.");
+                if (error.get() != null) {
+                    throw new RuntimeException("INSERT ... SELECT failed: " + error.get().getMessage(), error.get());
+                }
 
-            allowRefresh.countDown();
-            t.join(TimeUnit.SECONDS.toMillis(20));
-
-            if (error.get() != null) {
-                throw new RuntimeException("INSERT ... SELECT failed: " + error.get().getMessage(), error.get());
+                Assertions.assertTrue(finished.get(), "INSERT ... SELECT did not finish");
+                Assertions.assertEquals(1, refreshCalls.get(), "unqualified external table should still refresh once");
+                Assertions.assertEquals(2, getTableCalls.get(),
+                        "unqualified external table should be resolved before and after refresh");
+            } finally {
+                allowRefresh.countDown();
+                t.join(TimeUnit.SECONDS.toMillis(20));
             }
-
-            Assertions.assertTrue(finished.get(), "INSERT ... SELECT did not finish");
-            Assertions.assertEquals(1, refreshCalls.get(), "unqualified external table should still refresh once");
-            Assertions.assertEquals(2, getTableCalls.get(),
-                    "unqualified external table should be resolved before and after refresh");
         } finally {
             connectContext.setCurrentCatalog(originalCatalog);
             connectContext.setDatabase(originalDb);

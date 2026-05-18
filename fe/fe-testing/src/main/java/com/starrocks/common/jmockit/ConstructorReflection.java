@@ -127,8 +127,8 @@ public final class ConstructorReflection {
      * Get non-inner-class constructor with {@argTypes Class<?>[]}.
      * if more than one constructor was found, choose the more specific one.
      * (i.e. constructor with parameters that have more concrete types is more specific)
-     * if no constructor was found, will check if {@theClass} is a inner class.
-     * Then a IllegalArgumentException exception will be thrown.
+     * if no constructor was found, will check if {@theClass} is an inner class.
+     * Then an IllegalArgumentException will be thrown.
      */
     private static <T> Constructor<T> findCompatibleConstructor(Class<?> theClass, Class<?>[] argTypes) {
         if (theClass == null || argTypes == null) {
