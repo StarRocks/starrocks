@@ -341,7 +341,6 @@ public class DecodeRewriter extends OptExpressionVisitor<OptExpression, ColumnRe
         op.setDistinctColumnDataSkew(aggregate.getDistinctColumnDataSkew());
         op.setForcePreAggregation(aggregate.isForcePreAggregation());
         op.setLocalLimit(aggregate.getLocalLimit());
-        op.setGroupByMinMaxStatistic(aggregate.getGroupByMinMaxStatistic());
         return rewriteOptExpression(optExpression, op, info.outputStringColumns);
     }
 
