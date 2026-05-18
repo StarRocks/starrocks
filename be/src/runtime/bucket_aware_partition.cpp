@@ -14,6 +14,12 @@
 
 #include "runtime/bucket_aware_partition.h"
 
+#ifdef __AVX2__
+#include <immintrin.h>
+#elif defined(__ARM_NEON) && defined(__aarch64__)
+#include <arm_neon.h>
+#endif
+
 #include "column/nullable_column.h"
 #include "gutil/casts.h"
 
@@ -36,8 +42,38 @@ void calc_hash_values_and_bucket_ids(const std::vector<const Column*>& partition
         round_hashes.assign(num_rows, 0);
         round_ids.assign(num_rows, 0);
         partitions_columns[i]->murmur_hash3_x86_32(&round_hashes[0], 0, num_rows);
+        // SIMD-optimized XOR loop
+#ifdef __AVX2__
+        {
+            size_t j = 0;
+            for (; j + 8 <= num_rows; j += 8) {
+                __m256i hv = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(&hash_values[j]));
+                __m256i rh = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(&round_hashes[j]));
+                _mm256_storeu_si256(reinterpret_cast<__m256i*>(&hash_values[j]), _mm256_xor_si256(hv, rh));
+            }
+            for (; j < num_rows; j++) {
+                hash_values[j] ^= round_hashes[j];
+            }
+        }
+#elif defined(__ARM_NEON) && defined(__aarch64__)
+        {
+            size_t j = 0;
+            for (; j + 4 <= num_rows; j += 4) {
+                uint32x4_t hv = vld1q_u32(&hash_values[j]);
+                uint32x4_t rh = vld1q_u32(&round_hashes[j]);
+                vst1q_u32(&hash_values[j], veorq_u32(hv, rh));
+            }
+            for (; j < num_rows; j++) {
+                hash_values[j] ^= round_hashes[j];
+            }
+        }
+#else
         for (int j = 0; j < num_rows; j++) {
             hash_values[j] ^= round_hashes[j];
+        }
+#endif
+        // Modulo cannot be easily vectorized, keep scalar
+        for (int j = 0; j < num_rows; j++) {
             round_ids[j] = (round_hashes[j] & std::numeric_limits<int>::max()) % bucket_properties[i].bucket_num;
         }
         if (partitions_columns[i]->has_null()) {

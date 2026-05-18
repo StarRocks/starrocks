@@ -18,6 +18,12 @@
 #include <memory>
 #include <unordered_map>
 
+#ifdef __AVX2__
+#include <immintrin.h>
+#elif defined(__ARM_NEON) && defined(__aarch64__)
+#include <arm_neon.h>
+#endif
+
 #include "column/chunk.h"
 #include "common/config_exec_flow_fwd.h"
 #include "common/runtime_profile.h"
@@ -122,10 +128,37 @@ Status ShufflePartitioner::shuffle_channel_ids(const ChunkPtr& chunk, int32_t nu
             DCHECK(_bucket_properties[i].bucket_func == TBucketFunction::MURMUR3_X86_32);
             _round_hashes.assign(num_rows, 0);
             _partitions_columns[i]->murmur_hash3_x86_32(&_round_hashes[0], 0, num_rows);
+            // SIMD-optimized XOR loop
+#ifdef __AVX2__
+            {
+                size_t j = 0;
+                for (; j + 8 <= num_rows; j += 8) {
+                    __m256i hv = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(&_hash_values[j]));
+                    __m256i rh = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(&_round_hashes[j]));
+                    _mm256_storeu_si256(reinterpret_cast<__m256i*>(&_hash_values[j]), _mm256_xor_si256(hv, rh));
+                }
+                for (; j < num_rows; j++) {
+                    _hash_values[j] ^= _round_hashes[j];
+                }
+            }
+#elif defined(__ARM_NEON) && defined(__aarch64__)
+            {
+                size_t j = 0;
+                for (; j + 4 <= num_rows; j += 4) {
+                    uint32x4_t hv = vld1q_u32(&_hash_values[j]);
+                    uint32x4_t rh = vld1q_u32(&_round_hashes[j]);
+                    vst1q_u32(&_hash_values[j], veorq_u32(hv, rh));
+                }
+                for (; j < num_rows; j++) {
+                    _hash_values[j] ^= _round_hashes[j];
+                }
+            }
+#else
             // carefully keep same with exchange node
             for (int j = 0; j < num_rows; j++) {
                 _hash_values[j] ^= _round_hashes[j];
             }
+#endif
         }
     }
 

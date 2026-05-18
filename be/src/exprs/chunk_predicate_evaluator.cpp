@@ -16,6 +16,12 @@
 
 #include <algorithm>
 
+#ifdef __AVX2__
+#include <immintrin.h>
+#elif defined(__ARM_NEON) && defined(__aarch64__)
+#include <arm_neon.h>
+#endif
+
 #include "base/simd/simd.h"
 #include "column/chunk.h"
 #include "column/column_helper.h"
@@ -206,7 +212,19 @@ void ChunkPredicateEvaluator::eval_filter_null_values(Chunk* chunk,
         // till the end of the world.
         const auto& nulls = nullable_column->immutable_null_column_data();
         uint8_t* sel = selection.data();
-        for (size_t i = 0; i < before_size; i++) {
+        size_t i = 0;
+#ifdef __AVX2__
+        for (; i + 32 <= before_size; i += 32) {
+            __m256i s = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(sel + i));
+            __m256i n = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(nulls.data() + i));
+            _mm256_storeu_si256(reinterpret_cast<__m256i*>(sel + i), _mm256_andnot_si256(n, s));
+        }
+#elif defined(__ARM_NEON) && defined(__aarch64__)
+        for (; i + 16 <= before_size; i += 16) {
+            vst1q_u8(sel + i, vbicq_u8(vld1q_u8(sel + i), vld1q_u8(nulls.data() + i)));
+        }
+#endif
+        for (; i < before_size; ++i) {
             sel[i] &= !nulls[i];
         }
     }
