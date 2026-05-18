@@ -20,6 +20,7 @@ import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.metric.ResourceGroupMetricMgr;
+import com.starrocks.metric.WarehouseSlotMetricMgr;
 import com.starrocks.qe.scheduler.RecoverableException;
 import com.starrocks.qe.scheduler.dag.JobSpec;
 import com.starrocks.qe.scheduler.slot.BaseSlotManager;
@@ -73,6 +74,11 @@ public class QueryQueueManager {
 
         long startMs = System.currentTimeMillis();
         boolean isPending = false;
+        // Hoisted outside try so the finally block can update the big-query wait histogram.
+        // Computed up-front from rawSlots, totalSlots, and the threshold ratio.
+        final double thresholdRatio = Config.query_queue_big_query_slot_threshold_ratio;
+        final boolean isBigQuery = opts.isEnableQueryQueueV2() && totalSlots > 0
+                && estimate.rawSlots() > (long) Math.ceil(totalSlots * thresholdRatio);
         LogicalSlot slotRequirement = null;
         try {
             slotRequirement = createSlot(context, coord, estimate.clampedSlots());
@@ -91,13 +97,13 @@ public class QueryQueueManager {
             }
 
             if (trackedInFlight) {
-                final double thresholdRatio = Config.query_queue_big_query_slot_threshold_ratio;
-                final boolean isBigQuery = totalSlots > 0
-                        && estimate.rawSlots() > (long) Math.ceil(totalSlots * thresholdRatio);
                 WarehouseInFlightTracker.getInstance().onEnterPending(
                         warehouseId, slotRequirement.getSlotId(),
                         estimate.rawSlots(), estimate.clampedSlots(),
                         totalSlots, isBigQuery);
+                if (isBigQuery) {
+                    WarehouseSlotMetricMgr.getBigQueryCounter(warehouseId).increase(1L);
+                }
             }
 
             // LocalSlotProvider does not need to queue, just return directly. Currently, it is only used to adjust DOP
@@ -169,6 +175,13 @@ public class QueryQueueManager {
                 MetricRepo.COUNTER_QUERY_QUEUE_PENDING.increase(-1L);
                 ResourceGroupMetricMgr.increaseQueuedQuery(context, -1L);
                 context.setPending(false);
+
+                // Guarded by isBigQuery && trackedInFlight inside the isPending block —
+                // fires only for queries that actually pended as big.
+                if (isBigQuery && trackedInFlight) {
+                    WarehouseSlotMetricMgr.getBigQueryWaitHistogram(warehouseId)
+                            .update(pendingTimeMs);  // unit: milliseconds (matches metric name suffix)
+                }
             }
         }
     }

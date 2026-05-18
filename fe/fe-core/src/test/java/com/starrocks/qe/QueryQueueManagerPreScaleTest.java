@@ -17,6 +17,7 @@ package com.starrocks.qe;
 import com.starrocks.common.Config;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.metric.MetricRepo;
+import com.starrocks.metric.WarehouseSlotMetricMgr;
 import com.starrocks.qe.scheduler.SchedulerTestBase;
 import com.starrocks.qe.scheduler.slot.BaseSlotManager;
 import com.starrocks.qe.scheduler.slot.LogicalSlot;
@@ -60,6 +61,7 @@ public class QueryQueueManagerPreScaleTest extends SchedulerTestBase {
     private int prevQueuePendingTimeoutSecond;
     private int prevQueueMaxQueuedQueries;
     private int prevQueueTimeoutSecond;
+    private double prevBigQueryThresholdRatio;
 
     @BeforeAll
     public static void beforeClass() throws Exception {
@@ -78,6 +80,7 @@ public class QueryQueueManagerPreScaleTest extends SchedulerTestBase {
         prevQueuePendingTimeoutSecond = GlobalVariable.getQueryQueuePendingTimeoutSecond();
         prevQueueMaxQueuedQueries = GlobalVariable.getQueryQueueMaxQueuedQueries();
         prevQueueTimeoutSecond = connectContext.getSessionVariable().getQueryTimeoutS();
+        prevBigQueryThresholdRatio = Config.query_queue_big_query_slot_threshold_ratio;
 
         GlobalVariable.setQueryQueuePendingTimeoutSecond(Config.max_load_timeout_second);
         connectContext.getSessionVariable().setQueryTimeoutS(Config.max_load_timeout_second);
@@ -119,6 +122,7 @@ public class QueryQueueManagerPreScaleTest extends SchedulerTestBase {
         GlobalVariable.setQueryQueuePendingTimeoutSecond(prevQueuePendingTimeoutSecond);
         GlobalVariable.setQueryQueueMaxQueuedQueries(prevQueueMaxQueuedQueries);
         connectContext.getSessionVariable().setQueryTimeoutS(prevQueueTimeoutSecond);
+        Config.query_queue_big_query_slot_threshold_ratio = prevBigQueryThresholdRatio;
     }
 
     /**
@@ -267,6 +271,91 @@ public class QueryQueueManagerPreScaleTest extends SchedulerTestBase {
                 WAREHOUSE_ID, timingOutCoord.getSlot().getSlotId()));
 
         runningCoords.forEach(DefaultCoordinator::onFinished);
+    }
+
+    /**
+     * When the configured threshold is low enough that the query qualifies as "big", the
+     * per-warehouse {@code query_queue_big_query_total} counter must be incremented at
+     * pending-enter (B4). Verifies the GlobalSlotProvider path actually wires the bump.
+     */
+    @Test
+    public void testBigQueryCounterBumpedOnPendingEnter() throws Exception {
+        Config.enable_query_queue_v2 = true;
+        GlobalVariable.setEnableQueryQueueSelect(true);
+        GlobalVariable.setQueryQueueConcurrencyLimit(8);
+        GlobalVariable.setQueryQueueMaxQueuedQueries(8);
+        // Force every tracked query to be flagged as big.
+        Config.query_queue_big_query_slot_threshold_ratio = 0.0;
+
+        BackendResourceStat.getInstance().setNumCoresOfBe(WAREHOUSE_ID, 1, 8);
+        BackendResourceStat.getInstance().setMemLimitBytesOfBe(WAREHOUSE_ID, 1, 64L * 1024 * 1024 * 1024);
+
+        long baseline = WarehouseSlotMetricMgr.getBigQueryCounter(WAREHOUSE_ID).getValue();
+
+        DefaultCoordinator coord = getSchedulerWithQueryId("select count(1) from lineitem");
+        manager.maybeWait(connectContext, coord);
+        Assertions.assertEquals(LogicalSlot.State.ALLOCATED, coord.getSlot().getState());
+
+        assertThat(WarehouseSlotMetricMgr.getBigQueryCounter(WAREHOUSE_ID).getValue())
+                .isEqualTo(baseline + 1);
+
+        coord.onFinished();
+    }
+
+    /**
+     * When a big query actually pends (isPending == true), the per-warehouse wait histogram
+     * must record a sample in the finally block (B4). Fills the queue so the test query has
+     * to wait, then cancels it to drain and observes the histogram's count incremented.
+     */
+    @Test
+    public void testBigQueryWaitHistogramUpdatedAfterPending() throws Exception {
+        final int concurrencyLimit = 1;
+        Config.enable_query_queue_v2 = true;
+        GlobalVariable.setEnableQueryQueueSelect(true);
+        GlobalVariable.setQueryQueueConcurrencyLimit(concurrencyLimit);
+        GlobalVariable.setQueryQueueMaxQueuedQueries(8);
+        // Force every tracked query to be flagged as big.
+        Config.query_queue_big_query_slot_threshold_ratio = 0.0;
+
+        BackendResourceStat.getInstance().setNumCoresOfBe(WAREHOUSE_ID, 1, 8);
+        BackendResourceStat.getInstance().setMemLimitBytesOfBe(WAREHOUSE_ID, 1, 64L * 1024 * 1024 * 1024);
+
+        long baseline = WarehouseSlotMetricMgr.getBigQueryWaitHistogram(WAREHOUSE_ID).getCount();
+
+        // Fill the queue so the next query becomes pending.
+        List<DefaultCoordinator> runningCoords = new ArrayList<>();
+        for (int i = 0; i < concurrencyLimit; i++) {
+            DefaultCoordinator coord = getSchedulerWithQueryId("select count(1) from lineitem");
+            manager.maybeWait(connectContext, coord);
+            Assertions.assertEquals(LogicalSlot.State.ALLOCATED, coord.getSlot().getState());
+            runningCoords.add(coord);
+        }
+
+        // Submit a query that will pend.
+        DefaultCoordinator pendingCoord = getSchedulerWithQueryId("select count(1) from lineitem");
+        Thread thread = new Thread(() -> {
+            try {
+                manager.maybeWait(connectContext, pendingCoord);
+            } catch (StarRocksException | InterruptedException ignored) {
+                // Expected on cancellation below.
+            }
+        });
+        thread.start();
+
+        // Wait until the pending query is observable.
+        Awaitility.await().atMost(5, TimeUnit.SECONDS).until(
+                () -> MetricRepo.COUNTER_QUERY_QUEUE_PENDING.getValue() > 0);
+
+        // Cancel and drain so the finally block in maybeWait runs and records the histogram sample.
+        pendingCoord.cancel("Cancel by test");
+        runningCoords.forEach(DefaultCoordinator::onFinished);
+        thread.join(5_000);
+
+        // The histogram count must have advanced by 1 from the baseline.
+        Awaitility.await().atMost(5, TimeUnit.SECONDS).until(
+                () -> WarehouseSlotMetricMgr.getBigQueryWaitHistogram(WAREHOUSE_ID).getCount() > baseline);
+        assertThat(WarehouseSlotMetricMgr.getBigQueryWaitHistogram(WAREHOUSE_ID).getCount())
+                .isGreaterThan(baseline);
     }
 
     /**

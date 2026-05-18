@@ -107,8 +107,8 @@ public class SlotManagerMetricsScrapeTest {
                 "must visit big_query_total counter, saw=" + visitor.visitedNames);
 
         // The histogram must be visited via visitHistogram(HistogramMetric).
-        assertTrue(visitor.visitedHistogramNames.contains("query_queue_pending_big_query_wait_seconds"),
-                "must visit big_query_wait_seconds histogram, saw=" + visitor.visitedHistogramNames);
+        assertTrue(visitor.visitedHistogramNames.contains("query_queue_pending_big_query_wait_ms"),
+                "must visit big_query_wait_ms histogram, saw=" + visitor.visitedHistogramNames);
 
         // The gauges should have been populated with computed values.
         assertEquals(20L, com.starrocks.metric.WarehouseSlotMetricMgr.getMaxRawSlotsGauge(WH).getValue().longValue());

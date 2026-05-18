@@ -92,7 +92,7 @@ public class WarehouseSlotMetricMgr {
 
     public static HistogramMetric getBigQueryWaitHistogram(Long whId) {
         return getOrCreateHistogram(whId, BIG_WAIT_HIST, () ->
-                new HistogramMetric("query_queue_pending_big_query_wait_seconds"));
+                new HistogramMetric("query_queue_pending_big_query_wait_ms"));
     }
 
     private static <T extends Metric<?>> T getOrCreateMetric(Long whId, Map<Long, T> map, Supplier<T> creator) {
