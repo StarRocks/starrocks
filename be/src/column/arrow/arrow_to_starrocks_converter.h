@@ -95,4 +95,11 @@ struct ConvertFuncTree {
     std::vector<std::unique_ptr<ConvertFuncTree>> children;
 };
 
+Status build_arrow_column_convert_plan(const arrow::DataType* arrow_type, const TypeDescriptor* type_desc,
+                                       bool is_nullable, TypeDescriptor* raw_type_desc, ConvertFuncTree* conv_func,
+                                       bool& need_cast, bool strict_mode);
+
+MutableColumnPtr create_arrow_column_convert_dest(const TypeDescriptor& type_desc, const TypeDescriptor& raw_type_desc,
+                                                  bool need_cast, bool is_nullable);
+
 } // namespace starrocks
