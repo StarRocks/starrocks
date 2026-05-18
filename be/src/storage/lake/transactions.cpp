@@ -82,6 +82,26 @@ static void clear_remote_snapshot_async(TabletManager* tablet_mgr, int64_t table
     files_to_delete->emplace_back(std::move(slog_path));
 }
 
+// Populate `new_metadata->metadata_ancestors` for CDC reverse traversal:
+//   [direct_parent, then up to (max_depth - 1) entries from parent_metadata's
+//    own chain].
+// `parent_metadata` may be nullptr (e.g. when we don't already hold the
+// direct_parent's metadata); in that case only direct_parent is recorded.
+// `max_depth` is floored at 1 so CHANGES can always advance by one step.
+void build_metadata_ancestors(TabletMetadataPB* new_metadata, int64_t direct_parent,
+                              const TabletMetadataPB* parent_metadata) {
+    auto* chain = new_metadata->mutable_metadata_ancestors();
+    chain->Clear();
+    chain->Add(direct_parent);
+    int max_depth = std::max(1, config::cloud_native_tablet_metadata_ancestors_recorded);
+    if (max_depth > 1 && parent_metadata != nullptr && parent_metadata->metadata_ancestors_size() > 0) {
+        int copy_count = std::min(parent_metadata->metadata_ancestors_size(), max_depth - 1);
+        for (int i = 0; i < copy_count; i++) {
+            chain->Add(parent_metadata->metadata_ancestors(i));
+        }
+    }
+}
+
 int64_t cal_new_base_version(int64_t tablet_id, TabletManager* tablet_mgr, int64_t base_version, int64_t new_version,
                              const std::span<const TxnInfoPB>& txns) {
     int64_t version = base_version;
@@ -195,6 +215,10 @@ StatusOr<TabletMetadataPtr> publish_version(TabletManager* tablet_mgr, const Pub
                     new_metadata->has_vector_index_built_version() ? new_metadata->vector_index_built_version() : 0;
             new_metadata->set_vector_index_built_version(std::max(prev_bv, fe_built_version));
         }
+        // Empty / reshard publishes always have new_version == base_version + 1,
+        // so base_version is the direct parent and `metadata` is the tablet
+        // metadata at base_version.
+        build_metadata_ancestors(new_metadata.get(), base_version, metadata.get());
         if (!skip_write_tablet_metadata) {
             RETURN_IF_ERROR(tablet_mgr->put_tablet_metadata(new_metadata));
         } else {
@@ -529,23 +553,15 @@ StatusOr<TabletMetadataPtr> publish_version(TabletManager* tablet_mgr, const Pub
         new_metadata->set_vector_index_built_version(std::max(prev_bv, fe_built_version));
     }
 
-    // Build metadata_ancestors for CDC reverse traversal
-    if (config::cloud_native_tablet_metadata_ancestors_recorded > 0) {
-        auto* chain = new_metadata->mutable_metadata_ancestors();
-        chain->Clear();
-        // Add base_version as direct parent
-        chain->Add(base_version);
-        // Copy parent's chain (if available), truncating to configured depth
-        if (base_metadata != nullptr && base_metadata->metadata_ancestors_size() > 0) {
-            int max_depth = config::cloud_native_tablet_metadata_ancestors_recorded;
-            int copy_count = std::min(
-                base_metadata->metadata_ancestors_size(),
-                max_depth - 1);  // -1 because we already added base_version
-            for (int i = 0; i < copy_count; i++) {
-                chain->Add(base_metadata->metadata_ancestors(i));
-            }
-        }
-    }
+    // ori_base_version is the originally-requested base (base_version may have
+    // been advanced by cal_new_base_version when earlier txns in this batch
+    // were already published). base_metadata is at base_version, so we can
+    // only carry over its chain when ori_base_version == base_version; in the
+    // advanced case we record ori_base_version alone rather than fetching its
+    // metadata with an extra GetTabletMetadata RPC.
+    const TabletMetadataPB* ancestor_source =
+            (ori_base_version == base_version) ? base_metadata.get() : nullptr;
+    build_metadata_ancestors(new_metadata.get(), ori_base_version, ancestor_source);
 
     // Save new metadata
     RETURN_IF_ERROR(log_applier->finish());

@@ -24,18 +24,13 @@
 #include "column/chunk.h"
 #include "column/column.h"
 #include "connector/connector.h"
-#include "exec/olap_scan_prepare.h"
 #include "exec/pipeline/scan/morsel.h"
-#include "storage/predicate_tree/predicate_tree.hpp"
-#include "storage/runtime_filter_predicate.h"
-#include "storage/runtime_range_pruner.hpp"
 #include "fs/fs.h"
 #include "storage/chunk_iterator.h"
 #include "storage/olap_common.h"
 #include "storage/tablet_schema.h"
 
 namespace starrocks {
-class PredicateParser;
 class Segment;
 class TabletMetadataPB;
 class RowsetMetadataPB;
@@ -45,12 +40,6 @@ class TabletManager;
 } // namespace starrocks
 
 namespace starrocks::connector {
-
-// Spec §3.6 E11: caller-actionable error when the metadata ancestor chain is too
-// short to cover the (V_base, V_head] request range. Surfaced verbatim to the FE so
-// users can correlate with `cloud_native_tablet_metadata_ancestors_recorded`.
-// Exposed for unit testing the exact wording without staging a full traversal.
-std::string format_ancestor_chain_exhausted_error(int64_t tablet_id);
 
 class ChangesConnector final : public Connector {
 public:
@@ -89,70 +78,9 @@ protected:
     const TChangesScanNode _changes_scan_node;
 };
 
-/// Per-tablet statistics collected during metadata traversal (Phase 1).
-struct ChangesStats {
-    int64_t insertion_rows = 0;
-    int64_t insertion_data_size = 0;
-    int64_t insertion_segment_count = 0;
-    int64_t insertion_segment_total_rows = 0;
-    int64_t deletion_rows = 0;
-    int64_t deletion_data_size = 0;
-    int64_t deletion_segment_count = 0;
-    int64_t deletion_segment_total_rows = 0;
-    int64_t load_count = 0;
-    int64_t compaction_count = 0;
-    int64_t metadata_count = 0;
-    bool has_delete_predicate = false;
-    int64_t base_version_rows = 0;
-    int64_t base_version_data_size = 0;
-    int64_t base_version_segment_count = 0;
-    int64_t head_version_rows = 0;
-    int64_t head_version_data_size = 0;
-    int64_t head_version_segment_count = 0;
-};
-
-/// Predicate over the `__ROW_VERSION__` metadata column (rowset version).
-struct RowVersionFilter {
-    TExprOpcode::type op;
-    int64_t value;
-
-    RowVersionFilter(TExprOpcode::type op, int64_t value) : op(op), value(value) {}
-
-    bool evaluate(int64_t version) const {
-        switch (op) {
-        case TExprOpcode::EQ: return version == value;
-        case TExprOpcode::NE: return version != value;
-        case TExprOpcode::LT: return version < value;
-        case TExprOpcode::LE: return version <= value;
-        case TExprOpcode::GT: return version > value;
-        case TExprOpcode::GE: return version >= value;
-        default: return true;
-        }
-    }
-};
-
 struct ChangesRowset {
-    uint32_t id;
     int64_t version;
-    int64_t num_rows;       // total rowset rows
-    int64_t data_size;
-    std::vector<std::string> segments;  // segment filenames
-    std::vector<int64_t> segment_num_rows;  // per-segment row counts (from SegmentMetadataPB)
-
-    // Returns per-segment row count. Falls back to proportional estimate
-    // when segment_metas is absent or lacks num_rows.
-    int64_t get_segment_num_rows(size_t segment_index) const {
-        if (segment_index < segment_num_rows.size()) {
-            return segment_num_rows[segment_index];
-        }
-        // Fallback: proportional estimate
-        return segments.empty() ? 0 : num_rows / static_cast<int64_t>(segments.size());
-    }
-};
-
-struct ChangesPhase1Result {
-    std::vector<ChangesRowset> changes_rowsets;      // Phase 1 discovered delta rowsets (with segment_metas)
-    std::shared_ptr<const TabletMetadataPB> head_metadata;  // V_head metadata
+    std::vector<std::string> segments;
 };
 
 /// CDC data source implementing the Delta Replay algorithm for
@@ -185,7 +113,9 @@ private:
 
     // Phase 1: metadata traversal
     Status _do_metadata_traversal();
-    void _scan_metadata_for_changes_rowsets(const TabletMetadataPB& meta);
+    void _scan_metadata_for_changes_rowsets(const TabletMetadataPB& meta,
+                                            std::unordered_set<uint32_t>& seen_rowset_ids,
+                                            std::unordered_set<int64_t>& discovered_versions);
 
     // Phase 2: segment reading
     Status _read_next_chunk(ChunkPtr* chunk);
@@ -193,73 +123,46 @@ private:
     Schema _build_read_schema();
     void _append_metadata_columns(Chunk* chunk, int64_t version);
 
-    void _classify_predicates();
-    void _try_extract_row_version_predicate(ExprContext* ctx);
     Status _read_head_metadata();
-    Status _init_predicate_tree();
 
-    // Input parameters (from TChangesScanRange)
+    // --- Inputs (immutable after open) ---
     const ChangesDataSourceProvider* _provider;
     int64_t _tablet_id = 0;
-    int64_t _base_version = 0; // V_base (left-open)
-    int64_t _head_version = 0; // V_head (right-closed)
+    int64_t _base_version = 0;   // V_base (left-open)
+    int64_t _head_version = 0;   // V_head (right-closed)
 
-    // Phase 1 state
-    std::unordered_set<uint32_t> _found_ids;
-    std::unordered_set<int64_t> _found_cv;
-    std::vector<ChangesRowset> _changes_rowsets;
-    std::shared_ptr<const TabletMetadataPB> _head_metadata;
-
-    // Stats
-    ChangesStats _stats;
-    int64_t _rows_read = 0;
-    int64_t _bytes_read = 0;
-    int64_t _cpu_time_ns = 0;
-
-    // --- Profile counters (predicate filtering) ---
-    RuntimeProfile::Counter* _expr_filter_timer = nullptr;
-    RuntimeProfile::Counter* _expr_filter_counter = nullptr;
-
-    // --- Predicate classification ---
-    std::vector<ExprContext*> _data_column_conjuncts;  // data-column predicates pushable to the storage layer
-    std::vector<RowVersionFilter> _row_version_filters;
-    RuntimeProfile::Counter* _rowset_skipped_counter = nullptr;
-
-    ObjectPool _obj_pool;                              // declared first → destroyed last (owns _parser etc.)
-    std::unique_ptr<ScanConjunctsManager> _conjuncts_manager;
-    PredicateParser* _parser = nullptr;                 // lifetime owned by _obj_pool
-    PredicateTree _cached_pred_tree;                   // predicates pushable to the storage layer
-    RuntimeScanRangePruner _runtime_range_pruner;
-    ColumnPredicatePtrs _col_preds_owner;
-
-    // --- Profile counters (storage-layer pushdown) ---
-    RuntimeProfile::Counter* _pred_pushdown_counter = nullptr;
-
-    const TupleDescriptor* _tuple_desc = nullptr;
-    std::vector<std::string> _key_column_names;
-
+    // --- Runtime context ---
     RuntimeState* _runtime_state = nullptr;
+    const TupleDescriptor* _tuple_desc = nullptr;
 
-    // Phase 2 state: segment reading
-    size_t _current_rowset_index = 0;
-    size_t _current_segment_index = 0;
-    ChunkIteratorPtr _segment_iter;
-    TabletSchemaCSPtr _tablet_schema;
-    OlapReaderStatistics _seg_stats;
-    int64_t _prev_block_fetch_ns = 0;
-    std::shared_ptr<FileSystem> _fs;
-    std::optional<Schema> _cached_read_schema;
-
-    // Slot ID tracking for metadata columns
+    // --- Tuple slots resolved from _tuple_desc ---
+    std::vector<SlotDescriptor*> _data_slots;
     std::optional<int> _change_type_slot_id;
     std::optional<int> _row_version_slot_id;
-
-    // Pre-computed nullable flags for metadata slots
     bool _change_type_slot_is_nullable = false;
     bool _row_version_slot_is_nullable = false;
 
-    // Data column slots (exclude metadata columns)
-    std::vector<SlotDescriptor*> _data_slots;
+    // --- Phase 1: metadata traversal output ---
+    std::shared_ptr<const TabletMetadataPB> _head_metadata;
+    TabletSchemaCSPtr _tablet_schema;
+    std::vector<ChangesRowset> _changes_rowsets;
+    // Fail-fast gate: any in-range rowset with a DELETE predicate aborts
+    // Phase 2. Spec §2 reserves DELETE for the PK stage.
+    bool _has_delete_predicate = false;
+
+    // --- Phase 2: segment-read cursor and IO state ---
+    size_t _current_rowset_index = 0;
+    size_t _current_segment_index = 0;
+    ChunkIteratorPtr _segment_iter;
+    std::shared_ptr<FileSystem> _fs;
+    std::optional<Schema> _cached_read_schema;
+    OlapReaderStatistics _seg_stats;
+    int64_t _prev_block_fetch_ns = 0;
+
+    // --- Counters exposed via the DataSource interface ---
+    int64_t _rows_read = 0;
+    int64_t _bytes_read = 0;
+    int64_t _cpu_time_ns = 0;
 };
 
 } // namespace starrocks::connector

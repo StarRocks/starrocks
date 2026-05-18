@@ -17,18 +17,11 @@
 #include <algorithm>
 #include <fmt/format.h>
 
-#include "exec/olap_scan_prepare.h"
 #include "exprs/chunk_predicate_evaluator.h"
-#include "exprs/column_ref.h"
 #include "exprs/expr.h"
-#include "exprs/literal.h"
-#include "storage/predicate_parser.h"
 
-#include "column/const_column.h"
-#include "column/fixed_length_column.h"
 #include "column/nullable_column.h"
 #include "exec/connector_scan_node.h"
-#include "exec/pipeline/fragment_context.h"
 #include "fs/fs.h"
 #include "fs/fs_factory.h"
 #include "gen_cpp/PlanNodes_types.h"
@@ -37,20 +30,11 @@
 #include "runtime/runtime_state.h"
 #include "storage/chunk_helper.h"
 #include "storage/lake/tablet_manager.h"
-#include "storage/options.h"
 #include "storage/rowset/segment.h"
 #include "storage/rowset/segment_options.h"
-#include "common/config.h"
 #include "storage/tablet_schema_map.h"
 
 namespace starrocks::connector {
-
-std::string format_ancestor_chain_exhausted_error(int64_t tablet_id) {
-    return fmt::format(
-            "CHANGES_NOT_FOUND: ancestor chain insufficient for tablet {}; "
-            "consider raising cloud_native_tablet_metadata_ancestors_recorded",
-            tablet_id);
-}
 
 // --- ChangesConnector ---
 
@@ -108,43 +92,10 @@ Status ChangesDataSource::open(RuntimeState* state) {
         }
     }
 
-    // Split data-column and metadata-column predicates for storage-layer pushdown.
-    // Post-read behavior is unchanged: _conjunct_ctxs is still fully evaluated.
-    _classify_predicates();
-
-    // Profile counters — must be initialized before _init_predicate_tree, which uses COUNTER_SET internally.
-    _expr_filter_timer = ADD_TIMER(_runtime_profile, "ExprFilterTime");
-    _expr_filter_counter = ADD_COUNTER(_runtime_profile, "ExprFilterRows", TUnit::UNIT);
-    _pred_pushdown_counter = ADD_COUNTER(_runtime_profile, "PredPushdownToStorage", TUnit::UNIT);
-    _rowset_skipped_counter = ADD_COUNTER(_runtime_profile, "RowsetSkippedByVersionFilter", TUnit::UNIT);
-
-    // Read head metadata up front — _tablet_schema and _key_column_names are initialized here.
     RETURN_IF_ERROR(_read_head_metadata());
-
-    // Initialize the predicate tree (requires _tablet_schema, ready after _read_head_metadata).
-    RETURN_IF_ERROR(_init_predicate_tree());
 
     // Phase 1: metadata traversal
     RETURN_IF_ERROR(_do_metadata_traversal());
-
-    // Sort and RowVersionFilter
-    std::sort(_changes_rowsets.begin(), _changes_rowsets.end(),
-              [](const ChangesRowset& a, const ChangesRowset& b) {
-                  return a.version < b.version;
-              });
-
-    if (!_row_version_filters.empty()) {
-        size_t before = _changes_rowsets.size();
-        _changes_rowsets.erase(
-                std::remove_if(_changes_rowsets.begin(), _changes_rowsets.end(),
-                               [this](const ChangesRowset& rs) {
-                                   return std::any_of(
-                                           _row_version_filters.begin(), _row_version_filters.end(),
-                                           [&](const RowVersionFilter& f) { return !f.evaluate(rs.version); });
-                               }),
-                _changes_rowsets.end());
-        COUNTER_UPDATE(_rowset_skipped_counter, before - _changes_rowsets.size());
-    }
 
     return Status::OK();
 }
@@ -161,7 +112,6 @@ void ChangesDataSource::close(RuntimeState* state) {
 }
 
 Status ChangesDataSource::get_next(RuntimeState* state, ChunkPtr* chunk) {
-    // Serial read path (sort/filter already done in open())
     return _read_next_chunk(chunk);
 }
 
@@ -185,29 +135,31 @@ Status ChangesDataSource::_do_metadata_traversal() {
     if (_head_metadata == nullptr) {
         ASSIGN_OR_RETURN(_head_metadata, tablet_mgr->get_tablet_metadata(_tablet_id, _head_version));
     }
+    // Phase 1 traversal state — local to this method.
+    // seen_rowset_ids: rowset.id() set, dedupes the same rowset reappearing across ancestor metadata.
+    // discovered_versions: distinct rowset versions in (V_base, V_head] — used as the early-stop count.
+    std::unordered_set<uint32_t> seen_rowset_ids;
+    std::unordered_set<int64_t> discovered_versions;
+
     auto head_meta = _head_metadata;
-    _stats.metadata_count++;
-
-    // Collect head version stats
-    for (const auto& rs : head_meta->rowsets()) {
-        _stats.head_version_rows += rs.num_rows();
-        _stats.head_version_data_size += rs.data_size();
-        _stats.head_version_segment_count += rs.segments_size();
-    }
-
     // Reverse traverse from V_head
     auto current_meta = head_meta;
     int64_t current_version = _head_version;
 
     while (current_version > _base_version) {
-        _scan_metadata_for_changes_rowsets(*current_meta);
+        _scan_metadata_for_changes_rowsets(*current_meta, seen_rowset_ids, discovered_versions);
 
-        if (static_cast<int64_t>(_found_cv.size()) >= _head_version - _base_version) {
+        // The size check is a one-way termination hint: equal-or-more means
+        // (V_base, V_head] is fully covered. Less is inconclusive — versions
+        // are not 1:1 with rowsets (batch publish shares one version across
+        // rowsets, empty publish has no rowset at all). Fall through to the
+        // ancestor walk and let it run out naturally.
+        if (static_cast<int64_t>(discovered_versions.size()) >= _head_version - _base_version) {
             break;
         }
 
         if (current_meta->metadata_ancestors_size() == 0) {
-            return Status::InternalError(format_ancestor_chain_exhausted_error(_tablet_id));
+            break;
         }
 
         std::vector<int64_t> versions_to_read;
@@ -222,15 +174,18 @@ Status ChangesDataSource::_do_metadata_traversal() {
             break;
         }
 
+        // TODO: fetch the ancestor metadata in parallel — when it is not in
+        // cache each get_tablet_metadata() costs one object-store round-trip,
+        // so the current serial loop is bound by N * RTT for an N-deep
+        // ancestor chain.
         for (int64_t v : versions_to_read) {
             ASSIGN_OR_RETURN(auto meta, tablet_mgr->get_tablet_metadata(_tablet_id, v));
-            _stats.metadata_count++;
-            _scan_metadata_for_changes_rowsets(*meta);
+            _scan_metadata_for_changes_rowsets(*meta, seen_rowset_ids, discovered_versions);
 
             current_meta = meta;
             current_version = v;
 
-            if (static_cast<int64_t>(_found_cv.size()) >= _head_version - _base_version) {
+            if (static_cast<int64_t>(discovered_versions.size()) >= _head_version - _base_version) {
                 break;
             }
         }
@@ -243,56 +198,34 @@ Status ChangesDataSource::_do_metadata_traversal() {
     return Status::OK();
 }
 
-void ChangesDataSource::_scan_metadata_for_changes_rowsets(const TabletMetadataPB& meta) {
+void ChangesDataSource::_scan_metadata_for_changes_rowsets(const TabletMetadataPB& meta,
+                                                            std::unordered_set<uint32_t>& seen_rowset_ids,
+                                                            std::unordered_set<int64_t>& discovered_versions) {
     auto process_rowset = [&](const RowsetMetadataPB& r) {
         if (!r.has_version() || r.version() <= _base_version) {
             return;
         }
-        if (_found_ids.count(r.id()) > 0) {
+        if (seen_rowset_ids.count(r.id()) > 0) {
             return;
         }
-        _found_ids.insert(r.id());
-        _found_cv.insert(r.version());
+        seen_rowset_ids.insert(r.id());
+        discovered_versions.insert(r.version());
 
         if (r.has_delete_predicate()) {
-            _stats.has_delete_predicate = true;
+            _has_delete_predicate = true;
             return;
         }
 
         if (r.has_max_compact_input_rowset_id()) {
-            _stats.compaction_count++;
             return;
         }
 
         ChangesRowset changes_rs;
-        changes_rs.id = r.id();
         changes_rs.version = r.version();
-
-        changes_rs.num_rows = r.num_rows();
-        changes_rs.data_size = r.data_size();
         for (const auto& seg : r.segments()) {
             changes_rs.segments.push_back(seg);
         }
-        // Collect per-segment row counts from segment_metas (optional field)
-        if (r.segment_metas_size() == static_cast<int>(r.segments_size())) {
-            for (int i = 0; i < r.segment_metas_size(); ++i) {
-                if (r.segment_metas(i).has_num_rows()) {
-                    changes_rs.segment_num_rows.push_back(r.segment_metas(i).num_rows());
-                } else {
-                    // SegmentMetadataPB entry exists but lacks num_rows — clear and use fallback
-                    changes_rs.segment_num_rows.clear();
-                    break;
-                }
-            }
-        }
-        // If segment_num_rows is empty after this, get_segment_num_rows() uses proportional fallback
         _changes_rowsets.push_back(std::move(changes_rs));
-
-        _stats.insertion_rows += r.num_rows();
-        _stats.insertion_data_size += r.data_size();
-        _stats.insertion_segment_count += r.segments_size();
-        _stats.insertion_segment_total_rows += r.num_rows();
-        _stats.load_count++;
     };
 
     for (const auto& r : meta.rowsets()) {
@@ -351,7 +284,9 @@ Status ChangesDataSource::_open_next_segment() {
     auto segment_or = tablet_mgr->load_segment(file_info, segment_id, lake_io_opts,
                                                /*fill_meta_cache=*/true, _tablet_schema);
     if (!segment_or.ok()) {
-        return Status::InternalError(format_ancestor_chain_exhausted_error(_tablet_id));
+        return Status::InternalError(
+                fmt::format("CHANGES failed to load segment '{}' for tablet {}: {}",
+                            segment_path, _tablet_id, segment_or.status().to_string()));
     }
     auto segment = std::move(segment_or).value();
 
@@ -359,18 +294,6 @@ Status ChangesDataSource::_open_next_segment() {
     seg_options.fs = _fs;
     seg_options.stats = &_seg_stats;
     seg_options.chunk_size = _runtime_state->chunk_size();
-
-    // Storage-layer predicate pushdown.
-    seg_options.pred_tree = _cached_pred_tree;
-    seg_options.runtime_range_pruner = _runtime_range_pruner;
-
-    // Runtime filter predicates: re-fetched per segment to capture late-arriving bloom filters.
-    if (_conjuncts_manager && _runtime_state->enable_join_runtime_filter_pushdown()) {
-        auto rf_or = _conjuncts_manager->get_runtime_filter_predicates(&_obj_pool, _parser);
-        if (rf_or.ok()) {
-            seg_options.runtime_filter_preds = std::move(rf_or).value();
-        }
-    }
 
     auto iter_or = segment->new_iterator(schema, seg_options);
     if (iter_or.status().is_end_of_file()) {
@@ -384,7 +307,7 @@ Status ChangesDataSource::_open_next_segment() {
 }
 
 Status ChangesDataSource::_read_next_chunk(ChunkPtr* chunk) {
-    if (_stats.has_delete_predicate) {
+    if (_has_delete_predicate) {
         return Status::NotSupported(fmt::format(
                 "DELETE_PREDICATE_FOUND: CDC not supported for DELETE operations on tablet {}",
                 _tablet_id));
@@ -437,23 +360,17 @@ Status ChangesDataSource::_read_next_chunk(ChunkPtr* chunk) {
 
         _append_metadata_columns(data_chunk.get(), changes_rs.version);
 
-        // Post-read fallback: evaluate the full _conjunct_ctxs list as a correctness backstop —
-        // every predicate is evaluated here even if storage-layer pushdown was not enabled.
+        // Post-read fallback: evaluate the full _conjunct_ctxs list as a correctness backstop.
         // Ordering constraint: this must run after every column (data + metadata) is populated.
         if (!_conjunct_ctxs.empty()) {
-            SCOPED_TIMER(_expr_filter_timer);
-            size_t before = data_chunk->num_rows();
             RETURN_IF_ERROR(ChunkPredicateEvaluator::eval_conjuncts(_conjunct_ctxs, data_chunk.get()));
-            COUNTER_UPDATE(_expr_filter_counter, before - data_chunk->num_rows());
             if (data_chunk->num_rows() == 0) {
-                // All rows filtered out — read the next chunk.
                 _cpu_time_ns += _seg_stats.block_fetch_ns - _prev_block_fetch_ns;
                 _prev_block_fetch_ns = _seg_stats.block_fetch_ns;
                 continue;
             }
         }
 
-        // Stat updates (post-filter).
         _rows_read += data_chunk->num_rows();
         _bytes_read += data_chunk->bytes_usage();
         _cpu_time_ns += _seg_stats.block_fetch_ns - _prev_block_fetch_ns;
@@ -500,126 +417,11 @@ void ChangesDataSource::_append_metadata_columns(Chunk* chunk, int64_t version) 
     }
 }
 
-void ChangesDataSource::_try_extract_row_version_predicate(ExprContext* ctx) {
-    if (!_row_version_slot_id.has_value()) return;
-
-    Expr* root = ctx->root();
-    if (root->get_num_children() != 2) return;
-
-    Expr* left = root->get_child(0);
-    Expr* right = root->get_child(1);
-    TExprOpcode::type op = root->op();
-
-    Expr* slot_expr = nullptr;
-    Expr* const_expr = nullptr;
-
-    if (left->is_slotref() && right->is_literal()) {
-        slot_expr = left;
-        const_expr = right;
-    } else if (left->is_literal() && right->is_slotref()) {
-        slot_expr = right;
-        const_expr = left;
-        // const <op> slot → flip the comparison operator.
-        switch (op) {
-        case TExprOpcode::LT: op = TExprOpcode::GT; break;
-        case TExprOpcode::LE: op = TExprOpcode::GE; break;
-        case TExprOpcode::GT: op = TExprOpcode::LT; break;
-        case TExprOpcode::GE: op = TExprOpcode::LE; break;
-        default: break; // EQ / NE are symmetric.
-        }
-    } else {
-        return;
-    }
-
-    auto* col_ref = static_cast<ColumnRef*>(slot_expr);
-    if (col_ref->slot_id() != _row_version_slot_id.value()) return;
-
-    // Extract the constant value.
-    auto* literal = static_cast<VectorizedLiteral*>(const_expr);
-    ColumnPtr col = literal->value();
-    if (col == nullptr || col->size() == 0) return;
-    int64_t const_value = col->get(0).get_int64();
-
-    _row_version_filters.emplace_back(op, const_value);
-}
-
 Status ChangesDataSource::_read_head_metadata() {
     auto* tablet_mgr = ExecEnv::GetInstance()->lake_tablet_manager();
     ASSIGN_OR_RETURN(_head_metadata, tablet_mgr->get_tablet_metadata(_tablet_id, _head_version));
     _tablet_schema = GlobalTabletSchemaMap::Instance()->emplace(_head_metadata->schema()).first;
-
-    // Capture key column names — ScanConjunctsManager needs them when building the pred_tree.
-    for (auto idx : _tablet_schema->sort_key_idxes()) {
-        _key_column_names.emplace_back(_tablet_schema->column(idx).name());
-    }
     return Status::OK();
-}
-
-Status ChangesDataSource::_init_predicate_tree() {
-    if (_data_column_conjuncts.empty()) {
-        return Status::OK();
-    }
-
-    ScanConjunctsManagerOptions opts;
-    opts.conjunct_ctxs_ptr = &_data_column_conjuncts;
-    opts.tuple_desc = _tuple_desc;
-    opts.obj_pool = &_obj_pool;
-    opts.key_column_names = &_key_column_names;
-    opts.runtime_filters = _runtime_filters;
-    opts.runtime_state = _runtime_state;
-    if (_runtime_state->fragment_ctx() != nullptr) {
-        opts.pred_tree_params = _runtime_state->fragment_ctx()->pred_tree_params();
-    }
-
-    _conjuncts_manager = std::make_unique<ScanConjunctsManager>(opts);
-    RETURN_IF_ERROR(_conjuncts_manager->parse_conjuncts());
-
-    _parser = _obj_pool.add(new OlapPredicateParser(_tablet_schema));
-
-    // Fetch the full predicate tree, then partition by storage-layer pushdown capability.
-    ASSIGN_OR_RETURN(auto full_pred_tree, _conjuncts_manager->get_predicate_tree(_parser, _col_preds_owner));
-    PredicateAndNode pushdown_root;
-    PredicateAndNode non_pushdown_root;
-    full_pred_tree.root().partition_copy(
-        [this](const auto& node) { return _parser->can_pushdown(node); },
-        &pushdown_root, &non_pushdown_root);
-    _cached_pred_tree = PredicateTree::create(std::move(pushdown_root));
-    // non_pushdown_root is unused in Phase 1 — the post-read _conjunct_ctxs fallback covers it.
-
-    _runtime_range_pruner = RuntimeScanRangePruner(_parser, _conjuncts_manager->unarrived_runtime_filters());
-
-    COUNTER_SET(_pred_pushdown_counter, static_cast<int64_t>(_data_column_conjuncts.size()));
-    return Status::OK();
-}
-
-void ChangesDataSource::_classify_predicates() {
-    for (auto* ctx : _conjunct_ctxs) {
-        std::vector<SlotId> slot_ids;
-        ctx->root()->get_slot_ids(&slot_ids);
-
-        bool is_data_column_only = true;
-        for (auto slot_id : slot_ids) {
-            if ((_change_type_slot_id.has_value() && slot_id == _change_type_slot_id.value()) ||
-                (_row_version_slot_id.has_value() && slot_id == _row_version_slot_id.value())) {
-                is_data_column_only = false;
-                break;
-            }
-        }
-
-        if (is_data_column_only) {
-            _data_column_conjuncts.push_back(ctx);
-        }
-
-        // Try to extract a simple __ROW_VERSION__ predicate for rowset skipping.
-        if (_row_version_slot_id.has_value()) {
-            for (auto slot_id : slot_ids) {
-                if (slot_id == _row_version_slot_id.value()) {
-                    _try_extract_row_version_predicate(ctx);
-                    break;
-                }
-            }
-        }
-    }
 }
 
 } // namespace starrocks::connector
