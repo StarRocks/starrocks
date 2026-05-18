@@ -14,8 +14,6 @@
 
 #include "storage/index/vector/vector_search_executor_factory.h"
 
-#include "storage/index/vector/hnsw_ann_index.h"
-
 namespace starrocks {
 
 static StatusOr<std::unique_ptr<VectorAnnIndex>> create_ann_index(const VectorSearchExecutorConfig& config) {
@@ -24,18 +22,8 @@ static StatusOr<std::unique_ptr<VectorAnnIndex>> create_ann_index(const VectorSe
         // TODO: implement PaimonAnnIndex
         return Status::NotSupported("Paimon vector index not yet implemented");
     case TableType::OLAP:
-    case TableType::ICEBERG: {
-        std::unique_ptr<VectorAnnIndex> index;
-        switch (config.index_meta.index_type) {
-        case VectorIndexType::HNSW:
-            index = std::make_unique<HnswAnnIndex>();
-            break;
-        default:
-            return Status::NotSupported("unsupported vector index type");
-        }
-        RETURN_IF_ERROR(index->init(config.index_path, config.index_meta));
-        return index;
-    }
+    case TableType::ICEBERG:
+        return Status::NotSupported("unsupported vector index type");
     default:
         return Status::NotSupported("unsupported table type for vector search");
     }
