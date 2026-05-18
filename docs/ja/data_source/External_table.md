@@ -134,7 +134,7 @@ PROPERTIES (
 
 * `password`: ターゲットデータベースに接続するために使用されるパスワード。
 
-* `jdbc_uri`: JDBCドライバがターゲットデータベースに接続するために使用するURI。URIの形式はデータベースURIの構文を満たす必要があります。一般的なデータベースのURI構文については、[Oracle](https://docs.oracle.com/en/database/oracle/oracle-database/21/jjdbc/data-sources-and-URLs.html#GUID-6D8EFA50-AB0F-4A2B-88A0-45B4A67C361E)、[PostgreSQL](https://jdbc.postgresql.org/documentation/head/connect.html)、[SQL Server](https://docs.microsoft.com/en-us/sql/connect/jdbc/building-the-connection-url?view=sql-server-ver16) の公式ウェブサイトを参照してください。
+* `jdbc_uri`: JDBCドライバがターゲットデータベースに接続するために使用するURI。URIの形式はデータベースURIの構文を満たす必要があります。一般的なデータベースのURI構文については、[Oracle](https://docs.oracle.com/en/database/oracle/oracle-database/21/jjdbc/data-sources-and-URLs.html#GUID-6D8EFA50-AB0F-4A2B-88A0-45B4A67C361E)、[PostgreSQL](https://jdbc.postgresql.org/documentation/head/connect.html)、[SQL Server](https://learn.microsoft.com/en-us/sql/connect/jdbc/building-the-connection-url?view=sql-server-ver16) の公式ウェブサイトを参照してください。
 
 > 注：URIにはターゲットデータベースの名前を含める必要があります。前述のコード例では、`jdbc_test` は接続したいターゲットデータベースの名前です。
 

@@ -55,7 +55,7 @@ Flink has been deployed. If Flink has not been deployed, follow these steps to d
    OpenJDK 64-Bit Server VM (Temurin)(build 25.322-b06, mixed mode)
    ```
 
-2. Download and unzip the [Flink package](https://flink.apache.org/downloads.html) of your choice.
+2. Download and unzip the [Flink package](https://flink.apache.org/downloads/) of your choice.
 
    > **NOTE**
    >

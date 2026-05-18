@@ -29,7 +29,7 @@ CloudCanal 提供可视化的界面，可轻松实现数据的结构迁移、全
 
 :::info
 
-更多功能及参数设置，请参考 [CloudCanal 数据链路说明](https://www.clougence.com/cc-doc/dataMigrationAndSync/connection/mysql2?target=StarRocks)。
+更多功能及参数设置，请参考 [CloudCanal 数据链路说明](https://www.clougence.com/docs/dataMigrationAndSync/connection/mysql2?target=StarRocks)。
 
 :::
 

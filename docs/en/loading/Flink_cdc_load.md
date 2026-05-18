@@ -83,7 +83,7 @@ To synchronize data from MySQL, you need to install the following tools: SMT, Fl
         Java HotSpot(TM) 64-Bit Server VM (build 25.301-b09, mixed mode)
     ```
 
-   b. Download the [Flink installation package](https://flink.apache.org/downloads.html) and decompress it. We recommend that you use  Flink 1.14 or later. The minimum allowed version is Flink 1.11. This topic uses Flink 1.14.5.
+   b. Download the [Flink installation package](https://flink.apache.org/downloads/) and decompress it. We recommend that you use  Flink 1.14 or later. The minimum allowed version is Flink 1.11. This topic uses Flink 1.14.5.
 
    ```Bash
       # Download Flink.

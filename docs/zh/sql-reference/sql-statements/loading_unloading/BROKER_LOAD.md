@@ -409,7 +409,7 @@ StarRocks 访问存储系统的认证配置。
 | fs.oss.accessKeySecret | 访问阿里云 OSS 存储空间的 AccessKey Secret，是用于加密签名字符串和 OSS 用来验证签名字符串的密钥。 |
 | fs.oss.endpoint        | 访问阿里云 OSS 存储空间的连接地址。<br />**注意**<br />请勿在端点地址中指定 `https`。 |
 
-请参见阿里云官方文档[用户签名验证](https://help.aliyun.com/document_detail/31950.html)。
+请参见阿里云官方文档[用户签名验证](https://help.aliyun.com/zh/oss/verify-user-signatures)。
 
 #### 腾讯云 COS
 

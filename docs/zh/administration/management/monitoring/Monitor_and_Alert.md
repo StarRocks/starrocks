@@ -546,7 +546,7 @@ Grafana 通过通知策略（Notification policies）来关联报警渠道和报
 
    ![MA-29](../../../_assets/monitor/monitor29.png)
 
-如果您对通知策略的细节感兴趣，或者业务中有更复杂的报警场景要求，可以参考[官方文档](https://grafana.com/docs/grafana/latest/alerting/fundamentals/notification-policies/notifications/)。
+如果您对通知策略的细节感兴趣，或者业务中有更复杂的报警场景要求，可以参考[官方文档](https://grafana.com/docs/grafana/latest/alerting/fundamentals/notifications/notification-policies/)。
 
 ### 3.4 创建报警规则
 
