@@ -343,6 +343,173 @@ static void BM_LengthEqMask_SIMD(benchmark::State& state) {
 BENCHMARK(BM_LengthEqMask_Scalar)->Arg(256)->Arg(1024)->Arg(4096);
 BENCHMARK(BM_LengthEqMask_SIMD)->Arg(256)->Arg(1024)->Arg(4096);
 
+// =====================================================================
+// AVX-512 / AVX2 / default direct comparison (AVX-512 host only)
+// =====================================================================
+//
+// The wrappers above (simd_fill_int32, simd_dict_gather_*, simd_minmax_int32)
+// pick the best ISA at compile time, so on an AVX-512 host you only see the
+// "best available SIMD vs scalar" comparison. The benches below call the
+// MFV-generated *_avx512 / *_avx2 / *_default variants directly so all three
+// tiers are timed in the same binary. Only compiled when __AVX512F__ is set;
+// on AVX2-only hosts the wrapper benches above already exercise the AVX2
+// path so nothing is lost.
+
+#if defined(__AVX512F__)
+
+static void BM_FillInt32_Default(benchmark::State& state) {
+    size_t n = static_cast<size_t>(state.range(0));
+    std::vector<int32_t> dst(n);
+    for (auto _ : state) {
+        simd_fill_int32_default(dst.data(), 0x12345678, static_cast<int32_t>(n));
+        benchmark::DoNotOptimize(dst.data());
+    }
+}
+static void BM_FillInt32_AVX2(benchmark::State& state) {
+    size_t n = static_cast<size_t>(state.range(0));
+    std::vector<int32_t> dst(n);
+    for (auto _ : state) {
+        simd_fill_int32_avx2(dst.data(), 0x12345678, static_cast<int32_t>(n));
+        benchmark::DoNotOptimize(dst.data());
+    }
+}
+static void BM_FillInt32_AVX512(benchmark::State& state) {
+    size_t n = static_cast<size_t>(state.range(0));
+    std::vector<int32_t> dst(n);
+    for (auto _ : state) {
+        simd_fill_int32_avx512(dst.data(), 0x12345678, static_cast<int32_t>(n));
+        benchmark::DoNotOptimize(dst.data());
+    }
+}
+BENCHMARK(BM_FillInt32_Default)->Arg(64)->Arg(256)->Arg(1024)->Arg(4096);
+BENCHMARK(BM_FillInt32_AVX2)->Arg(64)->Arg(256)->Arg(1024)->Arg(4096);
+BENCHMARK(BM_FillInt32_AVX512)->Arg(64)->Arg(256)->Arg(1024)->Arg(4096);
+
+static void BM_DictGatherInt32_Default(benchmark::State& state) {
+    std::vector<int32_t> dict, dest;
+    std::vector<uint32_t> indices;
+    size_t n = static_cast<size_t>(state.range(0));
+    prepare_gather(dict, indices, dest, n);
+    for (auto _ : state) {
+        simd_dict_gather_int32_default(dest.data(), dict.data(), indices.data(), static_cast<int32_t>(n));
+        benchmark::DoNotOptimize(dest.data());
+    }
+}
+static void BM_DictGatherInt32_AVX2(benchmark::State& state) {
+    std::vector<int32_t> dict, dest;
+    std::vector<uint32_t> indices;
+    size_t n = static_cast<size_t>(state.range(0));
+    prepare_gather(dict, indices, dest, n);
+    for (auto _ : state) {
+        simd_dict_gather_int32_avx2(dest.data(), dict.data(), indices.data(), static_cast<int32_t>(n));
+        benchmark::DoNotOptimize(dest.data());
+    }
+}
+static void BM_DictGatherInt32_AVX512(benchmark::State& state) {
+    std::vector<int32_t> dict, dest;
+    std::vector<uint32_t> indices;
+    size_t n = static_cast<size_t>(state.range(0));
+    prepare_gather(dict, indices, dest, n);
+    for (auto _ : state) {
+        simd_dict_gather_int32_avx512(dest.data(), dict.data(), indices.data(), static_cast<int32_t>(n));
+        benchmark::DoNotOptimize(dest.data());
+    }
+}
+BENCHMARK(BM_DictGatherInt32_Default)->Arg(64)->Arg(256)->Arg(1024)->Arg(4096);
+BENCHMARK(BM_DictGatherInt32_AVX2)->Arg(64)->Arg(256)->Arg(1024)->Arg(4096);
+BENCHMARK(BM_DictGatherInt32_AVX512)->Arg(64)->Arg(256)->Arg(1024)->Arg(4096);
+
+static void prepare_gather_int64(std::vector<int64_t>& dict, std::vector<uint32_t>& indices, std::vector<int64_t>& dest,
+                                 size_t n) {
+    dict.resize(kDictSize);
+    indices.resize(n);
+    dest.resize(n);
+    std::mt19937_64 rng(0xBADC0DE);
+    std::uniform_int_distribution<int64_t> vd(0, 1LL << 40);
+    std::uniform_int_distribution<uint32_t> id(0, kDictSize - 1);
+    for (auto& v : dict) v = vd(rng);
+    for (auto& i : indices) i = id(rng);
+}
+
+static void BM_DictGatherInt64_Default(benchmark::State& state) {
+    std::vector<int64_t> dict, dest;
+    std::vector<uint32_t> indices;
+    size_t n = static_cast<size_t>(state.range(0));
+    prepare_gather_int64(dict, indices, dest, n);
+    for (auto _ : state) {
+        simd_dict_gather_int64_default(dest.data(), dict.data(), indices.data(), static_cast<int32_t>(n));
+        benchmark::DoNotOptimize(dest.data());
+    }
+}
+static void BM_DictGatherInt64_AVX2(benchmark::State& state) {
+    std::vector<int64_t> dict, dest;
+    std::vector<uint32_t> indices;
+    size_t n = static_cast<size_t>(state.range(0));
+    prepare_gather_int64(dict, indices, dest, n);
+    for (auto _ : state) {
+        simd_dict_gather_int64_avx2(dest.data(), dict.data(), indices.data(), static_cast<int32_t>(n));
+        benchmark::DoNotOptimize(dest.data());
+    }
+}
+static void BM_DictGatherInt64_AVX512(benchmark::State& state) {
+    std::vector<int64_t> dict, dest;
+    std::vector<uint32_t> indices;
+    size_t n = static_cast<size_t>(state.range(0));
+    prepare_gather_int64(dict, indices, dest, n);
+    for (auto _ : state) {
+        simd_dict_gather_int64_avx512(dest.data(), dict.data(), indices.data(), static_cast<int32_t>(n));
+        benchmark::DoNotOptimize(dest.data());
+    }
+}
+BENCHMARK(BM_DictGatherInt64_Default)->Arg(64)->Arg(256)->Arg(1024)->Arg(4096);
+BENCHMARK(BM_DictGatherInt64_AVX2)->Arg(64)->Arg(256)->Arg(1024)->Arg(4096);
+BENCHMARK(BM_DictGatherInt64_AVX512)->Arg(64)->Arg(256)->Arg(1024)->Arg(4096);
+
+static void BM_MinMaxInt32_Default(benchmark::State& state) {
+    size_t n = static_cast<size_t>(state.range(0));
+    std::vector<int32_t> data(n);
+    std::mt19937_64 rng(0xFEEDFACE);
+    std::uniform_int_distribution<int32_t> d(-1000000, 1000000);
+    for (auto& v : data) v = d(rng);
+    for (auto _ : state) {
+        int32_t mn = 0, mx = 0;
+        simd_minmax_int32_default(data.data(), static_cast<int32_t>(n), mn, mx);
+        benchmark::DoNotOptimize(mn);
+        benchmark::DoNotOptimize(mx);
+    }
+}
+static void BM_MinMaxInt32_AVX2(benchmark::State& state) {
+    size_t n = static_cast<size_t>(state.range(0));
+    std::vector<int32_t> data(n);
+    std::mt19937_64 rng(0xFEEDFACE);
+    std::uniform_int_distribution<int32_t> d(-1000000, 1000000);
+    for (auto& v : data) v = d(rng);
+    for (auto _ : state) {
+        int32_t mn = 0, mx = 0;
+        simd_minmax_int32_avx2(data.data(), static_cast<int32_t>(n), mn, mx);
+        benchmark::DoNotOptimize(mn);
+        benchmark::DoNotOptimize(mx);
+    }
+}
+static void BM_MinMaxInt32_AVX512(benchmark::State& state) {
+    size_t n = static_cast<size_t>(state.range(0));
+    std::vector<int32_t> data(n);
+    std::mt19937_64 rng(0xFEEDFACE);
+    std::uniform_int_distribution<int32_t> d(-1000000, 1000000);
+    for (auto& v : data) v = d(rng);
+    for (auto _ : state) {
+        int32_t mn = 0, mx = 0;
+        simd_minmax_int32_avx512(data.data(), static_cast<int32_t>(n), mn, mx);
+        benchmark::DoNotOptimize(mn);
+        benchmark::DoNotOptimize(mx);
+    }
+}
+BENCHMARK(BM_MinMaxInt32_Default)->Arg(64)->Arg(256)->Arg(1024)->Arg(4096);
+BENCHMARK(BM_MinMaxInt32_AVX2)->Arg(64)->Arg(256)->Arg(1024)->Arg(4096);
+BENCHMARK(BM_MinMaxInt32_AVX512)->Arg(64)->Arg(256)->Arg(1024)->Arg(4096);
+
+#endif // __AVX512F__
+
 } // namespace starrocks
 
 BENCHMARK_MAIN();
