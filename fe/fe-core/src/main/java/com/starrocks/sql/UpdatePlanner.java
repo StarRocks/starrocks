@@ -202,6 +202,106 @@ public class UpdatePlanner {
         }
     }
 
+<<<<<<< HEAD
+=======
+    private void setupOlapTableSink(ExecPlan execPlan, UpdateStmt updateStmt,
+                                     ConnectContext session, Table targetTable,
+                                     boolean canUsePipeline) {
+        DescriptorTable descriptorTable = execPlan.getDescTbl();
+        TupleDescriptor olapTuple = descriptorTable.createTupleDescriptor();
+        long tableId = targetTable.getId();
+
+        List<Pair<Integer, ColumnDict>> globalDicts = Lists.newArrayList();
+        for (Column column : targetTable.getFullSchema()) {
+            if (updateStmt.usePartialUpdate() && !column.isGeneratedColumn() &&
+                    !updateStmt.isAssignmentColumn(column.getName()) && !column.isKey()) {
+                continue;
+            }
+            SlotDescriptor slotDescriptor = descriptorTable.addSlotDescriptor(olapTuple);
+            slotDescriptor.setIsMaterialized(true);
+            slotDescriptor.setType(column.getType());
+            slotDescriptor.setColumn(column);
+            slotDescriptor.setIsNullable(column.isAllowNull());
+            if (column.getType().isVarchar() &&
+                    IDictManager.getInstance().hasGlobalDict(tableId, column.getColumnId())) {
+                Optional<ColumnDict> dict = IDictManager.getInstance().getGlobalDict(tableId, column.getColumnId());
+                dict.ifPresent(
+                        columnDict -> globalDicts.add(new Pair<>(slotDescriptor.getId().asInt(), columnDict)));
+            }
+        }
+        olapTuple.computeMemLayout();
+
+        OlapTable olapTable = (OlapTable) targetTable;
+        List<Long> partitionIds = Lists.newArrayList();
+        for (Partition partition : olapTable.getPartitions()) {
+            partitionIds.add(partition.getId());
+        }
+        DataSink dataSink = new OlapTableSink(olapTable, olapTuple, partitionIds, olapTable.writeQuorum(),
+                olapTable.enableReplicatedStorage(), false,
+                olapTable.supportedAutomaticPartition(), session.getCurrentComputeResource());
+        if (updateStmt.usePartialUpdate()) {
+            ((OlapTableSink) dataSink).setPartialUpdateMode(TPartialUpdateMode.COLUMN_UPDATE_MODE);
+        }
+        if (session.getTxnId() != 0) {
+            ((OlapTableSink) dataSink).setIsMultiStatementsTxn(true);
+        }
+
+        execPlan.getFragments().get(0).setSink(dataSink);
+        execPlan.getFragments().get(0).setLoadGlobalDicts(globalDicts);
+
+        // if sink is OlapTableSink Assigned to Be execute this sql [cn execute OlapTableSink will crash]
+        session.getSessionVariable().setPreferComputeNode(false);
+        session.getSessionVariable().setUseComputeNodes(0);
+        OlapTableSink olapTableSink = (OlapTableSink) dataSink;
+        TableRef tableRef = updateStmt.getTableRef();
+        TableName catalogDbTable = TableName.fromTableRef(tableRef);
+        Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(session, catalogDbTable.getCatalog(),
+                catalogDbTable.getDb());
+        try {
+            olapTableSink.init(session.getExecutionId(), updateStmt.getTxnId(), db.getId(), session.getExecTimeout());
+            olapTableSink.complete();
+        } catch (StarRocksException e) {
+            throw new SemanticException(e.getMessage());
+        }
+
+        configureSinkPipelineDop(execPlan, session, canUsePipeline, true);
+    }
+
+    private void setupIcebergRowDeltaSink(ExecPlan execPlan, List<String> colNames,
+                                          IcebergTable icebergTable, ConnectContext session) {
+        DescriptorTable descriptorTable = execPlan.getDescTbl();
+        TupleDescriptor rowDeltaTuple = descriptorTable.createTupleDescriptor();
+
+        List<Expr> outputExprs = execPlan.getOutputExprs();
+        Preconditions.checkArgument(colNames.size() == outputExprs.size(),
+                "output column size mismatch");
+        for (int index = 0; index < colNames.size(); ++index) {
+            SlotDescriptor slot = descriptorTable.addSlotDescriptor(rowDeltaTuple);
+            slot.setIsMaterialized(true);
+            slot.setType(outputExprs.get(index).getType());
+            slot.setColumn(new Column(colNames.get(index), outputExprs.get(index).getType()));
+            slot.setIsNullable(outputExprs.get(index).isNullable());
+        }
+        rowDeltaTuple.computeMemLayout();
+
+        descriptorTable.addReferencedTable(icebergTable);
+        IcebergRowDeltaSink dataSink = new IcebergRowDeltaSink(
+                icebergTable, rowDeltaTuple, session.getSessionVariable());
+        dataSink.init();
+
+        IcebergMetadata.IcebergSinkExtra icebergSinkExtra = new IcebergMetadata.IcebergSinkExtra();
+        org.apache.iceberg.expressions.Expression filterExpr =
+                IcebergPlannerUtils.buildIcebergFilterExpr(execPlan, icebergTable);
+        if (filterExpr != null) {
+            icebergSinkExtra.setConflictDetectionFilter(filterExpr);
+        }
+        icebergSinkExtra.setBaseSnapshotId(IcebergPlannerUtils.extractBaseSnapshotId(execPlan, icebergTable));
+        dataSink.setSinkExtraInfo(icebergSinkExtra);
+
+        execPlan.getFragments().get(0).setSink(dataSink);
+    }
+
+>>>>>>> 8290f95961 ([BugFix] Fix the issue that Iceberg DELETE conflict-detection uses incorrect snapshot id and filter (#73354))
     /**
      * Cast output columns type to target type.
      * @param columnRefFactory :  column ref factory of update stmt.
