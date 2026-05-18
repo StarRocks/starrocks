@@ -132,11 +132,6 @@ import static com.starrocks.thrift.PlanNodesConstants.CACHE_STATS_TABLET_ID_COLU
 import static com.starrocks.thrift.PlanNodesConstants.CACHE_STATS_TOTAL_BYTES_COLUMN_NAME;
 
 public class QueryAnalyzer {
-<<<<<<< HEAD
-=======
-    private static final String JDBC_QUERY_TABLE_FUNCTION_USAGE =
-            "JDBC query table function only supports TABLE(<catalog>.native_query('<sql>'))";
->>>>>>> 90ddf9e954 ([Enhancement] Move INSERT external table auto-refresh out of the planner lock path (#73391))
     private final ConnectContext session;
     private final MetadataMgr metadataMgr;
 
