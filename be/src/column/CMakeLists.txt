@@ -54,6 +54,8 @@ ADD_BE_LIB(ColumnCore
         column_hash/column_hash.cpp
 )
 
+target_link_libraries(ColumnCore PRIVATE arrow)
+
 ADD_BE_LIB(ChunkCore
         field.cpp
         schema.cpp
