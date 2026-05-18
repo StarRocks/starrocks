@@ -19,10 +19,14 @@
 
 namespace SIMD::Expand {
 
-// SIMD implements for branchless selection
-
-// dst_data[i] = src_data[cnt];
-// cnt += !nulls[i];
+// Branchless expand-load.
+//
+// For valid positions (nulls[i] == 0), dst[i] receives the next unconsumed
+// src element — equivalent to the reference loop below in expand_load_branchless.
+// Values at null positions are unspecified scratch and differ per implementation
+// (scalar leaves leftover src[cnt]; AVX2 broadcasts src[0] of the block; AVX-512
+// zeroes via maskz_expandloadu). Callers must pair the output with a null bitmap
+// (e.g. NullableColumn::null_column) and never read null lanes directly.
 
 void expand_load_simd(int32_t* dst_data, const int32_t* src_data, const uint8_t* nulls, size_t count);
 void expand_load_simd(int64_t* dst_data, const int64_t* src_data, const uint8_t* nulls, size_t count);
