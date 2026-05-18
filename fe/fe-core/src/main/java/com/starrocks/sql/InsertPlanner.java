@@ -61,7 +61,6 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AnalyzeState;
-import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.ExpressionAnalyzer;
 import com.starrocks.sql.analyzer.Field;
 import com.starrocks.sql.analyzer.PlannerMetaLocker;
@@ -72,7 +71,6 @@ import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.QueryRelation;
-import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SelectListItem;
 import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.TableRef;
@@ -288,19 +286,6 @@ public class InsertPlanner {
         }
     }
 
-    public void refreshExternalTable(QueryStatement queryStatement, ConnectContext session) {
-        SessionVariable currentVariable = (SessionVariable) session.getSessionVariable();
-        if (currentVariable.isEnableInsertSelectExternalAutoRefresh()) {
-            Map<TableName, Table> tables = AnalyzerUtils.collectAllTableWithAlias(queryStatement);
-            for (Map.Entry<TableName, Table> t : tables.entrySet()) {
-                if (t.getValue().isExternalTableWithFileSystem()) {
-                    session.getGlobalStateMgr().getMetadataMgr().refreshTable(t.getKey().getCatalog(),
-                            t.getKey().getDb(), t.getValue(), new ArrayList<>(), false);
-                }
-            }
-        }
-    }
-
     public ExecPlan plan(InsertStmt insertStmt, ConnectContext session) {
         QueryRelation queryRelation = insertStmt.getQueryStatement().getQueryRelation();
         List<ColumnRefOperator> outputColumns = new ArrayList<>();
@@ -327,8 +312,6 @@ public class InsertPlanner {
             outputFullSchema = outputFullSchema.stream().filter(col ->
                     !columnsToFilter.contains(col.getName())).toList();
         }
-
-        refreshExternalTable(insertStmt.getQueryStatement(), session);
 
         //1. Process the literal value of the insert values type and cast it into the type of the target table
         if (queryRelation instanceof ValuesRelation) {

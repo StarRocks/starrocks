@@ -254,6 +254,16 @@ public class StatementPlanner {
                     // Only files() or no tables at all: allow deferred lock
                     deferredLock = true;
                 }
+
+                // This external-table-only pre-pass is orthogonal to deferredLock.
+                // Even when the statement still needs the normal locked analyzer path,
+                // we can pre-resolve or pre-refresh external source tables here so slow
+                // connector/filesystem metadata I/O does not remain on the lock critical path.
+                if (Config.enable_experimental_external_table_preparse ||
+                        session.getSessionVariable().isEnableInsertSelectExternalAutoRefresh()) {
+                    new QueryAnalyzer(session).analyzeExternalTablesOnly(statement,
+                            session.getSessionVariable().isEnableInsertSelectExternalAutoRefresh());
+                }
             }
 
             if (deferredLock) {
@@ -269,7 +279,8 @@ public class StatementPlanner {
                 // Only pre-resolve external tables when there are internal tables to lock.
                 // This avoids holding meta lock while fetching external metadata.
                 // Check config first (cheapest), then locker state.
-                if (Config.enable_experimental_external_table_preparse && locker != null && !locker.isEmpty()) {
+                if (insertStmt == null && Config.enable_experimental_external_table_preparse
+                        && locker != null && !locker.isEmpty()) {
                     new QueryAnalyzer(session).analyzeExternalTablesOnly(statement);
                 }
                 takeLock.run();
