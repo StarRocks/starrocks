@@ -60,7 +60,7 @@ public class ExecuteScriptStmt extends StatementBase {
     public ExecuteScriptStmt(TargetType targetType, List<Long> nodeIds, String script, NodePosition pos) {
         super(pos);
         this.targetType = targetType;
-        this.nodeIds = (nodeIds == null) ? Collections.emptyList() : Collections.unmodifiableList(nodeIds);
+        this.nodeIds = (nodeIds == null) ? Collections.emptyList() : List.copyOf(nodeIds);
         this.script = script;
     }
 

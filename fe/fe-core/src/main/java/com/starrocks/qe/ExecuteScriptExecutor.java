@@ -34,8 +34,8 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
+import java.util.TreeSet;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
@@ -110,10 +110,10 @@ public class ExecuteScriptExecutor {
         if (ids == null || ids.isEmpty()) {
             throw new StarRocksException("no target nodes resolved for ADMIN EXECUTE");
         }
-        // Stable order helps deterministic output.
-        List<Long> sorted = new ArrayList<>(ids);
-        Collections.sort(sorted);
-        return sorted;
+        // Deduplicate so a repeated id (e.g. "ADMIN EXECUTE ON 10001,10001 ...") doesn't
+        // apply a side-effectful script twice on the same node. TreeSet also yields
+        // a stable ascending order for deterministic output.
+        return new ArrayList<>(new TreeSet<>(ids));
     }
 
     private static ShowResultSet executeBackendScript(ExecuteScriptStmt stmt, ConnectContext ctx) throws

@@ -19,9 +19,11 @@ import com.starrocks.sql.ast.ExecuteScriptStmt;
 import com.starrocks.sql.ast.StatementBase;
 import org.junit.jupiter.api.Test;
 
+import java.util.ArrayList;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ExecuteScriptStmtParserTest {
@@ -67,5 +69,18 @@ class ExecuteScriptStmtParserTest {
         ExecuteScriptStmt stmt = parse("ADMIN EXECUTE ON ALL COMPUTE NODES 'do_thing'");
         assertEquals(ExecuteScriptStmt.TargetType.ALL_COMPUTE_NODES, stmt.getTargetType());
         assertTrue(stmt.getNodeIds().isEmpty());
+    }
+
+    @Test
+    void testNodeIdsAreDefensivelyCopied() {
+        List<Long> mutable = new ArrayList<>();
+        mutable.add(10001L);
+        mutable.add(10002L);
+        ExecuteScriptStmt stmt = new ExecuteScriptStmt(
+                ExecuteScriptStmt.TargetType.NODES, mutable, "s", NodePosition.ZERO);
+        mutable.add(99999L);
+        mutable.set(0, 77777L);
+        assertEquals(List.of(10001L, 10002L), stmt.getNodeIds());
+        assertThrows(UnsupportedOperationException.class, () -> stmt.getNodeIds().add(1L));
     }
 }
