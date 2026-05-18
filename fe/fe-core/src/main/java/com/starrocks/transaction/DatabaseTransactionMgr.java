@@ -934,6 +934,12 @@ public class DatabaseTransactionMgr {
         }
     }
 
+    // Per-partition state carried across TransactionStates while building a
+    // TransactionStateBatch: previous version (must stay consecutive) and the
+    // materialized-index id snapshot (must stay identical across the batch).
+    private record PartitionCommitState(long version, List<Long> loadedIndexIds) {
+    }
+
     public List<TransactionStateBatch> getReadyToPublishTxnListBatch() {
         List<TransactionStateBatch> result = new ArrayList<>();
         readLock();
@@ -960,9 +966,11 @@ public class DatabaseTransactionMgr {
 
                 long tableId = states.get(0).getTableIdList().get(0);
 
-                // check whether version is consequent
-                // for schema change will occupy a version
-                Map<Long, PartitionCommitInfo> versions = new HashMap<>();
+                // Cut the batch whenever a per-partition invariant breaks: version must stay
+                // consecutive (schema change can occupy a version) and the loaded materialized-index
+                // id snapshot must stay identical (so a SplitTabletJob window does not let one batch
+                // mix old + new tablet ids and produce overlapping PublishTabletInfo tasks on BE).
+                Map<Long, PartitionCommitState> partitionCommitStates = new HashMap<>();
 
                 outerLoop:
                 for (int i = 0; i < states.size(); i++) {
@@ -985,15 +993,19 @@ public class DatabaseTransactionMgr {
                     Map<Long, PartitionCommitInfo> partitionInfoMap = tableInfo.getIdToPartitionCommitInfo();
                     for (Map.Entry<Long, PartitionCommitInfo> item : partitionInfoMap.entrySet()) {
                         PartitionCommitInfo currTxnInfo = item.getValue();
-                        PartitionCommitInfo prevTxnInfo = versions.get(item.getKey());
-                        if (prevTxnInfo != null && prevTxnInfo.getVersion() + 1 != currTxnInfo.getVersion()) {
+                        PartitionCommitState previousCommitState = partitionCommitStates.get(item.getKey());
+                        List<Long> currentLoadedIndexIds =
+                                state.getPartitionLoadedIndexIdsWithoutLock(tableId, item.getKey());
+                        if (previousCommitState != null
+                                && (previousCommitState.version() + 1 != currTxnInfo.getVersion()
+                                        || !Objects.equals(previousCommitState.loadedIndexIds(),
+                                                currentLoadedIndexIds))) {
                             assert i > 0;
-                            // version is not consecutive
-                            // may schema change occupy a version
                             states = states.subList(0, i);
                             break outerLoop;
                         }
-                        versions.put(item.getKey(), currTxnInfo);
+                        partitionCommitStates.put(item.getKey(),
+                                new PartitionCommitState(currTxnInfo.getVersion(), currentLoadedIndexIds));
                     }
                 }
 
