@@ -1,0 +1,134 @@
+-- name: test_query_cache_with_global_late_materialization
+-- Exercise the combination of query cache and global late materialization (GLM).
+-- GLM rewrites scans with TopN+LIMIT or LIMIT-after-JOIN to lazily fetch wide
+-- columns through a FetchNode. FetchNode does not override PlanNode.normalize(),
+-- so we want end-to-end correctness coverage when both features are on.
+
+set enable_pipeline_engine = true;
+set enable_query_cache = true;
+set enable_global_late_materialization = true;
+set pipeline_dop = 1;
+
+CREATE TABLE qc_glm_dup (
+    dt date NOT NULL,
+    k0 int NOT NULL,
+    v_int int NOT NULL,
+    v_str varchar(32) NOT NULL
+) ENGINE=OLAP
+DUPLICATE KEY(dt, k0)
+PARTITION BY RANGE(dt) (
+    START ("2024-01-01") END ("2024-01-11") EVERY (INTERVAL 1 DAY)
+)
+DISTRIBUTED BY HASH(k0) BUCKETS 3
+PROPERTIES ("replication_num" = "1");
+
+INSERT INTO qc_glm_dup VALUES
+  ('2024-01-01', 1, 10, 's1'),
+  ('2024-01-01', 2, 20, 's2'),
+  ('2024-01-02', 3, 30, 's3'),
+  ('2024-01-02', 4, 40, 's4'),
+  ('2024-01-03', 5, 50, 's5'),
+  ('2024-01-03', 6, 60, 's6'),
+  ('2024-01-04', 7, 70, 's7'),
+  ('2024-01-04', 8, 80, 's8'),
+  ('2024-01-05', 9, 90, 's9'),
+  ('2024-01-05', 10, 100, 's10');
+
+-- Case 1: aggregation has no LIMIT, GLM short-circuits via hasLimit() and is a no-op.
+-- Verify query cache still produces correct aggregate results.
+select count(*) from qc_glm_dup;
+select dt, sum(v_int) from qc_glm_dup
+where dt between '2024-01-01' and '2024-01-03'
+group by dt order by dt;
+
+-- Case 2: TopN + LIMIT is a GLM cost-based trigger (hasTopNWithLimit).
+-- Same SQL issued twice; cache hit on the second run must return identical rows.
+select k0, v_int, v_str from qc_glm_dup
+where dt between '2024-01-01' and '2024-01-05'
+order by k0 desc limit 5;
+select k0, v_int, v_str from qc_glm_dup
+where dt between '2024-01-01' and '2024-01-05'
+order by k0 desc limit 5;
+
+-- Case 3: LIMIT-after-JOIN is the second GLM cost-based trigger (hasLimitAfterJoin).
+CREATE TABLE qc_glm_dim (
+    k0 int NOT NULL,
+    cat varchar(8) NOT NULL
+) ENGINE=OLAP DUPLICATE KEY(k0) DISTRIBUTED BY HASH(k0) BUCKETS 3
+PROPERTIES ("replication_num" = "1");
+
+INSERT INTO qc_glm_dim VALUES (1, 'A'), (2, 'A'), (3, 'B'), (4, 'B'), (5, 'C');
+
+select t.k0, t.v_int, d.cat
+from qc_glm_dup t join[broadcast] qc_glm_dim d on t.k0 = d.k0
+where t.dt between '2024-01-01' and '2024-01-05'
+order by t.k0 limit 100;
+
+-- Case 4: cache invalidation. Issue the same query, then insert a new row in the
+-- queried partition, then re-issue. The post-insert result must include the new row,
+-- proving the cache key tracks tablet version even with GLM (TopN+LIMIT) active.
+select k0, v_int, v_str from qc_glm_dup where dt = '2024-01-01' order by k0 limit 10;
+INSERT INTO qc_glm_dup VALUES ('2024-01-01', 99, 999, 's99');
+select k0, v_int, v_str from qc_glm_dup where dt = '2024-01-01' order by k0 limit 10;
+
+-- Case 5: Aggregate KEY table — OlapScanLazyMaterializationSupport.supports() returns
+-- false on the aggregation family, so GLM never fires. Query cache must still work.
+CREATE TABLE qc_glm_agg (
+    dt date NOT NULL,
+    k0 int NOT NULL,
+    v_sum int SUM NOT NULL,
+    v_max int MAX NOT NULL
+) ENGINE=OLAP
+AGGREGATE KEY(dt, k0)
+PARTITION BY RANGE(dt) (
+    START ("2024-01-01") END ("2024-01-11") EVERY (INTERVAL 1 DAY)
+)
+DISTRIBUTED BY HASH(k0) BUCKETS 3
+PROPERTIES ("replication_num" = "1");
+
+INSERT INTO qc_glm_agg VALUES
+  ('2024-01-01', 1, 10, 1),
+  ('2024-01-01', 1, 15, 2),
+  ('2024-01-02', 2, 20, 3),
+  ('2024-01-02', 2, 25, 4),
+  ('2024-01-03', 3, 30, 5),
+  ('2024-01-03', 3, 35, 6);
+
+select dt, k0, v_sum, v_max from qc_glm_agg
+where dt between '2024-01-01' and '2024-01-03'
+order by dt, k0;
+
+-- Case 6: PK table with GLM-eligible TopN+LIMIT. PK is in supports().
+CREATE TABLE qc_glm_pk (
+    dt date NOT NULL,
+    k0 int NOT NULL,
+    v_int int NOT NULL,
+    v_str varchar(32) NOT NULL
+) ENGINE=OLAP
+PRIMARY KEY(dt, k0)
+PARTITION BY RANGE(dt) (
+    START ("2024-01-01") END ("2024-01-11") EVERY (INTERVAL 1 DAY)
+)
+DISTRIBUTED BY HASH(k0) BUCKETS 3
+PROPERTIES ("replication_num" = "1");
+
+INSERT INTO qc_glm_pk VALUES
+  ('2024-01-01', 1, 10, 'a'),
+  ('2024-01-01', 2, 20, 'b'),
+  ('2024-01-02', 3, 30, 'c'),
+  ('2024-01-02', 4, 40, 'd'),
+  ('2024-01-03', 5, 50, 'e');
+
+select k0, v_int, v_str from qc_glm_pk
+where dt between '2024-01-01' and '2024-01-03'
+order by k0 desc limit 3;
+
+-- Case 7: cost-based GLM disabled — broaden trigger to any plan with a limit.
+-- Verifies the non-cost-based GLM path also stays correct with cache on.
+set enable_global_late_materialization_cost_based = false;
+
+select k0, v_int from qc_glm_dup
+where dt between '2024-01-02' and '2024-01-04'
+order by v_int limit 4;
+
+set enable_global_late_materialization_cost_based = true;
