@@ -220,6 +220,14 @@ jobs:
           fi
           python3 lib/sync_notify.py ${msg_type} ${branch} ${source_pr} ${source_commit_id} ${action_url} ${this_pr_url}
 
+      - name: Trigger pending scan
+        if: always()
+        env:
+          GITHUB_TOKEN: ${{ secrets.SYNC_PAT }}
+        run: |
+          gh workflow run sync-scan-pending.yml \
+            -R ${{ github.repository }} || true
+
       - name: clean
         if: always()
         env:
@@ -382,6 +390,14 @@ jobs:
             this_pr_url=${{ steps.create_error_pr.outputs.pr_url }}
           fi
           python3 lib/sync_notify.py ${msg_type} ${branch} ${source_pr} ${source_commit_id} ${action_url} ${this_pr_url}
+
+      - name: Trigger pending scan
+        if: always()
+        env:
+          GITHUB_TOKEN: ${{ secrets.SYNC_PAT }}
+        run: |
+          gh workflow run sync-scan-pending.yml \
+            -R ${{ github.repository }} || true
 
       - name: clean
         if: always()
