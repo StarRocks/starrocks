@@ -91,7 +91,7 @@ StatusOr<ColumnPtr> DsThetaFunctions::ds_theta_intersect(FunctionContext* contex
         }
         int64_t mem = 0;
         try {
-            theta_intersection_type inter{alloc_type(&mem)};
+            theta_intersection_type inter(datasketches::DEFAULT_SEED, alloc_type(&mem));
             auto a_slice = lhs.value(row);
             auto b_slice = rhs.value(row);
             // intersection: feeding an empty sketch yields empty result, matching set semantics
@@ -118,7 +118,7 @@ StatusOr<ColumnPtr> DsThetaFunctions::ds_theta_a_not_b(FunctionContext* context,
         }
         int64_t mem = 0;
         try {
-            theta_a_not_b_type anb{alloc_type(&mem)};
+            theta_a_not_b_type anb(datasketches::DEFAULT_SEED, alloc_type(&mem));
             auto a_slice = lhs.value(row);
             auto b_slice = rhs.value(row);
             auto a = wrapped_compact_theta_sketch::wrap(a_slice.data, a_slice.size);
