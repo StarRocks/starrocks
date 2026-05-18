@@ -20,7 +20,9 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.lake.LakeMaterializedView;
 import com.starrocks.lake.LakeTable;
+import com.starrocks.lake.bookmark.BookmarkChange.DataChanged;
 import com.starrocks.lake.bookmark.BookmarkChange.IndexReplaced;
+import com.starrocks.lake.bookmark.BookmarkChange.PartitionAdded;
 import com.starrocks.lake.bookmark.BookmarkChange.PartitionDropped;
 import com.starrocks.lake.bookmark.BookmarkChange.PhysicalPartitionChange;
 import com.starrocks.lake.bookmark.BookmarkChange.TabletReshard;
@@ -79,6 +81,33 @@ public final class BookmarkScopedTableResolver {
         return resolve(live, bookmark);
     }
 
+    /**
+     * Returns a scoped OlapTable that exposes only the physical partitions touched
+     * by a trackable {@link BookmarkChange}. Each surviving physical partition is
+     * stamped with the head bookmark's visibleVersion / visibleVersionTimeMs from
+     * the change record, so a downstream scan sees the head's data. Full schema
+     * (columns, indexes) is preserved.
+     *
+     * <p>Only {@link PartitionAdded} and {@link DataChanged} entries are retained;
+     * other change types are non-trackable and the caller must reject them
+     * upstream (the CHANGES analyzer guards on {@code delta.isTrackable()} before
+     * calling this method).
+     */
+    public static OlapTable resolveByChange(OlapTable live, BookmarkChange delta) {
+        OlapTable shadow;
+        if (live instanceof LakeMaterializedView) {
+            shadow = new LakeMaterializedView();
+        } else if (live instanceof LakeTable) {
+            shadow = new LakeTable();
+        } else {
+            throw new IllegalStateException(String.format(
+                    "bookmark resolution requires a cloud-native table, got %s on '%s'",
+                    live.getClass().getSimpleName(), live.getName()));
+        }
+        live.buildBookmarkScopedTable(shadow, new BookmarkChangeRewriter(delta));
+        return shadow;
+    }
+
     private static OlapTable resolve(OlapTable live, Bookmark bookmark) {
         OlapTable shadow;
         if (live instanceof LakeMaterializedView) {
@@ -123,6 +152,66 @@ public final class BookmarkScopedTableResolver {
             }
         }
         return shadow;
+    }
+
+    /**
+     * Rewriter for a single {@link #resolveByChange} call. Returns a
+     * version-stamped copy iff the delta records the physical as
+     * {@link PartitionAdded} or {@link DataChanged}, otherwise empty.
+     *
+     * <p>The stamped version comes from the change's head meta (the bookmark's
+     * captured version at head), not from live — so a downstream scan sees the
+     * head version even if live has moved further forward.
+     *
+     * <p>Non-trackable change types ({@link PartitionDropped},
+     * {@link IndexReplaced}, {@link TabletReshard}) are rejected upstream by
+     * {@code BookmarkChange.isTrackable()} on the analyzer path, so this
+     * rewriter does not need to translate them into errors.
+     */
+    private static final class BookmarkChangeRewriter implements BookmarkPartitionRewriter {
+        private final Map<Long, Map<Long, PhysicalPartitionMeta>> headMetaByLogicalAndPhysical;
+
+        BookmarkChangeRewriter(BookmarkChange delta) {
+            this.headMetaByLogicalAndPhysical = new HashMap<>();
+            for (Map.Entry<Long, List<PhysicalPartitionChange>> logicalEntry : delta.getChanges().entrySet()) {
+                long logicalId = logicalEntry.getKey();
+                Map<Long, PhysicalPartitionMeta> inner = new HashMap<>();
+                for (PhysicalPartitionChange change : logicalEntry.getValue()) {
+                    PhysicalPartitionMeta head = headMetaOf(change);
+                    if (head != null) {
+                        inner.put(change.getPhysicalPartitionId(), head);
+                    }
+                }
+                if (!inner.isEmpty()) {
+                    headMetaByLogicalAndPhysical.put(logicalId, inner);
+                }
+            }
+        }
+
+        @Override
+        public Optional<PhysicalPartition> rewrite(Partition partition, PhysicalPartition physical) {
+            Map<Long, PhysicalPartitionMeta> physicals =
+                    headMetaByLogicalAndPhysical.get(partition.getId());
+            if (physicals == null) {
+                return Optional.empty();
+            }
+            PhysicalPartitionMeta head = physicals.get(physical.getId());
+            if (head == null) {
+                return Optional.empty();
+            }
+            return Optional.of(physical.copyForBookmark(
+                    head.getVisibleVersion(), head.getVisibleVersionTimeMs()));
+        }
+
+        private static PhysicalPartitionMeta headMetaOf(PhysicalPartitionChange change) {
+            if (change instanceof PartitionAdded) {
+                return ((PartitionAdded) change).getHeadPartition();
+            }
+            if (change instanceof DataChanged) {
+                return ((DataChanged) change).getHeadPartition();
+            }
+            return null;
+        }
     }
 
     /**
