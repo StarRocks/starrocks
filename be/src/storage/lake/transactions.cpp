@@ -657,8 +657,7 @@ void collect_files_in_log(TabletManager* tablet_mgr, const TxnLog& txn_log, std:
     // Multi-statement transactions cache the .log under the 4-segment key; use the
     // same path here so the cache entry actually drops.
     if (txn_log.has_load_id()) {
-        tablet_mgr->metacache()->erase(
-                tablet_mgr->txn_log_location(tablet_id, txn_log.txn_id(), txn_log.load_id()));
+        tablet_mgr->metacache()->erase(tablet_mgr->txn_log_location(tablet_id, txn_log.txn_id(), txn_log.load_id()));
     } else {
         tablet_mgr->metacache()->erase(tablet_mgr->txn_log_location(tablet_id, txn_log.txn_id()));
     }
