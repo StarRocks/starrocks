@@ -15,6 +15,7 @@
 package com.starrocks.sql.formatter;
 
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.MockColumnNameProvider;
 import com.starrocks.sql.ast.OrderByElement;
 import com.starrocks.sql.ast.expression.CastExpr;
 import com.starrocks.sql.ast.expression.ExprToSql;
@@ -101,8 +102,9 @@ public class ExprVerboseVisitor extends ExprExplainVisitor {
     @Override
     public String visitSlot(SlotRef node, Void context) {
         ConnectContext ctx = ConnectContext.get();
-        if (ctx != null && ctx.isExplainMockColumnNames() && node.getDesc() != null) {
-            return "[mock_col_" + node.getDesc().getId().asInt() + "," +
+        MockColumnNameProvider mockProvider = ctx == null ? null : ctx.getExplainMockNameProvider();
+        if (mockProvider != null && node.getDesc() != null) {
+            return "[" + mockProvider.mockName(mockKeyForSlot(node)) + "," +
                     " " + node.getDesc().getType() + "," +
                     " " + node.getDesc().getIsNullable() + "]";
         }

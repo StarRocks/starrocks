@@ -284,9 +284,10 @@ public class ConnectContext {
     // Track if current write is CTAS (Create Table As Select)
     private boolean isCTAS = false;
 
-    // When true, EXPLAIN rendering substitutes column references with mock names
-    // (e.g. `mock_col_<id>`). Set transiently around explain output generation.
-    private boolean explainMockColumnNames = false;
+    // When non-null, EXPLAIN rendering substitutes column references with mock
+    // names (e.g. `mock_col_<N>`). Set transiently around explain output generation
+    // for `EXPLAIN COSTS MOCK <query>`.
+    private MockColumnNameProvider explainMockNameProvider = null;
 
     public void setTxnId(long txnId) {
         this.txnId = txnId;
@@ -1016,11 +1017,19 @@ public class ConnectContext {
     }
 
     public boolean isExplainMockColumnNames() {
-        return explainMockColumnNames;
+        return explainMockNameProvider != null;
     }
 
-    public void setExplainMockColumnNames(boolean explainMockColumnNames) {
-        this.explainMockColumnNames = explainMockColumnNames;
+    public void setExplainMockColumnNames(boolean enable) {
+        this.explainMockNameProvider = enable ? new MockColumnNameProvider() : null;
+    }
+
+    public MockColumnNameProvider getExplainMockNameProvider() {
+        return explainMockNameProvider;
+    }
+
+    public void setExplainMockNameProvider(MockColumnNameProvider provider) {
+        this.explainMockNameProvider = provider;
     }
 
     public TWorkGroup getResourceGroup() {

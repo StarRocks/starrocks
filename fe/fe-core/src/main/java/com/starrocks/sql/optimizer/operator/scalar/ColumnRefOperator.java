@@ -16,6 +16,7 @@ package com.starrocks.sql.optimizer.operator.scalar;
 
 import com.starrocks.common.util.SRStringUtils;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.MockColumnNameProvider;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.type.Type;
@@ -58,8 +59,11 @@ public final class ColumnRefOperator extends ScalarOperator {
 
     public String getName() {
         ConnectContext ctx = ConnectContext.get();
-        if (ctx != null && ctx.isExplainMockColumnNames()) {
-            return "mock_col_" + id;
+        if (ctx != null) {
+            MockColumnNameProvider provider = ctx.getExplainMockNameProvider();
+            if (provider != null) {
+                return provider.mockName(name);
+            }
         }
         return name;
     }

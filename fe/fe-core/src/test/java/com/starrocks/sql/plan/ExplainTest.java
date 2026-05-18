@@ -15,6 +15,7 @@
 package com.starrocks.sql.plan;
 
 import com.starrocks.common.Config;
+import com.starrocks.qe.MockColumnNameProvider;
 import com.starrocks.sql.Explain;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.StatementBase;
@@ -123,17 +124,40 @@ public class ExplainTest extends PlanTestBase {
     @Test
     public void testExplainCostsMockOutput() throws Exception {
         String sql = "SELECT DISTINCT t0.v1 FROM t0 LEFT JOIN t1 ON t0.v1 = t1.v4";
-        boolean prev = connectContext.isExplainMockColumnNames();
+        MockColumnNameProvider prev = connectContext.getExplainMockNameProvider();
         try {
-            connectContext.setExplainMockColumnNames(true);
+            connectContext.setExplainMockNameProvider(new MockColumnNameProvider());
             String plan = getCostExplain(sql);
             // Real column names should not leak; mock names should appear instead.
-            Assertions.assertTrue(plan.contains("mock_col_1"), plan);
+            Assertions.assertTrue(plan.contains("mock_col_"), plan);
             Assertions.assertFalse(plan.contains(" v1-->"), plan);
             Assertions.assertFalse(plan.contains(" v4-->"), plan);
             Assertions.assertFalse(plan.contains("[1: v1,"), plan);
         } finally {
-            connectContext.setExplainMockColumnNames(prev);
+            connectContext.setExplainMockNameProvider(prev);
+        }
+    }
+
+    @Test
+    public void testExplainCostsMockedSqlConsistent() throws Exception {
+        // The mocked SQL and the mocked plan must share the same `mock_col_<N>`
+        // mapping so a reader can correlate references between them.
+        String sql = "SELECT t0.v1 FROM t0 WHERE t0.v2 > 1";
+        StatementBase parsedStmt = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+        MockColumnNameProvider prev = connectContext.getExplainMockNameProvider();
+        try {
+            MockColumnNameProvider provider = new MockColumnNameProvider();
+            connectContext.setExplainMockNameProvider(provider);
+            String mockedSql = com.starrocks.sql.analyzer.AstToSQLBuilder.toSQL(parsedStmt);
+            // v1 appears first in the SELECT list, then v2 in the predicate.
+            Assertions.assertEquals("mock_col_1", provider.mockName("v1"));
+            Assertions.assertEquals("mock_col_2", provider.mockName("v2"));
+            Assertions.assertTrue(mockedSql.contains("mock_col_1"), mockedSql);
+            Assertions.assertTrue(mockedSql.contains("mock_col_2"), mockedSql);
+            Assertions.assertFalse(mockedSql.contains(" v1 ") || mockedSql.contains(".v1 ")
+                    || mockedSql.contains("(v1)"), mockedSql);
+        } finally {
+            connectContext.setExplainMockNameProvider(prev);
         }
     }
 

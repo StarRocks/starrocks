@@ -2788,14 +2788,21 @@ public class StmtExecutor {
                 explainString += buildQueryQueueExplainString(execPlan, context, queryType);
             }
             if (execPlan != null) {
-                boolean prevMock = context.isExplainMockColumnNames();
+                MockColumnNameProvider prevProvider = context.getExplainMockNameProvider();
                 try {
                     if (parsedStmt.isMockColumnNames()) {
-                        context.setExplainMockColumnNames(true);
+                        MockColumnNameProvider mockProvider = new MockColumnNameProvider();
+                        context.setExplainMockNameProvider(mockProvider);
+                        // Render the mocked SQL first so its column order seeds the
+                        // mock_col_<N> numbering before the plan renders.
+                        String mockedSql = AstToSQLBuilder.toSQLOrDefault(parsedStmt, "");
+                        if (mockedSql != null && !mockedSql.isEmpty()) {
+                            explainString += "Mocked SQL:\n" + mockedSql + "\n\n";
+                        }
                     }
                     explainString += execPlan.getExplainString(explainLevel);
                 } finally {
-                    context.setExplainMockColumnNames(prevMock);
+                    context.setExplainMockNameProvider(prevProvider);
                 }
             }
         }
