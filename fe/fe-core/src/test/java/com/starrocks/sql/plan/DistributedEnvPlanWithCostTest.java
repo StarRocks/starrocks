@@ -774,7 +774,7 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
                 + "  |  equal join conjunct: [1: PS_PARTKEY, INT, true] = [7: P_PARTKEY, INT, true]\n"
                 + "  |  other predicates: [1: PS_PARTKEY, INT, true] IS NULL\n"
                 + "  |  output columns: 1, 2\n"
-                + "  |  cardinality: 4000000");
+                + "  |  cardinality: 8000000");
     }
 
     @Test
