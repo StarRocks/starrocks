@@ -36,7 +36,7 @@ For more information on supported functions and parameter settings, refer to [Bl
 
 ## Installation
 
-Follow the instructions in [Install BladePipe Worker (Docker)](https://doc.bladepipe.com/productOP/docker/install_worker_docker) or [Install BladePipe Worker (Binary)](https://doc.bladepipe.com/productOP/binary/install_worker_binary) to download and install a BladePipe Worker.
+[BladePipe](https://www.bladepipe.com/docs/quick/quick_start/)
 
 ## Example
 

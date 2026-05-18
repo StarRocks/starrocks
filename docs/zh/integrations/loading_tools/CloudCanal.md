@@ -35,7 +35,7 @@ CloudCanal 提供可视化的界面，可轻松实现数据的结构迁移、全
 
 ## 下载安装
 
-请参考 [全新安装 (Docker Linux/MacOS)](https://www.clougence.com/cc-doc/productOP/docker/install_linux_macos)，前往 [CloudCanal 官网](https://www.clougence.com/) 下载安装私有部署版本。
+[BladePipe](https://www.bladepipe.com/docs/quick/quick_start/)
 
 ## 操作示例
 

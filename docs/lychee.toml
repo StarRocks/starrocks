@@ -70,6 +70,14 @@ method = "get"
 # Exclude URLs from checking (supports regex)
 
  exclude = [
+     "https://www.nyc.gov/*",
+     "https://www.noaa.gov/*",
+     "https://stackoverflow.com/*",
+     "https://openjdk.org/*",
+     "https://search.maven.org/*",
+     "https://gist.github.com/*",
+     "https://github.com/*",
+     "https://www.linkedin.com/*",
    ]
 
 # Exclude these filesystem paths from getting checked.

@@ -21,7 +21,7 @@ This topic describes how to synchronize data from MySQL to StarRocks in real-tim
 
 :::tip
 
-Flink CDC is used in the synchronization from MySQL to Flink. This topic uses Flink CDC whose version is less than 3.0, so SMT is used to synchronize table schemas. However, if Flink CDC 3.0 is used, it is not necessary to use SMT to synchronize table schemas to StarRocks. Flink CDC 3.0 can even synchronize the schemas of the entire MySQL database, the sharded databases and tables, and also supports schema changes synchronization. For detailed usage, see [Streaming ELT from MySQL to StarRocks](https://nightlies.apache.org/flink/flink-cdc-docs-stable/docs/get-started/quickstart/mysql-to-starrocks).
+Flink CDC is used in the synchronization from MySQL to Flink. This topic uses Flink CDC whose version is less than 3.0, so SMT is used to synchronize table schemas. However, if Flink CDC 3.0 is used, it is not necessary to use SMT to synchronize table schemas to StarRocks. Flink CDC 3.0 can even synchronize the schemas of the entire MySQL database, the sharded databases and tables, and also supports schema changes synchronization. For detailed usage, see [Streaming ELT from MySQL to StarRocks](https://nightlies.apache.org/flink/flink-cdc-docs-release-3.4/docs/get-started/quickstart/mysql-to-starrocks/).
 
 :::
 
@@ -387,7 +387,7 @@ Run the Flink cluster and submit a Flink job to continuously synchronize full an
     Job ID: 5ae005c4b3425d8bb13fe660260a35da
     ```
 
-2. You can use the [Flink WebUI](https://nightlies.apache.org/flink/flink-docs-master/docs/try-flink/flink-operations-playground/#flink-webui) or run the `bin/flink list -running` command on  your Flink SQL client to view Flink jobs that are running in the Flink cluster and the job IDs.
+2. You can use the [Flink WebUI](https://nightlies.apache.org/flink/flink-docs-release-2.2/docs/try-flink/flink-operations-playground/#flink-webui) or run the `bin/flink list -running` command on  your Flink SQL client to view Flink jobs that are running in the Flink cluster and the job IDs.
 
     - Flink WebUI
       ![img](../_assets/4.9.3.png)
