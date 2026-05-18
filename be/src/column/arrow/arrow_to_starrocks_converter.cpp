@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "exec/arrow_to_starrocks_converter.h"
+#include "column/arrow/arrow_to_starrocks_converter.h"
 
 #include <arrow/array.h>
 #include <arrow/compute/api.h>
