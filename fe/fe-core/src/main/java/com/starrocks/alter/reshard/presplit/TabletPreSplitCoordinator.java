@@ -184,11 +184,11 @@ public final class TabletPreSplitCoordinator {
         } catch (PreSplitPreSubmitTimeoutException timeout) {
             LOG.info("Pre-split skipped for table {}: pre-submit phase exceeded {}s — {}",
                     table.getName(), preSubmitTimeout.toSeconds(), timeout.getMessage());
-            return new PreSplitOutcome.Skipped(SkipReason.TIMEOUT_PRE_SUBMIT);
+            return skipPostEligibility(SkipReason.TIMEOUT_PRE_SUBMIT);
         } catch (StarRocksException sampleFailure) {
             LOG.warn("Pre-split skipped for table {}: sampling/planning failed — {}",
                     table.getName(), sampleFailure.getMessage());
-            return new PreSplitOutcome.Skipped(SkipReason.SAMPLE_FAILED);
+            return skipPostEligibility(SkipReason.SAMPLE_FAILED);
         } finally {
             if (MetricRepo.hasInit) {
                 MetricRepo.HISTO_TABLET_PRE_SPLIT_PRE_SUBMIT_WAIT_MS.update(
@@ -208,9 +208,24 @@ public final class TabletPreSplitCoordinator {
             // (table-state changed, journal write rejected, job-id collision, etc.).
             LOG.warn("Pre-split skipped for table {}: TabletReshardJobMgr rejected admission — {}",
                     table.getName(), submitFailure.getMessage());
-            return new PreSplitOutcome.Skipped(SkipReason.SUBMIT_FAILED);
+            return skipPostEligibility(SkipReason.SUBMIT_FAILED);
         }
         return new PreSplitOutcome.Submitted(preparedJob);
+    }
+
+    /**
+     * Build a {@code Skipped} outcome for a post-eligibility failure (the sampler
+     * attempted but errored / timed out / could not admit) and record the
+     * sampler-failed counter under the reason label. Distinct from
+     * {@link #skipEligibility} which records eligibility-gate rejections, where
+     * the sampler never ran.
+     */
+    private static PreSplitOutcome.Skipped skipPostEligibility(SkipReason reason) {
+        if (MetricRepo.hasInit) {
+            MetricRepo.COUNTER_TABLET_PRE_SPLIT_SAMPLER_FAILED
+                    .getMetric(reason.name().toLowerCase()).increase(1L);
+        }
+        return new PreSplitOutcome.Skipped(reason);
     }
 
     /**

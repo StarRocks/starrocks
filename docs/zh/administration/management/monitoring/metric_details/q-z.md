@@ -664,34 +664,34 @@ description: "Alphabetical q - z"
 
 - 单位：计数
 - 类型：累计
-- 标签：`reason` — SkipReason 枚举值（小写形式），如 `not_range_distribution`、`table_not_normal`、`has_materialized_view_or_rollup`、`unsupported_sort_key`、`metadata_not_resolved`、`multiple_base_index_tablets`、`partition_not_empty`、`disabled_by_config`、`disabled_by_session`。
-- 描述：基于采样的 Tablet 预分裂（Sample-Based Tablet Pre-Split）在 FE 端被资格门拒绝的总次数，按拒绝原因细分。运维可据此一眼定位"预分裂没跑"是哪条具体分支造成的。
+- 标签：`reason` — SkipReason 枚举值（小写形式），取值之一：`not_range_distribution`、`table_not_normal`、`has_materialized_view_or_rollup`、`unsupported_sort_key`、`metadata_not_resolved`、`multiple_base_index_tablets`、`partition_not_empty`、`disabled_by_config`、`disabled_by_session`。
+- 描述：基于采样的 Tablet 预分裂（Sample-Based Tablet Pre-Split）在 FE 端被资格门拒绝、采样器尚未启动的总次数，按拒绝原因细分。运维可据此一眼定位"预分裂没跑"是哪条具体分支造成的。
 
 ## `starrocks_fe_tablet_pre_split_sampler_invocations`
 
 - 单位：计数
 - 类型：累计
-- 描述：由基于采样的 Tablet 预分裂触发的采样器调用总次数。由生产采样管道负责递增。
+- 描述：由基于采样的 Tablet 预分裂触发的采样器调用总次数。每次资格门通过、生产采样管道开始采样时递增一次。
 
 ## `starrocks_fe_tablet_pre_split_sampler_failed`
 
 - 单位：计数
 - 类型：累计
-- 标签：`reason` — 采样器失败类别（如 `tier1_unavailable`、`connector_error`）。
-- 描述：采样器失败总次数，按原因细分。Tier 1 → Tier 2 回退与一般连接器/IO 失败分别计数。
+- 标签：`reason` — 资格门通过后的失败类别（SkipReason 的小写形式），取值之一：`sample_failed`（采样执行器抛错）、`timeout_pre_submit`（采样 + 规划 + 构建阶段超出 `tablet_pre_split_pre_submit_timeout_seconds`）、`submit_failed`（`TabletReshardJobMgr` 拒绝接纳）。
+- 描述：采样器尝试但未能产出已接纳的 reshard 作业的总次数，按原因细分。与 `tablet_pre_split_eligibility_skipped`（采样器从未运行）以及 `tablet_pre_split_tier_used`（记录成功生成边界的层级）相区分。Tier 1 → Tier 2 回退本身不算失败，由 `tablet_pre_split_tier_used{tier=tier2}` 跟踪。
 
 ## `starrocks_fe_tablet_pre_split_tier_used`
 
 - 单位：计数
 - 类型：累计
-- 标签：`tier` — `tier1`（Parquet/ORC row-group 元数据）或 `tier2`（基于储水池的行采样）。
+- 标签：`tier` — `tier1`（Parquet/ORC row-group 元数据）或 `tier2`（基于储水池的行采样，包含直接 Tier 2 调用与 Tier 1 → Tier 2 回退两种来源）。
 - 描述：基于采样的 Tablet 预分裂调用总数，按生成边界的采样器层级细分。
 
 ## `starrocks_fe_tablet_pre_split_boundaries_planned`
 
 - 单位：计数
 - 类型：直方图
-- 描述：每次调用规划器产生的边界元组数量。等于 `effectiveTabletCount - 1`。
+- 描述：每次调用规划器产生的边界元组数量。等于 `effectiveTabletCount - 1`（K 个 tablet 的切分需要 K-1 个切点）。
 
 ## `starrocks_fe_tablet_pre_split_pre_submit_wait_ms`
 
@@ -703,19 +703,19 @@ description: "Alphabetical q - z"
 
 - 单位：毫秒
 - 类型：直方图
-- 描述：协调器等待已提交的预分裂 reshard 作业到达 `FINISHED` 状态所耗费的墙钟时间。受 `tablet_pre_split_post_submit_wait_seconds` 上限约束。
+- 描述：协调器等待已提交的预分裂 reshard 作业到达 `FINISHED` 状态所耗费的墙钟时间。仅在使用可选的同步等待包装路径（目前为测试路径以及未来可能的同步集成）时更新；生产导入路径采用 fire-and-forget 模式，因此该指标在生产中保持为零。
 
 ## `starrocks_fe_tablet_pre_split_post_submit_hard_cap`
 
 - 单位：计数
 - 类型：累计
-- 描述：基于采样的 Tablet 预分裂触发提交后硬上限的事件总数。已提交的 reshard 作业未能在 `tablet_pre_split_post_submit_wait_seconds` 内到达 `FINISHED` 时递增，协调器随即重新抛出异常以使导入事务安全回滚。
+- 描述：基于采样的 Tablet 预分裂触发提交后硬上限的事件总数。已提交的 reshard 作业未能在 `tablet_pre_split_post_submit_wait_seconds` 内到达 `FINISHED` 时递增。仅在可选的同步等待包装路径上触发（目前为测试路径以及未来可能的同步集成）；生产导入路径采用 fire-and-forget 模式，因此该指标在生产中保持为零。
 
 ## `starrocks_fe_tablet_pre_split_load_abort`
 
 - 单位：计数
 - 类型：累计
-- 描述：因基于采样的 Tablet 预分裂未能在限定时间内确认 reshard 作业到达 `FINISHED` 而导致回滚的导入事务总数。与 `tablet_pre_split_post_submit_hard_cap` 在同一代码路径上递增，用于呈现硬上限事件的用户影响视角。
+- 描述：因基于采样的 Tablet 预分裂未能在限定时间内确认 reshard 作业到达 `FINISHED` 而导致回滚的导入事务总数。`tablet_pre_split_post_submit_hard_cap` 的姊妹计数器。仅在可选的同步等待包装路径上触发；生产中导入不会因预分裂而回滚，因此该指标在生产中保持为零。
 
 ## `starrocks_fe_tablet_max_compaction_score`
 

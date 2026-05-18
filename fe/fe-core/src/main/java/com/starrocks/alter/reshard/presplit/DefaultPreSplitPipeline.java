@@ -65,10 +65,10 @@ public final class DefaultPreSplitPipeline implements PreSplitPipeline {
     static final Duration DEFAULT_POLL_INTERVAL = Duration.ofMillis(500);
 
     /** Metric label for a Tier 1 success path (single Parquet/ORC row-group plan). */
-    static final String TIER_LABEL_PARQUET_METADATA = "1";
+    static final String TIER_LABEL_PARQUET_METADATA = "tier1";
 
     /** Metric label for a fallback path where Tier 1 was unavailable and Tier 2 produced the cuts. */
-    static final String TIER_LABEL_FALLBACK_TO_RESERVOIR = "fallback_to_2";
+    static final String TIER_LABEL_FALLBACK_TO_RESERVOIR = "tier2";
 
     private final Tier1Sampler tier1Sampler;
     private final Sampler tier2Sampler;
@@ -158,7 +158,7 @@ public final class DefaultPreSplitPipeline implements PreSplitPipeline {
         }
 
         recordTierUsed(outcome.tier);
-        recordBoundariesPlanned(outcome.result.getEffectiveTabletCount());
+        recordBoundariesPlanned(outcome.result.getBoundaries().size());
 
         List<TabletRange> tabletRanges = buildTabletRanges(outcome.result.getBoundaries());
         TabletReshardJob job = SplitTabletJobFactory.forExternalBoundaries(database, table, oldTabletId, tabletRanges);
@@ -285,9 +285,9 @@ public final class DefaultPreSplitPipeline implements PreSplitPipeline {
         }
     }
 
-    private static void recordBoundariesPlanned(int effectiveTabletCount) {
+    private static void recordBoundariesPlanned(int boundaryCount) {
         if (MetricRepo.hasInit) {
-            MetricRepo.HISTO_TABLET_PRE_SPLIT_BOUNDARIES_PLANNED.update(effectiveTabletCount);
+            MetricRepo.HISTO_TABLET_PRE_SPLIT_BOUNDARIES_PLANNED.update(boundaryCount);
         }
     }
 
