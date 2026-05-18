@@ -365,26 +365,26 @@ Status SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id, const std::fun
 
         auto query_ctx_weak = _fragment_ctx->runtime_state()->query_ctx()->weak_from_this();
 
-        closure->addFailedHandler([this, query_ctx_weak](const ClosureContext& ctx,
-                                                         std::string_view rpc_error_msg) noexcept {
-            auto query_ctx_guard = query_ctx_weak.lock();
-            RETURN_IF(!query_ctx_guard, (void)0);
-            auto notify = this->defer_notify();
+        closure->addFailedHandler(
+                [this, query_ctx_weak](const ClosureContext& ctx, std::string_view rpc_error_msg) noexcept {
+                    auto query_ctx_guard = query_ctx_weak.lock();
+                    RETURN_IF(!query_ctx_guard, (void)0);
+                    auto notify = this->defer_notify();
 
-            auto defer = DeferOp([this]() { --_total_in_flight_rpc; });
-            _is_finishing = true;
-            auto& context = sink_ctx(ctx.instance_id.lo);
-            ++context.num_finished_rpcs;
-            --context.num_in_flight_rpcs;
+                    auto defer = DeferOp([this]() { --_total_in_flight_rpc; });
+                    _is_finishing = true;
+                    auto& context = sink_ctx(ctx.instance_id.lo);
+                    ++context.num_finished_rpcs;
+                    --context.num_in_flight_rpcs;
 
-            const auto& dest_addr = context.dest_addrs;
-            std::string err_msg =
-                    fmt::format("transmit chunk rpc failed [dest_instance_id={}] [dest={}:{}] detail:{}",
-                                print_id(ctx.instance_id), dest_addr.hostname, dest_addr.port, rpc_error_msg);
+                    const auto& dest_addr = context.dest_addrs;
+                    std::string err_msg =
+                            fmt::format("transmit chunk rpc failed [dest_instance_id={}] [dest={}:{}] detail:{}",
+                                        print_id(ctx.instance_id), dest_addr.hostname, dest_addr.port, rpc_error_msg);
 
-            _fragment_ctx->cancel(Status::ThriftRpcError(err_msg));
-            LOG(WARNING) << err_msg;
-        });
+                    _fragment_ctx->cancel(Status::ThriftRpcError(err_msg));
+                    LOG(WARNING) << err_msg;
+                });
         closure->addSuccessHandler([this, query_ctx_weak](const ClosureContext& ctx,
                                                           const PTransmitChunkResult& result) noexcept {
             auto query_ctx_guard = query_ctx_weak.lock();
