@@ -19,6 +19,7 @@ import com.starrocks.thrift.TUniqueId;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
+import java.util.function.IntSupplier;
 
 /**
  * Per-FE singleton that tracks queries currently in QueryQueueManager.maybeWait().
@@ -108,5 +109,36 @@ public class WarehouseInFlightTracker {
     public InFlightEntry getEntry(long warehouseId, TUniqueId slotId) {
         ConcurrentMap<TUniqueId, InFlightEntry> map = byWarehouse.get(warehouseId);
         return map == null ? null : map.get(slotId);
+    }
+
+    /**
+     * Block until the supplied totalSlots satisfies the threshold for the given rawSlots,
+     * or until maxWaitMs elapses. Polls with 200ms step (capped by remaining deadline).
+     *
+     * @param rawSlots         demand from the query
+     * @param supplyTotalSlots dynamic source of current totalSlots (re-evaluated each iteration)
+     * @param thresholdRatio   gate ratio: returns true when totalSlots * thresholdRatio >= rawSlots
+     * @param maxWaitMs        maximum milliseconds to wait; if <= 0, returns the current evaluation without sleeping
+     * @return true if capacity was satisfied, false on timeout
+     */
+    public boolean awaitCapacity(int rawSlots,
+                                 IntSupplier supplyTotalSlots,
+                                 double thresholdRatio,
+                                 long maxWaitMs) throws InterruptedException {
+        if (maxWaitMs <= 0) {
+            return supplyTotalSlots.getAsInt() * thresholdRatio >= rawSlots;
+        }
+        long deadline = System.currentTimeMillis() + maxWaitMs;
+        while (true) {
+            int total = supplyTotalSlots.getAsInt();
+            if (total * thresholdRatio >= rawSlots) {
+                return true;
+            }
+            long remaining = deadline - System.currentTimeMillis();
+            if (remaining <= 0) {
+                return false;
+            }
+            Thread.sleep(Math.min(200L, remaining));
+        }
     }
 }

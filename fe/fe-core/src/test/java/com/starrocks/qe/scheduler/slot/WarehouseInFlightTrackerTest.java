@@ -17,7 +17,11 @@ package com.starrocks.qe.scheduler.slot;
 import com.starrocks.thrift.TUniqueId;
 import org.junit.jupiter.api.Test;
 
+import java.util.concurrent.atomic.AtomicInteger;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class WarehouseInFlightTrackerTest {
     private static final long WH = 100L;
@@ -52,5 +56,55 @@ public class WarehouseInFlightTrackerTest {
         assertEquals(0, tracker.getMaxRawSlots(WH));
         assertEquals(0, tracker.getSumRawSlots(WH));
         assertEquals(0, tracker.getBigQueryCount(WH));
+    }
+
+    @Test
+    public void testAwaitCapacityReturnsImmediatelyWhenAlreadyEnough() throws Exception {
+        WarehouseInFlightTracker tracker = new WarehouseInFlightTracker();
+        long start = System.currentTimeMillis();
+        boolean result = tracker.awaitCapacity(
+                /*rawSlots=*/ 8,
+                /*supplyTotalSlots=*/ () -> 16,
+                /*thresholdRatio=*/ 1.0,
+                /*maxWaitMs=*/ 1000L);
+        assertTrue(result);
+        assertTrue(System.currentTimeMillis() - start < 200, "should return without waiting");
+    }
+
+    @Test
+    public void testAwaitCapacityTimesOut() throws Exception {
+        WarehouseInFlightTracker tracker = new WarehouseInFlightTracker();
+        long start = System.currentTimeMillis();
+        boolean result = tracker.awaitCapacity(
+                /*rawSlots=*/ 100,
+                /*supplyTotalSlots=*/ () -> 8,
+                /*thresholdRatio=*/ 1.0,
+                /*maxWaitMs=*/ 500L);
+        assertFalse(result);
+        long elapsed = System.currentTimeMillis() - start;
+        assertTrue(elapsed >= 500 && elapsed < 900,
+                "should wait full timeout (was " + elapsed + "ms)");
+    }
+
+    @Test
+    public void testAwaitCapacityUnblocksWhenSupplyGrows() throws Exception {
+        WarehouseInFlightTracker tracker = new WarehouseInFlightTracker();
+        AtomicInteger total = new AtomicInteger(8);
+        Thread grower = new Thread(() -> {
+            try {
+                Thread.sleep(300);
+            } catch (InterruptedException ignored) {
+                // ignore
+            }
+            total.set(64);
+        });
+        grower.start();
+        long start = System.currentTimeMillis();
+        boolean result = tracker.awaitCapacity(50, total::get, 1.0, 2000L);
+        grower.join();
+        assertTrue(result);
+        long elapsed = System.currentTimeMillis() - start;
+        assertTrue(elapsed >= 300 && elapsed < 800,
+                "should unblock soon after supply grows (elapsed " + elapsed + "ms)");
     }
 }
