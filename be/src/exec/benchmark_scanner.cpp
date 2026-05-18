@@ -14,14 +14,16 @@
 
 #include "exec/benchmark_scanner.h"
 
+#include <arrow/record_batch.h>
+
 #include <algorithm>
 
 #include "base/utility/arrow_utils.h"
 #include "benchgen/benchmark_suite.h"
 #include "benchgen/record_batch_iterator_factory.h"
+#include "column/arrow/arrow_to_starrocks_converter.h"
 #include "column/chunk.h"
 #include "column/column_helper.h"
-#include "exec/file_scanner/parquet_scanner.h"
 #include "exprs/cast_expr.h"
 #include "exprs/column_ref.h"
 #include "runtime/runtime_state.h"
@@ -140,8 +142,9 @@ Status BenchmarkScanner::_init_converters(const std::shared_ptr<arrow::Schema>& 
         auto raw_type_desc = std::make_unique<TypeDescriptor>();
         auto conv_func = std::make_unique<ConvertFuncTree>();
         bool need_cast = false;
-        RETURN_IF_ERROR(ParquetScanner::build_dest(field->type().get(), &slot_desc->type(), slot_desc->is_nullable(),
-                                                   raw_type_desc.get(), conv_func.get(), need_cast, false));
+        RETURN_IF_ERROR(build_arrow_column_convert_plan(field->type().get(), &slot_desc->type(),
+                                                        slot_desc->is_nullable(), raw_type_desc.get(), conv_func.get(),
+                                                        need_cast, false));
 
         Expr* expr = nullptr;
         if (!need_cast) {
