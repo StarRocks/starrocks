@@ -2400,7 +2400,37 @@ Status ShardByLengthMutableIndex::create_index_file(std::string& path) {
     return Status::OK();
 }
 
-#ifdef __SSE2__
+#ifdef __AVX2__
+
+#include <immintrin.h>
+
+size_t get_matched_tag_idxes(const uint8_t* tags, size_t ntag, uint8_t tag, uint8_t* matched_idxes) {
+    size_t nmatched = 0;
+    auto tests = _mm256_set1_epi8(tag);
+    size_t i = 0;
+
+    // Process 32 bytes at a time with AVX2
+    for (; i + 32 <= ntag; i += 32) {
+        auto tags32 = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(tags + i));
+        auto eqs = _mm256_cmpeq_epi8(tags32, tests);
+        auto mask = static_cast<uint32_t>(_mm256_movemask_epi8(eqs));
+        while (mask != 0) {
+            uint32_t match_pos = __builtin_ctz(mask);
+            matched_idxes[nmatched++] = i + match_pos;
+            mask &= (mask - 1);
+        }
+    }
+
+    // Process remaining bytes with scalar
+    for (; i < ntag; i++) {
+        if (tags[i] == tag) {
+            matched_idxes[nmatched++] = i;
+        }
+    }
+    return nmatched;
+}
+
+#elif defined(__SSE2__)
 
 #include <emmintrin.h>
 
@@ -2417,6 +2447,48 @@ size_t get_matched_tag_idxes(const uint8_t* tags, size_t ntag, uint8_t tag, uint
                 matched_idxes[nmatched++] = i + match_pos;
             }
             mask &= (mask - 1);
+        }
+    }
+    return nmatched;
+}
+
+#elif defined(__ARM_NEON) && defined(__aarch64__)
+
+#include <arm_neon.h>
+
+size_t get_matched_tag_idxes(const uint8_t* tags, size_t ntag, uint8_t tag, uint8_t* matched_idxes) {
+    size_t nmatched = 0;
+    uint8x16_t tests = vdupq_n_u8(tag);
+    size_t i = 0;
+
+    // Process 16 bytes at a time with NEON
+    for (; i + 16 <= ntag; i += 16) {
+        uint8x16_t tags16 = vld1q_u8(tags + i);
+        uint8x16_t eqs = vceqq_u8(tags16, tests);
+
+        // Check low and high 8-byte halves separately
+        uint64_t lo = vgetq_lane_u64(vreinterpretq_u64_u8(eqs), 0);
+        uint64_t hi = vgetq_lane_u64(vreinterpretq_u64_u8(eqs), 1);
+
+        // Process low half (bytes 0-7)
+        while (lo != 0) {
+            int bit_pos = __builtin_ctzll(lo);
+            matched_idxes[nmatched++] = i + (bit_pos >> 3);
+            lo &= ~(0xFFULL << bit_pos);
+        }
+
+        // Process high half (bytes 8-15)
+        while (hi != 0) {
+            int bit_pos = __builtin_ctzll(hi);
+            matched_idxes[nmatched++] = i + 8 + (bit_pos >> 3);
+            hi &= ~(0xFFULL << bit_pos);
+        }
+    }
+
+    // Process remaining bytes with scalar
+    for (; i < ntag; i++) {
+        if (tags[i] == tag) {
+            matched_idxes[nmatched++] = i;
         }
     }
     return nmatched;

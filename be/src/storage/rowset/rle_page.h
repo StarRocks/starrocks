@@ -225,7 +225,10 @@ public:
         if (PREDICT_FALSE(_cur_index >= _num_elements)) {
             return Status::OK();
         }
-        CppType value{};
+
+        // Use batch decoding for better performance
+        constexpr size_t kBatchSize = 1024;
+        CppType batch_buffer[kBatchSize];
 
         size_t to_read =
                 std::min(static_cast<size_t>(range.span_size()), static_cast<size_t>(_num_elements - _cur_index));
@@ -233,13 +236,18 @@ public:
         while (to_read > 0) {
             RETURN_IF_ERROR(seek_to_position_in_page(iter.begin()));
             Range<> r = iter.next(to_read);
-            for (size_t i = 0; i < r.span_size(); ++i) {
-                if (PREDICT_FALSE(!_rle_decoder.Get(&value))) {
+            size_t remaining = r.span_size();
+
+            while (remaining > 0) {
+                size_t batch_count = std::min(remaining, kBatchSize);
+                if (PREDICT_FALSE(!_rle_decoder.GetBatch(batch_buffer, batch_count))) {
                     return Status::Corruption("RLE decode failed");
                 }
-                [[maybe_unused]] int p = dst->append_numbers(&value, sizeof(value));
-                DCHECK_EQ(1, p);
+                [[maybe_unused]] int p = dst->append_numbers(batch_buffer, batch_count * sizeof(CppType));
+                DCHECK_EQ(batch_count, p);
+                remaining -= batch_count;
             }
+
             _cur_index += r.span_size();
             to_read -= r.span_size();
         }
