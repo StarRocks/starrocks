@@ -536,19 +536,11 @@ StatusOr<ColumnPtr> MathFunctions::iceberg_bucket_date(FunctionContext* context,
 }
 
 StatusOr<ColumnPtr> MathFunctions::iceberg_bucket_datetime(FunctionContext* context, const Columns& columns) {
-    ColumnPtr c0 = columns[0];
-    ColumnPtr c1 = columns[1];
-    NullColumn::MutablePtr null_flags;
-    bool has_null = false;
-    PREPARE_COLUMN_WITH_CONST_AND_NULL_FOR_ICEBERG_FUNC(c0, c1);
-    const int size = c0->size();
-    int64_t width = c1->get(0).get_int32();
+    RETURN_IF_COLUMNS_ONLY_NULL(columns);
 
-    auto col = ColumnHelper::cast_to_raw<TYPE_DATETIME>(c0);
-    MutableColumnPtr res = RunTimeColumnType<TYPE_INT>::create();
-    res->resize_uninitialized(size);
-    const auto& raw_c0 = col->immutable_data();
-    auto& raw_res = ColumnHelper::cast_to_raw<TYPE_INT>(res.get())->get_data();
+    const int size = columns[0]->size();
+    ColumnViewer<TYPE_DATETIME> viewer(columns[0]);
+    int64_t width = ColumnViewer<TYPE_INT>(columns[1]).value(0);
 
     ColumnBuilder<TYPE_INT> builder(size);
     for (int i = 0; i < size; i++) {
@@ -587,11 +579,7 @@ StatusOr<ColumnPtr> MathFunctions::iceberg_bucket_timestamptz_datetime(FunctionC
             builder.append(static_cast<int32_t>((hash & INT_MAX) % width));
         }
     }
-
-    if (has_null) {
-        res = NullableColumn::create(std::move(res), std::move(null_flags));
-    }
-    return res;
+    return builder.build(ColumnHelper::is_all_const(columns));
 }
 
 template <typename T>
