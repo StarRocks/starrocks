@@ -14,12 +14,9 @@
 
 #pragma once
 
-<<<<<<< HEAD
-#include "column/chunk.h"
-=======
 #include <mutex>
 
->>>>>>> e78da54a37 ([BugFix] Fix concurrent SegmentFlushTask race in DeltaWriter::commit() (#73371))
+#include "column/chunk.h"
 #include "column/vectorized_fwd.h"
 #include "common/tracer_fwd.h"
 #include "gen_cpp/internal_service.pb.h"
@@ -258,16 +255,12 @@ private:
 
     void _set_state(State state, const Status& st);
 
-<<<<<<< HEAD
-    State _state;
-=======
     // Body of commit() executed exactly once across concurrent duplicate
     // callers via std::call_once on _commit_once. The result is captured
     // in _commit_result. Not directly callable from outside commit().
     Status _do_commit_body();
 
     State _state{kUninitialized};
->>>>>>> e78da54a37 ([BugFix] Fix concurrent SegmentFlushTask race in DeltaWriter::commit() (#73371))
     Status _err_status;
     mutable std::mutex _state_lock;
     // Serialises the body of commit(). The first caller to enter
