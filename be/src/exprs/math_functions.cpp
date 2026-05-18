@@ -28,12 +28,9 @@
 #include "exprs/expr.h"
 #include "exprs/function_helper.h"
 #include "exprs/math_functions.h"
-<<<<<<< HEAD
-#include "util/murmur_hash3.h"
-=======
+#include "runtime/datetime_value.h"
 #include "runtime/runtime_state.h"
-#include "types/datetime_value.h"
->>>>>>> 82ff1fcd13 ([Enhancement] Complete Iceberg timestamptz partition transform support by filling the sink path gap (#73397))
+#include "util/murmur_hash3.h"
 
 namespace starrocks {
 
@@ -553,16 +550,6 @@ StatusOr<ColumnPtr> MathFunctions::iceberg_bucket_datetime(FunctionContext* cont
     const auto& raw_c0 = col->immutable_data();
     auto& raw_res = ColumnHelper::cast_to_raw<TYPE_INT>(res.get())->get_data();
 
-<<<<<<< HEAD
-    for (auto i = 0; i < size; i++) {
-        int64_t result = timestamp::to_julian(raw_c0[i].timestamp());
-        result *= SECS_PER_DAY;
-        result -= timestamp::UNIX_EPOCH_SECONDS;
-        result *= 1000000L;
-        result += timestamp::to_time(raw_c0[i].timestamp());
-        murmur_hash3_x86_32(&result, sizeof(int64_t), 0, (void*)&raw_res[i]);
-        raw_res[i] = (raw_res[i] & INT_MAX) % width;
-=======
     ColumnBuilder<TYPE_INT> builder(size);
     for (int i = 0; i < size; i++) {
         if (viewer.is_null(i)) {
@@ -599,7 +586,6 @@ StatusOr<ColumnPtr> MathFunctions::iceberg_bucket_timestamptz_datetime(FunctionC
             murmur_hash3_x86_32(&val, sizeof(int64_t), 0, &hash);
             builder.append(static_cast<int32_t>((hash & INT_MAX) % width));
         }
->>>>>>> 82ff1fcd13 ([Enhancement] Complete Iceberg timestamptz partition transform support by filling the sink path gap (#73397))
     }
 
     if (has_null) {
