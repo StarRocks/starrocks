@@ -34,15 +34,30 @@
 #include "common/statusor.h"
 #include "gutil/strings/fastmem.h"
 #include "gutil/strings/substitute.h"
-#include "runtime/descriptors.h"
-#include "runtime/runtime_state.h"
-#include "runtime/runtime_state_helper.h"
 #include "types/datetime_value.h"
 #include "types/logical_type.h"
 #include "types/type_descriptor.h"
 #include "types/value_generator.h"
 
 namespace starrocks {
+
+static std::string_view current_column_name_or_null(const ArrowConvertContext* ctx) {
+    if (ctx == nullptr || ctx->current_column_name.empty()) {
+        return "null";
+    }
+    return ctx->current_column_name;
+}
+
+static bool has_arrow_convert_error_reporter(const ArrowConvertContext* ctx) {
+    return ctx != nullptr && ctx->report_error_message != nullptr;
+}
+
+static void report_arrow_convert_error(ArrowConvertContext* ctx, const std::string& reason,
+                                       const std::string& raw_data) {
+    if (has_arrow_convert_error_reporter(ctx)) {
+        ctx->report_error_message(reason, raw_data);
+    }
+}
 
 Status illegal_converting_error(const std::string& arrow_type_name, const std::string& type_name) {
     return Status::InternalError(strings::Substitute("Illegal converting from arrow type($0) to StarRocks type($1)",
@@ -100,7 +115,7 @@ void fill_filter(const arrow::Array* array, size_t array_start_idx, size_t num_e
         all_invalid &= filter_data[i];
     }
     if (UNLIKELY(!all_invalid)) {
-        ctx->report_error_message("column type is not null but data is null", "");
+        report_arrow_convert_error(ctx, "column type is not null but data is null", "");
     }
 }
 
@@ -124,7 +139,9 @@ Status convert_arrow_array_to_column(ConvertFuncTree* conv_func, size_t num_elem
     if (array->type_id() == ArrowTypeId::TIMESTAMP) {
         auto* timestamp_type = down_cast<arrow::TimestampType*>(array->type().get());
         auto& mutable_timezone = (std::string&)timestamp_type->timezone();
-        mutable_timezone = conv_ctx->state->timezone();
+        if (conv_ctx != nullptr && !conv_ctx->timezone.empty()) {
+            mutable_timezone = conv_ctx->timezone;
+        }
     }
 
     uint8_t* null_data;
@@ -306,11 +323,8 @@ struct ArrowConverter<AT, LT, is_nullable, is_strict, BinaryATGuard<AT>, StringO
         auto concrete_column = down_cast<ColumnType*>(column);
         auto* filter_data = (&chunk_filter->front()) + column_start_idx;
         size_t max_length = binary_max_length<LT>;
-        if (ctx != nullptr) {
-            size_t type_len = ctx->current_slot->type().len;
-            if (type_len > 0) {
-                max_length = type_len;
-            }
+        if (ctx != nullptr && ctx->current_type_length > 0) {
+            max_length = ctx->current_type_length;
         }
 
         if constexpr (AT == ArrowTypeId::FIXED_SIZE_BINARY) {
@@ -328,11 +342,11 @@ struct ArrowConverter<AT, LT, is_nullable, is_strict, BinaryATGuard<AT>, StringO
                     //filter all
                     std::fill_n(filter_data, num_elements, 0);
 
-                    if (ctx != nullptr) {
+                    if (has_arrow_convert_error_reporter(ctx)) {
                         std::string raw_data = "arrow data is fixed size binary type";
                         std::string reason = strings::Substitute("type length $0 exceeds max length $1", width,
                                                                  binary_max_length<LT>);
-                        ctx->report_error_message(reason, raw_data);
+                        report_arrow_convert_error(ctx, reason, raw_data);
                     }
                 }
                 return Status::OK();
@@ -359,14 +373,14 @@ struct ArrowConverter<AT, LT, is_nullable, is_strict, BinaryATGuard<AT>, StringO
                     } else {
                         filter_data[i - array_start_idx] = 0;
 
-                        if (ctx != nullptr && !repeated) {
+                        if (!repeated && has_arrow_convert_error_reporter(ctx)) {
                             repeated = true;
                             ArrowOffsetType s_size = 0;
                             const char* s_data = reinterpret_cast<const char*>(concrete_array->GetValue(i, &s_size));
                             std::string raw_data = std::string(s_data, s_size);
                             std::string reason =
                                     strings::Substitute("string length $0 exceeds max length $1", s_size, max_length);
-                            ctx->report_error_message(reason, raw_data);
+                            report_arrow_convert_error(ctx, reason, raw_data);
                         }
                     }
                 }
@@ -421,11 +435,8 @@ struct ArrowConverter<AT, LT, is_nullable, is_strict, StringViewATGuard<AT>, Str
         auto* concrete_column = down_cast<ColumnType*>(column);
         auto* filter_data = (&chunk_filter->front()) + column_start_idx;
         size_t max_length = binary_max_length<LT>;
-        if (ctx != nullptr) {
-            size_t type_len = ctx->current_slot->type().len;
-            if (type_len > 0) {
-                max_length = type_len;
-            }
+        if (ctx != nullptr && ctx->current_type_length > 0) {
+            max_length = ctx->current_type_length;
         }
 
         concrete_column->reserve(concrete_column->size() + num_elements);
@@ -467,11 +478,11 @@ struct ArrowConverter<AT, LT, is_nullable, is_strict, StringViewATGuard<AT>, Str
                     null_data[i] = DATUM_NULL;
                 } else {
                     filter_data[i] = 0;
-                    if (ctx != nullptr && !repeated) {
+                    if (!repeated && has_arrow_convert_error_reporter(ctx)) {
                         repeated = true;
                         std::string reason =
                                 strings::Substitute("string length $0 exceeds max length $1", sv.size(), max_length);
-                        ctx->report_error_message(reason, std::string(sv));
+                        report_arrow_convert_error(ctx, reason, std::string(sv));
                     }
                 }
             } else {
@@ -851,7 +862,9 @@ struct ArrowConverter<AT, LT, is_nullable, is_strict, DateOrDateTimeATGuard<AT>,
                 /// column or datetime value.
 
                 // When the parquet timezone is empty, populate data with runtime timezone instead.
-                timezone = ctx->state->timezone();
+                if (ctx != nullptr && !ctx->timezone.empty()) {
+                    timezone = ctx->timezone;
+                }
             }
 
             cctz::time_zone ctz;
@@ -1064,7 +1077,8 @@ Status null_converter(const arrow::Array* array, size_t array_start_idx, size_t 
                       size_t column_start_idx, uint8_t* null_data, [[maybe_unused]] Filter* chunk_filter,
                       ArrowConvertContext* ctx, [[maybe_unused]] ConvertFuncTree* conv_func) {
     if (null_data == nullptr) {
-        return Status::InvalidArgument(fmt::format("The column ({}) must be nullable", ctx->current_slot->col_name()));
+        return Status::InvalidArgument(
+                fmt::format("The column ({}) must be nullable", current_column_name_or_null(ctx)));
     }
     for (size_t i = 0; i < num_elements; i++) {
         null_data[column_start_idx + i] = 1;
@@ -1177,18 +1191,6 @@ LogicalType get_strict_type(ArrowTypeId at) {
         return lt_it->second;
     }
     return TYPE_UNKNOWN;
-}
-
-static const int MAX_ERROR_MESSAGE_COUNTER = 100;
-
-void ArrowConvertContext::report_error_message(const std::string& reason, const std::string& raw_data) {
-    if (state == nullptr) return;
-    if (error_message_counter > MAX_ERROR_MESSAGE_COUNTER) return;
-    error_message_counter += 1;
-    std::string error_msg =
-            strings::Substitute("file = $0, column = $1, raw data = $2", current_file,
-                                (current_slot == nullptr) ? "null" : current_slot->col_name(), raw_data);
-    RuntimeStateHelper::append_error_msg_to_file(state, error_msg, reason);
 }
 
 } // namespace starrocks
