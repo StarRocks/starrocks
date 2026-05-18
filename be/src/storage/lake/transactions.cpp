@@ -520,25 +520,35 @@ Status publish_log_version(TabletManager* tablet_mgr, int64_t tablet_id, std::sp
             // change deadlock on publish_log_version load_ids).
             auto txn_id = txn_infos[i].txn_id();
             auto log_version = log_versions[i];
+            auto expected_count = txn_infos[i].load_ids_size();
             ASSIGN_OR_RETURN(auto txn_logs_vector, load_txn_log(tablet_mgr, {tablet_id}, txn_infos[i]));
             auto& txn_logs = txn_logs_vector[0];
 
-            if (txn_logs.empty()) {
-                // All per-load_id source files are missing. This is the same idempotent
-                // situation the non-load_id branch below guards against: if the target
-                // .vlog already exists treat the call as a no-op, otherwise surface
-                // NotFound so FE retries / fails the publish deterministically.
+            if (static_cast<int>(txn_logs.size()) < expected_count) {
+                // load_txn_log silently skips per-load_id files that are NotFound, so any
+                // shortfall here means either (a) an idempotent retry where the target
+                // .vlog has already been written and (some of) the source .log files have
+                // been vacuumed, or (b) shared-storage corruption / silent data loss.
+                // Distinguish by checking the .vlog: if it already exists, accept this as
+                // the idempotent path and clean up any leftover .log files; otherwise
+                // surface NotFound so FE retries / fails the publish instead of advancing
+                // visibility with incomplete statement data.
                 auto txn_vlog_path = tablet_mgr->txn_vlog_location(tablet_id, log_version);
                 ASSIGN_OR_RETURN(auto fs, FileSystemFactory::CreateSharedFromString(txn_vlog_path));
                 auto check_st = fs->path_exists(txn_vlog_path);
                 if (check_st.ok()) {
+                    for (const auto& load_id : txn_infos[i].load_ids()) {
+                        auto stale_path = tablet_mgr->txn_log_location(tablet_id, txn_id, load_id);
+                        files_to_delete.emplace_back(stale_path);
+                        tablet_mgr->metacache()->erase(stale_path);
+                    }
                     continue;
                 }
                 LOG_IF(WARNING, !check_st.is_not_found())
                         << "Fail to check the existance of " << txn_vlog_path << ": " << check_st;
-                return Status::NotFound(
-                        fmt::format("no per-load_id txn log found for tablet {} txn {} ({} load_ids checked)",
-                                    tablet_id, txn_id, txn_infos[i].load_ids_size()));
+                return Status::NotFound(fmt::format(
+                        "incomplete per-load_id txn logs for tablet {} txn {}: loaded {} of {} expected",
+                        tablet_id, txn_id, txn_logs.size(), expected_count));
             }
 
             auto merged = std::make_shared<TxnLogPB>(*txn_logs[0]);

@@ -2643,6 +2643,103 @@ TEST_F(LakeServiceTest, test_publish_log_version_with_load_ids) {
     }
 }
 
+// Partial per-load_id .log sets must NOT silently produce a .vlog from
+// incomplete data -- load_txn_log skips NotFound files, so a corruption /
+// lost-file scenario would otherwise let FE advance visibleVersion with
+// dropped statement data. publish_log_version must require every expected
+// per-load_id file (or fall back to an existing .vlog for idempotent retry).
+TEST_F(LakeServiceTest, test_publish_log_version_with_load_ids_partial) {
+    auto txn_id = next_id();
+    PUniqueId load_id_1;
+    load_id_1.set_hi(0x5555555555555551LL);
+    load_id_1.set_lo(0x6666666666666661LL);
+    PUniqueId load_id_2;
+    load_id_2.set_hi(0x5555555555555552LL);
+    load_id_2.set_lo(0x6666666666666662LL);
+
+    // Write only ONE of the two per-statement .log files -- simulate the
+    // case where one statement's flush is lost / the file vanished.
+    {
+        TxnLog log;
+        log.set_tablet_id(_tablet_id);
+        log.set_txn_id(txn_id);
+        log.mutable_load_id()->CopyFrom(load_id_1);
+        log.mutable_op_write()->mutable_rowset()->set_num_rows(7);
+        log.mutable_op_write()->mutable_rowset()->set_data_size(70);
+        log.mutable_op_write()->mutable_rowset()->add_segments("partial_seg.dat");
+        ASSERT_OK(_tablet_mgr->put_txn_log(log));
+    }
+
+    EXPECT_TRUE(fs::path_exist(_tablet_mgr->txn_log_location(_tablet_id, txn_id, load_id_1)));
+    EXPECT_FALSE(fs::path_exist(_tablet_mgr->txn_log_location(_tablet_id, txn_id, load_id_2)));
+
+    const int64_t version = 30;
+
+    // Without an existing .vlog, the partial set must fail loudly. The
+    // failing tablet ends up in failed_tablets and crucially NO .vlog gets
+    // written (otherwise a later retry would silently treat this as success).
+    {
+        PublishLogVersionRequest request;
+        PublishLogVersionResponse response;
+        request.add_tablet_ids(_tablet_id);
+        request.set_version(version);
+        auto* txn_info = request.mutable_txn_info();
+        txn_info->set_txn_id(txn_id);
+        txn_info->set_combined_txn_log(false);
+        txn_info->set_txn_type(TXN_NORMAL);
+        txn_info->set_commit_time(::time(nullptr));
+        txn_info->add_load_ids()->CopyFrom(load_id_1);
+        txn_info->add_load_ids()->CopyFrom(load_id_2);
+
+        brpc::Controller cntl;
+        _lake_service.publish_log_version(&cntl, &request, &response, nullptr);
+        ASSERT_FALSE(cntl.Failed());
+        ASSERT_EQ(1, response.failed_tablets_size());
+        ASSERT_EQ(_tablet_id, response.failed_tablets(0));
+        ExecEnv::GetInstance()->delete_file_thread_pool()->wait();
+        EXPECT_FALSE(fs::path_exist(_tablet_mgr->txn_vlog_location(_tablet_id, version)));
+        // The single source .log must remain so the operator can recover.
+        EXPECT_TRUE(fs::path_exist(_tablet_mgr->txn_log_location(_tablet_id, txn_id, load_id_1)));
+    }
+
+    // If the target .vlog already exists (a previous successful publish), a
+    // partial source set must be treated as an idempotent retry: succeed and
+    // sweep up the orphan .log so it doesn't linger until vacuum.
+    {
+        // Hand-craft a .vlog at the target path to simulate a prior success.
+        auto vlog = std::make_shared<TxnLog>();
+        vlog->set_tablet_id(_tablet_id);
+        vlog->set_txn_id(txn_id);
+        vlog->mutable_op_write()->mutable_rowset()->set_num_rows(99);
+        vlog->mutable_op_write()->mutable_rowset()->set_data_size(990);
+        vlog->mutable_op_write()->mutable_rowset()->add_segments("already_published.dat");
+        ASSERT_OK(_tablet_mgr->put_txn_vlog(vlog, version));
+        EXPECT_TRUE(fs::path_exist(_tablet_mgr->txn_vlog_location(_tablet_id, version)));
+
+        PublishLogVersionRequest request;
+        PublishLogVersionResponse response;
+        request.add_tablet_ids(_tablet_id);
+        request.set_version(version);
+        auto* txn_info = request.mutable_txn_info();
+        txn_info->set_txn_id(txn_id);
+        txn_info->set_combined_txn_log(false);
+        txn_info->set_txn_type(TXN_NORMAL);
+        txn_info->set_commit_time(::time(nullptr));
+        txn_info->add_load_ids()->CopyFrom(load_id_1);
+        txn_info->add_load_ids()->CopyFrom(load_id_2);
+
+        brpc::Controller cntl;
+        _lake_service.publish_log_version(&cntl, &request, &response, nullptr);
+        ASSERT_FALSE(cntl.Failed()) << cntl.ErrorText();
+        ASSERT_EQ(0, response.failed_tablets_size());
+
+        ExecEnv::GetInstance()->delete_file_thread_pool()->wait();
+        // The pre-existing .vlog stays intact and the stale .log is cleaned.
+        EXPECT_TRUE(fs::path_exist(_tablet_mgr->txn_vlog_location(_tablet_id, version)));
+        EXPECT_FALSE(fs::path_exist(_tablet_mgr->txn_log_location(_tablet_id, txn_id, load_id_1)));
+    }
+}
+
 // abort_txn shares the same load_ids anti-pattern as publish_log_version:
 // without walking the 4-segment paths it silently leaks the per-statement
 // .log files plus every segment they reference into shared storage.
