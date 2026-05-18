@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include "column/arrow/arrow_to_json_converter.h"
+
 #include <velocypack/Builder.h>
 #include <velocypack/Value.h>
 
