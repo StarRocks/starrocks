@@ -192,13 +192,6 @@ public class RewriteSimpleAggToMetaScanRule extends TransformationRule {
         if (!context.getSessionVariable().isEnableRewriteSimpleAggToMetaScan()) {
             return false;
         }
-        // The rule's pattern is Agg→Project→OlapScan, so it shouldn't match CDC plans;
-        // bail out defensively in case a future pattern change matches LOGICAL_CHANGES_SCAN.
-        if (input.getInputs().size() == 1 && input.inputAt(0).getInputs().size() == 1
-                && input.inputAt(0).inputAt(0).getOp().getOpType()
-                        == com.starrocks.sql.optimizer.operator.OperatorType.LOGICAL_CHANGES_SCAN) {
-            return false;
-        }
         LogicalAggregationOperator aggregationOperator = (LogicalAggregationOperator) input.getOp();
         LogicalOlapScanOperator scanOperator =
                 (LogicalOlapScanOperator) input.getInputs().get(0).getInputs().get(0).getOp();

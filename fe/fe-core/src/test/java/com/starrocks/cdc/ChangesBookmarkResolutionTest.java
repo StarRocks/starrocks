@@ -30,6 +30,7 @@ import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalChangesScanOperator;
+import com.starrocks.sql.optimizer.transformer.CdcScanHelper;
 import com.starrocks.sql.optimizer.transformer.LogicalPlan;
 import com.starrocks.sql.optimizer.transformer.RelationTransformer;
 import com.starrocks.utframe.UtFrameUtils;
@@ -296,7 +297,7 @@ public class ChangesBookmarkResolutionTest extends BookmarkTestBase {
                 new BookmarkChange.PartitionDropped(logicalId, physicalId,
                         new PhysicalPartitionMeta(1L, 1L, 1L, 0L)));
 
-        String msg = CDCPlanHelper.buildNonTrackableMessage(diff, live);
+        String msg = CdcScanHelper.formatNotTrackableMessage(diff, live);
         String expected = "CHANGES not trackable: physical partition '" + partitionName
                 + "' has been dropped or truncated between base and head";
         assertTrue(msg.contains(expected),
@@ -320,7 +321,7 @@ public class ChangesBookmarkResolutionTest extends BookmarkTestBase {
                         new PhysicalPartitionMeta(1L, 1L, 1L, 0L),
                         new PhysicalPartitionMeta(2L, 2L, 2L, 0L)));
 
-        String msg = CDCPlanHelper.buildNonTrackableMessage(diff, live);
+        String msg = CdcScanHelper.formatNotTrackableMessage(diff, live);
         String expected = "CHANGES not trackable: physical partition '" + partitionName
                 + "' has been modified in a way that rewrote its data";
         assertTrue(msg.contains(expected),
@@ -344,7 +345,7 @@ public class ChangesBookmarkResolutionTest extends BookmarkTestBase {
                         new PhysicalPartitionMeta(1L, 1L, 1L, 0L),
                         new PhysicalPartitionMeta(2L, 1L, 1L, 0L)));
 
-        String msg = CDCPlanHelper.buildNonTrackableMessage(diff, live);
+        String msg = CdcScanHelper.formatNotTrackableMessage(diff, live);
         String expected = "CHANGES not trackable: physical partition '" + partitionName
                 + "' has been redistributed";
         assertTrue(msg.contains(expected),

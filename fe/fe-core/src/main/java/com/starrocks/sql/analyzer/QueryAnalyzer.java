@@ -106,6 +106,7 @@ import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.common.TypeManager;
 import com.starrocks.sql.optimizer.dump.HiveMetaStoreTableDumpInfo;
+import com.starrocks.sql.optimizer.transformer.CdcScanHelper;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.type.BooleanType;
 import com.starrocks.type.IntegerType;
@@ -140,9 +141,6 @@ import static com.starrocks.thrift.PlanNodesConstants.CACHE_STATS_TABLET_ID_COLU
 import static com.starrocks.thrift.PlanNodesConstants.CACHE_STATS_TOTAL_BYTES_COLUMN_NAME;
 
 public class QueryAnalyzer {
-    public static final String CDC_CHANGE_TYPE_COLUMN_NAME = "__CHANGE_TYPE__";
-    public static final String CDC_ROW_VERSION_COLUMN_NAME = "__ROW_VERSION__";
-
     private static final String JDBC_QUERY_TABLE_FUNCTION_USAGE =
             "JDBC query table function only supports TABLE(<catalog>.native_query('<sql>'))";
     private final ConnectContext session;
@@ -1048,7 +1046,7 @@ public class QueryAnalyzer {
                         throw new SemanticException("CHANGES on primary-key table is not supported yet");
                     }
                     QueryAnalyzer.validateChangePeriod(node.getChangePeriod());
-                    for (Column column : getCdcMetadataColumns()) {
+                    for (Column column : CdcScanHelper.getCdcMetadataColumns()) {
                         SlotRef slot = new SlotRef(tableName, column.getName(), column.getName());
                         Field field = new Field(column.getName(), column.getType(), tableName, slot, true,
                                 column.isAllowNull());
@@ -1104,13 +1102,6 @@ public class QueryAnalyzer {
             columns.add(new Column(BINLOG_VERSION_COLUMN_NAME, IntegerType.BIGINT));
             columns.add(new Column(BINLOG_SEQ_ID_COLUMN_NAME, IntegerType.BIGINT));
             columns.add(new Column(BINLOG_TIMESTAMP_COLUMN_NAME, IntegerType.BIGINT));
-            return columns;
-        }
-
-        private List<Column> getCdcMetadataColumns() {
-            List<Column> columns = new ArrayList<>();
-            columns.add(new Column(CDC_CHANGE_TYPE_COLUMN_NAME, IntegerType.TINYINT));
-            columns.add(new Column(CDC_ROW_VERSION_COLUMN_NAME, IntegerType.BIGINT));
             return columns;
         }
 

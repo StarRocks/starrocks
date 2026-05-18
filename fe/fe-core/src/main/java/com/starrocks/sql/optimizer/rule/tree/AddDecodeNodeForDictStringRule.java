@@ -25,7 +25,6 @@ import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PhysicalPartition;
-import com.starrocks.cdc.CDCPlanHelper;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.qe.ConnectContext;
@@ -948,11 +947,6 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
     public OptExpression rewrite(OptExpression root, TaskContext taskContext) {
         if (!ConnectContext.get().getSessionVariable().isEnableLowCardinalityOptimize()
                 || taskContext.getOptimizerContext().getSessionVariable().isUseLowCardinalityOptimizeV2()) {
-            return root;
-        }
-        // CDC plans materialize the __CHANGE_TYPE__ / __ROW_VERSION__ slots inline; the dict
-        // decode pass doesn't know about them and would mis-attribute decoded slots if it ran.
-        if (CDCPlanHelper.containsChangesScan(root)) {
             return root;
         }
 

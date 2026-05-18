@@ -33,7 +33,6 @@ import com.starrocks.catalog.PartitionNames;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableFunction;
 import com.starrocks.catalog.View;
-import com.starrocks.cdc.CDCPlanHelper;
 import com.starrocks.common.Pair;
 import com.starrocks.common.tvr.TvrVersionRange;
 import com.starrocks.common.util.TimeUtils;
@@ -42,7 +41,6 @@ import com.starrocks.connector.PointerType;
 import com.starrocks.connector.elasticsearch.EsTablePartitions;
 import com.starrocks.connector.metadata.MetadataTable;
 import com.starrocks.lake.bookmark.Bookmark;
-import com.starrocks.lake.bookmark.BookmarkChange;
 import com.starrocks.lake.bookmark.BookmarkManager;
 import com.starrocks.lake.bookmark.BookmarkScopedTableResolver;
 import com.starrocks.qe.ConnectContext;
@@ -65,7 +63,6 @@ import com.starrocks.sql.ast.FileTableFunctionRelation;
 import com.starrocks.sql.ast.IntersectRelation;
 import com.starrocks.sql.ast.JoinOperator;
 import com.starrocks.sql.ast.JoinRelation;
-import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.NormalizedTableFunctionRelation;
 import com.starrocks.sql.ast.OrderByElement;
 import com.starrocks.sql.ast.PivotRelation;
@@ -118,7 +115,6 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalCTEAnchorOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalCTEConsumeOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalCTEProduceOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalCacheStatsScanOperator;
-import com.starrocks.sql.optimizer.operator.logical.LogicalChangesScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalDeltaLakeScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalEsScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalExceptOperator;
@@ -692,11 +688,6 @@ public class RelationTransformer implements AstVisitorExtendInterface<LogicalPla
                 OlapTable olapTable = (OlapTable) node.getTable();
                 ChangePeriod changePeriod = node.getChangePeriod();
 
-                // Stage-1 PK guard. Analyzer also throws this; transformer guard is defensive.
-                if (olapTable.getKeysType() == KeysType.PRIMARY_KEYS) {
-                    throw new SemanticException("CHANGES on primary-key table is not supported yet");
-                }
-
                 long dbId = GlobalStateMgr.getCurrentState().getLocalMetastore()
                         .getDb(node.getName().getDb()).getId();
                 long tableId = olapTable.getId();
@@ -709,28 +700,8 @@ public class RelationTransformer implements AstVisitorExtendInterface<LogicalPla
                                 new SemanticException("CHANGES TO expression is missing")),
                         changePeriod.getPeriodType(), "TO");
 
-                if (base.getBookmarkId() > head.getBookmarkId()) {
-                    throw new SemanticException("CHANGES base must not be later than head");
-                }
-
-                BookmarkChange delta = BookmarkChange.computeChanges(base, head);
-                if (!delta.isTrackable()) {
-                    throw new SemanticException(CDCPlanHelper.buildNonTrackableMessage(delta, olapTable));
-                }
-
-                // Hand the scan operator a shadow OlapTable carrying only the
-                // physicals touched by the trackable delta, each stamped with
-                // the head bookmark's visible version. Downstream planning
-                // (column ref, partition prune) sees the scoped view, not the
-                // mutable live catalog table.
-                OlapTable scoped = BookmarkScopedTableResolver.resolveByChange(olapTable, delta);
-
-                Map<ColumnRefOperator, Column> colRefToColumnMetaMap = colRefToColumnMetaMapBuilder.build();
-                scanOperator = new LogicalChangesScanOperator(
-                        scoped, colRefToColumnMetaMap, columnMetaToColRefMap,
-                        base, head, delta, Operator.DEFAULT_LIMIT);
-                ((LogicalChangesScanOperator) scanOperator)
-                        .setSelectedPartitionId(new ArrayList<>(delta.getChanges().keySet()));
+                scanOperator = CdcScanHelper.build(olapTable, base, head,
+                        colRefToColumnMetaMapBuilder.build(), columnMetaToColRefMap);
             } else {
                 OlapTable scanTable = (OlapTable) node.getTable();
                 if (node.getBookmarkId().isPresent()) {
