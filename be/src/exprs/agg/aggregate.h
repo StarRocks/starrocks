@@ -16,6 +16,7 @@
 
 #include <type_traits>
 
+#include "base/simd/simd.h"
 #include "column/column.h"
 #include "column/nullable_column.h"
 #include "runtime/current_thread.h"
@@ -413,10 +414,30 @@ public:
 
     void update_batch_selectively(FunctionContext* ctx, size_t chunk_size, size_t state_offset, const Column** columns,
                                   AggDataPtr* states, const Filter& filter) const override {
-        for (size_t i = 0; i < chunk_size; i++) {
-            // TODO: optimize with simd ?
-            if (filter[i] == 0) {
-                static_cast<const Derived*>(this)->update(ctx, columns, states[i] + state_offset, i);
+        // Adaptive SIMD with a *probe* instead of an up-front count_zero(n):
+        // sampling the first kProbe bytes costs only a handful of ns whereas a
+        // full count_zero(4096) is ~100 ns -- enough to wipe out the sparse-win
+        // for dense filters where the kept-scalar branch is taken. The probe
+        // ratio is representative for the uniform filter patterns produced by
+        // the streaming aggregator.
+        constexpr size_t kProbe = 256;
+        const size_t probe_n = std::min(chunk_size, kProbe);
+        const bool sparse = SIMD::count_zero(filter.data(), probe_n) <= probe_n / 8;
+        if (!sparse) {
+            // Dense or empty: straightforward scalar loop.
+            for (size_t i = 0; i < chunk_size; i++) {
+                if (filter[i] == 0) {
+                    static_cast<const Derived*>(this)->update(ctx, columns, states[i] + state_offset, i);
+                }
+            }
+        } else {
+            // Sparse: SIMD memchr-skip over the zero positions.
+            size_t idx = 0;
+            while (idx < chunk_size) {
+                idx = SIMD::find_zero(filter, idx, chunk_size - idx);
+                if (idx >= chunk_size) break;
+                static_cast<const Derived*>(this)->update(ctx, columns, states[idx] + state_offset, idx);
+                ++idx;
             }
         }
     }
@@ -447,9 +468,25 @@ public:
     void merge_batch_selectively(FunctionContext* ctx, size_t chunk_size, size_t state_offset, const Column* column,
                                  AggDataPtr* states, const Filter& filter) const override {
         auto merge_selectively = [&](const Column* merge_column) {
-            for (size_t i = 0; i < chunk_size; ++i) {
-                if (filter[i] == 0) {
-                    static_cast<const Derived*>(this)->merge(ctx, merge_column, states[i] + state_offset, i);
+            // Same lazy-probe adaptive as update_batch_selectively above -- see
+            // its comment for the rationale (avoid the up-front O(n) count_zero
+            // that pessimises dense filters by ~100 ns per call).
+            constexpr size_t kProbe = 256;
+            const size_t probe_n = std::min(chunk_size, kProbe);
+            const bool sparse = SIMD::count_zero(filter.data(), probe_n) <= probe_n / 8;
+            if (!sparse) {
+                for (size_t i = 0; i < chunk_size; ++i) {
+                    if (filter[i] == 0) {
+                        static_cast<const Derived*>(this)->merge(ctx, merge_column, states[i] + state_offset, i);
+                    }
+                }
+            } else {
+                size_t idx = 0;
+                while (idx < chunk_size) {
+                    idx = SIMD::find_zero(filter, idx, chunk_size - idx);
+                    if (idx >= chunk_size) break;
+                    static_cast<const Derived*>(this)->merge(ctx, merge_column, states[idx] + state_offset, idx);
+                    ++idx;
                 }
             }
         };

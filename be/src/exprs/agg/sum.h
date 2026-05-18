@@ -119,10 +119,14 @@ public:
     void get_values(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* dst, size_t start,
                     size_t end) const override {
         DCHECK_GT(end, start);
+        if (end <= start) {
+            return;
+        }
         ResultType result = this->data(state).sum;
         auto* column = down_cast<ResultColumnType*>(dst);
+        auto* data = column->get_data().data();
         for (size_t i = start; i < end; ++i) {
-            column->get_data()[i] = result;
+            data[i] = result;
         }
     }
 
