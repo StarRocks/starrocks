@@ -81,6 +81,7 @@ public class QueryQueueManager {
             // and may be different for query queue v2.
             if (opts.isEnableQueryQueueV2()) {
                 context.auditEventBuilder.setNumSlots(estimate.clampedSlots());
+                context.auditEventBuilder.setNumSlotsRaw(estimate.rawSlots());
             }
 
             // register listeners

@@ -129,6 +129,8 @@ public class AuditEvent {
     public long pendingTimeMs = -1;
     @AuditField(value = "Slots")
     public int numSlots = -1;
+    @AuditField(value = "SlotsRaw")
+    public int numSlotsRaw = -1;
     @AuditField(value = "BigQueryLogCPUSecondThreshold")
     public long bigQueryLogCPUSecondThreshold = -1;
     @AuditField(value = "BigQueryLogScanBytesThreshold")
@@ -438,6 +440,11 @@ public class AuditEvent {
 
         public AuditEventBuilder setNumSlots(int numSlots) {
             auditEvent.numSlots = numSlots;
+            return this;
+        }
+
+        public AuditEventBuilder setNumSlotsRaw(int numSlotsRaw) {
+            auditEvent.numSlotsRaw = numSlotsRaw;
             return this;
         }
 
