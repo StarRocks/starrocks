@@ -846,6 +846,23 @@ public class QueryAnalyzer {
                                 table.getType());
                     }
 
+                    if (tableRelation.getBookmarkId().isPresent()) {
+                        boolean isCloudNativeOlap = table instanceof OlapTable
+                                && ((OlapTable) table).isCloudNativeTableOrMaterializedView();
+                        if (!isCloudNativeOlap) {
+                            throw new SemanticException(
+                                    "bookmark hint is only supported on cloud-native OlapTable");
+                        }
+                        // [_META_] / [_CACHE_STATS_] switch the relation to a live
+                        // introspection view (index metadata / cache runtime state);
+                        // a bookmark scopes the relation to historical partition data
+                        // and has no introspection equivalent.
+                        if (tableRelation.isMetaQuery() || tableRelation.isCacheStatsQuery()) {
+                            throw new SemanticException(
+                                    "bookmark hint cannot combine with _META_ / _CACHE_STATS_");
+                        }
+                    }
+
                     if (table.isSupported()) {
                         tableRelation.setTable(table);
                         r = tableRelation;

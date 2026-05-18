@@ -1,0 +1,47 @@
+-- name: test_redistribute @cloud
+
+-- HASH-distributed table: bucket-count change rebuilds the partition under a
+-- new physical id (the optimize job drops the source partition and adds a temp
+-- partition under a fresh id); the bookmark's old physical id is orphaned.
+CREATE TABLE t_hash (
+    k BIGINT NOT NULL,
+    v BIGINT
+) DUPLICATE KEY(k)
+DISTRIBUTED BY HASH(k) BUCKETS 1
+PROPERTIES ('replication_num' = '1');
+
+INSERT INTO t_hash VALUES (1, 10);
+
+[UC]function: hash_bookmark_id=create_bookmark("${db[0]}", "t_hash")
+
+ALTER TABLE t_hash DISTRIBUTED BY HASH(k) BUCKETS 4;
+function: wait_optimize_table_finish()
+
+-- Bookmark is no longer queryable because the physical partition no longer exists.
+SELECT k FROM t_hash bk [_BOOKMARK_${hash_bookmark_id}_];
+
+-- RANGE-distributed table: SPLIT TABLETS splits each oversized tablet into
+-- smaller ones. The partition's baseMaterializedIndexId advances while
+-- baseMaterializedIndexMetaId is unchanged, so the resolver classifies the
+-- post-bookmark state as a redistribute rather than a partition drop.
+SET enable_range_distribution = true;
+
+CREATE TABLE t_range (
+    k BIGINT NOT NULL,
+    v BIGINT
+) DUPLICATE KEY(k)
+PROPERTIES ('replication_num' = '1');
+
+INSERT INTO t_range VALUES (1, 10);
+
+[UC]function: range_bookmark_id=create_bookmark("${db[0]}", "t_range")
+
+function: set_first_tablet_id("t_range")
+ALTER TABLE t_range SPLIT TABLET (${tablet_id}) PROPERTIES ('tablet_reshard_target_size' = '-2');
+function: wait_optimize_table_finish()
+
+-- Bookmark is no longer queryable because the partition was redistributed.
+SELECT k FROM t_range bk [_BOOKMARK_${range_bookmark_id}_];
+
+function: release_bookmark("${db[0]}", "t_hash", ${hash_bookmark_id})
+function: release_bookmark("${db[0]}", "t_range", ${range_bookmark_id})

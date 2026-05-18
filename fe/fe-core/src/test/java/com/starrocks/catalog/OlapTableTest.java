@@ -46,6 +46,7 @@ import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.UnitTestUtil;
+import com.starrocks.lake.bookmark.BookmarkPartitionRewriter;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.IndexDef;
 import com.starrocks.sql.ast.KeysType;
@@ -72,6 +73,7 @@ import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 public class OlapTableTest {
@@ -671,6 +673,41 @@ public class OlapTableTest {
         nonPrimaryKeyTable.setPrimaryKeyEncodingType(TPrimaryKeyEncodingType.PK_ENCODING_TYPE_V2);
         Assertions.assertEquals(TPrimaryKeyEncodingType.PK_ENCODING_TYPE_NONE,
                 nonPrimaryKeyTable.getPrimaryKeyEncodingType());
+    }
+
+    @Test
+    public void testBuildBookmarkScopedTable() {
+        Database db = UnitTestUtil.createDb(1, 2, 3, 4, 5, 6, 7, KeysType.AGG_KEYS);
+        OlapTable live = (OlapTable) db.getTable(UnitTestUtil.TABLE_NAME);
+
+        // Inject a non-base index entry on live; pruning should remove it on the shadow.
+        long baseMetaId = live.getBaseIndexMetaId();
+        long extraMetaId = baseMetaId + 999_001L;
+        live.getIndexMetaIdToMeta().put(extraMetaId, live.getIndexMetaIdToMeta().get(baseMetaId));
+        live.getIndexNameToMetaId().put("extra_index", extraMetaId);
+        Assertions.assertEquals(2, live.getIndexMetaIdToMeta().size());
+
+        OlapTable shadow = new OlapTable();
+        BookmarkPartitionRewriter keepAll = (partition, physical) ->
+                Optional.of(physical.copyForBookmark(physical.getVisibleVersion(), physical.getVisibleVersionTime()));
+        live.buildBookmarkScopedTable(shadow, keepAll);
+
+        // Shadow inherits live's partitions but only the base index.
+        Assertions.assertEquals(live.getPartitions().size(), shadow.getPartitions().size());
+        Assertions.assertEquals(1, shadow.getIndexMetaIdToMeta().size());
+        Assertions.assertTrue(shadow.getIndexMetaIdToMeta().containsKey(baseMetaId));
+
+        // Physicals on the kept partition are replaced with isolated copies.
+        for (Partition shadowPartition : shadow.getPartitions()) {
+            Partition livePartition = live.getPartition(shadowPartition.getId());
+            for (PhysicalPartition shadowPhysical : shadowPartition.getSubPartitions()) {
+                PhysicalPartition livePhysical = livePartition.getSubPartition(shadowPhysical.getId());
+                Assertions.assertNotSame(livePhysical, shadowPhysical);
+            }
+        }
+
+        // Live is unchanged.
+        Assertions.assertEquals(2, live.getIndexMetaIdToMeta().size());
     }
 
 }

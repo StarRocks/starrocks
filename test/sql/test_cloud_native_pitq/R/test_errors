@@ -1,0 +1,57 @@
+-- name: test_errors @cloud
+CREATE TABLE t (
+    k BIGINT NOT NULL,
+    dt DATE NOT NULL,
+    v BIGINT
+) DUPLICATE KEY(k, dt)
+PARTITION BY RANGE(dt) (
+    PARTITION p1 VALUES LESS THAN ('2024-02-01'),
+    PARTITION p2 VALUES LESS THAN ('2024-03-01')
+)
+DISTRIBUTED BY HASH(k) BUCKETS 1
+PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
+INSERT INTO t VALUES (1, '2024-01-15', 10);
+-- result:
+-- !result
+SELECT k FROM t FOR VERSION AS OF 1;
+-- result:
+[REGEX].*Unsupported table type for temporal clauses, table type: .*
+-- !result
+SELECT k FROM t FOR VERSION BETWEEN 1 AND 2;
+-- result:
+[REGEX].*Unsupported table type for temporal clauses, table type: .*
+-- !result
+SELECT k FROM t FOR VERSION FROM 1 TO 2;
+-- result:
+[REGEX].*Unsupported table type for temporal clauses, table type: .*
+-- !result
+SELECT k FROM t FOR VERSION ALL;
+-- result:
+[REGEX].*Unsupported table type for temporal clauses, table type: .*
+-- !result
+SELECT k FROM t [_BOOKMARK_999999999_];
+-- result:
+E: (1064, "Getting analyzing error. Detail message: bookmark 999999999 not found on table 't'.")
+-- !result
+SELECT k FROM t [_BOOKMARK_abc_];
+-- result:
+[REGEX].*invalid bookmark hint format.*
+-- !result
+SELECT k FROM t [_BOOKMARK__];
+-- result:
+[REGEX].*invalid bookmark hint format.*
+-- !result
+SELECT k FROM t [_BOOKMARK_1_, _BOOKMARK_2_];
+-- result:
+[REGEX].*multiple bookmark hints are not allowed.*
+-- !result
+SELECT k FROM t [_BOOKMARK_1_, _META_];
+-- result:
+[REGEX].*bookmark hint cannot combine with _META_.*
+-- !result
+SELECT k FROM t [_BOOKMARK_1_, _CACHE_STATS_];
+-- result:
+[REGEX].*bookmark hint cannot combine with _META_.*
+-- !result

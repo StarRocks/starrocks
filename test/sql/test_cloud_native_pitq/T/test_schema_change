@@ -1,0 +1,31 @@
+-- name: test_schema_change @cloud
+
+CREATE TABLE t (
+    k BIGINT NOT NULL,
+    v BIGINT
+) DUPLICATE KEY(k)
+DISTRIBUTED BY HASH(k) BUCKETS 1
+PROPERTIES ('replication_num' = '1');
+
+INSERT INTO t VALUES (1, 10);
+
+[UC]function: bookmark_id=create_bookmark("${db[0]}", "t")
+
+-- Fast schema change (ADD COLUMN) doesn't rewrite partition data; the bookmark
+-- stays queryable and pre-existing rows return the new column's default value.
+ALTER TABLE t ADD COLUMN extra BIGINT DEFAULT '0';
+function: wait_alter_table_finish()
+
+SELECT k, v, extra FROM t bk [_BOOKMARK_${bookmark_id}_] ORDER BY k;
+
+-- Data-rewrite schema change: BIGINT->VARCHAR can't reuse the zonemap
+-- (SchemaChangeTypeCompatibility.canReuseZonemapIndex returns false), so
+-- SchemaChangeHandler.processModifyColumn drops the fast path. Partition data
+-- is rewritten and baseMaterializedIndexMetaId advances.
+ALTER TABLE t MODIFY COLUMN v VARCHAR(50);
+function: wait_alter_table_finish()
+
+-- Bookmark is no longer queryable because the partition was rewritten.
+SELECT k FROM t bk [_BOOKMARK_${bookmark_id}_];
+
+function: release_bookmark("${db[0]}", "t", ${bookmark_id})

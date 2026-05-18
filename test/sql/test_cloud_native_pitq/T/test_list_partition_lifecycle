@@ -1,0 +1,47 @@
+-- name: test_list_partition_lifecycle @cloud
+
+CREATE TABLE t (
+    k BIGINT NOT NULL,
+    region VARCHAR(8) NOT NULL,
+    v BIGINT
+) DUPLICATE KEY(k, region)
+PARTITION BY LIST(region) (
+    PARTITION p_us VALUES IN ('us'),
+    PARTITION p_eu VALUES IN ('eu'),
+    PARTITION p_apac VALUES IN ('apac')
+)
+DISTRIBUTED BY HASH(k) BUCKETS 4
+PROPERTIES ('replication_num' = '1');
+
+INSERT INTO t VALUES (1, 'us', 10), (2, 'eu', 20), (3, 'apac', 30);
+
+[UC]function: bookmark_id=create_bookmark("${db[0]}", "t")
+
+-- ADD PARTITION post-bookmark; new rows are queryable on live, excluded on scoped.
+ALTER TABLE t ADD PARTITION p_jp VALUES IN ('jp');
+INSERT INTO t VALUES (4, 'jp', 40);
+
+SELECT k FROM t ORDER BY k;
+SELECT k FROM t bk [_BOOKMARK_${bookmark_id}_] ORDER BY k;
+
+-- Partition prune on the scoped table: equality on the list column keeps 1 of the 3 bookmarked partitions.
+explain select k from t bk [_BOOKMARK_${bookmark_id}_] where region = 'us';
+SELECT v FROM t bk [_BOOKMARK_${bookmark_id}_] WHERE region = 'us' ORDER BY v;
+
+-- Partition prune on the scoped table: predicate targets a partition added after the bookmark; 0 of 3 selected.
+explain select k from t bk [_BOOKMARK_${bookmark_id}_] where region = 'jp';
+SELECT v FROM t bk [_BOOKMARK_${bookmark_id}_] WHERE region = 'jp' ORDER BY v;
+
+-- Bucket prune on the scoped table: equality on the distribution column keeps 1 bucket per scanned partition.
+explain select v from t bk [_BOOKMARK_${bookmark_id}_] where k = 1;
+SELECT v FROM t bk [_BOOKMARK_${bookmark_id}_] WHERE k = 1 ORDER BY v;
+
+-- Combined partition + bucket prune on the scoped table.
+explain select v from t bk [_BOOKMARK_${bookmark_id}_] where k = 1 and region = 'us';
+SELECT v FROM t bk [_BOOKMARK_${bookmark_id}_] WHERE k = 1 AND region = 'us' ORDER BY v;
+
+-- DROP a bookmarked partition; resolver rejects the bookmark query.
+ALTER TABLE t DROP PARTITION p_eu;
+SELECT k FROM t bk [_BOOKMARK_${bookmark_id}_] ORDER BY k;
+
+function: release_bookmark("${db[0]}", "t", ${bookmark_id})

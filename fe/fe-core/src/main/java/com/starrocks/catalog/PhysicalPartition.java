@@ -192,6 +192,33 @@ public class PhysicalPartition extends MetaObject implements GsonPostProcessable
         this.versionTxnType = TransactionType.TXN_NORMAL;
     }
 
+    /**
+     * Returns a shallow copy stamped with the given visible version, carrying
+     * only the latest base materialized index entry. Older base instances
+     * (tablet-split history) and rollups are dropped to mirror the surrounding
+     * scoped OlapTable, which already prunes to the base. Uses the no-arg
+     * constructor so building a bookmark copy does not consume a GTID via
+     * {@code nextVersionEpoch}.
+     */
+    public PhysicalPartition copyForBookmark(long visibleVersion, long visibleVersionTimeMs) {
+        PhysicalPartition copy = new PhysicalPartition();
+        copy.id              = this.id;
+        copy.parentId        = this.parentId;
+        copy.baseIndexMetaId = this.baseIndexMetaId;
+        List<Long> baseIndexIds = this.indexMetaIdToIndexIds.get(this.baseIndexMetaId);
+        if (baseIndexIds != null && !baseIndexIds.isEmpty()) {
+            long latestBaseIndexId = baseIndexIds.get(baseIndexIds.size() - 1);
+            copy.indexMetaIdToIndexIds.put(this.baseIndexMetaId, Lists.newArrayList(latestBaseIndexId));
+            MaterializedIndex latestBaseIndex = this.idToVisibleIndex.get(latestBaseIndexId);
+            if (latestBaseIndex != null) {
+                copy.idToVisibleIndex.put(latestBaseIndexId, latestBaseIndex);
+            }
+        }
+        copy.visibleVersion     = visibleVersion;
+        copy.visibleVersionTime = visibleVersionTimeMs;
+        return copy;
+    }
+
     public long getId() {
         return this.id;
     }

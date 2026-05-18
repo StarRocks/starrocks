@@ -81,6 +81,7 @@ import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
 import com.starrocks.lake.DataCacheInfo;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.lake.StorageInfo;
+import com.starrocks.lake.bookmark.BookmarkPartitionRewriter;
 import com.starrocks.memory.estimate.IgnoreMemoryTrack;
 import com.starrocks.persist.ColocatePersistInfo;
 import com.starrocks.persist.ColocateRangePersistInfo;
@@ -2619,6 +2620,46 @@ public class OlapTable extends Table {
             }
         }
         tempPartitions.dropAll();
+    }
+
+    /**
+     * Populates {@code shadow} as a bookmark-scoped copy of this table: only
+     * the base materialized index is kept (a rollup may not exist at the
+     * bookmark's version), all temp partitions are dropped (otherwise
+     * {@code FOR VERSION AS OF X} on a temp partition would read live data),
+     * and each surviving physical partition is replaced via {@code rewriter}.
+     * Logical partitions left with no physicals are removed.
+     *
+     * <p>The shadow is single-query and must not participate in writes or DDL;
+     * reusing it across queries breaks isolation.
+     */
+    public void buildBookmarkScopedTable(OlapTable shadow, BookmarkPartitionRewriter rewriter) {
+        copyOnlyForQuery(shadow);
+
+        long baseMetaId = shadow.baseIndexMetaId;
+        shadow.indexMetaIdToMeta.keySet().retainAll(Collections.singleton(baseMetaId));
+        shadow.indexNameToMetaId.values().removeIf(metaId -> metaId != baseMetaId);
+
+        Collection<Partition> tempPartitions = shadow.tempPartitions.getAllPartitions();
+        for (Partition tempPartition : tempPartitions) {
+            shadow.partitionInfo.dropPartition(tempPartition.getId());
+        }
+        shadow.tempPartitions = new TempPartitions();
+
+        List<Partition> partitions = new ArrayList<>(shadow.idToPartition.values());
+        for (Partition partition : partitions) {
+            List<PhysicalPartition> physicals = new ArrayList<>(partition.getSubPartitions());
+            for (PhysicalPartition physical : physicals) {
+                Optional<PhysicalPartition> replacement = rewriter.rewrite(partition, physical);
+                partition.removeSubPartition(physical.getId());
+                replacement.ifPresent(partition::addSubPartition);
+            }
+            if (partition.getSubPartitions().isEmpty()) {
+                shadow.nameToPartition.remove(partition.getName());
+                shadow.partitionInfo.dropPartition(partition.getId());
+                shadow.idToPartition.remove(partition.getId());
+            }
+        }
     }
 
     public boolean existTempPartitions() {

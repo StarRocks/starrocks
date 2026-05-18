@@ -1,0 +1,45 @@
+-- name: test_async_materialized_view @cloud
+CREATE TABLE t (
+    k BIGINT NOT NULL,
+    dt DATE NOT NULL,
+    v BIGINT
+) DUPLICATE KEY(k, dt)
+PARTITION BY RANGE(dt) (
+    PARTITION p1 VALUES LESS THAN ('2024-02-01'),
+    PARTITION p2 VALUES LESS THAN ('2024-03-01')
+)
+DISTRIBUTED BY HASH(k) BUCKETS 1
+PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
+INSERT INTO t VALUES (1, '2024-01-15', 10), (2, '2024-02-15', 20);
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW async_mv
+PARTITION BY dt
+REFRESH IMMEDIATE MANUAL
+AS SELECT k, dt, sum(v) AS s FROM t GROUP BY k, dt;
+-- result:
+-- !result
+function: wait_async_materialized_view_finish("${db[0]}", "async_mv")
+-- result:
+None
+-- !result
+[UC]function: bookmark_id=create_bookmark("${db[0]}", "async_mv")
+SELECT k, dt, s FROM async_mv bk [_BOOKMARK_${bookmark_id}_] ORDER BY k;
+-- result:
+1	2024-01-15	10
+2	2024-02-15	20
+-- !result
+INSERT INTO t VALUES (3, '2024-01-20', 30);
+-- result:
+-- !result
+[UC] REFRESH MATERIALIZED VIEW async_mv FORCE WITH SYNC MODE;
+SELECT k, dt, s FROM async_mv bk [_BOOKMARK_${bookmark_id}_] ORDER BY k;
+-- result:
+[REGEX]E: \(1064, "Getting analyzing error\. Detail message: physical partition \d+ in bookmark \d+ no longer exists on table 'async_mv'\."\)
+-- !result
+function: release_bookmark("${db[0]}", "async_mv", ${bookmark_id})
+-- result:
+None
+-- !result

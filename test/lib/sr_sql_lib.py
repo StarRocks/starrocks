@@ -3712,6 +3712,34 @@ out.append("${{dictMgr.NO_DICT_STRING_COLUMNS.contains(cid)}}")
             times += 1
         tools.assert_true(True, "wait row count > 0 error, max_times:" + str(max_times))
 
+    def create_bookmark(self, db, table, holder="sql_test"):
+        """Create a Bookmark on db.table via ADMIN EXECUTE; return the bookmark id (int)."""
+        groovy = (
+            f'import com.starrocks.lake.bookmark.BookmarkHolder; '
+            f'def db = globalState.localMetastore.getDb("{db}"); '
+            f'def t = db.getTable("{table}"); '
+            f'def holder = BookmarkHolder.forEmptyInfo("{holder}"); '
+            f'def b = globalState.bookmarkManager.create(db.id, t.id, holder); '
+            f'out << b.bookmarkId'
+        )
+        sql = f"admin execute on frontend '{groovy}';"
+        res = self.execute_sql(sql, True)
+        tools.assert_true(res["status"], f"create bookmark failed: {res.get('msg')}")
+        return int(res["result"][0][0])
+
+    def release_bookmark(self, db, table, bookmark_id, holder="sql_test"):
+        """Release a Bookmark held by `holder` on db.table via ADMIN EXECUTE."""
+        groovy = (
+            f'import com.starrocks.lake.bookmark.HolderId; '
+            f'def db = globalState.localMetastore.getDb("{db}"); '
+            f'def t = db.getTable("{table}"); '
+            f'def holderId = new HolderId("{holder}"); '
+            f'globalState.bookmarkManager.releaseReference(db.id, t.id, {bookmark_id}L, holderId)'
+        )
+        sql = f"admin execute on frontend '{groovy}';"
+        res = self.execute_sql(sql, True)
+        tools.assert_true(res["status"], f"release bookmark failed: {res.get('msg')}")
+
     def assert_cache_select_is_success(self, query):
         """
         Check cache select is success, make sure that read_cache_size + write_cache_size > 0

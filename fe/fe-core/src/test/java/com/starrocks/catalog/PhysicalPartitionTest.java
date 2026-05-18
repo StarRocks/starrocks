@@ -478,4 +478,44 @@ public class PhysicalPartitionTest {
         partition.deleteMaterializedIndexByIndexId(baseIndexId2);
         Assertions.assertFalse(indexMetaIdToIndexIds.containsKey(baseMetaId));
     }
+
+    @Test
+    public void testCopyForBookmark() {
+        MaterializedIndex base = new MaterializedIndex(101L, IndexState.NORMAL);
+        base.setRowCount(123L);
+        PhysicalPartition src = new PhysicalPartition(10L, 20L, base);
+        src.setVisibleVersion(7L, 1_700_000_000L);
+
+        // Add a rollup and an older base-split instance on the source —
+        // the copy must drop the rollup and keep only the latest base id.
+        MaterializedIndex rollup = new MaterializedIndex(202L, IndexState.NORMAL);
+        src.createRollupIndex(rollup);
+        MaterializedIndex newerBase = new MaterializedIndex(303L, base.getMetaId(), IndexState.NORMAL, 0);
+        src.addMaterializedIndex(newerBase, true);
+        // Latest-per-metaId: newerBase (base metaId) + rollup (its own metaId).
+        Assertions.assertEquals(2, src.getLatestMaterializedIndices(IndexExtState.VISIBLE).size());
+
+        PhysicalPartition copy = src.copyForBookmark(5L, 1_700_000_500L);
+
+        Assertions.assertEquals(src.getId(), copy.getId());
+        Assertions.assertEquals(src.getParentId(), copy.getParentId());
+        Assertions.assertEquals(src.getLatestBaseIndex().getMetaId(), copy.getLatestBaseIndex().getMetaId());
+
+        // visibleVersion / time on the copy come from the args, not from src.
+        Assertions.assertEquals(5L, copy.getVisibleVersion());
+        Assertions.assertEquals(1_700_000_500L, copy.getVisibleVersionTime());
+        Assertions.assertEquals(7L, src.getVisibleVersion());
+
+        // Only the latest base index instance is carried over (rollup and older base
+        // are absent on the copy).
+        Assertions.assertEquals(1, copy.getLatestMaterializedIndices(IndexExtState.VISIBLE).size());
+        Assertions.assertSame(newerBase, copy.getLatestBaseIndex());
+
+        // Inner Lists are independent: adding another base instance to the copy
+        // must not advance src's getLatestBaseIndex().
+        MaterializedIndex extraBase = new MaterializedIndex(404L, base.getMetaId(), IndexState.NORMAL, 0);
+        copy.addMaterializedIndex(extraBase, true);
+        Assertions.assertEquals(extraBase.getId(), copy.getLatestBaseIndex().getId());
+        Assertions.assertEquals(newerBase.getId(), src.getLatestBaseIndex().getId());
+    }
 }

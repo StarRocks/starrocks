@@ -39,6 +39,7 @@ import com.starrocks.connector.ConnectorTableVersion;
 import com.starrocks.connector.PointerType;
 import com.starrocks.connector.elasticsearch.EsTablePartitions;
 import com.starrocks.connector.metadata.MetadataTable;
+import com.starrocks.lake.bookmark.BookmarkScopedTableResolver;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
@@ -677,12 +678,17 @@ public class RelationTransformer implements AstVisitorExtendInterface<LogicalPla
                         .setSelectedTabletIds(node.getTabletIds())
                         .build();
             } else {
+                OlapTable scanTable = (OlapTable) node.getTable();
+                if (node.getBookmarkId().isPresent()) {
+                    scanTable = BookmarkScopedTableResolver.resolveById(
+                            scanTable, node.getBookmarkId().getAsLong());
+                }
                 scanOperator = LogicalOlapScanOperator.builder()
-                        .setTable(node.getTable())
+                        .setTable(scanTable)
                         .setColRefToColumnMetaMap(colRefToColumnMetaMapBuilder.build())
                         .setColumnMetaToColRefMap(columnMetaToColRefMap)
                         .setDistributionSpec(distributionSpec)
-                        .setSelectedIndexId(((OlapTable) node.getTable()).getBaseIndexMetaId())
+                        .setSelectedIndexId(scanTable.getBaseIndexMetaId())
                         .setGtid(node.getGtid())
                         .setPartitionNames(node.getPartitionNames() == null ? null
                                 : new PartitionNames(node.getPartitionNames().isTemp(),

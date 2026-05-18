@@ -1,0 +1,31 @@
+-- name: test_sync_materialized_view @cloud
+
+CREATE TABLE t (
+    k BIGINT NOT NULL,
+    v BIGINT
+) DUPLICATE KEY(k)
+DISTRIBUTED BY HASH(k) BUCKETS 1
+PROPERTIES ('replication_num' = '1');
+
+INSERT INTO t VALUES (1, 10), (2, 20);
+
+-- Sync MV is a rollup index on the base table; the resolver strips non-base
+-- indexes from the scoped table, so PITQ reads must hit the base index only.
+CREATE MATERIALIZED VIEW sync_mv AS SELECT k, sum(v) FROM t GROUP BY k;
+function: wait_materialized_view_finish()
+
+[UC]function: bookmark_id=create_bookmark("${db[0]}", "t")
+
+INSERT INTO t VALUES (3, 30);
+
+-- PITQ on the base table sees only the rows present when the bookmark was created.
+SELECT k, v FROM t bk [_BOOKMARK_${bookmark_id}_] ORDER BY k;
+
+-- Aggregation on the scoped table uses the base index (rollup is stripped); the
+-- result still matches the bookmark-time data.
+SELECT k, sum(v) FROM t bk [_BOOKMARK_${bookmark_id}_] GROUP BY k ORDER BY k;
+
+-- EXPLAIN: the scoped scan picks the base index (rollup: t), not the sync_mv rollup.
+EXPLAIN SELECT k, sum(v) FROM t bk [_BOOKMARK_${bookmark_id}_] GROUP BY k;
+
+function: release_bookmark("${db[0]}", "t", ${bookmark_id})

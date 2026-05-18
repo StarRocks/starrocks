@@ -20,6 +20,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableName;
 import com.starrocks.common.tvr.TvrVersionRange;
 import com.starrocks.sql.analyzer.Field;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.parser.NodePosition;
@@ -29,7 +30,10 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.OptionalLong;
 import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 public class TableRelation extends Relation {
 
@@ -41,6 +45,12 @@ public class TableRelation extends Relation {
         _CACHE_STATS_,
     }
 
+    // Bookmark hint syntax: `[_BOOKMARK_<id>_]` where <id> is a non-negative integer.
+    // The id is encoded into the hint identifier itself rather than via an argument
+    // grammar, which keeps bracketHint as an identifier-only list.
+    private static final String BOOKMARK_HINT_PREFIX = "_BOOKMARK_";
+    private static final Pattern BOOKMARK_HINT_PATTERN = Pattern.compile("^_BOOKMARK_(\\d+)_$");
+
     private final TableName name;
     private Table table;
     private Map<Field, Column> columns;
@@ -49,6 +59,7 @@ public class TableRelation extends Relation {
     private final List<Long> tabletIds;
     private final List<Long> replicaIds;
     private final Set<TableHint> tableHints = new HashSet<>();
+    private OptionalLong bookmarkId = OptionalLong.empty();
     // used for mysql external table
     private String queryPeriodString;
 
@@ -171,6 +182,9 @@ public class TableRelation extends Relation {
     // Return true if add the hint successfully, otherwise return false.
     // For example, if the hint name is not defined, false will be returned.
     public boolean addTableHint(String hintName) {
+        if (tryAddBookmarkHint(hintName)) {
+            return true;
+        }
         try {
             TableHint hint = TableHint.valueOf(hintName);
             tableHints.add(hint);
@@ -178,6 +192,36 @@ public class TableRelation extends Relation {
         } catch (IllegalArgumentException e) {
             return false;
         }
+    }
+
+    // Bookmark hints are claimed by prefix so that a malformed payload throws
+    // here rather than being silently dropped like an unknown hint — the user
+    // clearly intended a bookmark hint.
+    private boolean tryAddBookmarkHint(String hintName) {
+        if (!hintName.startsWith(BOOKMARK_HINT_PREFIX)) {
+            return false;
+        }
+        Matcher m = BOOKMARK_HINT_PATTERN.matcher(hintName);
+        if (!m.matches()) {
+            throw new SemanticException(
+                    "invalid bookmark hint format: [" + hintName + "]; expected [_BOOKMARK_<id>_]");
+        }
+        if (bookmarkId.isPresent()) {
+            throw new SemanticException("multiple bookmark hints are not allowed");
+        }
+        long id;
+        try {
+            id = Long.parseLong(m.group(1));
+        } catch (NumberFormatException e) {
+            throw new SemanticException(
+                    "bookmark id in [" + hintName + "] is out of BIGINT range");
+        }
+        bookmarkId = OptionalLong.of(id);
+        return true;
+    }
+
+    public OptionalLong getBookmarkId() {
+        return bookmarkId;
     }
 
     public Set<TableHint> getTableHints() {

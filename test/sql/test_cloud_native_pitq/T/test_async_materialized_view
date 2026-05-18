@@ -1,0 +1,38 @@
+-- name: test_async_materialized_view @cloud
+
+CREATE TABLE t (
+    k BIGINT NOT NULL,
+    dt DATE NOT NULL,
+    v BIGINT
+) DUPLICATE KEY(k, dt)
+PARTITION BY RANGE(dt) (
+    PARTITION p1 VALUES LESS THAN ('2024-02-01'),
+    PARTITION p2 VALUES LESS THAN ('2024-03-01')
+)
+DISTRIBUTED BY HASH(k) BUCKETS 1
+PROPERTIES ('replication_num' = '1');
+
+INSERT INTO t VALUES (1, '2024-01-15', 10), (2, '2024-02-15', 20);
+
+CREATE MATERIALIZED VIEW async_mv
+PARTITION BY dt
+REFRESH IMMEDIATE MANUAL
+AS SELECT k, dt, sum(v) AS s FROM t GROUP BY k, dt;
+function: wait_async_materialized_view_finish("${db[0]}", "async_mv")
+
+-- Bookmark the async MV itself (LakeMaterializedView is also a cloud-native
+-- OlapTable, so the resolver builds a scoped MV exactly as for a base table).
+[UC]function: bookmark_id=create_bookmark("${db[0]}", "async_mv")
+
+-- PITQ on the MV with no changes since the bookmark returns the live state.
+SELECT k, dt, s FROM async_mv bk [_BOOKMARK_${bookmark_id}_] ORDER BY k;
+
+-- INSERT into the base then REFRESH the MV; refresh is INSERT OVERWRITE, so the
+-- bookmarked physical partitions are replaced and the bookmark becomes
+-- unqueryable.
+INSERT INTO t VALUES (3, '2024-01-20', 30);
+[UC] REFRESH MATERIALIZED VIEW async_mv FORCE WITH SYNC MODE;
+
+SELECT k, dt, s FROM async_mv bk [_BOOKMARK_${bookmark_id}_] ORDER BY k;
+
+function: release_bookmark("${db[0]}", "async_mv", ${bookmark_id})

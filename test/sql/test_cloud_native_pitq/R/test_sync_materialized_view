@@ -1,0 +1,41 @@
+-- name: test_sync_materialized_view @cloud
+CREATE TABLE t (
+    k BIGINT NOT NULL,
+    v BIGINT
+) DUPLICATE KEY(k)
+DISTRIBUTED BY HASH(k) BUCKETS 1
+PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
+INSERT INTO t VALUES (1, 10), (2, 20);
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW sync_mv AS SELECT k, sum(v) FROM t GROUP BY k;
+-- result:
+-- !result
+function: wait_materialized_view_finish()
+-- result:
+None
+-- !result
+[UC]function: bookmark_id=create_bookmark("${db[0]}", "t")
+INSERT INTO t VALUES (3, 30);
+-- result:
+-- !result
+SELECT k, v FROM t bk [_BOOKMARK_${bookmark_id}_] ORDER BY k;
+-- result:
+1	10
+2	20
+-- !result
+SELECT k, sum(v) FROM t bk [_BOOKMARK_${bookmark_id}_] GROUP BY k ORDER BY k;
+-- result:
+1	10
+2	20
+-- !result
+EXPLAIN SELECT k, sum(v) FROM t bk [_BOOKMARK_${bookmark_id}_] GROUP BY k;
+-- result:
+[REGEX](?s).*0:OlapScanNode\s+TABLE: t\s+PREAGGREGATION: ON\s+partitions=1/1\s+rollup: t\s.*
+-- !result
+function: release_bookmark("${db[0]}", "t", ${bookmark_id})
+-- result:
+None
+-- !result

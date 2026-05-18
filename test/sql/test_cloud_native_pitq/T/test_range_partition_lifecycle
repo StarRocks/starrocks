@@ -1,0 +1,47 @@
+-- name: test_range_partition_lifecycle @cloud
+
+CREATE TABLE t (
+    k BIGINT NOT NULL,
+    dt DATE NOT NULL,
+    v BIGINT
+) DUPLICATE KEY(k, dt)
+PARTITION BY RANGE(dt) (
+    PARTITION p1 VALUES LESS THAN ('2024-02-01'),
+    PARTITION p2 VALUES LESS THAN ('2024-03-01'),
+    PARTITION p3 VALUES LESS THAN ('2024-04-01')
+)
+DISTRIBUTED BY HASH(k) BUCKETS 4
+PROPERTIES ('replication_num' = '1');
+
+INSERT INTO t VALUES (1, '2024-01-15', 10), (2, '2024-02-15', 20), (3, '2024-03-15', 30);
+
+[UC]function: bookmark_id=create_bookmark("${db[0]}", "t")
+
+-- ADD PARTITION post-bookmark; new rows are queryable on live, excluded on scoped.
+ALTER TABLE t ADD PARTITION p4 VALUES LESS THAN ('2024-05-01');
+INSERT INTO t VALUES (4, '2024-04-15', 40);
+
+SELECT k FROM t ORDER BY k;
+SELECT k FROM t bk [_BOOKMARK_${bookmark_id}_] ORDER BY k;
+
+-- Partition prune on the scoped table: range predicate keeps 1 of the 3 bookmarked partitions.
+explain select k from t bk [_BOOKMARK_${bookmark_id}_] where dt >= '2024-02-01' and dt < '2024-03-01';
+SELECT v FROM t bk [_BOOKMARK_${bookmark_id}_] WHERE dt >= '2024-02-01' AND dt < '2024-03-01' ORDER BY v;
+
+-- Partition prune on the scoped table: predicate targets a partition added after the bookmark; 0 of 3 selected.
+explain select k from t bk [_BOOKMARK_${bookmark_id}_] where dt >= '2024-04-01';
+SELECT v FROM t bk [_BOOKMARK_${bookmark_id}_] WHERE dt >= '2024-04-01' ORDER BY v;
+
+-- Bucket prune on the scoped table: equality on the distribution column keeps 1 bucket per scanned partition.
+explain select v from t bk [_BOOKMARK_${bookmark_id}_] where k = 1;
+SELECT v FROM t bk [_BOOKMARK_${bookmark_id}_] WHERE k = 1 ORDER BY v;
+
+-- Combined partition + bucket prune on the scoped table.
+explain select v from t bk [_BOOKMARK_${bookmark_id}_] where k = 1 and dt >= '2024-01-01' and dt < '2024-02-01';
+SELECT v FROM t bk [_BOOKMARK_${bookmark_id}_] WHERE k = 1 AND dt >= '2024-01-01' AND dt < '2024-02-01' ORDER BY v;
+
+-- DROP a bookmarked partition; resolver rejects the bookmark query.
+ALTER TABLE t DROP PARTITION p2;
+SELECT k FROM t bk [_BOOKMARK_${bookmark_id}_] ORDER BY k;
+
+function: release_bookmark("${db[0]}", "t", ${bookmark_id})

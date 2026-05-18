@@ -1,0 +1,42 @@
+-- name: test_expression_partition_lifecycle @cloud
+
+CREATE TABLE t (
+    k BIGINT NOT NULL,
+    dt DATETIME NOT NULL,
+    v BIGINT
+) DUPLICATE KEY(k, dt)
+PARTITION BY date_trunc('day', dt)
+DISTRIBUTED BY HASH(k) BUCKETS 4
+PROPERTIES ('replication_num' = '1');
+
+INSERT INTO t VALUES (1, '2024-01-15 10:00:00', 10), (2, '2024-01-16 10:00:00', 20), (3, '2024-01-17 10:00:00', 30);
+
+[UC]function: bookmark_id=create_bookmark("${db[0]}", "t")
+
+-- Inserting a new day auto-creates a partition; new row queryable on live, excluded on scoped.
+INSERT INTO t VALUES (4, '2024-01-18 10:00:00', 40);
+
+SELECT k FROM t ORDER BY k;
+SELECT k FROM t bk [_BOOKMARK_${bookmark_id}_] ORDER BY k;
+
+-- Partition prune on the scoped table: range predicate keeps 1 of the 3 bookmarked daily partitions.
+explain select k from t bk [_BOOKMARK_${bookmark_id}_] where dt >= '2024-01-15 00:00:00' and dt < '2024-01-16 00:00:00';
+SELECT v FROM t bk [_BOOKMARK_${bookmark_id}_] WHERE dt >= '2024-01-15 00:00:00' AND dt < '2024-01-16 00:00:00' ORDER BY v;
+
+-- Partition prune on the scoped table: predicate targets the day auto-created after the bookmark; 0 of 3 selected.
+explain select k from t bk [_BOOKMARK_${bookmark_id}_] where dt >= '2024-01-18 00:00:00';
+SELECT v FROM t bk [_BOOKMARK_${bookmark_id}_] WHERE dt >= '2024-01-18 00:00:00' ORDER BY v;
+
+-- Bucket prune on the scoped table: equality on the distribution column keeps 1 bucket per scanned partition.
+explain select v from t bk [_BOOKMARK_${bookmark_id}_] where k = 1;
+SELECT v FROM t bk [_BOOKMARK_${bookmark_id}_] WHERE k = 1 ORDER BY v;
+
+-- Combined partition + bucket prune on the scoped table.
+explain select v from t bk [_BOOKMARK_${bookmark_id}_] where k = 1 and dt >= '2024-01-15 00:00:00' and dt < '2024-01-16 00:00:00';
+SELECT v FROM t bk [_BOOKMARK_${bookmark_id}_] WHERE k = 1 AND dt >= '2024-01-15 00:00:00' AND dt < '2024-01-16 00:00:00' ORDER BY v;
+
+-- DROP an auto-created bookmarked partition; resolver rejects the bookmark query.
+ALTER TABLE t DROP PARTITION p20240115;
+SELECT k FROM t bk [_BOOKMARK_${bookmark_id}_] ORDER BY k;
+
+function: release_bookmark("${db[0]}", "t", ${bookmark_id})

@@ -1,0 +1,38 @@
+-- name: test_errors @cloud
+
+CREATE TABLE t (
+    k BIGINT NOT NULL,
+    dt DATE NOT NULL,
+    v BIGINT
+) DUPLICATE KEY(k, dt)
+PARTITION BY RANGE(dt) (
+    PARTITION p1 VALUES LESS THAN ('2024-02-01'),
+    PARTITION p2 VALUES LESS THAN ('2024-03-01')
+)
+DISTRIBUTED BY HASH(k) BUCKETS 1
+PROPERTIES ('replication_num' = '1');
+
+INSERT INTO t VALUES (1, '2024-01-15', 10);
+
+-- FOR VERSION AS OF on cloud-native OlapTable hits the pre-PITQ error,
+-- because OlapTable.isTemporal() is false; bookmark uses a hint instead.
+SELECT k FROM t FOR VERSION AS OF 1;
+
+-- Non-AS-OF temporal forms hit the same pre-PITQ error.
+SELECT k FROM t FOR VERSION BETWEEN 1 AND 2;
+SELECT k FROM t FOR VERSION FROM 1 TO 2;
+SELECT k FROM t FOR VERSION ALL;
+
+-- Bookmark id not found.
+SELECT k FROM t [_BOOKMARK_999999999_];
+
+-- Malformed bookmark id is rejected at parse time.
+SELECT k FROM t [_BOOKMARK_abc_];
+SELECT k FROM t [_BOOKMARK__];
+
+-- Multiple bookmark hints are not allowed.
+SELECT k FROM t [_BOOKMARK_1_, _BOOKMARK_2_];
+
+-- Bookmark hint combined with _META_ / _CACHE_STATS_ is rejected.
+SELECT k FROM t [_BOOKMARK_1_, _META_];
+SELECT k FROM t [_BOOKMARK_1_, _CACHE_STATS_];

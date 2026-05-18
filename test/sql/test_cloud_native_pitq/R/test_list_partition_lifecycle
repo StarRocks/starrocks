@@ -1,0 +1,80 @@
+-- name: test_list_partition_lifecycle @cloud
+CREATE TABLE t (
+    k BIGINT NOT NULL,
+    region VARCHAR(8) NOT NULL,
+    v BIGINT
+) DUPLICATE KEY(k, region)
+PARTITION BY LIST(region) (
+    PARTITION p_us VALUES IN ('us'),
+    PARTITION p_eu VALUES IN ('eu'),
+    PARTITION p_apac VALUES IN ('apac')
+)
+DISTRIBUTED BY HASH(k) BUCKETS 4
+PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
+INSERT INTO t VALUES (1, 'us', 10), (2, 'eu', 20), (3, 'apac', 30);
+-- result:
+-- !result
+[UC]function: bookmark_id=create_bookmark("${db[0]}", "t")
+ALTER TABLE t ADD PARTITION p_jp VALUES IN ('jp');
+-- result:
+-- !result
+INSERT INTO t VALUES (4, 'jp', 40);
+-- result:
+-- !result
+SELECT k FROM t ORDER BY k;
+-- result:
+1
+2
+3
+4
+-- !result
+SELECT k FROM t bk [_BOOKMARK_${bookmark_id}_] ORDER BY k;
+-- result:
+1
+2
+3
+-- !result
+explain select k from t bk [_BOOKMARK_${bookmark_id}_] where region = 'us';
+-- result:
+[REGEX].*partitions=1/3.*
+-- !result
+SELECT v FROM t bk [_BOOKMARK_${bookmark_id}_] WHERE region = 'us' ORDER BY v;
+-- result:
+10
+-- !result
+explain select k from t bk [_BOOKMARK_${bookmark_id}_] where region = 'jp';
+-- result:
+[REGEX].*(partitions=0/3|EMPTYSET).*
+-- !result
+SELECT v FROM t bk [_BOOKMARK_${bookmark_id}_] WHERE region = 'jp' ORDER BY v;
+-- result:
+-- !result
+explain select v from t bk [_BOOKMARK_${bookmark_id}_] where k = 1;
+-- result:
+[REGEX](?s).*partitions=3/3.*tabletRatio=3/12.*
+-- !result
+SELECT v FROM t bk [_BOOKMARK_${bookmark_id}_] WHERE k = 1 ORDER BY v;
+-- result:
+10
+-- !result
+explain select v from t bk [_BOOKMARK_${bookmark_id}_] where k = 1 and region = 'us';
+-- result:
+[REGEX](?s).*partitions=1/3.*tabletRatio=1/4.*
+-- !result
+SELECT v FROM t bk [_BOOKMARK_${bookmark_id}_] WHERE k = 1 AND region = 'us' ORDER BY v;
+-- result:
+10
+-- !result
+ALTER TABLE t DROP PARTITION p_eu;
+-- result:
+-- !result
+SELECT k FROM t bk [_BOOKMARK_${bookmark_id}_] ORDER BY k;
+-- result:
+[REGEX]E: \(1064, "Getting analyzing error\. Detail message: physical partition \d+ in bookmark \d+ no longer exists on table 't'\."\)
+-- !result
+function: release_bookmark("${db[0]}", "t", ${bookmark_id})
+-- result:
+None
+-- !result

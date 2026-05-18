@@ -1,0 +1,39 @@
+-- name: test_query_types @cloud
+
+CREATE TABLE t (
+    k BIGINT NOT NULL,
+    dt DATE NOT NULL,
+    v BIGINT
+) DUPLICATE KEY(k, dt)
+PARTITION BY RANGE(dt) (
+    PARTITION p1 VALUES LESS THAN ('2024-02-01'),
+    PARTITION p2 VALUES LESS THAN ('2024-03-01')
+)
+DISTRIBUTED BY HASH(k) BUCKETS 1
+PROPERTIES ('replication_num' = '1');
+
+INSERT INTO t VALUES (1, '2024-01-15', 10), (2, '2024-02-15', 20);
+
+[UC]function: bookmark_id=create_bookmark("${db[0]}", "t")
+
+INSERT INTO t VALUES (3, '2024-01-20', 30);
+
+-- live read sees all three rows
+SELECT k, dt, v FROM t ORDER BY k;
+
+-- PITQ read at the bookmark sees only the first two
+SELECT k, dt, v FROM t bk [_BOOKMARK_${bookmark_id}_] ORDER BY k;
+
+-- aggregation against the scoped table
+SELECT count(*) FROM t bk [_BOOKMARK_${bookmark_id}_];
+
+-- group-by against the scoped table
+SELECT dt, count(*) FROM t bk [_BOOKMARK_${bookmark_id}_] GROUP BY dt ORDER BY dt;
+
+-- order + limit against the scoped table
+SELECT k FROM t bk [_BOOKMARK_${bookmark_id}_] ORDER BY k LIMIT 1;
+
+-- live join scoped on k
+SELECT a.k AS live_k, b.k AS scoped_k FROM t a JOIN t b [_BOOKMARK_${bookmark_id}_] ON a.k = b.k ORDER BY a.k;
+
+function: release_bookmark("${db[0]}", "t", ${bookmark_id})

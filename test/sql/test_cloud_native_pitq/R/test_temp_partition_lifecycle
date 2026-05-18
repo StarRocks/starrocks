@@ -1,0 +1,37 @@
+-- name: test_temp_partition_lifecycle @cloud
+CREATE TABLE t (
+    k BIGINT NOT NULL,
+    dt DATE NOT NULL,
+    v BIGINT
+) DUPLICATE KEY(k, dt)
+PARTITION BY RANGE(dt) (
+    PARTITION p1 VALUES LESS THAN ('2024-02-01'),
+    PARTITION p2 VALUES LESS THAN ('2024-03-01')
+)
+DISTRIBUTED BY HASH(k) BUCKETS 1
+PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
+INSERT INTO t VALUES (1, '2024-01-15', 10), (2, '2024-02-15', 20);
+-- result:
+-- !result
+ALTER TABLE t ADD TEMPORARY PARTITION tp1 VALUES LESS THAN ('2024-04-01');
+-- result:
+-- !result
+INSERT INTO t TEMPORARY PARTITION (tp1) VALUES (99, '2024-03-15', 999);
+-- result:
+-- !result
+[UC]function: bookmark_id=create_bookmark("${db[0]}", "t")
+SELECT k, dt, v FROM t TEMPORARY PARTITION (tp1) ORDER BY k;
+-- result:
+99	2024-03-15	999
+-- !result
+SELECT k, dt, v FROM t bk [_BOOKMARK_${bookmark_id}_] ORDER BY k;
+-- result:
+1	2024-01-15	10
+2	2024-02-15	20
+-- !result
+function: release_bookmark("${db[0]}", "t", ${bookmark_id})
+-- result:
+None
+-- !result

@@ -1,0 +1,61 @@
+-- name: test_redistribute @cloud
+CREATE TABLE t_hash (
+    k BIGINT NOT NULL,
+    v BIGINT
+) DUPLICATE KEY(k)
+DISTRIBUTED BY HASH(k) BUCKETS 1
+PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
+INSERT INTO t_hash VALUES (1, 10);
+-- result:
+-- !result
+[UC]function: hash_bookmark_id=create_bookmark("${db[0]}", "t_hash")
+ALTER TABLE t_hash DISTRIBUTED BY HASH(k) BUCKETS 4;
+-- result:
+-- !result
+function: wait_optimize_table_finish()
+-- result:
+None
+-- !result
+SELECT k FROM t_hash bk [_BOOKMARK_${hash_bookmark_id}_];
+-- result:
+[REGEX]E: \(1064, "Getting analyzing error\. Detail message: physical partition \d+ in bookmark \d+ no longer exists on table 't_hash'\."\)
+-- !result
+SET enable_range_distribution = true;
+-- result:
+-- !result
+CREATE TABLE t_range (
+    k BIGINT NOT NULL,
+    v BIGINT
+) DUPLICATE KEY(k)
+PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
+INSERT INTO t_range VALUES (1, 10);
+-- result:
+-- !result
+[UC]function: range_bookmark_id=create_bookmark("${db[0]}", "t_range")
+function: set_first_tablet_id("t_range")
+-- result:
+None
+-- !result
+ALTER TABLE t_range SPLIT TABLET (${tablet_id}) PROPERTIES ('tablet_reshard_target_size' = '-2');
+-- result:
+-- !result
+function: wait_optimize_table_finish()
+-- result:
+None
+-- !result
+SELECT k FROM t_range bk [_BOOKMARK_${range_bookmark_id}_];
+-- result:
+[REGEX]E: \(1064, "Getting analyzing error\. Detail message: bookmark \d+ is no longer queryable: partition '.+' has been redistributed\."\)
+-- !result
+function: release_bookmark("${db[0]}", "t_hash", ${hash_bookmark_id})
+-- result:
+None
+-- !result
+function: release_bookmark("${db[0]}", "t_range", ${range_bookmark_id})
+-- result:
+None
+-- !result
