@@ -28,12 +28,51 @@
 #include "exprs/expr.h"
 #include "exprs/function_helper.h"
 #include "exprs/math_functions.h"
+<<<<<<< HEAD
 #include "util/murmur_hash3.h"
+=======
+#include "runtime/runtime_state.h"
+#include "types/datetime_value.h"
+>>>>>>> 82ff1fcd13 ([Enhancement] Complete Iceberg timestamptz partition transform support by filling the sink path gap (#73397))
 
 namespace starrocks {
 
 static std::uniform_real_distribution<double> distribution(0.0, 1.0);
 static thread_local std::mt19937_64 generator{std::random_device{}()};
+
+namespace {
+
+int64_t iceberg_datetime_to_epoch_microseconds(const TimestampValue& timestamp) {
+    auto ts = timestamp.timestamp();
+    int64_t value = timestamp::to_julian(ts);
+    value *= SECS_PER_DAY;
+    value -= timestamp::UNIX_EPOCH_SECONDS;
+    value *= 1000000L;
+    value += timestamp::to_time(ts);
+    return value;
+}
+
+bool iceberg_timestamptz_to_epoch_microseconds(FunctionContext* context, const TimestampValue& timestamp,
+                                               int64_t* value) {
+    cctz::time_zone timezone = cctz::utc_time_zone();
+    if (context != nullptr && context->state() != nullptr) {
+        timezone = context->state()->timezone_obj();
+    }
+
+    int year, month, day, hour, minute, second, usec;
+    timestamp.to_timestamp(&year, &month, &day, &hour, &minute, &second, &usec);
+    DateTimeValue datetime(TIME_DATETIME, year, month, day, hour, minute, second, usec);
+
+    int64_t unix_second;
+    if (!datetime.unix_timestamp(&unix_second, timezone)) {
+        return false;
+    }
+
+    *value = unix_second * 1000000L + usec;
+    return true;
+}
+
+} // namespace
 
 // ==== basic check rules =========
 DEFINE_UNARY_FN_WITH_IMPL(NegativeCheck, value) {
@@ -514,6 +553,7 @@ StatusOr<ColumnPtr> MathFunctions::iceberg_bucket_datetime(FunctionContext* cont
     const auto& raw_c0 = col->immutable_data();
     auto& raw_res = ColumnHelper::cast_to_raw<TYPE_INT>(res.get())->get_data();
 
+<<<<<<< HEAD
     for (auto i = 0; i < size; i++) {
         int64_t result = timestamp::to_julian(raw_c0[i].timestamp());
         result *= SECS_PER_DAY;
@@ -522,6 +562,44 @@ StatusOr<ColumnPtr> MathFunctions::iceberg_bucket_datetime(FunctionContext* cont
         result += timestamp::to_time(raw_c0[i].timestamp());
         murmur_hash3_x86_32(&result, sizeof(int64_t), 0, (void*)&raw_res[i]);
         raw_res[i] = (raw_res[i] & INT_MAX) % width;
+=======
+    ColumnBuilder<TYPE_INT> builder(size);
+    for (int i = 0; i < size; i++) {
+        if (viewer.is_null(i)) {
+            builder.append_null();
+        } else {
+            int64_t val = iceberg_datetime_to_epoch_microseconds(viewer.value(i));
+            int32_t hash;
+            murmur_hash3_x86_32(&val, sizeof(int64_t), 0, &hash);
+            builder.append(static_cast<int32_t>((hash & INT_MAX) % width));
+        }
+    }
+    return builder.build(ColumnHelper::is_all_const(columns));
+}
+
+StatusOr<ColumnPtr> MathFunctions::iceberg_bucket_timestamptz_datetime(FunctionContext* context,
+                                                                       const Columns& columns) {
+    RETURN_IF_COLUMNS_ONLY_NULL(columns);
+
+    const int size = columns[0]->size();
+    ColumnViewer<TYPE_DATETIME> viewer(columns[0]);
+    int64_t width = ColumnViewer<TYPE_INT>(columns[1]).value(0);
+
+    ColumnBuilder<TYPE_INT> builder(size);
+    for (int i = 0; i < size; i++) {
+        if (viewer.is_null(i)) {
+            builder.append_null();
+        } else {
+            int64_t val;
+            if (!iceberg_timestamptz_to_epoch_microseconds(context, viewer.value(i), &val)) {
+                builder.append_null();
+                continue;
+            }
+            int32_t hash;
+            murmur_hash3_x86_32(&val, sizeof(int64_t), 0, &hash);
+            builder.append(static_cast<int32_t>((hash & INT_MAX) % width));
+        }
+>>>>>>> 82ff1fcd13 ([Enhancement] Complete Iceberg timestamptz partition transform support by filling the sink path gap (#73397))
     }
 
     if (has_null) {
