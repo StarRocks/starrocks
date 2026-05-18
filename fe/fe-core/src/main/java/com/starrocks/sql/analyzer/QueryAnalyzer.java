@@ -1025,34 +1025,7 @@ public class QueryAnalyzer {
                 }
 
                 if (node.isChangesQuery()) {
-                    // Spec section 4 reserves the STATS form of CHANGES for a future stage;
-                    // the grammar accepts it so users see this targeted "not yet supported"
-                    // message instead of a parse error, and the reject runs before the
-                    // table-type / period-type checks so the diagnostic isn't masked by
-                    // an unrelated rejection (e.g. PK-table or wrong-type table).
-                    if (node.getChangePeriod().isStats()) {
-                        throw new SemanticException("CHANGES STATS is not yet supported");
-                    }
-                    // E1: only cloud-native OlapTables (DUP / AGG) are in scope for CHANGES;
-                    // external / schema / view / shared-nothing tables fail here with the
-                    // type name so the user sees what kind they actually passed.
-                    if (!(table instanceof OlapTable) || !table.isCloudNativeTableOrMaterializedView()) {
-                        throw new SemanticException(
-                                "Unsupported table type for CHANGES, table type: " + table.getType());
-                    }
-                    // Stage-1 limitation: PK tables are excluded; this is independent of the
-                    // type-system errors and kept as its own message so callers can act on it.
-                    if (((OlapTable) table).getKeysType() == KeysType.PRIMARY_KEYS) {
-                        throw new SemanticException("CHANGES on primary-key table is not supported yet");
-                    }
-                    QueryAnalyzer.validateChangePeriod(node.getChangePeriod());
-                    for (Column column : CdcScanHelper.getCdcMetadataColumns()) {
-                        SlotRef slot = new SlotRef(tableName, column.getName(), column.getName());
-                        Field field = new Field(column.getName(), column.getType(), tableName, slot, true,
-                                column.isAllowNull());
-                        columns.put(field, column);
-                        fields.add(field);
-                    }
+                    analyzeChangesQuery(node, table, tableName, columns, fields);
                 }
 
                 // Add virtual columns for OLAP tables
@@ -1094,6 +1067,39 @@ public class QueryAnalyzer {
             collector.process(node, scope);
 
             return scope;
+        }
+
+        private void analyzeChangesQuery(TableRelation node, Table table, TableName tableName,
+                                         ImmutableMap.Builder<Field, Column> columns,
+                                         ImmutableList.Builder<Field> fields) {
+            // Spec section 4 reserves the STATS form of CHANGES for a future stage;
+            // the grammar accepts it so users see this targeted "not yet supported"
+            // message instead of a parse error, and the reject runs before the
+            // table-type / period-type checks so the diagnostic isn't masked by
+            // an unrelated rejection (e.g. PK-table or wrong-type table).
+            if (node.getChangePeriod().isStats()) {
+                throw new SemanticException("CHANGES STATS is not yet supported");
+            }
+            // E1: only cloud-native OlapTables (DUP / AGG) are in scope for CHANGES;
+            // external / schema / view / shared-nothing tables fail here with the
+            // type name so the user sees what kind they actually passed.
+            if (!(table instanceof OlapTable) || !table.isCloudNativeTableOrMaterializedView()) {
+                throw new SemanticException(
+                        "Unsupported table type for CHANGES, table type: " + table.getType());
+            }
+            // Stage-1 limitation: PK tables are excluded; this is independent of the
+            // type-system errors and kept as its own message so callers can act on it.
+            if (((OlapTable) table).getKeysType() == KeysType.PRIMARY_KEYS) {
+                throw new SemanticException("CHANGES on primary-key table is not supported yet");
+            }
+            QueryAnalyzer.validateChangePeriod(node.getChangePeriod());
+            for (Column column : CdcScanHelper.getCdcMetadataColumns()) {
+                SlotRef slot = new SlotRef(tableName, column.getName(), column.getName());
+                Field field = new Field(column.getName(), column.getType(), tableName, slot, true,
+                        column.isAllowNull());
+                columns.put(field, column);
+                fields.add(field);
+            }
         }
 
         private List<Column> getBinlogMetaColumns() {
