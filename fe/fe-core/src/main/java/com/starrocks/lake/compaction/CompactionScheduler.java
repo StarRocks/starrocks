@@ -238,6 +238,14 @@ public class CompactionScheduler extends Daemon {
             }
             info.taskRunning += job.getNumTabletCompactionTasks();
             runningCompactions.put(partitionStatisticsSnapshot.getPartition(), job);
+            if (MetricRepo.hasInit) {
+                // Centiscore (score * 100) preserves two decimal places of precision in a long-valued histogram;
+                // Math.round avoids the systematic under-reporting introduced by a plain (long) truncation.
+                Quantiles scoreBefore = job.getScoreBefore();
+                if (scoreBefore != null) {
+                    MetricRepo.HISTO_LAKE_COMPACTION_SCORE_AT_TRIGGER.update(Math.round(scoreBefore.getAvg() * 100));
+                }
+            }
             LOG.debug("Started compaction, {}", job.getDebugString());
         }
     }
