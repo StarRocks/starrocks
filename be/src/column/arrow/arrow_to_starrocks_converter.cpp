@@ -12,19 +12,22 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "exec/arrow_to_starrocks_converter.h"
+#include "column/arrow/arrow_to_starrocks_converter.h"
 
 #include <arrow/array.h>
 #include <arrow/compute/api.h>
+#include <fmt/format.h>
 
 #include "arrow/array/array_binary.h"
 #include "arrow/array/array_nested.h"
 #include "arrow/scalar.h"
 #include "arrow/type_fwd.h"
 #include "arrow/type_traits.h"
+#include "base/decimal_types.h"
 #include "base/utility/pred_guard.h"
 #include "column/array_column.h"
 #include "column/arrow/arrow_to_json_converter.h"
+#include "column/column_helper.h"
 #include "column/map_column.h"
 #include "column/nullable_column.h"
 #include "column/runtime_type_traits.h"
@@ -34,15 +37,30 @@
 #include "common/statusor.h"
 #include "gutil/strings/fastmem.h"
 #include "gutil/strings/substitute.h"
-#include "runtime/descriptors.h"
-#include "runtime/runtime_state.h"
-#include "runtime/runtime_state_helper.h"
 #include "types/datetime_value.h"
 #include "types/logical_type.h"
 #include "types/type_descriptor.h"
 #include "types/value_generator.h"
 
 namespace starrocks {
+
+static std::string_view current_column_name_or_null(const ArrowConvertContext* ctx) {
+    if (ctx == nullptr || ctx->current_column_name.empty()) {
+        return "null";
+    }
+    return ctx->current_column_name;
+}
+
+static bool has_arrow_convert_error_reporter(const ArrowConvertContext* ctx) {
+    return ctx != nullptr && ctx->report_error_message != nullptr;
+}
+
+static void report_arrow_convert_error(ArrowConvertContext* ctx, const std::string& reason,
+                                       const std::string& raw_data) {
+    if (has_arrow_convert_error_reporter(ctx)) {
+        ctx->report_error_message(reason, raw_data);
+    }
+}
 
 Status illegal_converting_error(const std::string& arrow_type_name, const std::string& type_name) {
     return Status::InternalError(strings::Substitute("Illegal converting from arrow type($0) to StarRocks type($1)",
@@ -100,7 +118,7 @@ void fill_filter(const arrow::Array* array, size_t array_start_idx, size_t num_e
         all_invalid &= filter_data[i];
     }
     if (UNLIKELY(!all_invalid)) {
-        ctx->report_error_message("column type is not null but data is null", "");
+        report_arrow_convert_error(ctx, "column type is not null but data is null", "");
     }
 }
 
@@ -124,7 +142,9 @@ Status convert_arrow_array_to_column(ConvertFuncTree* conv_func, size_t num_elem
     if (array->type_id() == ArrowTypeId::TIMESTAMP) {
         auto* timestamp_type = down_cast<arrow::TimestampType*>(array->type().get());
         auto& mutable_timezone = (std::string&)timestamp_type->timezone();
-        mutable_timezone = conv_ctx->state->timezone();
+        if (conv_ctx != nullptr && !conv_ctx->timezone.empty()) {
+            mutable_timezone = conv_ctx->timezone;
+        }
     }
 
     uint8_t* null_data;
@@ -306,11 +326,8 @@ struct ArrowConverter<AT, LT, is_nullable, is_strict, BinaryATGuard<AT>, StringO
         auto concrete_column = down_cast<ColumnType*>(column);
         auto* filter_data = (&chunk_filter->front()) + column_start_idx;
         size_t max_length = binary_max_length<LT>;
-        if (ctx != nullptr) {
-            size_t type_len = ctx->current_slot->type().len;
-            if (type_len > 0) {
-                max_length = type_len;
-            }
+        if (ctx != nullptr && ctx->current_type_length > 0) {
+            max_length = ctx->current_type_length;
         }
 
         if constexpr (AT == ArrowTypeId::FIXED_SIZE_BINARY) {
@@ -328,11 +345,11 @@ struct ArrowConverter<AT, LT, is_nullable, is_strict, BinaryATGuard<AT>, StringO
                     //filter all
                     std::fill_n(filter_data, num_elements, 0);
 
-                    if (ctx != nullptr) {
+                    if (has_arrow_convert_error_reporter(ctx)) {
                         std::string raw_data = "arrow data is fixed size binary type";
                         std::string reason = strings::Substitute("type length $0 exceeds max length $1", width,
                                                                  binary_max_length<LT>);
-                        ctx->report_error_message(reason, raw_data);
+                        report_arrow_convert_error(ctx, reason, raw_data);
                     }
                 }
                 return Status::OK();
@@ -359,14 +376,14 @@ struct ArrowConverter<AT, LT, is_nullable, is_strict, BinaryATGuard<AT>, StringO
                     } else {
                         filter_data[i - array_start_idx] = 0;
 
-                        if (ctx != nullptr && !repeated) {
+                        if (!repeated && has_arrow_convert_error_reporter(ctx)) {
                             repeated = true;
                             ArrowOffsetType s_size = 0;
                             const char* s_data = reinterpret_cast<const char*>(concrete_array->GetValue(i, &s_size));
                             std::string raw_data = std::string(s_data, s_size);
                             std::string reason =
                                     strings::Substitute("string length $0 exceeds max length $1", s_size, max_length);
-                            ctx->report_error_message(reason, raw_data);
+                            report_arrow_convert_error(ctx, reason, raw_data);
                         }
                     }
                 }
@@ -421,11 +438,8 @@ struct ArrowConverter<AT, LT, is_nullable, is_strict, StringViewATGuard<AT>, Str
         auto* concrete_column = down_cast<ColumnType*>(column);
         auto* filter_data = (&chunk_filter->front()) + column_start_idx;
         size_t max_length = binary_max_length<LT>;
-        if (ctx != nullptr) {
-            size_t type_len = ctx->current_slot->type().len;
-            if (type_len > 0) {
-                max_length = type_len;
-            }
+        if (ctx != nullptr && ctx->current_type_length > 0) {
+            max_length = ctx->current_type_length;
         }
 
         concrete_column->reserve(concrete_column->size() + num_elements);
@@ -467,11 +481,11 @@ struct ArrowConverter<AT, LT, is_nullable, is_strict, StringViewATGuard<AT>, Str
                     null_data[i] = DATUM_NULL;
                 } else {
                     filter_data[i] = 0;
-                    if (ctx != nullptr && !repeated) {
+                    if (!repeated && has_arrow_convert_error_reporter(ctx)) {
                         repeated = true;
                         std::string reason =
                                 strings::Substitute("string length $0 exceeds max length $1", sv.size(), max_length);
-                        ctx->report_error_message(reason, std::string(sv));
+                        report_arrow_convert_error(ctx, reason, std::string(sv));
                     }
                 }
             } else {
@@ -851,7 +865,9 @@ struct ArrowConverter<AT, LT, is_nullable, is_strict, DateOrDateTimeATGuard<AT>,
                 /// column or datetime value.
 
                 // When the parquet timezone is empty, populate data with runtime timezone instead.
-                timezone = ctx->state->timezone();
+                if (ctx != nullptr && !ctx->timezone.empty()) {
+                    timezone = ctx->timezone;
+                }
             }
 
             cctz::time_zone ctz;
@@ -1064,7 +1080,8 @@ Status null_converter(const arrow::Array* array, size_t array_start_idx, size_t 
                       size_t column_start_idx, uint8_t* null_data, [[maybe_unused]] Filter* chunk_filter,
                       ArrowConvertContext* ctx, [[maybe_unused]] ConvertFuncTree* conv_func) {
     if (null_data == nullptr) {
-        return Status::InvalidArgument(fmt::format("The column ({}) must be nullable", ctx->current_slot->col_name()));
+        return Status::InvalidArgument(
+                fmt::format("The column ({}) must be nullable", current_column_name_or_null(ctx)));
     }
     for (size_t i = 0; i < num_elements; i++) {
         null_data[column_start_idx + i] = 1;
@@ -1179,16 +1196,147 @@ LogicalType get_strict_type(ArrowTypeId at) {
     return TYPE_UNKNOWN;
 }
 
-static const int MAX_ERROR_MESSAGE_COUNTER = 100;
+// Build the arrow-column conversion plan used when the first batch determines
+// the physical destination type. An Arrow type AT loading into StarRocks type LT
+// is converted in two phases:
+// 1. AT -> LT0 by ConvertFuncTree, where LT0 is either LT or a strict raw type.
+// 2. LT0 -> LT by a higher-layer expression when a cast is needed.
+//
+// Nested ARRAY/MAP/STRUCT types build child plans recursively. This function
+// owns only phase 1: raw type selection and ConvertFuncTree construction.
+Status build_arrow_column_convert_plan(const arrow::DataType* arrow_type, const TypeDescriptor* type_desc,
+                                       bool is_nullable, TypeDescriptor* raw_type_desc, ConvertFuncTree* conv_func,
+                                       bool& need_cast, bool strict_mode) {
+    if (arrow_type->id() == ArrowTypeId::DICTIONARY) {
+        auto* dictionary_type = down_cast<const arrow::DictionaryType*>(arrow_type);
+        return build_arrow_column_convert_plan(dictionary_type->value_type().get(), type_desc, is_nullable,
+                                               raw_type_desc, conv_func, need_cast, strict_mode);
+    }
 
-void ArrowConvertContext::report_error_message(const std::string& reason, const std::string& raw_data) {
-    if (state == nullptr) return;
-    if (error_message_counter > MAX_ERROR_MESSAGE_COUNTER) return;
-    error_message_counter += 1;
-    std::string error_msg =
-            strings::Substitute("file = $0, column = $1, raw data = $2", current_file,
-                                (current_slot == nullptr) ? "null" : current_slot->col_name(), raw_data);
-    RuntimeStateHelper::append_error_msg_to_file(state, error_msg, reason);
+    auto at = arrow_type->id();
+    auto lt = type_desc->type;
+    conv_func->func = get_arrow_converter(at, lt, is_nullable, strict_mode);
+    conv_func->children.clear();
+
+    switch (lt) {
+    case TYPE_ARRAY: {
+        if (at != ArrowTypeId::LIST && at != ArrowTypeId::LARGE_LIST && at != ArrowTypeId::FIXED_SIZE_LIST) {
+            return Status::InternalError(
+                    fmt::format("Apache Arrow type (nested) {} does not match the type {} in StarRocks",
+                                arrow_type->name(), type_to_string(lt)));
+        }
+        raw_type_desc->type = TYPE_ARRAY;
+        TypeDescriptor type;
+        auto cf = std::make_unique<ConvertFuncTree>();
+        auto sub_at = arrow_type->field(0)->type();
+        RETURN_IF_ERROR(build_arrow_column_convert_plan(sub_at.get(), &type_desc->children[0], true, &type, cf.get(),
+                                                        need_cast, strict_mode));
+        raw_type_desc->children.emplace_back(std::move(type));
+        conv_func->children.emplace_back(std::move(cf));
+        break;
+    }
+    case TYPE_MAP: {
+        if (at != ArrowTypeId::MAP) {
+            return Status::InternalError(
+                    fmt::format("Apache Arrow type (nested) {} does not match the type {} in StarRocks",
+                                arrow_type->name(), type_to_string(lt)));
+        }
+
+        raw_type_desc->type = TYPE_MAP;
+        for (auto i = 0; i < 2; i++) {
+            TypeDescriptor type;
+            auto cf = std::make_unique<ConvertFuncTree>();
+            auto sub_at = i == 0 ? down_cast<const arrow::MapType*>(arrow_type)->key_type()
+                                 : down_cast<const arrow::MapType*>(arrow_type)->item_type();
+            RETURN_IF_ERROR(build_arrow_column_convert_plan(sub_at.get(), &type_desc->children[i], true, &type,
+                                                            cf.get(), need_cast, strict_mode));
+            raw_type_desc->children.emplace_back(std::move(type));
+            conv_func->children.emplace_back(std::move(cf));
+        }
+        break;
+    }
+    case TYPE_STRUCT: {
+        if (at != ArrowTypeId::STRUCT) {
+            return Status::InternalError(
+                    fmt::format("Apache Arrow type (nested) {} does not match the type {} in StarRocks",
+                                arrow_type->name(), type_to_string(lt)));
+        }
+        auto field_size = type_desc->children.size();
+        auto arrow_field_size = arrow_type->num_fields();
+
+        raw_type_desc->type = TYPE_STRUCT;
+        raw_type_desc->field_names = type_desc->field_names;
+        conv_func->field_names = type_desc->field_names;
+        for (auto i = 0; i < field_size; i++) {
+            TypeDescriptor type;
+            auto cf = std::make_unique<ConvertFuncTree>();
+            auto sub_at = i >= arrow_field_size ? arrow::null() : arrow_type->field(i)->type();
+            RETURN_IF_ERROR(build_arrow_column_convert_plan(sub_at.get(), &type_desc->children[i], true, &type,
+                                                            cf.get(), need_cast, strict_mode));
+            raw_type_desc->children.emplace_back(std::move(type));
+            conv_func->children.emplace_back(std::move(cf));
+        }
+        break;
+    }
+    default: {
+        if (conv_func->func == nullptr) {
+            need_cast = true;
+            Status error = illegal_converting_error(arrow_type->name(), type_desc->debug_string());
+            auto strict_pt = get_strict_type(at);
+            if (strict_pt == TYPE_UNKNOWN) {
+                return error;
+            }
+            auto strict_conv_func = get_arrow_converter(at, strict_pt, is_nullable, strict_mode);
+            if (strict_conv_func == nullptr) {
+                return error;
+            }
+            conv_func->func = strict_conv_func;
+            raw_type_desc->type = strict_pt;
+            switch (strict_pt) {
+            case TYPE_DECIMAL128:
+            case TYPE_DECIMAL256: {
+                const auto* decimal_type = down_cast<const arrow::DecimalType*>(arrow_type);
+                auto precision = decimal_type->precision();
+                auto scale = decimal_type->scale();
+                auto max_precision = strict_pt == TYPE_DECIMAL256 ? decimal_precision_limit<int256_t>
+                                                                  : decimal_precision_limit<int128_t>;
+                if (precision < 1 || precision > max_precision || scale < 0 || scale > precision) {
+                    return Status::InternalError(
+                            strings::Substitute("Decimal($0, $1) is out of range.", precision, scale));
+                }
+                raw_type_desc->precision = precision;
+                raw_type_desc->scale = scale;
+                break;
+            }
+            case TYPE_VARCHAR: {
+                raw_type_desc->len = TypeDescriptor::MAX_VARCHAR_LENGTH;
+                break;
+            }
+            case TYPE_CHAR: {
+                raw_type_desc->len = TypeDescriptor::MAX_CHAR_LENGTH;
+                break;
+            }
+            case TYPE_DECIMALV2:
+            case TYPE_DECIMAL32:
+            case TYPE_DECIMAL64: {
+                return Status::InternalError(
+                        strings::Substitute("Apache Arrow type($0) does not match the type($1) in StarRocks",
+                                            arrow_type->name(), type_to_string(strict_pt)));
+            }
+            default:
+                break;
+            }
+        } else {
+            *raw_type_desc = *type_desc;
+        }
+    }
+    }
+    return Status::OK();
+}
+
+MutableColumnPtr create_arrow_column_convert_dest(const TypeDescriptor& type_desc, const TypeDescriptor& raw_type_desc,
+                                                  bool need_cast, bool is_nullable) {
+    return ColumnHelper::create_column(need_cast ? raw_type_desc : type_desc, is_nullable);
 }
 
 } // namespace starrocks
