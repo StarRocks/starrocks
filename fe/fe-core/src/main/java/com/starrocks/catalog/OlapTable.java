@@ -1721,12 +1721,6 @@ public class OlapTable extends Table {
         return !isPartitionedTable();
     }
 
-    @Override
-    public boolean isTemporal() {
-        // Cloud-native OlapTables support FOR VERSION AS OF via the Bookmark module.
-        return isCloudNativeTableOrMaterializedView();
-    }
-
     // NOTE: It's different from `isPartitionedTable` which `isPartitioned` means table has many buckets rather than
     // partitions.
     @Override
