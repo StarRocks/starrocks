@@ -17,6 +17,8 @@
 #include <brpc/controller.h>
 #include <gtest/gtest.h>
 
+#include <atomic>
+#include <thread>
 #include <utility>
 
 #include "column/datum_tuple.h"
@@ -309,4 +311,100 @@ TEST_F(SegmentFlushExecutorTest, test_abort) {
     async_delta_writer->abort();
     ASSERT_EQ(kAborted, async_delta_writer->writer()->get_state());
 }
+
+// Regression test for the duplicate-eos race fixed by serialising the body
+// of DeltaWriter::commit() with std::call_once.
+//
+// In the original code path, two SegmentFlushTask threads servicing
+// duplicate tablet_writer_add_segment(eos=true) RPCs would both call
+// DeltaWriter::commit() concurrently. Both would observe state == kClosed
+// outside _state_lock, fall through into _rowset_writer->build(), race on
+// the destination TabletSchemaPB's RepeatedPtrField via concurrent
+// add_column() calls, and the loser would crash on a garbage ColumnPB*
+// returned by the corrupted Add().
+//
+// With the fix in place, exactly one caller runs the body; concurrent
+// duplicates block inside std::call_once until the body finishes and then
+// return the same captured Status. Both calls therefore return Status::OK()
+// for a successful commit, which is what SegmentFlushTask relies on (any
+// non-OK from commit() triggers _writer->cancel()).
+TEST_F(SegmentFlushExecutorTest, test_concurrent_commit_is_serialized) {
+    ASSERT_OK(prepare_primary_tablet_segment_dir(
+            "./ut_dir/SegmentFlushExecutorTest_test_concurrent_commit_is_serialized"));
+    std::shared_ptr<AsyncDeltaWriter> async_delta_writer =
+            create_delta_writer(_tablet->tablet_id(), _tablet->schema_hash(), _mem_tracker.get());
+    DeltaWriter* delta_writer = async_delta_writer->writer();
+
+    // After open() the inner writer is in kWriting. Transition to kClosed
+    // (the state that allows commit() to enter its body and made the race
+    // reachable in production).
+    ASSERT_OK(delta_writer->close());
+    ASSERT_EQ(kClosed, delta_writer->get_state());
+
+    // Two threads race into commit(). A spin-barrier maximises the window
+    // for the race; if either thread reached _rowset_writer->build()
+    // concurrently with the other under the old code it would corrupt the
+    // protobuf and crash. Under the new code exactly one thread runs the
+    // body inside std::call_once; the other blocks inside call_once and
+    // then reads the same captured Status.
+    std::atomic<int> num_ok{0};
+    std::atomic<int> num_other{0};
+    std::atomic<int> ready{0};
+    auto commit_fn = [&] {
+        ready.fetch_add(1, std::memory_order_acq_rel);
+        while (ready.load(std::memory_order_acquire) < 2) {
+            // spin until the sibling has also entered
+        }
+        Status st = delta_writer->commit();
+        if (st.ok()) {
+            num_ok.fetch_add(1, std::memory_order_relaxed);
+        } else {
+            num_other.fetch_add(1, std::memory_order_relaxed);
+        }
+    };
+    std::thread t1(commit_fn);
+    std::thread t2(commit_fn);
+    t1.join();
+    t2.join();
+
+    // Both threads must observe Status::OK() for a successful commit: the
+    // one that ran the body from running it, the other from reading the
+    // captured _commit_result after call_once returns. No transient or
+    // duplicate status is allowed to leak out, since SegmentFlushTask
+    // would otherwise cancel the writer on any non-OK return.
+    ASSERT_EQ(num_ok.load(), 2) << "both threads must return OK; got num_ok=" << num_ok.load()
+                                << " num_other=" << num_other.load();
+    ASSERT_EQ(num_other.load(), 0);
+    ASSERT_EQ(kCommitted, delta_writer->get_state());
+
+    ASSERT_OK(StorageEngine::instance()->txn_manager()->delete_txn(_partition_id, _tablet, delta_writer->txn_id()));
+}
+
+// Sequential variant of the above: a duplicate commit() that arrives after
+// the first one has already succeeded must short-circuit to Status::OK()
+// via the top-of-function state switch (case kCommitted -> OK). After the
+// first commit() returns, _state is kCommitted; subsequent callers observe
+// it at the head of commit() and never reach the std::call_once.
+TEST_F(SegmentFlushExecutorTest, test_duplicate_commit_after_committed_returns_ok) {
+    ASSERT_OK(prepare_primary_tablet_segment_dir(
+            "./ut_dir/SegmentFlushExecutorTest_test_duplicate_commit_after_committed_returns_ok"));
+    std::shared_ptr<AsyncDeltaWriter> async_delta_writer =
+            create_delta_writer(_tablet->tablet_id(), _tablet->schema_hash(), _mem_tracker.get());
+    DeltaWriter* delta_writer = async_delta_writer->writer();
+
+    ASSERT_OK(delta_writer->close());
+    ASSERT_EQ(kClosed, delta_writer->get_state());
+
+    ASSERT_OK(delta_writer->commit());
+    ASSERT_EQ(kCommitted, delta_writer->get_state());
+
+    // The second commit() must be a no-op success: a duplicate
+    // tablet_writer_add_segment(eos=true) that arrives after the first
+    // already finished should not error or alter state.
+    ASSERT_OK(delta_writer->commit());
+    ASSERT_EQ(kCommitted, delta_writer->get_state());
+
+    ASSERT_OK(StorageEngine::instance()->txn_manager()->delete_txn(_partition_id, _tablet, delta_writer->txn_id()));
+}
+
 } // namespace starrocks
