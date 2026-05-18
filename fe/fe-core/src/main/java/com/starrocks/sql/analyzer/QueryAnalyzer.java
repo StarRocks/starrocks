@@ -113,6 +113,11 @@ import static com.starrocks.thrift.PlanNodesConstants.BINLOG_TIMESTAMP_COLUMN_NA
 import static com.starrocks.thrift.PlanNodesConstants.BINLOG_VERSION_COLUMN_NAME;
 
 public class QueryAnalyzer {
+<<<<<<< HEAD
+=======
+    private static final String JDBC_QUERY_TABLE_FUNCTION_USAGE =
+            "JDBC query table function only supports TABLE(<catalog>.native_query('<sql>'))";
+>>>>>>> 90ddf9e954 ([Enhancement] Move INSERT external table auto-refresh out of the planner lock path (#73391))
     private final ConnectContext session;
     private final MetadataMgr metadataMgr;
 
@@ -134,6 +139,28 @@ public class QueryAnalyzer {
         new FilesOnlyVisitor().process(node, new Scope(RelationId.anonymous(), new RelationFields()));
     }
 
+<<<<<<< HEAD
+=======
+    /**
+     * Pre-resolve external (non-internal catalog) relations without touching internal table metadata.
+     * This is used to avoid holding PlannerMetaLock while doing potentially slow connector metadata fetch
+     * (e.g. JDBC external tables and JDBC native_query schema inference).
+     */
+    public void analyzeExternalTablesOnly(StatementBase node) {
+        analyzeExternalTablesOnly(node, false);
+    }
+
+    /**
+     * Pre-resolve external tables without touching internal table metadata.
+     * When {@code refreshFilesystemExternalTables} is true, filesystem-backed external tables referenced from an
+     * INSERT query are refreshed before lock acquisition so connector/filesystem metadata I/O stays out of the
+     * internal meta-lock critical path.
+     */
+    public void analyzeExternalTablesOnly(StatementBase node, boolean refreshFilesystemExternalTables) {
+        new ExternalTablesOnlyVisitor(refreshFilesystemExternalTables).process(node);
+    }
+
+>>>>>>> 90ddf9e954 ([Enhancement] Move INSERT external table auto-refresh out of the planner lock path (#73391))
     public void analyze(StatementBase node, Scope parent) {
         new Visitor().process(node, parent);
     }
@@ -1514,6 +1541,292 @@ public class QueryAnalyzer {
             return node.getScope();
         }
 
+<<<<<<< HEAD
+=======
+        private Scope tryResolveJdbcQueryTableFunction(TableFunctionRelation node, List<String> argNames) {
+            JdbcQueryTableFunctionName functionName = tryParseJdbcQueryTableFunctionName(
+                    node.getFunctionName().getFunction());
+            if (functionName == null) {
+                return null;
+            }
+
+            if (node.getColumnOutputNames() != null) {
+                throw new SemanticException("column aliases are not supported for JDBC query table function");
+            }
+
+            List<Expr> args = node.getFunctionParams().exprs();
+            if (args.size() != 1) {
+                throw new SemanticException("JDBC query table function requires exactly one query argument");
+            }
+            if (argNames != null && !argNames.isEmpty()) {
+                throw new SemanticException(JDBC_QUERY_TABLE_FUNCTION_USAGE);
+            }
+
+            Expr queryExpr = args.get(0);
+            if (!(queryExpr instanceof StringLiteral)) {
+                throw new SemanticException("JDBC query table function argument must be a string literal");
+            }
+            String passThroughQuery;
+            try {
+                passThroughQuery = JDBCTable.normalizePassThroughQuery(((StringLiteral) queryExpr).getStringValue());
+            } catch (IllegalArgumentException e) {
+                throw new SemanticException(e.getMessage());
+            }
+
+            node.setChildExpressions(args);
+
+            JDBCTable jdbcTable = node.getQueryTable();
+            if (jdbcTable == null) {
+                jdbcTable = resolveJdbcQueryTable(functionName, passThroughQuery);
+            }
+            return buildJdbcQueryTableScope(node, jdbcTable);
+        }
+
+        private List<Expr> appendPositionalDefaultArgExprs(FunctionParams functionParams, Function fn) {
+            List<Expr> result = Lists.newArrayList(functionParams.exprs());
+            List<Expr> lastDefaults = fn.getLastDefaultsFromN(functionParams.exprs().size());
+            if (lastDefaults != null) {
+                result.addAll(lastDefaults);
+            }
+            return result;
+        }
+
+        private List<Expr> reorderNamedArgAndAppendDefaults(FunctionParams functionParams, Function fn) {
+            String[] names = fn.getArgNames();
+            List<String> exprNames = functionParams.getExprsNames();
+            Preconditions.checkState(names != null && exprNames != null && names.length >= exprNames.size());
+
+            Map<String, Expr> nameToExpr = new HashMap<>();
+            for (int i = 0; i < exprNames.size(); i++) {
+                nameToExpr.put(exprNames.get(i), functionParams.exprs().get(i));
+            }
+
+            List<Expr> result = Lists.newArrayListWithExpectedSize(names.length);
+            int defaultNum = 0;
+            for (String name : names) {
+                Expr expr = nameToExpr.get(name);
+                if (expr != null) {
+                    result.add(expr);
+                    continue;
+                }
+
+                Expr defaultExpr = fn.getDefaultNamedExpr(name);
+                Preconditions.checkState(defaultExpr != null);
+                result.add(defaultExpr);
+                defaultNum++;
+            }
+            Preconditions.checkState(defaultNum + exprNames.size() == names.length);
+            return result;
+        }
+
+    }
+
+    /**
+     * A lightweight visitor that pre-resolves external (non-internal catalog) relations,
+     * so connector metadata fetch is done without holding PlannerMetaLock.
+     * Similar to TableCollector but inverts the logic: skips internal tables, pre-resolves external
+     * TableRelation and JDBC native_query table functions.
+     */
+    private class ExternalTablesOnlyVisitor extends AstTraverser<Void, Void> {
+        private final Deque<Set<String>> cteNameStack = new ArrayDeque<>();
+        private final boolean refreshFilesystemExternalTables;
+
+        private ExternalTablesOnlyVisitor(boolean refreshFilesystemExternalTables) {
+            this.refreshFilesystemExternalTables = refreshFilesystemExternalTables;
+        }
+
+        public void process(StatementBase node) {
+            visit(node);
+        }
+
+        @Override
+        public Void visitSelect(SelectRelation node, Void context) {
+            if (node.hasWithClause()) {
+                cteNameStack.push(collectCteNames(node.getCteRelations()));
+                try {
+                    return super.visitSelect(node, context);
+                } finally {
+                    cteNameStack.pop();
+                }
+            }
+            return super.visitSelect(node, context);
+        }
+
+        @Override
+        public Void visitSetOp(SetOperationRelation node, Void context) {
+            if (node.hasWithClause()) {
+                cteNameStack.push(collectCteNames(node.getCteRelations()));
+                try {
+                    return super.visitSetOp(node, context);
+                } finally {
+                    cteNameStack.pop();
+                }
+            }
+            return super.visitSetOp(node, context);
+        }
+
+        @Override
+        public Void visitTable(TableRelation tableRelation, Void context) {
+            if (tableRelation.getTable() != null) {
+                return null;
+            }
+            TableName tableName = tableRelation.getName();
+            if (tableName == null) {
+                return null;
+            }
+
+            if (Strings.isNullOrEmpty(tableName.getDb()) && Strings.isNullOrEmpty(tableName.getCatalog())
+                    && isCteName(tableName.getTbl())) {
+                return null;
+            }
+
+            // Use session to fill in catalog/db (same approach as TableCollector.resolveTable)
+            String catalogName = tableName.getCatalog();
+            String dbName = tableName.getDb();
+
+            if (Strings.isNullOrEmpty(catalogName)) {
+                catalogName = session.getCurrentCatalog();
+            }
+            if (Strings.isNullOrEmpty(dbName)) {
+                dbName = session.getDatabase();
+            }
+
+            if (catalogName == null || dbName == null) {
+                return null;
+            }
+
+            // Only pre-resolve external tables (non-internal catalog)
+            if (CatalogMgr.isInternalCatalog(catalogName)) {
+                return null;
+            }
+
+            // Pre-resolve external table using metadataMgr.getTable (returns null if not found)
+            // This approach:
+            // 1. Simplifies error handling (no try-catch needed)
+            // 2. Handles CTEs correctly (getTable returns null, main visitor handles them)
+            // 3. Pre-resolves real external tables (avoiding lock during RPC)
+            // Similar to TableCollector.resolveTable but inverts the logic (handles external tables only)
+            try (Timer ignored = Tracers.watchScope("AnalyzeTable")) {
+                Table table = metadataMgr.getTable(session, catalogName, dbName, tableName.getTbl());
+                if (table != null) {
+                    if (refreshFilesystemExternalTables && table.isExternalTableWithFileSystem()) {
+                        table = refreshFilesystemExternalTable(catalogName, dbName, tableName, table);
+                    }
+                    // Validate constraints similar to resolveTable
+                    PartitionRef partitionNamesObject = tableRelation.getPartitionNames();
+                    if (table.isExternalTableWithFileSystem() && partitionNamesObject != null) {
+                        throw unsupportedException("Unsupported table type for partition clause, type: " + table.getType());
+                    }
+                    tableRelation.setTable(table);
+                }
+                // If table == null (CTE or non-existent table), leave it unresolved.
+                // The main visitor will handle it correctly.
+            }
+            return null;
+        }
+
+        private Table refreshFilesystemExternalTable(String catalogName, String dbName,
+                                                     TableName tableName, Table resolvedTable) {
+            metadataMgr.refreshTable(catalogName, dbName, resolvedTable, Lists.newArrayList(), false);
+            Table refreshedTable = metadataMgr.getTable(session, catalogName, dbName, tableName.getTbl());
+            return refreshedTable != null ? refreshedTable : resolvedTable;
+        }
+
+        @Override
+        public Void visitInsertStatement(InsertStmt statement, Void context) {
+            // Avoid touching target table metadata here; only pre-resolve external tables in the query part.
+            if (statement.getQueryStatement() != null) {
+                visit(statement.getQueryStatement());
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitCreateTableAsSelectStatement(CreateTableAsSelectStmt statement, Void context) {
+            // Avoid touching target table metadata here; only pre-resolve external tables in the query part.
+            if (statement.getQueryStatement() != null) {
+                visit(statement.getQueryStatement());
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitNormalizedTableFunction(NormalizedTableFunctionRelation node, Void context) {
+            if (node.getRight() != null) {
+                visit(node.getRight(), context);
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitTableFunction(TableFunctionRelation node, Void context) {
+            if (node.getQueryTable() != null) {
+                return null;
+            }
+
+            JdbcQueryTableFunctionName functionName =
+                    tryParseCanonicalJdbcQueryTableFunctionName(node.getFunctionName().getFunction());
+            if (functionName == null) {
+                return null;
+            }
+
+            if (node.getColumnOutputNames() != null) {
+                return null;
+            }
+
+            List<Expr> args = node.getFunctionParams().exprs();
+            List<String> argNames = node.getFunctionParams().getExprsNames();
+            if (args.size() != 1 || (argNames != null && !argNames.isEmpty())) {
+                return null;
+            }
+
+            Expr queryExpr = args.get(0);
+            if (!(queryExpr instanceof StringLiteral)) {
+                return null;
+            }
+
+            String passThroughQuery;
+            try {
+                passThroughQuery = JDBCTable.normalizePassThroughQuery(((StringLiteral) queryExpr).getStringValue());
+            } catch (IllegalArgumentException e) {
+                return null;
+            }
+
+            Optional<ConnectorMetadata> metadata = metadataMgr.getOptionalMetadata(functionName.catalogName);
+            if (metadata.isEmpty()) {
+                return null;
+            }
+
+            JDBCTable jdbcTable;
+            try (Timer ignored = Tracers.watchScope("AnalyzeTable")) {
+                jdbcTable = resolveJdbcQueryTable(functionName, passThroughQuery);
+            }
+            node.setQueryTable(jdbcTable);
+            return null;
+        }
+
+        private Set<String> collectCteNames(List<CTERelation> cteRelations) {
+            Set<String> names = Sets.newHashSet();
+            for (CTERelation cteRelation : cteRelations) {
+                if (cteRelation.getName() != null) {
+                    names.add(cteRelation.getName());
+                }
+            }
+            return names;
+        }
+
+        private boolean isCteName(String name) {
+            if (cteNameStack.isEmpty()) {
+                return false;
+            }
+            for (Set<String> names : cteNameStack) {
+                if (names.contains(name)) {
+                    return true;
+                }
+            }
+            return false;
+        }
+>>>>>>> 90ddf9e954 ([Enhancement] Move INSERT external table auto-refresh out of the planner lock path (#73391))
     }
 
     /**
