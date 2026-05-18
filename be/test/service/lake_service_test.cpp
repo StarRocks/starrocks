@@ -2740,6 +2740,124 @@ TEST_F(LakeServiceTest, test_publish_log_version_with_load_ids_partial) {
     }
 }
 
+// MergeFrom on the merged op_write must accumulate every parallel repeated
+// field (segments / segment_size / segment_encryption_metas / dels /
+// del_encryption_metas) and sum the scalar accumulators across all
+// per-load_id source logs. A regression here would silently strip dels or
+// encryption metadata from the materialized .vlog, leaving later reads
+// unable to decrypt segments or apply tombstones.
+TEST_F(LakeServiceTest, test_publish_log_version_merge_repeated_fields) {
+    auto txn_id = next_id();
+    PUniqueId load_id_1;
+    load_id_1.set_hi(0xCAFE000000000001LL);
+    load_id_1.set_lo(0xBABE000000000001LL);
+    PUniqueId load_id_2;
+    load_id_2.set_hi(0xCAFE000000000002LL);
+    load_id_2.set_lo(0xBABE000000000002LL);
+
+    {
+        TxnLog log;
+        log.set_tablet_id(_tablet_id);
+        log.set_txn_id(txn_id);
+        log.mutable_load_id()->CopyFrom(load_id_1);
+        auto* op_write = log.mutable_op_write();
+        auto* rs = op_write->mutable_rowset();
+        rs->add_segments("a1.dat");
+        rs->add_segments("a2.dat");
+        rs->add_segment_size(100);
+        rs->add_segment_size(200);
+        rs->add_segment_encryption_metas("enc_a1");
+        rs->add_segment_encryption_metas("enc_a2");
+        rs->set_num_rows(10);
+        rs->set_data_size(300);
+        rs->set_num_dels(2);
+        op_write->add_dels("del_a1");
+        op_write->add_dels("del_a2");
+        op_write->add_del_encryption_metas("denc_a1");
+        op_write->add_del_encryption_metas("denc_a2");
+        ASSERT_OK(_tablet_mgr->put_txn_log(log));
+    }
+    {
+        TxnLog log;
+        log.set_tablet_id(_tablet_id);
+        log.set_txn_id(txn_id);
+        log.mutable_load_id()->CopyFrom(load_id_2);
+        auto* op_write = log.mutable_op_write();
+        auto* rs = op_write->mutable_rowset();
+        rs->add_segments("b1.dat");
+        rs->add_segment_size(500);
+        rs->add_segment_encryption_metas("enc_b1");
+        rs->set_num_rows(20);
+        rs->set_data_size(500);
+        rs->set_num_dels(3);
+        op_write->add_dels("del_b1");
+        op_write->add_del_encryption_metas("denc_b1");
+        ASSERT_OK(_tablet_mgr->put_txn_log(log));
+    }
+
+    const int64_t version = 40;
+    {
+        PublishLogVersionRequest request;
+        PublishLogVersionResponse response;
+        request.add_tablet_ids(_tablet_id);
+        request.set_version(version);
+        auto* txn_info = request.mutable_txn_info();
+        txn_info->set_txn_id(txn_id);
+        txn_info->set_combined_txn_log(false);
+        txn_info->set_txn_type(TXN_NORMAL);
+        txn_info->set_commit_time(::time(nullptr));
+        txn_info->add_load_ids()->CopyFrom(load_id_1);
+        txn_info->add_load_ids()->CopyFrom(load_id_2);
+
+        brpc::Controller cntl;
+        _lake_service.publish_log_version(&cntl, &request, &response, nullptr);
+        ASSERT_FALSE(cntl.Failed()) << cntl.ErrorText();
+        ASSERT_EQ(0, response.failed_tablets_size());
+    }
+
+    ExecEnv::GetInstance()->delete_file_thread_pool()->wait();
+    _tablet_mgr->prune_metacache();
+
+    ASSIGN_OR_ABORT(auto vlog, _tablet_mgr->get_txn_vlog(_tablet_id, version));
+    ASSERT_TRUE(vlog->has_op_write());
+    const auto& ow = vlog->op_write();
+    ASSERT_TRUE(ow.has_rowset());
+    const auto& rs = ow.rowset();
+
+    // Scalar accumulators are summed across both sources, not left as the
+    // last log's value (which is what protobuf MergeFrom would leave behind).
+    EXPECT_EQ(30, rs.num_rows());
+    EXPECT_EQ(800, rs.data_size());
+    EXPECT_EQ(5, rs.num_dels());
+    EXPECT_TRUE(rs.overlapped());
+
+    // Repeated parallel arrays inside rowset are appended in source order.
+    ASSERT_EQ(3, rs.segments_size());
+    EXPECT_EQ("a1.dat", rs.segments(0));
+    EXPECT_EQ("a2.dat", rs.segments(1));
+    EXPECT_EQ("b1.dat", rs.segments(2));
+    ASSERT_EQ(3, rs.segment_size_size());
+    EXPECT_EQ(100u, rs.segment_size(0));
+    EXPECT_EQ(200u, rs.segment_size(1));
+    EXPECT_EQ(500u, rs.segment_size(2));
+    ASSERT_EQ(3, rs.segment_encryption_metas_size());
+    EXPECT_EQ("enc_a1", rs.segment_encryption_metas(0));
+    EXPECT_EQ("enc_a2", rs.segment_encryption_metas(1));
+    EXPECT_EQ("enc_b1", rs.segment_encryption_metas(2));
+
+    // dels / del_encryption_metas live directly on op_write (not on rowset)
+    // and must also accumulate, otherwise tombstones from later statements
+    // would be silently dropped from the materialized .vlog.
+    ASSERT_EQ(3, ow.dels_size());
+    EXPECT_EQ("del_a1", ow.dels(0));
+    EXPECT_EQ("del_a2", ow.dels(1));
+    EXPECT_EQ("del_b1", ow.dels(2));
+    ASSERT_EQ(3, ow.del_encryption_metas_size());
+    EXPECT_EQ("denc_a1", ow.del_encryption_metas(0));
+    EXPECT_EQ("denc_a2", ow.del_encryption_metas(1));
+    EXPECT_EQ("denc_b1", ow.del_encryption_metas(2));
+}
+
 // abort_txn shares the same load_ids anti-pattern as publish_log_version:
 // without walking the 4-segment paths it silently leaks the per-statement
 // .log files plus every segment they reference into shared storage.
@@ -2978,6 +3096,118 @@ TEST_F(LakeServiceTest, test_publish_log_version_batch) {
             }
         }
     }
+}
+
+// publish_log_version_batch must dispatch each TxnInfoPB's branch
+// independently: load_ids txns merge from the 4-segment path while
+// non-load_ids txns keep using the legacy 2-segment copy_file path. A
+// regression in either branch selection would either deadlock alter for
+// multi-statement txns or break ordinary single-statement loads in the
+// same batch.
+TEST_F(LakeServiceTest, test_publish_log_version_batch_with_load_ids) {
+    auto txn_with_loads = next_id();
+    auto txn_no_loads = next_id();
+    PUniqueId load_id_1;
+    load_id_1.set_hi(0xFADE000000000001LL);
+    load_id_1.set_lo(0xCEDE000000000001LL);
+    PUniqueId load_id_2;
+    load_id_2.set_hi(0xFADE000000000002LL);
+    load_id_2.set_lo(0xCEDE000000000002LL);
+
+    // Multi-statement txn -> two 4-segment .log files for the same (tablet, txn).
+    {
+        TxnLog log;
+        log.set_tablet_id(_tablet_id);
+        log.set_txn_id(txn_with_loads);
+        log.mutable_load_id()->CopyFrom(load_id_1);
+        log.mutable_op_write()->mutable_rowset()->set_num_rows(3);
+        log.mutable_op_write()->mutable_rowset()->set_data_size(30);
+        log.mutable_op_write()->mutable_rowset()->add_segments("batch_a.dat");
+        ASSERT_OK(_tablet_mgr->put_txn_log(log));
+    }
+    {
+        TxnLog log;
+        log.set_tablet_id(_tablet_id);
+        log.set_txn_id(txn_with_loads);
+        log.mutable_load_id()->CopyFrom(load_id_2);
+        log.mutable_op_write()->mutable_rowset()->set_num_rows(5);
+        log.mutable_op_write()->mutable_rowset()->set_data_size(50);
+        log.mutable_op_write()->mutable_rowset()->add_segments("batch_b.dat");
+        ASSERT_OK(_tablet_mgr->put_txn_log(log));
+    }
+    // Single-statement txn -> one 2-segment .log file (no load_id set).
+    {
+        TxnLog log;
+        log.set_tablet_id(_tablet_id);
+        log.set_txn_id(txn_no_loads);
+        log.mutable_op_write()->mutable_rowset()->set_num_rows(7);
+        log.mutable_op_write()->mutable_rowset()->set_data_size(70);
+        log.mutable_op_write()->mutable_rowset()->add_segments("batch_c.dat");
+        ASSERT_OK(_tablet_mgr->put_txn_log(log));
+    }
+
+    EXPECT_TRUE(fs::path_exist(_tablet_mgr->txn_log_location(_tablet_id, txn_with_loads, load_id_1)));
+    EXPECT_TRUE(fs::path_exist(_tablet_mgr->txn_log_location(_tablet_id, txn_with_loads, load_id_2)));
+    EXPECT_TRUE(fs::path_exist(_tablet_mgr->txn_log_location(_tablet_id, txn_no_loads)));
+
+    const int64_t version_a = 50;
+    const int64_t version_b = 51;
+    {
+        PublishLogVersionBatchRequest request;
+        PublishLogVersionResponse response;
+        request.add_tablet_ids(_tablet_id);
+        request.add_versions(version_a);
+        request.add_versions(version_b);
+
+        auto* info_a = request.add_txn_infos();
+        info_a->set_txn_id(txn_with_loads);
+        info_a->set_combined_txn_log(false);
+        info_a->set_txn_type(TXN_NORMAL);
+        info_a->set_commit_time(::time(nullptr));
+        info_a->add_load_ids()->CopyFrom(load_id_1);
+        info_a->add_load_ids()->CopyFrom(load_id_2);
+
+        auto* info_b = request.add_txn_infos();
+        info_b->set_txn_id(txn_no_loads);
+        info_b->set_combined_txn_log(false);
+        info_b->set_txn_type(TXN_NORMAL);
+        info_b->set_commit_time(::time(nullptr));
+
+        brpc::Controller cntl;
+        _lake_service.publish_log_version_batch(&cntl, &request, &response, nullptr);
+        ASSERT_FALSE(cntl.Failed()) << cntl.ErrorText();
+        ASSERT_EQ(0, response.failed_tablets_size());
+    }
+
+    ExecEnv::GetInstance()->delete_file_thread_pool()->wait();
+
+    // Both .vlogs land; every source .log -- 4-segment for the multi-statement
+    // txn, 2-segment for the single one -- is cleaned up by its own branch.
+    EXPECT_TRUE(fs::path_exist(_tablet_mgr->txn_vlog_location(_tablet_id, version_a)));
+    EXPECT_TRUE(fs::path_exist(_tablet_mgr->txn_vlog_location(_tablet_id, version_b)));
+    EXPECT_FALSE(fs::path_exist(_tablet_mgr->txn_log_location(_tablet_id, txn_with_loads, load_id_1)));
+    EXPECT_FALSE(fs::path_exist(_tablet_mgr->txn_log_location(_tablet_id, txn_with_loads, load_id_2)));
+    EXPECT_FALSE(fs::path_exist(_tablet_mgr->txn_log_location(_tablet_id, txn_no_loads)));
+
+    _tablet_mgr->prune_metacache();
+
+    // load_ids txn: merged rowset has both statements' rows and segments.
+    ASSIGN_OR_ABORT(auto vlog_a, _tablet_mgr->get_txn_vlog(_tablet_id, version_a));
+    EXPECT_FALSE(vlog_a->has_load_id());
+    ASSERT_TRUE(vlog_a->has_op_write());
+    ASSERT_TRUE(vlog_a->op_write().has_rowset());
+    EXPECT_EQ(8, vlog_a->op_write().rowset().num_rows());
+    EXPECT_EQ(80, vlog_a->op_write().rowset().data_size());
+    ASSERT_EQ(2, vlog_a->op_write().rowset().segments_size());
+
+    // Non-load_ids txn: straight copy of the source TxnLog, no merge involved.
+    ASSIGN_OR_ABORT(auto vlog_b, _tablet_mgr->get_txn_vlog(_tablet_id, version_b));
+    ASSERT_TRUE(vlog_b->has_op_write());
+    ASSERT_TRUE(vlog_b->op_write().has_rowset());
+    EXPECT_EQ(7, vlog_b->op_write().rowset().num_rows());
+    EXPECT_EQ(70, vlog_b->op_write().rowset().data_size());
+    ASSERT_EQ(1, vlog_b->op_write().rowset().segments_size());
+    EXPECT_EQ("batch_c.dat", vlog_b->op_write().rowset().segments(0));
 }
 
 TEST_F(LakeServiceTest, test_publish_version_empty_txn_log) {
