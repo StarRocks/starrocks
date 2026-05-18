@@ -43,10 +43,8 @@ import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 
 public class ChangesScanNode extends ScanNode {
     private static final Logger LOG = LogManager.getLogger(ChangesScanNode.class);
@@ -55,20 +53,15 @@ public class ChangesScanNode extends ScanNode {
     private final BookmarkChange delta;
     private final Bookmark base;
     private final Bookmark head;
-    private List<Long> selectedPartitionIds;
     private final List<TScanRangeLocations> result = new ArrayList<>();
 
     public ChangesScanNode(PlanNodeId id, TupleDescriptor desc, OlapTable table,
                            BookmarkChange delta, Bookmark base, Bookmark head) {
-        super(id, desc, "ChangesScan");
+        super(id, desc, "ChangesScanNode");
         this.table = table;
         this.delta = delta;
         this.base = base;
         this.head = head;
-    }
-
-    public void setSelectedPartitionIds(List<Long> selectedPartitionIds) {
-        this.selectedPartitionIds = selectedPartitionIds;
     }
 
     /**
@@ -94,20 +87,8 @@ public class ChangesScanNode extends ScanNode {
     }
 
     public void computeScanRanges(ComputeResource computeResource) {
-        // Build filter sets from optimizer pruning results
-        Set<Long> selectedPartitions = (selectedPartitionIds != null)
-                ? new HashSet<>(selectedPartitionIds) : null;
-
         for (Map.Entry<Long, List<BookmarkChange.PhysicalPartitionChange>> entry :
                 delta.getChanges().entrySet()) {
-            long logicalPartitionId = entry.getKey();
-
-            // Partition filter
-            if (selectedPartitions != null
-                    && !selectedPartitions.contains(logicalPartitionId)) {
-                continue;
-            }
-
             for (BookmarkChange.PhysicalPartitionChange change : entry.getValue()) {
                 BookmarkChange.ChangeType type = change.getChangeType();
                 // Skip non-trackable types defensively; analyzer rejects them upstream.
@@ -188,8 +169,7 @@ public class ChangesScanNode extends ScanNode {
         output.append(prefix).append("TABLE: ").append(table.getName()).append("\n");
 
         int totalPartitions = delta.getChanges().size();
-        int selectedPartitions = (selectedPartitionIds != null) ? selectedPartitionIds.size() : totalPartitions;
-        output.append(prefix).append(String.format("partitions=%s/%s\n", selectedPartitions, totalPartitions));
+        output.append(prefix).append(String.format("partitions=%s/%s\n", totalPartitions, totalPartitions));
 
         // Count total tablets across trackable changes.
         int totalTablets = 0;

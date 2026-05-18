@@ -81,11 +81,9 @@ public final class CdcScanHelper {
             throw new SemanticException(formatNotTrackableMessage(delta, table));
         }
         OlapTable scoped = BookmarkScopedTableResolver.resolveByChange(table, delta);
-        LogicalChangesScanOperator op = new LogicalChangesScanOperator(
+        return new LogicalChangesScanOperator(
                 scoped, colRefToColumnMetaMap, columnMetaToColRefMap,
                 base, head, delta, Operator.DEFAULT_LIMIT);
-        op.setSelectedPartitionId(new ArrayList<>(delta.getChanges().keySet()));
-        return op;
     }
 
     /**

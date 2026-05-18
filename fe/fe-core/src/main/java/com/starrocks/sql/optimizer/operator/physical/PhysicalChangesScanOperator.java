@@ -25,7 +25,6 @@ import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
-import java.util.List;
 import java.util.Map;
 
 public class PhysicalChangesScanOperator extends PhysicalScanOperator {
@@ -33,7 +32,6 @@ public class PhysicalChangesScanOperator extends PhysicalScanOperator {
     private final Bookmark base;
     private final Bookmark head;
     private final BookmarkChange delta;
-    private final List<Long> selectedPartitionId;
 
     public PhysicalChangesScanOperator(Table table,
                                        Map<ColumnRefOperator, Column> colRefToColumnMetaMap,
@@ -41,14 +39,12 @@ public class PhysicalChangesScanOperator extends PhysicalScanOperator {
                                        ScalarOperator predicate,
                                        Bookmark base,
                                        Bookmark head,
-                                       BookmarkChange delta,
-                                       List<Long> selectedPartitionId) {
+                                       BookmarkChange delta) {
         super(OperatorType.PHYSICAL_CHANGES_SCAN, table,
                 colRefToColumnMetaMap, limit, predicate, null);
         this.base = base;
         this.head = head;
         this.delta = delta;
-        this.selectedPartitionId = selectedPartitionId;
     }
 
     public Bookmark getBase() {
@@ -61,10 +57,6 @@ public class PhysicalChangesScanOperator extends PhysicalScanOperator {
 
     public BookmarkChange getDelta() {
         return delta;
-    }
-
-    public List<Long> getSelectedPartitionId() {
-        return selectedPartitionId;
     }
 
     @Override

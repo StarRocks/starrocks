@@ -24,7 +24,6 @@ import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 
-import java.util.List;
 import java.util.Map;
 
 public class LogicalChangesScanOperator extends LogicalScanOperator {
@@ -32,10 +31,6 @@ public class LogicalChangesScanOperator extends LogicalScanOperator {
     private Bookmark base;
     private Bookmark head;
     private BookmarkChange delta;
-
-    // Partition candidates set by the analyzer; MVP has no prune rule, so this is the
-    // full list of logical partitions touched by the delta.
-    private List<Long> selectedPartitionId;
 
     public LogicalChangesScanOperator(Table table,
                                       Map<ColumnRefOperator, Column> colRefToColumnMetaMap,
@@ -67,14 +62,6 @@ public class LogicalChangesScanOperator extends LogicalScanOperator {
         return delta;
     }
 
-    public List<Long> getSelectedPartitionId() {
-        return selectedPartitionId;
-    }
-
-    public void setSelectedPartitionId(List<Long> selectedPartitionId) {
-        this.selectedPartitionId = selectedPartitionId;
-    }
-
     @Override
     public <R, C> R accept(OperatorVisitor<R, C> visitor, C context) {
         return visitor.visitLogicalChangesScan(this, context);
@@ -99,12 +86,6 @@ public class LogicalChangesScanOperator extends LogicalScanOperator {
             builder.base = operator.base;
             builder.head = operator.head;
             builder.delta = operator.delta;
-            builder.selectedPartitionId = operator.selectedPartitionId;
-            return this;
-        }
-
-        public Builder setSelectedPartitionId(List<Long> ids) {
-            builder.selectedPartitionId = ids;
             return this;
         }
     }

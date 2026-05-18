@@ -4488,9 +4488,6 @@ public class PlanFragmentBuilder {
                     scan.getBase(),
                     scan.getHead());
 
-            // Pass partition pruning results from optimizer (MVP: full delta partition set).
-            scanNode.setSelectedPartitionIds(scan.getSelectedPartitionId());
-
             ComputeResource computeResource = ConnectContext.get() != null
                     ? ConnectContext.get().getCurrentComputeResource()
                     : WarehouseManager.DEFAULT_RESOURCE;

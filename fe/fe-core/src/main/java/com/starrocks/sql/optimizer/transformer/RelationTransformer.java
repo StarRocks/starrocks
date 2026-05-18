@@ -871,31 +871,6 @@ public class RelationTransformer implements AstVisitorExtendInterface<LogicalPla
         return Optional.of(new ConnectorTableVersion(pointerType, (ConstantOperator) result));
     }
 
-    private OlapTable resolveBookmarkScopedTable(QueryPeriod queryPeriod, OlapTable live) {
-        ConnectorTableVersion version = resolveQueryPeriod(queryPeriod.getEnd(), queryPeriod.getPeriodType())
-                .orElseThrow(() -> new SemanticException("FOR VERSION AS OF requires a value"));
-        switch (version.getPointerType()) {
-            case VERSION: {
-                long id = version.getConstantOperator().castTo(IntegerType.BIGINT)
-                        .orElseThrow(() -> new SemanticException(
-                                "FOR VERSION AS OF on cloud-native requires BIGINT"))
-                        .getBigint();
-                return BookmarkScopedTableResolver.resolveById(live, id);
-            }
-            case TEMPORAL: {
-                LocalDateTime ts = version.getConstantOperator().castTo(DateType.DATETIME)
-                        .orElseThrow(() -> new SemanticException(
-                                "FOR VERSION AS OF TIMESTAMP requires a DATETIME-castable expression"))
-                        .getDatetime();
-                long timestampMs = ts.atZone(TimeUtils.getTimeZone().toZoneId()).toInstant().toEpochMilli();
-                return BookmarkScopedTableResolver.resolveByTimestamp(live, timestampMs);
-            }
-            default:
-                throw new IllegalStateException(
-                        String.format("unexpected version pointer type: %s", version.getPointerType()));
-        }
-    }
-
     private Bookmark resolveBookmark(BookmarkManager bm, long dbId, long tableId, OlapTable table,
                                      Expr versionExpr, QueryPeriod.PeriodType periodType,
                                      String endpointName) {
