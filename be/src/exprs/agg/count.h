@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include "base/simd/simd.h"
 #include "column/nullable_column.h"
 #include "exprs/agg/aggregate.h"
 #include "gutil/casts.h"
@@ -98,9 +99,14 @@ public:
     void get_values(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* dst, size_t start,
                     size_t end) const override {
         DCHECK_GT(end, start);
+        if (end <= start) {
+            return;
+        }
         auto* column = down_cast<Int64Column*>(dst);
+        int64_t* data = column->get_data().data();
+        const int64_t count_val = this->data(state).count;
         for (size_t i = start; i < end; ++i) {
-            column->get_data()[i] = this->data(state).count;
+            data[i] = count_val;
         }
     }
 
@@ -181,18 +187,48 @@ public:
 
     void update_batch_selectively(FunctionContext* ctx, size_t chunk_size, size_t state_offset, const Column** columns,
                                   AggDataPtr* states, const Filter& filter) const override {
+        // Adaptive SIMD: for sparse filters, use find_zero to skip; for dense, iterate all
+        const size_t num_selected = SIMD::count_zero(filter.data(), chunk_size);
+        if (num_selected == 0) {
+            return; // No rows selected
+        }
+
         if (columns[0]->has_null()) {
             const auto* nullable_column = down_cast<const NullableColumn*>(columns[0]);
             const uint8_t* null_data = nullable_column->immutable_null_column_data().data();
-            for (size_t i = 0; i < chunk_size; ++i) {
-                if (filter[i] == 0) {
-                    this->data(states[i] + state_offset).count += !null_data[i];
+            if (num_selected > chunk_size / 8) {
+                // Dense: more than 12.5% rows pass filter, iterate all
+                for (size_t i = 0; i < chunk_size; ++i) {
+                    if (filter[i] == 0) {
+                        this->data(states[i] + state_offset).count += !null_data[i];
+                    }
+                }
+            } else {
+                // Sparse: use SIMD to find zero positions
+                size_t idx = 0;
+                while (idx < chunk_size) {
+                    idx = SIMD::find_zero(filter, idx, chunk_size - idx);
+                    if (idx >= chunk_size) break;
+                    this->data(states[idx] + state_offset).count += !null_data[idx];
+                    ++idx;
                 }
             }
         } else {
-            for (size_t i = 0; i < chunk_size; ++i) {
-                if (filter[i] == 0) {
-                    this->data(states[i] + state_offset).count++;
+            if (num_selected > chunk_size / 8) {
+                // Dense: iterate all
+                for (size_t i = 0; i < chunk_size; ++i) {
+                    if (filter[i] == 0) {
+                        this->data(states[i] + state_offset).count++;
+                    }
+                }
+            } else {
+                // Sparse: use SIMD to find zero positions
+                size_t idx = 0;
+                while (idx < chunk_size) {
+                    idx = SIMD::find_zero(filter, idx, chunk_size - idx);
+                    if (idx >= chunk_size) break;
+                    this->data(states[idx] + state_offset).count++;
+                    ++idx;
                 }
             }
         }
@@ -204,9 +240,8 @@ public:
             const auto* nullable_column = down_cast<const NullableColumn*>(columns[0]);
             if (nullable_column->has_null()) {
                 const uint8_t* null_data = nullable_column->immutable_null_column_data().data();
-                for (size_t i = 0; i < chunk_size; ++i) {
-                    this->data(state).count += !null_data[i];
-                }
+                // SIMD optimization: count_zero counts positions where null_data[i] == 0 (non-null rows)
+                this->data(state).count += SIMD::count_zero(null_data, chunk_size);
             } else {
                 this->data(state).count += nullable_column->size();
             }
@@ -228,9 +263,8 @@ public:
             const auto* nullable_column = down_cast<const NullableColumn*>(columns[0]);
             if (nullable_column->has_null()) {
                 const uint8_t* null_data = nullable_column->immutable_null_column_data().data();
-                for (size_t i = frame_start; i < frame_end; ++i) {
-                    this->data(state).count += !null_data[i];
-                }
+                // SIMD optimization: count_zero counts positions where null_data[i] == 0 (non-null rows)
+                this->data(state).count += SIMD::count_zero(null_data + frame_start, frame_end - frame_start);
             } else {
                 this->data(state).count += (frame_end - frame_start);
             }
@@ -279,9 +313,8 @@ public:
                         }
                     } else {
                         // Build the frame for the first time
-                        for (size_t i = frame_start; i < frame_end; ++i) {
-                            this->data(state).count += !null_data[i];
-                        }
+                        // SIMD optimization: count_zero counts positions where null_data[i] == 0 (non-null rows)
+                        this->data(state).count += SIMD::count_zero(null_data + frame_start, frame_end - frame_start);
                         this->data(state).is_frame_init = true;
                     }
                     return;
@@ -304,9 +337,14 @@ public:
     void get_values(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* dst, size_t start,
                     size_t end) const override {
         DCHECK_GT(end, start);
+        if (end <= start) {
+            return;
+        }
         auto* column = down_cast<Int64Column*>(dst);
+        int64_t* data = column->get_data().data();
+        const int64_t count_val = this->data(state).count;
         for (size_t i = start; i < end; ++i) {
-            column->get_data()[i] = this->data(state).count;
+            data[i] = count_val;
         }
     }
 
