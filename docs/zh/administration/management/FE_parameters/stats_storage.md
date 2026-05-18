@@ -564,20 +564,20 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 ### `enable_tablet_pre_split_for_insert_from_files`
 
-- 默认值: false
+- 默认值: true
 - 类型: Boolean
 - 单位: -
 - 是否可变: Yes
-- 描述: 是否为 `INSERT INTO ... SELECT FROM FILES()` 导入启用基于采样的 Tablet 预分裂（Sample-Based Tablet Pre-Split）。默认关闭，GA 后按集群开启。会话变量 `enable_tablet_pre_split` 也必须为 `true` 时预分裂才会运行。
+- 描述: 是否为 `INSERT INTO ... SELECT FROM FILES()` 导入启用基于采样的 Tablet 预分裂（Sample-Based Tablet Pre-Split）。v4.1.0 起 GA 默认开启。如需在集群范围关闭，设置为 `false`。会话变量 `enable_tablet_pre_split` 也必须为 `true` 时预分裂才会运行。
 - 引入版本: v4.1.0
 
 ### `enable_tablet_pre_split_for_broker_load`
 
-- 默认值: false
+- 默认值: true
 - 类型: Boolean
 - 单位: -
 - 是否可变: Yes
-- 描述: 是否为 Broker Load 启用基于采样的 Tablet 预分裂。默认关闭，GA 后按集群开启。会话变量 `enable_tablet_pre_split` 也必须为 `true` 时预分裂才会运行。
+- 描述: 是否为 Broker Load 启用基于采样的 Tablet 预分裂。v4.1.0 起 GA 默认开启。如需在集群范围关闭，设置为 `false`。会话变量 `enable_tablet_pre_split` 也必须为 `true` 时预分裂才会运行。
 - 引入版本: v4.1.0
 
 ### `tablet_pre_split_pre_submit_timeout_seconds`

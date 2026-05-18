@@ -564,20 +564,20 @@ This topic introduces the following types of FE configurations:
 
 ### `enable_tablet_pre_split_for_insert_from_files`
 
-- Default: false
+- Default: true
 - Type: Boolean
 - Unit: -
 - Is mutable: Yes
-- Description: Whether to enable Sample-Based Tablet Pre-Split for `INSERT INTO ... SELECT FROM FILES()` loads. Off by default; flip on per cluster after the feature's GA gate. The session variable `enable_tablet_pre_split` must also be `true` for pre-split to run.
+- Description: Whether to enable Sample-Based Tablet Pre-Split for `INSERT INTO ... SELECT FROM FILES()` loads. On by default as of v4.1.0. Set to `false` to disable cluster-wide. The session variable `enable_tablet_pre_split` must also be `true` for pre-split to run.
 - Introduced in: v4.1.0
 
 ### `enable_tablet_pre_split_for_broker_load`
 
-- Default: false
+- Default: true
 - Type: Boolean
 - Unit: -
 - Is mutable: Yes
-- Description: Whether to enable Sample-Based Tablet Pre-Split for Broker Load. Off by default; flip on per cluster after the feature's GA gate. The session variable `enable_tablet_pre_split` must also be `true` for pre-split to run.
+- Description: Whether to enable Sample-Based Tablet Pre-Split for Broker Load. On by default as of v4.1.0. Set to `false` to disable cluster-wide. The session variable `enable_tablet_pre_split` must also be `true` for pre-split to run.
 - Introduced in: v4.1.0
 
 ### `tablet_pre_split_pre_submit_timeout_seconds`
