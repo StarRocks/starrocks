@@ -214,15 +214,9 @@ public class PaimonMetadataTest {
                 AstToStringBuilder.getExternalCatalogTableDdlStmt(paimonTable));
         assertEquals(Lists.newArrayList("col1"), paimonTable.getPartitionColumnNames());
         assertEquals("hdfs://127.0.0.1:10000/paimon", paimonTable.getTableLocation());
-<<<<<<< HEAD
         assertEquals(ScalarType.INT, paimonTable.getBaseSchema().get(0).getType());
-        org.junit.jupiter.api.Assertions.assertFalse(paimonTable.getBaseSchema().get(0).isAllowNull());
-        assertEquals(ScalarType.DOUBLE, paimonTable.getBaseSchema().get(1).getType());
-=======
-        assertEquals(IntegerType.INT, paimonTable.getBaseSchema().get(0).getType());
         org.junit.jupiter.api.Assertions.assertTrue(paimonTable.getBaseSchema().get(0).isAllowNull());
-        assertEquals(FloatType.DOUBLE, paimonTable.getBaseSchema().get(1).getType());
->>>>>>> 0d3e30ae99 ([BugFix] Paimon primary key columns incorrectly marked as non-nullable when querying external catalog (#71660))
+        assertEquals(ScalarType.DOUBLE, paimonTable.getBaseSchema().get(1).getType());
         org.junit.jupiter.api.Assertions.assertTrue(paimonTable.getBaseSchema().get(1).isAllowNull());
         assertEquals("paimon_catalog", paimonTable.getCatalogName());
         assertEquals("paimon_catalog.db1.tbl1.fake_uuid", paimonTable.getUUID());
