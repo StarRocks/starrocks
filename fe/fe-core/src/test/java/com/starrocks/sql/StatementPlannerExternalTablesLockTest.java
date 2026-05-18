@@ -18,6 +18,7 @@ import com.starrocks.catalog.JDBCResource;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.FeConstants;
 import com.starrocks.connector.MockedMetadataMgr;
+import com.starrocks.connector.hive.MockedHiveMetadata;
 import com.starrocks.connector.jdbc.MockedJDBCMetadata;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
@@ -29,6 +30,7 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
@@ -48,9 +50,9 @@ public class StatementPlannerExternalTablesLockTest extends ConnectorPlanTestBas
         private final AtomicInteger getTableCalls;
 
         public BlockingJDBCMetadata(Map<String, String> properties,
-                                   CountDownLatch started,
-                                   CountDownLatch allowReturn,
-                                   AtomicInteger getTableCalls) {
+                                    CountDownLatch started,
+                                    CountDownLatch allowReturn,
+                                    AtomicInteger getTableCalls) {
             super(properties);
             this.started = started;
             this.allowReturn = allowReturn;
@@ -68,6 +70,62 @@ public class StatementPlannerExternalTablesLockTest extends ConnectorPlanTestBas
                 Thread.currentThread().interrupt();
             }
             return super.getTable(context, dbName, tblName);
+        }
+    }
+
+    private static class BlockingRefreshHiveMetadata extends MockedHiveMetadata {
+        private final CountDownLatch refreshStarted;
+        private final CountDownLatch allowRefresh;
+        private final AtomicInteger getTableCalls;
+        private final AtomicInteger refreshCalls;
+
+        private BlockingRefreshHiveMetadata(CountDownLatch refreshStarted,
+                                            CountDownLatch allowRefresh,
+                                            AtomicInteger getTableCalls,
+                                            AtomicInteger refreshCalls) {
+            this.refreshStarted = refreshStarted;
+            this.allowRefresh = allowRefresh;
+            this.getTableCalls = getTableCalls;
+            this.refreshCalls = refreshCalls;
+        }
+
+        @Override
+        public Table getTable(ConnectContext context, String dbName, String tblName) {
+            getTableCalls.incrementAndGet();
+            return super.getTable(context, dbName, tblName);
+        }
+
+        @Override
+        public void refreshTable(String srDbName, Table table, List<String> partitionNames, boolean onlyCachedPartitions) {
+            refreshCalls.incrementAndGet();
+            refreshStarted.countDown();
+            try {
+                allowRefresh.await(20, TimeUnit.SECONDS);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+        }
+    }
+
+    private static class FailingRefreshHiveMetadata extends MockedHiveMetadata {
+        private final AtomicInteger getTableCalls;
+        private final AtomicInteger refreshCalls;
+
+        private FailingRefreshHiveMetadata(AtomicInteger getTableCalls, AtomicInteger refreshCalls) {
+            this.getTableCalls = getTableCalls;
+            this.refreshCalls = refreshCalls;
+        }
+
+        @Override
+        public Table getTable(ConnectContext context, String dbName, String tblName) {
+            getTableCalls.incrementAndGet();
+            return super.getTable(context, dbName, tblName);
+        }
+
+        @Override
+        public void refreshTable(String srDbName, Table table, List<String> partitionNames, boolean onlyCachedPartitions) {
+            refreshCalls.incrementAndGet();
+            throw new RuntimeException("mock refresh failure");
         }
     }
 
@@ -99,7 +157,7 @@ public class StatementPlannerExternalTablesLockTest extends ConnectorPlanTestBas
     public void testCTEJoinInternalTable() throws Exception {
         // Test CTE joined with internal table
         String sql = "with cte as (select * from jdbc0.partitioned_db0.tbl0) " +
-                     "select * from t0 join cte on t0.v1 = cte.a";
+                "select * from t0 join cte on t0.v1 = cte.a";
         StatementBase stmt = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         try {
             StatementPlanner.plan(stmt, connectContext);
@@ -114,8 +172,8 @@ public class StatementPlannerExternalTablesLockTest extends ConnectorPlanTestBas
         // This is the key scenario: CTE with internal table, joined with external table
         // Should pre-parse external table before acquiring lock on internal tables
         String sql = "with cte as (select * from t0) " +
-                     "select * from jdbc0.partitioned_db0.tbl0 " +
-                     "join cte on jdbc0.partitioned_db0.tbl0.a = cte.v1";
+                "select * from jdbc0.partitioned_db0.tbl0 " +
+                "join cte on jdbc0.partitioned_db0.tbl0.a = cte.v1";
         StatementBase stmt = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         try {
             StatementPlanner.plan(stmt, connectContext);
@@ -275,12 +333,211 @@ public class StatementPlannerExternalTablesLockTest extends ConnectorPlanTestBas
     }
 
     @Test
+    public void testInsertSelectFilesystemRefreshNotUnderLock() throws Exception {
+        CountDownLatch refreshStarted = new CountDownLatch(1);
+        CountDownLatch allowRefresh = new CountDownLatch(1);
+        AtomicInteger getTableCalls = new AtomicInteger();
+        AtomicInteger refreshCalls = new AtomicInteger();
+
+        GlobalStateMgr gsm = GlobalStateMgr.getCurrentState();
+        MockedMetadataMgr metadataMgr = (MockedMetadataMgr) gsm.getMetadataMgr();
+        metadataMgr.registerMockedMetadata(MockedHiveMetadata.MOCKED_HIVE_CATALOG_NAME,
+                new BlockingRefreshHiveMetadata(refreshStarted, allowRefresh, getTableCalls, refreshCalls));
+
+        String sql = "insert into t0 (v1, v2) select l_orderkey, l_partkey from hive0.tpch.lineitem";
+        StatementBase stmt = UtFrameUtils.parseStmtWithNewParserNotIncludeAnalyzer(sql, connectContext);
+
+        AtomicBoolean lockCalled = new AtomicBoolean(false);
+        PlannerMetaLocker locker = new PlannerMetaLocker(connectContext, stmt) {
+            @Override
+            public void lock() {
+                lockCalled.set(true);
+            }
+
+            @Override
+            public void unlock() {
+                // no-op
+            }
+        };
+
+        AtomicBoolean finished = new AtomicBoolean(false);
+        AtomicReference<Throwable> error = new AtomicReference<>();
+        Thread t = new Thread(() -> {
+            try {
+                StatementPlanner.analyzeStatement(stmt, connectContext, locker);
+                finished.set(true);
+            } catch (Throwable t0) {
+                error.set(t0);
+            }
+        });
+        t.start();
+        try {
+            Assertions.assertTrue(refreshStarted.await(10, TimeUnit.SECONDS));
+            Assertions.assertFalse(lockCalled.get(),
+                    "Meta lock was acquired while filesystem external refresh was blocked.");
+        } finally {
+            allowRefresh.countDown();
+            t.join(TimeUnit.SECONDS.toMillis(20));
+            if (t.isAlive()) {
+                t.interrupt();
+                t.join(TimeUnit.SECONDS.toMillis(5));
+            }
+        }
+
+        if (error.get() != null) {
+            throw new RuntimeException("INSERT ... SELECT failed: " + error.get().getMessage(), error.get());
+        }
+
+        Assertions.assertFalse(t.isAlive(), "background analyze thread should exit after refresh is released");
+        Assertions.assertTrue(finished.get(), "INSERT ... SELECT did not finish");
+        Assertions.assertTrue(lockCalled.get(), "Meta lock was never acquired after refresh completed");
+        Assertions.assertEquals(1, refreshCalls.get(), "filesystem external refresh should run exactly once");
+        Assertions.assertEquals(2, getTableCalls.get(),
+                "filesystem external table should be resolved before and after refresh, but not during locked analysis");
+    }
+
+    @Test
+    public void testInsertSelectFilesystemRefreshFailurePropagatesError() throws Exception {
+        AtomicInteger getTableCalls = new AtomicInteger();
+        AtomicInteger refreshCalls = new AtomicInteger();
+
+        GlobalStateMgr gsm = GlobalStateMgr.getCurrentState();
+        MockedMetadataMgr metadataMgr = (MockedMetadataMgr) gsm.getMetadataMgr();
+        metadataMgr.registerMockedMetadata(MockedHiveMetadata.MOCKED_HIVE_CATALOG_NAME,
+                new FailingRefreshHiveMetadata(getTableCalls, refreshCalls));
+
+        String sql = "insert into t0 (v1, v2) select l_orderkey, l_partkey from hive0.tpch.lineitem";
+        StatementBase stmt = UtFrameUtils.parseStmtWithNewParserNotIncludeAnalyzer(sql, connectContext);
+
+        Assertions.assertThrows(RuntimeException.class, () -> StatementPlanner.plan(stmt, connectContext));
+        Assertions.assertEquals(1, refreshCalls.get(), "filesystem external refresh should still be attempted once");
+        Assertions.assertEquals(1, getTableCalls.get(),
+                "planner should stop after the first pre-lock resolution when refresh fails");
+    }
+
+    @Test
+    public void testInsertSelectFilesystemRefreshDisabledSkipsRefresh() throws Exception {
+        boolean originalValue = connectContext.getSessionVariable().isEnableInsertSelectExternalAutoRefresh();
+        connectContext.getSessionVariable().setEnableInsertSelectExternalAutoRefresh(false);
+        try {
+            CountDownLatch refreshStarted = new CountDownLatch(1);
+            CountDownLatch allowRefresh = new CountDownLatch(1);
+            AtomicInteger getTableCalls = new AtomicInteger();
+            AtomicInteger refreshCalls = new AtomicInteger();
+
+            GlobalStateMgr gsm = GlobalStateMgr.getCurrentState();
+            MockedMetadataMgr metadataMgr = (MockedMetadataMgr) gsm.getMetadataMgr();
+            metadataMgr.registerMockedMetadata(MockedHiveMetadata.MOCKED_HIVE_CATALOG_NAME,
+                    new BlockingRefreshHiveMetadata(refreshStarted, allowRefresh, getTableCalls, refreshCalls));
+
+            String sql = "insert into t0 (v1, v2) select l_orderkey, l_partkey from hive0.tpch.lineitem";
+            StatementBase stmt = UtFrameUtils.parseStmtWithNewParserNotIncludeAnalyzer(sql, connectContext);
+
+            AtomicBoolean lockCalled = new AtomicBoolean(false);
+            PlannerMetaLocker locker = new PlannerMetaLocker(connectContext, stmt) {
+                @Override
+                public void lock() {
+                    lockCalled.set(true);
+                }
+
+                @Override
+                public void unlock() {
+                    // no-op
+                }
+            };
+
+            Assertions.assertDoesNotThrow(() -> StatementPlanner.analyzeStatement(stmt, connectContext, locker));
+            Assertions.assertEquals(0, refreshCalls.get(), "refresh should be skipped when auto refresh is disabled");
+            Assertions.assertEquals(1, getTableCalls.get(), "external table should still be pre-resolved once");
+            Assertions.assertFalse(refreshStarted.await(200, TimeUnit.MILLISECONDS),
+                    "refresh should not have been triggered");
+            Assertions.assertTrue(lockCalled.get(), "analyze should still acquire meta lock");
+            allowRefresh.countDown();
+        } finally {
+            connectContext.getSessionVariable().setEnableInsertSelectExternalAutoRefresh(originalValue);
+        }
+    }
+
+    @Test
+    public void testInsertSelectFilesystemRefreshWithUnqualifiedExternalTable() throws Exception {
+        String originalCatalog = connectContext.getCurrentCatalog();
+        String originalDb = connectContext.getDatabase();
+        try {
+            connectContext.setCurrentCatalog(MockedHiveMetadata.MOCKED_HIVE_CATALOG_NAME);
+            connectContext.setDatabase(MockedHiveMetadata.MOCKED_TPCH_DB_NAME);
+
+            CountDownLatch refreshStarted = new CountDownLatch(1);
+            CountDownLatch allowRefresh = new CountDownLatch(1);
+            AtomicInteger getTableCalls = new AtomicInteger();
+            AtomicInteger refreshCalls = new AtomicInteger();
+
+            GlobalStateMgr gsm = GlobalStateMgr.getCurrentState();
+            MockedMetadataMgr metadataMgr = (MockedMetadataMgr) gsm.getMetadataMgr();
+            metadataMgr.registerMockedMetadata(MockedHiveMetadata.MOCKED_HIVE_CATALOG_NAME,
+                    new BlockingRefreshHiveMetadata(refreshStarted, allowRefresh, getTableCalls, refreshCalls));
+
+            String sql = "insert into default_catalog.test.t0 (v1, v2) select l_orderkey, l_partkey from lineitem";
+            StatementBase stmt = UtFrameUtils.parseStmtWithNewParserNotIncludeAnalyzer(sql, connectContext);
+
+            AtomicBoolean lockCalled = new AtomicBoolean(false);
+            PlannerMetaLocker locker = new PlannerMetaLocker(connectContext, stmt) {
+                @Override
+                public void lock() {
+                    lockCalled.set(true);
+                }
+
+                @Override
+                public void unlock() {
+                    // no-op
+                }
+            };
+
+            AtomicBoolean finished = new AtomicBoolean(false);
+            AtomicReference<Throwable> error = new AtomicReference<>();
+            Thread t = new Thread(() -> {
+                try {
+                    StatementPlanner.analyzeStatement(stmt, connectContext, locker);
+                    finished.set(true);
+                } catch (Throwable t0) {
+                    error.set(t0);
+                }
+            });
+            t.start();
+            try {
+                Assertions.assertTrue(refreshStarted.await(10, TimeUnit.SECONDS));
+                Assertions.assertFalse(lockCalled.get(),
+                        "Meta lock was acquired while refreshing an unqualified external table.");
+            } finally {
+                allowRefresh.countDown();
+                t.join(TimeUnit.SECONDS.toMillis(20));
+                if (t.isAlive()) {
+                    t.interrupt();
+                    t.join(TimeUnit.SECONDS.toMillis(5));
+                }
+            }
+
+            if (error.get() != null) {
+                throw new RuntimeException("INSERT ... SELECT failed: " + error.get().getMessage(), error.get());
+            }
+
+            Assertions.assertFalse(t.isAlive(), "background analyze thread should exit after refresh is released");
+            Assertions.assertTrue(finished.get(), "INSERT ... SELECT did not finish");
+            Assertions.assertEquals(1, refreshCalls.get(), "unqualified external table should still refresh once");
+            Assertions.assertEquals(2, getTableCalls.get(),
+                    "unqualified external table should be resolved before and after refresh");
+        } finally {
+            connectContext.setCurrentCatalog(originalCatalog);
+            connectContext.setDatabase(originalDb);
+        }
+    }
+
+    @Test
     public void testNestedSubqueryWithSameNameCTE() throws Exception {
         // Test that CTE in nested subquery doesn't affect external table pre-resolution in outer query.
         // Scenario: Outer query uses external table "tbl0", nested subquery has CTE with same name "tbl0".
         // The external table should still be pre-resolved (not skipped due to CTE name collision).
         String sql = "select * from jdbc0.partitioned_db0.tbl0 t " +
-                     "where exists (with tbl0 as (select * from t0) select * from tbl0)";
+                "where exists (with tbl0 as (select * from t0) select * from tbl0)";
         StatementBase stmt = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         try {
             StatementPlanner.plan(stmt, connectContext);
@@ -314,7 +571,7 @@ public class StatementPlannerExternalTablesLockTest extends ConnectorPlanTestBas
 
         // Outer query uses external table "tbl0", nested subquery has CTE "tbl0"
         String sql = "select * from t0 join jdbc0.partitioned_db0.tbl0 on true " +
-                     "where exists (with tbl0 as (select * from t0) select * from tbl0)";
+                "where exists (with tbl0 as (select * from t0) select * from tbl0)";
         StatementBase stmt = UtFrameUtils.parseStmtWithNewParserNotIncludeAnalyzer(sql, connectContext);
 
         AtomicBoolean lockCalled = new AtomicBoolean(false);
@@ -390,7 +647,7 @@ public class StatementPlannerExternalTablesLockTest extends ConnectorPlanTestBas
             metadataMgr.registerMockedMetadata(MockedJDBCMetadata.MOCKED_JDBC_CATALOG_NAME, blocking);
 
             String sql = "with tbl0 as (select * from jdbc0.partitioned_db0.tbl0) " +
-                         "select * from default_catalog.test.t0 join tbl0 on true";
+                    "select * from default_catalog.test.t0 join tbl0 on true";
             StatementBase stmt = UtFrameUtils.parseStmtWithNewParserNotIncludeAnalyzer(sql, connectContext);
 
             AtomicBoolean lockCalled = new AtomicBoolean(false);
