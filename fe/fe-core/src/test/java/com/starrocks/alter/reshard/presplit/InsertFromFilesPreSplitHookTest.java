@@ -14,6 +14,10 @@
 
 package com.starrocks.alter.reshard.presplit;
 
+import com.starrocks.catalog.Column;
+import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.TableFunctionTable;
+import com.starrocks.catalog.TableName;
 import com.starrocks.common.Config;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
@@ -24,6 +28,9 @@ import com.starrocks.sql.ast.FileTableFunctionRelation;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
+import com.starrocks.sql.ast.Relation;
+import com.starrocks.sql.ast.SelectList;
+import com.starrocks.sql.ast.SelectListItem;
 import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.SetOperationRelation;
 import com.starrocks.sql.ast.StatementBase;
@@ -36,9 +43,12 @@ import org.junit.jupiter.api.Test;
 import org.mockito.MockedStatic;
 import org.mockito.Mockito;
 
+import java.util.ArrayList;
 import java.util.List;
 
 import static com.starrocks.alter.reshard.presplit.PresplitTestSupport.assertHookDoesNotDelegate;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
@@ -164,9 +174,151 @@ public class InsertFromFilesPreSplitHookTest {
     public void testNonFilesFromShortCircuits() throws Exception {
         // INSERT INTO t SELECT * FROM other_olap_table — FROM is a plain TableRelation,
         // not FileTableFunctionRelation. Out of scope for pre-split.
-        SelectRelation selectRelation = mock(SelectRelation.class);
-        when(selectRelation.getCteRelations()).thenReturn(List.of());
-        when(selectRelation.getRelation()).thenReturn(mock(TableRelation.class));
+        InsertStmt stmt = insertStmtWithQueryRelation(bareStarSelectRelationOver(mock(TableRelation.class)));
+        assertHookDoesNotDelegate(() ->
+                InsertFromFilesPreSplitHook.maybeRunPreSplit(stmt, mock(ConnectContext.class)));
+    }
+
+    @Test
+    public void testTargetColumnListShortCircuits() throws Exception {
+        // INSERT INTO t (a, b) SELECT * FROM FILES(...) — the explicit column
+        // list reorders/subsets the target's columns; the sampler reads source
+        // columns matching the target's sort-key names, so the sampled column
+        // would mismatch what the load writes.
+        InsertStmt stmt = simpleFilesInsertStmt();
+        when(stmt.getTargetColumnNames()).thenReturn(List.of("a", "b"));
+
+        assertHookDoesNotDelegate(() ->
+                InsertFromFilesPreSplitHook.maybeRunPreSplit(stmt, mock(ConnectContext.class)));
+    }
+
+    @Test
+    public void testExpressionProjectionShortCircuits() throws Exception {
+        // INSERT INTO t SELECT col + 1 FROM FILES(...) — expression projection
+        // changes the inserted values; the sampler reads source columns
+        // verbatim and would observe different values than the load writes.
+        SelectListItem exprItem = mock(SelectListItem.class);
+        when(exprItem.isStar()).thenReturn(false);
+
+        InsertStmt stmt = insertStmtWithQueryRelation(
+                filesSelectRelationWithSelectList(selectListOf(exprItem)));
+        assertHookDoesNotDelegate(() ->
+                InsertFromFilesPreSplitHook.maybeRunPreSplit(stmt, mock(ConnectContext.class)));
+    }
+
+    @Test
+    public void testMultipleSelectItemsShortCircuits() throws Exception {
+        // INSERT INTO t SELECT a, b FROM FILES(...) — even when each item is
+        // a plain column, naming a subset of FILES' columns produces a
+        // different inserted row shape than a bare `SELECT *`.
+        SelectList twoColumnSelectList = selectListOf(mock(SelectListItem.class), mock(SelectListItem.class));
+
+        InsertStmt stmt = insertStmtWithQueryRelation(filesSelectRelationWithSelectList(twoColumnSelectList));
+        assertHookDoesNotDelegate(() ->
+                InsertFromFilesPreSplitHook.maybeRunPreSplit(stmt, mock(ConnectContext.class)));
+    }
+
+    @Test
+    public void testQualifiedStarShortCircuits() throws Exception {
+        // INSERT INTO t SELECT files.* FROM FILES(...) — qualified star may
+        // expand to a different column-set than the sampler's verbatim FILES()
+        // read once multi-source joins are introduced.
+        SelectListItem qualifiedStar = mock(SelectListItem.class);
+        when(qualifiedStar.isStar()).thenReturn(true);
+        when(qualifiedStar.getTblName()).thenReturn(new TableName(null, "files"));
+
+        InsertStmt stmt = insertStmtWithQueryRelation(
+                filesSelectRelationWithSelectList(selectListOf(qualifiedStar)));
+        assertHookDoesNotDelegate(() ->
+                InsertFromFilesPreSplitHook.maybeRunPreSplit(stmt, mock(ConnectContext.class)));
+    }
+
+    @Test
+    public void testStarWithExcludeShortCircuits() throws Exception {
+        // INSERT INTO t SELECT * EXCLUDE (col_x) FROM FILES(...) — the
+        // exclusion drops a column from the inserted row, mismatching the
+        // sampler's verbatim FILES() read.
+        SelectListItem starExclude = mock(SelectListItem.class);
+        when(starExclude.isStar()).thenReturn(true);
+        when(starExclude.getExcludedColumns()).thenReturn(List.of("col_x"));
+
+        InsertStmt stmt = insertStmtWithQueryRelation(
+                filesSelectRelationWithSelectList(selectListOf(starExclude)));
+        assertHookDoesNotDelegate(() ->
+                InsertFromFilesPreSplitHook.maybeRunPreSplit(stmt, mock(ConnectContext.class)));
+    }
+
+    @Test
+    public void testDistinctShortCircuits() throws Exception {
+        // INSERT INTO t SELECT DISTINCT * FROM FILES(...) — DISTINCT collapses
+        // duplicate rows; the sampler does not, so the sampled row-set differs
+        // from what the load writes.
+        SelectListItem starItem = mock(SelectListItem.class);
+        when(starItem.isStar()).thenReturn(true);
+        SelectList distinctSelectList = selectListOf(starItem);
+        when(distinctSelectList.isDistinct()).thenReturn(true);
+
+        InsertStmt stmt = insertStmtWithQueryRelation(filesSelectRelationWithSelectList(distinctSelectList));
+        assertHookDoesNotDelegate(() ->
+                InsertFromFilesPreSplitHook.maybeRunPreSplit(stmt, mock(ConnectContext.class)));
+    }
+
+    @Test
+    public void testWhereClauseShortCircuits() throws Exception {
+        // INSERT INTO t SELECT * FROM FILES(...) WHERE x > 10 — the sampler
+        // ignores the predicate, so it would observe rows the load filters out.
+        SelectRelation selectRelation = bareStarSelectRelationOver(mock(FileTableFunctionRelation.class));
+        when(selectRelation.hasWhereClause()).thenReturn(true);
+
+        InsertStmt stmt = insertStmtWithQueryRelation(selectRelation);
+        assertHookDoesNotDelegate(() ->
+                InsertFromFilesPreSplitHook.maybeRunPreSplit(stmt, mock(ConnectContext.class)));
+    }
+
+    @Test
+    public void testGroupByClauseShortCircuits() throws Exception {
+        // INSERT INTO t SELECT * FROM FILES(...) GROUP BY ... — grouping
+        // changes the row count; the sampler would observe ungrouped rows.
+        SelectRelation selectRelation = bareStarSelectRelationOver(mock(FileTableFunctionRelation.class));
+        when(selectRelation.hasGroupByClause()).thenReturn(true);
+
+        InsertStmt stmt = insertStmtWithQueryRelation(selectRelation);
+        assertHookDoesNotDelegate(() ->
+                InsertFromFilesPreSplitHook.maybeRunPreSplit(stmt, mock(ConnectContext.class)));
+    }
+
+    @Test
+    public void testHavingClauseShortCircuits() throws Exception {
+        // HAVING without GROUP BY is rare but parser-legal; the sampler
+        // ignores it, so the row-set diverges.
+        SelectRelation selectRelation = bareStarSelectRelationOver(mock(FileTableFunctionRelation.class));
+        when(selectRelation.hasHavingClause()).thenReturn(true);
+
+        InsertStmt stmt = insertStmtWithQueryRelation(selectRelation);
+        assertHookDoesNotDelegate(() ->
+                InsertFromFilesPreSplitHook.maybeRunPreSplit(stmt, mock(ConnectContext.class)));
+    }
+
+    @Test
+    public void testOrderByClauseShortCircuits() throws Exception {
+        // ORDER BY combined with LIMIT picks a deterministic subset; ORDER BY
+        // alone does not change the row-set but pairs with LIMIT, so we reject
+        // either to keep the bare-`SELECT *` invariant simple.
+        SelectRelation selectRelation = bareStarSelectRelationOver(mock(FileTableFunctionRelation.class));
+        when(selectRelation.hasOrderByClause()).thenReturn(true);
+
+        InsertStmt stmt = insertStmtWithQueryRelation(selectRelation);
+        assertHookDoesNotDelegate(() ->
+                InsertFromFilesPreSplitHook.maybeRunPreSplit(stmt, mock(ConnectContext.class)));
+    }
+
+    @Test
+    public void testLimitClauseShortCircuits() throws Exception {
+        // INSERT INTO t SELECT * FROM FILES(...) LIMIT 100 — LIMIT caps the
+        // load row count; the sampler ignores it and would sample beyond the
+        // cap, biasing the boundaries toward unwritten data.
+        SelectRelation selectRelation = bareStarSelectRelationOver(mock(FileTableFunctionRelation.class));
+        when(selectRelation.hasLimit()).thenReturn(true);
 
         InsertStmt stmt = insertStmtWithQueryRelation(selectRelation);
         assertHookDoesNotDelegate(() ->
@@ -203,15 +355,113 @@ public class InsertFromFilesPreSplitHookTest {
                 InsertFromFilesPreSplitHook.maybeRunPreSplit(stmt, mock(ConnectContext.class)));
     }
 
+    @Test
+    public void testSchemasAlignWhenByPositionNamesMatch() {
+        InsertStmt stmt = byPositionInsertStmt();
+        OlapTable target = olapTableWithColumns("k", "v");
+        TableFunctionTable source = tableFunctionTableWithColumns("k", "v");
+
+        assertTrue(InsertFromFilesPreSplitHook.schemasAlignForByPositionInsert(stmt, target, source));
+    }
+
+    @Test
+    public void testSchemasMisalignedWhenByPositionNamesDifferAtOrdinal() {
+        // Target is (k, v) but FILES is (v, k). The load writes file column v
+        // into target column k while the sampler reads file column k by name.
+        InsertStmt stmt = byPositionInsertStmt();
+        OlapTable target = olapTableWithColumns("k", "v");
+        TableFunctionTable source = tableFunctionTableWithColumns("v", "k");
+
+        assertFalse(InsertFromFilesPreSplitHook.schemasAlignForByPositionInsert(stmt, target, source));
+    }
+
+    @Test
+    public void testSchemasMisalignedWhenArityDiffers() {
+        InsertStmt stmt = byPositionInsertStmt();
+        OlapTable target = olapTableWithColumns("k", "v");
+        TableFunctionTable source = tableFunctionTableWithColumns("k", "v", "extra");
+
+        assertFalse(InsertFromFilesPreSplitHook.schemasAlignForByPositionInsert(stmt, target, source));
+    }
+
+    @Test
+    public void testSchemasAlignWhenByNameMappingEvenWithReorderedSource() {
+        // By-name mapping pairs target column k with FILES column k regardless of
+        // position, so the by-name sampler read matches what the load writes.
+        InsertStmt stmt = mock(InsertStmt.class);
+        when(stmt.isColumnMatchByName()).thenReturn(true);
+        OlapTable target = olapTableWithColumns("k", "v");
+        TableFunctionTable source = tableFunctionTableWithColumns("v", "k");
+
+        assertTrue(InsertFromFilesPreSplitHook.schemasAlignForByPositionInsert(stmt, target, source));
+    }
+
+    private static InsertStmt byPositionInsertStmt() {
+        InsertStmt stmt = mock(InsertStmt.class);
+        when(stmt.isColumnMatchByName()).thenReturn(false);
+        return stmt;
+    }
+
+    private static OlapTable olapTableWithColumns(String... columnNames) {
+        // Resolve inner column mocks first; Mockito's per-thread stubbing state
+        // does not allow nested mock()/when() inside another when() argument.
+        List<Column> columns = columnsNamed(columnNames);
+        OlapTable table = mock(OlapTable.class);
+        when(table.getBaseSchemaWithoutGeneratedColumn()).thenReturn(columns);
+        return table;
+    }
+
+    private static TableFunctionTable tableFunctionTableWithColumns(String... columnNames) {
+        List<Column> columns = columnsNamed(columnNames);
+        TableFunctionTable table = mock(TableFunctionTable.class);
+        when(table.getFullSchema()).thenReturn(columns);
+        return table;
+    }
+
+    private static List<Column> columnsNamed(String... columnNames) {
+        List<Column> columns = new ArrayList<>(columnNames.length);
+        for (String name : columnNames) {
+            Column column = mock(Column.class);
+            when(column.getName()).thenReturn(name);
+            columns.add(column);
+        }
+        return columns;
+    }
+
     private static InsertStmt simpleFilesInsertStmt() {
-        // A minimal Insert-from-FILES shape so the Config-flag and txn checks
-        // are the only meaningful gates. The selectRelation's getRelation()
-        // returns a FileTableFunctionRelation but the hook never reaches that
-        // line in these tests — the gate it's testing fires first.
+        // A minimal `INSERT INTO t SELECT * FROM FILES(...)` shape that passes
+        // every cheap pre-filter inside extractSingleFilesSource. Tests that
+        // want to exercise a downstream branch (tableRef normalization, txn
+        // checks) start from here.
+        return insertStmtWithQueryRelation(bareStarSelectRelationOver(mock(FileTableFunctionRelation.class)));
+    }
+
+    private static SelectRelation bareStarSelectRelationOver(Relation from) {
+        // Match the production AST invariant: excludedColumns is final and
+        // always non-null. Without this stub Mockito returns null and the
+        // production `!isEmpty()` check would NPE.
+        SelectListItem starItem = mock(SelectListItem.class);
+        when(starItem.isStar()).thenReturn(true);
+        when(starItem.getExcludedColumns()).thenReturn(List.of());
+        return filesSelectRelationWithSelectList(selectListOf(starItem), from);
+    }
+
+    private static SelectRelation filesSelectRelationWithSelectList(SelectList selectList) {
+        return filesSelectRelationWithSelectList(selectList, mock(FileTableFunctionRelation.class));
+    }
+
+    private static SelectRelation filesSelectRelationWithSelectList(SelectList selectList, Relation from) {
         SelectRelation selectRelation = mock(SelectRelation.class);
         when(selectRelation.getCteRelations()).thenReturn(List.of());
-        when(selectRelation.getRelation()).thenReturn(mock(FileTableFunctionRelation.class));
-        return insertStmtWithQueryRelation(selectRelation);
+        when(selectRelation.getRelation()).thenReturn(from);
+        when(selectRelation.getSelectList()).thenReturn(selectList);
+        return selectRelation;
+    }
+
+    private static SelectList selectListOf(SelectListItem... items) {
+        SelectList selectList = mock(SelectList.class);
+        when(selectList.getItems()).thenReturn(List.of(items));
+        return selectList;
     }
 
     private static InsertStmt insertStmtWithQueryRelation(QueryRelation queryRelation) {
