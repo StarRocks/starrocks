@@ -94,7 +94,7 @@ public class ColumnRefFactory {
     }
 
     private ColumnRefOperator create(int id, String name, Type type, boolean nullable, boolean isLambdaArg) {
-        ColumnRefOperator columnRef = new ColumnRefOperator(id, type, name, nullable, isLambdaArg);
+        ColumnRefOperator columnRef = new ColumnRefOperator(id, type, name, nullable, isLambdaArg, this);
         columnRefs.add(columnRef);
         return columnRef;
     }
