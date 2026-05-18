@@ -84,6 +84,7 @@ target_link_libraries(ExprCore PUBLIC RuntimeCore)
 set(EXPR_FILES
   agg/data_sketch/ds_hll.cpp
   agg/data_sketch/ds_theta.cpp
+  ds_theta_functions.cpp
   agg/factory/aggregate_factory.cpp
   agg/factory/aggregate_resolver_approx.cpp
   agg/factory/aggregate_resolver_avg.cpp

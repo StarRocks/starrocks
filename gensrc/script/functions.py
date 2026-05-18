@@ -850,6 +850,11 @@ vectorized_functions = [
     [91003, 'bitmap_to_binary', False, True, 'VARBINARY', ['BITMAP'], 'BitmapFunctions::bitmap_to_binary'],
     [91004, 'bitmap_from_binary', False, False, 'BITMAP', ['VARBINARY'], 'BitmapFunctions::bitmap_from_binary'],
 
+    # data sketches theta scalar set operations
+    [91100, 'ds_theta_union', False, False, 'VARBINARY', ['VARBINARY', 'VARBINARY'], 'DsThetaFunctions::ds_theta_union'],
+    [91101, 'ds_theta_intersect', False, False, 'VARBINARY', ['VARBINARY', 'VARBINARY'], 'DsThetaFunctions::ds_theta_intersect'],
+    [91102, 'ds_theta_a_not_b', False, False, 'VARBINARY', ['VARBINARY', 'VARBINARY'], 'DsThetaFunctions::ds_theta_a_not_b'],
+
     # hash function
     [100010, 'murmur_hash3_32', True, False, 'INT', ['VARCHAR', '...'], 'HashFunctions::murmur_hash3_32'],
     [100021, 'xx_hash3_64', True, False, 'BIGINT', ['VARCHAR', '...'], 'HashFunctions::xx_hash3_64'],

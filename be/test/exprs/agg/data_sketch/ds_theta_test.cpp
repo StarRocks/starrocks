@@ -104,4 +104,26 @@ TEST_F(DataSketchsThetaTest, TestSerializeDeserialize2) {
         ASSERT_EQ(theta4.estimate_cardinality(), 100);
     }
 }
+
+// Disjoint sets produce a merged sketch whose estimate is the sum of inputs
+// (within theta error). Guards against accidental serialization drift in the
+// Apache DataSketches compact theta format used on the wire.
+TEST_F(DataSketchsThetaTest, TestMergeDisjointSets) {
+    int64_t memory_usage = 0;
+    DataSketchesTheta theta_a(&memory_usage);
+    DataSketchesTheta theta_b(&memory_usage);
+    for (int i = 0; i < 1000; i++) {
+        theta_a.update(i);
+    }
+    for (int i = 10000; i < 11000; i++) {
+        theta_b.update(i);
+    }
+    DataSketchesTheta merged(&memory_usage);
+    merged.merge(theta_a);
+    merged.merge(theta_b);
+    int64_t est = merged.estimate_cardinality();
+    // Apache DataSketches default lg_k=12 gives ~3.125% relative error at 95% CI;
+    // 10% bounds are very generous so flakiness is impossible.
+    EXPECT_NEAR(est, 2000, 200);
+}
 } // namespace starrocks
