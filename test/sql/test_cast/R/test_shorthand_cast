@@ -144,7 +144,7 @@ create table ctas_dst properties ("replication_num" = "1") as
 drop database shorthand_cast_${uuid0};
 -- result:
 -- !result
--- name: test_shorthand_cast_view_mv_canonicalization @native
+-- name: test_shorthand_cast_view_mv_persisted_definition @native
 create database shorthand_cast_catalog_${uuid0};
 -- result:
 -- !result
@@ -183,6 +183,37 @@ PROPERTIES \(
 \)
 AS SELECT `shorthand_cast_catalog_[0-9a-f]{32}`\.`src`\.`id`, CAST\(`shorthand_cast_catalog_[0-9a-f]{32}`\.`src`\.`x` AS INT\) AS `x_int`
 FROM `shorthand_cast_catalog_[0-9a-f]{32}`\.`src`;
+-- !result
+set enable_persist_canonical_view_sql = false;
+-- result:
+-- !result
+create view shorthand_cast_raw_view as select id, x::int as x_int from src;
+-- result:
+-- !result
+show create view shorthand_cast_raw_view;
+-- result:
+[REGEX]shorthand_cast_raw_view\s+CREATE VIEW `shorthand_cast_raw_view` \(`id`, `x_int`\) SECURITY NONE AS select id, x::int as x_int from src;\s+utf8\s+utf8_general_ci
+-- !result
+create materialized view shorthand_cast_raw_mv
+distributed by hash(id)
+refresh deferred manual
+as select id, x::int as x_int from src;
+-- result:
+-- !result
+show create materialized view shorthand_cast_raw_mv;
+-- result:
+[REGEX]shorthand_cast_raw_mv\s+CREATE MATERIALIZED VIEW `shorthand_cast_raw_mv` \(`id`, `x_int`\)
+DISTRIBUTED BY HASH\(`id`\)
+REFRESH DEFERRED MANUAL
+PROPERTIES \(
+"replicated_storage" = "true",
+"replication_num" = "1",
+"storage_medium" = "HDD"
+\)
+AS select id, x::int as x_int from src;
+-- !result
+set enable_persist_canonical_view_sql = true;
+-- result:
 -- !result
 drop database shorthand_cast_catalog_${uuid0};
 -- result:

@@ -71,6 +71,18 @@ Example 2: Same conversions using the `::` shorthand.
     select (1 + 2)::DECIMAL(10,2); -- parenthesized expression
 ```
 
+`::` is equivalent to `CAST(input AS type)` during query execution. Views and materialized views always keep an internal normalized SQL definition. For `CREATE VIEW`, `ALTER VIEW ... AS ...`, and `CREATE MATERIALIZED VIEW`, [`enable_persist_canonical_view_sql`](../System_variable.md#enable_persist_canonical_view_sql) controls only the saved original definition text. When enabled, `SHOW CREATE VIEW` and `SHOW CREATE MATERIALIZED VIEW` will show `CAST(input AS type)` instead of `input::type`.
+
+To preserve the raw `::` syntax in the saved original definition text, set the variable to `false` before running the DDL:
+
+```SQL
+SET enable_persist_canonical_view_sql = false;
+```
+
+> **Note**
+>
+> Disabling this variable can persist `::` in view and materialized view definitions. These definitions are not backward compatible with older StarRocks versions.
+
 Example 3: Convert the input into ARRAY.
 
 ```Plain Text

@@ -742,6 +742,11 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 * 默认值：true
 * 引入版本：v3.0
 
+### enable_persist_canonical_view_sql
+
+* 描述：是否将 `CREATE VIEW`、`ALTER VIEW ... AS ...` 和 `CREATE MATERIALIZED VIEW` 的原始定义存储为规范 SQL，而不是原始查询文本。该变量不影响内部规范 SQL 定义或 `ALTER MATERIALIZED VIEW` 的 Schema Change 重写。
+* 默认值：true
+
 ### enable_phased_scheduler
 
 * 描述: 是否启用多阶段调度。当启用多阶段调度时，系统将根据 Fragment 之间的依赖关系进行调度。例如，系统将首先调度 Shuffle Join 的 Build Side Fragment ，然后调度 Probe Side Fragment （注意，与分阶段调度不同，多阶段调度仍处于 MPP 执行模式下）。启用多阶段调度可显著降低大量 UNION ALL 查询的内存使用量。

@@ -92,7 +92,7 @@ public class ViewAnalyzer {
             Preconditions.checkArgument(stmt.getQueryStartIndex() >= 0 && stmt.getQueryStopIndex() >= stmt.getQueryStartIndex(),
                     "View's query start or stop index is invalid");
             String originalDefineSql = originalViewDef.substring(stmt.getQueryStartIndex(), stmt.getQueryStopIndex());
-            stmt.setOriginalViewDefineSql(canonicalizeShorthandCast(originalDefineSql, viewSql));
+            stmt.setOriginalViewDefineSql(getPersistedViewDefineSql(context, originalDefineSql, viewSql));
             return null;
         }
 
@@ -147,12 +147,12 @@ public class ViewAnalyzer {
                     "View's query start or stop index is invalid");
             String originalDefineSql = originalViewDef.substring(alterViewClause.getQueryStartIndex(),
                     alterViewClause.getQueryStopIndex());
-            alterViewClause.setOriginalViewDefineSql(canonicalizeShorthandCast(originalDefineSql, viewSql));
+            alterViewClause.setOriginalViewDefineSql(getPersistedViewDefineSql(context, originalDefineSql, viewSql));
             return null;
         }
 
-        private String canonicalizeShorthandCast(String originalDefineSql, String canonicalDefineSql) {
-            if (originalDefineSql.contains("::")) {
+        private String getPersistedViewDefineSql(ConnectContext context, String originalDefineSql, String canonicalDefineSql) {
+            if (context.getSessionVariable().isEnablePersistCanonicalViewSql()) {
                 return canonicalDefineSql;
             }
             return originalDefineSql;

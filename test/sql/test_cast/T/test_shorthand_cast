@@ -57,7 +57,7 @@ create table ctas_dst properties ("replication_num" = "1") as
 [ORDER]select id, x::int from src where x::int in (select y::int from dim) order by id;
 drop database shorthand_cast_${uuid0};
 
--- name: test_shorthand_cast_view_mv_canonicalization @native
+-- name: test_shorthand_cast_view_mv_persisted_definition @native
 create database shorthand_cast_catalog_${uuid0};
 use shorthand_cast_catalog_${uuid0};
 create table src (
@@ -71,4 +71,13 @@ distributed by hash(id)
 refresh deferred manual
 as select id, x::int as x_int from src;
 show create materialized view shorthand_cast_mv;
+set enable_persist_canonical_view_sql = false;
+create view shorthand_cast_raw_view as select id, x::int as x_int from src;
+show create view shorthand_cast_raw_view;
+create materialized view shorthand_cast_raw_mv
+distributed by hash(id)
+refresh deferred manual
+as select id, x::int as x_int from src;
+show create materialized view shorthand_cast_raw_mv;
+set enable_persist_canonical_view_sql = true;
 drop database shorthand_cast_catalog_${uuid0};

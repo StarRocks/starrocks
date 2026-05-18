@@ -976,6 +976,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String HDFS_BACKEND_SELECTOR_SCAN_RANGE_SHUFFLE = "hdfs_backend_selector_scan_range_shuffle";
 
     public static final String SQL_QUOTE_SHOW_CREATE = "sql_quote_show_create";
+    public static final String ENABLE_PERSIST_CANONICAL_VIEW_SQL = "enable_persist_canonical_view_sql";
 
     public static final String ENABLE_PLAN_VALIDATION = "enable_plan_validation";
 
@@ -2997,6 +2998,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = SQL_QUOTE_SHOW_CREATE)
     private boolean quoteShowCreate = true; // Defined but unused now, for compatibility with MySQL
+
+    @VarAttr(name = ENABLE_PERSIST_CANONICAL_VIEW_SQL)
+    private boolean enablePersistCanonicalViewSql = true;
 
     @VariableMgr.VarAttr(name = GROUP_CONCAT_MAX_LEN)
     private long groupConcatMaxLen = 1024;
@@ -5453,6 +5457,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setEnableDialectDowngrade(boolean enableDialectDowngrade) {
         this.enableDialectDowngrade = enableDialectDowngrade;
+    }
+
+    public boolean isEnablePersistCanonicalViewSql() {
+        return enablePersistCanonicalViewSql;
+    }
+
+    public void setEnablePersistCanonicalViewSql(boolean enablePersistCanonicalViewSql) {
+        this.enablePersistCanonicalViewSql = enablePersistCanonicalViewSql;
     }
 
     public boolean isEnableOuterJoinReorder() {
