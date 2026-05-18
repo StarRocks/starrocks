@@ -22,6 +22,7 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.stream.Collectors;
 import javax.validation.constraints.NotNull;
 
 public class DataSkew {
@@ -62,12 +63,13 @@ public class DataSkew {
             this(type, additionalInfo, Optional.empty());
         }
 
-        public SkewInfo(SkewType type, Optional<List<Pair<String, Long>>> maybeMcvs) {
-            this(type, AdditionalInfo.NONE, maybeMcvs);
-        }
-
         public boolean isSkewed() {
             return type != SkewType.NOT_SKEWED;
+        }
+
+        public Optional<Map<String, Long>> getMcvs() {
+            return maybeMcvs.map(mcvs -> mcvs.stream() //
+                    .collect(Collectors.toMap(pair -> pair.first, pair -> pair.second)));
         }
     }
 
@@ -148,7 +150,8 @@ public class DataSkew {
      */
     public static SkewInfo getColumnSkewInfo(@NotNull Statistics statistics, @NotNull ColumnStatistic columnStatistic,
                                              Thresholds thresholds) {
-        if (statistics.isTableRowCountMayInaccurate() || statistics.getOutputRowCount() < 1) {
+        final var rowCount = statistics.getOutputRowCount();
+        if (statistics.isTableRowCountMayInaccurate() || rowCount < 1) {
             // Without sufficient information we can not make a decision.
             return new SkewInfo(SkewType.NOT_SKEWED, AdditionalInfo.INACCURATE_ROW_COUNT);
         }
@@ -188,5 +191,16 @@ public class DataSkew {
     /* Always using default thresholds */
     public static boolean isColumnSkewed(@NotNull Statistics statistics, @NotNull ColumnStatistic columnStatistic) {
         return isColumnSkewed(statistics, columnStatistic, DEFAULT_THRESHOLDS);
+    }
+
+    public static long getOverlappingMcvRowCount(Map<String, Long> mcvs, Map<String, Long> otherMcvs) {
+        if (mcvs == null || mcvs.isEmpty() || otherMcvs == null || otherMcvs.isEmpty()) {
+            return 0;
+        }
+
+        return mcvs.entrySet().stream() //
+                .filter(mcv -> otherMcvs.containsKey(mcv.getKey())) //
+                .mapToLong(Map.Entry::getValue) //
+                .sum();
     }
 }
