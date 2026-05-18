@@ -15,6 +15,7 @@
 #include "exec/pipeline/exchange/sink_buffer.h"
 
 #include <bthread/bthread.h>
+#include <fmt/std.h>
 
 #include <cstddef>
 #include <mutex>
