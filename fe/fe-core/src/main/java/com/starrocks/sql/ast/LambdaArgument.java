@@ -15,6 +15,7 @@
 
 package com.starrocks.sql.ast;
 
+<<<<<<< HEAD:fe/fe-core/src/main/java/com/starrocks/sql/ast/LambdaArgument.java
 import com.google.common.base.Preconditions;
 import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.Expr;
@@ -23,20 +24,14 @@ import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.thrift.TExprNode;
+=======
+import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.AstVisitorExtendInterface;
+>>>>>>> e988c40d5c ([Refactor] Move LambdaArgument transformed ref cache to ColumnRefFactory (#73273)):fe/fe-core/src/main/java/com/starrocks/sql/ast/expression/LambdaArgument.java
 
 public class LambdaArgument extends Expr {
     private String name;
     private boolean nullable;
-
-    ColumnRefOperator transformedOp = null;
-
-    public ColumnRefOperator getTransformed() {
-        return transformedOp;
-    }
-
-    public void setTransformed(ColumnRefOperator op) {
-        transformedOp = op;
-    }
 
     public LambdaArgument(String name) {
         this.name = name;

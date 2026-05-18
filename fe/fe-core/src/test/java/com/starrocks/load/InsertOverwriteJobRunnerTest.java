@@ -29,11 +29,12 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
-import com.starrocks.sql.ast.AstTraverser;
 import com.starrocks.sql.ast.InsertStmt;
+<<<<<<< HEAD
 import com.starrocks.sql.ast.LambdaArgument;
+=======
+>>>>>>> e988c40d5c ([Refactor] Move LambdaArgument transformed ref cache to ColumnRefFactory (#73273))
 import com.starrocks.sql.common.DmlException;
-import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.statistic.StatisticsMetaManager;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
@@ -43,8 +44,6 @@ import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 
 import java.sql.SQLException;
-import java.util.ArrayList;
-import java.util.List;
 
 public class InsertOverwriteJobRunnerTest {
 
@@ -333,6 +332,7 @@ public class InsertOverwriteJobRunnerTest {
     }
 
     @Test
+<<<<<<< HEAD
     public void testClearLambdaArgumentTransformedOps() throws Exception {
         // Test that clearLambdaArgumentTransformedOps correctly clears all LambdaArgument.transformedOp
         // in the AST tree. This is critical for INSERT OVERWRITE re-plan correctness.
@@ -385,16 +385,18 @@ public class InsertOverwriteJobRunnerTest {
     }
 
     @Test
+=======
+>>>>>>> e988c40d5c ([Refactor] Move LambdaArgument transformed ref cache to ColumnRefFactory (#73273))
     public void testInsertOverwriteWithUnionAllAndLambda() throws Exception {
-        // Integration test: INSERT OVERWRITE + UNION ALL + Lambda expressions
-        // This is the exact scenario that triggers the "expr_type does not match slot_type" bug
-        // if clearLambdaArgumentTransformedOps is not called before re-plan.
+        // Integration regression for issue #72831: INSERT OVERWRITE + UNION ALL + lambda used to
+        // surface "expr_type does not match slot_type" because the second plan was reading
+        // ColumnRefOperators allocated by the first plan's ColumnRefFactory. The lambda-arg cache
+        // now lives on ColumnRefFactory, so re-plan automatically starts with a fresh cache.
         connectContext.getSessionVariable().setOptimizerExecuteTimeout(300000000);
         String sql = "insert overwrite t_lambda_target " +
                 "select k1, array_map(x -> x + 1, k2) from t_lambda_src1 " +
                 "union all " +
                 "select k1, array_map(x -> x + 2, k2) from t_lambda_src2";
-        // This should not throw any exception (especially not "expr_type does not match slot_type")
         cluster.runSql("insert_overwrite_test", sql);
     }
 }

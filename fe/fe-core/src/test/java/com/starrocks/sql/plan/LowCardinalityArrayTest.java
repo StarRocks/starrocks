@@ -1081,4 +1081,62 @@ public class LowCardinalityArrayTest extends PlanTestBase {
                 "  |  window: ROWS BETWEEN UNBOUNDED PRECEDING AND 1 FOLLOWING\n" +
                 "  |  cardinality: 1"), plan);
     }
+<<<<<<< HEAD
 }
+=======
+
+    @Test
+    public void testLeadLagUsingArrayAsParameterType() throws Exception {
+
+        String sql = "select /*+SET_VAR(array_low_cardinality_optimize=true)*/ v1, v2," +
+                " lead(a1) over(partition by v1 order by v2)\n" +
+                "  from s1;";
+        String plan = getVerboseExplain(sql);
+        Assertions.assertTrue(plan.contains("  4:Decode\n" +
+                "  |  <dict id 7> : <string id 5>\n" +
+                "  |  cardinality: 1\n" +
+                "  |  \n" +
+                "  3:Project\n" +
+                "  |  output columns:\n" +
+                "  |  1 <-> [1: v1, BIGINT, true]\n" +
+                "  |  2 <-> [2: v2, INT, true]\n" +
+                "  |  7 <-> [7: lead(3: a1, 1, null), ARRAY<INT>, true]\n" +
+                "  |  cardinality: 1\n" +
+                "  |  \n" +
+                "  2:ANALYTIC\n" +
+                "  |  functions: [, lead[([6: a1, ARRAY<INT>, true], 1, NULL); " +
+                "args: INVALID_TYPE; result: ARRAY<INT>; args nullable: true; result nullable: true], ]\n" +
+                "  |  partition by: [1: v1, BIGINT, true]"));
+    }
+
+    // Regression for the LambdaArgument transformed-ref cache refactor (issue #72831 / PR #72832).
+    // Two array_map calls reuse the same lambda argument name `x` on different array<varchar>
+    // columns of the low-cardinality-eligible table s3. The two LambdaArgument AST nodes are
+    // distinct instances; the factory-scoped IdentityHashMap cache must give each its own
+    // ColumnRefOperator. A name-keyed cache (or any cache that conflates AST identity) would
+    // collapse the two `x`s into one slot id, mixing the two lambda bodies' argument bindings.
+    @Test
+    public void testLambdaOverLowCardinalityArray() throws Exception {
+        String sql = "select array_map(x -> upper(x), a1), array_map(x -> lower(x), a3) "
+                + "from s3 where v1 > 0;";
+        String plan = getVerboseExplain(sql);
+        assertContains(plan, "upper");
+        assertContains(plan, "lower");
+        // Exactly two array_map operators survived translation + optimization.
+        Assertions.assertEquals(2, plan.split("array_map\\[", -1).length - 1,
+                "expected two array_map operators, plan was:\n" + plan);
+        // Core invariant: the two lambdas' argument slot ids must differ. The plan format is
+        // `array_map[([<slot-id>, VARCHAR... -> ...`. If a future change collapses the cache
+        // by name instead of identity, both would render with the same slot id and this fails.
+        java.util.regex.Matcher m = java.util.regex.Pattern
+                .compile("array_map\\[\\(\\[(\\d+),\\s*VARCHAR")
+                .matcher(plan);
+        Assertions.assertTrue(m.find(), "first array_map arg slot not found, plan was:\n" + plan);
+        String firstSlot = m.group(1);
+        Assertions.assertTrue(m.find(), "second array_map arg slot not found, plan was:\n" + plan);
+        String secondSlot = m.group(1);
+        Assertions.assertNotEquals(firstSlot, secondSlot,
+                "two array_map calls reusing arg name `x` must get distinct slot ids, plan was:\n" + plan);
+    }
+}
+>>>>>>> e988c40d5c ([Refactor] Move LambdaArgument transformed ref cache to ColumnRefFactory (#73273))
