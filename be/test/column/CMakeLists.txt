@@ -26,6 +26,7 @@ set(COLUMN_TEST_FILES
     column_hash_core_test.cpp
     array_column_core_test.cpp
     array_view_column_core_test.cpp
+    arrow_to_json_converter_test.cpp
     map_column_core_test.cpp
     struct_column_core_test.cpp
     binary_column_core_test.cpp

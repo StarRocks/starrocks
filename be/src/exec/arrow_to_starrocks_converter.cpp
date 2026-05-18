@@ -24,6 +24,7 @@
 #include "arrow/type_traits.h"
 #include "base/utility/pred_guard.h"
 #include "column/array_column.h"
+#include "column/arrow/arrow_to_json_converter.h"
 #include "column/map_column.h"
 #include "column/nullable_column.h"
 #include "column/runtime_type_traits.h"
@@ -862,10 +863,6 @@ struct ArrowConverter<AT, LT, is_nullable, is_strict, DateOrDateTimeATGuard<AT>,
         return Status::OK();
     }
 };
-
-// Convert nested arrow type(Map,List,Struct...) to Json
-Status convert_arrow_to_json(const arrow::Array* array, JsonColumn* output, size_t array_start_idx,
-                             size_t num_elements);
 
 template <ArrowTypeId AT, LogicalType LT, bool is_nullable, bool is_strict>
 struct ArrowConverter<AT, LT, is_nullable, is_strict, JsonGuard<LT>> {
