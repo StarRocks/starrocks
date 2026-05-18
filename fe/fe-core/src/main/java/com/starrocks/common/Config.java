@@ -889,6 +889,13 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true, comment = "Schedule strategy of pending queries: SWRR/SJF")
     public static String query_queue_v2_schedule_strategy = QueryQueueOptions.SchedulePolicy.createDefault().name();
 
+    @ConfField(mutable = true,
+            comment = "A pending query is considered 'big' if its raw (un-clamped) estimated " +
+                    "slots exceed totalSlots * this ratio. Surfaced via metric " +
+                    "`query_queue_pending_big_query_count`. Default 1.0 means only queries that fully " +
+                    "exceed current capacity are flagged.")
+    public static double query_queue_big_query_slot_threshold_ratio = 1.0;
+
     @ConfField(mutable = true, comment = "Slot estimator strategy of queue based queries: MBE/PBE/MAX/MIN")
     public static String query_queue_slots_estimator_strategy = SlotEstimatorFactory.EstimatorPolicy.createDefault().name();
 

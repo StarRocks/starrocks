@@ -642,6 +642,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: 发布验证任务发出的时间间隔。
 - 引入版本: -
 
+### `query_queue_big_query_slot_threshold_ratio`
+
+- 默认值: 1.0
+- 类型: Double
+- 单位: 比例
+- 是否可变: Yes
+- 描述: 用于判定查询是否为“大查询”的阈值比例。当待入队查询的原始（未钳制）预估 slot 数超过 `totalSlots × 此比例` 时，该查询被标记为大查询，并反映在 `query_queue_pending_big_query_count` 指标中。默认值 `1.0` 表示仅当查询所需 slot 完全超过当前集群容量时才被视为大查询。该指标用于外部自动扩容（如 K8s HPA）感知集群压力；可适当降低比例（例如 `0.5`）以提前将查询标记为扩容候选。
+- 引入版本: -
+
 ### `query_queue_slots_estimator_strategy`
 
 - 默认值: MAX

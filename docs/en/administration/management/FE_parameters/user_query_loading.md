@@ -642,6 +642,15 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Description: The time interval at which release validation tasks are issued.
 - Introduced in: -
 
+### `query_queue_big_query_slot_threshold_ratio`
+
+- Default: 1.0
+- Type: Double
+- Unit: Ratio
+- Is mutable: Yes
+- Description: A pending query is considered "big" when its raw (un-clamped) estimated slot count exceeds `totalSlots × this ratio`. Drives the metric `query_queue_pending_big_query_count` used by external auto-scalers. The default value of `1.0` means only queries whose raw slot estimate fully exceeds current cluster capacity are flagged. Lower the ratio (for example, `0.5`) to flag queries earlier as candidates for scale-out.
+- Introduced in: -
+
 ### `query_queue_slots_estimator_strategy`
 
 - Default: MAX

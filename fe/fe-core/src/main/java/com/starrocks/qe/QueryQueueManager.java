@@ -14,6 +14,7 @@
 
 package com.starrocks.qe;
 
+import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.UUIDUtil;
@@ -90,8 +91,7 @@ public class QueryQueueManager {
             }
 
             if (trackedInFlight) {
-                // TODO(B1): switch to Config.query_queue_big_query_slot_threshold_ratio
-                final double thresholdRatio = 1.0;
+                final double thresholdRatio = Config.query_queue_big_query_slot_threshold_ratio;
                 final boolean isBigQuery = totalSlots > 0
                         && estimate.rawSlots() > (long) Math.ceil(totalSlots * thresholdRatio);
                 WarehouseInFlightTracker.getInstance().onEnterPending(
