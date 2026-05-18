@@ -25,10 +25,13 @@
 #include "fs/fs_broker.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
+#include "runtime/runtime_state_helper.h"
 #include "runtime/stream_load/load_stream_mgr.h"
 #include "runtime/stream_load/stream_load_pipe.h"
 
 namespace starrocks {
+
+static const int MAX_ERROR_MESSAGE_COUNTER = 100;
 
 ParquetScanner::ParquetScanner(RuntimeState* state, RuntimeProfile* profile, const TBrokerScanRange& scan_range,
                                ScannerCounter* counter, bool schema_only)
@@ -40,7 +43,15 @@ ParquetScanner::ParquetScanner(RuntimeState* state, RuntimeProfile* profile, con
           _max_chunk_size(state->chunk_size() ? state->chunk_size() : 4096) {
     _file_format_str = "parquet";
     _chunk_filter.reserve(_max_chunk_size);
-    _conv_ctx.state = state;
+    _conv_ctx.timezone = state->timezone();
+    _conv_ctx.report_error_message = [state, ctx = &_conv_ctx](const std::string& reason, const std::string& raw_data) {
+        if (ctx->error_message_counter > MAX_ERROR_MESSAGE_COUNTER) return;
+        ctx->error_message_counter += 1;
+        std::string error_msg =
+                strings::Substitute("file = $0, column = $1, raw data = $2", ctx->current_file,
+                                    ctx->current_column_name.empty() ? "null" : ctx->current_column_name, raw_data);
+        RuntimeStateHelper::append_error_msg_to_file(state, error_msg, reason);
+    };
 }
 
 ParquetScanner::~ParquetScanner() = default;
@@ -107,7 +118,7 @@ Status ParquetScanner::append_batch_to_src_chunk(ChunkPtr* chunk) {
         if (slot_desc == nullptr) {
             continue;
         }
-        _conv_ctx.current_slot = slot_desc;
+        _conv_ctx.set_current_column(slot_desc->col_name(), slot_desc->type());
         auto* column = (*chunk)->get_column_raw_ptr_by_slot_id(slot_desc->id());
         auto array_ptr = _batch->GetColumnByName(std::string(slot_desc->col_name()));
         if (array_ptr == nullptr) {

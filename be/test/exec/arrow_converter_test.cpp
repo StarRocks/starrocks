@@ -32,7 +32,6 @@
 #include "column/vectorized_fwd.h"
 #include "exec/arrow_to_starrocks_converter.h"
 #include "exec/file_scanner/parquet_scanner.h"
-#include "runtime/descriptors.h"
 #include "types/datetime_value.h"
 #include "util/arrow/row_batch.h"
 
@@ -963,6 +962,23 @@ PARALLEL_TEST(ArrowConverterTest, test_timestamp_to_datetime) {
         test_datetime<ArrowTypeId::TIMESTAMP, TYPE_DATETIME, arrow::TimestampType>(type, test_cases);
         test_nullable_datetime<ArrowTypeId::TIMESTAMP, TYPE_DATETIME, arrow::TimestampType>(type, test_cases);
     }
+}
+
+PARALLEL_TEST(ArrowConverterTest, test_timestamp_convert_uses_context_timezone) {
+    auto type = std::make_shared<arrow::TimestampType>(arrow::TimeUnit::SECOND, "UTC");
+    size_t counter = 0;
+    auto array = create_constant_datetime_array<arrow::TimestampType, false>(1, 0, type, counter);
+    ConvertFuncTree cf(get_arrow_converter(ArrowTypeId::TIMESTAMP, TYPE_DATETIME, false, false));
+    ASSERT_TRUE(cf.func != nullptr);
+
+    ArrowConvertContext ctx;
+    ctx.timezone = "Asia/Shanghai";
+    auto column = TimestampColumn::create();
+    Filter filter(1, 1);
+    ASSERT_STATUS_OK(
+            convert_arrow_array_to_column(&cf, array->length(), array.get(), column.get(), 0, 0, &filter, &ctx));
+
+    ASSERT_EQ(column->get_data()[0], string_to_datetime<TYPE_DATETIME>("1970-01-01 08:00:00"));
 }
 
 template <bool is_nullable>
@@ -1919,8 +1935,27 @@ PARALLEL_TEST(ArrowConverterTest, test_string_view_nullable_non_strict_overflow)
     }
 }
 
-// Strict overflow with ArrowConvertContext — exercises ctx->current_slot->type().len
-// (lines 379-380) and ctx->report_error_message() (lines 425-429).
+PARALLEL_TEST(ArrowConverterTest, test_arrow_convert_context_uses_single_error_reporter_callback) {
+    ArrowConvertContext ctx;
+    ctx.current_file = "test_file.parquet";
+    ctx.set_current_column("test_col", TypeDescriptor::create_varchar_type(5));
+
+    std::string reported_reason;
+    std::string reported_raw_data;
+    std::string reported_column;
+    ctx.report_error_message = [&](const std::string& reason, const std::string& raw_data) {
+        reported_reason = reason;
+        reported_raw_data = raw_data;
+        reported_column = ctx.current_column_name;
+    };
+    ctx.report_error_message("too long", "abcdef");
+
+    ASSERT_EQ(reported_reason, "too long");
+    ASSERT_EQ(reported_raw_data, "abcdef");
+    ASSERT_EQ(reported_column, "test_col");
+}
+
+// Strict overflow with ArrowConvertContext primitive metadata.
 PARALLEL_TEST(ArrowConverterTest, test_string_view_strict_overflow_with_ctx) {
     // CHAR(10): strings > 10 bytes should be rejected
     std::vector<std::string> values = {
@@ -1931,11 +1966,10 @@ PARALLEL_TEST(ArrowConverterTest, test_string_view_strict_overflow_with_ctx) {
     };
     auto array = create_string_view_array(values);
 
-    // Build ArrowConvertContext with a CHAR(10) SlotDescriptor
-    SlotDescriptor slot(0, "test_col", TypeDescriptor::create_char_type(10));
+    // Build ArrowConvertContext with CHAR(10) metadata.
+    TypeDescriptor char_type = TypeDescriptor::create_char_type(10);
     ArrowConvertContext ctx;
-    ctx.state = nullptr;
-    ctx.current_slot = &slot;
+    ctx.set_current_column("test_col", char_type);
 
     auto conv_func = get_arrow_converter(ArrowTypeId::STRING_VIEW, TYPE_CHAR, false, true);
     ASSERT_TRUE(conv_func != nullptr);

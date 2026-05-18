@@ -17,6 +17,10 @@
 #include <arrow/array.h>
 #include <arrow/status.h>
 
+#include <functional>
+#include <string>
+#include <string_view>
+
 #include "base/utility/meta_macro.h"
 #include "column/array_column.h"
 #include "column/arrow/arrow_type_traits.h"
@@ -30,16 +34,22 @@
 #include "types/type_descriptor.h"
 
 namespace starrocks {
-class RuntimeState;
-class SlotDescriptor;
 struct ConvertFuncTree;
 
 struct ArrowConvertContext {
-    class RuntimeState* state;
-    class SlotDescriptor* current_slot;
+    using ErrorReporter = std::function<void(const std::string& reason, const std::string& raw_data)>;
+
+    std::string timezone;
     std::string current_file;
+    std::string current_column_name;
+    size_t current_type_length = 0;
     int error_message_counter = 0;
-    void report_error_message(const std::string& reason, const std::string& raw_data);
+    ErrorReporter report_error_message = nullptr;
+
+    void set_current_column(std::string_view column_name, const TypeDescriptor& type) {
+        current_column_name = std::string(column_name);
+        current_type_length = type.len > 0 ? static_cast<size_t>(type.len) : 0;
+    }
 };
 
 // fill null_column's range [column_start_idx, column_start_idx + num_elements) with

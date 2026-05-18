@@ -32,7 +32,7 @@ BenchmarkScanner::BenchmarkScanner(BenchmarkScannerParam param, const TupleDescr
         : _param(std::move(param)), _slot_descs(tuple_desc->slots()) {}
 
 Status BenchmarkScanner::open(RuntimeState* state) {
-    _conv_ctx.state = state;
+    _conv_ctx.timezone = state->timezone();
     _conv_ctx.current_file = _param.table_name;
     if (_param.options.chunk_size <= 0) {
         _param.options.chunk_size = state->chunk_size();
@@ -92,7 +92,7 @@ Status BenchmarkScanner::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eo
             return Status::NotFound("Benchmark column " + col + " not found in schema");
         }
 
-        _conv_ctx.current_slot = slot_desc;
+        _conv_ctx.set_current_column(slot_desc->col_name(), slot_desc->type());
         RETURN_IF_ERROR(convert_arrow_array_to_column(_conv_funcs[i].get(), num_elements, array.get(),
                                                       raw_chunk->get_column_raw_ptr_by_slot_id(slot_desc->id()),
                                                       _batch_start_idx, 0, &_chunk_filter, &_conv_ctx));
