@@ -241,11 +241,7 @@ public class PaimonMetadataTest {
         assertEquals(Lists.newArrayList("col1"), paimonTable.getPartitionColumnNames());
         assertEquals("hdfs://127.0.0.1:10000/paimon", paimonTable.getTableLocation());
         assertEquals(IntegerType.INT, paimonTable.getBaseSchema().get(0).getType());
-<<<<<<< HEAD
-        assertFalse(paimonTable.getBaseSchema().get(0).isAllowNull());
-=======
-        org.junit.jupiter.api.Assertions.assertTrue(paimonTable.getBaseSchema().get(0).isAllowNull());
->>>>>>> 0d3e30ae99 ([BugFix] Paimon primary key columns incorrectly marked as non-nullable when querying external catalog (#71660))
+        assertTrue(paimonTable.getBaseSchema().get(0).isAllowNull());
         assertEquals(FloatType.DOUBLE, paimonTable.getBaseSchema().get(1).getType());
         assertTrue(paimonTable.getBaseSchema().get(1).isAllowNull());
         assertEquals("paimon_catalog", paimonTable.getCatalogName());
