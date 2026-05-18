@@ -132,6 +132,11 @@ import static com.starrocks.thrift.PlanNodesConstants.CACHE_STATS_TABLET_ID_COLU
 import static com.starrocks.thrift.PlanNodesConstants.CACHE_STATS_TOTAL_BYTES_COLUMN_NAME;
 
 public class QueryAnalyzer {
+<<<<<<< HEAD
+=======
+    private static final String JDBC_QUERY_TABLE_FUNCTION_USAGE =
+            "JDBC query table function only supports TABLE(<catalog>.native_query('<sql>'))";
+>>>>>>> 90ddf9e954 ([Enhancement] Move INSERT external table auto-refresh out of the planner lock path (#73391))
     private final ConnectContext session;
     private final MetadataMgr metadataMgr;
 
@@ -159,7 +164,17 @@ public class QueryAnalyzer {
      * (e.g. JDBC).
      */
     public void analyzeExternalTablesOnly(StatementBase node) {
-        new ExternalTablesOnlyVisitor().process(node);
+        analyzeExternalTablesOnly(node, false);
+    }
+
+    /**
+     * Pre-resolve external tables without touching internal table metadata.
+     * When {@code refreshFilesystemExternalTables} is true, filesystem-backed external tables referenced from an
+     * INSERT query are refreshed before lock acquisition so connector/filesystem metadata I/O stays out of the
+     * internal meta-lock critical path.
+     */
+    public void analyzeExternalTablesOnly(StatementBase node, boolean refreshFilesystemExternalTables) {
+        new ExternalTablesOnlyVisitor(refreshFilesystemExternalTables).process(node);
     }
 
     public void analyze(StatementBase node, Scope parent) {
@@ -1838,6 +1853,11 @@ public class QueryAnalyzer {
      */
     private class ExternalTablesOnlyVisitor extends AstTraverser<Void, Void> {
         private final Deque<Set<String>> cteNameStack = new ArrayDeque<>();
+        private final boolean refreshFilesystemExternalTables;
+
+        private ExternalTablesOnlyVisitor(boolean refreshFilesystemExternalTables) {
+            this.refreshFilesystemExternalTables = refreshFilesystemExternalTables;
+        }
 
         public void process(StatementBase node) {
             visit(node);
@@ -1913,6 +1933,9 @@ public class QueryAnalyzer {
             try (Timer ignored = Tracers.watchScope("AnalyzeTable")) {
                 Table table = metadataMgr.getTable(session, catalogName, dbName, tableName.getTbl());
                 if (table != null) {
+                    if (refreshFilesystemExternalTables && table.isExternalTableWithFileSystem()) {
+                        table = refreshFilesystemExternalTable(catalogName, dbName, tableName, table);
+                    }
                     // Validate constraints similar to resolveTable
                     PartitionRef partitionNamesObject = tableRelation.getPartitionNames();
                     if (table.isExternalTableWithFileSystem() && partitionNamesObject != null) {
@@ -1924,6 +1947,13 @@ public class QueryAnalyzer {
                 // The main visitor will handle it correctly.
             }
             return null;
+        }
+
+        private Table refreshFilesystemExternalTable(String catalogName, String dbName,
+                                                     TableName tableName, Table resolvedTable) {
+            metadataMgr.refreshTable(catalogName, dbName, resolvedTable, Lists.newArrayList(), false);
+            Table refreshedTable = metadataMgr.getTable(session, catalogName, dbName, tableName.getTbl());
+            return refreshedTable != null ? refreshedTable : resolvedTable;
         }
 
         @Override
