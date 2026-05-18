@@ -65,7 +65,6 @@ import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.type.NullType;
 import com.starrocks.type.Type;
 import com.starrocks.type.VarcharType;
-import org.apache.iceberg.PartitionField;
 import org.apache.iceberg.SnapshotRef;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -166,7 +165,7 @@ public class InsertAnalyzer {
                 checkStaticKeyPartitionInsert(insertStmt, table, targetPartitionNames);
             } else {
                 if ((insertStmt.isOverwrite() && session.getSessionVariable().isDynamicOverwrite())
-                            && olapTable.supportedAutomaticPartition()) {
+                        && olapTable.supportedAutomaticPartition()) {
                     insertStmt.setIsDynamicOverwrite(true);
                 } else {
                     for (Partition partition : olapTable.getPartitions()) {
@@ -209,17 +208,6 @@ public class InsertAnalyzer {
                     if (isUnSupportedPartitionColumnType(column.getType())) {
                         throw new SemanticException("Unsupported partition column type [%s] for %s table sink",
                                 column.getType().canonicalName(), table.getType());
-                    }
-                }
-            } else {
-                for (PartitionField field : ((IcebergTable) table).getNativeTable().spec().fields()) {
-                    org.apache.iceberg.types.Type type = ((IcebergTable) table).getNativeTable()
-                            .schema().findType(field.sourceId());
-                    if (type instanceof org.apache.iceberg.types.Types.TimestampType) {
-                        if (((org.apache.iceberg.types.Types.TimestampType) type).shouldAdjustToUTC()) {
-                            throw new SemanticException("Partition column %s with timezone is not supported for sink now",
-                                    field.name());
-                        }
                     }
                 }
             }
@@ -297,7 +285,7 @@ public class InsertAnalyzer {
                         String missingKeyColumns = String.join(",", requiredKeyColumns);
                         ErrorReport.reportSemanticException(ErrorCode.ERR_MISSING_KEY_COLUMNS, missingKeyColumns);
                     }
-                    if (targetColumns.size() < olapTable.getBaseSchemaWithoutGeneratedColumn().size() && 
+                    if (targetColumns.size() < olapTable.getBaseSchemaWithoutGeneratedColumn().size() &&
                             session.getSessionVariable().isEnableInsertPartialUpdate()) {
                         insertStmt.setUsePartialUpdate();
                         // mark if partial update for auto increment column if and only if:
@@ -307,7 +295,7 @@ public class InsertAnalyzer {
                         if (olapTable.hasAutoIncrementColumn() &&
                                 !targetColumns.stream().anyMatch(col -> col.isAutoIncrement())) {
                             Column autoIncrementColumn =
-                                        table.getBaseSchema().stream().filter(Column::isAutoIncrement).findFirst().get();
+                                    table.getBaseSchema().stream().filter(Column::isAutoIncrement).findFirst().get();
                             if (!autoIncrementColumn.isKey()) {
                                 insertStmt.setAutoIncrementPartialUpdate();
                             }
@@ -422,17 +410,17 @@ public class InsertAnalyzer {
 
     /**
      * Push down target table column schema to files() table function.
-     *
+     * <p>
      * Two modes controlled by different switches:
      * 1. insert property "enable_push_down_schema" = true:
-     *    Full push-down — reshapes files() schema to match the effective SELECT list:
-     *    - SlotRef columns: type is rewritten to the matching target column type; added if missing.
-     *    - Function-expression columns: inner SlotRef columns are only ensured to exist in the schema
-     *      (defaulting to VARCHAR if absent); no type push-down, because the function itself determines
-     *      the output type.
-     *    - Extra file columns not referenced in the SELECT list are excluded.
+     * Full push-down — reshapes files() schema to match the effective SELECT list:
+     * - SlotRef columns: type is rewritten to the matching target column type; added if missing.
+     * - Function-expression columns: inner SlotRef columns are only ensured to exist in the schema
+     * (defaulting to VARCHAR if absent); no type push-down, because the function itself determines
+     * the output type.
+     * - Extra file columns not referenced in the SELECT list are excluded.
      * 2. FE config "files_enable_insert_push_down_column_type" = true (default):
-     *    Type-only push-down — only rewrites types of columns that already exist in the inferred files() schema.
+     * Type-only push-down — only rewrites types of columns that already exist in the inferred files() schema.
      */
     private static void pushDownTargetTableSchemaToFiles(InsertStmt insertStmt, ConnectContext session) {
         if (!insertStmt.isEnablePushDownSchema() && !Config.files_enable_insert_push_down_column_type) {
@@ -491,7 +479,7 @@ public class InsertAnalyzer {
      * Does not add or remove columns.
      */
     private static void rewriteFileTableColumnTypes(TableFunctionTable fileTable, InsertStmt insertStmt,
-            Table targetTable, SelectRelation selectRelation) {
+                                                    Table targetTable, SelectRelation selectRelation) {
         List<String> selectColumnNames = Lists.newArrayList();
         List<String> selectOutputNames = Lists.newArrayList();
         for (SelectListItem item : selectRelation.getSelectList().getItems()) {
@@ -558,16 +546,16 @@ public class InsertAnalyzer {
 
     /**
      * Rewrite the files() table schema by pushing down target table column names and types.
-     *
+     * <p>
      * Three kinds of SELECT items are handled:
-     *   - SELECT *: reshape files schema to exactly the target columns (by name or by position)
-     *   - SlotRef (e.g., col_a): push down the corresponding target column's type; add column if missing
-     *   - Function expr (e.g., CAST(col_b AS INT)): inner SlotRef columns are kept as VARCHAR if missing
-     *
+     * - SELECT *: reshape files schema to exactly the target columns (by name or by position)
+     * - SlotRef (e.g., col_a): push down the corresponding target column's type; add column if missing
+     * - Function expr (e.g., CAST(col_b AS INT)): inner SlotRef columns are kept as VARCHAR if missing
+     * <p>
      * The final files schema only contains columns that are actually used in the SELECT list.
      */
     private static void rewriteFileTableSchema(TableFunctionTable fileTable, InsertStmt insertStmt,
-            Table targetTable, SelectRelation selectRelation) {
+                                               Table targetTable, SelectRelation selectRelation) {
         List<String> targetColumnNames = insertStmt.getTargetColumnNames();
         if (targetColumnNames == null) {
             targetColumnNames = ((OlapTable) targetTable).getBaseSchemaWithoutGeneratedColumn().stream()
@@ -657,7 +645,7 @@ public class InsertAnalyzer {
      * BY POSITION: use file column names trimmed or extended to match target column count.
      */
     private static void expandStarColumns(List<String> selectColumnNames, List<String> selectOutputNames,
-            InsertStmt insertStmt, List<String> targetColumnNames, TableFunctionTable fileTable) {
+                                          InsertStmt insertStmt, List<String> targetColumnNames, TableFunctionTable fileTable) {
         if (insertStmt.isColumnMatchByName()) {
             selectColumnNames.addAll(targetColumnNames);
             selectOutputNames.addAll(targetColumnNames);
@@ -678,7 +666,7 @@ public class InsertAnalyzer {
      * Skips complex types which may fail to convert in the scanner.
      */
     private static void pushDownColumnType(String fileColName, Column targetCol,
-            Map<String, Column> fileColumns) {
+                                           Map<String, Column> fileColumns) {
         Column newCol = targetCol.deepCopy();
         if (newCol.getType().isComplexType()) {
             return;
@@ -706,12 +694,12 @@ public class InsertAnalyzer {
 
     /**
      * Build the final file schema containing only columns used in the SELECT list:
-     *   1. Non-null entries in selectColumnNames (SlotRefs and star-expanded columns), in order.
-     *   2. Inner SlotRef columns from function expressions, appended after.
+     * 1. Non-null entries in selectColumnNames (SlotRefs and star-expanded columns), in order.
+     * 2. Inner SlotRef columns from function expressions, appended after.
      * Duplicate column names are deduplicated (case-insensitive).
      */
     private static List<Column> buildNewFileSchema(List<String> selectColumnNames,
-            List<Expr> funcExprs, Map<String, Column> fileColumns) {
+                                                   List<Expr> funcExprs, Map<String, Column> fileColumns) {
         Set<String> seen = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
         List<Column> schema = Lists.newArrayList();
 

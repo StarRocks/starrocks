@@ -26,6 +26,8 @@
 #include "exprs/binary_functions.h"
 #include "exprs/mock_vectorized_expr.h"
 #include "exprs/time_functions.h"
+#include "gen_cpp/InternalService_types.h"
+#include "runtime/runtime_state.h"
 
 #define PI acos(-1)
 
@@ -1787,6 +1789,67 @@ TEST_F(VecMathFunctionsTest, IcbergTransTest) {
         ASSERT_FALSE(result->is_nullable());
         auto v = ColumnHelper::as_column<Int32Column>(result);
         ASSERT_EQ(0, v->get_data()[0]);
+    }
+
+    {
+        TQueryGlobals globals;
+        globals.__set_time_zone("UTC");
+        auto state = std::make_unique<RuntimeState>(globals);
+        std::unique_ptr<FunctionContext> ctx_with_state(FunctionContext::create_test_context());
+        ctx_with_state->set_runtime_state(state.get());
+
+        Columns columns_const;
+        auto col1 = TimestampColumn::create();
+        auto col2 = Int32Column::create();
+        col1->append(TimestampValue::create(2000, 1, 1, 12, 12, 12));
+        col2->append(10);
+        auto const_col1 = ConstColumn::create(std::move(col1), 1);
+        columns_const.emplace_back(std::move(const_col1));
+        columns_const.emplace_back(std::move(col2));
+
+        ColumnPtr result =
+                MathFunctions::iceberg_bucket_timestamptz_datetime(ctx_with_state.get(), columns_const).value();
+        ASSERT_TRUE(result->is_numeric());
+        ASSERT_FALSE(result->is_nullable());
+        auto v = ColumnHelper::as_column<Int32Column>(result);
+        ASSERT_EQ(0, v->get_data()[0]);
+    }
+
+    {
+        TQueryGlobals globals;
+        globals.__set_time_zone("Asia/Shanghai");
+        auto state = std::make_unique<RuntimeState>(globals);
+        std::unique_ptr<FunctionContext> ctx_with_state(FunctionContext::create_test_context());
+        ctx_with_state->set_runtime_state(state.get());
+
+        Columns columns_const;
+        auto col1 = TimestampColumn::create();
+        auto col2 = Int32Column::create();
+        col1->append(TimestampValue::create(1970, 1, 1, 1, 0, 0));
+        col2->append(10);
+        auto const_col1 = ConstColumn::create(std::move(col1), 1);
+        columns_const.emplace_back(std::move(const_col1));
+        columns_const.emplace_back(std::move(col2));
+
+        ColumnPtr result =
+                MathFunctions::iceberg_bucket_timestamptz_datetime(ctx_with_state.get(), columns_const).value();
+
+        Columns normalized_columns_const;
+        auto normalized_col1 = TimestampColumn::create();
+        auto normalized_col2 = Int32Column::create();
+        normalized_col1->append(TimestampValue::create(1969, 12, 31, 17, 0, 0));
+        normalized_col2->append(10);
+        auto normalized_const_col1 = ConstColumn::create(std::move(normalized_col1), 1);
+        normalized_columns_const.emplace_back(std::move(normalized_const_col1));
+        normalized_columns_const.emplace_back(std::move(normalized_col2));
+
+        std::unique_ptr<FunctionContext> utc_ctx(FunctionContext::create_test_context());
+        ColumnPtr expected = MathFunctions::iceberg_bucket_datetime(utc_ctx.get(), normalized_columns_const).value();
+
+        ASSERT_TRUE(result->is_numeric());
+        ASSERT_FALSE(result->is_nullable());
+        ASSERT_EQ(ColumnHelper::as_column<Int32Column>(expected)->get_data()[0],
+                  ColumnHelper::as_column<Int32Column>(result)->get_data()[0]);
     }
 
     {
