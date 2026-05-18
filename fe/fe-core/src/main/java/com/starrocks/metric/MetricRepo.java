@@ -309,6 +309,7 @@ public final class MetricRepo {
     public static LeaderAwareCounterMetricLong COUNTER_LAKE_COMPACTION_PARTIAL_SUCCESS;
     public static LeaderAwareCounterMetricLong COUNTER_LAKE_COMPACTION_FAILED;
     public static LeaderAwareGaugeMetric<Long> GAUGE_LAKE_COMPACTION_RUNNING;
+    public static LeaderAwareGaugeMetric<Long> GAUGE_LAKE_COMPACTION_RUNNING_TASKS;
     public static LongCounterMetric COUNTER_ROUTINE_LOAD_ROWS;
     public static LongCounterMetric COUNTER_ROUTINE_LOAD_RECEIVED_BYTES;
     public static LongCounterMetric COUNTER_ROUTINE_LOAD_ERROR_ROWS;
@@ -385,6 +386,7 @@ public final class MetricRepo {
     public static Histogram HISTO_SHORTCIRCUIT_RPC_LATENCY;
     public static Histogram HISTO_DEPLOY_PLAN_FRAGMENTS_LATENCY;
     public static Histogram HISTO_TABLET_RESHARD_JOB_DURATION;
+    public static Histogram HISTO_LAKE_COMPACTION_SCORE_AT_TRIGGER;
 
     // following metrics will be updated by metric calculator
     public static GaugeMetricImpl<Double> GAUGE_QUERY_PER_SECOND;
@@ -896,6 +898,18 @@ public final class MetricRepo {
             }
         };
         STARROCKS_METRIC_REGISTER.addMetric(GAUGE_LAKE_COMPACTION_RUNNING);
+        // Reports the same value as lake_compaction_running under the metric name explicitly
+        // requested by the maintainer on PR #72941. Kept alongside lake_compaction_running so the
+        // reviewer can decide which name to keep before merge.
+        GAUGE_LAKE_COMPACTION_RUNNING_TASKS = new LeaderAwareGaugeMetricLong(
+                "lake_compaction_running_tasks", MetricUnit.NOUNIT,
+                "number of lake compaction jobs currently tracked in the FE leader's runningCompactions map") {
+            @Override
+            public Long getValueLeader() {
+                return (long) GlobalStateMgr.getCurrentState().getCompactionMgr().getRunningCompactionCount();
+            }
+        };
+        STARROCKS_METRIC_REGISTER.addMetric(GAUGE_LAKE_COMPACTION_RUNNING_TASKS);
         STARROCKS_METRIC_REGISTER.addMetric(COUNTER_PUBLISH_VERSION_DAEMON_LOOP);
         COUNTER_ROUTINE_LOAD_ROWS =
                 new LongCounterMetric("routine_load_rows", MetricUnit.ROWS, "total rows of routine load");
@@ -1017,6 +1031,11 @@ public final class MetricRepo {
                 MetricRegistry.name("tablet_pre_split", "post_submit_wait", "ms"));
         HISTO_TABLET_PRE_SPLIT_BOUNDARIES_PLANNED = METRIC_REGISTER.histogram(
                 MetricRegistry.name("tablet_pre_split", "boundaries_planned"));
+        // Centiscore (raw score * 100) of partitions at the moment a lake compaction job is created.
+        // Multiplied by 100 to preserve two decimal places of precision in a long-valued histogram;
+        // dashboards should divide by 100 to recover the original score.
+        HISTO_LAKE_COMPACTION_SCORE_AT_TRIGGER = METRIC_REGISTER.histogram(
+                MetricRegistry.name("lake_compaction", "score_at_trigger"));
 
         // init system metrics
         initSystemMetrics();

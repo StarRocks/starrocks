@@ -29,8 +29,6 @@ import com.starrocks.common.ExceptionChecker;
 import com.starrocks.lake.LakeAggregator;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.LakeTablet;
-import com.starrocks.metric.LeaderAwareCounterMetricLong;
-import com.starrocks.metric.Metric;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.proto.AggregateCompactRequest;
 import com.starrocks.proto.CompactRequest;
@@ -55,6 +53,7 @@ import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -69,17 +68,25 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 public class CompactionSchedulerTest {
+    // Config.enable_metric_calculator is JVM-global; MetricRepo.init() schedules a fixed-rate timer
+    // when it is true. Save the original value here so @AfterAll can restore it and the toggle does
+    // not leak into other FE tests.
+    private static boolean savedEnableMetricCalculator;
+
     @BeforeAll
-    public static void beforeAll() {
-        MetricRepo.COUNTER_LAKE_COMPACTION_SUCCESS =
-                new LeaderAwareCounterMetricLong("lake_compaction_success", Metric.MetricUnit.REQUESTS,
-                        "counter of successful lake compaction jobs");
-        MetricRepo.COUNTER_LAKE_COMPACTION_PARTIAL_SUCCESS =
-                new LeaderAwareCounterMetricLong("lake_compaction_partial_success", Metric.MetricUnit.REQUESTS,
-                        "counter of partially successful lake compaction jobs");
-        MetricRepo.COUNTER_LAKE_COMPACTION_FAILED =
-                new LeaderAwareCounterMetricLong("lake_compaction_failed", Metric.MetricUnit.REQUESTS,
-                        "counter of failed lake compaction jobs");
+    public static void initMetrics() {
+        // CompactionScheduler dereferences MetricRepo.COUNTER_LAKE_COMPACTION_* and
+        // HISTO_LAKE_COMPACTION_SCORE_AT_TRIGGER guarded by MetricRepo.hasInit. Initialise the repo
+        // once so tests that drive runOneCycle()/scheduleNewCompaction() exercise the metric paths
+        // instead of short-circuiting. MetricRepo.init() is idempotent (guarded by hasInit).
+        savedEnableMetricCalculator = Config.enable_metric_calculator;
+        Config.enable_metric_calculator = false;
+        MetricRepo.init();
+    }
+
+    @AfterAll
+    public static void restoreConfig() {
+        Config.enable_metric_calculator = savedEnableMetricCalculator;
     }
 
     @Mocked
@@ -857,5 +864,120 @@ public class CompactionSchedulerTest {
         List<MaterializedIndex> loadedIndexes = txnState.getPartitionLoadedIndexes(tableId, physicalPartition);
         Assertions.assertEquals(1, loadedIndexes.size());
         Assertions.assertEquals(indexId, loadedIndexes.get(0).getId());
+    }
+
+    /**
+     * Drive runOneCycle through scheduleNewCompaction and assert that
+     * HISTO_LAKE_COMPACTION_SCORE_AT_TRIGGER samples once per partition whose compaction job
+     * lands in runningCompactions. Uses the same pattern as testCompactionWarehouseLimit but
+     * threads a real Quantiles through to the CompactionJob so the score-before getter is
+     * non-null and the centiscore update path is exercised.
+     */
+    @Test
+    public void testScoreHistogramSampledWhenJobStarts() {
+        CompactionMgr compactionManager = new CompactionMgr();
+
+        PartitionIdentifier partition1 = new PartitionIdentifier(1, 2, 3);
+        PartitionIdentifier partition2 = new PartitionIdentifier(1, 2, 4);
+
+        compactionManager.handleLoadingFinished(partition1, 10, System.currentTimeMillis(),
+                                                Quantiles.compute(Lists.newArrayList(42d)));
+        compactionManager.handleLoadingFinished(partition2, 10, System.currentTimeMillis(),
+                                                Quantiles.compute(Lists.newArrayList(99d)));
+
+        ComputeNode c1 = new ComputeNode(10001L, "192.168.0.2", 9050);
+        ComputeNode c2 = new ComputeNode(10002L, "192.168.0.3", 9050);
+
+        MockedWarehouseManager mockedWarehouseManager = new MockedWarehouseManager();
+        mockedWarehouseManager.initDefaultWarehouse();
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public WarehouseManager getWarehouseMgr() {
+                return mockedWarehouseManager;
+            }
+            @Mock
+            public boolean isLeader() {
+                return true;
+            }
+            @Mock
+            public boolean isReady() {
+                return true;
+            }
+        };
+        mockedWarehouseManager.setComputeNodesAssignedToTablet(Sets.newHashSet(c1, c2));
+
+        CompactionScheduler compactionScheduler = new CompactionScheduler(compactionManager, null, globalTransactionMgr,
+                globalStateMgr, "");
+
+        new MockUp<CompactionScheduler>() {
+            @Mock
+            protected CompactionJob startCompaction(PartitionStatisticsSnapshot partitionStatisticsSnapshot,
+                    CompactionWarehouseInfo info) {
+                Database db = new Database();
+                Table table = new LakeTable();
+                long partitionId = partitionStatisticsSnapshot.getPartition().getPartitionId();
+                PhysicalPartition partition = new PhysicalPartition(partitionId, partitionId, new MaterializedIndex());
+                // Thread the real Quantiles through so the histogram update site has a non-null
+                // scoreBefore to read from.
+                return new CompactionJob(db, table, partition, 100, false,
+                        info.computeResource, info.warehouseName,
+                        partitionStatisticsSnapshot.getCompactionScore());
+            }
+        };
+        new MockUp<CompactionJob>() {
+            @Mock
+            public int getNumTabletCompactionTasks() {
+                return 1;
+            }
+        };
+
+        long histoBefore = MetricRepo.HISTO_LAKE_COMPACTION_SCORE_AT_TRIGGER.getCount();
+        compactionScheduler.runOneCycle();
+        Assertions.assertEquals(2, compactionScheduler.getRunningCompactions().size());
+        long histoAfter = MetricRepo.HISTO_LAKE_COMPACTION_SCORE_AT_TRIGGER.getCount();
+        Assertions.assertEquals(2, histoAfter - histoBefore,
+                "Score histogram should be sampled once per newly-running compaction job");
+    }
+
+    /**
+     * Verify the two running-count gauges both surface CompactionMgr.getRunningCompactionCount():
+     * - GAUGE_LAKE_COMPACTION_RUNNING (`lake_compaction_running`) added in #71201
+     * - GAUGE_LAKE_COMPACTION_RUNNING_TASKS (`lake_compaction_running_tasks`) added in this PR
+     *   under the exact metric name requested by the maintainer on PR #72941.
+     * Both gauges share the same getValueLeader implementation so a single setup exercises both.
+     */
+    @Test
+    public void testRunningCompactionGaugesReadFromCompactionMgr() {
+        CompactionMgr compactionManager = new CompactionMgr();
+        CompactionScheduler scheduler = new CompactionScheduler(compactionManager, null, globalTransactionMgr,
+                globalStateMgr, "");
+        compactionManager.setCompactionScheduler(scheduler);
+
+        // Pre-seed three running compactions so the gauges have something distinct from zero.
+        new MockUp<CompactionScheduler>() {
+            @Mock
+            public ConcurrentHashMap<PartitionIdentifier, CompactionJob> getRunningCompactions() {
+                ConcurrentHashMap<PartitionIdentifier, CompactionJob> r = new ConcurrentHashMap<>();
+                Database db = new Database();
+                Table table = new LakeTable();
+                for (int i = 0; i < 3; i++) {
+                    PartitionIdentifier id = new PartitionIdentifier(1, 2, 100 + i);
+                    PhysicalPartition partition = new PhysicalPartition(100 + i, 100 + i, new MaterializedIndex());
+                    r.put(id, new CompactionJob(db, table, partition, 100 + i, false, null, "", null));
+                }
+                return r;
+            }
+        };
+
+        final CompactionMgr finalMgr = compactionManager;
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public CompactionMgr getCompactionMgr() {
+                return finalMgr;
+            }
+        };
+
+        Assertions.assertEquals(3L, (long) MetricRepo.GAUGE_LAKE_COMPACTION_RUNNING.getValueLeader());
+        Assertions.assertEquals(3L, (long) MetricRepo.GAUGE_LAKE_COMPACTION_RUNNING_TASKS.getValueLeader());
     }
 }
