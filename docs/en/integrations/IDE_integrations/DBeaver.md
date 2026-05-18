@@ -24,9 +24,13 @@ Follow these steps to connect to a database:
 
    ![DBeaver - Access the assistant](../../_assets/IDE_dbeaver_2.png)
 
-3. Select the MySQL driver.
+3. Select the StarRocks driver.
 
-   In the **Select your database** step, you are presented with a list of available drivers. Click **Analytical** in the left-side pane to quickly locate the MySQL driver. Then, double-click the **MySQL** icon.
+   In the **Select your database** step, you are presented with a list of available drivers. Search for **StarRocks** in the search bar, or click **Analytical** in the left-side pane to locate it. Then, double-click the **StarRocks** icon.
+
+   :::note
+   If your version of DBeaver does not include the StarRocks driver, you can use the **MySQL** driver as a fallback.
+   :::
 
    ![DBeaver - Select your database](../../_assets/IDE_dbeaver_3.png)
 
@@ -34,21 +38,25 @@ Follow these steps to connect to a database:
 
    In the **Connection Settings** step, go to the **Main** tab and configure the following essential connection settings:
 
-   - **Server Host**: the FE host IP address of your StarRocks cluster.
+   - **Host**: the FE host IP address of your StarRocks cluster.
    - **Port**: the FE query port of your StarRocks cluster, for example, `9030`.
-   - **Database**: the target database in your StarRocks cluster. Both internal and external databases are supported, but the functionality for external databases may be incomplete.
+   - **Database/Schema**: the target database in your StarRocks cluster.
    - **Username**: the username that is used to log in to your StarRocks cluster, for example, `admin`.
    - **Password**: the password that is used to log in to your StarRocks cluster.
 
+    :::note
+    Starting with DBeaver 26.0.5, multi-catalog browsing is supported when using the StarRocks driver, allowing you to explore all catalogs in your cluster without specifying a database.
+    :::
+
    ![DBeaver - Connection Settings - Main tab](../../_assets/IDE_dbeaver_4.png)
 
-   You can also view and edit the properties of the MySQL driver on the **Driver properties** tab if necessary. To edit a specific property, click the row in the **Value** column for that property.
+   You can also view and edit the properties of the StarRocks driver on the **Driver properties** tab if necessary. To edit a specific property, click the row in the **Value** column for that property.
 
    ![DBeaver - Connection Settings - Driver properties tab](../../_assets/IDE_dbeaver_5.png)
 
 5. Test the connection to the database.
 
-   Click **Test Connection** to verify the accuracy of the connection settings. A dialog box displaying the MySQL driver's information appears. Click **OK** in the dialog box to confirm the information. After you have successfully configured the connection settings, click **Finish** to complete the process.
+   Click **Test Connection** to verify the accuracy of the connection settings. A dialog box displaying the StarRocks driver's information appears. Click **OK** in the dialog box to confirm the information. After you have successfully configured the connection settings, click **Finish** to complete the process.
 
    ![DBeaver - Test Connection](../../_assets/IDE_dbeaver_6.png)
 
