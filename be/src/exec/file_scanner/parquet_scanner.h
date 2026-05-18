@@ -49,10 +49,6 @@ public:
 
     void close() override;
 
-    static Status convert_array_to_column(ConvertFuncTree* func, size_t num_elements, const arrow::Array* array,
-                                          Column* column, size_t batch_start_idx, size_t column_start_idx,
-                                          Filter* chunk_filter, ArrowConvertContext* conv_ctx);
-
     static Status new_column(const arrow::DataType* arrow_type, const SlotDescriptor* slot_desc,
                              MutableColumnPtr* column, ConvertFuncTree* conv_func, Expr** expr, ObjectPool& pool,
                              bool strict_mode);

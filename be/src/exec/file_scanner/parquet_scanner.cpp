@@ -14,7 +14,6 @@
 
 #include "exec/file_scanner/parquet_scanner.h"
 
-#include <arrow/compute/api.h>
 #include <fmt/format.h>
 
 #include "base/simd/simd.h"
@@ -114,8 +113,8 @@ Status ParquetScanner::append_batch_to_src_chunk(ChunkPtr* chunk) {
         if (array_ptr == nullptr) {
             (void)column->append_nulls(_batch->num_rows());
         } else {
-            auto st = convert_array_to_column(_conv_funcs[i].get(), num_elements, array_ptr.get(), column,
-                                              _batch_start_idx, _chunk_start_idx, &_chunk_filter, &_conv_ctx);
+            auto st = convert_arrow_array_to_column(_conv_funcs[i].get(), num_elements, array_ptr.get(), column,
+                                                    _batch_start_idx, _chunk_start_idx, &_chunk_filter, &_conv_ctx);
             if (!st.ok()) {
                 return st.clone_and_prepend(strings::Substitute("file=$0 column=$1 batch_row_range=[$2,$3)",
                                                                 _conv_ctx.current_file, slot_desc->col_name(),
@@ -329,55 +328,6 @@ Status ParquetScanner::new_column(const arrow::DataType* arrow_type, const SlotD
     }
 
     return Status::OK();
-}
-
-Status ParquetScanner::convert_array_to_column(ConvertFuncTree* conv_func, size_t num_elements,
-                                               const arrow::Array* array, Column* column, size_t batch_start_idx,
-                                               size_t chunk_start_idx, Filter* chunk_filter,
-                                               ArrowConvertContext* conv_ctx) {
-    if (array->type_id() == ArrowTypeId::DICTIONARY) {
-        auto* dictionary_type = down_cast<const arrow::DictionaryType*>(array->type().get());
-        auto sliced_array = array->Slice(batch_start_idx, num_elements);
-        auto decoded_array_res = arrow::compute::Cast(*sliced_array, dictionary_type->value_type());
-        if (!decoded_array_res.ok()) {
-            return Status::InternalError(decoded_array_res.status().ToString());
-        }
-        return convert_array_to_column(conv_func, num_elements, decoded_array_res->get(), column, 0, chunk_start_idx,
-                                       chunk_filter, conv_ctx);
-    }
-
-    // for timestamp type, state->timezone which is specified by user. convert function
-    // obtains timezone from array. thus timezone in array should be rectified to
-    // state->timezone.
-    if (array->type_id() == ArrowTypeId::TIMESTAMP) {
-        auto* timestamp_type = down_cast<arrow::TimestampType*>(array->type().get());
-        auto& mutable_timezone = (std::string&)timestamp_type->timezone();
-        mutable_timezone = conv_ctx->state->timezone();
-    }
-
-    uint8_t* null_data;
-    Column* data_column;
-    if (column->is_nullable()) {
-        auto nullable_column = down_cast<NullableColumn*>(column);
-        auto null_column = nullable_column->null_column_raw_ptr();
-        size_t null_count = fill_null_column(array, batch_start_idx, num_elements, null_column, chunk_start_idx);
-        nullable_column->set_has_null(null_count != 0);
-        null_data = &null_column->get_data().front() + chunk_start_idx;
-        data_column = nullable_column->data_column_raw_ptr();
-    } else {
-        null_data = nullptr;
-        // Fill nullable array into not-nullable column, positions of NULLs is marked as 1
-        fill_filter(array, batch_start_idx, num_elements, chunk_filter, chunk_start_idx, conv_ctx);
-        data_column = column;
-    }
-
-    auto st = conv_func->func(array, batch_start_idx, num_elements, data_column, chunk_start_idx, null_data,
-                              chunk_filter, conv_ctx, conv_func);
-    if (st.ok() && column->is_nullable()) {
-        // in some scene such as string length exceeds limit, the column will be set NULL, so we need reset has_null
-        down_cast<NullableColumn*>(column)->update_has_null();
-    }
-    return st;
 }
 
 bool ParquetScanner::chunk_is_full() {

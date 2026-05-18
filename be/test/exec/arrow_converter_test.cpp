@@ -1494,8 +1494,8 @@ PARALLEL_TEST(ArrowConverterTest, test_convert_nullable_list_array) {
     ASSERT_EQ(num, counter);
     Filter filter;
     filter.resize(array->length() + column->size(), 1);
-    ASSERT_STATUS_OK(ParquetScanner::convert_array_to_column(&cf, array->length(), array.get(), column.get(), 0,
-                                                             column->size(), &filter, nullptr));
+    ASSERT_STATUS_OK(convert_arrow_array_to_column(&cf, array->length(), array.get(), column.get(), 0, column->size(),
+                                                   &filter, nullptr));
     ASSERT_EQ(column->size(), 20);
     ASSERT_EQ(down_cast<NullableColumn*>(column.get())->null_count(), 10);
 }
@@ -1553,8 +1553,8 @@ PARALLEL_TEST(ArrowConverterTest, test_convert_nullable_map) {
 
     Filter filter;
     filter.resize(array->length() + map_column->size(), 1);
-    ASSERT_STATUS_OK(ParquetScanner::convert_array_to_column(&cf, array->length(), array.get(), map_column.get(), 0,
-                                                             map_column->size(), &filter, nullptr));
+    ASSERT_STATUS_OK(convert_arrow_array_to_column(&cf, array->length(), array.get(), map_column.get(), 0,
+                                                   map_column->size(), &filter, nullptr));
     ASSERT_EQ(map_column->size(), counter);
     ASSERT_EQ(down_cast<NullableColumn*>(map_column.get())->null_count(), num_elements);
     ASSERT_EQ(map_column->debug_item(0), "{'haha':2,'haha':2,'hehe':1,'hehe':1}");
@@ -1581,8 +1581,8 @@ PARALLEL_TEST(ArrowConverterTest, test_convert_struct) {
 
     Filter filter;
     filter.resize(array->length(), 1);
-    ASSERT_STATUS_OK(ParquetScanner::convert_array_to_column(&cf, array->length(), array.get(), st_col.get(), 0,
-                                                             st_col->size(), &filter, nullptr));
+    ASSERT_STATUS_OK(convert_arrow_array_to_column(&cf, array->length(), array.get(), st_col.get(), 0, st_col->size(),
+                                                   &filter, nullptr));
     ASSERT_EQ(st_col->size(), 10);
     ASSERT_EQ(down_cast<NullableColumn*>(st_col.get())->null_count(), 0);
 
@@ -1610,8 +1610,8 @@ PARALLEL_TEST(ArrowConverterTest, test_convert_struct_null) {
 
     Filter filter;
     filter.resize(array->length(), 1);
-    ASSERT_STATUS_OK(ParquetScanner::convert_array_to_column(&cf, array->length(), array.get(), st_col.get(), 0,
-                                                             st_col->size(), &filter, nullptr));
+    ASSERT_STATUS_OK(convert_arrow_array_to_column(&cf, array->length(), array.get(), st_col.get(), 0, st_col->size(),
+                                                   &filter, nullptr));
     ASSERT_EQ(st_col->size(), 10);
     ASSERT_EQ(down_cast<NullableColumn*>(st_col.get())->null_count(), 5);
     ASSERT_EQ(st_col->debug_item(0), "NULL");
@@ -1651,8 +1651,8 @@ PARALLEL_TEST(ArrowConverterTest, test_convert_struct_less_column) {
 
     Filter filter;
     filter.resize(array->length(), 1);
-    ASSERT_STATUS_OK(ParquetScanner::convert_array_to_column(&cf, array->length(), array.get(), st_col, 0,
-                                                             st_col->size(), &filter, nullptr));
+    ASSERT_STATUS_OK(convert_arrow_array_to_column(&cf, array->length(), array.get(), st_col, 0, st_col->size(),
+                                                   &filter, nullptr));
     ASSERT_EQ(st_col->size(), 10);
     ASSERT_EQ(down_cast<NullableColumn*>(st_col.get())->null_count(), 5);
     ASSERT_EQ(st_col->debug_item(3), "{col1:3,col2:'char-3',col3:30,col4:NULL}");
@@ -1677,8 +1677,8 @@ PARALLEL_TEST(ArrowConverterTest, test_convert_struct_more_column) {
 
     Filter filter;
     filter.resize(array->length(), 1);
-    ASSERT_STATUS_OK(ParquetScanner::convert_array_to_column(&cf, array->length(), array.get(), st_col, 0,
-                                                             st_col->size(), &filter, nullptr));
+    ASSERT_STATUS_OK(convert_arrow_array_to_column(&cf, array->length(), array.get(), st_col, 0, st_col->size(),
+                                                   &filter, nullptr));
     ASSERT_EQ(st_col->size(), 10);
     ASSERT_EQ(down_cast<NullableColumn*>(st_col.get())->null_count(), 0);
     ASSERT_EQ(st_col->debug_item(0), "{col1:0,col2:'char-0'}");
