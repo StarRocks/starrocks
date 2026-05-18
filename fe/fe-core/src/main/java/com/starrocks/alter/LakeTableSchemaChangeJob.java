@@ -527,6 +527,18 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
             span.addEvent("setWaitingTxn");
         }
 
+        // REPRO SLEEP: shadow index is now visible to new transactions (txnId > watershedTxnId).
+        // Sleep 90s here so a multi-statement transaction can commit to shadow tablets before
+        // schema change enters WAITING_TXN state, reproducing the publish_log_version NotFound bug.
+        LOG.info("REPRO: sleeping 90s after shadow index creation (watershedTxnId={}), job: {}",
+                watershedTxnId, jobId);
+        try {
+            Thread.sleep(90_000);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
+        LOG.info("REPRO: sleep done, proceeding to WAITING_TXN, job: {}", jobId);
+
         // can't add addRollIndexToCatalog into the applier, because of the nextTxnId check.
         // But addRollIndexToCatalog is idempotent, so it's ok to re-add if Leader transferred.
         persistStateChange(this, JobState.WAITING_TXN);
