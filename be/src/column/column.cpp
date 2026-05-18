@@ -16,6 +16,12 @@
 
 #include <fmt/format.h>
 
+#if defined(__AVX2__) && !defined(__AVX512F__)
+#include <immintrin.h>
+#elif defined(__ARM_NEON) && defined(__aarch64__)
+#include <arm_neon.h>
+#endif
+
 #include "column/column_hash/column_hash.h"
 #include "common/statusor.h"
 
@@ -95,12 +101,63 @@ bool Column::empty_null_in_complex_column(const ImmBuffer<uint8_t>& null_data, c
         throw std::runtime_error(
                 fmt::format("inputs offsets' size {} != the column's offsets' size {}.", offsets.size(), size + 1));
     }
-    // TODO: optimize it using SIMD
-    for (auto i = 0; i < size && !need_empty; ++i) {
+#if defined(__AVX2__) && !defined(__AVX512F__)
+    // Scan 32 null bytes at a time, check offsets only for set bits.
+    {
+        const __m256i zero = _mm256_setzero_si256();
+        size_t i = 0;
+        for (; i + 32 <= size && !need_empty; i += 32) {
+            __m256i v_null = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(null_data.data() + i));
+            uint32_t null_mask = static_cast<uint32_t>(_mm256_movemask_epi8(_mm256_cmpgt_epi8(v_null, zero)));
+            // Process each set bit (null position)
+            while (null_mask && !need_empty) {
+                uint32_t bit_pos = __builtin_ctz(null_mask);
+                size_t idx = i + bit_pos;
+                if (offsets[idx + 1] != offsets[idx]) {
+                    need_empty = true;
+                }
+                null_mask &= null_mask - 1; // Clear lowest set bit
+            }
+        }
+        // Scalar tail
+        for (; i < size && !need_empty; ++i) {
+            if (null_data[i] && offsets[i + 1] != offsets[i]) {
+                need_empty = true;
+            }
+        }
+    }
+#elif defined(__ARM_NEON) && defined(__aarch64__)
+    // SIMD optimization: scan 16 null bytes at a time, check offsets only for null positions
+    {
+        size_t i = 0;
+        for (; i + 16 <= size && !need_empty; i += 16) {
+            uint8x16_t v_null = vld1q_u8(null_data.data() + i);
+            if (vmaxvq_u8(v_null) == 0) {
+                continue; // no nulls in this block
+            }
+            uint8_t nulls[16];
+            vst1q_u8(nulls, v_null);
+            for (int j = 0; j < 16 && !need_empty; ++j) {
+                size_t idx = i + j;
+                if (nulls[j] && offsets[idx + 1] != offsets[idx]) {
+                    need_empty = true;
+                }
+            }
+        }
+        // Scalar tail
+        for (; i < size && !need_empty; ++i) {
+            if (null_data[i] && offsets[i + 1] != offsets[i]) {
+                need_empty = true;
+            }
+        }
+    }
+#else
+    for (size_t i = 0; i < size && !need_empty; ++i) {
         if (null_data[i] && offsets[i + 1] != offsets[i]) {
             need_empty = true;
         }
     }
+#endif
     // TODO: copy too much may result in worse performance.
     if (need_empty) {
         auto new_column = clone_empty();
