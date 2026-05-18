@@ -546,9 +546,9 @@ Status publish_log_version(TabletManager* tablet_mgr, int64_t tablet_id, std::sp
                 }
                 LOG_IF(WARNING, !check_st.is_not_found())
                         << "Fail to check the existance of " << txn_vlog_path << ": " << check_st;
-                return Status::NotFound(fmt::format(
-                        "incomplete per-load_id txn logs for tablet {} txn {}: loaded {} of {} expected",
-                        tablet_id, txn_id, txn_logs.size(), expected_count));
+                return Status::NotFound(
+                        fmt::format("incomplete per-load_id txn logs for tablet {} txn {}: loaded {} of {} expected",
+                                    tablet_id, txn_id, txn_logs.size(), expected_count));
             }
 
             auto merged = std::make_shared<TxnLogPB>(*txn_logs[0]);
