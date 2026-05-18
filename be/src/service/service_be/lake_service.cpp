@@ -388,7 +388,11 @@ void LakeServiceImpl::publish_version(::google::protobuf::RpcController* control
                     if (res.ok()) {
                         auto metadata = std::move(res).value();
                         auto score = compaction_score(_tablet_mgr, metadata);
-                        TabletMetadataPB* prealloc_metadata = nullptr;
+                        // Copy metadata out of the lock(response_mtx), to let it execute in parallel.
+                        TabletMetadataPB local_metadata;
+                        if (skip_write_tablet_metadata) {
+                            local_metadata.CopyFrom(*metadata);
+                        }
                         {
                             std::lock_guard l(response_mtx);
                             response->mutable_compaction_scores()->insert({metadata->id(), score});
@@ -400,13 +404,8 @@ void LakeServiceImpl::publish_version(::google::protobuf::RpcController* control
                                 response->mutable_tablet_row_nums()->insert({metadata->id(), row_nums});
                             }
                             if (skip_write_tablet_metadata) {
-                                auto& map = *response->mutable_tablet_metas();
-                                prealloc_metadata = &map[metadata->id()];
+                                (*response->mutable_tablet_metas())[metadata->id()].Swap(&local_metadata);
                             }
-                        }
-                        // Move copy metadata out of the lock(response_mtx), to let it execute in parallel.
-                        if (prealloc_metadata != nullptr) {
-                            prealloc_metadata->CopyFrom(*metadata);
                         }
                         // Report tablet for async VI build only on async-mode tables
                         // whose new rowset(s) have vector_index_ids. Sync-mode tables
