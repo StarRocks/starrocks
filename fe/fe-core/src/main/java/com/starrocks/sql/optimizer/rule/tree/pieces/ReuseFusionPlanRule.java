@@ -26,6 +26,7 @@ import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.combinator.AggStateIf;
+import com.starrocks.cdc.CDCPlanHelper;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.FunctionAnalyzer;
 import com.starrocks.sql.ast.JoinOperator;
@@ -92,6 +93,9 @@ public class ReuseFusionPlanRule implements TreeRewriteRule {
 
     @Override
     public OptExpression rewrite(OptExpression root, TaskContext taskContext) {
+        if (CDCPlanHelper.containsChangesScan(root)) {
+            return root;
+        }
         factory = taskContext.getOptimizerContext().getColumnRefFactory();
         ctx = taskContext.getOptimizerContext().getConnectContext();
         PiecesPlanTransformer transformer = new PiecesPlanTransformer(factory);

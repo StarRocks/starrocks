@@ -1,0 +1,20 @@
+-- name: test_cdc_agg_basic @cloud
+
+CREATE TABLE agg_t (k int, v bigint sum)
+AGGREGATE KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1
+PROPERTIES ('replication_num' = '1');
+
+[UC]function: bk0=create_bookmark("${db[0]}", "agg_t", "agg_base")
+
+-- Single LOAD with duplicate keys: AGG folds them within-rowset.
+INSERT INTO agg_t VALUES (1, 10), (1, 20), (1, 30);
+
+[UC]function: bk1=create_bookmark("${db[0]}", "agg_t", "agg_head")
+
+-- Expectation: 1 row with k=1, v=60 (the AGG'd result), change_type=1.
+SELECT k, v, __CHANGE_TYPE__ FROM agg_t
+CHANGES FROM VERSION ${bk0} TO VERSION ${bk1}
+ORDER BY k;
+
+function: release_bookmark("${db[0]}", "agg_t", ${bk0}, "agg_base")
+function: release_bookmark("${db[0]}", "agg_t", ${bk1}, "agg_head")

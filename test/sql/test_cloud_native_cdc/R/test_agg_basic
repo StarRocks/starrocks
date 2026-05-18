@@ -1,0 +1,25 @@
+-- name: test_cdc_agg_basic @cloud
+CREATE TABLE agg_t (k int, v bigint sum)
+AGGREGATE KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1
+PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
+[UC]function: bk0=create_bookmark("${db[0]}", "agg_t", "agg_base")
+INSERT INTO agg_t VALUES (1, 10), (1, 20), (1, 30);
+-- result:
+-- !result
+[UC]function: bk1=create_bookmark("${db[0]}", "agg_t", "agg_head")
+SELECT k, v, __CHANGE_TYPE__ FROM agg_t
+CHANGES FROM VERSION ${bk0} TO VERSION ${bk1}
+ORDER BY k;
+-- result:
+1	60	0
+-- !result
+function: release_bookmark("${db[0]}", "agg_t", ${bk0}, "agg_base")
+-- result:
+None
+-- !result
+function: release_bookmark("${db[0]}", "agg_t", ${bk1}, "agg_head")
+-- result:
+None
+-- !result

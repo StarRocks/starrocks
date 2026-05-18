@@ -1,0 +1,33 @@
+-- name: test_cdc_dup_basic @cloud
+
+CREATE TABLE dup_t (k int, v int)
+DUPLICATE KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1
+PROPERTIES ('replication_num' = '1');
+
+-- Baseline: pre-INSERT bookmark.
+[UC]function: bk_pre=create_bookmark("${db[0]}", "dup_t", "smoke_a")
+
+INSERT INTO dup_t VALUES (1, 10);
+INSERT INTO dup_t VALUES (2, 20), (3, 30);
+
+-- Head: post-INSERT bookmark.
+[UC]function: bk_post=create_bookmark("${db[0]}", "dup_t", "smoke_b")
+
+-- Empty window: from a bookmark to itself returns 0 rows.
+SELECT k, v, __CHANGE_TYPE__ FROM dup_t
+CHANGES FROM VERSION ${bk_pre} TO VERSION ${bk_pre}
+ORDER BY k;
+
+-- Non-trivial window: 3 inserted rows, change_type=1 (INSERT).
+SELECT k, v, __CHANGE_TYPE__ FROM dup_t
+CHANGES FROM VERSION ${bk_pre} TO VERSION ${bk_post}
+ORDER BY k;
+
+-- __ROW_VERSION__ is present and its distinct count is between 1 and the row
+-- count (data-driven, so check the bounds rather than specific values).
+SELECT count(*),
+       (count(DISTINCT __ROW_VERSION__) BETWEEN 1 AND count(*)) AS row_version_bounded
+FROM dup_t CHANGES FROM VERSION ${bk_pre} TO VERSION ${bk_post};
+
+function: release_bookmark("${db[0]}", "dup_t", ${bk_pre}, "smoke_a")
+function: release_bookmark("${db[0]}", "dup_t", ${bk_post}, "smoke_b")

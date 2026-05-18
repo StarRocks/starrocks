@@ -74,6 +74,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalCTEAnchorOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalCTEConsumeOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalCTEProduceOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalCacheStatsScanOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalChangesScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalDeltaLakeScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalEsScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalExceptOperator;
@@ -112,6 +113,7 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalBenchmarkScanOperat
 import com.starrocks.sql.optimizer.operator.physical.PhysicalCTEAnchorOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalCTEConsumeOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalCTEProduceOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalChangesScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalDeltaLakeScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalEsScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalExceptOperator;
@@ -351,6 +353,30 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
     public Void visitPhysicalOlapScan(PhysicalOlapScanOperator node, ExpressionContext context) {
         return computeOlapScanNode(node, context, node.getTable(), node.getSelectedPartitionId(),
                 node.getColRefToColumnMetaMap());
+    }
+
+    @Override
+    public Void visitLogicalChangesScan(LogicalChangesScanOperator node, ExpressionContext context) {
+        return computeChangesScanStats(node, context, node.getColRefToColumnMetaMap());
+    }
+
+    @Override
+    public Void visitPhysicalChangesScan(PhysicalChangesScanOperator node, ExpressionContext context) {
+        return computeChangesScanStats(node, context, node.getColRefToColumnMetaMap());
+    }
+
+    // CHANGES queries cannot reuse the olap-scan stats path because that path casts the
+    // operator to LogicalOlapScanOperator. Emit unknown column stats and a placeholder row
+    // count — the MVP has no cost-driven optimizations on CHANGES plans.
+    private Void computeChangesScanStats(Operator node, ExpressionContext context,
+                                         Map<ColumnRefOperator, Column> colRefToColumnMetaMap) {
+        Statistics.Builder builder = Statistics.builder();
+        for (ColumnRefOperator ref : colRefToColumnMetaMap.keySet()) {
+            builder.addColumnStatistic(ref, ColumnStatistic.unknown());
+        }
+        builder.setOutputRowCount(1);
+        context.setStatistics(builder.build());
+        return visitOperator(node, context);
     }
 
     @Override

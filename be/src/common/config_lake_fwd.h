@@ -85,6 +85,8 @@ CONF_mInt64(lake_max_garbage_version_distance, "100");
 // Turn this on after upgrade to clean up existing orphans, then turn it off once done.
 CONF_mBool(lake_enable_orphan_delvec_cleanup_on_compaction, "false");
 
+CONF_mInt32(cloud_native_tablet_metadata_ancestors_recorded, "10");
+
 CONF_mBool(enable_strict_delvec_crc_check, "true");
 
 // clear *.meta cache for lake table

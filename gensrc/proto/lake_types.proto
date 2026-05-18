@@ -187,6 +187,10 @@ message RowsetMetadataPB {
     repeated SegmentMetadataPB segment_metas = 17;
     // Indicates the effective sort key range of this rowset for range distribution table.
     optional TabletRangePB range = 18;
+    // CDC: the transaction commit version that produced this rowset.
+    // For individual publish: equals metadata version.
+    // For batch publish: base_version + txn_index + 1.
+    optional int64 commit_version = 19;
 }
 
 // At present, the lake persistent index reuses the logic of the persistent index,
@@ -247,6 +251,10 @@ message TabletMetadataPB {
     // Watermark for async vector index build: all rowsets with end_version <= this value
     // have their .vi files fully built. Carry-forwarded during publish.
     optional int64 vector_index_built_version = 23;
+    // CDC: metadata ancestor chain for reverse traversal.
+    // chain[0] = direct parent version; subsequent elements = older ancestors.
+    // Truncated to cloud_native_tablet_metadata_ancestors_recorded (default 10).
+    repeated int64 metadata_ancestors = 24;
 }
 
 message MetadataUpdateInfoPB {

@@ -2719,6 +2719,11 @@ queryPeriod
     | FOR? periodType AS OF end=expression
     ;
 
+changePeriod
+    : CHANGES FROM periodType start=expression TO periodType end=expression
+    | CHANGES STATS FROM start=expression TO end=expression
+    ;
+
 periodType
     : SYSTEM_TIME
     | TIMESTAMP
@@ -2809,7 +2814,7 @@ relation
     ;
 
 relationPrimary
-    : qualifiedName queryPeriod? partitionNames? tabletList? replicaList? sampleClause? (
+    : qualifiedName (queryPeriod | changePeriod)? partitionNames? tabletList? replicaList? sampleClause? (
         AS? alias=identifier)? bracketHint? (BEFORE ts=string)?                          #tableAtom
     | '(' VALUES rowConstructor (',' rowConstructor)* ')'
         (AS? alias=identifier columnAliases?)?                                          #inlineTable
@@ -3629,7 +3634,7 @@ nonReserved
     | ARRAY_AGG | ARRAY_AGG_DISTINCT | ASSERT_ROWS | AWARE
     | BACKEND | BACKENDS | BACKUP | BEGIN | BITMAP_UNION | BLACKLIST | BLACKHOLE | BINARY | BODY | BOOLEAN | BRANCH | BROKER | BUCKETS
     | BUILTIN | BASE | BEFORE | BASELINE
-    | CACHE | CALL | CAST | CANCEL | CATALOG | CATALOGS | CEIL | CHAIN | CHARSET | CLEAN | CLEAR | CLUSTER | CLUSTERS | CNGROUP | CNGROUPS | CURRENT | COLLATION | COLUMNS
+    | CACHE | CALL | CAST | CANCEL | CATALOG | CATALOGS | CEIL | CHAIN | CHANGES | CHARSET | CLEAN | CLEAR | CLUSTER | CLUSTERS | CNGROUP | CNGROUPS | CURRENT | COLLATION | COLUMNS
     | CUME_DIST | CUMULATIVE | COMMENT | COMMIT | COMMITTED | COMPUTE | CONNECTION | CONNECTIONS | CONSISTENT | COSTS | COUNT
     | CONFIG | COMPACT
     | DATA | DATE | DATACACHE | DATETIME | DAY | DAYS | DECOMMISSION | DIALECT | DIGEST | DISABLE | DISK | DISTRIBUTION | DUPLICATE | DYNAMIC | DISTRIBUTED | DICTIONARY | DICTIONARY_GET | DEALLOCATE

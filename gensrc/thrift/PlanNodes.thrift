@@ -89,7 +89,8 @@ enum TPlanNodeType {
   FETCH_NODE,
   LOOKUP_NODE,
   BENCHMARK_SCAN_NODE,
-  LAKE_CACHE_STATS_SCAN_NODE
+  LAKE_CACHE_STATS_SCAN_NODE,
+  CHANGES_SCAN_NODE
 }
 
 // phases of an execution node
@@ -478,6 +479,20 @@ struct TBenchmarkScanRange {
   2: optional i64 row_count
 }
 
+// CDC: per-tablet scan range for CHANGES query
+struct TChangesScanRange {
+    1: optional Types.TTabletId tablet_id
+    2: optional i64 base_version            // V_base (left-open): excludes this version
+    3: optional i64 head_version            // V_head (right-closed): includes this version
+    4: optional i64 partition_id
+}
+
+// CDC: FE -> CN plan node parameters
+struct TChangesScanNode {
+    1: optional Types.TTupleId tuple_id
+    2: optional Types.TKeysType table_type
+}
+
 // Specification of an individual data range which is held in its entirety
 // by a storage server
 struct TScanRange {
@@ -493,6 +508,8 @@ struct TScanRange {
   30: optional TBinlogScanRange binlog_scan_range
 
   40: optional TBenchmarkScanRange benchmark_scan_range
+
+  50: optional TChangesScanRange changes_scan_range
 }
 
 struct TMySQLScanNode {
@@ -1557,6 +1574,8 @@ struct TPlanNode {
   84: optional TBenchmarkScanNode benchmark_scan_node;
 
   85: optional TCacheStatsScanNode cache_stats_scan_node;
+
+  86: optional TChangesScanNode changes_scan_node;
 }
 
 // A flattened representation of a tree of PlanNodes, obtained by depth-first

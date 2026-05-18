@@ -19,32 +19,34 @@ import com.starrocks.sql.parser.NodePosition;
 
 import java.util.Optional;
 
-public class QueryPeriod implements ParseNode {
-    private final Optional<Expr> start;
+/**
+ * AST node for the CHANGES clause in CDC queries.
+ * <p>
+ * Syntax: CHANGES FROM {VERSION|TIMESTAMP} expr TO {VERSION|TIMESTAMP} expr
+ * <p>
+ * The version interval is left-open right-closed: (FROM, TO].
+ */
+public class ChangePeriod implements ParseNode {
+    private final QueryPeriod.PeriodType periodType;
+    private final Expr start;
     private final Optional<Expr> end;
-    private final PeriodType periodType;
+    private final boolean isStats;
+    private final NodePosition pos;
 
-    public QueryPeriod(PeriodType periodType, Expr end) {
-        this(periodType, Optional.empty(), Optional.of(end));
-    }
-
-    private QueryPeriod(PeriodType periodType, Optional<Expr> start, Optional<Expr> end) {
+    public ChangePeriod(QueryPeriod.PeriodType periodType, Expr start,
+                        Optional<Expr> end, boolean isStats, NodePosition pos) {
         this.periodType = periodType;
         this.start = start;
         this.end = end;
+        this.isStats = isStats;
+        this.pos = pos;
     }
 
-    public enum PeriodType {
-        TIMESTAMP,
-        /**
-         * Identifies the period endpoint by id. The id is interpreted as a
-         * bookmark id (com.starrocks.lake.bookmark) today; semantics may extend
-         * to a global commit version later without changing this enum.
-         */
-        VERSION
+    public QueryPeriod.PeriodType getPeriodType() {
+        return periodType;
     }
 
-    public Optional<Expr> getStart() {
+    public Expr getStart() {
         return start;
     }
 
@@ -52,12 +54,12 @@ public class QueryPeriod implements ParseNode {
         return end;
     }
 
-    public PeriodType getPeriodType() {
-        return periodType;
+    public boolean isStats() {
+        return isStats;
     }
 
     @Override
     public NodePosition getPos() {
-        return null;
+        return pos;
     }
 }

@@ -24,6 +24,7 @@ import com.starrocks.sql.optimizer.rule.implementation.CTEConsumeInlineImplement
 import com.starrocks.sql.optimizer.rule.implementation.CTEConsumerReuseImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.CTEProduceImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.CacheStatsScanImplementationRule;
+import com.starrocks.sql.optimizer.rule.implementation.ChangesScanImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.DeltaLakeScanImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.EsScanImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.ExceptImplementationRule;
@@ -210,6 +211,7 @@ public class RuleSet {
             new EsScanImplementationRule(),
             new MetaScanImplementationRule(),
             new CacheStatsScanImplementationRule(),
+            new ChangesScanImplementationRule(),
             new JDBCScanImplementationRule(),
             new BenchmarkScanImplementationRule(),
             new TableFunctionTableScanImplementationRule(),

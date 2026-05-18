@@ -33,8 +33,10 @@ import com.starrocks.catalog.PartitionNames;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableFunction;
 import com.starrocks.catalog.View;
+import com.starrocks.cdc.CDCPlanHelper;
 import com.starrocks.common.Pair;
 import com.starrocks.common.tvr.TvrVersionRange;
+import com.starrocks.common.util.TimeUtils;
 import com.starrocks.connector.ConnectorTableVersion;
 import com.starrocks.connector.PointerType;
 import com.starrocks.connector.elasticsearch.EsTablePartitions;
@@ -54,11 +56,13 @@ import com.starrocks.sql.analyzer.Scope;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.CTERelation;
+import com.starrocks.sql.ast.ChangePeriod;
 import com.starrocks.sql.ast.ExceptRelation;
 import com.starrocks.sql.ast.FileTableFunctionRelation;
 import com.starrocks.sql.ast.IntersectRelation;
 import com.starrocks.sql.ast.JoinOperator;
 import com.starrocks.sql.ast.JoinRelation;
+import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.NormalizedTableFunctionRelation;
 import com.starrocks.sql.ast.OrderByElement;
 import com.starrocks.sql.ast.PivotRelation;
@@ -111,6 +115,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalCTEAnchorOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalCTEConsumeOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalCTEProduceOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalCacheStatsScanOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalChangesScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalDeltaLakeScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalEsScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalExceptOperator;
@@ -149,12 +154,15 @@ import com.starrocks.sql.optimizer.operator.scalar.SubqueryOperator;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
 import com.starrocks.sql.optimizer.rewrite.scalar.ReduceCastRule;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.rule.TextMatchBasedRewriteRule;
+import com.starrocks.type.DateType;
+import com.starrocks.type.IntegerType;
 import com.starrocks.type.Type;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.tuple.Triple;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -677,6 +685,49 @@ public class RelationTransformer implements AstVisitorExtendInterface<LogicalPla
                                 node.getPartitionNames().getPartitionNames())
                         .setSelectedTabletIds(node.getTabletIds())
                         .build();
+            } else if (node.isChangesQuery()) {
+                OlapTable olapTable = (OlapTable) node.getTable();
+                ChangePeriod changePeriod = node.getChangePeriod();
+
+                // Stage-1 PK guard. Analyzer also throws this; transformer guard is defensive.
+                if (olapTable.getKeysType() == KeysType.PRIMARY_KEYS) {
+                    throw new SemanticException("CHANGES on primary-key table is not supported yet");
+                }
+
+                long dbId = GlobalStateMgr.getCurrentState().getLocalMetastore()
+                        .getDb(node.getName().getDb()).getId();
+                long tableId = olapTable.getId();
+                BookmarkManager bm = GlobalStateMgr.getCurrentState().getBookmarkManager();
+
+                Bookmark base = resolveBookmark(bm, dbId, tableId, olapTable,
+                        changePeriod.getStart(), changePeriod.getPeriodType(), "FROM");
+                Bookmark head = resolveBookmark(bm, dbId, tableId, olapTable,
+                        changePeriod.getEnd().orElseThrow(() ->
+                                new SemanticException("CHANGES TO expression is missing")),
+                        changePeriod.getPeriodType(), "TO");
+
+                if (base.getBookmarkId() > head.getBookmarkId()) {
+                    throw new SemanticException("CHANGES base must not be later than head");
+                }
+
+                BookmarkChange delta = BookmarkChange.computeChanges(base, head);
+                if (!delta.isTrackable()) {
+                    throw new SemanticException(CDCPlanHelper.buildNonTrackableMessage(delta, olapTable));
+                }
+
+                // Hand the scan operator a shadow OlapTable carrying only the
+                // physicals touched by the trackable delta, each stamped with
+                // the head bookmark's visible version. Downstream planning
+                // (column ref, partition prune) sees the scoped view, not the
+                // mutable live catalog table.
+                OlapTable scoped = BookmarkScopedTableResolver.resolveByChange(olapTable, delta);
+
+                Map<ColumnRefOperator, Column> colRefToColumnMetaMap = colRefToColumnMetaMapBuilder.build();
+                scanOperator = new LogicalChangesScanOperator(
+                        scoped, colRefToColumnMetaMap, columnMetaToColRefMap,
+                        base, head, delta, Operator.DEFAULT_LIMIT);
+                ((LogicalChangesScanOperator) scanOperator)
+                        .setSelectedPartitionId(new ArrayList<>(delta.getChanges().keySet()));
             } else {
                 OlapTable scanTable = (OlapTable) node.getTable();
                 if (node.getBookmarkId().isPresent()) {
@@ -845,6 +896,73 @@ public class RelationTransformer implements AstVisitorExtendInterface<LogicalPla
         PointerType pointerType = type == QueryPeriod.PeriodType.TIMESTAMP ? PointerType.TEMPORAL : PointerType.VERSION;
         return Optional.of(new ConnectorTableVersion(pointerType, (ConstantOperator) result));
     }
+
+    private OlapTable resolveBookmarkScopedTable(QueryPeriod queryPeriod, OlapTable live) {
+        ConnectorTableVersion version = resolveQueryPeriod(queryPeriod.getEnd(), queryPeriod.getPeriodType())
+                .orElseThrow(() -> new SemanticException("FOR VERSION AS OF requires a value"));
+        switch (version.getPointerType()) {
+            case VERSION: {
+                long id = version.getConstantOperator().castTo(IntegerType.BIGINT)
+                        .orElseThrow(() -> new SemanticException(
+                                "FOR VERSION AS OF on cloud-native requires BIGINT"))
+                        .getBigint();
+                return BookmarkScopedTableResolver.resolveById(live, id);
+            }
+            case TEMPORAL: {
+                LocalDateTime ts = version.getConstantOperator().castTo(DateType.DATETIME)
+                        .orElseThrow(() -> new SemanticException(
+                                "FOR VERSION AS OF TIMESTAMP requires a DATETIME-castable expression"))
+                        .getDatetime();
+                long timestampMs = ts.atZone(TimeUtils.getTimeZone().toZoneId()).toInstant().toEpochMilli();
+                return BookmarkScopedTableResolver.resolveByTimestamp(live, timestampMs);
+            }
+            default:
+                throw new IllegalStateException(
+                        String.format("unexpected version pointer type: %s", version.getPointerType()));
+        }
+    }
+
+    private Bookmark resolveBookmark(BookmarkManager bm, long dbId, long tableId, OlapTable table,
+                                     Expr versionExpr, QueryPeriod.PeriodType periodType,
+                                     String endpointName) {
+        ScalarOperator scalarOp;
+        try {
+            Scope scope = new Scope(RelationId.anonymous(), new RelationFields());
+            ExpressionAnalyzer.analyzeExpression(versionExpr, new AnalyzeState(), scope, session);
+            ExpressionMapping mapping = new ExpressionMapping(scope);
+            scalarOp = SqlToScalarOperatorTranslator.translate(versionExpr, mapping, new ColumnRefFactory());
+        } catch (Exception e) {
+            throw new SemanticException(
+                    "Failed to resolve CHANGES " + endpointName + " expression: " + e.getMessage());
+        }
+        if (!(scalarOp instanceof ConstantOperator)) {
+            throw new SemanticException(
+                    "CHANGES " + endpointName + " endpoint must be a constant expression");
+        }
+        ConstantOperator constant = (ConstantOperator) scalarOp;
+
+        if (periodType == QueryPeriod.PeriodType.VERSION) {
+            long bookmarkId = constant.castTo(IntegerType.BIGINT)
+                    .orElseThrow(() -> new SemanticException(
+                            "CHANGES " + endpointName + " VERSION must be a numeric constant"))
+                    .getBigint();
+            return bm.findBookmarkById(dbId, tableId, bookmarkId)
+                    .orElseThrow(() -> new SemanticException(String.format(
+                            "bookmark %d not found on table '%s'",
+                            bookmarkId, table.getName())));
+        } else {
+            LocalDateTime ts = constant.castTo(DateType.DATETIME)
+                    .orElseThrow(() -> new SemanticException(
+                            "CHANGES " + endpointName + " TIMESTAMP must be a DATETIME-castable expression"))
+                    .getDatetime();
+            long timestampMs = ts.atZone(TimeUtils.getTimeZone().toZoneId()).toInstant().toEpochMilli();
+            return bm.findByTimestamp(dbId, tableId, timestampMs)
+                    .orElseThrow(() -> new SemanticException(String.format(
+                            "no bookmark for table '%s' at or before %s",
+                            table.getName(), ts)));
+        }
+    }
+
 
     @Override
     public LogicalPlan visitCTE(CTERelation node, ExpressionMapping context) {

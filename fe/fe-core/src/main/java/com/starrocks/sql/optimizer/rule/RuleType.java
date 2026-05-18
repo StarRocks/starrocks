@@ -299,6 +299,7 @@ public enum RuleType {
     IMP_CTE_PRODUCE,
 
     IMP_CACHE_STATS_LSCAN_TO_PSCAN,
+    IMP_CHANGES_SCAN,
 
     // The following are combination rules:
     GROUP_RULES,

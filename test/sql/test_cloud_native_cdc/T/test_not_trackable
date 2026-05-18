@@ -1,0 +1,28 @@
+-- name: test_cdc_not_trackable @cloud
+
+CREATE TABLE part_t (dt date, k int, v int)
+DUPLICATE KEY(dt, k)
+PARTITION BY RANGE(dt) (
+    PARTITION p1 VALUES LESS THAN ("2026-06-01"),
+    PARTITION p2 VALUES LESS THAN ("2026-07-01")
+)
+DISTRIBUTED BY HASH(k) BUCKETS 1
+PROPERTIES ('replication_num' = '1');
+
+INSERT INTO part_t VALUES ("2026-05-15", 1, 10);
+INSERT INTO part_t VALUES ("2026-06-15", 2, 20);
+
+[UC]function: bk_base=create_bookmark("${db[0]}", "part_t", "base")
+
+ALTER TABLE part_t DROP PARTITION p1;
+
+-- Keep the table from being completely empty so create() finds state.
+INSERT INTO part_t VALUES ("2026-06-20", 3, 30);
+
+[UC]function: bk_head=create_bookmark("${db[0]}", "part_t", "head")
+
+-- Expect a SemanticException: bookmark base contains a partition that no longer exists.
+SELECT * FROM part_t CHANGES FROM VERSION ${bk_base} TO VERSION ${bk_head};
+
+function: release_bookmark("${db[0]}", "part_t", ${bk_base}, "base")
+function: release_bookmark("${db[0]}", "part_t", ${bk_head}, "head")

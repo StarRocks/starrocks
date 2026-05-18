@@ -378,6 +378,10 @@ public class OperationType {
     @IgnorableOnReplayFailed
     public static final short OP_REMOVE_EXTERNAL_HISTOGRAM_STATS_META = 11207;
 
+    // Bookmark (com.starrocks.lake.bookmark).
+    @IgnorableOnReplayFailed
+    public static final short OP_BOOKMARK_LOG = 11300;
+
     //Database json format log
     public static final short OP_CREATE_DB_V2 = 12001;
     @IgnorableOnReplayFailed

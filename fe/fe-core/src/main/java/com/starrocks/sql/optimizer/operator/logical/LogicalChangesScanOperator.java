@@ -1,0 +1,111 @@
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+package com.starrocks.sql.optimizer.operator.logical;
+
+import com.starrocks.catalog.Column;
+import com.starrocks.catalog.Table;
+import com.starrocks.lake.bookmark.Bookmark;
+import com.starrocks.lake.bookmark.BookmarkChange;
+import com.starrocks.sql.optimizer.OptExpression;
+import com.starrocks.sql.optimizer.OptExpressionVisitor;
+import com.starrocks.sql.optimizer.operator.OperatorType;
+import com.starrocks.sql.optimizer.operator.OperatorVisitor;
+import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+
+import java.util.List;
+import java.util.Map;
+
+public class LogicalChangesScanOperator extends LogicalScanOperator {
+
+    private Bookmark base;
+    private Bookmark head;
+    private BookmarkChange delta;
+
+    // Partition candidates set by the analyzer; MVP has no prune rule, so this is the
+    // full list of logical partitions touched by the delta.
+    private List<Long> selectedPartitionId;
+
+    public LogicalChangesScanOperator(Table table,
+                                      Map<ColumnRefOperator, Column> colRefToColumnMetaMap,
+                                      Map<Column, ColumnRefOperator> columnMetaToColRefMap,
+                                      Bookmark base,
+                                      Bookmark head,
+                                      BookmarkChange delta,
+                                      long limit) {
+        super(OperatorType.LOGICAL_CHANGES_SCAN, table,
+                colRefToColumnMetaMap, columnMetaToColRefMap, limit, null, null);
+        this.base = base;
+        this.head = head;
+        this.delta = delta;
+    }
+
+    private LogicalChangesScanOperator() {
+        super(OperatorType.LOGICAL_CHANGES_SCAN);
+    }
+
+    public Bookmark getBase() {
+        return base;
+    }
+
+    public Bookmark getHead() {
+        return head;
+    }
+
+    public BookmarkChange getDelta() {
+        return delta;
+    }
+
+    public List<Long> getSelectedPartitionId() {
+        return selectedPartitionId;
+    }
+
+    public void setSelectedPartitionId(List<Long> selectedPartitionId) {
+        this.selectedPartitionId = selectedPartitionId;
+    }
+
+    @Override
+    public <R, C> R accept(OperatorVisitor<R, C> visitor, C context) {
+        return visitor.visitLogicalChangesScan(this, context);
+    }
+
+    @Override
+    public <R, C> R accept(OptExpressionVisitor<R, C> visitor, OptExpression optExpression, C context) {
+        return visitor.visitLogicalTableScan(optExpression, context);
+    }
+
+    public static class Builder
+            extends LogicalScanOperator.Builder<LogicalChangesScanOperator, Builder> {
+
+        @Override
+        protected LogicalChangesScanOperator newInstance() {
+            return new LogicalChangesScanOperator();
+        }
+
+        @Override
+        public Builder withOperator(LogicalChangesScanOperator operator) {
+            super.withOperator(operator);
+            builder.base = operator.base;
+            builder.head = operator.head;
+            builder.delta = operator.delta;
+            builder.selectedPartitionId = operator.selectedPartitionId;
+            return this;
+        }
+
+        public Builder setSelectedPartitionId(List<Long> ids) {
+            builder.selectedPartitionId = ids;
+            return this;
+        }
+    }
+}

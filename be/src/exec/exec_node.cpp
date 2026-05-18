@@ -374,6 +374,7 @@ void ExecNode::collect_scan_nodes(vector<ExecNode*>* nodes) {
     collect_nodes(TPlanNodeType::BENCHMARK_SCAN_NODE, nodes);
     collect_nodes(TPlanNodeType::LAKE_SCAN_NODE, nodes);
     collect_nodes(TPlanNodeType::LAKE_CACHE_STATS_SCAN_NODE, nodes);
+    collect_nodes(TPlanNodeType::CHANGES_SCAN_NODE, nodes);
     collect_nodes(TPlanNodeType::SCHEMA_SCAN_NODE, nodes);
 }
 

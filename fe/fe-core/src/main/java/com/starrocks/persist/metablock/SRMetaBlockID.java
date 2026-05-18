@@ -107,6 +107,8 @@ public class SRMetaBlockID {
 
     public static final SRMetaBlockID DIGEST_BLACKLIST_MGR = new SRMetaBlockID(37);
 
+    public static final SRMetaBlockID BOOKMARK_MANAGER = new SRMetaBlockID(38);
+
     /**
      * NOTICE: SRMetaBlockID cannot use a value exceeding 20000, please follow the above sequence number
      */

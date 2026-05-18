@@ -17,6 +17,7 @@ package com.starrocks.sql.optimizer.rule.transformation.materialization.rule;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.Table;
+import com.starrocks.cdc.CDCPlanHelper;
 import com.starrocks.common.Config;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.metric.IMaterializedViewMetricsEntity;
@@ -79,6 +80,10 @@ public abstract class BaseMaterializedViewRewriteRule extends TransformationRule
 
     @Override
     public boolean check(OptExpression input, OptimizerContext context) {
+        // CDC plans build their own scan path; MV rewrite has no semantics over CHANGES output.
+        if (CDCPlanHelper.containsChangesScan(input)) {
+            return false;
+        }
         // To avoid dead-loop rewrite, no rewrite when query extra predicate is not changed
         if (Utils.isOptHasAppliedRule(input, OP_MV_UNION_REWRITE)) {
             return false;

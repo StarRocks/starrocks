@@ -433,11 +433,17 @@ StatusOr<TabletMetadataPtr> publish_version(TabletManager* tablet_mgr, const Pub
             if (txns[i].load_ids_size() > 0) {
                 VLOG(2) << "[publish_version] applying multi-stmt txn txn_id=" << txns[i].txn_id()
                         << " load_ids_size=" << txns[i].load_ids_size();
+                int rowsets_before = new_metadata->rowsets_size();
                 auto st = log_applier->apply(txn_logs);
                 if (!st.ok()) {
                     LOG(WARNING) << "Fail to apply txn log : " << st << " tablet_info=" << tablet_info
                                  << " txn=" << txns[i].DebugString();
                     return st;
+                }
+                // CDC: stamp precise commit_version on newly added rowsets
+                int64_t commit_version = ori_base_version + i + 1;
+                for (int r = rowsets_before; r < new_metadata->rowsets_size(); r++) {
+                    new_metadata->mutable_rowsets(r)->set_commit_version(commit_version);
                 }
                 for (const auto& load_id : txns[i].load_ids()) {
                     auto tablet_log_path =
@@ -461,11 +467,17 @@ StatusOr<TabletMetadataPtr> publish_version(TabletManager* tablet_mgr, const Pub
                 alter_version = txn_log->op_schema_change().alter_version();
             }
 
+            int rowsets_before = new_metadata->rowsets_size();
             auto st = log_applier->apply(*txn_log);
             if (!st.ok()) {
                 LOG(WARNING) << "Fail to apply txn log : " << st << " tablet_info=" << tablet_info
                              << " txn=" << txns[i].DebugString();
                 return st;
+            }
+            // CDC: stamp precise commit_version on newly added rowsets
+            int64_t commit_version = ori_base_version + i + 1;
+            for (int r = rowsets_before; r < new_metadata->rowsets_size(); r++) {
+                new_metadata->mutable_rowsets(r)->set_commit_version(commit_version);
             }
 
             if (tablet_info.can_delete_txn_log()) {
@@ -527,6 +539,24 @@ StatusOr<TabletMetadataPtr> publish_version(TabletManager* tablet_mgr, const Pub
         int64_t prev_bv =
                 new_metadata->has_vector_index_built_version() ? new_metadata->vector_index_built_version() : 0;
         new_metadata->set_vector_index_built_version(std::max(prev_bv, fe_built_version));
+    }
+
+    // Build metadata_ancestors for CDC reverse traversal
+    if (config::cloud_native_tablet_metadata_ancestors_recorded > 0) {
+        auto* chain = new_metadata->mutable_metadata_ancestors();
+        chain->Clear();
+        // Add base_version as direct parent
+        chain->Add(base_version);
+        // Copy parent's chain (if available), truncating to configured depth
+        if (base_metadata != nullptr && base_metadata->metadata_ancestors_size() > 0) {
+            int max_depth = config::cloud_native_tablet_metadata_ancestors_recorded;
+            int copy_count = std::min(
+                base_metadata->metadata_ancestors_size(),
+                max_depth - 1);  // -1 because we already added base_version
+            for (int i = 0; i < copy_count; i++) {
+                chain->Add(base_metadata->metadata_ancestors(i));
+            }
+        }
     }
 
     // Save new metadata

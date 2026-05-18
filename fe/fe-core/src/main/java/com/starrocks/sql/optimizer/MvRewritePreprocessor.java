@@ -45,6 +45,7 @@ import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.mv.MVPlanValidationResult;
 import com.starrocks.catalog.mv.MVTimelinessArbiter;
+import com.starrocks.cdc.CDCPlanHelper;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
@@ -131,6 +132,10 @@ public class MvRewritePreprocessor {
     }
 
     public void prepare(OptExpression queryOptExpression) {
+        // CDC plans build their own scan path; MV rewrite has no semantics over CHANGES output.
+        if (CDCPlanHelper.containsChangesScan(queryOptExpression)) {
+            return;
+        }
         try (Timer ignored = Tracers.watchScope("MVPreprocess")) {
             Set<Table> queryTables = MvUtils.getAllTables(queryOptExpression).stream().collect(Collectors.toSet());
             logMVParams(connectContext, queryTables);
@@ -1210,4 +1215,5 @@ public class MvRewritePreprocessor {
 
         return distributionSpec;
     }
+
 }

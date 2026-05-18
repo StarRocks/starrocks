@@ -65,6 +65,7 @@ import com.starrocks.planner.AnalyticEvalNode;
 import com.starrocks.planner.AssertNumRowsNode;
 import com.starrocks.planner.BenchmarkScanNode;
 import com.starrocks.planner.CacheStatsScanNode;
+import com.starrocks.planner.ChangesScanNode;
 import com.starrocks.planner.DataPartition;
 import com.starrocks.planner.DecodeNode;
 import com.starrocks.planner.DeltaLakeScanNode;
@@ -170,6 +171,7 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalBenchmarkScanOperat
 import com.starrocks.sql.optimizer.operator.physical.PhysicalCTEConsumeOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalCTEProduceOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalCacheStatsScanOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalChangesScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalConcatenateOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalDecodeOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalDeltaLakeScanOperator;
@@ -4447,6 +4449,63 @@ public class PlanFragmentBuilder {
             // scanNode.computeStatistics(optExpression.getStatistics());
             currentExecGroup.add(scanNode, true);
 
+            context.getScanNodes().add(scanNode);
+
+            PlanFragment fragment = new PlanFragment(
+                    context.getNextFragmentId(),
+                    scanNode,
+                    DataPartition.RANDOM);
+            context.getFragments().add(fragment);
+            return fragment;
+        }
+
+        @Override
+        public PlanFragment visitPhysicalChangesScan(OptExpression optExpression, ExecPlan context) {
+            PhysicalChangesScanOperator scan = (PhysicalChangesScanOperator) optExpression.getOp();
+            OlapTable olapTable = (OlapTable) scan.getTable();
+            context.getDescTbl().addReferencedTable(olapTable);
+
+            TupleDescriptor tupleDescriptor = context.getDescTbl().createTupleDescriptor();
+            tupleDescriptor.setTable(olapTable);
+
+            for (Map.Entry<ColumnRefOperator, Column> entry : scan.getColRefToColumnMetaMap().entrySet()) {
+                SlotDescriptor slotDescriptor = context.getDescTbl()
+                        .addSlotDescriptor(tupleDescriptor, new SlotId(entry.getKey().getId()));
+                slotDescriptor.setColumn(entry.getValue());
+                slotDescriptor.setIsNullable(entry.getValue().isAllowNull());
+                slotDescriptor.setIsMaterialized(true);
+                slotDescriptor.setType(entry.getKey().getType());
+                context.getColRefToExpr().put(entry.getKey(),
+                        new SlotRef(entry.getKey().getName(), slotDescriptor));
+            }
+            tupleDescriptor.computeMemLayout();
+
+            ChangesScanNode scanNode = new ChangesScanNode(
+                    context.getNextNodeId(),
+                    tupleDescriptor,
+                    olapTable,
+                    scan.getDelta(),
+                    scan.getBase(),
+                    scan.getHead());
+
+            // Pass partition pruning results from optimizer (MVP: full delta partition set).
+            scanNode.setSelectedPartitionIds(scan.getSelectedPartitionId());
+
+            ComputeResource computeResource = ConnectContext.get() != null
+                    ? ConnectContext.get().getCurrentComputeResource()
+                    : WarehouseManager.DEFAULT_RESOURCE;
+            scanNode.computeScanRanges(computeResource);
+
+            // Lower optimizer-pushed predicates to Expr conjuncts (mirrors visitPhysicalOlapScan).
+            List<ScalarOperator> predicates = Utils.extractConjuncts(scan.getPredicate());
+            ScalarOperatorToExpr.FormatterContext formatterContext =
+                    new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr());
+            for (ScalarOperator predicate : predicates) {
+                scanNode.getConjuncts().add(
+                        ScalarOperatorToExpr.buildExecExpression(predicate, formatterContext));
+            }
+
+            currentExecGroup.add(scanNode, true);
             context.getScanNodes().add(scanNode);
 
             PlanFragment fragment = new PlanFragment(

@@ -127,6 +127,7 @@ import com.starrocks.sql.ast.CancelLoadStmt;
 import com.starrocks.sql.ast.CancelRefreshDictionaryStmt;
 import com.starrocks.sql.ast.CancelRefreshMaterializedViewStmt;
 import com.starrocks.sql.ast.CatalogRef;
+import com.starrocks.sql.ast.ChangePeriod;
 import com.starrocks.sql.ast.CleanTabletSchedQClause;
 import com.starrocks.sql.ast.CleanTemporaryTableStmt;
 import com.starrocks.sql.ast.ClearDataCacheRulesStmt;
@@ -6574,6 +6575,11 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
             }
         }
 
+        if (context.changePeriod() != null) {
+            ChangePeriod changePeriod = (ChangePeriod) visit(context.changePeriod());
+            tableRelation.setChangePeriod(changePeriod);
+        }
+
         if (context.BEFORE() != null) {
             String ts = ((StringLiteral) visit(context.ts)).getStringValue();
             SimpleDateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
@@ -6614,6 +6620,27 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
         QueryPeriod.PeriodType type = getPeriodType((Token) context.periodType().getChild(0).getPayload());
         Expr end = (Expr) visit(context.end);
         return new QueryPeriod(type, end);
+    }
+
+    @Override
+    public ParseNode visitChangePeriod(com.starrocks.sql.parser.StarRocksParser.ChangePeriodContext context) {
+        Expr start = (Expr) visit(context.start);
+        Optional<Expr> end = Optional.of((Expr) visit(context.end));
+        // STATS branch elides the periodType keyword (no VERSION/TIMESTAMP between
+        // FROM/TO and the expression). Spec section 4 reserves STATS for a future
+        // stage; the analyzer rejects with a "not yet supported" message — we just
+        // need the AST to carry the flag and a placeholder periodType so existing
+        // QueryPeriod.PeriodType-typed fields stay non-null.
+        if (context.STATS() != null) {
+            return new ChangePeriod(QueryPeriod.PeriodType.VERSION, start, end, true, createPos(context));
+        }
+        QueryPeriod.PeriodType fromType = getPeriodType((Token) context.periodType(0).getChild(0).getPayload());
+        QueryPeriod.PeriodType toType = getPeriodType((Token) context.periodType(1).getChild(0).getPayload());
+        if (fromType != toType) {
+            throw new ParsingException(
+                    "FROM and TO must use the same period type (both VERSION or both TIMESTAMP)");
+        }
+        return new ChangePeriod(fromType, start, end, false, createPos(context));
     }
 
     private QueryPeriod.PeriodType getPeriodType(Token token) {

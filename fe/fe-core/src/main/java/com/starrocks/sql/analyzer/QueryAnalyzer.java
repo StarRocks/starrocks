@@ -54,6 +54,7 @@ import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.ast.AstTraverser;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.CTERelation;
+import com.starrocks.sql.ast.ChangePeriod;
 import com.starrocks.sql.ast.CreateTableAsSelectStmt;
 import com.starrocks.sql.ast.ExceptRelation;
 import com.starrocks.sql.ast.FileTableFunctionRelation;
@@ -62,6 +63,7 @@ import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.IntersectRelation;
 import com.starrocks.sql.ast.JoinOperator;
 import com.starrocks.sql.ast.JoinRelation;
+import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.NormalizedTableFunctionRelation;
 import com.starrocks.sql.ast.OrderByElement;
 import com.starrocks.sql.ast.ParseNode;
@@ -69,6 +71,7 @@ import com.starrocks.sql.ast.PartitionRef;
 import com.starrocks.sql.ast.PivotAggregation;
 import com.starrocks.sql.ast.PivotRelation;
 import com.starrocks.sql.ast.PivotValue;
+import com.starrocks.sql.ast.QueryPeriod;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.Relation;
@@ -137,6 +140,9 @@ import static com.starrocks.thrift.PlanNodesConstants.CACHE_STATS_TABLET_ID_COLU
 import static com.starrocks.thrift.PlanNodesConstants.CACHE_STATS_TOTAL_BYTES_COLUMN_NAME;
 
 public class QueryAnalyzer {
+    public static final String CDC_CHANGE_TYPE_COLUMN_NAME = "__CHANGE_TYPE__";
+    public static final String CDC_ROW_VERSION_COLUMN_NAME = "__ROW_VERSION__";
+
     private static final String JDBC_QUERY_TABLE_FUNCTION_USAGE =
             "JDBC query table function only supports TABLE(<catalog>.native_query('<sql>'))";
     private final ConnectContext session;
@@ -1020,6 +1026,37 @@ public class QueryAnalyzer {
                     throw new SemanticException("Legacy _BINLOG_ queries are no longer supported");
                 }
 
+                if (node.isChangesQuery()) {
+                    // Spec section 4 reserves the STATS form of CHANGES for a future stage;
+                    // the grammar accepts it so users see this targeted "not yet supported"
+                    // message instead of a parse error, and the reject runs before the
+                    // table-type / period-type checks so the diagnostic isn't masked by
+                    // an unrelated rejection (e.g. PK-table or wrong-type table).
+                    if (node.getChangePeriod().isStats()) {
+                        throw new SemanticException("CHANGES STATS is not yet supported");
+                    }
+                    // E1: only cloud-native OlapTables (DUP / AGG) are in scope for CHANGES;
+                    // external / schema / view / shared-nothing tables fail here with the
+                    // type name so the user sees what kind they actually passed.
+                    if (!(table instanceof OlapTable) || !table.isCloudNativeTableOrMaterializedView()) {
+                        throw new SemanticException(
+                                "Unsupported table type for CHANGES, table type: " + table.getType());
+                    }
+                    // Stage-1 limitation: PK tables are excluded; this is independent of the
+                    // type-system errors and kept as its own message so callers can act on it.
+                    if (((OlapTable) table).getKeysType() == KeysType.PRIMARY_KEYS) {
+                        throw new SemanticException("CHANGES on primary-key table is not supported yet");
+                    }
+                    QueryAnalyzer.validateChangePeriod(node.getChangePeriod());
+                    for (Column column : getCdcMetadataColumns()) {
+                        SlotRef slot = new SlotRef(tableName, column.getName(), column.getName());
+                        Field field = new Field(column.getName(), column.getType(), tableName, slot, true,
+                                column.isAllowNull());
+                        columns.put(field, column);
+                        fields.add(field);
+                    }
+                }
+
                 // Add virtual columns for OLAP tables
                 for (Column column : getVirtualColumns(table)) {
                     SlotRef slot = new SlotRef(tableName, column.getName(), column.getName());
@@ -1067,6 +1104,13 @@ public class QueryAnalyzer {
             columns.add(new Column(BINLOG_VERSION_COLUMN_NAME, IntegerType.BIGINT));
             columns.add(new Column(BINLOG_SEQ_ID_COLUMN_NAME, IntegerType.BIGINT));
             columns.add(new Column(BINLOG_TIMESTAMP_COLUMN_NAME, IntegerType.BIGINT));
+            return columns;
+        }
+
+        private List<Column> getCdcMetadataColumns() {
+            List<Column> columns = new ArrayList<>();
+            columns.add(new Column(CDC_CHANGE_TYPE_COLUMN_NAME, IntegerType.TINYINT));
+            columns.add(new Column(CDC_ROW_VERSION_COLUMN_NAME, IntegerType.BIGINT));
             return columns;
         }
 
@@ -2698,6 +2742,65 @@ public class QueryAnalyzer {
 
         private boolean isTemporalOrderingType(Type type) {
             return type.isBigint() || type.isDate() || type.isDatetime();
+        }
+    }
+
+    /**
+     * Lookup-time period / endpoint-type checks for the CHANGES clause.
+     *
+     * <p>Grammar+AstBuilder collapse SYSTEM_TIME onto TIMESTAMP, so a real SQL
+     * never produces a periodType outside {VERSION, TIMESTAMP}; the
+     * exhaustiveness throw is a defensive fallthrough so a future enum addition
+     * fails loudly here instead of silently misclassifying.
+     *
+     * <p>Endpoint types are checked against the parsed Expr's declared type
+     * (IntLiteral / StringLiteral / DateLiteral all stamp their type at
+     * construction), so this guard fires before any expression analysis.
+     *
+     * <p>Static + public so analyzer-only callers and JUnit can both exercise it
+     * without instantiating a full QueryAnalyzer.
+     */
+    public static void validateChangePeriod(ChangePeriod changePeriod) {
+        if (changePeriod == null) {
+            return;
+        }
+        QueryPeriod.PeriodType periodType = changePeriod.getPeriodType();
+        if (periodType == null) {
+            throw new SemanticException(
+                    "Unsupported CHANGES period type, expected VERSION or TIMESTAMP");
+        }
+        switch (periodType) {
+            case VERSION:
+                requireBigint(changePeriod.getStart());
+                changePeriod.getEnd().ifPresent(QueryAnalyzer::requireBigint);
+                break;
+            case TIMESTAMP:
+                requireDatetimeCastable(changePeriod.getStart());
+                changePeriod.getEnd().ifPresent(QueryAnalyzer::requireDatetimeCastable);
+                break;
+            default:
+                throw new SemanticException(
+                        "Unsupported CHANGES period type, expected VERSION or TIMESTAMP");
+        }
+    }
+
+    /** E3 — VERSION endpoints must be BIGINT (or a narrower signed integer). LARGEINT is rejected. */
+    private static void requireBigint(Expr expr) {
+        if (expr == null || !expr.getType().isIntegerType()) {
+            throw new SemanticException("CHANGES VERSION requires BIGINT");
+        }
+    }
+
+    /** E4 — TIMESTAMP endpoints must be string/date/datetime so castTo(DATETIME) can succeed. */
+    private static void requireDatetimeCastable(Expr expr) {
+        if (expr == null) {
+            throw new SemanticException(
+                    "CHANGES TIMESTAMP requires a DATETIME-castable expression");
+        }
+        Type t = expr.getType();
+        if (!t.isStringType() && !t.isDateType()) {
+            throw new SemanticException(
+                    "CHANGES TIMESTAMP requires a DATETIME-castable expression");
         }
     }
 }
