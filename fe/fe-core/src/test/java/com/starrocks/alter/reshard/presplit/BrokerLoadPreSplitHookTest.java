@@ -21,16 +21,21 @@ import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.common.Config;
 import com.starrocks.load.BrokerFileGroup;
+import com.starrocks.metric.MetricRepo;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.BrokerDesc;
 import com.starrocks.thrift.TBrokerFileStatus;
 import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.MockedStatic;
+import org.mockito.Mockito;
 
 import java.util.List;
 
 import static com.starrocks.alter.reshard.presplit.PresplitTestSupport.assertHookDoesNotDelegate;
+import static com.starrocks.alter.reshard.presplit.PresplitTestSupport.mockConnectContextWithSessionPreSplit;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -63,6 +68,38 @@ public class BrokerLoadPreSplitHookTest {
         Config.enable_tablet_pre_split_for_broker_load = false;
         assertHookDoesNotDelegate(() ->
                 invokeHook(singlePartitionOlapTable(), List.of(), List.of()));
+    }
+
+    @Test
+    public void testSessionOptOutShortCircuits() throws Exception {
+        // SET enable_tablet_pre_split=false on the session must short-circuit
+        // before the eligibility-target walk AND record the eligibility-skip
+        // counter under disabled_by_session. The hook reads ConnectContext.get()
+        // (BrokerLoadJob binds the load's ConnectContext via context.bindScope()
+        // around this call in production), so stub the thread-local lookup here.
+        // Resolve the inner context mock before the outer mockStatic.when() —
+        // Mockito's per-thread stubbing state does not tolerate nested
+        // mock()/when() inside another when() argument.
+        ConnectContext optedOutContext = mockConnectContextWithSessionPreSplit(false);
+        boolean savedHasInit = MetricRepo.hasInit;
+        MetricRepo.hasInit = true;
+        try {
+            String label = SkipReason.DISABLED_BY_SESSION.name().toLowerCase();
+            long baseline = MetricRepo.COUNTER_TABLET_PRE_SPLIT_ELIGIBILITY_SKIPPED
+                    .getMetric(label).getValue();
+
+            try (MockedStatic<ConnectContext> contextStatic = Mockito.mockStatic(ConnectContext.class)) {
+                contextStatic.when(ConnectContext::get).thenReturn(optedOutContext);
+                assertHookDoesNotDelegate(() ->
+                        invokeHook(singlePartitionOlapTable(), List.of(), List.of()));
+            }
+
+            org.junit.jupiter.api.Assertions.assertEquals(baseline + 1L,
+                    MetricRepo.COUNTER_TABLET_PRE_SPLIT_ELIGIBILITY_SKIPPED.getMetric(label).getValue().longValue(),
+                    "session opt-out must bump the disabled_by_session bucket");
+        } finally {
+            MetricRepo.hasInit = savedHasInit;
+        }
     }
 
     @Test

@@ -104,10 +104,7 @@ public final class TabletPreSplitCoordinator {
 
     /** Build a {@code Skipped} outcome and record the eligibility-skipped counter for the given reason. */
     private static PreSplitOutcome.Skipped skipEligibility(SkipReason reason) {
-        if (MetricRepo.hasInit) {
-            MetricRepo.COUNTER_TABLET_PRE_SPLIT_ELIGIBILITY_SKIPPED
-                    .getMetric(reason.name().toLowerCase()).increase(1L);
-        }
+        PreSplitMetrics.recordEligibilitySkip(reason);
         return new PreSplitOutcome.Skipped(reason);
     }
 

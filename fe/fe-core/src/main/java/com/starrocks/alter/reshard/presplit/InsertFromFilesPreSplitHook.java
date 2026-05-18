@@ -85,10 +85,15 @@ import java.util.List;
  * columns. By-name INSERT mapping skips this check.
  *
  * <p>Sampler-executor selection is delegated to
- * {@link DefaultPreSplitPipeline#forLoadKind}: Tier 1 uses the production
- * {@link InsertFromFilesRowGroupStatisticsProvider}; Tier 2 is still a
- * placeholder. The per-path Config flag defaults to {@code false}, so the
- * hook never reaches the executors until the operator opts in.
+ * {@link DefaultPreSplitPipeline#forLoadKind}: Tier 1 uses
+ * {@link InsertFromFilesRowGroupStatisticsProvider}, Tier 2 uses
+ * {@link InsertFromFilesSampleSubqueryExecutor}. The per-path Config flag
+ * {@code enable_tablet_pre_split_for_insert_from_files} defaults to
+ * {@code true} as of v4.1.0 (GA flip); set it to {@code false} to disable
+ * cluster-wide. The session variable {@code enable_tablet_pre_split} (also
+ * default {@code true}) provides a per-session opt-out checked early in
+ * this hook so a session-opt-out load does not pay the FILES schema
+ * resolution.
  */
 public final class InsertFromFilesPreSplitHook {
 
@@ -121,6 +126,16 @@ public final class InsertFromFilesPreSplitHook {
         }
         FileTableFunctionRelation filesRelation = extractSingleFilesSource(insertStmt);
         if (filesRelation == null) {
+            return;
+        }
+        // Honor the per-session opt-out after the cheap AST-shape filters so a
+        // load with SET enable_tablet_pre_split=false does NOT pay the
+        // eligibility-target walk + FILES schema inference. The
+        // eligibility-skip counter is recorded explicitly here — the coordinator
+        // never sees this skip otherwise, but operators still need to observe
+        // the disabled_by_session reason in metrics.
+        if (!context.getSessionVariable().isEnableTabletPreSplit()) {
+            PreSplitMetrics.recordEligibilitySkip(SkipReason.DISABLED_BY_SESSION);
             return;
         }
         PreSplitTargets.EligibleTarget target = resolveEligibleTarget(insertStmt, context);

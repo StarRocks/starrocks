@@ -19,6 +19,7 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.Config;
 import com.starrocks.load.BrokerFileGroup;
 import com.starrocks.planner.LoadScanNode;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.BrokerDesc;
 import com.starrocks.thrift.TBrokerFileStatus;
 import com.starrocks.warehouse.cngroup.ComputeResource;
@@ -44,8 +45,11 @@ import java.util.List;
  * {@link BrokerLoadRowGroupStatisticsProvider}, Tier 2 uses
  * {@link BrokerLoadSampleSubqueryExecutor}. The per-path Config flag
  * {@code enable_tablet_pre_split_for_broker_load} defaults to
- * {@code false}, so the hook never reaches the executors until the
- * operator opts in.
+ * {@code true} as of v4.1.0 (GA flip); set it to {@code false} to disable
+ * cluster-wide. The session variable {@code enable_tablet_pre_split}
+ * (also default {@code true}) provides a per-session opt-out checked
+ * early in this hook so a session-opt-out load does not pay the
+ * eligibility-target walk and scan-context build.
  */
 public final class BrokerLoadPreSplitHook {
 
@@ -81,6 +85,18 @@ public final class BrokerLoadPreSplitHook {
             List<BrokerFileGroup> fileGroups, List<List<TBrokerFileStatus>> fileStatuses,
             ComputeResource computeResource) {
         if (!Config.enable_tablet_pre_split_for_broker_load) {
+            return;
+        }
+        // Honor the per-session opt-out here so a load with
+        // SET enable_tablet_pre_split=false does NOT pay the eligibility-target
+        // walk and scan-context build. The session variable is bound by the
+        // caller (BrokerLoadJob.createLoadingTask wraps this in
+        // context.bindScope()). The eligibility-skip counter is recorded
+        // explicitly so operators still observe the disabled_by_session
+        // reason in metrics — the coordinator never sees this skip otherwise.
+        ConnectContext context = ConnectContext.get();
+        if (context != null && !context.getSessionVariable().isEnableTabletPreSplit()) {
+            PreSplitMetrics.recordEligibilitySkip(SkipReason.DISABLED_BY_SESSION);
             return;
         }
         // BrokerLoadJob.createLoadingTask guarantees database / targetTable / computeResource are

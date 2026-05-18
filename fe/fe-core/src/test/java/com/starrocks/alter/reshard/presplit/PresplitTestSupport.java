@@ -17,6 +17,8 @@ package com.starrocks.alter.reshard.presplit;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Tuple;
 import com.starrocks.catalog.Variant;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.SessionVariable;
 import com.starrocks.thrift.TBrokerFileStatus;
 import com.starrocks.thrift.TResultBatch;
 import com.starrocks.type.IntegerType;
@@ -86,6 +88,23 @@ final class PresplitTestSupport {
         return List.of(
                 Variant.of(VarcharType.VARCHAR, tenant),
                 Variant.of(IntegerType.BIGINT, Long.toString(position)));
+    }
+
+    /**
+     * Builds a {@link ConnectContext} stub whose {@link SessionVariable} carries
+     * a specific {@code enable_tablet_pre_split} value. Production hooks read
+     * this value to honor the per-session opt-out; tests that go through the
+     * hook's early session check should supply a properly-stubbed context
+     * rather than {@code mock(ConnectContext.class)} (whose
+     * {@code getSessionVariable()} returns {@code null} and would NPE the
+     * check).
+     */
+    static ConnectContext mockConnectContextWithSessionPreSplit(boolean enablePreSplit) {
+        ConnectContext context = Mockito.mock(ConnectContext.class);
+        SessionVariable sessionVariable = Mockito.mock(SessionVariable.class);
+        Mockito.when(sessionVariable.isEnableTabletPreSplit()).thenReturn(enablePreSplit);
+        Mockito.when(context.getSessionVariable()).thenReturn(sessionVariable);
+        return context;
     }
 
     static TBrokerFileStatus brokerFileStatus(String path, long size) {

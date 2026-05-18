@@ -19,6 +19,7 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.TableFunctionTable;
 import com.starrocks.catalog.TableName;
 import com.starrocks.common.Config;
+import com.starrocks.metric.MetricRepo;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.SemanticException;
@@ -47,6 +48,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import static com.starrocks.alter.reshard.presplit.PresplitTestSupport.assertHookDoesNotDelegate;
+import static com.starrocks.alter.reshard.presplit.PresplitTestSupport.mockConnectContextWithSessionPreSplit;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
@@ -83,14 +85,47 @@ public class InsertFromFilesPreSplitHookTest {
         InsertStmt stmt = simpleFilesInsertStmt();
 
         assertHookDoesNotDelegate(() ->
-                InsertFromFilesPreSplitHook.maybeRunPreSplit(stmt, mock(ConnectContext.class)));
+                InsertFromFilesPreSplitHook.maybeRunPreSplit(stmt, mockConnectContextWithSessionPreSplit(true)));
+    }
+
+    @Test
+    public void testSessionOptOutShortCircuits() throws Exception {
+        // SET enable_tablet_pre_split=false on the session must short-circuit
+        // after the cheap AST-shape filters (cost: zero) but before FILES
+        // schema resolution + target resolution (cost: real), AND record the
+        // eligibility-skip counter under disabled_by_session — operators rely
+        // on that bvar to observe per-session opt-outs.
+        //
+        // To reach the session check, the stmt must clear qualifyingInsertStmt
+        // and extractSingleFilesSource. The fresh-txn check needs getTxnId()
+        // == INVALID_TXN_ID (Mockito's default 0 would otherwise be treated
+        // as a pre-set txn id).
+        InsertStmt stmt = simpleFilesInsertStmt();
+        when(stmt.getTxnId()).thenReturn(DmlStmt.INVALID_TXN_ID);
+
+        boolean savedHasInit = MetricRepo.hasInit;
+        MetricRepo.hasInit = true;
+        try {
+            String label = SkipReason.DISABLED_BY_SESSION.name().toLowerCase();
+            long baseline = MetricRepo.COUNTER_TABLET_PRE_SPLIT_ELIGIBILITY_SKIPPED
+                    .getMetric(label).getValue();
+
+            assertHookDoesNotDelegate(() ->
+                    InsertFromFilesPreSplitHook.maybeRunPreSplit(stmt, mockConnectContextWithSessionPreSplit(false)));
+
+            org.junit.jupiter.api.Assertions.assertEquals(baseline + 1L,
+                    MetricRepo.COUNTER_TABLET_PRE_SPLIT_ELIGIBILITY_SKIPPED.getMetric(label).getValue().longValue(),
+                    "session opt-out must bump the disabled_by_session bucket");
+        } finally {
+            MetricRepo.hasInit = savedHasInit;
+        }
     }
 
     @Test
     public void testNonInsertStatementShortCircuits() throws Exception {
         StatementBase stmt = mock(StatementBase.class);
         assertHookDoesNotDelegate(() ->
-                InsertFromFilesPreSplitHook.maybeRunPreSplit(stmt, mock(ConnectContext.class)));
+                InsertFromFilesPreSplitHook.maybeRunPreSplit(stmt, mockConnectContextWithSessionPreSplit(true)));
     }
 
     @Test
@@ -101,7 +136,7 @@ public class InsertFromFilesPreSplitHookTest {
         when(stmt.getExplainLevel()).thenReturn(ExplainLevel.NORMAL);
 
         assertHookDoesNotDelegate(() ->
-                InsertFromFilesPreSplitHook.maybeRunPreSplit(stmt, mock(ConnectContext.class)));
+                InsertFromFilesPreSplitHook.maybeRunPreSplit(stmt, mockConnectContextWithSessionPreSplit(true)));
     }
 
     @Test
@@ -114,13 +149,13 @@ public class InsertFromFilesPreSplitHookTest {
         when(stmt.hasOverwriteJob()).thenReturn(false);
 
         assertHookDoesNotDelegate(() ->
-                InsertFromFilesPreSplitHook.maybeRunPreSplit(stmt, mock(ConnectContext.class)));
+                InsertFromFilesPreSplitHook.maybeRunPreSplit(stmt, mockConnectContextWithSessionPreSplit(true)));
     }
 
     @Test
     public void testExplicitSessionTransactionShortCircuits() throws Exception {
         InsertStmt stmt = simpleFilesInsertStmt();
-        ConnectContext context = mock(ConnectContext.class);
+        ConnectContext context = mockConnectContextWithSessionPreSplit(true);
         when(context.getTxnId()).thenReturn(42L);
 
         assertHookDoesNotDelegate(() -> InsertFromFilesPreSplitHook.maybeRunPreSplit(stmt, context));
@@ -134,7 +169,7 @@ public class InsertFromFilesPreSplitHookTest {
         when(stmt.getTxnId()).thenReturn(99L);
 
         assertHookDoesNotDelegate(() ->
-                InsertFromFilesPreSplitHook.maybeRunPreSplit(stmt, mock(ConnectContext.class)));
+                InsertFromFilesPreSplitHook.maybeRunPreSplit(stmt, mockConnectContextWithSessionPreSplit(true)));
     }
 
     @Test
@@ -144,7 +179,7 @@ public class InsertFromFilesPreSplitHookTest {
         when(stmt.getQueryStatement()).thenReturn(null);
 
         assertHookDoesNotDelegate(() ->
-                InsertFromFilesPreSplitHook.maybeRunPreSplit(stmt, mock(ConnectContext.class)));
+                InsertFromFilesPreSplitHook.maybeRunPreSplit(stmt, mockConnectContextWithSessionPreSplit(true)));
     }
 
     @Test
@@ -156,7 +191,7 @@ public class InsertFromFilesPreSplitHookTest {
 
         InsertStmt stmt = insertStmtWithQueryRelation(selectRelation);
         assertHookDoesNotDelegate(() ->
-                InsertFromFilesPreSplitHook.maybeRunPreSplit(stmt, mock(ConnectContext.class)));
+                InsertFromFilesPreSplitHook.maybeRunPreSplit(stmt, mockConnectContextWithSessionPreSplit(true)));
     }
 
     @Test
@@ -167,7 +202,7 @@ public class InsertFromFilesPreSplitHookTest {
         InsertStmt stmt = insertStmtWithQueryRelation(setOp);
 
         assertHookDoesNotDelegate(() ->
-                InsertFromFilesPreSplitHook.maybeRunPreSplit(stmt, mock(ConnectContext.class)));
+                InsertFromFilesPreSplitHook.maybeRunPreSplit(stmt, mockConnectContextWithSessionPreSplit(true)));
     }
 
     @Test
@@ -176,7 +211,7 @@ public class InsertFromFilesPreSplitHookTest {
         // not FileTableFunctionRelation. Out of scope for pre-split.
         InsertStmt stmt = insertStmtWithQueryRelation(bareStarSelectRelationOver(mock(TableRelation.class)));
         assertHookDoesNotDelegate(() ->
-                InsertFromFilesPreSplitHook.maybeRunPreSplit(stmt, mock(ConnectContext.class)));
+                InsertFromFilesPreSplitHook.maybeRunPreSplit(stmt, mockConnectContextWithSessionPreSplit(true)));
     }
 
     @Test
@@ -189,7 +224,7 @@ public class InsertFromFilesPreSplitHookTest {
         when(stmt.getTargetColumnNames()).thenReturn(List.of("a", "b"));
 
         assertHookDoesNotDelegate(() ->
-                InsertFromFilesPreSplitHook.maybeRunPreSplit(stmt, mock(ConnectContext.class)));
+                InsertFromFilesPreSplitHook.maybeRunPreSplit(stmt, mockConnectContextWithSessionPreSplit(true)));
     }
 
     @Test
@@ -203,7 +238,7 @@ public class InsertFromFilesPreSplitHookTest {
         InsertStmt stmt = insertStmtWithQueryRelation(
                 filesSelectRelationWithSelectList(selectListOf(exprItem)));
         assertHookDoesNotDelegate(() ->
-                InsertFromFilesPreSplitHook.maybeRunPreSplit(stmt, mock(ConnectContext.class)));
+                InsertFromFilesPreSplitHook.maybeRunPreSplit(stmt, mockConnectContextWithSessionPreSplit(true)));
     }
 
     @Test
@@ -215,7 +250,7 @@ public class InsertFromFilesPreSplitHookTest {
 
         InsertStmt stmt = insertStmtWithQueryRelation(filesSelectRelationWithSelectList(twoColumnSelectList));
         assertHookDoesNotDelegate(() ->
-                InsertFromFilesPreSplitHook.maybeRunPreSplit(stmt, mock(ConnectContext.class)));
+                InsertFromFilesPreSplitHook.maybeRunPreSplit(stmt, mockConnectContextWithSessionPreSplit(true)));
     }
 
     @Test
@@ -230,7 +265,7 @@ public class InsertFromFilesPreSplitHookTest {
         InsertStmt stmt = insertStmtWithQueryRelation(
                 filesSelectRelationWithSelectList(selectListOf(qualifiedStar)));
         assertHookDoesNotDelegate(() ->
-                InsertFromFilesPreSplitHook.maybeRunPreSplit(stmt, mock(ConnectContext.class)));
+                InsertFromFilesPreSplitHook.maybeRunPreSplit(stmt, mockConnectContextWithSessionPreSplit(true)));
     }
 
     @Test
@@ -245,7 +280,7 @@ public class InsertFromFilesPreSplitHookTest {
         InsertStmt stmt = insertStmtWithQueryRelation(
                 filesSelectRelationWithSelectList(selectListOf(starExclude)));
         assertHookDoesNotDelegate(() ->
-                InsertFromFilesPreSplitHook.maybeRunPreSplit(stmt, mock(ConnectContext.class)));
+                InsertFromFilesPreSplitHook.maybeRunPreSplit(stmt, mockConnectContextWithSessionPreSplit(true)));
     }
 
     @Test
@@ -260,7 +295,7 @@ public class InsertFromFilesPreSplitHookTest {
 
         InsertStmt stmt = insertStmtWithQueryRelation(filesSelectRelationWithSelectList(distinctSelectList));
         assertHookDoesNotDelegate(() ->
-                InsertFromFilesPreSplitHook.maybeRunPreSplit(stmt, mock(ConnectContext.class)));
+                InsertFromFilesPreSplitHook.maybeRunPreSplit(stmt, mockConnectContextWithSessionPreSplit(true)));
     }
 
     @Test
@@ -272,7 +307,7 @@ public class InsertFromFilesPreSplitHookTest {
 
         InsertStmt stmt = insertStmtWithQueryRelation(selectRelation);
         assertHookDoesNotDelegate(() ->
-                InsertFromFilesPreSplitHook.maybeRunPreSplit(stmt, mock(ConnectContext.class)));
+                InsertFromFilesPreSplitHook.maybeRunPreSplit(stmt, mockConnectContextWithSessionPreSplit(true)));
     }
 
     @Test
@@ -284,7 +319,7 @@ public class InsertFromFilesPreSplitHookTest {
 
         InsertStmt stmt = insertStmtWithQueryRelation(selectRelation);
         assertHookDoesNotDelegate(() ->
-                InsertFromFilesPreSplitHook.maybeRunPreSplit(stmt, mock(ConnectContext.class)));
+                InsertFromFilesPreSplitHook.maybeRunPreSplit(stmt, mockConnectContextWithSessionPreSplit(true)));
     }
 
     @Test
@@ -296,7 +331,7 @@ public class InsertFromFilesPreSplitHookTest {
 
         InsertStmt stmt = insertStmtWithQueryRelation(selectRelation);
         assertHookDoesNotDelegate(() ->
-                InsertFromFilesPreSplitHook.maybeRunPreSplit(stmt, mock(ConnectContext.class)));
+                InsertFromFilesPreSplitHook.maybeRunPreSplit(stmt, mockConnectContextWithSessionPreSplit(true)));
     }
 
     @Test
@@ -309,7 +344,7 @@ public class InsertFromFilesPreSplitHookTest {
 
         InsertStmt stmt = insertStmtWithQueryRelation(selectRelation);
         assertHookDoesNotDelegate(() ->
-                InsertFromFilesPreSplitHook.maybeRunPreSplit(stmt, mock(ConnectContext.class)));
+                InsertFromFilesPreSplitHook.maybeRunPreSplit(stmt, mockConnectContextWithSessionPreSplit(true)));
     }
 
     @Test
@@ -322,7 +357,7 @@ public class InsertFromFilesPreSplitHookTest {
 
         InsertStmt stmt = insertStmtWithQueryRelation(selectRelation);
         assertHookDoesNotDelegate(() ->
-                InsertFromFilesPreSplitHook.maybeRunPreSplit(stmt, mock(ConnectContext.class)));
+                InsertFromFilesPreSplitHook.maybeRunPreSplit(stmt, mockConnectContextWithSessionPreSplit(true)));
     }
 
     @Test
@@ -338,7 +373,7 @@ public class InsertFromFilesPreSplitHookTest {
             try (MockedStatic<AnalyzerUtils> analyzer = Mockito.mockStatic(AnalyzerUtils.class)) {
                 analyzer.when(() -> AnalyzerUtils.normalizedTableRef(eq(tableRef), any()))
                         .thenThrow(new SemanticException("simulated: no current database"));
-                InsertFromFilesPreSplitHook.maybeRunPreSplit(stmt, mock(ConnectContext.class));
+                InsertFromFilesPreSplitHook.maybeRunPreSplit(stmt, mockConnectContextWithSessionPreSplit(true));
             }
         });
     }
@@ -352,7 +387,7 @@ public class InsertFromFilesPreSplitHookTest {
         when(stmt.getTxnId()).thenThrow(new RuntimeException("simulated stmt failure"));
 
         assertHookDoesNotDelegate(() ->
-                InsertFromFilesPreSplitHook.maybeRunPreSplit(stmt, mock(ConnectContext.class)));
+                InsertFromFilesPreSplitHook.maybeRunPreSplit(stmt, mockConnectContextWithSessionPreSplit(true)));
     }
 
     @Test
@@ -470,6 +505,11 @@ public class InsertFromFilesPreSplitHookTest {
         InsertStmt stmt = mock(InsertStmt.class);
         when(stmt.getTxnId()).thenReturn(DmlStmt.INVALID_TXN_ID);
         when(stmt.getQueryStatement()).thenReturn(queryStatement);
+        // Mockito's default for List<String> returns an empty list (not null);
+        // explicitly stub null here so simpleFilesInsertStmt() actually clears
+        // the "target column list present" pre-filter. Tests that want the
+        // column-list-present branch override this with thenReturn(List.of(...)).
+        when(stmt.getTargetColumnNames()).thenReturn(null);
         return stmt;
     }
 }
