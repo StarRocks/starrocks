@@ -201,7 +201,7 @@ public class VectorIndexParams {
                         throw new SemanticException("Value of `NBITS_PQ` must be in [4, 16]");
                     }
                 } catch (NumberFormatException e) {
-                    throw new SemanticException("Value of `NBITS_PQ` must be a integer");
+                    throw new SemanticException("Value of `NBITS_PQ` must be an integer");
                 }
             }
         };
