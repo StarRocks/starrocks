@@ -51,8 +51,8 @@ Status PrimaryKeyCompactionConflictResolver::execute() {
                 // per-call setup, vector allocations, and memtable bookkeeping by ~N×. Values <= 1
                 // (including negatives, which would otherwise wrap when cast to size_t) collapse to
                 // a per-chunk threshold of 1, reverting to pre-patch behaviour.
-                const size_t batch_rows_threshold = static_cast<size_t>(
-                        std::max<int32_t>(1, config::primary_key_compaction_replace_batch_rows));
+                const size_t batch_rows_threshold =
+                        static_cast<size_t>(std::max<int32_t>(1, config::primary_key_compaction_replace_batch_rows));
                 for (size_t segment_id = 0; segment_id < segment_iters.size(); segment_id++) {
                     RETURN_IF_ERROR(breakpoint_check());
                     // only hold pkey, so can use larger chunk size
