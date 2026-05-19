@@ -222,6 +222,48 @@ public class ChangesSyntaxTest extends BookmarkTestBase {
                 "actual: " + ex.getMessage());
     }
 
+    @Test
+    public void testHintRejectsPkTable() {
+        // PK tables are out of scope for stage-1 CHANGES (hint or clause).
+        String sql = "SELECT * FROM pk_t [_CHANGES_1_2_]";
+        AnalysisException ex = assertThrows(AnalysisException.class,
+                () -> UtFrameUtils.parseStmtWithNewParser(sql, connectContext));
+        assertTrue(ex.getMessage().contains("CHANGES on primary-key table is not supported yet"),
+                "actual: " + ex.getMessage());
+    }
+
+    @Test
+    public void testHintBaseGreaterThanHead() {
+        // base must precede head in the bookmark range; otherwise the interval is empty / inverted.
+        String sql = "SELECT * FROM dup_t [_CHANGES_9_3_]";
+        AnalysisException ex = assertThrows(AnalysisException.class,
+                () -> UtFrameUtils.parseStmtWithNewParser(sql, connectContext));
+        assertTrue(ex.getMessage().contains("CHANGES hint base must not be later than head"),
+                "actual: " + ex.getMessage());
+    }
+
+    @Test
+    public void testHintConflictsWithMeta() {
+        // _META_ flips the relation to a live index-metadata introspection view; CHANGES is
+        // historical-row data — the two cannot coexist on the same TableRelation.
+        String sql = "SELECT * FROM dup_t [_META_, _CHANGES_1_2_]";
+        AnalysisException ex = assertThrows(AnalysisException.class,
+                () -> UtFrameUtils.parseStmtWithNewParser(sql, connectContext));
+        assertTrue(ex.getMessage().contains("CHANGES hint cannot combine with"),
+                "actual: " + ex.getMessage());
+    }
+
+    @Test
+    public void testHintConflictsWithBookmark() {
+        // _BOOKMARK_ is a PITQ scope; CHANGES is an interval scan. Combining them would
+        // require resolving two independent histories on one relation — reject explicitly.
+        String sql = "SELECT * FROM dup_t [_CHANGES_1_2_, _BOOKMARK_5_]";
+        AnalysisException ex = assertThrows(AnalysisException.class,
+                () -> UtFrameUtils.parseStmtWithNewParser(sql, connectContext));
+        assertTrue(ex.getMessage().contains("CHANGES hint cannot combine with"),
+                "actual: " + ex.getMessage());
+    }
+
     /**
      * Static counterpart to BookmarkTestBase#createTable. Needed because @BeforeAll
      * runs in static context but the base helper is an instance method.

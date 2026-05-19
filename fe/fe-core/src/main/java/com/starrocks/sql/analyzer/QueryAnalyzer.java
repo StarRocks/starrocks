@@ -47,6 +47,7 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.connector.ConnectorMetadata;
+import com.starrocks.lake.bookmark.BookmarkRange;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
@@ -850,6 +851,38 @@ public class QueryAnalyzer {
                                 table.getType());
                     }
 
+                    // The CHANGES hint must run BEFORE the PITQ branch so that a co-presence
+                    // with _BOOKMARK_ is caught here (the conflict check tests both flags)
+                    // rather than silently being treated as a plain PITQ scope.
+                    if (tableRelation.getBookmarkRange().isPresent()) {
+                        boolean isCloudNativeOlap = table instanceof OlapTable
+                                && ((OlapTable) table).isCloudNativeTableOrMaterializedView();
+                        if (!isCloudNativeOlap) {
+                            throw new SemanticException(
+                                    "CHANGES hint is only supported on cloud-native OlapTable");
+                        }
+                        // Stage-1 limitation: PK tables are excluded. Kept as its own message
+                        // so it matches the clause-path PK guard in analyzeChangesQuery.
+                        if (((OlapTable) table).getKeysType() == KeysType.PRIMARY_KEYS) {
+                            throw new SemanticException(
+                                    "CHANGES on primary-key table is not supported yet");
+                        }
+                        // _META_ / _CACHE_STATS_ are live introspection views; _BOOKMARK_ is a
+                        // PITQ scope. None of these can share a TableRelation with CHANGES,
+                        // which is an interval scan over historical rows.
+                        if (tableRelation.isMetaQuery()
+                                || tableRelation.isCacheStatsQuery()
+                                || tableRelation.getBookmarkId().isPresent()) {
+                            throw new SemanticException(
+                                    "CHANGES hint cannot combine with _META_ / _CACHE_STATS_ / _BOOKMARK_");
+                        }
+                        BookmarkRange range = tableRelation.getBookmarkRange().get();
+                        if (range.base() > range.head()) {
+                            throw new SemanticException(
+                                    "CHANGES hint base must not be later than head");
+                        }
+                    }
+
                     if (tableRelation.getBookmarkId().isPresent()) {
                         boolean isCloudNativeOlap = table instanceof OlapTable
                                 && ((OlapTable) table).isCloudNativeTableOrMaterializedView();
@@ -1026,6 +1059,22 @@ public class QueryAnalyzer {
 
                 if (node.isChangesQuery()) {
                     analyzeChangesQuery(node, table, tableName, columns, fields);
+                }
+
+                // CHANGES hint path: validations already ran in resolveTableRef; here we
+                // synthesize the same __CHANGE_TYPE__ / __ROW_VERSION__ metadata columns
+                // the clause path appends, so downstream transformation sees one shape.
+                // isChangesQuery() (clause) and getBookmarkRange().isPresent() (hint) are
+                // mutually exclusive — a TableRelation carries at most one of changePeriod
+                // or bookmarkRange — so no dedup guard is needed.
+                if (node.getBookmarkRange().isPresent()) {
+                    for (Column column : CdcScanHelper.getCdcMetadataColumns()) {
+                        SlotRef slot = new SlotRef(tableName, column.getName(), column.getName());
+                        Field field = new Field(column.getName(), column.getType(), tableName, slot, true,
+                                column.isAllowNull());
+                        columns.put(field, column);
+                        fields.add(field);
+                    }
                 }
 
                 // Add virtual columns for OLAP tables
