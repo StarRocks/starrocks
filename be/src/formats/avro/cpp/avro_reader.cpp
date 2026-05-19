@@ -562,10 +562,12 @@ Status AvroReader::init(std::unique_ptr<avro::InputStream> input_stream, const s
 
         // Collect the column names that actually need to be decoded.
         std::set<std::string> needed_cols;
+        bool has_complex_projection = false;
         if (slot_descs != nullptr) {
             for (const auto* slot : *slot_descs) {
                 if (slot != nullptr) {
                     needed_cols.insert(std::string(slot->col_name()));
+                    has_complex_projection |= slot->type().is_complex_type();
                 }
             }
         }
@@ -583,11 +585,20 @@ Status AvroReader::init(std::unique_ptr<avro::InputStream> input_stream, const s
             _base_reader = std::move(base);
             _base_reader->init();
         } else {
-            // Build a projected reader schema that contains only the needed columns.
-            // The ResolvingDecoder will then skip unwanted fields at the binary level,
-            // saving CPU deserialization work — the Trino-equivalent of maskColumnsFromTableSchema.
-            avro::ValidSchema projected = build_projected_schema(reader_schema, needed_cols);
-            bool using_projection = !needed_cols.empty() && projected.root()->leaves() < reader_schema.root()->leaves();
+            // Only apply top-level reader-schema projection to scalar-only scans.
+            // Complex slots (map/array/struct) may embed nullable named types, and
+            // avrocpp's resolving decoder can fail when a projected reader schema
+            // is used for those nested shapes. In that case, keep the full writer
+            // schema and rely on the generic row reader to materialize only the
+            // requested top-level slots.
+            avro::ValidSchema projected = reader_schema;
+            bool using_projection = false;
+            if (!has_complex_projection) {
+                // The ResolvingDecoder will then skip unwanted fields at the binary level,
+                // saving CPU deserialization work — the Trino-equivalent of maskColumnsFromTableSchema.
+                projected = build_projected_schema(reader_schema, needed_cols);
+                using_projection = !needed_cols.empty() && projected.root()->leaves() < reader_schema.root()->leaves();
+            }
 
             if (using_projection) {
                 _file_reader = std::make_unique<avro::DataFileReader<avro::GenericDatum>>(std::move(base), projected);
