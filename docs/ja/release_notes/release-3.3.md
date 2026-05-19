@@ -136,7 +136,7 @@ StarRocks を v3.3 にアップグレードした後、直接 v3.2.0、v3.2.1、
 ### 改善点
 
 - 正則式の解析失敗時のエラーメッセージを改善しました。 [#57904](https://github.com/StarRocks/starrocks/pull/57904)
-- セキュリティ脆弱性 [SNYK-JAVA-ORGJSON-5488379](https://snyk.io/vuln/SNYK-JAVA-ORGJSON-5488379) および [SNYK-JAVA-ORGJSON-5962464](https://snyk.io/vuln/SNYK-JAVA-ORGJSON-5962464) を修正しました。 [#58425](https://github.com/StarRocks/starrocks/pull/58425)
+- セキュリティ脆弱性 [SNYK-JAVA-ORGJSON-5488379](https://security.snyk.io/vuln/SNYK-JAVA-ORGJSON-5488379) および [SNYK-JAVA-ORGJSON-5962464](https://security.snyk.io/vuln/SNYK-JAVA-ORGJSON-5962464) を修正しました。 [#58425](https://github.com/StarRocks/starrocks/pull/58425)
 
 ### バグ修正
 

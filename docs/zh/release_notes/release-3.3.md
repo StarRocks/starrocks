@@ -136,7 +136,7 @@ displayed_sidebar: docs
 ### 功能优化
 
 - 优化正则表达式解析失败时的报错信息。[#57904](https://github.com/StarRocks/starrocks/pull/57904)
-- 修复安全漏洞 [SNYK-JAVA-ORGJSON-5488379](https://snyk.io/vuln/SNYK-JAVA-ORGJSON-5488379) 及 [SNYK-JAVA-ORGJSON-5962464](https://snyk.io/vuln/SNYK-JAVA-ORGJSON-5962464)。[#58425](https://github.com/StarRocks/starrocks/pull/58425)
+- 修复安全漏洞 [SNYK-JAVA-ORGJSON-5488379](https://security.snyk.io/vuln/SNYK-JAVA-ORGJSON-5488379) 及 [SNYK-JAVA-ORGJSON-5962464](https://security.snyk.io/vuln/SNYK-JAVA-ORGJSON-5962464)。[#58425](https://github.com/StarRocks/starrocks/pull/58425)
 
 ### 问题修复
 
@@ -655,10 +655,10 @@ displayed_sidebar: docs
 - 优化写入算子的的异步统计信息收集方式，解决导入任务较多时延迟变高的问题。[#48162](https://github.com/StarRocks/starrocks/pull/48162)
 -  增加以下 BE 动态参数以控制导入过程中的资源硬限制，从而降低写入大量 Tablet 时对 BE 稳定性的影响。[#48495](https://github.com/StarRocks/starrocks/pull/48495)
 
-  包括：
+包括：
 
-  - `load_process_max_memory_hard_limit_ratio`
-  - `enable_new_load_on_memory_limit_exceeded`
+- `load_process_max_memory_hard_limit_ratio`
+- `enable_new_load_on_memory_limit_exceeded`
 
 - 增加同一表内 Column ID 的一致性检查，防止引起 Compaction 错误。[#48498](https://github.com/StarRocks/starrocks/pull/48628)
 - 持久化 PIPE 元数据，防止因 FE 重启而导致元数据丢失。[#48852](https://github.com/StarRocks/starrocks/pull/48852)
