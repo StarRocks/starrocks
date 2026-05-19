@@ -255,7 +255,7 @@ public class TableRelation extends Relation {
             head = Long.parseLong(m.group(2));
         } catch (NumberFormatException e) {
             throw new SemanticException(
-                    "bookmark id in [" + hintName + "] is out of BIGINT range");
+                    "id in changes hint [" + hintName + "] is out of BIGINT range");
         }
         bookmarkRange = Optional.of(new BookmarkRange(base, head));
         return true;

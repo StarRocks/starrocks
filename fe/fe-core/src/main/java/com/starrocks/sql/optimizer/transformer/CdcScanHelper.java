@@ -77,20 +77,20 @@ public final class CdcScanHelper {
         long dbId = table.mayGetDatabaseId().orElseThrow(() ->
                 new IllegalStateException(
                         String.format("dbId missing on %s", table.getName())));
-        BookmarkManager mgr = GlobalStateMgr.getCurrentState().getBookmarkManager();
-        Bookmark base = mgr.findBookmarkById(dbId, table.getId(), range.base())
+        BookmarkManager bookmarkManager = GlobalStateMgr.getCurrentState().getBookmarkManager();
+        Bookmark base = bookmarkManager.findBookmarkById(dbId, table.getId(), range.base())
                 .orElseThrow(() -> new SemanticException(String.format(
                         "bookmark %d not found on table '%s'", range.base(), table.getName())));
-        Bookmark head = mgr.findBookmarkById(dbId, table.getId(), range.head())
+        Bookmark head = bookmarkManager.findBookmarkById(dbId, table.getId(), range.head())
                 .orElseThrow(() -> new SemanticException(String.format(
                         "bookmark %d not found on table '%s'", range.head(), table.getName())));
         BookmarkChange delta = BookmarkChange.computeChanges(base, head);
         if (!delta.isTrackable()) {
             throw new SemanticException(formatNotTrackableMessage(delta, table));
         }
-        OlapTable scoped = BookmarkScopedTableResolver.resolveByChange(table, delta);
+        OlapTable scopedTable = BookmarkScopedTableResolver.resolveByChange(table, delta);
         return new LogicalChangesScanOperator(
-                scoped, colRefToColumnMetaMap, columnMetaToColRefMap,
+                scopedTable, colRefToColumnMetaMap, columnMetaToColRefMap,
                 base, head, delta, Operator.DEFAULT_LIMIT);
     }
 
