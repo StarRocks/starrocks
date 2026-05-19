@@ -63,9 +63,9 @@ public class ChangesScanNode extends AbstractOlapTableScanNode {
     }
 
     /**
-     * Extract the base/head visible-version pair for one physical-partition change.
-     * Non-trackable changes are rejected upstream by the analyzer/transformer, so we
-     * only need to handle ADDED and DATA_CHANGED here.
+     * Extracts the (baseVersion, headVersion] visible-version pair for one
+     * physical-partition change. Only ADDED and DATA_CHANGED are handled; the
+     * analyzer rejects non-trackable changes before reaching the planner.
      */
     private static long[] versionPair(BookmarkChange.PhysicalPartitionChange change) {
         if (change instanceof BookmarkChange.DataChanged) {
@@ -76,7 +76,7 @@ public class ChangesScanNode extends AbstractOlapTableScanNode {
             };
         } else if (change instanceof BookmarkChange.PartitionAdded) {
             BookmarkChange.PartitionAdded pa = (BookmarkChange.PartitionAdded) change;
-            // Partition did not exist at base; emit every rowset reachable at head.
+            // Partition was absent at base; emit every rowset reachable at head.
             return new long[] {0L, pa.getHeadPartition().getVisibleVersion()};
         } else {
             throw new IllegalStateException(
@@ -89,7 +89,7 @@ public class ChangesScanNode extends AbstractOlapTableScanNode {
                 delta.getChanges().entrySet()) {
             for (BookmarkChange.PhysicalPartitionChange change : entry.getValue()) {
                 BookmarkChange.ChangeType type = change.getChangeType();
-                // Skip non-trackable types defensively; analyzer rejects them upstream.
+                // Defensive: the analyzer rejects non-trackable types upstream.
                 if (type != BookmarkChange.ChangeType.ADDED
                         && type != BookmarkChange.ChangeType.DATA_CHANGED) {
                     continue;
@@ -104,8 +104,11 @@ public class ChangesScanNode extends AbstractOlapTableScanNode {
                 long baseVersion = versions[0];
                 long headVersion = versions[1];
 
-                // Use headVersion: CDC only needs data up to head, not partition.getVisibleVersion()
-                // (which may be higher and would unnecessarily exclude replicas that already satisfy CDC).
+                // Pin replica selection to headVersion rather than
+                // partition.getVisibleVersion(): the partition's visible
+                // version can be higher than head, and requiring that level
+                // would needlessly reject replicas that already cover the
+                // CDC range.
                 long visibleVersion = headVersion;
                 MaterializedIndex index = partition.getLatestBaseIndex();
                 List<Tablet> tablets = index.getTablets();
@@ -169,7 +172,6 @@ public class ChangesScanNode extends AbstractOlapTableScanNode {
         int totalPartitions = delta.getChanges().size();
         output.append(prefix).append(String.format("partitions=%s/%s\n", totalPartitions, totalPartitions));
 
-        // Count total tablets across trackable changes.
         int totalTablets = 0;
         for (List<BookmarkChange.PhysicalPartitionChange> changes : delta.getChanges().values()) {
             for (BookmarkChange.PhysicalPartitionChange change : changes) {

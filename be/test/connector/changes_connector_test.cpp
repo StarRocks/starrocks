@@ -57,12 +57,10 @@ constexpr const char* kRootLocation = "test_changes_connector";
 constexpr const char* kChangeTypeColumnName = "__CHANGE_TYPE__";
 constexpr const char* kRowVersionColumnName = "__ROW_VERSION__";
 
-// Drives ChangesConnector / ChangesDataSourceProvider / ChangesDataSource
-// through their public surface — DataSourceProvider::create_data_source ->
-// open -> get_next -> close — over a real lake::TabletManager backed by an
-// on-disk FixedLocationProvider. Each test publishes the TabletMetadata and
-// rowset segment data its scenario requires; nothing pokes connector
-// internals.
+// End-to-end test for the public ChangesConnector surface
+// (create_data_source -> open -> get_next -> close). Backed by a real
+// lake::TabletManager over an on-disk FixedLocationProvider; each test
+// publishes only the TabletMetadata its scenario needs.
 class ChangesConnectorTest : public ::testing::Test {
 public:
     ChangesConnectorTest()
@@ -408,8 +406,8 @@ TEST_F(ChangesConnectorTest, test_open_error_paths) {
     }
 
     // Sub-case C: in-range rowset with delete_predicate; open() surfaces
-    // NotSupported. The rowset carries no segments because Phase 2 short-
-    // circuits before any read.
+    // NotSupported. The rowset carries no segments because open()
+    // short-circuits before any read.
     {
         auto tuple_id = install_tuple_descriptor(TupleShape::BOTH_NON_NULLABLE);
         int64_t schema_id = next_id();
@@ -430,9 +428,9 @@ TEST_F(ChangesConnectorTest, test_open_error_paths) {
 }
 
 // ============================================================================
-// Test 3 — Phase 1 metadata traversal: each sub-case crafts a TabletMetadata
-// chain whose surfaced row count witnesses which rowsets the traversal
-// admitted into Phase 2.
+// Test 3 — Metadata traversal: each sub-case crafts a TabletMetadata chain
+// whose surfaced row count witnesses which rowsets the traversal admitted
+// for reading.
 // ============================================================================
 
 TEST_F(ChangesConnectorTest, test_metadata_traversal_scenarios) {
@@ -447,7 +445,7 @@ TEST_F(ChangesConnectorTest, test_metadata_traversal_scenarios) {
     };
 
     // Sub-case A: base == head triggers the early return in
-    // _do_metadata_traversal; Phase 2 produces zero rows.
+    // _do_metadata_traversal; no rowsets surface for reading.
     {
         auto tuple_id = install_tuple_descriptor(TupleShape::BOTH_NON_NULLABLE);
         int64_t schema_id = next_id();
@@ -687,8 +685,8 @@ TEST_F(ChangesConnectorTest, test_chunk_stamping_with_slot_variants) {
 }
 
 // ============================================================================
-// Test 5 — Phase 2 drain: pump get_next() until EOF across multiple rowsets,
-// verify final EndOfFile and the public counters.
+// Test 5 — Pump get_next() until EOF across multiple rowsets, verify final
+// EndOfFile and the public counters.
 // ============================================================================
 
 TEST_F(ChangesConnectorTest, test_get_next_drains_to_eof) {

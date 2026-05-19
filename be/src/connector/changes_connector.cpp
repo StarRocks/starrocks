@@ -40,11 +40,10 @@ namespace starrocks::connector {
 
 namespace {
 
-// Wraps a per-segment ChunkIterator and stamps the two CDC metadata columns
-// (__CHANGE_TYPE__, __ROW_VERSION__) onto each chunk before it surfaces to
-// the union iterator above. Each instance carries its source rowset's
-// version, so a union over multiple wrappers can fan all segments into a
-// single chunk stream without losing per-rowset version information.
+// Per-segment ChunkIterator wrapper that appends __CHANGE_TYPE__ and
+// __ROW_VERSION__ to every chunk. Each instance is bound to its source
+// rowset's version, so a union over multiple wrappers can fan all
+// segments into one chunk stream without losing per-rowset version.
 class CdcStampingIterator final : public ChunkIterator {
 public:
     CdcStampingIterator(ChunkIteratorPtr inner, int64_t version,
@@ -70,8 +69,8 @@ public:
 protected:
     Status do_get_next(Chunk* chunk) override {
         RETURN_IF_ERROR(_inner->get_next(chunk));
-        // Map data-slot ids onto the chunk so post-read predicate evaluation
-        // can resolve SlotRef references by id.
+        // Post-read conjunct evaluation resolves SlotRef by slot id, so the
+        // inner segment iterator's name-indexed columns need a slot-id map.
         for (auto* slot : *_data_slots) {
             size_t col_idx = chunk->schema()->get_field_index_by_name(slot->col_name());
             if (col_idx != -1UL) {
@@ -79,7 +78,7 @@ protected:
             }
         }
         size_t nrows = chunk->num_rows();
-        // spec §2 enum: 0 = INSERT.
+        // INSERT; DUP/AGG CDC has no other change types.
         if (_change_type_slot_id.has_value()) {
             auto val_col = Int8Column::create();
             val_col->reserve(nrows);
@@ -164,7 +163,6 @@ Status ChangesDataSource::open(RuntimeState* state) {
     }
     _tuple_desc = tuple_desc;
 
-    // Identify metadata column slots by name and separate data slots
     for (auto* slot : tuple_desc->slots()) {
         if (slot->col_name() == "__CHANGE_TYPE__") {
             _change_type_slot_id = slot->id();
@@ -191,15 +189,15 @@ Status ChangesDataSource::open(RuntimeState* state) {
                 _tablet_id));
     }
 
-    // Build the unified chunk stream: per-rowset segment iterators get wrapped
-    // in CdcStampingIterator so each chunk carries its source rowset's version
-    // and CDC metadata columns; the union iterator then drains them in order.
+    // Per-rowset segment iterators get wrapped in CdcStampingIterator so
+    // each surfaced chunk carries the rowset's version plus the CDC
+    // metadata columns; the union iterator below drains them in order.
     RowsetReadOptions opts;
     opts.stats = &_read_stats;
     opts.chunk_size = _runtime_state->chunk_size();
     opts.tablet_schema = _tablet_schema;
     opts.use_page_cache = false;
-    // CDC MVP: no predicate / runtime-filter / delvec / range pushdown.
+    // No predicate / runtime-filter / delvec / range pushdown yet.
 
     std::vector<ChunkIteratorPtr> seg_iters;
     for (auto& rowset : _changes_rowsets) {
@@ -232,7 +230,9 @@ Status ChangesDataSource::get_next(RuntimeState* state, ChunkPtr* chunk) {
     return _read_next_chunk(chunk);
 }
 
-// Phase 1: Delta Replay metadata traversal algorithm
+// Walks the head TabletMetadata's metadata_ancestors chain backwards,
+// admitting every LOAD rowset whose version sits in (base, head]. The
+// traversal stops as soon as no ancestor version remains above base.
 Status ChangesDataSource::_do_metadata_traversal() {
     if (_base_version > _head_version) {
         return Status::InvalidArgument(
@@ -246,11 +246,11 @@ Status ChangesDataSource::_do_metadata_traversal() {
     auto* tablet_mgr = ExecEnv::GetInstance()->lake_tablet_manager();
     DCHECK(tablet_mgr != nullptr);
     DCHECK(_head_metadata != nullptr);
-    // seen_rowset_ids dedupes a rowset that reappears across ancestor metadata snapshots.
+    // A rowset can reappear in multiple ancestor snapshots; dedup so each
+    // is read exactly once.
     std::unordered_set<uint32_t> seen_rowset_ids;
 
     auto head_meta = _head_metadata;
-    // Reverse traverse from V_head
     auto current_meta = head_meta;
     int64_t current_version = _head_version;
 
@@ -311,10 +311,10 @@ void ChangesDataSource::_scan_metadata_for_changes_rowsets(const TabletMetadataP
             continue;
         }
 
-        // Use lake::Rowset's standard ctor (the one Rowset::get_rowsets uses).
-        // It keeps |meta| alive internally and derives the rowset's write
-        // schema from meta->rowset_to_schema() / historical_schemas / fallback
-        // meta->schema(). compaction_segment_limit=0 means "all segments".
+        // The Rowset holds a shared_ptr to |meta|, so the metadata
+        // snapshot stays alive for the lifetime of the rowset even
+        // after the traversal loop drops its local references.
+        // compaction_segment_limit=0 selects every segment.
         _changes_rowsets.push_back(std::make_shared<lake::Rowset>(
                 tablet_mgr, meta, rowset_index, /*compaction_segment_limit=*/0));
     }
@@ -348,15 +348,11 @@ Status ChangesDataSource::_read_next_chunk(ChunkPtr* chunk) {
     }
 }
 
-// Resolve the read schema for Phase 2 + pre-compute the projected Schema reused
-// across every rowset. Two layers:
-// 1. `_tablet_schema` — the live read schema, fetched via TableSchemaService
-//    keyed by the FE-supplied schema_key (mirrors LakeDataSource::get_tablet,
-//    lake_connector.cpp:233-247). Head-metadata's embedded schema would lag FE
-//    when a commit creates a new schema version before the matching tablet
-//    metadata is published.
-// 2. `_read_schema` — the projection over `_tablet_schema` selecting only
-//    the slots the caller asked for (`_data_slots`).
+// Fetches the live tablet schema via TableSchemaService keyed by the
+// FE-supplied schema_key, then derives the projected read schema over
+// the caller's data slots. The schema embedded in head metadata is
+// avoided here because a fresh schema version can be published before
+// the matching tablet metadata catches up.
 Status ChangesDataSource::_init_read_schema() {
     DCHECK(_head_metadata != nullptr);
 

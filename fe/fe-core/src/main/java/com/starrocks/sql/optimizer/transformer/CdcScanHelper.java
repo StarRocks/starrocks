@@ -34,11 +34,10 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Shared entry point for building a LogicalChangesScanOperator from a
- * BookmarkRange on an OlapTable, reused by SQL and non-SQL (e.g. IVM
- * refresh) callers so the bookmark-resolution and trackability checks
- * live in one place. PK rejection and the base&lt;=head invariant are
- * enforced by the caller.
+ * Builder for LogicalChangesScanOperator from a BookmarkRange on an OlapTable,
+ * shared by SQL and non-SQL (e.g. IVM refresh) callers. PK rejection and the
+ * base&lt;=head invariant are enforced by the caller; this builder enforces
+ * bookmark resolution and trackability.
  */
 public final class CdcScanHelper {
 
