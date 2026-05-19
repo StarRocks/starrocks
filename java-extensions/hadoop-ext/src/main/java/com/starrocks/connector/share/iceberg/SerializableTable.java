@@ -65,9 +65,6 @@ import java.util.Map;
 import java.util.UUID;
 
 public class SerializableTable implements Table, Serializable, HasTableOperations {
-
-    private static final long serialVersionUID = 1L;
-
     private final String name;
     private final String location;
     private final UUID uuid;
