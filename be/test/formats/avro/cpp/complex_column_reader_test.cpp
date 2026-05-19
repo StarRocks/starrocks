@@ -330,7 +330,8 @@ TEST_F(ComplexColumnReaderTest, test_struct_unknown_field_type_skips_field_decod
 
     std::vector<avro::GenericDatum> datums;
     datums.emplace_back(avro::GenericDatum(int32_t{10}));
-    datums.emplace_back(avro::GenericDatum(avro::AVRO_LONG, ts_type, milliseconds_since_epoch("2026-05-19 12:03:01.000")));
+    datums.emplace_back(
+            avro::GenericDatum(avro::AVRO_LONG, ts_type, milliseconds_since_epoch("2026-05-19 12:03:01.000")));
 
     auto record_schema =
             avro::NodePtr(new avro::NodeRecord(avro::HasName(avro::Name(_col_name)), field_nodes, field_names, datums));
