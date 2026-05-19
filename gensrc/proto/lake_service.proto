@@ -301,6 +301,31 @@ message RestoreSnapshotsResponse {
     optional int32 pad = 1;
 }
 
+// Placeholder for external cluster snapshot feature.
+message TabletDataSnapshotPB {
+    optional int64 tablet_id = 1;
+    repeated string new_data_files = 2;
+    repeated string new_metadata_files = 3;
+    repeated string new_schema_files = 4;
+}
+
+// Placeholder for external cluster snapshot feature.
+message UploadSnapshotFilesRequestPB {
+    optional int64 job_id = 1;
+    optional int64 db_id = 2;
+    optional int64 table_id = 3;
+    optional int64 partition_id = 4;
+    optional int64 physical_partition_id = 5;
+    optional int64 dest_tablet_id = 6;
+    repeated TabletDataSnapshotPB tablet_snapshots = 7;
+}
+
+// Placeholder for external cluster snapshot feature.
+message UploadSnapshotFilesResponsePB {
+    optional StatusPB status = 1;
+    repeated int64 failed_tablets = 2;
+}
+
 message AbortCompactionRequest {
     optional int64 txn_id = 1;
 }
@@ -483,4 +508,10 @@ service LakeService {
     rpc drop_tablet_cache(DropTabletCacheRequest) returns (DropTabletCacheResponse);
     rpc get_tablet_metadatas(GetTabletMetadatasRequest) returns (GetTabletMetadatasResponse);
     rpc repair_tablet_metadata(RepairTabletMetadataRequest) returns (RepairTabletMetadataResponse);
+<<<<<<< HEAD
+=======
+    // Placeholder for external cluster snapshot feature.
+    rpc upload_snapshot_files(UploadSnapshotFilesRequestPB) returns (UploadSnapshotFilesResponsePB);
+    rpc build_vector_index(BuildVectorIndexRequest) returns (BuildVectorIndexResponse);
+>>>>>>> 52ee60cd64 ([Enhancement] Reserve proto/thrift fields for external cluster snapshot feature (#73204))
 }
