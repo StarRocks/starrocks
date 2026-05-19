@@ -4,7 +4,7 @@ displayed_sidebar: docs
 
 # RisingWave から StarRocks へのデータシンク
 
-RisingWave は、ストリーミングデータのシンプルで効率的かつ信頼性の高い処理を可能にする分散型 SQL ストリーミングデータベースです。RisingWave をすぐに始めるには、[Get started](https://docs.risingwave.com/docs/current/get-started/) を参照してください。
+RisingWave は、ストリーミングデータのシンプルで効率的かつ信頼性の高い処理を可能にする分散型 SQL ストリーミングデータベースです。RisingWave をすぐに始めるには、[Get started](https://docs.risingwave.com/get-started/quickstart/) を参照してください。
 
 RisingWave はデータシンク機能を提供しており、ユーザーは他のサードパーティコンポーネントを必要とせずに直接データを StarRocks にシンクできます。この機能は、すべての StarRocks テーブルタイプ（Duplicate Key、主キーテーブル、Aggregate、ユニークキーテーブル）で動作します。
 
