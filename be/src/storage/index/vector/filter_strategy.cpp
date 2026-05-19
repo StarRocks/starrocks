@@ -27,36 +27,17 @@ std::unique_ptr<FilterStrategy> FilterStrategy::create(FilterStrategyType type) 
     }
 }
 
-// ============================================================
-// PreFilterStrategy
-// ============================================================
-
-Status PreFilterStrategy::execute(VectorAnnIndex* index, const VectorQuery& query, ScalarIndexProvider* scalar_provider,
-                                  const ScalarPredicate* predicate, VectorAnnResult* result) {
-    if (!predicate || predicate->empty() || !scalar_provider) {
-        return index->search(query, result);
-    }
-
-    ASSIGN_OR_RETURN(auto filter, scalar_provider->evaluate(*predicate));
-    if (!filter) {
+Status PreFilterStrategy::execute(VectorAnnIndex* index, const VectorQuery& query, const RowIdFilter* filter,
+                                  VectorAnnResult* result) {
+    if (filter == nullptr) {
         return index->search(query, result);
     }
     return index->filtered_search(query, *filter, result);
 }
 
-// ============================================================
-// PostFilterStrategy
-// ============================================================
-
-Status PostFilterStrategy::execute(VectorAnnIndex* index, const VectorQuery& query,
-                                   ScalarIndexProvider* scalar_provider, const ScalarPredicate* predicate,
+Status PostFilterStrategy::execute(VectorAnnIndex* index, const VectorQuery& query, const RowIdFilter* filter,
                                    VectorAnnResult* result) {
-    if (!predicate || predicate->empty() || !scalar_provider) {
-        return index->search(query, result);
-    }
-
-    ASSIGN_OR_RETURN(auto filter, scalar_provider->evaluate(*predicate));
-    if (!filter) {
+    if (filter == nullptr) {
         return index->search(query, result);
     }
 
