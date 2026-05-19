@@ -523,9 +523,11 @@ public:
     Type type() const override { return PHYSICAL_SPLIT; }
 
     // When enabled, _try_get_split_from_single_tablet() emits one morsel per
-    // segment (the rowid range covers the whole segment), instead of packing up
-    // to _splitted_scan_rows rows across multiple segments. Used by ANN queries
-    // so each segment's vector-index search runs on its own driver.
+    // segment instead of packing up to _splitted_scan_rows rows across multiple
+    // segments. The morsel's rowid range covers the segment's full scan range
+    // after key-range pruning (i.e. _segment_scan_range), so on queries without
+    // key predicates this is the whole segment. Used by ANN queries so each
+    // segment's vector-index search runs on its own driver.
     void set_split_by_segment(bool v) { _split_by_segment = v; }
 
 private:

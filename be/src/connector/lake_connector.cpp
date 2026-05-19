@@ -1289,8 +1289,10 @@ Status LakeDataSourceProvider::init(ObjectPool* pool, RuntimeState* state) {
         // repeat calls, so re-opening after an inline close would leave function state stale.
         RETURN_IF_ERROR(ExprExecutor::prepare(_partition_conjunct_ctxs, state));
         RETURN_IF_ERROR(ExprExecutor::open(_partition_conjunct_ctxs, state));
-        _runtime_state = state;
     }
+    // Cache state unconditionally; convert_scan_range_to_morsel_queue also consults
+    // query options (e.g. enable_per_segment_scan_parallel) outside the conjunct path.
+    _runtime_state = state;
     return Status::OK();
 }
 
@@ -1321,6 +1323,20 @@ StatusOr<pipeline::MorselQueuePtr> LakeDataSourceProvider::convert_scan_range_to
                     .ok()) {
             effective_scan_ranges = &pruned_scan_ranges;
         }
+    }
+
+    // ANN opt-in needs per-segment splitting even on small tablets / large
+    // row sizes that the row-count heuristic would otherwise reject. Promote
+    // to FORCE_SPLIT mode so the helper bypasses the "enough scan ranges" and
+    // min-DOP gates. The lake_tablet_rows_splitted_ratio bypass for the
+    // small-tablet shortcut sits in lake::TabletReader::open.
+    const bool is_vector_query = _t_lake_scan_node.__isset.vector_search_options &&
+                                 _t_lake_scan_node.vector_search_options.enable_use_ann;
+    if (is_vector_query && _runtime_state != nullptr &&
+        _runtime_state->query_options().__isset.enable_per_segment_scan_parallel &&
+        _runtime_state->query_options().enable_per_segment_scan_parallel) {
+        enable_tablet_internal_parallel = true;
+        tablet_internal_parallel_mode = TTabletInternalParallelMode::type::FORCE_SPLIT;
     }
 
     int64_t lake_scan_parallelism = 0;

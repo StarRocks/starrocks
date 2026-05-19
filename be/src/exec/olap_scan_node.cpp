@@ -482,6 +482,21 @@ StatusOr<pipeline::MorselQueuePtr> OlapScanNode::convert_scan_range_to_morsel_qu
         return std::make_unique<pipeline::FixedMorselQueue>(std::move(morsels));
     }
 
+    // ANN opt-in needs per-segment splitting even on small tablets / large
+    // row sizes that the row-count heuristic would otherwise reject. Promote
+    // to FORCE_SPLIT mode so _could_tablet_internal_parallel bypasses both
+    // the "enough scan ranges" and the min-DOP gates.
+    const auto& query_options = runtime_state()->query_options();
+    const bool is_vector_query =
+            _olap_scan_node.__isset.vector_search_options && _olap_scan_node.vector_search_options.enable_use_ann;
+    const bool force_per_segment = is_vector_query &&
+                                   query_options.__isset.enable_per_segment_scan_parallel &&
+                                   query_options.enable_per_segment_scan_parallel;
+    if (force_per_segment) {
+        enable_tablet_internal_parallel = true;
+        tablet_internal_parallel_mode = TTabletInternalParallelMode::type::FORCE_SPLIT;
+    }
+
     // Disable by the session variable shouldn't use tablet internal parallel.
     if (!enable_tablet_internal_parallel) {
         return std::make_unique<pipeline::FixedMorselQueue>(std::move(morsels));
@@ -501,12 +516,7 @@ StatusOr<pipeline::MorselQueuePtr> OlapScanNode::convert_scan_range_to_morsel_qu
     if (ok) {
         auto queue =
                 std::make_unique<pipeline::PhysicalSplitMorselQueue>(std::move(morsels), scan_dop, splitted_scan_rows);
-        // Gate per-segment split on session var + ANN query; otherwise fall through.
-        const auto& query_options = runtime_state()->query_options();
-        const bool is_vector_query =
-                _olap_scan_node.__isset.vector_search_options && _olap_scan_node.vector_search_options.enable_use_ann;
-        if (is_vector_query && query_options.__isset.enable_per_segment_scan_parallel &&
-            query_options.enable_per_segment_scan_parallel) {
+        if (force_per_segment) {
             queue->set_split_by_segment(true);
         }
         return queue;
