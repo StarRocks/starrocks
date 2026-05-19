@@ -1,0 +1,250 @@
+-- name: test_inline_agg_state
+
+create database db_${uuid0};
+use db_${uuid0};
+
+-- Setup: numeric key table (various int types, both nullable and not)
+create table t_num (
+    k_tinyint   tinyint,
+    k_smallint  smallint,
+    k_int       int,
+    k_bigint    bigint,
+    v_int       int     NOT NULL,
+    v_bigint    bigint  NOT NULL
+) DUPLICATE KEY(k_tinyint, k_smallint, k_int, k_bigint) DISTRIBUTED BY HASH(k_int) BUCKETS 3
+PROPERTIES('replication_num' = '1');
+
+-- 100000 rows: k_int in [0,999], v_int in [1,100000]
+insert into t_num
+    SELECT generate_series % 127, generate_series % 1000, generate_series % 1000,
+           generate_series % 1000, generate_series, generate_series
+    FROM TABLE(generate_series(1, 100000));
+-- 1000 rows with NULL k_int (exercises null-key inline path)
+insert into t_num (k_smallint, k_int, k_bigint, v_int, v_bigint)
+    SELECT NULL, NULL, generate_series % 100, generate_series, generate_series
+    FROM TABLE(generate_series(1, 1000));
+
+-- Setup: string key table (nullable key)
+create table t_str (
+    k_str   varchar(64),
+    v_int   int NOT NULL
+) DUPLICATE KEY(k_str) DISTRIBUTED BY HASH(k_str) BUCKETS 3
+PROPERTIES('replication_num' = '1');
+
+insert into t_str SELECT generate_series % 1000, generate_series FROM TABLE(generate_series(1, 100000));
+-- 1000 rows with NULL k_str
+insert into t_str (v_int) SELECT generate_series FROM TABLE(generate_series(1, 1000));
+
+-- Setup: multi-column key table (serialized / compressed key hash maps)
+create table t_multi (
+    k0  int         NOT NULL,
+    k1  int         NOT NULL,
+    k2  varchar(32) NOT NULL,
+    v   int         NOT NULL
+) DUPLICATE KEY(k0) DISTRIBUTED BY HASH(k0) BUCKETS 3
+PROPERTIES('replication_num' = '1');
+
+insert into t_multi
+    SELECT generate_series % 100, generate_series % 50, generate_series % 200, generate_series
+    FROM TABLE(generate_series(1, 100000));
+
+-- Setup: empty table (edge case)
+create table t_empty (k int, v int NOT NULL) DUPLICATE KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 3
+PROPERTIES('replication_num' = '1');
+
+
+-- =====================================================================
+-- Section 1: Non-nullable int key  (AggHashMapWithOneNumberKey<TYPE_INT>)
+-- =====================================================================
+
+-- 1a. count(*) with int key
+select /*+SET_VAR(enable_inline_agg_state=false)*/ k_int, count(*) as cnt from t_num where k_int is not null group by k_int order by k_int limit 10;
+select /*+SET_VAR(enable_inline_agg_state=true)*/  k_int, count(*) as cnt from t_num where k_int is not null group by k_int order by k_int limit 10;
+
+-- 1b. sum(int) with int key  (state = int64_t, 8 bytes → qualifies)
+select /*+SET_VAR(enable_inline_agg_state=false)*/ k_int, sum(v_int) as s from t_num where k_int is not null group by k_int order by k_int limit 10;
+select /*+SET_VAR(enable_inline_agg_state=true)*/  k_int, sum(v_int) as s from t_num where k_int is not null group by k_int order by k_int limit 10;
+
+-- 1c. min(int) with int key  (state = int32_t, 4 bytes → qualifies)
+select /*+SET_VAR(enable_inline_agg_state=false)*/ k_int, min(v_int) as m from t_num where k_int is not null group by k_int order by k_int limit 10;
+select /*+SET_VAR(enable_inline_agg_state=true)*/  k_int, min(v_int) as m from t_num where k_int is not null group by k_int order by k_int limit 10;
+
+-- 1d. max(bigint) with bigint key  (state = int64_t, 8 bytes → qualifies)
+select /*+SET_VAR(enable_inline_agg_state=false)*/ k_bigint, max(v_bigint) as m from t_num where k_bigint is not null group by k_bigint order by k_bigint limit 10;
+select /*+SET_VAR(enable_inline_agg_state=true)*/  k_bigint, max(v_bigint) as m from t_num where k_bigint is not null group by k_bigint order by k_bigint limit 10;
+
+
+-- 1e. min(bigint) with int key
+select /*+SET_VAR(enable_inline_agg_state=false)*/ k_int, min(v_bigint) as m from t_num where k_int is not null group by k_int order by k_int limit 10;
+select /*+SET_VAR(enable_inline_agg_state=true)*/  k_int, min(v_bigint) as m from t_num where k_int is not null group by k_int order by k_int limit 10;
+
+-- 1f. max(int) with int key
+select /*+SET_VAR(enable_inline_agg_state=false)*/ k_int, max(v_int) as m from t_num where k_int is not null group by k_int order by k_int limit 10;
+select /*+SET_VAR(enable_inline_agg_state=true)*/  k_int, max(v_int) as m from t_num where k_int is not null group by k_int order by k_int limit 10;
+
+
+-- =====================================================================
+-- Section 2: Nullable int key — null key value must be handled correctly
+-- =====================================================================
+
+-- 2a. count(*) with nullable int key (includes NULL key group)
+select /*+SET_VAR(enable_inline_agg_state=false)*/ k_int, count(*) as cnt from t_num group by k_int order by k_int limit 10;
+select /*+SET_VAR(enable_inline_agg_state=true)*/  k_int, count(*) as cnt from t_num group by k_int order by k_int limit 10;
+
+-- 2b. NULL-key group result
+select /*+SET_VAR(enable_inline_agg_state=false)*/ k_int, count(*) as cnt, sum(v_int) as s from t_num where k_int is null group by k_int;
+select /*+SET_VAR(enable_inline_agg_state=true)*/  k_int, count(*) as cnt, sum(v_int) as s from t_num where k_int is null group by k_int;
+
+-- 2c. Nullable smallint key (some rows have NULL k_smallint)
+select /*+SET_VAR(enable_inline_agg_state=false)*/ k_smallint, count(*) as cnt from t_num group by k_smallint order by k_smallint limit 10;
+select /*+SET_VAR(enable_inline_agg_state=true)*/  k_smallint, count(*) as cnt from t_num group by k_smallint order by k_smallint limit 10;
+
+-- 2d. min(int) with nullable key (NULL key group must get correct min)
+select /*+SET_VAR(enable_inline_agg_state=false)*/ k_int, min(v_int) as m from t_num group by k_int order by k_int limit 5;
+select /*+SET_VAR(enable_inline_agg_state=true)*/  k_int, min(v_int) as m from t_num group by k_int order by k_int limit 5;
+
+-- 2e. max(bigint) with nullable key
+select /*+SET_VAR(enable_inline_agg_state=false)*/ k_int, max(v_bigint) as m from t_num group by k_int order by k_int limit 5;
+select /*+SET_VAR(enable_inline_agg_state=true)*/  k_int, max(v_bigint) as m from t_num group by k_int order by k_int limit 5;
+
+-- 2f. min/max on NULL-only key group
+select /*+SET_VAR(enable_inline_agg_state=false)*/ k_int, min(v_int) as mi, max(v_int) as ma from t_num where k_int is null group by k_int;
+select /*+SET_VAR(enable_inline_agg_state=true)*/  k_int, min(v_int) as mi, max(v_int) as ma from t_num where k_int is null group by k_int;
+
+
+-- =====================================================================
+-- Section 3: Tinyint key uses SmallFixedSizeHashMap (supports_inline_state=false)
+-- Inline state must be silently skipped; per-group results must still be correct.
+-- =====================================================================
+
+select /*+SET_VAR(enable_inline_agg_state=false)*/ k_tinyint, count(*) as cnt, sum(v_int) as s from t_num where k_tinyint is not null group by k_tinyint order by k_tinyint;
+select /*+SET_VAR(enable_inline_agg_state=true)*/  k_tinyint, count(*) as cnt, sum(v_int) as s from t_num where k_tinyint is not null group by k_tinyint order by k_tinyint;
+
+
+-- =====================================================================
+-- Section 4: String key (AggHashMapWithOneStringKey / OneNullableStringKey)
+-- =====================================================================
+
+-- 4a. Non-null string key rows
+select /*+SET_VAR(enable_inline_agg_state=false)*/ k_str, count(*) as cnt, sum(v_int) as s from t_str where k_str is not null group by k_str order by k_str limit 10;
+select /*+SET_VAR(enable_inline_agg_state=true)*/  k_str, count(*) as cnt, sum(v_int) as s from t_str where k_str is not null group by k_str order by k_str limit 10;
+
+-- 4b. Nullable string key (includes NULL key group): verify null group appears
+select /*+SET_VAR(enable_inline_agg_state=false)*/ k_str, count(*) as cnt, sum(v_int) as s from t_str group by k_str order by k_str limit 10;
+select /*+SET_VAR(enable_inline_agg_state=true)*/  k_str, count(*) as cnt, sum(v_int) as s from t_str group by k_str order by k_str limit 10;
+
+-- 4c. NULL-key group result for string key
+select /*+SET_VAR(enable_inline_agg_state=false)*/ k_str, count(*) as cnt, sum(v_int) as s from t_str where k_str is null group by k_str;
+select /*+SET_VAR(enable_inline_agg_state=true)*/  k_str, count(*) as cnt, sum(v_int) as s from t_str where k_str is null group by k_str;
+
+
+-- =====================================================================
+-- Section 5: Multi-column keys (serialized / compressed key hash maps)
+-- =====================================================================
+
+-- 5a. Two int columns → AggHashMapWithCompressedKeyFixedSize or SerializedKeyFixedSize
+select /*+SET_VAR(enable_inline_agg_state=false)*/ k0, k1, count(*) as cnt, sum(v) as s from t_multi group by k0, k1 order by k0, k1 limit 10;
+select /*+SET_VAR(enable_inline_agg_state=true)*/  k0, k1, count(*) as cnt, sum(v) as s from t_multi group by k0, k1 order by k0, k1 limit 10;
+
+-- 5b. Two int columns with min/max
+select /*+SET_VAR(enable_inline_agg_state=false)*/ k0, k1, min(v) as mi, max(v) as ma from t_multi group by k0, k1 order by k0, k1 limit 10;
+select /*+SET_VAR(enable_inline_agg_state=true)*/  k0, k1, min(v) as mi, max(v) as ma from t_multi group by k0, k1 order by k0, k1 limit 10;
+
+-- 5c. int + varchar → AggHashMapWithSerializedKey
+select /*+SET_VAR(enable_inline_agg_state=false)*/ k0, k2, count(*) as cnt, sum(v) as s from t_multi group by k0, k2 order by k0, k2 limit 10;
+select /*+SET_VAR(enable_inline_agg_state=true)*/  k0, k2, count(*) as cnt, sum(v) as s from t_multi group by k0, k2 order by k0, k2 limit 10;
+
+-- 5c. Three columns (deeper SerializedKey path)
+select /*+SET_VAR(enable_inline_agg_state=false)*/ k0, k1, k2, count(*) as cnt, sum(v) as s from t_multi group by k0, k1, k2 order by k0, k1, k2 limit 10;
+select /*+SET_VAR(enable_inline_agg_state=true)*/  k0, k1, k2, count(*) as cnt, sum(v) as s from t_multi group by k0, k1, k2 order by k0, k1, k2 limit 10;
+
+
+-- =====================================================================
+-- Section 6: build_hash_map_with_limit path (GROUP BY … LIMIT)
+-- =====================================================================
+
+-- 6a. Int key with limit (limit < distinct key count)
+select /*+SET_VAR(enable_inline_agg_state=false)*/ k_int, count(*) as cnt from t_num where k_int is not null group by k_int order by k_int limit 10;
+select /*+SET_VAR(enable_inline_agg_state=true)*/  k_int, count(*) as cnt from t_num where k_int is not null group by k_int order by k_int limit 10;
+
+-- 6b. String key with limit
+select /*+SET_VAR(enable_inline_agg_state=false)*/ k_str, count(*) as cnt from t_str where k_str is not null group by k_str order by k_str limit 10;
+select /*+SET_VAR(enable_inline_agg_state=true)*/  k_str, count(*) as cnt from t_str where k_str is not null group by k_str order by k_str limit 10;
+
+-- 6c. Multi-column key with limit
+select /*+SET_VAR(enable_inline_agg_state=false)*/ k0, k1, count(*) as cnt from t_multi group by k0, k1 order by k0, k1 limit 10;
+select /*+SET_VAR(enable_inline_agg_state=true)*/  k0, k1, count(*) as cnt from t_multi group by k0, k1 order by k0, k1 limit 10;
+
+
+-- =====================================================================
+-- Section 7: build_hash_map_with_selection path (streaming pre-aggregation)
+-- =====================================================================
+
+set streaming_preaggregation_mode = 'force_streaming';
+
+-- 7a. Int key, force streaming
+select /*+SET_VAR(enable_inline_agg_state=false)*/ k_int, count(*) as cnt, sum(v_int) as s from t_num where k_int is not null group by k_int order by k_int limit 10;
+select /*+SET_VAR(enable_inline_agg_state=true)*/  k_int, count(*) as cnt, sum(v_int) as s from t_num where k_int is not null group by k_int order by k_int limit 10;
+
+-- 7b. String key, force streaming
+select /*+SET_VAR(enable_inline_agg_state=false)*/ k_str, count(*) as cnt, sum(v_int) as s from t_str where k_str is not null group by k_str order by k_str limit 10;
+select /*+SET_VAR(enable_inline_agg_state=true)*/  k_str, count(*) as cnt, sum(v_int) as s from t_str where k_str is not null group by k_str order by k_str limit 10;
+
+-- 7c. Multi-column key, force streaming
+select /*+SET_VAR(enable_inline_agg_state=false)*/ k0, k1, count(*) as cnt, sum(v) as s from t_multi group by k0, k1 order by k0, k1 limit 10;
+select /*+SET_VAR(enable_inline_agg_state=true)*/  k0, k1, count(*) as cnt, sum(v) as s from t_multi group by k0, k1 order by k0, k1 limit 10;
+
+-- 7d. Nullable key with null values, force streaming
+select /*+SET_VAR(enable_inline_agg_state=false)*/ k_int, count(*) as cnt from t_num group by k_int order by k_int limit 10;
+select /*+SET_VAR(enable_inline_agg_state=true)*/  k_int, count(*) as cnt from t_num group by k_int order by k_int limit 10;
+
+-- 7e. min/max with int key, force streaming
+select /*+SET_VAR(enable_inline_agg_state=false)*/ k_int, min(v_int) as mi, max(v_int) as ma from t_num where k_int is not null group by k_int order by k_int limit 10;
+select /*+SET_VAR(enable_inline_agg_state=true)*/  k_int, min(v_int) as mi, max(v_int) as ma from t_num where k_int is not null group by k_int order by k_int limit 10;
+
+set streaming_preaggregation_mode = 'auto';
+
+
+-- =====================================================================
+-- Section 8: Agg functions that do NOT qualify for inline state
+-- (sum(bigint) → 16-byte state; avg → composite state; multiple functions)
+-- =====================================================================
+
+-- 8a. sum(bigint): state is int128_t (16 bytes) → inline NOT used
+select /*+SET_VAR(enable_inline_agg_state=false)*/ k_int, sum(v_bigint) as s from t_num where k_int is not null group by k_int order by k_int limit 10;
+select /*+SET_VAR(enable_inline_agg_state=true)*/  k_int, sum(v_bigint) as s from t_num where k_int is not null group by k_int order by k_int limit 10;
+
+-- 8b. avg: composite state → inline NOT used
+select /*+SET_VAR(enable_inline_agg_state=false)*/ k_int, round(avg(v_int), 2) as a from t_num where k_int is not null group by k_int order by k_int limit 10;
+select /*+SET_VAR(enable_inline_agg_state=true)*/  k_int, round(avg(v_int), 2) as a from t_num where k_int is not null group by k_int order by k_int limit 10;
+
+-- 8c. Multiple agg functions: always falls back (more than one function)
+select /*+SET_VAR(enable_inline_agg_state=false)*/ k_int, count(*) as cnt, sum(v_int) as s from t_num where k_int is not null group by k_int order by k_int limit 10;
+select /*+SET_VAR(enable_inline_agg_state=true)*/  k_int, count(*) as cnt, sum(v_int) as s from t_num where k_int is not null group by k_int order by k_int limit 10;
+
+
+-- =====================================================================
+-- Section 9: Edge cases
+-- =====================================================================
+
+-- 9a. Empty table: no groups
+select /*+SET_VAR(enable_inline_agg_state=false)*/ k, count(*) as cnt from t_empty group by k order by k;
+select /*+SET_VAR(enable_inline_agg_state=true)*/  k, count(*) as cnt from t_empty group by k order by k;
+
+-- 9b. Single group (one distinct key value)
+create table t_single (k int NOT NULL, v int NOT NULL)
+    DUPLICATE KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1 PROPERTIES('replication_num' = '1');
+insert into t_single values (1, 10), (1, 20), (1, 30);
+
+select /*+SET_VAR(enable_inline_agg_state=false)*/ k, count(*) as cnt, sum(v) as s, min(v) as mi, max(v) as ma from t_single group by k;
+select /*+SET_VAR(enable_inline_agg_state=true)*/  k, count(*) as cnt, sum(v) as s, min(v) as mi, max(v) as ma from t_single group by k;
+
+-- 9c. All keys are NULL (only one null-key group)
+create table t_allnull (k int, v int NOT NULL)
+    DUPLICATE KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1 PROPERTIES('replication_num' = '1');
+insert into t_allnull (v) values (1), (2), (3);
+
+select /*+SET_VAR(enable_inline_agg_state=false)*/ k, count(*) as cnt, sum(v) as s, min(v) as mi, max(v) as ma from t_allnull group by k;
+select /*+SET_VAR(enable_inline_agg_state=true)*/  k, count(*) as cnt, sum(v) as s, min(v) as mi, max(v) as ma from t_allnull group by k;
+
+drop database db_${uuid0};

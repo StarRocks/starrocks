@@ -616,5 +616,8 @@ ADD_BE_TEST(storage/lake/compaction_task_test)
 # Standalone executable for builtin_functions_fuzzy_test
 ADD_BE_TEST(fuzzy/builtin_functions_fuzzy_test)
 
+# Functional tests for inline aggregate state optimization
+ADD_BE_TEST(exec/aggregate/agg_hash_map_inline_test)
+
 add_dependencies(starrocks_dw_test engine_storage_migration_task_test compaction_task_test builtin_functions_fuzzy_test)
 add_dependencies(starrocks_dw_test engine_storage_migration_task_test compaction_task_test builtin_functions_fuzzy_test)

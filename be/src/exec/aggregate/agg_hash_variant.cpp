@@ -337,7 +337,13 @@ size_t AggHashMapVariant::capacity() const {
 
 size_t AggHashMapVariant::size() const {
     return visit([](const auto& hash_map_with_key) {
-        return hash_map_with_key->hash_map.size() + (hash_map_with_key->get_null_key_data() != nullptr);
+        size_t null_count = (hash_map_with_key->get_null_key_data() != nullptr) ? 1 : 0;
+        if constexpr (requires { hash_map_with_key->get_inline_null_key_data(); }) {
+            if (null_count == 0 && hash_map_with_key->get_inline_null_key_data() != nullptr) {
+                null_count = 1;
+            }
+        }
+        return hash_map_with_key->hash_map.size() + null_count;
     });
 }
 

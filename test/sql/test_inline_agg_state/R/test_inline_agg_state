@@ -1,0 +1,1071 @@
+-- name: test_inline_agg_state
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+create table t_num (
+    k_tinyint   tinyint,
+    k_smallint  smallint,
+    k_int       int,
+    k_bigint    bigint,
+    v_int       int     NOT NULL,
+    v_bigint    bigint  NOT NULL
+) DUPLICATE KEY(k_tinyint, k_smallint, k_int, k_bigint) DISTRIBUTED BY HASH(k_int) BUCKETS 3
+PROPERTIES('replication_num' = '1');
+-- result:
+-- !result
+insert into t_num
+    SELECT generate_series % 127, generate_series % 1000, generate_series % 1000,
+           generate_series % 1000, generate_series, generate_series
+    FROM TABLE(generate_series(1, 100000));
+-- result:
+-- !result
+insert into t_num (k_smallint, k_int, k_bigint, v_int, v_bigint)
+    SELECT NULL, NULL, generate_series % 100, generate_series, generate_series
+    FROM TABLE(generate_series(1, 1000));
+-- result:
+-- !result
+create table t_str (
+    k_str   varchar(64),
+    v_int   int NOT NULL
+) DUPLICATE KEY(k_str) DISTRIBUTED BY HASH(k_str) BUCKETS 3
+PROPERTIES('replication_num' = '1');
+-- result:
+-- !result
+insert into t_str SELECT generate_series % 1000, generate_series FROM TABLE(generate_series(1, 100000));
+-- result:
+-- !result
+insert into t_str (v_int) SELECT generate_series FROM TABLE(generate_series(1, 1000));
+-- result:
+-- !result
+create table t_multi (
+    k0  int         NOT NULL,
+    k1  int         NOT NULL,
+    k2  varchar(32) NOT NULL,
+    v   int         NOT NULL
+) DUPLICATE KEY(k0) DISTRIBUTED BY HASH(k0) BUCKETS 3
+PROPERTIES('replication_num' = '1');
+-- result:
+-- !result
+insert into t_multi
+    SELECT generate_series % 100, generate_series % 50, generate_series % 200, generate_series
+    FROM TABLE(generate_series(1, 100000));
+-- result:
+-- !result
+create table t_empty (k int, v int NOT NULL) DUPLICATE KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 3
+PROPERTIES('replication_num' = '1');
+-- result:
+-- !result
+select /*+SET_VAR(enable_inline_agg_state=false)*/ k_int, count(*) as cnt from t_num where k_int is not null group by k_int order by k_int limit 10;
+-- result:
+0	100
+1	100
+2	100
+3	100
+4	100
+5	100
+6	100
+7	100
+8	100
+9	100
+-- !result
+select /*+SET_VAR(enable_inline_agg_state=true)*/  k_int, count(*) as cnt from t_num where k_int is not null group by k_int order by k_int limit 10;
+-- result:
+0	100
+1	100
+2	100
+3	100
+4	100
+5	100
+6	100
+7	100
+8	100
+9	100
+-- !result
+select /*+SET_VAR(enable_inline_agg_state=false)*/ k_int, sum(v_int) as s from t_num where k_int is not null group by k_int order by k_int limit 10;
+-- result:
+0	5050000
+1	4950100
+2	4950200
+3	4950300
+4	4950400
+5	4950500
+6	4950600
+7	4950700
+8	4950800
+9	4950900
+-- !result
+select /*+SET_VAR(enable_inline_agg_state=true)*/  k_int, sum(v_int) as s from t_num where k_int is not null group by k_int order by k_int limit 10;
+-- result:
+0	5050000
+1	4950100
+2	4950200
+3	4950300
+4	4950400
+5	4950500
+6	4950600
+7	4950700
+8	4950800
+9	4950900
+-- !result
+select /*+SET_VAR(enable_inline_agg_state=false)*/ k_int, min(v_int) as m from t_num where k_int is not null group by k_int order by k_int limit 10;
+-- result:
+0	1000
+1	1
+2	2
+3	3
+4	4
+5	5
+6	6
+7	7
+8	8
+9	9
+-- !result
+select /*+SET_VAR(enable_inline_agg_state=true)*/  k_int, min(v_int) as m from t_num where k_int is not null group by k_int order by k_int limit 10;
+-- result:
+0	1000
+1	1
+2	2
+3	3
+4	4
+5	5
+6	6
+7	7
+8	8
+9	9
+-- !result
+select /*+SET_VAR(enable_inline_agg_state=false)*/ k_bigint, max(v_bigint) as m from t_num where k_bigint is not null group by k_bigint order by k_bigint limit 10;
+-- result:
+0	100000
+1	99001
+2	99002
+3	99003
+4	99004
+5	99005
+6	99006
+7	99007
+8	99008
+9	99009
+-- !result
+select /*+SET_VAR(enable_inline_agg_state=true)*/  k_bigint, max(v_bigint) as m from t_num where k_bigint is not null group by k_bigint order by k_bigint limit 10;
+-- result:
+0	100000
+1	99001
+2	99002
+3	99003
+4	99004
+5	99005
+6	99006
+7	99007
+8	99008
+9	99009
+-- !result
+select /*+SET_VAR(enable_inline_agg_state=false)*/ k_int, min(v_bigint) as m from t_num where k_int is not null group by k_int order by k_int limit 10;
+-- result:
+0	1000
+1	1
+2	2
+3	3
+4	4
+5	5
+6	6
+7	7
+8	8
+9	9
+-- !result
+select /*+SET_VAR(enable_inline_agg_state=true)*/  k_int, min(v_bigint) as m from t_num where k_int is not null group by k_int order by k_int limit 10;
+-- result:
+0	1000
+1	1
+2	2
+3	3
+4	4
+5	5
+6	6
+7	7
+8	8
+9	9
+-- !result
+select /*+SET_VAR(enable_inline_agg_state=false)*/ k_int, max(v_int) as m from t_num where k_int is not null group by k_int order by k_int limit 10;
+-- result:
+0	100000
+1	99001
+2	99002
+3	99003
+4	99004
+5	99005
+6	99006
+7	99007
+8	99008
+9	99009
+-- !result
+select /*+SET_VAR(enable_inline_agg_state=true)*/  k_int, max(v_int) as m from t_num where k_int is not null group by k_int order by k_int limit 10;
+-- result:
+0	100000
+1	99001
+2	99002
+3	99003
+4	99004
+5	99005
+6	99006
+7	99007
+8	99008
+9	99009
+-- !result
+select /*+SET_VAR(enable_inline_agg_state=false)*/ k_int, count(*) as cnt from t_num group by k_int order by k_int limit 10;
+-- result:
+None	1000
+0	100
+1	100
+2	100
+3	100
+4	100
+5	100
+6	100
+7	100
+8	100
+-- !result
+select /*+SET_VAR(enable_inline_agg_state=true)*/  k_int, count(*) as cnt from t_num group by k_int order by k_int limit 10;
+-- result:
+None	1000
+0	100
+1	100
+2	100
+3	100
+4	100
+5	100
+6	100
+7	100
+8	100
+-- !result
+select /*+SET_VAR(enable_inline_agg_state=false)*/ k_int, count(*) as cnt, sum(v_int) as s from t_num where k_int is null group by k_int;
+-- result:
+None	1000	500500
+-- !result
+select /*+SET_VAR(enable_inline_agg_state=true)*/  k_int, count(*) as cnt, sum(v_int) as s from t_num where k_int is null group by k_int;
+-- result:
+None	1000	500500
+-- !result
+select /*+SET_VAR(enable_inline_agg_state=false)*/ k_smallint, count(*) as cnt from t_num group by k_smallint order by k_smallint limit 10;
+-- result:
+None	1000
+0	100
+1	100
+2	100
+3	100
+4	100
+5	100
+6	100
+7	100
+8	100
+-- !result
+select /*+SET_VAR(enable_inline_agg_state=true)*/  k_smallint, count(*) as cnt from t_num group by k_smallint order by k_smallint limit 10;
+-- result:
+None	1000
+0	100
+1	100
+2	100
+3	100
+4	100
+5	100
+6	100
+7	100
+8	100
+-- !result
+select /*+SET_VAR(enable_inline_agg_state=false)*/ k_int, min(v_int) as m from t_num group by k_int order by k_int limit 5;
+-- result:
+None	1
+0	1000
+1	1
+2	2
+3	3
+-- !result
+select /*+SET_VAR(enable_inline_agg_state=true)*/  k_int, min(v_int) as m from t_num group by k_int order by k_int limit 5;
+-- result:
+None	1
+0	1000
+1	1
+2	2
+3	3
+-- !result
+select /*+SET_VAR(enable_inline_agg_state=false)*/ k_int, max(v_bigint) as m from t_num group by k_int order by k_int limit 5;
+-- result:
+None	1000
+0	100000
+1	99001
+2	99002
+3	99003
+-- !result
+select /*+SET_VAR(enable_inline_agg_state=true)*/  k_int, max(v_bigint) as m from t_num group by k_int order by k_int limit 5;
+-- result:
+None	1000
+0	100000
+1	99001
+2	99002
+3	99003
+-- !result
+select /*+SET_VAR(enable_inline_agg_state=false)*/ k_int, min(v_int) as mi, max(v_int) as ma from t_num where k_int is null group by k_int;
+-- result:
+None	1	1000
+-- !result
+select /*+SET_VAR(enable_inline_agg_state=true)*/  k_int, min(v_int) as mi, max(v_int) as ma from t_num where k_int is null group by k_int;
+-- result:
+None	1	1000
+-- !result
+select /*+SET_VAR(enable_inline_agg_state=false)*/ k_tinyint, count(*) as cnt, sum(v_int) as s from t_num where k_tinyint is not null group by k_tinyint order by k_tinyint;
+-- result:
+0	787	39379906
+1	788	39380694
+2	788	39381482
+3	788	39382270
+4	788	39383058
+5	788	39383846
+6	788	39384634
+7	788	39385422
+8	788	39386210
+9	788	39386998
+10	788	39387786
+11	788	39388574
+12	788	39389362
+13	788	39390150
+14	788	39390938
+15	788	39391726
+16	788	39392514
+17	788	39393302
+18	788	39394090
+19	788	39394878
+20	788	39395666
+21	788	39396454
+22	788	39397242
+23	788	39398030
+24	788	39398818
+25	788	39399606
+26	788	39400394
+27	788	39401182
+28	788	39401970
+29	788	39402758
+30	788	39403546
+31	788	39404334
+32	788	39405122
+33	788	39405910
+34	788	39406698
+35	788	39407486
+36	788	39408274
+37	788	39409062
+38	788	39409850
+39	788	39410638
+40	788	39411426
+41	788	39412214
+42	788	39413002
+43	788	39413790
+44	788	39414578
+45	788	39415366
+46	788	39416154
+47	788	39416942
+48	788	39417730
+49	788	39418518
+50	788	39419306
+51	788	39420094
+52	787	39320881
+53	787	39321668
+54	787	39322455
+55	787	39323242
+56	787	39324029
+57	787	39324816
+58	787	39325603
+59	787	39326390
+60	787	39327177
+61	787	39327964
+62	787	39328751
+63	787	39329538
+64	787	39330325
+65	787	39331112
+66	787	39331899
+67	787	39332686
+68	787	39333473
+69	787	39334260
+70	787	39335047
+71	787	39335834
+72	787	39336621
+73	787	39337408
+74	787	39338195
+75	787	39338982
+76	787	39339769
+77	787	39340556
+78	787	39341343
+79	787	39342130
+80	787	39342917
+81	787	39343704
+82	787	39344491
+83	787	39345278
+84	787	39346065
+85	787	39346852
+86	787	39347639
+87	787	39348426
+88	787	39349213
+89	787	39350000
+90	787	39350787
+91	787	39351574
+92	787	39352361
+93	787	39353148
+94	787	39353935
+95	787	39354722
+96	787	39355509
+97	787	39356296
+98	787	39357083
+99	787	39357870
+100	787	39358657
+101	787	39359444
+102	787	39360231
+103	787	39361018
+104	787	39361805
+105	787	39362592
+106	787	39363379
+107	787	39364166
+108	787	39364953
+109	787	39365740
+110	787	39366527
+111	787	39367314
+112	787	39368101
+113	787	39368888
+114	787	39369675
+115	787	39370462
+116	787	39371249
+117	787	39372036
+118	787	39372823
+119	787	39373610
+120	787	39374397
+121	787	39375184
+122	787	39375971
+123	787	39376758
+124	787	39377545
+125	787	39378332
+126	787	39379119
+-- !result
+select /*+SET_VAR(enable_inline_agg_state=true)*/  k_tinyint, count(*) as cnt, sum(v_int) as s from t_num where k_tinyint is not null group by k_tinyint order by k_tinyint;
+-- result:
+0	787	39379906
+1	788	39380694
+2	788	39381482
+3	788	39382270
+4	788	39383058
+5	788	39383846
+6	788	39384634
+7	788	39385422
+8	788	39386210
+9	788	39386998
+10	788	39387786
+11	788	39388574
+12	788	39389362
+13	788	39390150
+14	788	39390938
+15	788	39391726
+16	788	39392514
+17	788	39393302
+18	788	39394090
+19	788	39394878
+20	788	39395666
+21	788	39396454
+22	788	39397242
+23	788	39398030
+24	788	39398818
+25	788	39399606
+26	788	39400394
+27	788	39401182
+28	788	39401970
+29	788	39402758
+30	788	39403546
+31	788	39404334
+32	788	39405122
+33	788	39405910
+34	788	39406698
+35	788	39407486
+36	788	39408274
+37	788	39409062
+38	788	39409850
+39	788	39410638
+40	788	39411426
+41	788	39412214
+42	788	39413002
+43	788	39413790
+44	788	39414578
+45	788	39415366
+46	788	39416154
+47	788	39416942
+48	788	39417730
+49	788	39418518
+50	788	39419306
+51	788	39420094
+52	787	39320881
+53	787	39321668
+54	787	39322455
+55	787	39323242
+56	787	39324029
+57	787	39324816
+58	787	39325603
+59	787	39326390
+60	787	39327177
+61	787	39327964
+62	787	39328751
+63	787	39329538
+64	787	39330325
+65	787	39331112
+66	787	39331899
+67	787	39332686
+68	787	39333473
+69	787	39334260
+70	787	39335047
+71	787	39335834
+72	787	39336621
+73	787	39337408
+74	787	39338195
+75	787	39338982
+76	787	39339769
+77	787	39340556
+78	787	39341343
+79	787	39342130
+80	787	39342917
+81	787	39343704
+82	787	39344491
+83	787	39345278
+84	787	39346065
+85	787	39346852
+86	787	39347639
+87	787	39348426
+88	787	39349213
+89	787	39350000
+90	787	39350787
+91	787	39351574
+92	787	39352361
+93	787	39353148
+94	787	39353935
+95	787	39354722
+96	787	39355509
+97	787	39356296
+98	787	39357083
+99	787	39357870
+100	787	39358657
+101	787	39359444
+102	787	39360231
+103	787	39361018
+104	787	39361805
+105	787	39362592
+106	787	39363379
+107	787	39364166
+108	787	39364953
+109	787	39365740
+110	787	39366527
+111	787	39367314
+112	787	39368101
+113	787	39368888
+114	787	39369675
+115	787	39370462
+116	787	39371249
+117	787	39372036
+118	787	39372823
+119	787	39373610
+120	787	39374397
+121	787	39375184
+122	787	39375971
+123	787	39376758
+124	787	39377545
+125	787	39378332
+126	787	39379119
+-- !result
+select /*+SET_VAR(enable_inline_agg_state=false)*/ k_str, count(*) as cnt, sum(v_int) as s from t_str where k_str is not null group by k_str order by k_str limit 10;
+-- result:
+0	100	5050000
+1	100	4950100
+10	100	4951000
+100	100	4960000
+101	100	4960100
+102	100	4960200
+103	100	4960300
+104	100	4960400
+105	100	4960500
+106	100	4960600
+-- !result
+select /*+SET_VAR(enable_inline_agg_state=true)*/  k_str, count(*) as cnt, sum(v_int) as s from t_str where k_str is not null group by k_str order by k_str limit 10;
+-- result:
+0	100	5050000
+1	100	4950100
+10	100	4951000
+100	100	4960000
+101	100	4960100
+102	100	4960200
+103	100	4960300
+104	100	4960400
+105	100	4960500
+106	100	4960600
+-- !result
+select /*+SET_VAR(enable_inline_agg_state=false)*/ k_str, count(*) as cnt, sum(v_int) as s from t_str group by k_str order by k_str limit 10;
+-- result:
+None	1000	500500
+0	100	5050000
+1	100	4950100
+10	100	4951000
+100	100	4960000
+101	100	4960100
+102	100	4960200
+103	100	4960300
+104	100	4960400
+105	100	4960500
+-- !result
+select /*+SET_VAR(enable_inline_agg_state=true)*/  k_str, count(*) as cnt, sum(v_int) as s from t_str group by k_str order by k_str limit 10;
+-- result:
+None	1000	500500
+0	100	5050000
+1	100	4950100
+10	100	4951000
+100	100	4960000
+101	100	4960100
+102	100	4960200
+103	100	4960300
+104	100	4960400
+105	100	4960500
+-- !result
+select /*+SET_VAR(enable_inline_agg_state=false)*/ k_str, count(*) as cnt, sum(v_int) as s from t_str where k_str is null group by k_str;
+-- result:
+None	1000	500500
+-- !result
+select /*+SET_VAR(enable_inline_agg_state=true)*/  k_str, count(*) as cnt, sum(v_int) as s from t_str where k_str is null group by k_str;
+-- result:
+None	1000	500500
+-- !result
+select /*+SET_VAR(enable_inline_agg_state=false)*/ k0, k1, count(*) as cnt, sum(v) as s from t_multi group by k0, k1 order by k0, k1 limit 10;
+-- result:
+0	0	1000	50050000
+1	1	1000	49951000
+2	2	1000	49952000
+3	3	1000	49953000
+4	4	1000	49954000
+5	5	1000	49955000
+6	6	1000	49956000
+7	7	1000	49957000
+8	8	1000	49958000
+9	9	1000	49959000
+-- !result
+select /*+SET_VAR(enable_inline_agg_state=true)*/  k0, k1, count(*) as cnt, sum(v) as s from t_multi group by k0, k1 order by k0, k1 limit 10;
+-- result:
+0	0	1000	50050000
+1	1	1000	49951000
+2	2	1000	49952000
+3	3	1000	49953000
+4	4	1000	49954000
+5	5	1000	49955000
+6	6	1000	49956000
+7	7	1000	49957000
+8	8	1000	49958000
+9	9	1000	49959000
+-- !result
+select /*+SET_VAR(enable_inline_agg_state=false)*/ k0, k1, min(v) as mi, max(v) as ma from t_multi group by k0, k1 order by k0, k1 limit 10;
+-- result:
+0	0	100	100000
+1	1	1	99901
+2	2	2	99902
+3	3	3	99903
+4	4	4	99904
+5	5	5	99905
+6	6	6	99906
+7	7	7	99907
+8	8	8	99908
+9	9	9	99909
+-- !result
+select /*+SET_VAR(enable_inline_agg_state=true)*/  k0, k1, min(v) as mi, max(v) as ma from t_multi group by k0, k1 order by k0, k1 limit 10;
+-- result:
+0	0	100	100000
+1	1	1	99901
+2	2	2	99902
+3	3	3	99903
+4	4	4	99904
+5	5	5	99905
+6	6	6	99906
+7	7	7	99907
+8	8	8	99908
+9	9	9	99909
+-- !result
+select /*+SET_VAR(enable_inline_agg_state=false)*/ k0, k2, count(*) as cnt, sum(v) as s from t_multi group by k0, k2 order by k0, k2 limit 10;
+-- result:
+0	0	500	25050000
+0	100	500	25000000
+1	1	500	24950500
+1	101	500	25000500
+2	102	500	25001000
+2	2	500	24951000
+3	103	500	25001500
+3	3	500	24951500
+4	104	500	25002000
+4	4	500	24952000
+-- !result
+select /*+SET_VAR(enable_inline_agg_state=true)*/  k0, k2, count(*) as cnt, sum(v) as s from t_multi group by k0, k2 order by k0, k2 limit 10;
+-- result:
+0	0	500	25050000
+0	100	500	25000000
+1	1	500	24950500
+1	101	500	25000500
+2	102	500	25001000
+2	2	500	24951000
+3	103	500	25001500
+3	3	500	24951500
+4	104	500	25002000
+4	4	500	24952000
+-- !result
+select /*+SET_VAR(enable_inline_agg_state=false)*/ k0, k1, k2, count(*) as cnt, sum(v) as s from t_multi group by k0, k1, k2 order by k0, k1, k2 limit 10;
+-- result:
+0	0	0	500	25050000
+0	0	100	500	25000000
+1	1	1	500	24950500
+1	1	101	500	25000500
+2	2	102	500	25001000
+2	2	2	500	24951000
+3	3	103	500	25001500
+3	3	3	500	24951500
+4	4	104	500	25002000
+4	4	4	500	24952000
+-- !result
+select /*+SET_VAR(enable_inline_agg_state=true)*/  k0, k1, k2, count(*) as cnt, sum(v) as s from t_multi group by k0, k1, k2 order by k0, k1, k2 limit 10;
+-- result:
+0	0	0	500	25050000
+0	0	100	500	25000000
+1	1	1	500	24950500
+1	1	101	500	25000500
+2	2	102	500	25001000
+2	2	2	500	24951000
+3	3	103	500	25001500
+3	3	3	500	24951500
+4	4	104	500	25002000
+4	4	4	500	24952000
+-- !result
+select /*+SET_VAR(enable_inline_agg_state=false)*/ k_int, count(*) as cnt from t_num where k_int is not null group by k_int order by k_int limit 10;
+-- result:
+0	100
+1	100
+2	100
+3	100
+4	100
+5	100
+6	100
+7	100
+8	100
+9	100
+-- !result
+select /*+SET_VAR(enable_inline_agg_state=true)*/  k_int, count(*) as cnt from t_num where k_int is not null group by k_int order by k_int limit 10;
+-- result:
+0	100
+1	100
+2	100
+3	100
+4	100
+5	100
+6	100
+7	100
+8	100
+9	100
+-- !result
+select /*+SET_VAR(enable_inline_agg_state=false)*/ k_str, count(*) as cnt from t_str where k_str is not null group by k_str order by k_str limit 10;
+-- result:
+0	100
+1	100
+10	100
+100	100
+101	100
+102	100
+103	100
+104	100
+105	100
+106	100
+-- !result
+select /*+SET_VAR(enable_inline_agg_state=true)*/  k_str, count(*) as cnt from t_str where k_str is not null group by k_str order by k_str limit 10;
+-- result:
+0	100
+1	100
+10	100
+100	100
+101	100
+102	100
+103	100
+104	100
+105	100
+106	100
+-- !result
+select /*+SET_VAR(enable_inline_agg_state=false)*/ k0, k1, count(*) as cnt from t_multi group by k0, k1 order by k0, k1 limit 10;
+-- result:
+0	0	1000
+1	1	1000
+2	2	1000
+3	3	1000
+4	4	1000
+5	5	1000
+6	6	1000
+7	7	1000
+8	8	1000
+9	9	1000
+-- !result
+select /*+SET_VAR(enable_inline_agg_state=true)*/  k0, k1, count(*) as cnt from t_multi group by k0, k1 order by k0, k1 limit 10;
+-- result:
+0	0	1000
+1	1	1000
+2	2	1000
+3	3	1000
+4	4	1000
+5	5	1000
+6	6	1000
+7	7	1000
+8	8	1000
+9	9	1000
+-- !result
+set streaming_preaggregation_mode = 'force_streaming';
+-- result:
+-- !result
+select /*+SET_VAR(enable_inline_agg_state=false)*/ k_int, count(*) as cnt, sum(v_int) as s from t_num where k_int is not null group by k_int order by k_int limit 10;
+-- result:
+0	100	5050000
+1	100	4950100
+2	100	4950200
+3	100	4950300
+4	100	4950400
+5	100	4950500
+6	100	4950600
+7	100	4950700
+8	100	4950800
+9	100	4950900
+-- !result
+select /*+SET_VAR(enable_inline_agg_state=true)*/  k_int, count(*) as cnt, sum(v_int) as s from t_num where k_int is not null group by k_int order by k_int limit 10;
+-- result:
+0	100	5050000
+1	100	4950100
+2	100	4950200
+3	100	4950300
+4	100	4950400
+5	100	4950500
+6	100	4950600
+7	100	4950700
+8	100	4950800
+9	100	4950900
+-- !result
+select /*+SET_VAR(enable_inline_agg_state=false)*/ k_str, count(*) as cnt, sum(v_int) as s from t_str where k_str is not null group by k_str order by k_str limit 10;
+-- result:
+0	100	5050000
+1	100	4950100
+10	100	4951000
+100	100	4960000
+101	100	4960100
+102	100	4960200
+103	100	4960300
+104	100	4960400
+105	100	4960500
+106	100	4960600
+-- !result
+select /*+SET_VAR(enable_inline_agg_state=true)*/  k_str, count(*) as cnt, sum(v_int) as s from t_str where k_str is not null group by k_str order by k_str limit 10;
+-- result:
+0	100	5050000
+1	100	4950100
+10	100	4951000
+100	100	4960000
+101	100	4960100
+102	100	4960200
+103	100	4960300
+104	100	4960400
+105	100	4960500
+106	100	4960600
+-- !result
+select /*+SET_VAR(enable_inline_agg_state=false)*/ k0, k1, count(*) as cnt, sum(v) as s from t_multi group by k0, k1 order by k0, k1 limit 10;
+-- result:
+0	0	1000	50050000
+1	1	1000	49951000
+2	2	1000	49952000
+3	3	1000	49953000
+4	4	1000	49954000
+5	5	1000	49955000
+6	6	1000	49956000
+7	7	1000	49957000
+8	8	1000	49958000
+9	9	1000	49959000
+-- !result
+select /*+SET_VAR(enable_inline_agg_state=true)*/  k0, k1, count(*) as cnt, sum(v) as s from t_multi group by k0, k1 order by k0, k1 limit 10;
+-- result:
+0	0	1000	50050000
+1	1	1000	49951000
+2	2	1000	49952000
+3	3	1000	49953000
+4	4	1000	49954000
+5	5	1000	49955000
+6	6	1000	49956000
+7	7	1000	49957000
+8	8	1000	49958000
+9	9	1000	49959000
+-- !result
+select /*+SET_VAR(enable_inline_agg_state=false)*/ k_int, count(*) as cnt from t_num group by k_int order by k_int limit 10;
+-- result:
+None	1000
+0	100
+1	100
+2	100
+3	100
+4	100
+5	100
+6	100
+7	100
+8	100
+-- !result
+select /*+SET_VAR(enable_inline_agg_state=true)*/  k_int, count(*) as cnt from t_num group by k_int order by k_int limit 10;
+-- result:
+None	1000
+0	100
+1	100
+2	100
+3	100
+4	100
+5	100
+6	100
+7	100
+8	100
+-- !result
+select /*+SET_VAR(enable_inline_agg_state=false)*/ k_int, min(v_int) as mi, max(v_int) as ma from t_num where k_int is not null group by k_int order by k_int limit 10;
+-- result:
+0	1000	100000
+1	1	99001
+2	2	99002
+3	3	99003
+4	4	99004
+5	5	99005
+6	6	99006
+7	7	99007
+8	8	99008
+9	9	99009
+-- !result
+select /*+SET_VAR(enable_inline_agg_state=true)*/  k_int, min(v_int) as mi, max(v_int) as ma from t_num where k_int is not null group by k_int order by k_int limit 10;
+-- result:
+0	1000	100000
+1	1	99001
+2	2	99002
+3	3	99003
+4	4	99004
+5	5	99005
+6	6	99006
+7	7	99007
+8	8	99008
+9	9	99009
+-- !result
+set streaming_preaggregation_mode = 'auto';
+-- result:
+-- !result
+select /*+SET_VAR(enable_inline_agg_state=false)*/ k_int, sum(v_bigint) as s from t_num where k_int is not null group by k_int order by k_int limit 10;
+-- result:
+0	5050000
+1	4950100
+2	4950200
+3	4950300
+4	4950400
+5	4950500
+6	4950600
+7	4950700
+8	4950800
+9	4950900
+-- !result
+select /*+SET_VAR(enable_inline_agg_state=true)*/  k_int, sum(v_bigint) as s from t_num where k_int is not null group by k_int order by k_int limit 10;
+-- result:
+0	5050000
+1	4950100
+2	4950200
+3	4950300
+4	4950400
+5	4950500
+6	4950600
+7	4950700
+8	4950800
+9	4950900
+-- !result
+select /*+SET_VAR(enable_inline_agg_state=false)*/ k_int, round(avg(v_int), 2) as a from t_num where k_int is not null group by k_int order by k_int limit 10;
+-- result:
+0	50500.0
+1	49501.0
+2	49502.0
+3	49503.0
+4	49504.0
+5	49505.0
+6	49506.0
+7	49507.0
+8	49508.0
+9	49509.0
+-- !result
+select /*+SET_VAR(enable_inline_agg_state=true)*/  k_int, round(avg(v_int), 2) as a from t_num where k_int is not null group by k_int order by k_int limit 10;
+-- result:
+0	50500.0
+1	49501.0
+2	49502.0
+3	49503.0
+4	49504.0
+5	49505.0
+6	49506.0
+7	49507.0
+8	49508.0
+9	49509.0
+-- !result
+select /*+SET_VAR(enable_inline_agg_state=false)*/ k_int, count(*) as cnt, sum(v_int) as s from t_num where k_int is not null group by k_int order by k_int limit 10;
+-- result:
+0	100	5050000
+1	100	4950100
+2	100	4950200
+3	100	4950300
+4	100	4950400
+5	100	4950500
+6	100	4950600
+7	100	4950700
+8	100	4950800
+9	100	4950900
+-- !result
+select /*+SET_VAR(enable_inline_agg_state=true)*/  k_int, count(*) as cnt, sum(v_int) as s from t_num where k_int is not null group by k_int order by k_int limit 10;
+-- result:
+0	100	5050000
+1	100	4950100
+2	100	4950200
+3	100	4950300
+4	100	4950400
+5	100	4950500
+6	100	4950600
+7	100	4950700
+8	100	4950800
+9	100	4950900
+-- !result
+select /*+SET_VAR(enable_inline_agg_state=false)*/ k, count(*) as cnt from t_empty group by k order by k;
+-- result:
+-- !result
+select /*+SET_VAR(enable_inline_agg_state=true)*/  k, count(*) as cnt from t_empty group by k order by k;
+-- result:
+-- !result
+create table t_single (k int NOT NULL, v int NOT NULL)
+    DUPLICATE KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1 PROPERTIES('replication_num' = '1');
+-- result:
+-- !result
+insert into t_single values (1, 10), (1, 20), (1, 30);
+-- result:
+-- !result
+select /*+SET_VAR(enable_inline_agg_state=false)*/ k, count(*) as cnt, sum(v) as s, min(v) as mi, max(v) as ma from t_single group by k;
+-- result:
+1	3	60	10	30
+-- !result
+select /*+SET_VAR(enable_inline_agg_state=true)*/  k, count(*) as cnt, sum(v) as s, min(v) as mi, max(v) as ma from t_single group by k;
+-- result:
+1	3	60	10	30
+-- !result
+create table t_allnull (k int, v int NOT NULL)
+    DUPLICATE KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1 PROPERTIES('replication_num' = '1');
+-- result:
+-- !result
+insert into t_allnull (v) values (1), (2), (3);
+-- result:
+-- !result
+select /*+SET_VAR(enable_inline_agg_state=false)*/ k, count(*) as cnt, sum(v) as s, min(v) as mi, max(v) as ma from t_allnull group by k;
+-- result:
+None	3	6	1	3
+-- !result
+select /*+SET_VAR(enable_inline_agg_state=true)*/  k, count(*) as cnt, sum(v) as s, min(v) as mi, max(v) as ma from t_allnull group by k;
+-- result:
+None	3	6	1	3
+-- !result
+drop database db_${uuid0};
+-- result:
+-- !result

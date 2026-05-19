@@ -52,6 +52,8 @@ public:
     // check if the agg state is pod
     bool is_pod_state() const override { return _function->is_pod_state(); }
 
+    bool is_agg_state_combinator() const override { return true; }
+
     // reset the agg state
     void reset(FunctionContext* ctx, const Columns& args, AggDataPtr state) const override {
         _function->reset(ctx, args, state);

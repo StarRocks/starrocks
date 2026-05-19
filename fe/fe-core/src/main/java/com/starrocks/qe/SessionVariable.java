@@ -1156,6 +1156,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String ENABLE_MULTI_CAST_LIMIT_PUSH_DOWN = "enable_multi_cast_limit_push_down";
     public static final String ENABLE_GLOBAL_LATE_MATERIALIZATION = "enable_global_late_materialization";
+    public static final String ENABLE_INLINE_AGG_STATE = "enable_inline_agg_state";
     public static final String GLOBAL_LATE_MATERIALIZE_MAX_FETCH_OPS = "global_late_materialization_max_fetch_ops";
     public static final String GLOBAL_LATE_MATERIALIZE_MAX_LIMIT = "global_late_materialization_max_limit";
     public static final String ENABLE_GLOBAL_LATE_MATERIALIZATION_COST_BASED =
@@ -2324,6 +2325,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     private boolean enableMultiCastLimitPushDown = true;
     @VarAttr(name = ENABLE_GLOBAL_LATE_MATERIALIZATION)
     private boolean enableGlobalLateMaterialization = true;
+    @VarAttr(name = ENABLE_INLINE_AGG_STATE)
+    private boolean enableInlineAggState = true;
 
     @VarAttr(name = GLOBAL_LATE_MATERIALIZE_MAX_FETCH_OPS)
     private int globalLateMaterializeMaxFetchOps = 4;
@@ -6197,6 +6200,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.enableGlobalLateMaterialization = enableGlobalLateMaterialization;
     }
 
+    public boolean isEnableInlineAggState() {
+        return enableInlineAggState;
+    }
+
+    public void setEnableInlineAggState(boolean enableInlineAggState) {
+        this.enableInlineAggState = enableInlineAggState;
+    }
+
     public void setGlobalLateMaterializeMaxFetchOps(int maxOpts) {
         this.globalLateMaterializeMaxFetchOps = maxOpts;
     }
@@ -6407,6 +6418,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         tResult.setEnable_join_runtime_bitset_filter(enableJoinRuntimeBitsetFilter);
         tResult.setLower_upper_support_utf8(lowerUpperSupportUTF8);
         tResult.setEnable_global_late_materialization(enableGlobalLateMaterialization);
+        tResult.setEnable_inline_agg_state(enableInlineAggState);
         tResult.setPipeline_dop(pipelineDop);
         if (pipelineProfileLevel == 2) {
             tResult.setPipeline_profile_level(TPipelineProfileLevel.DETAIL);

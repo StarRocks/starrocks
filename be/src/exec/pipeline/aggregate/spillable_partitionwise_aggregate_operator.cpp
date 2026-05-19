@@ -53,6 +53,7 @@ Status SpillablePartitionWiseAggregateSinkOperator::set_finishing(RuntimeState* 
     // Always queue a spill task for residual hash table and streaming data.
     // Even if channel has_task(), the in-flight task may have been created with
     // should_spill_hash_table=false and won't drain the hash table.
+    _agg_op->aggregator()->init_hash_map_iterator();
     _agg_op->aggregator()->spill_channel()->add_spill_task(_build_spill_task(state));
 
     auto flush_function = [this](RuntimeState* state) {
@@ -280,6 +281,9 @@ ChunkPtr& SpillablePartitionWiseAggregateSinkOperator::_append_hash_column(Chunk
 
 Status SpillablePartitionWiseAggregateSinkOperator::_spill_all_data(RuntimeState* state, bool should_spill_hash_table) {
     RETURN_IF(_agg_op->aggregator()->hash_map_variant().size() == 0, Status::OK());
+    if (should_spill_hash_table) {
+        _agg_op->aggregator()->init_hash_map_iterator();
+    }
     CHECK(!_agg_op->aggregator()->spill_channel()->has_task());
     RETURN_IF_ERROR(
             _agg_op->aggregator()->spill_aggregate_data(state, _build_spill_task(state, should_spill_hash_table)));
@@ -297,7 +301,7 @@ std::function<StatusOr<ChunkPtr>()> SpillablePartitionWiseAggregateSinkOperator:
         }
         if (should_spill_hash_table && _agg_op->aggregator()->hash_map_variant().size() > 0) {
             if (!iterator_initialized) {
-                _agg_op->aggregator()->it_hash() = _agg_op->aggregator()->state_allocator().begin();
+                _agg_op->aggregator()->init_hash_map_iterator();
                 iterator_initialized = true;
             }
             if (!_agg_op->aggregator()->is_ht_eos()) {

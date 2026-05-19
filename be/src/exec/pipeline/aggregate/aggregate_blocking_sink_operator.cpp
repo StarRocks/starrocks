@@ -75,7 +75,7 @@ Status AggregateBlockingSinkOperator::set_finishing(RuntimeState* state) {
         if (_aggregator->hash_map_variant().size() == 0) {
             _aggregator->set_ht_eos();
         }
-        _aggregator->it_hash() = _aggregator->state_allocator().begin();
+        _aggregator->init_hash_map_iterator();
 
     } else if (_aggregator->is_none_group_by_exprs()) {
         // for aggregate no group by, if _num_input_rows is 0,

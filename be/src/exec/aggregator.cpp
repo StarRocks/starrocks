@@ -375,6 +375,26 @@ Status Aggregator::open(RuntimeState* state) {
             _agg_states_total_size = ALIGN_TO(_agg_states_total_size, _max_agg_state_align_size);
             _state_allocator.aggregate_key_size = _agg_states_total_size;
             _state_allocator.pool = _mem_pool.get();
+
+            // Detect inline state eligibility: single POD agg function with state <= 8 bytes.
+            // The initial state value is precomputed via create() and stored in _inline_initial_state
+            // so that InlineAllocFunc can initialize hash map slots correctly (handles both
+            // zero-init functions like COUNT/SUM and non-zero-init functions like MIN/MAX).
+            if (state->enable_inline_agg_state() && _allow_inline_agg_state && _agg_fn_ctxs.size() == 1 &&
+                _agg_functions[0]->size() <= sizeof(AggDataPtr) && _agg_functions[0]->is_pod_state() &&
+                !_agg_functions[0]->is_agg_state_combinator()) {
+                _hash_map_variant.visit([&](auto& variant) {
+                    using MapType = std::remove_reference_t<decltype(*variant)>;
+                    if constexpr (MapType::supports_inline_state) {
+                        _use_inline_agg_state = true;
+                        _agg_states_offsets[0] = 0;
+                        // Precompute inline initial state for the agg function
+                        _inline_initial_state = 0;
+                        _agg_functions[0]->create(_agg_fn_ctxs[0],
+                                                  reinterpret_cast<AggDataPtr>(&_inline_initial_state));
+                    }
+                });
+            }
         }
     }
 
@@ -924,6 +944,7 @@ Status Aggregator::compute_single_agg_state(Chunk* chunk, size_t chunk_size) {
 }
 
 Status Aggregator::compute_batch_agg_states(Chunk* chunk, size_t chunk_size) {
+    if (_use_inline_agg_state) return Status::OK();
     SCOPED_TIMER(_agg_stat->agg_function_compute_timer);
     bool use_intermediate = _use_intermediate_as_input();
     auto& agg_expr_ctxs = use_intermediate ? _intermediate_agg_expr_ctxs : _agg_expr_ctxs;
@@ -948,6 +969,7 @@ Status Aggregator::compute_batch_agg_states(Chunk* chunk, size_t chunk_size) {
 }
 
 Status Aggregator::compute_batch_agg_states_with_selection(Chunk* chunk, size_t chunk_size) {
+    if (_use_inline_agg_state) return Status::OK();
     SCOPED_TIMER(_agg_stat->agg_function_compute_timer);
     bool use_intermediate = _use_intermediate_as_input();
     auto& agg_expr_ctxs = use_intermediate ? _intermediate_agg_expr_ctxs : _agg_expr_ctxs;
@@ -1061,6 +1083,7 @@ void Aggregator::process_limit(ChunkPtr* chunk) {
 }
 
 Status Aggregator::evaluate_groupby_exprs(Chunk* chunk) {
+    _current_chunk = chunk;
     _set_passthrough(chunk->owner_info().is_passthrough());
     _reset_exprs();
     return _evaluate_group_by_exprs(chunk);
@@ -1224,6 +1247,10 @@ Status Aggregator::output_chunk_by_streaming_with_selection(Chunk* input_chunk, 
 }
 
 void Aggregator::try_convert_to_two_level_map() {
+    // Two-level maps have independent sub-map rehash — inline state not safe.
+    if (_use_inline_agg_state) {
+        return;
+    }
     auto current_size = _hash_map_variant.reserved_memory_usage(mem_pool());
     if (current_size > get_two_level_threahold()) {
         _hash_map_variant.convert_to_two_level(_state);
@@ -1644,6 +1671,30 @@ void Aggregator::build_hash_map(size_t chunk_size, bool agg_group_by_with_limit)
 
     _hash_map_variant.visit([&](auto& hash_map_with_key) {
         using MapType = std::remove_reference_t<decltype(*hash_map_with_key)>;
+        if constexpr (MapType::supports_inline_state) {
+            if (_use_inline_agg_state && _current_chunk != nullptr) {
+                bool use_intermediate = _use_intermediate_as_input();
+                auto& agg_expr_ctxs = use_intermediate ? _intermediate_agg_expr_ctxs : _agg_expr_ctxs;
+                for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
+                    (void)evaluate_agg_input_column(_current_chunk, agg_expr_ctxs[i], i);
+                }
+                auto* agg_func = _agg_functions[0];
+                auto* fn_ctx = _agg_fn_ctxs[0];
+                const auto** columns = _agg_input_raw_columns[0].data();
+                bool is_merge = _is_merge_funcs[0] || use_intermediate;
+                auto update_fn = [agg_func, fn_ctx, columns, is_merge, this](AggDataPtr state, size_t row) {
+                    if (is_merge) {
+                        agg_func->merge(fn_ctx, _agg_input_columns[0][0].get(), state, row);
+                    } else {
+                        agg_func->update(fn_ctx, columns, state, row);
+                    }
+                };
+                InlineAllocFunc inline_alloc{reinterpret_cast<AggDataPtr>(_inline_initial_state)};
+                hash_map_with_key->template build_hash_map<decltype(update_fn)>(
+                        chunk_size, _group_by_columns, _mem_pool.get(), inline_alloc, &_tmp_agg_states, update_fn);
+                return;
+            }
+        }
         hash_map_with_key->build_hash_map(chunk_size, _group_by_columns, _mem_pool.get(), AllocateState<MapType>(this),
                                           &_tmp_agg_states);
     });
@@ -1668,6 +1719,31 @@ void Aggregator::_build_hash_map_with_shared_limit(size_t chunk_size, std::atomi
     }
     _hash_map_variant.visit([&](auto& hash_map_with_key) {
         using MapType = std::remove_reference_t<decltype(*hash_map_with_key)>;
+        if constexpr (MapType::supports_inline_state) {
+            if (_use_inline_agg_state && _current_chunk != nullptr) {
+                bool use_intermediate = _use_intermediate_as_input();
+                auto& agg_expr_ctxs = use_intermediate ? _intermediate_agg_expr_ctxs : _agg_expr_ctxs;
+                for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
+                    (void)evaluate_agg_input_column(_current_chunk, agg_expr_ctxs[i], i);
+                }
+                auto* agg_func = _agg_functions[0];
+                auto* fn_ctx = _agg_fn_ctxs[0];
+                const auto** columns = _agg_input_raw_columns[0].data();
+                bool is_merge = _is_merge_funcs[0] || use_intermediate;
+                auto update_fn = [agg_func, fn_ctx, columns, is_merge, this](AggDataPtr state, size_t row) {
+                    if (is_merge) {
+                        agg_func->merge(fn_ctx, _agg_input_columns[0][0].get(), state, row);
+                    } else {
+                        agg_func->update(fn_ctx, columns, state, row);
+                    }
+                };
+                InlineAllocFunc inline_alloc{reinterpret_cast<AggDataPtr>(_inline_initial_state)};
+                hash_map_with_key->template build_hash_map_with_limit<decltype(update_fn)>(
+                        chunk_size, _group_by_columns, _mem_pool.get(), inline_alloc, &_tmp_agg_states,
+                        &_streaming_selection, _limit, update_fn);
+                return;
+            }
+        }
         hash_map_with_key->build_hash_map_with_limit(chunk_size, _group_by_columns, _mem_pool.get(),
                                                      AllocateState<MapType>(this), &_tmp_agg_states,
                                                      &_streaming_selection, _limit);
@@ -1678,6 +1754,31 @@ void Aggregator::_build_hash_map_with_shared_limit(size_t chunk_size, std::atomi
 void Aggregator::build_hash_map_with_selection(size_t chunk_size) {
     _hash_map_variant.visit([&](auto& hash_map_with_key) {
         using MapType = std::remove_reference_t<decltype(*hash_map_with_key)>;
+        if constexpr (MapType::supports_inline_state) {
+            if (_use_inline_agg_state && _current_chunk != nullptr) {
+                bool use_intermediate = _use_intermediate_as_input();
+                auto& agg_expr_ctxs = use_intermediate ? _intermediate_agg_expr_ctxs : _agg_expr_ctxs;
+                for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
+                    (void)evaluate_agg_input_column(_current_chunk, agg_expr_ctxs[i], i);
+                }
+                auto* agg_func = _agg_functions[0];
+                auto* fn_ctx = _agg_fn_ctxs[0];
+                const auto** columns = _agg_input_raw_columns[0].data();
+                bool is_merge = _is_merge_funcs[0] || use_intermediate;
+                auto update_fn = [agg_func, fn_ctx, columns, is_merge, this](AggDataPtr state, size_t row) {
+                    if (is_merge) {
+                        agg_func->merge(fn_ctx, _agg_input_columns[0][0].get(), state, row);
+                    } else {
+                        agg_func->update(fn_ctx, columns, state, row);
+                    }
+                };
+                InlineAllocFunc inline_alloc{reinterpret_cast<AggDataPtr>(_inline_initial_state)};
+                hash_map_with_key->template build_hash_map_with_selection<decltype(update_fn)>(
+                        chunk_size, _group_by_columns, _mem_pool.get(), inline_alloc, &_tmp_agg_states,
+                        &_streaming_selection, update_fn);
+                return;
+            }
+        }
         hash_map_with_key->build_hash_map_with_selection(chunk_size, _group_by_columns, _mem_pool.get(),
                                                          AllocateState<MapType>(this), &_tmp_agg_states,
                                                          &_streaming_selection);
@@ -1688,6 +1789,31 @@ void Aggregator::build_hash_map_with_topn_runtime_filter(size_t chunk_size) {
     _streaming_selection.resize(chunk_size);
     _hash_map_variant.visit([&](auto& hash_map_with_key) {
         using MapType = std::remove_reference_t<decltype(*hash_map_with_key)>;
+        if constexpr (MapType::supports_inline_state) {
+            if (_use_inline_agg_state && _current_chunk != nullptr) {
+                bool use_intermediate = _use_intermediate_as_input();
+                auto& agg_expr_ctxs = use_intermediate ? _intermediate_agg_expr_ctxs : _agg_expr_ctxs;
+                for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
+                    (void)evaluate_agg_input_column(_current_chunk, agg_expr_ctxs[i], i);
+                }
+                auto* agg_func = _agg_functions[0];
+                auto* fn_ctx = _agg_fn_ctxs[0];
+                const auto** columns = _agg_input_raw_columns[0].data();
+                bool is_merge = _is_merge_funcs[0] || use_intermediate;
+                auto update_fn = [agg_func, fn_ctx, columns, is_merge, this](AggDataPtr state, size_t row) {
+                    if (is_merge) {
+                        agg_func->merge(fn_ctx, _agg_input_columns[0][0].get(), state, row);
+                    } else {
+                        agg_func->update(fn_ctx, columns, state, row);
+                    }
+                };
+                InlineAllocFunc inline_alloc{reinterpret_cast<AggDataPtr>(_inline_initial_state)};
+                hash_map_with_key->template build_hash_map_with_selection_and_allocation<decltype(update_fn)>(
+                        chunk_size, _group_by_columns, _mem_pool.get(), inline_alloc, &_tmp_agg_states,
+                        &_streaming_selection, update_fn);
+                return;
+            }
+        }
         hash_map_with_key->build_hash_map_with_selection_and_allocation(chunk_size, _group_by_columns, _mem_pool.get(),
                                                                         AllocateState<MapType>(this), &_tmp_agg_states,
                                                                         &_streaming_selection);
@@ -1706,6 +1832,31 @@ void Aggregator::build_hash_map_with_topn_runtime_filter(size_t chunk_size) {
 void Aggregator::build_hash_map_with_selection_and_allocation(size_t chunk_size, bool agg_group_by_with_limit) {
     _hash_map_variant.visit([&](auto& hash_map_with_key) {
         using MapType = std::remove_reference_t<decltype(*hash_map_with_key)>;
+        if constexpr (MapType::supports_inline_state) {
+            if (_use_inline_agg_state && _current_chunk != nullptr) {
+                bool use_intermediate = _use_intermediate_as_input();
+                auto& agg_expr_ctxs = use_intermediate ? _intermediate_agg_expr_ctxs : _agg_expr_ctxs;
+                for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
+                    (void)evaluate_agg_input_column(_current_chunk, agg_expr_ctxs[i], i);
+                }
+                auto* agg_func = _agg_functions[0];
+                auto* fn_ctx = _agg_fn_ctxs[0];
+                const auto** columns = _agg_input_raw_columns[0].data();
+                bool is_merge = _is_merge_funcs[0] || use_intermediate;
+                auto update_fn = [agg_func, fn_ctx, columns, is_merge, this](AggDataPtr state, size_t row) {
+                    if (is_merge) {
+                        agg_func->merge(fn_ctx, _agg_input_columns[0][0].get(), state, row);
+                    } else {
+                        agg_func->update(fn_ctx, columns, state, row);
+                    }
+                };
+                InlineAllocFunc inline_alloc{reinterpret_cast<AggDataPtr>(_inline_initial_state)};
+                hash_map_with_key->template build_hash_map_with_selection_and_allocation<decltype(update_fn)>(
+                        chunk_size, _group_by_columns, _mem_pool.get(), inline_alloc, &_tmp_agg_states,
+                        &_streaming_selection, update_fn);
+                return;
+            }
+        }
         hash_map_with_key->build_hash_map_with_selection_and_allocation(chunk_size, _group_by_columns, _mem_pool.get(),
                                                                         AllocateState<MapType>(this), &_tmp_agg_states,
                                                                         &_streaming_selection);
@@ -1720,9 +1871,6 @@ Status Aggregator::convert_hash_map_to_chunk(int32_t chunk_size, ChunkPtr* chunk
         auto& hash_map_with_key = *variant_value;
         using HashMapWithKey = std::remove_reference_t<decltype(hash_map_with_key)>;
 
-        auto it = std::any_cast<RawHashTableIterator>(_it_hash);
-        auto end = _state_allocator.end();
-
         const auto hash_map_size = _hash_map_variant.size();
         auto num_rows = std::min<size_t>(hash_map_size - _num_rows_processed, chunk_size);
         auto use_intermediate = force_use_intermediate_as_output || _use_intermediate_as_output();
@@ -1730,6 +1878,88 @@ Status Aggregator::convert_hash_map_to_chunk(int32_t chunk_size, ChunkPtr* chunk
         MutableColumns agg_result_columns = _create_agg_result_columns(num_rows, use_intermediate);
 
         int32_t read_index = 0;
+
+        if constexpr (HashMapWithKey::supports_inline_state) {
+            if (_use_inline_agg_state) {
+                // Inline state: iterate hash map directly (state is in value slot).
+                using Iterator = typename HashMapWithKey::HashMapType::iterator;
+                auto it = std::any_cast<Iterator>(_it_hash);
+                auto end = hash_map_with_key.hash_map.end();
+                {
+                    SCOPED_TIMER(_agg_stat->iter_timer);
+                    hash_map_with_key.results.resize(chunk_size);
+                    while ((it != end) && (read_index < chunk_size)) {
+                        hash_map_with_key.results[read_index] = it->first;
+                        _tmp_agg_states[read_index] = reinterpret_cast<AggDataPtr>(&it->second);
+                        ++read_index;
+                        ++it;
+                    }
+                }
+
+                if (read_index > 0) {
+                    {
+                        SCOPED_TIMER(_agg_stat->group_by_append_timer);
+                        hash_map_with_key.insert_keys_to_columns(hash_map_with_key.results, group_by_columns,
+                                                                 read_index);
+                    }
+                    {
+                        SCOPED_TIMER(_agg_stat->agg_append_timer);
+                        SCOPED_THREAD_LOCAL_STATE_ALLOCATOR_SETTER(_allocator.get());
+                        if (!use_intermediate) {
+                            for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
+                                TRY_CATCH_BAD_ALLOC(_agg_functions[i]->batch_finalize(
+                                        _agg_fn_ctxs[i], read_index, _tmp_agg_states, _agg_states_offsets[i],
+                                        agg_result_columns[i].get()));
+                            }
+                        } else {
+                            for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
+                                TRY_CATCH_BAD_ALLOC(_agg_functions[i]->batch_serialize(
+                                        _agg_fn_ctxs[i], read_index, _tmp_agg_states, _agg_states_offsets[i],
+                                        agg_result_columns[i].get()));
+                            }
+                        }
+                    }
+                }
+
+                RETURN_IF_ERROR(check_has_error());
+                _is_ht_eos = (it == end);
+
+                // Handle null key for inline state
+                if constexpr (HashMapWithKey::has_single_null_key) {
+                    if (_is_ht_eos && hash_map_with_key.get_inline_null_key_data() != nullptr) {
+                        if (read_index < _state->chunk_size()) {
+                            DCHECK(group_by_columns.size() == 1);
+                            DCHECK(group_by_columns[0]->is_nullable());
+                            group_by_columns[0]->append_default();
+                            SCOPED_THREAD_LOCAL_STATE_ALLOCATOR_SETTER(_allocator.get());
+                            auto null_state = hash_map_with_key.get_inline_null_key_data();
+                            if (!use_intermediate) {
+                                TRY_CATCH_BAD_ALLOC(_finalize_to_chunk(null_state, agg_result_columns));
+                            } else {
+                                TRY_CATCH_BAD_ALLOC(_serialize_to_chunk(null_state, agg_result_columns));
+                            }
+                            RETURN_IF_ERROR(check_has_error());
+                            ++read_index;
+                        } else {
+                            _is_ht_eos = false;
+                        }
+                    }
+                }
+
+                _it_hash = it;
+                auto result_chunk = _build_output_chunk(std::move(group_by_columns), std::move(agg_result_columns),
+                                                        use_intermediate);
+                _num_rows_returned += read_index;
+                _num_rows_processed += read_index;
+                *chunk = std::move(result_chunk);
+                return Status::OK();
+            }
+        }
+
+        // Non-inline: iterate _state_allocator via RawHashTableIterator.
+        auto it = std::any_cast<RawHashTableIterator>(_it_hash);
+        auto end = _state_allocator.end();
+
         {
             SCOPED_TIMER(_agg_stat->iter_timer);
             hash_map_with_key.results.resize(chunk_size);
@@ -1888,6 +2118,10 @@ void Aggregator::convert_hash_set_to_chunk(int32_t chunk_size, ChunkPtr* chunk) 
 }
 
 void Aggregator::_release_agg_memory() {
+    // Inline POD states live in the hash map itself — no destroy needed.
+    if (_use_inline_agg_state) {
+        return;
+    }
     // If all function states are of POD type,
     // then we don't have to traverse the hash table to call destroy method.
     //
