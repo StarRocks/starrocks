@@ -476,10 +476,6 @@ SMT 可以根据 Oracle 和 StarRocks 的集群信息和表结构自动生成 so
 ### 简介
 
 介绍如何使用 SMT 同步 Hive 数据至 StarRocks 时，会创建 StarRocks 明细表，并且使用 Flink 任务来进行数据的同步。
-<<<<<<< HEAD
-
-=======
->>>>>>> 68e89cc4f8 ([Doc] fix links (#73406))
 
 ### 操作步骤
 
