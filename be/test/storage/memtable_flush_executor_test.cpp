@@ -26,12 +26,12 @@
 #include "common/config_ingest_fwd.h"
 #include "fs/fs_util.h"
 #include "gutil/strings/split.h"
+#include "runtime/chunk_helper.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/descriptors.h"
 #include "runtime/mem_tracker.h"
 #include "runtime/runtime_state.h"
 #include "storage/aggregate_type.h"
-#include "storage/chunk_helper.h"
 #include "storage/memtable.h"
 #include "storage/memtable_rowset_writer_sink.h"
 #include "storage/olap_common.h"
@@ -166,7 +166,7 @@ static const std::vector<SlotDescriptor*>* create_tuple_desc_slots(RuntimeState*
 }
 
 static shared_ptr<Chunk> gen_chunk(const std::vector<SlotDescriptor*>& slots, size_t size) {
-    shared_ptr<Chunk> ret = ChunkHelper::new_chunk(slots, size);
+    shared_ptr<Chunk> ret = RuntimeChunkHelper::new_chunk(slots, size);
     auto cols = ret->mutable_columns();
     for (int ci = 0; ci < cols.size(); ci++) {
         auto& c = cols[ci];

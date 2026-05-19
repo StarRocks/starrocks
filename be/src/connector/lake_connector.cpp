@@ -42,7 +42,7 @@
 #include "exprs/jsonpath.h"
 #include "fs/fs.h"
 #include "fs/key_cache.h"
-#include "runtime/checked_chunk_factory.h"
+#include "runtime/chunk_helper.h"
 #include "runtime/current_thread.h"
 #include "runtime/global_dict/fragment_dict_state.h"
 #include "runtime/global_dict/parser.h"
@@ -185,8 +185,8 @@ void LakeDataSource::close(RuntimeState* state) {
 }
 
 Status LakeDataSource::get_next(RuntimeState* state, ChunkPtr* chunk) {
-    ASSIGN_OR_RETURN(auto chunk_ptr, CheckedChunkFactory::new_chunk_pooled_checked(_prj_iter->output_schema(),
-                                                                                   _runtime_state->chunk_size()));
+    ASSIGN_OR_RETURN(auto chunk_ptr, RuntimeChunkHelper::new_chunk_pooled_checked(_prj_iter->output_schema(),
+                                                                                  _runtime_state->chunk_size()));
     chunk->reset(chunk_ptr);
 
     do {

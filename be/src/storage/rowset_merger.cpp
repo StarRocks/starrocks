@@ -20,6 +20,7 @@
 #include "base/utility/pretty_printer.h"
 #include "column/binary_column.h"
 #include "column/chunk_factory.h"
+#include "column/chunk_schema_helper.h"
 #include "column/column_helper.h"
 #include "column/raw_data_visitor.h"
 #include "common/config_compaction_fwd.h"
@@ -414,7 +415,7 @@ private:
             }
         }
 
-        auto char_field_indexes = ChunkHelper::get_char_field_indexes(schema);
+        auto char_field_indexes = ChunkSchemaHelper::get_char_field_indexes(schema);
 
         vector<uint32_t> column_indexes;
         std::unique_ptr<vector<RowSourceMask>> source_masks;
@@ -581,7 +582,7 @@ private:
             RETURN_IF_ERROR(iter->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS));
 
             auto chunk = ChunkFactory::new_chunk(schema, _chunk_size);
-            auto char_field_indexes = ChunkHelper::get_char_field_indexes(schema);
+            auto char_field_indexes = ChunkSchemaHelper::get_char_field_indexes(schema);
 
             while (true) {
                 chunk->reset();

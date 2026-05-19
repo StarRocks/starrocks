@@ -37,6 +37,7 @@
 #include "fs/fs_util.h"
 #include "gen_cpp/AgentService_types.h"
 #include "gen_cpp/internal_service.pb.h"
+#include "runtime/chunk_helper.h"
 #include "runtime/current_thread.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/descriptors.h"
@@ -228,7 +229,7 @@ TEST_F(PublishVersionTaskTest, test_publish_version) {
         ASSERT_TRUE(delta_writer != nullptr);
         // prepare chunk
         std::vector<std::string> test_data;
-        auto chunk = ChunkHelper::new_chunk(tuple_desc->slots(), 1024);
+        auto chunk = RuntimeChunkHelper::new_chunk(tuple_desc->slots(), 1024);
         std::vector<uint32_t> indexes;
         indexes.reserve(1024);
         for (size_t i = 0; i < 1024; ++i) {
@@ -331,7 +332,7 @@ TEST_F(PublishVersionTaskTest, test_publish_version2) {
         ASSERT_TRUE(delta_writer != nullptr);
         // prepare chunk
         std::vector<std::string> test_data;
-        auto chunk = ChunkHelper::new_chunk(tuple_desc->slots(), 1024);
+        auto chunk = RuntimeChunkHelper::new_chunk(tuple_desc->slots(), 1024);
         std::vector<uint32_t> indexes;
         indexes.reserve(1024);
         for (size_t i = 0; i < 1024; ++i) {
@@ -419,7 +420,7 @@ TEST_F(PublishVersionTaskTest, test_publish_version_cancellation) {
         ASSERT_TRUE(delta_writer != nullptr);
 
         std::vector<std::string> test_data;
-        auto chunk = ChunkHelper::new_chunk(tuple_desc->slots(), 128);
+        auto chunk = RuntimeChunkHelper::new_chunk(tuple_desc->slots(), 128);
         std::vector<uint32_t> indexes;
         indexes.reserve(128);
         for (size_t i = 0; i < 128; ++i) {
@@ -572,7 +573,7 @@ TEST_F(PublishVersionTaskTest, test_publish_version_overwrite_failed) {
         ASSERT_TRUE(writer_status.ok());
         auto delta_writer = std::move(writer_status.value());
         ASSERT_TRUE(delta_writer != nullptr);
-        auto chunk = ChunkHelper::new_chunk(tuple_desc->slots(), 8);
+        auto chunk = RuntimeChunkHelper::new_chunk(tuple_desc->slots(), 8);
         std::vector<uint32_t> indexes;
         indexes.reserve(8);
         for (size_t i = 0; i < 8; ++i) {
@@ -687,7 +688,7 @@ TEST_F(PublishVersionTaskTest, test_publish_version_tablet_dropped) {
         ASSERT_TRUE(writer_status.ok());
         auto delta_writer = std::move(writer_status.value());
         ASSERT_TRUE(delta_writer != nullptr);
-        auto chunk = ChunkHelper::new_chunk(tuple_desc->slots(), 8);
+        auto chunk = RuntimeChunkHelper::new_chunk(tuple_desc->slots(), 8);
         std::vector<uint32_t> indexes;
         indexes.reserve(8);
         for (size_t i = 0; i < 8; ++i) {

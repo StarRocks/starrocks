@@ -17,7 +17,6 @@
 #include <numeric>
 #include <utility>
 
-#include "base/coding.h"
 #include "column/adaptive_nullable_column.h"
 #include "column/array_column.h"
 #include "column/chunk.h"
@@ -32,10 +31,7 @@
 #include "column/vectorized_fwd.h"
 #include "exprs/expr_context.h"
 #include "gutil/strings/fastmem.h"
-#include "runtime/checked_chunk_factory.h"
 #include "runtime/current_thread.h"
-#include "runtime/descriptors.h"
-#include "serde/column_array_serde.h"
 #include "storage/tablet_schema.h"
 #include "storage/types.h"
 #include "types/olap_type_infra.h"
@@ -135,51 +131,6 @@ starrocks::Schema ChunkHelper::get_sort_key_schema_by_primary_key(const starrock
     return starrocks::Schema(tablet_schema->schema(), all_keys_iota_idxes, primary_key_iota_idxes);
 }
 
-starrocks::SchemaPtr ChunkHelper::get_non_nullable_schema(const starrocks::SchemaPtr& schema,
-                                                          const std::vector<int>* keys) {
-    const auto& old_fields = schema->fields();
-    Fields new_fields;
-    new_fields.resize(old_fields.size());
-    DCHECK(keys == nullptr || old_fields.size() == keys->size());
-
-    int idx = 0;
-    for (const auto& old_field : old_fields) {
-        ColumnId id = old_field->id();
-        std::string_view name = old_field->name();
-        TypeInfoPtr type = old_field->type();
-        starrocks::StorageAggregateType agg = old_field->aggregate_method();
-        uint8_t short_key_length = old_field->short_key_length();
-        bool is_key = old_field->is_key();
-        bool nullable = false;
-
-        auto new_field = std::make_shared<Field>(id, name, type, agg, short_key_length,
-                                                 keys != nullptr ? static_cast<bool>((*keys)[idx]) : is_key, nullable);
-        new_fields[idx] = new_field;
-        ++idx;
-    }
-
-    return std::make_shared<starrocks::Schema>(new_fields, schema->keys_type(), schema->sort_key_idxes());
-}
-
-ColumnId ChunkHelper::max_column_id(const starrocks::Schema& schema) {
-    ColumnId id = 0;
-    for (const auto& field : schema.fields()) {
-        id = std::max(id, field->id());
-    }
-    return id;
-}
-
-std::vector<size_t> ChunkHelper::get_char_field_indexes(const Schema& schema) {
-    std::vector<size_t> char_field_indexes;
-    for (size_t i = 0; i < schema.num_fields(); ++i) {
-        const auto& field = schema.field(i);
-        if (field->type()->type() == TYPE_CHAR) {
-            char_field_indexes.push_back(i);
-        }
-    }
-    return char_field_indexes;
-}
-
 void ChunkHelper::padding_char_column(const starrocks::TabletSchemaCSPtr& tschema, const Field& field, Column* column) {
     size_t num_rows = column->size();
     Column* data_column = ColumnHelper::get_data_column(column);
@@ -227,99 +178,6 @@ void ChunkHelper::padding_char_columns(const std::vector<size_t>& char_column_in
         Column* column = chunk->get_column_raw_ptr_by_index(field_index);
         padding_char_column(tschema, *schema.field(field_index), column);
     }
-}
-
-ChunkUniquePtr ChunkHelper::new_chunk(const TupleDescriptor& tuple_desc, size_t n) {
-    return new_chunk(tuple_desc.slots(), n);
-}
-
-ChunkUniquePtr ChunkHelper::new_chunk(const std::vector<SlotDescriptor*>& slots, size_t n) {
-    auto chunk = std::make_unique<Chunk>();
-    for (const auto slot : slots) {
-        auto column = ColumnHelper::create_column(slot->type(), slot->is_nullable());
-        column->reserve(n);
-        chunk->append_column(std::move(column), slot->id());
-    }
-    return chunk;
-}
-
-StatusOr<ChunkUniquePtr> ChunkHelper::new_chunk_checked(const std::vector<SlotDescriptor*>& slots, size_t n) {
-    TRY_CATCH_ALLOC_SCOPE_START()
-    ChunkUniquePtr chunk;
-    chunk = ChunkHelper::new_chunk(slots, n);
-    return chunk;
-    TRY_CATCH_ALLOC_SCOPE_END();
-}
-
-StatusOr<ChunkUniquePtr> ChunkHelper::new_chunk_checked(const TupleDescriptor& tuple_desc, size_t n) {
-    return ChunkHelper::new_chunk_checked(tuple_desc.slots(), n);
-}
-
-StatusOr<Chunk> ChunkHelper::deserialize_chunk_pb_with_schema(const Schema& schema, std::string_view buff) {
-    const auto* cur = reinterpret_cast<const uint8_t*>(buff.data());
-    const auto* end = cur + buff.size();
-
-    uint32_t version = decode_fixed32_le(cur);
-    if (version != 1) {
-        return Status::Corruption("invalid version");
-    }
-    cur += 4;
-
-    uint32_t rows = decode_fixed32_le(cur);
-    cur += 4;
-
-    ASSIGN_OR_RETURN(auto chunk, CheckedChunkFactory::new_chunk_checked(schema, rows));
-    for (auto& column : chunk->columns()) {
-        ASSIGN_OR_RETURN(cur, serde::ColumnArraySerde::deserialize(cur, end, column->as_mutable_raw_ptr()));
-    }
-    return Chunk(std::move(*chunk));
-}
-
-MutableChunkPtr ChunkHelper::new_mutable_chunk(const TupleDescriptor& tuple_desc, size_t n) {
-    return new_mutable_chunk(tuple_desc.slots(), n);
-}
-
-MutableChunkPtr ChunkHelper::new_mutable_chunk(const std::vector<SlotDescriptor*>& slots, size_t n) {
-    auto chunk = std::make_shared<MutableChunk>();
-    for (const auto slot : slots) {
-        auto column = ColumnHelper::create_column(slot->type(), slot->is_nullable());
-        column->reserve(n);
-        chunk->append_column(std::move(column), slot->id());
-    }
-    return chunk;
-}
-
-StatusOr<MutableChunkPtr> ChunkHelper::new_mutable_chunk_checked(const std::vector<SlotDescriptor*>& slots, size_t n) {
-    TRY_CATCH_ALLOC_SCOPE_START()
-    MutableChunkPtr chunk;
-    chunk = ChunkHelper::new_mutable_chunk(slots, n);
-    return chunk;
-    TRY_CATCH_ALLOC_SCOPE_END();
-}
-
-StatusOr<MutableChunkPtr> ChunkHelper::new_mutable_chunk_checked(const TupleDescriptor& tuple_desc, size_t n) {
-    return ChunkHelper::new_mutable_chunk_checked(tuple_desc.slots(), n);
-}
-
-void ChunkHelper::reorder_chunk(const TupleDescriptor& tuple_desc, Chunk* chunk) {
-    return reorder_chunk(tuple_desc.slots(), chunk);
-}
-
-void ChunkHelper::reorder_chunk(const std::vector<SlotDescriptor*>& slots, Chunk* chunk) {
-    auto reordered_chunk = Chunk();
-    auto& original_chunk = (*chunk);
-    for (auto slot : slots) {
-        auto slot_id = slot->id();
-        reordered_chunk.append_column(original_chunk.get_column_by_slot_id(slot_id), slot_id);
-    }
-    original_chunk.swap_chunk(reordered_chunk);
-}
-
-ChunkPtr ChunkHelper::createDummyChunk() {
-    ChunkPtr dummyChunk = std::make_shared<Chunk>();
-    auto col = ColumnHelper::create_const_column<TYPE_INT>(1, 1);
-    dummyChunk->append_column(std::move(col), 0);
-    return dummyChunk;
 }
 
 ChunkAccumulator::ChunkAccumulator(size_t desired_size) : _desired_size(desired_size) {}

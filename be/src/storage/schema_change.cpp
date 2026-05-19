@@ -41,6 +41,7 @@
 
 #include "base/failpoint/fail_point.h"
 #include "column/chunk_factory.h"
+#include "column/chunk_schema_helper.h"
 #include "common/config_compaction_fwd.h"
 #include "common/config_exec_fwd.h"
 #include "common/config_storage_fwd.h"
@@ -54,6 +55,7 @@
 #include "runtime/mem_pool.h"
 #include "runtime/runtime_state.h"
 #include "storage/chunk_aggregator.h"
+#include "storage/chunk_helper.h"
 #include "storage/convert_helper.h"
 #include "storage/memtable.h"
 #include "storage/memtable_rowset_writer_sink.h"
@@ -430,7 +432,7 @@ Status SchemaChangeDirectly::process(TabletReader* reader, RowsetWriter* new_row
         cids.push_back(i);
     }
     Schema new_schema = ChunkHelper::convert_schema(new_tablet->tablet_schema(), cids);
-    auto char_field_indexes = ChunkHelper::get_char_field_indexes(new_schema);
+    auto char_field_indexes = ChunkSchemaHelper::get_char_field_indexes(new_schema);
 
     ChunkPtr new_chunk = ChunkFactory::new_chunk(new_schema, config::vector_chunk_size);
 
@@ -518,7 +520,7 @@ Status SchemaChangeWithSorting::process(TabletReader* reader, RowsetWriter* new_
         cids.push_back(i);
     }
     Schema new_schema = ChunkHelper::convert_schema(new_tablet->tablet_schema(), cids);
-    auto char_field_indexes = ChunkHelper::get_char_field_indexes(new_schema);
+    auto char_field_indexes = ChunkSchemaHelper::get_char_field_indexes(new_schema);
 
     PrimaryKeyEncodingType pk_encoding_type = PrimaryKeyEncodingType::PK_ENCODING_TYPE_NONE;
     if (new_tschema->keys_type() == KeysType::PRIMARY_KEYS) {

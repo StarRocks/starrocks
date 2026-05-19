@@ -25,12 +25,12 @@
 #include "exec/data_sinks/tablet_sink.h"
 #include "exec/pipeline/query_context.h"
 #include "exec/tablet_info.h"
+#include "runtime/chunk_helper.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
 #include "runtime/global_dict/fragment_dict_state.h"
 #include "runtime/runtime_state.h"
-#include "storage/chunk_helper.h"
 
 namespace starrocks {
 
@@ -327,7 +327,7 @@ void TabletSinkIndexChannelTest::test_load_diagnose_base(const std::string& erro
 
     ASSERT_OK(sink->open(runtime_state.get()));
     auto tuple_desc = runtime_state->desc_tbl().get_tuple_descriptor(_desc_tbl.tupleDescriptors[0].id);
-    ChunkUniquePtr chunk = ChunkHelper::new_chunk(*tuple_desc, 1);
+    ChunkUniquePtr chunk = RuntimeChunkHelper::new_chunk(*tuple_desc, 1);
     chunk->get_column_raw_ptr_by_index(0)->append_datum(Datum(1));
     chunk->get_column_raw_ptr_by_index(1)->append_datum(Datum(int64_t(1)));
     ASSERT_OK(sink->send_chunk(runtime_state.get(), chunk.get()));
@@ -405,7 +405,7 @@ TEST_F(TabletSinkIndexChannelTest, primary_replica_node_not_connected) {
 
     ASSERT_OK(sink->open(runtime_state.get()));
     auto tuple_desc = runtime_state->desc_tbl().get_tuple_descriptor(_desc_tbl.tupleDescriptors[0].id);
-    ChunkUniquePtr chunk = ChunkHelper::new_chunk(*tuple_desc, 1);
+    ChunkUniquePtr chunk = RuntimeChunkHelper::new_chunk(*tuple_desc, 1);
     chunk->get_column_raw_ptr_by_index(0)->append_datum(Datum(1));
     ASSERT_OK(sink->send_chunk(runtime_state.get(), chunk.get()));
     Status status = sink->close(runtime_state.get(), Status::OK());
@@ -475,7 +475,7 @@ TEST_F(TabletSinkIndexChannelTest, send_request_releases_protobuf_memory) {
 
     ASSERT_OK(sink->open(runtime_state.get()));
     auto tuple_desc = runtime_state->desc_tbl().get_tuple_descriptor(_desc_tbl.tupleDescriptors[0].id);
-    ChunkUniquePtr chunk = ChunkHelper::new_chunk(*tuple_desc, 1);
+    ChunkUniquePtr chunk = RuntimeChunkHelper::new_chunk(*tuple_desc, 1);
     chunk->get_column_raw_ptr_by_index(0)->append_datum(Datum(1));
     chunk->get_column_raw_ptr_by_index(1)->append_datum(Datum(int64_t(1)));
     ASSERT_OK(sink->send_chunk(runtime_state.get(), chunk.get()));
