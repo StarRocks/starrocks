@@ -54,13 +54,13 @@ public:
         _latch.count_down();
     }
 
-    void unschedule(BthreadTimer* timer);
+    void unschedule_and_join(BthreadTimer* timer);
 
     void set_tid(BthreadTimerTaskId tid) { _tid = tid; }
     BthreadTimerTaskId tid() const { return _tid; }
 
 private:
-    // Only call when unschedule returns that the task is running.
+    // Only call when BthreadTimer::unschedule returns that the task is running.
     void waitUtilFinished();
 
 protected:

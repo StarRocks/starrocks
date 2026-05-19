@@ -1,0 +1,126 @@
+-- name: test_ivm_whitelist_widening @slow
+-- Verifies the widened IVM aggregate-function whitelist:
+--   * MIN/MAX(VARCHAR) — enabled by #73095 (state_union accepts compatible string types)
+--   * AVG(DECIMAL)     — enabled by #73012 (preserve AggStateDesc on state_union)
+--   * ARRAY_AGG(arg)   — single-arg accepted; ORDER BY variant rejected
+-- HLL_UNION / BITMAP_UNION remain rejected (Column.type singleton mutation bug
+-- in the underlying combinator path; deferred to a separate PR).
+create external catalog mv_iceberg_${uuid0}
+properties
+(
+    "type" = "iceberg",
+    "iceberg.catalog.type" = "hive",
+    "hive.metastore.uris" = "${iceberg_catalog_hive_metastore_uris}"
+);
+-- result:
+-- !result
+set catalog mv_iceberg_${uuid0};
+-- result:
+-- !result
+create database mv_ice_db_${uuid0};
+-- result:
+-- !result
+use mv_ice_db_${uuid0};
+-- result:
+-- !result
+create table t1 (
+  k int,
+  s_short varchar(50),
+  d_dec decimal(10, 2),
+  dt date
+) partition by(dt);
+-- result:
+-- !result
+insert into t1 values
+  (1, 'apple', 10.50, '2023-12-01'),
+  (1, 'banana', 20.75, '2023-12-01'),
+  (2, 'cherry', 30.00, '2023-12-02'),
+  (2, 'date', 40.25, '2023-12-02');
+-- result:
+-- !result
+set catalog default_catalog;
+-- result:
+-- !result
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+set enable_materialized_view_rewrite = false;
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW mv_minmax_str PARTITION BY dt
+REFRESH DEFERRED MANUAL
+PROPERTIES ("refresh_mode" = "incremental")
+AS SELECT k, dt, MIN(s_short) AS min_s, MAX(s_short) AS max_s
+   FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1
+   GROUP BY k, dt;
+-- result:
+-- !result
+[UC]REFRESH MATERIALIZED VIEW mv_minmax_str WITH SYNC MODE;
+SELECT k, dt, min_s, max_s FROM mv_minmax_str ORDER BY k, dt;
+-- result:
+1	2023-12-01	apple	banana
+2	2023-12-02	cherry	date
+-- !result
+CREATE MATERIALIZED VIEW mv_avg_dec PARTITION BY dt
+REFRESH DEFERRED MANUAL
+PROPERTIES ("refresh_mode" = "incremental")
+AS SELECT k, dt, AVG(d_dec) AS avg_d
+   FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1
+   GROUP BY k, dt;
+-- result:
+-- !result
+[UC]REFRESH MATERIALIZED VIEW mv_avg_dec WITH SYNC MODE;
+SELECT k, dt, avg_d FROM mv_avg_dec ORDER BY k, dt;
+-- result:
+1	2023-12-01	15.62500000
+2	2023-12-02	35.12500000
+-- !result
+CREATE MATERIALIZED VIEW mv_array_agg PARTITION BY dt
+REFRESH DEFERRED MANUAL
+PROPERTIES ("refresh_mode" = "incremental")
+AS SELECT k, dt, ARRAY_AGG(s_short) AS arr_s
+   FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1
+   GROUP BY k, dt;
+-- result:
+-- !result
+[UC]REFRESH MATERIALIZED VIEW mv_array_agg WITH SYNC MODE;
+[UC]SELECT k, dt, array_sort(arr_s) FROM mv_array_agg ORDER BY k, dt;
+CREATE MATERIALIZED VIEW mv_array_agg_ob PARTITION BY dt
+REFRESH DEFERRED MANUAL
+PROPERTIES ("refresh_mode" = "incremental")
+AS SELECT k, dt, ARRAY_AGG(s_short ORDER BY k) AS arr_s
+   FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1
+   GROUP BY k, dt;
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: Failed to rewrite the query for IVM: Getting analyzing error. Detail message: IVMAnalyzer does not support array_agg with argument types [VARCHAR(1073741824), INT]..')
+-- !result
+CREATE MATERIALIZED VIEW mv_hll PARTITION BY dt
+REFRESH DEFERRED MANUAL
+PROPERTIES ("refresh_mode" = "incremental")
+AS SELECT k, dt, HLL_UNION(HLL_HASH(s_short)) AS h
+   FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1
+   GROUP BY k, dt;
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: Failed to rewrite the query for IVM: Getting analyzing error. Detail message: IVMAnalyzer does not support aggregate function: hll_union. Supported functions: [count, sum, avg, min, max, array_agg, bool_or, approx_count_distinct, ndv]..')
+-- !result
+CREATE MATERIALIZED VIEW mv_bmp PARTITION BY dt
+REFRESH DEFERRED MANUAL
+PROPERTIES ("refresh_mode" = "incremental")
+AS SELECT k, dt, BITMAP_UNION(TO_BITMAP(k)) AS b
+   FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1
+   GROUP BY k, dt;
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: Failed to rewrite the query for IVM: Getting analyzing error. Detail message: IVMAnalyzer does not support aggregate function: bitmap_agg. Supported functions: [count, sum, avg, min, max, array_agg, bool_or, approx_count_distinct, ndv]..')
+-- !result
+drop database db_${uuid0} force;
+-- result:
+-- !result
+drop table mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 force;
+-- result:
+-- !result
+drop database mv_iceberg_${uuid0}.mv_ice_db_${uuid0} force;
+-- result:
+-- !result

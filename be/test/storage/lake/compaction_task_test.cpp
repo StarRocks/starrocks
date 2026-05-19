@@ -25,7 +25,6 @@
 #include "column/schema.h"
 #include "common/config_compaction_fwd.h"
 #include "common/logging.h"
-#include "service/service_be/lake_service.h"
 #include "storage/chunk_helper.h"
 #include "storage/lake/compaction_test_utils.h"
 #include "storage/lake/delta_writer.h"

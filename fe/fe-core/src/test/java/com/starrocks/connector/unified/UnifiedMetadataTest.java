@@ -22,6 +22,7 @@ import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.HudiTable;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.KuduTable;
+import com.starrocks.catalog.MvId;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AlreadyExistsException;
 import com.starrocks.common.DdlException;
@@ -556,5 +557,26 @@ public class UnifiedMetadataTest {
         };
         boolean exists = unifiedMetadata.tableExists(new ConnectContext(), "test_db", "test_tbl");
         Assert.assertTrue(exists);
+    }
+
+    @Test
+    public void testAcquireTvrSnapshotRoutesByTableType(@Mocked IcebergTable icebergTable) {
+        MvId mvId = new MvId(1L, 2L);
+        TvrTableSnapshot expected = TvrTableSnapshot.of(42L);
+        new Expectations() {
+            {
+                icebergTable.getType();
+                result = ICEBERG;
+                minTimes = 1;
+            }
+            {
+                icebergMetadata.acquireTvrSnapshot("test_db", icebergTable, mvId);
+                result = expected;
+                times = 1;
+            }
+        };
+
+        TvrTableSnapshot actual = unifiedMetadata.acquireTvrSnapshot("test_db", icebergTable, mvId);
+        assertEquals(expected, actual);
     }
 }

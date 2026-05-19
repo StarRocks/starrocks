@@ -62,6 +62,7 @@
 #endif
 #include "base/bit/rle_encoding.h"
 #include "base/compression/block_compression.h"
+#include "common/bloom_filter.h"
 #include "storage/rowset/array_column_iterator.h"
 #include "storage/rowset/binary_dict_page.h"
 #include "storage/rowset/bitmap_index_reader.h"
@@ -80,7 +81,6 @@
 #include "storage/rowset/zone_map_index.h"
 #include "storage/types.h"
 #include "types/logical_type.h"
-#include "util/bloom_filter.h"
 
 namespace starrocks {
 

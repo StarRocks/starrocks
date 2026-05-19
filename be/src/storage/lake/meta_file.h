@@ -154,6 +154,16 @@ Status merge_delvec_files(TabletManager* tablet_mgr, const std::vector<DelvecFil
                           std::vector<uint64_t>* offsets, const Slice& extra_data = {},
                           uint64_t* extra_data_offset = nullptr);
 
+// Write a brand-new delvec file containing only |buffer|. Used by tablet merge
+// when the only contributor is a synthesized gap delvec and there are no
+// existing source delvec files to concatenate with — sidesteps
+// merge_delvec_files's DCHECK on (empty old_files + non-empty extra_data) and
+// avoids generating an empty file by mistake. Buffer is written at offset 0;
+// the resulting FileMetaPB is shared=false, encryption is per-call when
+// |buffer| is non-empty.
+Status write_delvec_file_from_buffer(TabletManager* tablet_mgr, int64_t new_tablet_id, int64_t txn_id,
+                                     const Slice& buffer, FileMetaPB* new_delvec_file);
+
 Status get_del_vec(TabletManager* tablet_mgr, const TabletMetadata& metadata, const DelvecPagePB& delvec_page,
                    bool fill_cache, const LakeIOOptions& lake_io_opts, DelVector* delvec);
 Status get_del_vec(TabletManager* tablet_mgr, const TabletMetadata& metadata, uint32_t segment_id, bool fill_cache,

@@ -283,10 +283,10 @@ CCTZ_SOURCE="cctz-2.3"
 CCTZ_MD5SUM="209348e50b24dbbdec6d961059c2fc92"
 
 # FMT
-FMT_DOWNLOAD="https://github.com/fmtlib/fmt/releases/download/8.1.1/fmt-8.1.1.zip"
-FMT_NAME="fmt-8.1.1.zip"
-FMT_SOURCE="fmt-8.1.1"
-FMT_MD5SUM="16dcd48ecc166f10162450bb28aabc87"
+FMT_DOWNLOAD="https://github.com/fmtlib/fmt/releases/download/10.2.1/fmt-10.2.1.zip"
+FMT_NAME="fmt-10.2.1.zip"
+FMT_SOURCE="fmt-10.2.1"
+FMT_MD5SUM="04e266ad52659480d593486a17eed804"
 
 # RYU
 RYU_DOWNLOAD="https://github.com/ulfjack/ryu/archive/aa31ca9361d21b1a00ee054aac49c87d07e74abc.zip"

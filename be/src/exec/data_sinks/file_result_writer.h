@@ -56,7 +56,7 @@ struct ResultFileOptions {
     size_t max_file_size_bytes = 1 * 1024 * 1024 * 1024; // 1GB
     std::vector<TNetworkAddress> broker_addresses;
     std::map<std::string, std::string> broker_properties;
-    int write_buffer_size_kb;
+    int write_buffer_size_kb = 0;
     THdfsProperties hdfs_properties;
     bool use_broker;
     std::vector<std::string> file_column_names;

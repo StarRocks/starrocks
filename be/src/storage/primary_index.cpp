@@ -1510,6 +1510,27 @@ Status PrimaryIndex::upsert(uint32_t rssid, uint32_t rowid_start, const Column& 
     }
 }
 
+Status PrimaryIndex::upsert(uint32_t rssid, const std::vector<uint32_t>& rowids, const Column& pks, IOStat* stat,
+                            ParallelPublishContext* ctx) {
+    DCHECK(_status.ok() && (_pkey_to_rssid_rowid || _persistent_index));
+    if (_persistent_index != nullptr) {
+        auto scope = IOProfiler::scope(IOProfiler::TAG_PKINDEX, _tablet_id);
+        const uint32_t n = pks.size();
+        DCHECK_EQ(rowids.size(), n);
+        DCHECK(ctx != nullptr && !ctx->slots.empty());
+        auto slot = ctx->slots.back().get();
+        slot->values.reserve(n);
+        slot->old_values.resize(n, NullIndexValue);
+        ASSIGN_OR_RETURN(const Slice* vkeys, build_persistent_keys(pks, _key_size, 0, n, &slot->keys));
+        RETURN_IF_ERROR(_build_persistent_values(rssid, rowids, 0, n, &slot->values));
+        RETURN_IF_ERROR(_persistent_index->upsert(n, vkeys, reinterpret_cast<IndexValue*>(slot->values.data()),
+                                                  reinterpret_cast<IndexValue*>(slot->old_values.data()), stat, ctx));
+        return Status::OK();
+    } else {
+        return Status::NotSupported("rowids upsert with thread pool is not supported in memory primary index");
+    }
+}
+
 Status PrimaryIndex::_replace_persistent_index_by_indexes(uint32_t rssid, uint32_t rowid_start,
                                                           const std::vector<uint32_t>& replace_indexes,
                                                           const Column& pks) {

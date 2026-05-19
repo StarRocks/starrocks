@@ -336,7 +336,7 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
                     List<VectorIndexBuildInfoPB> vectorIndexBuildInfos = new ArrayList<>();
                     Utils.aggregatePublishVersion(tablets, Lists.newArrayList(txnInfo), commitVersion - 1, commitVersion,
                                 null, null, computeResource, null, vectorIndexBuildInfos);
-                    VectorIndexBuildScheduler.onPublishComplete(vectorIndexBuildInfos);
+                    VectorIndexBuildScheduler.onPublishComplete(vectorIndexBuildInfos, /* fromCompaction= */ false);
                 }
             }
             return true;

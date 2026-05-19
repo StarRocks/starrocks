@@ -51,6 +51,7 @@ import com.starrocks.common.InternalErrorCode;
 import com.starrocks.common.Pair;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.Status;
+import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.common.ThriftServer;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
@@ -121,7 +122,10 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Consumer;
@@ -132,6 +136,8 @@ public class DefaultCoordinator extends Coordinator {
     private static final Logger LOG = LogManager.getLogger(DefaultCoordinator.class);
 
     private static final int DEFAULT_PROFILE_TIMEOUT_SECOND = 2;
+    private static final ExecutorService EXTERNAL_RESOURCE_CLEANUP_EXECUTOR =
+            ThreadPoolManager.newDaemonCacheThreadPool(32, 1024, "external-resource-cleanup", false);
 
     private final JobSpec jobSpec;
     private final ExecutionDAG executionDAG;
@@ -172,6 +178,8 @@ public class DefaultCoordinator extends Coordinator {
     private ShortCircuitExecutor shortCircuitExecutor = null;
     private boolean isShortCircuit = false;
     private boolean isBinaryRow = false;
+    private final AtomicBoolean externalResourcesCleared = new AtomicBoolean(false);
+    private final AtomicBoolean externalResourcesCleanupScheduled = new AtomicBoolean(false);
 
     private long estimatedMemCost;
     private ExecutionSchedule scheduler;
@@ -1087,7 +1095,7 @@ public class DefaultCoordinator extends Coordinator {
 
     private void cancelInternal(PPlanFragmentCancelReason cancelReason) {
         jobSpec.getSlotProvider().cancelSlotRequirement(slot);
-        clearExternalResources();
+        clearExternalResourcesAsync();
 
         if (!isInternalCancel(cancelReason) && StringUtils.isEmpty(connectContext.getState().getErrorMessage())) {
             String errorMsg = String.format("[reason=%s] [msg=%s]", cancelReason, queryStatus.getErrorMsg());
@@ -1115,6 +1123,29 @@ public class DefaultCoordinator extends Coordinator {
 
     @Override
     public void clearExternalResources() {
+        if (!externalResourcesCleared.compareAndSet(false, true)) {
+            return;
+        }
+        doClearExternalResources();
+    }
+
+    private void clearExternalResourcesAsync() {
+        if (externalResourcesCleared.get() || !externalResourcesCleanupScheduled.compareAndSet(false, true)) {
+            return;
+        }
+        // This is a containment for connector cleanup stalls, not a fix for the connector close itself.
+        // Some connectors may block while closing remote metadata/file iterators. Run cleanup outside the
+        // coordinator lock so KILL/query cancellation can still make progress if external cleanup stalls.
+        try {
+            EXTERNAL_RESOURCE_CLEANUP_EXECUTOR.execute(this::clearExternalResources);
+        } catch (RejectedExecutionException e) {
+            externalResourcesCleanupScheduled.set(false);
+            LOG.warn("submit external resource cleanup task failed, query id: {}",
+                    DebugUtil.printId(jobSpec.getQueryId()), e);
+        }
+    }
+
+    private void doClearExternalResources() {
         for (ScanNode scanNode : jobSpec.getScanNodes()) {
             try {
                 scanNode.clear();

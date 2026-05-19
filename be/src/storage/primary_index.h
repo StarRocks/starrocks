@@ -80,6 +80,25 @@ public:
     Status upsert(uint32_t rssid, uint32_t rowid_start, const Column& pks, IOStat* stat = nullptr,
                   ParallelPublishContext* ctx = nullptr);
 
+    // Parallel-publish overload that upserts an arbitrary subset of rows by absolute rowids:
+    // pks[i] is upserted at (rssid, rowids[i]). The active-memtable write happens synchronously
+    // in the caller; the SST/inactive-memtable lookup of replaced old values is submitted to
+    // ctx->token. Each call requires its own slot in `ctx` (caller must `extend_slots()` first).
+    //
+    // Replaced old rowids are appended to `ctx->deletes` under `ctx->mutex` by the lookup task.
+    // Caller is expected to drive `ctx->token->wait()` and `flush_memtable()` once all upsert
+    // submissions are done.
+    //
+    // Only supported on cloud-native persistent index (returns NotSupported otherwise).
+    //
+    // WHY this takes a compact (rowids, pks) rather than a sliced (idx_begin, idx_end) view:
+    // build_persistent_keys() materializes one Slice per row of the *whole* binary/string PK
+    // column, so a per-range slot would cost chunk_size Slices regardless of range size and
+    // multiplicatively blow up memory when winner ranges are fragmented. Compacting before
+    // submission keeps each slot's per-row buffers proportional to the actual upsert size.
+    Status upsert(uint32_t rssid, const std::vector<uint32_t>& rowids, const Column& pks, IOStat* stat,
+                  ParallelPublishContext* ctx);
+
     // replace old values and insert when key not exist.
     // Used in compaction apply & publish.
     // [not thread-safe]

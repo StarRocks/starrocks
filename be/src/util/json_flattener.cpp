@@ -40,6 +40,7 @@
 #include "column/nullable_column.h"
 #include "column/runtime_type_traits.h"
 #include "column/vectorized_fwd.h"
+#include "common/bloom_filter.h"
 #include "common/compiler_util.h"
 #include "common/config_exec_fwd.h"
 #include "common/config_json_flat_fwd.h"
@@ -55,7 +56,6 @@
 #include "types/json_value.h"
 #include "types/logical_type.h"
 #include "types/type_descriptor.h"
-#include "util/bloom_filter.h"
 
 namespace starrocks {
 
@@ -1104,10 +1104,10 @@ void JsonMerger::_merge_impl(size_t rows) {
             builder.add(vpack::Value(vpack::ValueType::Object));
             _merge_json(_src_root.get(), &builder, i);
             builder.close();
-            _json_result->append(JsonValue(builder.slice()));
+            auto json = builder.slice();
+            _json_result->append(JsonValue(json));
+            _null_result->append(json.isEmptyObject());
         }
-        int zero = 0;
-        _null_result->append_value_multiple_times(&zero, rows);
     }
 }
 

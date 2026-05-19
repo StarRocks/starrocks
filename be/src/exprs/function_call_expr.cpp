@@ -23,6 +23,7 @@
 #include "column/column_helper.h"
 #include "column/const_column.h"
 #include "column/vectorized_fwd.h"
+#include "common/bloom_filter.h"
 #include "exprs/agg/combinator/agg_state_utils.h"
 #include "exprs/agg/combinator/state_function.h"
 #include "exprs/builtin_functions.h"
@@ -31,7 +32,6 @@
 #include "runtime/current_thread.h"
 #include "runtime/user_function_cache.h"
 #include "types/logical_type.h"
-#include "util/bloom_filter.h"
 
 namespace starrocks {
 

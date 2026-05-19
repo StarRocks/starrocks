@@ -19,21 +19,38 @@ import com.google.common.collect.Maps;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.HiveView;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.TableName;
 import com.starrocks.connector.ConnectorProperties;
 import com.starrocks.connector.ConnectorType;
 import com.starrocks.connector.MetastoreType;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.SqlModeHelper;
+import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.AstToStringBuilder;
+import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.AstTraverser;
+import com.starrocks.sql.ast.QueryStatement;
+import com.starrocks.sql.ast.Relation;
+import com.starrocks.sql.ast.SelectRelation;
+import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.ast.SubqueryRelation;
+import com.starrocks.sql.ast.ViewRelation;
+import com.starrocks.sql.ast.expression.BinaryPredicate;
+import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.common.StarRocksPlannerException;
+import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.type.IntegerType;
+import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Mocked;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
+import org.mockito.MockedStatic;
+import org.mockito.Mockito;
 
 import java.util.Optional;
 
@@ -80,6 +97,57 @@ public class HiveViewTest extends PlanTestBase {
                         "  |  join op: INNER JOIN (BROADCAST)\n" +
                         "  |  colocate: false, reason: \n" +
                         "  |  equal join conjunct: 19: n_nationkey = 14: c_nationkey");
+    }
+
+    @Test
+    public void testHiveViewInheritsPolicyRewriteFlag() throws Exception {
+        TableName viewName = new TableName("hive0", "tpch", "customer_view");
+        Expr rowFilter = SqlParser.parseSqlToExpr("c_custkey = 1", SqlModeHelper.MODE_DEFAULT);
+
+        try (MockedStatic<Authorizer> authorizerMockedStatic = Mockito.mockStatic(Authorizer.class)) {
+            authorizerMockedStatic
+                    .when(() -> Authorizer.getColumnMaskingPolicy(Mockito.any(), Mockito.any(), Mockito.any()))
+                    .thenReturn(Maps.newHashMap());
+            authorizerMockedStatic
+                    .when(() -> Authorizer.getRowAccessPolicy(Mockito.any(), Mockito.eq(viewName)))
+                    .thenReturn(rowFilter);
+
+            StatementBase stmt = parseAndAnalyzeWithPolicyRewrite("select * from hive0.tpch.customer_view");
+            SelectRelation selectRelation = (SelectRelation) ((QueryStatement) stmt).getQueryRelation();
+            Assertions.assertTrue(selectRelation.getRelation() instanceof SubqueryRelation);
+
+            SubqueryRelation policyRelation = (SubqueryRelation) selectRelation.getRelation();
+            SelectRelation policySelectRelation = (SelectRelation) policyRelation.getQueryStatement().getQueryRelation();
+            Assertions.assertTrue(policySelectRelation.getRelation() instanceof ViewRelation);
+            Assertions.assertTrue(policySelectRelation.getWhereClause() instanceof BinaryPredicate);
+        }
+    }
+
+    @Test
+    public void testHiveViewBaseTableInheritsPolicyRewriteFlag() throws Exception {
+        TableName baseTableName = new TableName("hive0", "tpch", "customer");
+        Expr rowFilter = SqlParser.parseSqlToExpr("c_custkey = 1", SqlModeHelper.MODE_DEFAULT);
+
+        try (MockedStatic<Authorizer> authorizerMockedStatic = Mockito.mockStatic(Authorizer.class)) {
+            authorizerMockedStatic
+                    .when(() -> Authorizer.getColumnMaskingPolicy(Mockito.any(), Mockito.any(), Mockito.any()))
+                    .thenReturn(Maps.newHashMap());
+            authorizerMockedStatic
+                    .when(() -> Authorizer.getRowAccessPolicy(Mockito.any(), Mockito.eq(baseTableName)))
+                    .thenReturn(rowFilter);
+
+            StatementBase stmt = parseAndAnalyzeWithPolicyRewrite("select * from hive0.tpch.customer_view");
+            SelectRelation selectRelation = (SelectRelation) ((QueryStatement) stmt).getQueryRelation();
+            Assertions.assertTrue(selectRelation.getRelation() instanceof ViewRelation);
+
+            ViewRelation viewRelation = (ViewRelation) selectRelation.getRelation();
+            SelectRelation viewQueryRelation = (SelectRelation) viewRelation.getQueryStatement().getQueryRelation();
+            Assertions.assertTrue(viewQueryRelation.getRelation() instanceof SubqueryRelation);
+
+            SubqueryRelation policyRelation = (SubqueryRelation) viewQueryRelation.getRelation();
+            SelectRelation policySelectRelation = (SelectRelation) policyRelation.getQueryStatement().getQueryRelation();
+            Assertions.assertTrue(policySelectRelation.getWhereClause() instanceof BinaryPredicate);
+        }
     }
 
     @Test
@@ -186,5 +254,18 @@ public class HiveViewTest extends PlanTestBase {
                 "    t1b,t1a\n" +
                 "from\n" +
                 "    test_all_type;", viewDdl);
+    }
+
+    private StatementBase parseAndAnalyzeWithPolicyRewrite(String sql) throws Exception {
+        StatementBase stmt = UtFrameUtils.parseStmtWithNewParserNotIncludeAnalyzer(sql, connectContext);
+        new AstTraverser<Void, Void>() {
+            @Override
+            public Void visitRelation(Relation relation, Void context) {
+                relation.setNeedRewrittenByPolicy(true);
+                return null;
+            }
+        }.visit(stmt);
+        Analyzer.analyze(stmt, connectContext);
+        return stmt;
     }
 }

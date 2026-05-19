@@ -592,24 +592,41 @@ public class LakePublishBatchTest {
                 Lists.newArrayList(), null);
 
         {
-            TransactionStateBatch readyStateBatch = globalTransactionMgr.getReadyPublishTransactionsBatch().get(0);
+            // Pick the batch that belongs to *this* parameterized invocation's table. Other
+            // parameterized invocations share the same DB and may still have an in-flight
+            // async publish whose batch is also returned here; taking get(0) blindly would
+            // race with that prior invocation and silently target the wrong table.
+            long myTableId = table.getId();
+            TransactionStateBatch readyStateBatch = null;
+            for (TransactionStateBatch batch : globalTransactionMgr.getReadyPublishTransactionsBatch()) {
+                if (batch.getTableId() == myTableId) {
+                    readyStateBatch = batch;
+                    break;
+                }
+            }
+            Assertions.assertNotNull(readyStateBatch, "no ready batch for table " + myTableId);
             Assertions.assertEquals(2, readyStateBatch.size());
 
             DatabaseTransactionMgr transactionMgr = globalTransactionMgr.getDatabaseTransactionMgr(db.getId());
             Assertions.assertTrue(transactionMgr.checkTxnStateBatchConsistent(db, readyStateBatch));
 
-            // keep origin version
+            // keep origin version. Wrap the mutation in try/finally: an assertion failure here
+            // would otherwise leave partition.visibleVersion=0 and corrupt every subsequent
+            // test method that uses this table (publishPartitionBatch's
+            // visibleVersion+1 == versions.get(0) check would then permanently fail).
             Map<Partition, Long> partitionVersions = new HashMap<>();
             for (Partition partition : table.getPartitions()) {
                 partitionVersions.put(partition, partition.getDefaultPhysicalPartition().getVisibleVersion());
                 partition.getDefaultPhysicalPartition().setVisibleVersion(0, System.currentTimeMillis());
             }
-            Assertions.assertFalse(transactionMgr.checkTxnStateBatchConsistent(db, readyStateBatch));
-
-            // restore partition version
-            for (Map.Entry<Partition, Long> entry : partitionVersions.entrySet()) {
-                entry.getKey().getDefaultPhysicalPartition()
-                        .setVisibleVersion(entry.getValue(), System.currentTimeMillis());
+            try {
+                Assertions.assertFalse(transactionMgr.checkTxnStateBatchConsistent(db, readyStateBatch));
+            } finally {
+                // restore partition version
+                for (Map.Entry<Partition, Long> entry : partitionVersions.entrySet()) {
+                    entry.getKey().getDefaultPhysicalPartition()
+                            .setVisibleVersion(entry.getValue(), System.currentTimeMillis());
+                }
             }
             Assertions.assertTrue(transactionMgr.checkTxnStateBatchConsistent(db, readyStateBatch));
 
@@ -621,11 +638,13 @@ public class LakePublishBatchTest {
                 originPartitionCommitInfos.put(partitionCommitInfo, partitionCommitInfo.getVersion());
                 partitionCommitInfo.setVersion(99);
             }
-            Assertions.assertFalse(transactionMgr.checkTxnStateBatchConsistent(db, readyStateBatch));
-
-            // restore
-            for (Map.Entry<PartitionCommitInfo, Long> entry : originPartitionCommitInfos.entrySet()) {
-                entry.getKey().setVersion(entry.getValue());
+            try {
+                Assertions.assertFalse(transactionMgr.checkTxnStateBatchConsistent(db, readyStateBatch));
+            } finally {
+                // restore
+                for (Map.Entry<PartitionCommitInfo, Long> entry : originPartitionCommitInfos.entrySet()) {
+                    entry.getKey().setVersion(entry.getValue());
+                }
             }
             Assertions.assertTrue(transactionMgr.checkTxnStateBatchConsistent(db, readyStateBatch));
 
@@ -636,6 +655,21 @@ public class LakePublishBatchTest {
 
     @Test
     public void testBatchPublishShadowIndex() throws Exception {
+        // Strict cut on diverging loaded-index snapshots (see
+        // DatabaseTransactionMgr.getReadyToPublishTxnListBatch) breaks this scenario into
+        // single-txn batches per snapshot, but TransactionGraph.getTxnsWithTxnDependencyBatch
+        // refuses to return chains smaller than min_version_num. Production default is 1; the
+        // class-level setUp raises it to 2 to stress batching. Lower it back for this one
+        // test so the post-cut single-txn batches actually publish.
+        Config.lake_batch_publish_min_version_num = 1;
+        try {
+            doTestBatchPublishShadowIndex();
+        } finally {
+            Config.lake_batch_publish_min_version_num = 2;
+        }
+    }
+
+    private void doTestBatchPublishShadowIndex() throws Exception {
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(DB);
         Table table = GlobalStateMgr.getCurrentState().getLocalMetastore()
                 .getTable(db.getFullName(), TABLE_SCHEMA_CHANGE);
@@ -711,12 +745,23 @@ public class LakePublishBatchTest {
         LakeService lakeService = BrpcProxy.getLakeService(shadowTabletNode.getHost(), shadowTabletNode.getBrpcPort());
         assertInstanceOf(MockedBackend.MockLakeService.class, lakeService);
         MockedBackend.MockLakeService mockLakeService = (MockedBackend.MockLakeService) lakeService;
-        PublishLogVersionBatchRequest request = mockLakeService.pollPublishLogVersionBatchRequests();
-        assertNotNull(request);
-        assertEquals(List.of(shadowTablet.getId()), request.getTabletIds());
-        assertEquals(2, request.getTxnInfos().size());
-        assertEquals(txn2, request.getTxnInfos().get(0).getTxnId());
-        assertEquals(txn3, request.getTxnInfos().get(1).getTxnId());
+        // Strict cut in DatabaseTransactionMgr.getReadyToPublishTxnListBatch splits txn1
+        // away from txn2/txn3 (their loadedIndexIds snapshots differ across the schema
+        // change boundary), and the resulting single-txn batches publish via
+        // PublishVersionDaemon.publishLakeTransactionAsync. That path calls
+        // Utils.publishLogVersion per txn, producing one PublishLogVersionBatchRequest
+        // per shadow-loaded txn (txn2 then txn3) instead of one combined request.
+        PublishLogVersionBatchRequest firstShadowRequest = mockLakeService.pollPublishLogVersionBatchRequests();
+        assertNotNull(firstShadowRequest);
+        assertEquals(List.of(shadowTablet.getId()), firstShadowRequest.getTabletIds());
+        assertEquals(1, firstShadowRequest.getTxnInfos().size());
+        assertEquals(txn2, firstShadowRequest.getTxnInfos().get(0).getTxnId());
+
+        PublishLogVersionBatchRequest secondShadowRequest = mockLakeService.pollPublishLogVersionBatchRequests();
+        assertNotNull(secondShadowRequest);
+        assertEquals(List.of(shadowTablet.getId()), secondShadowRequest.getTabletIds());
+        assertEquals(1, secondShadowRequest.getTxnInfos().size());
+        assertEquals(txn3, secondShadowRequest.getTxnInfos().get(0).getTxnId());
     }
 
     private List<TabletCommitInfo> getPartitionTabletCommitInfos(Partition partition) {

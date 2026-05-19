@@ -421,6 +421,14 @@ public class OperationType {
     @IgnorableOnReplayFailed
     public static final short OP_MODIFY_TABLE_COLOCATE_V2 = 12134;
 
+    // Colocate range mgr update (range distribution colocate). Marked @IgnorableOnReplayFailed
+    // to match the sibling colocate ops; if a follower skips this record under
+    // metadata_journal_ignore_replay_failure, the next DDL on the same group is fail-loud via
+    // ColocateTableIndex.addTableToGroup's range-metadata-missing guard rather than silently
+    // corrupting dispatch.
+    @IgnorableOnReplayFailed
+    public static final short OP_COLOCATE_RANGE_UPDATE = 12135;
+
     //Export json format log
 
     @IgnorableOnReplayFailed

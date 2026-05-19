@@ -30,7 +30,6 @@
 #include "common/statusor.h"
 #include "common/tracer.h"
 #include "common/util/thrift_util.h"
-#include "common/utils.h"
 #include "exec/data_sinks/tablet_sink.h"
 #include "exec/pipeline/query_context.h"
 #include "exprs/expr_context.h"

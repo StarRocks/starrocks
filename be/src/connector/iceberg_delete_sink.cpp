@@ -118,14 +118,12 @@ Status IcebergDeleteSink::add(const ChunkPtr& chunk) {
     }
     SlotId file_path_slot_id = file_path_it->second.slot_ref.slot_id;
 
-    // Find pos column slot_id from the mapping
     auto pos_it = _column_slot_map.find("_pos");
     if (pos_it == _column_slot_map.end()) {
         return Status::InternalError("Could not find _pos column in column_slot_map");
     }
     SlotId pos_slot_id = pos_it->second.slot_ref.slot_id;
 
-    // Get file_path and pos columns using slot_id
     ColumnPtr file_path_column = chunk->get_column_by_slot_id(file_path_slot_id);
     ColumnPtr pos_column = chunk->get_column_by_slot_id(pos_slot_id);
     if (file_path_column == nullptr || pos_column == nullptr) {
@@ -257,7 +255,8 @@ StatusOr<std::unique_ptr<ConnectorChunkSink>> IcebergDeleteSinkProvider::create_
 
     // Create location provider for delete files
     auto location_provider = std::make_shared<connector::LocationProvider>(
-            ctx->path, print_id(ctx->fragment_context->query_id()), runtime_state->be_number(), driver_id, "parquet");
+            ctx->path, print_id(ctx->fragment_context->query_id()), runtime_state->be_number(), driver_id, "parquet",
+            ctx->writer_tag);
 
     std::vector<formats::FileColumnId> file_column_ids(column_names.size());
     // file_path column (index 0)

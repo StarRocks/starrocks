@@ -650,4 +650,28 @@ public class PublishVersionDaemonTest {
         Assertions.assertEquals(before + 2, listeners.size(),
                 "listener count must stay stable across repeated demote/re-elect cycles");
     }
+
+    @Test
+    public void testMaybeLogSlowPublishPartition() {
+        // Fast path: total < 3000ms, helper returns without logging. No exception expected.
+        long now = System.currentTimeMillis();
+        Assertions.assertDoesNotThrow(() -> PublishVersionDaemon.maybeLogSlowPublishPartition(
+                1L, 2L, 3L,
+                now, now + 10, now + 20, now + 30, now + 100));
+
+        // Slow path: total >= 3000ms, helper formats and emits the warn log.
+        long submitTimeMs = now;
+        long lambdaEntryMs = submitTimeMs + 200;
+        long lockAcquiredMs = lambdaEntryMs + 400;
+        long rpcStartMs = lockAcquiredMs + 100;
+        long rpcEndMs = submitTimeMs + 5000;
+        Assertions.assertDoesNotThrow(() -> PublishVersionDaemon.maybeLogSlowPublishPartition(
+                10L, 20L, 30L,
+                submitTimeMs, lambdaEntryMs, lockAcquiredMs, rpcStartMs, rpcEndMs));
+
+        // Boundary: total == 3000ms triggers the slow path (>=).
+        Assertions.assertDoesNotThrow(() -> PublishVersionDaemon.maybeLogSlowPublishPartition(
+                11L, 21L, 31L,
+                submitTimeMs, lambdaEntryMs, lockAcquiredMs, rpcStartMs, submitTimeMs + 3000));
+    }
 }

@@ -39,4 +39,18 @@ CONF_mInt32(config_vector_index_default_build_threshold, "10000");
 // value may exceed nproc * this value.
 CONF_mDouble(vector_index_build_max_cpu_ratio, "0.5");
 
+// Per-segment adaptive ef_search for HNSW vector queries.
+// Compensates for recall degradation on larger segments (e.g. after compaction
+// merges many small segments into one large segment).
+//
+// Formula:
+//   ef_effective = max(user_ef, query_k) * min(1 + alpha * log2(rows/baseline), cap)
+CONF_mBool(enable_vector_adaptive_search, "true");
+
+CONF_mDouble(vector_adaptive_ef_alpha, "1.0");
+
+CONF_mDouble(vector_adaptive_ef_cap, "8.0");
+
+CONF_mInt64(vector_adaptive_ef_baseline_rows, "300000");
+
 } // namespace starrocks::config

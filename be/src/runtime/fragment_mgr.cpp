@@ -832,6 +832,9 @@ Status FragmentMgr::exec_external_plan_fragment(const TScanOpenParams& params, c
         return Status::InvalidArgument(msg.str());
     }
 
+    VLOG_ROW << "BackendService execute open() TQueryPlanInfo: "
+             << apache::thrift::ThriftDebugString(t_query_plan_info);
+
     *query_id = t_query_plan_info.query_id;
 
     // set up desc tbl
@@ -861,7 +864,7 @@ Status FragmentMgr::exec_external_plan_fragment(const TScanOpenParams& params, c
             LOG(WARNING) << "tuple descriptor is null. id: " << slot_ref.tuple_id;
             return Status::InvalidArgument("tuple descriptor is null");
         }
-        auto* slot_desc = desc_tbl->get_slot_descriptor_with_column(slot_ref.slot_id);
+        auto* slot_desc = desc_tbl->get_slot_descriptor(slot_ref.slot_id);
         if (slot_desc == nullptr) {
             LOG(WARNING) << "slot descriptor is null. id: " << slot_ref.slot_id;
             return Status::InvalidArgument("slot descriptor is null");
@@ -878,8 +881,6 @@ Status FragmentMgr::exec_external_plan_fragment(const TScanOpenParams& params, c
         i++;
     }
 
-    LOG(INFO) << "BackendService execute open()  TQueryPlanInfo: "
-              << apache::thrift::ThriftDebugString(t_query_plan_info);
     // assign the param used to execute PlanFragment
     TExecPlanFragmentParams exec_fragment_params;
     exec_fragment_params.protocol_version = (InternalServiceVersion::type)0;

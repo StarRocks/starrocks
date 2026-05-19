@@ -55,7 +55,7 @@ WHERE NAME { = "mv_name" | LIKE "mv_name_matcher"}
 | last_refresh_start_time    | 物化视图上一次刷新开始时间。                                    |
 | last_refresh_finished_time | 物化视图上一次刷新结束时间。                                    |
 | last_refresh_duration      | 物化视图上一次刷新耗时（单位秒）。                               |
-| last_refresh_state         | 物化视图上一次刷新的状态，包括 PENDING、RUNNING、FAILED、SUCCESS。 |
+| last_refresh_state         | 物化视图上一次刷新的状态，包括 PENDING、RUNNING、FAILED、SUCCESS、SKIPPED。如果未检测到基表分区上的数据发生变化，则会跳过对应物化视图分区的刷新操作。 |
 | last_refresh_force_refresh | 物化视图上一次刷新是否为强制（FORCE）刷新。                      |
 | last_refresh_start_partition | 上一次刷新开始的物化视图分区。                                |
 | last_refresh_end_partition | 上一次刷新结束的物化视图分区。                                  |

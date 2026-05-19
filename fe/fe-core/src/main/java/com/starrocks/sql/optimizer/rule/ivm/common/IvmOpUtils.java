@@ -14,6 +14,7 @@
 
 package com.starrocks.sql.optimizer.rule.ivm.common;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
@@ -31,6 +32,7 @@ import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.type.AggStateDesc;
 import com.starrocks.type.ScalarType;
 import com.starrocks.type.Type;
 import com.starrocks.type.VarbinaryType;
@@ -159,8 +161,10 @@ public class IvmOpUtils {
     public static ScalarOperator buildStateUnionScalarOperator(CallOperator aggFunc,
                                                                 ScalarOperator intermediateAggScalarOp,
                                                                 ScalarOperator aggStateAggStateColumnRef) {
-        Preconditions.checkArgument(intermediateAggScalarOp.getType().equals(aggStateAggStateColumnRef.getType()),
-                "The type of intermediateAggScalarOp and aggStateTableRowIdScalarOp must be the same");
+        Preconditions.checkArgument(
+                typesCompatibleForStateUnion(intermediateAggScalarOp.getType(), aggStateAggStateColumnRef.getType()),
+                "intermediateAggScalarOp type %s is incompatible with MV state column type %s",
+                intermediateAggScalarOp.getType(), aggStateAggStateColumnRef.getType());
         Type[] argTypes = new Type[] {intermediateAggScalarOp.getType(), aggStateAggStateColumnRef.getType()};
         String origAggFuncName = AggStateUtils.getAggFuncNameOfCombinator(aggFunc.getFnName());
         String stateUnionFunctionName = AggStateUtils.stateUnionFunctionName(origAggFuncName);
@@ -169,7 +173,32 @@ public class IvmOpUtils {
         if (newFunc == null) {
             throw new IllegalArgumentException("Function " + stateUnionFunctionName + " not found");
         }
+        // <agg>_state_union overloads share one signature (varbinary, varbinary), so FunctionSet only
+        // keeps the first; its AggStateDesc may not match the real input type. The AGG_STATE column
+        // type carries the typed AggStateDesc from AggStateCombineCombinator.of — use it to specialize.
+        AggStateDesc inputAggStateDesc = intermediateAggScalarOp.getType().getAggStateDesc();
+        Preconditions.checkState(inputAggStateDesc != null,
+                "intermediateAggScalarOp's type must carry an AggStateDesc, got: %s",
+                intermediateAggScalarOp.getType());
+        Function specializedFunc = newFunc.copy();
+        specializedFunc.setAggStateDesc(inputAggStateDesc.clone());
         return new CallOperator(stateUnionFunctionName, intermediateAggScalarOp.getType(),
-                List.of(intermediateAggScalarOp, aggStateAggStateColumnRef), newFunc);
+                List.of(intermediateAggScalarOp, aggStateAggStateColumnRef), specializedFunc);
+    }
+
+    @VisibleForTesting
+    static boolean typesCompatibleForStateUnion(Type intermediate, Type mvColumn) {
+        if (intermediate.equals(mvColumn)) {
+            return true;
+        }
+        // MaterializedViewAnalyzer caps VARCHAR length at OlapMaxVarcharLength (65533)
+        // when persisting MV column types, so the delta side's narrower VARCHAR(N) is
+        // semantically compatible with the MV side's wider VARCHAR(65533). Same logic
+        // applies to other string types sharing a primitive kind.
+        if (intermediate.isStringType() && mvColumn.isStringType()
+                && intermediate.getPrimitiveType() == mvColumn.getPrimitiveType()) {
+            return true;
+        }
+        return false;
     }
 }

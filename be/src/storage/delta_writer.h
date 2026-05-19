@@ -14,6 +14,8 @@
 
 #pragma once
 
+#include <mutex>
+
 #include "column/vectorized_fwd.h"
 #include "common/tracer_fwd.h"
 #include "gen_cpp/internal_service.pb.h"
@@ -125,8 +127,6 @@ struct DeltaWriterStat {
     std::atomic_int64_t commit_wait_flush_time_ns = 0;
     // Time to build rowset in commit()
     std::atomic_int64_t commit_rowset_build_time_ns = 0;
-    // Time to deal with primary key in commit() which may load data from disk
-    std::atomic_int64_t commit_pk_preload_time_ns = 0;
     // Time to wait for replica sync in commit()
     std::atomic_int64_t commit_wait_replica_time_ns = 0;
     // Time to commit txn in commit()
@@ -252,9 +252,29 @@ private:
 
     void _set_state(State state, const Status& st);
 
+    // Body of commit() executed exactly once across concurrent duplicate
+    // callers via std::call_once on _commit_once. The result is captured
+    // in _commit_result. Not directly callable from outside commit().
+    Status _do_commit_body();
+
     State _state{kUninitialized};
     Status _err_status;
     mutable std::mutex _state_lock;
+    // Serialises the body of commit(). The first caller to enter
+    // std::call_once runs the body; concurrent duplicate callers (e.g.
+    // retried tablet_writer_add_segment(eos=true) arriving on the
+    // secondary replica) block inside call_once until the body finishes,
+    // and then read _commit_result. This makes duplicate RPCs observably
+    // idempotent at the API level and prevents callers such as
+    // SegmentFlushTask::run from cancelling the writer on a transient
+    // status (see the comment in LocalTabletsChannel::add_segment for
+    // the larger duplicate-RPC contract).
+    std::once_flag _commit_once;
+    // Outcome of the single commit body invocation. Written exactly once
+    // from inside the std::call_once callable; readable by all callers
+    // after the call_once returns (the standard library establishes the
+    // happens-before relationship).
+    Status _commit_result;
 
     ReplicaState _replica_state;
     DeltaWriterOptions _opt;

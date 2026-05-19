@@ -56,7 +56,7 @@ ADD_BE_LIB(RuntimeCore
 target_link_libraries(RuntimeCore PRIVATE
     ChunkCore
     ColumnCore
-    TypesCore
+    Types
     Common
     Base
     Gutil
@@ -122,4 +122,4 @@ ADD_BE_LIB(Runtime
     ${RUNTIME_FILES}
     )
 
-target_link_libraries(Runtime PUBLIC RuntimeCore ExecCore ExecSinkCore ExecSortingCore)
+target_link_libraries(Runtime PUBLIC RuntimeCore ExecCore ExecSinkCore ExecSortingCore Platform)

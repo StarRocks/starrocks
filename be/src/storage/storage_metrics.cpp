@@ -144,6 +144,13 @@ void StorageMetrics::install(MetricRegistry* registry) {
     REGISTER_STORAGE_METRIC(blocks_open_writing);
 
     REGISTER_ENGINE_REQUEST_METRIC(storage_migrate, total, storage_migrate_requests_total);
+    REGISTER_ENGINE_REQUEST_METRIC(create_tablet, total, create_tablet_requests_total);
+    REGISTER_ENGINE_REQUEST_METRIC(create_tablet, failed, create_tablet_requests_failed);
+    REGISTER_ENGINE_REQUEST_METRIC(drop_tablet, total, drop_tablet_requests_total);
+    REGISTER_ENGINE_REQUEST_METRIC(report_all_tablets, total, report_all_tablets_requests_total);
+    REGISTER_ENGINE_REQUEST_METRIC(report_tablet, total, report_tablet_requests_total);
+    REGISTER_ENGINE_REQUEST_METRIC(create_rollup, total, create_rollup_requests_total);
+    REGISTER_ENGINE_REQUEST_METRIC(create_rollup, failed, create_rollup_requests_failed);
     REGISTER_ENGINE_REQUEST_METRIC(delete, total, delete_requests_total);
     REGISTER_ENGINE_REQUEST_METRIC(delete, failed, delete_requests_failed);
     REGISTER_ENGINE_REQUEST_METRIC(base_compaction, total, base_compaction_request_total);
@@ -189,7 +196,6 @@ void StorageMetrics::install(MetricRegistry* registry) {
     REGISTER_STORAGE_METRIC(delta_writer_commit_task_total);
     REGISTER_STORAGE_METRIC(delta_writer_wait_flush_task_total);
     REGISTER_STORAGE_METRIC(delta_writer_wait_flush_duration_us);
-    REGISTER_STORAGE_METRIC(delta_writer_pk_preload_duration_us);
     REGISTER_STORAGE_METRIC(delta_writer_wait_replica_duration_us);
     REGISTER_STORAGE_METRIC(delta_writer_txn_commit_duration_us);
 

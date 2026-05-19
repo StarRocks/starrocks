@@ -23,6 +23,7 @@
 #include "exec/olap_scan_node.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/scan/glm_manager.h"
+#include "exprs/column_access_path_resolver.h"
 #include "runtime/exec_env.h"
 #include "runtime/global_dict/fragment_dict_state.h"
 #include "runtime/runtime_state.h"
@@ -46,8 +47,9 @@ namespace detail {
 StatusOr<std::vector<ColumnAccessPathPtr>> init_access_paths(const std::vector<TColumnAccessPath>& column_access_paths,
                                                              RuntimeState* state, ObjectPool* pool) {
     std::vector<ColumnAccessPathPtr> access_paths;
+    auto path_resolver = make_column_access_path_resolver(state, pool);
     for (int i = 0; i < column_access_paths.size(); ++i) {
-        auto st = ColumnAccessPath::create(column_access_paths[i], state, pool);
+        auto st = ColumnAccessPath::create(column_access_paths[i], path_resolver);
         if (LIKELY(st.ok())) {
             access_paths.emplace_back(std::move(st.value()));
         } else {

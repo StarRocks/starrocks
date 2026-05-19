@@ -1,0 +1,26 @@
+-- name: test_colocate_range_basic_create @cloud @sequential
+-- SQL integration: basic CREATE / DROP of range-colocate tables.
+-- Verifies two tables can join the same colocate group without error.
+set enable_range_distribution = true;
+
+create database db_${uuid0};
+use db_${uuid0};
+
+create table t1 (k1 int, k2 int)
+    order by(k1, k2)
+    properties('replication_num' = '1', 'colocate_with' = 'grp_basic_${uuid0}:k1');
+
+create table t2 (k1 int, k2 int)
+    order by(k1, k2)
+    properties('replication_num' = '1', 'colocate_with' = 'grp_basic_${uuid0}:k1');
+
+-- Both tables should accept inserts; result is checkable without uuid dependency.
+insert into t1 values (1, 10), (2, 20);
+insert into t2 values (1, 100), (2, 200);
+
+select count(*) from t1;
+select count(*) from t2;
+
+drop table t2;
+drop table t1;
+drop database db_${uuid0};

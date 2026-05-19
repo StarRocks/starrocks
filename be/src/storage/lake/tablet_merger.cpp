@@ -26,20 +26,26 @@
 
 #include "base/hash/crc32c.h"
 #include "base/testutil/sync_point.h"
+#include "base/uid_util.h"
+#include "base/utility/defer_op.h"
 #include "column/column_helper.h"
 #include "common/config_rowset_fwd.h"
 #include "fs/fs_factory.h"
 #include "fs/fs_util.h"
 #include "fs/key_cache.h"
+#include "gutil/stl_util.h"
 #include "storage/chunk_helper.h"
 #include "storage/del_vector.h"
 #include "storage/delta_column_group.h"
 #include "storage/lake/filenames.h"
 #include "storage/lake/meta_file.h"
+#include "storage/lake/persistent_index_sstable.h"
 #include "storage/lake/tablet_manager.h"
+#include "storage/lake/tablet_merger_split_family.h"
 #include "storage/lake/tablet_range_helper.h"
 #include "storage/lake/tablet_reshard_helper.h"
 #include "storage/lake/update_manager.h"
+#include "storage/lake/utils.h"
 #include "storage/olap_common.h"
 #include "storage/options.h"
 #include "storage/rowset/column_iterator.h"
@@ -47,6 +53,10 @@
 #include "storage/rowset/segment_iterator.h"
 #include "storage/rowset/segment_options.h"
 #include "storage/rowset/segment_writer.h"
+#include "storage/sstable/comparator.h"
+#include "storage/sstable/iterator.h"
+#include "storage/sstable/options.h"
+#include "storage/sstable/table_builder.h"
 #include "storage/tablet_schema.h"
 
 namespace {
@@ -54,6 +64,38 @@ namespace {
 bvar::Adder<int64_t> g_tablet_merge_dcg_rebuild_total("tablet_merge_dcg_rebuild_total");
 bvar::Adder<int64_t> g_tablet_merge_dcg_rebuild_fallback_not_supported_total(
         "tablet_merge_dcg_rebuild_fallback_not_supported_total");
+
+bvar::Adder<int64_t> g_tablet_merge_gap_delvec_total("tablet_merge_gap_delvec_total");
+bvar::Adder<int64_t> g_tablet_merge_non_pk_skip_dedup_total("tablet_merge_non_pk_skip_dedup_total");
+bvar::Adder<int64_t> g_tablet_merge_synthesized_only_delvec_total("tablet_merge_synthesized_only_delvec_total");
+
+bvar::Adder<int64_t> g_tablet_merge_legacy_sstable_rebuild_total("tablet_merge_legacy_sstable_rebuild_total");
+bvar::Adder<int64_t> g_tablet_merge_legacy_sstable_rebuild_dropped_entries(
+        "tablet_merge_legacy_sstable_rebuild_dropped_entries");
+bvar::Adder<int64_t> g_tablet_merge_legacy_sstable_fastpath_total("tablet_merge_legacy_sstable_fastpath_total");
+bvar::Adder<int64_t> g_tablet_merge_legacy_sstable_fastpath_fallback_to_rebuild_total(
+        "tablet_merge_legacy_sstable_fastpath_fallback_to_rebuild_total");
+bvar::Adder<int64_t> g_tablet_merge_legacy_sstable_fastpath_fallback_source_offset_nonzero(
+        "tablet_merge_legacy_sstable_fastpath_fallback_source_offset_nonzero");
+bvar::Adder<int64_t> g_tablet_merge_legacy_sstable_fastpath_fallback_canonical_offset_nonzero(
+        "tablet_merge_legacy_sstable_fastpath_fallback_canonical_offset_nonzero");
+bvar::Adder<int64_t> g_tablet_merge_legacy_sstable_fastpath_fallback_invalid_form(
+        "tablet_merge_legacy_sstable_fastpath_fallback_invalid_form");
+bvar::Adder<int64_t> g_tablet_merge_legacy_sstable_fastpath_fallback_merged_no_range(
+        "tablet_merge_legacy_sstable_fastpath_fallback_merged_no_range");
+bvar::Adder<int64_t> g_tablet_merge_legacy_sstable_fastpath_fallback_ranged_no_fileset_id(
+        "tablet_merge_legacy_sstable_fastpath_fallback_ranged_no_fileset_id");
+bvar::Adder<int64_t> g_tablet_merge_legacy_sstable_fastpath_fallback_partial_compaction(
+        "tablet_merge_legacy_sstable_fastpath_fallback_partial_compaction");
+bvar::Adder<int64_t> g_tablet_merge_legacy_sstable_fastpath_fallback_merged_delvec_nonempty(
+        "tablet_merge_legacy_sstable_fastpath_fallback_merged_delvec_nonempty");
+bvar::Adder<int64_t> g_tablet_merge_legacy_sstable_fastpath_fallback_coverage_span_invalid(
+        "tablet_merge_legacy_sstable_fastpath_fallback_coverage_span_invalid");
+bvar::Adder<int64_t> g_tablet_merge_legacy_sstable_fastpath_fallback_no_family(
+        "tablet_merge_legacy_sstable_fastpath_fallback_no_family");
+bvar::Adder<int64_t> g_tablet_merge_legacy_sstable_fastpath_fallback_unsafe_family(
+        "tablet_merge_legacy_sstable_fastpath_fallback_unsafe_family");
+bvar::Adder<int64_t> g_tablet_merge_non_shared_sstable_rebuild_total("tablet_merge_non_shared_sstable_rebuild_total");
 
 } // namespace
 
@@ -74,10 +116,28 @@ public:
     int64_t rssid_offset() const { return _rssid_offset; }
     void set_rssid_offset(int64_t offset) { _rssid_offset = offset; }
 
-    // Maps an original rssid to the final output rssid.
-    // If the rssid was deduped, returns the canonical rssid from shared_rssid_map;
-    // otherwise applies the default offset mapping with overflow check.
+    uint32_t child_index() const { return _child_index; }
+    void set_child_index(uint32_t child_index) { _child_index = child_index; }
+
+    // The plan must outlive this ctx (typically a stack local in
+    // merge_tablet). Null on non-PK merges; map_rssid then degenerates to
+    // the shared_rssid_map → natural offset path.
+    void set_projection_plan(const detail::RssidProjectionPlan* plan) { _projection_plan = plan; }
+    const detail::RssidProjectionPlan* projection_plan() const { return _projection_plan; }
+
+    // Maps an original rssid to the final output rssid. Lookup priority:
+    //   (1) RssidProjectionPlan.explicit_rssid_map keyed by (child_index,
+    //       rssid). Hit only for shared-ancestor rowsets in safe families
+    //       (PK + cloud-native gate at plan-build time).
+    //   (2) shared_rssid_map for runtime-deduped child-local mappings.
+    //   (3) natural offset (rssid + ctx.rssid_offset).
     StatusOr<uint32_t> map_rssid(uint32_t rssid) const {
+        if (_projection_plan != nullptr) {
+            auto plan_it = _projection_plan->explicit_rssid_map.find({_child_index, rssid});
+            if (plan_it != _projection_plan->explicit_rssid_map.end()) {
+                return plan_it->second;
+            }
+        }
         auto it = _shared_rssid_map.find(rssid);
         if (it != _shared_rssid_map.end()) {
             return it->second;
@@ -89,6 +149,58 @@ public:
         return static_cast<uint32_t>(mapped);
     }
 
+    // Precomputes the sorted set of source-effective rssids whose
+    // map_rssid would return a value DIFFERENT from
+    // rssid + this->_rssid_offset under the plan/shared_rssid priority.
+    // merge_sstables calls this once per ctx, then uses
+    // mapping_disagrees_with_natural_in_range below to range-test each
+    // non-shared sstable in O(log N) instead of re-scanning the plan +
+    // shared_rssid_map per sstable.
+    //
+    // Conservative: arithmetic overflow on natural-offset projection is
+    // treated as a disagreement so the rebuild path runs and rejects
+    // out-of-range entries explicitly. False-positives only cost an
+    // extra rebuild; false-negatives would silently mis-map PK lookups.
+    std::vector<uint32_t> compute_disagreement_keys() const {
+        auto disagrees = [&](uint32_t key, uint32_t value) -> bool {
+            const int64_t natural = static_cast<int64_t>(key) + _rssid_offset;
+            if (natural < 0 || natural > static_cast<int64_t>(std::numeric_limits<uint32_t>::max())) {
+                return true; // arithmetic overflow → force rebuild
+            }
+            return value != static_cast<uint32_t>(natural);
+        };
+
+        const size_t plan_size = (_projection_plan != nullptr) ? _projection_plan->explicit_rssid_map.size() : 0;
+        std::vector<uint32_t> keys;
+        keys.reserve(plan_size + _shared_rssid_map.size());
+
+        if (_projection_plan != nullptr) {
+            for (const auto& [source_key, final_rssid] : _projection_plan->explicit_rssid_map) {
+                if (source_key.child_index != _child_index) continue;
+                if (disagrees(source_key.source_rssid, final_rssid)) {
+                    keys.push_back(source_key.source_rssid);
+                }
+            }
+        }
+        for (const auto& [source_rssid, final_rssid] : _shared_rssid_map) {
+            if (disagrees(source_rssid, final_rssid)) {
+                keys.push_back(source_rssid);
+            }
+        }
+        STLSortAndRemoveDuplicates(&keys);
+        return keys;
+    }
+
+    // True iff the precomputed sorted disagreement-keys vector contains
+    // any key in [lifted_lower, lifted_upper] (inclusive). O(log N) via
+    // binary search; the caller is expected to compute the keys vector
+    // once per ctx outside the inner sstable loop.
+    static bool mapping_disagrees_with_natural_in_range(const std::vector<uint32_t>& sorted_disagreement_keys,
+                                                        uint32_t lifted_lower, uint32_t lifted_upper) {
+        auto it = std::lower_bound(sorted_disagreement_keys.begin(), sorted_disagreement_keys.end(), lifted_lower);
+        return it != sorted_disagreement_keys.end() && *it <= lifted_upper;
+    }
+
     bool has_shared_rssid_mapping() const { return !_shared_rssid_map.empty(); }
 
     // Fills shared_rssid_map so that all rssids occupied by |rowset| map to
@@ -96,10 +208,10 @@ public:
     void update_shared_rssid_map(const RowsetMetadataPB& rowset, const RowsetMetadataPB& canonical_rowset) {
         uint32_t canonical_rssid = canonical_rowset.id();
         _shared_rssid_map[rowset.id()] = canonical_rssid;
-        for (int seg_pos = 0; seg_pos < rowset.segments_size(); ++seg_pos) {
-            uint32_t rssid = get_rssid(rowset, seg_pos);
-            uint32_t seg_offset = rssid - rowset.id();
-            _shared_rssid_map[rssid] = canonical_rssid + seg_offset;
+        for (int segment_pos = 0; segment_pos < rowset.segments_size(); ++segment_pos) {
+            uint32_t rssid = get_rssid(rowset, segment_pos);
+            uint32_t segment_offset_within_rowset = rssid - rowset.id();
+            _shared_rssid_map[rssid] = canonical_rssid + segment_offset_within_rowset;
         }
     }
 
@@ -111,12 +223,44 @@ private:
     TabletMetadataPtr _metadata;
     int64_t _rssid_offset = 0;
     int _current_rowset_index = 0;
+    uint32_t _child_index = 0;
+    // Non-owning. Lifetime guaranteed by merge_tablet's stack frame.
+    const detail::RssidProjectionPlan* _projection_plan = nullptr;
     // Dedup-produced rssid remap table.
     // key: original rssid in this child metadata
     // value: canonical rowset's actual rssid in the final output
     // rssid not in this map uses the default offset mapping.
     std::unordered_map<uint32_t, uint32_t> _shared_rssid_map;
 };
+
+// PersistentIndexSstablePB::max_rss_rowid encodes (rssid << 32) | rowid.
+// Helpers below name that encoding so callers don't open-code the shift
+// or mask. The "rss_rowid" naming matches the PB field; "high" / "low"
+// disambiguate which 32-bit half is being referenced.
+constexpr int kRssRowidHighShift = 32;
+constexpr uint64_t kRssRowidLowMask = 0xFFFFFFFFULL;
+
+inline uint32_t extract_rss_rowid_high(uint64_t encoded) {
+    return static_cast<uint32_t>(encoded >> kRssRowidHighShift);
+}
+inline uint64_t extract_rss_rowid_low(uint64_t encoded) {
+    return encoded & kRssRowidLowMask;
+}
+inline uint64_t encode_rss_rowid(uint32_t rssid_high, uint64_t rowid_low) {
+    return (static_cast<uint64_t>(rssid_high) << kRssRowidHighShift) | rowid_low;
+}
+
+// Tracks the contributing children's child-local ranges per canonical rowset
+// in new_metadata. Used by the post-merge_rowsets PK coverage check and by
+// gap-delvec synthesis.
+//
+// Key: index of the canonical rowset in new_metadata->rowsets().
+// Value: each entry is the contributing child's effective_child_local_range
+// (rowset.range, fallback ctx.metadata.range, fallback unbounded), captured
+// BEFORE update_canonical's union_range mutates the canonical's stored range
+// — otherwise the convex hull would swallow gaps and the coverage / gap
+// detection would fail.
+using CanonicalContribMap = std::unordered_map<int, std::vector<TabletRangePB>>;
 
 struct DelvecSourceRef {
     const TabletMergeContext* ctx;
@@ -209,11 +353,22 @@ Status add_rowset(TabletMergeContext& ctx, const RowsetMetadataPB& rowset, Table
     return Status::OK();
 }
 
-Status update_canonical(RowsetMetadataPB* canonical_rowset, const RowsetMetadataPB& duplicate_rowset) {
-    if (canonical_rowset->has_range() && duplicate_rowset.has_range()) {
+Status update_canonical(RowsetMetadataPB* canonical_rowset, const TabletRangePB& duplicate_effective_range,
+                        const RowsetMetadataPB& duplicate_rowset) {
+    // Always extend the canonical range with the duplicate's *effective* range
+    // (rowset.range, fallback ctx.metadata.range, fallback unbounded — same chain
+    // as Rowset::get_seek_range()). The previous gate of
+    // `canonical_rowset->has_range() && duplicate_rowset.has_range()` silently
+    // dropped contributors whose rowset.range was unset but whose ctx tablet
+    // range filled the slice; the post-dedup canonical.range would then reflect
+    // only the first contributor and readers (which prefer rowset.range over
+    // tablet.range) would miss rows from later contributors.
+    if (canonical_rowset->has_range()) {
         ASSIGN_OR_RETURN(auto merged_range,
-                         tablet_reshard_helper::union_range(canonical_rowset->range(), duplicate_rowset.range()));
+                         tablet_reshard_helper::union_range(canonical_rowset->range(), duplicate_effective_range));
         canonical_rowset->mutable_range()->CopyFrom(merged_range);
+    } else {
+        canonical_rowset->mutable_range()->CopyFrom(duplicate_effective_range);
     }
     // Each merge input carries a proportional num_dels slice written by
     // tablet_splitter.cpp / tablet_reshard_helper.cpp with num_dels <= num_rows.
@@ -228,7 +383,9 @@ Status update_canonical(RowsetMetadataPB* canonical_rowset, const RowsetMetadata
     return Status::OK();
 }
 
-Status merge_rowsets(std::vector<TabletMergeContext>& merge_contexts, TabletMetadataPB* new_metadata) {
+Status merge_rowsets(std::vector<TabletMergeContext>& merge_contexts, TabletMetadataPB* new_metadata,
+                     CanonicalContribMap* canonical_contribs) {
+    const bool is_pk = is_primary_key(*new_metadata);
     int version_start_index = 0;
     int64_t current_version = -1;
 
@@ -248,6 +405,7 @@ Status merge_rowsets(std::vector<TabletMergeContext>& merge_contexts, TabletMeta
         if (min_child_index < 0) break;
 
         const auto& rowset = merge_contexts[min_child_index].current_rowset();
+        const auto& ctx_meta = *merge_contexts[min_child_index].metadata();
 
         // Version change: update version_start_index
         if (rowset.version() != current_version) {
@@ -255,13 +413,42 @@ Status merge_rowsets(std::vector<TabletMergeContext>& merge_contexts, TabletMeta
             version_start_index = new_metadata->rowsets_size();
         }
 
-        // Check for duplicate in [version_start_index, end)
+        // Search [version_start_index, end) for a dedup candidate. Decision:
+        //   - Delete-predicate dups: keep original unconditional skip path.
+        //   - Shared-segment / shared-del_file dups (the only other case
+        //     is_duplicate_rowset returns true on): PK always dedups; non-PK
+        //     dedups only when ranges are contiguous so that the convex-hull
+        //     range stored on the canonical does not span a gap left by a
+        //     compacted sibling.
         int canonical_index = -1;
+        bool non_pk_skip_dedup_fired = false;
         for (int i = version_start_index; i < new_metadata->rowsets_size(); ++i) {
-            if (is_duplicate_rowset(rowset, new_metadata->rowsets(i))) {
+            if (!is_duplicate_rowset(rowset, new_metadata->rowsets(i))) continue;
+
+            if (rowset.has_delete_predicate()) {
                 canonical_index = i;
                 break;
             }
+            if (is_pk) {
+                canonical_index = i;
+                break;
+            }
+            const auto& candidate_range = new_metadata->rowsets(i).range();
+            const auto& incoming_range = tablet_reshard_helper::effective_child_local_range(rowset, ctx_meta);
+            if (tablet_reshard_helper::ranges_are_contiguous(candidate_range, incoming_range)) {
+                canonical_index = i;
+                break;
+            }
+            // Non-PK + non-contiguous: keep scanning. If no other candidate
+            // matches, fall through to add_rowset and treat as a separate
+            // shared rowset — each retains its own contiguous range.
+            non_pk_skip_dedup_fired = true;
+        }
+        if (canonical_index < 0 && non_pk_skip_dedup_fired) {
+            // At least one is_duplicate_rowset hit was rejected due to
+            // non-contiguous ranges and no later candidate accepted it →
+            // the rowset is added as a sibling of an existing shared rowset.
+            g_tablet_merge_non_pk_skip_dedup_total << 1;
         }
 
         if (canonical_index >= 0) {
@@ -274,12 +461,32 @@ Status merge_rowsets(std::vector<TabletMergeContext>& merge_contexts, TabletMeta
                     << canonical.del_files_size() << ")";
             if (!rowset.has_delete_predicate()) {
                 merge_contexts[min_child_index].update_shared_rssid_map(rowset, canonical);
-                RETURN_IF_ERROR(update_canonical(new_metadata->mutable_rowsets(canonical_index), rowset));
+                // Capture the duplicate's child-local effective range BEFORE
+                // update_canonical mutates canonical.range via union_range. The
+                // same effective range is also passed into update_canonical so
+                // that a rowset without its own .range() but with a ctx tablet
+                // range still extends the canonical range.
+                const auto& duplicate_effective_range =
+                        tablet_reshard_helper::effective_child_local_range(rowset, ctx_meta);
+                if (canonical_contribs != nullptr) {
+                    (*canonical_contribs)[canonical_index].push_back(duplicate_effective_range);
+                }
+                RETURN_IF_ERROR(update_canonical(new_metadata->mutable_rowsets(canonical_index),
+                                                 duplicate_effective_range, rowset));
             }
             // predicate: just skip
         } else {
-            // First occurrence: output
+            // First occurrence: output. Capture child-local range first so that
+            // we record the pre-clip view (add_rowset clips to ctx tablet range).
+            TabletRangePB initial_child_range;
+            if (canonical_contribs != nullptr && !rowset.has_delete_predicate()) {
+                initial_child_range = tablet_reshard_helper::effective_child_local_range(rowset, ctx_meta);
+            }
+            const int new_index = new_metadata->rowsets_size();
             RETURN_IF_ERROR(add_rowset(merge_contexts[min_child_index], rowset, new_metadata));
+            if (canonical_contribs != nullptr && !rowset.has_delete_predicate()) {
+                (*canonical_contribs)[new_index].push_back(std::move(initial_child_range));
+            }
         }
 
         merge_contexts[min_child_index].advance_rowset();
@@ -379,6 +586,37 @@ struct DcgSurvivingEntry {
     // bookkeeping and downstream emission uniform.
     DeltaColumnGroupVerPB single_entry;
 };
+
+// True iff the entry's column_ids list contains |unique_id|. The
+// underlying PB shape is `entry.single_entry.unique_column_ids(0)
+// .column_ids()` (a single-entry-normalized DCG keeps all column ids
+// at slot 0); this helper hides the indirection.
+inline bool entry_claims_column_uid(const DcgSurvivingEntry& entry, uint32_t unique_id) {
+    for (auto claimed : entry.single_entry.unique_column_ids(0).column_ids()) {
+        if (claimed == unique_id) return true;
+    }
+    return false;
+}
+
+// Mark every DCG entry that shares any column UID with another entry
+// in |entries|. Two entries that both claim the same UID conflict —
+// merge_dcg_meta routes those through the rebuild path; non-conflicting
+// entries can be emitted as-is.
+inline std::vector<bool> mark_conflicting_dcg_entries(const std::vector<DcgSurvivingEntry>& entries) {
+    std::unordered_map<uint32_t, std::vector<size_t>> entry_indices_by_unique_id;
+    for (size_t entry_index = 0; entry_index < entries.size(); ++entry_index) {
+        for (auto unique_id : entries[entry_index].single_entry.unique_column_ids(0).column_ids()) {
+            entry_indices_by_unique_id[unique_id].push_back(entry_index);
+        }
+    }
+    std::vector<bool> entry_is_conflicting(entries.size(), false);
+    for (const auto& [unique_id, entry_indices] : entry_indices_by_unique_id) {
+        if (entry_indices.size() > 1) {
+            for (size_t entry_index : entry_indices) entry_is_conflicting[entry_index] = true;
+        }
+    }
+    return entry_is_conflicting;
+}
 
 struct DcgSourceRowsetReference {
     size_t child_index;
@@ -601,6 +839,14 @@ Status compute_row_windows_for_source_rowsets(TabletManager* tablet_manager, int
     *out_windows = std::move(deduped_windows);
 
     // Coverage validation: windows must be contiguous and cover [0, num_rows_in_target).
+    //
+    // Known limitation: the synthesized gap delvec from
+    // compute_synthesized_gap_specs masks rowids that no contributing child
+    // claims, but DCG rebuild does not yet consult that bitmap. A
+    // (compacted-child gap) × (DCG conflict on canonical R0) combination
+    // therefore returns NotSupported here. FE scheduling currently avoids
+    // the combo by requiring all children compacted before merge for any
+    // tablet with active partial-update DCGs.
     if ((*out_windows)[0].range.begin() != 0) {
         return Status::NotSupported(
                 fmt::format("DCG rebuild: row window coverage gap at the start (first.begin={}, expect 0)",
@@ -741,14 +987,7 @@ StatusOr<DeltaColumnGroupVerPB> rebuild_dcg_for_target_segment(
     std::unordered_map<uint32_t, ColumnSourceInfo> column_source_info_by_unique_id;
     for (uint32_t unique_id : rebuild_columns) {
         for (const DcgSurvivingEntry* entry : conflicting_entries) {
-            bool entry_claims_this_column = false;
-            for (auto claimed_unique_id : entry->single_entry.unique_column_ids(0).column_ids()) {
-                if (claimed_unique_id == unique_id) {
-                    entry_claims_this_column = true;
-                    break;
-                }
-            }
-            if (!entry_claims_this_column) continue;
+            if (!entry_claims_column_uid(*entry, unique_id)) continue;
             auto& info = column_source_info_by_unique_id[unique_id];
             if (info.default_donor == nullptr) info.default_donor = entry;
             info.override_by_child_index[entry->child_index] = entry;
@@ -898,21 +1137,10 @@ Status merge_dcg_meta(TabletManager* tablet_manager, const std::vector<TabletMer
     for (auto& [target_rssid, target_work] : work_by_target) {
         if (target_work.entries.empty()) continue;
 
-        // Build column UID -> entries index (stable indices, not pointers).
-        std::unordered_map<uint32_t, std::vector<size_t>> entry_indices_by_unique_id;
-        for (size_t entry_index = 0; entry_index < target_work.entries.size(); ++entry_index) {
-            for (auto unique_id : target_work.entries[entry_index].single_entry.unique_column_ids(0).column_ids()) {
-                entry_indices_by_unique_id[unique_id].push_back(entry_index);
-            }
-        }
-
-        // Identify conflicting entries: any entry claiming a UID shared with another entry.
-        std::vector<bool> entry_is_conflicting(target_work.entries.size(), false);
-        for (auto& [unique_id, entry_indices] : entry_indices_by_unique_id) {
-            if (entry_indices.size() > 1) {
-                for (size_t entry_index : entry_indices) entry_is_conflicting[entry_index] = true;
-            }
-        }
+        // Identify conflicting entries: any entry claiming a UID shared
+        // with another entry. Conflict-free entries are emitted as-is;
+        // conflicting entries are rebuilt below.
+        const std::vector<bool> entry_is_conflicting = mark_conflicting_dcg_entries(target_work.entries);
 
         DeltaColumnGroupVerPB final_dcg;
 
@@ -979,8 +1207,160 @@ Status merge_dcg_meta(TabletManager* tablet_manager, const std::vector<TabletMer
     return Status::OK();
 }
 
+// Phase 0 output: per-target rowid bitmaps representing keys in the
+// shared physical segment that no contributing child claims. Read-path
+// consumers:
+//   - canonical R0's segment iterator already filters by canonical.range, so
+//     gap rowids outside the convex hull are no-ops for scans.
+//   - PersistentIndexSstable::multi_get filters by the projected delvec on
+//     the sstable PB regardless of LSM block-sort order, which keeps the
+//     first-child-compacts case safe.
+struct CanonicalGapSpec {
+    uint32_t target_rssid;
+    Roaring gap_bits;
+};
+
+// Phase 0: for every PK canonical rowset that owns at least one shared
+// segment, mask the rowids whose key falls outside ⋃ contributors but inside
+// the merged tablet range.
+//
+// Bound = merged tablet range, not unbounded `(-∞, +∞)`. The plan's original
+// motivation for unbounded was to surface keys outside canonical.range (left
+// or right edges); but since each child's tablet.range is a sub-range of the
+// pre-split tablet, and merged_tablet.range = union of children's tablet
+// ranges, the shared physical segment never carries keys outside the merged
+// tablet range. The unbounded helper would just generate edge complements
+// that seek to empty rowid windows. Bounded-by-merged-tablet-range is both
+// correct and lets us skip the segment open entirely when contributors fully
+// cover the merged tablet range (the no-compaction common case).
+StatusOr<std::vector<CanonicalGapSpec>> compute_synthesized_gap_specs(TabletManager* tablet_manager,
+                                                                      const TabletMetadataPB& new_metadata,
+                                                                      const CanonicalContribMap& canonical_contribs) {
+    std::vector<CanonicalGapSpec> result;
+    for (const auto& [canonical_index, contrib] : canonical_contribs) {
+        if (canonical_index < 0 || canonical_index >= new_metadata.rowsets_size()) {
+            return Status::InternalError(
+                    fmt::format("compute_synthesized_gap_specs: invalid canonical_index {}", canonical_index));
+        }
+        const auto& canonical = new_metadata.rowsets(canonical_index);
+        // shared_segments_size() alone is insufficient because metadata
+        // transforms can leave an all-false vector behind. Only synthesize
+        // gap bits when at least one segment is actually shared.
+        bool has_shared = false;
+        for (int i = 0; i < canonical.shared_segments_size(); ++i) {
+            if (canonical.shared_segments(i)) {
+                has_shared = true;
+                break;
+            }
+        }
+        if (!has_shared) continue;
+
+        ASSIGN_OR_RETURN(auto sorted_disjoint, tablet_reshard_helper::sort_and_merge_adjacent_ranges(contrib));
+        ASSIGN_OR_RETURN(auto non_contributed,
+                         tablet_reshard_helper::compute_disjoint_gaps_within(new_metadata.range(), sorted_disjoint));
+        if (non_contributed.empty()) continue;
+
+        const TabletSchemaPB* schema_pb = resolve_rowset_schema_pb(new_metadata, canonical);
+        if (schema_pb == nullptr) {
+            return Status::Corruption("compute_synthesized_gap_specs: schema not found for canonical rowset");
+        }
+        TabletSchemaCSPtr schema = TabletSchema::create(*schema_pb);
+
+        for (int seg_pos = 0; seg_pos < canonical.shared_segments_size(); ++seg_pos) {
+            if (!canonical.shared_segments(seg_pos)) continue;
+            uint32_t target_rssid = get_rssid(canonical, seg_pos);
+
+            FileInfo seg_file_info;
+            seg_file_info.path = tablet_manager->segment_location(new_metadata.id(), canonical.segments(seg_pos));
+            if (canonical.segment_size_size() > seg_pos) {
+                seg_file_info.size = canonical.segment_size(seg_pos);
+            }
+            if (canonical.bundle_file_offsets_size() > seg_pos) {
+                seg_file_info.bundle_file_offset = canonical.bundle_file_offsets(seg_pos);
+            }
+            if (canonical.segment_encryption_metas_size() > seg_pos) {
+                seg_file_info.encryption_meta = canonical.segment_encryption_metas(seg_pos);
+            }
+            ASSIGN_OR_RETURN(auto fs, FileSystemFactory::CreateSharedFromString(seg_file_info.path));
+            ASSIGN_OR_RETURN(auto base_segment,
+                             Segment::open(fs, seg_file_info, /*segment_id=*/0, schema,
+                                           /*footer_length_hint=*/nullptr, /*partial_rowset_footer=*/nullptr,
+                                           /*lake_io_opts=*/LakeIOOptions{}, tablet_manager));
+            const rowid_t num_rows = static_cast<rowid_t>(base_segment->num_rows());
+            if (num_rows == 0) continue;
+
+            Roaring gap_bits;
+            for (const auto& gap_range : non_contributed) {
+                ASSIGN_OR_RETURN(auto seek_range,
+                                 TabletRangeHelper::create_seek_range_from(gap_range, schema, /*mem_pool=*/nullptr));
+                LakeIOOptions io_opts{.fill_data_cache = false};
+                ASSIGN_OR_RETURN(auto rowid_range_opt,
+                                 segment_seek_range_to_rowid_range(base_segment, seek_range, io_opts));
+                if (!rowid_range_opt.has_value()) continue;
+                rowid_t lo = std::max<rowid_t>(rowid_range_opt->begin(), 0);
+                rowid_t hi = std::min<rowid_t>(rowid_range_opt->end(), num_rows);
+                if (lo >= hi) continue;
+                gap_bits.addRange(static_cast<uint64_t>(lo), static_cast<uint64_t>(hi));
+            }
+            if (!gap_bits.isEmpty()) {
+                result.push_back(CanonicalGapSpec{target_rssid, std::move(gap_bits)});
+            }
+        }
+    }
+    return result;
+}
+
+// Phase 2.5 of merge_delvecs: union each synthesized gap bitmap into the
+// corresponding target state. Mirrors the Phase 2 transitions but the source
+// is a synthesized Roaring rather than a child delvec page — so no
+// (file_name, offset) entry goes into seen_sources.
+//
+// Uses DelVector::union_with(Roaring) directly (no rowid-vector round-trip):
+// a compacted-away child's gap can span millions of rowids, and the legacy
+// path through std::vector<uint32_t> + DelVector::init(uint32_t*, size) +
+// union_delvec would re-enumerate every rowid into a vector twice.
+Status inject_synthesized_gaps_into_target_states(TabletManager* tablet_manager,
+                                                  const std::vector<CanonicalGapSpec>& specs, int64_t new_version,
+                                                  std::map<uint32_t, TargetDelvecState>* target_states) {
+    for (const auto& spec : specs) {
+        if (spec.gap_bits.isEmpty()) continue;
+        auto& state = (*target_states)[spec.target_rssid];
+
+        if (state.single_source.has_value() && !state.merged) {
+            // Promote single_source → merged: load the source delvec, OR in gap_bits.
+            DelVector dv_prev;
+            const auto& ref = *state.single_source;
+            LakeIOOptions io_opts;
+            RETURN_IF_ERROR(get_del_vec(tablet_manager, *ref.ctx->metadata(), ref.page, false, io_opts, &dv_prev));
+            auto merged_dv = std::make_unique<DelVector>();
+            if (dv_prev.roaring()) {
+                merged_dv->union_with(new_version, *dv_prev.roaring());
+            }
+            merged_dv->union_with(new_version, spec.gap_bits);
+            state.merged = std::move(merged_dv);
+            state.single_source.reset();
+        } else if (state.merged) {
+            state.merged->union_with(new_version, spec.gap_bits);
+        } else {
+            // Empty state: construct merged directly from gap_bits.
+            auto merged_dv = std::make_unique<DelVector>();
+            merged_dv->union_with(new_version, spec.gap_bits);
+            state.merged = std::move(merged_dv);
+        }
+    }
+    return Status::OK();
+}
+
 Status merge_delvecs(TabletManager* tablet_manager, const std::vector<TabletMergeContext>& merge_contexts,
-                     int64_t new_version, int64_t txn_id, TabletMetadataPB* new_metadata) {
+                     const CanonicalContribMap& canonical_contribs, int64_t new_version, int64_t txn_id,
+                     TabletMetadataPB* new_metadata) {
+    // Phase 0: synthesize gap delvec bits from canonical_contribs.
+    ASSIGN_OR_RETURN(auto synthesized_gap_specs,
+                     compute_synthesized_gap_specs(tablet_manager, *new_metadata, canonical_contribs));
+    if (!synthesized_gap_specs.empty()) {
+        g_tablet_merge_gap_delvec_total << 1;
+    }
+
     // Phase 1: Collect unique delvec files across all children
     std::vector<DelvecFileInfo> unique_delvec_files;
     std::unordered_map<std::string, size_t> file_name_to_index;
@@ -1008,7 +1388,10 @@ Status merge_delvecs(TabletManager* tablet_manager, const std::vector<TabletMerg
         }
     }
 
-    if (unique_delvec_files.empty()) {
+    // Early-return only when there is no work at all: no source delvec files
+    // AND no synthesized gaps. A clean PK table with no prior deletes can
+    // still need a synthesized gap delvec to mask compacted-away child rowids.
+    if (unique_delvec_files.empty() && synthesized_gap_specs.empty()) {
         return Status::OK();
     }
 
@@ -1090,6 +1473,14 @@ Status merge_delvecs(TabletManager* tablet_manager, const std::vector<TabletMerg
         }
     }
 
+    // Phase 2.5: inject synthesized gap delvecs into target_states. Each spec's
+    // bitmap masks rowids in the shared physical segment whose key was
+    // contributed by no surviving child (e.g., a child that compacted away
+    // its copy of the shared rowset). Promotes any single_source state to
+    // merged so the bitmap can be unioned in.
+    RETURN_IF_ERROR(inject_synthesized_gaps_into_target_states(tablet_manager, synthesized_gap_specs, new_version,
+                                                               &target_states));
+
     // Phase 3: Serialize union results into union_buffer
     std::string union_buffer;
     std::map<uint32_t, UnionPageInfo> union_page_infos;
@@ -1104,14 +1495,34 @@ Status merge_delvecs(TabletManager* tablet_manager, const std::vector<TabletMerg
         }
     }
 
-    // Phase 4: Write one file (old files concatenated + union_buffer appended)
+    // Phase 4: Write one file. Three routes depending on what contributed:
+    //   1. only synthesized (no source delvec files) → write_delvec_file_from_buffer
+    //      with the union_buffer at offset 0; sidesteps merge_delvec_files's
+    //      DCHECK on (empty old_files + non-empty extra_data).
+    //   2. only source files (no synthesized + empty union_buffer) → existing
+    //      merge_delvec_files with empty extra_data.
+    //   3. both → existing merge_delvec_files with extra_data populated.
     FileMetaPB new_delvec_file;
     std::vector<uint64_t> offsets;
     uint64_t union_base_offset = 0;
-    RETURN_IF_ERROR(merge_delvec_files(tablet_manager, unique_delvec_files, new_metadata->id(), txn_id,
-                                       &new_delvec_file, &offsets, Slice(union_buffer), &union_base_offset));
+    if (unique_delvec_files.empty()) {
+        // Route 1: synthesized-only. Phase 1's early-return guarantees that
+        // synthesized_gap_specs (and therefore union_buffer) is non-empty
+        // here.
+        DCHECK(!union_buffer.empty()) << "synthesized-only path with empty union_buffer";
+        RETURN_IF_ERROR(write_delvec_file_from_buffer(tablet_manager, new_metadata->id(), txn_id, Slice(union_buffer),
+                                                      &new_delvec_file));
+        union_base_offset = 0;
+        g_tablet_merge_synthesized_only_delvec_total << 1;
+    } else {
+        // Routes 2 & 3.
+        RETURN_IF_ERROR(merge_delvec_files(tablet_manager, unique_delvec_files, new_metadata->id(), txn_id,
+                                           &new_delvec_file, &offsets, Slice(union_buffer), &union_base_offset));
+    }
 
-    // Build base_offset_by_file_name
+    // Build base_offset_by_file_name. Empty for synthesized-only route since
+    // there are no source files to reference; merged-state targets always go
+    // through union_page_infos which is keyed by target rssid, not file name.
     std::unordered_map<std::string, uint64_t> base_offset_by_file_name;
     for (size_t i = 0; i < unique_delvec_files.size(); ++i) {
         base_offset_by_file_name[unique_delvec_files[i].delvec_file.name()] = offsets[i];
@@ -1159,14 +1570,1061 @@ Status merge_delvecs(TabletManager* tablet_manager, const std::vector<TabletMerg
     return Status::OK();
 }
 
+// Lookup maps from a child-id-space rssid to the merged tablet's final
+// rssid. Built once per rebuild from the merge_contexts, scoped per
+// inferred family (or per orphan child for kNoFamily ctxs) so a multi-
+// family merge with overlapping source rssids never returns another
+// family's mapping. Each PerFamilyMaps half follows first-emitter-wins:
+//
+//   data_rssid_map      — keyed by per-segment lifted rssid via
+//                         get_rssid(rs, seg_pos). Honors sparse segment_idx
+//                         (e.g. {0,2} after middle-segment removal). Excludes
+//                         delete-only rowsets so a data entry pointing at
+//                         their rssid is dropped as a ghost.
+//   watermark_rssid_map — superset that ALSO records rs.id() for
+//                         delete-only rowsets. Used only for projecting
+//                         src_pb.max_rss_rowid (memtable flush sets it to
+//                         the current rowset id, which may be delete-only).
+//                         Must NOT be used for data-entry remap.
+struct LegacyRssidLookupMaps {
+    struct PerFamilyMaps {
+        std::unordered_map<uint32_t, uint32_t> data_rssid_map;
+        std::unordered_map<uint32_t, uint32_t> watermark_rssid_map;
+    };
+
+    // family_id → maps populated from that family's member ctxs only.
+    std::unordered_map<uint32_t, PerFamilyMaps> per_family;
+    // child_index → maps populated from THAT specific orphan ctx only.
+    // Each orphan ctx (kNoFamily) gets its own scoped entry so two
+    // unrelated orphan children with overlapping source rssids do not
+    // pollute each other — orphan ctxs each have an independent
+    // child-local id space, so a global orphan map would be susceptible
+    // to the same first-emitter-wins pollution that the per-family
+    // structure was designed to prevent for family ctxs.
+    std::unordered_map<size_t, PerFamilyMaps> orphan_by_child;
+};
+
+// Locate the PerFamilyMaps slot for (family_id, child_index): a family ctx
+// shares its family map; an orphan ctx (kNoFamily) has its own child-scoped
+// map so unrelated orphan children with overlapping source rssids stay
+// isolated. Returns nullptr on miss; callers wrap the result in either an
+// InternalError or a DCHECK depending on whether they're building or reading.
+template <typename Maps>
+auto* find_per_family_maps_slot(Maps& maps, uint32_t family_id, size_t child_index) {
+    if (family_id != detail::InferredSplitFamilies::kNoFamily) {
+        auto iter = maps.per_family.find(family_id);
+        return iter == maps.per_family.end() ? nullptr : &iter->second;
+    }
+    auto iter = maps.orphan_by_child.find(child_index);
+    return iter == maps.orphan_by_child.end() ? nullptr : &iter->second;
+}
+
+// Read-side accessor: missing entry surfaces as InternalError so the merge
+// fails loudly. build_legacy_rssid_lookup_maps pre-creates every entry, so a
+// miss is a programmer bug; falling back to an empty map would silently drop
+// every PK entry and manifest as data loss.
+StatusOr<const LegacyRssidLookupMaps::PerFamilyMaps*> lookup_maps_for_ctx(const LegacyRssidLookupMaps& maps,
+                                                                          uint32_t family_id, size_t child_index) {
+    if (const auto* slot = find_per_family_maps_slot(maps, family_id, child_index); slot != nullptr) {
+        return slot;
+    }
+    return Status::InternalError(
+            fmt::format("LegacyRssidLookupMaps: missing slot (family_id={}, child_index={})", family_id, child_index));
+}
+
+// Build-phase accessor: same lookup, but DCHECK on miss since
+// build_legacy_rssid_lookup_maps just pre-created the entry it's about to
+// populate.
+LegacyRssidLookupMaps::PerFamilyMaps& mutable_per_family_maps_for_ctx(LegacyRssidLookupMaps& maps, uint32_t family_id,
+                                                                      size_t child_index) {
+    auto* slot = find_per_family_maps_slot(maps, family_id, child_index);
+    DCHECK(slot != nullptr) << "PerFamilyMaps not pre-created (family_id=" << family_id
+                            << ", child_index=" << child_index << ")";
+    return *slot;
+}
+
+StatusOr<LegacyRssidLookupMaps> build_legacy_rssid_lookup_maps(const std::vector<TabletMergeContext>& merge_contexts,
+                                                               const detail::InferredSplitFamilies& families) {
+    if (families.child_to_family.size() != merge_contexts.size()) {
+        return Status::InvalidArgument(fmt::format(
+                "InferredSplitFamilies.child_to_family size {} != merge_contexts size {}; the families must be built "
+                "from the same contexts",
+                families.child_to_family.size(), merge_contexts.size()));
+    }
+    // Validate every child_to_family entry is either kNoFamily or a real
+    // family id so the population loop's find()-based lookups can rely on
+    // pre-created entries (and the lookup helper never silently skips a
+    // bad family id by treating it as orphan).
+    for (size_t child_index = 0; child_index < families.child_to_family.size(); ++child_index) {
+        const uint32_t family_id = families.child_to_family[child_index];
+        if (family_id != detail::InferredSplitFamilies::kNoFamily && family_id >= families.families.size()) {
+            return Status::InvalidArgument(
+                    fmt::format("InferredSplitFamilies.child_to_family[{}]={} is out of range (families.size={})",
+                                child_index, family_id, families.families.size()));
+        }
+    }
+
+    LegacyRssidLookupMaps lookup_maps;
+    // Pre-create one PerFamilyMaps per inferred family so consumers can
+    // assume the entry exists when they look up a non-orphan family.
+    lookup_maps.per_family.reserve(families.families.size());
+    for (uint32_t family_id = 0; family_id < families.families.size(); ++family_id) {
+        lookup_maps.per_family.emplace(family_id, LegacyRssidLookupMaps::PerFamilyMaps{});
+    }
+    // Pre-create one PerFamilyMaps per orphan child_index so consumers
+    // can assume the entry exists for every kNoFamily ctx.
+    for (size_t child_index = 0; child_index < merge_contexts.size(); ++child_index) {
+        if (families.child_to_family[child_index] == detail::InferredSplitFamilies::kNoFamily) {
+            lookup_maps.orphan_by_child.emplace(child_index, LegacyRssidLookupMaps::PerFamilyMaps{});
+        }
+    }
+
+    for (size_t child_index = 0; child_index < merge_contexts.size(); ++child_index) {
+        const auto& ctx = merge_contexts[child_index];
+        const uint32_t family_id = families.child_to_family[child_index];
+        auto& target = mutable_per_family_maps_for_ctx(lookup_maps, family_id, child_index);
+
+        for (const auto& rowset : ctx.metadata()->rowsets()) {
+            // Watermark map: rowset id (catches delete-only rowsets).
+            if (auto [it, inserted] = target.watermark_rssid_map.try_emplace(rowset.id(), 0); inserted) {
+                ASSIGN_OR_RETURN(it->second, ctx.map_rssid(rowset.id()));
+            }
+            // Data + watermark maps: per-segment rssids.
+            for (int segment_position = 0; segment_position < rowset.segments_size(); ++segment_position) {
+                const uint32_t lifted_rssid = get_rssid(rowset, segment_position);
+                auto [it, inserted] = target.data_rssid_map.try_emplace(lifted_rssid, 0);
+                if (!inserted) continue;
+                ASSIGN_OR_RETURN(it->second, ctx.map_rssid(lifted_rssid));
+                // Watermark map: only record if not already present (first
+                // emitter wins, matching merge_rowsets canonical-id semantics).
+                target.watermark_rssid_map.try_emplace(lifted_rssid, it->second);
+            }
+        }
+    }
+    return lookup_maps;
+}
+
+// True iff two PB instances of the same-filename shared sstable describe the
+// same physical file AND have identical projection-affecting fields. The
+// projection fields (rssid_offset, shared_rssid, shared_version) are included
+// because they change how stored bytes are interpreted at read time —
+// keeping the first sibling's PB on a mismatch would silently mis-map the
+// rebuilt or projected output. SPLIT today copies metadata as-is so siblings
+// agree on every field; this is defense-in-depth against future MERGE input
+// topologies. fileset_id is intentionally excluded: it can be synthesized
+// per-load by PersistentIndexSstableFileset::init when the source has none
+// (PR #72031).
+bool shared_sstable_metadata_matches(const PersistentIndexSstablePB& a, const PersistentIndexSstablePB& b) {
+    if (a.filesize() != b.filesize() || a.encryption_meta() != b.encryption_meta()) return false;
+    if (a.has_range() != b.has_range()) return false;
+    if (a.has_range() &&
+        (a.range().start_key() != b.range().start_key() || a.range().end_key() != b.range().end_key())) {
+        return false;
+    }
+    if (a.rssid_offset() != b.rssid_offset()) return false;
+    if (a.has_shared_rssid() != b.has_shared_rssid()) return false;
+    if (a.has_shared_rssid() && a.shared_rssid() != b.shared_rssid()) return false;
+    if (a.has_shared_version() != b.has_shared_version()) return false;
+    if (a.has_shared_version() && a.shared_version() != b.shared_version()) return false;
+    return true;
+}
+
+// Defense-in-depth invariants for the legacy-shared form. The merge_sstables
+// caller branch already gates on (shared && !has_shared_rssid), but rebuild
+// may be entered through other paths in the future.
+Status validate_legacy_shared_sstable_form(const PersistentIndexSstablePB& src_pb) {
+    if (src_pb.has_shared_rssid()) {
+        return Status::Corruption("rebuild_legacy_shared_sstable called on a non-legacy sstable (has_shared_rssid)");
+    }
+    if (src_pb.has_shared_version() && src_pb.shared_version() > 0) {
+        // multi_get DCHECKs has_shared_rssid when shared_version > 0
+        // (persistent_index_sstable.cpp:211). A legacy file with shared_version > 0
+        // is malformed and cannot be safely rebuilt without materializing that
+        // version into every entry.
+        return Status::Corruption("Legacy shared sstable has shared_version > 0 without has_shared_rssid");
+    }
+    if (src_pb.has_delvec() && src_pb.delvec().size() > 0) {
+        return Status::Corruption("Legacy shared sstable carries a delvec; cannot rebuild without shared_rssid");
+    }
+    return Status::OK();
+}
+
+// Project src_pb.max_rss_rowid through the rebuild. Returns the initial
+// encoded watermark for the rebuilt sstable, or std::nullopt when projection
+// cannot be done (out-of-range lifted high, or watermark map miss). Lets the
+// rebuilt file inherit a sensible max even when it ends up tombstone-only or
+// when its source max points at a delete-only rowset.
+// Convention: PersistentIndexSstablePB.max_rss_rowid.high is the EFFECTIVE
+// (post-projection) max rssid in the SOURCE child's id space — i.e. it
+// already includes any accumulated src_pb.rssid_offset. Cross-sstable
+// invariants in lake_persistent_index.cpp (the I1 ordering check at
+// apply_opcompaction line 875-886, the _memtable seed at line 146-160,
+// the post-compaction validation at line 686-689) all read max_rss_rowid
+// as effective rssid, and project_non_shared_legacy_sstable already shifts
+// max_rss_rowid.high by ctx.rssid_offset to maintain that convention.
+//
+// Therefore the source rssid offset must NOT be added again here; doing
+// so would double-shift for any stacked-offset src (anything that has
+// gone through one round of project_non_shared). The lookup key is just
+// source_max_rssid_high directly — it is the source child's effective
+// max rssid, exactly the key shape watermark_rssid_map records.
+std::optional<uint64_t> project_source_max_rss_rowid(
+        const PersistentIndexSstablePB& src_pb, int32_t /*source_rssid_offset*/,
+        const std::unordered_map<uint32_t, uint32_t>& watermark_rssid_map) {
+    const uint64_t source_max_rowid_low = extract_rss_rowid_low(src_pb.max_rss_rowid());
+    const uint32_t source_max_rssid_high = extract_rss_rowid_high(src_pb.max_rss_rowid());
+    auto entry = watermark_rssid_map.find(source_max_rssid_high);
+    if (entry == watermark_rssid_map.end()) {
+        return std::nullopt;
+    }
+    return encode_rss_rowid(entry->second, source_max_rowid_low);
+}
+
+// Walk |values_pb|'s non-tombstone entries and update |*max_encoded| /
+// |*initialized| with the encoded `(rssid<<32)|rowid` if larger.
+void update_max_encoded_rss_rowid_from(const IndexValuesWithVerPB& values_pb, uint64_t* max_encoded,
+                                       bool* initialized) {
+    for (int i = 0; i < values_pb.values_size(); ++i) {
+        const auto& index_value = values_pb.values(i);
+        if (is_index_tombstone(index_value)) continue;
+        const uint64_t encoded = encode_rss_rowid(index_value.rssid(), index_value.rowid());
+        if (!*initialized || encoded > *max_encoded) {
+            *max_encoded = encoded;
+            *initialized = true;
+        }
+    }
+}
+
+// Remap stored rssids on each non-tombstone value via the data map (lifted by
+// |source_rssid_offset|) and, on the first non-tombstone, check the rowid
+// against the per-final-rssid delvec via |load_del_vector|. The rowid is
+// shared across versions within an IndexValuesWithVerPB (same row, multiple
+// versions) — see KeyValueMerger and PersistentIndexSstable::multi_get for
+// the same invariant.
+//
+// Tombstones (sentinel rssid/rowid = UINT32_MAX) are preserved as-is.
+//
+// Returns:
+//   true  → keep this entry; rssids in |*values_pb| have been rewritten.
+//   false → drop this entry (dead source rowset or rowid in delvec).
+//   error → corruption (out-of-range stored rssid) or delvec load failure.
+// Owns the mutable resources used while writing a rebuilt PK sstable. The
+// caller arms a DeferOp that calls delete_partial_legacy_rebuild_output() on
+// any path that doesn't go through finalize_legacy_rebuild_output().
+struct LegacyRebuildOutputWriter {
+    std::string filename;
+    std::string location;
+    std::string encryption_meta;
+    std::unique_ptr<WritableFile> writable_file;
+    std::unique_ptr<sstable::FilterPolicy> filter_policy;
+    std::unique_ptr<sstable::TableBuilder> table_builder;
+};
+
+StatusOr<LegacyRebuildOutputWriter> open_legacy_rebuild_output(TabletManager* tablet_manager,
+                                                               int64_t merged_tablet_id) {
+    LegacyRebuildOutputWriter writer;
+    writer.filename = gen_sst_filename();
+    writer.location = tablet_manager->sst_location(merged_tablet_id, writer.filename);
+    WritableFileOptions write_options;
+    if (config::enable_transparent_data_encryption) {
+        ASSIGN_OR_RETURN(auto encryption_pair, KeyCache::instance().create_encryption_meta_pair_using_current_kek());
+        write_options.encryption_info = encryption_pair.info;
+        writer.encryption_meta = std::move(encryption_pair.encryption_meta);
+    }
+    ASSIGN_OR_RETURN(writer.writable_file, fs::new_writable_file(write_options, writer.location));
+    sstable::Options builder_options;
+    writer.filter_policy.reset(const_cast<sstable::FilterPolicy*>(sstable::NewBloomFilterPolicy(10)));
+    builder_options.filter_policy = writer.filter_policy.get();
+    writer.table_builder = std::make_unique<sstable::TableBuilder>(builder_options, writer.writable_file.get());
+    return writer;
+}
+
+// Finalize the table builder, close the writer, and populate |out_pb| with a
+// non-shared sstable PB pointing at the just-written physical file. A fresh
+// fileset_id is assigned because PersistentIndexSstableFileset::init(vector)
+// DCHECKs has_fileset_id() for any sstable with a range
+// (persistent_index_sstable_fileset.cpp:30-31), and the rebuilt PB carries a
+// real key range from builder.KeyRange().
+Status finalize_legacy_rebuild_output(LegacyRebuildOutputWriter& writer, uint64_t max_rss_rowid,
+                                      PersistentIndexSstablePB* out_pb) {
+    RETURN_IF_ERROR(writer.table_builder->Finish());
+    auto [start_key, end_key] = writer.table_builder->KeyRange();
+    const uint64_t filesize = writer.table_builder->FileSize();
+    RETURN_IF_ERROR(writer.writable_file->close());
+
+    out_pb->set_filename(writer.filename);
+    out_pb->set_filesize(filesize);
+    out_pb->set_encryption_meta(writer.encryption_meta);
+    out_pb->mutable_range()->set_start_key(start_key.to_string());
+    out_pb->mutable_range()->set_end_key(end_key.to_string());
+    out_pb->set_shared(false);
+    out_pb->set_rssid_offset(0);
+    out_pb->set_max_rss_rowid(max_rss_rowid);
+    out_pb->mutable_fileset_id()->CopyFrom(UniqueId::gen_uid().to_proto());
+    return Status::OK();
+}
+
+// Best-effort cleanup of an unfinalized partial output: close any writer
+// handle and delete the file at the recorded location. Used by the rebuild
+// cleanup guard so failure paths and "every entry dropped" don't leak OSS
+// orphans.
+void delete_partial_legacy_rebuild_output(LegacyRebuildOutputWriter& writer) {
+    if (writer.writable_file) {
+        (void)writer.writable_file->close();
+    }
+    auto filesystem_or = FileSystemFactory::CreateSharedFromString(writer.location);
+    if (filesystem_or.ok()) {
+        (void)(*filesystem_or)->delete_file(writer.location);
+    }
+}
+
+StatusOr<bool> remap_legacy_entry_or_drop(IndexValuesWithVerPB* values_pb, int32_t source_rssid_offset,
+                                          const std::unordered_map<uint32_t, uint32_t>& data_rssid_map,
+                                          const std::function<StatusOr<DelVectorPtr>(uint32_t)>& load_del_vector) {
+    bool delvec_already_checked = false;
+    for (int i = 0; i < values_pb->values_size(); ++i) {
+        auto* index_value = values_pb->mutable_values(i);
+        if (is_index_tombstone(*index_value)) continue;
+        const int64_t lifted_rssid = static_cast<int64_t>(index_value->rssid()) + source_rssid_offset;
+        if (lifted_rssid < 0 || lifted_rssid > std::numeric_limits<uint32_t>::max()) {
+            return Status::Corruption(fmt::format(
+                    "legacy sstable stored rssid out of range after applying source offset: stored={} offset={}",
+                    index_value->rssid(), source_rssid_offset));
+        }
+        auto mapped_entry = data_rssid_map.find(static_cast<uint32_t>(lifted_rssid));
+        if (mapped_entry == data_rssid_map.end()) {
+            return false; // dead source rowset
+        }
+        index_value->set_rssid(mapped_entry->second);
+        if (!delvec_already_checked) {
+            ASSIGN_OR_RETURN(auto del_vector, load_del_vector(mapped_entry->second));
+            if (del_vector && del_vector->roaring() && del_vector->roaring()->contains(index_value->rowid())) {
+                return false; // rowid filtered by merged delvec
+            }
+            delvec_already_checked = true;
+        }
+    }
+    return true;
+}
+
+// Try to project an ancestor-inherited shared PK sstable (shared=true,
+// !has_shared_rssid) without reading the source file. canonical_offset is
+// read from plan.family_legacy_sstable_offset; the dense walk verifies
+// data_rssid_map[lifted_rssid] == lifted_rssid + canonical_offset and that
+// the merged delvec at the final rssid is empty. Emit accumulates:
+//   out_pb.rssid_offset       = src_pb.rssid_offset + canonical_offset
+//   out_pb.max_rss_rowid.high = source_lifted_max + canonical_offset
+//
+// Returns true with out_pb filled when every safety check passes. On any
+// miss returns false and the caller falls back to
+// rebuild_legacy_shared_sstable; each fallback path increments a dedicated
+// counter so production can break down why fast-path missed.
+StatusOr<bool> try_fastpath_project_legacy_shared_sstable(const PersistentIndexSstablePB& src_pb, uint32_t family_id,
+                                                          const detail::RssidProjectionPlan& plan,
+                                                          const TabletMetadataPB& new_metadata,
+                                                          const LegacyRssidLookupMaps::PerFamilyMaps& rssid_lookup_maps,
+                                                          PersistentIndexSstablePB* out_pb) {
+    constexpr uint32_t kFastPathMaxRssidSpan = 8192;
+
+    if (family_id == detail::InferredSplitFamilies::kNoFamily) {
+        g_tablet_merge_legacy_sstable_fastpath_fallback_no_family << 1;
+        return false;
+    }
+    if (plan.unsafe_families.count(family_id) > 0) {
+        g_tablet_merge_legacy_sstable_fastpath_fallback_unsafe_family << 1;
+        return false;
+    }
+    auto family_offset_it = plan.family_legacy_sstable_offset.find(family_id);
+    if (family_offset_it == plan.family_legacy_sstable_offset.end()) {
+        g_tablet_merge_legacy_sstable_fastpath_fallback_no_family << 1;
+        return false;
+    }
+    const int64_t canonical_offset = family_offset_it->second;
+
+    // Form / range / fileset_id gates: identical legality contract to v1.
+    // Rebuild's PersistentIndexSstableFileset::init(vector) DCHECK requires
+    // a fileset_id on any ranged sstable, so the fast-path must too.
+    if (!validate_legacy_shared_sstable_form(src_pb).ok()) {
+        g_tablet_merge_legacy_sstable_fastpath_fallback_invalid_form << 1;
+        return false;
+    }
+    if (!new_metadata.has_range()) {
+        g_tablet_merge_legacy_sstable_fastpath_fallback_merged_no_range << 1;
+        return false;
+    }
+    if (src_pb.has_range() && !src_pb.has_fileset_id()) {
+        g_tablet_merge_legacy_sstable_fastpath_fallback_ranged_no_fileset_id << 1;
+        return false;
+    }
+
+    // Boundary / overflow checks. accumulated_offset must fit in int32 so
+    // it can be written back to the PB; new_lifted_max must fit in uint32
+    // so the high word is well-defined.
+    const int64_t accumulated_offset = static_cast<int64_t>(src_pb.rssid_offset()) + canonical_offset;
+    if (accumulated_offset < std::numeric_limits<int32_t>::min() ||
+        accumulated_offset > std::numeric_limits<int32_t>::max()) {
+        g_tablet_merge_legacy_sstable_fastpath_fallback_coverage_span_invalid << 1;
+        return false;
+    }
+    // max_rss_rowid.high is already in source-effective space (post-PR0).
+    const int64_t source_lifted_max = static_cast<int64_t>(extract_rss_rowid_high(src_pb.max_rss_rowid()));
+    const int64_t source_lifted_lower = static_cast<int64_t>(src_pb.rssid_offset()) + 1; // skip stored rssid 0
+    if (source_lifted_max < source_lifted_lower) {
+        g_tablet_merge_legacy_sstable_fastpath_fallback_coverage_span_invalid << 1;
+        return false;
+    }
+    if (source_lifted_max - source_lifted_lower + 1 > kFastPathMaxRssidSpan) {
+        g_tablet_merge_legacy_sstable_fastpath_fallback_coverage_span_invalid << 1;
+        return false;
+    }
+    const int64_t new_lifted_max = source_lifted_max + canonical_offset;
+    if (new_lifted_max < 0 || new_lifted_max > static_cast<int64_t>(std::numeric_limits<uint32_t>::max())) {
+        g_tablet_merge_legacy_sstable_fastpath_fallback_coverage_span_invalid << 1;
+        return false;
+    }
+
+    // Dense walk of [source_lifted_lower, source_lifted_max] in source-
+    // effective (canonical_ctx-local) space. For each lifted_rssid, expect:
+    //   data_rssid_map[lifted_rssid] == lifted_rssid + canonical_offset
+    // and the merged delvec at the FINAL rssid is empty (fast-path can't
+    // physically drop entries).
+    const auto& family_data_rssid_map = rssid_lookup_maps.data_rssid_map;
+    const auto& merged_delvecs = new_metadata.delvec_meta().delvecs();
+    for (int64_t lifted_rssid_64 = source_lifted_lower; lifted_rssid_64 <= source_lifted_max; ++lifted_rssid_64) {
+        const auto lifted_rssid = static_cast<uint32_t>(lifted_rssid_64);
+        const auto expected_final = static_cast<uint32_t>(lifted_rssid_64 + canonical_offset);
+        auto data_entry = family_data_rssid_map.find(lifted_rssid);
+        if (data_entry == family_data_rssid_map.end() || data_entry->second != expected_final) {
+            g_tablet_merge_legacy_sstable_fastpath_fallback_partial_compaction << 1;
+            return false;
+        }
+        auto delvec_entry = merged_delvecs.find(expected_final);
+        if (delvec_entry != merged_delvecs.end() && delvec_entry->second.size() > 0) {
+            g_tablet_merge_legacy_sstable_fastpath_fallback_merged_delvec_nonempty << 1;
+            return false;
+        }
+    }
+
+    // Emit projected PB. PB.rssid_offset accumulates; max_rss_rowid.high
+    // (in effective space) shifts by canonical_offset. low word and every
+    // other field copy through unchanged.
+    out_pb->CopyFrom(src_pb);
+    out_pb->set_rssid_offset(static_cast<int32_t>(accumulated_offset));
+    out_pb->set_max_rss_rowid(
+            encode_rss_rowid(static_cast<uint32_t>(new_lifted_max), extract_rss_rowid_low(src_pb.max_rss_rowid())));
+    return true;
+}
+
+// Rebuilds an ancestor-inherited shared PK sstable (shared=true,
+// !has_shared_rssid) by reading every entry, remapping stored rssids to the
+// merged tablet's final rssid space via merge_contexts, applying the merged
+// tablet's range filter and per-rssid delvec, and writing a fresh non-shared
+// sstable.
+//
+// Why this is needed (run4 ghost-rssid bug): the legacy projection path only
+// accumulates a single rssid_offset per PB, but a single PK sstable file holds
+// entries for many ancestor rowsets. After multi-cycle split/merge with partial
+// child compaction, a surviving rowset can be assigned a NEW id by add_rowset
+// in some merge while the inherited sstable still stores the OLD id. PK lookup
+// then returns a stored rssid that no longer corresponds to any live rowset
+// in the merged tablet — `unexpected segment id` at publish time.
+//
+// Five filtering layers (all needed to match modern shared_rssid path semantics
+// once we emit a non-shared file):
+//   (1) Tablet-range filter via TabletRangeHelper::create_sst_seek_range_from
+//       — drops ancestor keys outside the merged tablet range. The modern
+//       shared path gets this at PK index init via the contain_shared_sstables
+//       gate (lake_persistent_index.cpp:624-635). A non-shared rebuilt output
+//       must apply it inline.
+//   (2) Per-entry rssid remap via the precomputed data_rssid_map (built once
+//       by build_legacy_rssid_lookup_maps) — drops entries whose source rowset
+//       is dead in every child.
+//   (3) Per-entry delvec filter via new_metadata.delvec_meta() — drops entries
+//       whose rowid is in the merged delvec, which by Phase 5 of merge_delvecs
+//       includes both real deletes and synthesized gap-bits for shared segments
+//       not covered by any contributing child's range.
+//   (4) Watermark projection via the watermark_rssid_map (superset of the data
+//       map; also covers delete-only rowsets) — sets max_rss_rowid even when
+//       the file is tombstone-only or its source max points at a delete-only
+//       rowset.
+//   (5) Tombstones preserved as-is (rssid/rowid sentinel; never remapped or
+//       delvec-filtered) — same invariant as multi_get and KeyValueMerger.
+//
+// On success out_pb is filled with a non-shared sstable PB pointing at a new
+// physical file. If every entry was dropped (dead rowset / out-of-range / in
+// delvec), out_pb is left empty and the caller should drop the sstable entirely
+// from the merged metadata; the cleanup guard deletes the partial output file
+// before this function returns so we don't leave OSS orphans for vacuum.
+Status rebuild_legacy_shared_sstable(TabletManager* tablet_manager, int64_t merged_tablet_id,
+                                     const PersistentIndexSstablePB& src_pb, const TabletMetadataPtr& src_metadata,
+                                     const TabletMetadataPB& new_metadata,
+                                     const LegacyRssidLookupMaps::PerFamilyMaps& rssid_lookup_maps,
+                                     PersistentIndexSstablePB* out_pb) {
+    out_pb->Clear();
+    RETURN_IF_ERROR(validate_legacy_shared_sstable_form(src_pb));
+
+    // The merged tablet must carry a range for shared-data range distribution.
+    // Without it the (1) tablet-range filter below cannot be applied; refuse
+    // rather than silently dropping it.
+    if (!new_metadata.has_range()) {
+        return Status::InternalError("merged tablet has no range; cannot apply range filter to legacy rebuild");
+    }
+
+    // Open the source iterator and Seek to the merged tablet range start.
+    // (1) Tablet-range filter — mirrors the contain_shared_sstables gate at
+    // lake_persistent_index.cpp:624-635. Modern shared sstables get this at PK
+    // index init; the rebuilt output is shared=false, so we apply it inline.
+    ASSIGN_OR_RETURN(auto source_sstable,
+                     PersistentIndexSstable::new_sstable(
+                             src_pb, tablet_manager->sst_location(src_metadata->id(), src_pb.filename()),
+                             /*cache=*/nullptr, /*need_filter=*/false,
+                             /*delvec=*/nullptr, src_metadata, tablet_manager));
+    sstable::ReadOptions source_read_options;
+    source_read_options.fill_cache = false;
+    std::unique_ptr<sstable::Iterator> source_iterator(source_sstable->new_iterator(source_read_options));
+    auto merged_tablet_schema = TabletSchema::create(new_metadata.schema());
+    ASSIGN_OR_RETURN(auto seek_range,
+                     TabletRangeHelper::create_sst_seek_range_from(new_metadata.range(), merged_tablet_schema));
+    if (seek_range.seek_key.empty()) {
+        source_iterator->SeekToFirst();
+    } else {
+        source_iterator->Seek(seek_range.seek_key);
+    }
+    const sstable::Comparator* bytewise_comparator = sstable::BytewiseComparator();
+
+    // Maps are built once per merge_sstables() call and shared with the fast-path
+    // helper; both paths consult the same data + watermark mappings, so building
+    // them at the merge_sstables top avoids the quadratic walk that would
+    // otherwise scan merge_contexts × rowsets × segments per stored entry.
+
+    // Open the output writer and arm a cleanup guard so any failure path —
+    // parse error, delvec load, builder Add, builder Finish, close — and the
+    // "every entry dropped" path leave no OSS orphan. cancel() is called only
+    // after the output PB is fully built and ready to swap into the merged
+    // metadata.
+    ASSIGN_OR_RETURN(auto output_writer, open_legacy_rebuild_output(tablet_manager, merged_tablet_id));
+    CancelableDefer cleanup_partial_output([&] { delete_partial_legacy_rebuild_output(output_writer); });
+
+    // Stored rssids in the file are in pre-projection space. The read path at
+    // persistent_index_sstable.cpp:222-225 shifts them by src_pb.rssid_offset()
+    // to derive the effective rssid in the current child's id space. Apply the
+    // same shift before lookup so a stacked-offset legacy sstable still
+    // resolves correctly.
+    const int32_t source_rssid_offset = src_pb.rssid_offset();
+
+    // (4) Project src.max_rss_rowid through the rebuild before the scan so
+    // tombstone-only files and files whose source max points at a delete-only
+    // rowset still get a stable watermark.
+    uint64_t max_encoded_rss_rowid = 0;
+    bool max_encoded_initialized = false;
+    if (auto initial_max =
+                project_source_max_rss_rowid(src_pb, source_rssid_offset, rssid_lookup_maps.watermark_rssid_map)) {
+        max_encoded_rss_rowid = *initial_max;
+        max_encoded_initialized = true;
+    }
+
+    // (3) Per-rssid delvec cache. fill_cache=false / fill_data_cache=false so
+    // a one-shot bulk merge scan doesn't pollute long-lived block / delvec
+    // caches; the local cache here already deduplicates per-rssid loads.
+    std::unordered_map<uint32_t, DelVectorPtr> del_vector_cache;
+    auto load_del_vector = [&](uint32_t final_rssid) -> StatusOr<DelVectorPtr> {
+        auto cached_entry = del_vector_cache.find(final_rssid);
+        if (cached_entry != del_vector_cache.end()) return cached_entry->second;
+        const auto& delvecs_by_rssid = new_metadata.delvec_meta().delvecs();
+        auto delvec_page_entry = delvecs_by_rssid.find(final_rssid);
+        if (delvec_page_entry == delvecs_by_rssid.end() || delvec_page_entry->second.size() == 0) {
+            del_vector_cache.emplace(final_rssid, DelVectorPtr{});
+            return DelVectorPtr{};
+        }
+        DelVectorPtr del_vector = std::make_shared<DelVector>();
+        LakeIOOptions lake_io_options{.fill_data_cache = false, .skip_disk_cache = false};
+        RETURN_IF_ERROR(lake::get_del_vec(tablet_manager, new_metadata, delvec_page_entry->second,
+                                          /*fill_cache=*/false, lake_io_options, del_vector.get()));
+        del_vector_cache.emplace(final_rssid, del_vector);
+        return del_vector;
+    };
+
+    uint64_t kept_entry_count = 0;
+    uint64_t dropped_entry_count = 0;
+    for (; source_iterator->Valid(); source_iterator->Next()) {
+        const Slice entry_key = source_iterator->key();
+        if (!seek_range.stop_key.empty() && bytewise_comparator->Compare(entry_key, Slice(seek_range.stop_key)) >= 0) {
+            break; // (1) past merged tablet range upper bound
+        }
+        const Slice entry_raw_value = source_iterator->value();
+        IndexValuesWithVerPB values_pb;
+        if (!values_pb.ParseFromArray(entry_raw_value.data, static_cast<int>(entry_raw_value.size))) {
+            return Status::InternalError("Failed to parse legacy sstable value during rebuild");
+        }
+        // (2) + (3) per-entry remap and delvec filter, packed into one helper.
+        ASSIGN_OR_RETURN(bool keep_entry,
+                         remap_legacy_entry_or_drop(&values_pb, source_rssid_offset, rssid_lookup_maps.data_rssid_map,
+                                                    load_del_vector));
+        if (!keep_entry) {
+            ++dropped_entry_count;
+            continue;
+        }
+        update_max_encoded_rss_rowid_from(values_pb, &max_encoded_rss_rowid, &max_encoded_initialized);
+        const std::string serialized_entry = values_pb.SerializeAsString();
+        RETURN_IF_ERROR(output_writer.table_builder->Add(entry_key, Slice(serialized_entry)));
+        ++kept_entry_count;
+    }
+    RETURN_IF_ERROR(source_iterator->status());
+
+    if (dropped_entry_count > 0) {
+        g_tablet_merge_legacy_sstable_rebuild_dropped_entries << static_cast<int64_t>(dropped_entry_count);
+    }
+
+    if (kept_entry_count == 0) {
+        // Every entry was dropped (dead rowset / out-of-range / in delvec).
+        // The cleanup guard deletes the partial output file; signal to the
+        // caller that the sstable should be dropped from the merged metadata
+        // entirely.
+        return Status::OK();
+    }
+
+    RETURN_IF_ERROR(
+            finalize_legacy_rebuild_output(output_writer, max_encoded_initialized ? max_encoded_rss_rowid : 0, out_pb));
+    cleanup_partial_output.cancel(); // file is now referenced; keep it
+    g_tablet_merge_legacy_sstable_rebuild_total << 1;
+    return Status::OK();
+}
+
+// Emit the projected PB for one ancestor-inherited shared PK sstable into
+// |out_pb|. Tries the metadata-only fast-path first; on any safety miss
+// falls back to rebuild_legacy_shared_sstable. An empty out_pb after this
+// call means rebuild dropped every entry — the caller should NOT emit it
+// to the merged sstable_meta.
+Status emit_legacy_shared_sstable_via_fastpath_or_rebuild(TabletManager* tablet_manager, int64_t merged_tablet_id,
+                                                          const PersistentIndexSstablePB& src_pb,
+                                                          const TabletMetadataPtr& src_metadata,
+                                                          const TabletMetadataPB& new_metadata, uint32_t family_id,
+                                                          const detail::RssidProjectionPlan& plan,
+                                                          const LegacyRssidLookupMaps::PerFamilyMaps& rssid_lookup_maps,
+                                                          PersistentIndexSstablePB* out_pb) {
+    ASSIGN_OR_RETURN(bool fastpath_succeeded,
+                     try_fastpath_project_legacy_shared_sstable(src_pb, family_id, plan, new_metadata,
+                                                                rssid_lookup_maps, out_pb));
+    if (fastpath_succeeded) {
+        g_tablet_merge_legacy_sstable_fastpath_total << 1;
+        return Status::OK();
+    }
+    g_tablet_merge_legacy_sstable_fastpath_fallback_to_rebuild_total << 1;
+    return rebuild_legacy_shared_sstable(tablet_manager, merged_tablet_id, src_pb, src_metadata, new_metadata,
+                                         rssid_lookup_maps, out_pb);
+}
+
+// Rebuild a non-shared legacy sstable (shared=false, !has_shared_rssid)
+// by reading every entry, remapping stored rssid via ctx.map_rssid (which
+// honors the family-canonical projection), and writing a fresh non-shared
+// sstable. Used when the source sstable contains entries referencing both
+// shared-ancestor and child-local rowsets — typically a post-split PK-index
+// compaction output that crossed the shared-ancestor boundary — which a
+// single PB-level rssid_offset shift cannot translate uniformly.
+//
+// Differences from rebuild_legacy_shared_sstable:
+//   - SeekToFirst (non-shared sstable was written within this child's
+//     range, which is a subset of the merged range; no tablet-range
+//     filter needed).
+//   - No per-rssid delvec filter (matches v1 project_non_shared_legacy_-
+//     sstable; merged delvec is applied by the read path at lookup
+//     time, not pre-baked into the projected PB).
+//   - Per-entry remap via ctx.map_rssid instead of a family-scoped
+//     data_rssid_map (covers both shared-ancestor and child-local
+//     rowsets in a single funnel).
+//
+// On success out_pb carries a non-shared PB pointing at a new file with
+// rssid_offset=0 (entries are pre-remapped) and a fresh fileset_id. If
+// the source iterator is empty, out_pb stays empty and the caller drops
+// the sstable from merged metadata; the cleanup guard removes the
+// partial output on every error path.
+Status rebuild_non_shared_legacy_sstable(TabletManager* tablet_manager, int64_t merged_tablet_id,
+                                         const PersistentIndexSstablePB& src_pb, const TabletMergeContext& ctx,
+                                         const TabletMetadataPtr& src_metadata, PersistentIndexSstablePB* out_pb) {
+    out_pb->Clear();
+    // Mirror project_non_shared_legacy_sstable's existing corruption
+    // guard: a non-shared sstable must not carry an embedded delvec —
+    // the embedded delvec format only applies to shared_rssid=true PBs.
+    if (src_pb.has_delvec() && src_pb.delvec().size() > 0) {
+        return Status::Corruption(
+                "non-shared sstable has delvec but no shared_rssid, cannot rebuild during tablet merge");
+    }
+
+    // Open source iterator FIRST; emptiness must reach the drop-output
+    // path without going through map_rssid arithmetic that could error
+    // on an unrelated edge case (negative ctx offset + max_rss_rowid==0).
+    ASSIGN_OR_RETURN(auto source_sstable,
+                     PersistentIndexSstable::new_sstable(
+                             src_pb, tablet_manager->sst_location(src_metadata->id(), src_pb.filename()),
+                             /*cache=*/nullptr, /*need_filter=*/false,
+                             /*delvec=*/nullptr, src_metadata, tablet_manager));
+    sstable::ReadOptions source_read_options;
+    source_read_options.fill_cache = false;
+    std::unique_ptr<sstable::Iterator> source_iterator(source_sstable->new_iterator(source_read_options));
+    source_iterator->SeekToFirst();
+    if (!source_iterator->Valid()) {
+        RETURN_IF_ERROR(source_iterator->status());
+        // Zero-entry sstable: leave out_pb empty, caller drops it.
+        return Status::OK();
+    }
+
+    // Now safe to open the writer + project initial watermark.
+    ASSIGN_OR_RETURN(auto output_writer, open_legacy_rebuild_output(tablet_manager, merged_tablet_id));
+    CancelableDefer cleanup_partial_output([&] { delete_partial_legacy_rebuild_output(output_writer); });
+
+    const int32_t source_rssid_offset = src_pb.rssid_offset();
+    // Initial watermark: project the source max_rss_rowid.high through
+    // ctx.map_rssid so tombstone-only files still emit a stable
+    // post-merge watermark. Per-entry update_max_encoded_rss_rowid_from
+    // only widens this initial value as non-tombstone entries are
+    // written.
+    const uint32_t source_max_high = extract_rss_rowid_high(src_pb.max_rss_rowid());
+    ASSIGN_OR_RETURN(uint32_t projected_max_high, ctx.map_rssid(source_max_high));
+    uint64_t max_encoded_rss_rowid =
+            encode_rss_rowid(projected_max_high, extract_rss_rowid_low(src_pb.max_rss_rowid()));
+    bool max_encoded_initialized = true;
+
+    uint64_t kept_entry_count = 0;
+    for (; source_iterator->Valid(); source_iterator->Next()) {
+        const Slice entry_key = source_iterator->key();
+        const Slice entry_raw_value = source_iterator->value();
+        IndexValuesWithVerPB values_pb;
+        if (!values_pb.ParseFromArray(entry_raw_value.data, static_cast<int>(entry_raw_value.size))) {
+            return Status::InternalError("Failed to parse non-shared sstable value during rebuild");
+        }
+        for (int j = 0; j < values_pb.values_size(); ++j) {
+            auto* index_value = values_pb.mutable_values(j);
+            if (is_index_tombstone(*index_value)) continue; // preserve sentinel as-is
+            const int64_t lifted_rssid =
+                    static_cast<int64_t>(index_value->rssid()) + static_cast<int64_t>(source_rssid_offset);
+            if (lifted_rssid < 0 || lifted_rssid > static_cast<int64_t>(std::numeric_limits<uint32_t>::max())) {
+                return Status::Corruption(fmt::format(
+                        "non-shared rebuild: lifted rssid out of uint32 range: stored={} src_offset={} lifted={}",
+                        index_value->rssid(), source_rssid_offset, lifted_rssid));
+            }
+            ASSIGN_OR_RETURN(uint32_t final_rssid, ctx.map_rssid(static_cast<uint32_t>(lifted_rssid)));
+            index_value->set_rssid(final_rssid);
+        }
+        update_max_encoded_rss_rowid_from(values_pb, &max_encoded_rss_rowid, &max_encoded_initialized);
+        const std::string serialized_entry = values_pb.SerializeAsString();
+        RETURN_IF_ERROR(output_writer.table_builder->Add(entry_key, Slice(serialized_entry)));
+        ++kept_entry_count;
+    }
+    RETURN_IF_ERROR(source_iterator->status());
+
+    if (kept_entry_count == 0) {
+        // Defensive: SeekToFirst returned Valid() above, so this should
+        // be unreachable, but covers the case where every Add() somehow
+        // got skipped without an error.
+        return Status::OK();
+    }
+
+    RETURN_IF_ERROR(finalize_legacy_rebuild_output(output_writer, max_encoded_rss_rowid, out_pb));
+    cleanup_partial_output.cancel();
+    g_tablet_merge_non_shared_sstable_rebuild_total << 1;
+    return Status::OK();
+}
+
+// Project a sstable that has shared_rssid set (modern shared or
+// `ingest_sst()` output). |out| was already CopyFrom'd from |sst|; this
+// function rewrites the projection-affected fields in place.
+//
+// Always re-attaches the merged delvec from |new_metadata->delvec_meta()|
+// regardless of whether the source carried one — this is what lets a
+// synthesized gap-delvec (created by merge_delvecs Phase 0 for keys covered
+// by no contributing child) reach the rebuilt sstable PB. Without it,
+// PersistentIndexSstable::multi_get could return stale rssids when the LSM
+// block-sort order is inverted.
+Status project_modern_shared_rssid_sstable(const PersistentIndexSstablePB& sst, TabletMergeContext& ctx,
+                                           const TabletMetadataPB* new_metadata, PersistentIndexSstablePB* out) {
+    ASSIGN_OR_RETURN(auto mapped_rssid, ctx.map_rssid(sst.shared_rssid()));
+    out->set_shared_rssid(mapped_rssid);
+    out->set_rssid_offset(0); // shared_rssid is post-projection; clear to avoid double-transform on read
+    out->set_max_rss_rowid(encode_rss_rowid(mapped_rssid, extract_rss_rowid_low(sst.max_rss_rowid())));
+
+    auto delvec_entry = new_metadata->delvec_meta().delvecs().find(mapped_rssid);
+    if (delvec_entry != new_metadata->delvec_meta().delvecs().end() && delvec_entry->second.size() > 0) {
+        out->mutable_delvec()->CopyFrom(delvec_entry->second);
+    } else if (sst.has_delvec() && sst.delvec().size() > 0) {
+        return Status::Corruption("Delvec page not found for sstable after merge");
+    }
+    return Status::OK();
+}
+
+// Project a non-shared sstable without shared_rssid: a child-local file
+// produced by flush_pk_memtable for THIS merge round, or a rebuilt legacy
+// file from a prior merge. Stored rssids already live in the child's id
+// space, so a single ctx.rssid_offset() shift suffices. The accumulation
+// preserves correctness when the file already carries a non-zero
+// rssid_offset (stacked merge case).
+Status project_non_shared_legacy_sstable(const PersistentIndexSstablePB& sst, const TabletMergeContext& ctx,
+                                         PersistentIndexSstablePB* out) {
+    if (sst.has_delvec() && sst.delvec().size() > 0) {
+        return Status::Corruption("Sstable has delvec but no shared_rssid, cannot project delvec");
+    }
+    const int64_t accumulated_offset = static_cast<int64_t>(sst.rssid_offset()) + ctx.rssid_offset();
+    if (accumulated_offset < std::numeric_limits<int32_t>::min() ||
+        accumulated_offset > std::numeric_limits<int32_t>::max()) {
+        return Status::Corruption(
+                fmt::format("accumulated rssid_offset exceeds int32 range: sst_offset={} ctx_offset={} sum={}",
+                            sst.rssid_offset(), ctx.rssid_offset(), accumulated_offset));
+    }
+    out->set_rssid_offset(static_cast<int32_t>(accumulated_offset));
+    const int64_t high = static_cast<int64_t>(extract_rss_rowid_high(sst.max_rss_rowid()));
+    const int64_t new_high = high + ctx.rssid_offset();
+    if (new_high < 0 || new_high > std::numeric_limits<uint32_t>::max()) {
+        return Status::Corruption(
+                fmt::format("rssid high overflow in merge projection: high={} ctx_offset={} new_high={}", high,
+                            ctx.rssid_offset(), new_high));
+    }
+    out->set_max_rss_rowid(
+            encode_rss_rowid(static_cast<uint32_t>(new_high), extract_rss_rowid_low(sst.max_rss_rowid())));
+    out->clear_delvec();
+    return Status::OK();
+}
+
+// Two invariants must hold on the emitted sstable_meta after merge_sstables's
+// per-ctx projection:
+//
+//   (I1) Global signed-monotone non-decreasing max_rss_rowid.
+//        LakePersistentIndex::commit (lake_persistent_index.cpp:907-911)
+//        fetches max_rss_rowid into an int64_t and rejects last > cur with
+//        "sstables are not ordered". The signed comparison matters when the
+//        encoded (rssid<<32|rowid) sets the high bit (rssid >= 2^31 or
+//        memtable_max set to (rowset_id<<32|UINT32_MAX) per
+//        persistent_index_memtable.cpp:110) — unsigned ordering would be
+//        the reverse of signed against any low-rssid sibling.
+//
+//   (I2) Same fileset_id sstables are contiguous in metadata order.
+//        LakePersistentIndex::init (lake_persistent_index.cpp:131-145) groups
+//        sstables into PersistentIndexSstableFileset by consecutive equal
+//        fileset_id. lake_persistent_index_size_tiered_compaction_strategy
+//        .cpp:83-87 rejects non-contiguous reuse with "inconsistent
+//        fileset_id in sstables", and apply_opcompaction's contiguous-range
+//        find_if (lake_persistent_index.cpp:865-885) erases the wrong span
+//        otherwise.
+//
+// Source of conflict between I1 and I2: PersistentIndexSstableFileset::
+// append() (persistent_index_sstable_fileset.cpp:96-115) lets a freshly-
+// flushed sstable inherit an existing fileset's _fileset_id whenever the
+// new sstable's key range strictly extends the existing range. In a
+// multi-cycle SPLIT/MERGE flow, flush_pk_memtable on each merge context can
+// add a per-child sstable that inherits the same source FID-X from a long-
+// lived shared sstable. After projection these per-child flushes spread
+// across a wide max_rss_rowid range intermixed with other-FID compaction
+// outputs, so a single sort by max_rss_rowid necessarily produces multiple
+// non-contiguous runs of FID-X.
+//
+// Resolution: stable_sort by signed max_rss_rowid (satisfies I1), then walk
+// the sorted output and detect when a fileset_id reappears after at least
+// one other-FID sstable has closed its earlier run. Any such later run
+// cannot share a logical fileset with the earlier one — there is at least
+// one foreign sstable physically between them in metadata, so init() /
+// pick_compaction_candidates / apply_opcompaction would have to treat them
+// as separate filesets anyway. Assign a fresh fileset_id (UniqueId::
+// gen_uid) to each later run so I2 is satisfied without sacrificing I1.
+// Sstables with no fileset_id remain singletons and close any open run;
+// they are not grouped with anything.
+void reassign_fileset_ids_for_ordered_runs(google::protobuf::RepeatedPtrField<PersistentIndexSstablePB>* dest) {
+    std::vector<PersistentIndexSstablePB> sorted;
+    sorted.reserve(dest->size());
+    for (const auto& sst : *dest) {
+        sorted.emplace_back(sst);
+    }
+    std::stable_sort(sorted.begin(), sorted.end(),
+                     [](const PersistentIndexSstablePB& a, const PersistentIndexSstablePB& b) {
+                         return static_cast<int64_t>(a.max_rss_rowid()) < static_cast<int64_t>(b.max_rss_rowid());
+                     });
+
+    std::unordered_set<UniqueId> closed_orig_fids;
+    UniqueId current_run_orig;
+    UniqueId current_run_emitted;
+    bool has_run = false;
+    for (auto& sst : sorted) {
+        if (!sst.has_fileset_id()) {
+            // No fileset_id (legacy / standalone): cannot be grouped. Close
+            // any open run so a same-FID sstable after this one will be
+            // treated as a non-contiguous reuse.
+            if (has_run) {
+                closed_orig_fids.insert(current_run_orig);
+                has_run = false;
+            }
+            continue;
+        }
+        UniqueId orig(sst.fileset_id());
+        if (has_run && orig == current_run_orig) {
+            // Continuation of the current run: emit with this run's FID
+            // (which may be the original or a freshly-assigned one).
+            sst.mutable_fileset_id()->CopyFrom(current_run_emitted.to_proto());
+            continue;
+        }
+        // Run boundary.
+        if (has_run) {
+            closed_orig_fids.insert(current_run_orig);
+        }
+        UniqueId emitted = (closed_orig_fids.count(orig) > 0) ? UniqueId::gen_uid() : orig;
+        sst.mutable_fileset_id()->CopyFrom(emitted.to_proto());
+        current_run_orig = orig;
+        current_run_emitted = emitted;
+        has_run = true;
+    }
+
+    dest->Clear();
+    for (auto& sst : sorted) {
+        *dest->Add() = std::move(sst);
+    }
+}
+
+// Source-effective rssid range that a sstable's stored entries could
+// reference, clamped to the uint32_t key space the per-ctx
+// disagreement-key vector indexes by. Both bounds are inclusive.
+//
+// The signed arithmetic matters because compute_rssid_offset can
+// produce a negative ctx.rssid_offset() when ctx[N>0]'s input rowset
+// ids exceed ctx[0]'s next_rowset_id (legal — exercised by
+// test_tablet_merging_accumulates_stacked_rssid_offset). Casting a
+// negative low to uint32_t directly would wrap to a huge value and
+// silently miss in-range disagreement keys.
+struct ClampedLiftedRange {
+    uint32_t lower = 0;
+    uint32_t upper = 0;
+    bool valid() const { return lower <= upper; }
+};
+
+ClampedLiftedRange clamp_lifted_range_to_uint32(int32_t source_rssid_offset, uint64_t source_max_rss_rowid_high) {
+    constexpr int64_t kUint32Max = std::numeric_limits<uint32_t>::max();
+    const int64_t low_signed = static_cast<int64_t>(source_rssid_offset) + 1;
+    const int64_t high_signed = static_cast<int64_t>(source_max_rss_rowid_high);
+    ClampedLiftedRange range;
+    range.lower = static_cast<uint32_t>(std::max<int64_t>(0, low_signed));
+    range.upper = (high_signed < 0) ? 0u : static_cast<uint32_t>(std::min(high_signed, kUint32Max));
+    return range;
+}
+
+// Resolve the family-canonical projection plan for a ctx. Non-PK merges
+// leave the plan pointer null; the fast-path emit still wants a plan
+// reference, so an empty static instance acts as a safe identity.
+const detail::RssidProjectionPlan& projection_plan_or_empty(const TabletMergeContext& ctx) {
+    static const detail::RssidProjectionPlan kEmptyPlan{};
+    const auto* plan = ctx.projection_plan();
+    return (plan != nullptr) ? *plan : kEmptyPlan;
+}
+
+// Returns the highest (rowset.id + step + ctx.rssid_offset) seen across
+// merge_contexts[0..upper_exclusive), or |base_next_rowset_id| if higher.
+// Phase 1 in merge_tablet uses this as the watermark for ctx[i]'s
+// rssid_offset assignment so each child's projected rowset ids land
+// strictly above every earlier child's projected ids.
+//
+// Each uint32_t addend is widened to int64_t before the addition to avoid
+// uint32_t wrap when rowset.id() approaches UINT32_MAX — wrap there would
+// under-estimate the watermark and let later children reuse occupied rssids.
+uint32_t compute_cumulative_rowset_id_ceiling(const std::vector<TabletMergeContext>& merge_contexts,
+                                              size_t upper_exclusive, uint32_t base_next_rowset_id) {
+    uint32_t ceiling = base_next_rowset_id;
+    for (size_t j = 0; j < upper_exclusive; ++j) {
+        for (const auto& rowset : merge_contexts[j].metadata()->rowsets()) {
+            const int64_t end_wide = static_cast<int64_t>(rowset.id()) +
+                                     static_cast<int64_t>(get_rowset_id_step(rowset)) +
+                                     merge_contexts[j].rssid_offset();
+            const uint32_t end =
+                    static_cast<uint32_t>(std::clamp<int64_t>(end_wide, 0, std::numeric_limits<uint32_t>::max()));
+            ceiling = std::max(ceiling, end);
+        }
+    }
+    return ceiling;
+}
+
+// Emit one ancestor-inherited shared PK sstable (shared=true,
+// !has_shared_rssid) into dest via the fast-path or its rebuild fallback.
+// Resolves family_id, the family's PerFamilyMaps, and the projection plan
+// from ctx. Drops sstables whose rebuild emitted no entries (matches the
+// cleanup contract documented on rebuild_legacy_shared_sstable).
+Status emit_legacy_shared_sstable_into_dest(TabletManager* tablet_manager, const TabletMergeContext& ctx,
+                                            size_t child_index, const PersistentIndexSstablePB& src_pb,
+                                            const TabletMetadataPB& new_metadata,
+                                            const detail::InferredSplitFamilies& families,
+                                            const LegacyRssidLookupMaps& rssid_lookup_maps,
+                                            ::google::protobuf::RepeatedPtrField<PersistentIndexSstablePB>* dest) {
+    const uint32_t family_id = families.child_to_family[child_index];
+    ASSIGN_OR_RETURN(const auto* family_maps_ptr, lookup_maps_for_ctx(rssid_lookup_maps, family_id, child_index));
+    PersistentIndexSstablePB projected_pb;
+    RETURN_IF_ERROR(emit_legacy_shared_sstable_via_fastpath_or_rebuild(
+            tablet_manager, new_metadata.id(), src_pb, ctx.metadata(), new_metadata, family_id,
+            projection_plan_or_empty(ctx), *family_maps_ptr, &projected_pb));
+    if (!projected_pb.filename().empty()) {
+        dest->Add()->Swap(&projected_pb);
+    }
+    return Status::OK();
+}
+
+// Emit one non-shared legacy PK sstable (shared=false, !has_shared_rssid)
+// into dest. Routes through the per-entry rebuild path when the projection
+// plan would map some referenced rssid to a value that disagrees with the
+// natural ctx.rssid_offset shift; otherwise the metadata-only
+// project_non_shared_legacy_sstable path applies.
+Status emit_non_shared_legacy_sstable_into_dest(TabletManager* tablet_manager, const TabletMergeContext& ctx,
+                                                const PersistentIndexSstablePB& src_pb,
+                                                const TabletMetadataPB& new_metadata,
+                                                const std::vector<uint32_t>& ctx_disagreement_keys,
+                                                ::google::protobuf::RepeatedPtrField<PersistentIndexSstablePB>* dest) {
+    const auto lifted_range =
+            clamp_lifted_range_to_uint32(src_pb.rssid_offset(), extract_rss_rowid_high(src_pb.max_rss_rowid()));
+    const bool needs_rebuild = lifted_range.valid() && !ctx_disagreement_keys.empty() &&
+                               TabletMergeContext::mapping_disagrees_with_natural_in_range(
+                                       ctx_disagreement_keys, lifted_range.lower, lifted_range.upper);
+    if (needs_rebuild) {
+        PersistentIndexSstablePB rebuilt_pb;
+        RETURN_IF_ERROR(rebuild_non_shared_legacy_sstable(tablet_manager, new_metadata.id(), src_pb, ctx,
+                                                          ctx.metadata(), &rebuilt_pb));
+        if (!rebuilt_pb.filename().empty()) {
+            dest->Add()->Swap(&rebuilt_pb);
+        }
+        return Status::OK();
+    }
+    auto* out = dest->Add();
+    out->CopyFrom(src_pb);
+    return project_non_shared_legacy_sstable(src_pb, ctx, out);
+}
+
 Status merge_sstables(TabletManager* tablet_manager, std::vector<TabletMergeContext>& merge_contexts,
                       TabletMetadataPB* new_metadata) {
     auto* dest = new_metadata->mutable_sstable_meta()->mutable_sstables();
-    // key: filename -> index in dest, for shared dedup + consistency check
-    std::unordered_map<std::string, int> shared_dedup;
+    // Tracks shared sstables by filename so subsequent occurrences across child
+    // contexts are deduped + consistency-checked against the original source PB.
+    // We cache the SOURCE PB (not an index into dest) because the legacy-shared
+    // rebuild path can either replace the emitted PB with one that has a
+    // different filename/filesize, or drop it from dest entirely — either of
+    // which would invalidate an index-based cache.
+    std::unordered_map<std::string, PersistentIndexSstablePB> shared_dedup_sources;
 
     auto* update_manager = tablet_manager->update_mgr();
-    for (auto& ctx : merge_contexts) {
+
+    // PK-index memtable flush has to run first (below) before the lookup maps
+    // can be built — flushed metadata may add new rowsets the legacy path needs
+    // to remap into. Build the maps lazily once after the flush phase, and
+    // reuse them for both the fast-path and the rebuild fallback.
+    bool rssid_lookup_maps_initialized = false;
+    LegacyRssidLookupMaps rssid_lookup_maps;
+    detail::InferredSplitFamilies inferred_families;
+    auto ensure_rssid_lookup_maps = [&]() -> Status {
+        if (rssid_lookup_maps_initialized) return Status::OK();
+        // Family inference and lookup-map population must consume the same
+        // merge_contexts snapshot so per-ctx child_index → family_id mapping
+        // remains in lockstep with per-ctx contributions to the per-family
+        // PerFamilyMaps.
+        std::vector<detail::SplitFamilyInferenceInput> inference_inputs;
+        inference_inputs.reserve(merge_contexts.size());
+        for (const auto& ctx : merge_contexts) {
+            inference_inputs.push_back({ctx.metadata(), ctx.rssid_offset()});
+        }
+        ASSIGN_OR_RETURN(inferred_families, detail::infer_split_families(inference_inputs));
+        ASSIGN_OR_RETURN(rssid_lookup_maps, build_legacy_rssid_lookup_maps(merge_contexts, inferred_families));
+        rssid_lookup_maps_initialized = true;
+        return Status::OK();
+    };
+    for (size_t child_index = 0; child_index < merge_contexts.size(); ++child_index) {
+        auto& ctx = merge_contexts[child_index];
         // Flush the tablet's PK-index memtable into sstables so that the
         // inherited sstable_meta covers all live data of its rowsets. Covers
         // the case where a child accumulated post-split DML that never
@@ -1176,153 +2634,63 @@ Status merge_sstables(TabletManager* tablet_manager, std::vector<TabletMergeCont
         ctx.set_metadata(std::move(flushed_metadata));
         if (!ctx.metadata()->has_sstable_meta()) continue;
 
+        // Compute the per-ctx disagreement-keys cache ONCE outside the
+        // sstable loop. Each non-shared sstable then range-tests this
+        // cache via binary search instead of re-walking the projection
+        // plan + shared_rssid_map. Empty when ctx has no plan-driven
+        // disagreement (= ctx is canonical, ctx is non-PK, or no rowsets
+        // disagree with natural offset).
+        const std::vector<uint32_t> ctx_disagreement_keys = ctx.compute_disagreement_keys();
+
         for (const auto& sst : ctx.metadata()->sstable_meta().sstables()) {
-            // Dedup: only shared sstables can be duplicates
+            // (1) Dedup: only shared sstables can be duplicates across ctxs.
+            // The dedup map caches the SOURCE PB (not a dest index)
+            // because the rebuild path may replace or drop the projected
+            // PB, which would invalidate an index-based cache.
             if (sst.shared()) {
-                auto [it, inserted] = shared_dedup.emplace(sst.filename(), dest->size());
+                auto [it, inserted] = shared_dedup_sources.emplace(sst.filename(), sst);
                 if (!inserted) {
-                    // Dedup hit: check the fields that identify the physical file.
-                    // fileset_id is intentionally excluded: it is a grouping hint that
-                    // PersistentIndexSstableFileset::init may synthesize per-load when
-                    // the source sstable has no persisted id, so two ctxs sharing the
-                    // same legacy file can legitimately hold different ids. The merged
-                    // tablet re-derives grouping from whatever id the dedup keeps.
-                    const auto& existing = dest->Get(it->second);
-                    if (existing.filesize() != sst.filesize() || existing.encryption_meta() != sst.encryption_meta() ||
-                        existing.range().start_key() != sst.range().start_key() ||
-                        existing.range().end_key() != sst.range().end_key()) {
+                    if (!shared_sstable_metadata_matches(it->second, sst)) {
                         return Status::Corruption("Shared sstable metadata mismatch for same filename");
                     }
-                    continue; // skip duplicate
+                    continue; // duplicate, already projected/rebuilt
                 }
             }
 
-            // Projection: branch on has_shared_rssid, not on shared flag
-            auto* out = dest->Add();
-            out->CopyFrom(sst);
+            // (2) Ancestor-inherited shared PK sstable (shared=true,
+            // !has_shared_rssid): legacy form, may need rebuild after
+            // multi-cycle split/merge with partial-child compaction.
+            // The current ctx is the dedup-winner by construction:
+            // shared_dedup_sources only emplaces on first sighting.
+            if (sst.shared() && !sst.has_shared_rssid()) {
+                RETURN_IF_ERROR(ensure_rssid_lookup_maps());
+                RETURN_IF_ERROR(emit_legacy_shared_sstable_into_dest(tablet_manager, ctx, child_index, sst,
+                                                                     *new_metadata, inferred_families,
+                                                                     rssid_lookup_maps, dest));
+                continue;
+            }
 
+            // (3) Modern projection: shared sstable with has_shared_rssid
+            // (split-derived single-rowset slice).
             if (sst.has_shared_rssid()) {
-                // shared_rssid path: project rssid, clear offset, project delvec
-                ASSIGN_OR_RETURN(auto mapped_rssid, ctx.map_rssid(sst.shared_rssid()));
-                out->set_shared_rssid(mapped_rssid);
-                out->set_rssid_offset(0); // clear to avoid double-transform in read path
-
-                // max_rss_rowid: replace high part with mapped rssid
-                uint64_t low = sst.max_rss_rowid() & 0xffffffffULL;
-                out->set_max_rss_rowid((static_cast<uint64_t>(mapped_rssid) << 32) | low);
-
-                // delvec projection via new_metadata->delvec_meta()
-                if (sst.has_delvec() && sst.delvec().size() > 0) {
-                    auto dv_it = new_metadata->delvec_meta().delvecs().find(mapped_rssid);
-                    if (dv_it == new_metadata->delvec_meta().delvecs().end()) {
-                        return Status::Corruption("Delvec page not found for sstable after merge");
-                    }
-                    out->mutable_delvec()->CopyFrom(dv_it->second);
-                }
-            } else {
-                // No shared_rssid (legacy format): accumulate rssid_offset so that a
-                // stacked merge (parent sstable already has an offset from a prior
-                // merge) composes correctly. The read path at
-                // persistent_index_sstable.cpp:214 adds the sstable's rssid_offset
-                // once to each stored rssid, so the stored offset must be the total
-                // cumulative shift from the original rowset-id to the current tablet.
-                if (sst.has_delvec() && sst.delvec().size() > 0) {
-                    return Status::Corruption("Sstable has delvec but no shared_rssid, cannot project delvec");
-                }
-                const int64_t accumulated_offset = static_cast<int64_t>(sst.rssid_offset()) + ctx.rssid_offset();
-                if (accumulated_offset < std::numeric_limits<int32_t>::min() ||
-                    accumulated_offset > std::numeric_limits<int32_t>::max()) {
-                    return Status::Corruption(fmt::format(
-                            "accumulated rssid_offset exceeds int32 range: sst_offset={} ctx_offset={} sum={}",
-                            sst.rssid_offset(), ctx.rssid_offset(), accumulated_offset));
-                }
-                out->set_rssid_offset(static_cast<int32_t>(accumulated_offset));
-                uint64_t low = sst.max_rss_rowid() & 0xffffffffULL;
-                int64_t high = static_cast<int64_t>(sst.max_rss_rowid() >> 32);
-                const int64_t new_high = high + ctx.rssid_offset();
-                if (new_high < 0 || new_high > std::numeric_limits<uint32_t>::max()) {
-                    return Status::Corruption(
-                            fmt::format("rssid high overflow in merge projection: high={} ctx_offset={} new_high={}",
-                                        high, ctx.rssid_offset(), new_high));
-                }
-                out->set_max_rss_rowid((static_cast<uint64_t>(new_high) << 32) | low);
-                out->clear_delvec();
+                auto* out = dest->Add();
+                out->CopyFrom(sst);
+                RETURN_IF_ERROR(project_modern_shared_rssid_sstable(sst, ctx, new_metadata, out));
+                continue;
             }
+
+            // (4) Non-shared, non-modern: child-local PK sstable.
+            RETURN_IF_ERROR(emit_non_shared_legacy_sstable_into_dest(tablet_manager, ctx, sst, *new_metadata,
+                                                                     ctx_disagreement_keys, dest));
         }
     }
 
-    // The merge above appends sstables in source-child iteration order. The post-projection
-    // max_rss_rowid is what LakePersistentIndex::commit() and the size-tiered compaction
-    // strategy use to enforce the index-wide ordering invariant. If different children
-    // contributed sstables whose projected (rssid<<32|rowid) values interleave — for
-    // example, when a tombstone-bearing delete-only sstable in one child has its low
-    // word saturated near UINT32_MAX and a freshly-written sstable in the next child
-    // has a smaller projected high word — the source-order output would carry the
-    // disorder forward and any later commit/compaction on the merged tablet would
-    // refuse to publish with "sstables are not ordered". Reorder defensively here so
-    // the merged metadata always satisfies the invariant.
-    //
-    // Constraint: a single naive sort by max_rss_rowid alone breaks a separate invariant
-    // that LakePersistentIndex::init() and apply_opcompaction rely on — sstables sharing
-    // the same fileset_id must be contiguous in metadata order. Same fileset_id sstables
-    // can span a wide max_rss_rowid range (a fileset accretes via append() across
-    // multiple memtable flushes, persistent_index_sstable_fileset.cpp:96), and other
-    // fileset_ids' sstables can fall within that range. A flat sort by max_rss_rowid
-    // would interleave them, splitting one logical fileset into multiple physical
-    // filesets in init()'s grouping (which keys on adjacent fileset_id) and confusing
-    // apply_opcompaction's contiguous-range find_if (lake_persistent_index.cpp:838).
-    //
-    // Approach: bucket source-order entries into contiguous-fileset_id blocks, sort
-    // blocks by their first element's max_rss_rowid, and emit. This:
-    //   * Keeps same-fileset_id sstables together (init / apply_opcompaction invariant).
-    //   * Within a block, preserves source order — already monotonic in max_rss_rowid
-    //     per source child since the projection paths preserve relative order
-    //     (rssid_offset path adds a constant; shared_rssid path collapses to a single
-    //     mapped_rssid with low word in range order).
-    //   * Across blocks, orders by first-element max_rss_rowid — the sort key the flat
-    //     sort would have used. Cross-block monotonicity matches the original PR's
-    //     intent for cross-source ordering.
-    //
-    // Compare as `int64_t` rather than `uint64_t` to match the downstream check:
-    // LakePersistentIndex::commit() (lake_persistent_index.cpp:880-881) fetches
-    // max_rss_rowid into an `int64_t` and does a signed `>` comparison. When the
-    // encoded (rssid<<32|rowid) sets the high bit — e.g. an ingest_sst entry with
-    // rssid >= 2^31, or a delete-only sstable whose memtable max_rss_rowid was set to
-    // (rowset_id<<32|UINT32_MAX) (persistent_index_memtable.cpp:110, 131) — unsigned
-    // ordering is the reverse of signed ordering against any low-rssid sibling.
-    // Sstables without an explicit fileset_id are not part of any logical fileset
-    // group (they predate fileset_id, or are test fixtures). Treat each as its own
-    // singleton block so block-sort orders them by max_rss_rowid like the original
-    // flat sort would. When both sides have a fileset_id, only consider them in the
-    // same block if the ids match.
-    auto same_block_as_predecessor = [](const PersistentIndexSstablePB& prev, const PersistentIndexSstablePB& cur) {
-        if (!prev.has_fileset_id() || !cur.has_fileset_id()) return false;
-        return prev.fileset_id().hi() == cur.fileset_id().hi() && prev.fileset_id().lo() == cur.fileset_id().lo();
-    };
-
-    struct SstableBlock {
-        std::vector<PersistentIndexSstablePB> sstables;
-        int64_t sort_key = 0;
-    };
-    std::vector<SstableBlock> blocks;
-    blocks.reserve(dest->size());
-    for (const auto& sst : *dest) {
-        if (blocks.empty() || !same_block_as_predecessor(blocks.back().sstables.back(), sst)) {
-            blocks.emplace_back();
-            blocks.back().sort_key = static_cast<int64_t>(sst.max_rss_rowid());
-        }
-        blocks.back().sstables.push_back(sst);
-    }
-    std::stable_sort(blocks.begin(), blocks.end(),
-                     [](const SstableBlock& a, const SstableBlock& b) { return a.sort_key < b.sort_key; });
-
-    dest->Clear();
-    for (const auto& block : blocks) {
-        for (const auto& sst : block.sstables) {
-            *dest->Add() = sst;
-        }
-    }
-
+    // The merge above appended projected sstables in source-child iteration
+    // order. Re-sort by signed max_rss_rowid and reassign fileset_ids on
+    // non-contiguous reuse so the emitted sstable_meta satisfies both the
+    // signed-monotone (I1) and contiguous-fileset (I2) invariants. See the
+    // helper for the full reasoning.
+    reassign_fileset_ids_for_ordered_runs(dest);
     return Status::OK();
 }
 
@@ -1348,11 +2716,11 @@ void update_next_rowset_id(TabletMetadataPB* metadata) {
     // is strictly greater than every projected sstable rssid.
     if (metadata->has_sstable_meta()) {
         for (const auto& sst : metadata->sstable_meta().sstables()) {
-            uint64_t projected_high = sst.max_rss_rowid() >> 32;
-            // Clamp the projected high to uint32 range; rssids are uint32 elsewhere
-            // and any saturated high word would already break the rssid encoding.
+            const uint32_t projected_high = extract_rss_rowid_high(sst.max_rss_rowid());
+            // Saturated UINT32_MAX would already break the rssid encoding, so
+            // bumping past it is meaningless — leave max_end alone there.
             if (projected_high < std::numeric_limits<uint32_t>::max()) {
-                max_end = std::max(max_end, static_cast<uint32_t>(projected_high) + 1);
+                max_end = std::max(max_end, projected_high + 1);
             }
         }
     }
@@ -1439,18 +2807,15 @@ StatusOr<MutableTabletMetadataPtr> merge_tablet(TabletManager* tablet_manager,
     new_tablet_metadata->clear_prev_garbage_version();
     new_tablet_metadata->set_cumulative_point(0);
 
-    // Phase 1: Prepare rssid offsets and merged range
+    // Phase 1: Prepare rssid offsets and merged range. For each ctx[i],
+    // set new_tablet_metadata.next_rowset_id to the watermark of all
+    // earlier ctxs[0..i-1]'s projected rowset ids; compute_rssid_offset
+    // then derives ctx[i].rssid_offset against that watermark so its
+    // projected ids land strictly above every earlier ctx's.
     for (size_t i = 1; i < merge_contexts.size(); ++i) {
-        // Temporarily set next_rowset_id for compute_rssid_offset
-        uint32_t temp_next = merge_contexts.front().metadata()->next_rowset_id();
-        for (size_t j = 0; j < i; ++j) {
-            for (const auto& rowset : merge_contexts[j].metadata()->rowsets()) {
-                uint32_t end = static_cast<uint32_t>(static_cast<int64_t>(rowset.id() + get_rowset_id_step(rowset)) +
-                                                     merge_contexts[j].rssid_offset());
-                temp_next = std::max(temp_next, end);
-            }
-        }
-        new_tablet_metadata->set_next_rowset_id(temp_next);
+        const uint32_t cumulative_ceiling = compute_cumulative_rowset_id_ceiling(
+                merge_contexts, /*upper_exclusive=*/i, merge_contexts.front().metadata()->next_rowset_id());
+        new_tablet_metadata->set_next_rowset_id(cumulative_ceiling);
         merge_contexts[i].set_rssid_offset(compute_rssid_offset(*new_tablet_metadata, *merge_contexts[i].metadata()));
     }
 
@@ -1462,8 +2827,41 @@ StatusOr<MutableTabletMetadataPtr> merge_tablet(TabletManager* tablet_manager,
     }
     new_tablet_metadata->mutable_range()->CopyFrom(merged_range);
 
-    // Phase 2: Merge rowsets (version-driven k-way merge with dedup)
-    RETURN_IF_ERROR(merge_rowsets(merge_contexts, new_tablet_metadata.get()));
+    // Phase 1.5: build the family-canonical projection plan once Phase 1
+    // has populated rssid_offset, and wire (_child_index, _projection_plan)
+    // onto every TabletMergeContext. The plan drives three consumers:
+    //   - TabletMergeContext::map_rssid (priority 1 lookup);
+    //   - the legacy-sstable fast-path (plan.family_legacy_sstable_offset
+    //     + per-family LegacyRssidLookupMaps);
+    //   - merge_sstables's non-shared dispatch via
+    //     mapping_disagrees_with_natural_in_range, which routes mixed-
+    //     reference sstables to rebuild_non_shared_legacy_sstable.
+    //
+    // PK gate only — non-PK tables skip the build and leave the plan
+    // pointer null; map_rssid then degenerates to the
+    // shared_rssid_map → natural offset path.
+    detail::InferredSplitFamilies inferred_families;
+    detail::RssidProjectionPlan projection_plan;
+    if (is_primary_key(*new_tablet_metadata)) {
+        std::vector<detail::SplitFamilyInferenceInput> inference_inputs;
+        inference_inputs.reserve(merge_contexts.size());
+        for (const auto& ctx : merge_contexts) {
+            inference_inputs.push_back({ctx.metadata(), ctx.rssid_offset()});
+        }
+        ASSIGN_OR_RETURN(inferred_families, detail::infer_split_families(inference_inputs));
+        ASSIGN_OR_RETURN(projection_plan, detail::build_rssid_projection_plan(inference_inputs, inferred_families));
+        for (size_t i = 0; i < merge_contexts.size(); ++i) {
+            merge_contexts[i].set_child_index(static_cast<uint32_t>(i));
+            merge_contexts[i].set_projection_plan(&projection_plan);
+        }
+    }
+
+    // Phase 2: Merge rowsets (version-driven k-way merge with dedup).
+    // canonical_contribs collects each canonical rowset's contributing
+    // children's child-local ranges; consumed by the PK fail-fast coverage
+    // check below and by gap-delvec synthesis.
+    CanonicalContribMap canonical_contribs;
+    RETURN_IF_ERROR(merge_rowsets(merge_contexts, new_tablet_metadata.get(), &canonical_contribs));
 
     // Phase 2.5: Merge schemas (must run before merge_dcg_meta, which needs
     // historical_schemas to locate rebuild schemas for shared-segment rebuild).
@@ -1474,8 +2872,8 @@ StatusOr<MutableTabletMetadataPtr> merge_tablet(TabletManager* tablet_manager,
                                    txn_info.txn_id(), new_tablet_metadata.get()));
 
     if (is_primary_key(*new_tablet_metadata)) {
-        RETURN_IF_ERROR(merge_delvecs(tablet_manager, merge_contexts, new_version, txn_info.txn_id(),
-                                      new_tablet_metadata.get()));
+        RETURN_IF_ERROR(merge_delvecs(tablet_manager, merge_contexts, canonical_contribs, new_version,
+                                      txn_info.txn_id(), new_tablet_metadata.get()));
     }
 
     RETURN_IF_ERROR(merge_sstables(tablet_manager, merge_contexts, new_tablet_metadata.get()));

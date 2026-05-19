@@ -15,6 +15,7 @@
 #include "segment_iterator.h"
 
 #include <algorithm>
+#include <boost/algorithm/string/predicate.hpp>
 #include <cmath>
 #include <limits>
 #include <memory>
@@ -43,8 +44,10 @@
 #include "segment_options.h"
 #include "storage/chunk_helper.h"
 #include "storage/chunk_iterator.h"
+#include "storage/column_expr_predicate.h"
 #include "storage/column_or_predicate.h"
 #include "storage/column_predicate.h"
+#include "storage/column_predicate_inverted_index_fallback.h"
 #include "storage/column_predicate_rewriter.h"
 #include "storage/del_vector.h"
 #include "storage/index/index_descriptor.h"
@@ -66,6 +69,7 @@
 #include "storage/rowset/default_value_column_iterator.h"
 #include "storage/rowset/dictcode_column_iterator.h"
 #include "storage/rowset/fill_subfield_iterator.h"
+#include "storage/rowset/or_match_fallback_visitor.h"
 #include "storage/rowset/rowid_column_iterator.h"
 #include "storage/rowset/segment.h"
 #include "storage/rowset/short_key_range_option.h"
@@ -316,8 +320,14 @@ private:
 
         // Inverted index state
         bool has_inverted_index = false;
+        bool has_fallback_predicates = false;
         std::vector<InvertedIndexIterator*> inverted_index_iterators;
         std::unordered_set<ColumnId> prune_cols_candidate_by_inverted_index;
+
+        // Reusable buffer of segment-level rowids captured during scan. Owned
+        // here because `InvertedIndexFallbackPredicate` holds a stable pointer
+        // to it and reads rowids[i] for chunk row i during evaluate().
+        std::vector<rowid_t> rowid_buffer;
 
         // Cleanup method to properly delete iterators
         void cleanup() {
@@ -327,6 +337,7 @@ private:
                 }
             }
             inverted_index_iterators.clear();
+            has_fallback_predicates = false;
             has_inverted_index = false;
         }
     };
@@ -428,6 +439,10 @@ private:
     Status _init_inverted_index_iterators();
 
     Status _apply_inverted_index();
+    // Wrap MATCH predicates living inside OR subtrees of the predicate tree
+    // with `InvertedIndexFallbackPredicate`, so OR evaluation can fall back to
+    // a per-row bitmap lookup using the rowid captured during scan.
+    Status _wrap_or_match_predicates_for_fallback();
 
     Status _read(Chunk* chunk, vector<rowid_t>* rowid, size_t n, bool predicate_col_late_materialize_read);
 
@@ -961,7 +976,21 @@ inline Status SegmentIterator::_init_reader_from_file(const std::string& index_p
         return Status::OK();
     }
     RETURN_IF_ERROR(create_st);
-    auto status = _vector_index_ctx->ann_reader->init_searcher(*_vector_index_ctx->index_meta.get(), index_path, fs);
+    // Enable per-segment adaptive ef_search. query_params carries a user-explicit
+    // efSearch iff the user set one via query hint / session var; that disables
+    // adaptive scaling so user intent is honored. FE preserves the user-typed key
+    // casing for ann_params (e.g. "efsearch", "Efsearch", "EFSEARCH" are all
+    // valid), so the check must be case-insensitive.
+    bool user_set_ef = false;
+    for (const auto& entry : query_params) {
+        if (boost::iequals(entry.first, starrocks::index::vector::EF_SEARCH)) {
+            user_set_ef = true;
+            break;
+        }
+    }
+    auto status = _vector_index_ctx->ann_reader->init_searcher(*_vector_index_ctx->index_meta.get(), index_path, fs,
+                                                               static_cast<size_t>(_segment->num_rows()),
+                                                               _vector_index_ctx->k, user_set_ef);
     // empty ann reader — caller will set up brute-force fallback
     if (status.is_not_supported()) {
         _vector_index_ctx->use_vector_index = false;
@@ -2118,9 +2147,17 @@ Status SegmentIterator::do_get_next(Chunk* chunk) {
     DCHECK_EQ(0, chunk->num_rows());
 
     Status st;
-    std::vector<uint32_t> rowids;
-    std::vector<uint32_t>* p_rowids =
-            (_vector_index_ctx && _vector_index_ctx->always_build_rowid()) ? &rowids : nullptr;
+    std::vector<rowid_t> local_rowids;
+    std::vector<rowid_t>* p_rowids = nullptr;
+    // The OR-MATCH fallback path requires capturing into the buffer that the
+    // InvertedIndexFallbackPredicate already holds a pointer to. The vector
+    // index path just needs rowids; a per-call local is fine.
+    if (_inverted_index_ctx && _inverted_index_ctx->has_fallback_predicates) {
+        _inverted_index_ctx->rowid_buffer.clear();
+        p_rowids = &_inverted_index_ctx->rowid_buffer;
+    } else if (_vector_index_ctx && _vector_index_ctx->always_build_rowid()) {
+        p_rowids = &local_rowids;
+    }
     do {
         st = _do_get_next(chunk, p_rowids);
     } while (st.ok() && chunk->num_rows() == 0);
@@ -2155,15 +2192,21 @@ Status SegmentIterator::do_get_next(Chunk* chunk, vector<uint64_t>* rssid_rowids
     DCHECK_EQ(0, chunk->num_rows());
 
     Status st;
-    vector<uint32_t> rowids;
+    std::vector<rowid_t> local_rowids;
+    // When OR-MATCH fallback predicates are active, capture into the context
+    // buffer so the predicate's stored pointer stays valid.
+    std::vector<rowid_t>* p_rowids = &local_rowids;
+    if (_inverted_index_ctx && _inverted_index_ctx->has_fallback_predicates) {
+        _inverted_index_ctx->rowid_buffer.clear();
+        p_rowids = &_inverted_index_ctx->rowid_buffer;
+    }
     do {
-        st = _do_get_next(chunk, &rowids);
+        st = _do_get_next(chunk, p_rowids);
     } while (st.ok() && chunk->num_rows() == 0);
     if (st.ok()) {
-        // encode rssid with rowid
-        // | rssid (32bit) | rowid (32bit) |
+        // encode rssid with rowid: | rssid (32bit) | rowid (32bit) |
         uint64_t rssid_shift = (uint64_t)(_opts.rowset_id + segment_id()) << 32;
-        for (uint32_t rowid : rowids) {
+        for (uint32_t rowid : *p_rowids) {
             rssid_rowids->push_back(rssid_shift | rowid);
         }
     }
@@ -3620,7 +3663,7 @@ Status SegmentIterator::_init_inverted_index_iterators() {
         }
         cid_2_ucid[field->id()] = field->uid();
     }
-    for (const auto& pair : _opts.pred_tree.get_immediate_column_predicate_map()) {
+    for (const auto& pair : _opts.pred_tree.get_all_column_predicate_map()) {
         if (cid_2_ucid.find(pair.first) == cid_2_ucid.end()) {
             continue;
         }
@@ -3645,6 +3688,23 @@ Status SegmentIterator::_init_inverted_index_iterators() {
     return Status::OK();
 }
 
+Status SegmentIterator::_wrap_or_match_predicates_for_fallback() {
+    // Only OR subtrees need the per-row fallback. Immediate AND-children of the
+    // root keep the normal inverted-index filtering path.
+    if (!_opts.pred_tree.has_or_predicate()) {
+        return Status::OK();
+    }
+
+    OrMatchFallbackVisitor visitor{_inverted_index_ctx->inverted_index_iterators, _obj_pool,
+                                   &_inverted_index_ctx->rowid_buffer, &_inverted_index_ctx->has_fallback_predicates};
+    auto root = _opts.pred_tree.release_root();
+    for (auto& or_child : root.compound_children()) {
+        RETURN_IF_ERROR(or_child.visit(visitor));
+    }
+    _opts.pred_tree = PredicateTree::create(std::move(root));
+    return Status::OK();
+}
+
 Status SegmentIterator::_apply_inverted_index() {
     RETURN_IF(_scan_range.empty(), Status::OK());
     RETURN_IF(!_opts.enable_gin_filter, Status::OK());
@@ -3654,6 +3714,8 @@ Status SegmentIterator::_apply_inverted_index() {
         return Status::OK();
     }
     SCOPED_RAW_TIMER(&_opts.stats->gin_index_filter_ns);
+
+    RETURN_IF_ERROR(_wrap_or_match_predicates_for_fallback());
 
     roaring::Roaring row_bitmap = range2roaring(_scan_range);
     size_t input_rows = row_bitmap.cardinality();

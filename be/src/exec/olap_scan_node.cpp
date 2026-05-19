@@ -35,8 +35,11 @@
 #include "exec/pipeline/noop_sink_operator.h"
 #include "exec/pipeline/pipeline_builder.h"
 #include "exec/pipeline/scan/chunk_buffer_limiter.h"
+#include "exec/pipeline/scan/morsel.h"
 #include "exec/pipeline/scan/olap_scan_operator.h"
 #include "exec/pipeline/scan/olap_scan_prepare_operator.h"
+#include "exec/pipeline/scan/scan_morsel.h"
+#include "exprs/column_access_path_resolver.h"
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
 #include "exprs/expr_executor.h"
@@ -113,8 +116,9 @@ Status OlapScanNode::init(const TPlanNode& tnode, RuntimeState* state) {
     }
 
     if (_olap_scan_node.__isset.column_access_paths) {
+        auto path_resolver = make_column_access_path_resolver(state, _pool);
         for (int i = 0; i < _olap_scan_node.column_access_paths.size(); ++i) {
-            auto st = ColumnAccessPath::create(_olap_scan_node.column_access_paths[i], state, _pool);
+            auto st = ColumnAccessPath::create(_olap_scan_node.column_access_paths[i], path_resolver);
             if (LIKELY(st.ok())) {
                 _column_access_paths.emplace_back(std::move(st.value()));
             } else {

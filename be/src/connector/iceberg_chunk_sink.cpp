@@ -95,7 +95,7 @@ StatusOr<std::unique_ptr<ConnectorChunkSink>> IcebergChunkSinkProvider::create_c
             ColumnEvaluator::clone(ctx->column_evaluators));
     auto location_provider = std::make_shared<connector::LocationProvider>(
             ctx->path, print_id(ctx->fragment_context->query_id()), runtime_state->be_number(), driver_id,
-            boost::to_lower_copy(ctx->format));
+            boost::to_lower_copy(ctx->format), ctx->writer_tag);
 
     std::vector<std::string>& partition_columns = ctx->partition_column_names;
     std::vector<std::string>& transform_exprs = ctx->transform_exprs;
@@ -118,7 +118,9 @@ StatusOr<std::unique_ptr<ConnectorChunkSink>> IcebergChunkSinkProvider::create_c
                         fs,
                         ctx->fragment_context,
                         query_execution_services->runtime->connector_sink_spill_executor,
-                        runtime_state->desc_tbl().get_tuple_descriptor(ctx->tuple_desc_id),
+                        ctx->override_tuple_desc != nullptr
+                                ? ctx->override_tuple_desc
+                                : runtime_state->desc_tbl().get_tuple_descriptor(ctx->tuple_desc_id),
                         column_evaluators,
                         ctx->sort_ordering});
         partition_chunk_writer_factory = std::make_unique<SpillPartitionChunkWriterFactory>(partition_chunk_writer_ctx);

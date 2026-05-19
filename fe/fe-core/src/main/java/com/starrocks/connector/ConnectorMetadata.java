@@ -18,6 +18,7 @@ import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.IcebergTable;
+import com.starrocks.catalog.MvId;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AlreadyExistsException;
@@ -154,6 +155,15 @@ public interface ConnectorMetadata {
      */
     default TvrTableSnapshot getCurrentTvrSnapshot(String dbName, Table table) {
         return TvrTableSnapshot.empty();
+    }
+
+    /**
+     * Like {@link #getCurrentTvrSnapshot} but lets storages that pin snapshots
+     * per caller attach a reference for {@code mvId} as a side effect. Default
+     * is a pure read.
+     */
+    default TvrTableSnapshot acquireTvrSnapshot(String dbName, Table table, MvId mvId) {
+        return getCurrentTvrSnapshot(dbName, table);
     }
 
     /**

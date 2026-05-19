@@ -16,6 +16,7 @@ package com.starrocks.connector;
 
 import com.google.common.collect.ImmutableList;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.MvId;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.system.information.InfoSchemaDb;
 import com.starrocks.common.StarRocksException;
@@ -265,5 +266,27 @@ public class CatalogConnectorMetadataTest {
 
         Map<String, String> actualProperties = catalogConnectorMetadata.getCatalogProperties();
         assertEquals(expectedProperties, actualProperties);
+    }
+
+    @Test
+    void testAcquireTvrSnapshotDelegatesToChild(@Mocked ConnectorMetadata connectorMetadata, @Mocked Table table) {
+        MvId mvId = new MvId(1L, 2L);
+        TvrTableSnapshot expected = TvrTableSnapshot.of(123L);
+        new Expectations() {
+            {
+                connectorMetadata.acquireTvrSnapshot("test_db", table, mvId);
+                result = expected;
+                times = 1;
+            }
+        };
+
+        CatalogConnectorMetadata catalogConnectorMetadata = new CatalogConnectorMetadata(
+                connectorMetadata,
+                informationSchemaMetadata,
+                metaMetadata
+        );
+
+        TvrTableSnapshot actual = catalogConnectorMetadata.acquireTvrSnapshot("test_db", table, mvId);
+        assertEquals(expected, actual);
     }
 }

@@ -36,6 +36,30 @@ TEST(TypeTraitsCoreTest, RuntimeLimitsAndFixedLength) {
     EXPECT_EQ(0, RunTimeFixedTypeLength<TYPE_VARCHAR>::value);
 }
 
+TEST(TypeTraitsCoreTest, FixedLengthTypeSize) {
+    EXPECT_EQ(RunTimeFixedTypeLength<TYPE_BOOLEAN>::value, get_size_of_fixed_length_type(TYPE_BOOLEAN));
+    EXPECT_EQ(RunTimeFixedTypeLength<TYPE_TINYINT>::value, get_size_of_fixed_length_type(TYPE_TINYINT));
+    EXPECT_EQ(RunTimeFixedTypeLength<TYPE_SMALLINT>::value, get_size_of_fixed_length_type(TYPE_SMALLINT));
+    EXPECT_EQ(RunTimeFixedTypeLength<TYPE_INT>::value, get_size_of_fixed_length_type(TYPE_INT));
+    EXPECT_EQ(RunTimeFixedTypeLength<TYPE_BIGINT>::value, get_size_of_fixed_length_type(TYPE_BIGINT));
+    EXPECT_EQ(RunTimeFixedTypeLength<TYPE_LARGEINT>::value, get_size_of_fixed_length_type(TYPE_LARGEINT));
+    EXPECT_EQ(RunTimeFixedTypeLength<TYPE_FLOAT>::value, get_size_of_fixed_length_type(TYPE_FLOAT));
+    EXPECT_EQ(RunTimeFixedTypeLength<TYPE_DOUBLE>::value, get_size_of_fixed_length_type(TYPE_DOUBLE));
+    EXPECT_EQ(RunTimeFixedTypeLength<TYPE_TIME>::value, get_size_of_fixed_length_type(TYPE_TIME));
+    EXPECT_EQ(RunTimeFixedTypeLength<TYPE_DECIMALV2>::value, get_size_of_fixed_length_type(TYPE_DECIMALV2));
+    EXPECT_EQ(RunTimeFixedTypeLength<TYPE_DECIMAL32>::value, get_size_of_fixed_length_type(TYPE_DECIMAL32));
+    EXPECT_EQ(RunTimeFixedTypeLength<TYPE_DECIMAL64>::value, get_size_of_fixed_length_type(TYPE_DECIMAL64));
+    EXPECT_EQ(RunTimeFixedTypeLength<TYPE_DECIMAL128>::value, get_size_of_fixed_length_type(TYPE_DECIMAL128));
+    EXPECT_EQ(RunTimeFixedTypeLength<TYPE_DECIMAL256>::value, get_size_of_fixed_length_type(TYPE_DECIMAL256));
+    EXPECT_EQ(RunTimeFixedTypeLength<TYPE_DATE>::value, get_size_of_fixed_length_type(TYPE_DATE));
+    EXPECT_EQ(RunTimeFixedTypeLength<TYPE_DATETIME>::value, get_size_of_fixed_length_type(TYPE_DATETIME));
+
+    EXPECT_EQ(0, get_size_of_fixed_length_type(TYPE_VARCHAR));
+    EXPECT_EQ(0, get_size_of_fixed_length_type(TYPE_JSON));
+    EXPECT_EQ(0, get_size_of_fixed_length_type(TYPE_HLL));
+    EXPECT_EQ(0, get_size_of_fixed_length_type(TYPE_ARRAY));
+}
+
 TEST(TypeTraitsCoreTest, JsonLimits) {
     auto min_json = RunTimeTypeLimits<TYPE_JSON>::min_value();
     auto max_json = RunTimeTypeLimits<TYPE_JSON>::max_value();

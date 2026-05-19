@@ -1,0 +1,43 @@
+-- name: test_colocate_range_group_by_prefix @cloud @sequential
+set enable_range_distribution = true;
+-- result:
+-- !result
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+create table t (k1 int, k2 int, v int)
+    order by(k1, k2)
+    properties('replication_num' = '1', 'colocate_with' = 'grp_agg_${uuid0}:k1');
+-- result:
+-- !result
+insert into t (k1, k2, v)
+select cast(x % 4 as int), x, x from table(generate_series(1, 40)) as g(x);
+-- result:
+-- !result
+select k1, count(*) from t group by k1 order by k1;
+-- result:
+0	10
+1	10
+2	10
+3	10
+-- !result
+select k1, sum(v) from t group by k1 order by k1;
+-- result:
+0	220
+1	190
+2	200
+3	210
+-- !result
+select count(*) from t;
+-- result:
+40
+-- !result
+drop table t;
+-- result:
+-- !result
+drop database db_${uuid0};
+-- result:
+-- !result

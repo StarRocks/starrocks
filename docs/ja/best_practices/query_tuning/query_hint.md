@@ -54,14 +54,6 @@ SELECT /*+ SET_VAR (streaming_preaggregation_mode = 'force_streaming', new_plann
        SUM(sales_amount) AS total_sales_amount  
 FROM t;
 
--- サブクエリでヒントを指定するには
-WITH t AS (  
-  SELECT /*+ SET_VAR (streaming_preaggregation_mode = 'force_streaming') */  
-         region, sales_amount  
-  FROM sales_orders  
-)  
-SELECT SUM(sales_amount) AS total_sales_amount  
-FROM t;
 ```
 
 ## ユーザー定義変数ヒント

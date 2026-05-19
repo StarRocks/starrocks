@@ -37,6 +37,7 @@ set(EXPR_CORE_FILES
   cast_expr_map.cpp
   chunk_predicate_evaluator.cpp
   column_ref.cpp
+  column_access_path_resolver.cpp
   compound_predicate.cpp
   condition_expr.cpp
   encryption_functions.cpp
@@ -81,6 +82,7 @@ ADD_BE_LIB(ExprCore ${EXPR_CORE_FILES})
 target_link_libraries(ExprCore PUBLIC RuntimeCore)
 
 set(EXPR_FILES
+  agg/data_sketch/ds_hll.cpp
   agg/data_sketch/ds_theta.cpp
   agg/factory/aggregate_factory.cpp
   agg/factory/aggregate_resolver_approx.cpp

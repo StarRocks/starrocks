@@ -46,6 +46,8 @@ public:
         return _source_stream->get_numeric_statistics();
     }
 
+    IoStatsSnapshot get_io_stats_snapshot() const override;
+
 private:
     // Used to store the compressed data read from |_source_stream|.
     class CompressedBuffer {
@@ -93,6 +95,8 @@ public:
     StatusOr<std::unique_ptr<NumericStatistics>> get_numeric_statistics() override {
         return _source->get_numeric_statistics();
     }
+
+    IoStatsSnapshot get_io_stats_snapshot() const override;
 
     Status seek(int64_t position) override { return Status::NotSupported(""); }
     StatusOr<int64_t> position() override { return Status::NotSupported(""); }

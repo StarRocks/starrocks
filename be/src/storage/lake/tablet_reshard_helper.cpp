@@ -15,11 +15,131 @@
 #include "storage/lake/tablet_reshard_helper.h"
 
 #include <algorithm>
+#include <numeric>
 
+#include "common/logging.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/tablet_range.h"
 
 namespace starrocks::lake::tablet_reshard_helper {
+
+void allocate_proportionally(int64_t total, const std::vector<int64_t>& weights, std::vector<int64_t>* out) {
+    DCHECK(out != nullptr);
+    DCHECK_GE(total, 0);
+    DCHECK_EQ(weights.size(), out->size());
+    DCHECK(!weights.empty());
+    for (auto w : weights) DCHECK_GE(w, 0);
+
+    const size_t n = weights.size();
+
+    if (total == 0) {
+        std::fill(out->begin(), out->end(), 0);
+        return;
+    }
+
+    __int128 sum_w = 0;
+    for (auto w : weights) sum_w += static_cast<__int128>(w);
+
+    // All-zero weights with non-zero total: deterministic uniform fallback.
+    // Allocate floor(total/N) to each, +1 to the lowest indices to absorb the
+    // remainder. Preserves Σ exactly without stranding any of the total.
+    if (sum_w == 0) {
+        const int64_t base = total / static_cast<int64_t>(n);
+        const int64_t leftover = total - base * static_cast<int64_t>(n);
+        for (size_t i = 0; i < n; ++i) {
+            (*out)[i] = base + (static_cast<int64_t>(i) < leftover ? 1 : 0);
+        }
+        return;
+    }
+
+    // Largest-remainder method. base[i] = floor(total * w[i] / sum_w);
+    // remainder[i] = (total * w[i]) mod sum_w. The total minus Σ base[i]
+    // is the leftover (always in [0, n)) and is distributed +1 each to the
+    // entries with the largest fractional remainders, breaking ties by
+    // ascending index for determinism.
+    //
+    // remainder is stored as __int128 because rem can be in [0, sum_w) and
+    // sum_w may itself exceed INT64_MAX when there are many large weights;
+    // truncating to int64_t there would corrupt the largest-remainder ordering.
+    // numerator and base also stay in __int128: numerator = total * weights[i]
+    // ≤ INT64_MAX * INT64_MAX ≈ 8.5e37, well within __int128's ~1.7e38 limit.
+    std::vector<__int128> remainders(n, 0);
+    int64_t sum_base = 0;
+    for (size_t i = 0; i < n; ++i) {
+        if (weights[i] == 0) {
+            (*out)[i] = 0;
+            remainders[i] = 0;
+            continue;
+        }
+        const __int128 numerator = static_cast<__int128>(total) * static_cast<__int128>(weights[i]);
+        const __int128 base = numerator / sum_w;
+        const __int128 rem = numerator - base * sum_w;
+        (*out)[i] = static_cast<int64_t>(base);
+        remainders[i] = rem;
+        sum_base += static_cast<int64_t>(base);
+    }
+    int64_t leftover = total - sum_base;
+
+    if (leftover > 0) {
+        std::vector<size_t> order(n);
+        std::iota(order.begin(), order.end(), 0);
+        std::sort(order.begin(), order.end(), [&](size_t a, size_t b) {
+            if (remainders[a] != remainders[b]) return remainders[a] > remainders[b];
+            return a < b;
+        });
+        for (size_t k = 0; k < n && leftover > 0; ++k, --leftover) {
+            (*out)[order[k]]++;
+        }
+    }
+
+#ifndef NDEBUG
+    int64_t actual_sum = 0;
+    for (auto v : *out) actual_sum += v;
+    DCHECK_EQ(actual_sum, total);
+#endif
+}
+
+void cap_and_redistribute_dels(const std::vector<int64_t>& rows, std::vector<int64_t>* dels) {
+    DCHECK(dels != nullptr);
+    DCHECK_EQ(rows.size(), dels->size());
+    for (auto r : rows) DCHECK_GE(r, 0);
+    for (auto d : *dels) DCHECK_GE(d, 0);
+
+    const size_t n = rows.size();
+
+    // Cap each (*dels)[i] to rows[i]; accumulate the over-cap mass as overflow.
+    int64_t overflow = 0;
+    for (size_t i = 0; i < n; ++i) {
+        if ((*dels)[i] > rows[i]) {
+            overflow += (*dels)[i] - rows[i];
+            (*dels)[i] = rows[i];
+        }
+    }
+    if (overflow == 0) return;
+
+    // Redistribute overflow to buckets with headroom, ordered by
+    // (headroom desc, index asc) for deterministic output.
+    std::vector<size_t> order(n);
+    std::iota(order.begin(), order.end(), 0);
+    std::sort(order.begin(), order.end(), [&](size_t a, size_t b) {
+        const int64_t ha = rows[a] - (*dels)[a];
+        const int64_t hb = rows[b] - (*dels)[b];
+        if (ha != hb) return ha > hb;
+        return a < b;
+    });
+    for (size_t idx : order) {
+        if (overflow <= 0) break;
+        const int64_t headroom = rows[idx] - (*dels)[idx];
+        if (headroom <= 0) break; // remaining are zero-headroom under desc sort
+        const int64_t take = std::min(headroom, overflow);
+        (*dels)[idx] += take;
+        overflow -= take;
+    }
+    // overflow > 0 here only if the input violated the feasibility precondition
+    // (Σ pre-cap dels > Σ rows). The post-condition becomes Σ dels == Σ rows
+    // (the maximum feasible) with per-bucket cap honored, matching the
+    // best-effort contract in tablet_reshard_helper.h.
+}
 
 void set_all_data_files_shared(RowsetMetadataPB* rowset_metadata) {
     auto* shared_segments = rowset_metadata->mutable_shared_segments();
@@ -161,6 +281,161 @@ StatusOr<TabletRangePB> union_range(const TabletRangePB& lhs_pb, const TabletRan
     TabletRangePB result_pb;
     result.to_proto(&result_pb);
     return result_pb;
+}
+
+// Compare lower-bound positions between two ranges. Unbounded lower (-∞) is
+// smallest; otherwise compare values, then prefer included over excluded as
+// the smaller (it covers the boundary point).
+static int compare_lower_position(const TabletRange& a, const TabletRange& b) {
+    if (a.is_minimum() && b.is_minimum()) return 0;
+    if (a.is_minimum()) return -1;
+    if (b.is_minimum()) return 1;
+    int c = a.lower_bound().compare(b.lower_bound());
+    if (c != 0) return c;
+    if (a.lower_bound_included() == b.lower_bound_included()) return 0;
+    return a.lower_bound_included() ? -1 : 1;
+}
+
+// True iff |first| (with first.lower <= second.lower) extends to or past
+// |second|.lower without leaving a gap. Caller guarantees the ordering.
+static bool first_meets_second(const TabletRange& first, const TabletRange& second) {
+    if (first.is_maximum()) return true; // first covers everything to the right
+    if (second.is_minimum())
+        return true; // second covers everything to the left,
+                     //   which forces first.lower == -∞ too
+    int c = first.upper_bound().compare(second.lower_bound());
+    if (c < 0) return false; // strict gap
+    if (c > 0) return true;  // overlap
+    return first.upper_bound_included() || second.lower_bound_included();
+}
+
+bool ranges_are_contiguous(const TabletRangePB& lhs_pb, const TabletRangePB& rhs_pb) {
+    TabletRange lhs;
+    if (!lhs.from_proto(lhs_pb).ok()) return false;
+    TabletRange rhs;
+    if (!rhs.from_proto(rhs_pb).ok()) return false;
+    if (lhs.is_empty() || rhs.is_empty()) return false;
+
+    const TabletRange* first = &lhs;
+    const TabletRange* second = &rhs;
+    if (compare_lower_position(lhs, rhs) > 0) std::swap(first, second);
+    return first_meets_second(*first, *second);
+}
+
+StatusOr<std::vector<TabletRangePB>> sort_and_merge_adjacent_ranges(std::vector<TabletRangePB> ranges) {
+    std::vector<TabletRange> tr;
+    tr.reserve(ranges.size());
+    for (const auto& r : ranges) {
+        TabletRange tmp;
+        RETURN_IF_ERROR(tmp.from_proto(r));
+        if (!tmp.is_empty()) {
+            tr.push_back(std::move(tmp));
+        }
+    }
+
+    std::sort(tr.begin(), tr.end(),
+              [](const TabletRange& a, const TabletRange& b) { return compare_lower_position(a, b) < 0; });
+
+    std::vector<TabletRange> merged;
+    for (auto& cur : tr) {
+        if (merged.empty()) {
+            merged.push_back(std::move(cur));
+            continue;
+        }
+        auto& last = merged.back();
+        if (first_meets_second(last, cur)) {
+            // Overlap or touch with compatible included → merge via union.
+            last = last.union_with(cur);
+        } else {
+            merged.push_back(std::move(cur));
+        }
+    }
+
+    std::vector<TabletRangePB> result;
+    result.reserve(merged.size());
+    for (const auto& r : merged) {
+        result.emplace_back();
+        r.to_proto(&result.back());
+    }
+    return result;
+}
+
+StatusOr<std::vector<TabletRangePB>> compute_disjoint_gaps_within(
+        const TabletRangePB& bound_pb, const std::vector<TabletRangePB>& sorted_disjoint_children) {
+    TabletRange bound;
+    RETURN_IF_ERROR(bound.from_proto(bound_pb));
+    if (bound.is_empty()) return std::vector<TabletRangePB>{};
+
+    // Clip each child to within bound; drop empty post-clip.
+    std::vector<TabletRange> children;
+    children.reserve(sorted_disjoint_children.size());
+    for (const auto& c_pb : sorted_disjoint_children) {
+        TabletRange c;
+        RETURN_IF_ERROR(c.from_proto(c_pb));
+        if (c.is_empty()) continue;
+        ASSIGN_OR_RETURN(auto clipped, c.intersect(bound));
+        if (!clipped.is_empty()) {
+            children.push_back(std::move(clipped));
+        }
+    }
+
+    std::vector<TabletRangePB> result;
+
+    // Walk gap = [running_lower, child.lower); after last child, gap to bound.upper.
+    // running_* tracks the next-gap left edge. Initial value = bound's lower.
+    VariantTuple running_lower = bound.lower_bound();
+    bool running_lower_included = bound.is_minimum() ? false : bound.lower_bound_included();
+    bool running_lower_unbounded = bound.is_minimum();
+
+    auto emit_gap = [&](const VariantTuple& upper, bool upper_included, bool upper_unbounded) -> Status {
+        TabletRangePB pb;
+        if (!running_lower_unbounded) {
+            running_lower.to_proto(pb.mutable_lower_bound());
+            pb.set_lower_bound_included(running_lower_included);
+        }
+        if (!upper_unbounded) {
+            upper.to_proto(pb.mutable_upper_bound());
+            pb.set_upper_bound_included(upper_included);
+        }
+        TabletRange tr;
+        RETURN_IF_ERROR(tr.from_proto(pb));
+        if (!tr.is_empty()) {
+            result.push_back(std::move(pb));
+        }
+        return Status::OK();
+    };
+
+    for (const auto& child : children) {
+        // Left side of gap: [running_lower, child.lower) with flipped included.
+        if (!child.is_minimum()) {
+            RETURN_IF_ERROR(emit_gap(child.lower_bound(), !child.lower_bound_included(), false));
+        }
+        // Advance: if child reaches +∞, no further gap is possible.
+        if (child.is_maximum()) {
+            return result;
+        }
+        running_lower = child.upper_bound();
+        running_lower_included = !child.upper_bound_included();
+        running_lower_unbounded = false;
+    }
+
+    // Final gap: [running_lower, bound.upper].
+    RETURN_IF_ERROR(emit_gap(bound.upper_bound(), bound.is_maximum() ? false : bound.upper_bound_included(),
+                             bound.is_maximum()));
+    return result;
+}
+
+StatusOr<std::vector<TabletRangePB>> compute_non_contributed_ranges(
+        const std::vector<TabletRangePB>& sorted_disjoint_children) {
+    TabletRangePB unbounded; // empty PB is treated as (-∞, +∞)
+    return compute_disjoint_gaps_within(unbounded, sorted_disjoint_children);
+}
+
+const TabletRangePB& effective_child_local_range(const RowsetMetadataPB& rowset, const TabletMetadataPB& ctx_metadata) {
+    static const TabletRangePB kUnbounded;
+    if (rowset.has_range()) return rowset.range();
+    if (ctx_metadata.has_range()) return ctx_metadata.range();
+    return kUnbounded;
 }
 
 Status update_rowset_range(RowsetMetadataPB* rowset, const TabletRangePB& range) {
