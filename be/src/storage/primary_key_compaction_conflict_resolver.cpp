@@ -15,6 +15,7 @@
 #include "storage/primary_key_compaction_conflict_resolver.h"
 
 #include "base/debug/trace.h"
+#include "column/chunk_factory.h"
 #include "common/config_exec_fwd.h"
 #include "common/config_primary_key_fwd.h"
 #include "runtime/current_thread.h"
@@ -58,7 +59,7 @@ Status PrimaryKeyCompactionConflictResolver::execute() {
                     // only hold pkey, so can use larger chunk size
                     ChunkUniquePtr chunk_shared_ptr;
                     TRY_CATCH_BAD_ALLOC(chunk_shared_ptr =
-                                                ChunkHelper::new_chunk(pkey_schema, config::vector_chunk_size));
+                                                ChunkFactory::new_chunk(pkey_schema, config::vector_chunk_size));
                     auto chunk = chunk_shared_ptr.get();
                     auto batch_col = pk_column->clone();
                     vector<uint32_t> tmp_deletes;

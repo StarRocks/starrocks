@@ -16,6 +16,7 @@
 
 #include "base/time/time.h"
 #include "base/utility/defer_op.h"
+#include "column/chunk_factory.h"
 #include "common/config_compaction_fwd.h"
 #include "common/config_storage_fwd.h"
 #include "common/system/master_info.h"
@@ -92,7 +93,7 @@ Status HorizontalCompactionTask::execute(CancelFunc cancel_func, ThreadPool* flu
         writer->try_enable_pk_index_eager_build();
     }
 
-    auto chunk = ChunkHelper::new_chunk(schema, chunk_size);
+    auto chunk = ChunkFactory::new_chunk(schema, chunk_size);
     auto char_field_indexes = ChunkHelper::get_char_field_indexes(schema);
     std::vector<uint64_t> rssid_rowids;
     rssid_rowids.reserve(chunk_size);

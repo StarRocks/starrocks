@@ -61,37 +61,21 @@ public:
 
     static ColumnId max_column_id(const Schema& schema);
 
-    static Chunk* new_chunk_pooled(const Schema& schema, size_t n);
-    // a wrapper of new_chunk_pooled with memory check
-    static StatusOr<Chunk*> new_chunk_pooled_checked(const Schema& schema, size_t n);
-
     // Create an empty chunk according to the |slots| and reserve it of size |n|.
     static ChunkUniquePtr new_chunk(const std::vector<SlotDescriptor*>& slots, size_t n);
-    // Create an empty chunk according to the |schema| and reserve it of size |n|.
-    static ChunkUniquePtr new_chunk(const Schema& schema, size_t n);
     // Create an empty chunk according to the |tuple_desc| and reserve it of size |n|.
     static ChunkUniquePtr new_chunk(const TupleDescriptor& tuple_desc, size_t n);
     // a wrapper of new_chunk with memory check
-    static StatusOr<ChunkUniquePtr> new_chunk_checked(const Schema& schema, size_t n);
     static StatusOr<ChunkUniquePtr> new_chunk_checked(const std::vector<SlotDescriptor*>& slots, size_t n);
     static StatusOr<ChunkUniquePtr> new_chunk_checked(const TupleDescriptor& tuple_desc, size_t n);
     static StatusOr<Chunk> deserialize_chunk_pb_with_schema(const Schema& schema, std::string_view buff);
 
     // Create an empty mutable chunk according to the |slots| and reserve it of size |n|.
     static MutableChunkPtr new_mutable_chunk(const std::vector<SlotDescriptor*>& slots, size_t n);
-    static MutableChunkPtr new_mutable_chunk(const Schema& schema, size_t n);
     static MutableChunkPtr new_mutable_chunk(const TupleDescriptor& tuple_desc, size_t n);
     // a wrapper of new_mutable_chunk with memory check
-    static StatusOr<MutableChunkPtr> new_mutable_chunk_checked(const Schema& schema, size_t n);
     static StatusOr<MutableChunkPtr> new_mutable_chunk_checked(const std::vector<SlotDescriptor*>& slots, size_t n);
     static StatusOr<MutableChunkPtr> new_mutable_chunk_checked(const TupleDescriptor& tuple_desc, size_t n);
-
-    // Create a vectorized column from field .
-    // REQUIRE: |type| must be scalar type.
-    static MutableColumnPtr column_from_field_type(LogicalType type, bool nullable);
-
-    // Create a vectorized column from field.
-    static MutableColumnPtr column_from_field(const Field& field);
 
     // Get char column indexes
     static std::vector<size_t> get_char_field_indexes(const Schema& schema);

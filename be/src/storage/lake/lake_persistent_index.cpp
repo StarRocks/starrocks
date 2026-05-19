@@ -16,6 +16,7 @@
 
 #include "base/debug/trace.h"
 #include "base/utility/defer_op.h"
+#include "column/chunk_factory.h"
 #include "column/column_helper.h"
 #include "column/raw_data_visitor.h"
 #include "common/config_cache_fwd.h"
@@ -1142,7 +1143,7 @@ Status LakePersistentIndex::load_from_lake_tablet(TabletManager* tablet_mgr, con
     }
     vector<uint32_t> rowids;
     rowids.reserve(4096);
-    auto chunk_shared_ptr = ChunkHelper::new_chunk(pkey_schema, 4096);
+    auto chunk_shared_ptr = ChunkFactory::new_chunk(pkey_schema, 4096);
     auto chunk = chunk_shared_ptr.get();
     auto rowsets = Rowset::get_rowsets(tablet_mgr, metadata);
     int64_t get_next_cost_us = 0;
