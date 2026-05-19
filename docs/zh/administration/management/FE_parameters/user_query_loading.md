@@ -142,15 +142,6 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: 是否以 DEBUG 级别记录 OPA 响应状态码和 JSON 响应体。响应体可能包含策略表达式，因此仅建议在排查问题时启用。
 - 引入版本: v4.1.0
 
-### `opa_allow_permission_management_operations`
-
-- 默认值: false
-- 类型: Boolean
-- 单位: -
-- 是否可变: No
-- 描述: 启用 OPA 权限控制后，是否允许 GRANT、REVOKE 等权限管理操作。当该配置项为 false 时，StarRocks 不会查询 OPA，而是直接拒绝这些操作。
-- 引入版本: v4.1.0
-
 ### `privilege_max_role_depth`
 
 - 默认值: 16

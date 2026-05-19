@@ -15,8 +15,10 @@
 package com.starrocks.authorization.opa;
 
 import com.google.common.collect.Maps;
+import com.starrocks.authorization.AccessController;
 import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.authorization.ExternalAccessController;
+import com.starrocks.authorization.NativeAccessController;
 import com.starrocks.authorization.ObjectType;
 import com.starrocks.authorization.PEntryObject;
 import com.starrocks.authorization.PrivilegeType;
@@ -26,7 +28,6 @@ import com.starrocks.catalog.Function;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.TableName;
 import com.starrocks.catalog.UserIdentity;
-import com.starrocks.common.Config;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.pipe.PipeName;
@@ -40,22 +41,26 @@ import java.util.stream.Collectors;
 
 public class OpaAccessController extends ExternalAccessController implements AutoCloseable {
     private final OpaPolicyClient opaClient;
-    private final boolean allowPermissionManagementOperations;
+    private final AccessController nativeAccessController;
 
     public OpaAccessController() {
-        this(new OpaHttpClient(), Config.opa_allow_permission_management_operations);
+        this(new OpaHttpClient());
     }
 
-    OpaAccessController(OpaPolicyClient opaClient, boolean allowPermissionManagementOperations) {
+    OpaAccessController(OpaPolicyClient opaClient) {
+        this(opaClient, new NativeAccessController());
+    }
+
+    OpaAccessController(OpaPolicyClient opaClient, AccessController nativeAccessController) {
         this.opaClient = opaClient;
-        this.allowPermissionManagementOperations = allowPermissionManagementOperations;
+        this.nativeAccessController = nativeAccessController;
     }
 
     @Override
     public void checkSystemAction(ConnectContext context, PrivilegeType privilegeType)
             throws AccessDeniedException {
         if (isPermissionManagementOperation(privilegeType)) {
-            checkPermissionManagementOperation();
+            nativeAccessController.checkSystemAction(context, privilegeType);
             return;
         }
         check(context, privilegeType, ObjectType.SYSTEM, OpaResource.system());
@@ -240,7 +245,7 @@ public class OpaAccessController extends ExternalAccessController implements Aut
     @Override
     public void withGrantOption(ConnectContext context, ObjectType type, List<PrivilegeType> wants,
                                 List<PEntryObject> objects) throws AccessDeniedException {
-        checkPermissionManagementOperation();
+        nativeAccessController.withGrantOption(context, type, wants, objects);
     }
 
     @Override
@@ -320,12 +325,6 @@ public class OpaAccessController extends ExternalAccessController implements Aut
 
     private boolean isPermissionManagementOperation(PrivilegeType privilegeType) {
         return PrivilegeType.GRANT.equals(privilegeType);
-    }
-
-    private void checkPermissionManagementOperation() throws AccessDeniedException {
-        if (!allowPermissionManagementOperations) {
-            throw new AccessDeniedException();
-        }
     }
 
     private Expr parsePolicyExpression(String expression, ConnectContext context) {

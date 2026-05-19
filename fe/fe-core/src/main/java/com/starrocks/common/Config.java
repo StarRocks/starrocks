@@ -3969,9 +3969,6 @@ public class Config extends ConfigBase {
     @ConfField
     public static boolean opa_log_responses = false;
 
-    @ConfField
-    public static boolean opa_allow_permission_management_operations = false;
-
     /**
      * Whether to use the unix group as the ranger authentication group
      */

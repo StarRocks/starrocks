@@ -17,9 +17,11 @@ package com.starrocks.authorization.opa;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.authorization.AccessControlProvider;
+import com.starrocks.authorization.AccessController;
 import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.authorization.NativeAccessController;
 import com.starrocks.authorization.ObjectType;
+import com.starrocks.authorization.PEntryObject;
 import com.starrocks.authorization.PrivilegeType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.TableName;
@@ -79,7 +81,7 @@ public class OpaAccessControllerTest {
     @Test
     public void testCheckTableActionAllowsAndBuildsRequest() throws Exception {
         FakeOpaPolicyClient client = new FakeOpaPolicyClient();
-        OpaAccessController controller = new OpaAccessController(client, false);
+        OpaAccessController controller = new OpaAccessController(client);
 
         controller.checkTableAction(context(), new TableName("default_catalog", "db1", "tbl1"), PrivilegeType.SELECT);
 
@@ -99,7 +101,7 @@ public class OpaAccessControllerTest {
     public void testDeniedThrows() {
         FakeOpaPolicyClient client = new FakeOpaPolicyClient();
         client.allow = false;
-        OpaAccessController controller = new OpaAccessController(client, false);
+        OpaAccessController controller = new OpaAccessController(client);
 
         Assertions.assertThrows(AccessDeniedException.class, () -> controller.checkCatalogAction(
                 context(), "default_catalog", PrivilegeType.USAGE));
@@ -108,7 +110,7 @@ public class OpaAccessControllerTest {
     @Test
     public void testPermission() {
         FakeOpaPolicyClient client = new FakeOpaPolicyClient();
-        OpaAccessController controller = new OpaAccessController(client, false);
+        OpaAccessController controller = new OpaAccessController(client);
 
         Assertions.assertDoesNotThrow(() -> controller.checkSystemAction(context(), PrivilegeType.OPERATE));
 
@@ -121,7 +123,7 @@ public class OpaAccessControllerTest {
     public void testRootUserDoesNotBypassOpa() {
         FakeOpaPolicyClient client = new FakeOpaPolicyClient();
         client.allow = false;
-        OpaAccessController controller = new OpaAccessController(client, false);
+        OpaAccessController controller = new OpaAccessController(client);
         ConnectContext context = context();
         context.setCurrentUserIdentity(UserIdentity.ROOT);
 
@@ -131,19 +133,23 @@ public class OpaAccessControllerTest {
     }
 
     @Test
-    public void testPermissionManagementDisabledByDefault() {
+    public void testPermissionManagementUsesNativeAccessController() throws Exception {
         FakeOpaPolicyClient client = new FakeOpaPolicyClient();
-        OpaAccessController controller = new OpaAccessController(client, false);
+        AccessController nativeAccessController = Mockito.mock(AccessController.class);
+        Mockito.doThrow(new AccessDeniedException()).when(nativeAccessController)
+                .checkSystemAction(Mockito.any(), Mockito.eq(PrivilegeType.GRANT));
+        OpaAccessController controller = new OpaAccessController(client, nativeAccessController);
 
         Assertions.assertThrows(AccessDeniedException.class, () -> controller.checkSystemAction(
                 context(), PrivilegeType.GRANT));
         Assertions.assertTrue(client.accessRequests.isEmpty());
+        Mockito.verify(nativeAccessController).checkSystemAction(Mockito.any(), Mockito.eq(PrivilegeType.GRANT));
     }
 
     @Test
     public void testMaskingNull() {
         FakeOpaPolicyClient client = new FakeOpaPolicyClient();
-        OpaAccessController controller = new OpaAccessController(client, false);
+        OpaAccessController controller = new OpaAccessController(client);
 
         Map<String, Expr> masks = Assertions.assertDoesNotThrow(() -> controller.getColumnMaskingPolicy(context(),
                 new TableName("db", "tbl"), Lists.newArrayList(new Column("v1", IntegerType.INT))));
@@ -155,7 +161,7 @@ public class OpaAccessControllerTest {
     public void testMaskingExpr() {
         FakeOpaPolicyClient client = new FakeOpaPolicyClient();
         client.columnMasks.put("v1", "NULL");
-        OpaAccessController controller = new OpaAccessController(client, false);
+        OpaAccessController controller = new OpaAccessController(client);
 
         Map<String, Expr> masks = controller.getColumnMaskingPolicy(context(), new TableName("db", "tbl"),
                 Lists.newArrayList(new Column("v1", IntegerType.INT)));
@@ -168,20 +174,23 @@ public class OpaAccessControllerTest {
     }
 
     @Test
-    public void testPermissionManagementCanBeAllowedWithoutOpaRoundTrip() throws Exception {
+    public void testWithGrantOptionUsesNativeAccessController() throws Exception {
         FakeOpaPolicyClient client = new FakeOpaPolicyClient();
-        OpaAccessController controller = new OpaAccessController(client, true);
+        AccessController nativeAccessController = Mockito.mock(AccessController.class);
+        OpaAccessController controller = new OpaAccessController(client, nativeAccessController);
 
-        controller.checkSystemAction(context(), PrivilegeType.GRANT);
+        controller.withGrantOption(context(), ObjectType.TABLE, List.of(PrivilegeType.SELECT), List.<PEntryObject>of());
 
         Assertions.assertTrue(client.accessRequests.isEmpty());
+        Mockito.verify(nativeAccessController).withGrantOption(Mockito.any(), Mockito.eq(ObjectType.TABLE),
+                Mockito.eq(List.of(PrivilegeType.SELECT)), Mockito.eq(List.<PEntryObject>of()));
     }
 
     @Test
     public void testRowFiltersAreCombined() {
         FakeOpaPolicyClient client = new FakeOpaPolicyClient();
         client.rowFilters = List.of("v1 = 1", "v2 = 2");
-        OpaAccessController controller = new OpaAccessController(client, false);
+        OpaAccessController controller = new OpaAccessController(client);
 
         Expr rowFilter = controller.getRowAccessPolicy(context(), new TableName("default_catalog", "db1", "tbl1"));
 
@@ -193,7 +202,7 @@ public class OpaAccessControllerTest {
     public void testRowAccessExpr() {
         FakeOpaPolicyClient client = new FakeOpaPolicyClient();
         client.rowFilters = List.of("v1 = 1");
-        OpaAccessController controller = new OpaAccessController(client, false);
+        OpaAccessController controller = new OpaAccessController(client);
 
         Expr rowFilter = controller.getRowAccessPolicy(context(), new TableName("db", "tbl"));
 
@@ -205,7 +214,7 @@ public class OpaAccessControllerTest {
         FakeOpaPolicyClient client = new FakeOpaPolicyClient();
         client.supportBatch = true;
         client.batchMasks.put("v1", "NULL");
-        OpaAccessController controller = new OpaAccessController(client, false);
+        OpaAccessController controller = new OpaAccessController(client);
 
         Map<String, Expr> masks = controller.getColumnMaskingPolicy(context(),
                 new TableName("default_catalog", "db1", "tbl1"),
@@ -220,7 +229,7 @@ public class OpaAccessControllerTest {
     public void testPerColumnMaskFallback() {
         FakeOpaPolicyClient client = new FakeOpaPolicyClient();
         client.columnMasks.put("v1", "NULL");
-        OpaAccessController controller = new OpaAccessController(client, false);
+        OpaAccessController controller = new OpaAccessController(client);
 
         Map<String, Expr> masks = controller.getColumnMaskingPolicy(context(),
                 new TableName("default_catalog", "db1", "tbl1"),
@@ -234,7 +243,7 @@ public class OpaAccessControllerTest {
     public void testInvalidPolicyExpressionFailsClosed() {
         FakeOpaPolicyClient client = new FakeOpaPolicyClient();
         client.rowFilters = List.of("not a valid expression +");
-        OpaAccessController controller = new OpaAccessController(client, false);
+        OpaAccessController controller = new OpaAccessController(client);
 
         Assertions.assertThrows(OpaQueryException.class, () -> controller.getRowAccessPolicy(
                 context(), new TableName("default_catalog", "db1", "tbl1")));
@@ -247,13 +256,13 @@ public class OpaAccessControllerTest {
         accessControlProvider.removeAccessControl("hive");
 
         accessControlProvider.setAccessControl("hive", new NativeAccessController());
-        accessControlProvider.setAccessControl("hive", new OpaAccessController(new FakeOpaPolicyClient(), false));
+        accessControlProvider.setAccessControl("hive", new OpaAccessController(new FakeOpaPolicyClient()));
         Assertions.assertTrue(accessControlProvider.getAccessControlOrDefault("hive") instanceof OpaAccessController);
         accessControlProvider.removeAccessControl("hive");
 
         Assertions.assertTrue(accessControlProvider.getAccessControlOrDefault("hive") instanceof NativeAccessController);
 
-        accessControlProvider.setAccessControl("hive", new OpaAccessController(new FakeOpaPolicyClient(), false));
+        accessControlProvider.setAccessControl("hive", new OpaAccessController(new FakeOpaPolicyClient()));
         Assertions.assertTrue(accessControlProvider.getAccessControlOrDefault("hive") instanceof OpaAccessController);
         accessControlProvider.setAccessControl("hive", new NativeAccessController());
         Assertions.assertTrue(accessControlProvider.getAccessControlOrDefault("hive") instanceof NativeAccessController);
@@ -262,7 +271,7 @@ public class OpaAccessControllerTest {
     @Test
     public void testAccessControlProviderClosesOpaController() {
         FakeOpaPolicyClient client = new FakeOpaPolicyClient();
-        OpaAccessController controller = new OpaAccessController(client, false);
+        OpaAccessController controller = new OpaAccessController(client);
         AccessControlProvider provider = new AccessControlProvider(null, new NativeAccessController());
 
         provider.setAccessControl("hive", controller);

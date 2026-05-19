@@ -142,15 +142,6 @@ This topic introduces the following types of FE configurations:
 - Description: Whether to log OPA response status codes and JSON response bodies at DEBUG level. Enable only for troubleshooting because responses can contain policy expressions.
 - Introduced in: v4.1.0
 
-### `opa_allow_permission_management_operations`
-
-- Default: false
-- Type: Boolean
-- Unit: -
-- Is mutable: No
-- Description: Whether to allow permission-management operations such as GRANT and REVOKE when OPA access control is enabled. When false, StarRocks denies these operations without querying OPA.
-- Introduced in: v4.1.0
-
 ### `privilege_max_role_depth`
 
 - Default: 16
