@@ -14,6 +14,7 @@
 
 package com.starrocks.cdc;
 
+import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PhysicalPartition;
@@ -21,6 +22,7 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.lake.bookmark.Bookmark;
 import com.starrocks.lake.bookmark.BookmarkChange;
 import com.starrocks.lake.bookmark.BookmarkHolder;
+import com.starrocks.lake.bookmark.BookmarkLogEntry;
 import com.starrocks.lake.bookmark.BookmarkManager;
 import com.starrocks.lake.bookmark.BookmarkRange;
 import com.starrocks.lake.bookmark.BookmarkTestBase;
@@ -40,8 +42,6 @@ import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
-import java.util.ArrayList;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -139,74 +139,85 @@ public class ChangesBookmarkResolutionTest extends BookmarkTestBase {
     }
 
     @Test
-    public void testDroppedNotTrackableMessage() throws Exception {
+    public void testBuildRejectsPartitionDropped() throws Exception {
         String tableName = "dup_drop_" + TABLE_COUNTER.getAndIncrement();
         long tableId = createDupTable(tableName);
         OlapTable live = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
                 .getDb(dbId).getTable(tableId);
+        live.maySetDatabaseId(dbId);
 
-        long logicalId = live.getPartitions().iterator().next().getId();
-        String partitionName = live.getPartition(logicalId).getName();
-        long physicalId = live.getPartition(logicalId).getSubPartitions().iterator().next().getId();
+        // base carries a phantom physical partition that head/live lacks → PartitionDropped.
+        long phantomLogicalId = 999_001L;
+        long phantomPhysicalId = 999_002L;
+        Map<Long, Map<Long, PhysicalPartitionMeta>> baseParts = liveSnapshot(live);
+        baseParts.computeIfAbsent(phantomLogicalId, k -> new HashMap<>())
+                .put(phantomPhysicalId, new PhysicalPartitionMeta(1L, 1L, 1L, 0L));
+        Bookmark base = synthesizeAndRegister(tableId, baseParts);
+        Bookmark head = synthesizeAndRegister(tableId, liveSnapshot(live));
 
-        BookmarkChange diff = buildSingletonDiff(
-                logicalId,
-                new BookmarkChange.PartitionDropped(logicalId, physicalId,
-                        new PhysicalPartitionMeta(1L, 1L, 1L, 0L)));
-
-        String msg = CdcScanHelper.formatNotTrackableMessage(diff, live);
-        String expected = "CHANGES not trackable: physical partition '" + partitionName
-                + "' has been dropped or truncated between base and head";
-        assertTrue(msg.contains(expected),
-                "expected message to contain '" + expected + "', got: " + msg);
+        SemanticException ex = assertThrows(SemanticException.class,
+                () -> CdcScanHelper.build(
+                        live,
+                        new BookmarkRange(base.getBookmarkId(), head.getBookmarkId()),
+                        new HashMap<>(),
+                        new HashMap<>()));
+        String expected = String.format(
+                "CHANGES from bookmark %d to %d on table '%s' not trackable: physical partition %d dropped",
+                base.getBookmarkId(), head.getBookmarkId(), tableName, phantomPhysicalId);
+        assertTrue(ex.getMessage().contains(expected),
+                "expected message to contain '" + expected + "', got: " + ex.getMessage());
     }
 
     @Test
-    public void testIndexReplacedNotTrackableMessage() throws Exception {
+    public void testBuildRejectsIndexReplaced() throws Exception {
         String tableName = "dup_idx_" + TABLE_COUNTER.getAndIncrement();
         long tableId = createDupTable(tableName);
         OlapTable live = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
                 .getDb(dbId).getTable(tableId);
+        live.maySetDatabaseId(dbId);
 
-        long logicalId = live.getPartitions().iterator().next().getId();
-        String partitionName = live.getPartition(logicalId).getName();
-        long physicalId = live.getPartition(logicalId).getSubPartitions().iterator().next().getId();
+        Bookmark base = synthesizeAndRegister(tableId, liveSnapshot(live));
+        Map<Long, Map<Long, PhysicalPartitionMeta>> headParts = liveSnapshot(live);
+        long shiftedPhysicalId = shiftFirstPhysical(headParts, /* shiftMetaId = */ true);
+        Bookmark head = synthesizeAndRegister(tableId, headParts);
 
-        BookmarkChange diff = buildSingletonDiff(
-                logicalId,
-                new BookmarkChange.IndexReplaced(logicalId, physicalId,
-                        new PhysicalPartitionMeta(1L, 1L, 1L, 0L),
-                        new PhysicalPartitionMeta(2L, 2L, 2L, 0L)));
-
-        String msg = CdcScanHelper.formatNotTrackableMessage(diff, live);
-        String expected = "CHANGES not trackable: physical partition '" + partitionName
-                + "' has been modified in a way that rewrote its data";
-        assertTrue(msg.contains(expected),
-                "expected message to contain '" + expected + "', got: " + msg);
+        SemanticException ex = assertThrows(SemanticException.class,
+                () -> CdcScanHelper.build(
+                        live,
+                        new BookmarkRange(base.getBookmarkId(), head.getBookmarkId()),
+                        new HashMap<>(),
+                        new HashMap<>()));
+        String expected = String.format(
+                "CHANGES from bookmark %d to %d on table '%s' not trackable: physical partition %d rewritten",
+                base.getBookmarkId(), head.getBookmarkId(), tableName, shiftedPhysicalId);
+        assertTrue(ex.getMessage().contains(expected),
+                "expected message to contain '" + expected + "', got: " + ex.getMessage());
     }
 
     @Test
-    public void testTabletReshardNotTrackableMessage() throws Exception {
+    public void testBuildRejectsTabletReshard() throws Exception {
         String tableName = "dup_resh_" + TABLE_COUNTER.getAndIncrement();
         long tableId = createDupTable(tableName);
         OlapTable live = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
                 .getDb(dbId).getTable(tableId);
+        live.maySetDatabaseId(dbId);
 
-        long logicalId = live.getPartitions().iterator().next().getId();
-        String partitionName = live.getPartition(logicalId).getName();
-        long physicalId = live.getPartition(logicalId).getSubPartitions().iterator().next().getId();
+        Bookmark base = synthesizeAndRegister(tableId, liveSnapshot(live));
+        Map<Long, Map<Long, PhysicalPartitionMeta>> headParts = liveSnapshot(live);
+        long shiftedPhysicalId = shiftFirstPhysical(headParts, /* shiftMetaId = */ false);
+        Bookmark head = synthesizeAndRegister(tableId, headParts);
 
-        BookmarkChange diff = buildSingletonDiff(
-                logicalId,
-                new BookmarkChange.TabletReshard(logicalId, physicalId,
-                        new PhysicalPartitionMeta(1L, 1L, 1L, 0L),
-                        new PhysicalPartitionMeta(2L, 1L, 1L, 0L)));
-
-        String msg = CdcScanHelper.formatNotTrackableMessage(diff, live);
-        String expected = "CHANGES not trackable: physical partition '" + partitionName
-                + "' has been redistributed";
-        assertTrue(msg.contains(expected),
-                "expected message to contain '" + expected + "', got: " + msg);
+        SemanticException ex = assertThrows(SemanticException.class,
+                () -> CdcScanHelper.build(
+                        live,
+                        new BookmarkRange(base.getBookmarkId(), head.getBookmarkId()),
+                        new HashMap<>(),
+                        new HashMap<>()));
+        String expected = String.format(
+                "CHANGES from bookmark %d to %d on table '%s' not trackable: physical partition %d resharded",
+                base.getBookmarkId(), head.getBookmarkId(), tableName, shiftedPhysicalId);
+        assertTrue(ex.getMessage().contains(expected),
+                "expected message to contain '" + expected + "', got: " + ex.getMessage());
     }
 
     @Test
@@ -265,14 +276,56 @@ public class ChangesBookmarkResolutionTest extends BookmarkTestBase {
         }
     }
 
-    /** Wrap a single PhysicalPartitionChange in the per-logical-partition map a BookmarkChange expects. */
-    private static BookmarkChange buildSingletonDiff(long logicalId,
-                                                     BookmarkChange.PhysicalPartitionChange change) {
-        Map<Long, List<BookmarkChange.PhysicalPartitionChange>> changes = new HashMap<>();
-        List<BookmarkChange.PhysicalPartitionChange> row = new ArrayList<>();
-        row.add(change);
-        changes.put(logicalId, row);
-        return new BookmarkChange(Collections.unmodifiableMap(changes));
+    /** Capture {@code live}'s current partition state in the map shape a Bookmark holds. */
+    private static Map<Long, Map<Long, PhysicalPartitionMeta>> liveSnapshot(OlapTable live) {
+        Map<Long, Map<Long, PhysicalPartitionMeta>> parts = new HashMap<>();
+        for (Partition p : live.getPartitions()) {
+            Map<Long, PhysicalPartitionMeta> inner = new HashMap<>();
+            for (PhysicalPartition pp : p.getSubPartitions()) {
+                MaterializedIndex idx = pp.getLatestBaseIndex();
+                inner.put(pp.getId(), new PhysicalPartitionMeta(
+                        idx.getId(), idx.getMetaId(),
+                        pp.getVisibleVersion(), pp.getVisibleVersionTime()));
+            }
+            parts.put(p.getId(), inner);
+        }
+        return parts;
+    }
+
+    /**
+     * Shift {@code baseMaterializedIndexMetaId} (when {@code shiftMetaId} is true)
+     * or {@code baseMaterializedIndexId} (otherwise) on the first physical partition
+     * in {@code parts}. Returns the physical-partition id that was mutated.
+     */
+    private static long shiftFirstPhysical(Map<Long, Map<Long, PhysicalPartitionMeta>> parts,
+                                           boolean shiftMetaId) {
+        for (Map<Long, PhysicalPartitionMeta> inner : parts.values()) {
+            for (Map.Entry<Long, PhysicalPartitionMeta> e : inner.entrySet()) {
+                PhysicalPartitionMeta m = e.getValue();
+                long indexId = m.getBaseMaterializedIndexId();
+                long metaId = m.getBaseMaterializedIndexMetaId();
+                if (shiftMetaId) {
+                    metaId += 1;
+                } else {
+                    indexId += 1;
+                }
+                e.setValue(new PhysicalPartitionMeta(indexId, metaId,
+                        m.getVisibleVersion(), m.getVisibleVersionTimeMs()));
+                return e.getKey();
+            }
+        }
+        throw new IllegalStateException("no physical partitions to shift");
+    }
+
+    private static Bookmark synthesizeAndRegister(long tableId,
+                                                  Map<Long, Map<Long, PhysicalPartitionMeta>> parts) {
+        long bookmarkId = GlobalStateMgr.getCurrentState().getNextId();
+        long bookmarkTimeMs = System.currentTimeMillis();
+        Bookmark b = new Bookmark(dbId, tableId, bookmarkId, bookmarkTimeMs, parts);
+        GlobalStateMgr.getCurrentState().getBookmarkManager()
+                .replay(BookmarkLogEntry.AddBookmark.of(
+                        b, BookmarkHolder.forEmptyInfo("synthetic"), bookmarkTimeMs));
+        return b;
     }
 
     private static LogicalChangesScanOperator findChangesScan(OptExpression root) {

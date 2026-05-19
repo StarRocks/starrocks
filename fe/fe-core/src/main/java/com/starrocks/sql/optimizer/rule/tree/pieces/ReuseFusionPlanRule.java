@@ -90,27 +90,8 @@ public class ReuseFusionPlanRule implements TreeRewriteRule {
         return !fusionPieces.isEmpty();
     }
 
-    private static boolean containsChangesScan(OptExpression root) {
-        OperatorType type = root.getOp().getOpType();
-        if (type == OperatorType.LOGICAL_CHANGES_SCAN || type == OperatorType.PHYSICAL_CHANGES_SCAN) {
-            return true;
-        }
-        for (OptExpression child : root.getInputs()) {
-            if (containsChangesScan(child)) {
-                return true;
-            }
-        }
-        return false;
-    }
-
     @Override
     public OptExpression rewrite(OptExpression root, TaskContext taskContext) {
-        // CHANGES scans surface virtual __CHANGE_TYPE__ / __ROW_VERSION__ columns
-        // for which PiecesPlanTransformer's column-meta map has no entry, producing
-        // a NullPointerException when an Aggregate sits over the scan.
-        if (containsChangesScan(root)) {
-            return root;
-        }
         factory = taskContext.getOptimizerContext().getColumnRefFactory();
         ctx = taskContext.getOptimizerContext().getConnectContext();
         PiecesPlanTransformer transformer = new PiecesPlanTransformer(factory);

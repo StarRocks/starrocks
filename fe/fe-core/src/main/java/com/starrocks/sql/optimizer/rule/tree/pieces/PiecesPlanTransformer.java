@@ -25,6 +25,7 @@ import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalChangesScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalMetaScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
@@ -66,11 +67,16 @@ class PiecesPlanTransformer {
         return true;
     }
 
+    /** Scan operators whose virtual columns or runtime contract pieces fusion can't handle yet. */
+    private static boolean isUnsupportedScanForPieces(Operator op) {
+        return op instanceof LogicalMetaScanOperator || op instanceof LogicalChangesScanOperator;
+    }
+
     public boolean isSPJGPieces(OptExpression tree) {
         if (!tree.getOp().getOpType().equals(OperatorType.LOGICAL_AGGR)) {
             return false;
         }
-        if (Util.getStream(tree).anyMatch(op -> op instanceof LogicalMetaScanOperator)) {
+        if (Util.getStream(tree).anyMatch(PiecesPlanTransformer::isUnsupportedScanForPieces)) {
             return false;
         }
         return checkTrees(tree.inputAt(0), op -> op.getOpType().equals(OperatorType.LOGICAL_PROJECT)

@@ -16,7 +16,6 @@ package com.starrocks.sql.optimizer.transformer;
 
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.OlapTable;
-import com.starrocks.catalog.Partition;
 import com.starrocks.lake.bookmark.Bookmark;
 import com.starrocks.lake.bookmark.BookmarkChange;
 import com.starrocks.lake.bookmark.BookmarkManager;
@@ -43,8 +42,6 @@ public final class CdcScanHelper {
 
     public static final String CDC_CHANGE_TYPE_COLUMN_NAME = "__CHANGE_TYPE__";
     public static final String CDC_ROW_VERSION_COLUMN_NAME = "__ROW_VERSION__";
-
-    private CdcScanHelper() {}
 
     /** Synthetic CDC metadata columns appended after the business columns. */
     public static List<Column> getCdcMetadataColumns() {
@@ -82,55 +79,31 @@ public final class CdcScanHelper {
                 .orElseThrow(() -> new SemanticException(String.format(
                         "bookmark %d not found on table '%s'", range.head(), table.getName())));
         BookmarkChange delta = BookmarkChange.computeChanges(base, head);
-        if (!delta.isTrackable()) {
-            throw new SemanticException(formatNotTrackableMessage(delta, table));
-        }
+        checkTrackable(delta, table.getName(), base.getBookmarkId(), head.getBookmarkId());
         OlapTable scopedTable = BookmarkScopedTableResolver.resolveByChange(table, delta);
         return new LogicalChangesScanOperator(
                 scopedTable, colRefToColumnMetaMap, columnMetaToColRefMap,
                 base, head, delta, Operator.DEFAULT_LIMIT);
     }
 
-    /**
-     * Render the invalidation message for each non-trackable physical-partition
-     * change in {@code delta}, joined with {@code "; "}. If the logical
-     * partition has been dropped (so the name is gone), the message falls back
-     * to {@code <id=N>} rather than dropping the entry — every reason in the
-     * delta must surface to the user.
-     */
-    public static String formatNotTrackableMessage(BookmarkChange delta, OlapTable table) {
-        StringBuilder sb = new StringBuilder();
-        for (Map.Entry<Long, List<BookmarkChange.PhysicalPartitionChange>> e :
-                delta.getChanges().entrySet()) {
-            for (BookmarkChange.PhysicalPartitionChange c : e.getValue()) {
+    /** Reject the first non-trackable physical-partition change in {@code delta}. */
+    private static void checkTrackable(BookmarkChange delta, String tableName, long baseId, long headId) {
+        for (List<BookmarkChange.PhysicalPartitionChange> changes : delta.getChanges().values()) {
+            for (BookmarkChange.PhysicalPartitionChange change : changes) {
                 String reason;
-                if (c instanceof BookmarkChange.PartitionDropped) {
-                    reason = "has been dropped or truncated between base and head";
-                } else if (c instanceof BookmarkChange.IndexReplaced) {
-                    reason = "has been modified in a way that rewrote its data";
-                } else if (c instanceof BookmarkChange.TabletReshard) {
-                    reason = "has been redistributed";
+                if (change instanceof BookmarkChange.PartitionDropped) {
+                    reason = "dropped";
+                } else if (change instanceof BookmarkChange.IndexReplaced) {
+                    reason = "rewritten";
+                } else if (change instanceof BookmarkChange.TabletReshard) {
+                    reason = "resharded";
                 } else {
                     continue;
                 }
-                if (sb.length() > 0) {
-                    sb.append("; ");
-                }
-                sb.append("CHANGES not trackable: physical partition '")
-                        .append(resolvePartitionName(table, c))
-                        .append("' ")
-                        .append(reason);
+                throw new SemanticException(String.format(
+                        "CHANGES from bookmark %d to %d on table '%s' not trackable: physical partition %d %s",
+                        baseId, headId, tableName, change.getPhysicalPartitionId(), reason));
             }
         }
-        return sb.toString();
-    }
-
-    private static String resolvePartitionName(OlapTable table,
-                                               BookmarkChange.PhysicalPartitionChange change) {
-        Partition logical = table.getPartition(change.getLogicalPartitionId());
-        if (logical != null) {
-            return logical.getName();
-        }
-        return "<id=" + change.getPhysicalPartitionId() + ">";
     }
 }

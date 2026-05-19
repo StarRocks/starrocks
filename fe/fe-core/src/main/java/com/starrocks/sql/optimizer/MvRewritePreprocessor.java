@@ -1210,5 +1210,4 @@ public class MvRewritePreprocessor {
 
         return distributionSpec;
     }
-
 }
