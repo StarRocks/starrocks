@@ -35,15 +35,14 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Grammar and analyzer-stage coverage for the [_CHANGES_<base>_<head>_] hint
- * on cloud-native OlapTable: one happy-path parse case plus the negative
- * grammar / mutex / analyzer guards.
+ * Grammar and analyzer-stage test for the [_CHANGES_&lt;base&gt;_&lt;head&gt;_] hint
+ * on cloud-native OlapTable.
  *
  * <p>Relies on BookmarkTestBase's SHARED_DATA mini-cluster so the cloud-native
  * guard in QueryAnalyzer never fires on the DUP / PK tables created here — we
  * want the regex / PK / conflict guard to be the thing that throws.
  *
- * <p>UtFrameUtils#parseStmtWithNewParser rewraps both ParsingException and
+ * <p>UtFrameUtils.parseStmtWithNewParser rewraps both ParsingException and
  * SemanticException as AnalysisException, so every test here asserts on
  * AnalysisException.
  */
@@ -138,7 +137,6 @@ public class ChangesSyntaxTest extends BookmarkTestBase {
 
     @Test
     public void testHintBaseGreaterThanHead() {
-        // base must precede head in the bookmark range; otherwise the interval is empty / inverted.
         String sql = "SELECT * FROM dup_t [_CHANGES_9_3_]";
         AnalysisException ex = assertThrows(AnalysisException.class,
                 () -> UtFrameUtils.parseStmtWithNewParser(sql, connectContext));
@@ -169,8 +167,9 @@ public class ChangesSyntaxTest extends BookmarkTestBase {
     }
 
     /**
-     * Static counterpart to BookmarkTestBase#createTable. Needed because @BeforeAll
-     * runs in static context but the base helper is an instance method.
+     * Static counterpart to BookmarkTestBase.createTable, needed because
+     * {@code @BeforeAll} runs in static context but the base helper is an
+     * instance method.
      */
     private static void createTableStatic(String ddl) throws Exception {
         CreateTableStmt stmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(

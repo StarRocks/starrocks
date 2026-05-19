@@ -57,11 +57,11 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Planner-level test for the bookmark-resolution side of the _CHANGES_ hint:
- * shadow-table scoping in the transformer, non-trackable-delta messaging, and
- * the {@link CdcScanHelper} entry point that production callers reuse.
+ * scoped-table substitution in the transformer, non-trackable-delta messaging,
+ * and the CdcScanHelper.build entry point that production callers reuse.
  *
- * <p>Bookmarks are minted by calling {@link BookmarkManager} directly; INSERTs
- * are not available in the FE UT framework, so consecutive create() calls only
+ * <p>Bookmarks are minted by calling BookmarkManager directly; INSERTs are
+ * not available in the FE UT framework, so consecutive create() calls only
  * return distinct bookmarks after bumping physical-partition visibleVersion.
  */
 public class ChangesBookmarkResolutionTest extends BookmarkTestBase {
@@ -108,13 +108,14 @@ public class ChangesBookmarkResolutionTest extends BookmarkTestBase {
             assertNotNull(scan, "expected LogicalChangesScan in transformed plan");
 
             OlapTable scoped = (OlapTable) scan.getTable();
-            // The transformer must hand the operator the scoped (shadow) table,
-            // not the live catalog instance.
+            // The transformer must hand the operator the scoped table, not
+            // the live catalog instance — otherwise the scan would see
+            // post-head partition data.
             assertNotSame(live, scoped);
 
             // The scoped table's partitions must equal the trackable logical
             // partitions in the delta. For a freshly-created table with a
-            // DATA_CHANGED bump this is the full single partition.
+            // DataChanged bump this is the full single partition.
             Set<Long> expected = new HashSet<>();
             for (Map.Entry<Long, List<BookmarkChange.PhysicalPartitionChange>> entry :
                     scan.getDelta().getChanges().entrySet()) {
@@ -274,7 +275,6 @@ public class ChangesBookmarkResolutionTest extends BookmarkTestBase {
         return new BookmarkChange(Collections.unmodifiableMap(changes));
     }
 
-    /** Return the first LogicalChangesScan operator found in the tree, or null. */
     private static LogicalChangesScanOperator findChangesScan(OptExpression root) {
         if (root.getOp().getOpType() == OperatorType.LOGICAL_CHANGES_SCAN) {
             return (LogicalChangesScanOperator) root.getOp();

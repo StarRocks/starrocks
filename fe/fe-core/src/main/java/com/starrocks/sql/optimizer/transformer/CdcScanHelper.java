@@ -34,11 +34,11 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Shared entry point for building a {@link LogicalChangesScanOperator} from a
- * {@link BookmarkRange} on an OlapTable. The SQL path calls {@link #build}
- * via {@code RelationTransformer}; non-SQL callers (e.g. IVM refresh) drive
- * the same path with their own column-ref map. PK rejection and the
- * base<=head invariant are enforced by the caller (QueryAnalyzer for SQL).
+ * Shared entry point for building a LogicalChangesScanOperator from a
+ * BookmarkRange on an OlapTable, reused by SQL and non-SQL (e.g. IVM
+ * refresh) callers so the bookmark-resolution and trackability checks
+ * live in one place. PK rejection and the base&lt;=head invariant are
+ * enforced by the caller.
  */
 public final class CdcScanHelper {
 
@@ -47,10 +47,7 @@ public final class CdcScanHelper {
 
     private CdcScanHelper() {}
 
-    /**
-     * Synthetic CDC metadata columns appended after the business columns:
-     * a TINYINT change-type column and a BIGINT row-version column.
-     */
+    /** Synthetic CDC metadata columns appended after the business columns. */
     public static List<Column> getCdcMetadataColumns() {
         List<Column> columns = new ArrayList<>(2);
         columns.add(new Column(CDC_CHANGE_TYPE_COLUMN_NAME, IntegerType.TINYINT));
@@ -60,15 +57,16 @@ public final class CdcScanHelper {
 
     /**
      * Resolve {@code range}'s base and head ids against the BookmarkManager,
-     * compute the bookmark delta, reject non-trackable changes, and produce
-     * the scan operator over a bookmark-scoped view of {@code table}. The
-     * caller must have already registered column refs for both the business
-     * columns and the CDC metadata columns (see {@link #getCdcMetadataColumns()})
-     * in {@code colRefToColumnMetaMap}.
+     * compute the delta, reject non-trackable changes, and produce the scan
+     * operator over a bookmark-scoped view of {@code table}.
+     *
+     * <p>ASSUMES: the caller has already registered column refs for both the
+     * business columns and the CDC metadata columns in
+     * {@code colRefToColumnMetaMap} — this helper only consumes the maps,
+     * it does not populate them.
      *
      * @throws SemanticException if either bookmark id is not registered for
-     *     {@code table}, or if the computed delta contains non-trackable
-     *     changes
+     *     {@code table}, or the delta contains non-trackable changes
      */
     public static LogicalChangesScanOperator build(
             OlapTable table, BookmarkRange range,
@@ -95,11 +93,11 @@ public final class CdcScanHelper {
     }
 
     /**
-     * Render the spec §3.6 invalidation messages for each non-trackable
-     * physical-partition change in {@code delta}, joined with {@code "; "}.
-     * Each entry resolves the user-visible partition name from {@code table};
-     * if the logical partition is gone (DROPPED beyond head), the message
-     * falls back to {@code <id=N>} so the operator still has a stable handle.
+     * Render the invalidation message for each non-trackable physical-partition
+     * change in {@code delta}, joined with {@code "; "}. If the logical
+     * partition has been dropped (so the name is gone), the message falls back
+     * to {@code <id=N>} rather than dropping the entry — every reason in the
+     * delta must surface to the user.
      */
     public static String formatNotTrackableMessage(BookmarkChange delta, OlapTable table) {
         StringBuilder sb = new StringBuilder();
