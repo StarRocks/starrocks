@@ -61,6 +61,8 @@ import com.starrocks.catalog.ConnectorView;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DynamicPartitionProperty;
 import com.starrocks.catalog.Function;
+import com.starrocks.catalog.FunctionSearchDesc;
+import com.starrocks.catalog.GlobalFunctionMgr;
 import com.starrocks.catalog.Index;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.LocalTablet;
@@ -149,6 +151,7 @@ import com.starrocks.service.InformationSchemaDataSource;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.AstToStringBuilder;
 import com.starrocks.sql.analyzer.Authorizer;
+import com.starrocks.sql.analyzer.FunctionRefAnalyzer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AdminShowAutomatedSnapshotStmt;
 import com.starrocks.sql.ast.AdminShowConfigStmt;
@@ -158,6 +161,8 @@ import com.starrocks.sql.ast.AdminShowTabletStatusStmt;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.DescStorageVolumeStmt;
 import com.starrocks.sql.ast.DescribeStmt;
+import com.starrocks.sql.ast.FunctionArgsDef;
+import com.starrocks.sql.ast.FunctionRef;
 import com.starrocks.sql.ast.HelpStmt;
 import com.starrocks.sql.ast.ImportColumnDesc;
 import com.starrocks.sql.ast.LakeTabletStatus;
@@ -182,6 +187,7 @@ import com.starrocks.sql.ast.ShowComputeNodeBlackListStmt;
 import com.starrocks.sql.ast.ShowComputeNodesStmt;
 import com.starrocks.sql.ast.ShowCreateDbStmt;
 import com.starrocks.sql.ast.ShowCreateExternalCatalogStmt;
+import com.starrocks.sql.ast.ShowCreateFunctionStmt;
 import com.starrocks.sql.ast.ShowCreateRoutineLoadStmt;
 import com.starrocks.sql.ast.ShowCreateTableStmt;
 import com.starrocks.sql.ast.ShowDataCacheRulesStmt;
@@ -1268,6 +1274,56 @@ public class ShowExecutor {
             } catch (AccessDeniedException e) {
                 return false;
             }
+        }
+
+        @Override
+        public ShowResultSet visitShowCreateFunctionStatement(ShowCreateFunctionStmt statement, ConnectContext context) {
+            FunctionRef functionRef = statement.getFunctionRef();
+            FunctionArgsDef argsDef = statement.getArgsDef();
+            boolean isGlobal = statement.isGlobalFunction();
+
+            Function fn;
+            String dbFullName;
+            if (isGlobal) {
+                dbFullName = null;
+                GlobalFunctionMgr mgr = context.getGlobalStateMgr().getGlobalFunctionMgr();
+                FunctionSearchDesc desc = FunctionRefAnalyzer.buildFunctionSearchDesc(
+                        functionRef, argsDef, FunctionRefAnalyzer.GLOBAL_UDF_DB);
+                fn = mgr.getFunction(desc);
+            } else {
+                String dbName = functionRef.getDbName();
+                if (Strings.isNullOrEmpty(dbName)) {
+                    dbName = context.getDatabase();
+                    if (Strings.isNullOrEmpty(dbName)) {
+                        ErrorReport.reportSemanticException(ErrorCode.ERR_NO_DB_ERROR);
+                    }
+                }
+                Database db = context.getGlobalStateMgr().getLocalMetastore().getDb(dbName);
+                MetaUtils.checkDbNullAndReport(db, dbName);
+                dbFullName = db.getFullName();
+                FunctionSearchDesc desc = FunctionRefAnalyzer.buildFunctionSearchDesc(
+                        functionRef, argsDef, dbName);
+                fn = db.getFunction(desc);
+            }
+
+            if (fn == null) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
+                        "Function " + functionRef.getFnName().toString() + " does not exist");
+            }
+
+            List<List<String>> rows = Lists.newArrayList();
+            try {
+                if (isGlobal) {
+                    Authorizer.checkAnyActionOnGlobalFunction(context, fn);
+                } else {
+                    Authorizer.checkAnyActionOnFunction(context, dbFullName, fn);
+                }
+                rows.add(Lists.newArrayList(fn.toSql(false)));
+            } catch (AccessDeniedException e) {
+                // No privilege on the resolved function — return empty result set.
+            }
+
+            return new ShowResultSet(showResultMetaFactory.getMetadata(statement), rows);
         }
 
         @Override

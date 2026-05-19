@@ -38,6 +38,7 @@ import com.starrocks.type.Type;
 import com.starrocks.type.TypeSerializer;
 import com.starrocks.type.VarcharType;
 
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Vector;
@@ -182,6 +183,35 @@ public class TableFunction extends Function {
         tableFn.setIs_left_join(isLeftJoin);
         fn.setTable_fn(tableFn);
         return fn;
+    }
+
+    @Override
+    public String toSql(boolean ifNotExists) {
+        StringBuilder sb = new StringBuilder("CREATE TABLE FUNCTION ");
+        if (ifNotExists) {
+            sb.append("IF NOT EXISTS ");
+        }
+        sb.append(dbName()).append(".").append(signatureString()).append("\n")
+                .append("RETURNS ").append(getReturnType()).append("\n");
+
+        Map<String, String> props = synthesizePropertiesFromFields();
+        appendPropertiesBlock(sb, props);
+        return sb.toString();
+    }
+
+    private Map<String, String> synthesizePropertiesFromFields() {
+        Map<String, String> props = new LinkedHashMap<>();
+        String typeStr = binaryTypeToPropertyValue(getBinaryType());
+        if (typeStr != null) {
+            props.put(CreateFunctionStmt.TYPE_KEY, typeStr);
+        }
+        if (getLocation() != null) {
+            props.put(CreateFunctionStmt.FILE_KEY, getLocation().toString());
+        }
+        if (symbolName != null && !symbolName.isEmpty()) {
+            props.put(CreateFunctionStmt.SYMBOL_KEY, symbolName);
+        }
+        return props;
     }
 
     @Override

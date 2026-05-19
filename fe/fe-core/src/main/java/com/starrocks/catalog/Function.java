@@ -62,6 +62,7 @@ import org.apache.commons.lang.ArrayUtils;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -796,6 +797,37 @@ public class Function implements Writable {
     // Child classes must override this function.
     public String toSql(boolean ifNotExists) {
         return "";
+    }
+
+    protected static void appendPropertiesBlock(StringBuilder sb, Map<String, String> props) {
+        if (props == null || props.isEmpty()) {
+            return;
+        }
+        sb.append("PROPERTIES (\n");
+        Iterator<Map.Entry<String, String>> it = props.entrySet().iterator();
+        while (it.hasNext()) {
+            Map.Entry<String, String> e = it.next();
+            sb.append("    \"").append(e.getKey()).append("\" = \"").append(e.getValue()).append("\"");
+            if (it.hasNext()) {
+                sb.append(",");
+            }
+            sb.append("\n");
+        }
+        sb.append(")\n");
+    }
+
+    protected static String binaryTypeToPropertyValue(TFunctionBinaryType type) {
+        if (type == null) {
+            return null;
+        }
+        switch (type) {
+            case SRJAR:
+                return CreateFunctionStmt.TYPE_STARROCKS_JAR;
+            case PYTHON:
+                return CreateFunctionStmt.TYPE_STARROCKS_PYTHON;
+            default:
+                return null;
+        }
     }
 
     public static Function getFunction(List<Function> fns, Function desc, CompareMode mode) {

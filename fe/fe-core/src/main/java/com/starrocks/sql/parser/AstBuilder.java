@@ -340,6 +340,7 @@ import com.starrocks.sql.ast.ShowComputeNodeBlackListStmt;
 import com.starrocks.sql.ast.ShowComputeNodesStmt;
 import com.starrocks.sql.ast.ShowCreateDbStmt;
 import com.starrocks.sql.ast.ShowCreateExternalCatalogStmt;
+import com.starrocks.sql.ast.ShowCreateFunctionStmt;
 import com.starrocks.sql.ast.ShowCreateRoutineLoadStmt;
 import com.starrocks.sql.ast.ShowCreateTableStmt;
 import com.starrocks.sql.ast.ShowDataCacheRulesStmt;
@@ -6900,6 +6901,19 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
 
         return new DropFunctionStmt(functionRef, getFunctionArgsDef(context.typeList()),
                 createPos(context), dropIfExist);
+    }
+
+    @Override
+    public ParseNode visitShowCreateFunctionStatement(
+            com.starrocks.sql.parser.StarRocksParser.ShowCreateFunctionStatementContext context) {
+        QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
+        boolean isGlobal = context.GLOBAL() != null;
+        FunctionRef functionRef = new FunctionRef(qualifiedName, null, createPos(context), isGlobal);
+        if (isGlobal && !Strings.isNullOrEmpty(functionRef.getDbName())) {
+            throw new ParsingException(PARSER_ERROR_MSG.invalidUDFName(qualifiedName.toString()), qualifiedName.getPos());
+        }
+        FunctionArgsDef argsDef = getFunctionArgsDef(context.typeList());
+        return new ShowCreateFunctionStmt(functionRef, argsDef, createPos(context));
     }
 
     @Override

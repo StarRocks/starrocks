@@ -47,6 +47,7 @@ import com.starrocks.type.Type;
 import org.apache.logging.log4j.util.Strings;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -236,11 +237,40 @@ public class ScalarFunction extends Function {
         if (ifNotExists) {
             sb.append("IF NOT EXISTS ");
         }
-        sb.append(dbName() + "." + signatureString() + "\n")
-                .append(" RETURNS " + getReturnType() + "\n")
-                .append(" LOCATION '" + getLocation() + "'\n")
-                .append(" SYMBOL='" + getSymbolName() + "'\n");
+        sb.append(dbName()).append(".").append(signatureString()).append("\n")
+                .append("RETURNS ").append(getReturnType()).append("\n");
+
+        Map<String, String> props = synthesizePropertiesFromFields();
+        appendPropertiesBlock(sb, props);
+
+        if (content != null) {
+            // $$ ... $$ matches the inlineFunction grammar (ATTACHMENT token)
+            // so the emitted statement round-trips through CREATE FUNCTION.
+            sb.append("AS $$\n").append(content).append("\n$$\n");
+        }
         return sb.toString();
+    }
+
+    private Map<String, String> synthesizePropertiesFromFields() {
+        Map<String, String> props = new LinkedHashMap<>();
+        String typeStr = binaryTypeToPropertyValue(getBinaryType());
+        if (typeStr != null) {
+            props.put(CreateFunctionStmt.TYPE_KEY, typeStr);
+        }
+        if (getLocation() != null) {
+            props.put(CreateFunctionStmt.FILE_KEY, getLocation().toString());
+        }
+        if (!Strings.isEmpty(getSymbolName())) {
+            props.put(CreateFunctionStmt.SYMBOL_KEY, getSymbolName());
+        }
+        if (!Strings.isEmpty(inputType)) {
+            props.put(CreateFunctionStmt.INPUT_TYPE, inputType);
+        }
+        // Default isolation is isolated (true); only emit the property when explicitly shared.
+        if (!isolationType) {
+            props.put(CreateFunctionStmt.ISOLATION_KEY, "shared");
+        }
+        return props;
     }
 
     @Override
