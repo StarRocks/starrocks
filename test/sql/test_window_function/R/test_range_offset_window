@@ -261,3 +261,23 @@ ORDER BY id;
 6	3.50	4
 7	5.75	5
 -- !result
+SELECT id, k,
+       FIRST_VALUE(v) OVER (ORDER BY k ASC RANGE BETWEEN 1 PRECEDING AND CURRENT ROW) AS w
+FROM test_range_offset_window
+WHERE id IN (3, 6, 7)
+ORDER BY id;
+-- result:
+3	1	1
+6	3	4
+7	5	5
+-- !result
+SELECT id, k,
+       LAST_VALUE(v) OVER (ORDER BY k ASC RANGE BETWEEN CURRENT ROW AND 1 FOLLOWING) AS w
+FROM test_range_offset_window
+WHERE id IN (3, 6, 7)
+ORDER BY id;
+-- result:
+3	1	1
+6	3	4
+7	5	5
+-- !result

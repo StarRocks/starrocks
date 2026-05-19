@@ -450,6 +450,7 @@ public class AnalyticAnalyzer {
                                               AnalyticWindowBoundary b2) {
         if (windowFrame.getType() == AnalyticWindow.Type.RANGE &&
                 (b1.getExpr() instanceof IntervalLiteral || b2.getExpr() instanceof IntervalLiteral)) {
+            checkIntervalOffsetBoundaries(b1, b2);
             return;
         }
         Preconditions.checkState(b1.getBoundaryType().isOffset());
@@ -469,6 +470,29 @@ public class AnalyticAnalyzer {
         } catch (AnalysisException exc) {
             throw new SemanticException("Couldn't evaluate PRECEDING/FOLLOWING expression: " + exc.getMessage(),
                     e1.getPos());
+        }
+    }
+
+    private static void checkIntervalOffsetBoundaries(AnalyticWindowBoundary b1, AnalyticWindowBoundary b2) {
+        if (!(b1.getExpr() instanceof IntervalLiteral left) || !(b2.getExpr() instanceof IntervalLiteral right)) {
+            return;
+        }
+
+        String leftUnit = left.getUnitIdentifier().getDescription();
+        String rightUnit = right.getUnitIdentifier().getDescription();
+        if (!leftUnit.equalsIgnoreCase(rightUnit)) {
+            return;
+        }
+
+        try {
+            double leftValue = ExprUtils.getConstFromExpr(left.getValue());
+            double rightValue = ExprUtils.getConstFromExpr(right.getValue());
+            if (leftValue > rightValue) {
+                throw new SemanticException("Offset boundaries are in the wrong order", left.getPos());
+            }
+        } catch (AnalysisException exc) {
+            throw new SemanticException("Couldn't evaluate PRECEDING/FOLLOWING expression: " + exc.getMessage(),
+                    left.getPos());
         }
     }
 

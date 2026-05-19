@@ -217,7 +217,8 @@ public class WindowTransformer {
         if ((callExpr.getFunctionName().equalsIgnoreCase(AnalyticExpr.FIRSTVALUE)
                 || callExpr.getFunctionName().equalsIgnoreCase(AnalyticExpr.LASTVALUE))
                 && windowFrame != null
-                && windowFrame.getType() == AnalyticWindow.Type.RANGE) {
+                && windowFrame.getType() == AnalyticWindow.Type.RANGE
+                && !hasOffsetBoundary(windowFrame)) {
             windowFrame = new AnalyticWindow(AnalyticWindow.Type.ROWS, windowFrame.getLeftBoundary(),
                     windowFrame.getRightBoundary());
         }
@@ -248,6 +249,11 @@ public class WindowTransformer {
         analyticExpr.getOrderByElements().addAll(orderings);
         return new WindowOperator(analyticExpr, analyticExpr.getPartitionExprs(),
                 orderByElements, windowFrame);
+    }
+
+    private static boolean hasOffsetBoundary(AnalyticWindow windowFrame) {
+        return windowFrame.getLeftBoundary().getBoundaryType().isOffset() ||
+                windowFrame.getRightBoundary().getBoundaryType().isOffset();
     }
 
     /**

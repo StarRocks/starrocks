@@ -71,6 +71,9 @@ public class AnalyzeAnalyticTest {    // use a unique dir so that it won't be co
         analyzeFail("select sum(v1) " +
                         "over(partition by v2 order by v3 range between -1 preceding and current row) from t0",
                 "must be a constant non-negative number");
+        analyzeFail("select sum(tc) " +
+                        "over(order by ti range between interval 1 day preceding and interval 2 day preceding) from tall",
+                "Offset boundaries are in the wrong order");
 
         analyzeFail("select sum(v1) over(partition by v2 order by v3 range unbounded following) from t0",
                 "UNBOUNDED FOLLOWING is only allowed for upper bound of BETWEEN");

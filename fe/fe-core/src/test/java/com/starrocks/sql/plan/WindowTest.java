@@ -1905,6 +1905,19 @@ public class WindowTest extends PlanTestBase {
     }
 
     @Test
+    public void testFirstLastValueRangeOffsetNotRewriteToRows() throws Exception {
+        String firstValueSql = "select first_value(v3) over(" +
+                "partition by v1 order by v2 range between 10 preceding and current row) from t0";
+        String firstValuePlan = getFragmentPlan(firstValueSql);
+        assertContains(firstValuePlan, "window: RANGE BETWEEN 10 PRECEDING AND CURRENT ROW");
+
+        String lastValueSql = "select last_value(v3) over(" +
+                "partition by v1 order by v2 range between current row and 10 following) from t0";
+        String lastValuePlan = getFragmentPlan(lastValueSql);
+        assertContains(lastValuePlan, "window: RANGE BETWEEN CURRENT ROW AND 10 FOLLOWING");
+    }
+
+    @Test
     public void testRowNumberWithAggregate() throws Exception {
         // Test for issue: row_number() with count(*) and max() in SELECT with GROUP BY
         // This tests that aggregate columns are not pruned when window operator is above aggregate

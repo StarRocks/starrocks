@@ -132,3 +132,17 @@ SELECT id, dec_k,
        ) AS w
 FROM test_range_offset_window
 ORDER BY id;
+
+-- FIRST_VALUE with RANGE offset must not be rewritten to ROWS; gaps in k make ROWS results different.
+SELECT id, k,
+       FIRST_VALUE(v) OVER (ORDER BY k ASC RANGE BETWEEN 1 PRECEDING AND CURRENT ROW) AS w
+FROM test_range_offset_window
+WHERE id IN (3, 6, 7)
+ORDER BY id;
+
+-- LAST_VALUE with RANGE offset must not be rewritten to ROWS; gaps in k make ROWS results different.
+SELECT id, k,
+       LAST_VALUE(v) OVER (ORDER BY k ASC RANGE BETWEEN CURRENT ROW AND 1 FOLLOWING) AS w
+FROM test_range_offset_window
+WHERE id IN (3, 6, 7)
+ORDER BY id;
