@@ -17,7 +17,6 @@
 #include <memory>
 
 #include "common/status.h"
-#include "storage/index/vector/scalar_index_provider.h"
 #include "storage/index/vector/vector_ann_index.h"
 
 namespace starrocks {
@@ -30,46 +29,47 @@ enum class FilterStrategyType {
     // ADAPTIVE,
 };
 
-// FilterStrategy orchestrates the interaction between scalar predicate
-// evaluation and ANN vector search.
+// FilterStrategy orchestrates the interaction between a pre-built
+// row filter and ANN vector search.
 //
-// Different strategies handle the pre-filter / post-filter / iterative
-// trade-off differently. The Strategy is independent of index type and
-// table type — it works with any VectorAnnIndex + ScalarIndexProvider.
+// Predicate evaluation happens at the call site (each table type
+// translates its own predicate form into a RowIdFilter); the
+// strategy is intentionally agnostic to predicate representation
+// and table type.
 class FilterStrategy {
 public:
     virtual ~FilterStrategy() = default;
 
-    // Execute vector search with optional scalar predicate filtering.
-    //   index           - the ANN index to search
-    //   query           - vector search parameters
-    //   scalar_provider - provider for scalar predicate evaluation (may be nullptr)
-    //   predicate       - the scalar predicate (may be nullptr)
-    //   result          - output
-    virtual Status execute(VectorAnnIndex* index, const VectorQuery& query, ScalarIndexProvider* scalar_provider,
-                           const ScalarPredicate* predicate, VectorAnnResult* result) = 0;
+    // Execute vector search with an optional row filter.
+    //   index  - the ANN index to search
+    //   query  - vector search parameters
+    //   filter - pre-built row filter (may be nullptr for no filtering)
+    //   result - output
+    virtual Status execute(VectorAnnIndex* index, const VectorQuery& query, const RowIdFilter* filter,
+                           VectorAnnResult* result) = 0;
 
     static std::unique_ptr<FilterStrategy> create(FilterStrategyType type);
 };
 
-// PreFilterStrategy: evaluate predicate first → bitmap → filtered_search.
-// Best when the predicate is moderately selective (retains >10% of data)
-// and the ANN index supports efficient in-search filtering.
+// PreFilterStrategy: feed the filter directly into the index's
+// filtered_search path (the index skips non-matching rows during
+// graph traversal). Best when the ANN index supports efficient
+// in-search filtering.
 class PreFilterStrategy final : public FilterStrategy {
 public:
-    Status execute(VectorAnnIndex* index, const VectorQuery& query, ScalarIndexProvider* scalar_provider,
-                   const ScalarPredicate* predicate, VectorAnnResult* result) override;
+    Status execute(VectorAnnIndex* index, const VectorQuery& query, const RowIdFilter* filter,
+                   VectorAnnResult* result) override;
 };
 
-// PostFilterStrategy: search first (oversampled) → filter results.
-// Best when the predicate cannot be pushed to the index, or the
-// predicate is very selective (retains <1% of data).
+// PostFilterStrategy: search oversampled, then drop non-matching
+// rows from the result. Best when the index cannot push the filter
+// down efficiently, or when the filter is very selective.
 class PostFilterStrategy final : public FilterStrategy {
 public:
     static constexpr int32_t kDefaultOversampleFactor = 3;
 
-    Status execute(VectorAnnIndex* index, const VectorQuery& query, ScalarIndexProvider* scalar_provider,
-                   const ScalarPredicate* predicate, VectorAnnResult* result) override;
+    Status execute(VectorAnnIndex* index, const VectorQuery& query, const RowIdFilter* filter,
+                   VectorAnnResult* result) override;
 };
 
 } // namespace starrocks

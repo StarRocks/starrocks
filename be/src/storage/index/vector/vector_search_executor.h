@@ -19,7 +19,6 @@
 
 #include "common/status.h"
 #include "storage/index/vector/filter_strategy.h"
-#include "storage/index/vector/scalar_index_provider.h"
 #include "storage/index/vector/vector_ann_index.h"
 
 namespace starrocks {
@@ -29,10 +28,13 @@ struct VectorSearchOutput {
     std::string profile;
 };
 
-// VectorSearchExecutor is the top-level entry point (Layer 3) that
-// Scanners interact with. It composes VectorAnnIndex (Layer 1) +
-// FilterStrategy/ScalarIndexProvider (Layer 2) into an end-to-end
-// vector search pipeline.
+// VectorSearchExecutor is the top-level entry point that scanners
+// interact with. It composes a VectorAnnIndex with a FilterStrategy
+// into an end-to-end vector search pipeline.
+//
+// Predicate evaluation lives at the call site: each table type
+// translates its own predicate form into a RowIdFilter and passes
+// it (or nullptr) into search().
 //
 // Lifecycle: create -> init() -> search() [repeatable] -> close()
 class VectorSearchExecutor {
@@ -40,27 +42,23 @@ public:
     virtual ~VectorSearchExecutor() = default;
 
     virtual Status init() = 0;
-    virtual Status search(const VectorQuery& query, const ScalarPredicate* predicate, VectorSearchOutput* output) = 0;
+    virtual Status search(const VectorQuery& query, const RowIdFilter* filter, VectorSearchOutput* output) = 0;
     virtual Status close() = 0;
 };
 
 // DefaultVectorSearchExecutor composes injected components.
-// Works for all table types — differences are in the injected
-// VectorAnnIndex and ScalarIndexProvider implementations.
+// Callers (per table type) construct their own ann_index and
+// strategy and hand them in.
 class DefaultVectorSearchExecutor final : public VectorSearchExecutor {
 public:
-    DefaultVectorSearchExecutor(std::unique_ptr<VectorAnnIndex> ann_index,
-                                std::unique_ptr<ScalarIndexProvider> scalar_provider,
-                                std::unique_ptr<FilterStrategy> strategy)
-            : _ann_index(std::move(ann_index)),
-              _scalar_provider(std::move(scalar_provider)),
-              _strategy(std::move(strategy)) {}
+    DefaultVectorSearchExecutor(std::unique_ptr<VectorAnnIndex> ann_index, std::unique_ptr<FilterStrategy> strategy)
+            : _ann_index(std::move(ann_index)), _strategy(std::move(strategy)) {}
 
     ~DefaultVectorSearchExecutor() override = default;
 
     Status init() override { return Status::OK(); }
 
-    Status search(const VectorQuery& query, const ScalarPredicate* predicate, VectorSearchOutput* output) override;
+    Status search(const VectorQuery& query, const RowIdFilter* filter, VectorSearchOutput* output) override;
 
     Status close() override;
 
@@ -69,7 +67,6 @@ public:
 
 private:
     std::unique_ptr<VectorAnnIndex> _ann_index;
-    std::unique_ptr<ScalarIndexProvider> _scalar_provider;
     std::unique_ptr<FilterStrategy> _strategy;
 };
 

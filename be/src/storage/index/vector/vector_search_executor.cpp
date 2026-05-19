@@ -16,15 +16,11 @@
 
 namespace starrocks {
 
-Status DefaultVectorSearchExecutor::search(const VectorQuery& query, const ScalarPredicate* predicate,
+Status DefaultVectorSearchExecutor::search(const VectorQuery& query, const RowIdFilter* filter,
                                            VectorSearchOutput* output) {
     output->ann_result.clear();
     output->profile.clear();
-
-    RETURN_IF_ERROR(
-            _strategy->execute(_ann_index.get(), query, _scalar_provider.get(), predicate, &output->ann_result));
-
-    return Status::OK();
+    return _strategy->execute(_ann_index.get(), query, filter, &output->ann_result);
 }
 
 Status DefaultVectorSearchExecutor::close() {
