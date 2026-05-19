@@ -47,13 +47,12 @@ ParquetScanner::ParquetScanner(RuntimeState* state, RuntimeProfile* profile, con
     _chunk_filter.reserve(_max_chunk_size);
     _conv_ctx.timezone = state->timezone();
     _conv_ctx.report_error_message = [state, ctx = &_conv_ctx](const std::string& reason, const std::string& raw_data,
-                                                                int64_t row_offset_in_array) {
+                                                               int64_t row_offset_in_array) {
         if (ctx->error_message_counter > MAX_ERROR_MESSAGE_COUNTER) return;
         ctx->error_message_counter += 1;
         const std::string& col_name = ctx->current_column_name;
-        std::string error_msg =
-                strings::Substitute("file = $0, column = $1, raw data = $2", ctx->current_file,
-                                    col_name.empty() ? "null" : col_name, raw_data);
+        std::string error_msg = strings::Substitute("file = $0, column = $1, raw data = $2", ctx->current_file,
+                                                    col_name.empty() ? "null" : col_name, raw_data);
         RuntimeStateHelper::append_error_msg_to_file(state, error_msg, reason);
 
         // Emit a rejected-records anchor. The `raw_record` column stays as

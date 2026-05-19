@@ -55,8 +55,8 @@ static bool has_arrow_convert_error_reporter(const ArrowConvertContext* ctx) {
     return ctx != nullptr && ctx->report_error_message != nullptr;
 }
 
-static void report_arrow_convert_error(ArrowConvertContext* ctx, const std::string& reason,
-                                       const std::string& raw_data, int64_t row_offset_in_array = -1) {
+static void report_arrow_convert_error(ArrowConvertContext* ctx, const std::string& reason, const std::string& raw_data,
+                                       int64_t row_offset_in_array = -1) {
     if (has_arrow_convert_error_reporter(ctx)) {
         ctx->report_error_message(reason, raw_data, row_offset_in_array);
     }
