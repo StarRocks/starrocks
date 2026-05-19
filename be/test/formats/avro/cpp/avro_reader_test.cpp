@@ -471,6 +471,36 @@ TEST_F(AvroReaderTest, test_column_projection) {
     ASSERT_TRUE(avro_reader->read_chunk(chunk, 2).is_end_of_file());
 }
 
+TEST_F(AvroReaderTest, test_complex_projection_falls_back_to_full_writer_schema) {
+    std::string filename = "complex_nest.avro";
+
+    auto schema_reader = create_avro_reader(filename);
+    std::vector<SlotDescriptor> all_descs;
+    ASSERT_OK(schema_reader->get_schema(&all_descs));
+    ASSERT_EQ(13, all_descs.size());
+
+    std::vector<SlotDescriptor*> slot_descs = {&all_descs[12]};
+    ASSERT_EQ("map_array_record", slot_descs[0]->col_name());
+    ASSERT_TRUE(slot_descs[0]->type().is_complex_type());
+    create_column_readers(slot_descs, _timezone, false);
+
+    auto file_or = FileSystem::Default()->new_random_access_file(_test_exec_dir + filename);
+    ASSERT_OK(file_or.status());
+    auto avro_reader = std::make_unique<AvroReader>();
+    ASSERT_OK(avro_reader->init(std::make_unique<AvroBufferInputStream>(
+                                        std::move(file_or.value()), config::avro_reader_buffer_size_bytes, _counter),
+                                filename, _state.get(), _counter, &slot_descs, &_column_readers,
+                                /*col_not_found_as_null=*/false));
+    ASSERT_FALSE(avro_reader->TEST_use_direct_path());
+
+    auto chunk = create_src_chunk(slot_descs);
+    ASSERT_OK(avro_reader->read_chunk(chunk, 2));
+    materialize_src_chunk_adaptive_nullable_column(chunk);
+
+    ASSERT_EQ(1, chunk->num_rows());
+    ASSERT_EQ("[{'group':[{score:99.9},{score:88.8}]}]", chunk->debug_row(0));
+}
+
 TEST_F(AvroReaderTest, test_direct_path_skips_complex_fields) {
     std::string filename = "complex.avro";
 

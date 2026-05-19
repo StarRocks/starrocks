@@ -60,6 +60,19 @@ static StatusOr<tenann::IndexType> convert_to_index_type(const std::string& type
     }
 }
 
+static StatusOr<tenann::ScalarQuantizerType> convert_to_quantizer_type(const std::string& type_string) {
+    const std::string standard_type_string = boost::algorithm::to_lower_copy(type_string);
+    if (false) {
+    }
+    CHECK_AND_RETURN(standard_type_string, flat, tenann::ScalarQuantizerType::kFlat)
+    CHECK_AND_RETURN(standard_type_string, sq4, tenann::ScalarQuantizerType::kSQ4)
+    CHECK_AND_RETURN(standard_type_string, sq8, tenann::ScalarQuantizerType::kSQ8)
+    CHECK_AND_RETURN(standard_type_string, pq, tenann::ScalarQuantizerType::kPQ)
+    else {
+        return Status::InternalError("Do not support quantizer type " + type_string);
+    }
+}
+
 static StatusOr<tenann::MetricType> convert_to_metric_type(const std::string& type_string) {
     const std::string standard_type_string = boost::algorithm::to_lower_copy(type_string);
     if (false) {
@@ -100,6 +113,22 @@ StatusOr<tenann::IndexMeta> get_vector_meta(const std::shared_ptr<TabletIndex>& 
 
         CRITICAL_CHECK_AND_GET(tablet_index, index_properties, m, param_value)
         meta.index_params()[starrocks::index::vector::M] = std::atoi(param_value.c_str());
+
+        // Quantizer is optional. Absence is equivalent to "flat" so that pre-quantization
+        // indexes (built before this property existed) keep working unchanged.
+        GET_OR_DEFAULT(tablet_index, index_properties, quantizer, param_value, "flat")
+        ASSIGN_OR_RETURN(auto quantizer_type, convert_to_quantizer_type(param_value))
+        meta.index_params()[starrocks::index::vector::QUANTIZER] = static_cast<int>(quantizer_type);
+
+        if (quantizer_type == tenann::ScalarQuantizerType::kPQ) {
+            // PQ requires m_pq (no sensible default — must divide dim) and accepts an
+            // optional nbits_pq (default 8, matching faiss).
+            CRITICAL_CHECK_AND_GET(tablet_index, index_properties, m_pq, param_value)
+            meta.index_params()[starrocks::index::vector::M_PQ] = std::atoi(param_value.c_str());
+
+            GET_OR_DEFAULT(tablet_index, index_properties, nbits_pq, param_value, "8")
+            meta.index_params()[starrocks::index::vector::NBITS_PQ] = std::atoi(param_value.c_str());
+        }
 
         GET_OR_DEFAULT(tablet_index, search_properties, efsearch, param_value, "40")
         meta.search_params()[starrocks::index::vector::EF_SEARCH] = std::atoi(param_value.c_str());
