@@ -694,7 +694,7 @@ public class MaterializedViewTest extends StarRocksTestBase {
         new mockit.MockUp<com.starrocks.sql.analyzer.Authorizer>() {
             @mockit.Mock
             public void checkAnyActionOnTable(ConnectContext context,
-                                              com.starrocks.catalog.TableName tableName)
+                                              com.starrocks.analysis.TableName tableName)
                     throws com.starrocks.authorization.AccessDeniedException {
                 throw new com.starrocks.authorization.AccessDeniedException();
             }

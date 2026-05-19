@@ -743,53 +743,7 @@ public class ShowExecutor {
             Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(showStmt.getDb());
             MetaUtils.checkDbNullAndReport(db, showStmt.getDb());
             List<List<String>> rows = Lists.newArrayList();
-<<<<<<< HEAD
             TableName tableName = showStmt.getTbl();
-            Table table = MetaUtils.getSessionAwareTable(connectContext, db, tableName);
-            if (table == null) {
-                if (showStmt.getType() != ShowCreateTableStmt.CreateTableType.MATERIALIZED_VIEW) {
-                    ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_TABLE_ERROR, showStmt.getTable());
-                } else {
-                    Locker dbLocker = new Locker();
-                    dbLocker.lockDatabase(db.getId(), LockType.READ);
-                    try {
-                        // For Sync Materialized View, it is a mv index inside OLAP table,
-                        // so we can not get it from database.
-                        for (Table tbl : GlobalStateMgr.getCurrentState().getLocalMetastore().getTables(db.getId())) {
-                            if (tbl.getType() == Table.TableType.OLAP) {
-                                OlapTable olapTable = (OlapTable) tbl;
-                                List<MaterializedIndexMeta> visibleMaterializedViews =
-                                        olapTable.getVisibleIndexMetas();
-                                for (MaterializedIndexMeta mvMeta : visibleMaterializedViews) {
-                                    if (olapTable.getIndexNameById(mvMeta.getIndexId()).equals(showStmt.getTable())) {
-                                        if (mvMeta.getOriginStmt() == null) {
-                                            String mvName = olapTable.getIndexNameById(mvMeta.getIndexId());
-                                            rows.add(Lists.newArrayList(showStmt.getTable(),
-                                                    ShowMaterializedViewStatus.buildCreateMVSql(olapTable,
-                                                            mvName, mvMeta), "utf8", "utf8_general_ci"));
-                                        } else {
-                                            rows.add(Lists.newArrayList(showStmt.getTable(), mvMeta.getOriginStmt(),
-                                                    "utf8", "utf8_general_ci"));
-                                        }
-
-                                        ShowResultSetMetaData showResultSetMetaData = ShowResultSetMetaData.builder()
-                                                .addColumn(new Column("Materialized View", ScalarType.createVarchar(20)))
-                                                .addColumn(new Column("Create Materialized View",
-                                                        ScalarType.createVarchar(30)))
-                                                .build();
-                                        return new ShowResultSet(showResultSetMetaData, rows);
-                                    }
-                                }
-                            }
-                        }
-                    } finally {
-                        dbLocker.unLockDatabase(db.getId(), LockType.READ);
-                    }
-                    ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_TABLE_ERROR, showStmt.getTable());
-=======
-            TableName tableName = new TableName(showStmt.getCatalogName(), showStmt.getDb(), showStmt.getTable());
-            // Lookup is ConcurrentHashMap-backed (Database.nameToTable) for internal catalog and
-            // throws SemanticException if the name does not match a registered Table.
             Table table;
             try {
                 table = MetaUtils.getSessionAwareTable(connectContext, db, tableName);
@@ -799,7 +753,6 @@ public class ShowExecutor {
                 // for any other type, the miss is a real "table not found".
                 if (showStmt.getType() != ShowCreateTableStmt.CreateTableType.MATERIALIZED_VIEW) {
                     throw e;
->>>>>>> 4e35d9dc26 ([BugFix] Restore SHOW CREATE MATERIALIZED VIEW for sync MVs (#73396))
                 }
                 return findSyncMaterializedViewCreateStmt(connectContext, db, showStmt);
             }
@@ -845,16 +798,7 @@ public class ShowExecutor {
                                 .build();
                         return new ShowResultSet(showViewResultSetMeta, rows);
                     } else {
-<<<<<<< HEAD
-                        rows.add(Lists.newArrayList(table.getName(), createTableStmt.get(0)));
-                        ShowResultSetMetaData showResultSetMetaData = ShowResultSetMetaData.builder()
-                                .addColumn(new Column("Materialized View", ScalarType.createVarchar(20)))
-                                .addColumn(new Column("Create Materialized View", ScalarType.createVarchar(30)))
-                                .build();
-                        return new ShowResultSet(showResultSetMetaData, rows);
-=======
                         return buildShowCreateMaterializedViewResult(table.getName(), createTableStmt.get(0));
->>>>>>> 4e35d9dc26 ([BugFix] Restore SHOW CREATE MATERIALIZED VIEW for sync MVs (#73396))
                     }
                 } else {
                     if (showStmt.getType() != ShowCreateTableStmt.CreateTableType.TABLE) {
@@ -874,8 +818,8 @@ public class ShowExecutor {
             List<List<String>> rows = Lists.newArrayList();
             rows.add(Lists.newArrayList(mvName, createSql));
             ShowResultSetMetaData meta = ShowResultSetMetaData.builder()
-                    .addColumn(new Column("Materialized View", TypeFactory.createVarcharType(20)))
-                    .addColumn(new Column("Create Materialized View", TypeFactory.createVarcharType(30)))
+                    .addColumn(new Column("Materialized View", ScalarType.createVarchar(20)))
+                    .addColumn(new Column("Create Materialized View", ScalarType.createVarchar(30)))
                     .build();
             return new ShowResultSet(meta, rows);
         }
@@ -902,20 +846,20 @@ public class ShowExecutor {
                 OlapTable olapTable = (OlapTable) tbl;
                 locker.lockTableWithIntensiveDbLock(db.getId(), olapTable.getId(), LockType.READ);
                 try {
-                    Long metaId = olapTable.getIndexMetaIdByName(showStmt.getTable());
+                    Long metaId = olapTable.getIndexIdByName(showStmt.getTable());
                     // Skip the base index (its name equals the table's current name) - only
                     // reachable here if a concurrent RENAME slipped between the failed name
                     // lookup that routed us into this fallback and the snapshot below.
-                    if (metaId == null || metaId == olapTable.getBaseIndexMetaId()) {
+                    if (metaId == null || metaId == olapTable.getBaseIndexId()) {
                         continue;
                     }
                     // Skip shadow / mid-schema-change indexes.
                     boolean visible = olapTable.getVisibleIndexMetas().stream()
-                            .anyMatch(m -> m.getIndexMetaId() == metaId);
+                            .anyMatch(m -> m.getIndexId() == metaId);
                     if (!visible) {
                         continue;
                     }
-                    MaterializedIndexMeta mvMeta = olapTable.getIndexMetaByMetaId(metaId);
+                    MaterializedIndexMeta mvMeta = olapTable.getIndexMetaByIndexId(metaId);
                     if (mvMeta == null) {
                         continue;
                     }
