@@ -105,7 +105,7 @@ import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.common.TypeManager;
 import com.starrocks.sql.optimizer.dump.HiveMetaStoreTableDumpInfo;
-import com.starrocks.sql.optimizer.transformer.CdcScanHelper;
+import com.starrocks.sql.optimizer.transformer.CdcUtils;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.type.BooleanType;
 import com.starrocks.type.IntegerType;
@@ -1062,7 +1062,7 @@ public class QueryAnalyzer {
                 // synthesize the __CHANGE_TYPE__ / __ROW_VERSION__ metadata columns so
                 // downstream transformation sees one shape.
                 if (node.getBookmarkRange().isPresent()) {
-                    for (Column column : CdcScanHelper.getCdcMetadataColumns()) {
+                    for (Column column : CdcUtils.getCdcMetadataColumns()) {
                         SlotRef slot = new SlotRef(tableName, column.getName(), column.getName());
                         Field field = new Field(column.getName(), column.getType(), tableName, slot, true,
                                 column.isAllowNull());

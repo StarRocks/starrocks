@@ -34,6 +34,7 @@ import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.OptionalLong;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -237,7 +238,7 @@ public class BookmarkScopedTableResolverTest extends BookmarkTestBase {
             }
             changes.put(logicalId, row);
         }
-        return new BookmarkChange(changes);
+        return new BookmarkChange(OptionalLong.empty(), 0L, changes);
     }
 
     /** Head meta of every trackable change (ADDED / DATA_CHANGED), in iteration order. */
@@ -324,5 +325,85 @@ public class BookmarkScopedTableResolverTest extends BookmarkTestBase {
 
         assertEquals(1, scoped.getIndexMetaIdToMeta().size());
         assertTrue(scoped.getIndexMetaIdToMeta().containsKey(live.getBaseIndexMetaId()));
+    }
+
+    @Test
+    public void testResolveByChangeRejectsLiveDropped() throws Exception {
+        OlapTable live = table(createDefaultTable());
+        // Head references a physical that doesn't exist in live → walk never sees it → PartitionDropped.
+        long phantomLogicalId = 999_001L;
+        long phantomPhysicalId = 999_002L;
+        Map<Long, List<PhysicalPartitionChange>> changes = new HashMap<>();
+        List<PhysicalPartitionChange> row = new ArrayList<>();
+        row.add(new PartitionAdded(phantomLogicalId, phantomPhysicalId,
+                new PhysicalPartitionMeta(1L, 1L, 1L, 0L)));
+        changes.put(phantomLogicalId, row);
+        BookmarkChange diff = new BookmarkChange(OptionalLong.empty(), 42L, changes);
+
+        SemanticException ex = assertThrows(SemanticException.class,
+                () -> BookmarkScopedTableResolver.resolveByChange(live, diff));
+        String expected = String.format(
+                "CHANGES not trackable: physical partition %d on table '%s' dropped from live since bookmark 42",
+                phantomPhysicalId, live.getName());
+        assertTrue(ex.getMessage().contains(expected),
+                "expected '" + expected + "', got: " + ex.getMessage());
+    }
+
+    @Test
+    public void testResolveByChangeRejectsLiveIndexReplaced() throws Exception {
+        OlapTable live = table(createDefaultTable());
+        // Head says metaId = liveMetaId + 1 → walk sees mismatch → IndexReplaced.
+        BookmarkChange diff = buildDiffShiftedAgainstLive(live, /* shiftMetaId = */ true, /* headBookmarkId = */ 42L);
+
+        SemanticException ex = assertThrows(SemanticException.class,
+                () -> BookmarkScopedTableResolver.resolveByChange(live, diff));
+        assertTrue(ex.getMessage().contains("rewritten in live since bookmark 42"),
+                "actual: " + ex.getMessage());
+    }
+
+    @Test
+    public void testResolveByChangeRejectsLiveTabletReshard() throws Exception {
+        OlapTable live = table(createDefaultTable());
+        // Head says indexId = liveIndexId + 1 (metaId matches) → walk sees mismatch → TabletReshard.
+        BookmarkChange diff = buildDiffShiftedAgainstLive(live, /* shiftMetaId = */ false, /* headBookmarkId = */ 42L);
+
+        SemanticException ex = assertThrows(SemanticException.class,
+                () -> BookmarkScopedTableResolver.resolveByChange(live, diff));
+        assertTrue(ex.getMessage().contains("resharded in live since bookmark 42"),
+                "actual: " + ex.getMessage());
+    }
+
+    /**
+     * Build a diff whose first physical partition's recorded head meta mismatches live on
+     * {@code baseMaterializedIndexMetaId} (when {@code shiftMetaId} is true) or
+     * {@code baseMaterializedIndexId} (otherwise).
+     */
+    private static BookmarkChange buildDiffShiftedAgainstLive(OlapTable live, boolean shiftMetaId,
+                                                              long headBookmarkId) {
+        Map<Long, List<PhysicalPartitionChange>> changes = new HashMap<>();
+        boolean firstShifted = false;
+        long versionSeed = 1000L;
+        long timeSeed = 10_000L;
+        for (Partition p : live.getPartitions()) {
+            long logicalId = p.getId();
+            PhysicalPartition pp = p.getDefaultPhysicalPartition();
+            MaterializedIndex base = pp.getLatestBaseIndex();
+            long metaId = base.getMetaId();
+            long indexId = base.getId();
+            if (!firstShifted) {
+                if (shiftMetaId) {
+                    metaId += 1;
+                } else {
+                    indexId += 1;
+                }
+                firstShifted = true;
+            }
+            PhysicalPartitionMeta head = new PhysicalPartitionMeta(
+                    indexId, metaId, versionSeed++, timeSeed++);
+            List<PhysicalPartitionChange> row = new ArrayList<>();
+            row.add(new PartitionAdded(logicalId, pp.getId(), head));
+            changes.put(logicalId, row);
+        }
+        return new BookmarkChange(OptionalLong.empty(), headBookmarkId, changes);
     }
 }

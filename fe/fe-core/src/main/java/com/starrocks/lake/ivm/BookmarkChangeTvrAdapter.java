@@ -24,12 +24,13 @@ import java.util.Optional;
 import javax.annotation.Nullable;
 
 /**
- * Adapter that exposes a BookmarkChange between two Lake-table bookmarks to
- * IVM as a single TvrTableDeltaTrait covering the whole {@code (base, head]}
- * range. The trait is MONOTONIC when every per-partition diff is {@code ADDED}
- * or {@code DATA_CHANGED} (including the vacuous "no diff" case where
- * endpoints have equivalent partition meta but bookmark ids still advance);
- * RETRACTABLE otherwise so IVM falls back to a non-incremental refresh.
+ * Translates a {@link BookmarkChange} between two Lake-table bookmarks into the
+ * {@link TvrTableDeltaTrait} list consumed by IVM. Always emits exactly one
+ * trait covering the whole {@code (base, head]} range — MONOTONIC when every
+ * per-partition diff is {@code ADDED} or {@code DATA_CHANGED} (including the
+ * vacuous "no diff" case, where endpoints have equivalent partition meta but
+ * bookmark ids still advance), RETRACTABLE otherwise so IVM falls back to a
+ * non-incremental refresh.
  */
 public final class BookmarkChangeTvrAdapter {
 
@@ -44,7 +45,7 @@ public final class BookmarkChangeTvrAdapter {
      *         range
      */
     public static List<TvrTableDeltaTrait> toTvrTraits(@Nullable Bookmark base, Bookmark head) {
-        BookmarkChange change = BookmarkChange.computeChanges(base, head);
+        BookmarkChange change = BookmarkChange.computeChanges(Optional.ofNullable(base), head);
         TvrTableDelta delta = TvrTableDelta.of(
                 base == null ? Optional.empty() : Optional.of(base.getBookmarkId()),
                 Optional.of(head.getBookmarkId()));

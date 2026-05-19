@@ -31,6 +31,7 @@ import com.starrocks.type.IntegerType;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 /**
  * Builder for LogicalChangesScanOperator from a BookmarkRange on an OlapTable,
@@ -38,7 +39,7 @@ import java.util.Map;
  * base&lt;=head invariant are enforced by the caller; this builder enforces
  * bookmark resolution and trackability.
  */
-public final class CdcScanHelper {
+public final class CdcUtils {
 
     public static final String CDC_CHANGE_TYPE_COLUMN_NAME = "__CHANGE_TYPE__";
     public static final String CDC_ROW_VERSION_COLUMN_NAME = "__ROW_VERSION__";
@@ -64,7 +65,7 @@ public final class CdcScanHelper {
      * @throws SemanticException if either bookmark id is not registered for
      *     {@code table}, or the delta contains non-trackable changes
      */
-    public static LogicalChangesScanOperator build(
+    public static LogicalChangesScanOperator buildScanOperator(
             OlapTable table, BookmarkRange range,
             Map<ColumnRefOperator, Column> colRefToColumnMetaMap,
             Map<Column, ColumnRefOperator> columnMetaToColRefMap) {
@@ -78,32 +79,11 @@ public final class CdcScanHelper {
         Bookmark head = bookmarkManager.findBookmarkById(dbId, table.getId(), range.head())
                 .orElseThrow(() -> new SemanticException(String.format(
                         "bookmark %d not found on table '%s'", range.head(), table.getName())));
-        BookmarkChange delta = BookmarkChange.computeChanges(base, head);
-        checkTrackable(delta, table.getName(), base.getBookmarkId(), head.getBookmarkId());
+        BookmarkChange delta = BookmarkChange.computeChanges(Optional.of(base), head);
         OlapTable scopedTable = BookmarkScopedTableResolver.resolveByChange(table, delta);
         return new LogicalChangesScanOperator(
                 scopedTable, colRefToColumnMetaMap, columnMetaToColRefMap,
                 base, head, delta, Operator.DEFAULT_LIMIT);
     }
 
-    /** Reject the first non-trackable physical-partition change in {@code delta}. */
-    private static void checkTrackable(BookmarkChange delta, String tableName, long baseId, long headId) {
-        for (List<BookmarkChange.PhysicalPartitionChange> changes : delta.getChanges().values()) {
-            for (BookmarkChange.PhysicalPartitionChange change : changes) {
-                String reason;
-                if (change instanceof BookmarkChange.PartitionDropped) {
-                    reason = "dropped";
-                } else if (change instanceof BookmarkChange.IndexReplaced) {
-                    reason = "rewritten";
-                } else if (change instanceof BookmarkChange.TabletReshard) {
-                    reason = "resharded";
-                } else {
-                    continue;
-                }
-                throw new SemanticException(String.format(
-                        "CHANGES from bookmark %d to %d on table '%s' not trackable: physical partition %d %s",
-                        baseId, headId, tableName, change.getPhysicalPartitionId(), reason));
-            }
-        }
-    }
 }

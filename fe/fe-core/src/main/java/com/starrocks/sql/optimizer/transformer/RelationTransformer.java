@@ -679,7 +679,7 @@ public class RelationTransformer implements AstVisitorExtendInterface<LogicalPla
                         .build();
             } else if (node.getBookmarkRange().isPresent()) {
                 OlapTable olapTable = (OlapTable) node.getTable();
-                scanOperator = CdcScanHelper.build(
+                scanOperator = CdcUtils.buildScanOperator(
                         olapTable,
                         node.getBookmarkRange().get(),
                         colRefToColumnMetaMapBuilder.build(),

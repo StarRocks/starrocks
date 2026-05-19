@@ -21,6 +21,8 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
+import java.util.OptionalLong;
 
 /** How a table's physical-partition layout moved between two bookmarks. */
 public final class BookmarkChange {
@@ -179,10 +181,23 @@ public final class BookmarkChange {
         }
     }
 
+    private final OptionalLong baseBookmarkId;
+    private final long headBookmarkId;
     private final Map<Long, List<PhysicalPartitionChange>> changesByLogicalPartition;
 
-    public BookmarkChange(Map<Long, List<PhysicalPartitionChange>> changes) {
+    public BookmarkChange(OptionalLong baseBookmarkId, long headBookmarkId,
+                          Map<Long, List<PhysicalPartitionChange>> changes) {
+        this.baseBookmarkId = baseBookmarkId;
+        this.headBookmarkId = headBookmarkId;
         this.changesByLogicalPartition = changes;
+    }
+
+    public OptionalLong getBaseBookmarkId() {
+        return baseBookmarkId;
+    }
+
+    public long getHeadBookmarkId() {
+        return headBookmarkId;
     }
 
     public Map<Long, List<PhysicalPartitionChange>> getChanges() {
@@ -214,25 +229,30 @@ public final class BookmarkChange {
     /**
      * Compute the change between two bookmarks of the same table.
      *
-     * @param base the earlier bookmark, or null for "no prior bookmark"
-     *             (every physical partition in {@code head} is ADDED).
+     * @param base the earlier bookmark, or {@link Optional#empty()} for "no prior
+     *             bookmark" (every physical partition in {@code head} is ADDED).
      * @param head the later bookmark; must be non-null.
      * @throws IllegalArgumentException if base and head belong to different tables
      *         or base is newer than head.
      */
-    public static BookmarkChange computeChanges(Bookmark base, Bookmark head) {
+    public static BookmarkChange computeChanges(Optional<Bookmark> base, Bookmark head) {
+        Preconditions.checkNotNull(base, "base must not be null (use Optional.empty())");
         Preconditions.checkNotNull(head, "head must not be null");
-        if (base == null) {
-            return computeChanges(Collections.emptyMap(), head.getPartitionsMeta());
+        if (base.isEmpty()) {
+            return computeChanges(OptionalLong.empty(), head.getBookmarkId(),
+                    Collections.emptyMap(), head.getPartitionsMeta());
         }
-        Preconditions.checkArgument(base.getTableId() == head.getTableId(),
-                "base.tableId(%s) != head.tableId(%s)", base.getTableId(), head.getTableId());
-        Preconditions.checkArgument(base.getBookmarkId() <= head.getBookmarkId(),
-                "base.bookmarkId(%s) > head.bookmarkId(%s)", base.getBookmarkId(), head.getBookmarkId());
-        return computeChanges(base.getPartitionsMeta(), head.getPartitionsMeta());
+        Bookmark b = base.get();
+        Preconditions.checkArgument(b.getTableId() == head.getTableId(),
+                "base.tableId(%s) != head.tableId(%s)", b.getTableId(), head.getTableId());
+        Preconditions.checkArgument(b.getBookmarkId() <= head.getBookmarkId(),
+                "base.bookmarkId(%s) > head.bookmarkId(%s)", b.getBookmarkId(), head.getBookmarkId());
+        return computeChanges(OptionalLong.of(b.getBookmarkId()), head.getBookmarkId(),
+                b.getPartitionsMeta(), head.getPartitionsMeta());
     }
 
     private static BookmarkChange computeChanges(
+            OptionalLong baseBookmarkId, long headBookmarkId,
             Map<Long, Map<Long, PhysicalPartitionMeta>> baseParts,
             Map<Long, Map<Long, PhysicalPartitionMeta>> headParts) {
         Map<Long, List<PhysicalPartitionChange>> changes = new HashMap<>();
@@ -299,6 +319,6 @@ public final class BookmarkChange {
             changes.put(logicalId, row);
         }
 
-        return new BookmarkChange(changes);
+        return new BookmarkChange(baseBookmarkId, headBookmarkId, changes);
     }
 }

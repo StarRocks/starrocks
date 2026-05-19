@@ -27,6 +27,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -65,14 +66,14 @@ public class BookmarkChangeTest {
         // Identical → no change
         Bookmark b1 = meta(1L, 10L, 100L, 1L, 1L, 5L);
         Bookmark b2 = meta(2L, 10L, 100L, 1L, 1L, 5L);
-        BookmarkChange noChange = BookmarkChange.computeChanges(b1, b2);
+        BookmarkChange noChange = BookmarkChange.computeChanges(Optional.of(b1), b2);
         assertTrue(noChange.isNoChange());
         assertTrue(flatten(noChange).isEmpty());
 
         // Only visible version differs → DataChanged
         Bookmark b3 = meta(2L, 10L, 100L, 1L, 1L, 7L);
         DataChanged dc = assertInstanceOf(DataChanged.class,
-                flatten(BookmarkChange.computeChanges(b1, b3)).get(0));
+                flatten(BookmarkChange.computeChanges(Optional.of(b1), b3)).get(0));
         assertEquals(ChangeType.DATA_CHANGED, dc.getChangeType());
         assertEquals(5L, dc.getBasePartition().getVisibleVersion());
         assertEquals(7L, dc.getHeadPartition().getVisibleVersion());
@@ -80,7 +81,7 @@ public class BookmarkChangeTest {
         // metaId differs (id same) → IndexReplaced
         Bookmark b4 = meta(2L, 10L, 100L, 1L, 9L, 5L);
         IndexReplaced ir1 = assertInstanceOf(IndexReplaced.class,
-                flatten(BookmarkChange.computeChanges(b1, b4)).get(0));
+                flatten(BookmarkChange.computeChanges(Optional.of(b1), b4)).get(0));
         assertEquals(ChangeType.INDEX_REPLACED, ir1.getChangeType());
         assertEquals(1L, ir1.getBasePartition().getBaseMaterializedIndexMetaId());
         assertEquals(9L, ir1.getHeadPartition().getBaseMaterializedIndexMetaId());
@@ -88,14 +89,14 @@ public class BookmarkChangeTest {
         // metaId AND id differ → IndexReplaced (metaId wins)
         Bookmark b5 = meta(2L, 10L, 100L, 5L, 9L, 5L);
         IndexReplaced ir2 = assertInstanceOf(IndexReplaced.class,
-                flatten(BookmarkChange.computeChanges(b1, b5)).get(0));
+                flatten(BookmarkChange.computeChanges(Optional.of(b1), b5)).get(0));
         assertEquals(9L, ir2.getHeadPartition().getBaseMaterializedIndexMetaId());
         assertEquals(5L, ir2.getHeadPartition().getBaseMaterializedIndexId());
 
         // Only id differs (metaId stable) → TabletReshard
         Bookmark b6 = meta(2L, 10L, 100L, 5L, 1L, 5L);
         TabletReshard tr1 = assertInstanceOf(TabletReshard.class,
-                flatten(BookmarkChange.computeChanges(b1, b6)).get(0));
+                flatten(BookmarkChange.computeChanges(Optional.of(b1), b6)).get(0));
         assertEquals(ChangeType.TABLET_RESHARD, tr1.getChangeType());
         assertEquals(1L, tr1.getBasePartition().getBaseMaterializedIndexId());
         assertEquals(5L, tr1.getHeadPartition().getBaseMaterializedIndexId());
@@ -105,7 +106,7 @@ public class BookmarkChangeTest {
         // Precedence — id and version differ but metaId same → TabletReshard wins (id beats version)
         Bookmark b7 = meta(2L, 10L, 100L, 5L, 1L, 9L);
         assertInstanceOf(TabletReshard.class,
-                flatten(BookmarkChange.computeChanges(b1, b7)).get(0));
+                flatten(BookmarkChange.computeChanges(Optional.of(b1), b7)).get(0));
     }
 
     @Test
@@ -122,7 +123,7 @@ public class BookmarkChangeTest {
                 30L, 300L, 5L, 5L, 1L);
 
         Map<Long, List<PhysicalPartitionChange>> byLogical =
-                BookmarkChange.computeChanges(base, head).getChanges();
+                BookmarkChange.computeChanges(Optional.of(base), head).getChanges();
 
         // Logical 10: one ADDED (102) + one DROPPED (101).
         List<PhysicalPartitionChange> log10 = byLogical.get(10L);
@@ -152,27 +153,27 @@ public class BookmarkChangeTest {
         Bookmark b1 = meta(1L, 10L, 100L, 1L, 1L, 5L);
 
         // No change → trackable.
-        assertTrue(BookmarkChange.computeChanges(b1, b1).isTrackable());
+        assertTrue(BookmarkChange.computeChanges(Optional.of(b1), b1).isTrackable());
 
         // ADDED only.
         Bookmark added = meta(2L, 10L, 100L, 1L, 1L, 5L, 10L, 101L, 2L, 2L, 5L);
-        assertTrue(BookmarkChange.computeChanges(b1, added).isTrackable());
+        assertTrue(BookmarkChange.computeChanges(Optional.of(b1), added).isTrackable());
 
         // DATA_CHANGED only.
         Bookmark dataChanged = meta(2L, 10L, 100L, 1L, 1L, 9L);
-        assertTrue(BookmarkChange.computeChanges(b1, dataChanged).isTrackable());
+        assertTrue(BookmarkChange.computeChanges(Optional.of(b1), dataChanged).isTrackable());
 
         // INDEX_REPLACED → not trackable.
         Bookmark replaced = meta(2L, 10L, 100L, 1L, 5L, 5L);
-        assertFalse(BookmarkChange.computeChanges(b1, replaced).isTrackable());
+        assertFalse(BookmarkChange.computeChanges(Optional.of(b1), replaced).isTrackable());
 
         // TABLET_RESHARD → not trackable.
         Bookmark resharded = meta(2L, 10L, 100L, 9L, 1L, 5L);
-        assertFalse(BookmarkChange.computeChanges(b1, resharded).isTrackable());
+        assertFalse(BookmarkChange.computeChanges(Optional.of(b1), resharded).isTrackable());
 
         // PartitionDropped → not trackable.
         Bookmark dropped = meta(2L);
-        assertFalse(BookmarkChange.computeChanges(b1, dropped).isTrackable());
+        assertFalse(BookmarkChange.computeChanges(Optional.of(b1), dropped).isTrackable());
     }
 
     @Test
@@ -180,7 +181,7 @@ public class BookmarkChangeTest {
         Bookmark head = meta(2L, 10L, 100L, 1L, 1L, 5L);
 
         // Null base → every partition in head is ADDED.
-        BookmarkChange nullBase = BookmarkChange.computeChanges(null, head);
+        BookmarkChange nullBase = BookmarkChange.computeChanges(Optional.empty(), head);
         List<PhysicalPartitionChange> entries = flatten(nullBase);
         assertEquals(1, entries.size());
         assertInstanceOf(PartitionAdded.class, entries.get(0));
@@ -188,19 +189,19 @@ public class BookmarkChangeTest {
         // Non-null base + null head → NPE (isolates the null-head check, not "both null").
         Bookmark validBase = meta(1L, 10L, 100L, 1L, 1L, 5L);
         assertThrows(NullPointerException.class,
-                () -> BookmarkChange.computeChanges(validBase, null));
+                () -> BookmarkChange.computeChanges(Optional.of(validBase), null));
 
         // Table mismatch → IAE.
         Map<Long, Map<Long, PhysicalPartitionMeta>> empty = new HashMap<>();
         Bookmark base = new Bookmark(DB_ID, TABLE_ID, 1L, 1000L, empty);
         Bookmark headOtherTable = new Bookmark(DB_ID, 99L, 2L, 1000L, empty);
         assertThrows(IllegalArgumentException.class,
-                () -> BookmarkChange.computeChanges(base, headOtherTable));
+                () -> BookmarkChange.computeChanges(Optional.of(base), headOtherTable));
 
         // base.bookmarkId > head.bookmarkId → IAE.
         Bookmark older = new Bookmark(DB_ID, TABLE_ID, 50L, 1000L, empty);
         Bookmark newer = new Bookmark(DB_ID, TABLE_ID, 30L, 1000L, empty);
         assertThrows(IllegalArgumentException.class,
-                () -> BookmarkChange.computeChanges(older, newer));
+                () -> BookmarkChange.computeChanges(Optional.of(older), newer));
     }
 }

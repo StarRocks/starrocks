@@ -34,7 +34,7 @@ import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalChangesScanOperator;
-import com.starrocks.sql.optimizer.transformer.CdcScanHelper;
+import com.starrocks.sql.optimizer.transformer.CdcUtils;
 import com.starrocks.sql.optimizer.transformer.LogicalPlan;
 import com.starrocks.sql.optimizer.transformer.RelationTransformer;
 import com.starrocks.utframe.UtFrameUtils;
@@ -58,7 +58,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /**
  * Planner-level test for the bookmark-resolution side of the _CHANGES_ hint:
  * scoped-table substitution in the transformer, non-trackable-delta messaging,
- * and the CdcScanHelper.build entry point that production callers reuse.
+ * and the CdcUtils.buildScanOperator entry point that production callers reuse.
  *
  * <p>Bookmarks are minted by calling BookmarkManager directly; INSERTs are
  * not available in the FE UT framework, so consecutive create() calls only
@@ -156,7 +156,7 @@ public class ChangesBookmarkResolutionTest extends BookmarkTestBase {
         Bookmark head = synthesizeAndRegister(tableId, liveSnapshot(live));
 
         SemanticException ex = assertThrows(SemanticException.class,
-                () -> CdcScanHelper.build(
+                () -> CdcUtils.buildScanOperator(
                         live,
                         new BookmarkRange(base.getBookmarkId(), head.getBookmarkId()),
                         new HashMap<>(),
@@ -182,7 +182,7 @@ public class ChangesBookmarkResolutionTest extends BookmarkTestBase {
         Bookmark head = synthesizeAndRegister(tableId, headParts);
 
         SemanticException ex = assertThrows(SemanticException.class,
-                () -> CdcScanHelper.build(
+                () -> CdcUtils.buildScanOperator(
                         live,
                         new BookmarkRange(base.getBookmarkId(), head.getBookmarkId()),
                         new HashMap<>(),
@@ -208,7 +208,7 @@ public class ChangesBookmarkResolutionTest extends BookmarkTestBase {
         Bookmark head = synthesizeAndRegister(tableId, headParts);
 
         SemanticException ex = assertThrows(SemanticException.class,
-                () -> CdcScanHelper.build(
+                () -> CdcUtils.buildScanOperator(
                         live,
                         new BookmarkRange(base.getBookmarkId(), head.getBookmarkId()),
                         new HashMap<>(),
@@ -236,7 +236,7 @@ public class ChangesBookmarkResolutionTest extends BookmarkTestBase {
         Bookmark head = bm.create(dbId, tableId, hHead);
 
         try {
-            LogicalChangesScanOperator op = CdcScanHelper.build(
+            LogicalChangesScanOperator op = CdcUtils.buildScanOperator(
                     table,
                     new BookmarkRange(base.getBookmarkId(), head.getBookmarkId()),
                     new HashMap<>(),
@@ -264,7 +264,7 @@ public class ChangesBookmarkResolutionTest extends BookmarkTestBase {
 
         try {
             SemanticException ex = assertThrows(SemanticException.class,
-                    () -> CdcScanHelper.build(
+                    () -> CdcUtils.buildScanOperator(
                             table,
                             new BookmarkRange(99999L, head.getBookmarkId()),
                             new HashMap<>(),
