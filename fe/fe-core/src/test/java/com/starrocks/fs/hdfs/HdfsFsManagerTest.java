@@ -31,10 +31,13 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 
+import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.IOException;
+import java.io.InterruptedIOException;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
+import java.nio.file.Files;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -512,6 +515,137 @@ public class HdfsFsManagerTest {
         Assertions.assertFalse(cache.containsKey(id));
         // Closed on a fallback daemon thread
         Mockito.verify(fs, Mockito.timeout(2000).times(1)).closeFileSystem();
+    }
+
+    /**
+     * Regression for cluster snapshot upload error reporting: copyToLocal wraps the
+     * underlying Hadoop exception in a StarRocksException, and the wrapper message
+     * must include the cause's message so callers that surface only
+     * StarRocksException#getMessage (e.g. ClusterSnapshotJob.error_message) still
+     * see the real reason (AccessDenied, NoSuchBucket, timeout, etc.).
+     */
+    @Test
+    public void testCopyToLocalIncludesCauseMessage() throws Exception {
+        HdfsFsManager mgr = Mockito.spy(fileSystemManager);
+        FileSystem fs = Mockito.mock(FileSystem.class);
+        HdfsFs hdfs = Mockito.mock(HdfsFs.class);
+        Mockito.when(hdfs.getDFSFileSystem()).thenReturn(fs);
+        Mockito.doReturn(hdfs).when(mgr)
+                .getFileSystem(Mockito.anyString(), Mockito.anyMap(), Mockito.isNull());
+
+        String causeMsg = "AccessDenied: anonymous is not authorized to perform s3:GetObject";
+        Mockito.doThrow(new IOException(causeMsg))
+                .when(fs).copyToLocalFile(Mockito.anyBoolean(), Mockito.any(Path.class),
+                        Mockito.any(Path.class), Mockito.anyBoolean());
+
+        StarRocksException ex = Assertions.assertThrows(StarRocksException.class,
+                () -> mgr.copyToLocal("s3a://bucket/key", "/tmp/dest", new HashMap<>()));
+        Assertions.assertTrue(ex.getMessage().contains(causeMsg),
+                "wrapper message must include cause: " + ex.getMessage());
+        Assertions.assertTrue(ex.getMessage().contains("Failed to copy s3a://bucket/key to local /tmp/dest"),
+                "wrapper message must include both paths: " + ex.getMessage());
+        Assertions.assertNotNull(ex.getCause(), "cause must still be attached");
+    }
+
+    /**
+     * Companion to {@link #testCopyToLocalIncludesCauseMessage()} for copyFromLocal.
+     * Uses a non-existent local source so FileUtil.copy throws naturally, then checks
+     * that the wrapper message preserves the underlying message.
+     */
+    @Test
+    public void testCopyFromLocalIncludesCauseMessage() throws Exception {
+        HdfsFsManager mgr = Mockito.spy(fileSystemManager);
+        FileSystem fs = Mockito.mock(FileSystem.class);
+        HdfsFs hdfs = Mockito.mock(HdfsFs.class);
+        Mockito.when(hdfs.getDFSFileSystem()).thenReturn(fs);
+        Mockito.doReturn(hdfs).when(mgr)
+                .getFileSystem(Mockito.anyString(), Mockito.anyMap(), Mockito.isNull());
+
+        String nonExistentSrc = "/this/path/should/not/exist/" + System.nanoTime();
+        StarRocksException ex = Assertions.assertThrows(StarRocksException.class,
+                () -> mgr.copyFromLocal(nonExistentSrc, "s3a://bucket/key", new HashMap<>()));
+        Assertions.assertNotNull(ex.getCause(), "cause must still be attached");
+        Assertions.assertNotNull(ex.getCause().getMessage(), "cause must carry a message");
+        Assertions.assertTrue(ex.getMessage().contains(ex.getCause().getMessage()),
+                "wrapper message must include cause's message: " + ex.getMessage());
+        Assertions.assertTrue(ex.getMessage().contains("Failed to copy local " + nonExistentSrc
+                        + " to s3a://bucket/key"),
+                "wrapper message must include both paths: " + ex.getMessage());
+    }
+
+    /**
+     * Covers the {@link InterruptedIOException} branch of copyToLocal: the cause's
+     * message must still be visible in the wrapper, and the catch clears the
+     * thread's interrupt flag so callers don't observe spurious interruption.
+     */
+    @Test
+    public void testCopyToLocalInterruptedIncludesCauseMessage() throws Exception {
+        HdfsFsManager mgr = Mockito.spy(fileSystemManager);
+        FileSystem fs = Mockito.mock(FileSystem.class);
+        HdfsFs hdfs = Mockito.mock(HdfsFs.class);
+        Mockito.when(hdfs.getDFSFileSystem()).thenReturn(fs);
+        Mockito.doReturn(hdfs).when(mgr)
+                .getFileSystem(Mockito.anyString(), Mockito.anyMap(), Mockito.isNull());
+
+        String causeMsg = "interrupted during S3 GET";
+        Mockito.doThrow(new InterruptedIOException(causeMsg))
+                .when(fs).copyToLocalFile(Mockito.anyBoolean(), Mockito.any(Path.class),
+                        Mockito.any(Path.class), Mockito.anyBoolean());
+
+        try {
+            StarRocksException ex = Assertions.assertThrows(StarRocksException.class,
+                    () -> mgr.copyToLocal("s3a://bucket/key", "/tmp/dest", new HashMap<>()));
+            Assertions.assertTrue(ex.getMessage().contains(causeMsg),
+                    "wrapper message must include cause: " + ex.getMessage());
+            Assertions.assertTrue(ex.getMessage().contains(
+                            "Failed to copy s3a://bucket/key to local /tmp/dest"),
+                    "wrapper message must include both paths: " + ex.getMessage());
+            Assertions.assertInstanceOf(InterruptedIOException.class, ex.getCause(),
+                    "cause must be the InterruptedIOException");
+        } finally {
+            // Defensive: the catch calls Thread.interrupted() to clear the flag.
+            Thread.interrupted();
+        }
+    }
+
+    /**
+     * Covers the {@link InterruptedIOException} branch of copyFromLocal. Uses a
+     * real local source file so FileUtil.copy reaches the destination
+     * FileSystem.create(...) call, where we inject the interrupt.
+     */
+    @Test
+    public void testCopyFromLocalInterruptedIncludesCauseMessage() throws Exception {
+        HdfsFsManager mgr = Mockito.spy(fileSystemManager);
+        FileSystem fs = Mockito.mock(FileSystem.class);
+        HdfsFs hdfs = Mockito.mock(HdfsFs.class);
+        Mockito.when(hdfs.getDFSFileSystem()).thenReturn(fs);
+        Mockito.doReturn(hdfs).when(mgr)
+                .getFileSystem(Mockito.anyString(), Mockito.anyMap(), Mockito.isNull());
+
+        File srcFile = Files.createTempFile("hdfs-fs-mgr-test-", ".bin").toFile();
+        try {
+            Files.write(srcFile.toPath(), new byte[] {1, 2, 3});
+
+            String causeMsg = "interrupted during S3 PUT";
+            // FileUtil.copy ends up calling FileSystem.create(Path) — stub that overload directly
+            // (the (Path, boolean) overload isn't reached because Mockito short-circuits at the mocked
+            // create(Path) method without delegating to its real implementation).
+            Mockito.doThrow(new InterruptedIOException(causeMsg))
+                    .when(fs).create(Mockito.any(Path.class));
+
+            StarRocksException ex = Assertions.assertThrows(StarRocksException.class,
+                    () -> mgr.copyFromLocal(srcFile.getAbsolutePath(), "s3a://bucket/key", new HashMap<>()));
+            Assertions.assertTrue(ex.getMessage().contains(causeMsg),
+                    "wrapper message must include cause: " + ex.getMessage());
+            Assertions.assertTrue(ex.getMessage().contains(
+                            "Failed to copy local " + srcFile.getAbsolutePath() + " to s3a://bucket/key"),
+                    "wrapper message must include both paths: " + ex.getMessage());
+            Assertions.assertInstanceOf(InterruptedIOException.class, ex.getCause(),
+                    "cause must be the InterruptedIOException");
+        } finally {
+            srcFile.delete();
+            Thread.interrupted();
+        }
     }
 
     /**
