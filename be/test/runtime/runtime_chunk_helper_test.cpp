@@ -21,13 +21,11 @@
 #include "column/chunk.h"
 #include "column/field.h"
 #include "column/schema.h"
-#include "common/config_exec_fwd.h"
 #include "common/object_pool.h"
 #include "gtest/gtest.h"
 #include "runtime/chunk_helper.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/descriptors.h"
-#include "runtime/runtime_state.h"
 #include "types/logical_type.h"
 
 namespace starrocks {
@@ -41,7 +39,7 @@ protected:
     TSlotDescriptor _create_slot_desc(LogicalType type, const std::string& col_name, int col_pos);
     TupleDescriptor* _create_tuple_desc();
 
-    RuntimeState _runtime_state;
+    alignas(TupleDescriptor) char _tuple_desc_storage[sizeof(TupleDescriptor)];
     ObjectPool _pool;
 };
 
@@ -66,13 +64,13 @@ TupleDescriptor* RuntimeChunkHelperDescriptorTest::_create_tuple_desc() {
 
     tuple_builder.build(&table_builder);
 
-    std::vector<TTupleId> row_tuples = std::vector<TTupleId>{0};
-    DescriptorTbl* tbl = nullptr;
-    CHECK(DescriptorTbl::create(&_runtime_state, &_pool, table_builder.desc_tbl(), &tbl, config::vector_chunk_size)
-                  .ok());
-
-    auto* row_desc = _pool.add(new RowDescriptor(*tbl, row_tuples));
-    auto* tuple_desc = row_desc->tuple_descriptors()[0];
+    auto desc_tbl = table_builder.desc_tbl();
+    auto* tuple_desc = _pool.emplace<TupleDescriptor>(_tuple_desc_storage, desc_tbl.tupleDescriptors[0]);
+    for (const auto& slot_desc : desc_tbl.slotDescriptors) {
+        auto* slot = _pool.add(new SlotDescriptor(slot_desc));
+        tuple_desc->slots().push_back(slot);
+        tuple_desc->decoded_slots().push_back(slot);
+    }
 
     return tuple_desc;
 }
