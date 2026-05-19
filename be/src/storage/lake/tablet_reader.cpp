@@ -169,8 +169,18 @@ Status TabletReader::open(const TabletReaderParams& read_params) {
         std::shared_ptr<pipeline::SplitMorselQueue> split_morsel_queue = nullptr;
 
         if (_could_split_physically) {
-            split_morsel_queue = std::make_shared<pipeline::PhysicalSplitMorselQueue>(
+            auto physical_queue = std::make_shared<pipeline::PhysicalSplitMorselQueue>(
                     std::move(morsels), read_params.scan_dop, read_params.splitted_scan_rows);
+            // Per-segment morsel split is gated on:
+            //   (1) the user-facing session var (default off), and
+            //   (2) this being an ANN-driven vector query.
+            // Non-vector queries always fall through to the existing row-count split.
+            if (read_params.use_vector_index && read_params.runtime_state != nullptr &&
+                read_params.runtime_state->query_options().__isset.enable_per_segment_scan_parallel &&
+                read_params.runtime_state->query_options().enable_per_segment_scan_parallel) {
+                physical_queue->set_split_by_segment(true);
+            }
+            split_morsel_queue = std::move(physical_queue);
         } else {
             // logical
             split_morsel_queue = std::make_shared<pipeline::LogicalSplitMorselQueue>(

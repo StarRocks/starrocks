@@ -411,6 +411,13 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String ENABLE_LAKE_TABLET_INTERNAL_PARALLEL = "enable_lake_tablet_internal_parallel";
 
+    // Per-segment scan parallelism for ANN vector queries. When enabled, scan
+    // morsels are split at segment boundaries (one morsel per segment) instead
+    // of by row count, so each segment's vector-index search runs on its own
+    // driver. Only takes effect when the scan operator detects an ANN query;
+    // non-vector queries are unaffected. Default off: users opt in per session.
+    public static final String ENABLE_PER_SEGMENT_SCAN_PARALLEL = "enable_per_segment_scan_parallel";
+
     public static final String TABLET_INTERNAL_PARALLEL_MODE = "tablet_internal_parallel_mode";
     public static final String ENABLE_SHARED_SCAN = "enable_shared_scan";
     public static final String PIPELINE_DOP = "pipeline_dop";
@@ -1303,6 +1310,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = ENABLE_LAKE_TABLET_INTERNAL_PARALLEL)
     private boolean enableLakeTabletInternalParallel = true;
+
+    @VariableMgr.VarAttr(name = ENABLE_PER_SEGMENT_SCAN_PARALLEL)
+    private boolean enablePerSegmentScanParallel = false;
 
     // The strategy mode of TabletInternalParallel, which is effective only when enableTabletInternalParallel is true.
     // The optional values are "auto" and "force_split".
@@ -6404,6 +6414,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         } else {
             tResult.setEnable_tablet_internal_parallel(enableTabletInternalParallel);
         }
+
+        tResult.setEnable_per_segment_scan_parallel(enablePerSegmentScanParallel);
 
         tResult.setTablet_internal_parallel_mode(
                 TTabletInternalParallelMode.valueOf(tabletInternalParallelMode.toUpperCase()));

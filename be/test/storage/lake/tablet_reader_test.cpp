@@ -763,6 +763,173 @@ TEST_F(LakeTabletReaderSpit, test_reader_split) {
     }
 }
 
+// Exercises PhysicalSplitMorselQueue::set_split_by_segment(true) directly: each
+// try_get() call must return exactly one morsel whose RowidRangeOption covers
+// the full row range of a single segment, and the queue must emit one morsel
+// per segment with no merging across segments.
+TEST_F(LakeTabletReaderSpit, test_per_segment_split_mode) {
+    std::vector<int> k0{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22};
+    std::vector<int> v0{2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30, 32, 34, 36, 38, 40, 41, 44};
+
+    std::vector<int> k1{30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41};
+    std::vector<int> v1{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11};
+
+    auto c0 = Int32Column::create();
+    auto c1 = Int32Column::create();
+    auto c2 = Int32Column::create();
+    auto c3 = Int32Column::create();
+    c0->append_numbers(k0.data(), k0.size() * sizeof(int));
+    c1->append_numbers(v0.data(), v0.size() * sizeof(int));
+    c2->append_numbers(k1.data(), k1.size() * sizeof(int));
+    c3->append_numbers(v1.data(), v1.size() * sizeof(int));
+
+    Chunk chunk0({std::move(c0), std::move(c1)}, _schema);
+    Chunk chunk1({std::move(c2), std::move(c3)}, _schema);
+
+    VersionedTablet tablet(_tablet_mgr.get(), _tablet_metadata);
+
+    // Rowset 1: 2 segments, each with chunk0+chunk1 (34 rows / segment).
+    {
+        int64_t txn_id = next_id();
+        ASSIGN_OR_ABORT(auto writer, tablet.new_writer(kHorizontal, txn_id));
+        ASSERT_OK(writer->open());
+
+        ASSERT_OK(writer->write(chunk0));
+        ASSERT_OK(writer->write(chunk1));
+        ASSERT_OK(writer->finish());
+
+        ASSERT_OK(writer->write(chunk0));
+        ASSERT_OK(writer->write(chunk1));
+        ASSERT_OK(writer->finish());
+
+        ASSERT_EQ(2, writer->segments().size());
+
+        auto* rowset = _tablet_metadata->add_rowsets();
+        rowset->set_overlapped(true);
+        rowset->set_id(1);
+        rowset->set_num_rows(2 * (chunk0.num_rows() + chunk1.num_rows()));
+        auto* segs = rowset->mutable_segments();
+        auto* segs_size = rowset->mutable_segment_size();
+        for (const auto& file : writer->segments()) {
+            segs->Add()->assign(file.path);
+            segs_size->Add(file.size.value());
+        }
+        writer->close();
+    }
+
+    // Rowset 2: 1 segment.
+    {
+        int64_t txn_id = next_id();
+        ASSIGN_OR_ABORT(auto writer, tablet.new_writer(kHorizontal, txn_id));
+        ASSERT_OK(writer->open());
+
+        ASSERT_OK(writer->write(chunk0));
+        ASSERT_OK(writer->write(chunk1));
+        ASSERT_OK(writer->finish());
+
+        ASSERT_EQ(1, writer->segments().size());
+
+        auto* rowset = _tablet_metadata->add_rowsets();
+        rowset->set_overlapped(false);
+        rowset->set_id(2);
+        rowset->set_num_rows(chunk0.num_rows() + chunk1.num_rows());
+        auto* segs = rowset->mutable_segments();
+        auto* segs_size = rowset->mutable_segment_size();
+        for (const auto& file : writer->segments()) {
+            segs->Add()->assign(file.path);
+            segs_size->Add(file.size.value());
+        }
+        writer->close();
+    }
+
+    _tablet_metadata->set_version(3);
+    CHECK_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
+
+    // Build inputs for PhysicalSplitMorselQueue: one ScanMorsel for the tablet,
+    // and the rowset list collected via Rowset::get_rowsets.
+    auto rowsets = Rowset::get_rowsets(_tablet_mgr.get(), _tablet_metadata);
+    ASSERT_EQ(2u, rowsets.size());
+    const size_t total_segments = rowsets[0]->num_segments() + rowsets[1]->num_segments();
+    ASSERT_EQ(3u, total_segments);
+
+    TInternalScanRange internal_scan_range;
+    internal_scan_range.__set_tablet_id(_tablet_metadata->id());
+    internal_scan_range.__set_version(std::to_string(_tablet_metadata->version()));
+    TScanRange scan_range;
+    scan_range.__set_internal_scan_range(internal_scan_range);
+
+    pipeline::Morsels morsels;
+    morsels.emplace_back(std::make_unique<pipeline::ScanMorsel>(/*plan_node_id=*/1, scan_range));
+
+    pipeline::PhysicalSplitMorselQueue queue(std::move(morsels), /*scan_dop=*/4, /*splitted_scan_rows=*/4);
+
+    auto lake_tablet = std::make_shared<lake::Tablet>(_tablet_mgr.get(), _tablet_metadata->id());
+    lake_tablet->set_version_hint(_tablet_metadata->version());
+    std::vector<BaseTabletSharedPtr> tablets{lake_tablet};
+    queue.set_tablets(tablets);
+
+    std::vector<std::vector<BaseRowsetSharedPtr>> tablet_rowsets;
+    tablet_rowsets.emplace_back();
+    auto& rss = tablet_rowsets.back();
+    for (auto& rs : rowsets) {
+        rss.emplace_back(rs);
+    }
+    queue.set_tablet_rowsets(tablet_rowsets);
+    queue.set_tablet_schema(_tablet_schema);
+
+    queue.set_split_by_segment(true);
+
+    // Drain the queue and verify: exactly one morsel per segment, each carrying
+    // a RowidRangeOption that covers the full row range of its single segment.
+    std::vector<pipeline::MorselPtr> drained;
+    while (true) {
+        ASSIGN_OR_ABORT(auto morsel, queue.try_get());
+        if (morsel == nullptr) {
+            break;
+        }
+        drained.emplace_back(std::move(morsel));
+    }
+    ASSERT_EQ(total_segments, drained.size());
+    ASSERT_TRUE(queue.empty());
+
+    size_t seen_segments = 0;
+    for (auto& m : drained) {
+        auto* split = down_cast<pipeline::PhysicalSplitScanMorsel*>(m.get());
+        auto rowid_range = split->get_rowid_range_option();
+        ASSERT_NE(nullptr, rowid_range);
+
+        size_t segments_in_this_morsel = 0;
+        for (const auto& [rs_id, seg_map] : rowid_range->rowid_range_per_segment_per_rowset) {
+            segments_in_this_morsel += seg_map.size();
+            for (const auto& [seg_id, split_info] : seg_map) {
+                // Find the matching segment to compare its row count.
+                BaseRowset* matched_rowset = nullptr;
+                for (auto& rs : rowsets) {
+                    if (rs->rowset_id() == rs_id) {
+                        matched_rowset = rs.get();
+                        break;
+                    }
+                }
+                ASSERT_NE(nullptr, matched_rowset);
+                Segment* seg = nullptr;
+                for (auto& s : matched_rowset->get_segments()) {
+                    if (s->id() == seg_id) {
+                        seg = s.get();
+                        break;
+                    }
+                }
+                ASSERT_NE(nullptr, seg);
+                EXPECT_EQ(static_cast<size_t>(seg->num_rows()), split_info.row_id_range->span_size())
+                        << "per-segment morsel must cover the full segment";
+                EXPECT_TRUE(split_info.is_first_split_of_segment);
+            }
+        }
+        EXPECT_EQ(1u, segments_in_this_morsel) << "per-segment morsel must contain exactly one segment";
+        seen_segments += segments_in_this_morsel;
+    }
+    EXPECT_EQ(total_segments, seen_segments);
+}
+
 class DISABLED_LakeLoadSegmentParallelTest : public TestBase {
 public:
     DISABLED_LakeLoadSegmentParallelTest() : TestBase(kTestDirectory) {

@@ -390,6 +390,13 @@ struct TQueryOptions {
   215: optional string http_request_host_allowlist_regexp = "";
   216: optional bool http_request_allow_private_in_allowlist = false;
   217: optional bool enable_cache_udaf = false;
+
+  // When true, vector index queries split scan morsels at segment boundaries
+  // (one morsel per segment) rather than by row count. Only takes effect when
+  // the scan operator detects an ANN-driven query; non-vector queries fall
+  // through to the existing row-count-based PhysicalSplit/LogicalSplit policy.
+  // Default false: users opt in per session/query.
+  218: optional bool enable_per_segment_scan_parallel = false;
 }
 
 // A scan range plus the parameters needed to execute that scan.

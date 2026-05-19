@@ -499,7 +499,20 @@ StatusOr<pipeline::MorselQueuePtr> OlapScanNode::convert_scan_range_to_morsel_qu
     // Split tablet physically.
     ASSIGN_OR_RETURN(bool ok, _could_split_tablet_physically(pruned_scan_ranges));
     if (ok) {
-        return std::make_unique<pipeline::PhysicalSplitMorselQueue>(std::move(morsels), scan_dop, splitted_scan_rows);
+        auto queue =
+                std::make_unique<pipeline::PhysicalSplitMorselQueue>(std::move(morsels), scan_dop, splitted_scan_rows);
+        // Per-segment morsel split is gated on:
+        //   (1) the user-facing session var (default off), and
+        //   (2) this being an ANN-driven vector query.
+        // Non-vector queries always fall through to the existing row-count split.
+        const auto& query_options = runtime_state()->query_options();
+        const bool is_vector_query = _olap_scan_node.__isset.vector_search_options &&
+                                     _olap_scan_node.vector_search_options.enable_use_ann;
+        if (is_vector_query && query_options.__isset.enable_per_segment_scan_parallel &&
+            query_options.enable_per_segment_scan_parallel) {
+            queue->set_split_by_segment(true);
+        }
+        return queue;
     }
 
     return std::make_unique<pipeline::LogicalSplitMorselQueue>(std::move(morsels), scan_dop, splitted_scan_rows);

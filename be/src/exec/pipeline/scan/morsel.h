@@ -522,6 +522,12 @@ public:
     std::string name() const override { return "physical_split_morsel_queue"; }
     Type type() const override { return PHYSICAL_SPLIT; }
 
+    // When enabled, _try_get_split_from_single_tablet() emits one morsel per
+    // segment (the rowid range covers the whole segment), instead of packing up
+    // to _splitted_scan_rows rows across multiple segments. Used by ANN queries
+    // so each segment's vector-index search runs on its own driver.
+    void set_split_by_segment(bool v) { _split_by_segment = v; }
+
 private:
     rowid_t _lower_bound_ordinal(Segment* segment, const SeekTuple& key, bool lower) const;
     rowid_t _upper_bound_ordinal(Segment* segment, const SeekTuple& key, bool lower, rowid_t end) const;
@@ -562,6 +568,8 @@ private:
     size_t _num_segment_rest_rows = 0;
 
     MemPool _mempool;
+
+    bool _split_by_segment = false;
 };
 
 class LogicalSplitMorselQueue final : public SplitMorselQueue {

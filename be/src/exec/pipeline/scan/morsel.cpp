@@ -16,6 +16,7 @@
 
 #include <fmt/compile.h>
 
+#include <limits>
 #include <memory>
 #include <mutex>
 
@@ -426,6 +427,22 @@ StatusOr<RowidRangeOptionPtr> PhysicalSplitMorselQueue::_try_get_split_from_sing
 
         if (rowid_range == nullptr) {
             rowid_range = std::make_shared<RowidRangeOption>();
+        }
+
+        // Per-segment mode: drain the entire remainder of the current segment
+        // as a single split and return. The next try_get() will advance to the
+        // next segment via _next_segment() + _init_segment() in the outer loop.
+        // Iterator template defaults to rowid_t (uint32_t); pass its max so the
+        // iterator stops on its own bookkeeping rather than on a row limit.
+        if (_split_by_segment) {
+            SparseRange<> taken_range;
+            _segment_range_iter.next_range(std::numeric_limits<rowid_t>::max(), &taken_range);
+            _num_segment_rest_rows = 0;
+            rowid_range->add(_cur_rowset(), _cur_segment(),
+                             std::make_shared<SparseRange<>>(std::move(taken_range)),
+                             /*is_first_split_of_segment=*/true);
+            _is_first_split_of_segment = false;
+            return rowid_range;
         }
 
         SparseRange<> taken_range;
