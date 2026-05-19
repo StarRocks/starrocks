@@ -61,9 +61,12 @@ TEST_F(StarOSWorkerTest, test_add_listener) {
     EXPECT_EQ(0, counter);
     EXPECT_TRUE(ids.empty());
 
+    auto& shard_count_metric = StarOSWorkerMetrics::instance()->staros_shard_count;
+
     info.id = 1;
     EXPECT_TRUE(worker->add_shard(info).ok());
     EXPECT_EQ(1, worker->shard_ids().size());
+    EXPECT_EQ(1, shard_count_metric.value());
 
     // no shard registered, counter and ids will not be modified
     EXPECT_EQ(0, counter);
@@ -75,18 +78,31 @@ TEST_F(StarOSWorkerTest, test_add_listener) {
     info.id = 2;
     EXPECT_TRUE(worker->add_shard(info).ok());
     EXPECT_EQ(2, worker->shard_ids().size());
+    EXPECT_EQ(2, shard_count_metric.value());
 
     // shard:2 added
     EXPECT_EQ(1, counter);
     EXPECT_EQ(1, ids.size());
     EXPECT_EQ(2, ids[0]);
 
-    // add it again, will notify again
+    // add it again, will notify again; insert_or_assign keeps the count flat
+
     ids.clear();
     EXPECT_TRUE(worker->add_shard(info).ok());
     EXPECT_EQ(2, counter);
     EXPECT_EQ(1, ids.size());
     EXPECT_EQ(2, ids[0]);
+    EXPECT_EQ(2, shard_count_metric.value());
+
+    EXPECT_TRUE(worker->remove_shard(1).ok());
+    EXPECT_EQ(1, shard_count_metric.value());
+
+    // remove a shard that does not exist — count unchanged
+    EXPECT_TRUE(worker->remove_shard(999).ok());
+    EXPECT_EQ(1, shard_count_metric.value());
+
+    EXPECT_TRUE(worker->remove_shard(2).ok());
+    EXPECT_EQ(0, shard_count_metric.value());
 }
 
 TEST_F(StarOSWorkerTest, test_fs_cache) {

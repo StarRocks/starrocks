@@ -34,6 +34,7 @@ void StarOSWorkerMetrics::install(MetricRegistry* registry) {
 
     registry->register_metric("staros_shard_info_fallback_total", &staros_shard_info_fallback_total);
     registry->register_metric("staros_shard_info_fallback_failed_total", &staros_shard_info_fallback_failed_total);
+    registry->register_metric("staros_shard_count", &staros_shard_count);
 }
 
 } // namespace starrocks
