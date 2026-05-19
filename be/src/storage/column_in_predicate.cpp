@@ -25,9 +25,9 @@
 #include "runtime/runtime_filter.h"
 #include "storage/column_predicate.h"
 #include "storage/in_predicate_utils.h"
-#include "storage/olap_type_infra.h"
 #include "storage/rowset/bitmap_index_reader.h"
 #include "types/logical_type.h"
+#include "types/olap_type_infra.h"
 
 namespace starrocks {
 

@@ -78,7 +78,6 @@
 #include "storage/lake/vacuum.h"
 #include "storage/olap_common.h"
 #include "storage/olap_define.h"
-#include "storage/olap_type_infra.h"
 #include "storage/options.h"
 #include "storage/primary_key_dump.h"
 #include "storage/rowset/binary_plain_page.h"
@@ -95,6 +94,7 @@
 #include "storage/tablet_meta.h"
 #include "storage/tablet_meta_manager.h"
 #include "storage/zone_map_detail.h"
+#include "types/olap_type_infra.h"
 
 using starrocks::DataDir;
 using starrocks::KVStore;

@@ -43,13 +43,13 @@
 #include "base/string/utf8.h"
 #include "common/bloom_filter.h" // for BloomFilterOptions, BloomFilter
 #include "fs/fs.h"
-#include "storage/olap_type_infra.h"
 #include "storage/rowset/common.h"
 #include "storage/rowset/encoding_info.h"
 #include "storage/rowset/indexed_column_writer.h"
 #include "storage/type_info_allocator_adapter.h"
 #include "storage/types.h"
 #include "types/logical_type.h"
+#include "types/olap_type_infra.h"
 #include "types/storage_type_traits.h"
 
 namespace starrocks {

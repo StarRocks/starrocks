@@ -14,6 +14,9 @@
 
 #pragma once
 
+#include <string>
+#include <utility>
+
 #include "common/logging.h"
 #include "common/status.h"
 #include "types/logical_type.h"

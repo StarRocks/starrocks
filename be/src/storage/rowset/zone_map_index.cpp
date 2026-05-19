@@ -44,11 +44,11 @@
 #include "runtime/exec_env.h"
 #include "storage/chunk_helper.h"
 #include "storage/olap_define.h"
-#include "storage/olap_type_infra.h"
 #include "storage/rowset/encoding_info.h"
 #include "storage/rowset/indexed_column_reader.h"
 #include "storage/rowset/indexed_column_writer.h"
 #include "storage/types.h"
+#include "types/olap_type_infra.h"
 #include "types/storage_type_traits.h"
 #include "types/type_info.h"
 
