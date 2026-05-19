@@ -18,33 +18,20 @@
 
 namespace starrocks {
 
-// RowIdFilter implementation
+BitmapRowIdFilter::BitmapRowIdFilter(std::unique_ptr<detail::Roaring64Map> bitmap) : _bitmap(std::move(bitmap)) {}
 
-bool RowIdFilter::contains(int64_t row_id) const {
-    if (auto* bmp = std::get_if<std::shared_ptr<detail::Roaring64Map>>(&_impl)) {
-        return (*bmp) && (*bmp)->contains(static_cast<uint64_t>(row_id));
-    }
-    if (auto* cb = std::get_if<Callback>(&_impl)) {
-        return (*cb)(row_id);
-    }
-    return true; // empty filter matches all
+BitmapRowIdFilter::~BitmapRowIdFilter() = default;
+
+bool BitmapRowIdFilter::is_member(int64_t row_id) const {
+    return _bitmap && _bitmap->contains(static_cast<uint64_t>(row_id));
 }
 
-int64_t RowIdFilter::count() const {
-    if (auto* bmp = std::get_if<std::shared_ptr<detail::Roaring64Map>>(&_impl)) {
-        return (*bmp) ? static_cast<int64_t>((*bmp)->cardinality()) : 0;
-    }
-    return -1; // unknown for callback mode
+int64_t BitmapRowIdFilter::cardinality() const {
+    return _bitmap ? static_cast<int64_t>(_bitmap->cardinality()) : 0;
 }
 
-// VectorAnnIndex default filtered_search: fallback to search + post-filter
-
+// Default filtered_search: oversample + post-filter.
 Status VectorAnnIndex::filtered_search(const VectorQuery& query, const RowIdFilter& filter, VectorAnnResult* result) {
-    if (filter.empty()) {
-        return search(query, result);
-    }
-
-    // Oversample to compensate for rows removed by post-filter.
     constexpr int32_t kDefaultOversampleFactor = 3;
     VectorQuery oversampled = query;
     oversampled.top_k = query.top_k * kDefaultOversampleFactor;
@@ -55,7 +42,7 @@ Status VectorAnnIndex::filtered_search(const VectorQuery& query, const RowIdFilt
     result->clear();
     result->reserve(query.top_k);
     for (int32_t i = 0; i < raw.result_count && result->result_count < query.top_k; ++i) {
-        if (filter.contains(raw.row_ids[i])) {
+        if (filter.is_member(raw.row_ids[i])) {
             result->add(raw.row_ids[i], raw.scores[i]);
         }
     }

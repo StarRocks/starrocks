@@ -38,12 +38,10 @@ Status PreFilterStrategy::execute(VectorAnnIndex* index, const VectorQuery& quer
     }
 
     ASSIGN_OR_RETURN(auto filter, scalar_provider->evaluate(*predicate));
-
-    if (filter.empty()) {
+    if (!filter) {
         return index->search(query, result);
     }
-
-    return index->filtered_search(query, filter, result);
+    return index->filtered_search(query, *filter, result);
 }
 
 // ============================================================
@@ -57,14 +55,11 @@ Status PostFilterStrategy::execute(VectorAnnIndex* index, const VectorQuery& que
         return index->search(query, result);
     }
 
-    // Evaluate predicate to get the allow-list for post-filtering.
     ASSIGN_OR_RETURN(auto filter, scalar_provider->evaluate(*predicate));
-
-    if (filter.empty()) {
+    if (!filter) {
         return index->search(query, result);
     }
 
-    // Search with oversampled top_k, then filter results.
     VectorQuery oversampled = query;
     oversampled.top_k = query.top_k * kDefaultOversampleFactor;
 
@@ -74,7 +69,7 @@ Status PostFilterStrategy::execute(VectorAnnIndex* index, const VectorQuery& que
     result->clear();
     result->reserve(query.top_k);
     for (int32_t i = 0; i < raw.result_count && result->result_count < query.top_k; ++i) {
-        if (filter.contains(raw.row_ids[i])) {
+        if (filter->is_member(raw.row_ids[i])) {
             result->add(raw.row_ids[i], raw.scores[i]);
         }
     }
