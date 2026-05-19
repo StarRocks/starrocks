@@ -1761,7 +1761,15 @@ Status TabletUpdates::_apply_normal_rowset_commit(const EditVersionInfo& version
             auto r = rowset->total_segment_data_size();
             if (r.ok()) {
                 full_rowset_size = r.value();
+                const bool has_merge_condition = rowset_meta_pb.txn_meta().has_merge_condition();
+                std::string merge_condition;
+                if (has_merge_condition) {
+                    merge_condition = rowset_meta_pb.txn_meta().merge_condition();
+                }
                 rowset->rowset_meta()->clear_txn_meta();
+                if (has_merge_condition) {
+                    rowset->rowset_meta()->set_merge_condition(merge_condition);
+                }
                 rowset->rowset_meta()->set_total_row_size(full_row_size);
                 const auto index_disk_size = rowset->rowset_meta()->index_disk_size();
                 // full_rowset_size is the segment file bytes (column data + embedded indexes).

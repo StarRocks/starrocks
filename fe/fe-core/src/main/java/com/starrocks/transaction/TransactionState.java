@@ -1028,6 +1028,16 @@ public class TransactionState implements Writable, GsonPreProcessable {
         }
     }
 
+    // Raw materialized-index id snapshot recorded at OlapTableSink planning time
+    // for (tableId, physicalPartitionId); null if not recorded.
+    public List<Long> getPartitionLoadedIndexIdsWithoutLock(long tableId, long physicalPartitionId) {
+        Map<Long, List<Long>> loadedPartitionIndexes = loadedTblPartitionIndexes.get(tableId);
+        if (loadedPartitionIndexes == null) {
+            return null;
+        }
+        return loadedPartitionIndexes.get(physicalPartitionId);
+    }
+
     @Override
     public String toString() {
         StringBuilder sb = new StringBuilder("TransactionState. ");

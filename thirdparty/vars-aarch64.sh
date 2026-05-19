@@ -40,21 +40,21 @@ JINDOSDK_SOURCE="jindosdk-4.6.8-linux-el7-aarch64"
 JINDOSDK_MD5SUM="27a4e2cd9a403c6e21079a866287d88b"
 
 # tenann
-TENANN_DOWNLOAD="https://github.com/StarRocks/tenann/releases/download/v0.5.1-BETA/tenann-v0.5.1-BETA-arm64-nosve.tar.gz"
-TENANN_NAME="tenann-v0.5.1-BETA-arm64-nosve.tar.gz"
-TENANN_SOURCE="tenann-v0.5.1-BETA"
-TENANN_MD5SUM="fa35efc6066a5172a6ab73873b4ef31f"
+TENANN_DOWNLOAD="https://github.com/StarRocks/tenann/releases/download/v0.5.1-beta.2/tenann-v0.5.1-beta.2-nosve-arm64.tar.gz"
+TENANN_NAME="tenann-v0.5.1-beta.2-nosve-arm64.tar.gz"
+TENANN_SOURCE="tenann-v0.5.1-beta.2-nosve"
+TENANN_MD5SUM="70c12d229bec5e40bbe5f704f1a43d1f"
 # uncomment this for SVE version for better performance on ARM servers with SVE support
-#TENANN_DOWNLOAD="https://github.com/StarRocks/tenann/releases/download/v0.5.1-BETA/tenann-v0.5.1-BETA-arm64.tar.gz"
-#TENANN_NAME="tenann-v0.5.1-BETA-arm64.tar.gz"
-#TENANN_SOURCE="tenann-v0.5.1-BETA"
-#TENANN_MD5SUM="03f5d4cf3512029d7acfb2cddeb49a69"
+#TENANN_DOWNLOAD="https://github.com/StarRocks/tenann/releases/download/v0.5.1-beta.2/tenann-v0.5.1-beta.2-arm64.tar.gz"
+#TENANN_NAME="tenann-v0.5.1-beta.2-arm64.tar.gz"
+#TENANN_SOURCE="tenann-v0.5.1-beta.2"
+#TENANN_MD5SUM="6df6bf495013407c75d7a8b4b388cd00"
 
 # starcache
-STARCACHE_DOWNLOAD="https://cdn-thirdparty.starrocks.com/starcache/v4.1-rc3/starcache-centos7_arm64.tar.gz"
+STARCACHE_DOWNLOAD="https://cdn-thirdparty.starrocks.com/starcache/v4.2-rc1/starcache-centos7_arm64.tar.gz"
 STARCACHE_NAME="starcache.tar.gz"
 STARCACHE_SOURCE="starcache"
-STARCACHE_MD5SUM="8360f05571a77a3745094689a63f5e83"
+STARCACHE_MD5SUM="901cbd54823c73588a6f43e4d3b32e44"
 
 # pprof
 PPROF_DOWNLOAD="https://github.com/StarRocks/pprof/releases/download/release%2F20260421/pprof-linux-arm64"

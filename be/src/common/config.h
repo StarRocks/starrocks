@@ -1095,6 +1095,9 @@ CONF_Int64(pipeline_sink_brpc_dop, "64");
 CONF_Int64(pipeline_max_num_drivers_per_exec_thread, "10240");
 CONF_mBool(pipeline_print_profile, "false");
 CONF_mBool(pipeline_timeout_diagnostic, "false");
+// BE-wide kill switch for the pipeline event scheduler. When false, the event scheduler is
+// disabled even if the session variable `enable_pipeline_event_scheduler` is true.
+CONF_mBool(enable_pipeline_event_scheduler, "true");
 // If this value is greater than 0 and the query time exceeds the timeout, then execute gcore on the process.
 CONF_Int64(pipeline_gcore_timeout_threshold_sec, "-1");
 CONF_String(pipeline_gcore_output_dir, "${STARROCKS_HOME}/log");
@@ -1910,6 +1913,25 @@ CONF_mInt32(config_vector_index_default_build_threshold, "10000");
 // budget of 2 is enforced, so on small-core machines or with small ratios the effective
 // value may exceed nproc * this value.
 CONF_mDouble(vector_index_build_max_cpu_ratio, "0.5");
+
+// Per-segment adaptive ef_search for HNSW vector queries.
+// Compensates for recall degradation on larger segments (e.g. after compaction
+// merges many small segments into one large segment).
+//
+// Formula:
+//   ef_effective = max(user_ef, query_k) * min(1 + alpha * log2(rows/baseline), cap)
+CONF_mBool(enable_vector_adaptive_search, "true");
+CONF_mDouble(vector_adaptive_ef_alpha, "1.0");
+CONF_mDouble(vector_adaptive_ef_cap, "8.0");
+CONF_mInt64(vector_adaptive_ef_baseline_rows, "300000");
+
+// Per-builder in-memory row buffer cap before tenann does an intermediate
+// add into the faiss in-memory index. Bounds peak memory during HNSWFlat
+// build by capping data_buffer_ at |rows| × dim × 4 bytes (does NOT cap
+// the trained index storage itself, only the staging buffer).
+// 256K rows ≈ 128 MiB at dim=128. Lower this if BE memory is tight.
+// Set to 0 to disable intermediate flushing (whole tablet buffered in RAM).
+CONF_mInt64(vector_index_build_flush_threshold_rows, "262144");
 
 // When upgrade thrift to 0.20.0, the MaxMessageSize member defines the maximum size of a (received) message, in bytes.
 // The default value is represented by a constant named DEFAULT_MAX_MESSAGE_SIZE, whose value is 100 * 1024 * 1024 bytes.

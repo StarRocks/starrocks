@@ -14,14 +14,16 @@
 
 #include "exec/benchmark_scanner.h"
 
+#include <arrow/record_batch.h>
+
 #include <algorithm>
 
 #include "base/utility/arrow_utils.h"
 #include "benchgen/benchmark_suite.h"
 #include "benchgen/record_batch_iterator_factory.h"
+#include "column/arrow/arrow_to_starrocks_converter.h"
 #include "column/chunk.h"
 #include "column/column_helper.h"
-#include "exec/file_scanner/parquet_scanner.h"
 #include "exprs/cast_expr.h"
 #include "exprs/column_ref.h"
 #include "runtime/runtime_state.h"
@@ -32,7 +34,7 @@ BenchmarkScanner::BenchmarkScanner(BenchmarkScannerParam param, const TupleDescr
         : _param(std::move(param)), _slot_descs(tuple_desc->slots()) {}
 
 Status BenchmarkScanner::open(RuntimeState* state) {
-    _conv_ctx.state = state;
+    _conv_ctx.timezone = state->timezone();
     _conv_ctx.current_file = _param.table_name;
     if (_param.options.chunk_size <= 0) {
         _param.options.chunk_size = state->chunk_size();
@@ -92,11 +94,10 @@ Status BenchmarkScanner::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eo
             return Status::NotFound("Benchmark column " + col + " not found in schema");
         }
 
-        _conv_ctx.current_slot = slot_desc;
-        RETURN_IF_ERROR(
-                ParquetScanner::convert_array_to_column(_conv_funcs[i].get(), num_elements, array.get(),
-                                                        raw_chunk->get_column_raw_ptr_by_slot_id(slot_desc->id()),
-                                                        _batch_start_idx, 0, &_chunk_filter, &_conv_ctx));
+        _conv_ctx.set_current_column(slot_desc->col_name(), slot_desc->type());
+        RETURN_IF_ERROR(convert_arrow_array_to_column(_conv_funcs[i].get(), num_elements, array.get(),
+                                                      raw_chunk->get_column_raw_ptr_by_slot_id(slot_desc->id()),
+                                                      _batch_start_idx, 0, &_chunk_filter, &_conv_ctx));
     }
 
     raw_chunk->filter(_chunk_filter);
@@ -141,8 +142,9 @@ Status BenchmarkScanner::_init_converters(const std::shared_ptr<arrow::Schema>& 
         auto raw_type_desc = std::make_unique<TypeDescriptor>();
         auto conv_func = std::make_unique<ConvertFuncTree>();
         bool need_cast = false;
-        RETURN_IF_ERROR(ParquetScanner::build_dest(field->type().get(), &slot_desc->type(), slot_desc->is_nullable(),
-                                                   raw_type_desc.get(), conv_func.get(), need_cast, false));
+        RETURN_IF_ERROR(build_arrow_column_convert_plan(field->type().get(), &slot_desc->type(),
+                                                        slot_desc->is_nullable(), raw_type_desc.get(), conv_func.get(),
+                                                        need_cast, false));
 
         Expr* expr = nullptr;
         if (!need_cast) {

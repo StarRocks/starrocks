@@ -427,6 +427,18 @@ message TxnInfoPB {
 message SplittingTabletInfoPB {
     optional int64 old_tablet_id = 1;
     repeated int64 new_tablet_ids = 2;
+    // FE-supplied new-tablet ranges (external-boundaries path).
+    // When non-empty:
+    //   - BE skips data-driven boundary computation in `split_tablet` and
+    //     dispatches to `compute_split_ranges_from_external_boundaries`
+    //     instead, which honors these ranges verbatim.
+    //   - Size MUST equal new_tablet_ids.size.
+    //   - Ranges MUST cover the old tablet's range exactly with no gaps/overlaps.
+    //   - Each range uses [lower, upper) (upper_bound_included=false).
+    // Upgrade ordering policy: BE is upgraded before FE, so any FE that
+    // populates this field is guaranteed to be talking to BEs that consume
+    // it; no separate capability flag is needed.
+    repeated TabletRangePB new_tablet_ranges = 3;
 }
 
 message MergingTabletInfoPB {

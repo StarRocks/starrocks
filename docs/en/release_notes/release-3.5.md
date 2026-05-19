@@ -26,6 +26,44 @@ displayed_sidebar: docs
 
 :::
 
+## 3.5.17
+
+Release date: May 13, 2026
+
+### Behavior Changes
+
+- `SHOW CREATE TABLE` and `DESC` now show Primary Keys for Paimon tables. [#70535](https://github.com/StarRocks/starrocks/pull/70535)
+- Disallowed INSERT into insert-only ACID Hive tables in Hive catalogs. [#71460](https://github.com/StarRocks/starrocks/pull/71460)
+- `START_TIME` and `END_TIME` in Profile are now displayed using the session time zone. [#71429](https://github.com/StarRocks/starrocks/pull/71429)
+
+### Improvements
+
+- Supports `csv.enclose` and `csv.escape` in `INSERT INTO FILES` CSV export. [#71589](https://github.com/StarRocks/starrocks/pull/71589)
+- Added query relation information (directly queried tables and viewa) to audit logs. [#71596](https://github.com/StarRocks/starrocks/pull/71596)
+- Made the FE configuration `star_mgr_meta_sync_interval_sec` runtime mutable. [#71675](https://github.com/StarRocks/starrocks/pull/71675)
+- Reduced metadata and lock overhead in table metadata and row-count paths. [#72053](https://github.com/StarRocks/starrocks/pull/72053) [#72042](https://github.com/StarRocks/starrocks/pull/72042) [#71672](https://github.com/StarRocks/starrocks/pull/71672)
+- Improved build and dependency hygiene by merging the broker builder into the FE build and removing WildFly OpenSSL. [#71823](https://github.com/StarRocks/starrocks/pull/71823) [#71908](https://github.com/StarRocks/starrocks/pull/71908)
+
+### Bug fixes
+
+The following issues have been fixed:
+
+- Wrong results for local-shuffle aggregate queries with OFFSET. [#71997](https://github.com/StarRocks/starrocks/pull/71997)
+- Incorrect Join output properties after Exchange shuffle columns are pruned. [#72003](https://github.com/StarRocks/starrocks/pull/72003)
+- Several dependency CVE issues. [#71762](https://github.com/StarRocks/starrocks/pull/71762) [#71914](https://github.com/StarRocks/starrocks/pull/71914)
+- Oracle JDBC NLS format handling issue. [#71412](https://github.com/StarRocks/starrocks/pull/71412)
+- Missing Iceberg column statistics in manifest data file cache. [#71913](https://github.com/StarRocks/starrocks/pull/71913)
+- Missing Hive partition directory before INSERT OVERWRITE commit. [#71810](https://github.com/StarRocks/starrocks/pull/71810)
+- Aggregate-join-pushdown materialized view rewrite and min/max optimization issues on Iceberg base tables. [#71856](https://github.com/StarRocks/starrocks/pull/71856) [#71863](https://github.com/StarRocks/starrocks/pull/71863)
+- Race conditions in `ConnectorSinkPassthroughExchanger` and `LoadChannel::get_load_replica_status`. [#71848](https://github.com/StarRocks/starrocks/pull/71848) [#71843](https://github.com/StarRocks/starrocks/pull/71843)
+- Credential redaction issue in INSERT FILES operations. [#71245](https://github.com/StarRocks/starrocks/pull/71245)
+- Incorrect `reverse(DecimalV3)` results. [#71834](https://github.com/StarRocks/starrocks/pull/71834)
+- Missing JNI exception handling checks in Java UDF code. [#71734](https://github.com/StarRocks/starrocks/pull/71734)
+- Incorrect short-circuit checks in `EventScheduler`. [#71740](https://github.com/StarRocks/starrocks/pull/71740)
+- Incorrect Arrow Flight column name for empty result sets. [#71534](https://github.com/StarRocks/starrocks/pull/71534)
+- Batch publish deadlock caused by partition version gaps. [#71483](https://github.com/StarRocks/starrocks/pull/71483)
+- Repeated Apply attachments in scalar-subquery plans. [#71155](https://github.com/StarRocks/starrocks/pull/71155)
+
 ## 3.5.16
 
 Release date: April 20, 2026

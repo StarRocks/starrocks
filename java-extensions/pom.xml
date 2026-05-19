@@ -65,6 +65,7 @@
         <lz4-java.version>1.10.1</lz4-java.version>
         <httpclient5.version>5.4.3</httpclient5.version>
         <bouncycastle.version>1.84</bouncycastle.version>
+        <thrift.version>0.23.0</thrift.version>
     </properties>
 
     <profiles>
@@ -453,6 +454,12 @@
                 </exclusions>
             </dependency>
             <!-- hive -->
+
+            <dependency>
+                <groupId>org.apache.thrift</groupId>
+                <artifactId>libthrift</artifactId>
+                <version>${thrift.version}</version>
+            </dependency>
 
             <!--slf4j-->
             <dependency>

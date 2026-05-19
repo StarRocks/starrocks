@@ -28,7 +28,7 @@ target_link_libraries(Serde PUBLIC
         RuntimeCore
         ChunkCore
         ColumnCore
-        TypesCore
+        Types
         Common
         Base
         Gutil

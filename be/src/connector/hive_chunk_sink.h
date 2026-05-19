@@ -22,12 +22,11 @@
 #include "common/status.h"
 #include "common/thread/priority_thread_pool.hpp"
 #include "connector/async_flush_stream_poller.h"
-#include "connector/connector.h"
+#include "connector/connector_chunk_sink.h"
 #include "connector/sink_memory_manager.h"
-#include "connector_chunk_sink.h"
+#include "connector/utils.h"
 #include "formats/column_evaluator.h"
 #include "formats/file_writer.h"
-#include "utils.h"
 
 namespace starrocks::connector {
 

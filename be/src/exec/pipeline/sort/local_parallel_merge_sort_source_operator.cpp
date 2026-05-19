@@ -17,6 +17,7 @@
 #include <algorithm>
 #include <sstream>
 
+#include "exec/pipeline/fragment_context.h"
 #include "exprs/expr.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
@@ -82,13 +83,21 @@ OperatorPtr LocalParallelMergeSortSourceOperatorFactory::create(int32_t degree_o
                                                                 int32_t driver_sequence) {
     auto sort_context = _sort_context_factory->create(driver_sequence);
 
-    auto chunk_provider_factory = [](ChunksSorter* chunks_sorter) {
-        return ([chunks_sorter](bool only_check_if_has_data, ChunkPtr* chunk, bool* eos) {
+    auto chunk_provider_factory = [state = _state](ChunksSorter* chunks_sorter) {
+        return ([state, chunks_sorter](bool only_check_if_has_data, ChunkPtr* chunk, bool* eos) {
             if (!chunks_sorter->has_output()) {
                 return false;
             }
             if (!only_check_if_has_data) {
-                (void)chunks_sorter->get_next(chunk, eos);
+                auto status = chunks_sorter->get_next(chunk, eos);
+                // Propagate non-EOF errors instead of silently dropping them.
+                // Without this, a spiller restore failure leaves the merger waiting
+                // on a leaf provider that will never become ready, and the query hangs.
+                if (!status.ok() && !status.is_end_of_file()) {
+                    state->fragment_ctx()->cancel(status);
+                    *eos = true;
+                    return false;
+                }
             }
             return true;
         });

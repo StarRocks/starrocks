@@ -28,22 +28,16 @@ xcode-select --install
 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
 ```
 
-3. Install necessary Homebrew dependencies:
-
-```bash
-cd build-mac
-./env_macos.sh
-```
+3. No separate macOS environment script is required. The third-party build step below installs the required Homebrew formulas.
 
 ## Mac Compilation
 
 ## Compile Third-party Libraries
 
-Before compiling BE on macOS, you need to compile third-party dependencies first. Navigate to the `build-mac` directory and run:
+Before compiling BE on macOS, compile third-party dependencies from the repository root:
 
 ```bash
-cd build-mac
-./build_thirdparty.sh
+./thirdparty/build-thirdparty.sh
 ```
 
 ## Compile FE
@@ -68,19 +62,18 @@ output/fe/
 
 ## Compile BE
 
-The BE compilation script for macOS is located in the `build-mac` directory.
+Use the root build script to compile BE on macOS.
 
 ### First-time Compilation
 
 ```bash
-cd build-mac
-./build_be.sh
+./build.sh --be
 ```
 
 The first-time compilation will automatically complete the following steps:
 
 1. Check and configure environment variables
-2. Compile third-party dependencies (protobuf, thrift, brpc, etc.)
+2. Validate third-party dependencies (protobuf, thrift, brpc, etc.)
 3. Generate script-based sources and let CMake materialize BE Thrift/Protobuf outputs
 4. Compile BE code
 5. Install to `output/be/` directory
@@ -102,13 +95,13 @@ output/be/
 
 ### Configure FE
 
-`build-mac/start_fe.sh` writes the required defaults (e.g., `priority_networks`, `default_replication_num`, `bdbje_reset_election_group`). For custom values, edit `output/fe/conf/fe.conf`.
+For local single-node development, edit `output/fe/conf/fe.conf` and set required defaults such as `priority_networks`, `default_replication_num`, and `bdbje_reset_election_group`.
 
 ### Start FE
 
 ```bash
-cd build-mac
-./start_fe.sh --daemon
+cd output/fe
+./bin/start_fe.sh --daemon
 ```
 
 ### View FE Logs
@@ -121,13 +114,13 @@ tail -f output/fe/log/fe.log
 
 ### Configure BE
 
-`build-mac/start_be.sh` sets required runtime env vars and writes required defaults (e.g., `priority_networks`, `datacache_enable`, `enable_system_metrics`, `sys_log_verbose_modules`). For custom values, edit `output/be/conf/be.conf`.
+For local single-node development, edit `output/be/conf/be.conf` and set required defaults such as `priority_networks`, `datacache_enable`, `enable_system_metrics`, and `sys_log_verbose_modules`.
 
 ### Start BE
 
 ```bash
-cd build-mac
-./start_be.sh
+cd output/be
+./bin/start_be.sh --daemon
 ```
 
 ### View BE Logs
@@ -383,7 +376,7 @@ The macOS compilation implementation follows these principles:
 
 1. **Do Not Affect Linux Compilation**: All modifications are isolated through conditional compilation
 2. **Minimize Code Changes**: Prefer disabling features through configuration
-3. **Centralized Management**: Mac-related modifications are centralized in the `build-mac/` directory
+3. **Centralized Management**: Build entrypoints remain at the repository root, macOS build helpers live in `build-support/`, and Darwin third-party logic lives in `thirdparty/`
 4. **Use Standard Tools**: Rely on Homebrew and LLVM toolchain
 5. **Compile Key Dependencies from Source**: Ensure ABI compatibility (protobuf, thrift, brpc)
 
@@ -407,7 +400,7 @@ A: Make sure the BE CMake build is using `thirdparty/installed/bin/protoc` (vers
 A: Reduce the number of parallel compilation tasks:
 
 ```bash
-./build_be.sh --parallel 4
+./build.sh --be -j 4
 ```
 
 **Q: FE cannot connect to BE**
@@ -422,7 +415,7 @@ A: Check if they are tests related to disabled features (such as HDFS, S3, ORC, 
 
 If you find issues or have improvement suggestions on macOS:
 
-1. Check the relevant scripts in the `build-mac/` directory
+1. Check the relevant root build scripts, macOS helpers in `build-support/`, and Darwin third-party scripts in `thirdparty/`
 2. Follow the principle of "do not affect Linux compilation"
 3. Use `#ifdef __APPLE__` for platform-specific code modifications
 4. Submit a Pull Request with detailed description of changes

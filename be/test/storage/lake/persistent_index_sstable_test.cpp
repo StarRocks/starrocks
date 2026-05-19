@@ -75,9 +75,9 @@ TEST_F(PersistentIndexSstableTest, test_generate_sst_scan_and_check) {
     CHECK_OK(builder.Finish());
     uint64_t filesz = builder.FileSize();
     // scan & check
-    sstable::Table* sstable = nullptr;
     ASSIGN_OR_ABORT(auto read_file, fs::new_random_access_file(lake::join_path(kTestDir, filename)));
-    CHECK_OK(sstable::Table::Open(options, read_file.get(), filesz, &sstable));
+    std::unique_ptr<sstable::Table> sstable;
+    CHECK_OK(sstable::Table::Open(options, read_file.get(), filesz, sstable));
     sstable::ReadOptions read_options;
     int count = 0;
     sstable::Iterator* iter = sstable->NewIterator(read_options);
@@ -90,7 +90,6 @@ TEST_F(PersistentIndexSstableTest, test_generate_sst_scan_and_check) {
     }
     ASSERT_TRUE(count == N);
     delete iter;
-    delete sstable;
 }
 
 TEST_F(PersistentIndexSstableTest, test_generate_sst_seek_and_check) {
@@ -107,9 +106,9 @@ TEST_F(PersistentIndexSstableTest, test_generate_sst_seek_and_check) {
     CHECK_OK(builder.Finish());
     uint64_t filesz = builder.FileSize();
     // seek & check
-    sstable::Table* sstable = nullptr;
     ASSIGN_OR_ABORT(auto read_file, fs::new_random_access_file(lake::join_path(kTestDir, filename)));
-    CHECK_OK(sstable::Table::Open(options, read_file.get(), filesz, &sstable));
+    std::unique_ptr<sstable::Table> sstable;
+    CHECK_OK(sstable::Table::Open(options, read_file.get(), filesz, sstable));
     sstable::ReadOptions read_options;
     sstable::Iterator* iter = sstable->NewIterator(read_options);
     for (int i = 0; i < 100; i++) {
@@ -122,7 +121,6 @@ TEST_F(PersistentIndexSstableTest, test_generate_sst_seek_and_check) {
         ASSERT_TRUE(exp_val == cur_val);
     }
     delete iter;
-    delete sstable;
 }
 
 TEST_F(PersistentIndexSstableTest, test_merge) {
@@ -151,11 +149,11 @@ TEST_F(PersistentIndexSstableTest, test_merge) {
     sstable::ReadOptions read_options;
     std::vector<std::unique_ptr<sstable::Table>> sstable_ptrs(3);
     for (int i = 0; i < 3; ++i) {
-        sstable::Table* sstable = nullptr;
-        CHECK_OK(sstable::Table::Open(options, read_files[i].get(), fileszs[i], &sstable));
+        std::unique_ptr<sstable::Table> sstable;
+        CHECK_OK(sstable::Table::Open(options, read_files[i].get(), fileszs[i], sstable));
         sstable::Iterator* iter = sstable->NewIterator(read_options);
         list.emplace_back(iter);
-        sstable_ptrs[i].reset(sstable);
+        sstable_ptrs[i] = std::move(sstable);
     }
 
     phmap::btree_map<std::string, std::string> map;
@@ -190,9 +188,9 @@ TEST_F(PersistentIndexSstableTest, test_merge) {
     }
     CHECK_OK(builder.Finish());
     uint64_t filesz = builder.FileSize();
-    sstable::Table* sstable = nullptr;
     ASSIGN_OR_ABORT(auto read_file, fs::new_random_access_file(lake::join_path(kTestDir, filename)));
-    CHECK_OK(sstable::Table::Open(options, read_file.get(), filesz, &sstable));
+    std::unique_ptr<sstable::Table> sstable;
+    CHECK_OK(sstable::Table::Open(options, read_file.get(), filesz, sstable));
     sstable::Iterator* iter = sstable->NewIterator(read_options);
     for (int i = 0; i < 100; i++) {
         int r = rand() % N;
@@ -206,7 +204,6 @@ TEST_F(PersistentIndexSstableTest, test_merge) {
     list.clear();
     read_files.clear();
     delete iter;
-    delete sstable;
     sstable_ptrs.clear();
 }
 
@@ -475,16 +472,15 @@ TEST_F(PersistentIndexSstableTest, test_ioerror_inject) {
     uint64_t filesz = builder.FileSize();
     if (st.ok()) {
         // scan & check
-        sstable::Table* sstable = nullptr;
         ASSIGN_OR_ABORT(auto read_file, fs::new_random_access_file(lake::join_path(kTestDir, filename)));
-        CHECK_OK(sstable::Table::Open(options, read_file.get(), filesz, &sstable));
+        std::unique_ptr<sstable::Table> sstable;
+        CHECK_OK(sstable::Table::Open(options, read_file.get(), filesz, sstable));
         sstable::ReadOptions read_options;
         sstable::Iterator* iter = sstable->NewIterator(read_options);
         for (iter->SeekToFirst(); iter->Valid() && iter->status().ok(); iter->Next()) {
         }
         ASSERT_TRUE(iter->status().ok());
         delete iter;
-        delete sstable;
     }
 }
 
@@ -692,6 +688,7 @@ TEST_F(PersistentIndexSstableTest, test_metric_sst_open_read_error) {
     ASSERT_EQ(before + 1, StorageMetrics::instance()->pk_index_sst_read_error_total.value());
 }
 
+#if defined(USE_STAROS) && !defined(BUILD_FORMAT_LIB)
 TEST_F(PersistentIndexSstableTest, test_sst_open_retry_after_clear_corrupted_cache) {
     auto location_provider = std::make_shared<FixedLocationProvider>(kTestDir);
     auto metadata = std::make_shared<TabletMetadata>();
@@ -732,6 +729,7 @@ TEST_F(PersistentIndexSstableTest, test_sst_open_retry_after_clear_corrupted_cac
 
     ASSERT_OK(st);
 }
+#endif // USE_STAROS && !BUILD_FORMAT_LIB
 
 TEST_F(PersistentIndexSstableTest, test_metric_sst_multiget_read_error) {
     const std::string path = lake::join_path(kTestDir, "metric_multiget_error.sst");
@@ -766,6 +764,7 @@ TEST_F(PersistentIndexSstableTest, test_metric_sst_multiget_read_error) {
     ASSERT_EQ(before + 1, StorageMetrics::instance()->pk_index_sst_read_error_total.value());
 }
 
+#if defined(USE_STAROS) && !defined(BUILD_FORMAT_LIB)
 TEST_F(PersistentIndexSstableTest, test_multiget_retry_after_clear_corrupted_cache) {
     const std::string path = lake::join_path(kTestDir, "multiget_retry_corrupted_cache.sst");
     uint64_t filesize = 0;
@@ -805,6 +804,7 @@ TEST_F(PersistentIndexSstableTest, test_multiget_retry_after_clear_corrupted_cac
     ASSERT_TRUE(found.contains(0));
     ASSERT_EQ(IndexValue(0), values[0]);
 }
+#endif // USE_STAROS && !BUILD_FORMAT_LIB
 
 // Tombstones are stored as (rssid=UINT32_MAX, rowid=UINT32_MAX) so that the
 // 64-bit packed value equals NullIndexValue on the way out. When the owning

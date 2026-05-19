@@ -42,6 +42,7 @@
 #include "exec/pipeline/pipeline_driver_executor.h"
 #include "exec/pipeline/pipeline_fwd.h"
 #include "exec/pipeline/scan/morsel.h"
+#include "exec/pipeline/scan/scan_morsel.h"
 #include "exec/pipeline/schedule/common.h"
 #include "exec/pipeline/sink/result_sink_operator.h"
 #include "exec/scan_node.h"
@@ -775,7 +776,8 @@ Status FragmentExecutor::_prepare_pipeline_driver(ExecEnv* exec_env, const Unifi
     auto [exec_groups, pipelines] = builder.build();
     _fragment_ctx->set_pipelines(std::move(exec_groups), std::move(pipelines));
 
-    if (runtime_state->query_options().__isset.enable_pipeline_event_scheduler &&
+    if (config::enable_pipeline_event_scheduler &&
+        runtime_state->query_options().__isset.enable_pipeline_event_scheduler &&
         runtime_state->query_options().enable_pipeline_event_scheduler) {
         // check all pipeline in fragment support event scheduler
         bool all_support_event_scheduler = true;

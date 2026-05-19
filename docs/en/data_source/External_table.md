@@ -134,7 +134,7 @@ The required parameters in `PROPERTIES` are as follows:
 
 * `password`: the password that is used to connect to the target database.
 
-* `jdbc_uri`: the URI that the JDBC driver uses to connect to the target database. The URI format must satisfy the database URI syntax. For the URI syntax of some common databases, visit the official websites of [Oracle](https://docs.oracle.com/en/database/oracle/oracle-database/21/jjdbc/data-sources-and-URLs.html#GUID-6D8EFA50-AB0F-4A2B-88A0-45B4A67C361E), [PostgreSQL](https://jdbc.postgresql.org/documentation/head/connect.html), [SQL Server](https://docs.microsoft.com/en-us/sql/connect/jdbc/building-the-connection-url?view=sql-server-ver16).
+* `jdbc_uri`: the URI that the JDBC driver uses to connect to the target database. The URI format must satisfy the database URI syntax. For the URI syntax of some common databases, visit the official websites of [Oracle](https://docs.oracle.com/en/database/oracle/oracle-database/21/jjdbc/data-sources-and-URLs.html#GUID-6D8EFA50-AB0F-4A2B-88A0-45B4A67C361E), [PostgreSQL](https://jdbc.postgresql.org/documentation/head/connect.html), [SQL Server](https://learn.microsoft.com/en-us/sql/connect/jdbc/building-the-connection-url?view=sql-server-ver16).
 
 > Note: The URI must include the name of the target database. For example, in the preceding code example, `jdbc_test` is the name of the target database that you want to connect.
 
@@ -340,7 +340,7 @@ The following table describes the parameters.
 | **Parameter**        | **Required** | **Default value** | **Description**                                              |
 | -------------------- | ------------ | ----------------- | ------------------------------------------------------------ |
 | hosts                | Yes          | None              | The connection address of the Elasticsearch cluster. You can specify one or more addresses. StarRocks can parse the Elasticsearch version and index shard allocation from this address. StarRocks communicates with your Elasticsearch cluster based on the address returned by the `GET /_nodes/http` API operation. Therefore, the value of the `host` parameter must be the same as the address returned by the `GET /_nodes/http` API operation. Otherwise, BEs may not be able to communicate with your Elasticsearch cluster. |
-| index                | Yes          | None              | The name of the Elasticsearch index that is created on the table in StarRocks. The name can be an alias. This parameter supports wildcards (\*). For example, if you set `index` to <code class="language-text">hello*</code>, StarRocks retrieves all indexes whose names start with `hello`. |
+| index                | Yes          | None              | The name of the Elasticsearch index that is created on the table in StarRocks. The name can be an alias. This parameter supports wildcards (`*`). For example, if you set `index` to `hello*`, StarRocks retrieves all indexes whose names start with `hello`. |
 | user                 | No           | Empty             | The username that is used to log in to the Elasticsearch cluster with basic authentication enabled. Make sure you have access to `/*cluster/state/*nodes/http` and the index. |
 | password             | No           | Empty             | The password that is used to log in to the Elasticsearch cluster. |
 | type                 | No           | `_doc`            | The type of the index. Default value: `_doc`. If you want to query data in Elasticsearch 8 and later versions, you do not need to configure this parameter because the mapping types have been removed in Elasticsearch 8 and later versions. |
@@ -658,16 +658,16 @@ Description:
 
     |  Column type of Hive   |  Column type of StarRocks   | Description |
     | --- | --- | ---|
-    |   INT/INTEGER  | INT    |
-    |   BIGINT  | BIGINT    |
+    |   INT/INTEGER  | INT    ||
+    |   BIGINT  | BIGINT    ||
     |   TIMESTAMP  | DATETIME    | Precision and time zone information will be lost when you convert TIMESTAMP data into DATETIME data. You need to convert TIMESTAMP data into DATETIME data that does not have the time zone offset based on the time zone in sessionVariable. |
-    |  STRING  | VARCHAR   |
-    |  VARCHAR  | VARCHAR   |
-    |  CHAR  | CHAR   |
-    |  DOUBLE | DOUBLE |
-    | FLOAT | FLOAT|
-    | DECIMAL | DECIMAL|
-    | ARRAY | ARRAY |
+    |  STRING  | VARCHAR   ||
+    |  VARCHAR  | VARCHAR   ||
+    |  CHAR  | CHAR   ||
+    |  DOUBLE | DOUBLE ||
+    | FLOAT | FLOAT||
+    | DECIMAL | DECIMAL||
+    | ARRAY | ARRAY ||
 
 > Note:
 >

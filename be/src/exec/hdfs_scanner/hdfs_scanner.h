@@ -23,6 +23,7 @@
 #include "connector/deletion_vector/deletion_bitmap.h"
 #include "exec/olap_scan_prepare.h"
 #include "exec/pipeline/scan/morsel.h"
+#include "exec/pipeline/scan/scan_morsel.h"
 #include "exec/runtime_filter/runtime_filter_probe.h"
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
@@ -259,6 +260,7 @@ struct HdfsScannerParams {
     const TupleDescriptor* min_max_tuple_desc = nullptr;
 
     std::vector<std::string>* hive_column_names = nullptr;
+    std::string avro_schema_json;
 
     bool case_sensitive = false;
 

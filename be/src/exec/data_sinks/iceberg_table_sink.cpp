@@ -18,6 +18,7 @@
 
 #include "common/config_exec_fwd.h"
 #include "common/runtime_profile.h"
+#include "connector/connector_registry.h"
 #include "connector/iceberg_row_delta_sink.h"
 #include "exec/hdfs_scanner/hdfs_scanner.h"
 #include "exec/pipeline/fragment_context.h"
@@ -245,7 +246,7 @@ Status IcebergTableSink::create_delete_sink_context(
     }
 
     sink_ctx = delete_sink_ctx;
-    auto connector = connector::ConnectorManager::default_instance()->get(connector::Connector::ICEBERG);
+    auto connector = connector::ConnectorRegistry::default_instance()->get(connector::Connector::ICEBERG);
     sink_provider = connector->create_delete_sink_provider();
 
     return Status::OK();
@@ -323,7 +324,7 @@ Status IcebergTableSink::create_data_sink_context(const TDataSink& thrift_sink, 
     }
 
     sink_ctx = data_sink_ctx;
-    auto connector = connector::ConnectorManager::default_instance()->get(connector::Connector::ICEBERG);
+    auto connector = connector::ConnectorRegistry::default_instance()->get(connector::Connector::ICEBERG);
     sink_provider = connector->create_data_sink_provider();
 
     if (iceberg_table_desc->is_unpartitioned_table()) {
@@ -561,7 +562,7 @@ Status IcebergTableSink::create_row_delta_sink_context(
     row_delta_ctx->op_code_index = op_code_index;
 
     sink_ctx = row_delta_ctx;
-    auto connector = connector::ConnectorManager::default_instance()->get(connector::Connector::ICEBERG);
+    auto connector = connector::ConnectorRegistry::default_instance()->get(connector::Connector::ICEBERG);
     sink_provider = connector->create_row_delta_sink_provider();
 
     return Status::OK();

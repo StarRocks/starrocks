@@ -66,8 +66,39 @@ public class IcebergPlannerUtils {
         return new PhysicalPropertySet(distributionProperty);
     }
 
-    public static org.apache.iceberg.expressions.Expression buildIcebergFilterExpr(ExecPlan execPlan) {
-        if (execPlan == null || execPlan.getScanNodes() == null) {
+    /**
+     * Extracts the base snapshot id frozen at plan time from the IcebergScanNode that
+     * scans {@code targetTable}. The plan may contain scans for other Iceberg tables
+     * (e.g. {@code DELETE FROM t WHERE id IN (SELECT id FROM other_iceberg)}); using a
+     * source table's snapshot id with RowDelta.validateFromSnapshot is either rejected by
+     * Iceberg (snapshot not in the target's history) or silently validates against the
+     * wrong window.
+     * <p>
+     * Returns null when no scan over {@code targetTable} exists or the table had no
+     * snapshot when planned.
+     */
+    public static Long extractBaseSnapshotId(ExecPlan execPlan, IcebergTable targetTable) {
+        if (execPlan == null || execPlan.getScanNodes() == null || targetTable == null) {
+            return null;
+        }
+        for (PlanNode node : execPlan.getScanNodes()) {
+            if (node instanceof IcebergScanNode scanNode
+                    && scanNode.getIcebergTable().getId() == targetTable.getId()) {
+                return scanNode.getBaseSnapshotId().orElse(null);
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Builds the Iceberg conflict-detection filter from the scan node that targets
+     * {@code targetTable}. Selecting any other Iceberg scan in the plan would produce a
+     * filter whose column references and schema do not match the target's, leading to
+     * spurious conflicts or invalid expressions on the Iceberg side.
+     */
+    public static org.apache.iceberg.expressions.Expression buildIcebergFilterExpr(ExecPlan execPlan,
+                                                                                     IcebergTable targetTable) {
+        if (execPlan == null || execPlan.getScanNodes() == null || targetTable == null) {
             return null;
         }
 
@@ -75,7 +106,8 @@ public class IcebergPlannerUtils {
         org.apache.iceberg.Schema nativeSchema = null;
 
         for (PlanNode node : execPlan.getScanNodes()) {
-            if (node instanceof IcebergScanNode scanNode) {
+            if (node instanceof IcebergScanNode scanNode
+                    && scanNode.getIcebergTable().getId() == targetTable.getId()) {
                 predicate = scanNode.getIcebergJobPlanningPredicate();
                 nativeSchema = scanNode.getIcebergTable().getNativeTable().schema();
                 break;
