@@ -459,16 +459,15 @@ struct TReplicateSnapshotRequest {
     20: optional string src_partition_full_path
 }
 
-// Reserved for enterprise external cluster snapshot feature; OSS implementation TBD.
+// Placeholder for external cluster snapshot feature.
 struct TComputeNodeTablets {
     1: optional Types.TBackend compute_node
     2: optional list<Types.TTabletId> tablets
 }
 
-// Reserved for enterprise external cluster snapshot feature; OSS implementation TBD.
-// NOTE: this struct overwrites a prior OSS placeholder (which had fields 9/10 as
-// src_tablets/compute_nodes); the prior version was never wired into any OSS code
-// path. Aligning ordinals 9..11 with enterprise to keep the wire format 1:1.
+// Placeholder for external cluster snapshot feature.
+// NOTE: fields 9-11 replace a prior placeholder definition (src_tablets/compute_nodes
+// at 9/10) that was never wired into any code path.
 struct TExternalClusterSnapshotRequest {
     1: optional i64 job_id
     2: optional i64 db_id
@@ -483,20 +482,20 @@ struct TExternalClusterSnapshotRequest {
     11: optional list<TComputeNodeTablets> compute_node_tablets
 }
 
-// Reserved for enterprise external cluster snapshot feature; OSS implementation TBD.
+// Placeholder for external cluster snapshot feature.
 struct TRestoreTabletInfo {
     1: optional Types.TTabletId source_tablet_id
     2: optional Types.TTabletId target_tablet_id
     3: optional i64 target_schema_id
 }
 
-// Reserved for enterprise external cluster snapshot feature; OSS implementation TBD.
+// Placeholder for external cluster snapshot feature.
 struct TRestoreTabletRequest {
     1: optional list<TRestoreTabletInfo> tablet_infos
     2: optional i64 source_visible_version
 }
 
-// Reserved for enterprise external cluster snapshot feature; OSS implementation TBD.
+// Placeholder for external cluster snapshot feature.
 struct TRestoreTabletResult {
      1: optional bool success
      2: optional string error_msg
@@ -588,7 +587,7 @@ struct TAgentTaskRequest {
     31: optional TUpdateSchemaReq update_schema_req
     32: optional TCompactionControlReq compaction_control_req
     33: optional TExternalClusterSnapshotRequest external_cluster_snapshot_req
-    // Reserved for enterprise external cluster snapshot feature; OSS implementation TBD.
+    // Placeholder for external cluster snapshot feature.
     34: optional TRestoreTabletRequest restore_tablet_req
 }
 

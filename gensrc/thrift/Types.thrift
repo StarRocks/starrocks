@@ -220,7 +220,7 @@ enum TTaskType {
     UPDATE_SCHEMA,
     COMPACTION_CONTROL,
     EXTERNAL_CLUSTER_SNAPSHOT,
-    // Reserved for enterprise external cluster snapshot feature; OSS implementation TBD.
+    // Placeholder for external cluster snapshot feature.
     TABLET_RESTORE,
     NUM_TASK_TYPE
 }
@@ -632,7 +632,7 @@ struct TSnapshotInfo {
     3: optional bool incremental_snapshot
 }
 
-// Reserved for enterprise external cluster snapshot feature; OSS implementation TBD.
+// Placeholder for external cluster snapshot feature.
 struct TClusterSnapshotPartitionSpec {
     1: optional i64 db_id
     2: optional i64 table_id

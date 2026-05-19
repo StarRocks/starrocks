@@ -412,7 +412,7 @@ message TxnInfoPB {
     optional bool rebuild_pindex = 6;
     optional int64 gtid = 7 [default=0];
     repeated PUniqueId load_ids = 8;
-    // Reserved for enterprise external cluster snapshot feature; OSS implementation TBD.
+    // Placeholder for external cluster snapshot feature.
     optional bool restore_force_publish = 9; // Txn from snapshot restore, publish directly succeed
     optional int64 restore_gtid = 10;
     // Number of leading sort-key columns that participate in the table's range
@@ -448,7 +448,7 @@ message ReshardingTabletInfoPB {
     optional IdenticalTabletInfoPB identical_tablet_info = 3;
 }
 
-// Reserved for enterprise external cluster snapshot feature; OSS implementation TBD.
+// Placeholder for external cluster snapshot feature.
 message ExternalClusterSnapshotLogPB {
     optional int64 job_id = 1;
     optional int64 db_id = 2;
