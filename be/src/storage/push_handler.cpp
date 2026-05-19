@@ -17,6 +17,7 @@
 #include "base/utility/defer_op.h"
 #include "column/chunk_factory.h"
 #include "runtime/runtime_state.h"
+#include "storage/chunk_helper.h"
 #include "storage/compaction_manager.h"
 #include "storage/rowset/rowset_factory.h"
 #include "storage/rowset/rowset_id_generator.h"

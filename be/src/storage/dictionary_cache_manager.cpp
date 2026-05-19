@@ -17,6 +17,7 @@
 #include "column/chunk_factory.h"
 #include "column/chunk_schema_helper.h"
 #include "exec/tablet_info.h"
+#include "storage/chunk_helper.h"
 
 namespace starrocks {
 
