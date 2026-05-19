@@ -10,8 +10,6 @@ After upgrading StarRocks to v3.3, DO NOT downgrade it directly to v3.2.0, v3.2.
 
 :::
 
-<<<<<<< HEAD
-=======
 ## 3.3.22
 
 Release Date: January 27, 2026
@@ -397,7 +395,6 @@ Release date: April 3, 2025
 - Added authentication to the FE Profile interface. [#56914](https://github.com/StarRocks/starrocks/pull/56914)
 - Changed default value of session variable `big_query_profile_threshold` from `0` to `30`. [#56520](https://github.com/StarRocks/starrocks/pull/56520)
 
->>>>>>> 68e89cc4f8 ([Doc] fix links (#73406))
 ## 3.3.11
 
 Release date: March 7, 2025

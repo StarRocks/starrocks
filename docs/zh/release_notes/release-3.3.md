@@ -10,8 +10,6 @@ displayed_sidebar: docs
 
 :::
 
-<<<<<<< HEAD
-=======
 ## 3.3.22
 
 发布日期：2026 年 1 月 27 日
@@ -397,7 +395,6 @@ displayed_sidebar: docs
 - FE 的 Profile 接口增加认证环节。[#56914](https://github.com/StarRocks/starrocks/pull/56914)
 - Session 变量 `big_query_profile_threshold` 默认值从 `0` 改为 `30`。[#56520](https://github.com/StarRocks/starrocks/pull/56520)
 
->>>>>>> 68e89cc4f8 ([Doc] fix links (#73406))
 ## 3.3.11
 
 发布日期：2025 年 3 月 7 日

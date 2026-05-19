@@ -10,8 +10,6 @@ StarRocks を v3.3 にアップグレードした後、直接 v3.2.0、v3.2.1、
 
 :::
 
-<<<<<<< HEAD
-=======
 ## 3.3.22
 
 リリース日：2026 年 1 月 27 日
@@ -397,7 +395,6 @@ StarRocks を v3.3 にアップグレードした後、直接 v3.2.0、v3.2.1、
 - FE の Profile インターフェースに認証を追加しました。[#56914](https://github.com/StarRocks/starrocks/pull/56914)
 - セッション変数 `big_query_profile_threshold` のデフォルト値を `0` から `30` に変更しました。[#56520](https://github.com/StarRocks/starrocks/pull/56520)
 
->>>>>>> 68e89cc4f8 ([Doc] fix links (#73406))
 ## 3.3.11
 
 リリース日: 2025年3月7日

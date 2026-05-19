@@ -62,8 +62,6 @@ jobs:
            | jq -r '.searches | to_entries[] | "- [ ] \(.value.search)", "  failures this week: \(.value.count)"' \
            >> feedback.md
 
-<<<<<<< HEAD
-=======
       - name: Add Dependabot reminder for docs
         run: |
           set -eo pipefail # Ensure the script fails on any command error
@@ -98,7 +96,6 @@ jobs:
             echo "No broken links detected." >> feedback.md
           fi
 
->>>>>>> 68e89cc4f8 ([Doc] fix links (#73406))
       - name: Create issue from file
         id: weekly-feedback-report
         uses: peter-evans/create-issue-from-file@ceef9be92406ace67ab5421f66570acf213ec395
