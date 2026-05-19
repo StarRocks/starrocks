@@ -48,17 +48,14 @@ public class OpaHttpClient implements OpaPolicyClient {
     private final String rowFiltersUrl;
     private final String columnMaskingUrl;
     private final String batchColumnMaskingUrl;
-    private final boolean logRequests;
-    private final boolean logResponses;
 
     public OpaHttpClient() {
         this(Config.opa_policy_url, Config.opa_row_filters_url, Config.opa_column_masking_url,
-                Config.opa_batch_column_masking_url, Config.opa_connect_timeout_ms, Config.opa_read_timeout_ms,
-                Config.opa_log_requests, Config.opa_log_responses);
+                Config.opa_batch_column_masking_url, Config.opa_connect_timeout_ms, Config.opa_read_timeout_ms);
     }
 
     OpaHttpClient(String policyUrl, String rowFiltersUrl, String columnMaskingUrl, String batchColumnMaskingUrl,
-                  int connectTimeoutMs, int readTimeoutMs, boolean logRequests, boolean logResponses) {
+                  int connectTimeoutMs, int readTimeoutMs) {
         if (Strings.isNullOrEmpty(policyUrl)) {
             throw new IllegalArgumentException("opa_policy_url must be set when OPA access control is enabled");
         }
@@ -66,8 +63,6 @@ public class OpaHttpClient implements OpaPolicyClient {
         this.rowFiltersUrl = emptyToNull(rowFiltersUrl);
         this.columnMaskingUrl = emptyToNull(columnMaskingUrl);
         this.batchColumnMaskingUrl = emptyToNull(batchColumnMaskingUrl);
-        this.logRequests = logRequests;
-        this.logResponses = logResponses;
         this.httpClient = new OkHttpClient.Builder()
                 .connectTimeout(connectTimeoutMs, TimeUnit.MILLISECONDS)
                 .readTimeout(readTimeoutMs, TimeUnit.MILLISECONDS)
@@ -121,9 +116,6 @@ public class OpaHttpClient implements OpaPolicyClient {
 
     private JsonObject post(String url, OpaRequest request) {
         String requestBody = gson.toJson(new OpaEnvelope(request));
-        if (logRequests) {
-            LOG.debug("Sending OPA request to {}: {}", url, requestBody);
-        }
         Request httpRequest = new Request.Builder()
                 .url(url)
                 .post(RequestBody.create(JSON, requestBody))
@@ -131,9 +123,6 @@ public class OpaHttpClient implements OpaPolicyClient {
         try (Response response = httpClient.newCall(httpRequest).execute()) {
             ResponseBody body = response.body();
             String responseBody = body == null ? "" : body.string();
-            if (logResponses) {
-                LOG.debug("Received OPA response from {} with status {}: {}", url, response.code(), responseBody);
-            }
             if (!response.isSuccessful()) {
                 throw new OpaQueryException(
                         "OPA server returned HTTP " + response.code() + " for " + url);
