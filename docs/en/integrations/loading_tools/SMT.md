@@ -114,10 +114,10 @@ As shown in the image, SMT can automatically generate CREATE TABLE statements of
 
 | Dependency                | Package name                                  | Download link                                                     |
 | ------------------------- | --------------------------------------------- | ----------------------------------------------------------------- |
-| Flink                     | flink-x.x.x-bin-scala_2.12.tgz                | [Click here](https://flink.apache.org/downloads/)             |
-| Flink CDC connector       | flink-sql-connector-mysql-cdc-x.x.x.jar       | [Click here](https://github.com/apache/flink-cdc/releases)        |
-| Flink-connector-starrocks | flink-connector-starrocks-x.x.x_flink-x.x.jar | [Click here](https://github.com/StarRocks/starrocks-connector-for-apache-flink/releases) |
-| SMT                       | smt.tar.gz                                    | [Click here](https://cdn-thirdparty.starrocks.com/smt.tar.gz?r=2) |
+| Flink                     | flink-x.x.x-bin-scala_2.12.tgz                | [Flink](https://flink.apache.org/downloads/)             |
+| Flink CDC connector       | flink-sql-connector-mysql-cdc-x.x.x.jar       | [Flink CDC connector](https://github.com/apache/flink-cdc/releases)        |
+| Flink-connector-starrocks | flink-connector-starrocks-x.x.x_flink-x.x.jar | [Flink connector for StarRocks](https://github.com/StarRocks/starrocks-connector-for-apache-flink/releases) |
+| SMT                       | smt.tar.gz                                    | [SMT](https://cdn-thirdparty.starrocks.com/smt.tar.gz?r=2) |
 
 1. Download [Flink](https://flink.apache.org/downloads/). Flink 1.11 or later is supported.
 
