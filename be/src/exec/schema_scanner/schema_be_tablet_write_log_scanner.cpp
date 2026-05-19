@@ -16,6 +16,7 @@
 
 #include "column/column_helper.h"
 #include "exec/schema_scanner/schema_helper.h"
+#include "runtime/chunk_helper.h"
 #include "runtime/runtime_state.h"
 #include "storage/chunk_helper.h"
 #include "types/datetime_value.h"
@@ -75,7 +76,7 @@ Status SchemaBeTabletWriteLogScanner::get_next(ChunkPtr* chunk, bool* eos) {
         return Status::OK();
     }
     *eos = false;
-    *chunk = ChunkHelper::new_chunk(_slot_descs, _runtime_state->chunk_size());
+    *chunk = RuntimeChunkHelper::new_chunk(_slot_descs, _runtime_state->chunk_size());
 
     size_t i = 0;
     for (; i < _runtime_state->chunk_size() && _log_index < _logs.size(); ++i, ++_log_index) {

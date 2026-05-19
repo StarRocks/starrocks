@@ -15,6 +15,7 @@
 #include "storage/dictionary_cache_manager.h"
 
 #include "column/chunk_factory.h"
+#include "column/chunk_schema_helper.h"
 #include "exec/tablet_info.h"
 
 namespace starrocks {
@@ -77,7 +78,7 @@ Status DictionaryCacheManager::refresh(const PProcessDictionaryCacheRequest* req
     DCHECK(dictionary_schema != nullptr);
     std::vector<int> keys(dictionary_schema->fields().size(), 1);
     // remove the nullable attribute if necessary
-    dictionary_schema = ChunkHelper::get_non_nullable_schema(dictionary_schema, &keys);
+    dictionary_schema = ChunkSchemaHelper::get_non_nullable_schema(dictionary_schema, &keys);
 
     std::vector<ColumnId> key_col_ids(request->key_size());
     std::vector<ColumnId> value_col_ids(dictionary_schema->fields().size() - request->key_size());

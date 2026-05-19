@@ -53,6 +53,7 @@
 #include "formats/parquet/scalar_column_reader.h"
 #include "formats/parquet/schema.h"
 #include "gen_cpp/Exprs_types.h"
+#include "runtime/chunk_helper.h"
 #include "runtime/mem_pool.h"
 #include "storage/chunk_helper.h"
 #include "storage/convert_helper.h"
@@ -1619,7 +1620,7 @@ Status GroupReader::_init_read_chunk() {
         }
     }
     size_t chunk_size = _param.chunk_size;
-    ASSIGN_OR_RETURN(_read_chunk, ChunkHelper::new_chunk_checked(read_slots, chunk_size));
+    ASSIGN_OR_RETURN(_read_chunk, RuntimeChunkHelper::new_chunk_checked(read_slots, chunk_size));
     // Only pre-allocate active hidden sources in _read_chunk so they can be shared with
     // active_chunk.  Lazy hidden sources are created fresh each iteration in Phase 6
     // and merged into active_chunk there; they do not need a permanent slot here.

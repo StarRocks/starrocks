@@ -28,6 +28,7 @@
 #include "common/config_scan_io_fwd.h"
 #include "exec/tablet_info.h"
 #include "runtime/base_load_path_mgr.h"
+#include "runtime/chunk_helper.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
@@ -230,7 +231,7 @@ protected:
         DescriptorTbl* desc_tbl = nullptr;
         auto sink = _setup_sink(runtime_state, desc_tbl);
 
-        ChunkPtr chunk(ChunkHelper::new_chunk(desc_tbl->get_tuple_descriptor(0)->slots(), num_rows).release());
+        ChunkPtr chunk(RuntimeChunkHelper::new_chunk(desc_tbl->get_tuple_descriptor(0)->slots(), num_rows).release());
         _fill_chunk_base_data(chunk, desc_tbl->get_tuple_descriptor(0)->slots(), num_rows, test_type);
 
         auto* slot = desc_tbl->get_tuple_descriptor(0)->slots()[slot_index];

@@ -35,6 +35,7 @@
 #include "exec/pipeline/query_context.h"
 #include "fs/fs_util.h"
 #include "fs/key_cache.h"
+#include "runtime/chunk_helper.h"
 #include "runtime/current_thread.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/descriptors.h"
@@ -478,7 +479,7 @@ TEST_F(EngineStorageMigrationTaskTest, test_concurrent_ingestion_and_migration) 
         ASSERT_TRUE(new_tablet_uid.hi == old_tablet_uid.hi && new_tablet_uid.lo == old_tablet_uid.lo);
         // prepare chunk
         std::vector<std::string> test_data;
-        auto chunk = ChunkHelper::new_chunk(tuple_desc->slots(), 1024);
+        auto chunk = RuntimeChunkHelper::new_chunk(tuple_desc->slots(), 1024);
         std::vector<uint32_t> indexes;
         indexes.reserve(1024);
         for (size_t i = 0; i < 1024; ++i) {
@@ -557,7 +558,7 @@ TEST_F(EngineStorageMigrationTaskTest, test_concurrent_ingestion_and_migration_p
         ASSERT_TRUE(new_tablet_uid.hi == old_tablet_uid.hi && new_tablet_uid.lo == old_tablet_uid.lo);
         // prepare chunk
         std::vector<std::string> test_data;
-        auto chunk = ChunkHelper::new_chunk(tuple_desc->slots(), 1024);
+        auto chunk = RuntimeChunkHelper::new_chunk(tuple_desc->slots(), 1024);
         std::vector<uint32_t> indexes;
         indexes.reserve(1024);
         for (size_t i = 0; i < 1024; ++i) {

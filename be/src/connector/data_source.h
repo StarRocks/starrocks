@@ -23,6 +23,7 @@
 #include "exec/pipeline/scan/morsel.h"
 #include "exec/pipeline/scan/scan_morsel.h"
 #include "exec/runtime_filter/runtime_filter_probe.h"
+#include "runtime/chunk_helper.h"
 #include "runtime/runtime_state_fwd.h"
 #include "storage/chunk_helper.h"
 
@@ -100,7 +101,7 @@ protected:
     pipeline::ScanSplitContext* _split_context = nullptr;
 
     virtual Status _init_chunk_if_needed(ChunkPtr* chunk, size_t n) {
-        ASSIGN_OR_RETURN(*chunk, ChunkHelper::new_chunk_checked(*_tuple_desc, n));
+        ASSIGN_OR_RETURN(*chunk, RuntimeChunkHelper::new_chunk_checked(*_tuple_desc, n));
         return Status::OK();
     }
 

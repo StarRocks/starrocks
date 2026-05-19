@@ -18,7 +18,7 @@
 
 #include "column/chunk.h"
 #include "column/chunk_factory.h"
-#include "runtime/checked_chunk_factory.h"
+#include "runtime/chunk_helper.h"
 #include "storage/chunk_helper.h"
 
 namespace starrocks {
@@ -77,7 +77,7 @@ void ProjectionIterator::build_index_map(const Schema& output, const Schema& inp
 Status ProjectionIterator::do_get_next(Chunk* chunk) {
     if (_chunk == nullptr) {
         DCHECK_GT(_child->output_schema().num_fields(), 0);
-        ASSIGN_OR_RETURN(_chunk, CheckedChunkFactory::new_chunk_checked(_child->output_schema(), _chunk_size));
+        ASSIGN_OR_RETURN(_chunk, RuntimeChunkHelper::new_chunk_checked(_child->output_schema(), _chunk_size));
     }
     _chunk->reset();
     Status st = _child->get_next(_chunk.get());
