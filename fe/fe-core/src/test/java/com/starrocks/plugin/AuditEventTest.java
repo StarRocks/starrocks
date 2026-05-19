@@ -45,6 +45,7 @@ public class AuditEventTest {
                 .setWarehouse("wh")
                 .setSessionId("sessionId")
                 .setCustomQueryId("customQueryId")
+                .setCustomSessionName("customSessionName")
                 .setCNGroup("test_cngroup")
                 .setQueriedRelations(Arrays.asList("default_catalog.db.tbl", "default_catalog.db.view1"))
                 .addReadLocalCnt(100)
@@ -76,6 +77,7 @@ public class AuditEventTest {
         Assertions.assertEquals("wh", event.warehouse);
         Assertions.assertEquals("sessionId", event.sessionId);
         Assertions.assertEquals("customQueryId", event.customQueryId);
+        Assertions.assertEquals("customSessionName", event.customSessionName);
         Assertions.assertEquals("test_cngroup", event.cnGroup);
         Assertions.assertEquals(Arrays.asList("default_catalog.db.tbl", "default_catalog.db.view1"),
                 event.queriedRelations);
