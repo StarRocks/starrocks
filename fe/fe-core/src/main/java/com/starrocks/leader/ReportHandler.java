@@ -51,6 +51,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DiskInfo;
+import com.starrocks.catalog.FlatJsonConfig;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.LocalTablet.TabletHealthStatus;
 import com.starrocks.catalog.MaterializedIndex;
@@ -552,6 +553,9 @@ public class ReportHandler extends LeaderDaemon implements MemoryTrackable {
 
         // 11. send set table binlog config to be
         handleSetTabletBinlogConfig(backendId, backendTablets);
+
+        // 11.5. flat_json_config reconciliation — re-push when BE-reported version is behind.
+        handleSetTabletFlatJsonConfig(backendId, backendTablets);
 
         // 12. send primary index cache expire sec to be
         handleSetPrimaryIndexCacheExpireSec(backendId, backendTablets);
@@ -2174,6 +2178,64 @@ public class ReportHandler extends LeaderDaemon implements MemoryTrackable {
             AgentBatchTask batchTask = new AgentBatchTask();
             TabletMetadataUpdateAgentTask task = TabletMetadataUpdateAgentTaskFactory.createBinlogConfigUpdateTask(
                     backendId, tabletToBinlogConfig);
+            batchTask.addTask(task);
+            AgentTaskExecutor.submit(batchTask);
+        }
+    }
+
+    private static void handleSetTabletFlatJsonConfig(long backendId, Map<Long, TTablet> backendTablets) {
+        List<Pair<Long, FlatJsonConfig>> tabletToFlatJsonConfig = Lists.newArrayList();
+
+        TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
+        for (TTablet backendTablet : backendTablets.values()) {
+            for (TTabletInfo tabletInfo : backendTablet.tablet_infos) {
+                if (!tabletInfo.isSetFlat_json_config_version()) {
+                    continue;
+                }
+                long tabletId = tabletInfo.getTablet_id();
+                long beFlatJsonConfigVersion = tabletInfo.flat_json_config_version;
+                TabletMeta tabletMeta = invertedIndex.getTabletMeta(tabletId);
+                long dbId = tabletMeta != null ? tabletMeta.getDbId() : TabletInvertedIndex.NOT_EXIST_VALUE;
+                long tableId = tabletMeta != null ? tabletMeta.getTableId() : TabletInvertedIndex.NOT_EXIST_VALUE;
+
+                Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+                if (db == null) {
+                    continue;
+                }
+
+                OlapTable olapTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                        .getTable(db.getId(), tableId);
+                if (olapTable == null) {
+                    continue;
+                }
+                Locker locker = new Locker();
+                locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(olapTable.getId()), LockType.READ);
+                try {
+                    if (!olapTable.containsFlatJsonConfig()) {
+                        continue;
+                    }
+                    FlatJsonConfig flatJsonConfig = olapTable.getFlatJsonConfig();
+                    long feFlatJsonConfigVersion = flatJsonConfig.getVersion();
+                    if (beFlatJsonConfigVersion < feFlatJsonConfigVersion) {
+                        tabletToFlatJsonConfig.add(new Pair<>(tabletId, flatJsonConfig));
+                    } else if (beFlatJsonConfigVersion > feFlatJsonConfigVersion) {
+                        LOG.warn("table {} flat_json_config version of tabletId: {}, BeId: {}, is {} " +
+                                        "greater than version of FE, which is {}",
+                                olapTable.getName(), tabletId, backendId,
+                                beFlatJsonConfigVersion, feFlatJsonConfigVersion);
+                    }
+                } finally {
+                    locker.unLockTablesWithIntensiveDbLock(db.getId(),
+                            Lists.newArrayList(olapTable.getId()), LockType.READ);
+                }
+            }
+        }
+
+        LOG.debug("find [{}] tablets need set flat_json_config", tabletToFlatJsonConfig.size());
+        if (!tabletToFlatJsonConfig.isEmpty()) {
+            AgentBatchTask batchTask = new AgentBatchTask();
+            TabletMetadataUpdateAgentTask task = TabletMetadataUpdateAgentTaskFactory
+                    .createFlatJsonConfigUpdateTask(backendId, tabletToFlatJsonConfig);
             batchTask.addTask(task);
             AgentTaskExecutor.submit(batchTask);
         }

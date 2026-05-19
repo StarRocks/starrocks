@@ -30,6 +30,7 @@
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
 #include "runtime/snapshot_loader.h"
+#include "storage/flat_json_config.h"
 #include "storage/lake/replication_txn_manager.h"
 #include "storage/lake/schema_change.h"
 #include "storage/lake/tablet_manager.h"
@@ -980,6 +981,13 @@ void run_update_meta_info_task(const std::shared_ptr<UpdateTabletMetaInfoAgentTa
                 binlog_config.update(tablet_meta_info.binlog_config);
                 tablet->update_binlog_config(binlog_config);
                 break;
+            case TTabletMetaType::FLAT_JSON_CONFIG: {
+                LOG(INFO) << "update tablet:" << tablet->tablet_id() << " flat_json_config";
+                FlatJsonConfig flat_json_config;
+                flat_json_config.update(tablet_meta_info.flat_json_config);
+                tablet->update_flat_json_config(flat_json_config);
+                break;
+            }
             case TTabletMetaType::ENABLE_PERSISTENT_INDEX:
                 LOG(INFO) << "update tablet:" << tablet->tablet_id()
                           << " enable_persistent_index:" << tablet_meta_info.enable_persistent_index;

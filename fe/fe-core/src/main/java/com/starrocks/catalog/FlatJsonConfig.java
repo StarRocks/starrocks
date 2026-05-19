@@ -36,11 +36,15 @@ public class FlatJsonConfig implements Writable {
     @SerializedName("flatJsonColumnMax")
     private int flatJsonColumnMax;
 
+    @SerializedName("configVersion")
+    private long configVersion;
+
     public FlatJsonConfig(boolean enabled, double nullFactor, double sparsityFactor, int columnMax) {
         this.flatJsonEnable = enabled;
         this.flatJsonNullFactor = nullFactor;
         this.flatJsonSparsityFactor = sparsityFactor;
         this.flatJsonColumnMax = columnMax;
+        this.configVersion = 0;
     }
 
     public FlatJsonConfig(FlatJsonConfig config) {
@@ -48,6 +52,7 @@ public class FlatJsonConfig implements Writable {
         this.flatJsonNullFactor = config.getFlatJsonNullFactor();
         this.flatJsonSparsityFactor = config.getFlatJsonSparsityFactor();
         this.flatJsonColumnMax = config.getFlatJsonColumnMax();
+        this.configVersion = config.getVersion();
     }
 
     public FlatJsonConfig() {
@@ -106,6 +111,18 @@ public class FlatJsonConfig implements Writable {
         this.flatJsonColumnMax = flatJsonColumnMax;
     }
 
+    public long getVersion() {
+        return configVersion;
+    }
+
+    public void setVersion(long version) {
+        this.configVersion = version;
+    }
+
+    public void incVersion() {
+        this.configVersion++;
+    }
+
     public Map<String, String> toProperties() {
         Map<String, String> properties = new HashMap<>();
         properties.put(PropertyAnalyzer.PROPERTIES_FLAT_JSON_ENABLE, String.valueOf(flatJsonEnable));
@@ -122,6 +139,7 @@ public class FlatJsonConfig implements Writable {
 
     public TFlatJsonConfig toTFlatJsonConfig() {
         TFlatJsonConfig tFlatJsonConfig = new TFlatJsonConfig();
+        tFlatJsonConfig.setVersion(configVersion);
         tFlatJsonConfig.setFlat_json_enable(flatJsonEnable);
         tFlatJsonConfig.setFlat_json_null_factor(flatJsonNullFactor);
         tFlatJsonConfig.setFlat_json_sparsity_factor(flatJsonSparsityFactor);

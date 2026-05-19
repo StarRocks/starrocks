@@ -46,27 +46,34 @@ public:
     int get_flat_json_max_column_max() const { return _flat_json_max_column_max; }
     void set_flat_json_max_column_max(int max) { _flat_json_max_column_max = max; }
 
+    int64_t get_flat_json_config_version() const { return _flat_json_config_version; }
+    void set_flat_json_config_version(int64_t version) { _flat_json_config_version = version; }
+
     void to_pb(FlatJsonConfigPB* binlog_config_pb) {
         binlog_config_pb->set_flat_json_enable(_flat_json_enable);
         binlog_config_pb->set_flat_json_null_factor(_flat_json_null_factor);
         binlog_config_pb->set_flat_json_sparsity_factor(_flat_json_sparsity_factor);
         binlog_config_pb->set_flat_json_max_column_max(_flat_json_max_column_max);
+        binlog_config_pb->set_version(_flat_json_config_version);
     }
 
     // Update function using another FlatJsonConfig
     void update(const FlatJsonConfig& config) {
         update(config.is_flat_json_enabled(), config.get_flat_json_null_factor(),
                config.get_flat_json_sparsity_factor(), config.get_flat_json_max_column_max());
+        _flat_json_config_version = config.get_flat_json_config_version();
     }
 
     void update(const TFlatJsonConfig& config) {
         update(config.flat_json_enable, config.flat_json_null_factor, config.flat_json_sparsity_factor,
                config.flat_json_column_max);
+        _flat_json_config_version = config.__isset.version ? config.version : 0;
     }
 
     void update(const FlatJsonConfigPB& flat_json_config_pb) {
         update(flat_json_config_pb.flat_json_enable(), flat_json_config_pb.flat_json_null_factor(),
                flat_json_config_pb.flat_json_sparsity_factor(), flat_json_config_pb.flat_json_max_column_max());
+        _flat_json_config_version = flat_json_config_pb.has_version() ? flat_json_config_pb.version() : 0;
     }
 
     // Copy Assignment
@@ -76,6 +83,7 @@ public:
             _flat_json_null_factor = other._flat_json_null_factor;
             _flat_json_sparsity_factor = other._flat_json_sparsity_factor;
             _flat_json_max_column_max = other._flat_json_max_column_max;
+            _flat_json_config_version = other._flat_json_config_version;
         }
         return *this;
     }
@@ -94,7 +102,8 @@ public:
         oss << "flat_json_enable=" << (_flat_json_enable ? "true" : "false") << ", ";
         oss << "flat_json_null_factor=" << _flat_json_null_factor << ", ";
         oss << "flat_json_sparsity_factor=" << _flat_json_sparsity_factor << ", ";
-        oss << "flat_json_max_column_max=" << _flat_json_max_column_max;
+        oss << "flat_json_max_column_max=" << _flat_json_max_column_max << ", ";
+        oss << "version=" << _flat_json_config_version;
         oss << "}";
         return oss.str();
     }
@@ -104,5 +113,6 @@ private:
     double _flat_json_null_factor = 0;
     double _flat_json_sparsity_factor = 0;
     int _flat_json_max_column_max = 0;
+    int64_t _flat_json_config_version = 0;
 };
 } // namespace starrocks
