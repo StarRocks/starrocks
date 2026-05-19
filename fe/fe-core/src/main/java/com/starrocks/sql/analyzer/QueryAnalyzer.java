@@ -855,6 +855,19 @@ public class QueryAnalyzer {
                     // with _BOOKMARK_ is caught here (the conflict check tests both flags)
                     // rather than silently being treated as a plain PITQ scope.
                     if (tableRelation.getBookmarkRange().isPresent()) {
+                        // Defense-in-depth: the grammar at tableAtom permits both a
+                        // changePeriod and a trailing bracketHint, but the changePeriod's
+                        // `end=expression` greedily consumes a following `[...]` as a
+                        // collectionSubscript on the version literal (see g4 rule
+                        // `collectionSubscript`), so today's parser never produces a
+                        // TableRelation with both fields set. This guard fires only if a
+                        // future grammar change (e.g. parenthesizing the version expr)
+                        // separates the two — without it both synthesis blocks would run
+                        // and ImmutableMap.Builder would throw "Multiple entries with same key".
+                        if (tableRelation.isChangesQuery()) {
+                            throw new SemanticException(
+                                    "CHANGES hint cannot combine with the CHANGES clause");
+                        }
                         boolean isCloudNativeOlap = table instanceof OlapTable
                                 && ((OlapTable) table).isCloudNativeTableOrMaterializedView();
                         if (!isCloudNativeOlap) {
@@ -1064,9 +1077,11 @@ public class QueryAnalyzer {
                 // CHANGES hint path: validations already ran in resolveTableRef; here we
                 // synthesize the same __CHANGE_TYPE__ / __ROW_VERSION__ metadata columns
                 // the clause path appends, so downstream transformation sees one shape.
-                // isChangesQuery() (clause) and getBookmarkRange().isPresent() (hint) are
-                // mutually exclusive — a TableRelation carries at most one of changePeriod
-                // or bookmarkRange — so no dedup guard is needed.
+                // The parser collapses a trailing bracketHint after the changePeriod's
+                // version expression into a collectionSubscript, so a TableRelation never
+                // carries both changePeriod and bookmarkRange under today's grammar; the
+                // resolveTableRef defense-in-depth guard exists for a future grammar that
+                // separates them.
                 if (node.getBookmarkRange().isPresent()) {
                     for (Column column : CdcScanHelper.getCdcMetadataColumns()) {
                         SlotRef slot = new SlotRef(tableName, column.getName(), column.getName());

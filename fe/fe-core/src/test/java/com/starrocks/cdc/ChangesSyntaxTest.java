@@ -264,6 +264,31 @@ public class ChangesSyntaxTest extends BookmarkTestBase {
                 "actual: " + ex.getMessage());
     }
 
+    @Test
+    public void testHintConflictsWithClause() throws Exception {
+        // The grammar tableAtom permits both `changePeriod` and `bracketHint`, but the
+        // changePeriod's `end=expression` greedily consumes a trailing `[...]` as a
+        // collectionSubscript on the version literal — so SQL today never produces a
+        // TableRelation with both fields set. The resolveTableRef guard is defense-in-
+        // depth for a future grammar that separates the two; this test exercises it by
+        // parsing a hint-only SQL (parser-only, no analyzer pass) and then mutating the
+        // AST to also attach a changePeriod before invoking the analyzer.
+        String sql = "SELECT * FROM dup_t [_CHANGES_3_4_]";
+        QueryStatement stmt = (QueryStatement) UtFrameUtils.parseStmtWithNewParserNotIncludeAnalyzer(
+                sql, connectContext);
+        TableRelation tr = (TableRelation) ((SelectRelation) stmt.getQueryRelation()).getRelation();
+        tr.setChangePeriod(new ChangePeriod(
+                com.starrocks.sql.ast.QueryPeriod.PeriodType.VERSION,
+                new IntLiteral(1L),
+                Optional.of(new IntLiteral(2L)),
+                /* isStats */ false,
+                NodePosition.ZERO));
+        SemanticException ex = assertThrows(SemanticException.class,
+                () -> com.starrocks.sql.analyzer.Analyzer.analyze(stmt, connectContext));
+        assertTrue(ex.getMessage().contains("CHANGES hint cannot combine with the CHANGES clause"),
+                "actual: " + ex.getMessage());
+    }
+
     /**
      * Static counterpart to BookmarkTestBase#createTable. Needed because @BeforeAll
      * runs in static context but the base helper is an instance method.
