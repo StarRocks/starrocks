@@ -136,22 +136,16 @@ jobs:
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool
           cd ci-tool && git pull
 
-          # Parse who AI actually decided to assign from the skill's output.
-          # The skill prints: "Assigned reviewers: <comma-separated logins>" on success
-          # (see starrocks-skills/starrocks-assign-pr-reviewer/SKILL.md step 7).
-          # This catches the "AI picked someone already-assigned" case that a
-          # before/after diff on reviewRequests would miss.
+          # Parse the primary reviewer from the skill's output.
+          # The skill prints: "Recommended reviewer: <login>"
+          # (see starrocks-skills/starrocks-assign-pr-reviewer/SKILL.md "Output Template").
           ai_output="${RUNNER_TEMP}/ai_output.txt"
           reviewers=""
           if [ -f "$ai_output" ]; then
-            assigned_line=$(grep -iE 'assigned reviewers?:' "$ai_output" | tail -1 || true)
-            if [ -n "$assigned_line" ]; then
-              reviewers=$(echo "$assigned_line" \
-                | sed -E 's/^.*[Aa]ssigned [Rr]eviewers?:[[:space:]]*//' \
-                | tr ',，' '\n' \
-                | sed 's/^[[:space:]@]*//; s/[[:space:]]*$//' \
-                | grep -v '^$' || true)
-            fi
+            reviewers=$(grep -iE '^Recommended reviewer:' "$ai_output" | tail -1 \
+              | sed -E 's/^[Rr]ecommended reviewer:[[:space:]]*//' \
+              | sed -E 's/^[[:space:]@]*//; s/[[:space:]].*$//; s/[[:space:]]*$//' \
+              | grep -v '^$' || true)
           fi
 
           if [ -z "$reviewers" ]; then
