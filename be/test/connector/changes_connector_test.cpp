@@ -69,12 +69,9 @@ public:
 
     void SetUp() override {
         _backup_location_provider = _tablet_mgr->TEST_set_location_provider(_location_provider);
-        (void)FileSystem::Default()->create_dir_recursive(
-                lake::join_path(kRootLocation, lake::kSegmentDirectoryName));
-        (void)FileSystem::Default()->create_dir_recursive(
-                lake::join_path(kRootLocation, lake::kMetadataDirectoryName));
-        (void)FileSystem::Default()->create_dir_recursive(
-                lake::join_path(kRootLocation, lake::kTxnLogDirectoryName));
+        (void)FileSystem::Default()->create_dir_recursive(lake::join_path(kRootLocation, lake::kSegmentDirectoryName));
+        (void)FileSystem::Default()->create_dir_recursive(lake::join_path(kRootLocation, lake::kMetadataDirectoryName));
+        (void)FileSystem::Default()->create_dir_recursive(lake::join_path(kRootLocation, lake::kTxnLogDirectoryName));
         _runtime_state = lake::create_runtime_state();
         _fragment_ctx = _runtime_state->obj_pool()->add(new pipeline::FragmentContext());
         _runtime_state->set_fragment_ctx(_fragment_ctx);
@@ -114,12 +111,10 @@ protected:
                              .column_pos(col_pos++)
                              .nullable(false)
                              .build());
-        const bool include_ct =
-                (shape == TupleShape::CHANGE_TYPE_ONLY || shape == TupleShape::BOTH_NON_NULLABLE ||
-                 shape == TupleShape::BOTH_NULLABLE);
-        const bool include_rv =
-                (shape == TupleShape::ROW_VERSION_ONLY || shape == TupleShape::BOTH_NON_NULLABLE ||
-                 shape == TupleShape::BOTH_NULLABLE);
+        const bool include_ct = (shape == TupleShape::CHANGE_TYPE_ONLY || shape == TupleShape::BOTH_NON_NULLABLE ||
+                                 shape == TupleShape::BOTH_NULLABLE);
+        const bool include_rv = (shape == TupleShape::ROW_VERSION_ONLY || shape == TupleShape::BOTH_NON_NULLABLE ||
+                                 shape == TupleShape::BOTH_NULLABLE);
         const bool meta_nullable = (shape == TupleShape::BOTH_NULLABLE);
         if (include_ct) {
             tup.add_slot(TSlotDescriptorBuilder()
@@ -139,8 +134,8 @@ protected:
         }
         tup.build(&tbl_builder);
         DescriptorTbl* desc_tbl = nullptr;
-        CHECK_OK(DescriptorTbl::create(_runtime_state.get(), _runtime_state->obj_pool(),
-                                       tbl_builder.desc_tbl(), &desc_tbl, config::vector_chunk_size));
+        CHECK_OK(DescriptorTbl::create(_runtime_state.get(), _runtime_state->obj_pool(), tbl_builder.desc_tbl(),
+                                       &desc_tbl, config::vector_chunk_size));
         _runtime_state->set_desc_tbl(desc_tbl);
         return 0;
     }
@@ -184,8 +179,7 @@ protected:
     }
 
     std::unique_ptr<ChangesDataSourceProvider> make_provider(TTupleId tuple_id, int64_t schema_id) {
-        return std::make_unique<ChangesDataSourceProvider>(/*scan_node=*/nullptr,
-                                                          make_plan_node(tuple_id, schema_id));
+        return std::make_unique<ChangesDataSourceProvider>(/*scan_node=*/nullptr, make_plan_node(tuple_id, schema_id));
     }
 
     // -------------------------------------------------------------------
@@ -234,8 +228,8 @@ protected:
 
     // Write a single-segment rowset on disk for `tablet_id`. Stores the
     // resulting segment path through `out_path`.
-    void write_segment(int64_t tablet_id, const std::shared_ptr<TabletSchema>& tablet_schema,
-                       int64_t num_rows, std::string* out_path) {
+    void write_segment(int64_t tablet_id, const std::shared_ptr<TabletSchema>& tablet_schema, int64_t num_rows,
+                       std::string* out_path) {
         auto data_schema = std::make_shared<Schema>(ChunkHelper::convert_schema(tablet_schema));
         auto c0 = Int32Column::create();
         std::vector<int32_t> values;
@@ -260,8 +254,8 @@ protected:
 
     // Publish a TabletMetadata snapshot at the given version. Mutates
     // *rowsets so callers can chain segment_path values across versions.
-    void publish_metadata(int64_t tablet_id, int64_t version, int64_t schema_id,
-                          const std::vector<int64_t>& ancestors, std::vector<RowsetSpec>* rowsets) {
+    void publish_metadata(int64_t tablet_id, int64_t version, int64_t schema_id, const std::vector<int64_t>& ancestors,
+                          std::vector<RowsetSpec>* rowsets) {
         auto meta = std::make_shared<TabletMetadata>();
         meta->set_id(tablet_id);
         meta->set_version(version);
@@ -413,8 +407,7 @@ TEST_F(ChangesConnectorTest, test_open_error_paths) {
         int64_t schema_id = next_id();
         int64_t tablet_id = next_id();
         initialize_tablet(tablet_id, schema_id);
-        std::vector<RowsetSpec> rowsets = {
-                {.version = 2, .id = 100, .num_rows = 0, .delete_predicate = true}};
+        std::vector<RowsetSpec> rowsets = {{.version = 2, .id = 100, .num_rows = 0, .delete_predicate = true}};
         publish_metadata(tablet_id, /*version=*/2, schema_id, /*ancestors=*/{}, &rowsets);
 
         auto provider = make_provider(tuple_id, schema_id);
@@ -434,8 +427,8 @@ TEST_F(ChangesConnectorTest, test_open_error_paths) {
 // ============================================================================
 
 TEST_F(ChangesConnectorTest, test_metadata_traversal_scenarios) {
-    auto open_and_drain = [&](TTupleId tuple_id, int64_t schema_id, int64_t tablet_id,
-                              int64_t base, int64_t head) -> int64_t {
+    auto open_and_drain = [&](TTupleId tuple_id, int64_t schema_id, int64_t tablet_id, int64_t base,
+                              int64_t head) -> int64_t {
         auto provider = make_provider(tuple_id, schema_id);
         auto ds = provider->create_data_source(make_scan_range(tablet_id, base, head));
         CHECK_OK(ds->open(_runtime_state.get()));
@@ -476,9 +469,8 @@ TEST_F(ChangesConnectorTest, test_metadata_traversal_scenarios) {
         initialize_tablet(tablet_id, schema_id);
         std::vector<RowsetSpec> r2 = {{.version = 2, .id = 200, .num_rows = 7}};
         publish_metadata(tablet_id, /*version=*/2, schema_id, /*ancestors=*/{}, &r2);
-        std::vector<RowsetSpec> r4 = {
-                {.version = 2, .id = 200, .num_rows = 7, .segment_path = r2[0].segment_path},
-                {.version = 4, .id = 201, .num_rows = 3}};
+        std::vector<RowsetSpec> r4 = {{.version = 2, .id = 200, .num_rows = 7, .segment_path = r2[0].segment_path},
+                                      {.version = 4, .id = 201, .num_rows = 3}};
         publish_metadata(tablet_id, /*version=*/4, schema_id, /*ancestors=*/{2}, &r4);
         // base=3 filters id=200 (v=2); only id=201 (v=4) qualifies = 3 rows.
         EXPECT_EQ(3, open_and_drain(tuple_id, schema_id, tablet_id, /*base=*/3, /*head=*/4));
@@ -493,14 +485,12 @@ TEST_F(ChangesConnectorTest, test_metadata_traversal_scenarios) {
         initialize_tablet(tablet_id, schema_id);
         std::vector<RowsetSpec> r3 = {{.version = 3, .id = 300, .num_rows = 3}};
         publish_metadata(tablet_id, /*version=*/3, schema_id, /*ancestors=*/{}, &r3);
-        std::vector<RowsetSpec> r4 = {
-                {.version = 3, .id = 300, .num_rows = 3, .segment_path = r3[0].segment_path},
-                {.version = 4, .id = 301, .num_rows = 4}};
+        std::vector<RowsetSpec> r4 = {{.version = 3, .id = 300, .num_rows = 3, .segment_path = r3[0].segment_path},
+                                      {.version = 4, .id = 301, .num_rows = 4}};
         publish_metadata(tablet_id, /*version=*/4, schema_id, /*ancestors=*/{3}, &r4);
-        std::vector<RowsetSpec> r5 = {
-                {.version = 3, .id = 300, .num_rows = 3, .segment_path = r3[0].segment_path},
-                {.version = 4, .id = 301, .num_rows = 4, .segment_path = r4[1].segment_path},
-                {.version = 5, .id = 302, .num_rows = 5}};
+        std::vector<RowsetSpec> r5 = {{.version = 3, .id = 300, .num_rows = 3, .segment_path = r3[0].segment_path},
+                                      {.version = 4, .id = 301, .num_rows = 4, .segment_path = r4[1].segment_path},
+                                      {.version = 5, .id = 302, .num_rows = 5}};
         publish_metadata(tablet_id, /*version=*/5, schema_id, /*ancestors=*/{4}, &r5);
         EXPECT_EQ(3 + 4 + 5, open_and_drain(tuple_id, schema_id, tablet_id, /*base=*/2, /*head=*/5));
     }
@@ -515,9 +505,8 @@ TEST_F(ChangesConnectorTest, test_metadata_traversal_scenarios) {
         initialize_tablet(tablet_id, schema_id);
         std::vector<RowsetSpec> r3 = {{.version = 3, .id = 100, .num_rows = 5}};
         publish_metadata(tablet_id, /*version=*/3, schema_id, /*ancestors=*/{}, &r3);
-        std::vector<RowsetSpec> r4 = {
-                {.version = 3, .id = 100, .num_rows = 5, .segment_path = r3[0].segment_path},
-                {.version = 4, .id = 101, .num_rows = 2}};
+        std::vector<RowsetSpec> r4 = {{.version = 3, .id = 100, .num_rows = 5, .segment_path = r3[0].segment_path},
+                                      {.version = 4, .id = 101, .num_rows = 2}};
         publish_metadata(tablet_id, /*version=*/4, schema_id, /*ancestors=*/{3}, &r4);
         // Without dedup, id=100 would be added twice and total would be 5+5+2=12.
         EXPECT_EQ(5 + 2, open_and_drain(tuple_id, schema_id, tablet_id, /*base=*/2, /*head=*/4));
@@ -530,9 +519,8 @@ TEST_F(ChangesConnectorTest, test_metadata_traversal_scenarios) {
         int64_t schema_id = next_id();
         int64_t tablet_id = next_id();
         initialize_tablet(tablet_id, schema_id);
-        std::vector<RowsetSpec> r5 = {
-                {.version = 2, .id = 500, .num_rows = 8},  // version <= base, filtered
-                {.version = 5, .id = 501, .num_rows = 6}};
+        std::vector<RowsetSpec> r5 = {{.version = 2, .id = 500, .num_rows = 8}, // version <= base, filtered
+                                      {.version = 5, .id = 501, .num_rows = 6}};
         publish_metadata(tablet_id, /*version=*/5, schema_id, /*ancestors=*/{}, &r5);
         EXPECT_EQ(6, open_and_drain(tuple_id, schema_id, tablet_id, /*base=*/3, /*head=*/5));
     }
@@ -543,9 +531,8 @@ TEST_F(ChangesConnectorTest, test_metadata_traversal_scenarios) {
         int64_t schema_id = next_id();
         int64_t tablet_id = next_id();
         initialize_tablet(tablet_id, schema_id);
-        std::vector<RowsetSpec> r3 = {
-                {.version = 3, .id = 700, .num_rows = 9, .max_compact_input = true},
-                {.version = 3, .id = 701, .num_rows = 4}};
+        std::vector<RowsetSpec> r3 = {{.version = 3, .id = 700, .num_rows = 9, .max_compact_input = true},
+                                      {.version = 3, .id = 701, .num_rows = 4}};
         publish_metadata(tablet_id, /*version=*/3, schema_id, /*ancestors=*/{}, &r3);
         EXPECT_EQ(4, open_and_drain(tuple_id, schema_id, tablet_id, /*base=*/2, /*head=*/3));
     }
@@ -563,10 +550,8 @@ TEST_F(ChangesConnectorTest, test_chunk_stamping_with_slot_variants) {
     auto open_and_collect = [&](TTupleId tuple_id, int64_t schema_id, int64_t tablet_id,
                                 std::vector<ChunkPtr>* chunks_out) -> int64_t {
         initialize_tablet(tablet_id, schema_id);
-        std::vector<RowsetSpec> rowsets = {
-                {.version = kRowsetVersion, .id = 1, .num_rows = kNumRows}};
-        publish_metadata(tablet_id, /*version=*/kRowsetVersion, schema_id, /*ancestors=*/{},
-                         &rowsets);
+        std::vector<RowsetSpec> rowsets = {{.version = kRowsetVersion, .id = 1, .num_rows = kNumRows}};
+        publish_metadata(tablet_id, /*version=*/kRowsetVersion, schema_id, /*ancestors=*/{}, &rowsets);
         auto provider = make_provider(tuple_id, schema_id);
         auto ds = provider->create_data_source(
                 make_scan_range(tablet_id, /*base=*/kRowsetVersion - 1, /*head=*/kRowsetVersion));
@@ -697,9 +682,8 @@ TEST_F(ChangesConnectorTest, test_get_next_drains_to_eof) {
 
     std::vector<RowsetSpec> r2 = {{.version = 2, .id = 800, .num_rows = 6}};
     publish_metadata(tablet_id, /*version=*/2, schema_id, /*ancestors=*/{}, &r2);
-    std::vector<RowsetSpec> r3 = {
-            {.version = 2, .id = 800, .num_rows = 6, .segment_path = r2[0].segment_path},
-            {.version = 3, .id = 801, .num_rows = 4}};
+    std::vector<RowsetSpec> r3 = {{.version = 2, .id = 800, .num_rows = 6, .segment_path = r2[0].segment_path},
+                                  {.version = 3, .id = 801, .num_rows = 4}};
     publish_metadata(tablet_id, /*version=*/3, schema_id, /*ancestors=*/{2}, &r3);
 
     auto provider = make_provider(tuple_id, schema_id);
@@ -746,8 +730,8 @@ TEST_F(ChangesConnectorTest, test_get_next_drains_to_eof) {
 // ============================================================================
 
 TEST_F(ChangesConnectorTest, test_post_read_conjunct_filtering) {
-    auto open_with_predicate_and_drain = [&](TTupleId tuple_id, int64_t schema_id, int64_t tablet_id,
-                                              int64_t base, int64_t head, int32_t gt_value) -> int64_t {
+    auto open_with_predicate_and_drain = [&](TTupleId tuple_id, int64_t schema_id, int64_t tablet_id, int64_t base,
+                                             int64_t head, int32_t gt_value) -> int64_t {
         SlotId c0_slot_id = slot_id_of(tuple_id, "c0");
         EXPECT_NE(-1, c0_slot_id);
 
@@ -755,8 +739,8 @@ TEST_F(ChangesConnectorTest, test_post_read_conjunct_filtering) {
         // Builds `c0 > gt_value`; matches the data column populated by write_segment.
         texprs.emplace_back(ExprsTestHelper::create_binary_pred_texpr<TYPE_INT, int32_t>(c0_slot_id, gt_value));
         std::vector<ExprContext*> conjunct_ctxs;
-        CHECK_OK(ExprsTestHelper::create_and_open_conjunct_ctxs(
-                _runtime_state->obj_pool(), _runtime_state.get(), &texprs, &conjunct_ctxs));
+        CHECK_OK(ExprsTestHelper::create_and_open_conjunct_ctxs(_runtime_state->obj_pool(), _runtime_state.get(),
+                                                                &texprs, &conjunct_ctxs));
 
         auto provider = make_provider(tuple_id, schema_id);
         auto ds = provider->create_data_source(make_scan_range(tablet_id, base, head));
@@ -777,7 +761,7 @@ TEST_F(ChangesConnectorTest, test_post_read_conjunct_filtering) {
         std::vector<RowsetSpec> r2 = {{.version = 2, .id = 1, .num_rows = 4}};
         publish_metadata(tablet_id, /*version=*/2, schema_id, /*ancestors=*/{}, &r2);
         EXPECT_EQ(4, open_with_predicate_and_drain(tuple_id, schema_id, tablet_id,
-                                                    /*base=*/1, /*head=*/2, /*gt_value=*/-1));
+                                                   /*base=*/1, /*head=*/2, /*gt_value=*/-1));
     }
 
     // Sub-case B: predicate filters every row (c0 > 999 on [0..3]).
@@ -789,7 +773,7 @@ TEST_F(ChangesConnectorTest, test_post_read_conjunct_filtering) {
         std::vector<RowsetSpec> r2 = {{.version = 2, .id = 1, .num_rows = 4}};
         publish_metadata(tablet_id, /*version=*/2, schema_id, /*ancestors=*/{}, &r2);
         EXPECT_EQ(0, open_with_predicate_and_drain(tuple_id, schema_id, tablet_id,
-                                                    /*base=*/1, /*head=*/2, /*gt_value=*/999));
+                                                   /*base=*/1, /*head=*/2, /*gt_value=*/999));
     }
 }
 

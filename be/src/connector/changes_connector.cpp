@@ -14,15 +14,15 @@
 
 #include "connector/changes_connector.h"
 
-#include <algorithm>
 #include <fmt/format.h>
 
-#include "exprs/chunk_predicate_evaluator.h"
-#include "exprs/expr.h"
+#include <algorithm>
 
 #include "column/nullable_column.h"
 #include "exec/connector_scan_node.h"
 #include "exec/pipeline/fragment_context.h"
+#include "exprs/chunk_predicate_evaluator.h"
+#include "exprs/expr.h"
 #include "gen_cpp/PlanNodes_types.h"
 #include "gen_cpp/tablet_schema.pb.h"
 #include "runtime/descriptors.h"
@@ -46,8 +46,7 @@ namespace {
 // segments into one chunk stream without losing per-rowset version.
 class CdcStampingIterator final : public ChunkIterator {
 public:
-    CdcStampingIterator(ChunkIteratorPtr inner, int64_t version,
-                        const std::vector<SlotDescriptor*>& data_slots,
+    CdcStampingIterator(ChunkIteratorPtr inner, int64_t version, const std::vector<SlotDescriptor*>& data_slots,
                         std::optional<int> change_type_slot_id, bool change_type_nullable,
                         std::optional<int> row_version_slot_id, bool row_version_nullable)
             : ChunkIterator(inner->schema(), inner->chunk_size()),
@@ -122,17 +121,15 @@ private:
 
 // --- ChangesConnector ---
 
-DataSourceProviderPtr ChangesConnector::create_data_source_provider(
-        ConnectorScanNode* scan_node, const TPlanNode& plan_node) const {
+DataSourceProviderPtr ChangesConnector::create_data_source_provider(ConnectorScanNode* scan_node,
+                                                                    const TPlanNode& plan_node) const {
     return std::make_unique<ChangesDataSourceProvider>(scan_node, plan_node);
 }
 
 // --- ChangesDataSourceProvider ---
 
-ChangesDataSourceProvider::ChangesDataSourceProvider(
-        ConnectorScanNode* scan_node, const TPlanNode& plan_node)
-        : _scan_node(scan_node),
-          _changes_scan_node(plan_node.changes_scan_node) {}
+ChangesDataSourceProvider::ChangesDataSourceProvider(ConnectorScanNode* scan_node, const TPlanNode& plan_node)
+        : _scan_node(scan_node), _changes_scan_node(plan_node.changes_scan_node) {}
 
 DataSourcePtr ChangesDataSourceProvider::create_data_source(const TScanRange& scan_range) {
     return std::make_unique<ChangesDataSource>(this, scan_range);
@@ -144,8 +141,7 @@ const TupleDescriptor* ChangesDataSourceProvider::tuple_descriptor(RuntimeState*
 
 // --- ChangesDataSource ---
 
-ChangesDataSource::ChangesDataSource(const ChangesDataSourceProvider* provider,
-                                     const TScanRange& scan_range)
+ChangesDataSource::ChangesDataSource(const ChangesDataSourceProvider* provider, const TScanRange& scan_range)
         : _provider(provider) {
     const auto& range = scan_range.changes_scan_range;
     _tablet_id = range.tablet_id;
@@ -185,8 +181,7 @@ Status ChangesDataSource::open(RuntimeState* state) {
 
     if (_has_delete_predicate) {
         return Status::NotSupported(fmt::format(
-                "DELETE_PREDICATE_FOUND: CDC not supported for DELETE operations on tablet {}",
-                _tablet_id));
+                "DELETE_PREDICATE_FOUND: CDC not supported for DELETE operations on tablet {}", _tablet_id));
     }
 
     // Per-rowset segment iterators get wrapped in CdcStampingIterator so
@@ -204,14 +199,12 @@ Status ChangesDataSource::open(RuntimeState* state) {
         ASSIGN_OR_RETURN(auto iters, rowset->read(_read_schema, opts));
         for (auto& it : iters) {
             seg_iters.push_back(std::make_shared<CdcStampingIterator>(
-                    std::move(it), rowset->version(), _data_slots,
-                    _change_type_slot_id, _change_type_slot_is_nullable,
+                    std::move(it), rowset->version(), _data_slots, _change_type_slot_id, _change_type_slot_is_nullable,
                     _row_version_slot_id, _row_version_slot_is_nullable));
         }
     }
-    _chunk_iter = seg_iters.empty()
-                          ? new_empty_iterator(_read_schema, _runtime_state->chunk_size())
-                          : new_union_iterator(std::move(seg_iters));
+    _chunk_iter = seg_iters.empty() ? new_empty_iterator(_read_schema, _runtime_state->chunk_size())
+                                    : new_union_iterator(std::move(seg_iters));
 
     return Status::OK();
 }
@@ -235,9 +228,8 @@ Status ChangesDataSource::get_next(RuntimeState* state, ChunkPtr* chunk) {
 // traversal stops as soon as no ancestor version remains above base.
 Status ChangesDataSource::_do_metadata_traversal() {
     if (_base_version > _head_version) {
-        return Status::InvalidArgument(
-                fmt::format("CDC version range invalid: base_version({}) > head_version({})",
-                            _base_version, _head_version));
+        return Status::InvalidArgument(fmt::format("CDC version range invalid: base_version({}) > head_version({})",
+                                                   _base_version, _head_version));
     }
     if (_base_version == _head_version) {
         return Status::OK();
@@ -290,7 +282,7 @@ Status ChangesDataSource::_do_metadata_traversal() {
 }
 
 void ChangesDataSource::_scan_metadata_for_changes_rowsets(const TabletMetadataPtr& meta,
-                                                            std::unordered_set<uint32_t>& seen_rowset_ids) {
+                                                           std::unordered_set<uint32_t>& seen_rowset_ids) {
     auto* tablet_mgr = ExecEnv::GetInstance()->lake_tablet_manager();
 
     for (int rowset_index = 0; rowset_index < meta->rowsets_size(); ++rowset_index) {
@@ -315,11 +307,10 @@ void ChangesDataSource::_scan_metadata_for_changes_rowsets(const TabletMetadataP
         // snapshot stays alive for the lifetime of the rowset even
         // after the traversal loop drops its local references.
         // compaction_segment_limit=0 selects every segment.
-        _changes_rowsets.push_back(std::make_shared<lake::Rowset>(
-                tablet_mgr, meta, rowset_index, /*compaction_segment_limit=*/0));
+        _changes_rowsets.push_back(
+                std::make_shared<lake::Rowset>(tablet_mgr, meta, rowset_index, /*compaction_segment_limit=*/0));
     }
 }
-
 
 Status ChangesDataSource::_read_next_chunk(ChunkPtr* chunk) {
     DCHECK(_chunk_iter != nullptr);
@@ -362,10 +353,9 @@ Status ChangesDataSource::_init_read_schema() {
     schema_key_pb.set_db_id(t_schema_key.db_id);
     schema_key_pb.set_table_id(t_schema_key.table_id);
     schema_key_pb.set_schema_id(t_schema_key.schema_id);
-    ASSIGN_OR_RETURN(_tablet_schema,
-                     tablet_mgr->table_schema_service()->get_schema_for_scan(
-                             schema_key_pb, _tablet_id, _runtime_state->query_id(),
-                             _runtime_state->fragment_ctx()->fe_addr(), _head_metadata));
+    ASSIGN_OR_RETURN(_tablet_schema, tablet_mgr->table_schema_service()->get_schema_for_scan(
+                                             schema_key_pb, _tablet_id, _runtime_state->query_id(),
+                                             _runtime_state->fragment_ctx()->fe_addr(), _head_metadata));
 
     std::vector<uint32_t> column_indices;
     for (auto* slot : _data_slots) {

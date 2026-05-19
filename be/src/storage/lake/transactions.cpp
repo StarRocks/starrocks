@@ -559,8 +559,7 @@ StatusOr<TabletMetadataPtr> publish_version(TabletManager* tablet_mgr, const Pub
     // only carry over its chain when ori_base_version == base_version; in the
     // advanced case we record ori_base_version alone rather than fetching its
     // metadata with an extra GetTabletMetadata RPC.
-    const TabletMetadataPB* ancestor_source =
-            (ori_base_version == base_version) ? base_metadata.get() : nullptr;
+    const TabletMetadataPB* ancestor_source = (ori_base_version == base_version) ? base_metadata.get() : nullptr;
     build_metadata_ancestors(new_metadata.get(), ori_base_version, ancestor_source);
 
     // Save new metadata

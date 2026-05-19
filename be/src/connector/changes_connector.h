@@ -110,8 +110,8 @@ private:
     // --- Inputs (immutable after open) ---
     const ChangesDataSourceProvider* _provider;
     int64_t _tablet_id = 0;
-    int64_t _base_version = 0;   // left-open
-    int64_t _head_version = 0;   // right-closed
+    int64_t _base_version = 0; // left-open
+    int64_t _head_version = 0; // right-closed
 
     // --- Runtime context ---
     RuntimeState* _runtime_state = nullptr;
