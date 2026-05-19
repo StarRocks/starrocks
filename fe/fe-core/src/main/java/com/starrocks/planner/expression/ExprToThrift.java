@@ -19,13 +19,13 @@ import com.google.common.collect.Lists;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionName;
 import com.starrocks.catalog.FunctionSet;
+import com.starrocks.planner.FragmentNormalizer;
 import com.starrocks.planner.SlotDescriptor;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.ast.AssertNumRowsElement;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.JoinOperator;
 import com.starrocks.sql.ast.KeysType;
-import com.starrocks.sql.ast.OrderByElement;
 import com.starrocks.sql.ast.SetType;
 import com.starrocks.sql.ast.expression.AnalyticExpr;
 import com.starrocks.sql.ast.expression.AnalyticWindow;
@@ -236,15 +236,15 @@ public final class ExprToThrift {
     }
 
     public static TAnalyticWindow analyticWindowToThrift(AnalyticWindow window) {
-        return analyticWindowToThrift(window, null);
+        return analyticWindowToThrift(window, ExprToThrift::treeToThrift);
     }
 
-    public static TAnalyticWindow analyticWindowToThrift(AnalyticWindow window, List<OrderByElement> orderByElements) {
-        return analyticWindowToThrift(window, orderByElements, ExprToThrift::treeToThrift);
+    public static TAnalyticWindow analyticWindowToNormalForm(AnalyticWindow window, FragmentNormalizer normalizer) {
+        return analyticWindowToThrift(window, expr -> ExprToNormalFormVisitor.treeToNormalForm(expr, normalizer));
     }
 
-    public static TAnalyticWindow analyticWindowToThrift(AnalyticWindow window, List<OrderByElement> orderByElements,
-                                                         java.util.function.Function<Expr, TExpr> exprSerializer) {
+    private static TAnalyticWindow analyticWindowToThrift(AnalyticWindow window,
+                                                          java.util.function.Function<Expr, TExpr> exprSerializer) {
         Preconditions.checkNotNull(window, "Analytic window should not be null when converting to thrift");
         TAnalyticWindow result = new TAnalyticWindow(analyticWindowTypeToThrift(window.getType()));
         AnalyticWindowBoundary leftBoundary = window.getLeftBoundary();

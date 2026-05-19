@@ -39,7 +39,6 @@ import com.google.common.base.MoreObjects;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
-import com.starrocks.planner.expression.ExprToNormalFormVisitor;
 import com.starrocks.planner.expression.ExprToThrift;
 import com.starrocks.sql.ast.OrderByElement;
 import com.starrocks.sql.ast.expression.AnalyticWindow;
@@ -201,12 +200,10 @@ public class AnalyticEvalNode extends PlanNode {
         if (analyticWindow == null) {
             if (!orderByElements.isEmpty()) {
                 msg.analytic_node.setWindow(
-                        ExprToThrift.analyticWindowToThrift(AnalyticWindow.DEFAULT_WINDOW,
-                                orderByElements));
+                        ExprToThrift.analyticWindowToThrift(AnalyticWindow.DEFAULT_WINDOW));
             }
         } else {
-            msg.analytic_node.setWindow(ExprToThrift.analyticWindowToThrift(
-                    analyticWindow, orderByElements));
+            msg.analytic_node.setWindow(ExprToThrift.analyticWindowToThrift(analyticWindow));
         }
 
         if (partitionByEq != null) {
@@ -365,9 +362,7 @@ public class AnalyticEvalNode extends PlanNode {
         }
         analyticNode.setAnalytic_functions(normalizer.normalizeExprs(analyticFnCalls));
         if (analyticWindow != null) {
-            analyticNode.setWindow(ExprToThrift.analyticWindowToThrift(
-                    analyticWindow, orderByElements,
-                    expr -> ExprToNormalFormVisitor.treeToNormalForm(expr, normalizer)));
+            analyticNode.setWindow(ExprToThrift.analyticWindowToNormalForm(analyticWindow, normalizer));
         }
         if (intermediateTupleDesc != null) {
             analyticNode.setIntermediate_tuple_id(normalizer.remapTupleId(intermediateTupleDesc.getId()).asInt());
