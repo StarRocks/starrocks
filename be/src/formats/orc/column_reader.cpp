@@ -565,22 +565,15 @@ Status StringColumnReader::get_next(orc::ColumnVectorBatch* cvb, Column* col, si
                 vo.set(i + 1, write_pos);
             }
         } else {
-            if (LIKELY(!vo.is_large())) {
-                auto& offsets = vo.small_storage();
+            vo.visit_storage([&](auto& offsets) {
+                using OffsetValue = typename std::decay_t<decltype(offsets)>::value_type;
                 for (size_t i = col_start, cvb_pos = from; i < col_start + size; ++i, ++cvb_pos) {
                     strings::memcpy_inlined(&vb[write_pos], data->data[cvb_pos], data->length[cvb_pos]);
                     write_pos += data->length[cvb_pos];
                     // Need plus 1 for offset
-                    offsets[i + 1] = static_cast<uint32_t>(write_pos);
+                    offsets[i + 1] = static_cast<OffsetValue>(write_pos);
                 }
-            } else {
-                for (size_t i = col_start, cvb_pos = from; i < col_start + size; ++i, ++cvb_pos) {
-                    strings::memcpy_inlined(&vb[write_pos], data->data[cvb_pos], data->length[cvb_pos]);
-                    write_pos += data->length[cvb_pos];
-                    // Need plus 1 for offset
-                    vo.set(i + 1, write_pos);
-                }
-            }
+            });
         }
     }
 
@@ -682,50 +675,27 @@ Status VarbinaryColumnReader::get_next(orc::ColumnVectorBatch* cvb, Column* col,
     vo.resize_uninitialized(vo.size() + size, vb.size() + len);
 
     if (cvb->hasNulls) {
-        if (LIKELY(!vo.is_large())) {
-            auto& offsets = vo.small_storage();
+        vo.visit_storage([&](auto& offsets) {
+            using OffsetValue = typename std::decay_t<decltype(offsets)>::value_type;
             for (size_t i = col_start, cvb_pos = from; i < col_start + size; ++i, ++cvb_pos) {
                 if (cvb->notNull[cvb_pos]) {
                     strings::memcpy_inlined(&vb[write_pos], data->data[cvb_pos], data->length[cvb_pos]);
                     write_pos += data->length[cvb_pos];
                 }
                 // Plus 1 for offset
-                if (LIKELY(write_pos <= std::numeric_limits<uint32_t>::max())) {
-                    offsets[i + 1] = static_cast<uint32_t>(write_pos);
-                } else {
-                    vo.set(i + 1, write_pos);
-                }
+                offsets[i + 1] = static_cast<OffsetValue>(write_pos);
             }
-        } else {
-            for (size_t i = col_start, cvb_pos = from; i < col_start + size; ++i, ++cvb_pos) {
-                if (cvb->notNull[cvb_pos]) {
-                    strings::memcpy_inlined(&vb[write_pos], data->data[cvb_pos], data->length[cvb_pos]);
-                    write_pos += data->length[cvb_pos];
-                    // Plus 1 for offset
-                    vo.set(i + 1, write_pos);
-                } else {
-                    // Plus 1 for offset
-                    vo.set(i + 1, write_pos);
-                }
-            }
-        }
+        });
     } else {
-        if (LIKELY(!vo.is_large())) {
-            auto& offsets = vo.small_storage();
+        vo.visit_storage([&](auto& offsets) {
+            using OffsetValue = typename std::decay_t<decltype(offsets)>::value_type;
             for (size_t i = col_start, cvb_pos = from; i < col_start + size; ++i, ++cvb_pos) {
                 strings::memcpy_inlined(&vb[write_pos], data->data[cvb_pos], data->length[cvb_pos]);
                 write_pos += data->length[cvb_pos];
                 // Plus 1 for offset
-                offsets[i + 1] = static_cast<uint32_t>(write_pos);
+                offsets[i + 1] = static_cast<OffsetValue>(write_pos);
             }
-        } else {
-            for (size_t i = col_start, cvb_pos = from; i < col_start + size; ++i, ++cvb_pos) {
-                strings::memcpy_inlined(&vb[write_pos], data->data[cvb_pos], data->length[cvb_pos]);
-                write_pos += data->length[cvb_pos];
-                // Plus 1 for offset
-                vo.set(i + 1, write_pos);
-            }
-        }
+        });
     }
     return Status::OK();
 }

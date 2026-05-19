@@ -188,6 +188,31 @@ Status AppendWithMaskVisitor<PositiveSelect>::append_binary_impl(BinaryColumnBas
 
     auto* dest_bytes = bytes.data() + old_bytes;
 
+    if constexpr (!PositiveSelect) {
+        if (LIKELY(!offsets.is_large() && !src_offsets.is_large())) {
+            auto& dst_offsets_buf = offsets.small_storage();
+            const auto* __restrict src_offsets_data = src_offsets.small_storage().data();
+            auto* __restrict dest_offsets = dst_offsets_buf.data() + old_rows + 1;
+
+            uint64_t current_offset = old_bytes;
+            dst_offsets_buf[old_rows] = static_cast<uint32_t>(current_offset);
+            size_t copied = 0;
+            for (size_t i = 0; i < _count; ++i) {
+                if (is_selected(_mask[i])) {
+                    const uint64_t start = src_offsets_data[i];
+                    const uint64_t end = src_offsets_data[i + 1];
+                    const uint64_t len = end - start;
+                    strings::memcpy_inlined(dest_bytes + copied, src_bytes + start, len);
+                    copied += len;
+                    current_offset += len;
+                    *dest_offsets++ = static_cast<uint32_t>(current_offset);
+                }
+            }
+            column->invalidate_slice_cache();
+            return Status::OK();
+        }
+    }
+
     using Offsets = typename BinaryColumnBase<T>::Offsets;
     Offsets::visit_storage_pair(offsets, src_offsets, [&](auto& dst_offsets_buf, const auto& src_offsets_buf) {
         uint64_t current_offset = old_bytes;

@@ -158,15 +158,11 @@ public:
     }
 
     size_t byte_size(size_t from, size_t size) const override {
-        if (LIKELY(!_offsets.is_large())) {
-            const auto& offsets = _offsets.small_storage();
-            return (offsets[from + size] - offsets[from]) + size * sizeof(uint32_t);
-        }
-        const auto& offsets = _offsets.large_storage();
-        return (offsets[from + size] - offsets[from]) + size * sizeof(uint64_t);
+        DCHECK_LE(from + size, this->size()) << "Range error";
+        return (_offsets[from + size] - _offsets[from]) + size * _offsets.element_size();
     }
 
-    size_t byte_size(size_t idx) const override { return _offsets[idx + 1] - _offsets[idx] + sizeof(uint32_t); }
+    size_t byte_size(size_t idx) const override { return _offsets[idx + 1] - _offsets[idx] + _offsets.element_size(); }
 
     Slice get_slice(size_t idx) const {
         const uint8_t* base = _data_base();
@@ -415,8 +411,8 @@ public:
 
 private:
     void _append_binary_impl(const Offsets& src_offsets, const uint8_t* src_base, size_t offset, size_t count);
-    void _append_selective_slow(const BinaryColumnBase<T>& src_column, const uint32_t* indexes, uint32_t size,
-                                size_t prev_num_offsets, uint64_t dst_begin, uint64_t src_bytes_size);
+    void _append_selective_general(const BinaryColumnBase<T>& src_column, const uint32_t* indexes, uint32_t size,
+                                   size_t prev_num_offsets, uint64_t dst_begin);
 
     void _build_german_strings() const;
     void _ensure_materialized();

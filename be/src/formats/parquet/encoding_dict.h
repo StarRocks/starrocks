@@ -14,7 +14,6 @@
 
 #pragma once
 
-#include <limits>
 #include <map>
 #include <memory>
 #include <type_traits>
@@ -34,17 +33,6 @@
 #include "formats/parquet/encoding.h"
 
 namespace starrocks::parquet {
-
-template <typename OffsetValue>
-__attribute__((noinline)) static void relocate_binary_offsets_with_nulls(
-        OffsetValue* __restrict dst_offsets, size_t count, uint64_t offset, const uint8_t* __restrict is_nulls,
-        const uint32_t* __restrict lengths) {
-    size_t cnt = 0;
-    for (size_t i = 0; i < count; ++i) {
-        offset += is_nulls[i] ? 0 : lengths[cnt++];
-        dst_offsets[i] = static_cast<OffsetValue>(offset);
-    }
-}
 
 template <typename T>
 class DictEncoder final : public Encoder {
@@ -379,11 +367,8 @@ public:
         RETURN_IF_ERROR(decoder->next_batch(num_values, (uint8_t*)slices));
 
         size_t total_length = 0;
-        _has_fixed_value_length = num_values > 0;
-        _fixed_value_length = num_values > 0 ? slices[0].size : 0;
         for (int i = 0; i < num_values; ++i) {
             total_length += slices[i].size;
-            _has_fixed_value_length &= slices[i].size == _fixed_value_length;
         }
 
         _dict.resize(num_values);
@@ -556,46 +541,28 @@ private:
             uint32_t lengths[read_count + 1];
             char* datas[read_count + 1];
 
-            // Use a cheap upper bound for the common no-promote path. Only
-            // compute the exact byte count if the upper bound may force a promotion.
-            auto& offsets = binary_column->get_offset();
-            const uint64_t max_final_offset = offset + static_cast<uint64_t>(read_count) * _max_value_length;
-            const bool can_stay_small =
-                    !offsets.is_large() && max_final_offset <= std::numeric_limits<uint32_t>::max();
             uint64_t total_length = 0;
-
-            if (LIKELY(can_stay_small)) {
-                for (size_t i = 0; i < read_count; ++i) {
-                    datas[i] = _slices[i].data;
-                    lengths[i] = _slices[i].size;
-                }
-            } else {
-                for (size_t i = 0; i < read_count; ++i) {
-                    datas[i] = _slices[i].data;
-                    lengths[i] = _slices[i].size;
-                    total_length += lengths[i];
-                }
+            for (size_t i = 0; i < read_count; ++i) {
+                datas[i] = _slices[i].data;
+                lengths[i] = _slices[i].size;
+                total_length += lengths[i];
             }
 
             // relocate offsets
+            auto& offsets = binary_column->get_offset();
             size_t prev_offsets = offsets.size();
+            const uint64_t final_offset = offset + total_length;
+            offsets.resize_uninitialized(count + prev_offsets, final_offset);
             const uint32_t* lengths_ptr = lengths;
-
-            if (LIKELY(can_stay_small)) {
-                offsets.resize_uninitialized(count + prev_offsets);
-                auto* __restrict dst_offsets = offsets.small_storage().data() + prev_offsets;
-                relocate_binary_offsets_with_nulls(dst_offsets, count, offset, is_nulls, lengths_ptr);
-            } else {
-                const uint64_t final_offset = offset + total_length;
-                offsets.resize_uninitialized(count + prev_offsets, final_offset);
-                if (LIKELY(!offsets.is_large())) {
-                    auto* __restrict dst_offsets = offsets.small_storage().data() + prev_offsets;
-                    relocate_binary_offsets_with_nulls(dst_offsets, count, offset, is_nulls, lengths_ptr);
-                } else {
-                    auto* __restrict dst_offsets = offsets.large_storage().data() + prev_offsets;
-                    relocate_binary_offsets_with_nulls(dst_offsets, count, offset, is_nulls, lengths_ptr);
+            offsets.visit_storage([prev_offsets, count, offset, is_nulls, lengths_ptr](auto& offsets_buf) mutable {
+                using OffsetValue = typename std::decay_t<decltype(offsets_buf)>::value_type;
+                auto* __restrict dst_offsets = offsets_buf.data() + prev_offsets;
+                size_t cnt = 0;
+                for (size_t i = 0; i < count; ++i) {
+                    offset += is_nulls[i] ? 0 : lengths_ptr[cnt++];
+                    dst_offsets[i] = static_cast<OffsetValue>(offset);
                 }
-            }
+            });
 
             if (read_count == 0) {
                 return Status::OK();
@@ -654,8 +621,6 @@ private:
     std::vector<uint32_t> _indexes;
     FixedSliceArray _slices;
     size_t _max_value_length = 0;
-    size_t _fixed_value_length = 0;
-    bool _has_fixed_value_length = false;
 };
 
 } // namespace starrocks::parquet

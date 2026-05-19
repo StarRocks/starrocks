@@ -139,21 +139,19 @@ size_t JoinHashMapSelector::_get_binary_column_max_size(RuntimeState* state, con
     auto bytes = binary_column->get_immutable_bytes();
 
     bool has_tail_zero = false;
-    int64_t max_size = 1;
     offsets.visit_storage([&](const auto& offsets_buf) {
         const auto* __restrict offset_data = offsets_buf.data();
         for (size_t i = offsets_buf.size() - 1; i > 0 && offset_data[i] > 0; i--) {
             has_tail_zero |= bytes[offset_data[i] - 1] == 0;
         }
-        if (has_tail_zero) {
-            return;
-        }
-        for (size_t i = 0; i + 1 < offsets_buf.size(); i++) {
-            max_size = std::max<int64_t>(max_size, offset_data[i + 1] - offset_data[i]);
-        }
     });
     if (has_tail_zero) {
         return 0;
+    }
+
+    int64_t max_size = 1;
+    for (size_t i = 0; i + 1 < offsets.size(); i++) {
+        max_size = std::max<int64_t>(max_size, offsets[i + 1] - offsets[i]);
     }
 
     if (max_size <= 16) {
