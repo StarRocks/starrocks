@@ -27,6 +27,7 @@ import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.connector.share.credential.CloudConfigurationConstants;
+import com.starrocks.credential.azure.AzureCloudConfigurationProvider;
 import com.starrocks.persist.DropStorageVolumeLog;
 import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.SetDefaultStorageVolumeLog;
@@ -462,7 +463,15 @@ public abstract class StorageVolumeMgr implements Writable, GsonPostProcessable 
         if (svType.equalsIgnoreCase(HDFS)) {
             return;
         }
+        // RESTORE_CLUSTER_SNAPSHOT=true signals an ADLS2 disaster-recovery replay. During DR,
+        // AZURE_PATH_KEY is injected into the storage volume params by the recovery tooling but is
+        // intentionally absent from CloudConfigurationConstants.PARAM_NAMES, so skip it here to
+        // avoid a spurious "Invalid properties" error that would abort the restore.
+        boolean isRestoring = "true".equalsIgnoreCase(System.getenv("RESTORE_CLUSTER_SNAPSHOT"));
         for (String key : params.keySet()) {
+            if (key.equals(AzureCloudConfigurationProvider.AZURE_PATH_KEY) && isRestoring) {
+                continue;
+            }
             if (!PARAM_NAMES.contains(key)) {
                 throw new DdlException("Invalid properties " + key);
             }
