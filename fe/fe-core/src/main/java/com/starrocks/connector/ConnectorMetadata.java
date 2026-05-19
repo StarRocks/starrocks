@@ -136,7 +136,7 @@ public interface ConnectorMetadata {
     /**
      * Lazily fetch the table comment when a caller really needs it
      * (e.g. information_schema.tables). Default implementation returns
-     * the comment already on the cached Table object — i.e. for HMS/Iceberg
+     * the comment already on the cached Table object — i.e. for Iceberg
      * the comment travels with getTable() so this is free. JDBC overrides
      * to issue a dedicated REMARKS query.
      */
