@@ -57,7 +57,8 @@ public:
     virtual ~ScalarIndexProvider() = default;
 
     // Evaluate the predicate and return matching row IDs.
-    virtual StatusOr<RowIdFilter> evaluate(const ScalarPredicate& predicate) = 0;
+    // Returns nullptr to indicate "no filter" (match all rows).
+    virtual StatusOr<std::unique_ptr<RowIdFilter>> evaluate(const ScalarPredicate& predicate) = 0;
 
     // Estimate the fraction of rows matching the predicate (0.0 = none, 1.0 = all).
     // Used by AdaptiveStrategy to choose pre-filter vs post-filter.

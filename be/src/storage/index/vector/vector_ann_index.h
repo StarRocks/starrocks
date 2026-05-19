@@ -15,20 +15,18 @@
 #pragma once
 
 #include <cstdint>
-#include <functional>
 #include <map>
 #include <memory>
 #include <string>
-#include <variant>
 #include <vector>
 
 #include "common/status.h"
 
+namespace starrocks {
+
 namespace detail {
 class Roaring64Map;
-}
-
-namespace starrocks {
+} // namespace detail
 
 // ============================================================
 // Enums (shared with legacy vector_index_reader.h)
@@ -89,36 +87,38 @@ struct VectorAnnResult {
 };
 
 // ============================================================
-// RowIdFilter — abstract row filter (bitmap or callback)
+// RowIdFilter — abstract row filter (faiss IDSelector-inspired)
+//
+// Hot-path interface: a single virtual is_member(). ANN graph
+// traversal may invoke this hundreds of millions of times per
+// search, so the base interface is intentionally minimal — a
+// single vtable indirection per call, no variant tag check, no
+// std::function indirection.
+//
+// Open for extension: callers may add new subclasses; ANN
+// implementations may dynamic_cast to a known concrete subclass
+// to take a specialized fast path.
 // ============================================================
-
 class RowIdFilter {
 public:
-    using Callback = std::function<bool(int64_t)>;
+    virtual ~RowIdFilter() = default;
+    virtual bool is_member(int64_t row_id) const = 0;
+};
 
-    RowIdFilter() = default;
+// Roaring bitmap-backed filter. Owns the bitmap.
+class BitmapRowIdFilter final : public RowIdFilter {
+public:
+    explicit BitmapRowIdFilter(std::unique_ptr<detail::Roaring64Map> bitmap);
+    ~BitmapRowIdFilter() override;
 
-    static RowIdFilter from_bitmap(std::shared_ptr<detail::Roaring64Map> bitmap) {
-        RowIdFilter f;
-        f._impl = std::move(bitmap);
-        return f;
-    }
+    bool is_member(int64_t row_id) const override;
 
-    static RowIdFilter from_callback(Callback fn) {
-        RowIdFilter f;
-        f._impl = std::move(fn);
-        return f;
-    }
+    int64_t cardinality() const;
 
-    bool contains(int64_t row_id) const;
-
-    // Returns the number of set bits, or -1 if unknown (callback mode).
-    int64_t count() const;
-
-    bool empty() const { return std::holds_alternative<std::monostate>(_impl); }
+    const detail::Roaring64Map* bitmap() const { return _bitmap.get(); }
 
 private:
-    std::variant<std::monostate, std::shared_ptr<detail::Roaring64Map>, Callback> _impl;
+    std::unique_ptr<detail::Roaring64Map> _bitmap;
 };
 
 // ============================================================
