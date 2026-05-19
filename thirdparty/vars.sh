@@ -482,10 +482,10 @@ HADOOPSRC_SOURCE="hadoop-3.4.3-src"
 HADOOPSRC_MD5SUM="c5ac53ca70cc667189ec824c6048914a"
 
 # blake3
-BLAKE3_DOWNLOAD="https://github.com/BLAKE3-team/BLAKE3/archive/refs/tags/1.8.4.tar.gz"
-BLAKE3_NAME="BLAKE3-1.8.4.tar.gz"
-BLAKE3_SOURCE="BLAKE3-1.8.4"
-BLAKE3_MD5SUM="cfc266777f388026d11240f67cf3c3b2"
+BLAKE3_DOWNLOAD="https://github.com/BLAKE3-team/BLAKE3/archive/refs/tags/1.8.5.tar.gz"
+BLAKE3_NAME="BLAKE3-1.8.5.tar.gz"
+BLAKE3_SOURCE="BLAKE3-1.8.5"
+BLAKE3_MD5SUM="3731247eb9086571ba7128a794c1d2d3"
 
 # xxhash
 XXHASH_DOWNLOAD="https://github.com/Cyan4973/xxHash/archive/refs/tags/v0.8.3.tar.gz"
