@@ -97,3 +97,13 @@ fe/fe-core/pseudo_cluster_*
 contrib/java-udf/target/
 java-extensions/*/bin/
 .codex/
+<<<<<<< HEAD
+=======
+.worktrees/
+handbook/plans/local/
+
+_codeql_detected_source_root
+test/.venv
+
+.lycheecache
+>>>>>>> 68e89cc4f8 ([Doc] fix links (#73406))

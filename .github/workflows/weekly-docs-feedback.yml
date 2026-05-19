@@ -62,6 +62,43 @@ jobs:
            | jq -r '.searches | to_entries[] | "- [ ] \(.value.search)", "  failures this week: \(.value.count)"' \
            >> feedback.md
 
+<<<<<<< HEAD
+=======
+      - name: Add Dependabot reminder for docs
+        run: |
+          set -eo pipefail # Ensure the script fails on any command error
+          manual_dependabot_url="https://github.com/${GITHUB_REPOSITORY}/security/dependabot?q=is%3Aopen+sort%3Anewest+severity%3Ahigh+docs"
+
+          echo " " >> feedback.md
+          echo "## Dependabot alerts reminder" >> feedback.md
+          echo "- [ ] Check open Dependabot alerts for docs:" >> feedback.md
+          echo "  ${manual_dependabot_url}" >> feedback.md
+          echo " " >> feedback.md
+
+      - name: Check for broken external links
+        continue-on-error: true
+        uses: lycheeverse/lychee-action@v2.8.0
+        with:
+          fail: false
+          args: >
+            --config docs/lychee.toml
+            --format markdown
+            --output lychee-broken-links.md
+            "docs/en/**/*.md*"
+            "docs/zh/**/*.md*"
+            "docs/ja/**/*.md*"
+
+      - name: Append broken links to feedback
+        run: |
+          echo " " >> feedback.md
+          echo "## Broken external links" >> feedback.md
+          if [ -f lychee-broken-links.md ] && grep -q "Errors per input" lychee-broken-links.md; then
+            cat lychee-broken-links.md >> feedback.md
+          else
+            echo "No broken links detected." >> feedback.md
+          fi
+
+>>>>>>> 68e89cc4f8 ([Doc] fix links (#73406))
       - name: Create issue from file
         id: weekly-feedback-report
         uses: peter-evans/create-issue-from-file@ceef9be92406ace67ab5421f66570acf213ec395
