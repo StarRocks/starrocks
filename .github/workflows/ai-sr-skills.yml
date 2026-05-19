@@ -140,13 +140,16 @@ jobs:
           # Parse the primary reviewer from the skill's output.
           # The skill prints: "Recommended reviewer: <login>"
           # (see starrocks-skills/starrocks-assign-pr-reviewer/SKILL.md "Output Template").
+          # The LLM often wraps the line/value in markdown bold or italics
+          # (e.g. **Recommended reviewer: kevincai**, Recommended reviewer: **kevincai**).
+          # Tolerate optional leading *, then extract only valid GitHub login chars
+          # ([A-Za-z0-9-]) to drop @, **, backticks, etc.
           ai_output="${RUNNER_TEMP}/ai_output.txt"
           reviewers=""
           if [ -f "$ai_output" ]; then
-            reviewers=$(grep -iE '^Recommended reviewer:' "$ai_output" | tail -1 \
-              | sed -E 's/^[Rr]ecommended reviewer:[[:space:]]*//' \
-              | sed -E 's/^[[:space:]@]*//; s/[[:space:]].*$//; s/[[:space:]]*$//' \
-              | grep -v '^$' || true)
+            reviewers=$(grep -iE '^\**Recommended reviewer:' "$ai_output" | tail -1 \
+              | sed -E 's/^\**[Rr]ecommended reviewer:\**[[:space:]]*//' \
+              | grep -oE '[A-Za-z0-9][A-Za-z0-9-]*' | head -1 || true)
           fi
 
           if [ -z "$reviewers" ]; then
