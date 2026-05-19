@@ -12,11 +12,28 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#pragma once
-
-#include "exec/pipeline/scan/bucket_sequence_morsel_queue.h"
-#include "exec/pipeline/scan/dynamic_morsel_queue.h"
 #include "exec/pipeline/scan/fixed_morsel_queue.h"
-#include "exec/pipeline/scan/morsel_queue.h"
-#include "exec/pipeline/scan/morsel_queue_factory.h"
-#include "exec/pipeline/scan/split_morsel_queue.h"
+
+namespace starrocks::pipeline {
+
+StatusOr<MorselPtr> FixedMorselQueue::try_get() {
+    if (_unget_morsel != nullptr) {
+        return std::move(_unget_morsel);
+    }
+    auto idx = _pop_index.load();
+    // prevent _num_morsels from superfluous addition
+    if (idx >= _num_morsels) {
+        return nullptr;
+    }
+    idx = _pop_index.fetch_add(1);
+    if (idx < _num_morsels) {
+        if (!_tablet_rowsets.empty()) {
+            _morsels[idx]->set_rowsets(_tablet_rowsets[idx]);
+        }
+        return std::move(_morsels[idx]);
+    } else {
+        return nullptr;
+    }
+}
+
+} // namespace starrocks::pipeline
