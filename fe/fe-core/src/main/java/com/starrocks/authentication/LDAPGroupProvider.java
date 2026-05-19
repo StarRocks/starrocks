@@ -166,12 +166,12 @@ public class LDAPGroupProvider extends GroupProvider {
                 // in the response.
                 searchControls.setReturningAttributes(
                         new String[] {getLdapGroupIdentifierAttr(), getLDAPGroupMemberAttr()});
-                NamingEnumeration<SearchResult> results =
-                        ctx.search(getLdapBaseDn(), getLdapGroupFilter(), searchControls);
+                NamingEnumeration<SearchResult> results = null;
                 try {
+                    results = ctx.search(getLdapBaseDn(), getLdapGroupFilter(), searchControls);
                     while (results.hasMore()) {
                         SearchResult result = results.next();
-                        String groupDN = extractGroupDN(result);
+                        String groupDN = extractGroupDN(result, getLdapBaseDn());
                         try {
                             matchUserAndUpdateGroups(ctx, groupDN, groups,
                                     result.getAttributes(), userNameExtractInterface);
@@ -183,6 +183,8 @@ public class LDAPGroupProvider extends GroupProvider {
                     }
                 } catch (PartialResultException e) {
                     LOG.warn("LDAP group search partial result exception", e);
+                } finally {
+                    closeNamingEnumeration(results);
                 }
             } else if (getLdapGroupDn() != null) {
                 for (String ldapGroupDN : getLdapGroupDn()) {
@@ -225,7 +227,8 @@ public class LDAPGroupProvider extends GroupProvider {
      * because it returns the absolute DN in normalized form, which is required when re-issuing
      * getAttributes() for range retrieval follow-up pages.
      */
-    private static String extractGroupDN(SearchResult result) {
+    @VisibleForTesting
+    static String extractGroupDN(SearchResult result, String baseDN) {
         try {
             String dn = result.getNameInNamespace();
             if (dn != null && !dn.isEmpty()) {
@@ -234,9 +237,29 @@ public class LDAPGroupProvider extends GroupProvider {
         } catch (UnsupportedOperationException | IllegalStateException ignored) {
             // Some LDAP providers may not support getNameInNamespace; fall through.
         }
-        // Fall back to the (possibly relative) name. Callers must tolerate a possibly empty DN
-        // and skip range follow-up requests in that case.
-        return result.getName();
+        String name = result.getName();
+        if (name == null || name.isEmpty() || !result.isRelative()) {
+            return name;
+        }
+        return qualifyRelativeDN(name, baseDN);
+    }
+
+    @VisibleForTesting
+    static String qualifyRelativeDN(String dn, String baseDN) {
+        if (Strings.isNullOrEmpty(dn) || Strings.isNullOrEmpty(baseDN)) {
+            return dn;
+        }
+        String normalizedDN = StringUtils.strip(dn.trim(), "\"'");
+        String normalizedBaseDN = StringUtils.strip(baseDN.trim(), "\"'");
+        if (normalizedDN.isEmpty() || normalizedBaseDN.isEmpty()) {
+            return normalizedDN;
+        }
+        String lowerDN = normalizedDN.toLowerCase(Locale.ROOT);
+        String lowerBaseDN = normalizedBaseDN.toLowerCase(Locale.ROOT);
+        if (lowerDN.equals(lowerBaseDN) || lowerDN.endsWith("," + lowerBaseDN)) {
+            return normalizedDN;
+        }
+        return normalizedDN + "," + normalizedBaseDN;
     }
 
     private void matchUserAndUpdateGroups(DirContext ctx,
@@ -292,14 +315,18 @@ public class LDAPGroupProvider extends GroupProvider {
             return;
         }
         Attributes currentAttrs = initialAttrs;
-        int pageCount = 0;
+        int followupPageCount = 0;
 
         while (true) {
             Attribute attr = currentAttrs.get(currentAttrId);
             if (attr != null) {
                 NamingEnumeration<?> e = attr.getAll();
-                while (e.hasMore()) {
-                    memberConsumer.accept((String) e.next());
+                try {
+                    while (e.hasMore()) {
+                        memberConsumer.accept((String) e.next());
+                    }
+                } finally {
+                    closeNamingEnumeration(e);
                 }
             }
 
@@ -308,9 +335,9 @@ public class LDAPGroupProvider extends GroupProvider {
                 break;
             }
 
-            if (++pageCount >= MAX_RANGE_PAGES) {
-                LOG.warn("LDAP group '{}' exceeded MAX_RANGE_PAGES ({}), some members may be missing",
-                        groupDN, MAX_RANGE_PAGES);
+            if (followupPageCount >= MAX_RANGE_PAGES) {
+                LOG.warn("LDAP group '{}' exceeded MAX_RANGE_PAGES ({}) follow-up pages, " +
+                        "some members may be missing", groupDN, MAX_RANGE_PAGES);
                 break;
             }
 
@@ -323,6 +350,7 @@ public class LDAPGroupProvider extends GroupProvider {
             String nextAttrName = memberAttrName + ";range=" + (range.end + 1) + "-*";
             try {
                 currentAttrs = ctx.getAttributes(groupDN, new String[] {nextAttrName});
+                followupPageCount++;
             } catch (PartialResultException pre) {
                 LOG.warn("PartialResultException while fetching next range page for group '{}', " +
                         "stop paging", groupDN, pre);
@@ -355,29 +383,67 @@ public class LDAPGroupProvider extends GroupProvider {
         if (attrs == null) {
             return null;
         }
-        // 1) Plain match first. JNDI's BasicAttributes returned over LDAP is created with
-        //    ignoreCase=true, but we still go through attrs.get(...) explicitly for clarity.
-        if (attrs.get(memberAttrName) != null) {
-            return memberAttrName;
-        }
-        // 2) Search for a range variant such as "member;range=0-1499".
+        String plainAttrId = null;
+        String plainAttrIdWithValue = null;
+        String rangeAttrId = null;
         NamingEnumeration<String> ids = attrs.getIDs();
-        while (ids.hasMore()) {
-            String id = ids.next();
-            if (id.equalsIgnoreCase(memberAttrName)) {
-                return id;
+        try {
+            while (ids.hasMore()) {
+                String id = ids.next();
+                boolean isPlainMemberAttr = id.equalsIgnoreCase(memberAttrName);
+                boolean isRangeMemberAttr = isMemberRangeAttribute(id, memberAttrName);
+                if (!isPlainMemberAttr && !isRangeMemberAttr) {
+                    continue;
+                }
+
+                Attribute attr = attrs.get(id);
+                boolean hasValue = attr != null && attr.size() > 0;
+                if (isRangeMemberAttr) {
+                    if (hasValue) {
+                        return id;
+                    }
+                    if (rangeAttrId == null) {
+                        rangeAttrId = id;
+                    }
+                } else if (hasValue) {
+                    if (plainAttrIdWithValue == null) {
+                        plainAttrIdWithValue = id;
+                    }
+                } else if (plainAttrId == null) {
+                    plainAttrId = id;
+                }
             }
-            int semi = id.indexOf(';');
-            if (semi > 0
-                    && id.substring(0, semi).equalsIgnoreCase(memberAttrName)
-                    && id.substring(semi).toLowerCase(Locale.ROOT).startsWith(";range=")) {
-                return id;
-            }
+        } finally {
+            closeNamingEnumeration(ids);
         }
-        return null;
+        if (plainAttrIdWithValue != null) {
+            return plainAttrIdWithValue;
+        }
+        if (rangeAttrId != null) {
+            return rangeAttrId;
+        }
+        return plainAttrId;
     }
 
-    private static final Pattern RANGE_PATTERN = Pattern.compile("(?i);range=(\\d+)-(\\d+|\\*)$");
+    private static boolean isMemberRangeAttribute(String attrId, String memberAttrName) {
+        int semi = attrId.indexOf(';');
+        return semi > 0
+                && attrId.substring(0, semi).equalsIgnoreCase(memberAttrName)
+                && parseRangeSuffix(attrId) != null;
+    }
+
+    private static void closeNamingEnumeration(NamingEnumeration<?> enumeration) {
+        if (enumeration != null) {
+            try {
+                enumeration.close();
+            } catch (NamingException ne) {
+                LOG.debug("Failed to close LDAP naming enumeration", ne);
+            }
+        }
+    }
+
+    private static final Pattern RANGE_PATTERN =
+            Pattern.compile("(?i)(?:^|;)range=(\\d+)-(\\d+|\\*)(?:;|$)");
 
     /**
      * Parse the range suffix of an attribute id such as {@code "member;range=0-1499"} or
