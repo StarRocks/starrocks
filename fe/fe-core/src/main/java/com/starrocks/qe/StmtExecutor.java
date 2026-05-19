@@ -248,6 +248,7 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalValuesOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.statistics.StatisticStorage;
 import com.starrocks.sql.plan.ExecPlan;
+import com.starrocks.sql.plan.ExplainMockRewriter;
 import com.starrocks.statistic.AnalyzeJob;
 import com.starrocks.statistic.AnalyzeMgr;
 import com.starrocks.statistic.AnalyzeStatus;
@@ -2788,22 +2789,16 @@ public class StmtExecutor {
                 explainString += buildQueryQueueExplainString(execPlan, context, queryType);
             }
             if (execPlan != null) {
-                MockColumnNameProvider prevProvider = context.getExplainMockNameProvider();
-                try {
-                    if (parsedStmt.isMockColumnNames()) {
-                        MockColumnNameProvider mockProvider = new MockColumnNameProvider();
-                        context.setExplainMockNameProvider(mockProvider);
-                        // Render the mocked SQL first so its column order seeds the
-                        // mock_col_<N> numbering before the plan renders.
-                        String mockedSql = AstToSQLBuilder.toSQLOrDefault(parsedStmt, "");
-                        if (mockedSql != null && !mockedSql.isEmpty()) {
-                            explainString += "Mocked SQL:\n" + mockedSql + "\n\n";
-                        }
+                String rendered = execPlan.getExplainString(explainLevel);
+                if (parsedStmt.isMockColumnNames()) {
+                    ExplainMockRewriter rewriter = new ExplainMockRewriter(execPlan.getColumnRefFactory());
+                    String mockedSql = rewriter.rewrite(AstToSQLBuilder.toSQLOrDefault(parsedStmt, ""));
+                    if (mockedSql != null && !mockedSql.isEmpty()) {
+                        explainString += "Mocked SQL:\n" + mockedSql + "\n\n";
                     }
-                    explainString += execPlan.getExplainString(explainLevel);
-                } finally {
-                    context.setExplainMockNameProvider(prevProvider);
+                    rendered = rewriter.rewrite(rendered);
                 }
+                explainString += rendered;
             }
         }
 

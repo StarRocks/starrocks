@@ -17,8 +17,6 @@ package com.starrocks.sql.formatter;
 import com.google.common.base.Joiner;
 import com.starrocks.catalog.TableName;
 import com.starrocks.common.util.ParseUtil;
-import com.starrocks.qe.ConnectContext;
-import com.starrocks.qe.MockColumnNameProvider;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.Field;
 import com.starrocks.sql.ast.CTERelation;
@@ -486,11 +484,6 @@ public class AST2SQLVisitor extends AST2StringVisitor {
 
     @Override
     public String visitSlot(SlotRef expr, Void context) {
-        ConnectContext ctx = ConnectContext.get();
-        MockColumnNameProvider mockProvider = ctx == null ? null : ctx.getExplainMockNameProvider();
-        if (mockProvider != null) {
-            return mockProvider.mockName(expr.getColumnName());
-        }
         if (expr.getOriginType().isStructType()) {
             return buildStructColumnName(expr.getTblNameWithoutAnalyzed(),
                     expr.getColumnName(), expr.getColumnName());

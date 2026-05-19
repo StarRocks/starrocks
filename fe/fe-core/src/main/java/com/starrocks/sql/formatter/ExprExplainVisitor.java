@@ -17,8 +17,6 @@ package com.starrocks.sql.formatter;
 import com.google.common.base.Joiner;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.TableName;
-import com.starrocks.qe.ConnectContext;
-import com.starrocks.qe.MockColumnNameProvider;
 import com.starrocks.sql.analyzer.AstToStringBuilder;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.OrderByElement;
@@ -193,12 +191,6 @@ public class ExprExplainVisitor implements AstVisitorExtendInterface<String, Voi
     // ========================================= References and Function Calls =========================================
     @Override
     public String visitSlot(SlotRef node, Void context) {
-        ConnectContext ctx = ConnectContext.get();
-        MockColumnNameProvider mockProvider = ctx == null ? null : ctx.getExplainMockNameProvider();
-        if (mockProvider != null) {
-            String key = mockKeyForSlot(node);
-            return mockProvider.mockName(key);
-        }
         StringBuilder sb = new StringBuilder();
         TableName tblName = node.getTblName();
 
@@ -221,23 +213,6 @@ public class ExprExplainVisitor implements AstVisitorExtendInterface<String, Voi
         } else {
             return "<slot " + node.getDesc().getId().asInt() + ">";
         }
-    }
-
-    static String mockKeyForSlot(SlotRef node) {
-        if (node.getColName() != null && !node.getColName().isEmpty()) {
-            return node.getColName();
-        }
-        if (node.getLabel() != null && !node.getLabel().isEmpty()) {
-            String label = node.getLabel();
-            if (label.startsWith("`") && label.endsWith("`") && label.length() >= 2) {
-                return label.substring(1, label.length() - 1);
-            }
-            return label;
-        }
-        if (node.getDesc() != null) {
-            return "slot_" + node.getDesc().getId().asInt();
-        }
-        return "slot_unknown";
     }
 
     // ========================================= Arithmetic and Predicates =========================================
