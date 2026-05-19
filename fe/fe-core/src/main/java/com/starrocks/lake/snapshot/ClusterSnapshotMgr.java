@@ -361,6 +361,7 @@ public class ClusterSnapshotMgr implements GsonPostProcessable {
                         LOG.warn("Invalid Cluster Snapshot Job state {}", state);
                     }
                 }
+                break;
             }
             default: {
                 LOG.warn("Invalid Cluster Snapshot Log Type {}", logType);
