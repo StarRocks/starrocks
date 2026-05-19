@@ -106,8 +106,7 @@ private:
     // Phase 1: metadata traversal
     Status _do_metadata_traversal();
     void _scan_metadata_for_changes_rowsets(const TabletMetadataPtr& meta,
-                                            std::unordered_set<uint32_t>& seen_rowset_ids,
-                                            std::unordered_set<int64_t>& discovered_versions);
+                                            std::unordered_set<uint32_t>& seen_rowset_ids);
 
     // Phase 2: rowset reading
     Status _read_next_chunk(ChunkPtr* chunk);

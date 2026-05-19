@@ -246,11 +246,8 @@ Status ChangesDataSource::_do_metadata_traversal() {
     auto* tablet_mgr = ExecEnv::GetInstance()->lake_tablet_manager();
     DCHECK(tablet_mgr != nullptr);
     DCHECK(_head_metadata != nullptr);
-    // Phase 1 traversal state — local to this method.
-    // seen_rowset_ids: rowset.id() set, dedupes the same rowset reappearing across ancestor metadata.
-    // discovered_versions: distinct rowset versions in (V_base, V_head] — used as the early-stop count.
+    // seen_rowset_ids dedupes a rowset that reappears across ancestor metadata snapshots.
     std::unordered_set<uint32_t> seen_rowset_ids;
-    std::unordered_set<int64_t> discovered_versions;
 
     auto head_meta = _head_metadata;
     // Reverse traverse from V_head
@@ -258,16 +255,7 @@ Status ChangesDataSource::_do_metadata_traversal() {
     int64_t current_version = _head_version;
 
     while (current_version > _base_version) {
-        _scan_metadata_for_changes_rowsets(current_meta, seen_rowset_ids, discovered_versions);
-
-        // The size check is a one-way termination hint: equal-or-more means
-        // (V_base, V_head] is fully covered. Less is inconclusive — versions
-        // are not 1:1 with rowsets (batch publish shares one version across
-        // rowsets, empty publish has no rowset at all). Fall through to the
-        // ancestor walk and let it run out naturally.
-        if (static_cast<int64_t>(discovered_versions.size()) >= _head_version - _base_version) {
-            break;
-        }
+        _scan_metadata_for_changes_rowsets(current_meta, seen_rowset_ids);
 
         if (current_meta->metadata_ancestors_size() == 0) {
             break;
@@ -291,14 +279,10 @@ Status ChangesDataSource::_do_metadata_traversal() {
         // ancestor chain.
         for (int64_t v : versions_to_read) {
             ASSIGN_OR_RETURN(auto meta, tablet_mgr->get_tablet_metadata(_tablet_id, v));
-            _scan_metadata_for_changes_rowsets(meta, seen_rowset_ids, discovered_versions);
+            _scan_metadata_for_changes_rowsets(meta, seen_rowset_ids);
 
             current_meta = meta;
             current_version = v;
-
-            if (static_cast<int64_t>(discovered_versions.size()) >= _head_version - _base_version) {
-                break;
-            }
         }
 
         if (versions_to_read.back() <= _base_version) {
@@ -310,8 +294,7 @@ Status ChangesDataSource::_do_metadata_traversal() {
 }
 
 void ChangesDataSource::_scan_metadata_for_changes_rowsets(const TabletMetadataPtr& meta,
-                                                            std::unordered_set<uint32_t>& seen_rowset_ids,
-                                                            std::unordered_set<int64_t>& discovered_versions) {
+                                                            std::unordered_set<uint32_t>& seen_rowset_ids) {
     auto* tablet_mgr = ExecEnv::GetInstance()->lake_tablet_manager();
 
     for (int rowset_index = 0; rowset_index < meta->rowsets_size(); ++rowset_index) {
@@ -323,7 +306,6 @@ void ChangesDataSource::_scan_metadata_for_changes_rowsets(const TabletMetadataP
             continue;
         }
         seen_rowset_ids.insert(r.id());
-        discovered_versions.insert(r.version());
 
         if (r.has_delete_predicate()) {
             _has_delete_predicate = true;
