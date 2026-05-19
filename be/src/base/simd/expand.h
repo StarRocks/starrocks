@@ -27,6 +27,13 @@ namespace SIMD::Expand {
 // (scalar leaves leftover src[cnt]; AVX2 broadcasts src[0] of the block; AVX-512
 // zeroes via maskz_expandloadu). Callers must pair the output with a null bitmap
 // (e.g. NullableColumn::null_column) and never read null lanes directly.
+//
+// Precondition: `src_data` must remain valid for reads at index `num_valid`
+// (i.e. through index `count_zero(nulls, count)`), one past the last consumed
+// element. The branchless reference loop reads `src_data[cnt]` for every output
+// position including trailing nulls where `cnt` does not advance, so a buffer
+// sized to exactly `num_valid` can over-read by one. Pad `src_data` by one
+// element or ensure it has at least `num_valid + 1` allocated entries.
 
 void expand_load_simd(int32_t* dst_data, const int32_t* src_data, const uint8_t* nulls, size_t count);
 void expand_load_simd(int64_t* dst_data, const int64_t* src_data, const uint8_t* nulls, size_t count);

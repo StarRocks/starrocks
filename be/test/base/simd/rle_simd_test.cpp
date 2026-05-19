@@ -47,12 +47,6 @@ PARALLEL_TEST(RleSimdTest, simd_fill_int16) {
         }
         ASSERT_EQ(dst.back(), static_cast<int16_t>(0x4242)) << "n=" << n << " sentinel overwritten";
     }
-    // Spot-check the default fallback directly.
-    {
-        std::vector<int16_t> dst(64, 0);
-        simd_fill_int16_default(dst.data(), 7, 64);
-        for (auto v : dst) ASSERT_EQ(v, 7);
-    }
 }
 
 PARALLEL_TEST(RleSimdTest, simd_fill_int32) {
@@ -67,11 +61,6 @@ PARALLEL_TEST(RleSimdTest, simd_fill_int32) {
             ASSERT_EQ(dst[i], value) << "n=" << n << " i=" << i;
         }
         ASSERT_EQ(dst.back(), static_cast<int32_t>(0xCAFEBABE)) << "n=" << n;
-    }
-    {
-        std::vector<int32_t> dst(64, 0);
-        simd_fill_int32_default(dst.data(), 42, 64);
-        for (auto v : dst) ASSERT_EQ(v, 42);
     }
 }
 

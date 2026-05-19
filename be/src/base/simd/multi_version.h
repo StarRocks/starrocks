@@ -50,7 +50,21 @@
 #define MFV_AVX512VLBW(...) MFV_IMPL(__attribute__((target("avx512f,avx512vl,avx512bw"))), __VA_ARGS__)
 #endif
 
+// Use this for the "default" version of a function multi-version *family*
+// (same function name as the sibling MFV_SSE42/MFV_AVX2/MFV_AVX512* variants).
+// GCC's FMV requires every version to carry a `target` attribute so the IFUNC
+// resolver can distinguish them.
 #define MFV_DEFAULT(...) MFV_IMPL(__attribute__((target("default"))), __VA_ARGS__)
+
+// Use this for a stand-alone scalar fallback with a UNIQUE name (e.g. the
+// `simd_*_default` helpers in rle_simd.h that are picked by a compile-time
+// `#if defined(__AVX2__)` dispatcher, not by FMV). It inherits the build's
+// global -m flags so the compiler can auto-vectorise the body to AVX2 on
+// USE_AVX512=OFF and to AVX-512 on USE_AVX512=ON. Using MFV_DEFAULT here
+// instead would attach `target("default")` to the function, overriding the
+// global flags and silently emitting SSE2-only code, making the "fallback"
+// slower than an undecorated loop on the same build.
+#define MFV_AUTOVEC_STATIC(...) MFV_IMPL(/* inherit global -m flags */, __VA_ARGS__)
 
 #endif // end of defined(__GNUC__) && defined(__x86_64__)
 
@@ -84,4 +98,8 @@
 // base/simd/delta_decode.h) don't trigger duplicate-definition link errors when
 // included from multiple translation units on aarch64 / other targets.
 #define MFV_DEFAULT(...) static __VA_ARGS__
+#endif
+
+#if !defined(MFV_AUTOVEC_STATIC)
+#define MFV_AUTOVEC_STATIC(...) static __VA_ARGS__
 #endif

@@ -32,6 +32,7 @@
 #include <benchmark/benchmark.h>
 
 #include <cstdint>
+#include <limits>
 #include <random>
 #include <vector>
 
@@ -147,6 +148,118 @@ static void BM_WidenInt8_SIMD(benchmark::State& state) {
 
 BENCHMARK(BM_WidenInt8_Scalar)->Arg(64)->Arg(256)->Arg(1024)->Arg(4096);
 BENCHMARK(BM_WidenInt8_SIMD)->Arg(64)->Arg(256)->Arg(1024)->Arg(4096);
+
+// =====================================================================
+// simd_dict_gather_int32: scalar (autovec) vs hand AVX2 i32gather vs AVX-512
+// =====================================================================
+//
+// The hand-AVX2 `_mm256_i32gather_epi32` path was removed from rle_simd.h
+// because microbench on AMD m6a / Aliyun Intel (GDS microcode applied)
+// showed it was ~25% slower than the scalar default. This bench provides
+// the data needed to revisit that decision on Intel hosts where the GDS
+// mitigation is not applied (per stdpain's review on PR #73287).
+//
+// Setup: a 256-entry dictionary (fits comfortably in L1d), random indices
+// drawn uniformly. count = 256 / 1024 / 4096 covers the chunk sizes the
+// Parquet dictionary decoder typically calls with.
+
+static constexpr int32_t kDictSize = 256;
+
+static void prepare_dict_gather(std::vector<int32_t>& dict, std::vector<uint32_t>& indices, int32_t count) {
+    dict.resize(kDictSize);
+    indices.resize(count);
+    std::mt19937_64 rng(0x6A746F72);
+    std::uniform_int_distribution<int32_t> dv(std::numeric_limits<int32_t>::min(), std::numeric_limits<int32_t>::max());
+    for (auto& v : dict) v = dv(rng);
+    std::uniform_int_distribution<uint32_t> id(0, kDictSize - 1);
+    for (auto& v : indices) v = id(rng);
+}
+
+// Plain scalar gather. Compiler is free to auto-vectorise this any way it
+// likes (AVX2 vpgatherdd on -mavx2, AVX-512 vpgatherdd on -mavx512f, or
+// scalar loads if it prefers).
+static void scalar_dict_gather_int32(int32_t* __restrict dest, const int32_t* __restrict dict,
+                                     const uint32_t* __restrict indices, int32_t count) {
+    for (int32_t i = 0; i < count; ++i) dest[i] = dict[indices[i]];
+}
+
+#if defined(__AVX2__)
+// Hand AVX2 vpgatherdd, mirrors the path that was removed from rle_simd.h.
+static void avx2_dict_gather_int32(int32_t* __restrict dest, const int32_t* __restrict dict,
+                                   const uint32_t* __restrict indices, int32_t count) {
+    int32_t i = 0;
+    for (; i + 8 <= count; i += 8) {
+        __m256i v_idx = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(indices + i));
+        __m256i v_gat = _mm256_i32gather_epi32(dict, v_idx, sizeof(int32_t));
+        _mm256_storeu_si256(reinterpret_cast<__m256i*>(dest + i), v_gat);
+    }
+    for (; i < count; ++i) dest[i] = dict[indices[i]];
+}
+#endif
+
+#if defined(__AVX512F__)
+// Hand AVX-512 vpgatherdd zmm, same as simd_dict_gather_int32_avx512 in
+// rle_simd.h but called directly so the bench numbers line up against the
+// AVX2 path on the same hardware in the same binary.
+static void avx512_dict_gather_int32(int32_t* __restrict dest, const int32_t* __restrict dict,
+                                     const uint32_t* __restrict indices, int32_t count) {
+    int32_t i = 0;
+    for (; i + 16 <= count; i += 16) {
+        __m512i v_idx = _mm512_loadu_si512(reinterpret_cast<const __m512i*>(indices + i));
+        __m512i v_gat = _mm512_i32gather_epi32(v_idx, dict, sizeof(int32_t));
+        _mm512_storeu_si512(reinterpret_cast<__m512i*>(dest + i), v_gat);
+    }
+    for (; i < count; ++i) dest[i] = dict[indices[i]];
+}
+#endif
+
+static void BM_DictGather_Scalar(benchmark::State& state) {
+    int32_t n = static_cast<int32_t>(state.range(0));
+    std::vector<int32_t> dict;
+    std::vector<uint32_t> indices;
+    prepare_dict_gather(dict, indices, n);
+    std::vector<int32_t> dest(n);
+    for (auto _ : state) {
+        scalar_dict_gather_int32(dest.data(), dict.data(), indices.data(), n);
+        benchmark::DoNotOptimize(dest.data());
+    }
+}
+
+#if defined(__AVX2__)
+static void BM_DictGather_AVX2(benchmark::State& state) {
+    int32_t n = static_cast<int32_t>(state.range(0));
+    std::vector<int32_t> dict;
+    std::vector<uint32_t> indices;
+    prepare_dict_gather(dict, indices, n);
+    std::vector<int32_t> dest(n);
+    for (auto _ : state) {
+        avx2_dict_gather_int32(dest.data(), dict.data(), indices.data(), n);
+        benchmark::DoNotOptimize(dest.data());
+    }
+}
+#endif
+
+#if defined(__AVX512F__)
+static void BM_DictGather_AVX512(benchmark::State& state) {
+    int32_t n = static_cast<int32_t>(state.range(0));
+    std::vector<int32_t> dict;
+    std::vector<uint32_t> indices;
+    prepare_dict_gather(dict, indices, n);
+    std::vector<int32_t> dest(n);
+    for (auto _ : state) {
+        avx512_dict_gather_int32(dest.data(), dict.data(), indices.data(), n);
+        benchmark::DoNotOptimize(dest.data());
+    }
+}
+#endif
+
+BENCHMARK(BM_DictGather_Scalar)->Arg(256)->Arg(1024)->Arg(4096);
+#if defined(__AVX2__)
+BENCHMARK(BM_DictGather_AVX2)->Arg(256)->Arg(1024)->Arg(4096);
+#endif
+#if defined(__AVX512F__)
+BENCHMARK(BM_DictGather_AVX512)->Arg(256)->Arg(1024)->Arg(4096);
+#endif
 
 // =====================================================================
 // length_eq_mask (parquet PLAIN binary length filter, 8 strings per call)
