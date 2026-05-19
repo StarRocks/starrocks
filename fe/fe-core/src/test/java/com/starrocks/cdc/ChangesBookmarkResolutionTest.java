@@ -56,14 +56,13 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Analyzer + transformer resolution paths exercised through the bookmark API:
- * not-found bookmark id, base later than head, and the trackable-delta happy
- * path that emits a LogicalChangesScan from the transformer.
+ * Planner-level test for the bookmark-resolution side of the _CHANGES_ hint:
+ * shadow-table scoping in the transformer, non-trackable-delta messaging, and
+ * the {@link CdcScanHelper} entry point that production callers reuse.
  *
- * <p>Bookmarks are minted by calling BookmarkManager directly; INSERTs are not
- * available in the FE UT framework, so we bump physical-partition
- * visibleVersion directly to make consecutive create() calls return distinct
- * bookmarks.
+ * <p>Bookmarks are minted by calling {@link BookmarkManager} directly; INSERTs
+ * are not available in the FE UT framework, so consecutive create() calls only
+ * return distinct bookmarks after bumping physical-partition visibleVersion.
  */
 public class ChangesBookmarkResolutionTest extends BookmarkTestBase {
 
@@ -78,151 +77,6 @@ public class ChangesBookmarkResolutionTest extends BookmarkTestBase {
     @AfterAll
     public static void afterAllResolution() {
         FeConstants.unitTestView = true;
-    }
-
-    @Test
-    public void testBookmarkNotFound() throws Exception {
-        String tableName = "dup_nf_" + TABLE_COUNTER.getAndIncrement();
-        createDupTable(tableName);
-        String sql = "SELECT k, v FROM " + tableName
-                + " CHANGES FROM VERSION 99999 TO VERSION 99998";
-        Exception ex = assertThrows(Exception.class,
-                () -> UtFrameUtils.getFragmentPlan(connectContext, sql));
-        assertTrue(ex.getMessage().contains("not found"),
-                "expected not-found message, got: " + ex.getMessage());
-    }
-
-    @Test
-    public void testBookmarkIdNotFoundMessageMentionsTableName() throws Exception {
-        String tableName = "dup_nfmsg_" + TABLE_COUNTER.getAndIncrement();
-        createDupTable(tableName);
-        long unknownId = 999_999L;
-        String sql = String.format(
-                "SELECT k, v FROM %s CHANGES FROM VERSION %d TO VERSION %d",
-                tableName, unknownId, unknownId + 1);
-        Exception ex = assertThrows(Exception.class,
-                () -> UtFrameUtils.getFragmentPlan(connectContext, sql));
-        String expected = "bookmark " + unknownId + " not found on table '" + tableName + "'";
-        assertTrue(ex.getMessage().contains(expected),
-                "expected message to contain '" + expected + "', got: " + ex.getMessage());
-    }
-
-    @Test
-    public void testNoActiveBookmarkAtOrBeforeTsMessage() throws Exception {
-        String tableName = "dup_nots_" + TABLE_COUNTER.getAndIncrement();
-        createDupTable(tableName);
-        String sql = "SELECT k, v FROM " + tableName
-                + " CHANGES FROM TIMESTAMP '2020-01-01 00:00:00' TO TIMESTAMP '2099-01-01 00:00:00'";
-        Exception ex = assertThrows(Exception.class,
-                () -> UtFrameUtils.getFragmentPlan(connectContext, sql));
-        String expected = "no bookmark for table '" + tableName + "' at or before";
-        assertTrue(ex.getMessage().contains(expected),
-                "expected message to contain '" + expected + "', got: " + ex.getMessage());
-    }
-
-    @Test
-    public void testBaseLaterThanHeadMessage() throws Exception {
-        String tableName = "dup_blth_" + TABLE_COUNTER.getAndIncrement();
-        long tableId = createDupTable(tableName);
-        OlapTable t = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
-                .getDb(dbId).getTable(tableId);
-        t.maySetDatabaseId(dbId);
-
-        BookmarkManager bm = GlobalStateMgr.getCurrentState().getBookmarkManager();
-        BookmarkHolder h1 = BookmarkHolder.forEmptyInfo("base_later_than_head_1");
-        BookmarkHolder h2 = BookmarkHolder.forEmptyInfo("base_later_than_head_2");
-        Bookmark b1 = bm.create(dbId, tableId, h1);
-        bumpVisibleVersion(t, 3L);
-        Bookmark b2 = bm.create(dbId, tableId, h2);
-
-        try {
-            // base = b2 (larger id), head = b1 (smaller id) — must be rejected with the spec wording.
-            String sql = String.format(
-                    "SELECT k, v FROM %s CHANGES FROM VERSION %d TO VERSION %d",
-                    tableName, b2.getBookmarkId(), b1.getBookmarkId());
-            Exception ex = assertThrows(Exception.class,
-                    () -> UtFrameUtils.getFragmentPlan(connectContext, sql));
-            assertTrue(ex.getMessage().contains("CHANGES base must not be later than head"),
-                    "expected spec wording 'CHANGES base must not be later than head', got: " + ex.getMessage());
-        } finally {
-            bm.releaseReference(dbId, tableId, b1.getBookmarkId(), h1.getHolderId());
-            bm.releaseReference(dbId, tableId, b2.getBookmarkId(), h2.getHolderId());
-        }
-    }
-
-    @Test
-    public void testBaseAfterHead() throws Exception {
-        String tableName = "dup_order_" + TABLE_COUNTER.getAndIncrement();
-        long tableId = createDupTable(tableName);
-        OlapTable t = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
-                .getDb(dbId).getTable(tableId);
-        // LocalMetastore.createTable doesn't stamp dbId; production callers
-        // populate it before BookmarkManager runs, so seed it here.
-        t.maySetDatabaseId(dbId);
-
-        BookmarkManager bm = GlobalStateMgr.getCurrentState().getBookmarkManager();
-        BookmarkHolder h1 = BookmarkHolder.forEmptyInfo("base_after_head_1");
-        BookmarkHolder h2 = BookmarkHolder.forEmptyInfo("base_after_head_2");
-        Bookmark b1 = bm.create(dbId, tableId, h1);
-        // Bump visible version so the next create() observes a state change and
-        // returns a distinct bookmark id. PARTITION_INIT_VERSION is 1, so any
-        // value > 1 works.
-        bumpVisibleVersion(t, 2L);
-        Bookmark b2 = bm.create(dbId, tableId, h2);
-
-        try {
-            // base = b2 (larger id), head = b1 (smaller id) — must be rejected.
-            String sql = String.format(
-                    "SELECT k, v FROM %s CHANGES FROM VERSION %d TO VERSION %d",
-                    tableName, b2.getBookmarkId(), b1.getBookmarkId());
-            Exception ex = assertThrows(Exception.class,
-                    () -> UtFrameUtils.getFragmentPlan(connectContext, sql));
-            assertTrue(ex.getMessage().contains("CHANGES base must not be later than head"),
-                    "expected order-check message, got: " + ex.getMessage());
-        } finally {
-            bm.releaseReference(dbId, tableId, b1.getBookmarkId(), h1.getHolderId());
-            bm.releaseReference(dbId, tableId, b2.getBookmarkId(), h2.getHolderId());
-        }
-    }
-
-    @Test
-    public void testTrackableDeltaTransformsToChangesScan() throws Exception {
-        String tableName = "dup_trk_" + TABLE_COUNTER.getAndIncrement();
-        long tableId = createDupTable(tableName);
-        OlapTable t = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
-                .getDb(dbId).getTable(tableId);
-        t.maySetDatabaseId(dbId);
-
-        BookmarkManager bm = GlobalStateMgr.getCurrentState().getBookmarkManager();
-        BookmarkHolder hBase = BookmarkHolder.forEmptyInfo("trackable_base");
-        BookmarkHolder hHead = BookmarkHolder.forEmptyInfo("trackable_head");
-
-        Bookmark base = bm.create(dbId, tableId, hBase);
-        // Advance visibleVersion so the head bookmark differs from base; the
-        // resulting BookmarkChange has DATA_CHANGED, which is trackable.
-        bumpVisibleVersion(t, 5L);
-        Bookmark head = bm.create(dbId, tableId, hHead);
-
-        try {
-            // Run only parser + analyzer + transformer; skip the cost-based
-            // optimizer, whose StatisticsCalculator has no handler for
-            // LogicalChangesScan yet. The transformer is where bookmark
-            // resolution lives, so a successful transform that emits a
-            // LogicalChangesScan is the load-bearing assertion.
-            String sql = String.format(
-                    "SELECT k, v FROM %s CHANGES FROM VERSION %d TO VERSION %d",
-                    tableName, base.getBookmarkId(), head.getBookmarkId());
-            QueryStatement stmt = (QueryStatement) UtFrameUtils.parseStmtWithNewParser(
-                    sql, connectContext);
-            LogicalPlan plan = new RelationTransformer(new ColumnRefFactory(), connectContext)
-                    .transformWithSelectLimit(stmt.getQueryRelation());
-            assertTrue(containsChangesScan(plan.getRoot()),
-                    "expected LogicalChangesScan in transformed plan, got root op: "
-                            + plan.getRoot().getOp().getOpType());
-        } finally {
-            bm.releaseReference(dbId, tableId, base.getBookmarkId(), hBase.getHolderId());
-            bm.releaseReference(dbId, tableId, head.getBookmarkId(), hHead.getHolderId());
-        }
     }
 
     @Test
@@ -243,7 +97,7 @@ public class ChangesBookmarkResolutionTest extends BookmarkTestBase {
 
         try {
             String sql = String.format(
-                    "SELECT k, v FROM %s CHANGES FROM VERSION %d TO VERSION %d",
+                    "SELECT k, v FROM %s [_CHANGES_%d_%d_]",
                     tableName, base.getBookmarkId(), head.getBookmarkId());
             QueryStatement stmt = (QueryStatement) UtFrameUtils.parseStmtWithNewParser(
                     sql, connectContext);
@@ -429,8 +283,9 @@ public class ChangesBookmarkResolutionTest extends BookmarkTestBase {
             // Driven through the parser+analyzer+transformer path so the hint
             // ends up resolving to a BookmarkRange on the TableRelation, which
             // the new RelationTransformer branch dispatches into CdcScanHelper.
-            // Skip the cost-based optimizer like testTrackableDeltaTransformsToChangesScan
-            // does — the transformer is the load-bearing assertion here.
+            // Skip the cost-based optimizer — the transformer is the load-bearing
+            // assertion here, and StatisticsCalculator has no LogicalChangesScan
+            // handler yet.
             String sql = String.format(
                     "SELECT k, v FROM %s [_CHANGES_%d_%d_]",
                     tableName, base.getBookmarkId(), head.getBookmarkId());
