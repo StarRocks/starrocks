@@ -846,20 +846,20 @@ public class ShowExecutor {
                 OlapTable olapTable = (OlapTable) tbl;
                 locker.lockTableWithIntensiveDbLock(db.getId(), olapTable.getId(), LockType.READ);
                 try {
-                    Long metaId = olapTable.getIndexIdByName(showStmt.getTable());
+                    Long indexId = olapTable.getIndexIdByName(showStmt.getTable());
                     // Skip the base index (its name equals the table's current name) - only
                     // reachable here if a concurrent RENAME slipped between the failed name
                     // lookup that routed us into this fallback and the snapshot below.
-                    if (metaId == null || metaId == olapTable.getBaseIndexId()) {
+                    if (indexId == null || indexId == olapTable.getBaseIndexId()) {
                         continue;
                     }
                     // Skip shadow / mid-schema-change indexes.
                     boolean visible = olapTable.getVisibleIndexMetas().stream()
-                            .anyMatch(m -> m.getIndexId() == metaId);
+                            .anyMatch(m -> m.getIndexId() == indexId);
                     if (!visible) {
                         continue;
                     }
-                    MaterializedIndexMeta mvMeta = olapTable.getIndexMetaByIndexId(metaId);
+                    MaterializedIndexMeta mvMeta = olapTable.getIndexMetaByIndexId(indexId);
                     if (mvMeta == null) {
                         continue;
                     }
