@@ -253,7 +253,7 @@ displayed_sidebar: docs
 ### 功能优化
 
 - 优化正则表达式解析失败时的报错信息。[#57904](https://github.com/StarRocks/starrocks/pull/57904)
-- 修复安全漏洞 [SNYK-JAVA-ORGJSON-5488379](https://snyk.io/vuln/SNYK-JAVA-ORGJSON-5488379) 及 [SNYK-JAVA-ORGJSON-5962464](https://snyk.io/vuln/SNYK-JAVA-ORGJSON-5962464)。[#58425](https://github.com/StarRocks/starrocks/pull/58425)
+- 修复安全漏洞 [SNYK-JAVA-ORGJSON-5488379](https://security.snyk.io/vuln/SNYK-JAVA-ORGJSON-5488379) 及 [SNYK-JAVA-ORGJSON-5962464](https://security.snyk.io/vuln/SNYK-JAVA-ORGJSON-5962464)。[#58425](https://github.com/StarRocks/starrocks/pull/58425)
 
 ### 问题修复
 

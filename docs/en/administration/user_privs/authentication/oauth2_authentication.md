@@ -20,7 +20,7 @@ This topic describes how to manually create and authenticate users using OAuth 2
 
 ## Prerequisites
 
-If you want to connect to StarRocks from a MySQL client, the MySQL client version must be 9.2 or later. For more information, see [MySQL official document](https://dev.mysql.com/doc/refman/9.2/en/openid-pluggable-authentication.html).
+If you want to connect to StarRocks from a MySQL client, the MySQL client version must be 9.2 or later. For more information, see [MySQL official document](https://dev.mysql.com/doc/refman/9.7/en/openid-pluggable-authentication.html).
 
 ## Create a user with OAuth 2.0
 

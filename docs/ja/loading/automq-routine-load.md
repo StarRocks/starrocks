@@ -7,7 +7,7 @@ displayed_sidebar: docs
 
 import Replicanum from '../_assets/commonMarkdown/replicanum.mdx'
 
-[AutoMQ for Kafka](https://www.automq.com/docs) は、クラウド環境向けに再設計された Kafka のクラウドネイティブバージョンです。AutoMQ Kafka は [オープンソース](https://github.com/AutoMQ/automq-for-kafka) であり、Kafka プロトコルと完全に互換性があり、クラウドの利点を最大限に活用しています。自己管理型の Apache Kafka と比較して、AutoMQ Kafka はクラウドネイティブなアーキテクチャにより、容量の自動スケーリング、ネットワークトラフィックの自己バランス、パーティションの数秒での移動などの機能を提供します。これらの機能は、ユーザーにとっての総所有コスト (TCO) を大幅に削減します。
+[AutoMQ for Kafka](https://docs.automq.com/automq/what-is-automq/overview) は、クラウド環境向けに再設計された Kafka のクラウドネイティブバージョンです。AutoMQ Kafka は [オープンソース](https://github.com/AutoMQ/automq-for-kafka) であり、Kafka プロトコルと完全に互換性があり、クラウドの利点を最大限に活用しています。自己管理型の Apache Kafka と比較して、AutoMQ Kafka はクラウドネイティブなアーキテクチャにより、容量の自動スケーリング、ネットワークトラフィックの自己バランス、パーティションの数秒での移動などの機能を提供します。これらの機能は、ユーザーにとっての総所有コスト (TCO) を大幅に削減します。
 
 この記事では、StarRocks Routine Load を使用して AutoMQ Kafka にデータをインポートする方法を説明します。Routine Load の基本原則については、Routine Load Fundamentals のセクションを参照してください。
 
@@ -37,7 +37,7 @@ PROPERTIES (
 
 ## AutoMQ Kafka とテストデータの準備
 
-AutoMQ Kafka 環境とテストデータを準備するには、AutoMQ [Quick Start](https://www.automq.com/docs) ガイドに従って AutoMQ Kafka クラスターをデプロイします。StarRocks が AutoMQ Kafka サーバーに直接接続できることを確認してください。
+AutoMQ Kafka 環境とテストデータを準備するには、AutoMQ [Quick Start](https://docs.automq.com/automq/what-is-automq/overview) ガイドに従って AutoMQ Kafka クラスターをデプロイします。StarRocks が AutoMQ Kafka サーバーに直接接続できることを確認してください。
 
 AutoMQ Kafka で `example_topic` という名前のトピックをすばやく作成し、テスト JSON データを書き込むには、次の手順に従います。
 

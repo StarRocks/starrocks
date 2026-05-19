@@ -20,7 +20,7 @@ StarRocks は、トークンと引き換えに認可コードを使用する [Au
 
 ## 前提条件
 
-MySQL クライアントから StarRocks に接続したい場合、MySQL クライアントのバージョンは 9.2 以上である必要があります。詳細については、[MySQL official document](https://dev.mysql.com/doc/refman/9.2/en/openid-pluggable-authentication.html) を参照してください。
+MySQL クライアントから StarRocks に接続したい場合、MySQL クライアントのバージョンは 9.2 以上である必要があります。詳細については、[MySQL official document](https://dev.mysql.com/doc/refman/9.7/en/openid-pluggable-authentication.html) を参照してください。
 
 ## OAuth 2.0 を使用したユーザーの作成
 

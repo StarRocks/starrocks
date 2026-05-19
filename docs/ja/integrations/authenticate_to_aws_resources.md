@@ -17,7 +17,7 @@ StarRocks は、AWS リソースと統合するために 3 つの認証方法を
 
 ### Assumed role-based authentication
 
-インスタンスプロファイルベースの認証とは異なり、ロール引受ベースの認証方法は、AWS IAM ロールを引き受けて AWS リソースにアクセスすることをサポートしています。詳細については、[Assuming a role](https://docs.aws.amazon.com/awscloudtrail/latest/userguide/cloudtrail-sharing-logs-assume-role.html) を参照してください。
+インスタンスプロファイルベースの認証とは異なり、ロール引受ベースの認証方法は、AWS IAM ロールを引き受けて AWS リソースにアクセスすることをサポートしています。詳細については、[Assuming a role](https://docs.aws.amazon.com/awscloudtrail/latest/userguide/cloudtrail-sharing-logs.html) を参照してください。
 
 ### IAM user-based authentication
 

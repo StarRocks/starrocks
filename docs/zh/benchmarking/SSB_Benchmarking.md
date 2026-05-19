@@ -6,7 +6,7 @@ displayed_sidebar: docs
 
 星形模型基准测试（SSB）旨在测试 OLAP 数据库产品的基本性能指标。SSB 使用一种在学术界和工业界广泛应用的星形模型测试集。有关更多信息，请参见 [Star Schema Benchmark](https://www.cs.umb.edu/~poneil/StarSchemaB.PDF)。
 
-ClickHouse 将星形模型展平为一个宽扁平表，并将 SSB 重写为单表基准测试。有关更多信息，请参见 [Star schema benchmark of ClickHouse](https://clickhouse.com/docs/en/getting-started/example-datasets/star-schema)
+ClickHouse 将星形模型展平为一个宽扁平表，并将 SSB 重写为单表基准测试。有关更多信息，请参见 [Star schema benchmark of ClickHouse](https://clickhouse.com/docs/getting-started/example-datasets/star-schema)
 
 此测试比较了 StarRocks、Apache Druid 和 ClickHouse 在 SSB 单表数据集上的性能。
 

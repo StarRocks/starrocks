@@ -6,7 +6,7 @@ displayed_sidebar: docs
 
 スタースキーマベンチマーク (SSB) は、OLAP データベース製品の基本的なパフォーマンス指標をテストするために設計されています。SSB は、学術界や産業界で広く適用されているスタースキーマのテストセットを使用します。詳細については、 [Star Schema Benchmark](https://www.cs.umb.edu/~poneil/StarSchemaB.PDF) を参照してください。
 
-ClickHouse はスタースキーマを広いフラットテーブルに変換し、SSB を単一テーブルのベンチマークに書き換えます。詳細については、 [Star schema benchmark of ClickHouse](https://clickhouse.com/docs/en/getting-started/example-datasets/star-schema) を参照してください。
+ClickHouse はスタースキーマを広いフラットテーブルに変換し、SSB を単一テーブルのベンチマークに書き換えます。詳細については、 [Star schema benchmark of ClickHouse](https://clickhouse.com/docs/getting-started/example-datasets/star-schema) を参照してください。
 
 このテストは、StarRocks、Apache Druid、ClickHouse のパフォーマンスを SSB 単一テーブルデータセットに対して比較します。
 

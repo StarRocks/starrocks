@@ -20,7 +20,7 @@ StarRocks 使用 [Authorization Code](https://tools.ietf.org/html/rfc6749#sectio
 
 ## 前提条件
 
-如果您希望从 MySQL 客户端连接到 StarRocks，MySQL 客户端版本必须为 9.2 或更高版本。有关更多信息，请参阅 [MySQL 官方文档](https://dev.mysql.com/doc/refman/9.2/en/openid-pluggable-authentication.html)。
+如果您希望从 MySQL 客户端连接到 StarRocks，MySQL 客户端版本必须为 9.2 或更高版本。有关更多信息，请参阅 [MySQL 官方文档](https://dev.mysql.com/doc/refman/9.7/en/openid-pluggable-authentication.html)。
 
 ## 使用 OAuth 2.0 创建用户
 
