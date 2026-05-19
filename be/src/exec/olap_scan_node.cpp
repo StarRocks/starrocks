@@ -489,8 +489,7 @@ StatusOr<pipeline::MorselQueuePtr> OlapScanNode::convert_scan_range_to_morsel_qu
     const auto& query_options = runtime_state()->query_options();
     const bool is_vector_query =
             _olap_scan_node.__isset.vector_search_options && _olap_scan_node.vector_search_options.enable_use_ann;
-    const bool force_per_segment = is_vector_query &&
-                                   query_options.__isset.enable_per_segment_scan_parallel &&
+    const bool force_per_segment = is_vector_query && query_options.__isset.enable_per_segment_scan_parallel &&
                                    query_options.enable_per_segment_scan_parallel;
     if (force_per_segment) {
         enable_tablet_internal_parallel = true;

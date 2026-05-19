@@ -158,10 +158,10 @@ Status TabletReader::open(const TabletReaderParams& read_params) {
         if (tablet_num_rows < read_params.splitted_scan_rows * config::lake_tablet_rows_splitted_ratio) {
             // ANN opt-in needs per-segment splitting even on small tablets that
             // would normally short-circuit to a single scan here.
-            const bool force_per_segment = read_params.use_vector_index && read_params.runtime_state != nullptr &&
-                                           read_params.runtime_state->query_options().__isset
-                                                   .enable_per_segment_scan_parallel &&
-                                           read_params.runtime_state->query_options().enable_per_segment_scan_parallel;
+            const bool force_per_segment =
+                    read_params.use_vector_index && read_params.runtime_state != nullptr &&
+                    read_params.runtime_state->query_options().__isset.enable_per_segment_scan_parallel &&
+                    read_params.runtime_state->query_options().enable_per_segment_scan_parallel;
             if (!force_per_segment) {
                 // set _need_split false to make iterator can get data this round if split do not happen,
                 // otherwise, iterator will return empty.

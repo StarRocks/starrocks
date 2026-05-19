@@ -1330,8 +1330,8 @@ StatusOr<pipeline::MorselQueuePtr> LakeDataSourceProvider::convert_scan_range_to
     // to FORCE_SPLIT mode so the helper bypasses the "enough scan ranges" and
     // min-DOP gates. The lake_tablet_rows_splitted_ratio bypass for the
     // small-tablet shortcut sits in lake::TabletReader::open.
-    const bool is_vector_query = _t_lake_scan_node.__isset.vector_search_options &&
-                                 _t_lake_scan_node.vector_search_options.enable_use_ann;
+    const bool is_vector_query =
+            _t_lake_scan_node.__isset.vector_search_options && _t_lake_scan_node.vector_search_options.enable_use_ann;
     if (is_vector_query && _runtime_state != nullptr &&
         _runtime_state->query_options().__isset.enable_per_segment_scan_parallel &&
         _runtime_state->query_options().enable_per_segment_scan_parallel) {
