@@ -1202,13 +1202,13 @@ public class ExpressionStatisticsCalculatorTest {
     @Test
     public void testDictMappingInsideArrayMapKeepsLambdaStats() {
         // GIVEN
-        final var arrayCol = new ColumnRefOperator(1, Type.ARRAY_INT, "arr", true);
-        final var lambdaArg = new ColumnRefOperator(10, Type.INT, "x", true, true);
-        final var dictCol = new ColumnRefOperator(20, Type.INT, "dict", true);
+        final var arrayCol = new ColumnRefOperator(1, ArrayType.ARRAY_INT, "arr", true);
+        final var lambdaArg = new ColumnRefOperator(10, IntegerType.INT, "x", true, true);
+        final var dictCol = new ColumnRefOperator(20, IntegerType.INT, "dict", true);
 
-        final var originExpr = new CallOperator(FunctionSet.ABS, Type.INT, Lists.newArrayList(lambdaArg));
-        final var dictMapping = new DictMappingOperator(Type.INT, dictCol, originExpr, ConstantOperator.createInt(0));
-        final var lambda = new LambdaFunctionOperator(List.of(lambdaArg), dictMapping, Type.INT);
+        final var originExpr = new CallOperator(FunctionSet.ABS, IntegerType.INT, Lists.newArrayList(lambdaArg));
+        final var dictMapping = new DictMappingOperator(IntegerType.INT, dictCol, originExpr, ConstantOperator.createInt(0));
+        final var lambda = new LambdaFunctionOperator(List.of(lambdaArg), dictMapping, IntegerType.INT);
 
         final var stats = Statistics.builder()
                 .setOutputRowCount(10_000)
@@ -1222,7 +1222,7 @@ public class ExpressionStatisticsCalculatorTest {
                         .build())
                 .build();
 
-        final var arrayMap = new CallOperator(FunctionSet.ARRAY_MAP, Type.ARRAY_INT,
+        final var arrayMap = new CallOperator(FunctionSet.ARRAY_MAP, ArrayType.ARRAY_INT,
                 Lists.newArrayList(lambda, arrayCol));
 
         // WHEN
@@ -1855,7 +1855,7 @@ public class ExpressionStatisticsCalculatorTest {
                 .addColumnStatistic(stringProviderCol, providerStats)
                 .build();
 
-        final var originBackedDictMapping = new DictMappingOperator(dictCol, originCol, Type.INT);
+        final var originBackedDictMapping = new DictMappingOperator(dictCol, originCol, IntegerType.INT);
         final var providerBackedDictMapping = new DictMappingOperator(IntegerType.INT, dictCol,
                 new CallOperator(FunctionSet.ABS, IntegerType.INT, Lists.newArrayList(dictValueCol)), stringProviderCol);
 
