@@ -25,6 +25,7 @@ import com.starrocks.sql.ast.OrderByElement;
 import com.starrocks.sql.ast.expression.AnalyticExpr;
 import com.starrocks.sql.ast.expression.AnalyticWindow;
 import com.starrocks.sql.ast.expression.AnalyticWindowBoundary;
+import com.starrocks.sql.ast.expression.ArithmeticExpr;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.ExprCastFunction;
 import com.starrocks.sql.ast.expression.ExprToSql;
@@ -34,14 +35,15 @@ import com.starrocks.sql.ast.expression.IntervalLiteral;
 import com.starrocks.sql.ast.expression.LiteralExpr;
 import com.starrocks.sql.ast.expression.NullLiteral;
 import com.starrocks.sql.ast.expression.SlotRef;
+import com.starrocks.sql.ast.expression.TimestampArithmeticExpr;
 import com.starrocks.sql.ast.expression.UserVariableExpr;
 import com.starrocks.sql.common.TypeManager;
 import com.starrocks.type.DateType;
-import com.starrocks.type.FloatType;
 import com.starrocks.type.IntegerType;
 import com.starrocks.type.Type;
 
 import java.math.BigDecimal;
+import java.util.List;
 import java.util.Set;
 
 import static com.starrocks.catalog.FunctionSet.STATISTIC_FUNCTIONS;
@@ -216,6 +218,7 @@ public class AnalyticAnalyzer {
             if (rightBoundary.getBoundaryType().isOffset()) {
                 checkRangeOffsetBoundaryExpr(analyticExpr, rightBoundary);
             }
+            setAnalyzedRangeBoundaryExprs(windowFrame, analyticExpr.getOrderByElements());
         } else {
             if (leftBoundary.getBoundaryType().isOffset()) {
                 checkOffsetExpr(windowFrame, leftBoundary);
@@ -297,24 +300,61 @@ public class AnalyticAnalyzer {
                 + ExprToSql.toSql(analyticExpr), analyticExpr.getPos());
     }
 
+    public static void setAnalyzedRangeBoundaryExprs(AnalyticWindow windowFrame,
+                                                     List<OrderByElement> orderByElements) {
+        if (windowFrame == null || windowFrame.getType() != AnalyticWindow.Type.RANGE) {
+            return;
+        }
+        Preconditions.checkState(!orderByElements.isEmpty(), "Range window frame requires order by columns");
+        OrderByElement orderByElement = orderByElements.get(0);
+        if (!hasRangeOffsetBoundary(windowFrame)) {
+            return;
+        }
+
+        Expr orderByExpr = orderByElement.getExpr();
+        setAnalyzedRangeBoundaryExpr(windowFrame.getLeftBoundary(), orderByExpr, orderByElement.getIsAsc());
+        setAnalyzedRangeBoundaryExpr(windowFrame.getRightBoundary(), orderByExpr, orderByElement.getIsAsc());
+    }
+
+    private static boolean hasRangeOffsetBoundary(AnalyticWindow windowFrame) {
+        return windowFrame.getLeftBoundary().getBoundaryType().isOffset() ||
+                windowFrame.getRightBoundary().getBoundaryType().isOffset();
+    }
+
+    private static void setAnalyzedRangeBoundaryExpr(AnalyticWindowBoundary boundary, Expr orderByExpr,
+                                                     boolean orderByIsAsc) {
+        if (boundary == null || !boundary.getBoundaryType().isOffset()) {
+            return;
+        }
+        boundary.setAnalyzedRangeBoundaryExpr(buildRangeBoundaryExpr(boundary, orderByExpr, orderByIsAsc));
+    }
+
+    private static Expr buildRangeBoundaryExpr(AnalyticWindowBoundary boundary, Expr orderByExpr,
+                                               boolean orderByIsAsc) {
+        boolean addOffset =
+                (orderByIsAsc && boundary.getBoundaryType() == AnalyticWindowBoundary.BoundaryType.FOLLOWING) ||
+                        (!orderByIsAsc && boundary.getBoundaryType() == AnalyticWindowBoundary.BoundaryType.PRECEDING);
+        ArithmeticExpr.Operator op = addOffset ? ArithmeticExpr.Operator.ADD : ArithmeticExpr.Operator.SUBTRACT;
+        if (orderByExpr.getType().isDateType()) {
+            IntervalLiteral interval = (IntervalLiteral) boundary.getExpr();
+            Expr orderKey = TypeManager.addCastExpr(orderByExpr.clone(), DateType.DATETIME);
+            Expr intervalValue = TypeManager.addCastExpr(interval.getValue().clone(), IntegerType.INT);
+            TimestampArithmeticExpr timestampExpr = new TimestampArithmeticExpr(
+                    op, orderKey, intervalValue, interval.getUnitIdentifier().getDescription(), false);
+            timestampExpr.setType(DateType.DATETIME);
+            return timestampExpr;
+        }
+
+        Type rangeKeyType = orderByExpr.getType();
+        Expr orderKey = TypeManager.addCastExpr(orderByExpr.clone(), rangeKeyType);
+        Expr offset = TypeManager.addCastExpr(boundary.getExpr().clone(), rangeKeyType);
+        ArithmeticExpr arithmeticExpr = new ArithmeticExpr(op, orderKey, offset);
+        arithmeticExpr.setType(rangeKeyType);
+        return arithmeticExpr;
+    }
+
     private static Type getRangeNumericKeyType(Type orderByType, Type offsetType) {
-        Type commonType = TypeManager.getCommonType(orderByType, offsetType);
-        if (commonType.isInvalid()) {
-            return commonType;
-        }
-        if (commonType.isFloatingPointType()) {
-            return FloatType.DOUBLE;
-        }
-        if (commonType.isDecimalOfAnyVersion()) {
-            return commonType;
-        }
-        if (commonType.isLargeint()) {
-            return IntegerType.LARGEINT;
-        }
-        if (commonType.isFixedPointType()) {
-            return IntegerType.BIGINT;
-        }
-        return commonType;
+        return TypeManager.getCommonType(orderByType, offsetType);
     }
 
     private static void checkRangeNumericOffset(AnalyticWindowBoundary boundary) {

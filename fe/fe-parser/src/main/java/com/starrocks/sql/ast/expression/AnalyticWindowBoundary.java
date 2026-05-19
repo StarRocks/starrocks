@@ -83,6 +83,10 @@ public class AnalyticWindowBoundary implements ParseNode {
     // Offset expr. Only set for PRECEDING/FOLLOWING. Needed for toSql().
     private final Expr expr;
 
+    // Analyzed RANGE offset boundary expression, i.e. ORDER BY key +/- offset.
+    // Only set for RANGE PRECEDING/FOLLOWING after window standardization.
+    private Expr analyzedRangeBoundaryExpr;
+
     // The offset value. Set during analysis after evaluating expr_. Integral valued
     // for ROWS windows.
     private BigDecimal offsetValue;
@@ -93,6 +97,14 @@ public class AnalyticWindowBoundary implements ParseNode {
 
     public Expr getExpr() {
         return expr;
+    }
+
+    public Expr getAnalyzedRangeBoundaryExpr() {
+        return analyzedRangeBoundaryExpr;
+    }
+
+    public void setAnalyzedRangeBoundaryExpr(Expr analyzedRangeBoundaryExpr) {
+        this.analyzedRangeBoundaryExpr = analyzedRangeBoundaryExpr;
     }
 
     public AnalyticWindowBoundary(BoundaryType boundaryType, Expr e) {
@@ -148,12 +160,19 @@ public class AnalyticWindowBoundary implements ParseNode {
         AnalyticWindowBoundary result = new AnalyticWindowBoundary(boundaryType.converse(),
                 (expr != null) ? expr.clone() : null);
         result.offsetValue = offsetValue;
+        // Window reversal flips both ORDER BY direction and PRECEDING/FOLLOWING, so the analyzed
+        // RANGE boundary value remains equivalent. For example, ASC PRECEDING and DESC FOLLOWING
+        // both use order_key - offset.
+        result.analyzedRangeBoundaryExpr = analyzedRangeBoundaryExpr != null ? analyzedRangeBoundaryExpr.clone() : null;
         return result;
     }
 
     @Override
     public AnalyticWindowBoundary clone() {
-        return new AnalyticWindowBoundary(boundaryType, expr != null ? expr.clone() : null, offsetValue);
+        AnalyticWindowBoundary result =
+                new AnalyticWindowBoundary(boundaryType, expr != null ? expr.clone() : null, offsetValue);
+        result.analyzedRangeBoundaryExpr = analyzedRangeBoundaryExpr != null ? analyzedRangeBoundaryExpr.clone() : null;
+        return result;
     }
 
     public void setOffsetValue(BigDecimal offsetValue) {

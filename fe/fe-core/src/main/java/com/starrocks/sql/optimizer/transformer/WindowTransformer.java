@@ -781,4 +781,3 @@ public class WindowTransformer {
         }
     }
 }
-

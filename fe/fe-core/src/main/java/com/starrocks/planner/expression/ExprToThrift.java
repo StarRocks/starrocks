@@ -79,7 +79,6 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
-import com.starrocks.sql.common.TypeManager;
 import com.starrocks.thrift.TAggregateExpr;
 import com.starrocks.thrift.TAnalyticWindow;
 import com.starrocks.thrift.TAnalyticWindowBoundary;
@@ -110,9 +109,7 @@ import com.starrocks.thrift.TSlotRef;
 import com.starrocks.thrift.TStringLiteral;
 import com.starrocks.thrift.TVarType;
 import com.starrocks.type.BooleanType;
-import com.starrocks.type.DateType;
 import com.starrocks.type.InvalidType;
-import com.starrocks.type.IntegerType;
 import com.starrocks.type.Type;
 import com.starrocks.type.TypeSerializer;
 
@@ -250,30 +247,22 @@ public final class ExprToThrift {
                                                          java.util.function.Function<Expr, TExpr> exprSerializer) {
         Preconditions.checkNotNull(window, "Analytic window should not be null when converting to thrift");
         TAnalyticWindow result = new TAnalyticWindow(analyticWindowTypeToThrift(window.getType()));
-        Expr rangeOrderByExpr = null;
-        Boolean rangeOrderByIsAsc = null;
-        if (window.getType() == AnalyticWindow.Type.RANGE && orderByElements != null && !orderByElements.isEmpty()) {
-            rangeOrderByExpr = orderByElements.get(0).getExpr();
-            rangeOrderByIsAsc = orderByElements.get(0).getIsAsc();
-        }
         AnalyticWindowBoundary leftBoundary = window.getLeftBoundary();
         if (leftBoundary.getBoundaryType() != AnalyticWindowBoundary.BoundaryType.UNBOUNDED_PRECEDING) {
             result.setWindow_start(analyticWindowBoundaryToThrift(leftBoundary, window.getType(),
-                    rangeOrderByExpr, rangeOrderByIsAsc, exprSerializer));
+                    exprSerializer));
         }
         AnalyticWindowBoundary rightBoundary = window.getRightBoundary();
         Preconditions.checkNotNull(rightBoundary, "Right boundary must be set before converting to thrift");
         if (rightBoundary.getBoundaryType() != AnalyticWindowBoundary.BoundaryType.UNBOUNDED_FOLLOWING) {
             result.setWindow_end(analyticWindowBoundaryToThrift(rightBoundary, window.getType(),
-                    rangeOrderByExpr, rangeOrderByIsAsc, exprSerializer));
+                    exprSerializer));
         }
         return result;
     }
 
     private static TAnalyticWindowBoundary analyticWindowBoundaryToThrift(AnalyticWindowBoundary boundary,
                                                                           AnalyticWindow.Type windowType,
-                                                                          Expr rangeOrderByExpr,
-                                                                          Boolean rangeOrderByIsAsc,
                                                                           java.util.function.Function<Expr, TExpr> exprSerializer) {
         TAnalyticWindowBoundary result = new TAnalyticWindowBoundary(
                 analyticWindowBoundaryTypeToThrift(boundary.getBoundaryType()));
@@ -283,38 +272,11 @@ public final class ExprToThrift {
         }
         if (boundary.getBoundaryType().isOffset() && windowType == AnalyticWindow.Type.RANGE) {
             Preconditions.checkNotNull(boundary.getExpr(), "Offset expression is required for RANGE window");
-            Preconditions.checkNotNull(rangeOrderByExpr, "ORDER BY expression is required for RANGE offset window");
-            Preconditions.checkNotNull(rangeOrderByIsAsc, "ORDER BY direction is required for RANGE offset window");
-            result.setRange_boundary_expr(exprSerializer.apply(buildRangeBoundaryExpr(
-                    boundary, rangeOrderByExpr, rangeOrderByIsAsc)));
+            Expr rangeBoundaryExpr = Preconditions.checkNotNull(boundary.getAnalyzedRangeBoundaryExpr(),
+                    "Analyzed RANGE boundary expression is required for RANGE offset window");
+            result.setRange_boundary_expr(exprSerializer.apply(rangeBoundaryExpr));
         }
         return result;
-    }
-
-    private static Expr buildRangeBoundaryExpr(AnalyticWindowBoundary boundary, Expr orderByExpr, boolean orderByIsAsc) {
-        boolean addOffset =
-                (orderByIsAsc && boundary.getBoundaryType() == AnalyticWindowBoundary.BoundaryType.FOLLOWING) ||
-                        (!orderByIsAsc && boundary.getBoundaryType() == AnalyticWindowBoundary.BoundaryType.PRECEDING);
-        if (orderByExpr.getType().isDateType()) {
-            Preconditions.checkState(boundary.getExpr() instanceof IntervalLiteral,
-                    "DATE/DATETIME RANGE offset requires INTERVAL expression");
-            IntervalLiteral interval = (IntervalLiteral) boundary.getExpr();
-            Expr orderKey = TypeManager.addCastExpr(orderByExpr.clone(), DateType.DATETIME);
-            Expr intervalValue = TypeManager.addCastExpr(interval.getValue().clone(), IntegerType.INT);
-            TimestampArithmeticExpr timestampExpr = new TimestampArithmeticExpr(
-                    addOffset ? ArithmeticExpr.Operator.ADD : ArithmeticExpr.Operator.SUBTRACT,
-                    orderKey, intervalValue, interval.getUnitIdentifier().getDescription(), false);
-            timestampExpr.setType(DateType.DATETIME);
-            return timestampExpr;
-        }
-
-        Type rangeKeyType = orderByExpr.getType();
-        Expr orderKey = TypeManager.addCastExpr(orderByExpr.clone(), rangeKeyType);
-        Expr offset = TypeManager.addCastExpr(boundary.getExpr().clone(), rangeKeyType);
-        ArithmeticExpr arithmeticExpr = new ArithmeticExpr(
-                addOffset ? ArithmeticExpr.Operator.ADD : ArithmeticExpr.Operator.SUBTRACT, orderKey, offset);
-        arithmeticExpr.setType(rangeKeyType);
-        return arithmeticExpr;
     }
 
     private static TAnalyticWindowBoundaryType analyticWindowBoundaryTypeToThrift(

@@ -132,7 +132,11 @@ import com.starrocks.sql.ast.BrokerDesc;
 import com.starrocks.sql.ast.JoinOperator;
 import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.OrderByElement;
+import com.starrocks.sql.ast.expression.AnalyticWindow;
+import com.starrocks.sql.ast.expression.AnalyticWindowBoundary;
+import com.starrocks.sql.ast.expression.ArithmeticExpr;
 import com.starrocks.sql.ast.expression.BinaryType;
+import com.starrocks.sql.ast.expression.CastExpr;
 import com.starrocks.sql.ast.expression.DateLiteral;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.ExprUtils;
@@ -140,6 +144,7 @@ import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.LiteralExpr;
 import com.starrocks.sql.ast.expression.LiteralExprFactory;
 import com.starrocks.sql.ast.expression.SlotRef;
+import com.starrocks.sql.ast.expression.TimestampArithmeticExpr;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.common.UnsupportedException;
 import com.starrocks.sql.optimizer.JoinHelper;
@@ -3519,13 +3524,19 @@ public class PlanFragmentBuilder {
                             new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr())),
                     e.isAscending(), e.isNullsFirst())).collect(Collectors.toList());
 
+            AnalyticWindow analyticWindow = node.getAnalyticWindow();
+            if (needBindRangeBoundaryExprsToPhysicalOrderBy(analyticWindow)) {
+                analyticWindow = analyticWindow.clone();
+                bindRangeBoundaryExprsToPhysicalOrderBy(analyticWindow, orderByElements);
+            }
+
             AnalyticEvalNode analyticEvalNode = new AnalyticEvalNode(
                     context.getNextNodeId(),
                     inputFragment.getPlanRoot(),
                     analyticFnCalls,
                     partitionExprs,
                     orderByElements,
-                    node.getAnalyticWindow(),
+                    analyticWindow,
                     node.isUseHashBasedPartition(),
                     node.isSkewed(),
                     null, outputTupleDesc, null, null,
@@ -3552,6 +3563,56 @@ public class PlanFragmentBuilder {
 
             inputFragment.setPlanRoot(analyticEvalNode);
             return inputFragment;
+        }
+
+        private boolean needBindRangeBoundaryExprsToPhysicalOrderBy(AnalyticWindow analyticWindow) {
+            if (analyticWindow == null || analyticWindow.getType() != AnalyticWindow.Type.RANGE) {
+                return false;
+            }
+            return analyticWindow.getLeftBoundary().getBoundaryType().isOffset() ||
+                    analyticWindow.getRightBoundary().getBoundaryType().isOffset();
+        }
+
+        private void bindRangeBoundaryExprsToPhysicalOrderBy(AnalyticWindow analyticWindow,
+                                                             List<OrderByElement> orderByElements) {
+            Preconditions.checkState(!orderByElements.isEmpty(), "Range window frame requires order by columns");
+            Expr orderByExpr = orderByElements.get(0).getExpr();
+            bindRangeBoundaryExprToPhysicalOrderBy(analyticWindow.getLeftBoundary(), orderByExpr);
+            bindRangeBoundaryExprToPhysicalOrderBy(analyticWindow.getRightBoundary(), orderByExpr);
+        }
+
+        private void bindRangeBoundaryExprToPhysicalOrderBy(AnalyticWindowBoundary boundary, Expr orderByExpr) {
+            if (boundary == null || !boundary.getBoundaryType().isOffset()) {
+                return;
+            }
+            Expr analyzedRangeBoundaryExpr = Preconditions.checkNotNull(boundary.getAnalyzedRangeBoundaryExpr(),
+                    "Analyzed RANGE boundary expression is required for RANGE offset window");
+            Expr physicalRangeBoundaryExpr = analyzedRangeBoundaryExpr.clone();
+            // Analyze has already decided RANGE offset semantics, including the necessary casts, using the
+            // logical ORDER BY expression. The optimizer may then project that ORDER BY expression into a
+            // ColumnRef, and this fragment builder lowers it to the physical SlotRef used by AnalyticEvalNode.
+            // Bind the boundary expression to that same SlotRef so BE compares the ORDER BY column and the
+            // computed RANGE boundary value on the same physical key.
+            // For example, if analyze builds
+            // `CAST(d AS DATETIME) - INTERVAL 1 DAY` and the optimizer projects `CAST(d AS DATETIME)` as
+            // slot $10, then the final boundary expression should be `$10 - INTERVAL 1 DAY`.
+            bindRangeBoundaryOrderKey(physicalRangeBoundaryExpr, orderByExpr);
+            boundary.setAnalyzedRangeBoundaryExpr(physicalRangeBoundaryExpr);
+        }
+
+        private void bindRangeBoundaryOrderKey(Expr rangeBoundaryExpr, Expr orderByExpr) {
+            if (rangeBoundaryExpr instanceof ArithmeticExpr || rangeBoundaryExpr instanceof TimestampArithmeticExpr) {
+                Expr orderKey = rangeBoundaryExpr.getChild(0);
+                if (orderKey instanceof CastExpr && !orderKey.getType().matchesType(orderByExpr.getType())) {
+                    orderKey.setChild(0, orderByExpr.clone());
+                } else {
+                    rangeBoundaryExpr.setChild(0, orderByExpr.clone());
+                }
+                return;
+            }
+            Preconditions.checkState(!rangeBoundaryExpr.getChildren().isEmpty(),
+                    "RANGE boundary expression must contain an arithmetic expression");
+            bindRangeBoundaryOrderKey(rangeBoundaryExpr.getChild(0), orderByExpr);
         }
 
         /**
