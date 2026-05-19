@@ -15,6 +15,7 @@
 package com.starrocks.service;
 
 import com.google.common.base.Joiner;
+import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.gson.Gson;
 import com.starrocks.authentication.UserIdentityUtils;
@@ -557,6 +558,12 @@ public class InformationSchemaDataSource {
                 }
                 if (table == null) {
                     continue;
+                }
+                if (table instanceof Table t
+                        && Config.enable_external_catalog_information_schema_tables_access_full_metadata
+                        && Strings.isNullOrEmpty(t.getComment())) {
+                    metadataMgr.getOptionalMetadata(catalogName)
+                            .ifPresent(m -> t.setComment(m.getTableComment(context, dbName, tableName)));
                 }
 
                 try {

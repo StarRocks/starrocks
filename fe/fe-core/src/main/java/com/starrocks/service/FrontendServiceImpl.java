@@ -565,8 +565,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                 }
 
                 try {
-                    tbl = metadataMgr.getBasicTable(context, catalogName, params.db, tableName,
-                            Config.enable_external_catalog_information_schema_tables_access_full_metadata);
+                    tbl = metadataMgr.getBasicTable(context, catalogName, params.db, tableName);
                 } catch (Exception e) {
                     LOG.warn(e.getMessage(), e);
                 }

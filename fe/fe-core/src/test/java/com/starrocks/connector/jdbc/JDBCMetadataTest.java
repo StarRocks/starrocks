@@ -381,15 +381,26 @@ public class JDBCMetadataTest {
     }
 
     @Test
-    public void testGetTableSetsCommentFromMetadata() throws SQLException {
-        // Prepare a TABLES result set with REMARKS for tbl1
+    public void testGetTableDoesNotFetchComment() throws SQLException {
+        // getTable() must not populate the comment — keep its hot path single
+        // round-trip (getColumns only). Comment fetch is deferred to
+        // getTableComment(). No getTables() mock is set for "tbl1" here so any
+        // unintended REMARKS round-trip in the lambda would also surface via the
+        // returned table's empty comment.
+        JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog", dataSource);
+        Table table = jdbcMetadata.getTable(new ConnectContext(), "test", "tbl1");
+        Assertions.assertNotNull(table);
+        Assertions.assertEquals("", table.getComment());
+    }
+
+    @Test
+    public void testGetTableCommentReadsRemarks() throws SQLException {
         MockResultSet tablesWithRemarks = new MockResultSet("tables_with_remarks");
         tablesWithRemarks.addColumn("TABLE_NAME", Arrays.asList("tbl1"));
         tablesWithRemarks.addColumn("REMARKS", Arrays.asList("jdbc table comment"));
 
         new Expectations() {
             {
-                // getColumns is already mocked in setUp; here we only need to mock getTables for a single table
                 connection.getMetaData().getTables("test", null, "tbl1", new String[] {"TABLE", "VIEW"});
                 result = tablesWithRemarks;
                 minTimes = 0;
@@ -397,9 +408,8 @@ public class JDBCMetadataTest {
         };
 
         JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog", dataSource);
-        Table table = jdbcMetadata.getTable(new ConnectContext(), "test", "tbl1");
-        Assertions.assertNotNull(table);
-        Assertions.assertEquals("jdbc table comment", table.getComment());
+        String comment = jdbcMetadata.getTableComment(new ConnectContext(), "test", "tbl1");
+        Assertions.assertEquals("jdbc table comment", comment);
     }
 
     @Test
