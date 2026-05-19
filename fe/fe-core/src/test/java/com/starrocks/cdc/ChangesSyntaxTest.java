@@ -40,16 +40,16 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Grammar negative + analyzer negative cases for the CHANGES clause.
+ * Grammar negative + analyzer negative cases for the [_CHANGES_<base>_<head>_]
+ * hint on cloud-native OlapTable.
  *
  * <p>Relies on BookmarkTestBase's SHARED_DATA mini-cluster so the cloud-native
- * guard in QueryAnalyzer ("CHANGES is only supported on cloud-native tables")
- * never fires on these tables — we want the grammar mutex / PK-key guard to be
- * the thing that throws.
+ * guard in QueryAnalyzer never fires on the DUP / PK tables created here — we
+ * want the regex / analyzer-mutex / PK guard to be the thing that throws.
  *
- * <p>Note: UtFrameUtils#parseStmtWithNewParser rewraps both ParsingException
- * and SemanticException as AnalysisException, so the grammar tests assert on
- * AnalysisException.
+ * <p>Note: UtFrameUtils#parseStmtWithNewParser rewraps ParsingException and
+ * SemanticException as AnalysisException for grammar tests; analyzer-stage
+ * cases assert on SemanticException directly.
  */
 public class ChangesSyntaxTest extends BookmarkTestBase {
 
@@ -80,19 +80,6 @@ public class ChangesSyntaxTest extends BookmarkTestBase {
     }
 
     @Test
-    public void testMissingTo() {
-        // CHANGES FROM VERSION <n> without `TO VERSION <n>` is a grammar error.
-        // parseStmtWithNewParser rewraps ParsingException as AnalysisException,
-        // so we assert on the wrapper and inspect its message.
-        String sql = "SELECT * FROM dup_t CHANGES FROM VERSION 1";
-        AnalysisException ex = assertThrows(AnalysisException.class,
-                () -> UtFrameUtils.parseStmtWithNewParser(sql, connectContext));
-        String msg = ex.getMessage();
-        assertTrue(msg.contains("Unexpected input") && msg.contains("'TO'"),
-                "expected parser error naming missing 'TO' token, got: " + msg);
-    }
-
-    @Test
     public void testForVersionAsOfBeforeChangesIsMutex() {
         // Grammar allows `(queryPeriod | changePeriod)?` — at most one per relation.
         String sql = "SELECT * FROM dup_t FOR VERSION AS OF 100 "
@@ -108,16 +95,6 @@ public class ChangesSyntaxTest extends BookmarkTestBase {
                 + "FOR VERSION AS OF 100";
         assertThrows(AnalysisException.class,
                 () -> UtFrameUtils.parseStmtWithNewParser(sql, connectContext));
-    }
-
-    @Test
-    public void testPrimaryKeyTableRejected() {
-        // Analyzer rejects CHANGES on a PK table with a stage-1 not-yet-supported message.
-        String sql = "SELECT * FROM pk_t CHANGES FROM VERSION 1 TO VERSION 2";
-        Exception ex = assertThrows(Exception.class,
-                () -> UtFrameUtils.getFragmentPlan(connectContext, sql));
-        assertTrue(ex.getMessage().contains("primary-key table is not supported"),
-                "expected PK guard message, got: " + ex.getMessage());
     }
 
     @Test
@@ -139,47 +116,14 @@ public class ChangesSyntaxTest extends BookmarkTestBase {
     }
 
     @Test
-    public void testUnsupportedTableTypeMessage() {
+    public void testHintRejectsNonOlapTable() {
         // information_schema.tables is a built-in SchemaTable (TableType.SCHEMA),
-        // not an OlapTable — the analyzer must report this as an unsupported table type.
-        String sql = "SELECT * FROM information_schema.tables CHANGES FROM VERSION 1 TO VERSION 2";
+        // not an OlapTable — the hint path's cloud-native-OlapTable guard fires
+        // before any analyzer-stage CHANGES code runs.
+        String sql = "SELECT * FROM information_schema.tables [_CHANGES_1_2_]";
         AnalysisException ex = assertThrows(AnalysisException.class,
                 () -> UtFrameUtils.parseStmtWithNewParser(sql, connectContext));
-        assertTrue(ex.getMessage().contains("Unsupported table type for CHANGES, table type:"),
-                "actual: " + ex.getMessage());
-    }
-
-    @Test
-    public void testVersionRequiresBigintMessage() {
-        // VERSION endpoints must be fixed-point integers; a quoted string must be
-        // rejected at analyzer time with the BIGINT requirement message.
-        String sql = "SELECT * FROM dup_t CHANGES FROM VERSION 'abc' TO VERSION 'xyz'";
-        AnalysisException ex = assertThrows(AnalysisException.class,
-                () -> UtFrameUtils.parseStmtWithNewParser(sql, connectContext));
-        assertTrue(ex.getMessage().contains("CHANGES VERSION requires BIGINT"),
-                "actual: " + ex.getMessage());
-    }
-
-    @Test
-    public void testTimestampRequiresDatetimeMessage() {
-        // TIMESTAMP endpoints must be castable to DATETIME (string / date / datetime);
-        // a bare bigint literal must be rejected with the DATETIME-castable message.
-        String sql = "SELECT * FROM dup_t CHANGES FROM TIMESTAMP 12345 TO TIMESTAMP 67890";
-        AnalysisException ex = assertThrows(AnalysisException.class,
-                () -> UtFrameUtils.parseStmtWithNewParser(sql, connectContext));
-        assertTrue(ex.getMessage().contains("CHANGES TIMESTAMP requires a DATETIME-castable expression"),
-                "actual: " + ex.getMessage());
-    }
-
-    @Test
-    public void testStatsNotYetSupported() {
-        // Spec section 4 reserves STATS for a future stage; the analyzer must reject
-        // CHANGES STATS up front so users get a clear not-yet-supported message
-        // rather than a downstream failure from the version-interval code path.
-        String sql = "SELECT * FROM dup_t CHANGES STATS FROM 1 TO 2";
-        AnalysisException ex = assertThrows(AnalysisException.class,
-                () -> UtFrameUtils.parseStmtWithNewParser(sql, connectContext));
-        assertTrue(ex.getMessage().contains("CHANGES STATS is not yet supported"),
+        assertTrue(ex.getMessage().contains("CHANGES hint is only supported on cloud-native OlapTable"),
                 "actual: " + ex.getMessage());
     }
 
