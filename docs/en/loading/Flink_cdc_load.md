@@ -21,7 +21,7 @@ This topic describes how to synchronize data from MySQL to StarRocks in real-tim
 
 :::tip
 
-Flink CDC is used in the synchronization from MySQL to Flink. This topic uses Flink CDC whose version is less than 3.0, so SMT is used to synchronize table schemas. However, if Flink CDC 3.0 is used, it is not necessary to use SMT to synchronize table schemas to StarRocks. Flink CDC 3.0 can even synchronize the schemas of the entire MySQL database, the sharded databases and tables, and also supports schema changes synchronization. For detailed usage, see [Streaming ELT from MySQL to StarRocks](https://nightlies.apache.org/flink/flink-cdc-docs-stable/docs/get-started/quickstart/mysql-to-starrocks).
+Flink CDC is used in the synchronization from MySQL to Flink. This topic uses Flink CDC whose version is less than 3.0, so SMT is used to synchronize table schemas. However, if Flink CDC 3.0 is used, it is not necessary to use SMT to synchronize table schemas to StarRocks. Flink CDC 3.0 can even synchronize the schemas of the entire MySQL database, the sharded databases and tables, and also supports schema changes synchronization. For detailed usage, see [Streaming ELT from MySQL to StarRocks](https://nightlies.apache.org/flink/flink-cdc-docs-release-3.4/docs/get-started/quickstart/mysql-to-starrocks/).
 
 :::
 
@@ -83,7 +83,7 @@ To synchronize data from MySQL, you need to install the following tools: SMT, Fl
         Java HotSpot(TM) 64-Bit Server VM (build 25.301-b09, mixed mode)
     ```
 
-   b. Download the [Flink installation package](https://flink.apache.org/downloads.html) and decompress it. We recommend that you use  Flink 1.14 or later. The minimum allowed version is Flink 1.11. This topic uses Flink 1.14.5.
+   b. Download the [Flink installation package](https://flink.apache.org/downloads/) and decompress it. We recommend that you use  Flink 1.14 or later. The minimum allowed version is Flink 1.11. This topic uses Flink 1.14.5.
 
    ```Bash
       # Download Flink.
@@ -129,8 +129,8 @@ To synchronize data from MySQL, you need to install the following tools: SMT, Fl
     > If a Flink cluster is already running in your system, you must stop the Flink cluster and restart it to load and validate the JAR packages.
     >
     > ```Bash
-    > $ ./bin/stop-cluster.sh
-    > $ ./bin/start-cluster.sh
+    > ./bin/stop-cluster.sh
+    > ./bin/start-cluster.sh
     > ```
 
 5. Download and decompress the [SMT package](https://www.starrocks.io/download/community) and place it in the `flink-1.14.5` directory. StarRocks provides SMT packages for Linux x86 and macos ARM64. You can choose one based on your operating system and CPU.
@@ -387,7 +387,7 @@ Run the Flink cluster and submit a Flink job to continuously synchronize full an
     Job ID: 5ae005c4b3425d8bb13fe660260a35da
     ```
 
-2. You can use the [Flink WebUI](https://nightlies.apache.org/flink/flink-docs-master/docs/try-flink/flink-operations-playground/#flink-webui) or run the `bin/flink list -running` command on  your Flink SQL client to view Flink jobs that are running in the Flink cluster and the job IDs.
+2. You can use the [Flink WebUI](https://nightlies.apache.org/flink/flink-docs-release-2.2/docs/try-flink/flink-operations-playground/#flink-webui) or run the `bin/flink list -running` command on  your Flink SQL client to view Flink jobs that are running in the Flink cluster and the job IDs.
 
     - Flink WebUI
       ![img](../_assets/4.9.3.png)

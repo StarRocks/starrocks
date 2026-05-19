@@ -38,6 +38,7 @@
 
 #include <memory>
 
+#include "column/chunk_factory.h"
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
 #include "common/bloom_filter.h"
@@ -96,7 +97,7 @@ Status BloomFilterIndexReader::new_iterator(const IndexReadOptions& opts,
 }
 
 Status BloomFilterIndexIterator::read_bloom_filter(rowid_t ordinal, std::unique_ptr<BloomFilter>* bf) {
-    auto column = ChunkHelper::column_from_field_type(TYPE_VARCHAR, false);
+    auto column = ChunkFactory::column_from_field_type(TYPE_VARCHAR, false);
     RETURN_IF_ERROR(_bloom_filter_iter->seek_to_ordinal(ordinal));
     size_t num_to_read = 1;
     size_t num_read = num_to_read;

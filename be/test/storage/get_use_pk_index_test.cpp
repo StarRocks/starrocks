@@ -23,6 +23,7 @@
 
 #include "base/testutil/assert.h"
 #include "base/utility/defer_op.h"
+#include "column/chunk_factory.h"
 #include "column/datum_tuple.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/runtime_state.h"
@@ -66,7 +67,7 @@ public:
         auto schema = ChunkHelper::convert_schema(tablet->tablet_schema());
         for (size_t i = 0; i < segments.size(); i++) {
             auto& segment = segments[i];
-            auto chunk = ChunkHelper::new_chunk(schema, segment.size());
+            auto chunk = ChunkFactory::new_chunk(schema, segment.size());
             auto cols = chunk->mutable_columns();
             for (auto& row : segment) {
                 CHECK(cols.size() == row.size());
@@ -238,7 +239,7 @@ public:
         params.pred_tree = PredicateTree::create(std::move(pred_root));
         ASSERT_OK(reader.prepare());
         ASSERT_OK(reader.open(params));
-        auto chunk = ChunkHelper::new_chunk(reader.schema(), 1);
+        auto chunk = ChunkFactory::new_chunk(reader.schema(), 1);
         if (expect_exist) {
             ASSERT_OK(reader.do_get_next(chunk.get()));
             ASSERT_EQ(1, chunk->num_rows());

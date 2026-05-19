@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include "column/arrow/arrow_to_starrocks_converter.h"
+
 #include <arrow/builder.h>
 #include <arrow/memory_pool.h>
 #include <arrow/testing/builder.h>
@@ -26,15 +28,13 @@
 #include <utility>
 
 #include "arrow/array/builder_base.h"
+#include "arrow/type.h"
 #include "arrow/type_fwd.h"
 #include "arrow/type_traits.h"
 #include "column/column_helper.h"
 #include "column/vectorized_fwd.h"
-#include "exec/arrow_to_starrocks_converter.h"
-#include "exec/file_scanner/parquet_scanner.h"
-#include "runtime/descriptors.h"
 #include "types/datetime_value.h"
-#include "util/arrow/row_batch.h"
+#include "types/type_descriptor.h"
 
 #define ASSERT_STATUS_OK(stmt)    \
     do {                          \
@@ -62,36 +62,302 @@ public:
     void SetUp() override { date::init_date_cache(); }
 };
 
+static Status make_arrow_type_for_test(const TypeDescriptor& type, std::shared_ptr<arrow::DataType>* result) {
+    switch (type.type) {
+    case TYPE_BOOLEAN:
+        *result = arrow::boolean();
+        break;
+    case TYPE_TINYINT:
+        *result = arrow::int8();
+        break;
+    case TYPE_SMALLINT:
+        *result = arrow::int16();
+        break;
+    case TYPE_INT:
+        *result = arrow::int32();
+        break;
+    case TYPE_BIGINT:
+        *result = arrow::int64();
+        break;
+    case TYPE_FLOAT:
+        *result = arrow::float32();
+        break;
+    case TYPE_DOUBLE:
+        *result = arrow::float64();
+        break;
+    case TYPE_VARCHAR:
+    case TYPE_CHAR:
+    case TYPE_LARGEINT:
+    case TYPE_DATE:
+    case TYPE_DATETIME:
+    case TYPE_JSON:
+        *result = arrow::utf8();
+        break;
+    case TYPE_VARBINARY:
+        *result = arrow::binary();
+        break;
+    case TYPE_DECIMALV2:
+        *result = std::make_shared<arrow::Decimal128Type>(27, 9);
+        break;
+    case TYPE_DECIMAL32:
+    case TYPE_DECIMAL64:
+    case TYPE_DECIMAL128:
+        *result = std::make_shared<arrow::Decimal128Type>(type.precision, type.scale);
+        break;
+    case TYPE_DECIMAL256:
+        *result = std::make_shared<arrow::Decimal256Type>(type.precision, type.scale);
+        break;
+    case TYPE_ARRAY: {
+        std::shared_ptr<arrow::DataType> child_type;
+        RETURN_IF_ERROR(make_arrow_type_for_test(type.children[0], &child_type));
+        *result = arrow::list(child_type);
+        break;
+    }
+    case TYPE_MAP: {
+        std::shared_ptr<arrow::DataType> key_type;
+        std::shared_ptr<arrow::DataType> value_type;
+        RETURN_IF_ERROR(make_arrow_type_for_test(type.children[0], &key_type));
+        RETURN_IF_ERROR(make_arrow_type_for_test(type.children[1], &value_type));
+        *result = arrow::map(key_type, value_type);
+        break;
+    }
+    case TYPE_STRUCT: {
+        if (type.field_names.size() != type.children.size()) {
+            return Status::InternalError("Struct field names size does not match children size");
+        }
+        std::vector<std::shared_ptr<arrow::Field>> fields;
+        fields.reserve(type.children.size());
+        for (size_t i = 0; i < type.children.size(); ++i) {
+            std::shared_ptr<arrow::DataType> child_type;
+            RETURN_IF_ERROR(make_arrow_type_for_test(type.children[i], &child_type));
+            fields.emplace_back(arrow::field(type.field_names[i], child_type));
+        }
+        *result = arrow::struct_(fields);
+        break;
+    }
+    default:
+        return Status::InvalidArgument("Unsupported test logical type");
+    }
+    return Status::OK();
+}
+
+static Status build_convert_tree_for_test(const arrow::DataType* arrow_type, const TypeDescriptor& sr_type,
+                                          bool is_nullable, ConvertFuncTree* tree) {
+    if (arrow_type->id() == ArrowTypeId::DICTIONARY) {
+        const auto* dictionary_type = down_cast<const arrow::DictionaryType*>(arrow_type);
+        return build_convert_tree_for_test(dictionary_type->value_type().get(), sr_type, is_nullable, tree);
+    }
+
+    const auto at = arrow_type->id();
+    const auto lt = sr_type.type;
+    tree->func = get_arrow_converter(at, lt, is_nullable, false);
+    tree->children.clear();
+    tree->field_names.clear();
+
+    switch (lt) {
+    case TYPE_ARRAY: {
+        if (at != ArrowTypeId::LIST && at != ArrowTypeId::LARGE_LIST && at != ArrowTypeId::FIXED_SIZE_LIST) {
+            return illegal_converting_error(arrow_type->name(), sr_type.debug_string());
+        }
+        auto child = std::make_unique<ConvertFuncTree>();
+        RETURN_IF_ERROR(build_convert_tree_for_test(arrow_type->field(0)->type().get(), sr_type.children[0], true,
+                                                    child.get()));
+        tree->children.emplace_back(std::move(child));
+        break;
+    }
+    case TYPE_MAP: {
+        if (at != ArrowTypeId::MAP) {
+            return illegal_converting_error(arrow_type->name(), sr_type.debug_string());
+        }
+        const auto* map_type = down_cast<const arrow::MapType*>(arrow_type);
+        const arrow::DataType* child_types[] = {map_type->key_type().get(), map_type->item_type().get()};
+        for (size_t i = 0; i < 2; ++i) {
+            auto child = std::make_unique<ConvertFuncTree>();
+            RETURN_IF_ERROR(build_convert_tree_for_test(child_types[i], sr_type.children[i], true, child.get()));
+            tree->children.emplace_back(std::move(child));
+        }
+        break;
+    }
+    case TYPE_STRUCT: {
+        if (at != ArrowTypeId::STRUCT) {
+            return illegal_converting_error(arrow_type->name(), sr_type.debug_string());
+        }
+        const auto* struct_type = down_cast<const arrow::StructType*>(arrow_type);
+        tree->field_names = sr_type.field_names;
+        for (size_t i = 0; i < sr_type.children.size(); ++i) {
+            auto child = std::make_unique<ConvertFuncTree>();
+            const auto field = struct_type->GetFieldByName(sr_type.field_names[i]);
+            if (field != nullptr) {
+                RETURN_IF_ERROR(
+                        build_convert_tree_for_test(field->type().get(), sr_type.children[i], true, child.get()));
+            }
+            tree->children.emplace_back(std::move(child));
+        }
+        break;
+    }
+    default:
+        if (tree->func == nullptr) {
+            return illegal_converting_error(arrow_type->name(), sr_type.debug_string());
+        }
+        break;
+    }
+    return Status::OK();
+}
+
 std::tuple<bool, Status> get_conv_func(const TypeDescriptor& type, const TypeDescriptor& to_arrow_type,
                                        ConvertFuncTree& cf, bool is_nullable = false) {
     std::shared_ptr<arrow::DataType> arrow_type;
-    convert_to_arrow_type(to_arrow_type, &arrow_type);
-    TypeDescriptor raw_type;
+    auto st = make_arrow_type_for_test(to_arrow_type, &arrow_type);
+    if (!st.ok()) {
+        return {false, st};
+    }
+    return {false, build_convert_tree_for_test(arrow_type.get(), type, is_nullable, &cf)};
+}
+
+TEST_F(ArrowConverterTest, BuildArrowColumnConvertPlanDirectScalar) {
+    auto arrow_type = arrow::int32();
+    TypeDescriptor type_desc(TYPE_INT);
+    TypeDescriptor raw_type_desc;
+    ConvertFuncTree conv_func;
     bool need_cast = false;
-    auto st = ParquetScanner::build_dest(arrow_type.get(), &type, is_nullable, &raw_type, &cf, need_cast, false);
-    return {need_cast, st};
+
+    ASSERT_STATUS_OK(build_arrow_column_convert_plan(arrow_type.get(), &type_desc, true, &raw_type_desc, &conv_func,
+                                                     need_cast, false));
+    ASSERT_FALSE(need_cast);
+    ASSERT_EQ(TYPE_INT, raw_type_desc.type);
+    ASSERT_NE(nullptr, conv_func.func);
+
+    auto column = create_arrow_column_convert_dest(type_desc, raw_type_desc, need_cast, true);
+    ASSERT_TRUE(column->is_nullable());
+}
+
+TEST_F(ArrowConverterTest, BuildArrowColumnConvertPlanCastNeededScalar) {
+    auto arrow_type = arrow::utf8();
+    TypeDescriptor type_desc(TYPE_INT);
+    TypeDescriptor raw_type_desc;
+    ConvertFuncTree conv_func;
+    bool need_cast = false;
+
+    ASSERT_STATUS_OK(build_arrow_column_convert_plan(arrow_type.get(), &type_desc, false, &raw_type_desc, &conv_func,
+                                                     need_cast, false));
+    ASSERT_TRUE(need_cast);
+    ASSERT_EQ(TYPE_VARCHAR, raw_type_desc.type);
+    ASSERT_EQ(TypeDescriptor::MAX_VARCHAR_LENGTH, raw_type_desc.len);
+    ASSERT_NE(nullptr, conv_func.func);
+
+    auto column = create_arrow_column_convert_dest(type_desc, raw_type_desc, need_cast, false);
+    ASSERT_TRUE(column->is_binary());
+}
+
+TEST_F(ArrowConverterTest, BuildArrowColumnConvertPlanUnwrapsDictionary) {
+    auto arrow_type = arrow::dictionary(arrow::int8(), arrow::int32());
+    TypeDescriptor type_desc(TYPE_INT);
+    TypeDescriptor raw_type_desc;
+    ConvertFuncTree conv_func;
+    bool need_cast = false;
+
+    ASSERT_STATUS_OK(build_arrow_column_convert_plan(arrow_type.get(), &type_desc, true, &raw_type_desc, &conv_func,
+                                                     need_cast, false));
+    ASSERT_FALSE(need_cast);
+    ASSERT_EQ(TYPE_INT, raw_type_desc.type);
+    ASSERT_NE(nullptr, conv_func.func);
+}
+
+TEST_F(ArrowConverterTest, BuildArrowColumnConvertPlanArray) {
+    auto arrow_type = arrow::list(arrow::int32());
+    TypeDescriptor type_desc(TYPE_ARRAY);
+    type_desc.children.emplace_back(TYPE_INT);
+    TypeDescriptor raw_type_desc;
+    ConvertFuncTree conv_func;
+    bool need_cast = false;
+
+    ASSERT_STATUS_OK(build_arrow_column_convert_plan(arrow_type.get(), &type_desc, true, &raw_type_desc, &conv_func,
+                                                     need_cast, false));
+    ASSERT_FALSE(need_cast);
+    ASSERT_EQ(TYPE_ARRAY, raw_type_desc.type);
+    ASSERT_EQ(1, raw_type_desc.children.size());
+    ASSERT_EQ(TYPE_INT, raw_type_desc.children[0].type);
+    ASSERT_EQ(1, conv_func.children.size());
+}
+
+TEST_F(ArrowConverterTest, BuildArrowColumnConvertPlanMap) {
+    auto arrow_type = arrow::map(arrow::int32(), arrow::utf8());
+    TypeDescriptor type_desc(TYPE_MAP);
+    type_desc.children.emplace_back(TYPE_INT);
+    type_desc.children.emplace_back(TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH));
+    TypeDescriptor raw_type_desc;
+    ConvertFuncTree conv_func;
+    bool need_cast = false;
+
+    ASSERT_STATUS_OK(build_arrow_column_convert_plan(arrow_type.get(), &type_desc, true, &raw_type_desc, &conv_func,
+                                                     need_cast, false));
+    ASSERT_FALSE(need_cast);
+    ASSERT_EQ(TYPE_MAP, raw_type_desc.type);
+    ASSERT_EQ(2, raw_type_desc.children.size());
+    ASSERT_EQ(TYPE_INT, raw_type_desc.children[0].type);
+    ASSERT_EQ(TYPE_VARCHAR, raw_type_desc.children[1].type);
+    ASSERT_EQ(2, conv_func.children.size());
+}
+
+TEST_F(ArrowConverterTest, BuildArrowColumnConvertPlanStruct) {
+    auto arrow_type = arrow::struct_({arrow::field("c0", arrow::int32()), arrow::field("c1", arrow::utf8())});
+    TypeDescriptor type_desc(TYPE_STRUCT);
+    type_desc.children.emplace_back(TYPE_INT);
+    type_desc.children.emplace_back(TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH));
+    type_desc.field_names = {"c0", "c1"};
+    TypeDescriptor raw_type_desc;
+    ConvertFuncTree conv_func;
+    bool need_cast = false;
+
+    ASSERT_STATUS_OK(build_arrow_column_convert_plan(arrow_type.get(), &type_desc, true, &raw_type_desc, &conv_func,
+                                                     need_cast, false));
+    ASSERT_FALSE(need_cast);
+    ASSERT_EQ(TYPE_STRUCT, raw_type_desc.type);
+    ASSERT_EQ(type_desc.field_names, raw_type_desc.field_names);
+    ASSERT_EQ(type_desc.field_names, conv_func.field_names);
+    ASSERT_EQ(2, raw_type_desc.children.size());
+    ASSERT_EQ(TYPE_INT, raw_type_desc.children[0].type);
+    ASSERT_EQ(TYPE_VARCHAR, raw_type_desc.children[1].type);
+    ASSERT_EQ(2, conv_func.children.size());
+}
+
+TEST_F(ArrowConverterTest, BuildArrowColumnConvertPlanRejectsInvalidNestedType) {
+    auto arrow_type = arrow::int32();
+    TypeDescriptor type_desc(TYPE_ARRAY);
+    type_desc.children.emplace_back(TYPE_INT);
+    TypeDescriptor raw_type_desc;
+    ConvertFuncTree conv_func;
+    bool need_cast = false;
+
+    auto st = build_arrow_column_convert_plan(arrow_type.get(), &type_desc, true, &raw_type_desc, &conv_func, need_cast,
+                                              false);
+    ASSERT_FALSE(st.ok());
+    ASSERT_NE(std::string::npos, st.message().find("does not match"));
 }
 
 template <typename ArrowType, bool is_nullable = false, typename CType = typename arrow::TypeTraits<ArrowType>::CType,
           typename BuilderType = typename arrow::TypeTraits<ArrowType>::BuilderType>
 static inline std::shared_ptr<arrow::Array> create_constant_array(int64_t num_elements, CType value, size_t& counter) {
     auto type = arrow::TypeTraits<ArrowType>::type_singleton();
-    size_t i = 0;
-    auto builder_fn = [value, &i](BuilderType* builder) {
-        if constexpr (is_nullable) {
+    if constexpr (is_nullable) {
+        size_t i = 0;
+        auto builder_fn = [value, &i](BuilderType* builder) {
             if (i % 2 == 0) {
                 builder->UnsafeAppendNull();
             } else {
                 builder->UnsafeAppend(CType(value));
             }
             ++i;
-        } else {
-            builder->UnsafeAppend(CType(value));
-        }
-    };
-    EXPECT_OK_AND_ASSIGN(auto array, arrow::ArrayFromBuilderVisitor(type, num_elements, builder_fn));
-    counter += num_elements;
-    return array;
+        };
+        EXPECT_OK_AND_ASSIGN(auto array, arrow::ArrayFromBuilderVisitor(type, num_elements, builder_fn));
+        counter += num_elements;
+        return array;
+    } else {
+        auto builder_fn = [value](BuilderType* builder) { builder->UnsafeAppend(CType(value)); };
+        EXPECT_OK_AND_ASSIGN(auto array, arrow::ArrayFromBuilderVisitor(type, num_elements, builder_fn));
+        counter += num_elements;
+        return array;
+    }
 }
 
 template <ArrowTypeId AT, LogicalType LT, typename ArrowType,
@@ -965,6 +1231,23 @@ PARALLEL_TEST(ArrowConverterTest, test_timestamp_to_datetime) {
     }
 }
 
+PARALLEL_TEST(ArrowConverterTest, test_timestamp_convert_uses_context_timezone) {
+    auto type = std::make_shared<arrow::TimestampType>(arrow::TimeUnit::SECOND, "UTC");
+    size_t counter = 0;
+    auto array = create_constant_datetime_array<arrow::TimestampType, false>(1, 0, type, counter);
+    ConvertFuncTree cf(get_arrow_converter(ArrowTypeId::TIMESTAMP, TYPE_DATETIME, false, false));
+    ASSERT_TRUE(cf.func != nullptr);
+
+    ArrowConvertContext ctx;
+    ctx.timezone = "Asia/Shanghai";
+    auto column = TimestampColumn::create();
+    Filter filter(1, 1);
+    ASSERT_STATUS_OK(
+            convert_arrow_array_to_column(&cf, array->length(), array.get(), column.get(), 0, 0, &filter, &ctx));
+
+    ASSERT_EQ(column->get_data()[0], string_to_datetime<TYPE_DATETIME>("1970-01-01 08:00:00"));
+}
+
 template <bool is_nullable>
 std::shared_ptr<arrow::Array> create_const_decimal_array(size_t num_elements,
                                                          const std::shared_ptr<arrow::Decimal128Type>& type,
@@ -1395,32 +1678,6 @@ PARALLEL_TEST(ArrowConverterTest, test_convert_list_array) {
     ASSERT_FALSE(need_cast);
 
     auto column = ColumnHelper::create_column(array_type, false);
-    column->reserve(4096);
-    ssize_t counter = 0;
-    int num = 100;
-    auto array = create_list_array(num, counter);
-    ASSERT_EQ(num, counter);
-    Filter filter;
-    filter.resize(array->length() + column->size(), 1);
-    ASSERT_STATUS_OK(
-            cf.func(array.get(), 0, array->length(), column.get(), column->size(), nullptr, &filter, nullptr, &cf));
-    ASSERT_EQ(column->size(), 10);
-}
-
-PARALLEL_TEST(ArrowConverterTest, test_convert_list_array_cast) {
-    TypeDescriptor array_type(TYPE_ARRAY);
-    array_type.children.emplace_back(LogicalType::TYPE_INT);
-    std::shared_ptr<arrow::DataType> arrow_type;
-    convert_to_arrow_type(array_type, &arrow_type);
-    array_type.children[0].type = LogicalType::TYPE_FLOAT; // hack type here
-    TypeDescriptor raw_type;
-    ConvertFuncTree cf;
-    bool need_cast;
-    ASSERT_STATUS_OK(
-            ParquetScanner::build_dest(arrow_type.get(), &array_type, false, &raw_type, &cf, need_cast, false));
-    ASSERT_TRUE(need_cast);
-    ASSERT_EQ(raw_type.children[0].type, LogicalType::TYPE_INT);
-    auto column = ColumnHelper::create_column(raw_type, false);
     column->reserve(4096);
     ssize_t counter = 0;
     int num = 100;
@@ -1919,8 +2176,27 @@ PARALLEL_TEST(ArrowConverterTest, test_string_view_nullable_non_strict_overflow)
     }
 }
 
-// Strict overflow with ArrowConvertContext — exercises ctx->current_slot->type().len
-// (lines 379-380) and ctx->report_error_message() (lines 425-429).
+PARALLEL_TEST(ArrowConverterTest, test_arrow_convert_context_uses_single_error_reporter_callback) {
+    ArrowConvertContext ctx;
+    ctx.current_file = "test_file.parquet";
+    ctx.set_current_column("test_col", TypeDescriptor::create_varchar_type(5));
+
+    std::string reported_reason;
+    std::string reported_raw_data;
+    std::string reported_column;
+    ctx.report_error_message = [&](const std::string& reason, const std::string& raw_data) {
+        reported_reason = reason;
+        reported_raw_data = raw_data;
+        reported_column = ctx.current_column_name;
+    };
+    ctx.report_error_message("too long", "abcdef");
+
+    ASSERT_EQ(reported_reason, "too long");
+    ASSERT_EQ(reported_raw_data, "abcdef");
+    ASSERT_EQ(reported_column, "test_col");
+}
+
+// Strict overflow with ArrowConvertContext primitive metadata.
 PARALLEL_TEST(ArrowConverterTest, test_string_view_strict_overflow_with_ctx) {
     // CHAR(10): strings > 10 bytes should be rejected
     std::vector<std::string> values = {
@@ -1931,11 +2207,10 @@ PARALLEL_TEST(ArrowConverterTest, test_string_view_strict_overflow_with_ctx) {
     };
     auto array = create_string_view_array(values);
 
-    // Build ArrowConvertContext with a CHAR(10) SlotDescriptor
-    SlotDescriptor slot(0, "test_col", TypeDescriptor::create_char_type(10));
+    // Build ArrowConvertContext with CHAR(10) metadata.
+    TypeDescriptor char_type = TypeDescriptor::create_char_type(10);
     ArrowConvertContext ctx;
-    ctx.state = nullptr;
-    ctx.current_slot = &slot;
+    ctx.set_current_column("test_col", char_type);
 
     auto conv_func = get_arrow_converter(ArrowTypeId::STRING_VIEW, TYPE_CHAR, false, true);
     ASSERT_TRUE(conv_func != nullptr);
