@@ -340,7 +340,7 @@ PROPERTIES (
 | **パラメータ**        | **必須** | **デフォルト値** | **説明**                                              |
 | -------------------- | ------------ | ----------------- | ------------------------------------------------------------ |
 | hosts                | Yes          | None              | Elasticsearchクラスターの接続アドレス。1つ以上のアドレスを指定できます。StarRocksは、このアドレスからElasticsearchのバージョンとインデックスシャードの割り当てを解析します。StarRocksは、`GET /_nodes/http` API操作によって返されるアドレスに基づいて、Elasticsearchクラスターと通信します。したがって、`host` パラメータの値は、`GET /_nodes/http` API操作によって返されるアドレスと同じでなければなりません。そうでない場合、BEsはElasticsearchクラスターと通信できない可能性があります。 |
-| index                | Yes          | None              | StarRocksに作成されたテーブルに対して作成されたElasticsearchインデックスの名前。名前はエイリアスにすることができます。このパラメータはワイルドカード（\*）をサポートしています。たとえば、`index` を <code class="language-text">hello*</code> に設定すると、StarRocksは名前が `hello` で始まるすべてのインデックスを取得します。 |
+| index                | Yes          | None              | StarRocksに作成されたテーブルに対して作成されたElasticsearchインデックスの名前。名前はエイリアスにすることができます。このパラメータはワイルドカード（`*`）をサポートしています。たとえば、`index` を `hello*` に設定すると、StarRocksは名前が `hello` で始まるすべてのインデックスを取得します。 |
 | user                 | No           | Empty             | 基本認証が有効なElasticsearchクラスターにログインするために使用されるユーザー名。`/*cluster/state/*nodes/http` とインデックスにアクセスできることを確認してください。 |
 | password             | No           | Empty             | Elasticsearchクラスターにログインするために使用されるパスワード。 |
 | type                 | No           | `_doc`            | インデックスのタイプ。デフォルト値：`_doc`。Elasticsearch 8以降のバージョンでデータをクエリする場合、このパラメータを設定する必要はありません。Elasticsearch 8以降のバージョンでは、マッピングタイプが削除されています。 |

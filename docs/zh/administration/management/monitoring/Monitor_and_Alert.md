@@ -600,6 +600,7 @@ Grafana 通过通知策略（Notification policies）来关联报警渠道和报
    1. 通过 PromQL 查询获取 Prometheus 中指标项的值。PromQL 是 Prometheus 自己开发的数据查询 DSL 语言，在 Dashboard 的 JSON 模板中也有使用到。每个监控项的 `expr` 属性即为对应的 PromQL。您可以在规则设置页面点击 **Run queries** 按钮查看查询结果。
    2. 对以上查询的结果数据做函数和模式的处理。通常您需要使用 Last 函数获取最新的值，使用 Strict 严格模式来保证若返回值为非数值数据可以展示为 `NaN`。
    3. 对处理过的查询结果设置判断规则。以 FE 为例，如果 FE 节点状态正常，则输出结果为 `1`。若 FE 节点宕机，则结果为 `0`。因此您可以设置判断规则为“小于1”，即 **IS BELOW 1**，出现该情况时即会触发报警。
+
    </details>
 
 5. 设置报警评估规则。
