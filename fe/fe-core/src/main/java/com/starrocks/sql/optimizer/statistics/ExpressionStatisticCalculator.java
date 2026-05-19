@@ -105,26 +105,48 @@ public class ExpressionStatisticCalculator {
 
         @Override
         public ColumnStatistic visitDictMappingOperator(DictMappingOperator operator, Void context) {
-            final var stringProvideOperator = operator.getStringProvideOperator();
-            final ScalarOperator sourceOperator;
-            if (stringProvideOperator != null) {
-                sourceOperator = stringProvideOperator;
-            } else {
-                sourceOperator = operator.getOriginScalaOperator();
-            }
-
-            if (!hasAllColumnStatisticsFor(sourceOperator)) {
-                // Return unknown stats in case we don't have the non-dict stats anymore.
+            if (inputStatistics == null) {
                 return ColumnStatistic.unknown();
             }
 
-            final var sourceStatistic = sourceOperator.accept(this, context);
-            if (sourceStatistic.isUnknown() || operator.getType().matchesType(sourceOperator.getType())) {
-                return sourceStatistic;
+            final var stringProvideOperator = operator.getStringProvideOperator();
+            final var originOperator = operator.getOriginScalaOperator();
+            final ColumnStatistic statistic;
+            if (stringProvideOperator != null) {
+                if (!hasAllColumnStatisticsFor(stringProvideOperator, inputStatistics)) {
+                    // Return unknown stats in case we don't have the non-dict stats anymore.
+                    return ColumnStatistic.unknown();
+                }
+
+                final var providerColumnStatistic = stringProvideOperator.accept(this, context);
+                if (providerColumnStatistic.isUnknown()) {
+                    return ColumnStatistic.unknown();
+                }
+
+                // Rewrite the input stats to contain the provider stats on the dict column to evaluate the origin operator
+                // based on the provider stats.
+                final var providerStatistics = Statistics.buildFrom(inputStatistics) //
+                        .addColumnStatistic(operator.getDictColumn(), providerColumnStatistic) //
+                        .build();
+
+                if (!hasAllColumnStatisticsFor(originOperator, providerStatistics)) {
+                    return ColumnStatistic.unknown();
+                }
+                statistic = originOperator.accept(copyWithNewStats(providerStatistics), context);
+            } else {
+                if (!hasAllColumnStatisticsFor(originOperator, inputStatistics)) {
+                    // Return unknown stats in case we don't have the non-dict stats anymore.
+                    return ColumnStatistic.unknown();
+                }
+                statistic = originOperator.accept(this, context);
+            }
+
+            if (statistic.isUnknown() || operator.getType().matchesType(originOperator.getType())) {
+                return statistic;
             }
 
             // If the dict type does not match the materialized type, we have to drop type-specific stats.
-            return ColumnStatistic.buildFrom(sourceStatistic)
+            return ColumnStatistic.buildFrom(statistic)
                     .setMinString(null) //
                     .setMaxString(null) //
                     .setMinValue(Double.NEGATIVE_INFINITY) //
@@ -134,15 +156,21 @@ public class ExpressionStatisticCalculator {
                     .build();
         }
 
-        private boolean hasAllColumnStatisticsFor(ScalarOperator operator) {
+        private boolean hasAllColumnStatisticsFor(ScalarOperator operator, Statistics statistics) {
             final var columns = operator.getColumnRefs();
             if (columns.isEmpty()) {
                 return true;
             }
-            if (inputStatistics == null) {
+            if (statistics == null) {
                 return false;
             }
-            return columns.stream().allMatch(inputStatistics.getColumnStatistics()::containsKey);
+            return columns.stream().allMatch(statistics.getColumnStatistics()::containsKey);
+        }
+
+        private ExpressionStatisticVisitor copyWithNewStats(Statistics statistics) {
+            final var copy = new ExpressionStatisticVisitor(statistics, this.rowCount);
+            copy.mappedStats.putAll(this.mappedStats);
+            return copy;
         }
 
         @Override
