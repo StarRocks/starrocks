@@ -97,8 +97,14 @@ ColumnReaderUniquePtr ColumnReader::get_nullable_column_reader(const std::string
     }
 
     case TYPE_MAP: {
-        auto key_reader = get_nullable_column_reader(col_name, type_desc.children[0], timezone, invalid_as_null);
-        auto value_reader = get_nullable_column_reader(col_name, type_desc.children[1], timezone, invalid_as_null);
+        ColumnReaderUniquePtr key_reader = nullptr;
+        ColumnReaderUniquePtr value_reader = nullptr;
+        if (!type_desc.children[0].is_unknown_type()) {
+            key_reader = get_nullable_column_reader(col_name, type_desc.children[0], timezone, invalid_as_null);
+        }
+        if (!type_desc.children[1].is_unknown_type()) {
+            value_reader = get_nullable_column_reader(col_name, type_desc.children[1], timezone, invalid_as_null);
+        }
         reader = std::make_unique<MapColumnReader>(col_name, type_desc, std::move(key_reader), std::move(value_reader));
         break;
     }

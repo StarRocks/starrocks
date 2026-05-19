@@ -75,8 +75,6 @@ Status ArrayColumnReader::read_datum(const avro::GenericDatum& datum, Column* co
 Status MapColumnReader::read_datum(const avro::GenericDatum& datum, Column* column) {
     DCHECK_EQ(datum.type(), avro::AVRO_MAP);
 
-    auto* value_reader = down_cast<NullableColumnReader*>(_value_reader.get());
-
     auto map_column = down_cast<MapColumn*>(column);
     auto keys_column = down_cast<NullableColumn*>(map_column->keys_column_raw_ptr());
     auto* keys_null_column = keys_column->null_column_raw_ptr();
@@ -89,16 +87,26 @@ Status MapColumnReader::read_datum(const avro::GenericDatum& datum, Column* colu
 
     uint32_t n = 0;
     for (auto& p : map_values) {
-        const auto& key = p.first;
-        if (UNLIKELY(key.size() > _type_desc.children[0].len)) {
-            return Status::DataQualityError(fmt::format("Value length is beyond the capacity. column: {}, capacity: {}",
-                                                        _col_name, _type_desc.children[0].len));
+        if (_key_reader != nullptr) {
+            const auto& key = p.first;
+            if (UNLIKELY(key.size() > _type_desc.children[0].len)) {
+                return Status::DataQualityError(
+                        fmt::format("Value length is beyond the capacity. column: {}, capacity: {}", _col_name,
+                                    _type_desc.children[0].len));
+            }
+            keys_data_column->append(Slice(key));
+            keys_null_column->append(0);
+        } else {
+            keys_column->append_nulls(1);
         }
-        keys_data_column->append(Slice(key));
-        keys_null_column->append(0);
 
-        const auto& value = p.second;
-        RETURN_IF_ERROR(value_reader->read_datum(value, values_column));
+        if (_value_reader != nullptr) {
+            auto* value_reader = down_cast<NullableColumnReader*>(_value_reader.get());
+            const auto& value = p.second;
+            RETURN_IF_ERROR(value_reader->read_datum(value, values_column));
+        } else {
+            values_column->append_nulls(1);
+        }
 
         ++n;
     }

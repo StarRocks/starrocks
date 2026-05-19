@@ -143,4 +143,137 @@ TEST_F(ComplexColumnReaderTest, test_map) {
     ASSERT_EQ("[{'abc':10,'def':11}]", column->debug_string());
 }
 
+TEST_F(ComplexColumnReaderTest, test_map_nullable_date_values) {
+    avro::LogicalType date_type(avro::LogicalType::DATE);
+    auto date_node = avro::NodePtr(new avro::NodePrimitive(avro::AVRO_INT));
+    date_node->setLogicalType(date_type);
+
+    avro::MultiLeaves union_nodes;
+    union_nodes.add(avro::NodePtr(new avro::NodePrimitive(avro::AVRO_NULL)));
+    union_nodes.add(date_node);
+    auto union_schema = avro::NodePtr(new avro::NodeUnion(union_nodes));
+
+    auto map_schema = avro::NodePtr(new avro::NodeMap(avro::SingleLeaf(union_schema)));
+    auto map_datum = avro::GenericMap(map_schema);
+    auto& map_value = map_datum.value();
+    {
+        avro::GenericUnion null_union(union_schema);
+        null_union.selectBranch(0);
+        map_value.emplace_back("abc", avro::GenericDatum(union_schema, null_union));
+    }
+    {
+        avro::GenericUnion date_union(union_schema);
+        date_union.selectBranch(1);
+        date_union.datum() = avro::GenericDatum(avro::AVRO_INT, date_type, days_since_epoch("2026-05-19"));
+        map_value.emplace_back("def", avro::GenericDatum(union_schema, date_union));
+    }
+
+    auto datum = avro::GenericDatum(map_schema, map_datum);
+
+    TypeDescriptor type_desc;
+    CHECK_OK(get_avro_type(map_schema, &type_desc));
+    ASSERT_EQ(TYPE_MAP, type_desc.type);
+    ASSERT_EQ(TYPE_DATE, type_desc.children[1].type);
+
+    auto column = create_adaptive_nullable_column(type_desc);
+    auto reader = get_column_reader(type_desc, false);
+
+    CHECK_OK(reader->read_datum_for_adaptive_column(datum, column.get()));
+
+    ASSERT_EQ(1, column->size());
+    ASSERT_EQ("[{'abc':NULL,'def':2026-05-19}]", column->debug_string());
+}
+
+TEST_F(ComplexColumnReaderTest, test_map_nullable_timestamp_values) {
+    avro::LogicalType ts_type(avro::LogicalType::TIMESTAMP_MILLIS);
+    auto ts_node = avro::NodePtr(new avro::NodePrimitive(avro::AVRO_LONG));
+    ts_node->setLogicalType(ts_type);
+
+    avro::MultiLeaves union_nodes;
+    union_nodes.add(avro::NodePtr(new avro::NodePrimitive(avro::AVRO_NULL)));
+    union_nodes.add(ts_node);
+    auto union_schema = avro::NodePtr(new avro::NodeUnion(union_nodes));
+
+    auto map_schema = avro::NodePtr(new avro::NodeMap(avro::SingleLeaf(union_schema)));
+    auto map_datum = avro::GenericMap(map_schema);
+    auto& map_value = map_datum.value();
+    {
+        avro::GenericUnion null_union(union_schema);
+        null_union.selectBranch(0);
+        map_value.emplace_back("true", avro::GenericDatum(union_schema, null_union));
+    }
+    {
+        avro::GenericUnion ts_union(union_schema);
+        ts_union.selectBranch(1);
+        ts_union.datum() =
+                avro::GenericDatum(avro::AVRO_LONG, ts_type, milliseconds_since_epoch("2026-05-19 12:03:01.000"));
+        map_value.emplace_back("false", avro::GenericDatum(union_schema, ts_union));
+    }
+
+    auto datum = avro::GenericDatum(map_schema, map_datum);
+
+    TypeDescriptor type_desc;
+    CHECK_OK(get_avro_type(map_schema, &type_desc));
+    ASSERT_EQ(TYPE_MAP, type_desc.type);
+    ASSERT_EQ(TYPE_DATETIME, type_desc.children[1].type);
+
+    auto column = create_adaptive_nullable_column(type_desc);
+    auto reader = get_column_reader(type_desc, false);
+
+    CHECK_OK(reader->read_datum_for_adaptive_column(datum, column.get()));
+
+    ASSERT_EQ(1, column->size());
+    ASSERT_EQ("[{'true':NULL,'false':2026-05-19 12:03:01}]", column->debug_string());
+}
+
+TEST_F(ComplexColumnReaderTest, test_adaptive_reader_rejects_non_adaptive_column) {
+    auto type_desc = TypeDescriptor::from_logical_type(TYPE_INT);
+    auto reader = get_column_reader(type_desc, false);
+    auto column = ColumnHelper::create_column(type_desc, true, false, 0, false);
+    avro::GenericDatum datum(int32_t{10});
+
+    auto st = reader->read_datum_for_adaptive_column(datum, column.get());
+    ASSERT_TRUE(st.is_internal_error());
+    ASSERT_TRUE(st.message().find("AdaptiveNullableColumn") != std::string::npos);
+}
+
+TEST_F(ComplexColumnReaderTest, test_map_unknown_value_type_skips_value_decode) {
+    avro::LogicalType ts_type(avro::LogicalType::TIMESTAMP_MILLIS);
+    auto ts_node = avro::NodePtr(new avro::NodePrimitive(avro::AVRO_LONG));
+    ts_node->setLogicalType(ts_type);
+
+    avro::MultiLeaves union_nodes;
+    union_nodes.add(avro::NodePtr(new avro::NodePrimitive(avro::AVRO_NULL)));
+    union_nodes.add(ts_node);
+    auto union_schema = avro::NodePtr(new avro::NodeUnion(union_nodes));
+
+    auto map_schema = avro::NodePtr(new avro::NodeMap(avro::SingleLeaf(union_schema)));
+    auto map_datum = avro::GenericMap(map_schema);
+    auto& map_value = map_datum.value();
+    {
+        avro::GenericUnion null_union(union_schema);
+        null_union.selectBranch(0);
+        map_value.emplace_back("true", avro::GenericDatum(union_schema, null_union));
+    }
+    {
+        avro::GenericUnion ts_union(union_schema);
+        ts_union.selectBranch(1);
+        ts_union.datum() =
+                avro::GenericDatum(avro::AVRO_LONG, ts_type, milliseconds_since_epoch("2026-05-19 12:03:01.000"));
+        map_value.emplace_back("false", avro::GenericDatum(union_schema, ts_union));
+    }
+
+    auto datum = avro::GenericDatum(map_schema, map_datum);
+
+    TypeDescriptor type_desc = TypeDescriptor::create_map_type(
+            TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH), TypeDescriptor(TYPE_UNKNOWN));
+    auto column = create_adaptive_nullable_column(type_desc);
+    auto reader = get_column_reader(type_desc, false);
+
+    CHECK_OK(reader->read_datum_for_adaptive_column(datum, column.get()));
+
+    ASSERT_EQ(1, column->size());
+    ASSERT_EQ("[{'true':NULL,'false':NULL}]", column->debug_string());
+}
+
 } // namespace starrocks::avrocpp
