@@ -430,15 +430,7 @@ inline bool RleDecoder<T>::GetBatch(T* vals, size_t batch_num) {
 
         if (PREDICT_TRUE(repeat_count_ > 0)) {
             read_this_time = std::min((size_t)repeat_count_, read_this_time);
-            if constexpr (sizeof(T) == 2) {
-                simd_fill_int16(reinterpret_cast<int16_t*>(vals), static_cast<int16_t>(current_value_),
-                                static_cast<int32_t>(read_this_time));
-            } else if constexpr (sizeof(T) == 4) {
-                simd_fill_int32(reinterpret_cast<int32_t*>(vals), static_cast<int32_t>(current_value_),
-                                static_cast<int32_t>(read_this_time));
-            } else {
-                std::fill(vals, vals + read_this_time, current_value_);
-            }
+            std::fill_n(vals, read_this_time, current_value_);
             vals += read_this_time;
             repeat_count_ -= read_this_time;
             read_num += read_this_time;
@@ -925,16 +917,7 @@ inline int32_t RleBatchDecoder<T>::GetBatch(T* values, int32_t batch_num) {
         if (num_repeats > 0) {
             int32_t num_repeats_to_set = std::min(num_repeats, batch_num - num_consumed);
             T repeated_value = GetRepeatedValue(num_repeats_to_set);
-            if constexpr (sizeof(T) == 4) {
-                // memcpy bit-cast: T may be float/uint32, simd_fill_int32 takes int32_t.
-                int32_t value_bits;
-                std::memcpy(&value_bits, &repeated_value, sizeof(int32_t));
-                simd_fill_int32(reinterpret_cast<int32_t*>(values + num_consumed), value_bits, num_repeats_to_set);
-            } else {
-                for (int i = 0; i < num_repeats_to_set; ++i) {
-                    values[num_consumed + i] = repeated_value;
-                }
-            }
+            std::fill_n(values + num_consumed, num_repeats_to_set, repeated_value);
             num_consumed += num_repeats_to_set;
             continue;
         }
@@ -1007,15 +990,7 @@ inline int RleBatchDecoder<T>::GetBatchWithDict(const TV* dictionary, int32_t di
                 return -1;
             }
             TV value = dictionary[repeated_value];
-            if constexpr (sizeof(TV) == 4) {
-                int32_t value_bits;
-                std::memcpy(&value_bits, &value, sizeof(int32_t));
-                simd_fill_int32(reinterpret_cast<int32_t*>(values + num_consumed), value_bits, num_repeats_to_set);
-            } else {
-                for (int i = 0; i < num_repeats_to_set; ++i) {
-                    values[num_consumed + i] = value;
-                }
-            }
+            std::fill_n(values + num_consumed, num_repeats_to_set, value);
             num_consumed += num_repeats_to_set;
             continue;
         }
