@@ -438,8 +438,7 @@ StatusOr<RowidRangeOptionPtr> PhysicalSplitMorselQueue::_try_get_split_from_sing
             SparseRange<> taken_range;
             _segment_range_iter.next_range(std::numeric_limits<rowid_t>::max(), &taken_range);
             _num_segment_rest_rows = 0;
-            rowid_range->add(_cur_rowset(), _cur_segment(),
-                             std::make_shared<SparseRange<>>(std::move(taken_range)),
+            rowid_range->add(_cur_rowset(), _cur_segment(), std::make_shared<SparseRange<>>(std::move(taken_range)),
                              /*is_first_split_of_segment=*/true);
             _is_first_split_of_segment = false;
             return rowid_range;

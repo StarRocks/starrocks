@@ -506,8 +506,8 @@ StatusOr<pipeline::MorselQueuePtr> OlapScanNode::convert_scan_range_to_morsel_qu
         //   (2) this being an ANN-driven vector query.
         // Non-vector queries always fall through to the existing row-count split.
         const auto& query_options = runtime_state()->query_options();
-        const bool is_vector_query = _olap_scan_node.__isset.vector_search_options &&
-                                     _olap_scan_node.vector_search_options.enable_use_ann;
+        const bool is_vector_query =
+                _olap_scan_node.__isset.vector_search_options && _olap_scan_node.vector_search_options.enable_use_ann;
         if (is_vector_query && query_options.__isset.enable_per_segment_scan_parallel &&
             query_options.enable_per_segment_scan_parallel) {
             queue->set_split_by_segment(true);
