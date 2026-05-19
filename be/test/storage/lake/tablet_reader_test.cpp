@@ -894,7 +894,11 @@ TEST_F(LakeTabletReaderSpit, test_per_segment_split_mode) {
 
     size_t seen_segments = 0;
     for (auto& m : drained) {
-        auto* split = down_cast<pipeline::PhysicalSplitScanMorsel*>(m.get());
+        // dynamic_cast (vs. down_cast) sidesteps a GCC name-lookup quirk on the
+        // pipeline::PhysicalSplitScanMorsel template argument; production code in
+        // lake::TabletReader::open uses the same form.
+        auto* split = dynamic_cast<pipeline::PhysicalSplitScanMorsel*>(m.get());
+        ASSERT_NE(nullptr, split);
         auto rowid_range = split->get_rowid_range_option();
         ASSERT_NE(nullptr, rowid_range);
 
