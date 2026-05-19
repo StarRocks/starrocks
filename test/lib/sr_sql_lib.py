@@ -2350,9 +2350,14 @@ class StarrocksSQLApiLib(object):
                 time.sleep(2)
         return False
 
-    def print_hit_materialized_views(self, query) -> str:
+    def print_hit_materialized_views(self, query, *expects) -> str:
         """
-        print all mv_names hit in query
+        print all mv_names hit in query.
+
+        If ``expects`` is provided, retry the explain a few times until every
+        expected mv name appears in the rewrite. MV partition-version state
+        propagates asynchronously after a refresh/insert, so the optimizer may
+        skip an eligible MV on the very first explain call.
         """
         time.sleep(1)
         def extract_mvs():
@@ -2379,7 +2384,20 @@ class StarrocksSQLApiLib(object):
             # sort the mv_names to make the result deterministic
             ans.sort()
             return ",".join(ans)
-        return self._with_materialized_view_rewrite(extract_mvs)
+
+        if not expects:
+            return self._with_materialized_view_rewrite(extract_mvs)
+
+        max_retries = 5
+        last_result = ""
+        for attempt in range(max_retries):
+            last_result = self._with_materialized_view_rewrite(extract_mvs)
+            hit_set = set(last_result.split(",")) if last_result else set()
+            if all(e in hit_set for e in expects):
+                return last_result
+            if attempt < max_retries - 1:
+                time.sleep(2)
+        return last_result
 
     def assert_equal_result(self, *sqls):
         if len(sqls) < 2:
