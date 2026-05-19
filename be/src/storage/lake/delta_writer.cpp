@@ -1032,10 +1032,14 @@ void DeltaWriterImpl::close() {
     _tablet_writer.reset();
     _mem_table.reset();
     _mem_table_sink.reset();
-    // Lake-write load_spill files are reclaimed asynchronously by the vacuum job, which
-    // scans <load_spill_txns>/<txn_id_hex> entries and deletes those whose txn_id is no
-    // longer active. The synchronous clear_parent_path() call is intentionally omitted to
-    // avoid heavy per-load DELETE traffic against object storage.
+    // Lake spill files moved from per-load directory layout
+    //   <root>/load_spill/<load_id_uuid>/<file>
+    // to flat
+    //   <root>/load_spill_txns/<txn_id_hex>_..._<seq>
+    // vacuum now reclaims by parsing txn_id_hex from the filename, removing
+    // per-load LIST. clear_parent_path() no longer applies (no per-load dir);
+    // deletion is done by TabletInternalParallelMergeTask after a successful
+    // merge, with vacuum_full as the asynchronous fallback for residuals.
     {
         // Take exclusive lock before resetting _flush_token to prevent race with cancel()
         // and get_flush_token(), which may be accessing _flush_token concurrently.

@@ -21,6 +21,7 @@
 #include "exec/spill/dir_manager.h"
 #include "exec/spill/input_stream.h"
 #include "fmt/format.h"
+#include "storage/lake/location_provider.h"
 
 namespace starrocks {
 
@@ -104,9 +105,9 @@ public:
               _txn_id(txn_id) {
         if (enable_flat_layout) {
             DCHECK(txn_id != 0) << "flat layout mode requires non-zero txn_id";
-            _remote_spill_path = remote_spill_path + "/load_spill_txns";
+            _remote_spill_path = remote_spill_path + "/" + lake::kLoadSpillTxnsDirectoryName;
         } else {
-            _remote_spill_path = remote_spill_path + "/load_spill";
+            _remote_spill_path = remote_spill_path + "/" + lake::kLoadSpillDirectoryName;
         }
     }
 
