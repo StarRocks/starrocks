@@ -935,6 +935,208 @@ TEST_F(LakeTabletReaderSpit, test_per_segment_split_mode) {
     EXPECT_EQ(total_segments, seen_segments);
 }
 
+// Helper for the TabletReader::open integration tests below: writes the same
+// 3-segment shape used by the existing tests (rowset 1 has 2 segments, rowset 2
+// has 1) and returns the per-segment row count.
+inline size_t write_three_segment_tablet(VersionedTablet& tablet, const std::shared_ptr<Schema>& schema,
+                                         std::shared_ptr<TabletMetadata>& tablet_metadata) {
+    std::vector<int> k0{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22};
+    std::vector<int> v0{2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30, 32, 34, 36, 38, 40, 41, 44};
+    std::vector<int> k1{30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41};
+    std::vector<int> v1{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11};
+
+    auto c0 = Int32Column::create();
+    auto c1 = Int32Column::create();
+    auto c2 = Int32Column::create();
+    auto c3 = Int32Column::create();
+    c0->append_numbers(k0.data(), k0.size() * sizeof(int));
+    c1->append_numbers(v0.data(), v0.size() * sizeof(int));
+    c2->append_numbers(k1.data(), k1.size() * sizeof(int));
+    c3->append_numbers(v1.data(), v1.size() * sizeof(int));
+
+    Chunk chunk0({std::move(c0), std::move(c1)}, schema);
+    Chunk chunk1({std::move(c2), std::move(c3)}, schema);
+    const size_t segment_rows = chunk0.num_rows() + chunk1.num_rows();
+
+    {
+        int64_t txn_id = next_id();
+        auto writer_or = tablet.new_writer(kHorizontal, txn_id);
+        CHECK(writer_or.ok());
+        auto writer = std::move(writer_or.value());
+        CHECK(writer->open().ok());
+
+        CHECK(writer->write(chunk0).ok());
+        CHECK(writer->write(chunk1).ok());
+        CHECK(writer->finish().ok());
+
+        CHECK(writer->write(chunk0).ok());
+        CHECK(writer->write(chunk1).ok());
+        CHECK(writer->finish().ok());
+
+        CHECK_EQ(2, writer->segments().size());
+
+        auto* rowset = tablet_metadata->add_rowsets();
+        rowset->set_overlapped(true);
+        rowset->set_id(1);
+        rowset->set_num_rows(2 * segment_rows);
+        auto* segs = rowset->mutable_segments();
+        auto* segs_size = rowset->mutable_segment_size();
+        for (const auto& file : writer->segments()) {
+            segs->Add()->assign(file.path);
+            segs_size->Add(file.size.value());
+        }
+        writer->close();
+    }
+    {
+        int64_t txn_id = next_id();
+        auto writer_or = tablet.new_writer(kHorizontal, txn_id);
+        CHECK(writer_or.ok());
+        auto writer = std::move(writer_or.value());
+        CHECK(writer->open().ok());
+
+        CHECK(writer->write(chunk0).ok());
+        CHECK(writer->write(chunk1).ok());
+        CHECK(writer->finish().ok());
+
+        CHECK_EQ(1, writer->segments().size());
+
+        auto* rowset = tablet_metadata->add_rowsets();
+        rowset->set_overlapped(false);
+        rowset->set_id(2);
+        rowset->set_num_rows(segment_rows);
+        auto* segs = rowset->mutable_segments();
+        auto* segs_size = rowset->mutable_segment_size();
+        for (const auto& file : writer->segments()) {
+            segs->Add()->assign(file.path);
+            segs_size->Add(file.size.value());
+        }
+        writer->close();
+    }
+    return segment_rows;
+}
+
+// Drives the new code path in lake::TabletReader::open that calls
+// set_split_by_segment(true) when a vector query opts into per-segment
+// parallelism via the enable_per_segment_scan_parallel session variable.
+// Asserts that each ScanSplitContext (LakeSplitContext) carries a
+// RowidRangeOption that covers exactly one full segment.
+TEST_F(LakeTabletReaderSpit, test_per_segment_split_via_reader_open) {
+    VersionedTablet tablet(_tablet_mgr.get(), _tablet_metadata);
+    const size_t segment_rows = write_three_segment_tablet(tablet, _schema, _tablet_metadata);
+
+    _tablet_metadata->set_version(3);
+    CHECK_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
+
+    auto rowsets_for_check = Rowset::get_rowsets(_tablet_mgr.get(), _tablet_metadata);
+    ASSERT_EQ(2u, rowsets_for_check.size());
+    const size_t total_segments = rowsets_for_check[0]->num_segments() + rowsets_for_check[1]->num_segments();
+    ASSERT_EQ(3u, total_segments);
+
+    // splitted_scan_rows=4 keeps total_rows (3 * segment_rows) above the
+    // small-tablet shortcut threshold so we hit the split path regardless of
+    // the ANN bypass — this test focuses on the set_split_by_segment(true)
+    // call inside TabletReader::open, not the bypass.
+    TQueryOptions query_options;
+    query_options.__set_enable_per_segment_scan_parallel(true);
+    auto runtime_state = create_runtime_state(query_options);
+
+    auto reader = std::make_shared<TabletReader>(_tablet_mgr.get(), _tablet_metadata, *_schema,
+                                                 /*need_split=*/true, /*could_split_physically=*/true);
+
+    TInternalScanRange internal_scan_range;
+    internal_scan_range.__set_tablet_id(_tablet_metadata->id());
+    internal_scan_range.__set_version(std::to_string(_tablet_metadata->version()));
+    TScanRange scan_range;
+    scan_range.__set_internal_scan_range(internal_scan_range);
+
+    auto params = generate_tablet_reader_params(&scan_range);
+    params.use_vector_index = true;
+    params.runtime_state = runtime_state.get();
+
+    ASSERT_OK(reader->prepare());
+    ASSERT_OK(reader->open(params));
+
+    std::vector<pipeline::ScanSplitContextPtr> split_tasks;
+    reader->get_split_tasks(&split_tasks);
+    ASSERT_EQ(total_segments, split_tasks.size())
+            << "TabletReader::open with ANN + session var should emit one split per segment";
+
+    auto rowsets = Rowset::get_rowsets(_tablet_mgr.get(), _tablet_metadata);
+    for (auto& task : split_tasks) {
+        // dynamic_cast mirrors the GCC compatibility workaround used elsewhere
+        // in this file (see test_per_segment_split_mode) for derived types
+        // declared in morsel.h.
+        auto* lake_ctx = dynamic_cast<pipeline::LakeSplitContext*>(task.get());
+        ASSERT_NE(nullptr, lake_ctx);
+        ASSERT_NE(nullptr, lake_ctx->rowid_range);
+
+        size_t segments_in_split = 0;
+        for (const auto& [rs_id, seg_map] : lake_ctx->rowid_range->rowid_range_per_segment_per_rowset) {
+            segments_in_split += seg_map.size();
+            for (const auto& [seg_id, split_info] : seg_map) {
+                EXPECT_EQ(segment_rows, split_info.row_id_range->span_size())
+                        << "per-segment split must cover the full segment";
+                EXPECT_TRUE(split_info.is_first_split_of_segment);
+            }
+        }
+        EXPECT_EQ(1u, segments_in_split) << "each split must contain exactly one segment";
+    }
+
+    reader->close();
+}
+
+// Verifies the new bypass of the small-tablet short-circuit in
+// lake::TabletReader::open: when tablet_num_rows is below the
+// lake_tablet_rows_splitted_ratio * splitted_scan_rows threshold, the default
+// behavior is to skip splitting. ANN queries that opt into per-segment
+// parallelism must override this and still emit one split per segment.
+TEST_F(LakeTabletReaderSpit, test_per_segment_split_bypasses_small_tablet_short_circuit) {
+    VersionedTablet tablet(_tablet_mgr.get(), _tablet_metadata);
+    const size_t segment_rows = write_three_segment_tablet(tablet, _schema, _tablet_metadata);
+
+    _tablet_metadata->set_version(3);
+    CHECK_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
+
+    // Pick splitted_scan_rows large enough that
+    //   tablet_num_rows (3 * segment_rows) < splitted_scan_rows * ratio
+    // so the small-tablet shortcut at lake/tablet_reader.cpp fires by default.
+    const int64_t large_splitted_scan_rows = 100 * static_cast<int64_t>(3 * segment_rows);
+    ASSERT_LT(static_cast<int64_t>(3 * segment_rows),
+              static_cast<int64_t>(large_splitted_scan_rows * config::lake_tablet_rows_splitted_ratio));
+
+    TQueryOptions query_options;
+    query_options.__set_enable_per_segment_scan_parallel(true);
+    auto runtime_state = create_runtime_state(query_options);
+
+    auto reader = std::make_shared<TabletReader>(_tablet_mgr.get(), _tablet_metadata, *_schema,
+                                                 /*need_split=*/true, /*could_split_physically=*/true);
+
+    TInternalScanRange internal_scan_range;
+    internal_scan_range.__set_tablet_id(_tablet_metadata->id());
+    internal_scan_range.__set_version(std::to_string(_tablet_metadata->version()));
+    TScanRange scan_range;
+    scan_range.__set_internal_scan_range(internal_scan_range);
+
+    auto params = generate_tablet_reader_params(&scan_range);
+    params.splitted_scan_rows = large_splitted_scan_rows;
+    params.scan_dop = 4;
+    params.use_vector_index = true;
+    params.runtime_state = runtime_state.get();
+
+    ASSERT_OK(reader->prepare());
+    ASSERT_OK(reader->open(params));
+
+    std::vector<pipeline::ScanSplitContextPtr> split_tasks;
+    reader->get_split_tasks(&split_tasks);
+    // If the bypass guard is broken (force_per_segment evaluates to false when
+    // it should be true), TabletReader::open short-circuits with no splits.
+    // Asserting 3 (= number of segments) covers both the bypass firing and the
+    // set_split_by_segment(true) call inside the split path.
+    EXPECT_EQ(3u, split_tasks.size())
+            << "ANN + session var must bypass the small-tablet shortcut and emit per-segment splits";
+    reader->close();
+}
+
 class DISABLED_LakeLoadSegmentParallelTest : public TestBase {
 public:
     DISABLED_LakeLoadSegmentParallelTest() : TestBase(kTestDirectory) {

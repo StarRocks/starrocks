@@ -67,4 +67,40 @@ TEST_F(PhysicalSplitMorselQueueTest, test_empty_rowset) {
     ASSERT_TRUE(queue.empty());
 }
 
+// Same empty-rowset scenario but with set_split_by_segment(true) toggled on.
+// The per-segment branch must follow the same boundary checks as the default
+// path and not crash when the tablet has no rowsets.
+TEST_F(PhysicalSplitMorselQueueTest, test_set_split_by_segment_empty_rowset) {
+    TScanRange scan_range;
+    TInternalScanRange internal_scan_range;
+    internal_scan_range.tablet_id = 10001;
+    internal_scan_range.version = "1";
+    internal_scan_range.partition_id = 1;
+    scan_range.__set_internal_scan_range(internal_scan_range);
+
+    Morsels morsels;
+    morsels.emplace_back(std::make_unique<ScanMorsel>(1, scan_range));
+
+    PhysicalSplitMorselQueue queue(std::move(morsels), 1, 1024);
+
+    auto tablet = std::make_shared<lake::Tablet>(nullptr, 10001);
+    std::vector<BaseTabletSharedPtr> tablets;
+    tablets.push_back(tablet);
+    queue.set_tablets(tablets);
+
+    std::vector<std::vector<BaseRowsetSharedPtr>> tablet_rowsets;
+    tablet_rowsets.emplace_back();
+    queue.set_tablet_rowsets(tablet_rowsets);
+
+    auto tablet_schema = std::make_shared<TabletSchema>();
+    queue.set_tablet_schema(tablet_schema);
+
+    queue.set_split_by_segment(true);
+
+    auto result = queue.try_get();
+    ASSERT_TRUE(result.ok());
+    ASSERT_EQ(result.value(), nullptr);
+    ASSERT_TRUE(queue.empty());
+}
+
 } // namespace starrocks::pipeline
