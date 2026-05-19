@@ -31,6 +31,7 @@ import java.util.Arrays;
 import java.util.HashSet;
 import java.util.Hashtable;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -39,6 +40,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Consumer;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import javax.naming.Context;
@@ -150,28 +152,50 @@ public class LDAPGroupProvider extends GroupProvider {
     public void refreshGroups() {
         LOG.info("refresh ldap group cache for group provider: {}", name);
         Map<String, Set<String>> groups = new ConcurrentHashMap<>();
+        DirContext ctx = null;
         try {
-            DirContext ctx = createDirContextOnConnection(getLdapBindRootDn(), getLdapBindRootPwd());
+            ctx = createDirContextOnConnection(getLdapBindRootDn(), getLdapBindRootPwd());
             UserNameExtractInterface userNameExtractInterface = getUserNameExtractInterface();
 
             if (getLdapGroupFilter() != null) {
                 SearchControls searchControls = new SearchControls();
                 searchControls.setSearchScope(SearchControls.SUBTREE_SCOPE);
-                NamingEnumeration<SearchResult> results = ctx.search(getLdapBaseDn(), getLdapGroupFilter(), searchControls);
+                // Explicitly request only the identifier and member attributes. This avoids
+                // the AD default attribute set behavior and ensures the server includes the
+                // member attribute (encoded in range retrieval form when the group is large)
+                // in the response.
+                searchControls.setReturningAttributes(
+                        new String[] {getLdapGroupIdentifierAttr(), getLDAPGroupMemberAttr()});
+                NamingEnumeration<SearchResult> results =
+                        ctx.search(getLdapBaseDn(), getLdapGroupFilter(), searchControls);
                 try {
                     while (results.hasMore()) {
                         SearchResult result = results.next();
-                        Attributes attributes = result.getAttributes();
-                        matchUserAndUpdateGroups(groups, attributes, userNameExtractInterface);
+                        String groupDN = extractGroupDN(result);
+                        try {
+                            matchUserAndUpdateGroups(ctx, groupDN, groups,
+                                    result.getAttributes(), userNameExtractInterface);
+                        } catch (NamingException ne) {
+                            // Isolate failure to a single group so other entries still refresh.
+                            LOG.warn("Failed to process LDAP group with DN '{}', skipping",
+                                    groupDN, ne);
+                        }
                     }
                 } catch (PartialResultException e) {
                     LOG.warn("LDAP group search partial result exception", e);
                 }
             } else if (getLdapGroupDn() != null) {
                 for (String ldapGroupDN : getLdapGroupDn()) {
-                    Attributes attributes =
-                            ctx.getAttributes(ldapGroupDN, new String[] {getLdapGroupIdentifierAttr(), getLDAPGroupMemberAttr()});
-                    matchUserAndUpdateGroups(groups, attributes, userNameExtractInterface);
+                    try {
+                        Attributes attributes = ctx.getAttributes(ldapGroupDN,
+                                new String[] {getLdapGroupIdentifierAttr(), getLDAPGroupMemberAttr()});
+                        matchUserAndUpdateGroups(ctx, ldapGroupDN, groups, attributes,
+                                userNameExtractInterface);
+                    } catch (NamingException ne) {
+                        // Isolate failure to a single group so other configured groups still refresh.
+                        LOG.warn("Failed to fetch attributes for LDAP group '{}', skipping",
+                                ldapGroupDN, ne);
+                    }
                 }
             } else {
                 LOG.warn("Neither ldap_group_filter nor ldap_group_dn exists");
@@ -179,6 +203,14 @@ public class LDAPGroupProvider extends GroupProvider {
         } catch (Exception e) {
             //Do not affect the normal login process at this time. If an error occurs, an empty group will be returned.
             LOG.error("LDAP group search failed", e);
+        } finally {
+            if (ctx != null) {
+                try {
+                    ctx.close();
+                } catch (NamingException ne) {
+                    LOG.warn("Failed to close LDAP DirContext", ne);
+                }
+            }
         }
 
         if (LOG.isDebugEnabled()) {
@@ -188,7 +220,28 @@ public class LDAPGroupProvider extends GroupProvider {
         this.userToGroupCache = groups;
     }
 
-    private void matchUserAndUpdateGroups(Map<String, Set<String>> groups,
+    /**
+     * Extract the fully-qualified DN of a group from a SearchResult. Prefer getNameInNamespace()
+     * because it returns the absolute DN in normalized form, which is required when re-issuing
+     * getAttributes() for range retrieval follow-up pages.
+     */
+    private static String extractGroupDN(SearchResult result) {
+        try {
+            String dn = result.getNameInNamespace();
+            if (dn != null && !dn.isEmpty()) {
+                return dn;
+            }
+        } catch (UnsupportedOperationException | IllegalStateException ignored) {
+            // Some LDAP providers may not support getNameInNamespace; fall through.
+        }
+        // Fall back to the (possibly relative) name. Callers must tolerate a possibly empty DN
+        // and skip range follow-up requests in that case.
+        return result.getName();
+    }
+
+    private void matchUserAndUpdateGroups(DirContext ctx,
+                                          String groupDN,
+                                          Map<String, Set<String>> groups,
                                           Attributes attributes,
                                           UserNameExtractInterface userNameExtractInterface)
             throws NamingException {
@@ -200,20 +253,12 @@ public class LDAPGroupProvider extends GroupProvider {
         }
         String groupName = (String) ldapGroupIdentifierAttr.get();
 
-        Attribute memberAttribute = attributes.get(getLDAPGroupMemberAttr());
-        if (memberAttribute == null) {
-            LOG.warn("LDAP group member attribute '{}' not found in attributes: {}", getLDAPGroupMemberAttr(), attributes);
-            return;
-        }
-
-        NamingEnumeration<?> e = memberAttribute.getAll();
-        while (e.hasMore()) {
-            String memberDN = (String) e.next();
+        collectAllMembers(ctx, groupDN, getLDAPGroupMemberAttr(), attributes, memberDN -> {
             String extractUserName = userNameExtractInterface.extract(memberDN);
 
             if (extractUserName == null) {
                 LOG.debug("Failed to extract user name from member DN: '{}'", memberDN);
-                continue;
+                return;
             }
 
             // Normalize extracted username for case-insensitive matching
@@ -225,8 +270,157 @@ public class LDAPGroupProvider extends GroupProvider {
 
             LOG.debug("Successfully extracted user '{}' from member '{}', added to group '{}'",
                     extractUserName, memberDN, groupName);
+        });
+    }
+
+    /**
+     * Collect all members from {@code initialAttrs} and, if Active Directory split the member
+     * attribute via range retrieval ({@code member;range=N-M}), iteratively fetch the remaining
+     * pages until a terminal ({@code -*}) marker is seen.
+     *
+     * <p>Errors while fetching a follow-up page are logged and the loop is broken so that
+     * members already collected from earlier pages are preserved instead of being lost.
+     */
+    @VisibleForTesting
+    static void collectAllMembers(DirContext ctx, String groupDN, String memberAttrName,
+                                    Attributes initialAttrs, Consumer<String> memberConsumer)
+            throws NamingException {
+        String currentAttrId = findMemberAttributeId(initialAttrs, memberAttrName);
+        if (currentAttrId == null) {
+            LOG.warn("LDAP group member attribute '{}' not found in attributes: {}",
+                    memberAttrName, initialAttrs);
+            return;
+        }
+        Attributes currentAttrs = initialAttrs;
+        int pageCount = 0;
+
+        while (true) {
+            Attribute attr = currentAttrs.get(currentAttrId);
+            if (attr != null) {
+                NamingEnumeration<?> e = attr.getAll();
+                while (e.hasMore()) {
+                    memberConsumer.accept((String) e.next());
+                }
+            }
+
+            RangeInfo range = parseRangeSuffix(currentAttrId);
+            if (range == null || range.isTerminal()) {
+                break;
+            }
+
+            if (++pageCount >= MAX_RANGE_PAGES) {
+                LOG.warn("LDAP group '{}' exceeded MAX_RANGE_PAGES ({}), some members may be missing",
+                        groupDN, MAX_RANGE_PAGES);
+                break;
+            }
+
+            if (groupDN == null || groupDN.isEmpty()) {
+                LOG.warn("Cannot fetch next range page: groupDN unavailable. Current attr: '{}'",
+                        currentAttrId);
+                break;
+            }
+
+            String nextAttrName = memberAttrName + ";range=" + (range.end + 1) + "-*";
+            try {
+                currentAttrs = ctx.getAttributes(groupDN, new String[] {nextAttrName});
+            } catch (PartialResultException pre) {
+                LOG.warn("PartialResultException while fetching next range page for group '{}', " +
+                        "stop paging", groupDN, pre);
+                break;
+            } catch (NamingException ne) {
+                LOG.warn("NamingException while fetching next range page for group '{}', " +
+                        "stop paging. Members already collected are preserved.", groupDN, ne);
+                break;
+            }
+
+            currentAttrId = findMemberAttributeId(currentAttrs, memberAttrName);
+            if (currentAttrId == null) {
+                LOG.warn("LDAP server did not return expected range page starting at {} for group '{}'",
+                        range.end + 1, groupDN);
+                break;
+            }
         }
     }
+
+    /**
+     * Locate the actual attribute id used for the member attribute in {@code attrs}. Active
+     * Directory may return the canonical name {@code "member"} as-is when the group is small,
+     * or encode it as {@code "member;range=0-1499"} when range retrieval is in effect. Matching
+     * is case-insensitive because the LDAP attribute namespace is case-insensitive.
+     *
+     * @return the id present in {@code attrs}, or {@code null} when no matching attribute exists.
+     */
+    @VisibleForTesting
+    static String findMemberAttributeId(Attributes attrs, String memberAttrName) throws NamingException {
+        if (attrs == null) {
+            return null;
+        }
+        // 1) Plain match first. JNDI's BasicAttributes returned over LDAP is created with
+        //    ignoreCase=true, but we still go through attrs.get(...) explicitly for clarity.
+        if (attrs.get(memberAttrName) != null) {
+            return memberAttrName;
+        }
+        // 2) Search for a range variant such as "member;range=0-1499".
+        NamingEnumeration<String> ids = attrs.getIDs();
+        while (ids.hasMore()) {
+            String id = ids.next();
+            if (id.equalsIgnoreCase(memberAttrName)) {
+                return id;
+            }
+            int semi = id.indexOf(';');
+            if (semi > 0
+                    && id.substring(0, semi).equalsIgnoreCase(memberAttrName)
+                    && id.substring(semi).toLowerCase(Locale.ROOT).startsWith(";range=")) {
+                return id;
+            }
+        }
+        return null;
+    }
+
+    private static final Pattern RANGE_PATTERN = Pattern.compile("(?i);range=(\\d+)-(\\d+|\\*)$");
+
+    /**
+     * Parse the range suffix of an attribute id such as {@code "member;range=0-1499"} or
+     * {@code "member;range=1500-*"}. Returns {@code null} when the id does not carry a valid
+     * range suffix.
+     */
+    @VisibleForTesting
+    static RangeInfo parseRangeSuffix(String attrId) {
+        if (attrId == null) {
+            return null;
+        }
+        Matcher m = RANGE_PATTERN.matcher(attrId);
+        if (!m.find()) {
+            return null;
+        }
+        String endStr = m.group(2);
+        long end = "*".equals(endStr) ? -1L : Long.parseLong(endStr);
+        return new RangeInfo(Long.parseLong(m.group(1)), end);
+    }
+
+    @VisibleForTesting
+    static final class RangeInfo {
+        final long start;
+        final long end; // -1L means "*", i.e. the terminal page.
+
+        RangeInfo(long start, long end) {
+            this.start = start;
+            this.end = end;
+        }
+
+        boolean isTerminal() {
+            return end == -1L;
+        }
+    }
+
+    /**
+     * Hard safety limit on the number of follow-up range pages fetched per group. Prevents an
+     * unbounded loop on a misbehaving server that always advertises a non-terminal range. 100
+     * pages at the typical AD MaxValRange (1500) covers ~150k members, well above any realistic
+     * group size.
+     */
+    @VisibleForTesting
+    static int MAX_RANGE_PAGES = 100;
 
     @FunctionalInterface
     private interface UserNameExtractInterface {
