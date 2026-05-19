@@ -17,7 +17,7 @@ displayed_sidebar: docs
 ## 语法
 
 ```SQL
-EXPLAIN [ LOGICAL | VERBOSE | COSTS ] <query>
+EXPLAIN [ LOGICAL | VERBOSE | COSTS ] [ MOCK ] <query>
 ```
 
 :::tip
@@ -37,6 +37,7 @@ EXPLAIN [ LOGICAL | VERBOSE | COSTS ] <query>
 | LOGICAL  | 显示简要的逻辑执行计划。                  |
 | VERBOSE  | 显示详细的逻辑执行计划，包括数据类型，nullable 信息，优化策略等。 |
 | COSTS    | 显示详细的逻辑执行计划，包括统计信息。 |
+| MOCK     | 将渲染后的 plan 和分析后的 SQL 中所有列引用替换为稳定的 `mock_col_<N>`，并在输出顶部打印一段 `Mocked SQL:`。同一列在 SQL 段和 plan 段使用同一个 mock 名字，便于对外分享 plan 而不暴露真实列名。表名、字面量、函数名不参与 mock；如需同时脱敏字面量，请配合 session 变量 `enable_desensitize_explain` 使用。 |
 | query    | 需要查看执行计划的查询语句。                                  |
 
 ## 返回
@@ -437,3 +438,39 @@ MySQL tpcds> explain verbose select
 +---------------------------------------------------------------------------------------------------------------------------------------------------------+
 114 rows in set
 ```
+
+### EXPLAIN COSTS MOCK
+
+`MOCK` 会对渲染后的 plan 与分析后的 SQL 做一次后处理，把所有列引用替换为稳定的 `mock_col_<N>`。同一列在 SQL 段和 plan 段共享同一个 mock 名字，因此即使对外分享，仍然可以把两者对齐。
+
+```Plain
+MySQL tpcds> explain costs mock select sr_customer_sk, sum(sr_return_amt)
+  from store_returns where sr_store_sk = 1 group by sr_customer_sk;
++------------------------------------------------------------+
+| Explain String                                             |
++------------------------------------------------------------+
+| Mocked SQL:                                                |
+| SELECT `mock_col_1`, sum(`mock_col_2`)                     |
+| FROM `store_returns`                                       |
+| WHERE `mock_col_3` = 1                                     |
+| GROUP BY `mock_col_1`                                      |
+|                                                            |
+| PLAN FRAGMENT 0(F01)                                       |
+|   Output Exprs:5: mock_col_1 | 49: sum                     |
+|   ...                                                      |
+|   0:OlapScanNode                                           |
+|      table: store_returns, rollup: store_returns           |
+|      Predicates: [9: mock_col_3, INT, true] = 1            |
+|      column statistics:                                    |
+|      * mock_col_3-->[1.0, 10.0, ...] ESTIMATE              |
+|      * mock_col_1-->[1.0, 100000.0, ...] ESTIMATE          |
+|      * mock_col_2-->[0.0, 16917.12, ...] ESTIMATE          |
++------------------------------------------------------------+
+```
+
+> **说明**
+>
+> - MOCK 只会替换列名。表名、库名、字面量、函数名都保持原样。如需同时脱敏字面量，请在执行前设置 session 变量 `enable_desensitize_explain = true`。
+> - mock 映射只在一次 EXPLAIN 内有效；同一查询多次执行得到的 `mock_col_<N>` 编号不保证完全一致。
+> - 如果列名与 SQL 关键字或内置函数名相同，可能会被错替换到无关的位置上——这是当前基于整词替换实现的已知限制。
+

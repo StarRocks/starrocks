@@ -17,7 +17,7 @@ displayed_sidebar: docs
 ## 構文
 
 ```SQL
-EXPLAIN [ LOGICAL | VERBOSE | COSTS ] <query>
+EXPLAIN [ LOGICAL | VERBOSE | COSTS ] [ MOCK ] <query>
 ```
 
 :::tip
@@ -37,6 +37,7 @@ EXPLAIN [ LOGICAL | VERBOSE | COSTS ] <query>
 | LOGICAL       | シンプルな論理実行プランを表示します。               |
 | VERBOSE       | データ型、NULL 可能情報、最適化戦略を含む詳細な論理実行プランを表示します。 |
 | COSTS (デフォルト) | カラム統計を含む詳細な論理実行プランを表示します。 |
+| MOCK          | 出力中のすべてのカラム参照を安定した `mock_col_<N>` に置き換え、先頭に `Mocked SQL:` ブロックを追加します。SQL とプランで同じカラムは同じ mock 名にマップされるため、外部に共有する際もカラム名を漏らさずに対応関係を保てます。テーブル名、リテラル値、関数名は置換されません。リテラル値も難読化したい場合は、セッション変数 `enable_desensitize_explain` を併用してください。 |
 | query         | 実行プランを表示したいクエリステートメント。         |
 
 > **NOTE**
@@ -442,3 +443,38 @@ MySQL tpcds> explain verbose select
 +---------------------------------------------------------------------------------------------------------------------------------------------------------+
 114 rows in set
 ```
+
+### EXPLAIN COSTS MOCK
+
+`MOCK` は描画後のプランと解析済み SQL に対して後処理を行い、すべてのカラム参照を安定した `mock_col_<N>` に置き換えます。同じカラムは SQL ブロックとプランブロックで同じ mock 名にマップされるため、外部に共有しても両者を対応付けられます。
+
+```Plain
+MySQL tpcds> explain costs mock select sr_customer_sk, sum(sr_return_amt)
+  from store_returns where sr_store_sk = 1 group by sr_customer_sk;
++------------------------------------------------------------+
+| Explain String                                             |
++------------------------------------------------------------+
+| Mocked SQL:                                                |
+| SELECT `mock_col_1`, sum(`mock_col_2`)                     |
+| FROM `store_returns`                                       |
+| WHERE `mock_col_3` = 1                                     |
+| GROUP BY `mock_col_1`                                      |
+|                                                            |
+| PLAN FRAGMENT 0(F01)                                       |
+|   Output Exprs:5: mock_col_1 | 49: sum                     |
+|   ...                                                      |
+|   0:OlapScanNode                                           |
+|      table: store_returns, rollup: store_returns           |
+|      Predicates: [9: mock_col_3, INT, true] = 1            |
+|      column statistics:                                    |
+|      * mock_col_3-->[1.0, 10.0, ...] ESTIMATE              |
+|      * mock_col_1-->[1.0, 100000.0, ...] ESTIMATE          |
+|      * mock_col_2-->[0.0, 16917.12, ...] ESTIMATE          |
++------------------------------------------------------------+
+```
+
+> **注意**
+>
+> - MOCK が置換するのはカラム名のみです。テーブル名、データベース名、リテラル値、関数名はそのまま残ります。リテラル値も難読化したい場合は、クエリ実行前にセッション変数 `enable_desensitize_explain = true` を設定してください。
+> - mock マッピングは 1 回の EXPLAIN 内でのみ有効です。同じクエリを複数回実行した場合、`mock_col_<N>` の番号付けが完全に一致するとは保証されません。
+> - カラム名が SQL キーワードや組み込み関数名と一致する場合、出力中の無関係な箇所まで置換される可能性があります — これは現在の単語単位置換実装の既知の制約です。

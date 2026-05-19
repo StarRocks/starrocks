@@ -15,7 +15,7 @@ This operation does not require privileges.
 ## Syntax
 
 ```SQL
-EXPLAIN [ LOGICAL | VERBOSE | COSTS ] <query>
+EXPLAIN [ LOGICAL | VERBOSE | COSTS ] [ MOCK ] <query>
 ```
 
 :::tip
@@ -35,6 +35,7 @@ In most cases, using EXPLAIN is sufficient. EXPLAIN VERBOSE and EXPLAIN COSTS wi
 | LOGICAL       | Shows the simple logical execution plans.                  |
 | VERBOSE       | Shows the detailed logical execution plans, including data types, nullable information, and optimization strategy. |
 | COSTS (Default) | Shows the detailed logical execution plans, including column statistics. |
+| MOCK          | Replaces every column reference in the rendered plan with a stable `mock_col_<N>` and prints a `Mocked SQL:` block that uses the same mock names. Useful for sharing a plan externally without leaking column names. Table names, literal values, and function names are not mocked; pair with `enable_desensitize_explain` to also digest literals. |
 | query         | The query statement whose execution plan you want to view. |
 
 > **NOTE**
@@ -440,3 +441,39 @@ MySQL tpcds> explain verbose select
 +---------------------------------------------------------------------------------------------------------------------------------------------------------+
 114 rows in set
 ```
+
+### EXPLAIN COSTS MOCK
+
+`MOCK` post-processes the rendered plan and the analyzed SQL, replacing every column reference with a stable `mock_col_<N>`. Same column always maps to the same mock name in both the SQL block and the plan, so the two can still be correlated when shared externally.
+
+```Plain
+MySQL tpcds> explain costs mock select sr_customer_sk, sum(sr_return_amt)
+  from store_returns where sr_store_sk = 1 group by sr_customer_sk;
++------------------------------------------------------------+
+| Explain String                                             |
++------------------------------------------------------------+
+| Mocked SQL:                                                |
+| SELECT `mock_col_1`, sum(`mock_col_2`)                     |
+| FROM `store_returns`                                       |
+| WHERE `mock_col_3` = 1                                     |
+| GROUP BY `mock_col_1`                                      |
+|                                                            |
+| PLAN FRAGMENT 0(F01)                                       |
+|   Output Exprs:5: mock_col_1 | 49: sum                     |
+|   ...                                                      |
+|   0:OlapScanNode                                           |
+|      table: store_returns, rollup: store_returns           |
+|      Predicates: [9: mock_col_3, INT, true] = 1            |
+|      column statistics:                                    |
+|      * mock_col_3-->[1.0, 10.0, ...] ESTIMATE              |
+|      * mock_col_1-->[1.0, 100000.0, ...] ESTIMATE          |
+|      * mock_col_2-->[0.0, 16917.12, ...] ESTIMATE          |
++------------------------------------------------------------+
+```
+
+> **NOTE**
+>
+> - Mocking only covers column names. Table names, database names, literal values, and function names are left untouched. To also digest literal values, set the session variable `enable_desensitize_explain = true` before issuing the query.
+> - The mock mapping lives only for the duration of one EXPLAIN; running the same query twice produces consistent mock names within each run but `mock_col_<N>` numbering is not guaranteed to be identical across runs.
+> - Column names that collide with SQL keywords or built-in function names may also be replaced in unrelated positions of the output — this is a known limitation of the whole-word substitution approach.
+
