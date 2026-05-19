@@ -40,16 +40,20 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Grammar negative + analyzer negative cases for the [_CHANGES_<base>_<head>_]
- * hint on cloud-native OlapTable.
+ * Grammar and analyzer-stage coverage for the [_CHANGES_<base>_<head>_] hint
+ * on cloud-native OlapTable: one happy-path parse case plus the negative
+ * grammar / mutex / analyzer guards.
  *
  * <p>Relies on BookmarkTestBase's SHARED_DATA mini-cluster so the cloud-native
  * guard in QueryAnalyzer never fires on the DUP / PK tables created here — we
  * want the regex / analyzer-mutex / PK guard to be the thing that throws.
  *
- * <p>Note: UtFrameUtils#parseStmtWithNewParser rewraps ParsingException and
- * SemanticException as AnalysisException for grammar tests; analyzer-stage
- * cases assert on SemanticException directly.
+ * <p>Note: UtFrameUtils#parseStmtWithNewParser rewraps both ParsingException
+ * and SemanticException as AnalysisException, so tests going through that
+ * helper assert on AnalysisException. The two tests that bypass it — by
+ * calling QueryAnalyzer.validateChangePeriod directly, or by using
+ * parseStmtWithNewParserNotIncludeAnalyzer + Analyzer.analyze — assert on
+ * SemanticException directly.
  */
 public class ChangesSyntaxTest extends BookmarkTestBase {
 
