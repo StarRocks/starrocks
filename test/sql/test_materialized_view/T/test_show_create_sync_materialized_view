@@ -1,0 +1,34 @@
+-- name: test_show_create_sync_materialized_view @native
+
+create database test_show_create_sync_mv_${uuid0};
+use test_show_create_sync_mv_${uuid0};
+
+create table sync_mv_base
+(
+    k1 date,
+    k2 int,
+    v1 int sum
+)
+distributed by hash(k2) buckets 3
+properties('replication_num' = '1');
+
+-- Sync materialized view (legacy rollup style: no DISTRIBUTED BY, no REFRESH
+-- clause). Stored as a MaterializedIndexMeta inside the base OLAP table, not
+-- as a separately-registered Table.
+create materialized view sync_mv_rollup as select k2, sum(v1) from sync_mv_base group by k2;
+function: wait_materialized_view_finish()
+
+-- Regression: SHOW CREATE MATERIALIZED VIEW on a sync MV must locate the
+-- MaterializedIndexMeta via the dedicated scan path inside
+-- showCreateInternalCatalogTable. Without the fix this returned
+-- "Table sync_mv_rollup is not found" because the regular name lookup misses
+-- sync MV index names.
+show create materialized view sync_mv_rollup;
+
+-- Negative cases: SHOW CREATE TABLE / VIEW on a sync MV name must still fail
+-- with "Table not found" (the fallback scan is only entered for MV-typed
+-- queries; see ShowExecutor.showCreateInternalCatalogTable).
+show create table sync_mv_rollup;
+show create view sync_mv_rollup;
+
+drop database test_show_create_sync_mv_${uuid0};

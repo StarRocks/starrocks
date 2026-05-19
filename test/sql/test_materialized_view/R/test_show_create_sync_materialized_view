@@ -1,0 +1,39 @@
+-- name: test_show_create_sync_materialized_view @native
+create database test_show_create_sync_mv_${uuid0};
+-- result:
+-- !result
+use test_show_create_sync_mv_${uuid0};
+-- result:
+-- !result
+create table sync_mv_base
+(
+    k1 date,
+    k2 int,
+    v1 int sum
+)
+distributed by hash(k2) buckets 3
+properties('replication_num' = '1');
+-- result:
+-- !result
+create materialized view sync_mv_rollup as select k2, sum(v1) from sync_mv_base group by k2;
+-- result:
+-- !result
+function: wait_materialized_view_finish()
+-- result:
+None
+-- !result
+show create materialized view sync_mv_rollup;
+-- result:
+[REGEX]sync_mv_rollup\tcreate materialized view sync_mv_rollup as select.*from sync_mv_base group by.*
+-- !result
+show create table sync_mv_rollup;
+-- result:
+[REGEX].*Table.*sync_mv_rollup.*is not found.*
+-- !result
+show create view sync_mv_rollup;
+-- result:
+[REGEX].*Table.*sync_mv_rollup.*is not found.*
+-- !result
+drop database test_show_create_sync_mv_${uuid0};
+-- result:
+-- !result
