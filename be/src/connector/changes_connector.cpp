@@ -284,10 +284,6 @@ Status ChangesDataSource::_do_metadata_traversal() {
             current_meta = meta;
             current_version = v;
         }
-
-        if (versions_to_read.back() <= _base_version) {
-            break;
-        }
     }
 
     return Status::OK();
