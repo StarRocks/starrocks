@@ -35,9 +35,9 @@
 #include "runtime/current_thread.h"
 #include "runtime/descriptors.h"
 #include "serde/column_array_serde.h"
-#include "storage/olap_type_infra.h"
 #include "storage/tablet_schema.h"
 #include "storage/types.h"
+#include "types/olap_type_infra.h"
 #include "types/storage_type_traits.h"
 
 namespace starrocks {
