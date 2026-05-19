@@ -41,7 +41,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  *
  * <p>Relies on BookmarkTestBase's SHARED_DATA mini-cluster so the cloud-native
  * guard in QueryAnalyzer never fires on the DUP / PK tables created here — we
- * want the regex / analyzer-mutex / PK guard to be the thing that throws.
+ * want the regex / PK / conflict guard to be the thing that throws.
  *
  * <p>UtFrameUtils#parseStmtWithNewParser rewraps both ParsingException and
  * SemanticException as AnalysisException, so every test here asserts on
