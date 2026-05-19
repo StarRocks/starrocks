@@ -676,13 +676,13 @@ All transaction metrics share the following labels:
 - Unit: Count
 - Type: Cumulative
 - Labels: `reason` — the post-eligibility failure category (lower-cased SkipReason), one of `sample_failed` (sampler executor threw), `timeout_pre_submit` (sample + plan + build phase exceeded `tablet_pre_split_pre_submit_timeout_seconds`), `submit_failed` (`TabletReshardJobMgr` rejected admission).
-- Description: Total times the sampler attempted but did not produce an admitted reshard job, broken down by reason. Distinct from `tablet_pre_split_eligibility_skipped` (sampler never ran) and from `tablet_pre_split_tier_used` (which records the tier that succeeded). Tier 1 → Tier 2 fallback alone is not a failure; it is tracked via `tablet_pre_split_tier_used{tier=tier2}`.
+- Description: Total times the sampler attempted but did not produce an admitted reshard job, broken down by reason. Distinct from `tablet_pre_split_eligibility_skipped` (sampler never ran) and from `tablet_pre_split_tier_used` (which records the tier that succeeded). Tier 1 → Tier 2 fallback alone is not a failure; it is tracked via `tablet_pre_split_tier_used{tier=data}`.
 
 ## `starrocks_fe_tablet_pre_split_tier_used`
 
 - Unit: Count
 - Type: Cumulative
-- Labels: `tier` — `tier1` (Parquet/ORC row-group metadata) or `tier2` (row sampling via reservoir sampler, used both on direct Tier 2 invocations and on Tier 1 → Tier 2 fallbacks).
+- Labels: `tier` — `metadata` (boundaries computed from Parquet/ORC row-group statistics; no row data read) or `data` (boundaries computed from actual row samples collected via a FILES sub-query — covers both direct Tier 2 invocations and Tier 1 → Tier 2 fallbacks).
 - Description: Total Sample-Based Tablet Pre-Split invocations by which sampler tier produced the boundaries.
 
 ## `starrocks_fe_tablet_pre_split_boundaries_planned`

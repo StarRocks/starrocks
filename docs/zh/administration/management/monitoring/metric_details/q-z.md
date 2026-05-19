@@ -678,13 +678,13 @@ description: "Alphabetical q - z"
 - 单位：计数
 - 类型：累计
 - 标签：`reason` — 资格门通过后的失败类别（SkipReason 的小写形式），取值之一：`sample_failed`（采样执行器抛错）、`timeout_pre_submit`（采样 + 规划 + 构建阶段超出 `tablet_pre_split_pre_submit_timeout_seconds`）、`submit_failed`（`TabletReshardJobMgr` 拒绝接纳）。
-- 描述：采样器尝试但未能产出已接纳的 reshard 作业的总次数，按原因细分。与 `tablet_pre_split_eligibility_skipped`（采样器从未运行）以及 `tablet_pre_split_tier_used`（记录成功生成边界的层级）相区分。Tier 1 → Tier 2 回退本身不算失败，由 `tablet_pre_split_tier_used{tier=tier2}` 跟踪。
+- 描述：采样器尝试但未能产出已接纳的 reshard 作业的总次数，按原因细分。与 `tablet_pre_split_eligibility_skipped`（采样器从未运行）以及 `tablet_pre_split_tier_used`（记录成功生成边界的层级）相区分。Tier 1 → Tier 2 回退本身不算失败，由 `tablet_pre_split_tier_used{tier=data}` 跟踪。
 
 ## `starrocks_fe_tablet_pre_split_tier_used`
 
 - 单位：计数
 - 类型：累计
-- 标签：`tier` — `tier1`（Parquet/ORC row-group 元数据）或 `tier2`（基于储水池的行采样，包含直接 Tier 2 调用与 Tier 1 → Tier 2 回退两种来源）。
+- 标签：`tier` — `metadata`（边界由 Parquet/ORC row-group 统计算出，不读取行数据）或 `data`（边界由 FILES 子查询采样的实际行算出，包含直接 Tier 2 调用与 Tier 1 → Tier 2 回退两种来源）。
 - 描述：基于采样的 Tablet 预分裂调用总数，按生成边界的采样器层级细分。
 
 ## `starrocks_fe_tablet_pre_split_boundaries_planned`

@@ -64,11 +64,18 @@ public final class DefaultPreSplitPipeline implements PreSplitPipeline {
 
     static final Duration DEFAULT_POLL_INTERVAL = Duration.ofMillis(500);
 
-    /** Metric label for a Tier 1 success path (single Parquet/ORC row-group plan). */
-    static final String TIER_LABEL_PARQUET_METADATA = "tier1";
+    /**
+     * Metric label for a Tier 1 success path: boundaries computed from Parquet/ORC row-group
+     * statistics ({@code metadata}), no row data read.
+     */
+    static final String TIER_LABEL_METADATA = "metadata";
 
-    /** Metric label for a fallback path where Tier 1 was unavailable and Tier 2 produced the cuts. */
-    static final String TIER_LABEL_FALLBACK_TO_RESERVOIR = "tier2";
+    /**
+     * Metric label for a Tier 2 success path: boundaries computed from actual row samples
+     * ({@code data}) collected via a FILES sub-query. Covers both direct Tier 2 invocations
+     * and Tier 1 → Tier 2 fallbacks.
+     */
+    static final String TIER_LABEL_DATA = "data";
 
     private final Tier1Sampler tier1Sampler;
     private final Sampler tier2Sampler;
@@ -224,7 +231,7 @@ public final class DefaultPreSplitPipeline implements PreSplitPipeline {
             throws PreSplitPreSubmitTimeoutException, StarRocksException {
         BoundaryPlannerResult result = tier1Sampler.tryPlan(request, requestedTabletCount);
         checkDeadline(deadline);
-        return new TierOutcome(result, TIER_LABEL_PARQUET_METADATA);
+        return new TierOutcome(result, TIER_LABEL_METADATA);
     }
 
     private TierOutcome runTier2(SampleRequest request, int requestedTabletCount, Instant deadline)
@@ -234,7 +241,7 @@ public final class DefaultPreSplitPipeline implements PreSplitPipeline {
         checkDeadline(deadline);
         BoundaryPlannerResult result =
                 BoundaryPlanner.planRowQuantileBoundaries(sampleSet, requestedTabletCount, request.getSortKey());
-        return new TierOutcome(result, TIER_LABEL_FALLBACK_TO_RESERVOIR);
+        return new TierOutcome(result, TIER_LABEL_DATA);
     }
 
     /** Cuts {@code c1 < c2 < ... < c_{K-1}} → tablet ranges
