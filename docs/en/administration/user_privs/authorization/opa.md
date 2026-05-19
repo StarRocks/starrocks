@@ -66,11 +66,12 @@ StarRocks sends a POST request to `opa_policy_url` using the OPA Data API format
     "action": {
       "operation": "check",
       "privilege": "SELECT",
-      "objectType": "TABLE",
+      "objectType": "COLUMN",
       "resource": {
         "catalog": "default_catalog",
         "database": "sales",
-        "table": "orders"
+        "table": "orders",
+        "column": "amount"
       }
     }
   }
@@ -78,6 +79,8 @@ StarRocks sends a POST request to `opa_policy_url` using the OPA Data API format
 ```
 
 Return `{"result": true}` to allow the request. Any other result denies it.
+
+For `SELECT` queries, StarRocks authorizes each scanned column after column pruning. To model table-level `SELECT` in OPA, write a `COLUMN` policy that ignores `input.action.resource.column`.
 
 Example Rego policy:
 
@@ -88,8 +91,9 @@ default allow := false
 
 allow if {
     input.action.privilege == "SELECT"
-    input.action.objectType == "TABLE"
+    input.action.objectType == "COLUMN"
     input.action.resource.database == "sales"
+    input.action.resource.table == "orders"
     input.context.user == "alice"
 }
 ```

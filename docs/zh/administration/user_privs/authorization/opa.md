@@ -66,11 +66,12 @@ StarRocks 按 OPA Data API 格式向 `opa_policy_url` 发送 POST 请求：
     "action": {
       "operation": "check",
       "privilege": "SELECT",
-      "objectType": "TABLE",
+      "objectType": "COLUMN",
       "resource": {
         "catalog": "default_catalog",
         "database": "sales",
-        "table": "orders"
+        "table": "orders",
+        "column": "amount"
       }
     }
   }
@@ -78,6 +79,8 @@ StarRocks 按 OPA Data API 格式向 `opa_policy_url` 发送 POST 请求：
 ```
 
 返回 `{"result": true}` 表示允许请求。其他任何结果都会拒绝请求。
+
+对于 `SELECT` 查询，StarRocks 会在列裁剪后逐个扫描列进行授权。如需在 OPA 中实现表级 `SELECT` 语义，可以编写 `COLUMN` 策略并忽略 `input.action.resource.column`。
 
 Rego 策略示例：
 
@@ -88,8 +91,9 @@ default allow := false
 
 allow if {
     input.action.privilege == "SELECT"
-    input.action.objectType == "TABLE"
+    input.action.objectType == "COLUMN"
     input.action.resource.database == "sales"
+    input.action.resource.table == "orders"
     input.context.user == "alice"
 }
 ```
