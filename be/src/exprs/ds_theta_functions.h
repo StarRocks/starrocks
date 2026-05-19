@@ -24,6 +24,9 @@ namespace starrocks {
 // any other Apache DataSketches implementation built on the same defaults.
 class DsThetaFunctions {
 public:
+    // Per-row distinct-count estimate from a compact theta sketch. NULL in -> NULL out.
+    DEFINE_VECTORIZED_FN(ds_theta_estimate);
+
     // Pairwise union of two compact theta sketches. NULL if either input is NULL.
     DEFINE_VECTORIZED_FN(ds_theta_union);
 

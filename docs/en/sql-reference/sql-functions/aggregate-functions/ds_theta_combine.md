@@ -4,13 +4,19 @@ displayed_sidebar: docs
 
 # ds_theta_combine
 
-Aggregates serialized Apache DataSketches Theta sketches (`VARBINARY`) by
-union-merging them, returning a single serialized compact sketch. Inverse of
-[ds_theta_accumulate](./ds_theta_accumulate.md) at the aggregate layer.
+Aggregate function that unions serialized Apache DataSketches Theta sketches
+(`VARBINARY`) across rows and returns a single serialized compact sketch.
+
+Input is a column of compact theta sketches from any source: built via
+[`ds_theta_accumulate`](./ds_theta_accumulate.md), produced by the pairwise
+scalar set ops [`ds_theta_union`](./ds_theta_union.md) /
+[`ds_theta_intersect`](./ds_theta_intersect.md) /
+[`ds_theta_a_not_b`](./ds_theta_a_not_b.md), or loaded externally as
+`VARBINARY` from Parquet/Iceberg.
 
 The on-wire format is the standard Apache DataSketches C++ compact theta
-serialization, so sketches produced by any conforming Apache DataSketches
-implementation can be combined here without translation.
+serialization, so result sketches interoperate with any other Apache
+DataSketches implementation that uses the default hash seed.
 
 ## Syntax
 

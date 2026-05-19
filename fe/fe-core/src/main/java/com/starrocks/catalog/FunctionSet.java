@@ -949,7 +949,6 @@ public class FunctionSet {
                     .add(DS_HLL_ESTIMATE)
                     .add(DS_THETA_ACCUMULATE)
                     .add(DS_THETA_COMBINE)
-                    .add(DS_THETA_ESTIMATE)
                     // Functions with constant contexts in be are not supported.
                     .add(WINDOW_FUNNEL)
                     .add(APPROX_TOP_K)
@@ -1472,9 +1471,8 @@ public class FunctionSet {
         addBuiltin(AggregateFunction.createBuiltin(DS_THETA_COMBINE,
                 Lists.newArrayList(VarbinaryType.VARBINARY), VarbinaryType.VARBINARY, VarbinaryType.VARBINARY,
                 true, false, true));
-        addBuiltin(AggregateFunction.createBuiltin(DS_THETA_ESTIMATE,
-                Lists.newArrayList(VarbinaryType.VARBINARY), IntegerType.BIGINT, VarbinaryType.VARBINARY,
-                true, false, true));
+        // DS_THETA_ESTIMATE is registered as a scalar function via gensrc/script/functions.py.
+        // It deserializes a compact theta sketch row-by-row and returns the estimate as BIGINT.
 
         // Sum
         registerBuiltinSumAggFunction(SUM);

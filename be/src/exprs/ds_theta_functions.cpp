@@ -48,6 +48,31 @@ void append_compact(CompactSketch&& sk, ColumnBuilder<TYPE_VARBINARY>& builder) 
 
 } // namespace
 
+StatusOr<ColumnPtr> DsThetaFunctions::ds_theta_estimate(FunctionContext* context, const Columns& columns) {
+    ColumnViewer<TYPE_VARBINARY> viewer(columns[0]);
+    size_t size = columns[0]->size();
+    ColumnBuilder<TYPE_BIGINT> builder(size);
+
+    for (size_t row = 0; row < size; ++row) {
+        if (viewer.is_null(row)) {
+            builder.append_null();
+            continue;
+        }
+        auto slice = viewer.value(row);
+        if (slice.size == 0) {
+            builder.append(0);
+            continue;
+        }
+        try {
+            auto sk = wrapped_compact_theta_sketch::wrap(slice.data, slice.size);
+            builder.append(static_cast<int64_t>(sk.get_estimate()));
+        } catch (const std::exception& e) {
+            return Status::InternalError(strings::Substitute("ds_theta_estimate failed: $0", e.what()));
+        }
+    }
+    return builder.build(ColumnHelper::is_all_const(columns));
+}
+
 StatusOr<ColumnPtr> DsThetaFunctions::ds_theta_union(FunctionContext* context, const Columns& columns) {
     ColumnViewer<TYPE_VARBINARY> lhs(columns[0]);
     ColumnViewer<TYPE_VARBINARY> rhs(columns[1]);
