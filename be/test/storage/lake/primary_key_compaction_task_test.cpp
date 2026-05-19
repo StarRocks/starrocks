@@ -1903,7 +1903,7 @@ TEST_P(LakePrimaryKeyCompactionTest, test_replace_batch_rows_correctness) {
             auto reader = std::make_shared<TabletReader>(_tablet_mgr.get(), md, *tablet_schema_shared);
             CHECK_OK(reader->prepare());
             CHECK_OK(reader->open(TabletReaderParams()));
-            auto chunk = ChunkHelper::new_chunk(*tablet_schema_shared, 128);
+            auto chunk = ChunkFactory::new_chunk(*tablet_schema_shared, 128);
             int64_t total = 0;
             while (true) {
                 auto st = reader->get_next(chunk.get());
