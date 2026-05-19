@@ -29,6 +29,7 @@ import com.starrocks.sql.optimizer.operator.scalar.CaseWhenOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
+import com.starrocks.sql.optimizer.operator.scalar.DictMappingOperator;
 import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.LambdaFunctionOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
@@ -100,6 +101,48 @@ public class ExpressionStatisticCalculator {
         @Override
         public ColumnStatistic visitLambdaFunctionOperator(LambdaFunctionOperator operator, Void context) {
             return operator.getChild(0).accept(this, context);
+        }
+
+        @Override
+        public ColumnStatistic visitDictMappingOperator(DictMappingOperator operator, Void context) {
+            final var stringProvideOperator = operator.getStringProvideOperator();
+            final ScalarOperator sourceOperator;
+            if (stringProvideOperator != null) {
+                sourceOperator = stringProvideOperator;
+            } else {
+                sourceOperator = operator.getOriginScalaOperator();
+            }
+
+            if (!hasAllColumnStatisticsFor(sourceOperator)) {
+                // Return unknown stats in case we don't have the non-dict stats anymore.
+                return ColumnStatistic.unknown();
+            }
+
+            final var sourceStatistic = sourceOperator.accept(this, context);
+            if (sourceStatistic.isUnknown() || operator.getType().matchesType(sourceOperator.getType())) {
+                return sourceStatistic;
+            }
+
+            // If the dict type does not match the materialized type, we have to drop type-specific stats.
+            return ColumnStatistic.buildFrom(sourceStatistic)
+                    .setMinString(null) //
+                    .setMaxString(null) //
+                    .setMinValue(Double.NEGATIVE_INFINITY) //
+                    .setMaxValue(Double.POSITIVE_INFINITY) //
+                    .setAverageRowSize(operator.getType().getTypeSize()) //
+                    .setHistogram(null) //
+                    .build();
+        }
+
+        private boolean hasAllColumnStatisticsFor(ScalarOperator operator) {
+            final var columns = operator.getColumnRefs();
+            if (columns.isEmpty()) {
+                return true;
+            }
+            if (inputStatistics == null) {
+                return false;
+            }
+            return columns.stream().allMatch(inputStatistics.getColumnStatistics()::containsKey);
         }
 
         @Override
