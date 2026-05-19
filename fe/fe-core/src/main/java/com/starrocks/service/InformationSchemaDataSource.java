@@ -15,7 +15,6 @@
 package com.starrocks.service;
 
 import com.google.common.base.Joiner;
-import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.gson.Gson;
 import com.starrocks.authentication.UserIdentityUtils;
@@ -29,6 +28,7 @@ import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.InternalCatalog;
+import com.starrocks.catalog.JDBCTable;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.MaterializedView;
@@ -559,11 +559,13 @@ public class InformationSchemaDataSource {
                 if (table == null) {
                     continue;
                 }
-                if (table instanceof Table t
+                if (table instanceof JDBCTable jt
                         && Config.enable_external_catalog_information_schema_tables_access_full_metadata
-                        && Strings.isNullOrEmpty(t.getComment())) {
-                    metadataMgr.getOptionalMetadata(catalogName)
-                            .ifPresent(m -> t.setComment(m.getTableComment(context, dbName, tableName)));
+                        && !jt.isCommentFetched()) {
+                    metadataMgr.getOptionalMetadata(catalogName).ifPresent(m -> {
+                        jt.setComment(m.getTableComment(context, dbName, tableName));
+                        jt.setCommentFetched(true);
+                    });
                 }
 
                 try {
