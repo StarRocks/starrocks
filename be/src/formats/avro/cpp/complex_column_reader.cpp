@@ -82,8 +82,6 @@ Status MapColumnReader::read_datum(const avro::GenericDatum& datum, Column* colu
 
     auto map_column = down_cast<MapColumn*>(column);
     auto keys_column = down_cast<NullableColumn*>(map_column->keys_column_raw_ptr());
-    auto* keys_null_column = keys_column->null_column_raw_ptr();
-    auto keys_data_column = down_cast<BinaryColumn*>(keys_column->data_column_raw_ptr());
     auto* values_column = map_column->values_column_raw_ptr();
     auto* offsets_column = map_column->offsets_column_raw_ptr();
 
@@ -93,6 +91,8 @@ Status MapColumnReader::read_datum(const avro::GenericDatum& datum, Column* colu
     uint32_t n = 0;
     for (auto& p : map_values) {
         if (_key_reader != nullptr) {
+            auto* keys_null_column = keys_column->null_column_raw_ptr();
+            auto* keys_data_column = down_cast<BinaryColumn*>(keys_column->data_column_raw_ptr());
             const auto& key = p.first;
             if (UNLIKELY(key.size() > _type_desc.children[0].len)) {
                 return Status::DataQualityError(
