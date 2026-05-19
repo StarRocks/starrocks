@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "storage/index/vector/vector_ann_index.h"
+#include "retrieval/vector/vector_ann_index.h"
 
 #include "types/bitmap_value_detail.h"
 

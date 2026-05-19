@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "storage/index/vector/filter_strategy.h"
+#include "retrieval/vector/filter_strategy.h"
 
 namespace starrocks {
 

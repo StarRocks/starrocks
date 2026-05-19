@@ -18,8 +18,8 @@
 #include <string>
 
 #include "common/status.h"
-#include "storage/index/vector/filter_strategy.h"
-#include "storage/index/vector/vector_ann_index.h"
+#include "retrieval/vector/filter_strategy.h"
+#include "retrieval/vector/vector_ann_index.h"
 
 namespace starrocks {
 

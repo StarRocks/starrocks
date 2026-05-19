@@ -187,6 +187,18 @@
       "remediation": "Keep Types independent of runtime/util/storage/exec layers; move integration code into higher layers."
     },
     {
+      "id": "retrieval",
+      "doc_label": "Retrieval",
+      "summary": "Pure retrieval framework: ANN index interface, row-id filter contracts, and search strategy orchestration under retrieval/vector/. Designed to also host future full-text and hybrid retrieval abstractions under sibling subdirectories without storage/exec/runtime/connector coupling.",
+      "owned_targets": ["Retrieval"],
+      "owned_globs": ["be/src/retrieval/**"],
+      "allowed_include_prefixes": ["retrieval/", "types/", "common/", "base/", "gutil/", "gen_cpp/"],
+      "allowed_target_deps": ["TypesCore", "Common", "Base", "Gutil", "StarRocksGen"],
+      "allowed_test_targets": ["retrieval_test"],
+      "allowed_test_link_deps": ["Retrieval", "TypesCore", "Common", "Base", "Gutil", "StarRocksGen"],
+      "remediation": "Keep Retrieval as a pure interface layer; concrete index implementations (TenANN/HNSW/Paimon/full-text) and scanner integration belong in their owning modules and depend on Retrieval downward."
+    },
+    {
       "id": "columncore",
       "doc_label": "ColumnCore",
       "summary": "Core column representations that must stay independent of ChunkCore and higher layers.",
