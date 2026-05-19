@@ -1007,8 +1007,8 @@ static void bench_serialize_scalar_scan(benchmark::State& state, size_t rows, si
     state.SetBytesProcessed(static_cast<int64_t>(state.iterations() * rows * len * repeat));
 }
 
-static ALWAYS_NOINLINE BENCH_NO_TREE_VECTORIZE void bench_serialize_size_scan(benchmark::State& state, size_t rows,
-                                                                              size_t len, size_t repeat = 1) {
+static BENCH_NO_TREE_VECTORIZE void bench_serialize_size_scan(benchmark::State& state, size_t rows, size_t len,
+                                                              size_t repeat = 1) {
     auto src = make_fixed_column(rows, len);
 
     for (auto _ : state) {
@@ -1069,15 +1069,15 @@ static void bench_german_strings(benchmark::State& state, size_t rows, size_t le
     state.SetItemsProcessed(static_cast<int64_t>(state.iterations() * rows));
 }
 
-static ALWAYS_NOINLINE BENCH_NO_TREE_VECTORIZE void bench_byte_size_scan(benchmark::State& state, size_t rows,
-                                                                         size_t len, size_t repeat = 1) {
+static BENCH_NO_TREE_VECTORIZE void bench_byte_size_scan(benchmark::State& state, size_t rows, size_t len,
+                                                         size_t repeat = 1) {
     auto src = make_fixed_column(rows, len);
 
     for (auto _ : state) {
         uint64_t total_size = 0;
         for (size_t r = 0; r < repeat; ++r) {
             for (size_t i = 0; i < rows; ++i) {
-                total_size += src->byte_size(i);
+                total_size += static_cast<uint32_t>(src->byte_size(i));
             }
             total_size += src->byte_size(0, rows);
         }
