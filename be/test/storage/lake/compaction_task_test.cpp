@@ -257,6 +257,62 @@ TEST_P(LakeDuplicateKeyCompactionTest, test_empty_tablet) {
     ASSERT_EQ(0, read(version));
 }
 
+// CDC: non-PK compaction must stamp max_compact_input_rowset_id on the
+// output rowset so downstream CDC traversal can distinguish compaction
+// rowsets from LOAD rowsets. Drives apply_compaction_log_single_output via
+// the real tablet_mgr->compact + publish flow.
+TEST_P(LakeDuplicateKeyCompactionTest, test_compaction_output_max_compact_input_rowset_id) {
+    auto chunk0 = generate_data(kChunkSize);
+    auto indexes = std::vector<uint32_t>(kChunkSize);
+    for (int i = 0; i < kChunkSize; i++) {
+        indexes[i] = i;
+    }
+
+    auto version = 1;
+    auto tablet_id = _tablet_metadata->id();
+    for (int i = 0; i < 3; i++) {
+        auto txn_id = next_id();
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .set_profile(&_dummy_runtime_profile)
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+        ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
+        version++;
+    }
+
+    ASSIGN_OR_ABORT(auto pre_meta, _tablet_mgr->get_tablet_metadata(tablet_id, version));
+    ASSERT_EQ(3, pre_meta->rowsets_size());
+    uint32_t expected_max = 0;
+    for (int i = 0; i < pre_meta->rowsets_size(); ++i) {
+        // Untouched LOAD rowsets carry no compaction marker.
+        EXPECT_FALSE(pre_meta->rowsets(i).has_max_compact_input_rowset_id());
+        expected_max = std::max(expected_max, pre_meta->rowsets(i).id());
+    }
+
+    auto txn_id = next_id();
+    auto task_context = std::make_unique<CompactionTaskContext>(txn_id, tablet_id, version, false, false, nullptr);
+    ASSIGN_OR_ABORT(auto task, _tablet_mgr->compact(task_context.get()));
+    check_task(task);
+    ASSERT_OK(task->execute(CompactionTask::kNoCancelFn));
+    EXPECT_EQ(100, task_context->progress.value());
+    ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
+    version++;
+
+    ASSIGN_OR_ABORT(auto post_meta, _tablet_mgr->get_tablet_metadata(tablet_id, version));
+    ASSERT_EQ(1, post_meta->rowsets_size());
+    EXPECT_TRUE(post_meta->rowsets(0).has_max_compact_input_rowset_id());
+    EXPECT_EQ(expected_max, post_meta->rowsets(0).max_compact_input_rowset_id());
+}
+
 // Regression test for SIGFPE in compaction when rowset metadata reports
 // num_rows=0 but the underlying physical segments still contain readable
 // rows. This simulates the state after an online tablet split where sub-tablet

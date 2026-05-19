@@ -8,19 +8,33 @@
 #include <utility>
 #include <vector>
 
+#include "column/chunk.h"
+#include "column/fixed_length_column.h"
+#include "column/schema.h"
+#include "common/config.h"
 #include "common/status.h"
 #include "common/statusor.h"
 #include "gen_cpp/lake_types.pb.h"
 #include "gen_cpp/types.pb.h"
+#include "storage/chunk_helper.h"
+#include "storage/lake/delta_writer.h"
 #include "storage/lake/fixed_location_provider.h"
 #include "storage/lake/location_provider.h"
 #include "storage/lake/tablet_manager.h"
+#include "storage/lake/tablet_reshard.h"
 #include "storage/lake/txn_log.h"
+#include "storage/tablet_schema.h"
+#include "test_util.h"
 
 namespace starrocks::lake {
 
 StatusOr<std::vector<TxnLogVector>> load_txn_log(TabletManager* tablet_mgr, std::vector<int64_t> tablet_ids,
                                                  const TxnInfoPB& txn_info);
+
+// Free function defined in transactions.cpp (non-static, in namespace
+// starrocks::lake), forward-declared here for direct unit-test access.
+void build_metadata_ancestors(TabletMetadataPB* new_metadata, int64_t direct_parent,
+                              const TabletMetadataPB* parent_metadata);
 
 // Helper: build a minimal TxnLogPB.
 static std::shared_ptr<TxnLogPB> make_txn_log(int64_t tablet_id, int64_t txn_id) {
@@ -274,6 +288,172 @@ TEST(TransactionsLoadIdsTest, PreserveInputTabletIdsOrder_RealApiWithMockMgr) {
     ASSERT_EQ(st->size(), 2);
     ASSERT_EQ((*st)[0][0]->tablet_id(), tablet_id_2);
     ASSERT_EQ((*st)[1][0]->tablet_id(), tablet_id_1);
+}
+
+class BuildMetadataAncestorsTest : public ::testing::Test {
+protected:
+    void SetUp() override { _saved = config::cloud_native_tablet_metadata_ancestors_recorded; }
+    void TearDown() override { config::cloud_native_tablet_metadata_ancestors_recorded = _saved; }
+
+    int32_t _saved = 0;
+};
+
+TEST_F(BuildMetadataAncestorsTest, testBuildAncestors) {
+    struct Case {
+        const char* name;
+        int32_t cfg_max_depth;
+        std::vector<int64_t> existing_chain; // stale entries seeded on `out`
+        bool has_parent;
+        std::vector<int64_t> parent_chain;
+        int64_t direct_parent;
+        std::vector<int64_t> expected;
+    };
+    const std::vector<Case> cases = {
+            // depth floored at 1 → only direct_parent recorded even with config <= 0
+            {"depth_floored_at_one", 0, {}, true, {10, 9}, 20, {20}},
+            // parent_metadata nullptr → only direct_parent
+            {"null_parent", 5, {}, false, {}, 42, {42}},
+            // parent has no chain → only direct_parent
+            {"parent_without_chain", 5, {}, true, {}, 7, {7}},
+            // chain truncated to max_depth - 1
+            {"chain_truncated_to_max_minus_one", 3, {}, true, {100, 99, 98, 97, 96}, 200, {200, 100, 99}},
+            // chain copied in full when under capacity
+            {"chain_copied_in_full_when_under_capacity", 10, {}, true, {50, 49}, 60, {60, 50, 49}},
+            // existing entries on `out` are cleared before append
+            {"clears_stale_chain_before_append", 2, {999, 998}, true, {8}, 9, {9, 8}},
+    };
+    for (const auto& c : cases) {
+        SCOPED_TRACE(c.name);
+        config::cloud_native_tablet_metadata_ancestors_recorded = c.cfg_max_depth;
+        TabletMetadataPB out;
+        for (auto v : c.existing_chain) out.add_metadata_ancestors(v);
+        TabletMetadataPB parent;
+        for (auto v : c.parent_chain) parent.add_metadata_ancestors(v);
+        build_metadata_ancestors(&out, c.direct_parent, c.has_parent ? &parent : nullptr);
+        ASSERT_EQ(static_cast<int>(c.expected.size()), out.metadata_ancestors_size());
+        for (int i = 0; i < out.metadata_ancestors_size(); ++i) {
+            EXPECT_EQ(c.expected[i], out.metadata_ancestors(i)) << "index " << i;
+        }
+    }
+}
+
+class PublishVersionAncestorsTest : public TestBase {
+public:
+    PublishVersionAncestorsTest() : TestBase(kTestDirectory) {
+        _tablet_metadata = generate_simple_tablet_metadata(DUP_KEYS);
+        _tablet_schema = TabletSchema::create(_tablet_metadata->schema());
+        _schema = std::make_shared<Schema>(ChunkHelper::convert_schema(_tablet_schema));
+    }
+
+protected:
+    constexpr static const char* const kTestDirectory = "test_publish_version_ancestors";
+    constexpr static int kChunkSize = 12;
+
+    void SetUp() override {
+        clear_and_init_test_dir();
+        CHECK_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
+    }
+
+    void TearDown() override { remove_test_dir_ignore_error(); }
+
+    Chunk make_chunk() const {
+        std::vector<int> v0(kChunkSize);
+        std::vector<int> v1(kChunkSize);
+        for (int i = 0; i < kChunkSize; i++) {
+            v0[i] = i;
+            v1[i] = i * 3;
+        }
+        auto c0 = Int32Column::create();
+        auto c1 = Int32Column::create();
+        c0->append_numbers(v0.data(), v0.size() * sizeof(int));
+        c1->append_numbers(v1.data(), v1.size() * sizeof(int));
+        return Chunk({std::move(c0), std::move(c1)}, _schema);
+    }
+
+    // Write a single DUP_KEYS rowset and publish it at new_version. Returns the
+    // newly published metadata.
+    TabletMetadataPtr write_and_publish_load(int64_t new_version) {
+        auto chunk = make_chunk();
+        std::vector<uint32_t> indexes(kChunkSize);
+        for (int i = 0; i < kChunkSize; i++) indexes[i] = i;
+        auto txn_id = next_id();
+        auto writer_or = DeltaWriterBuilder()
+                                 .set_tablet_manager(_tablet_mgr.get())
+                                 .set_tablet_id(_tablet_metadata->id())
+                                 .set_txn_id(txn_id)
+                                 .set_partition_id(_partition_id)
+                                 .set_mem_tracker(_mem_tracker.get())
+                                 .set_schema_id(_tablet_schema->id())
+                                 .set_profile(&_dummy_runtime_profile)
+                                 .build();
+        CHECK(writer_or.ok()) << writer_or.status();
+        auto writer = std::move(writer_or.value());
+        CHECK_OK(writer->open());
+        CHECK_OK(writer->write(chunk, indexes.data(), indexes.size()));
+        CHECK_OK(writer->finish_with_txnlog());
+        writer->close();
+        auto meta_or = publish_single_version(_tablet_metadata->id(), new_version, txn_id);
+        CHECK(meta_or.ok()) << meta_or.status();
+        return meta_or.value();
+    }
+
+    std::shared_ptr<TabletMetadata> _tablet_metadata;
+    std::shared_ptr<TabletSchema> _tablet_schema;
+    std::shared_ptr<Schema> _schema;
+    int64_t _partition_id = next_id();
+    RuntimeProfile _dummy_runtime_profile{"dummy"};
+};
+
+// Drives the regular publish path (transactions.cpp:564). Each new metadata
+// records [base_version, ...] as its ancestor chain; assert it extends one
+// step per publish, proving the parent's chain is propagated forward.
+TEST_F(PublishVersionAncestorsTest, testRegularPublishAncestors) {
+    for (int64_t v = 2; v <= 4; ++v) {
+        SCOPED_TRACE(fmt::format("version={}", v));
+        auto meta = write_and_publish_load(v);
+        ASSERT_EQ(v - 1, meta->metadata_ancestors_size());
+        for (int64_t i = 0; i < v - 1; ++i) {
+            EXPECT_EQ(v - 1 - i, meta->metadata_ancestors(i)) << "index " << i;
+        }
+    }
+}
+
+// Drives the fast-path publish branch (transactions.cpp:200): triggered by
+// either txn_id == EMPTY_TXNLOG_TXNID or txn_type == TXN_TABLET_RESHARD.
+// Both shortcuts copy base metadata and rebuild the ancestor chain — verify
+// each in turn by advancing the version one step.
+TEST_F(PublishVersionAncestorsTest, testFastPathPublishAncestors) {
+    (void)write_and_publish_load(2);
+    (void)write_and_publish_load(3);
+
+    struct Case {
+        const char* name;
+        int64_t txn_id;
+        TxnTypePB txn_type;
+    };
+    const Case cases[] = {
+            {"empty_txnlog", -1, TXN_NORMAL},
+            {"tablet_reshard", 9999, TXN_TABLET_RESHARD},
+    };
+    int64_t base_version = 3;
+    for (const auto& c : cases) {
+        SCOPED_TRACE(c.name);
+        TxnInfoPB info;
+        info.set_txn_id(c.txn_id);
+        info.set_txn_type(c.txn_type);
+        info.set_combined_txn_log(false);
+        info.set_commit_time(time(nullptr));
+        info.set_gtid(base_version);
+        std::vector<TxnInfoPB> txns{info};
+        ASSIGN_OR_ABORT(auto meta, publish_version(_tablet_mgr.get(), PublishTabletInfo(_tablet_metadata->id()),
+                                                   base_version, base_version + 1, txns, false));
+        ASSERT_EQ(base_version + 1, meta->version());
+        ASSERT_EQ(base_version, meta->metadata_ancestors_size());
+        for (int64_t i = 0; i < base_version; ++i) {
+            EXPECT_EQ(base_version - i, meta->metadata_ancestors(i)) << "index " << i;
+        }
+        ++base_version;
+    }
 }
 
 } // namespace starrocks::lake
