@@ -71,15 +71,11 @@ Status VariantFunctions::variant_segments_prepare(FunctionContext* context, Func
     std::string path_string = variant_path.to_string();
     auto variant_path_status = VariantPathParser::parse(path_string);
     RETURN_IF(!variant_path_status.ok(), variant_path_status.status());
-<<<<<<< HEAD
     auto* path_state = new VariantState();
     path_state->variant_path.reset(std::move(variant_path_status.value()));
     context->set_function_state(scope, path_state);
     VLOG(10) << "Preloaded variant path: " << path_string;
 
-=======
-    context->set_function_state(scope, new VariantPath(std::move(variant_path_status.value())));
->>>>>>> 91a3e21f43 ([BugFix] Lazily initialize LocationProvider in SerializableTable to fix read failure on tables with custom LocationProvider (#73482))
     return Status::OK();
 }
 
