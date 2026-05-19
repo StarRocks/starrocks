@@ -25,7 +25,6 @@
 #include "runtime/current_thread.h"
 #include "runtime/descriptors.h"
 #include "serde/column_array_serde.h"
-#include "storage/chunk_helper.h"
 
 namespace starrocks::serde {
 
@@ -187,26 +186,6 @@ StatusOr<Chunk> ProtobufChunkSerde::deserialize(const RowDescriptor& row_desc, c
         }
     }
     return chunk;
-}
-
-StatusOr<Chunk> deserialize_chunk_pb_with_schema(const Schema& schema, std::string_view buff) {
-    const auto* cur = reinterpret_cast<const uint8_t*>(buff.data());
-    const auto* end = cur + buff.size();
-
-    uint32_t version = decode_fixed32_le(cur);
-    if (version != 1) {
-        return Status::Corruption("invalid version");
-    }
-    cur += 4;
-
-    uint32_t rows = decode_fixed32_le(cur);
-    cur += 4;
-
-    ASSIGN_OR_RETURN(auto chunk, ChunkHelper::new_chunk_checked(schema, rows));
-    for (auto& column : chunk->columns()) {
-        ASSIGN_OR_RETURN(cur, ColumnArraySerde::deserialize(cur, end, column->as_mutable_raw_ptr()));
-    }
-    return Chunk(std::move(*chunk));
 }
 
 static SlotId get_slot_id_by_index(const Chunk::SlotHashMap& slot_id_to_index, int target_index) {

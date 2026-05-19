@@ -35,12 +35,6 @@ TEST(ServiceMetricsTest, InstallRegistersServiceMetrics) {
     ServiceMetrics metrics(&registry);
     metrics.install(&registry);
 
-    metrics.staros_shard_info_fallback_total.increment(3);
-    assert_metric_value(&registry, "staros_shard_info_fallback_total", "3");
-
-    metrics.staros_shard_info_fallback_failed_total.increment(4);
-    assert_metric_value(&registry, "staros_shard_info_fallback_failed_total", "4");
-
     metrics.short_circuit_request_total.increment(5);
     assert_metric_value(&registry, "short_circuit_request_total", "5");
 

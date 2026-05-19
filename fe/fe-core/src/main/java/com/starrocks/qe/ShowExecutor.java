@@ -848,49 +848,32 @@ public class ShowExecutor {
             Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(showStmt.getDb());
             MetaUtils.checkDbNullAndReport(db, showStmt.getDb());
             List<List<String>> rows = Lists.newArrayList();
-            Locker locker = new Locker();
-            locker.lockDatabase(db.getId(), LockType.READ);
+            TableName tableName = new TableName(showStmt.getCatalogName(), showStmt.getDb(), showStmt.getTable());
+            // Lookup is ConcurrentHashMap-backed (Database.nameToTable) for internal catalog and
+            // throws SemanticException if the name does not match a registered Table.
+            Table table;
             try {
-                TableName tableName = new TableName(showStmt.getCatalogName(), showStmt.getDb(), showStmt.getTable());
-                Table table = MetaUtils.getSessionAwareTable(connectContext, db, tableName);
-                if (table == null) {
-                    if (showStmt.getType() != ShowCreateTableStmt.CreateTableType.MATERIALIZED_VIEW) {
-                        ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_TABLE_ERROR, showStmt.getTable());
-                    } else {
-                        // For Sync Materialized View, it is a mv index inside OLAP table,
-                        // so we can not get it from database.
-                        for (Table tbl : GlobalStateMgr.getCurrentState().getLocalMetastore().getTables(db.getId())) {
-                            if (tbl.getType() == Table.TableType.OLAP) {
-                                OlapTable olapTable = (OlapTable) tbl;
-                                List<MaterializedIndexMeta> visibleMaterializedViews =
-                                        olapTable.getVisibleIndexMetas();
-                                for (MaterializedIndexMeta mvMeta : visibleMaterializedViews) {
-                                    if (olapTable.getIndexNameByMetaId(mvMeta.getIndexMetaId()).equals(showStmt.getTable())) {
-                                        if (mvMeta.getOriginStmt() == null) {
-                                            String mvName = olapTable.getIndexNameByMetaId(mvMeta.getIndexMetaId());
-                                            rows.add(Lists.newArrayList(showStmt.getTable(),
-                                                    ShowMaterializedViewStatus.buildCreateMVSql(olapTable,
-                                                            mvName, mvMeta), "utf8", "utf8_general_ci"));
-                                        } else {
-                                            rows.add(Lists.newArrayList(showStmt.getTable(), mvMeta.getOriginStmt(),
-                                                    "utf8", "utf8_general_ci"));
-                                        }
-
-                                        ShowResultSetMetaData showResultSetMetaData = ShowResultSetMetaData.builder()
-                                                .addColumn(new Column("Materialized View",
-                                                        TypeFactory.createVarcharType(20)))
-                                                .addColumn(new Column("Create Materialized View",
-                                                        TypeFactory.createVarcharType(30)))
-                                                .build();
-                                        return new ShowResultSet(showResultSetMetaData, rows);
-                                    }
-                                }
-                            }
-                        }
-                        ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_TABLE_ERROR, showStmt.getTable());
-                    }
+                table = MetaUtils.getSessionAwareTable(connectContext, db, tableName);
+            } catch (SemanticException e) {
+                // Sync MVs are mv indexes inside an OLAP table and are not registered as Tables,
+                // so the lookup misses. Fall through to a DB-wide scan for the MV-typed query;
+                // for any other type, the miss is a real "table not found".
+                if (showStmt.getType() != ShowCreateTableStmt.CreateTableType.MATERIALIZED_VIEW) {
+                    throw e;
                 }
-
+                return findSyncMaterializedViewCreateStmt(connectContext, db, showStmt);
+            }
+            Locker locker = new Locker();
+            locker.lockTableWithIntensiveDbLock(db.getId(), table.getId(), LockType.READ);
+            try {
+                // Revalidate by name to detect concurrent DROP/RENAME between unlocked lookup
+                // and lock acquisition. The table id is stable for a given Table object, so an
+                // id-based check would miss a RENAME that re-binds the name to a different
+                // (or no) table; revalidate via the same lookup path so both regular and
+                // temporary tables are handled correctly.
+                if (MetaUtils.getSessionAwareTable(connectContext, db, tableName) != table) {
+                    ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_TABLE_ERROR, showStmt.getTable());
+                }
                 List<String> createTableStmt = Lists.newArrayList();
                 AstToStringBuilder.getDdlStmt(table, createTableStmt, null, null, false, true /* hide password */);
                 if (createTableStmt.isEmpty()) {
@@ -927,12 +910,7 @@ public class ShowExecutor {
                                 .build();
                         return new ShowResultSet(showViewResultSetMeta, rows);
                     } else {
-                        rows.add(Lists.newArrayList(table.getName(), createTableStmt.get(0)));
-                        ShowResultSetMetaData showResultSetMetaData = ShowResultSetMetaData.builder()
-                                .addColumn(new Column("Materialized View", TypeFactory.createVarcharType(20)))
-                                .addColumn(new Column("Create Materialized View", TypeFactory.createVarcharType(30)))
-                                .build();
-                        return new ShowResultSet(showResultSetMetaData, rows);
+                        return buildShowCreateMaterializedViewResult(table.getName(), createTableStmt.get(0));
                     }
                 } else {
                     if (showStmt.getType() != ShowCreateTableStmt.CreateTableType.TABLE) {
@@ -943,8 +921,83 @@ public class ShowExecutor {
                     return new ShowResultSet(showResultMetaFactory.getMetadata(showStmt), rows);
                 }
             } finally {
-                locker.unLockDatabase(db.getId(), LockType.READ);
+                locker.unLockTableWithIntensiveDbLock(db.getId(), table.getId(), LockType.READ);
             }
+        }
+
+        // Shared SHOW CREATE MATERIALIZED VIEW schema for the async and sync MV paths.
+        private static ShowResultSet buildShowCreateMaterializedViewResult(String mvName, String createSql) {
+            List<List<String>> rows = Lists.newArrayList();
+            rows.add(Lists.newArrayList(mvName, createSql));
+            ShowResultSetMetaData meta = ShowResultSetMetaData.builder()
+                    .addColumn(new Column("Materialized View", TypeFactory.createVarcharType(20)))
+                    .addColumn(new Column("Create Materialized View", TypeFactory.createVarcharType(30)))
+                    .build();
+            return new ShowResultSet(meta, rows);
+        }
+
+        // Sync MVs live as MaterializedIndexMetas inside an OLAP table, not as
+        // separate Tables, so a name lookup misses and we scan. The visitor's
+        // pre-execution auth check resolves the sync MV name to a null BasicTable
+        // and silently no-ops, so we re-check privileges on the owning OLAP table
+        // once a match is found; the deny error names the sync MV (not the base
+        // table) to avoid revealing which table hosts the index.
+        private ShowResultSet findSyncMaterializedViewCreateStmt(ConnectContext connectContext,
+                                                                 Database db,
+                                                                 ShowCreateTableStmt showStmt) {
+            // ConcurrentHashMap-backed snapshot: weakly consistent, not a point-in-time
+            // atomic snapshot. Acceptable here - this is a best-effort fallback.
+            List<Table> tablesSnapshot = GlobalStateMgr.getCurrentState().getLocalMetastore().getTables(db.getId());
+            Locker locker = new Locker();
+            for (Table tbl : tablesSnapshot) {
+                // Include CLOUD_NATIVE (shared-data) base tables - sync MVs exist
+                // there too, see LakeSyncMaterializedViewTest.
+                if (!tbl.isOlapOrCloudNativeTable()) {
+                    continue;
+                }
+                OlapTable olapTable = (OlapTable) tbl;
+                locker.lockTableWithIntensiveDbLock(db.getId(), olapTable.getId(), LockType.READ);
+                try {
+                    Long metaId = olapTable.getIndexMetaIdByName(showStmt.getTable());
+                    // Skip the base index (its name equals the table's current name) - only
+                    // reachable here if a concurrent RENAME slipped between the failed name
+                    // lookup that routed us into this fallback and the snapshot below.
+                    if (metaId == null || metaId == olapTable.getBaseIndexMetaId()) {
+                        continue;
+                    }
+                    // Skip shadow / mid-schema-change indexes.
+                    boolean visible = olapTable.getVisibleIndexMetas().stream()
+                            .anyMatch(m -> m.getIndexMetaId() == metaId);
+                    if (!visible) {
+                        continue;
+                    }
+                    MaterializedIndexMeta mvMeta = olapTable.getIndexMetaByMetaId(metaId);
+                    if (mvMeta == null) {
+                        continue;
+                    }
+                    TableName baseTableName = new TableName(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
+                            db.getFullName(), olapTable.getName());
+                    try {
+                        Authorizer.checkAnyActionOnTable(connectContext, baseTableName);
+                    } catch (AccessDeniedException denied) {
+                        AccessDeniedException.reportAccessDenied(
+                                InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
+                                connectContext.getCurrentUserIdentity(),
+                                connectContext.getCurrentRoleIds(),
+                                PrivilegeType.ANY.name(),
+                                ObjectType.TABLE.name(),
+                                showStmt.getTable());
+                    }
+                    String createSql = mvMeta.getOriginStmt() == null
+                            ? ShowMaterializedViewStatus.buildCreateMVSql(olapTable, showStmt.getTable(), mvMeta)
+                            : mvMeta.getOriginStmt();
+                    return buildShowCreateMaterializedViewResult(showStmt.getTable(), createSql);
+                } finally {
+                    locker.unLockTableWithIntensiveDbLock(db.getId(), olapTable.getId(), LockType.READ);
+                }
+            }
+            ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_TABLE_ERROR, showStmt.getTable());
+            return null; // unreachable; reportSemanticException always throws
         }
 
         private ShowResultSet showCreateExternalCatalogTable(ConnectContext context, ShowCreateTableStmt showStmt,
@@ -1882,7 +1935,7 @@ public class ShowExecutor {
                     dbName = db.getFullName();
 
                     Locker locker = new Locker();
-                    locker.lockDatabase(db.getId(), LockType.READ);
+                    locker.lockTableWithIntensiveDbLock(db.getId(), tableId, LockType.READ);
                     try {
                         Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
                         if (!(table instanceof OlapTable)) {
@@ -1943,7 +1996,7 @@ public class ShowExecutor {
                         }
 
                     } finally {
-                        locker.unLockDatabase(db.getId(), LockType.READ);
+                        locker.unLockTableWithIntensiveDbLock(db.getId(), tableId, LockType.READ);
                     }
                 } while (false);
 
@@ -1962,19 +2015,25 @@ public class ShowExecutor {
                 Database db = globalStateMgr.getLocalMetastore().getDb(dbName);
                 MetaUtils.checkDbNullAndReport(db, dbName);
 
-                Locker locker = new Locker();
-                locker.lockDatabase(db.getId(), LockType.READ);
-                try {
-                    Table table = MetaUtils.getSessionAwareTable(
-                            context, db, new TableName(tableRef.getCatalogName(), tableRef.getDbName(),
-                                    tableRef.getTableName()));
-                    if (table == null) {
-                        ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_TABLE_ERROR, statement.getTableName());
-                    }
-                    if (!table.isNativeTableOrMaterializedView()) {
-                        ErrorReport.reportSemanticException(ErrorCode.ERR_NOT_OLAP_TABLE, statement.getTableName());
-                    }
+                // Lookup is ConcurrentHashMap-backed for the internal catalog and throws on missing
+                // table, so it is safe outside the lock.
+                TableName tableName = new TableName(tableRef.getCatalogName(), tableRef.getDbName(),
+                        tableRef.getTableName());
+                Table table = MetaUtils.getSessionAwareTable(context, db, tableName);
+                if (!table.isNativeTableOrMaterializedView()) {
+                    ErrorReport.reportSemanticException(ErrorCode.ERR_NOT_OLAP_TABLE, statement.getTableName());
+                }
 
+                Locker locker = new Locker();
+                locker.lockTableWithIntensiveDbLock(db.getId(), table.getId(), LockType.READ);
+                try {
+                    // Revalidate by name to detect concurrent DROP/RENAME between unlocked lookup
+                    // and lock acquisition. Id-based check would miss a RENAME that re-binds the
+                    // name to a different table; re-running the same lookup catches that.
+                    if (MetaUtils.getSessionAwareTable(context, db, tableName) != table) {
+                        ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_TABLE_ERROR,
+                                statement.getTableName());
+                    }
                     Pair<Boolean, Boolean> privResult = Authorizer.checkPrivForShowTablet(
                             context, db.getFullName(), table);
                     if (!privResult.first) {
@@ -2068,7 +2127,7 @@ public class ShowExecutor {
                         rows.add(oneTablet);
                     }
                 } finally {
-                    locker.unLockDatabase(db.getId(), LockType.READ);
+                    locker.unLockTableWithIntensiveDbLock(db.getId(), table.getId(), LockType.READ);
                 }
             }
 

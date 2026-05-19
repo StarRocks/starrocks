@@ -19,6 +19,7 @@
 
 #include "base/hash/xxh3.h"
 #include "base/types/int128.h"
+#include "column/chunk_factory.h"
 #include "column/column_helper.h"
 #include "column/raw_data_visitor.h"
 #include "common/stack_util.h"
@@ -1251,7 +1252,7 @@ Status PrimaryIndex::_do_load(Tablet* tablet) {
     // only hold pkey, so can use larger chunk size
     vector<uint32_t> rowids;
     rowids.reserve(4096);
-    auto chunk_shared_ptr = ChunkHelper::new_chunk(pkey_schema, 4096);
+    auto chunk_shared_ptr = ChunkFactory::new_chunk(pkey_schema, 4096);
     auto chunk = chunk_shared_ptr.get();
     for (auto& rowset : rowsets) {
         RowsetReleaseGuard guard(rowset);
@@ -1507,6 +1508,27 @@ Status PrimaryIndex::upsert(uint32_t rssid, uint32_t rowid_start, const Column& 
         return _upsert_into_persistent_index(rssid, rowid_start, pks, 0, pks.size(), stat, ctx);
     } else {
         return Status::NotSupported("upsert with thread pool is not supported in memory primary index");
+    }
+}
+
+Status PrimaryIndex::upsert(uint32_t rssid, const std::vector<uint32_t>& rowids, const Column& pks, IOStat* stat,
+                            ParallelPublishContext* ctx) {
+    DCHECK(_status.ok() && (_pkey_to_rssid_rowid || _persistent_index));
+    if (_persistent_index != nullptr) {
+        auto scope = IOProfiler::scope(IOProfiler::TAG_PKINDEX, _tablet_id);
+        const uint32_t n = pks.size();
+        DCHECK_EQ(rowids.size(), n);
+        DCHECK(ctx != nullptr && !ctx->slots.empty());
+        auto slot = ctx->slots.back().get();
+        slot->values.reserve(n);
+        slot->old_values.resize(n, NullIndexValue);
+        ASSIGN_OR_RETURN(const Slice* vkeys, build_persistent_keys(pks, _key_size, 0, n, &slot->keys));
+        RETURN_IF_ERROR(_build_persistent_values(rssid, rowids, 0, n, &slot->values));
+        RETURN_IF_ERROR(_persistent_index->upsert(n, vkeys, reinterpret_cast<IndexValue*>(slot->values.data()),
+                                                  reinterpret_cast<IndexValue*>(slot->old_values.data()), stat, ctx));
+        return Status::OK();
+    } else {
+        return Status::NotSupported("rowids upsert with thread pool is not supported in memory primary index");
     }
 }
 

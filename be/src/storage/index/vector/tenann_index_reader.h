@@ -37,6 +37,9 @@ public:
 
     Status init_searcher(const tenann::IndexMeta& meta, const std::string& index_path, FileSystem* fs) override;
 
+    Status init_searcher(const tenann::IndexMeta& meta, const std::string& index_path, FileSystem* fs,
+                         size_t segment_num_rows, int query_k, bool user_set_ef) override;
+
     Status search(tenann::PrimitiveSeqView query_vector, int k, int64_t* result_ids, uint8_t* result_distances,
                   tenann::IdFilter* id_filter = nullptr) override;
     Status range_search(tenann::PrimitiveSeqView query_vector, int k, std::vector<int64_t>* result_ids,

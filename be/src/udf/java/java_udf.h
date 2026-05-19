@@ -681,6 +681,16 @@ struct JavaUDAFSharedContext {
     JavaGlobalRef states_add_method = nullptr;
     JavaGlobalRef states_remove_method = nullptr;
     JavaGlobalRef states_clear_method = nullptr;
+
+    // Per-argument UdfTypeDesc Java objects mirroring the SQL TypeDescriptor of each
+    // UDAF arg (read by `update`). Slots whose type subtree contains no STRUCT are
+    // null-handle. Built once at shared-context construction by walking
+    // update.getGenericParameterTypes() (with state_offset=1 for the leading State arg).
+    std::vector<JavaGlobalRef> update_arg_type_descs;
+    // UdfTypeDesc for `finalize`'s return type when the subtree contains a STRUCT;
+    // null-handle otherwise. Used by the UDAF finalize / batch_finalize paths to
+    // route through the unified UDFHelper.writeResult drain.
+    JavaGlobalRef finalize_return_type_desc = nullptr;
 };
 
 // Per-aggregator UDAF context stored as FunctionContext::THREAD_LOCAL.

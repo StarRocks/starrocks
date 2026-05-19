@@ -21,6 +21,7 @@
 #include <memory>
 
 #include "base/testutil/assert.h"
+#include "column/chunk_factory.h"
 #include "column/datum_tuple.h"
 #include "common/config_rowset_fwd.h"
 #include "fs/fs_memory.h"
@@ -88,7 +89,7 @@ public:
         std::unique_ptr<RowsetWriter> writer;
         EXPECT_TRUE(RowsetFactory::create_rowset_writer(writer_context, &writer).ok());
         auto schema = ChunkHelper::convert_schema(tablet->tablet_schema());
-        auto chunk = ChunkHelper::new_chunk(schema, keys.size());
+        auto chunk = ChunkFactory::new_chunk(schema, keys.size());
         auto col0 = chunk->get_column_raw_ptr_by_index(0);
         auto col1 = chunk->get_column_raw_ptr_by_index(1);
         auto col2 = chunk->get_column_raw_ptr_by_index(2);
@@ -163,7 +164,7 @@ public:
         EXPECT_TRUE(RowsetFactory::create_rowset_writer(writer_context, &writer).ok());
         auto schema = ChunkHelper::convert_schema(partial_schema);
 
-        auto chunk = ChunkHelper::new_chunk(schema, keys.size());
+        auto chunk = ChunkFactory::new_chunk(schema, keys.size());
         EXPECT_TRUE(2 == chunk->num_columns());
         auto cols = chunk->mutable_columns();
         for (int64_t key : keys) {
@@ -200,7 +201,7 @@ static ChunkIteratorPtr create_tablet_iterator(TabletReader& reader, Schema& sch
 }
 
 static ssize_t read_until_eof(const ChunkIteratorPtr& iter) {
-    auto chunk = ChunkHelper::new_chunk(iter->schema(), 100);
+    auto chunk = ChunkFactory::new_chunk(iter->schema(), 100);
     size_t count = 0;
     while (true) {
         auto st = iter->get_next(chunk.get());
@@ -338,7 +339,7 @@ TEST_F(RowsetUpdateStateTest, check_conflict) {
     std::unique_ptr<RowsetWriter> writer;
     EXPECT_TRUE(RowsetFactory::create_rowset_writer(writer_context, &writer).ok());
     auto schema = ChunkHelper::convert_schema(_tablet->tablet_schema());
-    auto chunk = ChunkHelper::new_chunk(schema, N);
+    auto chunk = ChunkFactory::new_chunk(schema, N);
     auto cols = chunk->mutable_columns();
     for (uint64_t i = 0; i < N; i++) {
         cols[0]->append_datum(Datum(i));

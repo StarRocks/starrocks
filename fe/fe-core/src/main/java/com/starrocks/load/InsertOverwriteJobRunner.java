@@ -369,7 +369,10 @@ public class InsertOverwriteJobRunner {
 
     private void executeInsert() throws Exception {
         long insertStartTimestamp = System.currentTimeMillis();
-        // should replan here because prepareInsert has changed the targetPartitionNames of insertStmt
+        // should replan here because prepareInsert has changed the targetPartitionNames of insertStmt.
+        // The re-plan creates a fresh ColumnRefFactory; lambda-argument -> ColumnRefOperator caches
+        // live on the factory (see ColumnRefFactory.computeLambdaArgRefIfAbsent), so stale ids from
+        // the first plan cannot leak into the second.
         try (var guard = context.bindScope()) {
             // For dynamic overwrite, set the txnId to insertStmt so that StatementPlanner.beginTransaction()
             // will skip creating a new transaction and reuse the one we created in prepare().

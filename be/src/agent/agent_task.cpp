@@ -1088,7 +1088,7 @@ void run_remote_snapshot_task(const std::shared_ptr<RemoteSnapshotAgentTaskReque
 }
 
 void run_replicate_snapshot_task(const std::shared_ptr<ReplicateSnapshotAgentTaskRequest>& agent_task_req,
-                                 ExecEnv* exec_env) {
+                                 ExecEnv* exec_env, ThreadPool* replicate_snapshot_pool) {
     SCOPED_SET_MODULE_TYPE(ThreadModuleType::REPLICATION);
     MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(GlobalEnv::GetInstance()->replication_mem_tracker());
     DeferOp op([prev_tracker] { tls_thread_status.set_mem_tracker(prev_tracker); });
@@ -1103,7 +1103,8 @@ void run_replicate_snapshot_task(const std::shared_ptr<ReplicateSnapshotAgentTas
 
     Status res;
     if (replicate_snapshot_req.tablet_type == TTabletType::TABLET_TYPE_LAKE) {
-        res = exec_env->lake_replication_txn_manager()->replicate_snapshot(replicate_snapshot_req);
+        res = exec_env->lake_replication_txn_manager()->replicate_snapshot(replicate_snapshot_req,
+                                                                           replicate_snapshot_pool);
     } else {
         res = StorageEngine::instance()->replication_txn_manager()->replicate_snapshot(replicate_snapshot_req);
     }

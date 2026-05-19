@@ -54,6 +54,7 @@
 #include "storage/lake/vacuum.h"
 #include "storage/lake/vacuum_full.h"
 #include "storage/lake/vector_index_build_task.h"
+#include "storage/tablet_index.h"
 
 namespace starrocks {
 
@@ -176,6 +177,25 @@ bool should_rebuild_pindex(const std::unordered_set<int64>& rebuild_pindex_table
     return false;
 }
 
+// Returns true if any VECTOR index has index_build_mode = "async".
+bool is_async_vector_index_table(const TabletMetadataPB& metadata) {
+    if (!metadata.has_schema()) return false;
+    for (const auto& index_pb : metadata.schema().table_indices()) {
+        if (!index_pb.has_index_type() || index_pb.index_type() != VECTOR) {
+            continue;
+        }
+        TabletIndex parsed;
+        if (!parsed.init_from_pb(index_pb).ok()) {
+            continue;
+        }
+        auto it = parsed.common_properties().find("index_build_mode");
+        if (it != parsed.common_properties().end() && it->second == "async") {
+            return true;
+        }
+    }
+    return false;
+}
+
 } // namespace
 
 // Get txn_ids string from request (compatible with both new and old FE versions)
@@ -205,6 +225,10 @@ void LakeServiceImpl::publish_version(::google::protobuf::RpcController* control
                                       ::google::protobuf::Closure* done) {
     brpc::ClosureGuard guard(done);
     auto cntl = static_cast<brpc::Controller*>(controller);
+    // Server-side BRPC queue time: latency from RPC arrival on this server to handler entry.
+    // Used to attribute the FE-measured publish_rpc cost vs BE handler cost gap.
+    // cntl can be nullptr in unit tests, so guard the access.
+    int64_t brpc_queue_us = (cntl != nullptr) ? cntl->latency_us() : 0;
 
     if (!request->has_base_version()) {
         cntl->SetFailed("missing base version");
@@ -364,7 +388,11 @@ void LakeServiceImpl::publish_version(::google::protobuf::RpcController* control
                     if (res.ok()) {
                         auto metadata = std::move(res).value();
                         auto score = compaction_score(_tablet_mgr, metadata);
-                        TabletMetadataPB* prealloc_metadata = nullptr;
+                        // Copy metadata out of the lock(response_mtx), to let it execute in parallel.
+                        TabletMetadataPB local_metadata;
+                        if (skip_write_tablet_metadata) {
+                            local_metadata.CopyFrom(*metadata);
+                        }
                         {
                             std::lock_guard l(response_mtx);
                             response->mutable_compaction_scores()->insert({metadata->id(), score});
@@ -376,28 +404,25 @@ void LakeServiceImpl::publish_version(::google::protobuf::RpcController* control
                                 response->mutable_tablet_row_nums()->insert({metadata->id(), row_nums});
                             }
                             if (skip_write_tablet_metadata) {
-                                auto& map = *response->mutable_tablet_metas();
-                                prealloc_metadata = &map[metadata->id()];
+                                (*response->mutable_tablet_metas())[metadata->id()].Swap(&local_metadata);
                             }
                         }
-                        // Move copy metadata out of the lock(response_mtx), to let it execute in parallel.
-                        if (prealloc_metadata != nullptr) {
-                            prealloc_metadata->CopyFrom(*metadata);
-                        }
-                        // Report tablet for async vector index build only if this publish's
-                        // new rowset(s) have vector_index_ids (i.e., met the build threshold).
-                        // Old unbuilt rowsets are handled by recovery scan after leader switch.
+                        // Report tablet for async VI build only on async-mode tables
+                        // whose new rowset(s) have vector_index_ids. Sync-mode tables
+                        // build VI inline on write/compaction, so FE dispatch is unneeded.
                         bool new_rowset_has_vi = false;
-                        for (const auto& rowset : metadata->rowsets()) {
-                            int64_t rv = rowset.has_version() ? rowset.version() : 0;
-                            if (rv <= base_version) continue; // existing rowset, not from this publish
-                            for (int i = 0; i < rowset.segment_metas_size(); i++) {
-                                if (rowset.segment_metas(i).vector_index_ids_size() > 0) {
-                                    new_rowset_has_vi = true;
-                                    break;
+                        if (is_async_vector_index_table(*metadata)) {
+                            for (const auto& rowset : metadata->rowsets()) {
+                                int64_t rv = rowset.has_version() ? rowset.version() : 0;
+                                if (rv <= base_version) continue; // existing rowset, not from this publish
+                                for (int i = 0; i < rowset.segment_metas_size(); i++) {
+                                    if (rowset.segment_metas(i).vector_index_ids_size() > 0) {
+                                        new_rowset_has_vi = true;
+                                        break;
+                                    }
                                 }
+                                if (new_rowset_has_vi) break;
                             }
-                            if (new_rowset_has_vi) break;
                         }
                         if (new_rowset_has_vi) {
                             std::lock_guard l(response_mtx);
@@ -549,7 +574,7 @@ void LakeServiceImpl::publish_version(::google::protobuf::RpcController* control
     if (is_slow) {
         LOG(INFO) << "Published txns=" << get_txn_ids_string(request)
                   << ". tablets=" << JoinInts(request->tablet_ids(), ",") << " cost=" << cost
-                  << "us, trace: " << trace->MetricsAsJSON();
+                  << "us brpc_queue_us=" << brpc_queue_us << ", trace: " << trace->MetricsAsJSON();
     }
     TEST_SYNC_POINT("LakeServiceImpl::publish_version:return");
 }

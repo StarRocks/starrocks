@@ -1,3 +1,5 @@
+add_subdirectory(testutil)
+
 set(EXEC_FILES
         ./agent/agent_metrics_test.cpp
         ./agent/agent_task_test.cpp
@@ -31,6 +33,7 @@ set(EXEC_FILES
         ./connector_sink/async_flush_output_stream_test.cpp
         ./connector_sink/iceberg_table_sink_test.cpp
         ./connector_sink/iceberg_delete_sink_test.cpp
+        ./connector_sink/iceberg_row_delta_sink_test.cpp
         ./connector_sink/sink_memory_manager_test.cpp
         ./fs/azure/azblob_uri_test.cpp
         ./fs/azure/fs_azblob_test.cpp
@@ -80,6 +83,7 @@ set(EXEC_FILES
         ./exec/pipeline/local_exchange_memory_test.cpp
         ./exec/pipeline/mem_limited_chunk_queue_test.cpp
         ./exec/pipeline/exec_group_test.cpp
+        ./exec/pipeline/fragment_executor_test.cpp
         ./exec/pipeline/glm_manager_tablet_adaptor_test.cpp
         ./exec/pipeline/scan/physical_split_morsel_queue_test.cpp
         ./exec/query_cache/query_cache_test.cpp
@@ -99,7 +103,6 @@ set(EXEC_FILES
         ./exec/pipeline/olap_scan_operator_test.cpp
         ./exec/analytor_test.cpp
         ./exec/analytor_test.cpp
-        ./exec/arrow_converter_test.cpp
         ./exec/benchmark_scanner_test.cpp
         ./exec/chunks_sorter_heap_sort_test.cpp
         ./exec/chunks_sorter_test.cpp
@@ -249,12 +252,11 @@ set(EXEC_FILES
         ./formats/parquet/page_index_test.cpp
         ./formats/parquet/dict_encoding_test.cpp
         ./formats/disk_range_test.cpp
-        ./geo/geo_types_test.cpp
-        ./geo/wkt_parse_test.cpp
         ./http/default_path_handlers_test.cpp
+        ./http/ev_http_server_test.cpp
+        ./http/http_core_test.cpp
         ./http/http_metrics_test.cpp
         ./http/http_client_test.cpp
-        ./http/http_utils_test.cpp
         ./http/message_body_sink_test.cpp
         ./http/metrics_action_test.cpp
         ./http/stream_load_test.cpp
@@ -270,6 +272,7 @@ set(EXEC_FILES
         ./exec/data_sinks/arrow_result_writer_test.cpp
         ./runtime/buffer_control_block_test.cpp
         ./runtime/data_stream_mgr_test.cpp
+        ./runtime/descriptors_test.cpp
         ./runtime/diagnose_daemon_test.cpp
         ./runtime/external_scan_context_mgr_test.cpp
         ./runtime/fragment_mgr_test.cpp
@@ -300,10 +303,8 @@ set(EXEC_FILES
         ./exec/data_sinks/memory_scratch_sink_test.cpp
         ./runtime/command_executor_test.cpp
         ./runtime/exec_env_test.cpp
-        ./serde/column_array_serde_test.cpp
-        ./serde/protobuf_serde_test.cpp
-        ./types/type_checker_test.cpp
-        ./types/type_checker_xml_loader_test.cpp
+        ./exec/jdbc/type_checker_test.cpp
+        ./exec/jdbc/type_checker_xml_loader_test.cpp
         ./column/simd_selector_test.cpp
         ./column/simd_mulselector_test.cpp
         ./util/brpc_stub_cache_test.cpp
@@ -321,18 +322,15 @@ set(EXEC_FILES
         ./base/types/int96_test.cpp
         ./util/internal_service_recoverable_stub_test.cpp
         ./util/internal_service_recoverable_stub_parallel_test.cpp
-        ./util/arrow/starrocks_column_to_arrow_test.cpp
         ./util/simdjson_util_test.cpp
         ./util/starrocks_metrics_test.cpp
         ./util/system_metrics_test.cpp
-        ./util/download_util_test.cpp
         ./gutil/cpu_test.cc
         service/backend_base_test.cpp
         ./service/mem_hook_test.cpp
         ./service/service_metrics_test.cpp
         ./service/service_be/arrow_flight_call_header_utils_test.cpp
         ./service/service_be/internal_service_test.cpp
-        ./service/staros_worker_test.cpp
         ./udf/java/java_native_method_test.cpp
         ./udf/java/java_data_converter_test.cpp
         ./udf/java/java_udf_test.cpp
@@ -357,6 +355,15 @@ if (STARROCKS_JIT_ENABLE)
     set(EXEC_FILES ${EXEC_FILES} ./exprs/jit_cache_test.cpp)
 endif()
 
+add_library(be_test_cxa_throw_wrap INTERFACE)
+if (NOT APPLE)
+    target_sources(be_test_cxa_throw_wrap INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/base/cxa_throw_wrap.cpp)
+endif()
+
+function(target_link_be_test_cxa_throw_wrap TEST_TARGET)
+    target_link_libraries(${TEST_TARGET} be_test_cxa_throw_wrap)
+endfunction()
+
 add_subdirectory(base)
 add_subdirectory(common)
 add_subdirectory(column)
@@ -366,12 +373,16 @@ add_subdirectory(runtime)
 add_subdirectory(exprs)
 add_subdirectory(io)
 add_subdirectory(fs)
+add_subdirectory(platform)
 add_subdirectory(http)
+add_subdirectory(geo)
 add_subdirectory(cache)
+add_subdirectory(serde)
 add_subdirectory(spill)
+add_subdirectory(staros_integration)
 
 if (APPLE)
-    set(TEST_EXTRA_SOURCES ${CMAKE_SOURCE_DIR}/src/service/macos_link_stubs.cpp)
+    set(TEST_EXTRA_SOURCES ${CMAKE_SOURCE_DIR}/test/base/macos_link_stubs.cpp)
 endif ()
 
 add_library(starrocks_test_objs OBJECT ${EXEC_FILES})
@@ -383,7 +394,7 @@ else()
 endif ()
 add_executable(starrocks_test test_main.cpp $<TARGET_OBJECTS:starrocks_test_objs> ${TEST_EXTRA_SOURCES})
 
-TARGET_LINK_LIBRARIES(starrocks_test ${TEST_LINK_LIBS})
+TARGET_LINK_LIBRARIES(starrocks_test ServiceBE Service ${TEST_LINK_LIBS})
 STARROCKS_FORCE_LOAD_LIBS(starrocks_test Exprs ExprCore)
 
 
@@ -401,6 +412,7 @@ SET(DW_TEST_FILES
     ./storage/column_and_predicate_test.cpp
     ./storage/column_or_predicate_test.cpp
     ./storage/column_predicate_test.cpp
+    ./storage/column_predicate_inverted_index_fallback_test.cpp
     ./storage/compaction_manager_test.cpp
     ./storage/compaction_parallelization_test.cpp
     ./storage/compaction_utils_test.cpp
@@ -419,7 +431,6 @@ SET(DW_TEST_FILES
     ./storage/dictionary_cache_manager_test.cpp
     ./storage/disjunctive_predicates_test.cpp
     ./storage/fast_schema_evolution_test.cpp
-    ./storage/file_utils_test.cpp
     ./storage/get_use_pk_index_test.cpp
     ./storage/index/vector_index_test.cpp
     ./storage/index/vector_search_test.cpp
@@ -509,7 +520,6 @@ SET(DW_TEST_FILES
     ./storage/rowset/binary_prefix_page_test.cpp
     ./storage/rowset/bitmap_index_test.cpp
     ./storage/rowset/bitshuffle_page_test.cpp
-    ./storage/rowset/block_bloom_filter_test.cpp
     ./storage/rowset/bloom_filter_index_reader_writer_test.cpp
     ./storage/rowset/cast_column_iterator_test.cpp
     ./storage/rowset/column_iterator_decorator_test.cpp

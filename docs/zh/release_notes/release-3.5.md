@@ -26,6 +26,44 @@ displayed_sidebar: docs
 
 :::
 
+## 3.5.17
+
+发布日期：2026 年 5 月 13 日
+
+### 行为变更
+
+- `SHOW CREATE TABLE` 和 `DESC` 现在会展示 Paimon 表的主键。 [#70535](https://github.com/StarRocks/starrocks/pull/70535)
+- Hive Catalog 中不再允许向 insert-only ACID Hive 表执行 INSERT。 [#71460](https://github.com/StarRocks/starrocks/pull/71460)
+- Profile 中的 `START_TIME` 和 `END_TIME` 现在会按照会话时区展示。 [#71429](https://github.com/StarRocks/starrocks/pull/71429)
+
+### 功能优化
+
+- `INSERT INTO FILES` CSV 导出支持 `csv.enclose` 和 `csv.escape`。 [#71589](https://github.com/StarRocks/starrocks/pull/71589)
+- 审计日志支持记录查询关系（被直接查询的表和视图）信息。 [#71596](https://github.com/StarRocks/starrocks/pull/71596)
+- FE 配置项 `star_mgr_meta_sync_interval_sec` 支持动态修改。 [#71675](https://github.com/StarRocks/starrocks/pull/71675)
+- 降低了表元数据和行数统计相关路径中的元数据加载和锁开销。 [#72053](https://github.com/StarRocks/starrocks/pull/72053) [#72042](https://github.com/StarRocks/starrocks/pull/72042) [#71672](https://github.com/StarRocks/starrocks/pull/71672)
+- 通过将 Broker Builder 合并到 FE 构建并移除 WildFly OpenSSL，改进了构建和依赖管理。 [#71823](https://github.com/StarRocks/starrocks/pull/71823) [#71908](https://github.com/StarRocks/starrocks/pull/71908)
+
+### 问题修复
+
+修复了以下问题：
+
+- 带 OFFSET 的 Local Shuffle 聚合查询结果错误。 [#71997](https://github.com/StarRocks/starrocks/pull/71997)
+- Exchange Shuffle 列被裁剪后 Join 输出属性未正确更新。 [#72003](https://github.com/StarRocks/starrocks/pull/72003)
+- 多个依赖安全漏洞。 [#71762](https://github.com/StarRocks/starrocks/pull/71762) [#71914](https://github.com/StarRocks/starrocks/pull/71914)
+- Oracle JDBC NLS 格式处理问题。 [#71412](https://github.com/StarRocks/starrocks/pull/71412)
+- Iceberg Manifest Data File Cache 中列统计信息丢失。 [#71913](https://github.com/StarRocks/starrocks/pull/71913)
+- INSERT OVERWRITE 提交前未创建缺失的 Hive 分区目录。 [#71810](https://github.com/StarRocks/starrocks/pull/71810)
+- Iceberg 基表上的聚合 Join 下推物化视图 Rewrite 以及 Min/Max 优化问题。 [#71856](https://github.com/StarRocks/starrocks/pull/71856) [#71863](https://github.com/StarRocks/starrocks/pull/71863)
+- `ConnectorSinkPassthroughExchanger` 和 `LoadChannel::get_load_replica_status` 中的竞争问题。 [#71848](https://github.com/StarRocks/starrocks/pull/71848) [#71843](https://github.com/StarRocks/starrocks/pull/71843)
+- INSERT FILES 操作中的凭证脱敏问题。 [#71245](https://github.com/StarRocks/starrocks/pull/71245)
+- `reverse(DecimalV3)` 结果错误。 [#71834](https://github.com/StarRocks/starrocks/pull/71834)
+- Java UDF 代码中缺少 JNI 异常处理检查。 [#71734](https://github.com/StarRocks/starrocks/pull/71734)
+- `EventScheduler` 中 Short-circuit 检查不正确。 [#71740](https://github.com/StarRocks/starrocks/pull/71740)
+- Arrow Flight 空结果集列名错误。 [#71534](https://github.com/StarRocks/starrocks/pull/71534)
+- 分区版本间隙导致 Batch Publish 死锁。 [#71483](https://github.com/StarRocks/starrocks/pull/71483)
+- 标量子查询计划中重复添加 Apply Attachment。 [#71155](https://github.com/StarRocks/starrocks/pull/71155)
+
 ## 3.5.16
 
 发布日期：2026 年 4 月 20 日

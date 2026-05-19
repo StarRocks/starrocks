@@ -134,6 +134,10 @@ public final class MetricRepo {
     private static final String PLAN_ADVISOR_OPTIMIZATION_DURATION_MS_TOTAL_METRIC_DESC =
             "total execution time saved by plan advisor in milliseconds";
 
+    private static final String SPM_BASELINE_COUNT_METRIC_NAME = "spm_baseline_count";
+    private static final String SPM_REWRITE_TOTAL_METRIC_NAME = "spm_rewrite_total";
+    private static final String SPM_CAPTURE_CANDIDATE_TOTAL_METRIC_NAME = "spm_capture_candidate_total";
+
     public static LongCounterMetric COUNTER_REQUEST_ALL;
     public static LongCounterMetric COUNTER_QUERY_ALL;
     public static LongCounterMetric COUNTER_QUERY_ERR;
@@ -152,10 +156,14 @@ public final class MetricRepo {
     public static LongCounterMetric COUNTER_QUERY_ANALYSIS_ERR;
     public static LongCounterMetric COUNTER_QUERY_INTERNAL_ERR;
 
-    public static final MetricWithLabelGroup<LongCounterMetric> COUNTER_ICEBERG_TIME_TRAVEL_QUERY_TOTAL_BY_TYPE =
-            new MetricWithLabelGroup<>("time_travel_type",
-                    () -> new LongCounterMetric(ICEBERG_TIME_TRAVEL_QUERY_TOTAL_METRIC_NAME, MetricUnit.REQUESTS,
-                            ICEBERG_TIME_TRAVEL_QUERY_TOTAL_METRIC_DESC));
+    public static final MetricWithLabelGroup<LongCounterMetric> COUNTER_SPM_REWRITE_TOTAL =
+            new MetricWithLabelGroup<>("result",
+                    () -> new LongCounterMetric(SPM_REWRITE_TOTAL_METRIC_NAME, MetricUnit.REQUESTS,
+                            "total SPM rewrite attempts by result"));
+    public static final MetricWithLabelGroup<LongCounterMetric> COUNTER_SPM_CAPTURE_CANDIDATE_TOTAL =
+            new MetricWithLabelGroup<>("result",
+                    () -> new LongCounterMetric(SPM_CAPTURE_CANDIDATE_TOTAL_METRIC_NAME, MetricUnit.REQUESTS,
+                            "total SPM auto-capture candidate processing results"));
     public static final MetricWithLabelGroup<LongCounterMetric> COUNTER_PLAN_ADVISOR_GUIDE_GENERATED_TOTAL =
             new MetricWithLabelGroup<>("operator_type",
                     () -> new LongCounterMetric(PLAN_ADVISOR_GUIDE_GENERATED_TOTAL_METRIC_NAME, MetricUnit.REQUESTS,
@@ -164,6 +172,11 @@ public final class MetricRepo {
             new MetricWithLabelGroup<>("operator_type",
                     () -> new LongCounterMetric(PLAN_ADVISOR_GUIDE_APPLIED_TOTAL_METRIC_NAME, MetricUnit.REQUESTS,
                             PLAN_ADVISOR_GUIDE_APPLIED_TOTAL_METRIC_DESC));
+
+    public static final MetricWithLabelGroup<LongCounterMetric> COUNTER_ICEBERG_TIME_TRAVEL_QUERY_TOTAL_BY_TYPE =
+            new MetricWithLabelGroup<>("time_travel_type",
+                    () -> new LongCounterMetric(ICEBERG_TIME_TRAVEL_QUERY_TOTAL_METRIC_NAME, MetricUnit.REQUESTS,
+                            ICEBERG_TIME_TRAVEL_QUERY_TOTAL_METRIC_DESC));
 
     // Per-catalog-type query counters
     public static final MetricWithLabelGroup<LongCounterMetric> COUNTER_CATALOG_QUERY_TOTAL =
@@ -375,6 +388,7 @@ public final class MetricRepo {
     public static GaugeMetricImpl<Double> GAUGE_QUERY_LATENCY_P95;
     public static GaugeMetricImpl<Double> GAUGE_QUERY_LATENCY_P99;
     public static GaugeMetricImpl<Double> GAUGE_QUERY_LATENCY_P999;
+    public static LeaderAwareGaugeMetricLong GAUGE_SPM_BASELINE_COUNT;
     public static LeaderAwareGaugeMetric<Long> GAUGE_MAX_TABLET_COMPACTION_SCORE;
     public static GaugeMetricImpl<Long> GAUGE_STACKED_JOURNAL_NUM;
 
@@ -517,6 +531,17 @@ public final class MetricRepo {
             }
         };
         STARROCKS_METRIC_REGISTER.addMetric(maxJournalId);
+
+        GAUGE_SPM_BASELINE_COUNT = new LeaderAwareGaugeMetricLong(
+                SPM_BASELINE_COUNT_METRIC_NAME,
+                MetricUnit.NOUNIT,
+                "current number of global SPM baselines") {
+            @Override
+            public Long getValueLeader() {
+                return GlobalStateMgr.getCurrentState().getSqlPlanStorage().getBaselineCount();
+            }
+        };
+        STARROCKS_METRIC_REGISTER.addMetric(GAUGE_SPM_BASELINE_COUNT);
 
         // meta log total count
         GaugeMetric<Long> metaLogCount = new GaugeMetric<Long>(

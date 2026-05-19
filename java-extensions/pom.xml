@@ -42,7 +42,7 @@
         <jni-connector.version>1.0.0</jni-connector.version>
         <hadoop-ext.version>1.0.0</hadoop-ext.version>
         <java-utils.version>1.0.0</java-utils.version>
-        <io.netty.version>4.1.132.Final</io.netty.version>
+        <io.netty.version>4.1.133.Final</io.netty.version>
         <protobuf-java.version>3.25.5</protobuf-java.version>
         <nimbusds.version>9.37.2</nimbusds.version>
         <commons-io.version>2.14.0</commons-io.version>
@@ -64,6 +64,8 @@
         <commons-beanutils.version>1.11.0</commons-beanutils.version>
         <lz4-java.version>1.10.1</lz4-java.version>
         <httpclient5.version>5.4.3</httpclient5.version>
+        <bouncycastle.version>1.84</bouncycastle.version>
+        <thrift.version>0.23.0</thrift.version>
     </properties>
 
     <profiles>
@@ -139,6 +141,22 @@
 
     <dependencyManagement>
         <dependencies>
+            <dependency>
+                <groupId>org.bouncycastle</groupId>
+                <artifactId>bcprov-jdk18on</artifactId>
+                <version>${bouncycastle.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.bouncycastle</groupId>
+                <artifactId>bcpkix-jdk18on</artifactId>
+                <version>${bouncycastle.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.bouncycastle</groupId>
+                <artifactId>bcutil-jdk18on</artifactId>
+                <version>${bouncycastle.version}</version>
+            </dependency>
+
             <!-- jni connector -->
             <dependency>
                 <groupId>com.starrocks</groupId>
@@ -436,6 +454,12 @@
                 </exclusions>
             </dependency>
             <!-- hive -->
+
+            <dependency>
+                <groupId>org.apache.thrift</groupId>
+                <artifactId>libthrift</artifactId>
+                <version>${thrift.version}</version>
+            </dependency>
 
             <!--slf4j-->
             <dependency>

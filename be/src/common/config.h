@@ -482,6 +482,11 @@ CONF_mInt64(pk_index_parallel_execution_min_rows, "16384");
 CONF_mInt32(pk_index_parallel_execution_threadpool_max_threads, "0");
 // The queue size for pk index parallel get threadpool in shared-data mode.
 CONF_mInt32(pk_index_parallel_execution_threadpool_size, "1048576");
+// Skip the parallel two-phase prefetch in LakePersistentIndex::load_dels when the update
+// mem tracker is already past this percent (0-100) of its limit. In that regime the function
+// falls back to a single-pass loop that holds only one decoded del-file column at a time,
+// trading the cold-start latency win for bounded peak memory.
+CONF_mInt32(pk_index_parallel_load_dels_mem_ratio, "50");
 // Memtable flush threadpool max thread num for pk index in shared-data mode.
 CONF_mInt32(pk_index_memtable_flush_threadpool_max_threads, "0");
 // The queue size for pk index memtable flush threadpool in shared-data mode.
@@ -1017,7 +1022,7 @@ CONF_mInt64(pipeline_rf_worker_timeout_guard_ms, "-1");
 CONF_mInt64(pipeline_datastream_timeout_guard_ms, "-1");
 
 // whether to enable large column detection in the pipeline execution framework.
-CONF_mBool(pipeline_enable_large_column_checker, "false");
+CONF_mBool(pipeline_enable_large_column_checker, "true");
 
 // The number of scan threads pipeline engine.
 CONF_Int64(pipeline_scan_thread_pool_thread_num, "0");
@@ -1046,6 +1051,9 @@ CONF_Int64(pipeline_sink_brpc_dop, "64");
 CONF_Int64(pipeline_max_num_drivers_per_exec_thread, "10240");
 CONF_mBool(pipeline_print_profile, "false");
 CONF_mBool(pipeline_timeout_diagnostic, "false");
+// BE-wide kill switch for the pipeline event scheduler. When false, the event scheduler is
+// disabled even if the session variable `enable_pipeline_event_scheduler` is true.
+CONF_mBool(enable_pipeline_event_scheduler, "true");
 // If this value is greater than 0 and the query time exceeds the timeout, then execute gcore on the process.
 CONF_Int64(pipeline_gcore_timeout_threshold_sec, "-1");
 CONF_String(pipeline_gcore_output_dir, "${STARROCKS_HOME}/log");
@@ -1359,6 +1367,12 @@ CONF_mBool(lake_clear_corrupted_cache_data, "false");
 // The maximum number of files which need to rebuilt in cloud native pk index.
 // If files which need to rebuilt larger than this, we will flush memtable immediately.
 CONF_mInt32(cloud_native_pk_index_rebuild_files_threshold, "50");
+// Batch row count for PrimaryKeyCompactionConflictResolver::execute() — multiple per-chunk
+// `params.index->replace()` calls are accumulated into one call across this many rows. Each
+// replace() in LakePersistentIndex runs a memtable flush check + lock round-trip; batching N
+// chunks amortises that work by ~N×. Setting this <= vector_chunk_size (4096) effectively
+// disables batching. 32 K rows ≈ 8 chunks ≈ ~1.6 MB of accumulated PK bytes.
+CONF_mInt32(primary_key_compaction_replace_batch_rows, "32768");
 // The maximum number of rows which need to be rebuilt in cloud native pk index.
 // If rows which need to be rebuilt exceed this threshold, we will flush memtable immediately
 // to reduce index rebuild cost. 0 means disabled.
@@ -1824,7 +1838,6 @@ CONF_Bool(report_python_worker_error, "true");
 CONF_Bool(python_worker_reuse, "true");
 CONF_Int32(python_worker_expire_time_sec, "300");
 CONF_mBool(enable_pk_strict_memcheck, "true");
-CONF_mBool(skip_pk_preload, "true");
 // Reduce core file size by not dumping jemalloc retain pages
 CONF_mBool(enable_core_file_size_optimization, "true");
 // Current supported modules:
@@ -1862,6 +1875,25 @@ CONF_mInt32(config_vector_index_default_build_threshold, "10000");
 // budget of 2 is enforced, so on small-core machines or with small ratios the effective
 // value may exceed nproc * this value.
 CONF_mDouble(vector_index_build_max_cpu_ratio, "0.5");
+
+// Per-segment adaptive ef_search for HNSW vector queries.
+// Compensates for recall degradation on larger segments (e.g. after compaction
+// merges many small segments into one large segment).
+//
+// Formula:
+//   ef_effective = max(user_ef, query_k) * min(1 + alpha * log2(rows/baseline), cap)
+CONF_mBool(enable_vector_adaptive_search, "true");
+CONF_mDouble(vector_adaptive_ef_alpha, "1.0");
+CONF_mDouble(vector_adaptive_ef_cap, "8.0");
+CONF_mInt64(vector_adaptive_ef_baseline_rows, "300000");
+
+// Per-builder in-memory row buffer cap before tenann does an intermediate
+// add into the faiss in-memory index. Bounds peak memory during HNSWFlat
+// build by capping data_buffer_ at |rows| × dim × 4 bytes (does NOT cap
+// the trained index storage itself, only the staging buffer).
+// 256K rows ≈ 128 MiB at dim=128. Lower this if BE memory is tight.
+// Set to 0 to disable intermediate flushing (whole tablet buffered in RAM).
+CONF_mInt64(vector_index_build_flush_threshold_rows, "262144");
 
 // When upgrade thrift to 0.20.0, the MaxMessageSize member defines the maximum size of a (received) message, in bytes.
 // The default value is represented by a constant named DEFAULT_MAX_MESSAGE_SIZE, whose value is 100 * 1024 * 1024 bytes.

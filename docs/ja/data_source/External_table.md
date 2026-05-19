@@ -134,7 +134,7 @@ PROPERTIES (
 
 * `password`: ターゲットデータベースに接続するために使用されるパスワード。
 
-* `jdbc_uri`: JDBCドライバがターゲットデータベースに接続するために使用するURI。URIの形式はデータベースURIの構文を満たす必要があります。一般的なデータベースのURI構文については、[Oracle](https://docs.oracle.com/en/database/oracle/oracle-database/21/jjdbc/data-sources-and-URLs.html#GUID-6D8EFA50-AB0F-4A2B-88A0-45B4A67C361E)、[PostgreSQL](https://jdbc.postgresql.org/documentation/head/connect.html)、[SQL Server](https://docs.microsoft.com/en-us/sql/connect/jdbc/building-the-connection-url?view=sql-server-ver16) の公式ウェブサイトを参照してください。
+* `jdbc_uri`: JDBCドライバがターゲットデータベースに接続するために使用するURI。URIの形式はデータベースURIの構文を満たす必要があります。一般的なデータベースのURI構文については、[Oracle](https://docs.oracle.com/en/database/oracle/oracle-database/21/jjdbc/data-sources-and-URLs.html#GUID-6D8EFA50-AB0F-4A2B-88A0-45B4A67C361E)、[PostgreSQL](https://jdbc.postgresql.org/documentation/head/connect.html)、[SQL Server](https://learn.microsoft.com/en-us/sql/connect/jdbc/building-the-connection-url?view=sql-server-ver16) の公式ウェブサイトを参照してください。
 
 > 注：URIにはターゲットデータベースの名前を含める必要があります。前述のコード例では、`jdbc_test` は接続したいターゲットデータベースの名前です。
 
@@ -340,7 +340,7 @@ PROPERTIES (
 | **パラメータ**        | **必須** | **デフォルト値** | **説明**                                              |
 | -------------------- | ------------ | ----------------- | ------------------------------------------------------------ |
 | hosts                | Yes          | None              | Elasticsearchクラスターの接続アドレス。1つ以上のアドレスを指定できます。StarRocksは、このアドレスからElasticsearchのバージョンとインデックスシャードの割り当てを解析します。StarRocksは、`GET /_nodes/http` API操作によって返されるアドレスに基づいて、Elasticsearchクラスターと通信します。したがって、`host` パラメータの値は、`GET /_nodes/http` API操作によって返されるアドレスと同じでなければなりません。そうでない場合、BEsはElasticsearchクラスターと通信できない可能性があります。 |
-| index                | Yes          | None              | StarRocksに作成されたテーブルに対して作成されたElasticsearchインデックスの名前。名前はエイリアスにすることができます。このパラメータはワイルドカード（\*）をサポートしています。たとえば、`index` を <code class="language-text">hello*</code> に設定すると、StarRocksは名前が `hello` で始まるすべてのインデックスを取得します。 |
+| index                | Yes          | None              | StarRocksに作成されたテーブルに対して作成されたElasticsearchインデックスの名前。名前はエイリアスにすることができます。このパラメータはワイルドカード（`*`）をサポートしています。たとえば、`index` を `hello*` に設定すると、StarRocksは名前が `hello` で始まるすべてのインデックスを取得します。 |
 | user                 | No           | Empty             | 基本認証が有効なElasticsearchクラスターにログインするために使用されるユーザー名。`/*cluster/state/*nodes/http` とインデックスにアクセスできることを確認してください。 |
 | password             | No           | Empty             | Elasticsearchクラスターにログインするために使用されるパスワード。 |
 | type                 | No           | `_doc`            | インデックスのタイプ。デフォルト値：`_doc`。Elasticsearch 8以降のバージョンでデータをクエリする場合、このパラメータを設定する必要はありません。Elasticsearch 8以降のバージョンでは、マッピングタイプが削除されています。 |
@@ -658,16 +658,16 @@ PROPERTIES (
 
     |  Hiveの列タイプ   |  StarRocksの列タイプ   | 説明 |
     | --- | --- | ---|
-    |   INT/INTEGER  | INT    |
-    |   BIGINT  | BIGINT    |
+    |   INT/INTEGER  | INT    ||
+    |   BIGINT  | BIGINT    ||
     |   TIMESTAMP  | DATETIME    | TIMESTAMPデータをDATETIMEデータに変換する際、精度とタイムゾーン情報が失われます。セッション変数のタイムゾーンに基づいて、タイムゾーンオフセットのないDATETIMEデータに変換する必要があります。 |
-    |  STRING  | VARCHAR   |
-    |  VARCHAR  | VARCHAR   |
-    |  CHAR  | CHAR   |
-    |  DOUBLE | DOUBLE |
-    | FLOAT | FLOAT|
-    | DECIMAL | DECIMAL|
-    | ARRAY | ARRAY |
+    |  STRING  | VARCHAR   ||
+    |  VARCHAR  | VARCHAR   ||
+    |  CHAR  | CHAR   ||
+    |  DOUBLE | DOUBLE ||
+    | FLOAT | FLOAT||
+    | DECIMAL | DECIMAL||
+    | ARRAY | ARRAY ||
 
 > 注：
 >

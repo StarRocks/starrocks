@@ -24,9 +24,87 @@ jobs:
       CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
     if: >
       github.event.action == 'opened' &&
-      !startsWith(github.head_ref, 'mergify/')
+      !startsWith(github.head_ref, 'mergify/') &&
+      !contains(github.head_ref, '-sync-pr-')
     steps:
+      - name: Compute skip rule
+        id: gate
+        env:
+          PR: ${{ github.event.number }}
+          REPO: ${{ github.repository }}
+          TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          set -x
+          # Skip AI reviewer assignment for small/test-only PRs to reduce noise.
+          # Adjust BUGFIX_LINE_THRESHOLD as needed (non-test add+del lines).
+          BUGFIX_LINE_THRESHOLD=30
+          TEST_PATTERN='(Test\.(java|kt)$|_test\.(cpp|cc|h)$|/test/|^test/|^fe-test/|^regression-test/|/__test__/)'
+
+          skip=false
+          reason=""
+
+          # Rule 1: [UT] / [Doc] title prefix
+          if echo "$TITLE" | grep -qE '^\[(UT|Doc)\]'; then
+            skip=true
+            reason="title prefix [UT] or [Doc]"
+          fi
+
+          # Rule 2: all changed files match test pattern
+          if [ "$skip" = "false" ]; then
+            files=$(gh pr diff "$PR" -R "$REPO" --name-only 2>/dev/null || true)
+            total=$(echo "$files" | grep -cv '^$' || true)
+            non_test=$(echo "$files" | grep -v '^$' | grep -cvE "$TEST_PATTERN" || true)
+            if [ "$total" -gt 0 ] && [ "$non_test" -eq 0 ]; then
+              skip=true
+              reason="all $total changed files are tests"
+            fi
+          fi
+
+          # Rule 3: [BugFix] with non-test add+del < threshold
+          # NOTE: jq's regex needs \\. for a literal dot (the pattern must match TEST_PATTERN above).
+          if [ "$skip" = "false" ] && echo "$TITLE" | grep -qE '^\[BugFix\]'; then
+            non_test_lines=$(gh pr view "$PR" -R "$REPO" --json files --jq '
+              [.files[]
+               | select(.path | test("(Test\\.(java|kt)$|_test\\.(cpp|cc|h)$|/test/|^test/|^fe-test/|^regression-test/|/__test__/)") | not)
+               | (.additions + .deletions)]
+              | add // 0
+            ' 2>/dev/null || echo 0)
+            if [ "${non_test_lines:-0}" -lt "$BUGFIX_LINE_THRESHOLD" ]; then
+              skip=true
+              reason="[BugFix] non-test lines=$non_test_lines < $BUGFIX_LINE_THRESHOLD"
+            fi
+          fi
+
+          echo "skip=$skip"     >> "$GITHUB_OUTPUT"
+          echo "reason=$reason" >> "$GITHUB_OUTPUT"
+          echo "=== gate result: skip=$skip, reason='$reason' ==="
+
+      - name: Sync skills to latest
+        if: steps.gate.outputs.skip != 'true'
+        run: |
+          set -e
+          SKILL_REPO="$HOME/starrocks-skills"
+          SKILL_DEST="$HOME/.claude/skills"
+
+          if [ -d "$SKILL_REPO/.git" ]; then
+            cd "$SKILL_REPO" && git pull --ff-only --quiet \
+              || echo "WARN: git pull failed, using current checkout"
+          else
+            echo "WARN: $SKILL_REPO is not a git checkout, skip pull"
+          fi
+
+          mkdir -p "$SKILL_DEST"
+          for skill_dir in "$SKILL_REPO"/*/; do
+            [ -d "$skill_dir" ] || continue
+            name=$(basename "$skill_dir")
+            rsync -a --delete "$skill_dir" "$SKILL_DEST/$name/"
+          done
+
+          echo "Skills synced to $SKILL_DEST:"
+          ls -1 "$SKILL_DEST"
+
       - name: Assign PR Reviewer
+        if: steps.gate.outputs.skip != 'true'
         run: |
           echo "=== DEBUG ==="
           echo "PR: ${{ github.event.number }}"
@@ -36,8 +114,66 @@ jobs:
           echo "CLAUDE_CODE_OAUTH_TOKEN length: ${#CLAUDE_CODE_OAUTH_TOKEN}"
           echo "GITHUB_TOKEN length: ${#GITHUB_TOKEN}"
           echo "=== RUN ==="
+          # tee captures the skill's stdout for the Notify Slack step to parse
           docker exec -i -u claudeuser \
             -e GITHUB_TOKEN="${GITHUB_TOKEN}" \
             -e CLAUDE_CODE_OAUTH_TOKEN="${CLAUDE_CODE_OAUTH_TOKEN}" \
             claude-cli claude --dangerously-skip-permissions \
-            -p "/starrocks-assign-pr-reviewer https://github.com/${{ github.repository }}/pull/${{ github.event.number }}" || true
+            -p "/starrocks-assign-pr-reviewer https://github.com/${{ github.repository }}/pull/${{ github.event.number }}" \
+            2>&1 | tee "${RUNNER_TEMP}/ai_output.txt" || true
+
+      - name: Notify Slack
+        if: steps.gate.outputs.skip != 'true'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
+          PR: ${{ github.event.number }}
+          REPO: ${{ github.repository }}
+          TITLE: ${{ github.event.pull_request.title }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          CHANNEL_ID: C0B4GU36HJN
+        run: |
+          set -e
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool
+          cd ci-tool && git pull
+
+          # Parse the primary reviewer from the skill's output.
+          # The skill prints: "Recommended reviewer: <login>"
+          # (see starrocks-skills/starrocks-assign-pr-reviewer/SKILL.md "Output Template").
+          # The LLM often wraps the line/value in markdown bold or italics
+          # (e.g. **Recommended reviewer: kevincai**, Recommended reviewer: **kevincai**).
+          # Tolerate optional leading *, then extract only valid GitHub login chars
+          # ([A-Za-z0-9-]) to drop @, **, backticks, etc.
+          ai_output="${RUNNER_TEMP}/ai_output.txt"
+          reviewers=""
+          if [ -f "$ai_output" ]; then
+            reviewers=$(grep -iE '^\**Recommended reviewer:' "$ai_output" | tail -1 \
+              | sed -E 's/^\**[Rr]ecommended reviewer:\**[[:space:]]*//' \
+              | grep -oE '[A-Za-z0-9][A-Za-z0-9-]*' | head -1 || true)
+          fi
+
+          if [ -z "$reviewers" ]; then
+            echo "Could not extract AI-assigned reviewers from output, skip Slack notification"
+            exit 0
+          fi
+          echo "AI assigned: $(echo "$reviewers" | tr '\n' ' ')"
+
+          # GitHub login -> Slack ID; unmapped users fall back to plain @login
+          mentions=""
+          while IFS= read -r login; do
+            [ -z "$login" ] && continue
+            slack_id=$(jq -r --arg k "$login" '.[$k] // empty' conf/member_slack.json)
+            if [ -n "$slack_id" ]; then
+              mentions="${mentions}<@${slack_id}> "
+            else
+              mentions="${mentions}@${login} "
+            fi
+          done <<< "$reviewers"
+
+          text="${mentions}You were assigned as reviewer for <${PR_URL}|#${PR} ${TITLE}>"
+
+          python3 lib/slack_notify.py \
+            --mode channel \
+            --token "$SLACK_BOT_TOKEN" \
+            --channel "$CHANNEL_ID" \
+            --text "$text"

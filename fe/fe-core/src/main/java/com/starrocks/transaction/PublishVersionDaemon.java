@@ -104,6 +104,8 @@ public class PublishVersionDaemon extends LeaderDaemon {
     // each thread under the default configurations
     private static final int PUBLISH_MAX_QUEUE_SIZE = 4096;
 
+    private static final long SLOW_PUBLISH_PARTITION_LOG_THRESHOLD_MS = 3000;
+
     // for shared-data, task executor thread will be responsible for sending publish tasks to BE
     // and modify transaction state on FE
     // for shared-nothing, task executor thread will be responsible for checking publish task
@@ -707,7 +709,11 @@ public class PublishVersionDaemon extends LeaderDaemon {
                             compactionScores, nodeToTablets, computeResource, null, vectorIndexBuildInfos);
                 }
 
-                VectorIndexBuildScheduler.onPublishComplete(vectorIndexBuildInfos);
+                // Mixed batches (rare) fall back to false so the load-tail delay protects
+                // against wasted builds.
+                boolean allFromCompaction = !transactionStates.isEmpty() &&
+                        transactionStates.stream().allMatch(TransactionState::isFromLakeCompaction);
+                VectorIndexBuildScheduler.onPublishComplete(vectorIndexBuildInfos, allFromCompaction);
                 Quantiles quantiles = Quantiles.compute(compactionScores.values());
                 stateBatch.setCompactionScore(tableId, partitionId, quantiles);
                 stateBatch.putBeTablets(partitionId, nodeToTablets);
@@ -1016,8 +1022,11 @@ public class PublishVersionDaemon extends LeaderDaemon {
             return CompletableFuture.completedFuture(false);
         }
 
+        long submitTimeMs = System.currentTimeMillis();
         return CompletableFuture.supplyAsync(() -> {
-            boolean success = publishPartition(db, tableCommitInfo, partitionCommitInfo, txnState);
+            long lambdaEntryMs = System.currentTimeMillis();
+            boolean success = publishPartition(db, tableCommitInfo, partitionCommitInfo, txnState,
+                    submitTimeMs, lambdaEntryMs);
             partitionCommitInfo.setVersionTime(success ? System.currentTimeMillis() : -System.currentTimeMillis());
             return success;
         }, getTaskExecutor()).exceptionally(ex -> {
@@ -1029,7 +1038,8 @@ public class PublishVersionDaemon extends LeaderDaemon {
 
     private boolean publishPartition(@NotNull Database db, @NotNull TableCommitInfo tableCommitInfo,
                                      @NotNull PartitionCommitInfo partitionCommitInfo,
-                                     @NotNull TransactionState txnState) {
+                                     @NotNull TransactionState txnState,
+                                     long submitTimeMs, long lambdaEntryMs) {
         long tableId = tableCommitInfo.getTableId();
         long baseVersion = 0;
         long txnVersion = partitionCommitInfo.getVersion();
@@ -1042,6 +1052,7 @@ public class PublishVersionDaemon extends LeaderDaemon {
 
         Locker locker = new Locker();
         locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(tableId), LockType.READ);
+        long lockAcquiredMs = System.currentTimeMillis();
         boolean useAggregatePublish = Config.enable_file_bundling;
         try {
             OlapTable table =
@@ -1082,6 +1093,7 @@ public class PublishVersionDaemon extends LeaderDaemon {
         }
 
         TxnInfoPB txnInfo = TxnInfoHelper.fromTransactionState(txnState);
+        long rpcStartMs = System.currentTimeMillis();
         try {
             if (CollectionUtils.isNotEmpty(shadowTablets)) {
                 Utils.publishLogVersion(shadowTablets, txnInfo, txnVersion, computeResource);
@@ -1094,7 +1106,7 @@ public class PublishVersionDaemon extends LeaderDaemon {
                 Utils.publishVersion(normalTablets, txnInfo, baseVersion, txnVersion, compactionScores,
                         computeResource, tabletRowNums, useAggregatePublish, vectorIndexBuildInfos);
 
-                VectorIndexBuildScheduler.onPublishComplete(vectorIndexBuildInfos);
+                VectorIndexBuildScheduler.onPublishComplete(vectorIndexBuildInfos, txnState.isFromLakeCompaction());
                 Quantiles quantiles = Quantiles.compute(compactionScores.values());
                 partitionCommitInfo.setCompactionScore(quantiles);
                 if (!tabletRowNums.isEmpty()) {
@@ -1114,7 +1126,37 @@ public class PublishVersionDaemon extends LeaderDaemon {
             LOG.error("Fail to publish partition {} of txn {}: {}", partitionCommitInfo.getPhysicalPartitionId(),
                     txnId, e.getMessage());
             return false;
+        } finally {
+            maybeLogSlowPublishPartition(txnId, partitionCommitInfo.getPhysicalPartitionId(), tableId,
+                    submitTimeMs, lambdaEntryMs, lockAcquiredMs, rpcStartMs, System.currentTimeMillis());
         }
+    }
+
+    // Per-partition publishPartition phase breakdown for slow outliers.
+    // total = executor_queue + db_lock_wait + fe_prep + rpc, where:
+    //   executor_queue = CompletableFuture submit -> lambda entry
+    //                    (publish-executor scheduling delay / queue depth)
+    //   db_lock_wait   = lambda entry -> lockTablesWithIntensiveDbLock acquired
+    //   fe_prep        = lock acquired -> first BRPC issued
+    //                    (OlapTable lookup, shadow tablet collection, txnInfo build)
+    //   rpc            = publishLogVersion + publishLakePartition BRPC round-trip
+    // Complementary to the txn-level summary in TransactionState.toString:
+    // that one is wall-clock across all partitions running in parallel;
+    // this is per-partition and only fires when one partition crosses
+    // the threshold, so it can attribute which partition / which phase
+    // dominated when the txn-level "publish rpc cost" is large.
+    static void maybeLogSlowPublishPartition(long txnId, long partitionId, long tableId,
+                                             long submitTimeMs, long lambdaEntryMs, long lockAcquiredMs,
+                                             long rpcStartMs, long rpcEndMs) {
+        long totalMs = rpcEndMs - submitTimeMs;
+        if (totalMs < SLOW_PUBLISH_PARTITION_LOG_THRESHOLD_MS) {
+            return;
+        }
+        LOG.warn("Slow publishPartition: txn={} partition={} table={}, total={}ms " +
+                        "(executor_queue={}ms + db_lock_wait={}ms + fe_prep={}ms + rpc={}ms)",
+                txnId, partitionId, tableId,
+                totalMs, lambdaEntryMs - submitTimeMs,
+                lockAcquiredMs - lambdaEntryMs, rpcStartMs - lockAcquiredMs, rpcEndMs - rpcStartMs);
     }
 
     /**

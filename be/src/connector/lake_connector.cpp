@@ -19,6 +19,7 @@
 #include "base/string/string_parser.hpp"
 #include "base/testutil/sync_point.h"
 #include "column/chunk.h"
+#include "column/chunk_factory.h"
 #include "column/column_access_path.h"
 #include "column/column_helper.h"
 #include "common/config_lake_fwd.h"
@@ -31,13 +32,17 @@
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/query_context.h"
 #include "exec/pipeline/scan/glm_manager.h"
+#include "exec/pipeline/scan/scan_morsel.h"
+#include "exec/pipeline/scan/split_scan_morsel.h"
 #include "exec/query_scan_metrics.h"
 #include "exprs/chunk_predicate_evaluator.h"
+#include "exprs/column_access_path_resolver.h"
 #include "exprs/expr_executor.h"
 #include "exprs/expr_factory.h"
 #include "exprs/jsonpath.h"
 #include "fs/fs.h"
 #include "fs/key_cache.h"
+#include "runtime/checked_chunk_factory.h"
 #include "runtime/current_thread.h"
 #include "runtime/global_dict/fragment_dict_state.h"
 #include "runtime/global_dict/parser.h"
@@ -108,8 +113,9 @@ Status LakeDataSource::open(RuntimeState* state) {
 
     // init column access paths
     if (thrift_lake_scan_node.__isset.column_access_paths) {
+        auto path_resolver = make_column_access_path_resolver(state, state->obj_pool());
         for (int i = 0; i < thrift_lake_scan_node.column_access_paths.size(); ++i) {
-            auto st = ColumnAccessPath::create(thrift_lake_scan_node.column_access_paths[i], state, state->obj_pool());
+            auto st = ColumnAccessPath::create(thrift_lake_scan_node.column_access_paths[i], path_resolver);
             if (LIKELY(st.ok())) {
                 _column_access_paths.emplace_back(std::move(st.value()));
             } else {
@@ -179,8 +185,8 @@ void LakeDataSource::close(RuntimeState* state) {
 }
 
 Status LakeDataSource::get_next(RuntimeState* state, ChunkPtr* chunk) {
-    ASSIGN_OR_RETURN(auto chunk_ptr,
-                     ChunkHelper::new_chunk_pooled_checked(_prj_iter->output_schema(), _runtime_state->chunk_size()));
+    ASSIGN_OR_RETURN(auto chunk_ptr, CheckedChunkFactory::new_chunk_pooled_checked(_prj_iter->output_schema(),
+                                                                                   _runtime_state->chunk_size()));
     chunk->reset(chunk_ptr);
 
     do {

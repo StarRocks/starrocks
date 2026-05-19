@@ -27,7 +27,7 @@ import com.starrocks.catalog.TableName;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.MaterializedViewExceptions;
-import com.starrocks.common.util.FrontendDaemon;
+import com.starrocks.common.util.LeaderDaemon;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
@@ -46,7 +46,7 @@ import java.util.Set;
 /**
  * A daemon thread that check the MV active status, try to activate the MV it's inactive.
  */
-public class MVActiveChecker extends FrontendDaemon {
+public class MVActiveChecker extends LeaderDaemon {
 
     private static final Logger LOG = LogManager.getLogger(MVActiveChecker.class);
 
@@ -54,6 +54,14 @@ public class MVActiveChecker extends FrontendDaemon {
 
     public MVActiveChecker() {
         super("mv-active-checker", Config.mv_active_checker_interval_seconds * 1000);
+    }
+
+    @Override
+    protected void onStopped() {
+        // MV_ACTIVE_INFO holds per-MV failure backoff state used only by the leader's activation
+        // loop. Drop it on demotion so the next leader (or this FE on re-election) starts fresh
+        // rather than honoring backoff windows accumulated under the previous leader session.
+        MV_ACTIVE_INFO.clear();
     }
 
     public static final String MV_BACKUP_INACTIVE_REASON = "it's in backup and will be activated after restore if possible";
@@ -67,7 +75,7 @@ public class MVActiveChecker extends FrontendDaemon {
     );
 
     @Override
-    protected void runAfterCatalogReady() {
+    protected void runAfterLeaseValid() {
         // reset if the interval has been changed
         setInterval(Config.mv_active_checker_interval_seconds * 1000L);
 

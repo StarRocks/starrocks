@@ -14,9 +14,14 @@
 
 #include "storage/index/vector/vector_index_writer.h"
 
+#include <cmath>
+
+#include "column/nullable_column.h"
+#include "column/raw_data_visitor.h"
 #include "common/config_vector_index_fwd.h"
 #include "common/runtime_profile.h"
 #include "fs/fs_util.h"
+#include "gutil/strings/substitute.h"
 #include "storage/index/index_descriptor.h"
 #include "storage/index/vector/vector_index_file_writer.h"
 
@@ -69,6 +74,11 @@ Status VectorIndexWriter::init() {
 }
 
 Status VectorIndexWriter::append(const Column& src) {
+    DCHECK(src.is_array());
+
+    // Input validation is performed by ArrayColumnWriter::append before this
+    // method is reached, so the writer trusts the data and skips re-checking.
+
     int64_t duration = 0;
     {
         SCOPED_RAW_TIMER(&duration);
@@ -167,6 +177,58 @@ Status VectorIndexWriter::_prepare_index_builder() {
 Status VectorIndexWriter::_append_data(const Column& src, size_t offset) {
     DCHECK(src.is_array());
     RETURN_IF_ERROR(_index_builder->add(src, offset));
+    return Status::OK();
+}
+
+// Mirrors the original valid_input_vector<is_input_normalized> in
+// tenann_index_builder.cpp byte-for-byte; the only structural change is that
+// the compile-time template parameter becomes a runtime argument. Behavior
+// parity is intentional — this lifts the same validation up so it runs from
+// every caller (writer below threshold, async build task) instead of only
+// when TenAnnIndexBuilderProxy::add is reached.
+Status validate_vector_index_input(const ArrayColumn& array_col, size_t dim, bool is_input_normalized) {
+    if (array_col.empty()) {
+        return Status::OK();
+    }
+
+    const size_t num_rows = array_col.size();
+    const auto& offsets = array_col.offsets().immutable_data();
+    RawDataVisitor rv;
+    RETURN_IF_ERROR(array_col.elements().accept(&rv));
+    const auto* nums = reinterpret_cast<const float*>(rv.result());
+
+    // Element column is nullable for vector-indexed array columns; the null
+    // mask is only consumed when normalization is checked, but we extract it
+    // unconditionally to mirror the original control flow.
+    const auto& nullable_elements = down_cast<const NullableColumn&>(array_col.elements());
+    const uint8_t* is_element_nulls = nullable_elements.null_column_ref().raw_data();
+
+    for (size_t i = 0; i < num_rows; i++) {
+        const size_t input_dim = offsets[i + 1] - offsets[i];
+
+        if (input_dim != dim) {
+            return Status::InvalidArgument(
+                    strings::Substitute("The dimensions of the vector written are inconsistent, index dim is "
+                                        "$0 but data dim is $1",
+                                        dim, input_dim));
+        }
+
+        if (is_input_normalized) {
+            double sum = 0;
+            for (size_t j = 0; j < input_dim; j++) {
+                const size_t offset = offsets[i] + j;
+                if (!is_element_nulls[offset]) {
+                    sum += nums[offset] * nums[offset];
+                }
+            }
+            if (std::abs(sum - 1) > 1e-3) {
+                return Status::InvalidArgument(
+                        "The input vector is not normalized but `metric_type` is cosine_similarity and "
+                        "`is_vector_normed` is true");
+            }
+        }
+    }
+
     return Status::OK();
 }
 

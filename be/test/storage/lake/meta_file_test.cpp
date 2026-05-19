@@ -22,7 +22,7 @@
 #include "base/testutil/assert.h"
 #include "base/testutil/id_generator.h"
 #include "base/uid_util.h"
-#include "common/config.h"
+#include "common/config_lake_fwd.h"
 #include "fs/fs.h"
 #include "fs/fs_util.h"
 #include "fs/key_cache.h"

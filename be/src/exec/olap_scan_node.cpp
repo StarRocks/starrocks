@@ -22,6 +22,7 @@
 
 #include "base/utility/defer_op.h"
 #include "column/chunk.h"
+#include "column/chunk_factory.h"
 #include "column/column.h"
 #include "column/column_access_path.h"
 #include "column/column_helper.h"
@@ -35,8 +36,11 @@
 #include "exec/pipeline/noop_sink_operator.h"
 #include "exec/pipeline/pipeline_builder.h"
 #include "exec/pipeline/scan/chunk_buffer_limiter.h"
+#include "exec/pipeline/scan/morsel.h"
 #include "exec/pipeline/scan/olap_scan_operator.h"
 #include "exec/pipeline/scan/olap_scan_prepare_operator.h"
+#include "exec/pipeline/scan/scan_morsel.h"
+#include "exprs/column_access_path_resolver.h"
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
 #include "exprs/expr_executor.h"
@@ -113,8 +117,9 @@ Status OlapScanNode::init(const TPlanNode& tnode, RuntimeState* state) {
     }
 
     if (_olap_scan_node.__isset.column_access_paths) {
+        auto path_resolver = make_column_access_path_resolver(state, _pool);
         for (int i = 0; i < _olap_scan_node.column_access_paths.size(); ++i) {
-            auto st = ColumnAccessPath::create(_olap_scan_node.column_access_paths[i], state, _pool);
+            auto st = ColumnAccessPath::create(_olap_scan_node.column_access_paths[i], path_resolver);
             if (LIKELY(st.ok())) {
                 _column_access_paths.emplace_back(std::move(st.value()));
             } else {
@@ -308,7 +313,7 @@ OlapScanNode::~OlapScanNode() {
 void OlapScanNode::_fill_chunk_pool(int count) {
     const size_t capacity = runtime_state()->chunk_size();
     for (int i = 0; i < count; i++) {
-        ChunkPtr chunk(ChunkHelper::new_chunk_pooled(*_chunk_schema, capacity));
+        ChunkPtr chunk(ChunkFactory::new_chunk_pooled(*_chunk_schema, capacity));
         {
             std::lock_guard<std::mutex> l(_mtx);
             _chunk_pool.push(std::move(chunk));

@@ -305,6 +305,12 @@ public class HiveConnectorScanRangeSource extends ConnectorScanRangeSource {
             PartitionAttachment attachment = (PartitionAttachment) remoteFileInfo.getAttachment();
             TScanRangeLocations scanRangeLocations = new TScanRangeLocations();
 
+            SessionVariable sv = SessionVariable.DEFAULT_SESSION_VARIABLE;
+            ConnectContext connectContext = ConnectContext.get();
+            if (connectContext != null) {
+                sv = connectContext.getSessionVariable();
+            }
+
             THdfsScanRange hdfsScanRange = new THdfsScanRange();
             hdfsScanRange.setRelative_path(fileDesc.getFileName());
             hdfsScanRange.setOffset(offset);
@@ -317,6 +323,10 @@ public class HiveConnectorScanRangeSource extends ConnectorScanRangeSource {
             hdfsScanRange.setFile_format(fileFormat.toThrift());
             if (fileFormat.isTextFormat()) {
                 hdfsScanRange.setText_file_desc(fileDesc.getTextFileFormatDesc().toThrift());
+            }
+
+            if (fileFormat == RemoteFileInputFormat.AVRO) {
+                hdfsScanRange.setUse_avro_jni_reader(sv.getAvroUseJNIReader());
             }
 
             if (attachment.dataCacheOptions != null) {

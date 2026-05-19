@@ -21,6 +21,7 @@
 #include "base/testutil/sync_point.h"
 #include "base/utility/defer_op.h"
 #include "column/chunk.h"
+#include "column/chunk_factory.h"
 #include "column/datum_convert.h"
 #include "column/datum_tuple.h"
 #include "column/fixed_length_column.h"
@@ -156,7 +157,7 @@ public:
         auto reader = std::make_shared<TabletReader>(_tablet_mgr.get(), metadata, *_schema);
         CHECK_OK(reader->prepare());
         CHECK_OK(reader->open(TabletReaderParams()));
-        auto chunk = ChunkHelper::new_chunk(*_schema, 128);
+        auto chunk = ChunkFactory::new_chunk(*_schema, 128);
         int64_t ret = 0;
         while (true) {
             auto st = reader->get_next(chunk.get());
@@ -407,10 +408,6 @@ TEST_P(LakePartialUpdateTest, test_dcg_then_row_mode_with_default_and_expr_overr
 }
 
 TEST_P(LakePartialUpdateTest, test_partial_update_with_condition) {
-    if (GetParam().partial_update_mode == PartialUpdateMode::COLUMN_UPDATE_MODE) {
-        return;
-    }
-
     auto chunk0 = generate_data(kChunkSize, 0, false, 3);
     std::vector<Chunk> chunks(3);
     chunks[0] = generate_data(kChunkSize, 0, true, 2);
@@ -481,6 +478,63 @@ TEST_P(LakePartialUpdateTest, test_partial_update_with_condition) {
     if (GetParam().enable_persistent_index && GetParam().persistent_index_type == PersistentIndexTypePB::LOCAL) {
         check_local_persistent_index_meta(tablet_id, version);
     }
+}
+
+// Validates that column-mode partial update rejects a merge_condition when the condition column
+// is not part of the partial update column set — the handler cannot read the new condition value
+// otherwise and must refuse rather than silently producing wrong results.
+TEST_P(LakePartialUpdateTest, test_column_mode_condition_missing_column_rejected) {
+    if (GetParam().partial_update_mode != PartialUpdateMode::COLUMN_UPDATE_MODE) {
+        return;
+    }
+
+    auto chunk0 = generate_data(kChunkSize, 0, false, 3);
+    auto chunk1 = generate_data(kChunkSize, 0, true, 2);
+    auto indexes = std::vector<uint32_t>(kChunkSize);
+    for (int i = 0; i < kChunkSize; i++) {
+        indexes[i] = i;
+    }
+
+    auto version = 1;
+    auto tablet_id = _tablet_metadata->id();
+    // Baseline full write.
+    {
+        auto txn_id = next_id();
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+        ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
+        version++;
+    }
+
+    // Partial update set is (c0, c1), but merge_condition references c2 which is NOT in the set.
+    auto txn_id = next_id();
+    ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                               .set_tablet_manager(_tablet_mgr.get())
+                                               .set_tablet_id(tablet_id)
+                                               .set_txn_id(txn_id)
+                                               .set_partition_id(_partition_id)
+                                               .set_mem_tracker(_mem_tracker.get())
+                                               .set_schema_id(_tablet_schema->id())
+                                               .set_slot_descriptors(&_slot_pointers)
+                                               .set_partial_update_mode(PartialUpdateMode::COLUMN_UPDATE_MODE)
+                                               .set_merge_condition("c2")
+                                               .build());
+    ASSERT_OK(delta_writer->open());
+    ASSERT_OK(delta_writer->write(chunk1, indexes.data(), indexes.size()));
+    auto st = delta_writer->finish_with_txnlog().status();
+    ASSERT_FALSE(st.ok());
+    ASSERT_TRUE(st.is_not_supported()) << st;
+    delta_writer->close();
 }
 
 TEST_P(LakePartialUpdateTest, test_dcg_not_found_and_fallback_to_segment) {
@@ -1999,7 +2053,7 @@ public:
         auto reader = std::make_shared<TabletReader>(_tablet_mgr.get(), metadata, *schema);
         CHECK_OK(reader->prepare());
         CHECK_OK(reader->open(TabletReaderParams()));
-        auto chunk = ChunkHelper::new_chunk(*schema, 128);
+        auto chunk = ChunkFactory::new_chunk(*schema, 128);
         auto ret = int64_t{0};
         auto rowid = int64_t{0};
         while (true) {
@@ -2475,7 +2529,7 @@ TEST_F(LakeColumnUpsertModeTest, test_default_values_handling) {
     auto reader = std::make_shared<TabletReader>(_tablet_mgr.get(), metadata, *reader_schema);
     CHECK_OK(reader->prepare());
     CHECK_OK(reader->open(TabletReaderParams()));
-    auto result_chunk = ChunkHelper::new_chunk(*reader_schema, 128);
+    auto result_chunk = ChunkFactory::new_chunk(*reader_schema, 128);
 
     int total_rows = 0;
     bool found_default_values = false;
@@ -2920,7 +2974,7 @@ TEST_F(LakeColumnUpsertModeTest, test_auto_increment_column_handling) {
     auto reader = std::make_shared<TabletReader>(_tablet_mgr.get(), metadata, *reader_schema);
     CHECK_OK(reader->prepare());
     CHECK_OK(reader->open(TabletReaderParams()));
-    auto result_chunk = ChunkHelper::new_chunk(*reader_schema, 128);
+    auto result_chunk = ChunkFactory::new_chunk(*reader_schema, 128);
 
     int total_rows = 0;
     bool found_updated_rows = false;
@@ -3075,7 +3129,7 @@ TEST_F(LakeColumnUpsertModeTest, test_handle_delete_files) {
         auto reader = std::make_shared<TabletReader>(_tablet_mgr.get(), metadata, *_schema);
         ASSERT_OK(reader->prepare());
         ASSERT_OK(reader->open(TabletReaderParams()));
-        auto chk = ChunkHelper::new_chunk(*_schema, 256);
+        auto chk = ChunkFactory::new_chunk(*_schema, 256);
         std::vector<bool> seen(kChunkSize, false);
         while (true) {
             auto st = reader->get_next(chk.get());
@@ -3246,7 +3300,7 @@ TEST_F(LakeColumnUpsertModeTest, test_bundle_files_and_encryption_handling) {
     auto reader = std::make_shared<TabletReader>(_tablet_mgr.get(), metadata, *reader_schema);
     ASSERT_OK(reader->prepare());
     ASSERT_OK(reader->open(TabletReaderParams()));
-    auto result_chunk = ChunkHelper::new_chunk(*reader_schema, 128);
+    auto result_chunk = ChunkFactory::new_chunk(*reader_schema, 128);
 
     int total_rows = 0;
     bool found_new_rows = false;
@@ -3382,7 +3436,7 @@ TEST_F(LakeColumnUpsertModeTest, test_default_value_and_null_handling) {
     auto reader = std::make_shared<TabletReader>(_tablet_mgr.get(), metadata, *reader_schema);
     ASSERT_OK(reader->prepare());
     ASSERT_OK(reader->open(TabletReaderParams()));
-    auto result_chunk = ChunkHelper::new_chunk(*reader_schema, 128);
+    auto result_chunk = ChunkFactory::new_chunk(*reader_schema, 128);
 
     int total_rows = 0;
     bool found_correct_defaults = false;
@@ -3495,7 +3549,7 @@ TEST_F(LakeColumnUpsertModeTest, memory_optimization_skip_column_reading) {
         CHECK_OK(reader->prepare());
         CHECK_OK(reader->open(TabletReaderParams()));
 
-        auto chunk = ChunkHelper::new_chunk(*_schema, 128);
+        auto chunk = ChunkFactory::new_chunk(*_schema, 128);
         int total_rows = 0;
         int new_rows_found = 0;
 
@@ -3555,7 +3609,7 @@ TEST_F(LakeColumnUpsertModeTest, memory_optimization_skip_column_reading) {
     CHECK_OK(reader->prepare());
     CHECK_OK(reader->open(TabletReaderParams()));
 
-    auto chunk = ChunkHelper::new_chunk(*_schema, 128);
+    auto chunk = ChunkFactory::new_chunk(*_schema, 128);
     int total_rows = 0;
     int existing_rows_updated = 0;
     int new_rows_verified = 0;
@@ -3796,7 +3850,7 @@ TEST_F(LakeColumnUpsertModeTest, test_del_files_handling_in_column_upsert_mode) 
         ASSERT_OK(reader->prepare());
         ASSERT_OK(reader->open(TabletReaderParams()));
 
-        auto chk = ChunkHelper::new_chunk(*_schema, 256);
+        auto chk = ChunkFactory::new_chunk(*_schema, 256);
         std::set<int> found_keys;
         while (true) {
             auto st = reader->get_next(chk.get());

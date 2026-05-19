@@ -21,10 +21,10 @@
 #include <utility>
 
 #include "base/utility/arrow_utils.h"
+#include "column/arrow/arrow_to_starrocks_converter.h"
 #include "column/nullable_column.h"
 #include "common/compiler_util.h"
 #include "common/status.h"
-#include "exec/arrow_to_starrocks_converter.h"
 #include "exprs/function_helper.h"
 #include "gutil/casts.h"
 #include "util/arrow/row_batch.h"

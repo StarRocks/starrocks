@@ -27,6 +27,7 @@
 #include "column/column_helper.h"
 #include "common/config_cache_fwd.h"
 #include "common/config_exec_fwd.h"
+#include "exec/hdfs_scanner/hdfs_scanner_avro.h"
 #include "exec/hdfs_scanner/hdfs_scanner_orc.h"
 #include "exec/hdfs_scanner/hdfs_scanner_parquet.h"
 #include "exec/hdfs_scanner/hdfs_scanner_text.h"
@@ -265,6 +266,60 @@ TEST_F(HdfsScannerTest, TestParquetGetNext) {
     ASSERT_TRUE(status.is_end_of_file());
 
     scanner->close();
+}
+
+static SlotDesc avro_multiblock_descs[] = {{"id", TypeDescriptor::from_logical_type(LogicalType::TYPE_INT)}, {""}};
+
+std::string avro_multiblock_file = "./be/test/formats/test_data/avro/cpp/multiblock.avro";
+
+TEST_F(HdfsScannerTest, TestAvroGetNextWithDirectReader) {
+    auto scanner = std::make_shared<HdfsAvroScanner>();
+
+    auto* range = _create_scan_range(avro_multiblock_file, 0, 0);
+    auto* tuple_desc = _create_tuple_desc(avro_multiblock_descs);
+    auto* param = _create_param(avro_multiblock_file, range, tuple_desc);
+
+    Status status = scanner->init(_runtime_state, *param);
+    ASSERT_TRUE(status.ok()) << status.to_string();
+
+    status = scanner->open(_runtime_state);
+    ASSERT_TRUE(status.ok()) << status.to_string();
+
+    ChunkPtr chunk = ChunkHelper::new_chunk(*tuple_desc, 0);
+    status = scanner->get_next(_runtime_state, &chunk);
+    ASSERT_TRUE(status.ok()) << status.to_string();
+    ASSERT_EQ(100, chunk->num_rows());
+    ASSERT_EQ("[0]", chunk->debug_row(0));
+    ASSERT_EQ("[99]", chunk->debug_row(99));
+    ASSERT_EQ(100, scanner->raw_rows_read());
+    ASSERT_EQ(100, scanner->num_rows_read());
+
+    HdfsScanProfile profile;
+    profile.runtime_profile = _runtime_profile;
+    scanner->do_update_counter(&profile);
+    ASSERT_NE(nullptr, _runtime_profile->get_counter("DirectPathUsed"));
+    ASSERT_EQ(1, _runtime_profile->get_counter("DirectPathUsed")->value());
+    ASSERT_EQ(100, _runtime_profile->get_counter("DirectRowsDecoded")->value());
+    ASSERT_EQ(1, _runtime_profile->get_counter("DirectReadEntries")->value());
+    ASSERT_EQ(1, _runtime_profile->get_counter("DirectSkipEntries")->value());
+    ASSERT_EQ(1, _runtime_profile->get_counter("DirectFastSkipEntries")->value());
+
+    ChunkPtr eof_chunk = ChunkHelper::new_chunk(*tuple_desc, 0);
+    status = scanner->get_next(_runtime_state, &eof_chunk);
+    ASSERT_TRUE(status.is_end_of_file()) << status.to_string();
+
+    scanner->close();
+}
+
+TEST_F(HdfsScannerTest, TestAvroUpdateCounterWithoutOpen) {
+    HdfsAvroScanner scanner;
+    HdfsScanProfile profile;
+    profile.runtime_profile = _runtime_profile;
+
+    scanner.do_update_counter(&profile);
+
+    ASSERT_NE(nullptr, _runtime_profile->get_counter("InputStreamReadCount"));
+    ASSERT_EQ(0, _runtime_profile->get_counter("InputStreamReadCount")->value());
 }
 
 TEST_F(HdfsScannerTest, TestFillNotExistedColumnWithDefaultValue) {

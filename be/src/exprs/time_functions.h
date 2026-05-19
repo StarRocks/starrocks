@@ -872,6 +872,10 @@ public:
     DEFINE_VECTORIZED_FN(iceberg_days_since_epoch_date);
     DEFINE_VECTORIZED_FN(iceberg_days_since_epoch_datetime);
     DEFINE_VECTORIZED_FN(iceberg_hours_since_epoch_datetime);
+    DEFINE_VECTORIZED_FN(iceberg_timestamptz_years_since_epoch_datetime);
+    DEFINE_VECTORIZED_FN(iceberg_timestamptz_months_since_epoch_datetime);
+    DEFINE_VECTORIZED_FN(iceberg_timestamptz_days_since_epoch_datetime);
+    DEFINE_VECTORIZED_FN(iceberg_timestamptz_hours_since_epoch_datetime);
 
 private:
     DEFINE_VECTORIZED_FN_TEMPLATE(_t_from_unix_to_datetime);

@@ -39,6 +39,7 @@
 #include <iostream>
 #include <limits>
 
+#include "column/chunk_factory.h"
 #include "column/column.h"
 #include "column/column_helper.h"
 #include "common/logging.h"
@@ -67,7 +68,7 @@ public:
 
     template <LogicalType type, class PageDecoderType, class CppType = StorageCppType<type>>
     void copy_one(PageDecoderType* decoder, CppType* ret) {
-        auto column = ChunkHelper::column_from_field_type(type, false);
+        auto column = ChunkFactory::column_from_field_type(type, false);
         size_t n = 1;
         decoder->next_batch(&n, column.get());
         ASSERT_EQ(1, n);
@@ -103,7 +104,7 @@ public:
 
         ASSERT_EQ(0, page_decoder.current_index());
 
-        auto column = ChunkHelper::column_from_field_type(Type, false);
+        auto column = ChunkFactory::column_from_field_type(Type, false);
         status = page_decoder.next_batch(&size, column.get());
         ASSERT_TRUE(status.ok());
         const auto decoded = GetStorageContainer<Type>::get_data(column);
@@ -113,7 +114,7 @@ public:
             }
         }
 
-        auto column1 = ChunkHelper::column_from_field_type(Type, false);
+        auto column1 = ChunkFactory::column_from_field_type(Type, false);
         ASSERT_TRUE(page_decoder.seek_to_position_in_page(0).ok());
         ASSERT_EQ(0, page_decoder.current_index());
 

@@ -152,6 +152,7 @@
         "pipeline_sink_brpc_dop",
         "pipeline_print_profile",
         "pipeline_timeout_diagnostic",
+        "enable_pipeline_event_scheduler",
         "pipeline_driver_queue_level_time_slice_base_ns",
         "pipeline_driver_queue_ratio_of_adjacent_queue",
         "pipeline_analytic_max_buffer_size",
@@ -339,7 +340,12 @@
         "enable_vector_index_block_cache",
         "config_vector_index_build_concurrency",
         "config_vector_index_default_build_threshold",
-        "vector_index_build_max_cpu_ratio"
+        "vector_index_build_max_cpu_ratio",
+        "enable_vector_adaptive_search",
+        "vector_adaptive_ef_alpha",
+        "vector_adaptive_ef_cap",
+        "vector_adaptive_ef_baseline_rows",
+        "vector_index_build_flush_threshold_rows"
       ]
     },
     {
@@ -720,6 +726,7 @@
         "pk_index_early_sst_compaction_threshold",
         "enable_pk_index_parallel_execution",
         "pk_index_parallel_execution_min_rows",
+        "pk_index_parallel_load_dels_mem_ratio",
         "pk_index_memtable_max_count",
         "pk_index_memtable_max_wait_flush_timeout_ms",
         "pk_index_size_tiered_min_level_size",
@@ -741,6 +748,7 @@
         "lake_pk_index_cumulative_base_compaction_ratio",
         "lake_pk_index_block_cache_limit_percent",
         "cloud_native_pk_index_rebuild_files_threshold",
+        "primary_key_compaction_replace_batch_rows",
         "cloud_native_pk_index_rebuild_rows_threshold",
         "l0_l1_merge_ratio",
         "l0_max_file_size",
@@ -768,7 +776,6 @@
         "primary_key_batch_get_index_memory_limit",
         "pk_dump_interval_seconds",
         "enable_pk_strict_memcheck",
-        "skip_pk_preload",
         "apply_version_slow_log_sec",
         "pk_column_lazy_load_threshold_bytes",
         "column_mode_partial_update_insert_batch_size"

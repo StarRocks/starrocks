@@ -784,6 +784,60 @@ TEST_F(ParquetScannerTest, test_to_json) {
     }
 }
 
+TEST_F(ParquetScannerTest, test_data_quality_error_context_for_json) {
+    // When convert_array_to_column fails inside
+    // ParquetScanner::append_batch_to_src_chunk, the returned Status must be
+    // prefixed with file/column/batch_row_range context so operators can
+    // identify the offending source without re-running the load. Without this
+    // wrapping the user only sees the raw converter message
+    // ("Data quality error: Unfinished string") with no idea which file,
+    // column, or row range triggered it.
+    //
+    // Setup: a single-row parquet file whose only column is a STRING with
+    // value `"unterminated` (a leading double quote with no terminator).
+    // Mapping this column to a JSON dest slot routes it through
+    // arrow_to_json_converter.cpp's STRING branch, which calls vpack and
+    // fails with "Unfinished string".
+    const std::string parquet_file_name = (_tmp_root_dir / "bad_json.parquet").string();
+    {
+        arrow::StringBuilder builder;
+        ASSERT_OK(builder.Append(R"("unterminated)"));
+        std::shared_ptr<arrow::Array> array;
+        ASSERT_OK(builder.Finish(&array));
+        auto schema = arrow::schema({arrow::field("col_json_string", array->type(), true)});
+        auto table = arrow::Table::Make(schema, {array});
+        auto output_res = arrow::io::FileOutputStream::Open(parquet_file_name);
+        ASSERT_TRUE(output_res.ok()) << output_res.status().ToString();
+        std::shared_ptr<arrow::io::FileOutputStream> output = output_res.ValueOrDie();
+        auto arrow_props = ::parquet::ArrowWriterProperties::Builder().store_schema()->build();
+        auto write_st = ::parquet::arrow::WriteTable(*table, arrow::default_memory_pool(), output, table->num_rows(),
+                                                     ::parquet::default_writer_properties(), arrow_props);
+        ASSERT_TRUE(write_st.ok()) << write_st.ToString();
+        ASSERT_TRUE(output->Close().ok());
+    }
+    DeferOp defer([&]() { std::filesystem::remove(parquet_file_name); });
+
+    auto slot_infos = select_columns({"col_json_string"}, true);
+    auto ranges = generate_ranges({parquet_file_name}, slot_infos.size(), {});
+    auto* desc_tbl = DescTblHelper::generate_desc_tbl(_runtime_state, _obj_pool, {slot_infos, slot_infos});
+    auto scanner = create_parquet_scanner("UTC", desc_tbl, {}, ranges);
+
+    ASSERT_OK(scanner->open());
+    DeferOp close_scanner([&] { scanner->close(); });
+    auto res = scanner->get_next();
+    ASSERT_FALSE(res.ok()) << "expected get_next to surface the malformed JSON failure";
+
+    const std::string msg = res.status().to_string();
+    EXPECT_NE(std::string::npos, msg.find("file=" + parquet_file_name))
+            << "Status should carry the offending file path: " << msg;
+    EXPECT_NE(std::string::npos, msg.find("column=col_json_string"))
+            << "Status should carry the offending column name: " << msg;
+    EXPECT_NE(std::string::npos, msg.find("batch_row_range=["))
+            << "Status should carry the in-batch row range: " << msg;
+    EXPECT_NE(std::string::npos, msg.find("Unfinished string"))
+            << "Status should still carry the underlying converter message: " << msg;
+}
+
 TEST_F(ParquetScannerTest, test_selected_parquet_data) {
     auto column_names = std::vector<std::string>{
             "col_date",     "col_datetime", "col_char",   "col_varchar",      "col_boolean",       "col_tinyint",

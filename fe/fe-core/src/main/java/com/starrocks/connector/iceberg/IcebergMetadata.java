@@ -178,8 +178,11 @@ import java.util.NoSuchElementException;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
 
 import static com.google.common.collect.ImmutableList.toImmutableList;
@@ -202,6 +205,7 @@ import static org.apache.iceberg.TableProperties.ENCRYPTION_TABLE_KEY;
 public class IcebergMetadata implements ConnectorMetadata {
 
     private static final Logger LOG = LogManager.getLogger(IcebergMetadata.class);
+    private static final long CLOSE_WARN_DELAY_SECONDS = 60;
 
     public static final String LOCATION_PROPERTY = "location";
     public static final String FILE_FORMAT = "file_format";
@@ -1350,12 +1354,13 @@ public class IcebergMetadata implements ConnectorMetadata {
             private void openPlannedTaskIterator(Scan tableScan) {
                 fileScanTaskIterable = normalizePlannedTaskIterable(tableScan.planFiles());
                 fileScanTaskIterator = buildSplitFileScanTaskIterator(
-                        fileScanTaskIterable, fileScanTaskIterable.iterator(), tableScan.targetSplitSize());
+                        fileScanTaskIterable, fileScanTaskIterable.iterator(), tableScan.targetSplitSize(),
+                        dbName, tableName, snapshotId);
             }
 
             private void closePlannedTaskIterator() {
-                closeQuietly(fileScanTaskIterator);
-                closeQuietly(fileScanTaskIterable);
+                closeQuietly(fileScanTaskIterator, "fileScanTaskIterator", dbName, tableName, snapshotId);
+                closeQuietly(fileScanTaskIterable, "fileScanTaskIterable", dbName, tableName, snapshotId);
                 fileScanTaskIterator = null;
                 fileScanTaskIterable = null;
             }
@@ -1427,17 +1432,20 @@ public class IcebergMetadata implements ConnectorMetadata {
     private CloseableIterator<FileScanTask> buildSplitFileScanTaskIterator(
             CloseableIterable<FileScanTask> plannedTaskIterable,
             CloseableIterator<FileScanTask> plannedTaskIterator,
-            long targetSplitSize) {
+            long targetSplitSize,
+            String dbName,
+            String tableName,
+            long snapshotId) {
         return new CloseableIterator<>() {
             private CloseableIterable<FileScanTask> currentTaskIterable = CloseableIterable.empty();
             private CloseableIterator<FileScanTask> currentTaskIterator = CloseableIterator.empty();
 
             @Override
             public void close() throws IOException {
-                currentTaskIterator.close();
-                currentTaskIterable.close();
-                plannedTaskIterator.close();
-                plannedTaskIterable.close();
+                closeUnchecked(currentTaskIterator, "currentTaskIterator", dbName, tableName, snapshotId);
+                closeUnchecked(currentTaskIterable, "currentTaskIterable", dbName, tableName, snapshotId);
+                closeUnchecked(plannedTaskIterator, "plannedTaskIterator", dbName, tableName, snapshotId);
+                closeUnchecked(plannedTaskIterable, "plannedTaskIterable", dbName, tableName, snapshotId);
             }
 
             @Override
@@ -1491,6 +1499,20 @@ public class IcebergMetadata implements ConnectorMetadata {
         Tracers.record(EXTERNAL, name, value);
     }
 
+    private void closeUnchecked(AutoCloseable closeable, String closeableName, String dbName, String tableName,
+                                long snapshotId) {
+        AtomicBoolean finished = watchSlowClose(closeable, closeableName, dbName, tableName, snapshotId);
+        try {
+            closeable.close();
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        } finally {
+            finished.set(true);
+        }
+    }
+
     private void closeUnchecked(AutoCloseable closeable) {
         try {
             closeable.close();
@@ -1501,14 +1523,32 @@ public class IcebergMetadata implements ConnectorMetadata {
         }
     }
 
-    private void closeQuietly(AutoCloseable closeable) {
+    private void closeQuietly(AutoCloseable closeable, String closeableName, String dbName, String tableName,
+                              long snapshotId) {
         if (closeable == null) {
             return;
         }
+        AtomicBoolean finished = watchSlowClose(closeable, closeableName, dbName, tableName, snapshotId);
         try {
             closeable.close();
         } catch (Exception ignore) {
+        } finally {
+            finished.set(true);
         }
+    }
+
+    private AtomicBoolean watchSlowClose(AutoCloseable closeable, String closeableName, String dbName, String tableName,
+                                         long snapshotId) {
+        AtomicBoolean finished = new AtomicBoolean(false);
+        CompletableFuture.delayedExecutor(CLOSE_WARN_DELAY_SECONDS, TimeUnit.SECONDS).execute(() -> {
+            if (!finished.get()) {
+                LOG.warn("Iceberg planned task close is still running after {} seconds, table: {}.{}, snapshot: {}, "
+                                + "closeable name: {}, closeable class: {}",
+                        CLOSE_WARN_DELAY_SECONDS, dbName, tableName, snapshotId, closeableName,
+                        closeable.getClass().getName());
+            }
+        });
+        return finished;
     }
 
     public Set<DeleteFile> getDeleteFiles(IcebergTable icebergTable, Long snapshotId,
@@ -1872,10 +1912,19 @@ public class IcebergMetadata implements ConnectorMetadata {
             rowDelta.addDeletes(deleteFile);
         }
 
-        // Validate from snapshot if table has current snapshot
-        Snapshot currentSnapshot = nativeTbl.currentSnapshot();
-        if (currentSnapshot != null) {
-            rowDelta.validateFromSnapshot(currentSnapshot.snapshotId());
+        // Use the base snapshot id frozen at plan time so conflict detection covers
+        // every commit landed between scan and commit. Falling back to currentSnapshot
+        // here would silently skip that window and defeat SERIALIZABLE isolation.
+        Long baseSnapshotId = extra instanceof IcebergSinkExtra
+                ? ((IcebergSinkExtra) extra).getBaseSnapshotId() : null;
+        if (baseSnapshotId == null) {
+            Snapshot currentSnapshot = nativeTbl.currentSnapshot();
+            if (currentSnapshot != null) {
+                baseSnapshotId = currentSnapshot.snapshotId();
+            }
+        }
+        if (baseSnapshotId != null) {
+            rowDelta.validateFromSnapshot(baseSnapshotId);
         }
 
         // Validate that referenced data files exist and haven't been deleted
@@ -2161,6 +2210,10 @@ public class IcebergMetadata implements ConnectorMetadata {
         private final Set<DataFile> scannedDataFiles;
         private final Set<DeleteFile> appliedDeleteFiles;
         private Expression conflictDetectionFilter;
+        // Base snapshot id frozen at plan time. Used by RowDelta.validateFromSnapshot
+        // so conflict detection covers the window between scan and commit, not a fresher
+        // snapshot re-read at commit time.
+        private Long baseSnapshotId;
 
         public IcebergSinkExtra() {
             this.scannedDataFiles = new HashSet<>();
@@ -2189,6 +2242,14 @@ public class IcebergMetadata implements ConnectorMetadata {
 
         public Expression getConflictDetectionFilter() {
             return conflictDetectionFilter;
+        }
+
+        public void setBaseSnapshotId(Long baseSnapshotId) {
+            this.baseSnapshotId = baseSnapshotId;
+        }
+
+        public Long getBaseSnapshotId() {
+            return baseSnapshotId;
         }
     }
 

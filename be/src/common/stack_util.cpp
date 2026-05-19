@@ -18,6 +18,7 @@
 #include <fmt/core.h>
 #include <fmt/format.h>
 #include <fmt/ostream.h>
+#include <fmt/std.h>
 #include <signal.h>
 #include <sys/syscall.h>
 #include <unistd.h>
