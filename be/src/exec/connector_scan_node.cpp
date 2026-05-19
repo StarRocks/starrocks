@@ -133,10 +133,6 @@ StatusOr<pipeline::OpFactories> ConnectorScanNode::decompose_to_pipeline(pipelin
     auto exec_group = context->find_exec_group_by_plan_node_id(_id);
     context->set_current_execution_group(exec_group);
 
-    if (_data_source_provider->stream_data_source()) {
-        return Status::NotSupported("Legacy incremental MV maintenance is no longer supported");
-    }
-
     size_t dop = context->dop_of_source_operator(id());
     std::shared_ptr<pipeline::ConnectorScanOperatorFactory> scan_op = nullptr;
 
