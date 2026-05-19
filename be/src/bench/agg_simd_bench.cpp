@@ -207,7 +207,7 @@ static inline void merge_selectively_adaptive(const BenchFilter& filter, size_t 
     // dense-filter path. Mirrors the fix in aggregate.h.
     constexpr size_t kProbe = 256;
     const size_t probe_n = std::min(n, kProbe);
-    const bool sparse = SIMD::count_zero(filter.data(), probe_n) <= probe_n / 8;
+    const bool sparse = SIMD::count_zero(filter.data(), probe_n) <= probe_n / 32;
     if (!sparse) {
         for (size_t i = 0; i < n; ++i) {
             if (filter[i] == 0) cb(i);
