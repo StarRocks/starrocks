@@ -1219,10 +1219,10 @@ public class HdfsFsManager {
         } catch (InterruptedIOException e) {
             Thread.interrupted(); // clear interrupted flag
             LOG.error("Interrupted while copy {} to local {} ", srcPath, destPath, e);
-            throw new StarRocksException("Failed to copy " + srcPath + "to local " + destPath, e);
+            throw new StarRocksException("Failed to copy " + srcPath + " to local " + destPath + ": " + e.getMessage(), e);
         } catch (Exception e) {
             LOG.error("Exception while copy {} to local {} ", srcPath, destPath, e);
-            throw new StarRocksException("Failed to copy " + srcPath + "to local " + destPath, e);
+            throw new StarRocksException("Failed to copy " + srcPath + " to local " + destPath + ": " + e.getMessage(), e);
         }
     }
 
@@ -1235,10 +1235,10 @@ public class HdfsFsManager {
         } catch (InterruptedIOException e) {
             Thread.interrupted(); // clear interrupted flag
             LOG.error("Interrupted while copy local {} to {} ", srcPath, destPath, e);
-            throw new StarRocksException("Failed to copy local " + srcPath + " to " + destPath, e);
+            throw new StarRocksException("Failed to copy local " + srcPath + " to " + destPath + ": " + e.getMessage(), e);
         } catch (Exception e) {
             LOG.error("Exception while copy local {} to {} ", srcPath, destPath, e);
-            throw new StarRocksException("Failed to copy local " + srcPath  + " to " + destPath, e);
+            throw new StarRocksException("Failed to copy local " + srcPath + " to " + destPath + ": " + e.getMessage(), e);
         }
     }
 
