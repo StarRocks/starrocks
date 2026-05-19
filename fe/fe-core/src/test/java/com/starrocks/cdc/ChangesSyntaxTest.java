@@ -61,11 +61,14 @@ public class ChangesSyntaxTest extends BookmarkTestBase {
                         + "DUPLICATE KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1 "
                         + "PROPERTIES ('replication_num' = '1');");
 
-        // PK cloud-native table — needed so the analyzer-level PK guard is the
-        // one that throws (the cloud-native guard runs earlier).
         createTableStatic(
                 "CREATE TABLE pk_t (k int, v int) "
                         + "PRIMARY KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1 "
+                        + "PROPERTIES ('replication_num' = '1');");
+
+        createTableStatic(
+                "CREATE TABLE unique_t (k int, v int) "
+                        + "UNIQUE KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1 "
                         + "PROPERTIES ('replication_num' = '1');");
     }
 
@@ -126,13 +129,15 @@ public class ChangesSyntaxTest extends BookmarkTestBase {
     }
 
     @Test
-    public void testHintRejectsPkTable() {
-        // PK tables are out of scope for stage-1 CHANGES (hint or clause).
-        String sql = "SELECT * FROM pk_t [_CHANGES_1_2_]";
-        AnalysisException ex = assertThrows(AnalysisException.class,
-                () -> UtFrameUtils.parseStmtWithNewParser(sql, connectContext));
-        assertTrue(ex.getMessage().contains("CHANGES on primary-key table is not supported yet"),
-                "actual: " + ex.getMessage());
+    public void testHintRejectsPkAndUniqueTable() {
+        String[] tableNames = {"pk_t", "unique_t"};
+        for (String tableName : tableNames) {
+            String sql = "SELECT * FROM " + tableName + " [_CHANGES_1_2_]";
+            AnalysisException ex = assertThrows(AnalysisException.class,
+                    () -> UtFrameUtils.parseStmtWithNewParser(sql, connectContext));
+            assertTrue(ex.getMessage().contains("CHANGES hint is only supported on DUPLICATE / AGGREGATE table"),
+                    "actual for " + tableName + ": " + ex.getMessage());
+        }
     }
 
     @Test

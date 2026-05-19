@@ -36,11 +36,6 @@ public class QueryPeriod implements ParseNode {
 
     public enum PeriodType {
         TIMESTAMP,
-        /**
-         * Identifies the period endpoint by id. The id is interpreted as a
-         * bookmark id (com.starrocks.lake.bookmark) today; semantics may extend
-         * to a global commit version later without changing this enum.
-         */
         VERSION
     }
 

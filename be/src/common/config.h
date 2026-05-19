@@ -1416,7 +1416,7 @@ CONF_mInt64(lake_max_garbage_version_distance, "100");
 // Number of historical tablet-metadata ancestor versions retained per tablet;
 // sets the trackable horizon for CHANGES queries. A larger value lets CHANGES
 // reach further-back base versions at the cost of metadata storage.
-CONF_mInt32(cloud_native_tablet_metadata_ancestors_recorded, "10");
+CONF_mInt32(cloud_native_tablet_metadata_ancestors_recorded, "5");
 CONF_mBool(enable_primary_key_recover, "false");
 CONF_mBool(lake_enable_compaction_async_write, "false");
 CONF_mInt64(lake_pk_compaction_max_input_rowsets, "500");

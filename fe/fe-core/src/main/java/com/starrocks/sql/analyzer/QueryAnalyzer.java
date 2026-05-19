@@ -229,6 +229,34 @@ public class QueryAnalyzer {
         return null;
     }
 
+    private static void validateChangesHint(Table table, TableRelation tableRelation) {
+        boolean isCloudNativeOlap = table instanceof OlapTable
+                && ((OlapTable) table).isCloudNativeTableOrMaterializedView();
+        if (!isCloudNativeOlap) {
+            throw new SemanticException(
+                    "CHANGES hint is only supported on cloud-native OlapTable");
+        }
+        KeysType keysType = ((OlapTable) table).getKeysType();
+        if (keysType != KeysType.DUP_KEYS && keysType != KeysType.AGG_KEYS) {
+            throw new SemanticException(
+                    "CHANGES hint is only supported on DUPLICATE / AGGREGATE table");
+        }
+        // _META_ / _CACHE_STATS_ are live introspection views; _BOOKMARK_ is a
+        // PITQ scope. None of these can share a TableRelation with CHANGES,
+        // which is an interval scan over historical rows.
+        if (tableRelation.isMetaQuery()
+                || tableRelation.isCacheStatsQuery()
+                || tableRelation.getBookmarkId().isPresent()) {
+            throw new SemanticException(
+                    "CHANGES hint cannot combine with _META_ / _CACHE_STATS_ / _BOOKMARK_");
+        }
+        BookmarkRange range = tableRelation.getBookmarkRange().get();
+        if (range.base() > range.head()) {
+            throw new SemanticException(
+                    "CHANGES hint base must not be later than head");
+        }
+    }
+
     private JDBCTable resolveJdbcQueryTable(JdbcQueryTableFunctionName functionName, String passThroughQuery) {
         Optional<ConnectorMetadata> metadata = metadataMgr.getOptionalMetadata(functionName.catalogName);
         if (metadata.isEmpty()) {
@@ -853,31 +881,7 @@ public class QueryAnalyzer {
                     // with _BOOKMARK_ is caught here (the conflict check tests both flags)
                     // rather than silently being treated as a plain PITQ scope.
                     if (tableRelation.getBookmarkRange().isPresent()) {
-                        boolean isCloudNativeOlap = table instanceof OlapTable
-                                && ((OlapTable) table).isCloudNativeTableOrMaterializedView();
-                        if (!isCloudNativeOlap) {
-                            throw new SemanticException(
-                                    "CHANGES hint is only supported on cloud-native OlapTable");
-                        }
-                        // Stage-1 limitation: PK tables are excluded.
-                        if (((OlapTable) table).getKeysType() == KeysType.PRIMARY_KEYS) {
-                            throw new SemanticException(
-                                    "CHANGES on primary-key table is not supported yet");
-                        }
-                        // _META_ / _CACHE_STATS_ are live introspection views; _BOOKMARK_ is a
-                        // PITQ scope. None of these can share a TableRelation with CHANGES,
-                        // which is an interval scan over historical rows.
-                        if (tableRelation.isMetaQuery()
-                                || tableRelation.isCacheStatsQuery()
-                                || tableRelation.getBookmarkId().isPresent()) {
-                            throw new SemanticException(
-                                    "CHANGES hint cannot combine with _META_ / _CACHE_STATS_ / _BOOKMARK_");
-                        }
-                        BookmarkRange range = tableRelation.getBookmarkRange().get();
-                        if (range.base() > range.head()) {
-                            throw new SemanticException(
-                                    "CHANGES hint base must not be later than head");
-                        }
+                        validateChangesHint(table, tableRelation);
                     }
 
                     if (tableRelation.getBookmarkId().isPresent()) {
