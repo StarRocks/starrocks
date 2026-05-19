@@ -20,6 +20,7 @@ import com.starrocks.metric.HistogramMetric;
 import com.starrocks.metric.Metric;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.metric.MetricVisitor;
+import com.starrocks.metric.WarehouseMetricMgr;
 import com.starrocks.monitor.jvm.JvmStats;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.BackendResourceStat;
@@ -40,11 +41,9 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Tests for B3: {@link SlotManager#collectWarehouseMetrics} must walk the warehouses
- * currently tracked by {@link WarehouseInFlightTracker}, update the gauges in
- * {@link com.starrocks.metric.WarehouseSlotMetricMgr}, and emit the 5 gauges + 1 counter
- * via {@link MetricVisitor#visit} and 1 histogram via
- * {@link MetricVisitor#visitHistogram(HistogramMetric)}.
+ * {@link SlotManager#collectWarehouseMetrics} must walk the warehouses currently tracked by
+ * {@link WarehouseInFlightTracker} and emit, per warehouse, the pending-sum-raw-slots gauge,
+ * the pre-scale-wait counter, and the pre-scale-wait histogram via {@link MetricVisitor}.
  */
 public class SlotManagerMetricsScrapeTest {
 
@@ -59,14 +58,11 @@ public class SlotManagerMetricsScrapeTest {
     @BeforeEach
     public void before() {
         clearTrackerForWarehouse(WH);
-        // Provide a BE so QueryQueueOptions.V2 can compute a non-zero totalSlots; the
-        // scrape path uses BackendResourceStat.getNumBes for slots-per-CN.
+        // Provide a BE so QueryQueueOptions.V2 can compute a non-zero totalSlots.
         BackendResourceStat.getInstance().setNumCoresOfBe(WH, 1, 8);
         BackendResourceStat.getInstance().setMemLimitBytesOfBe(WH, 1, 64L * 1024 * 1024 * 1024);
 
-        // Force QueryQueueOptions.createFromEnv(WH) to return V2-enabled options. The real
-        // path goes through BaseSlotManager.isEnableQueryQueueV2 which depends on
-        // Config.enable_query_queue_v2 and a per-warehouse plan; mock the plumbing.
+        // Force QueryQueueOptions.createFromEnv(WH) to return V2-enabled options.
         new MockUp<BaseSlotManager>() {
             @Mock
             public boolean isEnableQueryQueueV2(long warehouseId) {
@@ -82,43 +78,28 @@ public class SlotManagerMetricsScrapeTest {
     }
 
     @Test
-    public void testEmitsAllSevenMetricsPerTrackedWarehouse() {
+    public void testEmitsThreeMetricsPerTrackedWarehouse() {
         WarehouseInFlightTracker tracker = WarehouseInFlightTracker.getInstance();
-        // One big query (raw=20, clamped=8) and one small (raw=4) on warehouse 999.
-        tracker.onEnterPending(WH, new TUniqueId(1, 1), 20, 8, 8, true);
-        tracker.onEnterPending(WH, new TUniqueId(2, 2), 4, 4, 8, false);
+        tracker.onEnterPending(WH, new TUniqueId(1, 1), 20, 8, 8);
+        tracker.onEnterPending(WH, new TUniqueId(2, 2), 4, 4, 8);
 
         SlotManager sm = (SlotManager) GlobalStateMgr.getCurrentState().getSlotManager();
         CapturingVisitor visitor = new CapturingVisitor();
         sm.collectWarehouseMetrics(visitor);
 
-        // All five gauges + the counter must be visited.
-        assertTrue(visitor.visitedNames.contains("query_queue_pending_max_raw_slots"),
-                "must visit max_raw_slots gauge, saw=" + visitor.visitedNames);
         assertTrue(visitor.visitedNames.contains("query_queue_pending_sum_raw_slots"),
                 "must visit sum_raw_slots gauge, saw=" + visitor.visitedNames);
-        assertTrue(visitor.visitedNames.contains("query_queue_required_compute_node_count"),
-                "must visit required_compute_node_count gauge, saw=" + visitor.visitedNames);
-        assertTrue(visitor.visitedNames.contains("query_queue_max_raw_slots_ratio"),
-                "must visit max_raw_slots_ratio gauge, saw=" + visitor.visitedNames);
-        assertTrue(visitor.visitedNames.contains("query_queue_pending_big_query_count"),
-                "must visit pending_big_query_count gauge, saw=" + visitor.visitedNames);
-        assertTrue(visitor.visitedNames.contains("query_queue_big_query_total"),
-                "must visit big_query_total counter, saw=" + visitor.visitedNames);
+        assertTrue(visitor.visitedNames.contains("query_queue_pre_scale_wait_total"),
+                "must visit pre_scale_wait_total counter, saw=" + visitor.visitedNames);
+        assertTrue(visitor.visitedHistogramNames.contains("query_queue_pre_scale_wait_ms"),
+                "must visit pre_scale_wait_ms histogram, saw=" + visitor.visitedHistogramNames);
 
-        // The histogram must be visited via visitHistogram(HistogramMetric).
-        assertTrue(visitor.visitedHistogramNames.contains("query_queue_pending_big_query_wait_ms"),
-                "must visit big_query_wait_ms histogram, saw=" + visitor.visitedHistogramNames);
-
-        // The gauges should have been populated with computed values.
-        assertEquals(20L, com.starrocks.metric.WarehouseSlotMetricMgr.getMaxRawSlotsGauge(WH).getValue().longValue());
-        assertEquals(24L, com.starrocks.metric.WarehouseSlotMetricMgr.getSumRawSlotsGauge(WH).getValue().longValue());
-        assertEquals(1L, com.starrocks.metric.WarehouseSlotMetricMgr.getPendingBigQueryCountGauge(WH).getValue().longValue());
+        // The sum gauge should reflect total raw demand from the two tracker entries.
+        assertEquals(24L, WarehouseMetricMgr.getPendingSumRawSlotsGauge(WH).getValue().longValue());
     }
 
     @Test
     public void testEmptyTrackerEmitsNothing() {
-        // Tracker has no entries for WH after clearTrackerForWarehouse.
         SlotManager sm = (SlotManager) GlobalStateMgr.getCurrentState().getSlotManager();
         CapturingVisitor visitor = new CapturingVisitor();
         sm.collectWarehouseMetrics(visitor);
@@ -128,11 +109,6 @@ public class SlotManagerMetricsScrapeTest {
                 "no tracked warehouses -> no histograms emitted, saw=" + visitor.visitedHistogramNames);
     }
 
-    /**
-     * The tracker is a process-wide singleton; clear any entries for the test-specific
-     * warehouse id so the test does not see leftovers from prior runs (mirrors the
-     * pattern in QueryQueueManagerPreScaleTest).
-     */
     @SuppressWarnings("unchecked")
     private static void clearTrackerForWarehouse(long warehouseId) {
         try {

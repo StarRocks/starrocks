@@ -21,41 +21,40 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class WarehouseInFlightTrackerTest {
     private static final long WH = 100L;
 
     @Test
-    public void testRegisterAndMaxRaw() {
+    public void testRegisterAndSumRaw() {
         WarehouseInFlightTracker tracker = new WarehouseInFlightTracker();
         TUniqueId q1 = new TUniqueId(1, 1);
         TUniqueId q2 = new TUniqueId(2, 2);
-        tracker.onEnterPending(WH, q1, /*raw=*/ 20, /*clamped=*/ 8, /*totalSlots=*/ 8, /*isBig=*/ true);
-        tracker.onEnterPending(WH, q2, /*raw=*/ 4, /*clamped=*/ 4, /*totalSlots=*/ 8, /*isBig=*/ false);
-        assertEquals(20, tracker.getMaxRawSlots(WH));
-        assertEquals(24, tracker.getSumRawSlots(WH));
-        assertEquals(1, tracker.getBigQueryCount(WH));
+        tracker.onEnterPending(WH, q1, /*raw=*/ 20, /*clamped=*/ 8, /*totalSlots=*/ 8);
+        tracker.onEnterPending(WH, q2, /*raw=*/ 4, /*clamped=*/ 4, /*totalSlots=*/ 8);
+        assertEquals(24L, tracker.getSumRawSlots(WH));
+        assertNotNull(tracker.getEntry(WH, q1));
         tracker.onExitPending(WH, q1);
-        assertEquals(4, tracker.getMaxRawSlots(WH));
-        assertEquals(0, tracker.getBigQueryCount(WH));
+        assertEquals(4L, tracker.getSumRawSlots(WH));
+        assertNull(tracker.getEntry(WH, q1));
     }
 
     @Test
     public void testIsolationAcrossWarehouses() {
         WarehouseInFlightTracker tracker = new WarehouseInFlightTracker();
-        tracker.onEnterPending(WH, new TUniqueId(1, 1), 10, 8, 8, true);
-        tracker.onEnterPending(WH + 1, new TUniqueId(2, 2), 50, 8, 8, true);
-        assertEquals(10, tracker.getMaxRawSlots(WH));
-        assertEquals(50, tracker.getMaxRawSlots(WH + 1));
+        tracker.onEnterPending(WH, new TUniqueId(1, 1), 10, 8, 8);
+        tracker.onEnterPending(WH + 1, new TUniqueId(2, 2), 50, 8, 8);
+        assertEquals(10L, tracker.getSumRawSlots(WH));
+        assertEquals(50L, tracker.getSumRawSlots(WH + 1));
     }
 
     @Test
     public void testEmptyWarehouseReturnsZero() {
         WarehouseInFlightTracker tracker = new WarehouseInFlightTracker();
-        assertEquals(0, tracker.getMaxRawSlots(WH));
-        assertEquals(0, tracker.getSumRawSlots(WH));
-        assertEquals(0, tracker.getBigQueryCount(WH));
+        assertEquals(0L, tracker.getSumRawSlots(WH));
     }
 
     @Test

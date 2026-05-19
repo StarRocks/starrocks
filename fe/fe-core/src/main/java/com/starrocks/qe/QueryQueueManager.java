@@ -20,7 +20,7 @@ import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.metric.ResourceGroupMetricMgr;
-import com.starrocks.metric.WarehouseSlotMetricMgr;
+import com.starrocks.metric.WarehouseMetricMgr;
 import com.starrocks.qe.scheduler.RecoverableException;
 import com.starrocks.qe.scheduler.dag.JobSpec;
 import com.starrocks.qe.scheduler.slot.BaseSlotManager;
@@ -74,11 +74,6 @@ public class QueryQueueManager {
 
         long startMs = System.currentTimeMillis();
         boolean isPending = false;
-        // Hoisted outside try so the finally block can update the big-query wait histogram.
-        // Computed up-front from rawSlots, totalSlots, and the threshold ratio.
-        final double thresholdRatio = Config.query_queue_big_query_slot_threshold_ratio;
-        final boolean isBigQuery = opts.isEnableQueryQueueV2() && totalSlots > 0
-                && estimate.rawSlots() > (long) Math.ceil(totalSlots * thresholdRatio);
         LogicalSlot slotRequirement = null;
         try {
             slotRequirement = createSlot(context, coord, estimate.clampedSlots());
@@ -100,12 +95,10 @@ public class QueryQueueManager {
                 WarehouseInFlightTracker.getInstance().onEnterPending(
                         warehouseId, slotRequirement.getSlotId(),
                         estimate.rawSlots(), estimate.clampedSlots(),
-                        totalSlots, isBigQuery);
-                if (isBigQuery) {
-                    WarehouseSlotMetricMgr.getBigQueryCounter(warehouseId).increase(1L);
-                }
+                        totalSlots);
 
-                // Pre-scale wait: hold big query briefly to give external auto-scaler a chance to add CN capacity.
+                // Pre-scale wait: hold queries whose raw demand exceeds capacity briefly to give
+                // external auto-scalers a chance to add CN capacity before admission.
                 if (Config.query_queue_pre_scale_max_wait_ms > 0L) {
                     double gateRatio = Config.query_queue_pre_scale_slot_threshold_ratio;
                     if (estimate.rawSlots() > (long) Math.ceil(totalSlots * gateRatio)) {
@@ -120,8 +113,8 @@ public class QueryQueueManager {
                                 gateRatio,
                                 capWaitMs);
                         long waitedMs = System.currentTimeMillis() - preScaleStartMs;
-                        WarehouseSlotMetricMgr.getPreScaleWaitCounter(warehouseId).increase(1L);
-                        WarehouseSlotMetricMgr.getPreScaleWaitHistogram(warehouseId).update(waitedMs);
+                        WarehouseMetricMgr.getPreScaleWaitCounter(warehouseId).increase(1L);
+                        WarehouseMetricMgr.getPreScaleWaitHistogram(warehouseId).update(waitedMs);
                         LOG.info("Pre-scale wait for queryId={}, raw={}, totalSlotsAtStart={}, capWaitMs={}, "
                                         + "waited={}ms, satisfied={}",
                                 UUIDUtil.fromTUniqueid(coord.getQueryId()), estimate.rawSlots(),
@@ -199,13 +192,6 @@ public class QueryQueueManager {
                 MetricRepo.COUNTER_QUERY_QUEUE_PENDING.increase(-1L);
                 ResourceGroupMetricMgr.increaseQueuedQuery(context, -1L);
                 context.setPending(false);
-
-                // Guarded by isBigQuery && trackedInFlight inside the isPending block —
-                // fires only for queries that actually pended as big.
-                if (isBigQuery && trackedInFlight) {
-                    WarehouseSlotMetricMgr.getBigQueryWaitHistogram(warehouseId)
-                            .update(pendingTimeMs);  // unit: milliseconds (matches metric name suffix)
-                }
             }
         }
     }

@@ -37,16 +37,14 @@ public class WarehouseInFlightTracker {
         public final int rawSlots;
         public final int clampedSlots;
         public final int totalSlotsAtEnter;
-        public final boolean isBigQuery;
         public final long enterPendingMs;
 
         InFlightEntry(TUniqueId slotId, int rawSlots, int clampedSlots,
-                      int totalSlotsAtEnter, boolean isBigQuery, long enterPendingMs) {
+                      int totalSlotsAtEnter, long enterPendingMs) {
             this.slotId = slotId;
             this.rawSlots = rawSlots;
             this.clampedSlots = clampedSlots;
             this.totalSlotsAtEnter = totalSlotsAtEnter;
-            this.isBigQuery = isBigQuery;
             this.enterPendingMs = enterPendingMs;
         }
     }
@@ -63,12 +61,11 @@ public class WarehouseInFlightTracker {
             new ConcurrentHashMap<>();
 
     public void onEnterPending(long warehouseId, TUniqueId slotId,
-                               int rawSlots, int clampedSlots,
-                               int totalSlotsAtEnter, boolean isBigQuery) {
+                               int rawSlots, int clampedSlots, int totalSlotsAtEnter) {
         byWarehouse
                 .computeIfAbsent(warehouseId, k -> new ConcurrentHashMap<>())
                 .put(slotId, new InFlightEntry(slotId, rawSlots, clampedSlots,
-                        totalSlotsAtEnter, isBigQuery, System.currentTimeMillis()));
+                        totalSlotsAtEnter, System.currentTimeMillis()));
     }
 
     public void onExitPending(long warehouseId, TUniqueId slotId) {
@@ -78,28 +75,12 @@ public class WarehouseInFlightTracker {
         }
     }
 
-    public int getMaxRawSlots(long warehouseId) {
-        ConcurrentMap<TUniqueId, InFlightEntry> map = byWarehouse.get(warehouseId);
-        if (map == null) {
-            return 0;
-        }
-        return map.values().stream().mapToInt(e -> e.rawSlots).max().orElse(0);
-    }
-
     public long getSumRawSlots(long warehouseId) {
         ConcurrentMap<TUniqueId, InFlightEntry> map = byWarehouse.get(warehouseId);
         if (map == null) {
             return 0L;
         }
         return map.values().stream().mapToLong(e -> e.rawSlots).sum();
-    }
-
-    public int getBigQueryCount(long warehouseId) {
-        ConcurrentMap<TUniqueId, InFlightEntry> map = byWarehouse.get(warehouseId);
-        if (map == null) {
-            return 0;
-        }
-        return (int) map.values().stream().filter(e -> e.isBigQuery).count();
     }
 
     public Set<Long> getTrackedWarehouseIds() {

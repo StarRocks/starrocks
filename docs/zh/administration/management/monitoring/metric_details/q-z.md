@@ -51,41 +51,6 @@ description: "Alphabetical q - z"
 - 单位：字节
 - 描述：查询使用的内存。
 
-## `query_queue_big_query_total`
-
-- 单位：计数
-- 类型：Counter
-- 标签：`warehouse_id`、`warehouse_name`
-- 描述：按仓库聚合的、在待入队阶段被识别为大查询的累计次数。每条跨过大查询阈值的查询会使该计数加一。用于对大查询频率进行告警。
-
-## `query_queue_max_raw_slots_ratio`
-
-- 单位：比例
-- 类型：Gauge
-- 标签：`warehouse_id`、`warehouse_name`
-- 描述：`pending_max_raw_slots / totalSlots`。当该值大于 1.0 时，表明仓库的容量无法满足最大待入队查询的需求。适用于基于比例的 HPA 扩容目标（例如，超过 0.8 时触发扩容）。
-
-## `query_queue_pending_big_query_count`
-
-- 单位：计数
-- 类型：Gauge
-- 标签：`warehouse_id`、`warehouse_name`
-- 描述：按仓库聚合的、被标记为"大查询"的待入队查询数量。当查询的原始 slot 数超过 `totalSlots × query_queue_big_query_slot_threshold_ratio`（默认比例 1.0）时会被标记。用于对大查询的队列深度进行告警。
-
-## `query_queue_pending_big_query_wait_ms`
-
-- 单位：毫秒
-- 类型：Histogram
-- 标签：`warehouse_id`、`warehouse_name`
-- 描述：大查询在待入队进入和退出之间的等待时长分布（毫秒）。用于验证预扩容等待（在其他特性中引入）是否生效；p99 较高表明大查询的队列准入被拖慢。
-
-## `query_queue_pending_max_raw_slots`
-
-- 单位：计数
-- 类型：Gauge
-- 标签：`warehouse_id`、`warehouse_name`
-- 描述：当前在 `QueryQueueManager.maybeWait()` 待入队阶段的查询中，原始（未钳制）预估 slot 数的最大值（按仓库聚合）。当该值大于 totalSlots 时，表明至少有一条查询所需容量超过当前可用容量。K8s HPA 自动扩容的主要信号。
-
 ## `query_queue_pending_sum_raw_slots`
 
 - 单位：计数
@@ -106,13 +71,6 @@ description: "Alphabetical q - z"
 - 类型：Counter
 - 标签：`warehouse_id`、`warehouse_name`
 - 描述：每个仓库内 pre-scale 等待门控触发的累计次数。用于监控大查询被自动扩容友好的准入延迟所阻塞的频次，但被中断（InterruptedException）的等待除外。
-
-## `query_queue_required_compute_node_count`
-
-- 单位：计数
-- 类型：Gauge
-- 标签：`warehouse_id`、`warehouse_name`
-- 描述：派生值：`ceil(query_queue_pending_max_raw_slots / slots_per_cn)`，其中 `slots_per_cn = totalSlots / numBes`。作为 HPA 的 `desiredReplicas` 信号 —— 表示仓库需要多少个计算节点才能容纳最大的待入队查询。
 
 ## `query_scan_bytes`
 

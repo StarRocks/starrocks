@@ -642,22 +642,13 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: 发布验证任务发出的时间间隔。
 - 引入版本: -
 
-### `query_queue_big_query_slot_threshold_ratio`
-
-- 默认值: 1.0
-- 类型: Double
-- 单位: 比例
-- 是否可变: Yes
-- 描述: 用于判定查询是否为“大查询”的阈值比例。当待入队查询的原始（未钳制）预估 slot 数超过 `totalSlots × 此比例` 时，该查询被标记为大查询，并反映在 `query_queue_pending_big_query_count` 指标中。默认值 `1.0` 表示仅当查询所需 slot 完全超过当前集群容量时才被视为大查询。该指标用于外部自动扩容（如 K8s HPA）感知集群压力；可适当降低比例（例如 `0.5`）以提前将查询标记为扩容候选。
-- 引入版本: -
-
 ### `query_queue_pre_scale_max_wait_ms`
 
 - 默认值: 0
 - 类型: Long
 - 单位: 毫秒
 - 是否可变: Yes
-- 描述: 大查询入队时，`QueryQueueManager` 等待计算节点扩容增加容量的最大毫秒数。仅当查询通过 `GlobalSlotProvider` 入队（QQv2 启用）时生效。默认值 `0` 表示禁用 pre-scale 等待——查询立即被准入，行为与改造前一致。
+- 描述: `QueryQueueManager` 等待计算节点扩容增加容量的最大毫秒数。仅当查询通过 `GlobalSlotProvider` 入队（QQv2 启用）且原始 slot 需求超过阈值时生效。默认值 `0` 表示禁用 pre-scale 等待——查询立即被准入，行为与改造前一致。
 - 引入版本: -
 
 ### `query_queue_pre_scale_slot_threshold_ratio`
@@ -666,7 +657,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: Double
 - 单位: 比例
 - 是否可变: Yes
-- 描述: 触发 pre-scale 等待的原始 slot 阈值比例。当查询的 `rawSlots > totalSlots × 此比例` 时进入等待。与 `query_queue_big_query_slot_threshold_ratio` 相互独立，运维方可以分别配置“识别为大查询”和“实际等待扩容”的两个阈值。
+- 描述: 触发 pre-scale 等待的原始 slot 阈值比例。当查询的 `rawSlots > totalSlots × 此比例` 时进入等待。
 - 引入版本: -
 
 ### `query_queue_slots_estimator_strategy`

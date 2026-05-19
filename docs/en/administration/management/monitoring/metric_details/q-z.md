@@ -51,41 +51,6 @@ For more information on how to build a monitoring service for your StarRocks clu
 - Unit: Bytes
 - Description: Memory used by queries.
 
-## `query_queue_big_query_total`
-
-- Unit: Count
-- Type: Counter
-- Labels: `warehouse_id`, `warehouse_name`
-- Description: Cumulative count of big queries observed at pending-enter per warehouse. Increments once per query that crosses the big-query threshold. Useful for alerting on big-query frequency.
-
-## `query_queue_max_raw_slots_ratio`
-
-- Unit: Ratio
-- Type: Gauge
-- Labels: `warehouse_id`, `warehouse_name`
-- Description: `pending_max_raw_slots / totalSlots`. Values > 1.0 mean the warehouse is short of capacity for the largest pending query. Useful for ratio-based HPA targets (e.g., scale up when this exceeds 0.8).
-
-## `query_queue_pending_big_query_count`
-
-- Unit: Count
-- Type: Gauge
-- Labels: `warehouse_id`, `warehouse_name`
-- Description: Number of pending queries flagged as "big" per warehouse. A query is flagged when its raw slots exceed `totalSlots × query_queue_big_query_slot_threshold_ratio` (default ratio 1.0). Useful for alerting on big-query queue depth.
-
-## `query_queue_pending_big_query_wait_ms`
-
-- Unit: Milliseconds
-- Type: Histogram
-- Labels: `warehouse_id`, `warehouse_name`
-- Description: Wait-time distribution (milliseconds) for big queries between pending-enter and pending-exit. Validates whether pre-scale wait (introduced separately) is effective; high p99 indicates queue admission is being held up for big queries.
-
-## `query_queue_pending_max_raw_slots`
-
-- Unit: Count
-- Type: Gauge
-- Labels: `warehouse_id`, `warehouse_name`
-- Description: Maximum raw (un-clamped) estimated slot count across queries currently in the pending phase of `QueryQueueManager.maybeWait()` for the warehouse. Values > totalSlots indicate at least one query needs more capacity than is currently available. Primary signal for K8s HPA autoscaling.
-
 ## `query_queue_pending_sum_raw_slots`
 
 - Unit: Count
@@ -106,13 +71,6 @@ For more information on how to build a monitoring service for your StarRocks clu
 - Type: Counter
 - Labels: `warehouse_id`, `warehouse_name`
 - Description: Cumulative count of pre-scale wait gate firings per warehouse. Useful for monitoring how often big queries are being held by the autoscaling-friendly admission delay, excluding interrupted waits.
-
-## `query_queue_required_compute_node_count`
-
-- Unit: Count
-- Type: Gauge
-- Labels: `warehouse_id`, `warehouse_name`
-- Description: Derived value: `ceil(query_queue_pending_max_raw_slots / slots_per_cn)` where `slots_per_cn = totalSlots / numBes`. Intended as the HPA `desiredReplicas` signal — exposes how many compute nodes the warehouse would need to fit the largest pending query.
 
 ## `query_scan_bytes`
 
