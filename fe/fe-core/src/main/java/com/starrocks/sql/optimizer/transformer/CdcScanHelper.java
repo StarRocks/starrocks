@@ -19,7 +19,10 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.lake.bookmark.Bookmark;
 import com.starrocks.lake.bookmark.BookmarkChange;
+import com.starrocks.lake.bookmark.BookmarkManager;
+import com.starrocks.lake.bookmark.BookmarkRange;
 import com.starrocks.lake.bookmark.BookmarkScopedTableResolver;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.optimizer.operator.Operator;
@@ -53,6 +56,31 @@ public final class CdcScanHelper {
         columns.add(new Column(CDC_CHANGE_TYPE_COLUMN_NAME, IntegerType.TINYINT));
         columns.add(new Column(CDC_ROW_VERSION_COLUMN_NAME, IntegerType.BIGINT));
         return columns;
+    }
+
+    /**
+     * Resolve {@code range}'s base and head ids against the BookmarkManager and
+     * forward to {@link #build(OlapTable, Bookmark, Bookmark, Map, Map)}.
+     *
+     * @throws SemanticException if either bookmark id is not registered for
+     *     {@code table}; downstream invariants on the resolved Bookmarks are
+     *     enforced by the (Bookmark, Bookmark) overload
+     */
+    public static LogicalChangesScanOperator build(
+            OlapTable table, BookmarkRange range,
+            Map<ColumnRefOperator, Column> colRefToColumnMetaMap,
+            Map<Column, ColumnRefOperator> columnMetaToColRefMap) {
+        long dbId = table.mayGetDatabaseId().orElseThrow(() ->
+                new IllegalStateException(
+                        String.format("dbId missing on %s", table.getName())));
+        BookmarkManager mgr = GlobalStateMgr.getCurrentState().getBookmarkManager();
+        Bookmark base = mgr.findBookmarkById(dbId, table.getId(), range.base())
+                .orElseThrow(() -> new SemanticException(String.format(
+                        "bookmark %d not found on table '%s'", range.base(), table.getName())));
+        Bookmark head = mgr.findBookmarkById(dbId, table.getId(), range.head())
+                .orElseThrow(() -> new SemanticException(String.format(
+                        "bookmark %d not found on table '%s'", range.head(), table.getName())));
+        return build(table, base, head, colRefToColumnMetaMap, columnMetaToColRefMap);
     }
 
     /**

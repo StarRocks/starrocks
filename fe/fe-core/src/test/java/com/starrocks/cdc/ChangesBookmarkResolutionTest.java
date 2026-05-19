@@ -22,9 +22,11 @@ import com.starrocks.lake.bookmark.Bookmark;
 import com.starrocks.lake.bookmark.BookmarkChange;
 import com.starrocks.lake.bookmark.BookmarkHolder;
 import com.starrocks.lake.bookmark.BookmarkManager;
+import com.starrocks.lake.bookmark.BookmarkRange;
 import com.starrocks.lake.bookmark.BookmarkTestBase;
 import com.starrocks.lake.bookmark.PhysicalPartitionMeta;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
@@ -350,6 +352,62 @@ public class ChangesBookmarkResolutionTest extends BookmarkTestBase {
                 + "' has been redistributed";
         assertTrue(msg.contains(expected),
                 "expected message to contain '" + expected + "', got: " + msg);
+    }
+
+    @Test
+    public void testBuildFromBookmarkRange() throws Exception {
+        String tableName = "dup_br_" + TABLE_COUNTER.getAndIncrement();
+        long tableId = createDupTable(tableName);
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getDb(dbId).getTable(tableId);
+        table.maySetDatabaseId(dbId);
+
+        BookmarkManager bm = GlobalStateMgr.getCurrentState().getBookmarkManager();
+        BookmarkHolder hBase = BookmarkHolder.forEmptyInfo("range_base");
+        BookmarkHolder hHead = BookmarkHolder.forEmptyInfo("range_head");
+        Bookmark base = bm.create(dbId, tableId, hBase);
+        bumpVisibleVersion(table, 4L);
+        Bookmark head = bm.create(dbId, tableId, hHead);
+
+        try {
+            LogicalChangesScanOperator op = CdcScanHelper.build(
+                    table,
+                    new BookmarkRange(base.getBookmarkId(), head.getBookmarkId()),
+                    new HashMap<>(),
+                    new HashMap<>());
+            assertNotNull(op);
+            assertEquals(base.getBookmarkId(), op.getBase().getBookmarkId());
+            assertEquals(head.getBookmarkId(), op.getHead().getBookmarkId());
+        } finally {
+            bm.releaseReference(dbId, tableId, base.getBookmarkId(), hBase.getHolderId());
+            bm.releaseReference(dbId, tableId, head.getBookmarkId(), hHead.getHolderId());
+        }
+    }
+
+    @Test
+    public void testBuildFromBookmarkRangeBaseNotFound() throws Exception {
+        String tableName = "dup_brnf_" + TABLE_COUNTER.getAndIncrement();
+        long tableId = createDupTable(tableName);
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getDb(dbId).getTable(tableId);
+        table.maySetDatabaseId(dbId);
+
+        BookmarkManager bm = GlobalStateMgr.getCurrentState().getBookmarkManager();
+        BookmarkHolder hHead = BookmarkHolder.forEmptyInfo("range_nf_head");
+        Bookmark head = bm.create(dbId, tableId, hHead);
+
+        try {
+            SemanticException ex = assertThrows(SemanticException.class,
+                    () -> CdcScanHelper.build(
+                            table,
+                            new BookmarkRange(99999L, head.getBookmarkId()),
+                            new HashMap<>(),
+                            new HashMap<>()));
+            assertTrue(ex.getMessage().contains("bookmark 99999 not found"),
+                    "actual: " + ex.getMessage());
+        } finally {
+            bm.releaseReference(dbId, tableId, head.getBookmarkId(), hHead.getHolderId());
+        }
     }
 
     /** Wrap a single PhysicalPartitionChange in the per-logical-partition map a BookmarkChange expects. */
