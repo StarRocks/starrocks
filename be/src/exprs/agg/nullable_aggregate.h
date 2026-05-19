@@ -301,7 +301,8 @@ public:
         // dense filters by ~100 ns per call).
         constexpr size_t kProbe = 256;
         const size_t probe_n = std::min(chunk_size, kProbe);
-        const bool sparse = SIMD::count_zero(filter.data(), probe_n) <= probe_n / 8;
+        // See aggregate.h::update_batch_selectively for the threshold rationale.
+        const bool sparse = SIMD::count_zero(filter.data(), probe_n) <= probe_n / 32;
         if (!sparse) {
             for (size_t i = 0; i < chunk_size; i++) {
                 if (filter[i] == 0) {

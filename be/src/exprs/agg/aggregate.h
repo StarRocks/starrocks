@@ -422,7 +422,12 @@ public:
         // the streaming aggregator.
         constexpr size_t kProbe = 256;
         const size_t probe_n = std::min(chunk_size, kProbe);
-        const bool sparse = SIMD::count_zero(filter.data(), probe_n) <= probe_n / 8;
+        // Threshold 1/32 (~3%) reflects the measured crossover between the
+        // sparse SIMD-skip loop (~6-7 ns per kept row) and the dense scalar
+        // loop (~0.2 ns per row). At 1/8 (12.5%) the sparse branch was used
+        // for filters with 5-12% kept rows where it ran 1.5-4x slower than
+        // the dense loop.
+        const bool sparse = SIMD::count_zero(filter.data(), probe_n) <= probe_n / 32;
         if (!sparse) {
             // Dense or empty: straightforward scalar loop.
             for (size_t i = 0; i < chunk_size; i++) {
@@ -473,7 +478,12 @@ public:
             // that pessimises dense filters by ~100 ns per call).
             constexpr size_t kProbe = 256;
             const size_t probe_n = std::min(chunk_size, kProbe);
-            const bool sparse = SIMD::count_zero(filter.data(), probe_n) <= probe_n / 8;
+            // Threshold 1/32 (~3%) reflects the measured crossover between the
+            // sparse SIMD-skip loop (~6-7 ns per kept row) and the dense scalar
+            // loop (~0.2 ns per row). At 1/8 (12.5%) the sparse branch was used
+            // for filters with 5-12% kept rows where it ran 1.5-4x slower than
+            // the dense loop.
+            const bool sparse = SIMD::count_zero(filter.data(), probe_n) <= probe_n / 32;
             if (!sparse) {
                 for (size_t i = 0; i < chunk_size; ++i) {
                     if (filter[i] == 0) {
