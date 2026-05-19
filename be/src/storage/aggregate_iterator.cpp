@@ -23,7 +23,6 @@
 #include "gutil/casts.h"
 #include "runtime/chunk_helper.h"
 #include "storage/chunk_aggregator.h"
-#include "storage/chunk_helper.h"
 
 namespace starrocks {
 

@@ -16,7 +16,6 @@
 
 #include "column/chunk_schema_helper.h"
 #include "common/config_rowset_fwd.h"
-#include "storage/chunk_helper.h"
 #include "storage/predicate_tree/predicate_tree.hpp"
 #include "storage/roaring2range.h"
 

@@ -31,7 +31,6 @@
 #include "gen_cpp/orc_proto.pb.h"
 #include "runtime/chunk_helper.h"
 #include "runtime/runtime_state.h"
-#include "storage/chunk_helper.h"
 
 namespace starrocks {
 

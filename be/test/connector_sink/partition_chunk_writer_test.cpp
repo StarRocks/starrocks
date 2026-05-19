@@ -36,7 +36,6 @@
 #include "formats/utils.h"
 #include "runtime/chunk_helper.h"
 #include "runtime/exec_env.h"
-#include "storage/chunk_helper.h"
 
 namespace starrocks::connector {
 namespace {

@@ -28,7 +28,6 @@
 #include "runtime/chunk_helper.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
-#include "storage/chunk_helper.h"
 #include "types/date_value.h"
 #include "types/timestamp_value.h"
 

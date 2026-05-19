@@ -55,7 +55,6 @@
 #include "gen_cpp/Exprs_types.h"
 #include "runtime/chunk_helper.h"
 #include "runtime/mem_pool.h"
-#include "storage/chunk_helper.h"
 #include "storage/convert_helper.h"
 #include "types/type_descriptor.h"
 #include "utils.h"

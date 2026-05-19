@@ -22,7 +22,6 @@
 #include "fs/fs_factory.h"
 #include "runtime/chunk_helper.h"
 #include "runtime/runtime_state.h"
-#include "storage/chunk_helper.h"
 
 namespace starrocks {
 class HdfsScannerJsonReaderTest : public testing::Test {

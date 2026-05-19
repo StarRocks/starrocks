@@ -19,7 +19,6 @@
 #include "column/chunk.h"
 #include "column/chunk_factory.h"
 #include "runtime/chunk_helper.h"
-#include "storage/chunk_helper.h"
 
 namespace starrocks {
 

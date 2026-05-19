@@ -18,7 +18,6 @@
 #include "exec/schema_scanner/schema_helper.h"
 #include "runtime/chunk_helper.h"
 #include "runtime/runtime_state.h"
-#include "storage/chunk_helper.h"
 #include "types/datetime_value.h"
 #include "types/datum.h"
 #include "types/logical_type.h"
