@@ -24,7 +24,6 @@ import com.starrocks.lake.bookmark.BookmarkRange;
 import com.starrocks.lake.bookmark.BookmarkScopedTableResolver;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
-import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalChangesScanOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -36,9 +35,10 @@ import java.util.Map;
 
 /**
  * Shared entry point for building a {@link LogicalChangesScanOperator} from a
- * pair of Bookmarks on the same OlapTable. The SQL path calls {@link #build}
+ * {@link BookmarkRange} on an OlapTable. The SQL path calls {@link #build}
  * via {@code RelationTransformer}; non-SQL callers (e.g. IVM refresh) drive
- * the same path with their own column-ref map.
+ * the same path with their own column-ref map. PK rejection and the
+ * base<=head invariant are enforced by the caller (QueryAnalyzer for SQL).
  */
 public final class CdcScanHelper {
 
@@ -59,12 +59,16 @@ public final class CdcScanHelper {
     }
 
     /**
-     * Resolve {@code range}'s base and head ids against the BookmarkManager and
-     * forward to {@link #build(OlapTable, Bookmark, Bookmark, Map, Map)}.
+     * Resolve {@code range}'s base and head ids against the BookmarkManager,
+     * compute the bookmark delta, reject non-trackable changes, and produce
+     * the scan operator over a bookmark-scoped view of {@code table}. The
+     * caller must have already registered column refs for both the business
+     * columns and the CDC metadata columns (see {@link #getCdcMetadataColumns()})
+     * in {@code colRefToColumnMetaMap}.
      *
      * @throws SemanticException if either bookmark id is not registered for
-     *     {@code table}; downstream invariants on the resolved Bookmarks are
-     *     enforced by the (Bookmark, Bookmark) overload
+     *     {@code table}, or if the computed delta contains non-trackable
+     *     changes
      */
     public static LogicalChangesScanOperator build(
             OlapTable table, BookmarkRange range,
@@ -80,30 +84,6 @@ public final class CdcScanHelper {
         Bookmark head = mgr.findBookmarkById(dbId, table.getId(), range.head())
                 .orElseThrow(() -> new SemanticException(String.format(
                         "bookmark %d not found on table '%s'", range.head(), table.getName())));
-        return build(table, base, head, colRefToColumnMetaMap, columnMetaToColRefMap);
-    }
-
-    /**
-     * Validate the CHANGES request and produce the scan operator over a
-     * bookmark-scoped view of {@code table}. The caller must have already
-     * registered column refs for both the business columns and the CDC
-     * metadata columns (see {@link #getCdcMetadataColumns()}) in
-     * {@code colRefToColumnMetaMap}.
-     *
-     * @throws SemanticException if {@code table} is a primary-key table,
-     *     if {@code base} is later than {@code head}, or if the computed
-     *     delta contains non-trackable changes
-     */
-    public static LogicalChangesScanOperator build(
-            OlapTable table, Bookmark base, Bookmark head,
-            Map<ColumnRefOperator, Column> colRefToColumnMetaMap,
-            Map<Column, ColumnRefOperator> columnMetaToColRefMap) {
-        if (table.getKeysType() == KeysType.PRIMARY_KEYS) {
-            throw new SemanticException("CHANGES on primary-key table is not supported yet");
-        }
-        if (base.getBookmarkId() > head.getBookmarkId()) {
-            throw new SemanticException("CHANGES base must not be later than head");
-        }
         BookmarkChange delta = BookmarkChange.computeChanges(base, head);
         if (!delta.isTrackable()) {
             throw new SemanticException(formatNotTrackableMessage(delta, table));
