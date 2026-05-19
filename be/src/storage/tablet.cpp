@@ -1584,6 +1584,10 @@ void Tablet::build_tablet_report_info(TTabletInfo* tablet_info) {
         if (_tablet_meta->get_binlog_config() != nullptr) {
             tablet_info->__set_binlog_config_version(_tablet_meta->get_binlog_config()->version);
         }
+        if (_tablet_meta->get_flat_json_config() != nullptr) {
+            tablet_info->__set_flat_json_config_version(
+                    _tablet_meta->get_flat_json_config()->get_flat_json_config_version());
+        }
         if (_updates == nullptr) {
             int64_t max_version = _timestamped_version_tracker.get_max_continuous_version();
             auto max_rowset = rowset_with_max_version();

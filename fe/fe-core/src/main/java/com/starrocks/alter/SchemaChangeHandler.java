@@ -2731,10 +2731,17 @@ public class SchemaChangeHandler extends AlterHandler {
             return true;
         }
 
-        newFlatJsonConfig.incVersion();
-
         locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(olapTable.getId()), LockType.WRITE);
         try {
+            // check for concurrent modifications by version
+            if (olapTable.containsFlatJsonConfig()
+                    && olapTable.getFlatJsonConfig().getVersion() != newFlatJsonConfig.getVersion()) {
+                Map<String, String> newProperties = olapTable.getFlatJsonConfig().toProperties();
+                newProperties.putAll(properties);
+                newFlatJsonConfig.buildFromProperties(newProperties);
+                newFlatJsonConfig.setVersion(olapTable.getFlatJsonConfig().getVersion());
+            }
+            newFlatJsonConfig.incVersion();
             GlobalStateMgr.getCurrentState().getLocalMetastore().modifyFlatJsonMeta(db, olapTable, newFlatJsonConfig);
         } catch (Exception e) {
             isModifiedSuccess = false;
