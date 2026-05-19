@@ -26,8 +26,13 @@
 // PR #73290 and rle_page's batch-decode is covered by the existing
 // parquet_dict_decode_bench end-to-end.)
 
-#ifdef __AVX2__
+#if defined(__AVX2__)
 #include <immintrin.h>
+#elif defined(__SSE2__)
+// scalar_get_matched_sse2() uses _mm_* intrinsics under #if defined(__SSE2__);
+// on `-msse2 -mno-avx2` builds __SSE2__ is set but __AVX2__ is not, so the
+// AVX2-gated include above isn't enough. Pull in <emmintrin.h> for that case.
+#include <emmintrin.h>
 #elif defined(__ARM_NEON) && defined(__aarch64__)
 #include <arm_neon.h>
 #endif
@@ -195,14 +200,20 @@ static void prepare_dict_codes(std::vector<int32_t>& res, std::vector<uint8_t>& 
     for (auto& n : nulls) n = (nd(rng) < null_ratio_percent) ? 1 : 0;
 }
 
+// Note: the working buffer `rc` is allocated once outside the timed loop.
+// Earlier versions copied `rc = res;` inside the loop, which dominated the
+// timings with a 16 KiB std::vector copy and hid the actual kernel cost
+// (the kernel writes in-place at the call site, no copy involved).
+
 static void BM_DictNullMask_Scalar(benchmark::State& state) {
     std::vector<int32_t> res;
     std::vector<uint8_t> nulls;
     prepare_dict_codes(res, nulls, static_cast<int>(state.range(0)));
+    std::vector<int32_t> rc = res;
     for (auto _ : state) {
-        std::vector<int32_t> rc = res;
         scalar_null_mask_int32(rc.data(), nulls.data(), kChunk);
         benchmark::DoNotOptimize(rc.data());
+        benchmark::ClobberMemory();
     }
 }
 
@@ -210,10 +221,11 @@ static void BM_DictNullMask_SIMD(benchmark::State& state) {
     std::vector<int32_t> res;
     std::vector<uint8_t> nulls;
     prepare_dict_codes(res, nulls, static_cast<int>(state.range(0)));
+    std::vector<int32_t> rc = res;
     for (auto _ : state) {
-        std::vector<int32_t> rc = res;
         simd_null_mask_int32(rc.data(), nulls.data(), kChunk);
         benchmark::DoNotOptimize(rc.data());
+        benchmark::ClobberMemory();
     }
 }
 
