@@ -645,27 +645,7 @@ Status vacuum_load_spill(std::string_view root_location, int64_t min_active_txn_
         return txn_id;
     };
 
-    // Batch deletion buffer. S3 DeleteObjects API allows up to 1000 keys per request and
-    // staros::S3FileSystem::delete_files batches by FLAGS_delete_files_max_key_in_batch
-    // (default 1000). See design-doc §10.3.
-    constexpr size_t kBatchSize = 1000;
-    std::vector<std::string> batch;
-    batch.reserve(kBatchSize);
-
-    auto flush_batch = [&]() {
-        if (batch.empty()) return;
-        auto st = ignore_not_found(fs->delete_files(batch));
-        if (!st.ok()) {
-            // Tolerant: log and continue. Next vacuum round will retry untouched files
-            // (list is idempotent and the surviving files keep their hex prefix).
-            LOG(WARNING) << "Fail to batch-delete " << batch.size() << " load spill files under " << load_spill_txns_dir
-                         << ": " << st;
-            ret.update(st);
-        } else {
-            local_deleted += batch.size();
-        }
-        batch.clear();
-    };
+    std::vector<std::string> to_delete;
 
     auto txns_iter_st = ignore_not_found(fs->iterate_dir2(load_spill_txns_dir, [&](DirEntry entry) {
         std::string_view name = normalize_entry_name(entry);
@@ -688,14 +668,15 @@ Status vacuum_load_spill(std::string_view root_location, int64_t min_active_txn_
             return true; // still potentially in use
         }
 
-        batch.emplace_back(join_path(load_spill_txns_dir, std::string(name)));
-        if (batch.size() >= kBatchSize) {
-            flush_batch();
-        }
+        to_delete.emplace_back(join_path(load_spill_txns_dir, std::string(name)));
         return true;
     }));
-    flush_batch();
     ret.update(txns_iter_st);
+
+    if (!to_delete.empty()) {
+        local_deleted += to_delete.size();
+        delete_files_async(std::move(to_delete));
+    }
 
     // ---- (2) Legacy layout: <root>/load_spill/<load_id>/ ----
     //

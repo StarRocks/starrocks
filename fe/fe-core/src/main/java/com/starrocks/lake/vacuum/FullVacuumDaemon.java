@@ -63,9 +63,9 @@ public class FullVacuumDaemon extends FrontendDaemon implements Writable {
 
     private final Set<Long> vacuumingPartitions = Sets.newConcurrentHashSet();
 
-    private final BlockingThreadPoolExecutorService executorService = BlockingThreadPoolExecutorService.newInstance(
-            Config.lake_fullvacuum_parallel_partitions, 0, TIMEOUT_VACUUM_FULL,
-            TimeUnit.MILLISECONDS, "fullvacuum");
+    private final BlockingThreadPoolExecutorService executorService =
+            BlockingThreadPoolExecutorService.newInstance(Config.lake_fullvacuum_parallel_partitions, 0, TIMEOUT_VACUUM_FULL,
+                    TimeUnit.MILLISECONDS, "fullvacuum");
 
     public FullVacuumDaemon() {
         // Check every minute if we should run a full vacuum
@@ -94,14 +94,12 @@ public class FullVacuumDaemon extends FrontendDaemon implements Writable {
                 }
             }
 
-            // Full vacuum cleans up two types of data (orphan data files and redundant
-            // db/table/partition)
+            // Full vacuum cleans up two types of data (orphan data files and redundant db/table/partition)
             // 1. Cleanup Orphan Data Files: Data files not referenced by tablet metadata.
             for (Table table : tables) {
                 vacuumTable(db, table);
             }
-            // 2. Redundant db/table/partition: Dbs, tables, or partitions that have been
-            // deleted in FE but not in the object storage.
+            //  2. Redundant db/table/partition: Dbs, tables, or partitions that have been deleted in FE but not in the object storage.
 
         }
     }
@@ -154,8 +152,7 @@ public class FullVacuumDaemon extends FrontendDaemon implements Writable {
         Locker locker = new Locker();
         locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.READ);
         try {
-            for (MaterializedIndex index : partition
-                    .getLatestMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
+            for (MaterializedIndex index : partition.getLatestMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
                 tablets.addAll(index.getTablets());
             }
             visibleVersion = partition.getVisibleVersion();
@@ -164,8 +161,7 @@ public class FullVacuumDaemon extends FrontendDaemon implements Writable {
         }
 
         if (visibleVersion <= 1) {
-            LOG.info("skipping full vacuum of partition={} because its visible version is {}", partition.getId(),
-                    visibleVersion);
+            LOG.info("skipping full vacuum of partition={} because its visible version is {}", partition.getId(), visibleVersion);
             partition.setLastFullVacuumTime(startTime);
             return;
         }
@@ -176,8 +172,7 @@ public class FullVacuumDaemon extends FrontendDaemon implements Writable {
         Map<ComputeNode, Tablet> nodeToTablet = new HashMap<>();
 
         for (Tablet tablet : tablets) {
-            ComputeNode node = warehouseManager.getComputeNodeAssignedToTablet(WarehouseManager.DEFAULT_RESOURCE,
-                    tablet.getId());
+            ComputeNode node = warehouseManager.getComputeNodeAssignedToTablet(WarehouseManager.DEFAULT_RESOURCE, tablet.getId());
 
             if (node == null) {
                 LOG.error("Could not get CN for tablet={}, returning early.", tablet.getId());
@@ -203,14 +198,14 @@ public class FullVacuumDaemon extends FrontendDaemon implements Writable {
 
         long graceTimestamp = startTime / MILLISECONDS_PER_SECOND - Config.lake_fullvacuum_meta_expired_seconds;
         graceTimestamp = Math.min(graceTimestamp,
-                Math.max(clusterSnapshotMgr.getSafeDeletionTimeMs() / MILLISECONDS_PER_SECOND, 1));
+                                  Math.max(clusterSnapshotMgr.getSafeDeletionTimeMs() / MILLISECONDS_PER_SECOND, 1));
         vacuumFullRequest.setGraceTimestamp(graceTimestamp);
 
         List<Long> retainVersions = new ArrayList<>();
         retainVersions.addAll(clusterSnapshotMgr.getVacuumRetainVersions(
-                db.getId(), table.getId(), partition.getParentId(), partition.getId()));
+                              db.getId(), table.getId(), partition.getParentId(), partition.getId()));
         if (!retainVersions.contains(visibleVersion)) {
-            retainVersions.add(visibleVersion); // current visibleVersion should be retained
+            retainVersions.add(visibleVersion); // current visibleVersion should be retained 
         }
         long minCheckVersion = 0;
         long maxCheckVersion = visibleVersion; // always should be inited by current visibleVersion
@@ -224,11 +219,10 @@ public class FullVacuumDaemon extends FrontendDaemon implements Writable {
         vacuumFullRequest.setCleanupLegacyLoadSpill(true);
 
         LOG.info(
-                "Sending full vacuum request to cn={}: table={}, partition={}, max_check_version={}, "
-                        + "min_active_txn_id={}",
-                chosenNode.getHost(), table.getName(), vacuumFullRequest.getPartitionId(),
-                vacuumFullRequest.maxCheckVersion,
+                "Sending full vacuum request to cn={}: table={}, partition={}, max_check_version={}, " + "min_active_txn_id={}",
+                chosenNode.getHost(), table.getName(), vacuumFullRequest.getPartitionId(), vacuumFullRequest.maxCheckVersion,
                 vacuumFullRequest.minActiveTxnId);
+
 
         boolean hasError = false;
         long vacuumedFiles = 0;
@@ -250,9 +244,8 @@ public class FullVacuumDaemon extends FrontendDaemon implements Writable {
                 if (response.status.statusCode != 0) {
                     hasError = true;
                     LOG.warn("Vacuumed {}.{}.{} with error: {}", db.getFullName(), table.getName(), partition.getId(),
-                            response.status.errorMsgs != null && !response.status.errorMsgs.isEmpty()
-                                    ? response.status.errorMsgs.get(0)
-                                    : "");
+                             response.status.errorMsgs != null && !response.status.errorMsgs.isEmpty() ?
+                             response.status.errorMsgs.get(0) : "");
                 } else {
                     vacuumedFiles += response.vacuumedFiles;
                     vacuumedFileSize += response.vacuumedFileSize;
@@ -271,9 +264,8 @@ public class FullVacuumDaemon extends FrontendDaemon implements Writable {
         partition.setLastFullVacuumTime(startTime);
 
         LOG.info("Full vacuumed {}.{}.{} hasError={} vacuumedFiles={} vacuumedFileSize={} " +
-                "visibleVersion={} minActiveTxnId={} vacuumVersion={} cost={}ms", db.getFullName(), table.getName(),
-                partition.getId(), hasError, vacuumedFiles, vacuumedFileSize, visibleVersion, minActiveTxnId,
-                vacuumedVersion,
+                        "visibleVersion={} minActiveTxnId={} vacuumVersion={} cost={}ms", db.getFullName(), table.getName(),
+                partition.getId(), hasError, vacuumedFiles, vacuumedFileSize, visibleVersion, minActiveTxnId, vacuumedVersion,
                 System.currentTimeMillis() - startTime);
     }
 

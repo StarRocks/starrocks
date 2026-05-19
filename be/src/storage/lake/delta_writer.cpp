@@ -408,9 +408,9 @@ Status DeltaWriterImpl::build_schema_and_writer() {
         if (should_enable_load_spill()) {
             if (_load_spill_block_mgr == nullptr || !_load_spill_block_mgr->is_initialized()) {
                 // Pass txn_id to LoadSpillBlockManager so that spill files are placed under
-                // <tablet_root>/load_spill_txns/<txn_id_hex>/<load_id>/, enabling offline
-                // vacuum to reclaim expired directories by comparing the encoded txn_id
-                // against the cluster-wide min_active_txn_id.
+                // the flat layout <tablet_root>/load_spill_txns/<txn_id_hex>_<load_id>_<frag_id>_<seq>,
+                // enabling offline vacuum to reclaim expired entries by comparing the leading
+                // hex txn_id against the cluster-wide min_active_txn_id.
                 _load_spill_block_mgr = std::make_unique<LoadSpillBlockManager>(
                         UniqueId(_load_id).to_thrift(),
                         UniqueId(_tablet_id, _txn_id)

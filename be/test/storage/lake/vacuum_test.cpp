@@ -5170,6 +5170,7 @@ TEST_P(LakeVacuumTest, vacuum_load_spill_flat_parses_valid_name) {
     int64_t deleted = 0;
     ASSERT_OK(vacuum_load_spill(kTestDir, /*min_active_txn_id=*/1000,
                                 /*cleanup_legacy_load_spill=*/false, &deleted));
+    ExecEnv::GetInstance()->delete_file_thread_pool()->wait();
     EXPECT_FALSE(path_exists(victim));
     EXPECT_EQ(1, deleted);
 }
@@ -5235,6 +5236,7 @@ TEST_P(LakeVacuumTest, vacuum_load_spill_flat_threshold_strict_less_than) {
     int64_t deleted = 0;
     ASSERT_OK(vacuum_load_spill(kTestDir, /*min_active_txn_id=*/100,
                                 /*cleanup_legacy_load_spill=*/false, &deleted));
+    ExecEnv::GetInstance()->delete_file_thread_pool()->wait();
     EXPECT_TRUE(path_exists(kept));
     EXPECT_FALSE(path_exists(victim));
     EXPECT_EQ(1, deleted);
