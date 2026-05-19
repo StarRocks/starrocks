@@ -328,7 +328,7 @@ SHOW CREATE MATERIALIZED VIEW <mv_name>;
 ALTER MATERIALIZED VIEW <mv_name> SET ("bloom_filter_columns" = "");  
 ```  
 
-**PROPERTIES** (optional)
+#### PROPERTIES (optional)
 
 Properties of the asynchronous materialized view. You can modify the properties of an existing materialized view using [ALTER MATERIALIZED VIEW](ALTER_MATERIALIZED_VIEW.md).
 

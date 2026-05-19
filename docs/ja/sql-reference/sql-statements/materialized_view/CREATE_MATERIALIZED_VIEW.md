@@ -331,7 +331,7 @@ SHOW CREATE MATERIALIZED VIEW <mv_name>;
 ALTER MATERIALIZED VIEW <mv_name> SET ("bloom_filter_columns" = "");  
 ```
 
-**PROPERTIES** (オプション)
+#### PROPERTIES (オプション)
 
 非同期マテリアライズドビューのプロパティ。既存のマテリアライズドビューのプロパティを変更するには、[ALTER MATERIALIZED VIEW](ALTER_MATERIALIZED_VIEW.md)を使用できます。
 
