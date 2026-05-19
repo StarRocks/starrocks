@@ -38,7 +38,9 @@ Status StructColumnReader::read_datum(const avro::GenericDatum& datum, Column* c
         const auto& field_name = _type_desc.field_names[i];
         ASSIGN_OR_RETURN(auto* field_column, struct_column->field_column_raw_ptr(field_name));
 
-        if (record.hasField(field_name)) {
+        if (_field_readers[i] == nullptr) {
+            field_column->append_nulls(1);
+        } else if (record.hasField(field_name)) {
             const auto& field = record.field(field_name);
             auto* field_reader = down_cast<NullableColumnReader*>(_field_readers[i].get());
             RETURN_IF_ERROR(field_reader->read_datum(field, field_column));
@@ -52,8 +54,6 @@ Status StructColumnReader::read_datum(const avro::GenericDatum& datum, Column* c
 Status ArrayColumnReader::read_datum(const avro::GenericDatum& datum, Column* column) {
     DCHECK_EQ(datum.type(), avro::AVRO_ARRAY);
 
-    auto* element_reader = down_cast<NullableColumnReader*>(_element_reader.get());
-
     auto array_column = down_cast<ArrayColumn*>(column);
     auto* elements_column = array_column->elements_column_raw_ptr();
     auto* offsets_column = array_column->offsets_column_raw_ptr();
@@ -63,7 +63,12 @@ Status ArrayColumnReader::read_datum(const avro::GenericDatum& datum, Column* co
 
     uint32_t n = 0;
     for (auto& value : array_values) {
-        RETURN_IF_ERROR(element_reader->read_datum(value, elements_column));
+        if (_element_reader != nullptr) {
+            auto* element_reader = down_cast<NullableColumnReader*>(_element_reader.get());
+            RETURN_IF_ERROR(element_reader->read_datum(value, elements_column));
+        } else {
+            elements_column->append_nulls(1);
+        }
         ++n;
     }
 

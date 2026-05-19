@@ -276,4 +276,81 @@ TEST_F(ComplexColumnReaderTest, test_map_unknown_value_type_skips_value_decode) 
     ASSERT_EQ("[{'true':NULL,'false':NULL}]", column->debug_string());
 }
 
+TEST_F(ComplexColumnReaderTest, test_array_unknown_element_type_skips_element_decode) {
+    avro::LogicalType ts_type(avro::LogicalType::TIMESTAMP_MILLIS);
+    auto ts_node = avro::NodePtr(new avro::NodePrimitive(avro::AVRO_LONG));
+    ts_node->setLogicalType(ts_type);
+
+    avro::MultiLeaves union_nodes;
+    union_nodes.add(avro::NodePtr(new avro::NodePrimitive(avro::AVRO_NULL)));
+    union_nodes.add(ts_node);
+    auto union_schema = avro::NodePtr(new avro::NodeUnion(union_nodes));
+
+    auto array_schema = avro::NodePtr(new avro::NodeArray(avro::SingleLeaf(union_schema)));
+    auto array_datum = avro::GenericArray(array_schema);
+    auto& array_value = array_datum.value();
+    {
+        avro::GenericUnion null_union(union_schema);
+        null_union.selectBranch(0);
+        array_value.emplace_back(avro::GenericDatum(union_schema, null_union));
+    }
+    {
+        avro::GenericUnion ts_union(union_schema);
+        ts_union.selectBranch(1);
+        ts_union.datum() =
+                avro::GenericDatum(avro::AVRO_LONG, ts_type, milliseconds_since_epoch("2026-05-19 12:03:01.000"));
+        array_value.emplace_back(avro::GenericDatum(union_schema, ts_union));
+    }
+
+    auto datum = avro::GenericDatum(array_schema, array_datum);
+
+    TypeDescriptor reader_type_desc = TypeDescriptor::create_array_type(TypeDescriptor(TYPE_UNKNOWN));
+    TypeDescriptor column_type_desc = TypeDescriptor::create_array_type(TypeDescriptor{TYPE_NULL});
+    auto column = create_adaptive_nullable_column(column_type_desc);
+    auto reader = get_column_reader(reader_type_desc, false);
+
+    CHECK_OK(reader->read_datum_for_adaptive_column(datum, column.get()));
+
+    ASSERT_EQ(1, column->size());
+    ASSERT_EQ("[[NULL,NULL]]", column->debug_string());
+}
+
+TEST_F(ComplexColumnReaderTest, test_struct_unknown_field_type_skips_field_decode) {
+    avro::LogicalType ts_type(avro::LogicalType::TIMESTAMP_MILLIS);
+    auto ts_node = avro::NodePtr(new avro::NodePrimitive(avro::AVRO_LONG));
+    ts_node->setLogicalType(ts_type);
+
+    avro::MultiLeaves field_nodes;
+    field_nodes.add(avro::NodePtr(new avro::NodePrimitive(avro::AVRO_INT)));
+    field_nodes.add(ts_node);
+
+    avro::LeafNames field_names;
+    field_names.add("int_col");
+    field_names.add("ts_col");
+
+    std::vector<avro::GenericDatum> datums;
+    datums.emplace_back(avro::GenericDatum(int32_t{10}));
+    datums.emplace_back(avro::GenericDatum(avro::AVRO_LONG, ts_type, milliseconds_since_epoch("2026-05-19 12:03:01.000")));
+
+    auto record_schema =
+            avro::NodePtr(new avro::NodeRecord(avro::HasName(avro::Name(_col_name)), field_nodes, field_names, datums));
+    auto record_datum = avro::GenericRecord(record_schema);
+    for (size_t i = 0; i < datums.size(); ++i) {
+        record_datum.setFieldAt(i, datums[i]);
+    }
+    auto datum = avro::GenericDatum(record_schema, record_datum);
+
+    TypeDescriptor reader_type_desc = TypeDescriptor::create_struct_type(
+            {"int_col", "ts_col"}, {TypeDescriptor::from_logical_type(TYPE_INT), TypeDescriptor(TYPE_UNKNOWN)});
+    TypeDescriptor column_type_desc = TypeDescriptor::create_struct_type(
+            {"int_col", "ts_col"}, {TypeDescriptor::from_logical_type(TYPE_INT), TypeDescriptor{TYPE_NULL}});
+    auto column = create_adaptive_nullable_column(column_type_desc);
+    auto reader = get_column_reader(reader_type_desc, false);
+
+    CHECK_OK(reader->read_datum_for_adaptive_column(datum, column.get()));
+
+    ASSERT_EQ(1, column->size());
+    ASSERT_EQ("[{int_col:10,ts_col:NULL}]", column->debug_string());
+}
+
 } // namespace starrocks::avrocpp
