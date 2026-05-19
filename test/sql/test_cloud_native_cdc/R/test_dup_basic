@@ -12,13 +12,11 @@ INSERT INTO dup_t VALUES (2, 20), (3, 30);
 -- result:
 -- !result
 [UC]function: bk_post=create_bookmark("${db[0]}", "dup_t", "smoke_b")
-SELECT k, v, __CHANGE_TYPE__ FROM dup_t
-CHANGES FROM VERSION ${bk_pre} TO VERSION ${bk_pre}
+SELECT k, v, __CHANGE_TYPE__ FROM dup_t [_CHANGES_${bk_pre}_${bk_pre}_]
 ORDER BY k;
 -- result:
 -- !result
-SELECT k, v, __CHANGE_TYPE__ FROM dup_t
-CHANGES FROM VERSION ${bk_pre} TO VERSION ${bk_post}
+SELECT k, v, __CHANGE_TYPE__ FROM dup_t [_CHANGES_${bk_pre}_${bk_post}_]
 ORDER BY k;
 -- result:
 1	10	0
@@ -27,7 +25,7 @@ ORDER BY k;
 -- !result
 SELECT count(*),
        (count(DISTINCT __ROW_VERSION__) BETWEEN 1 AND count(*)) AS row_version_bounded
-FROM dup_t CHANGES FROM VERSION ${bk_pre} TO VERSION ${bk_post};
+FROM dup_t [_CHANGES_${bk_pre}_${bk_post}_];
 -- result:
 3	1
 -- !result

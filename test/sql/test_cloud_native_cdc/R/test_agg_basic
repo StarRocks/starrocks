@@ -9,8 +9,7 @@ INSERT INTO agg_t VALUES (1, 10), (1, 20), (1, 30);
 -- result:
 -- !result
 [UC]function: bk1=create_bookmark("${db[0]}", "agg_t", "agg_head")
-SELECT k, v, __CHANGE_TYPE__ FROM agg_t
-CHANGES FROM VERSION ${bk0} TO VERSION ${bk1}
+SELECT k, v, __CHANGE_TYPE__ FROM agg_t [_CHANGES_${bk0}_${bk1}_]
 ORDER BY k;
 -- result:
 1	60	0
