@@ -124,24 +124,6 @@ This topic introduces the following types of FE configurations:
 - Description: Read timeout for OPA HTTP requests. StarRocks denies the checked operation if an authorization request times out.
 - Introduced in: v4.1.0
 
-### `opa_log_requests`
-
-- Default: false
-- Type: Boolean
-- Unit: -
-- Is mutable: No
-- Description: Whether to log OPA request URLs and JSON request bodies at DEBUG level. Enable only for troubleshooting because the request body can contain user, group, and object names.
-- Introduced in: v4.1.0
-
-### `opa_log_responses`
-
-- Default: false
-- Type: Boolean
-- Unit: -
-- Is mutable: No
-- Description: Whether to log OPA response status codes and JSON response bodies at DEBUG level. Enable only for troubleshooting because responses can contain policy expressions.
-- Introduced in: v4.1.0
-
 ### `privilege_max_role_depth`
 
 - Default: 16

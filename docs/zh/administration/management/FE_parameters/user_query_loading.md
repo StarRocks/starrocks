@@ -124,24 +124,6 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: OPA HTTP 请求的读取超时时间。如果授权请求超时，StarRocks 会拒绝被检查的操作。
 - 引入版本: v4.1.0
 
-### `opa_log_requests`
-
-- 默认值: false
-- 类型: Boolean
-- 单位: -
-- 是否可变: No
-- 描述: 是否以 DEBUG 级别记录 OPA 请求 URL 和 JSON 请求体。请求体可能包含用户、用户组和对象名称，因此仅建议在排查问题时启用。
-- 引入版本: v4.1.0
-
-### `opa_log_responses`
-
-- 默认值: false
-- 类型: Boolean
-- 单位: -
-- 是否可变: No
-- 描述: 是否以 DEBUG 级别记录 OPA 响应状态码和 JSON 响应体。响应体可能包含策略表达式，因此仅建议在排查问题时启用。
-- 引入版本: v4.1.0
-
 ### `privilege_max_role_depth`
 
 - 默认值: 16

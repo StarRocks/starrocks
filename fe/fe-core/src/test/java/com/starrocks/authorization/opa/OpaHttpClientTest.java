@@ -57,7 +57,7 @@ public class OpaHttpClientTest {
     @Test
     public void testCheckPermissionAllowsAndSendsInputEnvelope() throws Exception {
         String policyUrl = startServer("/policy", 200, "{\"result\":true}");
-        OpaHttpClient client = new OpaHttpClient(policyUrl, "", "", "", 1000, 1000, false, false);
+        OpaHttpClient client = new OpaHttpClient(policyUrl, "", "", "", 1000, 1000);
 
         boolean allowed = client.checkPermission(OpaRequest.createCheck(context(), PrivilegeType.SELECT,
                 ObjectType.TABLE, OpaResource.table(new TableName("default_catalog", "db1", "tbl1"))));
@@ -89,7 +89,7 @@ public class OpaHttpClientTest {
         register("/mask", 200, "{\"result\":{\"expression\":\"NULL\"}}");
         register("/batch", 200, "{\"result\":[{\"column\":\"v1\",\"expression\":\"NULL\"},{\"index\":1,\"expression\":\"v2\"}]}");
         OpaHttpClient client = new OpaHttpClient(policyUrl, baseUrl + "/rows", baseUrl + "/mask", baseUrl + "/batch",
-                1000, 1000, false, false);
+                1000, 1000);
 
         Assertions.assertEquals(List.of("v1 = 1", "v2 = 2"), client.getRowFilters(
                 OpaRequest.create(context(), OpaRequest.OPERATION_GET_ROW_FILTERS, PrivilegeType.SELECT,
@@ -111,7 +111,7 @@ public class OpaHttpClientTest {
 
     private void assertDeniedResponse(String responseBody, int status) throws Exception {
         String policyUrl = startServer("/policy", status, responseBody);
-        OpaHttpClient client = new OpaHttpClient(policyUrl, "", "", "", 1000, 1000, false, false);
+        OpaHttpClient client = new OpaHttpClient(policyUrl, "", "", "", 1000, 1000);
         Assertions.assertFalse(client.checkPermission(OpaRequest.createCheck(context(), PrivilegeType.SELECT,
                 ObjectType.TABLE, OpaResource.table(new TableName("default_catalog", "db1", "tbl1")))));
         client.close();
