@@ -73,6 +73,10 @@ ConvertFunc get_arrow_converter(ArrowTypeId at, LogicalType lt, bool is_nullable
 // phase2: convert lt0->lt by VectorCastExpr.
 LogicalType get_strict_type(ArrowTypeId at);
 
+Status convert_arrow_array_to_column(ConvertFuncTree* conv_func, size_t num_elements, const arrow::Array* array,
+                                     Column* column, size_t batch_start_idx, size_t chunk_start_idx,
+                                     Filter* chunk_filter, ArrowConvertContext* conv_ctx);
+
 struct ConvertFuncTree {
     ConvertFuncTree(ConvertFunc f) : func(f){};
     ConvertFuncTree() = default;
