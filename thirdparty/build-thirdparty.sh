@@ -580,7 +580,7 @@ build_blake3() {
         -DCMAKE_BUILD_TYPE=Release \
         -DCMAKE_INSTALL_PREFIX=$TP_INSTALL_DIR \
         -DCMAKE_INSTALL_LIBDIR=lib \
-        -DCMAKE_C_FLAGS="-O3 -fPIC -fno-omit-frame-pointer" \
+        -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
         -DBUILD_SHARED_LIBS=OFF \
         -S . -B build
     ${CMAKE_CMD} --build build -j "${PARALLEL}"
