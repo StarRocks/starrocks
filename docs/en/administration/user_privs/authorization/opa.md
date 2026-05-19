@@ -18,6 +18,8 @@ StarRocks sends OPA a StarRocks-native JSON payload. The policy response control
 
 OPA authorization is fail-closed. StarRocks denies the operation if the OPA service returns `false`, omits `result`, returns invalid JSON, returns a non-2xx HTTP status, or times out.
 
+Permission-management operations such as `GRANT`, `REVOKE`, user management, and role management continue to use StarRocks native privilege checks. OPA controls object authorization, row filters, and column masks, but it does not replace the native permission-management model.
+
 ## Configure OPA access control
 
 Add the following items to the FE configuration file **fe.conf** on every FE node:
