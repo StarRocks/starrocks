@@ -111,6 +111,8 @@ import com.starrocks.common.MaterializedViewExceptions;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.StarRocksException;
+import com.starrocks.common.tvr.TvrTableDeltaTrait;
+import com.starrocks.common.tvr.TvrTableSnapshot;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.DynamicPartitionUtil;
 import com.starrocks.common.util.PropertyAnalyzer;
@@ -134,6 +136,7 @@ import com.starrocks.lake.LakeMaterializedView;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.StorageInfo;
+import com.starrocks.lake.ivm.MvBookmarkOps;
 import com.starrocks.listener.LoadJobMVListener;
 import com.starrocks.load.pipe.PipeManager;
 import com.starrocks.memory.MemoryTrackable;
@@ -3603,6 +3606,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
             }
 
             db.dropTable(table.getName(), stmt.isSetIfExists(), true);
+            MvBookmarkOps.releaseAll((MaterializedView) table);
         } else {
             stateMgr.getAlterJobMgr().processDropMaterializedView(stmt);
         }
@@ -5812,5 +5816,39 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
                 info, wal -> addOrReplaceAutoIncrementIdByTableId(tableId, newAutoIncrementValue));
 
         LOG.info("Set auto_increment value for table {}.{} to {}", dbName, tableName, newAutoIncrementValue);
+    }
+
+    /* ---------- IVM-on-Lake bookmark glue ---------- */
+
+    @Override
+    public TvrTableSnapshot acquireTvrSnapshot(String dbName, Table table, MvId mvId) {
+        if (mvId == null || !table.isCloudNativeTableOrMaterializedView()) {
+            return getCurrentTvrSnapshot(dbName, table);
+        }
+        Database db = getDb(dbName);
+        if (db == null) {
+            return TvrTableSnapshot.empty();
+        }
+        return MvBookmarkOps.acquire(db.getId(), table, mvId);
+    }
+
+    @Override
+    public List<TvrTableDeltaTrait> listTableDeltaTraits(String dbName, Table table,
+                                                        TvrTableSnapshot fromSnapshotExclusive,
+                                                        TvrTableSnapshot toSnapshotInclusive) {
+        // Only Lake tables have bookmarks; any other table reaching this path
+        // means IVM routed to the wrong metastore. Lake responses are always
+        // non-empty (BookmarkChangeTvrAdapter emits at least one trait even
+        // for the vacuous "no change" case), so empty-list as "unsupported"
+        // would be silently ambiguous.
+        if (!table.isCloudNativeTableOrMaterializedView()) {
+            throw new StarRocksConnectorException(
+                    "listTableDeltaTraits only supports cloud-native tables, got: " + table.getName());
+        }
+        Database db = getDb(dbName);
+        if (db == null) {
+            return Lists.newArrayList();
+        }
+        return MvBookmarkOps.computeDeltaTraits(db.getId(), table.getId(), fromSnapshotExclusive, toSnapshotInclusive);
     }
 }
