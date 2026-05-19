@@ -112,3 +112,5 @@ handbook/plans/local/
 
 _codeql_detected_source_root
 test/.venv
+
+.lycheecache

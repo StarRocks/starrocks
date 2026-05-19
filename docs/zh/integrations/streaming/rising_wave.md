@@ -4,7 +4,7 @@ displayed_sidebar: docs
 
 # 从 RisingWave 持续导入
 
-[RisingWave](https://docs.risingwave.com/) 是 Apache 2.0 协议开源的分布式流数据库。旨在让用户以操作传统数据库的方式来处理流数据。通过创建实时物化视图，RisingWave 可以让用户轻松编写流计算逻辑。用户可以访问物化视图来对流计算结果进行及时、一致的查询。想快速上手 RisingWave 可参考[此文档](https://docs.risingwave.com/docs/current/get-started/)。
+[RisingWave](https://docs.risingwave.com/) 是 Apache 2.0 协议开源的分布式流数据库。旨在让用户以操作传统数据库的方式来处理流数据。通过创建实时物化视图，RisingWave 可以让用户轻松编写流计算逻辑。用户可以访问物化视图来对流计算结果进行及时、一致的查询。想快速上手 RisingWave 可参考[此文档](https://docs.risingwave.com/get-started/quickstart/)。
 
 RisingWave 提供了直连的 StarRocks Sink 功能，可用于将数据导入至 StarRocks 表，不依赖第三方组件。该功能支持 StarRocks 全部 4 种表类型：明细表、聚合表、更新表和主键表。
 

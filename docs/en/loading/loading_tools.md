@@ -23,7 +23,7 @@ DataX is a tool for offline data synchronization, and is open-sourced by Alibaba
 
 ## [CloudCanal](../integrations/loading_tools/CloudCanal.md)
 
-CloudCanal Community Edition is a free data migration and synchronization platform published by [ClouGence Co., Ltd](https://www.cloudcanalx.com/) that integrates Schema Migration, Full Data Migration, verification, Correction, and real-time Incremental Synchronization.  You can directly add StarRocks as a data source in CloudCanal's visual interface and create tasks to automatically migrate or synchronize data from source databases (e.g., MySQL, Oracle, PostgreSQL) to StarRocks.
+CloudCanal Community Edition is a free data migration and synchronization platform published by [ClouGence Co., Ltd](https://www.bladepipe.com/) that integrates Schema Migration, Full Data Migration, verification, Correction, and real-time Incremental Synchronization.  You can directly add StarRocks as a data source in CloudCanal's visual interface and create tasks to automatically migrate or synchronize data from source databases (e.g., MySQL, Oracle, PostgreSQL) to StarRocks.
 
 ## [Kettle connector](https://github.com/StarRocks/starrocks-connector-for-kettle)
 

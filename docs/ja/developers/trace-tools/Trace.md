@@ -19,7 +19,7 @@ displayed_sidebar: docs
 
 SR でトレースを有効にする手順:
 
-1.  [Jaeger](https://www.jaegertracing.io/docs/1.31/getting-started/) をインストール
+1.  [Jaeger](https://www.jaegertracing.io/docs/1.76/getting-started/) をインストール
     上記のガイドは docker を使用しています。簡単にするために、[バイナリパッケージ](https://github.com/jaegertracing/jaeger/releases)をダウンロードしてローカルで実行することもできます。
 
 ```
