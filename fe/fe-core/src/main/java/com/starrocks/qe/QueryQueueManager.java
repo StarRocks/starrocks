@@ -65,7 +65,7 @@ public class QueryQueueManager {
         final JobSpec jobSpec = coord.getJobSpec();
         final SlotProvider slotProvider = jobSpec.getSlotProvider();
         final QueryQueueOptions opts = QueryQueueOptions.createFromEnvAndQuery(coord);
-        final SlotEstimator.SlotEstimate estimate = SlotEstimatorFactory.create(opts).estimateBoth(opts, context, coord);
+        final SlotEstimator.SlotEstimate estimate = SlotEstimatorFactory.create(opts).estimateSlots(opts, context, coord);
         final int totalSlots = opts.isEnableQueryQueueV2() ? opts.v2().getTotalSlots() : 0;
         // Only register tracker entries on the GlobalSlotProvider path; LocalSlotProvider paths
         // (LOAD, STATISTICS, schema-only queries, queue disabled) must NOT enter the tracker.

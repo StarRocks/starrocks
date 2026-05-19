@@ -19,23 +19,12 @@ import com.starrocks.qe.DefaultCoordinator;
 
 public interface SlotEstimator {
     /**
-     * Estimate the number of slots needed for the given query.
-     * <p>The returned value is the slot count after all clamps (in particular the {@code totalSlots} cap),
-     * suitable for use as the admission decision.
-     */
-    int estimateSlots(QueryQueueOptions opts, ConnectContext context, DefaultCoordinator coord);
-
-    /**
      * Estimate both the raw (un-clamped) and clamped slot counts for the given query.
-     * <p>The clamped value is what {@link #estimateSlots} returns; the raw value preserves the pre-clamp
-     * demand and is intended for signals such as "this query wanted N slots but the warehouse only has M".
-     * <p>The default implementation returns {@code (clamped, clamped)} so estimators that do not have a
-     * meaningful raw value remain backwards-compatible.
+     * <p>The clamped value is bounded by {@code totalSlots} and is suitable for the admission decision;
+     * the raw value preserves the pre-clamp demand and is intended for signals such as "this query wanted
+     * N slots but the warehouse only has M".
      */
-    default SlotEstimate estimateBoth(QueryQueueOptions opts, ConnectContext context, DefaultCoordinator coord) {
-        int clamped = estimateSlots(opts, context, coord);
-        return new SlotEstimate(clamped, clamped);
-    }
+    SlotEstimate estimateSlots(QueryQueueOptions opts, ConnectContext context, DefaultCoordinator coord);
 
     /**
      * The pre-clamp ({@code rawSlots}) and post-clamp ({@code clampedSlots}) slot counts for a query.
