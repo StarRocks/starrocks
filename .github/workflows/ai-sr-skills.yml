@@ -24,7 +24,8 @@ jobs:
       CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
     if: >
       github.event.action == 'opened' &&
-      !startsWith(github.head_ref, 'mergify/')
+      !startsWith(github.head_ref, 'mergify/') &&
+      !contains(github.head_ref, '-sync-pr-')
     steps:
       - name: Compute skip rule
         id: gate
