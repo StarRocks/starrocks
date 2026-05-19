@@ -682,7 +682,6 @@ build_zlib() {
         -DCMAKE_INSTALL_PREFIX=$TP_INSTALL_DIR \
         -DZLIB_COMPAT=ON \
         -DBUILD_SHARED_LIBS=OFF \
-        -DWITH_MINIZIP=ON \
         -DCMAKE_BUILD_TYPE=Release
     make -j$PARALLEL
     make install
