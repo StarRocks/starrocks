@@ -597,8 +597,7 @@ Status AvroReader::init(std::unique_ptr<avro::InputStream> input_stream, const s
                 // The ResolvingDecoder will then skip unwanted fields at the binary level,
                 // saving CPU deserialization work — the Trino-equivalent of maskColumnsFromTableSchema.
                 projected = build_projected_schema(reader_schema, needed_cols);
-                using_projection =
-                        !needed_cols.empty() && projected.root()->leaves() < reader_schema.root()->leaves();
+                using_projection = !needed_cols.empty() && projected.root()->leaves() < reader_schema.root()->leaves();
             }
 
             if (using_projection) {
