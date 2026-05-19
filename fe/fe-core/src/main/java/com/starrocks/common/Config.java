@@ -4127,12 +4127,6 @@ public class Config extends ConfigBase {
     @ConfField
     public static int opa_read_timeout_ms = 5000;
 
-    @ConfField
-    public static boolean opa_log_requests = false;
-
-    @ConfField
-    public static boolean opa_log_responses = false;
-
     /**
      * Whether to use the unix group as the ranger authentication group
      */
