@@ -61,6 +61,96 @@ This topic introduces the following types of FE configurations:
 - Description: When true, StarRocks redacts credentials from task SQL definitions before returning them in `information_schema.tasks` and `information_schema.task_runs` by applying SqlCredentialRedactor.redact to the DEFINITION column. In `information_schema.task_runs` the same redaction is applied whether the definition comes from the task run status or, when empty, from the task definition lookup. When false, raw task definitions are returned (may expose credentials). Masking is CPU/string-processing work and can be time-consuming when the number of tasks or `task_runs` is large; disable only if you need unredacted definitions and accept the security risk.
 - Introduced in: v3.5.6
 
+### `access_control`
+
+- Default: native
+- Type: String
+- Unit: -
+- Is mutable: Yes
+- Description: The access controller used by StarRocks. Valid values are `native`, `ranger`, and `opa`. Changing the global value requires restarting all FE nodes to make the default access controller effective.
+- Introduced in: v3.1.9
+
+### `opa_policy_url`
+
+- Default: Empty string
+- Type: String
+- Unit: -
+- Is mutable: No
+- Description: The OPA Data API URL used for allow/deny authorization checks. This item is required when `access_control` is set to `opa`.
+- Introduced in: v4.1.0
+
+### `opa_row_filters_url`
+
+- Default: Empty string
+- Type: String
+- Unit: -
+- Is mutable: No
+- Description: Optional OPA Data API URL used to fetch row access policy expressions. If this item is empty, OPA row filtering is disabled.
+- Introduced in: v4.1.0
+
+### `opa_column_masking_url`
+
+- Default: Empty string
+- Type: String
+- Unit: -
+- Is mutable: No
+- Description: Optional OPA Data API URL used to fetch a masking expression for one column at a time. If this item is empty and `opa_batch_column_masking_url` is also empty, OPA column masking is disabled.
+- Introduced in: v4.1.0
+
+### `opa_batch_column_masking_url`
+
+- Default: Empty string
+- Type: String
+- Unit: -
+- Is mutable: No
+- Description: Optional OPA Data API URL used to fetch masking expressions for multiple columns in one request. When this item is set, StarRocks uses it instead of `opa_column_masking_url`.
+- Introduced in: v4.1.0
+
+### `opa_connect_timeout_ms`
+
+- Default: 5000
+- Type: Int
+- Unit: Milliseconds
+- Is mutable: No
+- Description: Connection timeout for OPA HTTP requests. StarRocks denies the checked operation if an authorization request times out.
+- Introduced in: v4.1.0
+
+### `opa_read_timeout_ms`
+
+- Default: 5000
+- Type: Int
+- Unit: Milliseconds
+- Is mutable: No
+- Description: Read timeout for OPA HTTP requests. StarRocks denies the checked operation if an authorization request times out.
+- Introduced in: v4.1.0
+
+### `opa_log_requests`
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: No
+- Description: Whether to log OPA request URLs and JSON request bodies at DEBUG level. Enable only for troubleshooting because the request body can contain user, group, and object names.
+- Introduced in: v4.1.0
+
+### `opa_log_responses`
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: No
+- Description: Whether to log OPA response status codes and JSON response bodies at DEBUG level. Enable only for troubleshooting because responses can contain policy expressions.
+- Introduced in: v4.1.0
+
+### `opa_allow_permission_management_operations`
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: No
+- Description: Whether to allow permission-management operations such as GRANT and REVOKE when OPA access control is enabled. When false, StarRocks denies these operations without querying OPA.
+- Introduced in: v4.1.0
+
 ### `privilege_max_role_depth`
 
 - Default: 16

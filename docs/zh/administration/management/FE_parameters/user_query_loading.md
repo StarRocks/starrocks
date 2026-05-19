@@ -61,6 +61,96 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: 当为 true 时，StarRocks 会在将凭据从任务 SQL 定义返回到 `information_schema.tasks` 和 `information_schema.task_runs` 之前，通过对 DEFINITION 列应用 SqlCredentialRedactor.redact 来屏蔽凭据。在 `information_schema.task_runs` 中，无论定义是来自任务运行状态还是在为空时来自任务定义查找，都应用相同的屏蔽。当为 false 时，返回原始任务定义（可能会暴露凭据）。屏蔽是 CPU/字符串处理工作，当任务或 `task_runs` 数量很大时可能非常耗时；仅当您需要未屏蔽的定义并接受安全风险时才禁用。
 - 引入版本: v3.5.6
 
+### `access_control`
+
+- 默认值: native
+- 类型: String
+- 单位: -
+- 是否可变: Yes
+- 描述: StarRocks 使用的权限控制器。有效值为 `native`、`ranger` 和 `opa`。将该配置项设置为 `opa` 后，StarRocks 会将授权委托给 Open Policy Agent。修改全局值后，需要重启所有 FE 节点才能使默认权限控制器生效。
+- 引入版本: v3.1.9
+
+### `opa_policy_url`
+
+- 默认值: 空字符串
+- 类型: String
+- 单位: -
+- 是否可变: No
+- 描述: 用于 allow/deny 授权检查的 OPA Data API URL。当 `access_control` 设置为 `opa` 时，必须设置该配置项。
+- 引入版本: v4.1.0
+
+### `opa_row_filters_url`
+
+- 默认值: 空字符串
+- 类型: String
+- 单位: -
+- 是否可变: No
+- 描述: 用于获取行访问策略表达式的可选 OPA Data API URL。如果该配置项为空，则禁用 OPA 行过滤。
+- 引入版本: v4.1.0
+
+### `opa_column_masking_url`
+
+- 默认值: 空字符串
+- 类型: String
+- 单位: -
+- 是否可变: No
+- 描述: 用于逐列获取列掩码表达式的可选 OPA Data API URL。如果该配置项为空且 `opa_batch_column_masking_url` 也为空，则禁用 OPA 列掩码。
+- 引入版本: v4.1.0
+
+### `opa_batch_column_masking_url`
+
+- 默认值: 空字符串
+- 类型: String
+- 单位: -
+- 是否可变: No
+- 描述: 用于在一次请求中获取多列掩码表达式的可选 OPA Data API URL。设置该配置项后，StarRocks 会优先使用它，而不是 `opa_column_masking_url`。
+- 引入版本: v4.1.0
+
+### `opa_connect_timeout_ms`
+
+- 默认值: 5000
+- 类型: Int
+- 单位: 毫秒
+- 是否可变: No
+- 描述: OPA HTTP 请求的连接超时时间。如果授权请求超时，StarRocks 会拒绝被检查的操作。
+- 引入版本: v4.1.0
+
+### `opa_read_timeout_ms`
+
+- 默认值: 5000
+- 类型: Int
+- 单位: 毫秒
+- 是否可变: No
+- 描述: OPA HTTP 请求的读取超时时间。如果授权请求超时，StarRocks 会拒绝被检查的操作。
+- 引入版本: v4.1.0
+
+### `opa_log_requests`
+
+- 默认值: false
+- 类型: Boolean
+- 单位: -
+- 是否可变: No
+- 描述: 是否以 DEBUG 级别记录 OPA 请求 URL 和 JSON 请求体。请求体可能包含用户、用户组和对象名称，因此仅建议在排查问题时启用。
+- 引入版本: v4.1.0
+
+### `opa_log_responses`
+
+- 默认值: false
+- 类型: Boolean
+- 单位: -
+- 是否可变: No
+- 描述: 是否以 DEBUG 级别记录 OPA 响应状态码和 JSON 响应体。响应体可能包含策略表达式，因此仅建议在排查问题时启用。
+- 引入版本: v4.1.0
+
+### `opa_allow_permission_management_operations`
+
+- 默认值: false
+- 类型: Boolean
+- 单位: -
+- 是否可变: No
+- 描述: 启用 OPA 权限控制后，是否允许 GRANT、REVOKE 等权限管理操作。当该配置项为 false 时，StarRocks 不会查询 OPA，而是直接拒绝这些操作。
+- 引入版本: v4.1.0
+
 ### `privilege_max_role_depth`
 
 - 默认值: 16
