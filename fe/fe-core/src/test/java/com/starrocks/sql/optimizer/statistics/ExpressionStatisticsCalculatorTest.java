@@ -1787,9 +1787,9 @@ public class ExpressionStatisticsCalculatorTest {
     @Test
     public void testDictMappingPropagatesStats() {
         // GIVEN
-        final var originCol = new ColumnRefOperator(0, Type.INT, "origin", true);
-        final var dictCol = new ColumnRefOperator(1, Type.INT, "dict", true);
-        final var stringProviderCol = new ColumnRefOperator(2, Type.INT, "provider", true);
+        final var originCol = new ColumnRefOperator(0, IntegerType.INT, "origin", true);
+        final var dictCol = new ColumnRefOperator(1, IntegerType.INT, "dict", true);
+        final var stringProviderCol = new ColumnRefOperator(2, IntegerType.INT, "provider", true);
 
         final var originStats = ColumnStatistic.builder()
                 .setMinValue(10)
@@ -1820,8 +1820,8 @@ public class ExpressionStatisticsCalculatorTest {
                 .addColumnStatistic(stringProviderCol, providerStats)
                 .build();
 
-        final var originBackedDictMapping = new DictMappingOperator(dictCol, originCol, Type.INT);
-        final var providerBackedDictMapping = new DictMappingOperator(Type.INT, dictCol, originCol, stringProviderCol);
+        final var originBackedDictMapping = new DictMappingOperator(dictCol, originCol, IntegerType.INT);
+        final var providerBackedDictMapping = new DictMappingOperator(IntegerType.INT, dictCol, originCol, stringProviderCol);
 
         // WHEN
         final var originBackedStats = ExpressionStatisticCalculator.calculate(originBackedDictMapping, statistics);
@@ -1882,7 +1882,7 @@ public class ExpressionStatisticsCalculatorTest {
                 .addColumnStatistic(stringProviderCol, providerStats)
                 .build();
 
-        final var originBackedDictMapping = new DictMappingOperator(dictCol, originCol, Type.INT);
+        final var originBackedDictMapping = new DictMappingOperator(dictCol, originCol, IntegerType.INT);
         final var providerBackedDictMapping =
                 new DictMappingOperator(IntegerType.INT, dictCol, originCol, stringProviderCol);
 
@@ -1896,7 +1896,7 @@ public class ExpressionStatisticsCalculatorTest {
         Assertions.assertEquals(Double.POSITIVE_INFINITY, originBackedStats.getMaxValue(), 0.001);
         Assertions.assertEquals(originStats.getDistinctValuesCount(), originBackedStats.getDistinctValuesCount(), 0.001);
         Assertions.assertEquals(originStats.getNullsFraction(), originBackedStats.getNullsFraction(), 0.001);
-        Assertions.assertEquals(Type.INT.getTypeSize(), originBackedStats.getAverageRowSize(), 0.001);
+        Assertions.assertEquals(IntegerType.INT.getTypeSize(), originBackedStats.getAverageRowSize(), 0.001);
         Assertions.assertNull(originBackedStats.getMinString());
         Assertions.assertNull(originBackedStats.getMaxString());
         Assertions.assertNull(originBackedStats.getHistogram());
@@ -1930,7 +1930,7 @@ public class ExpressionStatisticsCalculatorTest {
                         .build())
                 .build();
 
-        final var dictMapping = new DictMappingOperator(dictCol, originCol, Type.VARCHAR);
+        final var dictMapping = new DictMappingOperator(dictCol, originCol, VarcharType.VARCHAR);
 
         // WHEN
         final var dictMappingStats = ExpressionStatisticCalculator.calculate(dictMapping, statistics);
