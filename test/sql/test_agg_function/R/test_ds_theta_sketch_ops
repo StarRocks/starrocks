@@ -60,6 +60,15 @@ select cast(ds_theta_estimate(ds_theta_combine(s)) between 70000 and 80000 as in
 -- result:
 1
 -- !result
+-- disjoint sets: intersect estimate ~ 0, union estimate ~ |A| + |B|
+with a as (select ds_theta_accumulate(c) as sk from (select generate_series as c from table(generate_series(1, 1000))) t),
+     b as (select ds_theta_accumulate(c) as sk from (select generate_series as c from table(generate_series(2001, 3000))) t)
+select cast(ds_theta_estimate(ds_theta_intersect(a.sk, b.sk)) < 50 as int) as disjoint_intersect_near_zero,
+       cast(ds_theta_estimate(ds_theta_union(a.sk, b.sk)) between 1900 and 2100 as int) as disjoint_union_near_2000
+from a, b;
+-- result:
+1	1
+-- !result
 -- NULL propagation
 select ds_theta_estimate(NULL);
 -- result:

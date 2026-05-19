@@ -44,6 +44,13 @@ with grp_sk as (select grp, ds_theta_accumulate(id) as s from t1 group by grp),
      stacked as (select u as s from unioned union all select i from unioned)
 select cast(ds_theta_estimate(ds_theta_combine(s)) between 70000 and 80000 as int) from stacked;
 
+-- disjoint sets: intersect estimate ~ 0, union estimate ~ |A| + |B|
+with a as (select ds_theta_accumulate(c) as sk from (select generate_series as c from table(generate_series(1, 1000))) t),
+     b as (select ds_theta_accumulate(c) as sk from (select generate_series as c from table(generate_series(2001, 3000))) t)
+select cast(ds_theta_estimate(ds_theta_intersect(a.sk, b.sk)) < 50 as int) as disjoint_intersect_near_zero,
+       cast(ds_theta_estimate(ds_theta_union(a.sk, b.sk)) between 1900 and 2100 as int) as disjoint_union_near_2000
+from a, b;
+
 -- NULL propagation
 select ds_theta_estimate(NULL);
 select cast(ds_theta_union(NULL, NULL) is NULL as int);
