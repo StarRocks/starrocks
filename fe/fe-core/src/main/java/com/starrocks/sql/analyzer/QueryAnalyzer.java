@@ -55,7 +55,6 @@ import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.ast.AstTraverser;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.CTERelation;
-import com.starrocks.sql.ast.ChangePeriod;
 import com.starrocks.sql.ast.CreateTableAsSelectStmt;
 import com.starrocks.sql.ast.ExceptRelation;
 import com.starrocks.sql.ast.FileTableFunctionRelation;
@@ -855,27 +854,13 @@ public class QueryAnalyzer {
                     // with _BOOKMARK_ is caught here (the conflict check tests both flags)
                     // rather than silently being treated as a plain PITQ scope.
                     if (tableRelation.getBookmarkRange().isPresent()) {
-                        // Defense-in-depth: the grammar at tableAtom permits both a
-                        // changePeriod and a trailing bracketHint, but the changePeriod's
-                        // `end=expression` greedily consumes a following `[...]` as a
-                        // collectionSubscript on the version literal (see g4 rule
-                        // `collectionSubscript`), so today's parser never produces a
-                        // TableRelation with both fields set. This guard fires only if a
-                        // future grammar change (e.g. parenthesizing the version expr)
-                        // separates the two — without it both synthesis blocks would run
-                        // and ImmutableMap.Builder would throw "Multiple entries with same key".
-                        if (tableRelation.isChangesQuery()) {
-                            throw new SemanticException(
-                                    "CHANGES hint cannot combine with the CHANGES clause");
-                        }
                         boolean isCloudNativeOlap = table instanceof OlapTable
                                 && ((OlapTable) table).isCloudNativeTableOrMaterializedView();
                         if (!isCloudNativeOlap) {
                             throw new SemanticException(
                                     "CHANGES hint is only supported on cloud-native OlapTable");
                         }
-                        // Stage-1 limitation: PK tables are excluded. Kept as its own message
-                        // so it matches the clause-path PK guard in analyzeChangesQuery.
+                        // Stage-1 limitation: PK tables are excluded.
                         if (((OlapTable) table).getKeysType() == KeysType.PRIMARY_KEYS) {
                             throw new SemanticException(
                                     "CHANGES on primary-key table is not supported yet");
@@ -1070,18 +1055,9 @@ public class QueryAnalyzer {
                     throw new SemanticException("Legacy _BINLOG_ queries are no longer supported");
                 }
 
-                if (node.isChangesQuery()) {
-                    analyzeChangesQuery(node, table, tableName, columns, fields);
-                }
-
                 // CHANGES hint path: validations already ran in resolveTableRef; here we
-                // synthesize the same __CHANGE_TYPE__ / __ROW_VERSION__ metadata columns
-                // the clause path appends, so downstream transformation sees one shape.
-                // The parser collapses a trailing bracketHint after the changePeriod's
-                // version expression into a collectionSubscript, so a TableRelation never
-                // carries both changePeriod and bookmarkRange under today's grammar; the
-                // resolveTableRef defense-in-depth guard exists for a future grammar that
-                // separates them.
+                // synthesize the __CHANGE_TYPE__ / __ROW_VERSION__ metadata columns so
+                // downstream transformation sees one shape.
                 if (node.getBookmarkRange().isPresent()) {
                     for (Column column : CdcScanHelper.getCdcMetadataColumns()) {
                         SlotRef slot = new SlotRef(tableName, column.getName(), column.getName());
@@ -1131,39 +1107,6 @@ public class QueryAnalyzer {
             collector.process(node, scope);
 
             return scope;
-        }
-
-        private void analyzeChangesQuery(TableRelation node, Table table, TableName tableName,
-                                         ImmutableMap.Builder<Field, Column> columns,
-                                         ImmutableList.Builder<Field> fields) {
-            // Spec section 4 reserves the STATS form of CHANGES for a future stage;
-            // the grammar accepts it so users see this targeted "not yet supported"
-            // message instead of a parse error, and the reject runs before the
-            // table-type / period-type checks so the diagnostic isn't masked by
-            // an unrelated rejection (e.g. PK-table or wrong-type table).
-            if (node.getChangePeriod().isStats()) {
-                throw new SemanticException("CHANGES STATS is not yet supported");
-            }
-            // E1: only cloud-native OlapTables (DUP / AGG) are in scope for CHANGES;
-            // external / schema / view / shared-nothing tables fail here with the
-            // type name so the user sees what kind they actually passed.
-            if (!(table instanceof OlapTable) || !table.isCloudNativeTableOrMaterializedView()) {
-                throw new SemanticException(
-                        "Unsupported table type for CHANGES, table type: " + table.getType());
-            }
-            // Stage-1 limitation: PK tables are excluded; this is independent of the
-            // type-system errors and kept as its own message so callers can act on it.
-            if (((OlapTable) table).getKeysType() == KeysType.PRIMARY_KEYS) {
-                throw new SemanticException("CHANGES on primary-key table is not supported yet");
-            }
-            QueryAnalyzer.validateChangePeriod(node.getChangePeriod());
-            for (Column column : CdcScanHelper.getCdcMetadataColumns()) {
-                SlotRef slot = new SlotRef(tableName, column.getName(), column.getName());
-                Field field = new Field(column.getName(), column.getType(), tableName, slot, true,
-                        column.isAllowNull());
-                columns.put(field, column);
-                fields.add(field);
-            }
         }
 
         private List<Column> getBinlogMetaColumns() {
@@ -2806,62 +2749,4 @@ public class QueryAnalyzer {
         }
     }
 
-    /**
-     * Lookup-time period / endpoint-type checks for the CHANGES clause.
-     *
-     * <p>Grammar+AstBuilder collapse SYSTEM_TIME onto TIMESTAMP, so a real SQL
-     * never produces a periodType outside {VERSION, TIMESTAMP}; the
-     * exhaustiveness throw is a defensive fallthrough so a future enum addition
-     * fails loudly here instead of silently misclassifying.
-     *
-     * <p>Endpoint types are checked against the parsed Expr's declared type
-     * (IntLiteral / StringLiteral / DateLiteral all stamp their type at
-     * construction), so this guard fires before any expression analysis.
-     *
-     * <p>Static + public so analyzer-only callers and JUnit can both exercise it
-     * without instantiating a full QueryAnalyzer.
-     */
-    public static void validateChangePeriod(ChangePeriod changePeriod) {
-        if (changePeriod == null) {
-            return;
-        }
-        QueryPeriod.PeriodType periodType = changePeriod.getPeriodType();
-        if (periodType == null) {
-            throw new SemanticException(
-                    "Unsupported CHANGES period type, expected VERSION or TIMESTAMP");
-        }
-        switch (periodType) {
-            case VERSION:
-                requireBigint(changePeriod.getStart());
-                changePeriod.getEnd().ifPresent(QueryAnalyzer::requireBigint);
-                break;
-            case TIMESTAMP:
-                requireDatetimeCastable(changePeriod.getStart());
-                changePeriod.getEnd().ifPresent(QueryAnalyzer::requireDatetimeCastable);
-                break;
-            default:
-                throw new SemanticException(
-                        "Unsupported CHANGES period type, expected VERSION or TIMESTAMP");
-        }
-    }
-
-    /** E3 — VERSION endpoints must be BIGINT (or a narrower signed integer). LARGEINT is rejected. */
-    private static void requireBigint(Expr expr) {
-        if (expr == null || !expr.getType().isIntegerType()) {
-            throw new SemanticException("CHANGES VERSION requires BIGINT");
-        }
-    }
-
-    /** E4 — TIMESTAMP endpoints must be string/date/datetime so castTo(DATETIME) can succeed. */
-    private static void requireDatetimeCastable(Expr expr) {
-        if (expr == null) {
-            throw new SemanticException(
-                    "CHANGES TIMESTAMP requires a DATETIME-castable expression");
-        }
-        Type t = expr.getType();
-        if (!t.isStringType() && !t.isDateType()) {
-            throw new SemanticException(
-                    "CHANGES TIMESTAMP requires a DATETIME-castable expression");
-        }
-    }
 }

@@ -19,15 +19,10 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.lake.bookmark.BookmarkRange;
 import com.starrocks.lake.bookmark.BookmarkTestBase;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.analyzer.QueryAnalyzer;
-import com.starrocks.sql.analyzer.SemanticException;
-import com.starrocks.sql.ast.ChangePeriod;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.TableRelation;
-import com.starrocks.sql.ast.expression.IntLiteral;
-import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
@@ -48,12 +43,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * guard in QueryAnalyzer never fires on the DUP / PK tables created here — we
  * want the regex / analyzer-mutex / PK guard to be the thing that throws.
  *
- * <p>Note: UtFrameUtils#parseStmtWithNewParser rewraps both ParsingException
- * and SemanticException as AnalysisException, so tests going through that
- * helper assert on AnalysisException. The two tests that bypass it — by
- * calling QueryAnalyzer.validateChangePeriod directly, or by using
- * parseStmtWithNewParserNotIncludeAnalyzer + Analyzer.analyze — assert on
- * SemanticException directly.
+ * <p>UtFrameUtils#parseStmtWithNewParser rewraps both ParsingException and
+ * SemanticException as AnalysisException, so every test here asserts on
+ * AnalysisException.
  */
 public class ChangesSyntaxTest extends BookmarkTestBase {
 
@@ -81,42 +73,6 @@ public class ChangesSyntaxTest extends BookmarkTestBase {
     @AfterAll
     public static void afterAll() {
         FeConstants.unitTestView = true;
-    }
-
-    @Test
-    public void testForVersionAsOfBeforeChangesIsMutex() {
-        // Grammar allows `(queryPeriod | changePeriod)?` — at most one per relation.
-        String sql = "SELECT * FROM dup_t FOR VERSION AS OF 100 "
-                + "CHANGES FROM VERSION 1 TO VERSION 2";
-        assertThrows(AnalysisException.class,
-                () -> UtFrameUtils.parseStmtWithNewParser(sql, connectContext));
-    }
-
-    @Test
-    public void testForVersionAsOfAfterChangesIsMutex() {
-        // Same grammar mutex, reversed order.
-        String sql = "SELECT * FROM dup_t CHANGES FROM VERSION 1 TO VERSION 2 "
-                + "FOR VERSION AS OF 100";
-        assertThrows(AnalysisException.class,
-                () -> UtFrameUtils.parseStmtWithNewParser(sql, connectContext));
-    }
-
-    @Test
-    public void testUnsupportedPeriodTypeMessage() {
-        // The grammar + AstBuilder collapse SYSTEM_TIME onto QueryPeriod.PeriodType.TIMESTAMP,
-        // so a real SQL never reaches the defensive default-case throw. We exercise the
-        // guard directly with a ChangePeriod whose periodType is null — same code path,
-        // same message — so a future enum addition that skips the switch fails loudly here.
-        ChangePeriod bad = new ChangePeriod(
-                /* periodType */ null,
-                new IntLiteral(1L),
-                Optional.of(new IntLiteral(2L)),
-                /* isStats */ false,
-                NodePosition.ZERO);
-        SemanticException ex = assertThrows(SemanticException.class,
-                () -> QueryAnalyzer.validateChangePeriod(bad));
-        assertTrue(ex.getMessage().contains("Unsupported CHANGES period type, expected VERSION or TIMESTAMP"),
-                "actual: " + ex.getMessage());
     }
 
     @Test
@@ -209,31 +165,6 @@ public class ChangesSyntaxTest extends BookmarkTestBase {
         AnalysisException ex = assertThrows(AnalysisException.class,
                 () -> UtFrameUtils.parseStmtWithNewParser(sql, connectContext));
         assertTrue(ex.getMessage().contains("CHANGES hint cannot combine with"),
-                "actual: " + ex.getMessage());
-    }
-
-    @Test
-    public void testHintConflictsWithClause() throws Exception {
-        // The grammar tableAtom permits both `changePeriod` and `bracketHint`, but the
-        // changePeriod's `end=expression` greedily consumes a trailing `[...]` as a
-        // collectionSubscript on the version literal — so SQL today never produces a
-        // TableRelation with both fields set. The resolveTableRef guard is defense-in-
-        // depth for a future grammar that separates the two; this test exercises it by
-        // parsing a hint-only SQL (parser-only, no analyzer pass) and then mutating the
-        // AST to also attach a changePeriod before invoking the analyzer.
-        String sql = "SELECT * FROM dup_t [_CHANGES_3_4_]";
-        QueryStatement stmt = (QueryStatement) UtFrameUtils.parseStmtWithNewParserNotIncludeAnalyzer(
-                sql, connectContext);
-        TableRelation tr = (TableRelation) ((SelectRelation) stmt.getQueryRelation()).getRelation();
-        tr.setChangePeriod(new ChangePeriod(
-                com.starrocks.sql.ast.QueryPeriod.PeriodType.VERSION,
-                new IntLiteral(1L),
-                Optional.of(new IntLiteral(2L)),
-                /* isStats */ false,
-                NodePosition.ZERO));
-        SemanticException ex = assertThrows(SemanticException.class,
-                () -> com.starrocks.sql.analyzer.Analyzer.analyze(stmt, connectContext));
-        assertTrue(ex.getMessage().contains("CHANGES hint cannot combine with the CHANGES clause"),
                 "actual: " + ex.getMessage());
     }
 

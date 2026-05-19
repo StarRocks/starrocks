@@ -73,7 +73,6 @@ public class TableRelation extends Relation {
     private QueryPeriod queryPeriod;
     // used for tvr incremental read
     private TvrVersionRange tvrVersionRange;
-    private ChangePeriod changePeriod;
 
     // TABLE SAMPLE
     private TableSampleClause sampleClause;
@@ -322,18 +321,6 @@ public class TableRelation extends Relation {
 
     public TvrVersionRange getTvrVersionRange() {
         return tvrVersionRange;
-    }
-
-    public ChangePeriod getChangePeriod() {
-        return changePeriod;
-    }
-
-    public void setChangePeriod(ChangePeriod changePeriod) {
-        this.changePeriod = changePeriod;
-    }
-
-    public boolean isChangesQuery() {
-        return changePeriod != null;
     }
 
     public TableSampleClause getSampleClause() {
