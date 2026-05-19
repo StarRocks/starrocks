@@ -77,7 +77,11 @@ static void compare_integral_simd(int8_t* cmp_vector, const T* lhs, T rhs, size_
 template <>
 void compare_integral_simd<int8_t>(int8_t* cmp_vector, const int8_t* lhs, int8_t rhs, size_t n) {
     size_t i = 0;
-#ifdef __AVX2__
+    // Mirror the gate in compare_integral_column_simd (compare_column.cpp):
+    // on AVX-512 builds the auto-vectorised scalar fallback beats the
+    // hand-written AVX2 block-skip path, so we only opt into hand-SIMD
+    // on AVX2-only builds.
+#if defined(__AVX2__) && !defined(__AVX512F__)
     constexpr size_t kBlock = 32;
     const __m256i zero = _mm256_setzero_si256();
     const __m256i rhs_vec = _mm256_set1_epi8(rhs);
@@ -132,7 +136,8 @@ void compare_integral_simd<int8_t>(int8_t* cmp_vector, const int8_t* lhs, int8_t
 template <>
 void compare_integral_simd<int32_t>(int8_t* cmp_vector, const int32_t* lhs, int32_t rhs, size_t n) {
     size_t i = 0;
-#ifdef __AVX2__
+    // See compare_integral_simd<int8_t> above for the gate rationale.
+#if defined(__AVX2__) && !defined(__AVX512F__)
     constexpr size_t kBlock = 8;
     const __m256i rhs_vec = _mm256_set1_epi32(rhs);
     const __m256i ones = _mm256_set1_epi32(1);
@@ -186,7 +191,8 @@ void compare_integral_simd<int32_t>(int8_t* cmp_vector, const int32_t* lhs, int3
 template <>
 void compare_integral_simd<int64_t>(int8_t* cmp_vector, const int64_t* lhs, int64_t rhs, size_t n) {
     size_t i = 0;
-#ifdef __AVX2__
+    // See compare_integral_simd<int8_t> above for the gate rationale.
+#if defined(__AVX2__) && !defined(__AVX512F__)
     constexpr size_t kBlock = 4;
     const __m256i rhs_vec = _mm256_set1_epi64x(rhs);
     const __m256i ones = _mm256_set1_epi64x(1);

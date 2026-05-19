@@ -93,7 +93,12 @@ static inline size_t compare_integral_column_simd(CompareVector& cmp_vector, con
 
     if (SIMD::count_zero(cmp_vector) > size / 8) {
         size_t i = 0;
-#if defined(__AVX2__)
+        // On AVX-512 builds the compiler auto-vectorises the scalar fallback
+        // (the simple `if (cmp_vector[i] == 0) cmp_vector[i] = scalar_cmp(i);`
+        // loop below) to wider AVX-512 mask-merge code that beats the
+        // hand-written AVX2 block-skip path. Only opt into the hand-written
+        // SIMD on AVX2-only builds.
+#if defined(__AVX2__) && !defined(__AVX512F__)
         if constexpr (sizeof(T) == 1) {
             constexpr size_t kBlock = 32;
             const __m256i zero = _mm256_setzero_si256();
