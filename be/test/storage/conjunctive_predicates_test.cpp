@@ -21,6 +21,7 @@
 #include <vector>
 
 #include "base/testutil/assert.h"
+#include "column/chunk_factory.h"
 #include "common/config_exec_fwd.h"
 #include "exec/olap_scan_prepare.h"
 #include "exec/runtime_filter/runtime_filter_probe.h"
@@ -90,11 +91,11 @@ TEST(ConjunctivePredicatesTest, test_evaluate) {
     schema->append(c3_field);
     schema->append(c4_field);
 
-    auto c0 = ChunkHelper::column_from_field(*c0_field);
-    auto c1 = ChunkHelper::column_from_field(*c1_field);
-    auto c2 = ChunkHelper::column_from_field(*c2_field);
-    auto c3 = ChunkHelper::column_from_field(*c3_field);
-    auto c4 = ChunkHelper::column_from_field(*c4_field);
+    auto c0 = ChunkFactory::column_from_field(*c0_field);
+    auto c1 = ChunkFactory::column_from_field(*c1_field);
+    auto c2 = ChunkFactory::column_from_field(*c2_field);
+    auto c3 = ChunkFactory::column_from_field(*c3_field);
+    auto c4 = ChunkFactory::column_from_field(*c4_field);
 
     // +------+-------+------------+----------------------+----------+
     // | c0   | c1    | c2         | c3                   | c4       |
@@ -180,7 +181,7 @@ TEST(ConjunctivePredicatesTest, test_empty_predicates) {
     SchemaPtr schema(new Schema());
     auto c0_field = std::make_shared<Field>(0, "c0", TYPE_INT, true);
     schema->append(c0_field);
-    auto c0 = ChunkHelper::column_from_field(*c0_field);
+    auto c0 = ChunkFactory::column_from_field(*c0_field);
 
     // +------+
     // | c0   |
@@ -217,7 +218,7 @@ TEST(ConjunctivePredicatesTest, test_evaluate_and) {
     SchemaPtr schema(new Schema());
     schema->append(std::make_shared<Field>(0, "c0", TYPE_INT, true));
 
-    auto c0 = ChunkHelper::column_from_field_type(TYPE_INT, true);
+    auto c0 = ChunkFactory::column_from_field_type(TYPE_INT, true);
 
     // +------+
     // | c0   |
@@ -256,7 +257,7 @@ TEST(ConjunctivePredicatesTest, test_evaluate_or) {
     SchemaPtr schema(new Schema());
     schema->append(std::make_shared<Field>(0, "c0", TYPE_INT, true));
 
-    auto c0 = ChunkHelper::column_from_field_type(TYPE_INT, true);
+    auto c0 = ChunkFactory::column_from_field_type(TYPE_INT, true);
 
     // +------+
     // | c0   |

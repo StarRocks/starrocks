@@ -17,6 +17,7 @@
 #include <gtest/gtest.h>
 
 #include "base/testutil/assert.h"
+#include "column/chunk_factory.h"
 #include "column/raw_data_visitor.h"
 #include "common/config_compaction_fwd.h"
 #include "gutil/strings/substitute.h"
@@ -125,7 +126,7 @@ public:
         std::unique_ptr<RowsetWriter> writer;
         EXPECT_TRUE(RowsetFactory::create_rowset_writer(writer_context, &writer).ok());
         auto schema = ChunkHelper::convert_schema(_tablet->tablet_schema());
-        auto chunk = ChunkHelper::new_chunk(schema, keys.size());
+        auto chunk = ChunkFactory::new_chunk(schema, keys.size());
         auto cols = chunk->mutable_columns();
         for (int64_t key : keys) {
             cols[0]->append_datum(Datum(key));
@@ -204,7 +205,7 @@ static ChunkIteratorPtr create_tablet_iterator(TabletReader& reader, Schema& sch
 }
 
 static ssize_t read_until_eof(const ChunkIteratorPtr& iter) {
-    auto chunk = ChunkHelper::new_chunk(iter->schema(), 100);
+    auto chunk = ChunkFactory::new_chunk(iter->schema(), 100);
     size_t count = 0;
     while (true) {
         auto st = iter->get_next(chunk.get());

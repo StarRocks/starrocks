@@ -19,6 +19,7 @@
 #include <utility>
 #include <vector>
 
+#include "column/chunk_factory.h"
 #include "column/column_access_path.h"
 #include "column/datum_convert.h"
 #include "common/config_json_flat_fwd.h"
@@ -214,7 +215,7 @@ Status TabletReader::_init_collector_for_pk_index_read() {
         pk_column_ids.emplace_back(i);
     }
     auto pk_schema = ChunkHelper::convert_schema(tablet_schema, pk_column_ids);
-    auto keys = ChunkHelper::new_chunk(pk_schema, 1);
+    auto keys = ChunkFactory::new_chunk(pk_schema, 1);
     size_t num_pk_eq_predicates = 0;
 
     PredicateAndNode pushdown_pred_root;
