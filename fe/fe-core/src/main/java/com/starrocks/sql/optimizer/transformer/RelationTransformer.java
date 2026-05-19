@@ -684,6 +684,13 @@ public class RelationTransformer implements AstVisitorExtendInterface<LogicalPla
                                 node.getPartitionNames().getPartitionNames())
                         .setSelectedTabletIds(node.getTabletIds())
                         .build();
+            } else if (node.getBookmarkRange().isPresent()) {
+                OlapTable olapTable = (OlapTable) node.getTable();
+                scanOperator = CdcScanHelper.build(
+                        olapTable,
+                        node.getBookmarkRange().get(),
+                        colRefToColumnMetaMapBuilder.build(),
+                        columnMetaToColRefMap);
             } else if (node.isChangesQuery()) {
                 OlapTable olapTable = (OlapTable) node.getTable();
                 ChangePeriod changePeriod = node.getChangePeriod();

@@ -410,6 +410,43 @@ public class ChangesBookmarkResolutionTest extends BookmarkTestBase {
         }
     }
 
+    @Test
+    public void testHintEndToEndPlan() throws Exception {
+        String tableName = "dup_hint_" + TABLE_COUNTER.getAndIncrement();
+        long tableId = createDupTable(tableName);
+        OlapTable live = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getDb(dbId).getTable(tableId);
+        live.maySetDatabaseId(dbId);
+
+        BookmarkManager bm = GlobalStateMgr.getCurrentState().getBookmarkManager();
+        BookmarkHolder hBase = BookmarkHolder.forEmptyInfo("hint_base");
+        BookmarkHolder hHead = BookmarkHolder.forEmptyInfo("hint_head");
+        Bookmark base = bm.create(dbId, tableId, hBase);
+        bumpVisibleVersion(live, 6L);
+        Bookmark head = bm.create(dbId, tableId, hHead);
+
+        try {
+            // Driven through the parser+analyzer+transformer path so the hint
+            // ends up resolving to a BookmarkRange on the TableRelation, which
+            // the new RelationTransformer branch dispatches into CdcScanHelper.
+            // Skip the cost-based optimizer like testTrackableDeltaTransformsToChangesScan
+            // does — the transformer is the load-bearing assertion here.
+            String sql = String.format(
+                    "SELECT k, v FROM %s [_CHANGES_%d_%d_]",
+                    tableName, base.getBookmarkId(), head.getBookmarkId());
+            QueryStatement stmt = (QueryStatement) UtFrameUtils.parseStmtWithNewParser(
+                    sql, connectContext);
+            LogicalPlan plan = new RelationTransformer(new ColumnRefFactory(), connectContext)
+                    .transformWithSelectLimit(stmt.getQueryRelation());
+            assertTrue(containsChangesScan(plan.getRoot()),
+                    "expected LogicalChangesScan in transformed plan, got root op: "
+                            + plan.getRoot().getOp().getOpType());
+        } finally {
+            bm.releaseReference(dbId, tableId, base.getBookmarkId(), hBase.getHolderId());
+            bm.releaseReference(dbId, tableId, head.getBookmarkId(), hHead.getHolderId());
+        }
+    }
+
     /** Wrap a single PhysicalPartitionChange in the per-logical-partition map a BookmarkChange expects. */
     private static BookmarkChange buildSingletonDiff(long logicalId,
                                                      BookmarkChange.PhysicalPartitionChange change) {
