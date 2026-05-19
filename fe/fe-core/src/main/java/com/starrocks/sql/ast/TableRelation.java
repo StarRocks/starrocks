@@ -19,6 +19,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableName;
 import com.starrocks.common.tvr.TvrVersionRange;
+import com.starrocks.lake.bookmark.BookmarkRange;
 import com.starrocks.sql.analyzer.Field;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.expression.Expr;
@@ -30,6 +31,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.OptionalLong;
 import java.util.Set;
 import java.util.regex.Matcher;
@@ -51,6 +53,9 @@ public class TableRelation extends Relation {
     private static final String BOOKMARK_HINT_PREFIX = "_BOOKMARK_";
     private static final Pattern BOOKMARK_HINT_PATTERN = Pattern.compile("^_BOOKMARK_(\\d+)_$");
 
+    private static final String CHANGES_HINT_PREFIX = "_CHANGES_";
+    private static final Pattern CHANGES_HINT_PATTERN = Pattern.compile("^_CHANGES_(\\d+)_(\\d+)_$");
+
     private final TableName name;
     private Table table;
     private Map<Field, Column> columns;
@@ -60,6 +65,7 @@ public class TableRelation extends Relation {
     private final List<Long> replicaIds;
     private final Set<TableHint> tableHints = new HashSet<>();
     private OptionalLong bookmarkId = OptionalLong.empty();
+    private Optional<BookmarkRange> bookmarkRange = Optional.empty();
     // used for mysql external table
     private String queryPeriodString;
 
@@ -183,6 +189,9 @@ public class TableRelation extends Relation {
     // Return true if add the hint successfully, otherwise return false.
     // For example, if the hint name is not defined, false will be returned.
     public boolean addTableHint(String hintName) {
+        if (tryAddChangesHint(hintName)) {
+            return true;
+        }
         if (tryAddBookmarkHint(hintName)) {
             return true;
         }
@@ -223,6 +232,38 @@ public class TableRelation extends Relation {
 
     public OptionalLong getBookmarkId() {
         return bookmarkId;
+    }
+
+    // Changes hints are claimed by prefix so that a malformed payload throws
+    // here rather than being silently dropped like an unknown hint — the user
+    // clearly intended a changes hint.
+    private boolean tryAddChangesHint(String hintName) {
+        if (!hintName.startsWith(CHANGES_HINT_PREFIX)) {
+            return false;
+        }
+        Matcher m = CHANGES_HINT_PATTERN.matcher(hintName);
+        if (!m.matches()) {
+            throw new SemanticException(
+                    "invalid changes hint format: [" + hintName + "]; expected [_CHANGES_<base>_<head>_]");
+        }
+        if (bookmarkRange.isPresent()) {
+            throw new SemanticException("multiple changes hints are not allowed");
+        }
+        long base;
+        long head;
+        try {
+            base = Long.parseLong(m.group(1));
+            head = Long.parseLong(m.group(2));
+        } catch (NumberFormatException e) {
+            throw new SemanticException(
+                    "bookmark id in [" + hintName + "] is out of BIGINT range");
+        }
+        bookmarkRange = Optional.of(new BookmarkRange(base, head));
+        return true;
+    }
+
+    public Optional<BookmarkRange> getBookmarkRange() {
+        return bookmarkRange;
     }
 
     public Set<TableHint> getTableHints() {

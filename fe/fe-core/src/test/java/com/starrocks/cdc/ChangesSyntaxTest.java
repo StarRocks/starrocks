@@ -16,12 +16,16 @@ package com.starrocks.cdc;
 
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.FeConstants;
+import com.starrocks.lake.bookmark.BookmarkRange;
 import com.starrocks.lake.bookmark.BookmarkTestBase;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.QueryAnalyzer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.ChangePeriod;
 import com.starrocks.sql.ast.CreateTableStmt;
+import com.starrocks.sql.ast.QueryStatement;
+import com.starrocks.sql.ast.SelectRelation;
+import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.ast.expression.IntLiteral;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.utframe.UtFrameUtils;
@@ -31,6 +35,7 @@ import org.junit.jupiter.api.Test;
 
 import java.util.Optional;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -175,6 +180,45 @@ public class ChangesSyntaxTest extends BookmarkTestBase {
         AnalysisException ex = assertThrows(AnalysisException.class,
                 () -> UtFrameUtils.parseStmtWithNewParser(sql, connectContext));
         assertTrue(ex.getMessage().contains("CHANGES STATS is not yet supported"),
+                "actual: " + ex.getMessage());
+    }
+
+    @Test
+    public void testHintParsesIntoBookmarkRange() throws Exception {
+        String sql = "SELECT * FROM dup_t [_CHANGES_5_7_]";
+        QueryStatement stmt = (QueryStatement) UtFrameUtils.parseStmtWithNewParser(
+                sql, connectContext);
+        TableRelation tr = (TableRelation) ((SelectRelation) stmt.getQueryRelation()).getRelation();
+        Optional<BookmarkRange> range = tr.getBookmarkRange();
+        assertTrue(range.isPresent());
+        assertEquals(5L, range.get().base());
+        assertEquals(7L, range.get().head());
+    }
+
+    @Test
+    public void testHintMalformedThrows() {
+        String sql = "SELECT * FROM dup_t [_CHANGES_5_]";
+        AnalysisException ex = assertThrows(AnalysisException.class,
+                () -> UtFrameUtils.parseStmtWithNewParser(sql, connectContext));
+        assertTrue(ex.getMessage().contains("invalid changes hint format"),
+                "actual: " + ex.getMessage());
+    }
+
+    @Test
+    public void testHintDuplicateThrows() {
+        String sql = "SELECT * FROM dup_t [_CHANGES_1_2_, _CHANGES_3_4_]";
+        AnalysisException ex = assertThrows(AnalysisException.class,
+                () -> UtFrameUtils.parseStmtWithNewParser(sql, connectContext));
+        assertTrue(ex.getMessage().contains("multiple changes hints are not allowed"),
+                "actual: " + ex.getMessage());
+    }
+
+    @Test
+    public void testHintIdOutOfBigintRange() {
+        String sql = "SELECT * FROM dup_t [_CHANGES_99999999999999999999_1_]";
+        AnalysisException ex = assertThrows(AnalysisException.class,
+                () -> UtFrameUtils.parseStmtWithNewParser(sql, connectContext));
+        assertTrue(ex.getMessage().contains("out of BIGINT range"),
                 "actual: " + ex.getMessage());
     }
 
