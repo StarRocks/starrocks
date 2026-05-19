@@ -11,7 +11,7 @@
 #include "column/chunk.h"
 #include "column/fixed_length_column.h"
 #include "column/schema.h"
-#include "common/config.h"
+#include "common/config_lake_fwd.h"
 #include "common/status.h"
 #include "common/statusor.h"
 #include "gen_cpp/lake_types.pb.h"
