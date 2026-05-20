@@ -170,10 +170,13 @@ public:
     // been reached.
     bool add(Value x, Weight w);
     void add(std::vector<Centroid>::const_iterator iter, std::vector<Centroid>::const_iterator end);
-    // Upper bound for centroid array sizes in a deserialized blob. Mirrors
-    // ClickHouse QuantileTDigest::max_centroids_deserialize and protects
+    // Upper bound for centroid array sizes in a deserialized blob. Must cover
+    // the largest legitimate intermediate state (the _unprocessed buffer
+    // before process() runs has capacity 8 * ceil(compression), and the
+    // percentile_approx MAX_COMPRESSION is 10000 → 80000 centroids). 131072
+    // = 1 << 17 gives ~60% headroom past that ceiling and still protects
     // against OOM from corrupted or truncated input.
-    static constexpr size_t kMaxCentroidsDeserialize = 65536;
+    static constexpr size_t kMaxCentroidsDeserialize = 1 << 17;
 
     uint64_t serialize_size() const;
     size_t serialize(uint8_t* writer) const;
