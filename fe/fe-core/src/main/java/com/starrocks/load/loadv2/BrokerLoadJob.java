@@ -89,6 +89,7 @@ import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TransactionState.TxnCoordinator;
 import com.starrocks.transaction.TransactionState.TxnSourceType;
 import com.starrocks.warehouse.WarehouseIdleChecker;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -349,23 +350,7 @@ public class BrokerLoadJob extends BulkLoadJob {
             locker.unLockDatabase(db.getId(), LockType.READ);
         }
 
-        // Pre-split is fire-and-forget; bind the job's ConnectContext so the coordinator's
-        // session-var check sees the load's session, not whatever stale thread-local is set.
-        // Apply the persisted opt-out value too so the user's submit-time `SET enable_tablet_pre_split = false`
-        // survives FE failover (the recreated context above otherwise has the default value).
-        if (!preSplitInputs.isEmpty()) {
-            String persistedPreSplitOptOut = sessionVariables.get(SessionVariable.ENABLE_TABLET_PRE_SPLIT);
-            if (persistedPreSplitOptOut != null) {
-                context.getSessionVariable().setEnableTabletPreSplit(Boolean.parseBoolean(persistedPreSplitOptOut));
-            }
-            try (ConnectContext.ScopeGuard ignored = context.bindScope()) {
-                for (PreSplitHookInput input : preSplitInputs) {
-                    BrokerLoadPreSplitHook.maybeRunPreSplit(
-                            db, input.targetTable(), brokerDesc,
-                            input.fileGroups(), input.fileStatuses(), computeResource);
-                }
-            }
-        }
+        firePreSplitHooks(context, db, brokerDesc, computeResource, preSplitInputs, sessionVariables);
 
         // Submit task outside the database lock, cause it may take a while if task queue is full.
         for (LoadTask loadTask : newLoadingTasks) {
@@ -373,8 +358,38 @@ public class BrokerLoadJob extends BulkLoadJob {
         }
     }
 
+    /**
+     * Fire the Sample-Based Tablet Pre-Split hook for each per-table input snapshot.
+     * Pre-split is fire-and-forget; we bind the job's {@link ConnectContext} so the
+     * coordinator's session-var check sees the load's session, not whatever stale
+     * thread-local is set. We also apply the persisted opt-out value so a submit-time
+     * {@code SET enable_tablet_pre_split = false} survives FE failover (the recreated
+     * context otherwise has the default value).
+     *
+     * <p>Package-private so {@code BrokerLoadJobTest} can drive it directly without
+     * standing up the full {@code createLoadingTask} fixture.
+     */
+    static void firePreSplitHooks(
+            ConnectContext context, Database db, BrokerDesc brokerDesc, ComputeResource computeResource,
+            List<PreSplitHookInput> preSplitInputs, Map<String, String> sessionVariables) {
+        if (preSplitInputs.isEmpty()) {
+            return;
+        }
+        String persistedPreSplitOptOut = sessionVariables.get(SessionVariable.ENABLE_TABLET_PRE_SPLIT);
+        if (persistedPreSplitOptOut != null) {
+            context.getSessionVariable().setEnableTabletPreSplit(Boolean.parseBoolean(persistedPreSplitOptOut));
+        }
+        try (ConnectContext.ScopeGuard ignored = context.bindScope()) {
+            for (PreSplitHookInput input : preSplitInputs) {
+                BrokerLoadPreSplitHook.maybeRunPreSplit(
+                        db, input.targetTable(), brokerDesc,
+                        input.fileGroups(), input.fileStatuses(), computeResource);
+            }
+        }
+    }
+
     /** Per-table inputs captured under the DB read lock so the pre-split hook can fire outside it. */
-    private record PreSplitHookInput(
+    record PreSplitHookInput(
             OlapTable targetTable, List<BrokerFileGroup> fileGroups,
             List<List<TBrokerFileStatus>> fileStatuses) {
     }
