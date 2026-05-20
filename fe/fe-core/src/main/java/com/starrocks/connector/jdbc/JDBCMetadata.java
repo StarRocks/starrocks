@@ -295,7 +295,13 @@ public class JDBCMetadata implements ConnectorMetadata {
                         Table table = schemaResolver.getTable(tableId, tblName, fullSchema,
                                 partitionColumns, dbName, catalogName, properties);
                         if (table != null) {
+<<<<<<< HEAD
                             table.setComment(schemaResolver.getTableComment(connection, dbName, tblName));
+=======
+                            if (table instanceof JDBCTable && !originalJdbcTypes.isEmpty()) {
+                                ((JDBCTable) table).setOriginalJdbcColumnTypes(originalJdbcTypes);
+                            }
+>>>>>>> db2d5b956d ([BugFix] Defer JDBC REMARKS fetch out of getTable() hot path (#73488))
                         }
                         return table;
                     } catch (SQLException | DdlException e) {
@@ -306,6 +312,51 @@ public class JDBCMetadata implements ConnectorMetadata {
     }
 
     @Override
+<<<<<<< HEAD
+=======
+    public String getTableComment(ConnectContext context, String dbName, String tblName) {
+        try (Connection connection = getConnection()) {
+            return schemaResolver.getTableComment(connection, dbName, tblName);
+        } catch (SQLException e) {
+            LOG.warn("get table comment for JDBC catalog fail!", e);
+            return "";
+        }
+    }
+
+    @Override
+    public Table getTableFromQuery(ConnectContext context, String dbName, String query) {
+        String normalizedQuery = JDBCTable.normalizePassThroughQuery(query);
+        String metadataQuery = "SELECT * FROM (" + normalizedQuery + ") starrocks_query WHERE 1 = 0";
+        try (Connection connection = getConnection();
+                Statement statement = connection.createStatement()) {
+            int queryTimeoutSeconds = schemaResolver.getQueryTimeoutSeconds();
+            if (queryTimeoutSeconds > 0) {
+                statement.setQueryTimeout(queryTimeoutSeconds);
+            }
+
+            try (ResultSet resultSet = statement.executeQuery(metadataQuery)) {
+                Map<String, Integer> originalJdbcTypes = new HashMap<>();
+                List<Column> fullSchema = schemaResolver.convertToSRTable(resultSet.getMetaData(), originalJdbcTypes);
+                if (fullSchema.isEmpty()) {
+                    throw new StarRocksConnectorException("pass-through query returned no columns");
+                }
+
+                int tableId = ConnectorTableId.CONNECTOR_ID_GENERATOR.getNextId().asInt();
+                JDBCTable queryTable = new JDBCTable(tableId, "_query_" + tableId, fullSchema, dbName, catalogName,
+                        properties);
+                queryTable.setPassThroughQuery(normalizedQuery);
+                if (!originalJdbcTypes.isEmpty()) {
+                    queryTable.setOriginalJdbcColumnTypes(originalJdbcTypes);
+                }
+                return queryTable;
+            }
+        } catch (SQLException | DdlException e) {
+            throw new StarRocksConnectorException("get query table for JDBC catalog fail!", e);
+        }
+    }
+
+    @Override
+>>>>>>> db2d5b956d ([BugFix] Defer JDBC REMARKS fetch out of getTable() hot path (#73488))
     public List<String> listPartitionNames(String databaseName, String tableName,
                                            ConnectorMetadataRequestContext requestContext) {
         return partitionNamesCache.get(new JDBCTableName(null, databaseName, tableName),

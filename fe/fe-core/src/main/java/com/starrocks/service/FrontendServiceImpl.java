@@ -539,7 +539,11 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                 }
 
                 try {
+<<<<<<< HEAD
                     tbl = metadataMgr.getTable(context, catalogName, params.db, tableName);
+=======
+                    tbl = metadataMgr.getBasicTable(context, catalogName, params.db, tableName);
+>>>>>>> db2d5b956d ([BugFix] Defer JDBC REMARKS fetch out of getTable() hot path (#73488))
                 } catch (Exception e) {
                     LOG.warn(e.getMessage(), e);
                 }

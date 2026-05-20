@@ -14,6 +14,7 @@
 
 package com.starrocks.connector;
 
+import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
@@ -132,6 +133,28 @@ public interface ConnectorMetadata {
     }
 
     /**
+<<<<<<< HEAD
+=======
+     * Lazily fetch the table comment when a caller really needs it
+     * (e.g. information_schema.tables). Default implementation returns
+     * the comment already on the cached Table object — i.e. for Iceberg
+     * the comment travels with getTable() so this is free. JDBC overrides
+     * to issue a dedicated REMARKS query.
+     */
+    default String getTableComment(ConnectContext context, String dbName, String tblName) {
+        Table table = getTable(context, dbName, tblName);
+        return table == null ? "" : Strings.nullToEmpty(table.getComment());
+    }
+
+    /**
+     * Build a temporary table from a pass-through query when the connector can infer the result schema.
+     */
+    default Table getTableFromQuery(ConnectContext context, String dbName, String query) {
+        return null;
+    }
+
+    /**
+>>>>>>> db2d5b956d ([BugFix] Defer JDBC REMARKS fetch out of getTable() hot path (#73488))
      * Get the Time Varying Relation (TVR) version range for the table between the specified versions.
      */
     default TvrVersionRange getTableVersionRange(String dbName, Table table,
