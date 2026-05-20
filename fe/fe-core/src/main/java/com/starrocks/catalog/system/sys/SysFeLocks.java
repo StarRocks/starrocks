@@ -19,10 +19,12 @@ import com.google.common.base.Joiner;
 import com.google.gson.JsonObject;
 import com.starrocks.authentication.UserIdentityUtils;
 import com.starrocks.authorization.AccessDeniedException;
+import com.starrocks.authorization.ObjectType;
 import com.starrocks.authorization.PrivilegeType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.system.SystemId;
 import com.starrocks.catalog.system.SystemTable;
+import com.starrocks.common.ErrorCode;
 import com.starrocks.common.util.concurrent.lock.LockHolder;
 import com.starrocks.common.util.concurrent.lock.LockInfo;
 import com.starrocks.common.util.concurrent.lock.LockManager;
@@ -75,7 +77,8 @@ public class SysFeLocks {
                 Authorizer.checkSystemAction(context, PrivilegeType.OPERATE);
             }
         } catch (AccessDeniedException e) {
-            throw new TException(e.getMessage(), e);
+            throw new TException(ErrorCode.ERR_ACCESS_DENIED_FOR_EXTERNAL_ACCESS_CONTROLLER.formatErrorMsg(
+                    PrivilegeType.OPERATE.name(), ObjectType.SYSTEM.name(), ""), e);
         }
 
         TFeLocksRes response = new TFeLocksRes();

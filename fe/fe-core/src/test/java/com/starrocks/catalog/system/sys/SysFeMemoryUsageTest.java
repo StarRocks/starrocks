@@ -25,12 +25,16 @@ import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.thrift.TAuthInfo;
 import com.starrocks.thrift.TFeMemoryReq;
 import mockit.Expectations;
+import mockit.Mock;
+import mockit.MockUp;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.thrift.TException;
 import org.junit.jupiter.api.Test;
 
 import java.util.Map;
 
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class SysFeMemoryUsageTest {
@@ -57,6 +61,29 @@ public class SysFeMemoryUsageTest {
 
         var res = SysFeMemoryUsage.listFeMemoryUsage(req);
         assertTrue(StringUtils.isNotEmpty(res.toString()));
+    }
+
+    @Test
+    public void testListFeMemoryUsageAccessDeniedSurfacesMessage() {
+        TFeMemoryReq req = new TFeMemoryReq();
+        TAuthInfo auth = new TAuthInfo();
+        auth.setUser("nopriv");
+        auth.setUser_ip("127.0.0.1");
+        req.setAuth_info(auth);
+
+        new MockUp<Authorizer>() {
+            @Mock
+            public void checkSystemAction(ConnectContext context, PrivilegeType privilegeType)
+                    throws AccessDeniedException {
+                throw new AccessDeniedException();
+            }
+        };
+
+        TException ex = assertThrows(TException.class, () -> SysFeMemoryUsage.listFeMemoryUsage(req));
+        assertNotNull(ex.getMessage(), "AccessDenied message should not be null");
+        assertTrue(ex.getMessage().contains("Access denied"), "Should match canonical format: " + ex.getMessage());
+        assertTrue(ex.getMessage().contains("OPERATE"), "Should mention OPERATE: " + ex.getMessage());
+        assertTrue(ex.getMessage().contains("SYSTEM"), "Should mention SYSTEM: " + ex.getMessage());
     }
 
 }
