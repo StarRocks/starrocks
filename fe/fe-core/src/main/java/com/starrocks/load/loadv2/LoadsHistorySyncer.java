@@ -61,6 +61,12 @@ public class LoadsHistorySyncer extends FrontendDaemon {
             "properties json, " +
             "error_msg varchar(2048), " +
             "tracking_sql varchar(2048), " +
+            // Deprecated: BE no longer populates the per-load tab-delimited
+            // rejected-record file that this column pointed at. Column is
+            // kept for compatibility with clusters that already have the
+            // table materialized; rejected rows live in
+            // `_statistics_.rejected_records` and can be joined to this
+            // table via load_label / txn_id.
             "rejected_record_path varchar(2048), " +
             "job_id bigint " +
             ") " +

@@ -95,6 +95,7 @@
 #include "runtime/mem_tracker.h"
 #include "runtime/memory/mem_chunk_allocator.h"
 #include "runtime/profile_report_worker.h"
+#include "runtime/rejected_record_sync_daemon.h"
 #include "runtime/result_buffer_mgr.h"
 #include "runtime/result_queue_mgr.h"
 #include "runtime/routine_load/routine_load_task_executor.h"
@@ -688,6 +689,23 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, ProcessMetricsRe
         exit(-1);
     }
 
+    // Phase 3 of the rejected records feature. The daemon thread is
+    // started unconditionally; its tick_loop() re-reads
+    // `config::enable_rejected_record_sync` every interval and treats a
+    // false value as a no-op. Starting it only when the flag is true at
+    // BE-boot time would break the mutable-config contract: operators
+    // (and tests) expect `update_config?enable_rejected_record_sync=true`
+    // to activate shipping without a BE restart. Leaving the thread
+    // parked costs one condvar wait per interval and no I/O when the
+    // flag is off.
+    _rejected_record_sync_daemon = new RejectedRecordSyncDaemon(this);
+    Status rr_status = _rejected_record_sync_daemon->init();
+    if (!rr_status.ok()) {
+        LOG(ERROR) << "RejectedRecordSyncDaemon init failed: " << rr_status.message();
+        // Non-fatal: the load path still works, we just don't ship
+        // rejected records to the system table this run.
+    }
+
 #if defined(USE_STAROS) && !defined(BE_TEST) && !defined(BUILD_FORMAT_LIB)
     _lake_location_provider = std::make_shared<lake::StarletLocationProvider>();
     _lake_update_manager =
@@ -1082,6 +1100,10 @@ void ExecEnv::destroy() {
     SAFE_DELETE(_load_stream_mgr);
     SAFE_DELETE(_load_channel_mgr);
     SAFE_DELETE(_broker_mgr);
+    if (_rejected_record_sync_daemon != nullptr) {
+        _rejected_record_sync_daemon->stop();
+    }
+    SAFE_DELETE(_rejected_record_sync_daemon);
     SAFE_DELETE(_load_path_mgr);
     SAFE_DELETE(_brpc_stub_cache);
     SAFE_DELETE(_udf_call_pool);

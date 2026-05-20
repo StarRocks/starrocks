@@ -19,11 +19,13 @@
 #include <string>
 
 #include "common/status.h"
+#include "gen_cpp/InternalService_types.h"
 
 namespace starrocks {
 
 class ObjectPool;
 class QueryStatisticsRecvr;
+class RejectedRecordWriter;
 class RuntimeState;
 struct TReportExecStatusParams;
 
@@ -33,11 +35,27 @@ public:
     static ObjectPool* global_obj_pool(const RuntimeState* state);
 
     static Status create_error_log_file(RuntimeState* state);
-    static Status create_rejected_record_file(RuntimeState* state);
     static void append_error_msg_to_file(RuntimeState* state, const std::string& line, const std::string& error_msg,
                                          bool is_summary = false);
     static void append_rejected_record_to_file(RuntimeState* state, const std::string& record,
                                                const std::string& error_msg, const std::string& source);
+
+    // Build the source_info JSON to record on a rejected row. Routine load
+    // tasks pre-populate `query_options.routine_load_source_info` with a
+    // kafka anchor (topic + partitions + begin_offsets); when set we
+    // forward it as-is. Otherwise wrap the legacy free-form `source`
+    // string (typically a file path) in `{"source": "<source>"}`. Returns
+    // an empty string when no source info is available so callers can
+    // pass it through unchanged. Exposed for tests; the production
+    // dispatcher in `append_rejected_record_to_file` calls it on every
+    // rejected row.
+    static std::string build_rejected_record_source_info(const TQueryOptions& query_options, const std::string& source);
+
+    // Phase 2: return the per-fragment RejectedRecordWriter, constructing it
+    // on first call under the existing rejected-record lock. Returns nullptr
+    // only if rejected-record logging is disabled for this state.
+    static RejectedRecordWriter* rejected_record_writer(RuntimeState* state);
+
     static void update_report_load_status(const RuntimeState* state, TReportExecStatusParams* load_params);
 
     static std::shared_ptr<QueryStatisticsRecvr> query_recv(RuntimeState* state);

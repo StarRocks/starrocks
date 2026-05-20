@@ -1611,6 +1611,40 @@ public class FrontendServiceImplTest {
     }
 
     @Test
+    public void testIsAuthorizedByInternalToken() {
+        // Direct unit test for the bypass helper -- standalone so each
+        // fall-through branch is pinned without spinning up the full
+        // requestMergeCommit RPC flow.
+        FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+
+        // null / empty token -> always reject, regardless of table.
+        Assertions.assertFalse(impl.isAuthorizedByInternalToken(null, "_statistics_", "rejected_records"));
+        Assertions.assertFalse(impl.isAuthorizedByInternalToken("", "_statistics_", "rejected_records"));
+
+        // Non-empty token + wrong database -> reject (line 1158: a leaked
+        // token cannot be reused on a non-system table).
+        Assertions.assertFalse(impl.isAuthorizedByInternalToken("some-token", "user_db", "rejected_records"));
+
+        // Non-empty token + wrong table in the system database -> reject.
+        Assertions.assertFalse(impl.isAuthorizedByInternalToken("some-token", "_statistics_", "query_history"));
+
+        // Token mismatch on the right table -> reject. NodeMgr.getToken()
+        // in the test fixture returns a real cluster token; we ensure ours
+        // does not equal it.
+        String realToken = GlobalStateMgr.getCurrentState().getNodeMgr().getToken();
+        Assertions.assertNotEquals("attacker-supplied-token", realToken);
+        Assertions.assertFalse(
+                impl.isAuthorizedByInternalToken("attacker-supplied-token", "_statistics_", "rejected_records"));
+
+        // Matching token + matching db/tbl -> accept. This is the only
+        // input combination that should ever return true.
+        if (realToken != null && !realToken.isEmpty()) {
+            Assertions.assertTrue(
+                    impl.isAuthorizedByInternalToken(realToken, "_statistics_", "rejected_records"));
+        }
+    }
+
+    @Test
     public void testRequestMergeCommit() throws Exception {
         // test success request
         testRequestMergeCommitBase(request -> {}, result -> {

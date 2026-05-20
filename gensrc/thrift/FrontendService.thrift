@@ -596,6 +596,10 @@ struct TLoadInfo {
     21: optional i64 num_filtered_rows
     22: optional i64 num_unselected_rows
     23: optional i64 num_sink_rows
+    // Deprecated: the BE-local tab-delimited rejected-record file was
+    // removed. Rejected rows are now in `_statistics_.rejected_records`,
+    // queryable by load label / txn_id. The field ordinal is kept for
+    // wire compatibility across rolling upgrades; BE never populates it.
     24: optional string rejected_record_path
     25: optional string load_id
     26: optional string profile_id
@@ -763,6 +767,9 @@ struct TReportExecStatusParams {
 
   25: optional list<Types.TSinkCommitInfo> sink_commit_infos
 
+  // Deprecated: see TLoadInfo.rejected_record_path for the original field
+  // and the migration note explaining why it's gone. Kept for wire
+  // compatibility; BE never populates it.
   27: optional string rejected_record_path
 
   28: optional RuntimeProfile.TRuntimeProfileTree load_channel_profile;
@@ -1026,6 +1033,12 @@ struct TMergeCommitRequest {
     6: optional i64 backend_id
     7: optional string backend_host;
     8: optional map<string, string> params;
+    // Cluster-internal trust token: when set and matching the FE cluster
+    // token, the request bypasses Basic-style password verification and
+    // is dispatched as ROOT. Only honored for designated system tables
+    // (currently `_statistics_.rejected_records`); any other db/tbl
+    // falls back to the normal user/passwd check regardless of token.
+    9: optional string internal_token;
 }
 
 struct TMergeCommitResult {

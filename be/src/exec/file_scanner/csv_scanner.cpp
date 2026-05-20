@@ -592,6 +592,11 @@ void CSVScanner::_report_error(const CSVReader::Record& record, const std::strin
 }
 
 void CSVScanner::_report_rejected_record(const CSVReader::Record& record, const std::string& err_msg) {
+    // `append_rejected_record_to_file` routes the record into
+    // RejectedRecordWriter so the sync daemon can ship it to
+    // `_statistics_.rejected_records`. No direct writer call is needed
+    // here; the function name is kept only for historical symmetry with
+    // the pre-feature code path.
     RuntimeStateHelper::append_rejected_record_to_file(_state, record.to_string(), err_msg, _curr_reader->filename());
 }
 
