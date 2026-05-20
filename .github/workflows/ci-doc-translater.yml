@@ -84,8 +84,8 @@ jobs:
       - name: Checkout Trusted Tools
         uses: actions/checkout@v4
         with:
-          repository: StarRocks/markdown-translator
-          ref: 'v1.0.6'
+          repository: StarRocks/doc-translator
+          ref: 'v1.0.1'
           path: trusted_tools
 
       - name: Get Changed Files
@@ -119,7 +119,7 @@ jobs:
 
       - name: Run Translations
         env:
-          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.DOCS_ANTHROPIC_API_KEY }}
           BODY: ${{ steps.get_checks.outputs.result }}
           FILES_JSON: ${{ steps.changed-files.outputs.all_changed_files }}
         run: |          
@@ -173,7 +173,7 @@ jobs:
 
           if [[ -n $(git status --porcelain docs/) ]]; then
             git add docs/
-            git commit -m "docs: automated translation via Gemini"
+            git commit -m "docs: automated translation via Anthropic"
 
             # ------------------------------------------------------------------
             # CRITICAL AUTH FIX: Use PAT to push to Fork
