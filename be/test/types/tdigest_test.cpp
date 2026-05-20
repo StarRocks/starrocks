@@ -362,6 +362,31 @@ TEST_F(TDigestTest, LegacyTrailingBytesIgnored) {
     EXPECT_NEAR(source.quantile(0.5), decoded.quantile(0.5), 0.5);
 }
 
+// P16: byte_size_in_memory tracks capacity, so it reports more than the
+// logical serialize_size once any growth has happened.
+TEST_F(TDigestTest, ByteSizeInMemoryIncludesCapacity) {
+    TDigest digest(1000);
+    for (int i = 0; i < 100; ++i) {
+        digest.add(static_cast<float>(i));
+    }
+    EXPECT_GE(digest.byte_size_in_memory(), digest.serialize_size());
+}
+
+// P16: compress() empties _unprocessed but capacity is retained, so
+// byte_size_in_memory must not drop below its pre-compress value. This is
+// the regression that the old mem_usage = serialize_size() formula caused
+// — process() would shrink serialize_size and produce a negative delta in
+// FunctionContext::add_mem_usage(curr - prev).
+TEST_F(TDigestTest, ByteSizeInMemoryStableAfterCompress) {
+    TDigest digest(1000);
+    for (int i = 0; i < 200; ++i) {
+        digest.add(static_cast<float>(i));
+    }
+    const uint64_t before = digest.byte_size_in_memory();
+    digest.compress();
+    EXPECT_GE(digest.byte_size_in_memory(), before);
+}
+
 TEST_F(TDigestTest, Montonicity) {
     TDigest digest(1000);
     std::uniform_real_distribution<> reals(0.0, 1.0);

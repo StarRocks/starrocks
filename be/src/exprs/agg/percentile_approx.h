@@ -41,7 +41,10 @@ public:
         compression_initialized = true;
     }
 
-    int64_t mem_usage() const { return percentile->mem_usage(); }
+    // Heap footprint of the state. Includes the PercentileValue (capacity-
+    // based) plus the targetQuantiles vector capacity so push_back / resize
+    // of quantiles is also charged to FunctionContext::add_mem_usage.
+    int64_t mem_usage() const { return percentile->mem_usage() + targetQuantiles.capacity() * sizeof(double); }
 
     std::unique_ptr<PercentileValue> percentile;
     bool compression_initialized = false; // Flag to track if compression has been initialized from FunctionContext
@@ -82,7 +85,7 @@ public:
         PercentileApproxState src_percentile(compression);
         src_percentile.percentile->deserialize((char*)src.data + sizeof(double));
 
-        int64_t prev_memory = data(state).percentile->mem_usage();
+        int64_t prev_memory = data(state).mem_usage();
         // Fast-path: when convert_to_serialize_format ships a single value
         // per row (PASS_THROUGH / FORCE_STREAMING), every incoming digest is
         // a singleton. TDigest::merge() would route it through a priority
@@ -99,7 +102,7 @@ public:
         if (data(state).targetQuantiles.empty()) {
             data(state).targetQuantiles.push_back(quantile);
         }
-        ctx->add_mem_usage(data(state).percentile->mem_usage() - prev_memory);
+        ctx->add_mem_usage(data(state).mem_usage() - prev_memory);
     }
 
     void serialize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {
@@ -160,9 +163,9 @@ public:
             data(state).targetQuantiles.push_back(columns[1]->get(0).get_double());
         }
         double column_value = data_column->immutable_data()[row_num];
-        int64_t prev_memory = data(state).percentile->mem_usage();
+        int64_t prev_memory = data(state).mem_usage();
         data(state).percentile->add(implicit_cast<float>(column_value));
-        ctx->add_mem_usage(data(state).percentile->mem_usage() - prev_memory);
+        ctx->add_mem_usage(data(state).mem_usage() - prev_memory);
     }
 
     void convert_to_serialize_format(FunctionContext* ctx, const Columns& src, size_t chunk_size,
@@ -244,14 +247,14 @@ public:
         }
 
         double column_value = data_column->immutable_data()[row_num];
-        int64_t prev_memory = data(state).percentile->mem_usage();
+        int64_t prev_memory = data(state).mem_usage();
         // add value with weight. Reject w <= 0: a negative weight pushes
         // _processed_weight negative and yields NaN from weightedAverageSorted().
         // TDigest::add() also rejects non-positive weights as a second guard.
         if (LIKELY(weight > 0)) {
             data(state).percentile->add(implicit_cast<float>(column_value), weight);
         }
-        ctx->add_mem_usage(data(state).percentile->mem_usage() - prev_memory);
+        ctx->add_mem_usage(data(state).mem_usage() - prev_memory);
     }
 
     void convert_to_serialize_format(FunctionContext* ctx, const Columns& src, size_t chunk_size,
@@ -347,9 +350,9 @@ public:
         const auto* data_column = down_cast<const DoubleColumn*>(columns[0]);
 
         double column_value = data_column->immutable_data()[row_num];
-        int64_t prev_memory = data(state).percentile->mem_usage();
+        int64_t prev_memory = data(state).mem_usage();
         data(state).percentile->add(implicit_cast<float>(column_value));
-        ctx->add_mem_usage(data(state).percentile->mem_usage() - prev_memory);
+        ctx->add_mem_usage(data(state).mem_usage() - prev_memory);
     }
 
     // Override merge method, deserialize using new format: [count(4 bytes), q1...qn(8*n bytes), TDigest_data]
@@ -379,7 +382,7 @@ public:
 
         // Merge into current state. See base class merge() for the singleton
         // fast-path rationale.
-        int64_t prev_memory = data(state).percentile->mem_usage();
+        int64_t prev_memory = data(state).mem_usage();
         float singleton_mean;
         float singleton_weight;
         if (src_percentile.percentile->try_extract_singleton(&singleton_mean, &singleton_weight)) {
@@ -387,7 +390,7 @@ public:
         } else {
             data(state).percentile->merge(src_percentile.percentile.get());
         }
-        ctx->add_mem_usage(data(state).percentile->mem_usage() - prev_memory);
+        ctx->add_mem_usage(data(state).mem_usage() - prev_memory);
     }
 
     // Override serialize_to_column method, serialize using new format: [count(4 bytes), q1...qn(8*n bytes), TDigest_data]
@@ -510,14 +513,14 @@ public:
         int64_t weight = columns[1]->get(real_row_num).get_int64();
 
         double column_value = data_column->immutable_data()[row_num];
-        int64_t prev_memory = data(state).percentile->mem_usage();
+        int64_t prev_memory = data(state).mem_usage();
         // add value with weight. Reject w <= 0: a negative weight pushes
         // _processed_weight negative and yields NaN from weightedAverageSorted().
         // TDigest::add() also rejects non-positive weights as a second guard.
         if (LIKELY(weight > 0)) {
             data(state).percentile->add(implicit_cast<float>(column_value), weight);
         }
-        ctx->add_mem_usage(data(state).percentile->mem_usage() - prev_memory);
+        ctx->add_mem_usage(data(state).mem_usage() - prev_memory);
     }
 
     // Override merge method, deserialize using new format: [count(4 bytes), q1...qn(8*n bytes), TDigest_data]
@@ -547,7 +550,7 @@ public:
 
         // Merge into current state. See base class merge() for the singleton
         // fast-path rationale.
-        int64_t prev_memory = data(state).percentile->mem_usage();
+        int64_t prev_memory = data(state).mem_usage();
         float singleton_mean;
         float singleton_weight;
         if (src_percentile.percentile->try_extract_singleton(&singleton_mean, &singleton_weight)) {
@@ -555,7 +558,7 @@ public:
         } else {
             data(state).percentile->merge(src_percentile.percentile.get());
         }
-        ctx->add_mem_usage(data(state).percentile->mem_usage() - prev_memory);
+        ctx->add_mem_usage(data(state).mem_usage() - prev_memory);
     }
 
     // Override serialize_to_column method, serialize using new format: [count(4 bytes), q1...qn(8*n bytes), TDigest_data]

@@ -188,6 +188,13 @@ public:
     // bounded overload at new call sites.
     void deserialize(const char* type_reader);
 
+    // Actual heap footprint, capacity-based. Distinct from serialize_size()
+    // (which only reports the logical byte length of a serialized blob);
+    // used for FunctionContext::add_mem_usage so the counter does not flip
+    // negative when process() empties _unprocessed without releasing
+    // capacity.
+    uint64_t byte_size_in_memory() const;
+
 private:
     Value _compression;
     Value _min = std::numeric_limits<Value>::max();
