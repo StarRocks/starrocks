@@ -97,9 +97,9 @@
 // helpers defined via MFV_DEFAULT in headers (e.g. base/simd/rle_simd.h,
 // base/simd/delta_decode.h) don't trigger duplicate-definition link errors when
 // included from multiple translation units on aarch64 / other targets.
-#define MFV_DEFAULT(...) static __VA_ARGS__
+#define MFV_DEFAULT(...) [[maybe_unused]] static __VA_ARGS__
 #endif
 
 #if !defined(MFV_AUTOVEC_STATIC)
-#define MFV_AUTOVEC_STATIC(...) static __VA_ARGS__
+#define MFV_AUTOVEC_STATIC(...) [[maybe_unused]] static __VA_ARGS__
 #endif
