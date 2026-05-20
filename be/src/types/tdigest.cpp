@@ -425,6 +425,11 @@ uint64_t TDigest::serialize_size() const {
            _unprocessed.size() * sizeof(Centroid) + _cumulative.size() * sizeof(Weight);
 }
 
+uint64_t TDigest::byte_size_in_memory() const {
+    return sizeof(TDigest) + _processed.capacity() * sizeof(Centroid) + _unprocessed.capacity() * sizeof(Centroid) +
+           _cumulative.capacity() * sizeof(Weight);
+}
+
 size_t TDigest::serialize(uint8_t* writer) const {
     memcpy(writer, &_compression, sizeof(Value));
     writer += sizeof(Value);
