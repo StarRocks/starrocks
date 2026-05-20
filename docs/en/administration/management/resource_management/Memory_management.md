@@ -14,7 +14,7 @@ Explanation:
 |   Metric  | Name | Description |
 | --- | --- | --- |
 |  process   |  Total memory used of BE  | |
-|  query\_pool   |   Memory used by data querying  | Consists of two parts: memory used by the execution layer and memory used by the storage layer.|
+|  `query_pool`   |   Memory used by data querying  | Consists of two parts: memory used by the execution layer and memory used by the storage layer.|
 |  load   |  Memory used by data loading    | Generally MemTable|
 |  table_meta   |   Metadata memory | S Schema, Tablet metadata, RowSet metadata, Column metadata, ColumnReader, IndexReader |
 |  compaction   |   Multi-version memory compaction  |  compaction that happens after data import is complete |
@@ -47,7 +47,7 @@ Explanation:
 
 ## View memory usage
 
-* **mem\_tracker**
+* **`mem_tracker`**
 
 ~~~ bash
 //View the overall memory statistics
@@ -57,37 +57,15 @@ Explanation:
 <http://be_ip:be_http_port/mem_tracker?type=query_pool&upper_level=3>
 ~~~
 
-* **tcmalloc**
+* **jemalloc**
 
 ~~~ bash
 <http://be_ip:be_http_port/memz>
 ~~~
 
-~~~plain text
-------------------------------------------------
-MALLOC:      777276768 (  741.3 MiB) Bytes in use by application
-MALLOC: +   8851890176 ( 8441.8 MiB) Bytes in page heap freelist
-MALLOC: +    143722232 (  137.1 MiB) Bytes in central cache freelist
-MALLOC: +     21869824 (   20.9 MiB) Bytes in transfer cache freelist
-MALLOC: +    832509608 (  793.9 MiB) Bytes in thread cache freelists
-MALLOC: +     58195968 (   55.5 MiB) Bytes in malloc metadata
-MALLOC:   ------------
-MALLOC: =  10685464576 (10190.5 MiB) Actual memory used (physical + swap)
-MALLOC: +  25231564800 (24062.7 MiB) Bytes released to OS (aka unmapped)
-MALLOC:   ------------
-MALLOC: =  35917029376 (34253.1 MiB) Virtual address space used
-MALLOC:
-MALLOC:         112388              Spans in use
-MALLOC:            335              Thread heaps in use
-MALLOC:           8192              Tcmalloc page size
-------------------------------------------------
-Call ReleaseFreeMemory() to release freelist memory to the OS (via madvise()).
-Bytes released to the OS take up virtual address space but no physical memory.
-~~~
+The `/memz` page displays the BE process memory limit, current process memory consumption, jemalloc allocator statistics, and update manager memory statistics. In the jemalloc section, fields such as `allocated`, `active`, `resident`, `mapped`, `retained`, and `metadata` help distinguish memory used by objects from memory retained by the allocator.
 
-The memory queried by this method is accurate. However, some memory in StarRocks is reserved but not in use. TcMalloc counts the memory that is reserved, not the memory used.
-
-Here `Bytes in use by application` refers to the memory currently in use.
+Allocator-retained memory may be higher than memory currently used by objects. Use `/mem_tracker` together with `/memz` to compare StarRocks memory trackers with process-level allocator statistics.
 
 * **metrics**
 
