@@ -276,6 +276,36 @@ inline bool contains_nonzero_bit(const T* data, size_t size) {
     return false;
 }
 
+/// Check if all bytes are zero (early exit on first non-zero).
+/// Equivalent to count_zero(data, size) == size, but faster.
+template <Integer8BitType T>
+inline bool all_zeros(const T* data, size_t size) {
+    return !contains_nonzero_bit(data, size);
+}
+
+template <typename Container, typename T = typename Container::value_type>
+inline bool all_zeros(const Container& data) {
+    static_assert(std::is_integral<T>::value && sizeof(T) == sizeof(uint8_t),
+                  "only 8-bit integral types are supported");
+    return all_zeros(data.data(), data.size());
+}
+
+/// Check if all bytes are non-zero (early exit on first zero).
+/// Equivalent to count_zero(data, size) == 0, but faster.
+/// Uses memchr for optimal performance (libc is highly optimized for this).
+template <Integer8BitType T>
+inline bool all_ones(const T* data, size_t size) {
+    // memchr is extremely fast for finding a byte - uses SIMD internally in glibc/musl.
+    return std::memchr(data, 0, size) == nullptr;
+}
+
+template <typename Container, typename T = typename Container::value_type>
+inline bool all_ones(const Container& data) {
+    static_assert(std::is_integral<T>::value && sizeof(T) == sizeof(uint8_t),
+                  "only 8-bit integral types are supported");
+    return all_ones(data.data(), data.size());
+}
+
 #if defined(__ARM_NEON) && defined(__aarch64__)
 
 /// Returns a 64-bit mask, each 4-bit represents a byte of the input.

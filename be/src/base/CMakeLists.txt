@@ -59,6 +59,7 @@ ADD_BE_LIB(Base
   path/path_util.cpp
   random/random.cc
   simd/expand.cpp
+  simd/rle_simd.cpp
   stats/ndv_estimator.cpp
   metrics.cpp
   string/base85.cpp

@@ -71,6 +71,8 @@ set(BASE_TEST_FILES
     simd/batch_run_counter_test.cpp
     simd/simd_expand_test.cpp
     simd/simd_test.cpp
+    simd/rle_simd_test.cpp
+    simd/string_length_filter_test.cpp
     stats/ndv_estimator_test.cpp
     string/base85_test.cpp
     string/c_string_test.cpp
