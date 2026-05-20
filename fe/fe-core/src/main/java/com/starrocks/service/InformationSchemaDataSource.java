@@ -28,6 +28,7 @@ import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.InternalCatalog;
+import com.starrocks.catalog.JDBCTable;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.MaterializedView;
@@ -557,6 +558,14 @@ public class InformationSchemaDataSource {
                 }
                 if (table == null) {
                     continue;
+                }
+                if (table instanceof JDBCTable jt
+                        && Config.enable_external_catalog_information_schema_tables_access_full_metadata
+                        && !jt.isCommentFetched()) {
+                    metadataMgr.getOptionalMetadata(catalogName).ifPresent(m -> {
+                        jt.setComment(m.getTableComment(context, dbName, tableName));
+                        jt.setCommentFetched(true);
+                    });
                 }
 
                 try {
