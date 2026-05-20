@@ -512,6 +512,11 @@ StatusOr<pipeline::MorselQueuePtr> OlapScanNode::convert_scan_range_to_morsel_qu
     if (!could) {
         return std::make_unique<pipeline::FixedMorselQueue>(std::move(morsels));
     }
+    if (force_per_segment) {
+        // Row-count heuristic clamps scan_dop to 1 for small tablets, which would
+        // funnel all per-segment morsels through one driver.
+        scan_dop = pipeline_dop;
+    }
 
     // Split tablet physically.
     ASSIGN_OR_RETURN(bool ok, _could_split_tablet_physically(pruned_scan_ranges));

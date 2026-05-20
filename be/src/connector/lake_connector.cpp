@@ -1336,9 +1336,10 @@ StatusOr<pipeline::MorselQueuePtr> LakeDataSourceProvider::convert_scan_range_to
     // small-tablet shortcut sits in lake::TabletReader::open.
     const bool is_vector_query =
             _t_lake_scan_node.__isset.vector_search_options && _t_lake_scan_node.vector_search_options.enable_use_ann;
-    if (is_vector_query && _runtime_state != nullptr &&
-        _runtime_state->query_options().__isset.enable_per_segment_scan_parallel &&
-        _runtime_state->query_options().enable_per_segment_scan_parallel) {
+    const bool force_per_segment = is_vector_query && _runtime_state != nullptr &&
+                                   _runtime_state->query_options().__isset.enable_per_segment_scan_parallel &&
+                                   _runtime_state->query_options().enable_per_segment_scan_parallel;
+    if (force_per_segment) {
         enable_tablet_internal_parallel = true;
         tablet_internal_parallel_mode = TTabletInternalParallelMode::type::FORCE_SPLIT;
     }
@@ -1351,6 +1352,11 @@ StatusOr<pipeline::MorselQueuePtr> LakeDataSourceProvider::convert_scan_range_to
                                                          &splitted_scan_rows));
         if (_could_split) {
             ASSIGN_OR_RETURN(_could_split_physically, _could_split_tablet_physically(*effective_scan_ranges));
+            if (force_per_segment) {
+                // Row-count heuristic clamps parallelism to 1 for small tablets, which
+                // would funnel all per-segment morsels through one driver.
+                lake_scan_parallelism = pipeline_dop;
+            }
         }
     }
 
