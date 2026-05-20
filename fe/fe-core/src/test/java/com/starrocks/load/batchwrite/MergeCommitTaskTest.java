@@ -895,6 +895,14 @@ public class MergeCommitTaskTest extends BatchWriteTestBase {
             assertNull(info.getTracking_sql());
             assertNull(info.getRejected_record_path());
             assertNotNull(info.getCreate_time());
+            // PENDING has the createTimeMs set at construction but no later
+            // timestamps yet. New BE uses these ms fields for materialization
+            // so any drop in setters would silently regress non-Asia/Shanghai
+            // sessions to the legacy UTC+8 string.
+            assertTrue(info.getCreate_time_ms() > 0);
+            assertFalse(info.isSetLoad_start_time_ms());
+            assertFalse(info.isSetLoad_commit_time_ms());
+            assertFalse(info.isSetLoad_finish_time_ms());
         } else if (taskState == MergeCommitTask.TaskState.FINISHED) {
             assertTrue(info.getTxn_id() > 0);
             assertTrue(task.endTimeMs() > 0);
@@ -904,6 +912,10 @@ public class MergeCommitTaskTest extends BatchWriteTestBase {
             assertFalse(info.getLoad_commit_time().isEmpty());
             assertNotNull(info.getLoad_finish_time());
             assertFalse(info.getLoad_finish_time().isEmpty());
+            assertTrue(info.getCreate_time_ms() > 0);
+            assertTrue(info.getLoad_start_time_ms() > 0);
+            assertTrue(info.getLoad_commit_time_ms() > 0);
+            assertTrue(info.getLoad_finish_time_ms() > 0);
             assertTrue(info.getNum_scan_rows() > 0);
             assertTrue(info.getNum_scan_bytes() > 0);
             assertTrue(info.getNum_sink_rows() > 0);
@@ -919,6 +931,8 @@ public class MergeCommitTaskTest extends BatchWriteTestBase {
             assertTrue(info.getTxn_id() > 0);
             assertTrue(task.endTimeMs() > 0);
             assertNotNull(info.getLoad_finish_time());
+            assertTrue(info.getCreate_time_ms() > 0);
+            assertTrue(info.getLoad_finish_time_ms() > 0);
             assertNotNull(info.getError_msg());
             assertFalse(info.getError_msg().isEmpty());
             
@@ -939,6 +953,8 @@ public class MergeCommitTaskTest extends BatchWriteTestBase {
             assertEquals(-1, info.getTxn_id());
             assertTrue(task.endTimeMs() > 0);
             assertNotNull(info.getLoad_finish_time());
+            assertTrue(info.getCreate_time_ms() > 0);
+            assertTrue(info.getLoad_finish_time_ms() > 0);
             assertNotNull(info.getError_msg());
             assertEquals("test cancellation", info.getError_msg());
             assertEquals(0, info.getNum_scan_rows());

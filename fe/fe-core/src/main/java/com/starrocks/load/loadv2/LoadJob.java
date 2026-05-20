@@ -1071,9 +1071,13 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback
                 info.setError_msg("type:" + failMsg.getCancelType() + "; msg:" + failMsg.getMsg());
             }
 
-            // create time
+            // create time. Set both the legacy wall-clock string and the new
+            // UTC epoch ms. New BE materializes the DATETIME column from the
+            // ms field (via from_unixtime() in the session zone), bypassing
+            // the from_date_str() round-trip that loses timezone information.
             if (createTimestamp != -1) {
                 info.setCreate_time(TimeUtils.longToTimeString(createTimestamp));
+                info.setCreate_time_ms(createTimestamp);
             }
             // etl start time
             if (getEtlStartTimestamp() != -1) {
@@ -1084,13 +1088,16 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback
                 info.setEtl_finish_time(TimeUtils.longToTimeString(loadStartTimestamp));
                 // load start time
                 info.setLoad_start_time(TimeUtils.longToTimeString(loadStartTimestamp));
+                info.setLoad_start_time_ms(loadStartTimestamp);
             }
             if (loadCommittedTimestamp != -1) {
                 info.setLoad_commit_time(TimeUtils.longToTimeString(loadCommittedTimestamp));
+                info.setLoad_commit_time_ms(loadCommittedTimestamp);
             }
             // load end time
             if (finishTimestamp != -1) {
                 info.setLoad_finish_time(TimeUtils.longToTimeString(finishTimestamp));
+                info.setLoad_finish_time_ms(finishTimestamp);
             }
             // tracking url
             if (!loadingStatus.getTrackingUrl().equals(EtlStatus.DEFAULT_TRACKING_URL)) {

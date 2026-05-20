@@ -14,8 +14,11 @@
 
 #include "exec/schema_scanner/schema_loads_scanner.h"
 
+#include <algorithm>
 #include <boost/algorithm/string.hpp>
 
+#include "cctz/civil_time.h"
+#include "cctz/time_zone.h"
 #include "exec/schema_scanner/schema_helper.h"
 #include "exprs/column_ref.h"
 #include "exprs/expr_context.h"
@@ -26,7 +29,17 @@
 namespace starrocks {
 
 namespace {
-bool _extract_literal_datetime_value(Expr* expr, std::string& result) {
+// Bound for a datetime range predicate extracted from BE conjuncts. Carries
+// both the legacy wall-clock string (for old FEs that still parse strings) and
+// the unambiguous UTC epoch ms (for new FEs that compare epochs directly).
+struct DateTimeRangeBound {
+    std::string str_value;
+    int64_t epoch_ms = 0;
+    bool has_value = false;
+};
+
+bool _extract_literal_datetime_value(Expr* expr, const cctz::time_zone& session_tz, bool is_lower_bound,
+                                     DateTimeRangeBound& result) {
     auto* literal = dynamic_cast<VectorizedLiteral*>(expr);
     if (literal == nullptr) {
         return false;
@@ -43,13 +56,22 @@ bool _extract_literal_datetime_value(Expr* expr, std::string& result) {
     }
 
     const auto datum = literal_col->get(0);
-    result = datum.get_timestamp().to_string(true);
+    const auto ts = datum.get_timestamp();
+    result.str_value = ts.to_string(true);
+    int year, month, day, hour, minute, second, usec;
+    ts.to_timestamp(&year, &month, &day, &hour, &minute, &second, &usec);
+    // Second precision; see literal_to_epoch_ms for the contract and DST
+    // handling. To enable ms support, also propagate `usec` into the result.
+    (void)usec;
+    result.epoch_ms = SchemaLoadsScanner::literal_to_epoch_ms(
+            session_tz, cctz::civil_second(year, month, day, hour, minute, second), is_lower_bound);
 
     return true;
 }
 
 bool _try_parse_datetime_range_predicate(const SchemaScannerParam* param, Expr* conjunct, const std::string& col_name,
-                                         std::string& literal_value, bool& is_lower_bound) {
+                                         const cctz::time_zone& session_tz, DateTimeRangeBound& bound,
+                                         bool& is_lower_bound) {
     const TExprNodeType::type& node_type = conjunct->node_type();
     const TExprOpcode::type& op_type = conjunct->op();
     if (node_type != TExprNodeType::BINARY_PRED || (op_type != TExprOpcode::GE && op_type != TExprOpcode::GT &&
@@ -77,21 +99,24 @@ bool _try_parse_datetime_range_predicate(const SchemaScannerParam* param, Expr* 
         return false;
     }
 
-    if (!_extract_literal_datetime_value(value_child, literal_value)) {
+    if (!_extract_literal_datetime_value(value_child, session_tz, is_lower_bound, bound)) {
         return false;
     }
+    bound.has_value = true;
 
     return true;
 }
 
-void _update_range_bound(std::string& bound, bool& has_bound, const std::string& candidate, bool is_lower_bound) {
-    if (!has_bound) {
+void _update_range_bound(DateTimeRangeBound& bound, const DateTimeRangeBound& candidate, bool is_lower_bound) {
+    if (!bound.has_value) {
         bound = candidate;
-        has_bound = true;
         return;
     }
 
-    if ((is_lower_bound && candidate > bound) || (!is_lower_bound && candidate < bound)) {
+    // Lower bound: keep the largest candidate (tightest >= literal).
+    // Upper bound: keep the smallest candidate (tightest <= literal).
+    if ((is_lower_bound && candidate.epoch_ms > bound.epoch_ms) ||
+        (!is_lower_bound && candidate.epoch_ms < bound.epoch_ms)) {
         bound = candidate;
     }
 }
@@ -102,25 +127,28 @@ void _update_range_bound(std::string& bound, bool& has_bound, const std::string&
 // 2. This function scans conjuncts and picks predicates with operators in {>, >=, <, <=}.
 // 3. It normalizes them into [lower_bound, upper_bound] (both inclusive for FE-side filtering).
 // Purpose: convert BE-side scan predicates into FE RPC parameters to reduce rows returned by getLoads().
+//
+// session_tz is used to compute the epoch-ms representation of each literal; the
+// wall-clock string is preserved for FEs that still parse the string field.
 void _parse_datetime_range_predicates(const SchemaScannerParam* param, const std::string& col_name,
-                                      std::string& lower_bound, bool& has_lower_bound, std::string& upper_bound,
-                                      bool& has_upper_bound) {
+                                      const cctz::time_zone& session_tz, DateTimeRangeBound& lower,
+                                      DateTimeRangeBound& upper) {
     if (param->expr_contexts == nullptr) {
         return;
     }
 
     for (auto* expr_context : *(param->expr_contexts)) {
-        std::string literal_value;
+        DateTimeRangeBound candidate;
         bool is_lower_bound = false;
-        if (!_try_parse_datetime_range_predicate(param, expr_context->root(), col_name, literal_value,
+        if (!_try_parse_datetime_range_predicate(param, expr_context->root(), col_name, session_tz, candidate,
                                                  is_lower_bound)) {
             continue;
         }
 
         if (is_lower_bound) {
-            _update_range_bound(lower_bound, has_lower_bound, literal_value, true);
+            _update_range_bound(lower, candidate, true);
         } else {
-            _update_range_bound(upper_bound, has_upper_bound, literal_value, false);
+            _update_range_bound(upper, candidate, false);
         }
     }
 }
@@ -160,6 +188,47 @@ SchemaLoadsScanner::SchemaLoadsScanner()
 
 SchemaLoadsScanner::~SchemaLoadsScanner() = default;
 
+int64_t SchemaLoadsScanner::literal_to_epoch_ms(const cctz::time_zone& session_tz, cctz::civil_second cs,
+                                                bool is_lower_bound) {
+    // DST makes the civil-to-absolute mapping non-unique. cctz returns two
+    // candidates named by which transition offset was applied, NOT by temporal
+    // order:
+    //   - REPEATED (fall-back, e.g. America/New_York 2026-11-01 01:30):
+    //       lookup.pre is the earlier instant, lookup.post the later.
+    //   - SKIPPED  (spring-forward gap, e.g. America/New_York 2026-03-08 02:30):
+    //       senses SWAPPED - lookup.pre applies the pre-transition offset and
+    //       is the LATER instant, lookup.post the EARLIER. For UNIQUE civil
+    //       times pre == post.
+    // BE re-evaluates the predicate after materializing the column in
+    // session_tz, so this prefilter must be no-false-negative against the
+    // post-filter. Picking min/max(pre, post) widens for both DST cases.
+    //
+    // Returns second-aligned ms. To enable ms support, also propagate `usec`
+    // from _extract_literal_datetime_value.
+    const auto lookup = session_tz.lookup(cs);
+    const auto tp = is_lower_bound ? std::min(lookup.pre, lookup.post) : std::max(lookup.pre, lookup.post);
+    return tp.time_since_epoch().count() * 1000;
+}
+
+bool SchemaLoadsScanner::_fill_datetime_column_from_ms(Column* column, bool is_set, int64_t epoch_ms) const {
+    if (!is_set) {
+        return false;
+    }
+    if (epoch_ms <= 0) {
+        // Defensive: FE writers leave the field unset for unknown timestamps,
+        // so an explicit sentinel here only happens on malformed input.
+        down_cast<NullableColumn*>(column)->append_nulls(1);
+        return true;
+    }
+    DateTimeValue t;
+    // Second precision: the column filler at schema_column_filler.h strips
+    // microseconds regardless. To enable ms support, use the (s, us, tz)
+    // overload here AND pass microsecond() through in the column filler.
+    t.from_unixtime(epoch_ms / 1000, _runtime_state->timezone_obj());
+    fill_column_with_slot<TYPE_DATETIME>(column, (void*)&t);
+    return true;
+}
+
 Status SchemaLoadsScanner::start(RuntimeState* state) {
     RETURN_IF_ERROR(SchemaScanner::start(state));
     TGetLoadsParams load_params;
@@ -179,43 +248,47 @@ Status SchemaLoadsScanner::start(RuntimeState* state) {
         load_params.__set_state(state_str);
     }
 
-    std::string load_start_time_from;
-    std::string load_start_time_to;
-    bool has_load_start_time_from = false;
-    bool has_load_start_time_to = false;
-    _parse_datetime_range_predicates(_param, "LOAD_START_TIME", load_start_time_from, has_load_start_time_from,
-                                     load_start_time_to, has_load_start_time_to);
-    if (has_load_start_time_from) {
-        load_params.__set_load_start_time_from(load_start_time_from);
+    // BE evaluates the SQL literal in the session timezone (a wall-clock value
+    // with no zone marker). The new *_ms fields carry the unambiguous UTC epoch
+    // ms derived from that wall-clock via the session zone. The legacy *_from /
+    // *_to string fields are still populated for old FEs.
+    const auto& session_tz = state->timezone_obj();
+
+    DateTimeRangeBound load_start_time_from;
+    DateTimeRangeBound load_start_time_to;
+    _parse_datetime_range_predicates(_param, "LOAD_START_TIME", session_tz, load_start_time_from, load_start_time_to);
+    if (load_start_time_from.has_value) {
+        load_params.__set_load_start_time_from(load_start_time_from.str_value);
+        load_params.__set_load_start_time_from_ms(load_start_time_from.epoch_ms);
     }
-    if (has_load_start_time_to) {
-        load_params.__set_load_start_time_to(load_start_time_to);
+    if (load_start_time_to.has_value) {
+        load_params.__set_load_start_time_to(load_start_time_to.str_value);
+        load_params.__set_load_start_time_to_ms(load_start_time_to.epoch_ms);
     }
 
-    std::string load_finish_time_from;
-    std::string load_finish_time_to;
-    bool has_load_finish_time_from = false;
-    bool has_load_finish_time_to = false;
-    _parse_datetime_range_predicates(_param, "LOAD_FINISH_TIME", load_finish_time_from, has_load_finish_time_from,
-                                     load_finish_time_to, has_load_finish_time_to);
-    if (has_load_finish_time_from) {
-        load_params.__set_load_finish_time_from(load_finish_time_from);
+    DateTimeRangeBound load_finish_time_from;
+    DateTimeRangeBound load_finish_time_to;
+    _parse_datetime_range_predicates(_param, "LOAD_FINISH_TIME", session_tz, load_finish_time_from,
+                                     load_finish_time_to);
+    if (load_finish_time_from.has_value) {
+        load_params.__set_load_finish_time_from(load_finish_time_from.str_value);
+        load_params.__set_load_finish_time_from_ms(load_finish_time_from.epoch_ms);
     }
-    if (has_load_finish_time_to) {
-        load_params.__set_load_finish_time_to(load_finish_time_to);
+    if (load_finish_time_to.has_value) {
+        load_params.__set_load_finish_time_to(load_finish_time_to.str_value);
+        load_params.__set_load_finish_time_to_ms(load_finish_time_to.epoch_ms);
     }
 
-    std::string create_time_from;
-    std::string create_time_to;
-    bool has_create_time_from = false;
-    bool has_create_time_to = false;
-    _parse_datetime_range_predicates(_param, "CREATE_TIME", create_time_from, has_create_time_from, create_time_to,
-                                     has_create_time_to);
-    if (has_create_time_from) {
-        load_params.__set_create_time_from(create_time_from);
+    DateTimeRangeBound create_time_from;
+    DateTimeRangeBound create_time_to;
+    _parse_datetime_range_predicates(_param, "CREATE_TIME", session_tz, create_time_from, create_time_to);
+    if (create_time_from.has_value) {
+        load_params.__set_create_time_from(create_time_from.str_value);
+        load_params.__set_create_time_from_ms(create_time_from.epoch_ms);
     }
-    if (has_create_time_to) {
-        load_params.__set_create_time_to(create_time_to);
+    if (create_time_to.has_value) {
+        load_params.__set_create_time_to(create_time_to.str_value);
+        load_params.__set_create_time_to_ms(create_time_to.epoch_ms);
     }
 
     if (nullptr != _param->label) {
@@ -357,6 +430,9 @@ Status SchemaLoadsScanner::fill_chunk(ChunkPtr* chunk) {
             }
             case 18: {
                 // create time
+                if (_fill_datetime_column_from_ms(column.get(), info.__isset.create_time_ms, info.create_time_ms)) {
+                    break;
+                }
                 DateTimeValue t;
                 if (info.__isset.create_time) {
                     if (t.from_date_str(info.create_time.data(), info.create_time.size())) {
@@ -369,6 +445,10 @@ Status SchemaLoadsScanner::fill_chunk(ChunkPtr* chunk) {
             }
             case 19: {
                 // load start time
+                if (_fill_datetime_column_from_ms(column.get(), info.__isset.load_start_time_ms,
+                                                  info.load_start_time_ms)) {
+                    break;
+                }
                 DateTimeValue t;
                 if (info.__isset.load_start_time) {
                     if (t.from_date_str(info.load_start_time.data(), info.load_start_time.size())) {
@@ -381,6 +461,10 @@ Status SchemaLoadsScanner::fill_chunk(ChunkPtr* chunk) {
             }
             case 20: {
                 // load commit time
+                if (_fill_datetime_column_from_ms(column.get(), info.__isset.load_commit_time_ms,
+                                                  info.load_commit_time_ms)) {
+                    break;
+                }
                 DateTimeValue t;
                 if (info.__isset.load_commit_time) {
                     if (t.from_date_str(info.load_commit_time.data(), info.load_commit_time.size())) {
@@ -393,6 +477,10 @@ Status SchemaLoadsScanner::fill_chunk(ChunkPtr* chunk) {
             }
             case 21: {
                 // load finish time
+                if (_fill_datetime_column_from_ms(column.get(), info.__isset.load_finish_time_ms,
+                                                  info.load_finish_time_ms)) {
+                    break;
+                }
                 DateTimeValue t;
                 if (info.__isset.load_finish_time) {
                     if (t.from_date_str(info.load_finish_time.data(), info.load_finish_time.size())) {
