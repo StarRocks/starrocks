@@ -342,11 +342,20 @@ size_t AggHashMapVariant::size() const {
 }
 
 bool AggHashMapVariant::need_expand(size_t increasement) const {
-    size_t capacity = this->capacity();
-    // TODO: think about two-level hashmap
-    size_t size = this->size() + increasement;
-    // see detail implement in reset_growth_left
-    return size >= capacity - capacity / 8;
+    // Direct-array hash maps (SmallFixedSizeHashMap for TINYINT/BOOL/SMALLINT
+    // and the low-card-dict uint8 variant) have a hard-coded full keyspace
+    // and never rehash, so streaming/spill paths should only fall back when
+    // the array is actually full -- not at the 87.5% growth-heuristic
+    // threshold used by phmap.
+    return visit([increasement](const auto& hash_map_with_key) {
+        using HashMap = std::remove_reference_t<decltype(hash_map_with_key->hash_map)>;
+        const size_t size = hash_map_with_key->hash_map.size() + increasement;
+        if constexpr (requires { HashMap::bucket_byte_size(); }) {
+            return size > HashMap::hash_table_size;
+        }
+        const size_t capacity = hash_map_with_key->hash_map.capacity();
+        return size >= capacity - capacity / 8;
+    });
 }
 
 size_t AggHashMapVariant::reserved_memory_usage(const MemPool* pool) const {
@@ -441,10 +450,17 @@ size_t AggHashSetVariant::size() const {
 }
 
 bool AggHashSetVariant::need_expand(size_t increasement) const {
-    size_t capacity = this->capacity();
-    size_t size = this->size() + increasement;
-    // see detail implement in reset_growth_left
-    return size >= capacity - capacity / 8;
+    // Direct-array hash sets (SmallFixedSizeHashSet for TINYINT/BOOL/SMALLINT)
+    // never rehash; only fall back when the array is actually full.
+    return visit([increasement](const auto& hash_set_with_key) {
+        using HashSet = std::remove_reference_t<decltype(hash_set_with_key->hash_set)>;
+        const size_t size = hash_set_with_key->hash_set.size() + increasement;
+        if constexpr (requires { HashSet::bucket_byte_size(); }) {
+            return size > HashSet::hash_table_size;
+        }
+        const size_t capacity = hash_set_with_key->hash_set.capacity();
+        return size >= capacity - capacity / 8;
+    });
 }
 
 size_t AggHashSetVariant::reserved_memory_usage(const MemPool* pool) const {
