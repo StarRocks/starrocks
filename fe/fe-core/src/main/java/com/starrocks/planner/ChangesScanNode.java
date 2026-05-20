@@ -74,7 +74,7 @@ public class ChangesScanNode extends AbstractOlapTableScanNode {
      * physical-partition change. Throws on non-trackable change types — the
      * analyzer rejects those upstream, so reaching the else is a planner bug.
      */
-    private static Pair<Long, Long> versionPair(BookmarkChange.PhysicalPartitionChange change) {
+    private Pair<Long, Long> versionPair(BookmarkChange.PhysicalPartitionChange change) {
         if (change instanceof BookmarkChange.DataChanged dc) {
             return Pair.create(dc.getBasePartition().getVisibleVersion(),
                     dc.getHeadPartition().getVisibleVersion());
@@ -83,7 +83,9 @@ public class ChangesScanNode extends AbstractOlapTableScanNode {
             return Pair.create(0L, pa.getHeadPartition().getVisibleVersion());
         } else {
             throw new IllegalStateException(
-                    "non-trackable change in CDC plan: " + change.getChangeType());
+                    "non-trackable change in CDC plan for table '" + olapTable.getName()
+                            + "', physical partition " + change.getPhysicalPartitionId()
+                            + ": " + change.getChangeType());
         }
     }
 
@@ -105,12 +107,6 @@ public class ChangesScanNode extends AbstractOlapTableScanNode {
                                     + olapTable.getName() + "'");
                 }
 
-                // Pin replica selection to headVersion rather than
-                // partition.getVisibleVersion(): the partition's visible
-                // version can be higher than head, and requiring that level
-                // would needlessly reject replicas that already cover the
-                // CDC range.
-                long visibleVersion = headVersion;
                 MaterializedIndex index = partition.getLatestBaseIndex();
                 List<Tablet> tablets = index.getTablets();
 
@@ -131,7 +127,7 @@ public class ChangesScanNode extends AbstractOlapTableScanNode {
 
                     List<Replica> allQueryableReplicas = Lists.newArrayList();
                     tablet.getQueryableReplicas(allQueryableReplicas, Collections.emptyList(),
-                            visibleVersion, -1, -1, computeResource, null);
+                            headVersion, -1, -1, computeResource, null);
                     if (allQueryableReplicas.isEmpty()) {
                         throw new StarRocksPlannerException(
                                 "No queryable replica found for CDC scan on tablet " + tablet.getId() +

@@ -249,7 +249,7 @@ message TabletMetadataPB {
     optional int64 vector_index_built_version = 23;
     // CDC: metadata ancestor chain for reverse traversal.
     // chain[0] = direct parent version; subsequent elements = older ancestors.
-    // Truncated to cloud_native_tablet_metadata_ancestors_recorded (default 10).
+    // Truncated to cloud_native_tablet_metadata_ancestors_recorded (default 5).
     repeated int64 metadata_ancestors = 24;
 }
 
