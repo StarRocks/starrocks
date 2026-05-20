@@ -338,6 +338,11 @@ private:
 
     int64_t _end_offset = 0;
 
+    // set to true by _create_column_reader when the FE global-dict map produced a
+    // dict-aware wrapper for at least one slot in this row group; consumed by
+    // _create_column_readers to bump the per-row-group applied counter.
+    bool _global_dict_applied_in_group = false;
+
     // columns(index) use as dict filter column
     std::vector<int> _dict_column_indices;
     std::unordered_map<int, std::vector<std::vector<std::string>>> _dict_column_sub_field_paths;

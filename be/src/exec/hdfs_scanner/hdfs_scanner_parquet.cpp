@@ -228,6 +228,28 @@ void HdfsParquetScanner::do_update_counter(HdfsScanProfile* profile) {
         _runtime_state->fragment_ctx()->pred_tree_params().enable_show_in_profile) {
         root->add_info_string("ParquetPredicateTreeFilter", _scanner_ctx.predicate_tree.root().debug_string());
     }
+
+    // Global-dict opt visibility for Hive/Iceberg/Hudi/Paimon Parquet workloads.
+    // Authoritative signal is the counter pair; the info-string is a quick grep
+    // hook published if any row group wrapped a dict-aware reader at all.
+    RuntimeProfile::Counter* gd_total_row_groups =
+            ADD_CHILD_COUNTER(root, "GlobalDictTotalRowGroups", TUnit::UNIT, kParquetProfileSectionPrefix);
+    RuntimeProfile::Counter* gd_applied_row_groups =
+            ADD_CHILD_COUNTER(root, "GlobalDictAppliedRowGroups", TUnit::UNIT, kParquetProfileSectionPrefix);
+    RuntimeProfile::Counter* gd_applied_slots =
+            ADD_CHILD_COUNTER(root, "GlobalDictAppliedSlots", TUnit::UNIT, kParquetProfileSectionPrefix);
+    RuntimeProfile::Counter* gd_dict_code_reader_slots =
+            ADD_CHILD_COUNTER(root, "GlobalDictDictCodeReaderSlots", TUnit::UNIT, kParquetProfileSectionPrefix);
+    RuntimeProfile::Counter* gd_encode_reader_slots =
+            ADD_CHILD_COUNTER(root, "GlobalDictEncodeReaderSlots", TUnit::UNIT, kParquetProfileSectionPrefix);
+    COUNTER_UPDATE(gd_total_row_groups, _app_stats.global_dict_total_row_groups);
+    COUNTER_UPDATE(gd_applied_row_groups, _app_stats.global_dict_applied_row_groups);
+    COUNTER_UPDATE(gd_applied_slots, _app_stats.global_dict_applied_slots);
+    COUNTER_UPDATE(gd_dict_code_reader_slots, _app_stats.global_dict_dict_code_reader_slots);
+    COUNTER_UPDATE(gd_encode_reader_slots, _app_stats.global_dict_encode_reader_slots);
+    if (_app_stats.global_dict_applied_row_groups > 0) {
+        root->add_info_string_if_not_exists("GlobalDictOptApplied", "true");
+    }
 }
 
 Status HdfsParquetScanner::do_open(RuntimeState* runtime_state) {

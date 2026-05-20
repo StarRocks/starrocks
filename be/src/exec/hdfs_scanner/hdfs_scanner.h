@@ -124,6 +124,18 @@ struct HdfsScanStats {
     // late materialize round-by-round
     int64_t group_min_round_cost = 0;
 
+    // Parquet global-dict opt application — populated by parquet::GroupReader as
+    // it wraps column readers with dict-aware adapters.  These counters answer
+    // "did the FE global-dict optimization actually reach Parquet column readers
+    // on this scan instance, and through which wrapper path?" for Hive/Iceberg
+    // workloads where the connector-level dict map can otherwise lie about
+    // schema-evolved files.
+    int64_t global_dict_total_row_groups = 0;       // selected row groups this scanner read
+    int64_t global_dict_applied_row_groups = 0;     // row groups with >=1 dict-wrapped slot
+    int64_t global_dict_applied_slots = 0;          // sum of wrapped slots across row groups
+    int64_t global_dict_dict_code_reader_slots = 0; // wrapped via LowCardColumnReader
+    int64_t global_dict_encode_reader_slots = 0;    // wrapped via LowRowsColumnReader
+
     // orc stripe information
     std::vector<int64_t> orc_stripe_sizes{};
     int64_t orc_total_tiny_stripe_size = 0;
