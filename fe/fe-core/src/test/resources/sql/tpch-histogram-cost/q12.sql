@@ -65,8 +65,8 @@ OutPut Exchange Id: 07
 |  cardinality: 5055334
 |  column statistics:
 |  * L_SHIPMODE-->[-Infinity, Infinity, 0.0, 10.0, 2.0] ESTIMATE
-|  * case-->[0.0, 1.0, 0.0, 8.0, 2.0] ESTIMATE
-|  * case-->[0.0, 1.0, 0.0, 8.0, 2.0] ESTIMATE
+|  * case-->[0.0, 1.0, 0.0, 8.0, 2.0] MCV: [[0:3235414][1:1819920]] ESTIMATE
+|  * case-->[0.0, 1.0, 0.0, 8.0, 2.0] MCV: [[1:3235414][0:1819920]] ESTIMATE
 |
 4:HASH JOIN
 |  join op: INNER JOIN (BUCKET_SHUFFLE)
@@ -80,8 +80,8 @@ OutPut Exchange Id: 07
 |  * O_ORDERPRIORITY-->[-Infinity, Infinity, 0.0, 15.0, 5.0] ESTIMATE
 |  * L_ORDERKEY-->[1.0, 6.0E8, 0.0, 8.0, 5055334.309012595] ESTIMATE
 |  * L_SHIPMODE-->[-Infinity, Infinity, 0.0, 10.0, 2.0] ESTIMATE
-|  * case-->[0.0, 1.0, 0.0, 8.0, 2.0] ESTIMATE
-|  * case-->[0.0, 1.0, 0.0, 8.0, 2.0] ESTIMATE
+|  * case-->[0.0, 1.0, 0.0, 8.0, 2.0] MCV: [[0:3235414][1:1819920]] ESTIMATE
+|  * case-->[0.0, 1.0, 0.0, 8.0, 2.0] MCV: [[1:3235414][0:1819920]] ESTIMATE
 |
 |----3:EXCHANGE
 |       distribution type: SHUFFLE

@@ -27,6 +27,7 @@ import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CaseWhenOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.LambdaFunctionOperator;
@@ -46,6 +47,7 @@ import java.time.ZoneId;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.function.Function;
 
 import static com.starrocks.sql.optimizer.Utils.getLongFromDateTime;
@@ -1781,6 +1783,242 @@ public class ExpressionStatisticsCalculatorTest {
         Assertions.assertEquals(2, mcv.size());
         Assertions.assertEquals(100L + 200L, mcv.get("2024-01-01"));
         Assertions.assertEquals(50L, mcv.get("2024-02-01"));
+    }
+
+    private static void assertOnlyBooleanMcvs(ColumnStatistic predicateStatistic, long expectedRows) {
+        Map<String, Long> mcvs = predicateStatistic.getHistogram().getMCV();
+        Assertions.assertTrue(Set.of("0", "1").containsAll(mcvs.keySet()));
+        Assertions.assertEquals(expectedRows, mcvs.values().stream().mapToLong(Long::longValue).sum());
+    }
+
+    private static ColumnStatistic booleanColumnStatistic(long trueRows, long falseRows, long nullRows) {
+        long totalRows = trueRows + falseRows + nullRows;
+        return ColumnStatistic.builder()
+                .setMinValue(0)
+                .setMaxValue(1)
+                .setNullsFraction((double) nullRows / totalRows)
+                .setAverageRowSize(BooleanType.BOOLEAN.getTypeSize())
+                .setDistinctValuesCount(2)
+                .setHistogram(new Histogram(Collections.emptyList(), Map.of("1", trueRows, "0", falseRows)))
+                .build();
+    }
+
+    private static void assertBooleanDistribution(ColumnStatistic predicateStatistic, long expectedTrueRows,
+                                                  long expectedFalseRows, double expectedNullsFraction) {
+        Map<String, Long> mcvs = predicateStatistic.getHistogram().getMCV();
+        Assertions.assertEquals(expectedTrueRows, mcvs.getOrDefault("1", 0L));
+        Assertions.assertEquals(expectedFalseRows, mcvs.getOrDefault("0", 0L));
+        Assertions.assertEquals(expectedNullsFraction, predicateStatistic.getNullsFraction(), 0.001);
+        Assertions.assertEquals(expectedTrueRows + expectedFalseRows,
+                mcvs.values().stream().mapToLong(Long::longValue).sum());
+    }
+
+    @Test
+    public void testCompoundPredicateAnd() {
+        ColumnRefOperator col1 = new ColumnRefOperator(0, IntegerType.INT, "col1", true);
+        ColumnRefOperator col2 = new ColumnRefOperator(1, IntegerType.INT, "col2", true);
+
+        Statistics statistics = Statistics.builder()
+                .setOutputRowCount(1000)
+                .addColumnStatistic(col1, ColumnStatistic.builder()
+                        .setMinValue(0).setMaxValue(100)
+                        .setNullsFraction(0.0).setAverageRowSize(4)
+                        .setDistinctValuesCount(100).build())
+                .addColumnStatistic(col2, ColumnStatistic.builder()
+                        .setMinValue(0).setMaxValue(50)
+                        .setNullsFraction(0.0).setAverageRowSize(4)
+                        .setDistinctValuesCount(50).build())
+                .build();
+
+        // col1 > 50 AND col2 > 25
+        BinaryPredicateOperator left = new BinaryPredicateOperator(
+                BinaryType.GT, col1, ConstantOperator.createInt(50));
+        BinaryPredicateOperator right = new BinaryPredicateOperator(
+                BinaryType.GT, col2, ConstantOperator.createInt(25));
+        CompoundPredicateOperator andOp = new CompoundPredicateOperator(
+                CompoundPredicateOperator.CompoundType.AND, left, right);
+
+        ColumnStatistic stat = ExpressionStatisticCalculator.calculate(andOp, statistics);
+
+        Assertions.assertEquals(0.0, stat.getMinValue(), 0.001);
+        Assertions.assertEquals(1.0, stat.getMaxValue(), 0.001);
+
+        // probability for true should be 0.5 * 0.5 = 0.25
+        assertBooleanDistribution(stat, 250L, 750L, 0.0);
+    }
+
+    @Test
+    public void testCompoundPredicateOr() {
+        ColumnRefOperator col1 = new ColumnRefOperator(0, IntegerType.INT, "col1", true);
+
+        Statistics statistics = Statistics.builder()
+                .setOutputRowCount(1000)
+                .addColumnStatistic(col1, ColumnStatistic.builder()
+                        .setMinValue(0).setMaxValue(100)
+                        .setNullsFraction(0.0).setAverageRowSize(4)
+                        .setDistinctValuesCount(100).build())
+                .build();
+
+        // col1 = 10 OR col1 = 20
+        BinaryPredicateOperator left = new BinaryPredicateOperator(
+                BinaryType.EQ, col1, ConstantOperator.createInt(10));
+        BinaryPredicateOperator right = new BinaryPredicateOperator(
+                BinaryType.EQ, col1, ConstantOperator.createInt(20));
+        CompoundPredicateOperator orOp = new CompoundPredicateOperator(
+                CompoundPredicateOperator.CompoundType.OR, left, right);
+
+        ColumnStatistic stat = ExpressionStatisticCalculator.calculate(orOp, statistics);
+
+        Assertions.assertEquals(0.0, stat.getMinValue(), 0.001);
+        Assertions.assertEquals(1.0, stat.getMaxValue(), 0.001);
+
+        // probability for true should be 2/100, so 0.02 * 1000 = 20 rows for each value.
+        assertBooleanDistribution(stat, 19, 981, 0.0);
+    }
+
+    @Test
+    public void testCompoundPredicateNot() {
+        ColumnRefOperator col1 = new ColumnRefOperator(0, IntegerType.INT, "col1", true);
+
+        Statistics statistics = Statistics.builder()
+                .setOutputRowCount(1000)
+                .addColumnStatistic(col1, ColumnStatistic.builder()
+                        .setMinValue(0).setMaxValue(100)
+                        .setNullsFraction(0.0).setAverageRowSize(4)
+                        .setDistinctValuesCount(100).build())
+                .build();
+
+        // NOT (col1 > 50) should be roughly the complement
+        BinaryPredicateOperator inner = new BinaryPredicateOperator(
+                BinaryType.GT, col1, ConstantOperator.createInt(50));
+        CompoundPredicateOperator notOp = new CompoundPredicateOperator(
+                CompoundPredicateOperator.CompoundType.NOT, inner);
+
+        ColumnStatistic stat = ExpressionStatisticCalculator.calculate(notOp, statistics);
+
+        Assertions.assertEquals(0.0, stat.getMinValue(), 0.001);
+        Assertions.assertEquals(1.0, stat.getMaxValue(), 0.001);
+        Assertions.assertEquals(0.0, stat.getNullsFraction(), 0.001);
+        Assertions.assertNotNull(stat.getHistogram());
+
+        assertBooleanDistribution(stat, 500L, 500L, 0.0);
+    }
+
+    @Test
+    public void testCompoundPredicateAndWithNulls() {
+        ColumnRefOperator col1 = new ColumnRefOperator(0, BooleanType.BOOLEAN, "col1", true);
+        ColumnRefOperator col2 = new ColumnRefOperator(1, BooleanType.BOOLEAN, "col2", true);
+
+        Statistics statistics = Statistics.builder()
+                .setOutputRowCount(1000)
+                .addColumnStatistic(col1, booleanColumnStatistic(200, 500, 300))
+                .addColumnStatistic(col2, booleanColumnStatistic(400, 500, 100))
+                .build();
+
+        CompoundPredicateOperator andOp = new CompoundPredicateOperator(
+                CompoundPredicateOperator.CompoundType.AND, col1, col2);
+
+        ColumnStatistic stat = ExpressionStatisticCalculator.calculate(andOp, statistics);
+
+        Assertions.assertEquals(0.0, stat.getMinValue(), 0.001);
+        Assertions.assertEquals(1.0, stat.getMaxValue(), 0.001);
+        Assertions.assertNotNull(stat.getHistogram());
+        // TRUE comes from the existing predicate calculator.
+        // NULL upper bound: 1 - (1 - 0.3) * (1 - 0.1) = 0.37.
+        assertBooleanDistribution(stat, 80L, 550L, 0.37);
+    }
+
+    @Test
+    public void testCompoundPredicateOrWithNulls() {
+        ColumnRefOperator col1 = new ColumnRefOperator(0, BooleanType.BOOLEAN, "col1", true);
+        ColumnRefOperator col2 = new ColumnRefOperator(1, BooleanType.BOOLEAN, "col2", true);
+
+        Statistics statistics = Statistics.builder()
+                .setOutputRowCount(1000)
+                .addColumnStatistic(col1, booleanColumnStatistic(200, 500, 300))
+                .addColumnStatistic(col2, booleanColumnStatistic(400, 500, 100))
+                .build();
+
+        CompoundPredicateOperator orOp = new CompoundPredicateOperator(
+                CompoundPredicateOperator.CompoundType.OR, col1, col2);
+
+        ColumnStatistic stat = ExpressionStatisticCalculator.calculate(orOp, statistics);
+
+        Assertions.assertEquals(0.0, stat.getMinValue(), 0.001);
+        Assertions.assertEquals(1.0, stat.getMaxValue(), 0.001);
+        Assertions.assertNotNull(stat.getHistogram());
+        // TRUE comes from the existing predicate calculator.
+        // NULL uses the same upper bound as AND.
+        assertBooleanDistribution(stat, 520L, 110L, 0.37);
+    }
+
+    @Test
+    public void testCompoundPredicateNotWithNulls() {
+        ColumnRefOperator col1 = new ColumnRefOperator(0, BooleanType.BOOLEAN, "col1", true);
+
+        Statistics statistics = Statistics.builder()
+                .setOutputRowCount(1000)
+                .addColumnStatistic(col1, booleanColumnStatistic(200, 500, 300))
+                .build();
+
+        CompoundPredicateOperator notOp = new CompoundPredicateOperator(
+                CompoundPredicateOperator.CompoundType.NOT, col1);
+
+        ColumnStatistic stat = ExpressionStatisticCalculator.calculate(notOp, statistics);
+
+        Assertions.assertEquals(0.0, stat.getMinValue(), 0.001);
+        Assertions.assertEquals(1.0, stat.getMaxValue(), 0.001);
+        Assertions.assertNotNull(stat.getHistogram());
+        assertBooleanDistribution(stat, 700L, 0L, 0.3);
+    }
+
+    @Test
+    public void testCompoundPredicateWithNullStatistics() {
+        ColumnRefOperator col1 = new ColumnRefOperator(0, IntegerType.INT, "col1", true);
+
+        BinaryPredicateOperator inner = new BinaryPredicateOperator(
+                BinaryType.GT, col1, ConstantOperator.createInt(50));
+        CompoundPredicateOperator notOp = new CompoundPredicateOperator(
+                CompoundPredicateOperator.CompoundType.NOT, inner);
+
+        // null input statistics should return unknown
+        ColumnStatistic stat = ExpressionStatisticCalculator.calculate(notOp, null);
+        Assertions.assertTrue(stat.isUnknown());
+    }
+
+    @Test
+    public void testNestedCompoundPredicate() {
+        ColumnRefOperator col1 = new ColumnRefOperator(0, IntegerType.INT, "col1", true);
+        ColumnRefOperator col2 = new ColumnRefOperator(1, IntegerType.INT, "col2", true);
+
+        Statistics statistics = Statistics.builder()
+                .setOutputRowCount(1000)
+                .addColumnStatistic(col1, ColumnStatistic.builder()
+                        .setMinValue(0).setMaxValue(100)
+                        .setNullsFraction(0.0).setAverageRowSize(4)
+                        .setDistinctValuesCount(100).build())
+                .addColumnStatistic(col2, ColumnStatistic.builder()
+                        .setMinValue(0).setMaxValue(50)
+                        .setNullsFraction(0.0).setAverageRowSize(4)
+                        .setDistinctValuesCount(50).build())
+                .build();
+
+        // (col1 > 50) OR (NOT (col2 > 25))
+        BinaryPredicateOperator pred1 = new BinaryPredicateOperator(
+                BinaryType.GT, col1, ConstantOperator.createInt(50));
+        BinaryPredicateOperator pred2 = new BinaryPredicateOperator(
+                BinaryType.GT, col2, ConstantOperator.createInt(25));
+        CompoundPredicateOperator notPred2 = new CompoundPredicateOperator(
+                CompoundPredicateOperator.CompoundType.NOT, pred2);
+        CompoundPredicateOperator orOp = new CompoundPredicateOperator(
+                CompoundPredicateOperator.CompoundType.OR, pred1, notPred2);
+
+        ColumnStatistic stat = ExpressionStatisticCalculator.calculate(orOp, statistics);
+
+        Assertions.assertEquals(0.0, stat.getMinValue(), 0.001);
+        Assertions.assertEquals(1.0, stat.getMaxValue(), 0.001);
+        Assertions.assertNotNull(stat.getHistogram());
+        assertBooleanDistribution(stat, 750, 250, 0.0);
     }
 
 }

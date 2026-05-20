@@ -28,6 +28,7 @@ import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CaseWhenOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.LambdaFunctionOperator;
@@ -141,6 +142,98 @@ public class ExpressionStatisticCalculator {
                         .setAverageRowSize(operator.toString().length());
             }
             return builder.build();
+        }
+        @Override
+        public ColumnStatistic visitCompoundPredicate(CompoundPredicateOperator operator, Void context) {
+            if (inputStatistics == null || Double.isNaN(inputStatistics.getOutputRowCount())) {
+                return ColumnStatistic.unknown();
+            }
+
+            // Lambda arguments are synthetic refs, not input Statistics columns. PredicateStatisticsCalculator fetches
+            // every ColumnRef from Statistics, so compound lambda predicates can fail on missing stats for lambda columns.
+            // Return conservative boolean stats instead of estimating table-column selectivity for them.
+            if (containsLambdaArgument(operator)) {
+                return buildGenericBooleanStatistic(operator, estimateCompoundNullsFraction(operator, context));
+            }
+
+            Statistics predicateStatistics = PredicateStatisticsCalculator.statisticsCalculate(operator, inputStatistics);
+            if (predicateStatistics == null || Double.isNaN(predicateStatistics.getOutputRowCount())) {
+                return ColumnStatistic.unknown();
+            }
+
+            long inputRows = Math.max(1L, Math.round(rowCount));
+            double nullsFraction = estimateCompoundNullsFraction(operator, context);
+            long nullRows = Math.round(inputRows * nullsFraction);
+            long nonNullRows = Math.max(0L, inputRows - nullRows);
+            long trueRows = Math.min(nonNullRows, estimatePredicateTrueRows(predicateStatistics, inputRows));
+            long falseRows = nonNullRows - trueRows;
+
+            Map<String, Long> mcvs = new HashMap<>();
+            if (trueRows > 0) {
+                mcvs.put(booleanToMcvValue(true), trueRows);
+            }
+            if (falseRows > 0) {
+                mcvs.put(booleanToMcvValue(false), falseRows);
+            }
+
+            ColumnStatistic.Builder builder = ColumnStatistic.builder()
+                    .setMinValue(0)
+                    .setMaxValue(1)
+                    .setNullsFraction(nullsFraction)
+                    .setAverageRowSize(operator.getType().getTypeSize())
+                    .setDistinctValuesCount(mcvs.size());
+
+            if (!mcvs.isEmpty()) {
+                builder.setHistogram(new Histogram(Collections.emptyList(), mcvs));
+            }
+
+            return builder.build();
+        }
+
+        private boolean containsLambdaArgument(ScalarOperator operator) {
+            return operator.asStream().anyMatch(op -> op instanceof ColumnRefOperator column
+                    && column.getOpType() == OperatorType.LAMBDA_ARGUMENT);
+        }
+
+        private ColumnStatistic buildGenericBooleanStatistic(ScalarOperator operator, double nullsFraction) {
+            return ColumnStatistic.builder()
+                    .setMinValue(0)
+                    .setMaxValue(1)
+                    .setNullsFraction(clampFraction(nullsFraction))
+                    .setAverageRowSize(operator.getType().getTypeSize())
+                    .setDistinctValuesCount(2)
+                    .build();
+        }
+
+        private long estimatePredicateTrueRows(Statistics predicateStatistics, long inputRows) {
+            double inputStatisticsRows = inputStatistics.getOutputRowCount();
+            if (Double.isNaN(inputStatisticsRows) || inputStatisticsRows <= 0) {
+                return Math.max(0L, Math.round(predicateStatistics.getOutputRowCount()));
+            }
+            double selectivity = clampFraction(predicateStatistics.getOutputRowCount() / inputStatisticsRows);
+            return Math.max(0L, Math.round(inputRows * selectivity));
+        }
+
+        private double estimateCompoundNullsFraction(CompoundPredicateOperator operator, Void context) {
+            if (operator.isNot()) {
+                return getExpressionNullsFraction(operator.getChild(0), context);
+            }
+
+            double leftNullFraction = getExpressionNullsFraction(operator.getChild(0), context);
+            double rightNullFraction = getExpressionNullsFraction(operator.getChild(1), context);
+            return 1.0 - (1.0 - leftNullFraction) * (1.0 - rightNullFraction);
+        }
+
+        private double getExpressionNullsFraction(ScalarOperator operator, Void context) {
+            ColumnStatistic statistic = operator.accept(this, context);
+            return statistic.isUnknown() ? 0.0 : clampFraction(statistic.getNullsFraction());
+        }
+
+        private static double clampFraction(double value) {
+            if (Double.isNaN(value)) {
+                return 0.0;
+            }
+            return Math.max(0.0, Math.min(1.0, value));
         }
 
         @Override
