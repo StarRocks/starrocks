@@ -490,11 +490,11 @@ public class LoadJobTest {
     }
     @Test
     public void testToThrift_timestampMsFields() {
-        TimeZone tz = TimeZone.getTimeZone(ZoneId.of("Asia/Shanghai"));
+        TimeZone shanghaiTimeZone = TimeZone.getTimeZone(ZoneId.of("Asia/Shanghai"));
         new MockUp<TimeUtils>() {
             @Mock
             public TimeZone getTimeZone() {
-                return tz;
+                return shanghaiTimeZone;
             }
         };
 
