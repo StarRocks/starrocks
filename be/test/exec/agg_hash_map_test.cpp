@@ -178,6 +178,67 @@ TEST(HashMapTest, TwoLevelConvert) {
     }
 }
 
+TEST(ConsecutiveKeyCacheTest, NumericKeyCacheHit) {
+    RuntimeProfile profile("ConsecutiveKeyCacheTest");
+    AggStatistics statis(&profile);
+    RuntimeState dummy;
+
+    using HashMapWithKey = Int32AggHashMapWithOneNumberKey<PhmapSeed1>;
+    HashMapWithKey hash_map_with_key(1024, &statis);
+
+    MemPool pool;
+    const int32_t chunk_size = 4;
+    Buffer<AggDataPtr> agg_states(chunk_size);
+
+    // keys: 1,1,2,2 => expected hits: 2, misses: 2
+    auto col = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), false);
+    col->append_datum(Datum(1));
+    col->append_datum(Datum(1));
+    col->append_datum(Datum(2));
+    col->append_datum(Datum(2));
+
+    Columns key_columns;
+    key_columns.emplace_back(std::move(col));
+
+    auto allocate_func = [&pool](auto&) { return pool.allocate(16); };
+    hash_map_with_key.build_hash_map(chunk_size, key_columns, &pool, allocate_func, &agg_states);
+
+    ASSERT_EQ(agg_states[0], agg_states[1]);
+    ASSERT_EQ(agg_states[2], agg_states[3]);
+    ASSERT_NE(agg_states[0], agg_states[2]);
+
+    ASSERT_EQ(hash_map_with_key.get_cache_hits(), 2);
+    ASSERT_EQ(hash_map_with_key.get_cache_misses(), 2);
+    ASSERT_TRUE(hash_map_with_key.is_cache_enabled());
+}
+
+TEST(ConsecutiveKeyCacheTest, DisableForSmallFixedSizeHashMap) {
+    RuntimeProfile profile("ConsecutiveKeyCacheTest");
+    AggStatistics statis(&profile);
+    RuntimeState dummy;
+
+    using HashMapWithKey = Int8AggHashMapWithOneNumberKey<PhmapSeed1>;
+    HashMapWithKey hash_map_with_key(1024, &statis);
+
+    MemPool pool;
+    const int32_t chunk_size = 2;
+    Buffer<AggDataPtr> agg_states(chunk_size);
+
+    auto col = ColumnHelper::create_column(TypeDescriptor(TYPE_TINYINT), false);
+    col->append_datum(Datum(int8_t{7}));
+    col->append_datum(Datum(int8_t{7}));
+
+    Columns key_columns;
+    key_columns.emplace_back(std::move(col));
+
+    auto allocate_func = [&pool](auto&) { return pool.allocate(16); };
+    hash_map_with_key.build_hash_map(chunk_size, key_columns, &pool, allocate_func, &agg_states);
+
+    ASSERT_EQ(agg_states[0], agg_states[1]);
+    ASSERT_EQ(hash_map_with_key.get_cache_hits(), 0);
+    ASSERT_EQ(hash_map_with_key.get_cache_misses(), 0);
+}
+
 class AggHashMapKeyNotFoundsTest : public ::testing::Test {
 public:
     template <typename HashMapWithKey>

@@ -166,7 +166,7 @@ Status AggregateStreamingSinkOperator::_push_chunk_by_force_preaggregation(Runti
     _aggregator->try_convert_to_two_level_map();
     TRY_CATCH_ALLOC_SCOPE_END();
 
-    COUNTER_SET(_aggregator->hash_table_size(), (int64_t)_aggregator->hash_map_variant().size());
+    _aggregator->update_hash_map_profile_counters();
     return Status::OK();
 }
 
@@ -205,7 +205,7 @@ Status AggregateStreamingSinkOperator::_push_chunk_by_selective_preaggregation(c
         }
     }
     TRY_CATCH_ALLOC_SCOPE_END();
-    COUNTER_SET(_aggregator->hash_table_size(), (int64_t)_aggregator->hash_map_variant().size());
+    _aggregator->update_hash_map_profile_counters();
     return Status::OK();
 }
 
@@ -248,7 +248,7 @@ Status AggregateStreamingSinkOperator::_push_chunk_by_auto(RuntimeState* state, 
             _aggregator->try_convert_to_two_level_map();
             TRY_CATCH_ALLOC_SCOPE_END()
 
-            COUNTER_SET(_aggregator->hash_table_size(), (int64_t)_aggregator->hash_map_variant().size());
+            _aggregator->update_hash_map_profile_counters();
             break;
         } else {
             _auto_state = AggrAutoState::ADJUST;

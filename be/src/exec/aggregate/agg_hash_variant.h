@@ -534,6 +534,10 @@ struct AggHashMapVariant {
 
     size_t allocated_memory_usage(const MemPool* pool) const;
 
+    // Consecutive keys cache statistics (0 if the active hash map type doesn't support it).
+    size_t consecutive_keys_cache_hits() const;
+    size_t consecutive_keys_cache_misses() const;
+
 private:
     Type _type = Type::phase1_slice;
     AggStatistics* _agg_stat = nullptr;
