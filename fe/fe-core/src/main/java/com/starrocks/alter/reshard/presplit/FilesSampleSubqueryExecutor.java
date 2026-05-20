@@ -28,7 +28,6 @@ import com.starrocks.qe.SimpleExecutor;
 import com.starrocks.statistic.StatisticUtils;
 import com.starrocks.thrift.TResultBatch;
 import com.starrocks.thrift.TResultSinkType;
-import com.starrocks.type.Type;
 import com.starrocks.warehouse.cngroup.ComputeResource;
 
 import java.nio.ByteBuffer;
@@ -131,34 +130,17 @@ abstract class FilesSampleSubqueryExecutor implements SampleSubqueryExecutor {
 
     @Override
     public final SampleExecution execute(SampleRequest request) throws StarRocksException {
-        rejectCompositeSortKey(request);
         Source source = resolveSource(request);
-        Column sortKeyColumn = request.getSortKey().get(0);
+        List<Column> sortKeyColumns = request.getSortKey();
 
         double samplingRate = pickSamplingRate(source.totalFileBytes());
         int rowLimit = pickRowLimit(request.getSampleByteLimit());
 
         String sampleSql = buildSampleSql(
-                source.filesProperties(), sortKeyColumn, samplingRate, rowLimit, request.getSeed());
+                source.filesProperties(), sortKeyColumns, samplingRate, rowLimit, request.getSeed());
         List<TResultBatch> resultBatches = runSampleQuery(sampleSql, source.computeResource());
-        Iterator<List<Variant>> rowIterator =
-                decodeRowsAsSingleColumn(resultBatches, sortKeyColumn.getType()).iterator();
+        Iterator<List<Variant>> rowIterator = decodeRows(resultBatches, sortKeyColumns).iterator();
         return new SampleExecution(rowIterator, new Estimates(source.totalFileBytes(), 0L));
-    }
-
-    /**
-     * Tier 1's {@code ParquetMetadataSampler.rejectCompositeSortKey} throws
-     * {@link Tier1UnavailableException}, which falls back to this Tier 2
-     * executor. The current sub-query shape projects a single column, so
-     * composite sort keys are not yet supported here either — we surface a
-     * clean StarRocksException (mapped to SkipReason.SAMPLE_FAILED) rather
-     * than letting the multi-column row decode throw later.
-     */
-    private void rejectCompositeSortKey(SampleRequest request) throws StarRocksException {
-        if (request.getSortKey().size() > 1) {
-            throw new StarRocksException(errorPrefix
-                    + "composite sort keys are not yet supported (size=" + request.getSortKey().size() + ")");
-        }
     }
 
     private static double pickSamplingRate(long totalFileBytes) {
@@ -183,9 +165,9 @@ abstract class FilesSampleSubqueryExecutor implements SampleSubqueryExecutor {
     }
 
     /**
-     * Builds the sampling SELECT against the supplied FILES properties. The
-     * sort-key column is the only projection (composite sort keys are rejected
-     * upstream).
+     * Builds the sampling SELECT against the supplied FILES properties. Projects
+     * every sort-key column so multi-column sort keys produce tuple-valued
+     * samples that {@link BoundaryPlanner} can lex-sort and quantile-cut.
      *
      * <p>String literal escaping covers both {@code "} and {@code \} so a
      * crafted property value cannot break out of the double-quoted form and
@@ -196,8 +178,11 @@ abstract class FilesSampleSubqueryExecutor implements SampleSubqueryExecutor {
      */
     @VisibleForTesting
     static String buildSampleSql(
-            Map<String, String> filesProperties, Column sortKeyColumn,
+            Map<String, String> filesProperties, List<Column> sortKeyColumns,
             double samplingRate, int rowLimit, long seed) {
+        String projection = sortKeyColumns.stream()
+                .map(column -> SqlUtils.getIdentSql(column.getName()))
+                .collect(Collectors.joining(", "));
         String propertiesClause = filesProperties.entrySet().stream()
                 .map(property -> '"' + escapeDoubleQuoted(property.getKey()) + "\" = \""
                         + escapeDoubleQuoted(property.getValue()) + '"')
@@ -205,7 +190,7 @@ abstract class FilesSampleSubqueryExecutor implements SampleSubqueryExecutor {
         long orderShuffleSeed = seed ^ 0x5A5A5A5A5A5A5A5AL;
         return String.format(
                 "SELECT %s FROM FILES(%s) WHERE rand(%d) < %s ORDER BY rand(%d) LIMIT %d",
-                SqlUtils.getIdentSql(sortKeyColumn.getName()),
+                projection,
                 propertiesClause,
                 seed,
                 Double.toString(samplingRate),
@@ -277,7 +262,7 @@ abstract class FilesSampleSubqueryExecutor implements SampleSubqueryExecutor {
         return context;
     }
 
-    private List<List<Variant>> decodeRowsAsSingleColumn(List<TResultBatch> resultBatches, Type valueType)
+    private List<List<Variant>> decodeRows(List<TResultBatch> resultBatches, List<Column> sortKeyColumns)
             throws StarRocksException {
         List<List<Variant>> rows = new ArrayList<>();
         if (resultBatches == null) {
@@ -289,7 +274,7 @@ abstract class FilesSampleSubqueryExecutor implements SampleSubqueryExecutor {
                 continue;
             }
             for (ByteBuffer rowBuffer : batchRows) {
-                rows.add(decodeSingleColumnRow(rowBuffer, valueType));
+                rows.add(decodeRow(rowBuffer, sortKeyColumns));
             }
         }
         return rows;
@@ -297,16 +282,17 @@ abstract class FilesSampleSubqueryExecutor implements SampleSubqueryExecutor {
 
     /**
      * Each row arrives as a UTF-8 JSON document of shape
-     * {@code {"data":[<single value>],"meta":[...]}}; we read the lone
-     * {@code data} cell and feed it to {@link Variant#of}. A null cell would
-     * imply a null in the sort key — sort-key columns reject nulls upstream,
-     * so we surface this as an executor failure rather than silently dropping
-     * the row. Any shape deviation (non-object root, missing/non-array
+     * {@code {"data":[<val0>, <val1>, ...],"meta":[...]}}; we read each
+     * {@code data} cell and feed it to {@link Variant#of} using the
+     * corresponding sort-key column's declared type. A null cell would imply
+     * a null in the sort key — sort-key columns reject nulls upstream, so we
+     * surface this as an executor failure rather than silently dropping the
+     * row. Any shape deviation (non-object root, missing/non-array
      * {@code data}, wrong arity, type-coerce failure) becomes a
      * {@link StarRocksException} so the coordinator records SAMPLE_FAILED
      * instead of letting an unchecked exception unwind the load thread.
      */
-    private List<Variant> decodeSingleColumnRow(ByteBuffer rowBuffer, Type valueType) throws StarRocksException {
+    private List<Variant> decodeRow(ByteBuffer rowBuffer, List<Column> sortKeyColumns) throws StarRocksException {
         String jsonRow = StandardCharsets.UTF_8.decode(rowBuffer.duplicate()).toString();
         JsonElement root;
         try {
@@ -324,20 +310,26 @@ abstract class FilesSampleSubqueryExecutor implements SampleSubqueryExecutor {
             throw new StarRocksException(errorPrefix + "row is missing a JSON array `data` field: " + jsonRow);
         }
         JsonArray dataArray = dataElement.getAsJsonArray();
-        if (dataArray.size() != 1) {
-            throw new StarRocksException(errorPrefix
-                    + "expected one projected column per row but row carried " + dataArray.size());
+        if (dataArray.size() != sortKeyColumns.size()) {
+            throw new StarRocksException(errorPrefix + "expected " + sortKeyColumns.size()
+                    + " projected column(s) per row but row carried " + dataArray.size());
         }
-        JsonElement valueElement = dataArray.get(0);
-        if (valueElement.isJsonNull()) {
-            throw new StarRocksException(
-                    errorPrefix + "sample returned a null sort-key value — sort keys must be non-null");
+        List<Variant> tupleValues = new ArrayList<>(sortKeyColumns.size());
+        for (int columnIndex = 0; columnIndex < sortKeyColumns.size(); columnIndex++) {
+            Column column = sortKeyColumns.get(columnIndex);
+            JsonElement valueElement = dataArray.get(columnIndex);
+            if (valueElement.isJsonNull()) {
+                throw new StarRocksException(errorPrefix + "sample returned a null value for sort-key column "
+                        + column.getName() + " — sort keys must be non-null");
+            }
+            try {
+                tupleValues.add(Variant.of(column.getType(), valueElement.getAsString()));
+            } catch (RuntimeException variantFailure) {
+                throw new StarRocksException(errorPrefix + "failed to coerce sample value for column "
+                        + column.getName() + " to " + column.getType().toSql() + ": " + variantFailure.getMessage(),
+                        variantFailure);
+            }
         }
-        try {
-            return List.of(Variant.of(valueType, valueElement.getAsString()));
-        } catch (RuntimeException variantFailure) {
-            throw new StarRocksException(errorPrefix + "failed to coerce sample value to "
-                    + valueType.toSql() + ": " + variantFailure.getMessage(), variantFailure);
-        }
+        return tupleValues;
     }
 }

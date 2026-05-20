@@ -286,7 +286,15 @@ class BrokerLoadSampleSubqueryExecutorTest {
     }
 
     @Test
-    void compositeSortKeyIsRejected() {
+    void compositeSortKeyProjectsAllColumnsAndDecodesTuples() throws Exception {
+        StringBuilder capturedSql = new StringBuilder();
+        BrokerLoadSampleSubqueryExecutor executor = new BrokerLoadSampleSubqueryExecutor(
+                /*sampleQueryRunner=*/ (sql, computeResource) -> {
+                    capturedSql.append(sql);
+                    return List.of(jsonResultBatch(
+                            "{\"data\":[10, 20]}",
+                            "{\"data\":[30, 40]}"));
+                });
         SampleRequest request = new SampleRequest(
                 new BrokerLoadScanContext(
                         new BrokerDesc(Map.of()),
@@ -296,10 +304,16 @@ class BrokerLoadSampleSubqueryExecutorTest {
                 List.of(bigintColumn("tenant"), bigintColumn("position")),
                 /*sampleByteLimit=*/ Long.MAX_VALUE,
                 /*seed=*/ 0L);
-        BrokerLoadSampleSubqueryExecutor executor = new BrokerLoadSampleSubqueryExecutor(
-                /*sampleQueryRunner=*/ (sql, computeResource) -> List.of());
 
-        Assertions.assertThrows(StarRocksException.class, () -> executor.execute(request));
+        SampleSubqueryExecutor.SampleExecution execution = executor.execute(request);
+
+        Assertions.assertTrue(capturedSql.toString().contains("SELECT `tenant`, `position` FROM FILES"),
+                "both sort-key columns must appear in the projection: " + capturedSql);
+        List<List<Variant>> rows = Lists.newArrayList(execution.rows());
+        Assertions.assertEquals(2, rows.size());
+        Assertions.assertEquals(2, rows.get(0).size());
+        Assertions.assertEquals("10", rows.get(0).get(0).getStringValue());
+        Assertions.assertEquals("20", rows.get(0).get(1).getStringValue());
     }
 
     @Test

@@ -163,7 +163,7 @@ class InsertFromFilesSampleSubqueryExecutorTest {
         Column sortKeyColumn = new Column("weird`name", IntegerType.BIGINT);
 
         String sql = FilesSampleSubqueryExecutor.buildSampleSql(
-                properties, sortKeyColumn, /*samplingRate=*/ 0.1, /*rowLimit=*/ 200_000, /*seed=*/ 42L);
+                properties, List.of(sortKeyColumn), /*samplingRate=*/ 0.1, /*rowLimit=*/ 200_000, /*seed=*/ 42L);
 
         Assertions.assertTrue(sql.contains("`weird``name`"), "backtick in identifier must be doubled: " + sql);
         // Both double-quote AND backslash must be escaped inside the property's
@@ -225,16 +225,50 @@ class InsertFromFilesSampleSubqueryExecutorTest {
     }
 
     @Test
-    void compositeSortKeyIsRejected() {
-        TableFunctionTable sourceTable = mockSourceTable(Map.of("format", "parquet"), List.of());
+    void compositeSortKeyProjectsAllColumnsAndDecodesTuples() throws Exception {
+        TableFunctionTable sourceTable = mockSourceTable(
+                Map.of("path", "s3://bucket/data/*.parquet", "format", "parquet"),
+                List.of(brokerFileStatus("s3://bucket/data/a.parquet", 4L * 1024L * 1024L)));
+        StringBuilder capturedSql = new StringBuilder();
+        InsertFromFilesSampleSubqueryExecutor executor = new InsertFromFilesSampleSubqueryExecutor(
+                /*sampleQueryRunner=*/ (sql, computeResource) -> {
+                    capturedSql.append(sql);
+                    return List.of(jsonResultBatch(
+                            "{\"data\":[100, 200],\"meta\":[{\"name\":\"tenant\"},{\"name\":\"position\"}]}",
+                            "{\"data\":[100, 300]}"));
+                });
         SampleRequest request = new SampleRequest(
                 new InsertFromFilesScanContext(sourceTable, Mockito.mock(ComputeResource.class)),
                 List.of(bigintColumn("tenant"), bigintColumn("position")),
                 /*sampleByteLimit=*/ Long.MAX_VALUE,
                 /*seed=*/ 0L);
 
+        SampleSubqueryExecutor.SampleExecution execution = executor.execute(request);
+
+        Assertions.assertTrue(capturedSql.toString().contains("SELECT `tenant`, `position` FROM FILES"),
+                "both sort-key columns must appear in the projection: " + capturedSql);
+        List<List<Variant>> rows = Lists.newArrayList(execution.rows());
+        Assertions.assertEquals(2, rows.size());
+        Assertions.assertEquals(2, rows.get(0).size(), "each decoded row carries a value per sort-key column");
+        Assertions.assertEquals("100", rows.get(0).get(0).getStringValue());
+        Assertions.assertEquals("200", rows.get(0).get(1).getStringValue());
+        Assertions.assertEquals("100", rows.get(1).get(0).getStringValue());
+        Assertions.assertEquals("300", rows.get(1).get(1).getStringValue());
+    }
+
+    @Test
+    void compositeSortKeyArityMismatchInResultThrows() {
+        TableFunctionTable sourceTable = mockSourceTable(Map.of("format", "parquet"), List.of());
+        // Sampler claims 2 sort-key columns but server returns 1-value rows — surfaced
+        // as a clean StarRocksException (mapped to SkipReason.SAMPLE_FAILED) rather
+        // than letting downstream tuple compare blow up.
         InsertFromFilesSampleSubqueryExecutor executor = new InsertFromFilesSampleSubqueryExecutor(
-                /*sampleQueryRunner=*/ (sql, computeResource) -> List.of());
+                /*sampleQueryRunner=*/ (sql, computeResource) -> List.of(jsonResultBatch("{\"data\":[100]}")));
+        SampleRequest request = new SampleRequest(
+                new InsertFromFilesScanContext(sourceTable, Mockito.mock(ComputeResource.class)),
+                List.of(bigintColumn("tenant"), bigintColumn("position")),
+                /*sampleByteLimit=*/ Long.MAX_VALUE,
+                /*seed=*/ 0L);
 
         Assertions.assertThrows(StarRocksException.class, () -> executor.execute(request));
     }
