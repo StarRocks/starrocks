@@ -23,6 +23,7 @@
 
 #include "base/debug/trace.h"
 #include "base/failpoint/fail_point.h"
+#include "base/random/random.h"
 #include "base/utility/defer_op.h"
 #include "base/utility/pretty_printer.h"
 #include "base/utility/scoped_cleanup.h"
@@ -3073,7 +3074,7 @@ Status TabletUpdates::compaction(MemTracker* mem_tracker) {
         }
     }
     // give 10s time gitter, so same table's compaction don't start at same time
-    _last_compaction_time_ms = UnixMillis() + rand() % 10000;
+    _last_compaction_time_ms = UnixMillis() + ThreadLocalRandomUniform(10000);
     if (info->inputs.empty()) {
         VLOG(2) << "no candidate rowset to do update compaction, tablet:" << _tablet.tablet_id();
         _compaction_running = false;
@@ -3253,7 +3254,7 @@ Status TabletUpdates::compaction_for_size_tiered(MemTracker* mem_tracker) {
                 _tablet.tablet_id(), version_count, _pending_commits.size());
     } else {
         // give 10s time gitter, so same table's compaction don't start at same time
-        _last_compaction_time_ms = UnixMillis() + rand() % 10000;
+        _last_compaction_time_ms = UnixMillis() + ThreadLocalRandomUniform(10000);
     }
 
     int64_t del_rows = total_rows - stat.num_rows;
@@ -5829,7 +5830,7 @@ Status TabletUpdates::compaction_random(MemTracker* mem_tracker) {
                 LOG(WARNING) << msg;
             } else if (itr->second->compaction_score > 0) {
                 // 30% chance to pick this rowset
-                if (rand() % 100 < 30) {
+                if (ThreadLocalRandomUniform(100) < 30) {
                     info->inputs.push_back(rowsetid);
                     if (info->inputs.size() >= config::max_update_compaction_num_singleton_deltas) {
                         break;
@@ -5840,7 +5841,7 @@ Status TabletUpdates::compaction_random(MemTracker* mem_tracker) {
     }
 
     // give 10s time gitter, so same table's compaction don't start at same time
-    _last_compaction_time_ms = UnixMillis() + rand() % 10000;
+    _last_compaction_time_ms = UnixMillis() + ThreadLocalRandomUniform(10000);
     if (info->inputs.empty()) {
         VLOG(2) << "no candidate rowset to do update compaction, tablet:" << _tablet.tablet_id();
         _compaction_running = false;

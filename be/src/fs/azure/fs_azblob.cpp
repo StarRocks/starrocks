@@ -20,6 +20,7 @@
 #include <azure/storage/blobs.hpp>
 
 #include "base/concurrency/stopwatch.hpp"
+#include "base/random/random.h"
 #include "fs/azure/azblob_uri.h"
 #include "fs/azure/utils.h"
 #include "fs/credential/cloud_configuration_factory.h"
@@ -274,7 +275,7 @@ Status AzBlobOutputStream::complete_multipart_upload() {
 
 class AzBlobClientFactory {
 public:
-    AzBlobClientFactory() { srand(time(nullptr)); }
+    AzBlobClientFactory() = default;
     ~AzBlobClientFactory() = default;
 
     BlobContainerClientPtr new_blob_container_client(const AzureCloudCredential& azure_cloud_credential,
@@ -320,8 +321,8 @@ BlobContainerClientPtr AzBlobClientFactory::new_blob_container_client(
             }
         }
 
-        auto& client =
-                _client_cache.size() < kMaxItems ? _client_cache.emplace_back() : _client_cache[rand() % kMaxItems];
+        auto& client = _client_cache.size() < kMaxItems ? _client_cache.emplace_back()
+                                                        : _client_cache[ThreadLocalRandomUniform(kMaxItems)];
         client.azure_cloud_credential = azure_cloud_credential;
         client.blob_container_client = container_client;
     }
