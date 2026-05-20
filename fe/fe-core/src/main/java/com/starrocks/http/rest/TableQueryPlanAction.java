@@ -327,6 +327,8 @@ public class TableQueryPlanAction extends RestBaseAction {
         });
         tQueryPlanInfo.tablet_info = tabletInfo;
 
+        LOG.debug("query plan: {}", tQueryPlanInfo);
+
         // serialize TQueryPlanInfo and encode plan with Base64 to string in order to translate by json format
         String opaquedQueryPlan;
         try {

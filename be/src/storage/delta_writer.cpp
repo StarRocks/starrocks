@@ -14,6 +14,7 @@
 
 #include "storage/delta_writer.h"
 
+#include <mutex>
 #include <utility>
 
 #include "column/raw_data_visitor.h"
@@ -27,6 +28,7 @@
 #include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
 #include "runtime/load_fail_point.h"
+#include "storage/chunk_helper.h"
 #include "storage/compaction_manager.h"
 #include "storage/memtable.h"
 #include "storage/memtable_flush_executor.h"
@@ -744,6 +746,23 @@ Status DeltaWriter::commit() {
         break;
     }
 
+    // Exactly one thread runs the commit body. Two SegmentFlushTask threads
+    // can reach this point concurrently for the same DeltaWriter when the
+    // upstream sends a duplicate tablet_writer_add_segment(eos=true) (e.g.
+    // a brpc retry on an unstable peer link) and SegmentFlushToken
+    // dispatches the duplicates in parallel. Concurrent duplicate callers
+    // block inside std::call_once until the first invocation completes
+    // and then return the captured _commit_result. This makes duplicate
+    // commit() calls observably idempotent: both threads return OK on
+    // success, or both return the same error on failure, with no transient
+    // "in progress" status leaking to callers such as SegmentFlushTask::run
+    // (which would otherwise cancel the writer on any non-OK return and
+    // convert a successful commit into a reported failure on the primary).
+    std::call_once(_commit_once, [this] { _commit_result = _do_commit_body(); });
+    return _commit_result;
+}
+
+Status DeltaWriter::_do_commit_body() {
     MonotonicStopWatch watch;
     watch.start();
     if (auto st = _flush_token->wait(); UNLIKELY(!st.ok())) {

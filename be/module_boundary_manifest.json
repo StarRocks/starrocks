@@ -86,6 +86,8 @@
       "owned_targets": ["HttpCore"],
       "owned_globs": [
         "be/src/http/http_handler.h",
+        "be/src/http/http_auth.*",
+        "be/src/http/http_common.h",
         "be/src/http/http_method.*",
         "be/src/http/http_status.*",
         "be/src/http/http_headers.*",
@@ -94,6 +96,7 @@
         "be/src/http/http_parser.*",
         "be/src/http/http_channel.*",
         "be/src/http/http_stream_channel.*",
+        "be/src/http/http_client.*",
         "be/src/http/ev_http_server.*"
       ],
       "allowed_include_prefixes": ["http/", "common/", "base/", "gutil/", "gen_cpp/"],
@@ -101,7 +104,6 @@
       "forbidden_includes": [
         "http/default_path_handlers.h",
         "http/download_action.h",
-        "http/http_common.h",
         "http/monitor_action.h",
         "http/rest_monitor_iface.h",
         "http/utils.h",
@@ -140,7 +142,8 @@
         "be/src/fs/fs_factory.*",
         "be/src/fs/fs_posix.*",
         "be/src/fs/fs_registry.*",
-        "be/src/fs/fs_scheme.*"
+        "be/src/fs/fs_scheme.*",
+        "be/src/fs/fs_util.*"
       ],
       "allowed_include_prefixes": ["fs/", "io/core/", "common/", "base/", "gutil/", "gen_cpp/"],
       "forbidden_include_prefixes": ["fs/azure/", "fs/credential/", "fs/hdfs/", "fs/s3/"],
@@ -149,7 +152,6 @@
         "fs/fs_options_helper.h",
         "fs/fs_s3.h",
         "fs/fs_starlet.h",
-        "fs/fs_util.h",
         "fs/key_cache.h",
         "fs/output_stream_adapter.h"
       ],
@@ -157,6 +159,18 @@
       "allowed_test_targets": ["fs_core_test"],
       "allowed_test_link_deps": ["FSCore", "IOCore", "Common", "Base", "Gutil", "StarRocksGen"],
       "remediation": "Keep FSCore limited to IOCore plus core FS abstractions; move backend-specific behavior into FileSystem."
+    },
+    {
+      "id": "platform",
+      "doc_label": "Platform",
+      "summary": "Shared BE platform utilities above IO/FS/Common and below Runtime/Exec/Storage/Service.",
+      "owned_targets": ["Platform"],
+      "owned_roots": ["be/src/platform"],
+      "allowed_include_prefixes": ["platform/", "http/", "fs/", "io/core/", "common/", "base/", "gutil/", "gen_cpp/"],
+      "allowed_target_deps": ["HttpCore", "FSCore", "IOCore", "Common", "Base", "Gutil", "StarRocksGen"],
+      "allowed_test_targets": ["platform_test"],
+      "allowed_test_link_deps": ["Platform"],
+      "remediation": "Keep Platform limited to reusable host, filesystem-adjacent, download, temp-file, environment, retry, and platform-level helpers; move runtime, exec, storage, and service integration upward."
     },
     {
       "id": "spillcore",
@@ -216,6 +230,8 @@
       "owned_globs": ["be/src/column/**"],
       "excluded_globs": [
         "be/src/column/chunk.*",
+        "be/src/column/chunk_factory.*",
+        "be/src/column/chunk_schema_helper.*",
         "be/src/column/chunk_extra_data.*",
         "be/src/column/chunk_slice.*",
         "be/src/column/column_access_path.*",
@@ -277,7 +293,7 @@
         "be/src/runtime/service_contexts.h",
         "be/src/runtime/memory/*.h"
       ],
-      "allowed_include_prefixes": ["runtime/", "column/", "types/", "common/", "base/", "gutil/", "gen_cpp/"],
+      "allowed_include_prefixes": ["runtime/", "platform/", "column/", "types/", "common/", "base/", "gutil/", "gen_cpp/"],
       "forbidden_include_prefixes": [
         "runtime/batch_write/",
         "runtime/routine_load/",
@@ -330,9 +346,9 @@
         "runtime/user_function_cache.h",
         "runtime/variable_result_writer.h"
       ],
-      "allowed_target_deps": ["ChunkCore", "ColumnCore", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
+      "allowed_target_deps": ["Platform", "ChunkCore", "ColumnCore", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
       "allowed_test_targets": ["runtime_core_test"],
-      "allowed_test_link_deps": ["RuntimeCore", "ChunkCore", "ColumnCore", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
+      "allowed_test_link_deps": ["RuntimeCore", "Platform", "ChunkCore", "ColumnCore", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
       "remediation": "Keep RuntimeCore restricted to core runtime infrastructure; move service/storage/stream-load/integration code into Runtime."
     },
     {

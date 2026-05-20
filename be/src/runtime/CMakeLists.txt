@@ -20,6 +20,7 @@ set(EXECUTABLE_OUTPUT_PATH "${BUILD_DIR}/src/runtime")
 set(RUNTIME_CORE_FILES
     client_cache.cpp
     current_thread.cpp
+    chunk_helper.cpp
     descriptors.cpp
     runtime_state.cpp
     mem_tracker.cpp
@@ -122,4 +123,4 @@ ADD_BE_LIB(Runtime
     ${RUNTIME_FILES}
     )
 
-target_link_libraries(Runtime PUBLIC RuntimeCore ExecCore ExecSinkCore ExecSortingCore)
+target_link_libraries(Runtime PUBLIC RuntimeCore ExecCore ExecSinkCore ExecSortingCore Platform)

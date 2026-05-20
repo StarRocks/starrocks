@@ -26,6 +26,8 @@
 
 namespace starrocks {
 
+static const std::string kAvroProfileSectionPrefix = "Avro";
+
 Status HdfsAvroScanner::do_init(RuntimeState* state, const HdfsScannerParams& /*params*/) {
     if (!TimezoneUtils::find_cctz_time_zone(state->timezone(), _timezone)) {
         return Status::InvalidArgument(fmt::format("Cannot find cctz time zone: {}", state->timezone()));
@@ -70,10 +72,12 @@ Status HdfsAvroScanner::do_open(RuntimeState* state) {
     }
 
     _avro_reader = std::make_unique<AvroReader>();
+    SCOPED_RAW_TIMER(&_app_stats.reader_init_ns);
     return _avro_reader->init(std::move(input_stream), _scanner_params.path, state, &_scanner_counter,
                               &_materialize_slot_descs, &_column_readers,
                               /*col_not_found_as_null=*/true, _file.get(), config::avro_reader_buffer_size_bytes,
-                              split_offset, split_length, _scanner_params.avro_schema_json);
+                              split_offset, split_length, _scanner_params.avro_schema_json,
+                              /*invalid_as_null=*/false, /*allow_direct_path=*/true);
 }
 
 Status HdfsAvroScanner::do_get_next(RuntimeState* state, ChunkPtr* chunk) {
@@ -89,7 +93,11 @@ Status HdfsAvroScanner::do_get_next(RuntimeState* state, ChunkPtr* chunk) {
     }
 
     int64_t row_count = 0;
-    Status st = _avro_reader->read_chunk(avro_chunk, state->chunk_size(), &row_count);
+    Status st;
+    {
+        SCOPED_RAW_TIMER(&_app_stats.column_read_ns);
+        st = _avro_reader->read_chunk(avro_chunk, state->chunk_size(), &row_count);
+    }
     if (!st.ok() && !st.is_end_of_file()) {
         return st;
     }
@@ -102,11 +110,14 @@ Status HdfsAvroScanner::do_get_next(RuntimeState* state, ChunkPtr* chunk) {
     // Merge materialized columns into the output chunk.
     if (!avro_chunk->is_empty()) {
         // Convert AdaptiveNullableColumn → NullableColumn.
-        _materialize_nullable_columns(avro_chunk);
-        for (size_t i = 0; i < _scanner_ctx.materialized_columns.size(); i++) {
-            const auto& col_info = _scanner_ctx.materialized_columns[i];
-            ck->append_or_update_column(std::move(avro_chunk->get_column_by_slot_id(col_info.slot_desc->id())),
-                                        col_info.slot_desc->id());
+        {
+            SCOPED_RAW_TIMER(&_app_stats.column_convert_ns);
+            _materialize_nullable_columns(avro_chunk);
+            for (size_t i = 0; i < _scanner_ctx.materialized_columns.size(); i++) {
+                const auto& col_info = _scanner_ctx.materialized_columns[i];
+                ck->append_or_update_column(std::move(avro_chunk->get_column_by_slot_id(col_info.slot_desc->id())),
+                                            col_info.slot_desc->id());
+            }
         }
     }
     // Fill not-existed slots: fills the ___count___ column (count queries) and any
@@ -129,6 +140,61 @@ Status HdfsAvroScanner::do_get_next(RuntimeState* state, ChunkPtr* chunk) {
     // Note: _app_stats.rows_read is updated by the base class HdfsScanner::get_next
     // after do_get_next returns. Do NOT update it here to avoid double-counting.
     return Status::OK();
+}
+
+void HdfsAvroScanner::do_update_counter(HdfsScanProfile* profile) {
+    RuntimeProfile* root = profile->runtime_profile;
+    ADD_COUNTER(root, kAvroProfileSectionPrefix, TUnit::NONE);
+
+    auto* direct_path_used = ADD_CHILD_COUNTER(root, "DirectPathUsed", TUnit::UNIT, kAvroProfileSectionPrefix);
+    auto* rows_decoded = ADD_CHILD_COUNTER(root, "RowsDecoded", TUnit::UNIT, kAvroProfileSectionPrefix);
+    auto* direct_rows_decoded = ADD_CHILD_COUNTER(root, "DirectRowsDecoded", TUnit::UNIT, kAvroProfileSectionPrefix);
+    auto* generic_rows_decoded = ADD_CHILD_COUNTER(root, "GenericRowsDecoded", TUnit::UNIT, kAvroProfileSectionPrefix);
+    auto* block_count_rows = ADD_CHILD_COUNTER(root, "BlockCountRows", TUnit::UNIT, kAvroProfileSectionPrefix);
+    auto* direct_plan_entries = ADD_CHILD_COUNTER(root, "DirectPlanEntries", TUnit::UNIT, kAvroProfileSectionPrefix);
+    auto* direct_read_entries = ADD_CHILD_COUNTER(root, "DirectReadEntries", TUnit::UNIT, kAvroProfileSectionPrefix);
+    auto* direct_skip_entries = ADD_CHILD_COUNTER(root, "DirectSkipEntries", TUnit::UNIT, kAvroProfileSectionPrefix);
+    auto* direct_fast_skip_entries =
+            ADD_CHILD_COUNTER(root, "DirectFastSkipEntries", TUnit::UNIT, kAvroProfileSectionPrefix);
+    auto* direct_fallback_skip_entries =
+            ADD_CHILD_COUNTER(root, "DirectFallbackSkipEntries", TUnit::UNIT, kAvroProfileSectionPrefix);
+    auto* direct_read_field_calls =
+            ADD_CHILD_COUNTER(root, "DirectReadFieldCalls", TUnit::UNIT, kAvroProfileSectionPrefix);
+    auto* direct_skip_field_calls =
+            ADD_CHILD_COUNTER(root, "DirectSkipFieldCalls", TUnit::UNIT, kAvroProfileSectionPrefix);
+    auto* direct_fast_skip_calls =
+            ADD_CHILD_COUNTER(root, "DirectFastSkipCalls", TUnit::UNIT, kAvroProfileSectionPrefix);
+    auto* direct_fallback_skip_calls =
+            ADD_CHILD_COUNTER(root, "DirectFallbackSkipCalls", TUnit::UNIT, kAvroProfileSectionPrefix);
+    auto* input_stream_read_count =
+            ADD_CHILD_COUNTER(root, "InputStreamReadCount", TUnit::UNIT, kAvroProfileSectionPrefix);
+    auto* input_stream_read_timer = ADD_CHILD_TIMER(root, "InputStreamReadTime", kAvroProfileSectionPrefix);
+
+    if (_avro_reader == nullptr) {
+        COUNTER_UPDATE(input_stream_read_count, _scanner_counter.file_read_count);
+        COUNTER_UPDATE(input_stream_read_timer, _scanner_counter.file_read_ns);
+        return;
+    }
+
+    const auto& avro_stats = _avro_reader->stats();
+    COUNTER_UPDATE(direct_path_used, avro_stats.direct_path_used);
+    COUNTER_UPDATE(rows_decoded, avro_stats.rows_decoded);
+    COUNTER_UPDATE(direct_rows_decoded, avro_stats.direct_rows_decoded);
+    COUNTER_UPDATE(generic_rows_decoded, avro_stats.generic_rows_decoded);
+    COUNTER_UPDATE(block_count_rows, avro_stats.block_count_rows);
+    COUNTER_UPDATE(direct_plan_entries, avro_stats.direct_plan_entries);
+    COUNTER_UPDATE(direct_read_entries, avro_stats.direct_read_entries);
+    COUNTER_UPDATE(direct_skip_entries, avro_stats.direct_skip_entries);
+    COUNTER_UPDATE(direct_fast_skip_entries, avro_stats.direct_fast_skip_entries);
+    COUNTER_UPDATE(direct_fallback_skip_entries, avro_stats.direct_fallback_skip_entries);
+    // Derived totals: total field-level calls = rows_decoded × per-plan entry count.
+    COUNTER_UPDATE(direct_read_field_calls, avro_stats.direct_rows_decoded * avro_stats.direct_read_entries);
+    COUNTER_UPDATE(direct_skip_field_calls, avro_stats.direct_rows_decoded * avro_stats.direct_skip_entries);
+    COUNTER_UPDATE(direct_fast_skip_calls, avro_stats.direct_rows_decoded * avro_stats.direct_fast_skip_entries);
+    COUNTER_UPDATE(direct_fallback_skip_calls,
+                   avro_stats.direct_rows_decoded * avro_stats.direct_fallback_skip_entries);
+    COUNTER_UPDATE(input_stream_read_count, _scanner_counter.file_read_count);
+    COUNTER_UPDATE(input_stream_read_timer, _scanner_counter.file_read_ns);
 }
 
 void HdfsAvroScanner::do_close(RuntimeState* /*state*/) noexcept {

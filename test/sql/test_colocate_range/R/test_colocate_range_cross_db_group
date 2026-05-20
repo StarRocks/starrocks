@@ -1,0 +1,42 @@
+-- name: test_colocate_range_cross_db_group @cloud @sequential
+set enable_range_distribution = true;
+-- result:
+-- !result
+create database db_${uuid0}_a;
+-- result:
+-- !result
+create database db_${uuid0}_b;
+-- result:
+-- !result
+create table db_${uuid0}_a.t_left (k1 int, k2 int)
+    order by(k1, k2)
+    properties('replication_num' = '1', 'colocate_with' = 'grp_xdb_${uuid0}:k1');
+-- result:
+-- !result
+create table db_${uuid0}_b.t_right (k1 int, k2 int)
+    order by(k1, k2)
+    properties('replication_num' = '1', 'colocate_with' = 'grp_xdb_${uuid0}:k1');
+-- result:
+-- !result
+insert into db_${uuid0}_a.t_left values (1, 10), (2, 20), (3, 30);
+-- result:
+-- !result
+insert into db_${uuid0}_b.t_right values (1, 100), (2, 200), (3, 300);
+-- result:
+-- !result
+select count(*) from db_${uuid0}_a.t_left l join db_${uuid0}_b.t_right r on l.k1 = r.k1;
+-- result:
+3
+-- !result
+drop table db_${uuid0}_a.t_left;
+-- result:
+-- !result
+drop table db_${uuid0}_b.t_right;
+-- result:
+-- !result
+drop database db_${uuid0}_a;
+-- result:
+-- !result
+drop database db_${uuid0}_b;
+-- result:
+-- !result

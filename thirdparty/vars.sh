@@ -138,11 +138,11 @@ GPERFTOOLS_NAME=gperftools-2.7.tar.gz
 GPERFTOOLS_SOURCE=gperftools-gperftools-2.7
 GPERFTOOLS_MD5SUM="797e7b7f6663288e2b90ab664861c61a"
 
-# zlib
-ZLIB_DOWNLOAD="https://github.com/madler/zlib/archive/refs/tags/v1.2.11.tar.gz"
-ZLIB_NAME=zlib-1.2.11.tar.gz
-ZLIB_SOURCE=zlib-1.2.11
-ZLIB_MD5SUM="0095d2d2d1f3442ce1318336637b695f"
+# zlib-ng (compat mode: same API/ABI as zlib, faster inflate via SSE/AVX2/NEON)
+ZLIB_DOWNLOAD="https://github.com/zlib-ng/zlib-ng/archive/refs/tags/2.3.3.tar.gz"
+ZLIB_NAME=zlib-ng-2.3.3.tar.gz
+ZLIB_SOURCE=zlib-ng-2.3.3
+ZLIB_MD5SUM="72337e6a7d2662af50a4ed0274c61b7e"
 
 # lz4
 LZ4_DOWNLOAD="https://github.com/lz4/lz4/archive/v1.10.0.tar.gz"
@@ -283,10 +283,10 @@ CCTZ_SOURCE="cctz-2.3"
 CCTZ_MD5SUM="209348e50b24dbbdec6d961059c2fc92"
 
 # FMT
-FMT_DOWNLOAD="https://github.com/fmtlib/fmt/releases/download/8.1.1/fmt-8.1.1.zip"
-FMT_NAME="fmt-8.1.1.zip"
-FMT_SOURCE="fmt-8.1.1"
-FMT_MD5SUM="16dcd48ecc166f10162450bb28aabc87"
+FMT_DOWNLOAD="https://github.com/fmtlib/fmt/releases/download/10.2.1/fmt-10.2.1.zip"
+FMT_NAME="fmt-10.2.1.zip"
+FMT_SOURCE="fmt-10.2.1"
+FMT_MD5SUM="04e266ad52659480d593486a17eed804"
 
 # RYU
 RYU_DOWNLOAD="https://github.com/ulfjack/ryu/archive/aa31ca9361d21b1a00ee054aac49c87d07e74abc.zip"
@@ -481,6 +481,11 @@ HADOOPSRC_NAME="hadoop-3.4.3-src.tar.gz"
 HADOOPSRC_SOURCE="hadoop-3.4.3-src"
 HADOOPSRC_MD5SUM="c5ac53ca70cc667189ec824c6048914a"
 
+BLAKE3_DOWNLOAD="https://github.com/BLAKE3-team/BLAKE3/archive/refs/tags/1.8.5.tar.gz"
+BLAKE3_NAME="BLAKE3-1.8.5.tar.gz"
+BLAKE3_SOURCE="BLAKE3-1.8.5"
+BLAKE3_MD5SUM="3731247eb9086571ba7128a794c1d2d3"
+
 # xxhash
 XXHASH_DOWNLOAD="https://github.com/Cyan4973/xxHash/archive/refs/tags/v0.8.3.tar.gz"
 XXHASH_NAME=xxHash-0.8.3.tar.gz
@@ -499,7 +504,7 @@ TP_ARCHIVES="CLUCENE LIBEVENT OPENSSL THRIFT PROTOBUF GFLAGS GLOG GTEST RAPIDJSO
             JEMALLOC CCTZ FMT RYU BREAK_PAD HADOOPSRC JDK RAGEL HYPERSCAN MARIADB JINDOSDK AWS_SDK_CPP VPACK OPENTELEMETRY \
             BENCHMARK FAST_FLOAT STARCACHE STREAMVBYTE JANSSON AVRO SERDES GCS_CONNECTOR LZO2 DATASKETCHES \
             FIU LIBDEFLATE LLVM ABSL CARES GRPC SIMDUTF TENANN POCO ICU XSIMD LIBXML2 AZURE LIBDIVIDE PPROF FLAMEGRAPH XXHASH \
-            BENCHGEN"
+            BLAKE3 BENCHGEN"
 
 if [[ -n "${STARROCKS_TP_VARS_OVERRIDE:-}" ]]; then
     . "${STARROCKS_TP_VARS_OVERRIDE}"

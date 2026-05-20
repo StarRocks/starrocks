@@ -17,7 +17,7 @@ src/exec/workgroup/lock_free_work_group_scan_task_queue.cpp
 src/exec/workgroup/scan_task_queue.cpp
 src/exec/write_combined_txn_log.cpp
 src/fs/fs_broker.cpp
-src/http/action/update_config_action.cpp
+src/service/service_be/config_update_hooks.cpp
 src/runtime/exec_env.cpp
 src/runtime/fragment_mgr.cpp
 src/runtime/load_channel_mgr.cpp
@@ -50,6 +50,5 @@ src/storage/segment_replicate_executor.cpp
 src/storage/table_reader.cpp
 src/storage/task/engine_alter_tablet_task.cpp
 src/storage/task/engine_batch_load_task.cpp
-src/testutil/init_test_env.h
 src/udf/java/utils.cpp
 src/util/system_metrics.cpp

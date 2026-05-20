@@ -277,17 +277,6 @@ SlotDescriptor* DescriptorTbl::get_slot_descriptor(SlotId id) const {
     }
 }
 
-SlotDescriptor* DescriptorTbl::get_slot_descriptor_with_column(SlotId id) const {
-    // TODO: is there some boost function to do exactly this?
-    auto i = _slot_with_column_name_map.find(id);
-
-    if (i == _slot_with_column_name_map.end()) {
-        return nullptr;
-    } else {
-        return i->second;
-    }
-}
-
 // return all registered tuple descriptors
 void DescriptorTbl::get_tuple_descs(std::vector<TupleDescriptor*>* descs) const {
     descs->clear();

@@ -17,9 +17,6 @@
 
 #include "http/http_client.h"
 
-#include "common/config_http_fwd.h"
-#include "fs/fs_util.h"
-
 namespace starrocks {
 
 HttpClient::HttpClient() = default;
@@ -224,34 +221,6 @@ Status HttpClient::execute(const std::function<bool(const void* data, size_t len
         return Status::InternalError(_to_errmsg(code));
     }
     return Status::OK();
-}
-
-StatusOr<uint64_t> HttpClient::download(const std::string& local_path) {
-    // set method to GET
-    set_method(GET);
-
-    // TODO(zc) Move this download speed limit outside to limit download speed
-    // at system level
-    curl_easy_setopt(_curl, CURLOPT_LOW_SPEED_LIMIT, config::download_low_speed_limit_kbps * 1024);
-    curl_easy_setopt(_curl, CURLOPT_LOW_SPEED_TIME, config::download_low_speed_time);
-    curl_easy_setopt(_curl, CURLOPT_MAX_RECV_SPEED_LARGE, config::max_download_speed_kbps * 1024);
-
-    WritableFileOptions opts{.sync_on_close = true, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
-    ASSIGN_OR_RETURN(auto output_file, fs::new_writable_file(opts, local_path));
-
-    Status status;
-    auto callback = [&status, &output_file, &local_path](const void* data, size_t length) {
-        status = output_file->append(Slice((const char*)data, length));
-        if (!status.ok()) {
-            LOG(WARNING) << "fail to write data to file, file=" << local_path << ", error=" << status;
-            return false;
-        }
-        return true;
-    };
-    RETURN_IF_ERROR(execute(callback));
-    RETURN_IF_ERROR(status);
-    RETURN_IF_ERROR(output_file->close());
-    return output_file->size();
 }
 
 Status HttpClient::download(const std::function<Status(const void* data, size_t length)>& callback,

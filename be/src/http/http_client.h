@@ -20,6 +20,7 @@
 #include <curl/curl.h>
 
 #include <cstdio>
+#include <functional>
 #include <string>
 #include <unordered_map>
 
@@ -127,10 +128,6 @@ public:
         set_method(HEAD);
         return execute();
     }
-
-    // helper function to download a file, you can call this function to downlaod
-    // a file to local_path
-    StatusOr<uint64_t> download(const std::string& local_path);
 
     Status download(const std::function<Status(const void* data, size_t length)>& callback,
                     int32_t min_speed_limit_kbps, int32_t min_speed_time_sec, int32_t max_speed_limit_kbps);

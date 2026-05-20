@@ -19,6 +19,7 @@
 #include <memory>
 
 #include "base/testutil/assert.h"
+#include "column/chunk_factory.h"
 #include "column/column_helper.h"
 #include "column/datum_tuple.h"
 #include "column/vectorized_fwd.h"
@@ -69,7 +70,7 @@ public:
         std::unique_ptr<RowsetWriter> writer;
         EXPECT_TRUE(RowsetFactory::create_rowset_writer(writer_context, &writer).ok());
         auto schema = ChunkHelper::convert_schema(tablet->tablet_schema());
-        auto chunk = ChunkHelper::new_chunk(schema, data.size());
+        auto chunk = ChunkFactory::new_chunk(schema, data.size());
         auto cols = chunk->mutable_columns();
         for (int pos = start_pos; pos < end_pos; pos++) {
             const DatumTuple& row = data[pos];
@@ -240,7 +241,7 @@ TEST_F(TableReaderRemoteTest, test_multi_get_1_tablet) {
     TypeDescriptor key_type = TypeDescriptor::from_thrift(read_params.schema.slot_descs[0].slotType);
     key_chunk->append_column(ColumnHelper::create_column(key_type, false), read_params.schema.slot_descs[0].id);
     key_chunk->get_column_raw_ptr_by_index(0)->reserve(multi_get_size);
-    ChunkPtr values_chunk = ChunkHelper::new_chunk(_value_schema, multi_get_size);
+    ChunkPtr values_chunk = ChunkFactory::new_chunk(_value_schema, multi_get_size);
     vector<int64_t> expected_values;
     vector<bool> expected_found(multi_get_size, false);
     for (int64_t i = 0; i < multi_get_size; i++) {
@@ -336,7 +337,7 @@ TEST_F(TableReaderRemoteTest, test_multi_get_4_tablet) {
         TypeDescriptor key_type = TypeDescriptor::from_thrift(read_params.schema.slot_descs[0].slotType);
         key_chunk->append_column(ColumnHelper::create_column(key_type, false), read_params.schema.slot_descs[0].id);
         key_chunk->get_column_raw_ptr_by_index(0)->reserve(multi_get_size);
-        ChunkPtr values_chunk = ChunkHelper::new_chunk(_value_schema, multi_get_size);
+        ChunkPtr values_chunk = ChunkFactory::new_chunk(_value_schema, multi_get_size);
         vector<int64_t> expected_values;
         vector<bool> expected_found(multi_get_size, false);
         for (int64_t i = 0; i < multi_get_size; i++) {

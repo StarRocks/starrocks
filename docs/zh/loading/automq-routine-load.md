@@ -2,7 +2,7 @@
 
 import Replicanum from '../_assets/commonMarkdown/replicanum.mdx'
 
-[AutoMQ for Kafka](https://www.automq.com/docs) AutoMQ Kafka ) 是一款基于云重新设计的云原生 Kafka。
+[AutoMQ for Kafka](https://docs.automq.com/automq/what-is-automq/overview) AutoMQ Kafka ) 是一款基于云重新设计的云原生 Kafka。
 AutoMQ Kafka [内核开源](https://github.com/AutoMQ/automq-for-kafka)并且100% 兼容 Kafka 协议，可以充分兑现云的红利。
 相比自建 Apache Kafka，AutoMQ Kafka 在其云原生架构基础上实现的自动弹性、流量自平衡、秒级分区移动等特性可以为用户带来更低的总体拥有成本（TCO）。
 本文将介绍如何通过 StarRocks Routine Load 将数据导入 AutoMQ Kafka。关于Routine Load的基本原理可以参考 Routine Load 基本原理。
@@ -31,7 +31,7 @@ PROPERTIES (
 
 ### 准备 AutoMQ Kafka 环境和测试数据
 
-参考 AutoMQ [快速入门](https://docs.automq.com/docs/automq-opensource/EvqhwAkpriAomHklOUzcUtybn7g)部署好 AutoMQ Kafka 集群，确保 AutoMQ Kafka 与 StarRocks 之间保持网络连通性。
+参考 AutoMQ [快速入门](https://docs.automq.com/automq/what-is-automq/overview)部署好 AutoMQ Kafka 集群，确保 AutoMQ Kafka 与 StarRocks 之间保持网络连通性。
 在AutoMQ Kafka中快速创建一个名为 example_topic 的主题并向其中写入一条测试JSON数据，可以通过以下步骤实现：
 
 #### **创建Topic**

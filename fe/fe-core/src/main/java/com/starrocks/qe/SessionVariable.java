@@ -562,6 +562,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_STATS_TO_OPTIMIZE_SKEW_JOIN = "enable_stats_to_optimize_skew_join";
     public static final String SKEW_JOIN_OPTIMIZE_USE_MCV_COUNT = "skew_join_use_mcv_count";
     public static final String SKEW_JOIN_DATA_SKEW_THRESHOLD = "skew_join_data_skew_threshold";
+    public static final String SKEW_JOIN_MAX_OTHER_SIDE_OVERLAP_ROW_COUNT = "skew_join_max_other_side_overlap_row_count";
     public static final String SKEW_JOIN_MCV_SINGLE_THRESHOLD = "skew_join_mcv_single_threshold";
     public static final String SKEW_JOIN_MCV_MIN_INPUT_ROWS = "skew_join_mcv_min_input_rows";
 
@@ -1186,7 +1187,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String DYNAMIC_PARTITION_PRUNE_VALUES_LIMIT = "dynamic_partition_prune_limit";
     public static final String MCV_ROW_PERCENTAGE_PROPAGATION_THRESHOLD = "mcv_row_percentage_propagation_threshold";
-    
+
     public static final List<String> DEPRECATED_VARIABLES = ImmutableList.<String>builder()
             .add(CODEGEN_LEVEL)
             .add(MAX_EXECUTION_TIME)
@@ -3242,6 +3243,12 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = SKEW_JOIN_DATA_SKEW_THRESHOLD, flag = VariableMgr.INVISIBLE)
     private double skewJoinDataSkewThreshold = 0.2;
+
+    // Maximum number of overlapping MCV rows on the other side of the join. When exceeding the overlap,
+    // the skew join optimization is skipped as this can lead to a row explosion.
+    // With the default value of `skewJoinRandRange` = 1000, an overlap of 1M leads to 1Bn rows.
+    @VarAttr(name = SKEW_JOIN_MAX_OTHER_SIDE_OVERLAP_ROW_COUNT, flag = VariableMgr.INVISIBLE)
+    private long skewJoinMaxOtherSideOverlapRowCount = 1_000_000;
 
     // A single MCV value must exceed this total-domain ratio to be considered as a skew value candidate.
     @VarAttr(name = SKEW_JOIN_MCV_SINGLE_THRESHOLD, flag = VariableMgr.INVISIBLE)
@@ -5827,6 +5834,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setSkewJoinDataSkewThreshold(double skewJoinDataSkewThreshold) {
         this.skewJoinDataSkewThreshold = skewJoinDataSkewThreshold;
+    }
+
+    public long getSkewJoinMaxOtherSideOverlapRowCount() {
+        return skewJoinMaxOtherSideOverlapRowCount;
+    }
+
+    public void setSkewJoinMaxOtherSideOverlapRowCount(long skewJoinMaxOtherSideOverlapRowCount) {
+        this.skewJoinMaxOtherSideOverlapRowCount = skewJoinMaxOtherSideOverlapRowCount;
     }
 
     public double getSkewJoinMcvSingleThreshold() {

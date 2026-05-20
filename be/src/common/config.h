@@ -1367,6 +1367,12 @@ CONF_mBool(lake_clear_corrupted_cache_data, "false");
 // The maximum number of files which need to rebuilt in cloud native pk index.
 // If files which need to rebuilt larger than this, we will flush memtable immediately.
 CONF_mInt32(cloud_native_pk_index_rebuild_files_threshold, "50");
+// Batch row count for PrimaryKeyCompactionConflictResolver::execute() — multiple per-chunk
+// `params.index->replace()` calls are accumulated into one call across this many rows. Each
+// replace() in LakePersistentIndex runs a memtable flush check + lock round-trip; batching N
+// chunks amortises that work by ~N×. Setting this <= vector_chunk_size (4096) effectively
+// disables batching. 32 K rows ≈ 8 chunks ≈ ~1.6 MB of accumulated PK bytes.
+CONF_mInt32(primary_key_compaction_replace_batch_rows, "32768");
 // The maximum number of rows which need to be rebuilt in cloud native pk index.
 // If rows which need to be rebuilt exceed this threshold, we will flush memtable immediately
 // to reduce index rebuild cost. 0 means disabled.
@@ -1880,6 +1886,14 @@ CONF_mBool(enable_vector_adaptive_search, "true");
 CONF_mDouble(vector_adaptive_ef_alpha, "1.0");
 CONF_mDouble(vector_adaptive_ef_cap, "8.0");
 CONF_mInt64(vector_adaptive_ef_baseline_rows, "300000");
+
+// Per-builder in-memory row buffer cap before tenann does an intermediate
+// add into the faiss in-memory index. Bounds peak memory during HNSWFlat
+// build by capping data_buffer_ at |rows| × dim × 4 bytes (does NOT cap
+// the trained index storage itself, only the staging buffer).
+// 256K rows ≈ 128 MiB at dim=128. Lower this if BE memory is tight.
+// Set to 0 to disable intermediate flushing (whole tablet buffered in RAM).
+CONF_mInt64(vector_index_build_flush_threshold_rows, "262144");
 
 // When upgrade thrift to 0.20.0, the MaxMessageSize member defines the maximum size of a (received) message, in bytes.
 // The default value is represented by a constant named DEFAULT_MAX_MESSAGE_SIZE, whose value is 100 * 1024 * 1024 bytes.

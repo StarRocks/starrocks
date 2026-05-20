@@ -171,7 +171,8 @@ public class SkewJoinOptimizeRule extends TransformationRule {
         // Idea: the most frequent composite tuple (k_1, k_2, ..., k_n) is bounded by the most
         // frequent value of each individual key. If any key k_i is not skewed (no value exceeds
         // the threshold), then no composite tuple can exceed it either, so no partition is skewed.
-        record PredicateSkewInfo(ColumnRefOperator column, DataSkew.SkewInfo skewInfo) {}
+        record PredicateSkewInfo(ColumnRefOperator column, ColumnRefOperator otherColumn, DataSkew.SkewInfo skewInfo) {
+        }
 
         List<PredicateSkewInfo> skewedPredicates = new ArrayList<>();
         for (BinaryPredicateOperator equalConj : equalConjs) {
@@ -183,7 +184,10 @@ public class SkewJoinOptimizeRule extends TransformationRule {
             if (!skewInfoOpt.get().isSkewed()) {
                 return false;
             }
-            skewedPredicates.add(new PredicateSkewInfo(columnOpt.get(), skewInfoOpt.get()));
+            final var leftCol = (ColumnRefOperator) equalConj.getChild(0);
+            final var rightCol = (ColumnRefOperator) equalConj.getChild(1);
+            final var otherColumn = columnOpt.get().equals(leftCol) ? rightCol : leftCol;
+            skewedPredicates.add(new PredicateSkewInfo(columnOpt.get(), otherColumn, skewInfoOpt.get()));
         }
 
         for (final var skewPredicate : skewedPredicates) {
@@ -211,6 +215,24 @@ public class SkewJoinOptimizeRule extends TransformationRule {
                 }
             } else {
                 throw new StarRocksPlannerException("Did not handle skew type in SkewOptimizeRule", ErrorType.INTERNAL_ERROR);
+            }
+
+            // Check how many rows on the other side would be affected by salting, as this can lead to a
+            // cardinality blow up. We only check for MCVs since for NULLs this is not an issue as NULL does not join.
+            final var skewInfoMcvs = skewInfo.getMcvs();
+            if (skewInfo.type() == DataSkew.SkewType.SKEWED_MCV && skewInfoMcvs.isPresent()) {
+                final var rightChildStats = input.inputAt(1).getStatistics();
+                if (rightChildStats != null && rightChildStats.getColumnStatistics().containsKey(skewPredicate.otherColumn)) {
+                    final var otherColumnStats = rightChildStats.getColumnStatistic(skewPredicate.otherColumn);
+                    if (otherColumnStats != null && otherColumnStats.getHistogram() != null) {
+                        final var maxOverlapRowCount = context.getSessionVariable().getSkewJoinMaxOtherSideOverlapRowCount();
+                        final var overlapRows = DataSkew.getOverlappingMcvRowCount(otherColumnStats.getHistogram().getMCV(),
+                                skewInfoMcvs.get());
+                        if (overlapRows > maxOverlapRowCount) {
+                            continue;
+                        }
+                    }
+                }
             }
 
             joinOperator.setSkewColumn(skewJoinColumn);

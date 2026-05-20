@@ -4367,7 +4367,8 @@ public class Config extends ConfigBase {
     /**
      * The default scheduler interval for tablet reshard jobs.
      */
-    @ConfField(mutable = false, comment = "The default scheduler interval for tablet reshard jobs.")
+    @ConfField(mutable = false, comment = "The default scheduler interval for tablet reshard jobs. "
+            + "Also drives the colocate checker's tick cadence on shared-data clusters.")
     public static long tablet_reshard_job_scheduler_interval_ms = 10;
 
     /**

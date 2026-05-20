@@ -35,7 +35,6 @@ set(STARROCKS_LIBS
     Formats
     orc
     Gutil
-    HttpClient
     HttpCore
     IO
     Serde
@@ -48,7 +47,6 @@ set(STARROCKS_LIBS
     Script
     StarRocksGen
     Webserver
-    TestUtil
     Cache
     ${WL_END_GROUP}
 )

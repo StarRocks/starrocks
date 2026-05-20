@@ -29,32 +29,7 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-// The OS-specific header included below must provide two calls:
-// base::internal::SpinLockDelay() and base::internal::SpinLockWake().
-// See spinlock_internal.h for the spec of SpinLockWake().
-
-// void SpinLockDelay(volatile Atomic32 *w, int32 value, int loop)
-// SpinLockDelay() generates an apprproate spin delay on iteration "loop" of a
-// spin loop on location *w, whose previously observed value was "value".
-// SpinLockDelay() may do nothing, may yield the CPU, may sleep a clock tick,
-// or may wait for a delay that can be truncated by a call to SpinlockWake(w).
-// In all cases, it must return in bounded time even if SpinlockWake() is not
-// called.
-
 #include "gutil/spinlock_internal.h"
-
-// forward declaration for use by spinlock_*-inl.h
-namespace base::internal {
-static int SuggestedDelayNS(int loop);
-} // namespace base::internal
-
-#if defined(_WIN32)
-#include "gutil/spinlock_win32-inl.h"
-#elif defined(__linux__)
-#include "gutil/spinlock_linux-inl.h"
-#else
-#include "gutil/spinlock_posix-inl.h"
-#endif
 
 namespace base::internal {
 
@@ -75,47 +50,6 @@ int32 SpinLockWait(volatile Atomic32* w, int n, const SpinLockWaitTransition tra
         }
     }
     return v;
-}
-
-// Return a suggested delay in nanoseconds for iteration number "loop"
-static int SuggestedDelayNS(int loop) {
-    // Weak pseudo-random number generator to get some spread between threads
-    // when many are spinning.
-#ifdef BASE_HAS_ATOMIC64
-    static base::subtle::Atomic64 rand;
-    uint64 r = base::subtle::NoBarrier_Load(&rand);
-    r = 0x5deece66dLL * r + 0xb; // numbers from nrand48()
-    base::subtle::NoBarrier_Store(&rand, r);
-
-    r <<= 16;                    // 48-bit random number now in top 48-bits.
-    if (loop < 0 || loop > 32) { // limit loop to 0..32
-        loop = 32;
-    }
-    // loop>>3 cannot exceed 4 because loop cannot exceed 32.
-    // Select top 20..24 bits of lower 48 bits,
-    // giving approximately 0ms to 16ms.
-    // Mean is exponential in loop for first 32 iterations, then 8ms.
-    // The futex path multiplies this by 16, since we expect explicit wakeups
-    // almost always on that path.
-    return r >> (44 - (loop >> 3));
-#else
-    static Atomic32 rand;
-    uint32 r = base::subtle::NoBarrier_Load(&rand);
-    r = 0x343fd * r + 0x269ec3; // numbers from MSVC++
-    base::subtle::NoBarrier_Store(&rand, r);
-
-    r <<= 1;                     // 31-bit random number now in top 31-bits.
-    if (loop < 0 || loop > 32) { // limit loop to 0..32
-        loop = 32;
-    }
-    // loop>>3 cannot exceed 4 because loop cannot exceed 32.
-    // Select top 20..24 bits of lower 31 bits,
-    // giving approximately 0ms to 16ms.
-    // Mean is exponential in loop for first 32 iterations, then 8ms.
-    // The futex path multiplies this by 16, since we expect explicit wakeups
-    // almost always on that path.
-    return r >> (12 - (loop >> 3));
-#endif
 }
 
 } // namespace base::internal

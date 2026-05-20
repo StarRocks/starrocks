@@ -892,9 +892,6 @@ DescriptorTbl* JoinHashMapTest::create_descriptor_tbl(TDescriptorTableBuilder* t
     for (const auto& sdesc : thrift_tbl.slotDescriptors) {
         auto* slot_desc = _object_pool->add(new SlotDescriptor(sdesc));
         tbl->_slot_desc_map[sdesc.id] = slot_desc;
-        if (!slot_desc->col_name().empty()) {
-            tbl->_slot_with_column_name_map[sdesc.id] = slot_desc;
-        }
 
         auto tuple = tbl->_tuple_desc_map.find(sdesc.parent);
         CHECK(tuple != tbl->_tuple_desc_map.end());

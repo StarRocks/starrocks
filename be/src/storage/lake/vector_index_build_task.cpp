@@ -20,6 +20,7 @@
 #include <set>
 
 #include "column/chunk.h"
+#include "column/chunk_factory.h"
 #include "fs/fs_factory.h"
 #include "fs/fs_util.h"
 #include "fs/key_cache.h"
@@ -311,7 +312,7 @@ Status VectorIndexBuildTask::build_segment(int64_t tablet_id, const FileInfo& se
 
         // Read column data in batches and add to builder
         auto field = ChunkHelper::convert_field(col_idx, column);
-        auto col_ptr = ChunkHelper::column_from_field(field);
+        auto col_ptr = ChunkFactory::column_from_field(field);
         ordinal_t total_rows = col_iter->num_rows();
         ordinal_t rows_read = 0;
 

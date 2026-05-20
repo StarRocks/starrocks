@@ -1,0 +1,53 @@
+// BackslashEscape.tengo
+//
+// Detect backslash-escaped emphasis characters (\* and \_) outside code blocks.
+//
+// remark's parse→translate→stringify roundtrip silently drops the backslash:
+// the parser records a literal "*" with no escape marker, so the stringifier
+// emits "*" without the backslash. In translated output this bare "*" can open
+// or close an emphasis run (CommonMark's flanking delimiter rules apply to the
+// surrounding Unicode punctuation in CJK text), producing broken MDX that
+// fails the Docusaurus build.
+//
+// Use backtick inline code for literal special characters instead:
+//   Bad:  wildcards (\*)
+//   Good: wildcards (`*`)
+//
+// Code regions excluded from flagging:
+//   - Backtick fenced code blocks:  ```[lang]\n...\n```
+//   - Tilde fenced code blocks:     ~~~[lang]\n...\n~~~
+//   - Inline code spans:            `...`
+
+text := import("text")
+
+code_regions := []
+
+for groups in text.re_find("(?s)```[^\n]*\n.*?\n[ \t]*```[ \t]*(?:\n|$)", scope, -1) {
+    m := groups[0]
+    code_regions = append(code_regions, [m.begin, m.end])
+}
+
+for groups in text.re_find("(?s)~~~[^\n]*\n.*?\n[ \t]*~~~[ \t]*(?:\n|$)", scope, -1) {
+    m := groups[0]
+    code_regions = append(code_regions, [m.begin, m.end])
+}
+
+for groups in text.re_find("`+[^`\n]+`+", scope, -1) {
+    m := groups[0]
+    code_regions = append(code_regions, [m.begin, m.end])
+}
+
+matches := []
+for groups in text.re_find(`\\[*_]`, scope, -1) {
+    hit := groups[0]
+    inside := false
+    for r in code_regions {
+        if hit.begin >= r[0] && hit.begin < r[1] {
+            inside = true
+            break
+        }
+    }
+    if !inside {
+        matches = append(matches, {begin: hit.begin, end: hit.end})
+    }
+}

@@ -56,6 +56,7 @@
 #include "base/bit/rle_encoding.h"
 #include "base/compression/block_compression.h"
 #include "base/string/faststring.h"
+#include "common/bloom_filter.h"
 #include "storage/rowset/array_column_writer.h"
 #include "storage/rowset/bitmap_index_writer.h"
 #include "storage/rowset/bitshuffle_page.h"
@@ -70,7 +71,6 @@
 #include "storage/rowset/struct_column_writer.h"
 #include "storage/rowset/zone_map_index.h"
 #include "types/logical_type.h"
-#include "util/bloom_filter.h"
 
 namespace starrocks {
 

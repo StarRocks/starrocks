@@ -28,6 +28,7 @@
 #include "base/utility/defer_op.h"
 #include "column/array_column.h"
 #include "column/chunk.h"
+#include "column/chunk_factory.h"
 #include "column/column_helper.h"
 #include "column/fixed_length_column.h"
 #include "column/nullable_column.h"
@@ -447,7 +448,7 @@ protected:
         opts.num_rows_per_block = 100;
         SegmentWriter writer(std::move(wfile), 0, write_schema, opts);
 
-        auto chunk = ChunkHelper::new_chunk(ChunkHelper::convert_schema(write_schema), ids.size());
+        auto chunk = ChunkFactory::new_chunk(ChunkHelper::convert_schema(write_schema), ids.size());
         for (auto id : ids) {
             chunk->mutable_columns()[0]->append_datum(Datum(id));
         }
@@ -539,7 +540,7 @@ TEST_F(BruteForceVectorFallbackTest, test_brute_force_l2_distance_fallback) {
     ASSERT_OK(chunk_iter->init_output_schema({}));
 
     // The output schema includes the distance virtual column appended by brute-force path
-    auto chunk = ChunkHelper::new_chunk(chunk_iter->output_schema(), 1024);
+    auto chunk = ChunkFactory::new_chunk(chunk_iter->output_schema(), 1024);
     std::vector<uint32_t> rowids;
     auto st = chunk_iter->get_next(chunk.get(), &rowids);
 
@@ -614,7 +615,7 @@ TEST_F(BruteForceVectorFallbackTest, test_brute_force_vector_column_not_pruned) 
     auto chunk_iter = new_segment_iterator(segment, read_schema, seg_opts);
     ASSERT_TRUE(chunk_iter != nullptr);
 
-    auto chunk = ChunkHelper::new_chunk(chunk_iter->output_schema(), 1024);
+    auto chunk = ChunkFactory::new_chunk(chunk_iter->output_schema(), 1024);
     std::vector<uint32_t> rowids;
     auto st = chunk_iter->get_next(chunk.get(), &rowids);
 
@@ -674,7 +675,7 @@ TEST_F(BruteForceVectorFallbackTest, test_brute_force_with_vector_range_filter) 
     auto chunk_iter = new_segment_iterator(segment, read_schema, seg_opts);
     ASSERT_TRUE(chunk_iter != nullptr);
 
-    auto chunk = ChunkHelper::new_chunk(chunk_iter->output_schema(), 1024);
+    auto chunk = ChunkFactory::new_chunk(chunk_iter->output_schema(), 1024);
     std::vector<uint32_t> rowids;
     auto st = chunk_iter->get_next(chunk.get(), &rowids);
 
@@ -793,7 +794,7 @@ TEST_F(BruteForceVectorFallbackTest, test_brute_force_cosine_similarity) {
 
     auto chunk_iter = new_segment_iterator(segment, read_schema, seg_opts);
     ASSERT_OK(chunk_iter->init_output_schema({}));
-    auto chunk = ChunkHelper::new_chunk(chunk_iter->output_schema(), 1024);
+    auto chunk = ChunkFactory::new_chunk(chunk_iter->output_schema(), 1024);
     std::vector<uint32_t> rowids;
     ASSERT_OK(chunk_iter->get_next(chunk.get(), &rowids));
     ASSERT_EQ(chunk->num_rows(), 3);
@@ -837,7 +838,7 @@ TEST_F(BruteForceVectorFallbackTest, test_brute_force_unsupported_metric_disable
 
     auto chunk_iter = new_segment_iterator(segment, read_schema, seg_opts);
     ASSERT_OK(chunk_iter->init_output_schema({}));
-    auto chunk = ChunkHelper::new_chunk(chunk_iter->output_schema(), 1024);
+    auto chunk = ChunkFactory::new_chunk(chunk_iter->output_schema(), 1024);
     std::vector<uint32_t> rowids;
     auto st = chunk_iter->get_next(chunk.get(), &rowids);
     // Distance column is intentionally NOT produced — fallback was disabled.
@@ -876,7 +877,7 @@ TEST_F(BruteForceVectorFallbackTest, test_brute_force_dim_mismatch_truncates) {
 
     auto chunk_iter = new_segment_iterator(segment, read_schema, seg_opts);
     ASSERT_OK(chunk_iter->init_output_schema({}));
-    auto chunk = ChunkHelper::new_chunk(chunk_iter->output_schema(), 1024);
+    auto chunk = ChunkFactory::new_chunk(chunk_iter->output_schema(), 1024);
     std::vector<uint32_t> rowids;
     ASSERT_OK(chunk_iter->get_next(chunk.get(), &rowids));
     ASSERT_EQ(chunk->num_rows(), 2);

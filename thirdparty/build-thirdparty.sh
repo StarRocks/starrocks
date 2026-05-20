@@ -572,6 +572,21 @@ build_xxhash() {
     mkdir -p $TP_INCLUDE_DIR/xxhash && cp $TP_SOURCE_DIR/$XXHASH_SOURCE/xxhash.h $TP_INCLUDE_DIR/xxhash/
 }
 
+# blake3
+build_blake3() {
+    check_if_source_exist $BLAKE3_SOURCE
+    cd $TP_SOURCE_DIR/$BLAKE3_SOURCE/c
+    ${CMAKE_CMD} -G "${CMAKE_GENERATOR}" \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DCMAKE_INSTALL_PREFIX=$TP_INSTALL_DIR \
+        -DCMAKE_INSTALL_LIBDIR=lib \
+        -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
+        -DBUILD_SHARED_LIBS=OFF \
+        -S . -B build
+    ${CMAKE_CMD} --build build -j "${PARALLEL}"
+    ${CMAKE_CMD} --install build
+}
+
 # rapidjson
 build_rapidjson() {
     check_if_source_exist $RAPIDJSON_SOURCE
@@ -656,20 +671,18 @@ build_gperftools() {
     make install
 }
 
-# zlib
+# zlib-ng (compat mode: drop-in replacement for zlib with SSE/AVX2/NEON optimizations)
 build_zlib() {
     check_if_source_exist $ZLIB_SOURCE
     cd $TP_SOURCE_DIR/$ZLIB_SOURCE
 
-    LDFLAGS="-L${TP_LIB_DIR}" \
-    ./configure --prefix=$TP_INSTALL_DIR --static
-    make -j$PARALLEL
-    make install
-
-    # build minizip
-    cd $TP_SOURCE_DIR/$ZLIB_SOURCE/contrib/minizip
-    autoreconf --force --install
-    ./configure --prefix=$TP_INSTALL_DIR --enable-static=yes --enable-shared=no
+    mkdir -p build
+    cd build
+    $CMAKE_CMD .. \
+        -DCMAKE_INSTALL_PREFIX=$TP_INSTALL_DIR \
+        -DZLIB_COMPAT=ON \
+        -DBUILD_SHARED_LIBS=OFF \
+        -DCMAKE_BUILD_TYPE=Release
     make -j$PARALLEL
     make install
 }

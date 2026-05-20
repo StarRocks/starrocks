@@ -24,6 +24,7 @@
 #include "base/testutil/sync_point.h"
 #include "base/utility/defer_op.h"
 #include "column/chunk.h"
+#include "column/chunk_factory.h"
 #include "column/datum_tuple.h"
 #include "column/fixed_length_column.h"
 #include "column/schema.h"
@@ -32,6 +33,7 @@
 #include "common/config_lake_fwd.h"
 #include "common/logging.h"
 #include "exec/pipeline/scan/morsel.h"
+#include "exec/pipeline/scan/split_scan_morsel.h"
 #include "storage/chunk_helper.h"
 #include "storage/lake/tablet.h"
 #include "storage/lake/tablet_manager.h"
@@ -148,7 +150,7 @@ TEST_F(LakeDuplicateTabletReaderTest, test_read_success) {
     TabletReaderParams params;
     ASSERT_OK(reader->open(params));
 
-    auto read_chunk_ptr = ChunkHelper::new_chunk(*_schema, 1024);
+    auto read_chunk_ptr = ChunkFactory::new_chunk(*_schema, 1024);
     for (int j = 0; j < 2; ++j) {
         read_chunk_ptr->reset();
         ASSERT_OK(reader->get_next(read_chunk_ptr.get()));
@@ -294,7 +296,7 @@ TEST_F(LakeAggregateTabletReaderTest, test_read_success) {
     TabletReaderParams params;
     ASSERT_OK(reader->open(params));
 
-    auto read_chunk_ptr = ChunkHelper::new_chunk(*_schema, 1024);
+    auto read_chunk_ptr = ChunkFactory::new_chunk(*_schema, 1024);
     ASSERT_OK(reader->get_next(read_chunk_ptr.get()));
     ASSERT_EQ(segment_rows, read_chunk_ptr->num_rows());
     for (int i = 0, sz = k0.size(); i < sz; i++) {
@@ -455,7 +457,7 @@ TEST_F(LakeDuplicateTabletReaderWithDeleteTest, test_read_success) {
     TabletReaderParams params;
     ASSERT_OK(reader->open(params));
 
-    auto read_chunk_ptr = ChunkHelper::new_chunk(*_schema, 1024);
+    auto read_chunk_ptr = ChunkFactory::new_chunk(*_schema, 1024);
     for (int j = 0; j < 2; ++j) {
         read_chunk_ptr->reset();
         ASSERT_OK(reader->get_next(read_chunk_ptr.get()));
@@ -570,7 +572,7 @@ TEST_F(LakeDuplicateTabletReaderWithDeleteNotInOneValueTest, test_read_success) 
     TabletReaderParams params;
     ASSERT_OK(reader->open(params));
 
-    auto read_chunk_ptr = ChunkHelper::new_chunk(*_schema, 1024);
+    auto read_chunk_ptr = ChunkFactory::new_chunk(*_schema, 1024);
     ASSERT_OK(reader->get_next(read_chunk_ptr.get()));
     ASSERT_EQ(1, read_chunk_ptr->num_rows());
     EXPECT_EQ(10, read_chunk_ptr->get(0)[0].get_int32());
@@ -751,7 +753,7 @@ TEST_F(LakeTabletReaderSpit, test_reader_split) {
         ASSERT_OK(reader->prepare());
         ASSERT_OK(reader->open(params));
 
-        auto read_chunk_ptr = ChunkHelper::new_chunk(*_schema, 1024);
+        auto read_chunk_ptr = ChunkFactory::new_chunk(*_schema, 1024);
         read_chunk_ptr->reset();
         ASSERT_OK(reader->get_next(read_chunk_ptr.get()));
         ASSERT_EQ(20, read_chunk_ptr->num_rows());
@@ -1065,7 +1067,7 @@ TEST_F(LakeTabletReaderSpit, test_per_segment_split_via_reader_open) {
     for (auto& task : split_tasks) {
         // dynamic_cast mirrors the GCC compatibility workaround used elsewhere
         // in this file (see test_per_segment_split_mode) for derived types
-        // declared in morsel.h.
+        // declared in split_scan_morsel.h.
         auto* lake_ctx = dynamic_cast<pipeline::LakeSplitContext*>(task.get());
         ASSERT_NE(nullptr, lake_ctx);
         ASSERT_NE(nullptr, lake_ctx->rowid_range);
@@ -1256,7 +1258,7 @@ TEST_F(DISABLED_LakeLoadSegmentParallelTest, test_normal) {
     TabletReaderParams params;
     ASSERT_OK(reader->open(params));
 
-    auto read_chunk_ptr = ChunkHelper::new_chunk(*_schema, 1024);
+    auto read_chunk_ptr = ChunkFactory::new_chunk(*_schema, 1024);
     for (int j = 0; j < 2; ++j) {
         read_chunk_ptr->reset();
         ASSERT_OK(reader->get_next(read_chunk_ptr.get()));
@@ -1375,7 +1377,7 @@ void LakeDuplicateTablet10kColumnReaderTest::test_10k_column_read_perf_body(bool
     TabletReaderParams params;
     ASSERT_OK(reader->open(params));
 
-    auto read_chunk_ptr = ChunkHelper::new_chunk(*_schema, 1024);
+    auto read_chunk_ptr = ChunkFactory::new_chunk(*_schema, 1024);
     read_chunk_ptr->reset();
     ASSERT_OK(reader->get_next(read_chunk_ptr.get()));
     ASSERT_EQ(segment_rows, read_chunk_ptr->num_rows());
@@ -1450,7 +1452,7 @@ StatusOr<std::pair<size_t, size_t>> LakeDuplicateTablet10kColumnReaderTest::test
     TabletReaderParams params;
     RETURN_IF_ERROR(reader->open(params));
 
-    auto read_chunk_ptr = ChunkHelper::new_chunk(*_schema, 1024);
+    auto read_chunk_ptr = ChunkFactory::new_chunk(*_schema, 1024);
     read_chunk_ptr->reset();
     RETURN_IF_ERROR(reader->get_next(read_chunk_ptr.get()));
     EXPECT_EQ(segment_rows, read_chunk_ptr->num_rows());
@@ -1529,7 +1531,7 @@ TEST_F(LakeDuplicateTabletReaderTest, test_read_empty_tablet_with_split) {
     // This should not crash even with need_split=true and empty rowsets
     ASSERT_OK(reader->open(params));
 
-    auto read_chunk_ptr = ChunkHelper::new_chunk(*_schema, 1024);
+    auto read_chunk_ptr = ChunkFactory::new_chunk(*_schema, 1024);
     read_chunk_ptr->reset();
     // Should return end of file immediately for empty tablet
     ASSERT_TRUE(reader->get_next(read_chunk_ptr.get()).is_end_of_file());

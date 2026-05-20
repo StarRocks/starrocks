@@ -43,7 +43,7 @@ Spark 集群配置不同，资源需要添加的配置项也不同。当前 Spar
     | ----------------------------------------- | -------- | ------------------------------------------------------------ |
     | type                                      | 是       | 资源类型，取值为 `spark`。                                   |
     | spark.master                              | 是       | Spark 的 cluster manager。当前仅支持 YARN，所以取值为 `yarn`。 |
-    | spark.submit.deployMode                   | 是       | Spark driver 的部署模式。取值包括`cluster`和`client`。关于取值说明，参考 [Launching Spark on YARN](https://spark.apache.org/docs/3.3.0/running-on-yarn.html#launching-spark-on-yarn)。 |
+    | spark.submit.deployMode                   | 是       | Spark driver 的部署模式。取值包括`cluster`和`client`。关于取值说明，参考 [Launching Spark on YARN](https://spark.apache.org/docs/latest/running-on-yarn.html#launching-spark-on-yarn)。 |
     | spark.executor.memory                     | 否       | Spark executor 占用的内存量，单位为 KB、MB、GB 或 TB。       |
     | spark.yarn.queue                          | 否       | YARN 队列名称。                                              |
     | spark.hadoop.yarn.resourcemanager.address | 是       | YARN ResourceManager 地址。                                  |
@@ -59,7 +59,7 @@ Spark 集群配置不同，资源需要添加的配置项也不同。当前 Spar
     | ------------------------------------------------ | -------- | ------------------------------------------------------------ |
     | type                                             | 是       | 资源类型，取值为`spark`。                                    |
     | spark.master                                     | 是       | Spark 的 cluster manager。当前仅支持 YARN，所以取值为`yarn`。 |
-    | spark.submit.deployMode                          | 是       | Spark 驱动程序的部署模式。取值包括`cluster`和`client`。关于取值说明，参考 [Launching Spark on YARN](https://spark.apache.org/docs/3.3.0/running-on-yarn.html#launching-spark-on-yarn)。 |
+    | spark.submit.deployMode                          | 是       | Spark 驱动程序的部署模式。取值包括`cluster`和`client`。关于取值说明，参考 [Launching Spark on YARN](https://spark.apache.org/docs/latest/running-on-yarn.html#launching-spark-on-yarn)。 |
     | spark.hadoop.yarn.resourcemanager.ha.enabled     | 是       | YARN ResourceManager 是否启用 HA。需设置该参数为`true`，即启用 HA。 |
     | spark.hadoop.yarn.resourcemanager.ha.rm-ids      | 是       | YARN ResourceManager 的逻辑 ID 列表。多个逻辑 ID 之间用逗号 (`,`) 隔开。 |
     | spark.hadoop.yarn.resourcemanager.hostname.rm-id | 是       | 对于每个 rm-id，需指定 ResourceManager 对应的主机名。如已添加该配置项，则不需要再添加`spark.hadoop.yarn.resourcemanager.address.rm-id`。 |
@@ -138,7 +138,7 @@ Spark 集群配置不同，资源需要添加的配置项也不同。当前 Spar
 | type         | 是       | 资源类型，取值为 `jdbc`。                                    |
 | user         | 是       | 登录到支持的 JDBC 数据库 （以下简称“目标数据库”）的用户名。  |
 | password     | 是       | 目标数据库的登录密码。                                       |
-| jdbc_uri     | 是       | 用于连接目标数据库的JDBC URI，需要满足目标数据库 URI 的语法。常见的目标数据库 URI，请参见 [MySQL](https://dev.mysql.com/doc/connector-j/en/connector-j-reference-jdbc-url-format.html)、[Oracle](https://docs.oracle.com/en/database/oracle/oracle-database/21/jjdbc/data-sources-and-URLs.html#GUID-6D8EFA50-AB0F-4A2B-88A0-45B4A67C361E)、[PostgreSQL](https://jdbc.postgresql.org/documentation/head/connect.html)、[SQL Server](https://docs.microsoft.com/en-us/sql/connect/jdbc/building-the-connection-url?view=sql-server-ver16) 官网文档。 |
+| jdbc_uri     | 是       | 用于连接目标数据库的JDBC URI，需要满足目标数据库 URI 的语法。常见的目标数据库 URI，请参见 [MySQL](https://dev.mysql.com/doc/connector-j/en/connector-j-reference-jdbc-url-format.html)、[Oracle](https://docs.oracle.com/en/database/oracle/oracle-database/21/jjdbc/data-sources-and-URLs.html#GUID-6D8EFA50-AB0F-4A2B-88A0-45B4A67C361E)、[PostgreSQL](https://jdbc.postgresql.org/documentation/head/connect.html)、[SQL Server](https://learn.microsoft.com/en-us/sql/connect/jdbc/building-the-connection-url?view=sql-server-ver16) 官网文档。 |
 | driver_url   | 是       | 用于下载 JDBC 驱动程序 JAR 包的 URL，支持使用 HTTP 协议 或者 file 协议。例如 `https://repo1.maven.org/maven2/org/postgresql/postgresql/42.3.3/postgresql-42.3.3.jar`， `file:///home/disk1/postgresql-42.3.3.jar`。 |
 | driver_class | 是       | 目标数据库使用的 JDBC 驱动程序的类名称。常见的类名称如下： <ul><li>MySQL：com.mysql.jdbc.Driver（MySQL 5.x 及以下版本）和com.mysql.cj.jdbc.Driver （MySQL 6.x 及以上版本）</li><li>SQL Server：com.microsoft.sqlserver.jdbc.SQLServerDriver </li><li>Oracle： oracle.jdbc.driver.OracleDriver </li><li>PostgreSQL：org.postgresql.Driver</li></ul> |
 

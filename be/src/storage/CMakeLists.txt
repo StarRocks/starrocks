@@ -309,7 +309,8 @@ set(STORAGE_FILES
     index/inverted/builtin/builtin_inverted_writer.cpp
     index/inverted/builtin/builtin_inverted_reader.cpp
     index/inverted/builtin/builtin_inverted_index_iterator.cpp
-    index/inverted/builtin/builtin_simple_analyzer.cpp)
+    index/inverted/builtin/builtin_simple_analyzer.cpp
+    manual_compaction.cpp)
 
 if (NOT BUILD_FORMAT_LIB)
     list(APPEND STORAGE_FILES  lake/starlet_location_provider.cpp)

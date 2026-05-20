@@ -19,6 +19,7 @@
 #include "base/testutil/assert.h"
 #include "base/testutil/id_generator.h"
 #include "column/chunk.h"
+#include "column/chunk_factory.h"
 #include "column/datum_tuple.h"
 #include "column/fixed_length_column.h"
 #include "column/schema.h"
@@ -236,7 +237,7 @@ TEST_F(LakeTabletDeleteDataTest, test_delete_data_without_schema_key) {
     TabletReaderParams params;
     ASSERT_OK(reader->open(params));
 
-    auto read_chunk_ptr = ChunkHelper::new_chunk(*_schema, 1024);
+    auto read_chunk_ptr = ChunkFactory::new_chunk(*_schema, 1024);
     int total_rows = 0;
     std::set<int> remaining_c1_values;
     while (true) {
@@ -348,7 +349,7 @@ TEST_F(LakeTabletDeleteDataTest, test_delete_data_with_schema_key) {
     TabletReaderParams params;
     ASSERT_OK(reader->open(params));
 
-    auto read_chunk_ptr = ChunkHelper::new_chunk(*extended_schema_obj, 1024);
+    auto read_chunk_ptr = ChunkFactory::new_chunk(*extended_schema_obj, 1024);
     int total_rows = 0;
     while (true) {
         read_chunk_ptr->reset();

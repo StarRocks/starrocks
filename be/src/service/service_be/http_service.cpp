@@ -37,6 +37,7 @@
 #include "cache/datacache.h"
 #include "common/config_ingest_fwd.h"
 #include "common/config_path_fwd.h"
+#include "common/config_update_registry.h"
 #include "fs/fs_util.h"
 #include "gutil/stl_util.h"
 #include "http/action/checksum_action.h"
@@ -73,6 +74,7 @@
 #include "http/web_page_handler.h"
 #include "runtime/base_load_path_mgr.h"
 #include "runtime/exec_env.h"
+#include "service/service_be/config_update_hooks.h"
 #include "storage/store_path.h"
 
 namespace starrocks {
@@ -101,6 +103,9 @@ void HttpServiceBE::join() {
 }
 
 Status HttpServiceBE::start() {
+    register_config_update_hooks(_env);
+    ConfigUpdateRegistry::instance()->set_ready();
+
     add_default_path_handlers(_web_page_handler.get(), GlobalEnv::GetInstance()->process_mem_tracker());
 
     // register load
@@ -254,7 +259,7 @@ Status HttpServiceBE::start() {
     _ev_http_server->register_handler(HttpMethod::GET, "/api/compaction/running", show_running_action);
     _http_handlers.emplace_back(show_running_action);
 
-    auto* update_config_action = new UpdateConfigAction(_env);
+    auto* update_config_action = new UpdateConfigAction();
     _ev_http_server->register_handler(HttpMethod::POST, "/api/update_config", update_config_action);
     _http_handlers.emplace_back(update_config_action);
 

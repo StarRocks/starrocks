@@ -14,13 +14,21 @@
 
 #include "storage/lake/tablet_splitter.h"
 
+#include <google/protobuf/util/message_differencer.h>
 #include <gtest/gtest.h>
 
+#include <optional>
+
 #include "base/testutil/assert.h"
+#include "gen_cpp/lake_types.pb.h"
 #include "storage/tablet_range.h"
+#include "types/logical_type.h"
 #include "types/type_descriptor.h"
 
 namespace starrocks::lake {
+
+using google::protobuf::RepeatedPtrField;
+using google::protobuf::util::MessageDifferencer;
 
 namespace {
 
@@ -594,6 +602,10 @@ TEST(TabletSplitterTest, tablet_range_total_invariant_across_split_counts) {
 // they can be reused by the planned cross-publish (P2) refactor without
 // re-introducing a private split-only header.
 
+// Helpers below serve two test groups: colocate-aware data-driven splitter
+// tests (TabletSplitterTest.colocate_*) and external boundaries external-boundaries tests
+// (TabletSplitterExternalBoundariesTest.*). Kept in one anonymous namespace to avoid
+// duplicate-symbol churn.
 namespace {
 
 // Build a 2-column key tuple (k1, k2). Used for colocate-aware splitter tests.
@@ -615,10 +627,146 @@ static SegmentSplitInfo make_two_col_seg(int64_t lo_k1, int64_t lo_k2, int64_t h
     return s;
 }
 
+// =============================================================================
+// external boundaries external-boundaries path helpers
+// =============================================================================
+//
+// These exercise compute_split_ranges_from_external_boundaries' validation
+// layers (1a/1b/1c/3a/3b). Empty tablets are used throughout so the production
+// path returns at the empty fast-path (step 4) without needing a real
+// TabletManager. tablet_manager = nullptr is safe in that regime.
+
+static VariantPB make_bigint_variant_pb(int64_t value) {
+    DatumVariant dv(get_type_info(LogicalType::TYPE_BIGINT), Datum(value));
+    VariantPB pb;
+    dv.to_proto(&pb);
+    return pb;
+}
+
+static VariantPB make_varchar_variant_pb(const std::string& value) {
+    auto type_info = get_type_info(LogicalType::TYPE_VARCHAR);
+    DatumVariant dv(type_info, Datum(Slice(value)));
+    VariantPB pb;
+    dv.to_proto(&pb);
+    return pb;
+}
+
+static VariantPB make_decimal64_variant_pb(int precision, int scale, int64_t raw_value) {
+    auto type_desc = TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL64, precision, scale);
+    auto type_info = get_type_info(type_desc);
+    DatumVariant dv(type_info, Datum(raw_value));
+    VariantPB pb;
+    dv.to_proto(&pb);
+    return pb;
+}
+
+static TuplePB make_bigint_tuple_pb(int64_t value) {
+    TuplePB t;
+    *t.add_values() = make_bigint_variant_pb(value);
+    return t;
+}
+
+// Build a closed-open [lower, upper) range. Either side may be absent (nullopt)
+// for unbounded ±infinity semantics.
+static TabletRangePB make_bigint_range_pb(std::optional<int64_t> lower, std::optional<int64_t> upper) {
+    TabletRangePB r;
+    if (lower.has_value()) {
+        *r.mutable_lower_bound() = make_bigint_tuple_pb(*lower);
+        r.set_lower_bound_included(true);
+    }
+    if (upper.has_value()) {
+        *r.mutable_upper_bound() = make_bigint_tuple_pb(*upper);
+        r.set_upper_bound_included(false);
+    }
+    return r;
+}
+
+// Builds a minimal empty TabletMetadataPtr with a single sort-key column of
+// the given LogicalType and the requested parent range. Used by every external boundaries
+// validation test that expects the function to return before touching
+// segments/anchors. precision/scale/length are populated only when non-zero
+// (relevant for decimal sort keys).
+struct SortKeyColumnSpec {
+    LogicalType type;
+    int precision = 0;
+    int scale = 0;
+    int length = 0;
+};
+
+static TabletMetadataPtr make_empty_metadata_with_sort_key(const SortKeyColumnSpec& col_spec,
+                                                           const TabletRangePB& parent_range) {
+    auto m = std::make_shared<TabletMetadataPB>();
+    m->set_id(1);
+    m->set_version(1);
+
+    auto* schema = m->mutable_schema();
+    schema->set_keys_type(PRIMARY_KEYS);
+    schema->set_id(100);
+    auto* col = schema->add_column();
+    col->set_unique_id(0);
+    col->set_name("k1");
+    col->set_type(logical_type_to_string(col_spec.type));
+    col->set_is_key(true);
+    col->set_is_nullable(false);
+    if (col_spec.precision > 0) col->set_precision(col_spec.precision);
+    if (col_spec.scale > 0) col->set_frac(col_spec.scale); // ColumnPB.frac is the scale field
+    if (col_spec.length > 0) col->set_length(col_spec.length);
+    schema->add_sort_key_idxes(0);
+
+    *m->mutable_range() = parent_range;
+    return m;
+}
+
+static TabletMetadataPtr make_empty_metadata_bigint_key(std::optional<int64_t> parent_lower,
+                                                        std::optional<int64_t> parent_upper) {
+    return make_empty_metadata_with_sort_key({.type = TYPE_BIGINT}, make_bigint_range_pb(parent_lower, parent_upper));
+}
+
+static TabletMetadataPtr make_empty_metadata_decimal64_key(int precision, int scale) {
+    // Decimal parent range: cover [10000, 100000) raw to keep tests simple.
+    // (raw value space; the unit-test rationale doesn't depend on the human value)
+    TabletRangePB parent_range;
+    *parent_range.mutable_lower_bound()->add_values() = make_decimal64_variant_pb(precision, scale, 10000);
+    parent_range.set_lower_bound_included(true);
+    *parent_range.mutable_upper_bound()->add_values() = make_decimal64_variant_pb(precision, scale, 100000);
+    parent_range.set_upper_bound_included(false);
+    return make_empty_metadata_with_sort_key(
+            {.type = TYPE_DECIMAL64, .precision = precision, .scale = scale, .length = 8}, parent_range);
+}
+
+static RepeatedPtrField<TabletRangePB> make_ranges(std::initializer_list<TabletRangePB> ranges) {
+    RepeatedPtrField<TabletRangePB> r;
+    for (const auto& range : ranges) {
+        *r.Add() = range;
+    }
+    return r;
+}
+
+// Build a closed-open DECIMAL64 range with explicit raw values on both bounds.
+static TabletRangePB make_decimal64_range_pb(int precision, int scale, int64_t lo_raw, int64_t hi_raw) {
+    TabletRangePB r;
+    *r.mutable_lower_bound()->add_values() = make_decimal64_variant_pb(precision, scale, lo_raw);
+    r.set_lower_bound_included(true);
+    *r.mutable_upper_bound()->add_values() = make_decimal64_variant_pb(precision, scale, hi_raw);
+    r.set_upper_bound_included(false);
+    return r;
+}
+
+// external-boundaries validation test helper: invokes compute_split_ranges_from_external_boundaries
+// and asserts the call rejected with an InvalidArgument. Used by every test that
+// expects the function to fail early before touching segments/anchors.
+static void expect_external_boundaries_rejected(const TabletMetadataPtr& m,
+                                                const RepeatedPtrField<TabletRangePB>& ranges) {
+    std::vector<TabletRangeInfo> out;
+    auto status = compute_split_ranges_from_external_boundaries(/*tablet_manager=*/nullptr, m, ranges, &out);
+    ASSERT_FALSE(status.ok());
+    EXPECT_TRUE(status.is_invalid_argument()) << status;
+}
+
 } // namespace
 
 // Three disjoint segments with three distinct k1 values produce candidate
-// ranges between every adjacent pair. With colocate_col_count=1 and a 2-way
+// ranges between every adjacent pair. With colocate_column_count=1 and a 2-way
 // split, the chosen boundary lands at a k1 transition; canonicalization
 // rewrites the boundary to (right_k1, NULL).
 TEST(TabletSplitterTest, colocate_aware_split_picks_canonical_boundary) {
@@ -673,7 +821,7 @@ TEST(TabletSplitterTest, colocate_column_count_zero_unchanged) {
     ASSIGN_OR_ABORT(auto result_default,
                     calculate_range_split_boundaries(segs, /*target_split_count=*/2, /*target_value_per_split=*/100,
                                                      /*use_num_rows=*/true, /*track_sources=*/true,
-                                                     /*tablet_range=*/nullptr, /*colocate_col_count=*/0));
+                                                     /*tablet_range=*/nullptr, /*colocate_column_count=*/0));
 
     ASSERT_EQ(1, result_default.boundaries.size());
     ASSERT_EQ(1, result_with_colocate.boundaries.size());
@@ -712,6 +860,294 @@ TEST(TabletSplitterTest, colocate_aware_split_keeps_stats_consistent_across_pref
             << "rows from the prefix-crossing segment must contribute to the LEFT child";
     EXPECT_GT(left_it->second.first, 0);
     EXPECT_GT(left_it->second.second, 0);
+}
+
+// -----------------------------------------------------------------------------
+// Happy path: empty tablet, K=2 well-formed ranges covering parent.
+// -----------------------------------------------------------------------------
+TEST(TabletSplitterExternalBoundariesTest, empty_tablet_happy_path_k2) {
+    auto m = make_empty_metadata_bigint_key(0, 100);
+    auto ranges = make_ranges({make_bigint_range_pb(0, 50), make_bigint_range_pb(50, 100)});
+    std::vector<TabletRangeInfo> out;
+    auto status = compute_split_ranges_from_external_boundaries(/*tablet_manager=*/nullptr, m, ranges, &out);
+    ASSERT_TRUE(status.ok()) << status;
+    ASSERT_EQ(2, out.size());
+    EXPECT_TRUE(out[0].rowset_stats.empty());
+    EXPECT_TRUE(out[1].rowset_stats.empty());
+}
+
+// -----------------------------------------------------------------------------
+// 1a: tuple arity mismatch (2-column tuple for a 1-column sort key)
+// -----------------------------------------------------------------------------
+TEST(TabletSplitterExternalBoundariesTest, tuple_arity_mismatch_is_rejected) {
+    auto m = make_empty_metadata_bigint_key(0, 100);
+    TabletRangePB r0;
+    auto* lo = r0.mutable_lower_bound();
+    *lo->add_values() = make_bigint_variant_pb(0);
+    *lo->add_values() = make_bigint_variant_pb(0); // extra column
+    r0.set_lower_bound_included(true);
+    *r0.mutable_upper_bound() = make_bigint_tuple_pb(50);
+    r0.set_upper_bound_included(false);
+    expect_external_boundaries_rejected(m, make_ranges({r0, make_bigint_range_pb(50, 100)}));
+}
+
+// -----------------------------------------------------------------------------
+// 1b: variant type mismatch (VARCHAR variant for BIGINT sort key)
+// -----------------------------------------------------------------------------
+TEST(TabletSplitterExternalBoundariesTest, tuple_type_mismatch_is_rejected) {
+    auto m = make_empty_metadata_bigint_key(0, 100);
+    TabletRangePB r0 = make_bigint_range_pb(0, 50);
+    // Replace upper bound with a VARCHAR variant.
+    r0.mutable_upper_bound()->clear_values();
+    *r0.mutable_upper_bound()->add_values() = make_varchar_variant_pb("50");
+    expect_external_boundaries_rejected(m, make_ranges({r0, make_bigint_range_pb(50, 100)}));
+}
+
+// -----------------------------------------------------------------------------
+// 1b: decimal precision mismatch (schema DECIMAL64(10,2), bound DECIMAL64(11,2))
+// -----------------------------------------------------------------------------
+TEST(TabletSplitterExternalBoundariesTest, decimal_precision_mismatch_is_rejected) {
+    auto m = make_empty_metadata_decimal64_key(10, 2);
+    // Build two adjacent ranges spanning parent [10000, 100000) but with bound
+    // precision 11 instead of 10.
+    expect_external_boundaries_rejected(m, make_ranges({make_decimal64_range_pb(11, 2, 10000, 50000),
+                                                        make_decimal64_range_pb(11, 2, 50000, 100000)}));
+}
+
+// -----------------------------------------------------------------------------
+// 1b: decimal scale mismatch (schema DECIMAL64(10,2), bound DECIMAL64(10,3))
+// -----------------------------------------------------------------------------
+TEST(TabletSplitterExternalBoundariesTest, decimal_scale_mismatch_is_rejected) {
+    auto m = make_empty_metadata_decimal64_key(10, 2);
+    expect_external_boundaries_rejected(m, make_ranges({make_decimal64_range_pb(10, 3, 10000, 50000),
+                                                        make_decimal64_range_pb(10, 3, 50000, 100000)}));
+}
+
+// -----------------------------------------------------------------------------
+// 1b: variant has no `type` field
+// -----------------------------------------------------------------------------
+TEST(TabletSplitterExternalBoundariesTest, variant_missing_type_is_rejected) {
+    auto m = make_empty_metadata_bigint_key(0, 100);
+    TabletRangePB r0 = make_bigint_range_pb(0, 50);
+    // Drop the `type` field on the upper bound's variant.
+    r0.mutable_upper_bound()->mutable_values(0)->clear_type();
+    expect_external_boundaries_rejected(m, make_ranges({r0, make_bigint_range_pb(50, 100)}));
+}
+
+// -----------------------------------------------------------------------------
+// 1b: variant has `type` but PTypeDesc.types is empty
+// -----------------------------------------------------------------------------
+TEST(TabletSplitterExternalBoundariesTest, variant_empty_ptypedesc_is_rejected) {
+    auto m = make_empty_metadata_bigint_key(0, 100);
+    TabletRangePB r0 = make_bigint_range_pb(0, 50);
+    r0.mutable_upper_bound()->mutable_values(0)->mutable_type()->clear_types();
+    expect_external_boundaries_rejected(m, make_ranges({r0, make_bigint_range_pb(50, 100)}));
+}
+
+// -----------------------------------------------------------------------------
+// 1b: variant uses a non-SCALAR PTypeNode (ARRAY) — must reject before
+// TypeDescriptor::from_protobuf reaches unsafe child-node access.
+// -----------------------------------------------------------------------------
+TEST(TabletSplitterExternalBoundariesTest, variant_non_scalar_node_is_rejected) {
+    auto m = make_empty_metadata_bigint_key(0, 100);
+    TabletRangePB r0 = make_bigint_range_pb(0, 50);
+    // Mutate the single PTypeNode on the upper bound's variant to look like
+    // ARRAY (TTypeNodeType::ARRAY == 1) and remove its scalar_type payload.
+    auto* var = r0.mutable_upper_bound()->mutable_values(0);
+    var->mutable_type()->mutable_types(0)->set_type(static_cast<int32_t>(TTypeNodeType::ARRAY));
+    var->mutable_type()->mutable_types(0)->clear_scalar_type();
+    expect_external_boundaries_rejected(m, make_ranges({r0, make_bigint_range_pb(50, 100)}));
+}
+
+// -----------------------------------------------------------------------------
+// 3b: adjacent ranges out of order semantically. Important: empty tablets must
+// also reject this (the fix that moved the semantic check before the empty
+// fast-path).
+// -----------------------------------------------------------------------------
+TEST(TabletSplitterExternalBoundariesTest, empty_tablet_rejects_semantic_inversion) {
+    auto m = make_empty_metadata_bigint_key(0, 100);
+    // 3 ranges that tile structurally (first.lower==0, last.upper==100, byte
+    // adjacencies hold), but the middle range is semantically inverted:
+    //   [0, 50) [50, 40) [40, 100)
+    // ranges[0].upper == ranges[1].lower byte-wise (50==50).
+    // ranges[1].upper == ranges[2].lower byte-wise (40==40).
+    // Structural validation accepts; step 3a semantic check rejects on the
+    // middle range's lower(50) >= upper(40).
+    expect_external_boundaries_rejected(
+            m, make_ranges({make_bigint_range_pb(0, 50), make_bigint_range_pb(50, 40), make_bigint_range_pb(40, 100)}));
+}
+
+// =============================================================================
+// Parity: external-boundaries path produces the same per-range output as the data-driven path
+// when given the same K-1 boundaries.
+// =============================================================================
+//
+// Both paths share build_rowset_anchor + apply_rowset_anchor downstream, so
+// equivalent boundary inputs SHOULD yield equivalent outputs (ranges + per-
+// rowset stats). This test:
+//   1. Runs the data-driven path on a synthetic 2-rowset tablet.
+//   2. Extracts the K-1 boundary it picked.
+//   3. Feeds the same boundary back through the external-boundaries path.
+//   4. Asserts the resulting K TabletRangeInfo entries are byte-equal.
+//
+// DUP_KEYS + explicit rowset-level num_dels lets us pass tablet_manager =
+// nullptr (no PK delvec fallback).
+
+namespace {
+
+// Build a DUP_KEYS tablet with N rowsets at disjoint integer key ranges. Each
+// rowset gets one segment populated with sort_key_min/max + num_rows; the
+// rowset-level num_rows/data_size/num_dels are set explicitly to skip the
+// build_rowset_anchor PK-fallback path. {@code parent_range} is an explicit
+// closed-open parent range; pass an empty TabletRangePB for Range.all() parent.
+static TabletMetadataPtr make_dup_keys_metadata_with_rowsets(
+        std::initializer_list<std::tuple<uint32_t, int64_t, int64_t, int64_t, int64_t>> rowsets,
+        const TabletRangePB& parent_range = {}) {
+    auto m = std::make_shared<TabletMetadataPB>();
+    m->set_id(1);
+    m->set_version(1);
+    auto* schema = m->mutable_schema();
+    schema->set_keys_type(DUP_KEYS);
+    schema->set_id(100);
+    auto* col = schema->add_column();
+    col->set_unique_id(0);
+    col->set_name("k1");
+    col->set_type("BIGINT");
+    col->set_is_key(true);
+    col->set_is_nullable(false);
+    schema->add_sort_key_idxes(0);
+    *m->mutable_range() = parent_range;
+
+    for (const auto& [id, lo, hi, num_rows, data_size] : rowsets) {
+        auto* r = m->add_rowsets();
+        r->set_id(id);
+        r->set_num_rows(num_rows);
+        r->set_data_size(data_size);
+        r->set_num_dels(0); // explicit to skip the PK delvec fallback in build_rowset_anchor.
+        r->add_segments("seg" + std::to_string(id));
+        r->add_segment_size(data_size);
+        auto* sm = r->add_segment_metas();
+        sm->set_num_rows(num_rows);
+        *sm->mutable_sort_key_min() = make_bigint_tuple_pb(lo);
+        *sm->mutable_sort_key_max() = make_bigint_tuple_pb(hi);
+    }
+    return m;
+}
+
+} // namespace
+
+TEST(TabletSplitterExternalBoundariesTest, parent_envelope_clips_effective_lo_hi) {
+    // Parent [0, 100). Two rowsets fully within parent at [10, 40] and [60, 90].
+    // external boundaries K=2 split at 50. Exercises the effective-envelope branches that read
+    // parent.lower_bound / parent.upper_bound (otherwise unreachable from the
+    // Range.all()-parent parity test).
+    auto m = make_dup_keys_metadata_with_rowsets(
+            {
+                    std::make_tuple<uint32_t, int64_t, int64_t, int64_t, int64_t>(1, 10, 40, 100, 1000),
+                    std::make_tuple<uint32_t, int64_t, int64_t, int64_t, int64_t>(2, 60, 90, 100, 1000),
+            },
+            make_bigint_range_pb(0, 100));
+
+    auto ranges = make_ranges({make_bigint_range_pb(0, 50), make_bigint_range_pb(50, 100)});
+    std::vector<TabletRangeInfo> out;
+    auto s = compute_split_ranges_from_external_boundaries(/*tablet_manager=*/nullptr, m, ranges, &out);
+    ASSERT_TRUE(s.ok()) << s;
+    ASSERT_EQ(2u, out.size());
+    // Each rowset's stats must sum to the parent's totals (anchor conservation).
+    for (uint32_t rowset_id : {1u, 2u}) {
+        int64_t sum_rows = 0;
+        int64_t sum_size = 0;
+        for (const auto& tri : out) {
+            auto it = tri.rowset_stats.find(rowset_id);
+            if (it != tri.rowset_stats.end()) {
+                sum_rows += it->second.num_rows;
+                sum_size += it->second.data_size;
+            }
+        }
+        EXPECT_EQ(100, sum_rows) << "rowset " << rowset_id;
+        EXPECT_EQ(1000, sum_size) << "rowset " << rowset_id;
+    }
+}
+
+TEST(TabletSplitterParityTest, external_boundaries_matches_data_driven_when_fed_same_boundaries) {
+    // Two disjoint rowsets at [0,50] and [60,100], 100 rows each. Data-driven
+    // will pick a boundary somewhere in the gap (50..60) for K=2.
+    auto m = make_dup_keys_metadata_with_rowsets({
+            std::make_tuple<uint32_t, int64_t, int64_t, int64_t, int64_t>(1, 0, 50, 100, 1000),
+            std::make_tuple<uint32_t, int64_t, int64_t, int64_t, int64_t>(2, 60, 100, 100, 1000),
+    });
+
+    std::vector<TabletRangeInfo> split_data_driven;
+    auto s = get_tablet_split_ranges(/*tablet_manager=*/nullptr, m, /*split_count=*/2, &split_data_driven,
+                                     /*colocate_column_count=*/0);
+    ASSERT_TRUE(s.ok()) << s;
+    ASSERT_EQ(2u, split_data_driven.size());
+    ASSERT_TRUE(split_data_driven[0].range.has_upper_bound());
+    ASSERT_TRUE(split_data_driven[1].range.has_lower_bound());
+    // Byte-equality of the interior boundary (data-driven emits one tuple,
+    // not two — same TuplePB on both sides).
+    ASSERT_TRUE(MessageDifferencer::Equals(split_data_driven[0].range.upper_bound(),
+                                           split_data_driven[1].range.lower_bound()))
+            << "data-driven path's interior boundary must be a single TuplePB on both sides";
+
+    // Build external boundaries external_ranges from the data-driven boundary, mirroring the
+    // parent Range.all() (first.lower unset, last.upper unset).
+    RepeatedPtrField<TabletRangePB> external_ranges;
+    {
+        auto* r0 = external_ranges.Add();
+        *r0->mutable_upper_bound() = split_data_driven[0].range.upper_bound();
+        r0->set_upper_bound_included(false);
+    }
+    {
+        auto* r1 = external_ranges.Add();
+        *r1->mutable_lower_bound() = split_data_driven[1].range.lower_bound();
+        r1->set_lower_bound_included(true);
+    }
+
+    std::vector<TabletRangeInfo> split_external_boundaries;
+    s = compute_split_ranges_from_external_boundaries(/*tablet_manager=*/nullptr, m, external_ranges,
+                                                      &split_external_boundaries);
+    ASSERT_TRUE(s.ok()) << s;
+    ASSERT_EQ(2u, split_external_boundaries.size());
+
+    // Ranges must be byte-equal proto messages.
+    for (size_t i = 0; i < split_data_driven.size(); ++i) {
+        EXPECT_TRUE(MessageDifferencer::Equals(split_data_driven[i].range, split_external_boundaries[i].range))
+                << "range[" << i << "] differs between paths";
+    }
+
+    // Per-rowset stats must match field-by-field.
+    for (size_t i = 0; i < split_data_driven.size(); ++i) {
+        EXPECT_EQ(split_data_driven[i].rowset_stats.size(), split_external_boundaries[i].rowset_stats.size())
+                << "rowset_stats size differs at range " << i;
+        for (const auto& [rowset_id, stats_dd] : split_data_driven[i].rowset_stats) {
+            auto it = split_external_boundaries[i].rowset_stats.find(rowset_id);
+            ASSERT_NE(it, split_external_boundaries[i].rowset_stats.end())
+                    << "rowset " << rowset_id << " missing in external boundaries output at range " << i;
+            EXPECT_EQ(stats_dd.num_rows, it->second.num_rows)
+                    << "range[" << i << "] rowset[" << rowset_id << "] num_rows differs";
+            EXPECT_EQ(stats_dd.data_size, it->second.data_size)
+                    << "range[" << i << "] rowset[" << rowset_id << "] data_size differs";
+            EXPECT_EQ(stats_dd.num_dels, it->second.num_dels)
+                    << "range[" << i << "] rowset[" << rowset_id << "] num_dels differs";
+        }
+    }
+
+    // Sanity: anchored stats sum to parent totals (the property both paths
+    // claim). Aggregate per rowset across the two child ranges.
+    for (uint32_t rowset_id : {1u, 2u}) {
+        int64_t sum_rows = 0;
+        int64_t sum_size = 0;
+        for (const auto& s : split_data_driven) {
+            auto it = s.rowset_stats.find(rowset_id);
+            if (it != s.rowset_stats.end()) {
+                sum_rows += it->second.num_rows;
+                sum_size += it->second.data_size;
+            }
+        }
+        EXPECT_EQ(100, sum_rows) << "rowset " << rowset_id << ": Σ children num_rows must equal parent";
+        EXPECT_EQ(1000, sum_size) << "rowset " << rowset_id << ": Σ children data_size must equal parent";
+    }
 }
 
 } // namespace starrocks::lake

@@ -39,6 +39,7 @@
 
 #include "base/time/time.h"
 #include "base/utility/defer_op.h"
+#include "column/chunk_factory.h"
 #include "common/config_exec_fwd.h"
 #include "common/config_rowset_fwd.h"
 #include "fmt/format.h"
@@ -1043,8 +1044,8 @@ static Status report_unordered(const Chunk& chunk0, size_t idx0, int64_t row_id0
 
 static Status is_ordered(ChunkIteratorPtr& iter, bool unique) {
     ChunkUniquePtr chunks[2];
-    chunks[0] = ChunkHelper::new_chunk(iter->schema(), iter->chunk_size());
-    chunks[1] = ChunkHelper::new_chunk(iter->schema(), iter->chunk_size());
+    chunks[0] = ChunkFactory::new_chunk(iter->schema(), iter->chunk_size());
+    chunks[1] = ChunkFactory::new_chunk(iter->schema(), iter->chunk_size());
     size_t chunk_idx = 0;
     int64_t row_idx = 0;
     while (true) {

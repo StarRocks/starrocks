@@ -22,6 +22,7 @@
 
 #include "base/utility/defer_op.h"
 #include "column/chunk.h"
+#include "column/chunk_factory.h"
 #include "column/column.h"
 #include "column/column_access_path.h"
 #include "column/column_helper.h"
@@ -35,8 +36,10 @@
 #include "exec/pipeline/noop_sink_operator.h"
 #include "exec/pipeline/pipeline_builder.h"
 #include "exec/pipeline/scan/chunk_buffer_limiter.h"
+#include "exec/pipeline/scan/morsel.h"
 #include "exec/pipeline/scan/olap_scan_operator.h"
 #include "exec/pipeline/scan/olap_scan_prepare_operator.h"
+#include "exec/pipeline/scan/scan_morsel.h"
 #include "exprs/column_access_path_resolver.h"
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
@@ -310,7 +313,7 @@ OlapScanNode::~OlapScanNode() {
 void OlapScanNode::_fill_chunk_pool(int count) {
     const size_t capacity = runtime_state()->chunk_size();
     for (int i = 0; i < count; i++) {
-        ChunkPtr chunk(ChunkHelper::new_chunk_pooled(*_chunk_schema, capacity));
+        ChunkPtr chunk(ChunkFactory::new_chunk_pooled(*_chunk_schema, capacity));
         {
             std::lock_guard<std::mutex> l(_mtx);
             _chunk_pool.push(std::move(chunk));
