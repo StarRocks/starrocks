@@ -386,6 +386,9 @@ message VacuumFullRequest {
     // All tablet metadata and their data files of these verisons should be retained and can not be
     // vaccummed.
     repeated int64 retain_versions = 7;
+    // Opt-in switch for vacuum_full to reclaim the legacy load_spill layout
+    // `<root>/load_spill/<load_id_uuid>/`
+    optional bool cleanup_legacy_load_spill = 8;
 }
 
 message VacuumFullResponse {
