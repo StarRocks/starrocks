@@ -157,23 +157,32 @@ void ChunkHelper::padding_char_column(const starrocks::TabletSchemaCSPtr& tschem
     // The buffer is pre-zeroed, so null rows already have valid padding
     if (field.is_nullable()) {
         auto* nullable_column = down_cast<NullableColumn*>(column);
-        const uint8_t* null_data = nullable_column->null_column()->get_data().data();
-        size_t null_count = SIMD::count_nonzero(null_data, num_rows);
-        // Only use sparse iteration if more than 12.5% of rows are null
-        if (null_count > num_rows / 8) {
-            for (size_t j = 0; j < num_rows; ++j) {
-                if (!null_data[j]) {
-                    uint32_t copy_data_len = std::min(len, offset[j + 1] - offset[j]);
-                    strings::memcpy_inlined(new_bytes.data() + from, bytes.data() + offset[j], copy_data_len);
-                }
-                from += len;
-            }
-        } else {
-            // Low null ratio: original loop without branch
+        if (!nullable_column->has_null()) {
+            // No nulls: avoid the extra count_nonzero pass and keep the tight loop
             for (size_t j = 0; j < num_rows; ++j) {
                 uint32_t copy_data_len = std::min(len, offset[j + 1] - offset[j]);
                 strings::memcpy_inlined(new_bytes.data() + from, bytes.data() + offset[j], copy_data_len);
                 from += len;
+            }
+        } else {
+            const uint8_t* null_data = nullable_column->null_column()->get_data().data();
+            size_t null_count = SIMD::count_nonzero(null_data, num_rows);
+            // Only use sparse iteration if more than 12.5% of rows are null
+            if (null_count > num_rows / 8) {
+                for (size_t j = 0; j < num_rows; ++j) {
+                    if (!null_data[j]) {
+                        uint32_t copy_data_len = std::min(len, offset[j + 1] - offset[j]);
+                        strings::memcpy_inlined(new_bytes.data() + from, bytes.data() + offset[j], copy_data_len);
+                    }
+                    from += len;
+                }
+            } else {
+                // Low null ratio: original loop without branch
+                for (size_t j = 0; j < num_rows; ++j) {
+                    uint32_t copy_data_len = std::min(len, offset[j + 1] - offset[j]);
+                    strings::memcpy_inlined(new_bytes.data() + from, bytes.data() + offset[j], copy_data_len);
+                    from += len;
+                }
             }
         }
     } else {
