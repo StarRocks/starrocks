@@ -189,12 +189,12 @@ public class CachingHiveMetastore extends CachingMetastore implements IHiveMetas
 
         avroSchemaCache = newCacheBuilder(expireAfterWriteSec, NEVER_REFRESH, maxSize).build();
 
+        // Partition stats refresh is driven exclusively by refreshTable() (background
+        // metadata daemon or explicit REFRESH EXTERNAL TABLE); per-key refreshAfterWrite
+        // on top of that amplifies HMS load on large partitioned tables.
         Caffeine<Object, Object> builder = Caffeine.newBuilder().maximumSize(maxSize).executor(executor);
         if (expireAfterWriteSec > 0) {
             builder.expireAfterWrite(expireAfterWriteSec, TimeUnit.SECONDS);
-        }
-        if (refreshIntervalSec > 0) {
-            builder.refreshAfterWrite(refreshIntervalSec, TimeUnit.SECONDS);
         }
         partitionStatsCache = builder.buildAsync(new PartitionStatisticsLoader(this));
     }
@@ -589,12 +589,11 @@ public class CachingHiveMetastore extends CachingMetastore implements IHiveMetas
             refreshPartitionNames = refreshPartitions(presentPartitionNames, updatedPartitionKeys,
                     this::loadPartitionsByNames, partitionCache);
             if (Config.enable_refresh_hive_partitions_statistics) {
-                partitionStatsCache.synchronous().invalidateAll(presentPartitionStatistics);
                 List<HivePartitionName> needToRefresh = presentPartitionStatistics.stream()
                         .filter(x -> x.getPartitionNames().isPresent()
                                 && updatedPartitionKeys.contains(x.getPartitionNames().get()))
                         .toList();
-                partitionStatsCache.getAll(needToRefresh);
+                needToRefresh.forEach(partitionStatsCache.synchronous()::refresh);
             }
         }
         return refreshPartitionNames;
