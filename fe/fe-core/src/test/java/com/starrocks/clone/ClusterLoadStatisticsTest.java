@@ -187,11 +187,11 @@ public class ClusterLoadStatisticsTest {
         long tabletId = 80000;
         // 3 HDD-declared and 2 SSD-declared replicas, all physically on the HDD-only BE.
         for (int i = 0; i < 3; i++, tabletId++) {
-            localIndex.addTablet(tabletId, new TabletMeta(1, 2, 3, 4, TStorageMedium.HDD));
+            localIndex.addTablet(tabletId, new TabletMeta(1, 2, 3, 4, 0, TStorageMedium.HDD));
             localIndex.addReplica(tabletId, new Replica(tabletId + 100, hddOnlyBe.getId(), 0, ReplicaState.NORMAL));
         }
         for (int i = 0; i < 2; i++, tabletId++) {
-            localIndex.addTablet(tabletId, new TabletMeta(1, 2, 3, 5, TStorageMedium.SSD));
+            localIndex.addTablet(tabletId, new TabletMeta(1, 2, 3, 5, 0, TStorageMedium.SSD));
             localIndex.addReplica(tabletId, new Replica(tabletId + 100, hddOnlyBe.getId(), 0, ReplicaState.NORMAL));
         }
 
@@ -226,11 +226,11 @@ public class ClusterLoadStatisticsTest {
         TabletInvertedIndex localIndex = new TabletInvertedIndex();
         long tabletId = 81000;
         for (int i = 0; i < 4; i++, tabletId++) {
-            localIndex.addTablet(tabletId, new TabletMeta(1, 2, 3, 4, TStorageMedium.SSD));
+            localIndex.addTablet(tabletId, new TabletMeta(1, 2, 3, 4, 0, TStorageMedium.SSD));
             localIndex.addReplica(tabletId, new Replica(tabletId + 100, ssdOnlyBe.getId(), 0, ReplicaState.NORMAL));
         }
         for (int i = 0; i < 3; i++, tabletId++) {
-            localIndex.addTablet(tabletId, new TabletMeta(1, 2, 3, 5, TStorageMedium.HDD));
+            localIndex.addTablet(tabletId, new TabletMeta(1, 2, 3, 5, 0, TStorageMedium.HDD));
             localIndex.addReplica(tabletId, new Replica(tabletId + 100, ssdOnlyBe.getId(), 0, ReplicaState.NORMAL));
         }
 
@@ -272,11 +272,11 @@ public class ClusterLoadStatisticsTest {
         TabletInvertedIndex localIndex = new TabletInvertedIndex();
         long tabletId = 82000;
         for (int i = 0; i < 6; i++, tabletId++) {
-            localIndex.addTablet(tabletId, new TabletMeta(1, 2, 3, 4, TStorageMedium.HDD));
+            localIndex.addTablet(tabletId, new TabletMeta(1, 2, 3, 4, 0, TStorageMedium.HDD));
             localIndex.addReplica(tabletId, new Replica(tabletId + 100, mixedBe.getId(), 0, ReplicaState.NORMAL));
         }
         for (int i = 0; i < 4; i++, tabletId++) {
-            localIndex.addTablet(tabletId, new TabletMeta(1, 2, 3, 5, TStorageMedium.SSD));
+            localIndex.addTablet(tabletId, new TabletMeta(1, 2, 3, 5, 0, TStorageMedium.SSD));
             localIndex.addReplica(tabletId, new Replica(tabletId + 100, mixedBe.getId(), 0, ReplicaState.NORMAL));
         }
 
