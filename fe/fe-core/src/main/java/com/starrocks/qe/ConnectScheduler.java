@@ -74,6 +74,7 @@ public class ConnectScheduler {
     // mysql connectContext/ http connectContext/ arrowFlight connectContext all stored in connectionMap
     private final Map<Long, ConnectContext> connectionMap = Maps.newConcurrentMap();
     private final Map<String, ArrowFlightSqlConnectContext> arrowFlightSqlConnectContextMap = Maps.newConcurrentMap();
+    private final RoleConnectionManager roleConnectionManager;
 
     private final Map<String, AtomicInteger> connCountByUser = Maps.newConcurrentMap();
     private final ReentrantLock connStatsLock = new ReentrantLock();
@@ -82,6 +83,7 @@ public class ConnectScheduler {
         this.maxConnections = new AtomicInteger(maxConnections);
         numberConnection = new AtomicInteger(0);
         connectionIdGenerator = new ConnectionIdGenerator();
+        roleConnectionManager = new RoleConnectionManager(Config.qe_max_connection, Config.qe_role_connection_limits);
         // Use a thread to check whether connection is timeout. Because
         // 1. If use a scheduler, the task maybe a huge number when query is messy.
         //    Let timeout is 10m, and 5000 qps, then there are up to 3000000 tasks in scheduler.
@@ -235,6 +237,7 @@ public class ConnectScheduler {
                 LOG.info("Connection closed. remote={}, connectionId={}, qualifiedUser={}, user.currConn={}",
                         ctx.getMysqlChannel().getRemoteHostPortString(), ctx.getConnectionId(),
                         ctx.getQualifiedUser(), conns != null ? Integer.toString(conns.get()) : "nil");
+                roleConnectionManager.unregisterConnection(ctx);
             }
 
             if (ctx.isArrowFlightSql()) {
@@ -316,6 +319,10 @@ public class ConnectScheduler {
             });
         }
         return sessionIds;
+    }
+
+    public RoleConnectionManager getRoleConnectionManager() {
+        return roleConnectionManager;
     }
 
     public int getTotalConnCount() {

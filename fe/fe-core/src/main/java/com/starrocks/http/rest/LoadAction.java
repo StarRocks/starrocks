@@ -37,6 +37,7 @@ package com.starrocks.http.rest;
 import com.google.common.base.Strings;
 import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.authorization.PrivilegeType;
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseRequest;
@@ -204,7 +205,7 @@ public class LoadAction extends RestBaseAction {
 
         LOG.info("redirect load action to destination={}, db: {}, tbl: {}, label: {}, warehouse: {}",
                 redirectAddr.toString(), dbName, tableName, label, warehouseName);
-        redirectTo(request, response, redirectAddr);
+        redirectTo(request, response, Config.be_https_enabled, redirectAddr);
     }
 
     private void processBatchWriteStreamLoad(
@@ -226,7 +227,7 @@ public class LoadAction extends RestBaseAction {
         ComputeNode node = nodes.get(index);
         TNetworkAddress redirectAddr = new TNetworkAddress(node.getHost(), node.getHttpPort());
         LOG.info("redirect batch write to destination={}, db: {}, tbl: {}", redirectAddr, dbName, tableName);
-        redirectTo(request, response, redirectAddr);
+        redirectTo(request, response, Config.be_https_enabled, redirectAddr);
     }
 
     public static class BatchWriteResponseResult extends RestBaseResult {

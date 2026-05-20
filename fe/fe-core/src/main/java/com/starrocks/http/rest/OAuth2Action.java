@@ -62,9 +62,11 @@ public class OAuth2Action extends RestBaseAction {
         NodeMgr nodeMgr = GlobalStateMgr.getCurrentState().getNodeMgr();
         int fid = (int) ((connectionId >> 24) & 0xFF);
         Frontend frontend = GlobalStateMgr.getCurrentState().getNodeMgr().getFrontend(fid);
+        int fePort = Config.enable_https ? Config.https_port : Config.http_port;
+
         if (!nodeMgr.getMySelf().getNodeName().equals(frontend.getNodeName())) {
             String responseContent =
-                    StarRocksHttpClient.redirect(frontend.getHost(), Config.http_port, request.getRequest());
+                    StarRocksHttpClient.redirect(frontend.getHost(), fePort, request.getRequest());
             response.appendContent(responseContent);
             sendResult(request, response);
             return;

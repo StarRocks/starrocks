@@ -23,6 +23,7 @@ import com.starrocks.common.Pair;
 import com.starrocks.mysql.privilege.AuthPlugin;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.service.ExecuteEnv;
 import com.starrocks.sql.ast.UserIdentity;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -182,7 +183,7 @@ public class AuthenticationHandler {
                 authenticationResult.groupProviderName);
         context.setGroups(groups);
         // Set current role IDs based on the authenticated user and groups
-        context.setCurrentRoleIds(authenticationResult.authenticatedUser, groups);
+        context.setCurrentRoleIds(authenticationResult.authenticatedUser);
 
         // Step 5: Validate group access permissions
         // If authentication result specifies allowed groups, verify user belongs to at least one
@@ -195,7 +196,10 @@ public class AuthenticationHandler {
             }
         }
 
-        // Step 6: Apply user properties for non-ephemeral users
+        // Step 6: Check Role based connection limit
+        ExecuteEnv.getInstance().getScheduler().getRoleConnectionManager().registerConnection(context);
+
+        // Step 7: Apply user properties for non-ephemeral users
         // Load and apply user-specific properties (session variables, resource limits, etc.)
         // Ephemeral users (from external auth) don't have stored properties
         if (!authenticationResult.authenticatedUser.isEphemeral()) {

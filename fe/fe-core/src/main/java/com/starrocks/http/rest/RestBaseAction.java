@@ -39,6 +39,7 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Strings;
 import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.authorization.AuthorizationMgr;
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.Pair;
@@ -221,14 +222,14 @@ public class RestBaseAction extends BaseAction {
         sendResult(request, response);
     }
 
-    public void redirectTo(BaseRequest request, BaseResponse response, TNetworkAddress addr)
+    public void redirectTo(BaseRequest request, BaseResponse response, boolean useSSL, TNetworkAddress addr)
             throws DdlException {
         String urlStr = request.getRequest().uri();
         URI urlObj;
         URI resultUriObj;
         try {
             urlObj = new URI(urlStr);
-            resultUriObj = new URI("http", null, addr.getHostname(),
+            resultUriObj = new URI(useSSL ? "https" : "http", null, addr.getHostname(),
                     addr.getPort(), urlObj.getPath(), urlObj.getQuery(), null);
         } catch (URISyntaxException e) {
             LOG.warn(e.getMessage(), e);
@@ -244,7 +245,7 @@ public class RestBaseAction extends BaseAction {
             return false;
         }
         Pair<String, Integer> leaderIpAndPort = globalStateMgr.getNodeMgr().getLeaderIpAndHttpPort();
-        redirectTo(request, response,
+        redirectTo(request, response, Config.enable_https,
                 new TNetworkAddress(leaderIpAndPort.first, leaderIpAndPort.second));
         return true;
     }

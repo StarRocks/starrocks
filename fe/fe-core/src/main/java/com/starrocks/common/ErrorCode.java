@@ -262,6 +262,8 @@ public enum ErrorCode {
             "Access denied; Need to access the URL [%s] to complete the OAuth2 authentication operation"),
     ERR_AUTHENTICATION_FAIL_IN_AUTH_CHAIN(5208, new byte[] {'4', '2', '0', '0', '0'},
             "Access denied; No authentication was successful in the authentication chain : [%s]"),
+    ERR_GROUP_MAX_CONNECTION(5209, new byte[] {'4', '2', '0', '0', '0'},
+            "Role-based connection limit exceeded [role=[%s], maxAllowed=[%s], current=[%s]]"),
 
     /**
      * 5300 - 5399: Lock and Transaction

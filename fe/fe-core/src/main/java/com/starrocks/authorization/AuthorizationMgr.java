@@ -49,6 +49,7 @@ import com.starrocks.sql.ast.RevokePrivilegeStmt;
 import com.starrocks.sql.ast.RevokeRoleStmt;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.parser.NodePosition;
+import org.apache.commons.collections4.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.jetbrains.annotations.NotNull;
@@ -62,6 +63,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
@@ -1379,6 +1381,29 @@ public class AuthorizationMgr {
         }
     }
 
+    protected Set<Long> getRoleIdsByUserUnlocked(UserIdentity user, Set<String> userGroups) throws PrivilegeException {
+        Set<Long> ret = new HashSet<>();
+
+        UserPrivilegeCollectionV2 privileges = getUserPrivilegeCollectionUnlockedAllowNull(user);
+
+        if (privileges != null) {
+            for (long roleId : privileges.getAllRoles()) {
+                // role may be removed
+                if (getRolePrivilegeCollectionUnlocked(roleId, false) != null) {
+                    ret.add(roleId);
+                }
+            }
+        }
+
+        if (CollectionUtils.isNotEmpty(userGroups)) {
+            for (String name : userGroups) {
+                Optional.ofNullable(roleNameToId.get(name)).ifPresent(ret::add);
+            }
+        }
+
+        return ret;
+    }
+
     protected Set<Long> getRoleIdsByUserUnlocked(UserIdentity user) throws PrivilegeException {
         Set<Long> ret = new HashSet<>();
 
@@ -1392,12 +1417,12 @@ public class AuthorizationMgr {
     }
 
     // used in executing `set role` statement
-    public Set<Long> getRoleIdsByUser(UserIdentity user) throws PrivilegeException {
+    public Set<Long> getRoleIdsByUser(UserIdentity user, Set<String> userGroups) throws PrivilegeException {
         userReadLock();
         try {
             roleReadLock();
             try {
-                return getRoleIdsByUserUnlocked(user);
+                return getRoleIdsByUserUnlocked(user, userGroups);
             } finally {
                 roleReadUnlock();
             }
@@ -1406,22 +1431,41 @@ public class AuthorizationMgr {
         }
     }
 
+    public Set<Long> getRoleIdsByUser(UserIdentity user) throws PrivilegeException {
+        return getRoleIdsByUser(user, Set.of());
+    }
+
     public Set<Long> getDefaultRoleIdsByUser(UserIdentity user) throws PrivilegeException {
+        return getDefaultRoleIdsByUser(user, Set.of());
+    }
+
+    public Set<Long> getDefaultRoleIdsByUser(UserIdentity user, Set<String> userGroups) throws PrivilegeException {
         userReadLock();
         try {
             Set<Long> ret = new HashSet<>();
             roleReadLock();
+
+            UserPrivilegeCollectionV2 privileges = getUserPrivilegeCollectionUnlockedAllowNull(user);
+
             try {
-                for (long roleId : getUserPrivilegeCollectionUnlocked(user).getDefaultRoleIds()) {
-                    // role may be removed
-                    if (getRolePrivilegeCollectionUnlocked(roleId, false) != null) {
-                        ret.add(roleId);
+                if (privileges != null) {
+                    for (long roleId : privileges.getDefaultRoleIds()) {
+                        // role may be removed
+                        if (getRolePrivilegeCollectionUnlocked(roleId, false) != null) {
+                            ret.add(roleId);
+                        }
                     }
                 }
-                return ret;
+
+                if (CollectionUtils.isNotEmpty(userGroups)) {
+                    for (String roleName : userGroups) {
+                        Optional.ofNullable(roleNameToId.get(roleName)).ifPresent(ret::add);
+                    }
+                }
             } finally {
                 roleReadUnlock();
             }
+            return ret;
         } finally {
             userReadUnlock();
         }

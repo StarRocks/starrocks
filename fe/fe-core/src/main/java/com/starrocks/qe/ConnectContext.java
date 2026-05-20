@@ -509,29 +509,21 @@ public class ConnectContext {
     }
 
     public void setCurrentRoleIds(UserIdentity user) {
-        if (user.isEphemeral()) {
-            this.currentRoleIds = new HashSet<>();
-        } else {
-            try {
-                Set<Long> defaultRoleIds;
-                if (GlobalVariable.isActivateAllRolesOnLogin()) {
-                    defaultRoleIds = globalStateMgr.getAuthorizationMgr().getRoleIdsByUser(user);
-                } else {
-                    defaultRoleIds = globalStateMgr.getAuthorizationMgr().getDefaultRoleIdsByUser(user);
-                }
-                this.currentRoleIds = defaultRoleIds;
-            } catch (PrivilegeException e) {
-                LOG.warn("Set current role fail : {}", e.getMessage());
+        try {
+            Set<Long> defaultRoleIds;
+            if (GlobalVariable.isActivateAllRolesOnLogin()) {
+                defaultRoleIds = globalStateMgr.getAuthorizationMgr().getRoleIdsByUser(user, groups);
+            } else {
+                defaultRoleIds = globalStateMgr.getAuthorizationMgr().getDefaultRoleIdsByUser(user, groups);
             }
+            this.currentRoleIds = defaultRoleIds;
+        } catch (PrivilegeException e) {
+            LOG.warn("Set current role fail : {}", e.getMessage());
         }
     }
 
     public void setCurrentRoleIds(Set<Long> roleIds) {
         this.currentRoleIds = roleIds;
-    }
-
-    public void setCurrentRoleIds(UserIdentity userIdentity, Set<String> groups) {
-        setCurrentRoleIds(userIdentity);
     }
 
     public void setAuthInfoFromThrift(TAuthInfo authInfo) {
@@ -1319,7 +1311,7 @@ public class ConnectContext {
     }
 
     public boolean enableSSL() throws IOException {
-        SSLChannel sslChannel = new SSLChannelImp(SSLContextLoader.getSslContext().createSSLEngine(), mysqlChannel);
+        SSLChannel sslChannel = new SSLChannelImp(SSLContextLoader.newServerEngine(), mysqlChannel);
         if (!sslChannel.init()) {
             return false;
         } else {

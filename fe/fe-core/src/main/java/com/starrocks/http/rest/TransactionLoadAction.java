@@ -39,6 +39,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.google.common.annotations.VisibleForTesting;
 import com.starrocks.catalog.Database;
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.LabelAlreadyUsedException;
 import com.starrocks.common.StarRocksException;
@@ -271,7 +272,7 @@ public class TransactionLoadAction extends RestBaseAction {
 
         LOG.info("Redirect transaction action to destination={}, db: {}, table: {}, op: {}, label: {}",
                 redirectAddress, txnOperationParams.getDbName(), txnOperationParams.getTableName(), txnOperation, label);
-        redirectTo(request, response, redirectAddress);
+        redirectTo(request, response, Config.be_https_enabled, redirectAddress);
     }
 
     private TransactionOperationHandler getTxnOperationHandler(TransactionOperationParams params) throws

@@ -323,7 +323,7 @@ public class SchemaScanNode extends ScanNode {
             TFrontend feInfo = new TFrontend();
             feInfo.setId(fe.getNodeName());
             feInfo.setIp(fe.getHost());
-            feInfo.setHttp_port(Config.http_port);
+            feInfo.setHttp_port(Config.enable_https ? Config.https_port : Config.http_port);
             frontends.add(feInfo);
         }
     }

@@ -789,6 +789,41 @@ public class Config extends ConfigBase {
     public static int http_port = 8030;
 
     /**
+     * Fe https port
+     * Currently, all FEs' https port must be same.
+     */
+    @ConfField
+    public static int https_port = 8443;
+
+    /**
+     *  https enable flag. false by default.
+     *  If the value is false, http is supported. Otherwise, https is supported.
+     */
+    @ConfField
+    public static boolean enable_https = false;
+
+    @ConfField
+    public static boolean be_https_enabled = false;
+
+    @ConfField
+    public static String sslCipherWhitelist = "";
+
+    @ConfField
+    public static String sslCipherBlacklist = "";
+
+    /**
+     * format of the keystore, JKS by default
+     */
+    @ConfField
+    public static String ssl_keystore_type = "JKS";
+
+    /**
+     * format of the truststore, JKS by default
+     */
+    @ConfField
+    public static String ssl_truststore_type = "JKS";
+
+    /**
      * Configs for query queue v2.
      * The configs {@code query_queue_v2_xxx} are effective only when {@code enable_query_queue_v2} is true.
      * @see com.starrocks.qe.scheduler.slot.QueryQueueOptions
@@ -1424,6 +1459,9 @@ public class Config extends ConfigBase {
      */
     @ConfField
     public static int qe_max_connection = 4096;
+
+    @ConfField
+    public static String qe_role_connection_limits = "";
 
     /**
      * Used to limit element num of InPredicate in delete statement.

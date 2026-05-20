@@ -914,6 +914,21 @@ This topic introduces the following types of FE configurations:
 - Description: The maximum number of connections that can be established by all users to the FE node. From v3.1.12 and v3.2.7 onwards, the default value has been changed from `1024` to `4096`.
 - Introduced in: -
 
+### `qe_role_connection_limits`
+
+- Default: Empty string
+- Type: String
+- Unit: -
+- Is mutable: No
+- Description: This defines maximum concurrent connections per role using role patterns.<br/>
+  `<role-pattern>:<max-connections>[,<role-pattern>:<max-connections>...]`<br/>
+  Each entry consists of:
+    - role-pattern - Role name or wildcard pattern
+    - max-connections - Maximum allowed concurrent connections (integer)
+  
+  Entries are comma-separated.
+- Introduced in: -
+
 ### `query_port`
 
 - Default: 9030

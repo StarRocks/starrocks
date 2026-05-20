@@ -84,7 +84,7 @@ public class RestBaseActionTest {
         URI expectedUri = new URI("http", null, "127.0.0.1", 8030, "/api/mydb/testStreamLoad测试/_stream_load", null, null);
         String asciiUri = expectedUri.toASCIIString();
 
-        restBaseAction.redirectTo(mockRequest, mockResponse, mockAddr);
+        restBaseAction.redirectTo(mockRequest, mockResponse, false, mockAddr);
         verify(mockResponse).updateHeader(HttpHeaderNames.LOCATION.toString(), asciiUri);
     }
 }
