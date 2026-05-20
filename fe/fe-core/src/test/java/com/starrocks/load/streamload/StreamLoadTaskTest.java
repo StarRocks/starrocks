@@ -199,6 +199,42 @@ public class StreamLoadTaskTest {
     }
 
     @Test
+    public void testToThrift_timestampMsFields() {
+        // Regression coverage for the BE materialization path: if a future
+        // change drops one of the *_ms setters, BE silently falls back to the
+        // legacy UTC+8 string and stream-load rows go missing in
+        // non-Asia/Shanghai sessions.
+        long createMs = 1_700_000_000_000L;
+        long startMs = createMs + 1_000;
+        long commitMs = createMs + 2_000;
+        long endMs = createMs + 3_000;
+
+        Deencapsulation.setField(streamLoadTask, "createTimeMs", createMs);
+        Deencapsulation.setField(streamLoadTask, "startLoadingTimeMs", startMs);
+        Deencapsulation.setField(streamLoadTask, "commitTimeMs", commitMs);
+        Deencapsulation.setField(streamLoadTask, "endTimeMs", endMs);
+
+        TLoadInfo info = streamLoadTask.toThrift().get(0);
+        Assertions.assertEquals(createMs, info.getCreate_time_ms());
+        Assertions.assertEquals(startMs, info.getLoad_start_time_ms());
+        Assertions.assertEquals(commitMs, info.getLoad_commit_time_ms());
+        Assertions.assertEquals(endMs, info.getLoad_finish_time_ms());
+
+        // Sentinel path: zero/unset timestamps must leave the ms field unset so
+        // BE's !__isset branch can fall back to NULL instead of materializing
+        // epoch values.
+        Deencapsulation.setField(streamLoadTask, "createTimeMs", 0L);
+        Deencapsulation.setField(streamLoadTask, "startLoadingTimeMs", 0L);
+        Deencapsulation.setField(streamLoadTask, "commitTimeMs", 0L);
+        Deencapsulation.setField(streamLoadTask, "endTimeMs", 0L);
+        TLoadInfo unsetInfo = streamLoadTask.toThrift().get(0);
+        Assertions.assertFalse(unsetInfo.isSetCreate_time_ms());
+        Assertions.assertFalse(unsetInfo.isSetLoad_start_time_ms());
+        Assertions.assertFalse(unsetInfo.isSetLoad_commit_time_ms());
+        Assertions.assertFalse(unsetInfo.isSetLoad_finish_time_ms());
+    }
+
+    @Test
     public void testBuildProfile() throws StarRocksException {
         streamLoadTask.setCoordinator(coord);
         streamLoadTask.setIsSyncStreamLoad(true);
