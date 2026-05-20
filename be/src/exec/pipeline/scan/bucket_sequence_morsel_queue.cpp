@@ -22,7 +22,7 @@ BucketSequenceMorselQueue::BucketSequenceMorselQueue(MorselQueuePtr&& morsel_que
         : _morsel_queue(std::move(morsel_queue)) {}
 
 std::vector<TInternalScanRange*> BucketSequenceMorselQueue::prepare_olap_scan_ranges() const {
-    return _morsel_queue->prepare_olap_scan_ranges();
+    return _olap_morsel_queue()->prepare_olap_scan_ranges();
 }
 
 bool BucketSequenceMorselQueue::empty() const {

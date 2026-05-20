@@ -19,11 +19,12 @@
 #include <mutex>
 #include <utility>
 
-#include "exec/pipeline/scan/morsel_queue.h"
+#include "exec/pipeline/scan/olap_morsel_queue.h"
+#include "exec/pipeline/scan/ticketed_morsel_queue.h"
 
 namespace starrocks::pipeline {
 
-class DynamicMorselQueue final : public MorselQueue {
+class DynamicMorselQueue final : public OlapMorselQueue, public TicketedMorselQueue {
 public:
     explicit DynamicMorselQueue(Morsels&& morsels, bool has_more) {
         (void)append_morsels(std::move(morsels));
