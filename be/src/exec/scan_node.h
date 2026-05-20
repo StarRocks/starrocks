@@ -35,8 +35,11 @@
 #pragma once
 
 #include <cstddef>
+#include <map>
+#include <memory>
 #include <optional>
 #include <string>
+#include <vector>
 
 #include "column/column_access_path.h"
 #include "common/runtime_profile.h"
@@ -46,8 +49,8 @@
 namespace starrocks {
 
 namespace pipeline {
-class MorselQueue;
-using MorselQueuePtr = std::unique_ptr<MorselQueue>;
+class MorselQueueBuilder;
+using MorselQueueBuilderPtr = std::unique_ptr<MorselQueueBuilder>;
 class MorselQueueFactory;
 using MorselQueueFactoryPtr = std::unique_ptr<MorselQueueFactory>;
 } // namespace pipeline
@@ -88,7 +91,7 @@ public:
             const std::map<int32_t, std::vector<TScanRangeParams>>& scan_ranges_per_driver_seq, int node_id,
             int pipeline_dop, bool in_colocate_exec_group, bool enable_tablet_internal_parallel,
             TTabletInternalParallelMode::type tablet_internal_parallel_mode, bool enable_shared_scan = false);
-    virtual StatusOr<pipeline::MorselQueuePtr> convert_scan_range_to_morsel_queue(
+    virtual StatusOr<pipeline::MorselQueueBuilderPtr> convert_scan_range_to_morsel_queue_builder(
             const std::vector<TScanRangeParams>& scan_ranges, int node_id, int32_t pipeline_dop,
             bool enable_tablet_internal_parallel, TTabletInternalParallelMode::type tablet_internal_parallel_mode,
             size_t num_total_scan_ranges);

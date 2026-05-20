@@ -17,11 +17,12 @@
 #include <algorithm>
 #include <functional>
 
+#include "exec/pipeline/scan/dynamic_morsel_queue_builder.h"
 #include "exec/pipeline/scan/scan_morsel.h"
 
 namespace starrocks::connector {
 
-StatusOr<pipeline::MorselQueuePtr> DataSourceProvider::convert_scan_range_to_morsel_queue(
+StatusOr<pipeline::MorselQueueBuilderPtr> DataSourceProvider::convert_scan_range_to_morsel_queue_builder(
         const std::vector<TScanRangeParams>& scan_ranges, int node_id, int32_t pipeline_dop,
         bool enable_tablet_internal_parallel, TTabletInternalParallelMode::type tablet_internal_parallel_mode,
         size_t num_total_scan_ranges, size_t scan_parallelism) {
@@ -52,11 +53,7 @@ StatusOr<pipeline::MorselQueuePtr> DataSourceProvider::convert_scan_range_to_mor
         });
     }
 
-    auto morsel_queue = std::make_unique<pipeline::DynamicMorselQueue>(std::move(morsels), has_more_morsel);
-    if (scan_parallelism > 0) {
-        morsel_queue->set_max_degree_of_parallelism(scan_parallelism);
-    }
-    return morsel_queue;
+    return pipeline::make_dynamic_morsel_queue_builder(std::move(morsels), has_more_morsel, scan_parallelism);
 }
 
 } // namespace starrocks::connector

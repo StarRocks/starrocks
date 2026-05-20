@@ -20,7 +20,7 @@
 
 #include "common/statusor.h"
 #include "connector/data_source.h"
-#include "exec/pipeline/scan/morsel.h"
+#include "exec/pipeline/scan/morsel_queue_builder.h"
 #include "gen_cpp/InternalService_types.h"
 #include "gen_cpp/PlanNodes_types.h"
 #include "runtime/runtime_state_fwd.h"
@@ -76,7 +76,7 @@ public:
         *max_value = MAX_DATA_SOURCE_MEM_BYTES;
     }
 
-    virtual StatusOr<pipeline::MorselQueuePtr> convert_scan_range_to_morsel_queue(
+    virtual StatusOr<pipeline::MorselQueueBuilderPtr> convert_scan_range_to_morsel_queue_builder(
             const std::vector<TScanRangeParams>& scan_ranges, int node_id, int32_t pipeline_dop,
             bool enable_tablet_internal_parallel, TTabletInternalParallelMode::type tablet_internal_parallel_mode,
             size_t num_total_scan_ranges, size_t scan_parallelism = 0);
