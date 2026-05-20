@@ -173,7 +173,7 @@ jobs:
 
           if [[ -n $(git status --porcelain docs/) ]]; then
             git add docs/
-            git commit -m "docs: automated translation via Gemini"
+            git commit -m "docs: automated translation via Anthropic"
 
             # ------------------------------------------------------------------
             # CRITICAL AUTH FIX: Use PAT to push to Fork
