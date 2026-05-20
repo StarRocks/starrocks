@@ -62,10 +62,10 @@ public:
     uint64_t mem_usage() const { return 1 + _tdigest.serialize_size(); }
 
     size_t serialize(uint8_t* writer) const {
-        // Canonicalize before writing so on-disk cells carry only merged
-        // processed centroids; the now-empty unprocessed array still
-        // serializes with count=0, keeping byte layout unchanged for readers.
-        _tdigest.compress();
+        // Must not mutate _tdigest here: callers size their buffer from
+        // serialize_size() before this call, and compress() can grow the
+        // serialized footprint (rebuilds _cumulative with M+1 weights), so
+        // canonicalizing inside serialize would overflow the caller buffer.
         *(writer) = _type;
         return _tdigest.serialize(writer + 1);
     }
@@ -100,10 +100,7 @@ public:
 
 private:
     enum PercentileDataType { TDIGEST = 0 };
-    // `mutable` lets serialize() canonicalize via TDigest::compress() while
-    // staying logically const — aggregate functions reach PercentileValue
-    // through ConstAggDataPtr.
-    mutable TDigest _tdigest;
+    TDigest _tdigest;
     PercentileDataType _type;
 };
 } // namespace starrocks
