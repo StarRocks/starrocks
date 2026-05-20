@@ -167,7 +167,7 @@ static const std::vector<SlotDescriptor*>* create_tuple_desc_slots(RuntimeState*
 
 static shared_ptr<Chunk> gen_chunk(const std::vector<SlotDescriptor*>& slots, size_t size) {
     shared_ptr<Chunk> ret = RuntimeChunkHelper::new_chunk(slots, size);
-    auto cols = ret->mutable_columns();
+    auto cols = ret->columns();
     for (int ci = 0; ci < cols.size(); ci++) {
         auto& c = cols[ci];
         Datum v;
@@ -183,7 +183,7 @@ static shared_ptr<Chunk> gen_chunk(const std::vector<SlotDescriptor*>& slots, si
             } else if (type == TYPE_INT) {
                 v.set_int32(i + 3);
             } else if (type == TYPE_BIGINT) {
-                v.set_int16(i * 3);
+                v.set_int64(i * 3);
             } else if (type == TYPE_FLOAT) {
                 v.set_float(i * 4);
             } else if (type == TYPE_DOUBLE) {
@@ -194,7 +194,7 @@ static shared_ptr<Chunk> gen_chunk(const std::vector<SlotDescriptor*>& slots, si
             } else {
                 CHECK(false) << "gen_chunk type not supported";
             }
-            c->append_datum(v);
+            c->as_mutable_ptr()->append_datum(v);
         }
     }
     return ret;
