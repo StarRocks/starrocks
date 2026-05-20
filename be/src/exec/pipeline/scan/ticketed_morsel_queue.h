@@ -14,11 +14,16 @@
 
 #pragma once
 
-#include "exec/pipeline/scan/bucket_sequence_morsel_queue.h"
-#include "exec/pipeline/scan/dynamic_morsel_queue.h"
-#include "exec/pipeline/scan/fixed_morsel_queue.h"
-#include "exec/pipeline/scan/morsel_queue.h"
-#include "exec/pipeline/scan/morsel_queue_factory.h"
-#include "exec/pipeline/scan/olap_morsel_queue.h"
-#include "exec/pipeline/scan/split_morsel_queue.h"
-#include "exec/pipeline/scan/ticketed_morsel_queue.h"
+#include "exec/query_cache/ticket_checker.h"
+
+namespace starrocks::pipeline {
+
+class TicketedMorselQueue {
+public:
+    virtual ~TicketedMorselQueue() = default;
+
+    virtual void set_ticket_checker(const query_cache::TicketCheckerPtr& ticket_checker) = 0;
+    virtual bool could_attch_ticket_checker() const = 0;
+};
+
+} // namespace starrocks::pipeline

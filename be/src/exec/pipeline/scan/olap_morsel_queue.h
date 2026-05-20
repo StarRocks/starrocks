@@ -14,11 +14,15 @@
 
 #pragma once
 
-#include "exec/pipeline/scan/bucket_sequence_morsel_queue.h"
-#include "exec/pipeline/scan/dynamic_morsel_queue.h"
-#include "exec/pipeline/scan/fixed_morsel_queue.h"
 #include "exec/pipeline/scan/morsel_queue.h"
-#include "exec/pipeline/scan/morsel_queue_factory.h"
-#include "exec/pipeline/scan/olap_morsel_queue.h"
-#include "exec/pipeline/scan/split_morsel_queue.h"
-#include "exec/pipeline/scan/ticketed_morsel_queue.h"
+
+namespace starrocks::pipeline {
+
+// Transitional capability interface for queues that expose OLAP scan preparation hooks.
+class OlapMorselQueue : public MorselQueue {
+public:
+    using MorselQueue::MorselQueue;
+    ~OlapMorselQueue() override = default;
+};
+
+} // namespace starrocks::pipeline
