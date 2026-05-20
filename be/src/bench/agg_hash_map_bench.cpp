@@ -22,18 +22,28 @@
 // no scan I/O, no pipeline operator overhead.  Working-set sized so the
 // Int16 column (~200 MiB at 100M rows) does not fit in L3.
 //
-// Sections:
-//   A) Density x distribution sweep at 100M rows; both hash-only and
-//      hash + simulated COUNT(*) update.
-//   B) Construction-vs-amortization break-even: row count sweep at
-//      density=24 sorted, exposes the cell count beyond which the
-//      array's 524 KiB upfront alloc stops dominating.
-//   C) Construction-only cost regression guard.
+// What is timed in each section:
+//   A) build_hash_map only.  Wrapper construction is paused; the array
+//      path's 524 KiB upfront zero-fill is NOT in the timed number here.
+//      This isolates steady-state hash-insert cost.
+//   B) Both BuildOnly and BuildWithCtor companions on a rows sweep.
+//      BuildWithCtor includes wrapper construction inside the timed
+//      region, so the per-iteration timing carries the 524 KiB upfront
+//      cost paid at every Aggregator instantiation.  Comparing the two
+//      sections shows the row count beyond which construction stops
+//      dominating -- the construction-vs-amortization break-even.
+//   C) Construction-only cost (regression guard, microsecond unit).
 //   D) Nullable wrapper at null fractions {0%, 10%, 50%}.
+//
+// density=1 is included as a boundary case (single distinct value after
+// partition pruning); it is the array path's best case but NOT the
+// headline density we expect upstream readers to focus on.  Mid-density
+// (24 hour-of-day, 366 day-of-year, 1000 region-code) is where production
+// SMALLINT GROUP BY queries cluster.
 
-#include <base/testutil/assert.h>
 #include <benchmark/benchmark.h>
 
+#include <cmath>
 #include <memory>
 #include <random>
 #include <vector>
@@ -74,6 +84,7 @@ enum class Distribution : int {
     Random = 0,
     Sorted = 1,
     Clustered64 = 2, // run-length 64: each value repeats 64 times before the next
+    Zipf = 3,        // skewed: ~90% of rows hit ~10% of values (s=1.5)
 };
 
 // Production-shaped allocator.  Aggregator uses HashTableKeyAllocator with
@@ -98,6 +109,14 @@ public:
         const int64_t num_chunks = (num_rows + kBenchChunkSize - 1) / kBenchChunkSize;
         _chunks.reserve(num_chunks);
         const int range_start = -distinct_count / 2; // straddle signed range to exercise unsigned cast
+
+        // Pre-build a Zipf code table once if needed.
+        std::vector<int> zipf_codes;
+        if (dist == Distribution::Zipf) {
+            zipf_codes = build_zipf_codes(distinct_count);
+        }
+        std::uniform_int_distribution<int> zipf_pick(0, zipf_codes.empty() ? 0 : zipf_codes.size() - 1);
+
         for (int64_t c = 0; c < num_chunks; ++c) {
             auto col = Int16Column::create();
             auto& data = col->get_data();
@@ -125,8 +144,13 @@ public:
                 }
                 break;
             }
+            case Distribution::Zipf: {
+                for (int i = 0; i < kBenchChunkSize; ++i) {
+                    data[i] = static_cast<int16_t>(range_start + zipf_codes[zipf_pick(rng)]);
+                }
+                break;
             }
-            // MutPtr -> ImmutPtr requires rvalue (ImmutPtr(const MutPtr&) is deleted).
+            }
             _chunks.emplace_back(std::move(col));
         }
     }
@@ -134,6 +158,36 @@ public:
     const std::vector<ColumnPtr>& chunks() const { return _chunks; }
 
 private:
+    // Build a 4096-entry sample table over [0, distinct_count) with
+    // Zipf(s=1.5) frequencies; sample uniformly from this table to emit
+    // skewed codes.  Top ~10% of distinct values get ~80-90% of mass for
+    // typical OLAP dimension columns (status, country, segment).
+    static std::vector<int> build_zipf_codes(int distinct_count) {
+        constexpr int table_size = 4096;
+        constexpr double s = 1.5;
+        if (distinct_count <= 0) return {};
+        // Cumulative weights w_k = 1 / k^s.
+        std::vector<double> cum(distinct_count);
+        double total = 0.0;
+        for (int k = 0; k < distinct_count; ++k) {
+            total += 1.0 / std::pow(k + 1, s);
+            cum[k] = total;
+        }
+        std::vector<int> codes(table_size);
+        std::mt19937 rng(0xBEEFCAFE);
+        std::uniform_real_distribution<double> uni(0.0, total);
+        for (int i = 0; i < table_size; ++i) {
+            double r = uni(rng);
+            int lo = 0, hi = distinct_count - 1;
+            while (lo < hi) {
+                int mid = (lo + hi) >> 1;
+                if (cum[mid] < r) lo = mid + 1; else hi = mid;
+            }
+            codes[i] = lo;
+        }
+        return codes;
+    }
+
     std::vector<ColumnPtr> _chunks;
 };
 
@@ -209,11 +263,20 @@ public:
     std::unique_ptr<AggStatistics> _agg_stat;
 };
 
+// Memory snapshot helper: hash-table byte footprint via dump_bound()
+// (uniform across phmap and SmallFixedSizeHashMap) plus mem-pool
+// allocated bytes.  Reported as benchmark counters so reviewers can see
+// the time/memory trade-off without re-running with a profiler.
+template <typename Wrapper>
+inline size_t hash_table_bytes(Wrapper* w) {
+    return w->hash_map.dump_bound();
+}
+
 // ============================================================================
-// Section A — main steady-state win (hash insert only)
+// Section A -- steady-state hash-insert win (build_hash_map only)
 // ============================================================================
 template <typename Wrapper>
-static void BM_Int16ColdBuild(benchmark::State& state) {
+static void BM_Int16BuildOnly(benchmark::State& state) {
     const int64_t num_rows = state.range(0);
     const int distinct = static_cast<int>(state.range(1));
     const Distribution dist = static_cast<Distribution>(state.range(2));
@@ -223,6 +286,10 @@ static void BM_Int16ColdBuild(benchmark::State& state) {
     Int16ChunkStream stream(num_rows, distinct, dist);
 
     int64_t total_rows = 0;
+    size_t final_groups = 0;
+    size_t final_ht_bytes = 0;
+    size_t final_pool_bytes = 0;
+    int64_t cum_checksum = 0;
     for (auto _ : state) {
         state.PauseTiming();
         // Heap-allocated to match production (Aggregator uses std::make_unique
@@ -242,29 +309,44 @@ static void BM_Int16ColdBuild(benchmark::State& state) {
             wrapper->build_hash_map(kBenchChunkSize, key_columns, suite._mem_pool.get(), alloc, &agg_states);
             total_rows += kBenchChunkSize;
         }
+        benchmark::DoNotOptimize(agg_states.data());
+        benchmark::ClobberMemory();
 
         // End the iteration paused so wrapper / pool destruction does not
         // bleed into the next iter's measurement window.
         state.PauseTiming();
+        final_groups = wrapper->hash_map.size();
+        final_ht_bytes = hash_table_bytes(wrapper.get());
+        final_pool_bytes = suite._mem_pool->total_allocated_bytes();
+        // Observe the last-chunk AggDataPtr targets so build_hash_map
+        // results survive DCE.
+        int64_t cs = 0;
+        for (int i = 0; i < kBenchChunkSize; ++i) cs += reinterpret_cast<intptr_t>(agg_states[i]);
+        cum_checksum += cs;
         wrapper.reset();
         suite._mem_pool->clear();
     }
+    benchmark::DoNotOptimize(cum_checksum);
     state.SetItemsProcessed(total_rows);
     state.counters["distinct"] = distinct;
+    state.counters["dist"] = static_cast<int>(dist);
     state.counters["rows_per_iter"] = num_rows;
+    state.counters["final_groups"] = final_groups;
+    state.counters["hash_table_bytes"] = final_ht_bytes;
+    state.counters["pool_bytes"] = final_pool_bytes;
 
     suite.TearDown();
 }
 
 // ============================================================================
-// Section A (continued) — hash insert + COUNT(*) update
-// Same shape as BM_Int16ColdBuild but with a simulated COUNT(*) increment
+// Section A (continued) -- build_hash_map + COUNT(*) update
+// Same shape as BM_Int16BuildOnly but with a simulated COUNT(*) increment
 // per resolved AggDataPtr.  Exposes the total per-row cost (hash-insert
 // cost + agg-state-update cost) so the reader can see how the kernel-level
 // delta translates to total agg-phase delta.
 // ============================================================================
 template <typename Wrapper>
-static void BM_Int16ColdBuildAndCount(benchmark::State& state) {
+static void BM_Int16BuildAndCount(benchmark::State& state) {
     const int64_t num_rows = state.range(0);
     const int distinct = static_cast<int>(state.range(1));
     const Distribution dist = static_cast<Distribution>(state.range(2));
@@ -274,6 +356,10 @@ static void BM_Int16ColdBuildAndCount(benchmark::State& state) {
     Int16ChunkStream stream(num_rows, distinct, dist);
 
     int64_t total_rows = 0;
+    size_t final_groups = 0;
+    size_t final_ht_bytes = 0;
+    size_t final_pool_bytes = 0;
+    int64_t cum_checksum = 0;
     for (auto _ : state) {
         state.PauseTiming();
         auto wrapper = std::make_unique<Wrapper>(kBenchChunkSize, suite._agg_stat.get());
@@ -295,20 +381,91 @@ static void BM_Int16ColdBuildAndCount(benchmark::State& state) {
             }
             total_rows += kBenchChunkSize;
         }
+        benchmark::DoNotOptimize(agg_states.data());
+        benchmark::ClobberMemory();
 
         state.PauseTiming();
+        final_groups = wrapper->hash_map.size();
+        final_ht_bytes = hash_table_bytes(wrapper.get());
+        final_pool_bytes = suite._mem_pool->total_allocated_bytes();
+        int64_t cs = 0;
+        for (int i = 0; i < kBenchChunkSize; ++i) cs += *reinterpret_cast<int64_t*>(agg_states[i]);
+        cum_checksum += cs;
         wrapper.reset();
         suite._mem_pool->clear();
     }
+    benchmark::DoNotOptimize(cum_checksum);
     state.SetItemsProcessed(total_rows);
     state.counters["distinct"] = distinct;
+    state.counters["dist"] = static_cast<int>(dist);
     state.counters["rows_per_iter"] = num_rows;
+    state.counters["final_groups"] = final_groups;
+    state.counters["hash_table_bytes"] = final_ht_bytes;
+    state.counters["pool_bytes"] = final_pool_bytes;
 
     suite.TearDown();
 }
 
 // ============================================================================
-// Section C — construction-only cost
+// Section B -- amortization sweep, ctor-included companion
+// Same as BM_Int16BuildOnly but wrapper construction (and the 524 KiB
+// zero-fill for the array path) happens INSIDE the timed region.  This
+// is the row count at which the upfront cost stops dominating.
+// ============================================================================
+template <typename Wrapper>
+static void BM_Int16BuildWithCtor(benchmark::State& state) {
+    const int64_t num_rows = state.range(0);
+    const int distinct = static_cast<int>(state.range(1));
+    const Distribution dist = static_cast<Distribution>(state.range(2));
+
+    BenchSuite suite;
+    suite.SetUp();
+    Int16ChunkStream stream(num_rows, distinct, dist);
+
+    int64_t total_rows = 0;
+    size_t final_ht_bytes = 0;
+    int64_t cum_checksum = 0;
+    for (auto _ : state) {
+        // No PauseTiming before construction -- the ctor's 524 KiB
+        // zero-fill (array path) or default-capacity table (phmap) is
+        // included in the per-iter timing.
+        auto wrapper = std::make_unique<Wrapper>(kBenchChunkSize, suite._agg_stat.get());
+        HashTableKeyAllocator allocator;
+        allocator.aggregate_key_size = sizeof(int64_t);
+        allocator.pool = suite._mem_pool.get();
+        BenchAllocateState alloc{&allocator};
+        Buffer<AggDataPtr> agg_states(kBenchChunkSize);
+
+        for (const auto& chunk_col : stream.chunks()) {
+            Columns key_columns;
+            key_columns.emplace_back(chunk_col);
+            wrapper->build_hash_map(kBenchChunkSize, key_columns, suite._mem_pool.get(), alloc, &agg_states);
+            total_rows += kBenchChunkSize;
+        }
+        benchmark::DoNotOptimize(agg_states.data());
+        benchmark::ClobberMemory();
+
+        state.PauseTiming();
+        final_ht_bytes = hash_table_bytes(wrapper.get());
+        int64_t cs = 0;
+        for (int i = 0; i < kBenchChunkSize; ++i) cs += reinterpret_cast<intptr_t>(agg_states[i]);
+        cum_checksum += cs;
+        wrapper.reset();
+        suite._mem_pool->clear();
+        state.ResumeTiming();
+    }
+    benchmark::DoNotOptimize(cum_checksum);
+    state.SetItemsProcessed(total_rows);
+    state.counters["distinct"] = distinct;
+    state.counters["dist"] = static_cast<int>(dist);
+    state.counters["rows_per_iter"] = num_rows;
+    state.counters["hash_table_bytes"] = final_ht_bytes;
+
+    suite.TearDown();
+}
+
+// ============================================================================
+// Section C -- construction-only cost
 // SmallFixedSizeHashMap<int16_t> ctor zero-fills the 524 KiB pointer table
 // while phmap starts at near-zero capacity; this exposes the upfront cost
 // independent of any workload.
@@ -331,7 +488,7 @@ static void BM_Int16Construct(benchmark::State& state) {
 }
 
 // ============================================================================
-// Section D — nullable coverage
+// Section D -- nullable coverage
 // Three null fractions exercise the three branches of compute_agg_states_nullable:
 //   null_fraction == 0  -> NullableColumn with has_null=false; fast-path
 //                          falls through to compute_agg_states_non_nullable.
@@ -340,7 +497,7 @@ static void BM_Int16Construct(benchmark::State& state) {
 //                          (the per-row null-bit-aware loop).
 // ============================================================================
 template <typename Wrapper>
-static void BM_Int16NullableColdBuild(benchmark::State& state) {
+static void BM_Int16NullableBuildOnly(benchmark::State& state) {
     const int64_t num_rows = state.range(0);
     const int distinct = static_cast<int>(state.range(1));
     // null_fraction encoded as state.range(2) * 0.01 (so 0, 10, 50 -> 0%, 10%, 50%)
@@ -351,6 +508,7 @@ static void BM_Int16NullableColdBuild(benchmark::State& state) {
     NullableInt16ChunkStream stream(num_rows, distinct, null_fraction);
 
     int64_t total_rows = 0;
+    int64_t cum_checksum = 0;
     for (auto _ : state) {
         state.PauseTiming();
         auto wrapper = std::make_unique<Wrapper>(kBenchChunkSize, suite._agg_stat.get());
@@ -367,11 +525,17 @@ static void BM_Int16NullableColdBuild(benchmark::State& state) {
             wrapper->build_hash_map(kBenchChunkSize, key_columns, suite._mem_pool.get(), alloc, &agg_states);
             total_rows += kBenchChunkSize;
         }
+        benchmark::DoNotOptimize(agg_states.data());
+        benchmark::ClobberMemory();
 
         state.PauseTiming();
+        int64_t cs = 0;
+        for (int i = 0; i < kBenchChunkSize; ++i) cs += reinterpret_cast<intptr_t>(agg_states[i]);
+        cum_checksum += cs;
         wrapper.reset();
         suite._mem_pool->clear();
     }
+    benchmark::DoNotOptimize(cum_checksum);
     state.SetItemsProcessed(total_rows);
     state.counters["distinct"] = distinct;
     state.counters["null_pct"] = state.range(2);
@@ -385,9 +549,10 @@ static void BM_Int16NullableColdBuild(benchmark::State& state) {
 
 // Section A: density x distribution sweep at 100M rows.
 // Densities chosen for realistic SMALLINT GROUP BY shapes:
-//   1     -> pathological "OneUniqueValue" (single bucket / single slot)
+//   1     -> boundary "single distinct after pruning"; array's pathological
+//            best case.  Not the headline density.
 //   4     -> year bucket
-//   24    -> hour-of-day
+//   24    -> hour-of-day (headline mid density)
 //   366   -> day-of-year
 //   1000  -> region-code-ish
 //   10000 -> ClickHouse fixed_hash_table baseline density
@@ -396,7 +561,7 @@ static void RegisterArgs_SectionA(benchmark::internal::Benchmark* b) {
     b->ArgNames({"rows", "distinct", "dist"});
     constexpr int64_t kRows = 100'000'000;
     for (int distinct : {1, 4, 24, 366, 1000, 10000, 65536}) {
-        for (int d = 0; d <= 2; ++d) {
+        for (int d = 0; d <= 3; ++d) {
             b->Args({kRows, distinct, d});
         }
     }
@@ -404,8 +569,10 @@ static void RegisterArgs_SectionA(benchmark::internal::Benchmark* b) {
     b->Iterations(3);
 }
 
-// Section B: construction-vs-amortization break-even sweep at density=24, sorted.
-// Shows where the 524 KiB upfront alloc stops dominating.
+// Section B: amortization sweep at density=24, sorted.  Shows where the
+// 524 KiB upfront alloc stops dominating.  Same args used by both
+// BM_Int16BuildOnly (ctor paused) and BM_Int16BuildWithCtor (ctor timed)
+// so reviewers can read the two side by side.
 static void RegisterArgs_SectionB(benchmark::internal::Benchmark* b) {
     b->ArgNames({"rows", "distinct", "dist"});
     for (int64_t rows : {4'096LL, 100'000LL, 1'000'000LL, 10'000'000LL, 100'000'000LL}) {
@@ -428,20 +595,23 @@ static void RegisterArgs_SectionD(benchmark::internal::Benchmark* b) {
     b->Iterations(3);
 }
 
-BENCHMARK_TEMPLATE(BM_Int16ColdBuild, PhmapInt16Wrapper)->Apply(RegisterArgs_SectionA);
-BENCHMARK_TEMPLATE(BM_Int16ColdBuild, ArrayInt16Wrapper)->Apply(RegisterArgs_SectionA);
+BENCHMARK_TEMPLATE(BM_Int16BuildOnly, PhmapInt16Wrapper)->Apply(RegisterArgs_SectionA);
+BENCHMARK_TEMPLATE(BM_Int16BuildOnly, ArrayInt16Wrapper)->Apply(RegisterArgs_SectionA);
 
-BENCHMARK_TEMPLATE(BM_Int16ColdBuildAndCount, PhmapInt16Wrapper)->Apply(RegisterArgs_SectionA);
-BENCHMARK_TEMPLATE(BM_Int16ColdBuildAndCount, ArrayInt16Wrapper)->Apply(RegisterArgs_SectionA);
+BENCHMARK_TEMPLATE(BM_Int16BuildAndCount, PhmapInt16Wrapper)->Apply(RegisterArgs_SectionA);
+BENCHMARK_TEMPLATE(BM_Int16BuildAndCount, ArrayInt16Wrapper)->Apply(RegisterArgs_SectionA);
 
-BENCHMARK_TEMPLATE(BM_Int16ColdBuild, PhmapInt16Wrapper)->Apply(RegisterArgs_SectionB);
-BENCHMARK_TEMPLATE(BM_Int16ColdBuild, ArrayInt16Wrapper)->Apply(RegisterArgs_SectionB);
+BENCHMARK_TEMPLATE(BM_Int16BuildOnly, PhmapInt16Wrapper)->Apply(RegisterArgs_SectionB);
+BENCHMARK_TEMPLATE(BM_Int16BuildOnly, ArrayInt16Wrapper)->Apply(RegisterArgs_SectionB);
+
+BENCHMARK_TEMPLATE(BM_Int16BuildWithCtor, PhmapInt16Wrapper)->Apply(RegisterArgs_SectionB);
+BENCHMARK_TEMPLATE(BM_Int16BuildWithCtor, ArrayInt16Wrapper)->Apply(RegisterArgs_SectionB);
 
 BENCHMARK_TEMPLATE(BM_Int16Construct, PhmapInt16Wrapper)->Unit(benchmark::kMicrosecond);
 BENCHMARK_TEMPLATE(BM_Int16Construct, ArrayInt16Wrapper)->Unit(benchmark::kMicrosecond);
 
-BENCHMARK_TEMPLATE(BM_Int16NullableColdBuild, PhmapInt16NullableWrapper)->Apply(RegisterArgs_SectionD);
-BENCHMARK_TEMPLATE(BM_Int16NullableColdBuild, ArrayInt16NullableWrapper)->Apply(RegisterArgs_SectionD);
+BENCHMARK_TEMPLATE(BM_Int16NullableBuildOnly, PhmapInt16NullableWrapper)->Apply(RegisterArgs_SectionD);
+BENCHMARK_TEMPLATE(BM_Int16NullableBuildOnly, ArrayInt16NullableWrapper)->Apply(RegisterArgs_SectionD);
 
 } // namespace starrocks
 
