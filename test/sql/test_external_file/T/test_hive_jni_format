@@ -38,7 +38,6 @@ PROPERTIES
     "format" = "avro"
 );
 
-
 select * from test_hive_avro_format where col_string = 'world';
 select * from test_hive_avro_format where abs(col_float - 1.23) < 0.01 ;
 select col_tinyint,col_decimal,col_array from test_hive_avro_format order by 1;
