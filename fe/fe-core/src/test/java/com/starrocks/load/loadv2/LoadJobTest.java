@@ -488,11 +488,16 @@ public class LoadJobTest {
         loadInfo = loadJob.toThrift();
         Assertions.assertEquals("", loadInfo.getWarehouse());
     }
-<<<<<<< HEAD
-=======
-
     @Test
     public void testToThrift_timestampMsFields() {
+        TimeZone tz = TimeZone.getTimeZone(ZoneId.of("Asia/Shanghai"));
+        new MockUp<TimeUtils>() {
+            @Mock
+            public TimeZone getTimeZone() {
+                return tz;
+            }
+        };
+
         // Regression coverage: BE materializes information_schema.loads DATETIME
         // columns from the *_ms fields. If a future change ever drops a setter,
         // the column silently falls back to the legacy UTC+8 string and loads in
@@ -546,23 +551,4 @@ public class LoadJobTest {
         Assertions.assertFalse(unsetInfo.isSetLoad_finish_time_ms());
     }
 
-    @Test
-    public void testJsonOptionsEnvelope() throws DdlException {
-        Map<String, String> properties = Maps.newHashMap();
-        properties.put(LoadStmt.ENVELOPE, LoadStmt.ENVELOPE_DEBEZIUM);
-
-        LoadJob loadJob = new BrokerLoadJob();
-        loadJob.setJobProperties(properties);
-        Assertions.assertEquals(LoadStmt.ENVELOPE_DEBEZIUM, loadJob.jsonOptions.envelope);
-
-        // Mutually exclusive: json_root and envelope
-        properties.put(LoadStmt.JSONROOT, "$.root");
-        Assertions.assertThrows(DdlException.class, () -> loadJob.setJobProperties(properties));
-
-        // Mutually exclusive: strip_outer_array and envelope
-        properties.remove(LoadStmt.JSONROOT);
-        properties.put(LoadStmt.STRIP_OUTER_ARRAY, "true");
-        Assertions.assertThrows(DdlException.class, () -> loadJob.setJobProperties(properties));
-    }
->>>>>>> 6ddadce8cb ([BugFix] carry load times as UTC epoch ms across BE/FE thrift (#73365))
 }
