@@ -21,6 +21,7 @@
 #include "runtime/runtime_state.h"
 #include "storage/aggregate_iterator.h"
 #include "storage/chunk_helper.h"
+#include "storage/lake/vacuum.h"
 #include "storage/load_spill_block_manager.h"
 #include "storage/merge_iterator.h"
 #include "storage/union_iterator.h"
@@ -283,6 +284,26 @@ Status LoadChunkSpiller::merge_write(size_t target_size, bool do_sort, bool do_a
     if (merge_inputs.size() > 0) {
         RETURN_IF_ERROR(merge_func());
     }
+
+    // Flat-layout mode (Lake DeltaWriter path) disables per-block destructor deletion
+    // (skip_file_deletion = true), so we must batch-delete the merged spill files here.
+    // Legacy mode keeps the original destructor-based deletion and skips this branch.
+    if (_block_manager->is_flat_layout()) {
+        std::vector<std::string> spill_paths;
+        for (auto& group : groups) {
+            for (const auto& block : group.blocks()) {
+                if (block == nullptr) continue;
+                if (auto p = block->path(); p.has_value() && !p->empty()) {
+                    spill_paths.emplace_back(std::move(*p));
+                }
+            }
+        }
+        if (!spill_paths.empty()) {
+            VLOG(2) << "load spill hot delete: " << spill_paths.size() << " files for txn " << _block_manager->txn_id();
+            lake::delete_files_async(std::move(spill_paths));
+        }
+    }
+
     timer.stop();
     auto duration_ms = timer.elapsed_time() / 1000000;
 
