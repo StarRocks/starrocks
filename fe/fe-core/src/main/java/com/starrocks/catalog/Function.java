@@ -39,6 +39,9 @@ import com.google.common.base.Objects;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
+import com.google.gson.Gson;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionName;
@@ -46,6 +49,7 @@ import com.starrocks.catalog.combinator.AggStateDesc;
 import com.starrocks.common.Pair;
 import com.starrocks.common.io.Writable;
 import com.starrocks.credential.CloudConfiguration;
+import com.starrocks.sql.ast.CreateFunctionStmt;
 import com.starrocks.sql.ast.HdfsURI;
 import com.starrocks.thrift.TCloudConfiguration;
 import com.starrocks.thrift.TFunction;
@@ -64,6 +68,8 @@ import java.util.stream.Collectors;
  * Base class for all functions.
  */
 public class Function implements Writable {
+    private static final String MASKED_LOCATION = "***";
+
     // Enum for how to compare function signatures.
     // For decimal types, the type in the function can be a wildcard, i.e. decimal(*,*).
     // The wildcard can *only* exist as function type, the caller will always be a
@@ -873,7 +879,35 @@ public class Function implements Writable {
         return "";
     }
 
+    public String getProperties(boolean hideLocation) {
+        if (!hideLocation) {
+            return getProperties();
+        }
+
+        String properties = getProperties();
+        if (properties == null || properties.isEmpty()) {
+            return properties;
+        }
+
+        try {
+            JsonObject propertyObject = JsonParser.parseString(properties).getAsJsonObject();
+            if (propertyObject.has(CreateFunctionStmt.FILE_KEY)) {
+                propertyObject.addProperty(CreateFunctionStmt.FILE_KEY, MASKED_LOCATION);
+            }
+            if (propertyObject.has("object_file")) {
+                propertyObject.addProperty("object_file", MASKED_LOCATION);
+            }
+            return new Gson().toJson(propertyObject);
+        } catch (RuntimeException e) {
+            return properties;
+        }
+    }
+
     public List<Comparable> getInfo(boolean isVerbose) {
+        return getInfo(isVerbose, false);
+    }
+
+    public List<Comparable> getInfo(boolean isVerbose, boolean hideLocation) {
         List<Comparable> row = Lists.newArrayList();
         if (isVerbose) {
             // signature
@@ -903,7 +937,7 @@ public class Function implements Writable {
                 row.add("NULL");
             }
             // property
-            row.add(getProperties());
+            row.add(getProperties(hideLocation));
         } else {
             row.add(functionName());
         }

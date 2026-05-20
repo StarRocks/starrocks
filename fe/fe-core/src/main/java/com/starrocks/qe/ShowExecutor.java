@@ -1063,37 +1063,47 @@ public class ShowExecutor {
         @Override
         public ShowResultSet visitShowFunctionsStatement(ShowFunctionsStmt statement, ConnectContext context) {
             List<Function> functions;
+            boolean canShowFullAddress = false;
+            String dbName = statement.getDbName();
             if (statement.getIsBuiltin()) {
                 functions = context.getGlobalStateMgr().getBuiltinFunctions();
             } else if (statement.getIsGlobal()) {
                 functions = context.getGlobalStateMgr().getGlobalFunctionMgr().getFunctions();
+                canShowFullAddress = canShowFullGlobalFunctionAddress(context);
             } else {
-                Database db = context.getGlobalStateMgr().getLocalMetastore().getDb(statement.getDbName());
-                MetaUtils.checkDbNullAndReport(db, statement.getDbName());
+                Database db = context.getGlobalStateMgr().getLocalMetastore().getDb(dbName);
+                MetaUtils.checkDbNullAndReport(db, dbName);
+                dbName = db.getFullName();
                 functions = db.getFunctions();
+                canShowFullAddress = canShowFullFunctionAddress(context, dbName);
             }
 
             List<List<Comparable>> rowSet = Lists.newArrayList();
             for (Function function : functions) {
-                List<Comparable> row = function.getInfo(statement.getIsVerbose());
                 // like predicate
                 if (statement.getWild() == null || statement.like(function.functionName())) {
+                    boolean hideFunctionAddress = false;
                     if (statement.getIsGlobal()) {
-                        try {
-                            Authorizer.checkAnyActionOnGlobalFunction(context, function);
-                        } catch (AccessDeniedException e) {
-                            continue;
+                        if (!canShowFullAddress) {
+                            try {
+                                Authorizer.checkAnyActionOnGlobalFunction(context, function);
+                            } catch (AccessDeniedException e) {
+                                continue;
+                            }
+                            hideFunctionAddress = true;
                         }
                     } else if (!statement.getIsBuiltin()) {
-                        Database db = context.getGlobalStateMgr().getLocalMetastore().getDb(statement.getDbName());
-                        try {
-                            Authorizer.checkAnyActionOnFunction(context, db.getFullName(), function);
-                        } catch (AccessDeniedException e) {
-                            continue;
+                        if (!canShowFullAddress) {
+                            try {
+                                Authorizer.checkAnyActionOnFunction(context, dbName, function);
+                            } catch (AccessDeniedException e) {
+                                continue;
+                            }
+                            hideFunctionAddress = true;
                         }
                     }
 
-                    rowSet.add(row);
+                    rowSet.add(function.getInfo(statement.getIsVerbose(), hideFunctionAddress));
                 }
             }
 
@@ -1123,6 +1133,25 @@ public class ShowExecutor {
                     ShowResultSetMetaData.builder()
                             .addColumn(new Column("Function Name", ScalarType.createVarchar(256))).build();
             return new ShowResultSet(showMetaData, resultRowSet);
+        }
+
+        private boolean canShowFullFunctionAddress(ConnectContext context, String dbName) {
+            try {
+                Authorizer.checkDbAction(context, InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, dbName,
+                        PrivilegeType.CREATE_FUNCTION);
+                return true;
+            } catch (AccessDeniedException e) {
+                return false;
+            }
+        }
+
+        private boolean canShowFullGlobalFunctionAddress(ConnectContext context) {
+            try {
+                Authorizer.checkSystemAction(context, PrivilegeType.CREATE_GLOBAL_FUNCTION);
+                return true;
+            } catch (AccessDeniedException e) {
+                return false;
+            }
         }
 
         @Override
