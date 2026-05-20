@@ -5765,11 +5765,12 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
             return TvrTableSnapshot.empty();
         }
         OlapTable olapTable = (OlapTable) table;
-        long maxVersion = olapTable.getAllPhysicalPartitions().stream()
+        // Sum all partition visible versions so that a load into any partition advances the
+        // watermark, not just loads that beat the current per-partition maximum.
+        long watermark = olapTable.getAllPhysicalPartitions().stream()
                 .mapToLong(PhysicalPartition::getVisibleVersion)
-                .max()
-                .orElse(0L);
-        return maxVersion > 0 ? TvrTableSnapshot.of(maxVersion) : TvrTableSnapshot.empty();
+                .sum();
+        return watermark > 0 ? TvrTableSnapshot.of(watermark) : TvrTableSnapshot.empty();
     }
 
     @Override
@@ -5798,12 +5799,13 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
                 ? Optional.empty()
                 : Optional.of(fromSnapshotExclusive.getSnapshotId());
         TvrTableDelta delta = TvrTableDelta.of(fromOpt, Optional.of(toVersion));
-        return Collections.singletonList(classifyNativeDelta(olapTable, delta));
+        return Collections.singletonList(classifyNativeDelta(delta));
     }
 
-    private static TvrTableDeltaTrait classifyNativeDelta(OlapTable table, TvrTableDelta delta) {
-        return table.getKeysType() == KeysType.DUP_KEYS
-                ? TvrTableDeltaTrait.ofMonotonic(delta)
-                : TvrTableDeltaTrait.ofRetractable(delta);
+    // All native OLAP deltas are conservatively classified as retractable because DELETE
+    // predicates are legal on every KeysType, and per-version op-type metadata is unavailable
+    // in the FE. Promote to MONOTONIC in a follow-up once op-type tracking exists.
+    private static TvrTableDeltaTrait classifyNativeDelta(TvrTableDelta delta) {
+        return TvrTableDeltaTrait.ofRetractable(delta);
     }
 }
