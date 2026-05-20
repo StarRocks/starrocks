@@ -515,7 +515,6 @@ public:
                _query_options.enable_agg_low_card_dict_array_table;
     }
 
-
     const std::vector<TTabletCommitInfo>& tablet_commit_infos() const { return _tablet_commit_infos; }
 
     std::vector<TTabletCommitInfo>& tablet_commit_infos() { return _tablet_commit_infos; }

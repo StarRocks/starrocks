@@ -226,7 +226,6 @@ TEST(LowCardDictAggHashMapTest, RoundTripHighCodes) {
     ASSERT_EQ(read_key(agg_states[3]), 255);
 }
 
-
 class AggHashMapKeyNotFoundsTest : public ::testing::Test {
 public:
     template <typename HashMapWithKey>

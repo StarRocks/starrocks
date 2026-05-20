@@ -112,7 +112,10 @@ static std::vector<int> build_zipf_codes(int distinct_count) {
         int lo = 0, hi = distinct_count - 1;
         while (lo < hi) {
             int mid = (lo + hi) >> 1;
-            if (cum[mid] < r) lo = mid + 1; else hi = mid;
+            if (cum[mid] < r)
+                lo = mid + 1;
+            else
+                hi = mid;
         }
         codes[i] = lo;
     }
