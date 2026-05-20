@@ -138,11 +138,11 @@ GPERFTOOLS_NAME=gperftools-2.7.tar.gz
 GPERFTOOLS_SOURCE=gperftools-gperftools-2.7
 GPERFTOOLS_MD5SUM="797e7b7f6663288e2b90ab664861c61a"
 
-# zlib
-ZLIB_DOWNLOAD="https://github.com/madler/zlib/archive/refs/tags/v1.2.11.tar.gz"
-ZLIB_NAME=zlib-1.2.11.tar.gz
-ZLIB_SOURCE=zlib-1.2.11
-ZLIB_MD5SUM="0095d2d2d1f3442ce1318336637b695f"
+# zlib-ng (compat mode: same API/ABI as zlib, faster inflate via SSE/AVX2/NEON)
+ZLIB_DOWNLOAD="https://github.com/zlib-ng/zlib-ng/archive/refs/tags/2.3.3.tar.gz"
+ZLIB_NAME=zlib-ng-2.3.3.tar.gz
+ZLIB_SOURCE=zlib-ng-2.3.3
+ZLIB_MD5SUM="72337e6a7d2662af50a4ed0274c61b7e"
 
 # lz4
 LZ4_DOWNLOAD="https://github.com/lz4/lz4/archive/v1.10.0.tar.gz"
