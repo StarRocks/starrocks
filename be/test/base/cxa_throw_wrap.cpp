@@ -22,6 +22,8 @@ void __cxa_throw(void* thrown_exception, std::type_info* info, void (*dest)(void
 void __wrap___cxa_throw(void* thrown_exception, std::type_info* info, void (*dest)(void*)) {
     __cxa_throw(thrown_exception, info, dest);
 }
+// brpc weakly probes this gperftools compatibility hook. macOS test binaries do
+// not link the gperftools allocator, so keep the call as a no-op.
 void MallocExtension_ReleaseFreeMemory() {}
 #else
 void __real___cxa_throw(void* thrown_exception, std::type_info* info, void (*dest)(void*));

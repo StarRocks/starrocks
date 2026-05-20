@@ -47,7 +47,7 @@ http://be_ip:8040/mem_tracker
 * `Current Consumption`: 当前内存使用。
 * `Peak Consumption`: 峰值内存使用。
 
-* **通过浏览器或 curl 命令访问 TCmalloc 接口分析 BE 内存使用。**
+* **通过浏览器或 curl 命令访问 jemalloc 接口分析 BE 内存使用。**
 
 ```bash
 http://be_ip:8040/memz
@@ -58,36 +58,9 @@ http://be_ip:8040/memz
 > * 将以上 `be_ip` 改为 BE 节点实际的 IP 地址。
 > * BE `be_http_port` 默认为 `8040`。
 
-示例：
+`/memz` 页面展示 BE 进程内存限制、当前进程内存使用量、jemalloc 分配器统计信息以及 Update Manager 内存统计信息。在 jemalloc 统计中，`allocated`、`active`、`resident`、`mapped`、`retained`、`metadata` 等字段可用于区分对象实际使用的内存和分配器保留的内存。
 
-```plain text
-------------------------------------------------
-MALLOC:      777276768 (  741.3 MiB) Bytes in use by application
-MALLOC: +   8851890176 ( 8441.8 MiB) Bytes in page heap freelist
-MALLOC: +    143722232 (  137.1 MiB) Bytes in central cache freelist
-MALLOC: +     21869824 (   20.9 MiB) Bytes in transfer cache freelist
-MALLOC: +    832509608 (  793.9 MiB) Bytes in thread cache freelists
-MALLOC: +     58195968 (   55.5 MiB) Bytes in malloc metadata
-MALLOC:   ------------
-MALLOC: =  10685464576 (10190.5 MiB) Actual memory used (physical + swap)
-MALLOC: +  25231564800 (24062.7 MiB) Bytes released to OS (aka unmapped)
-MALLOC:   ------------
-MALLOC: =  35917029376 (34253.1 MiB) Virtual address space used
-MALLOC:
-MALLOC:         112388              Spans in use
-MALLOC:            335              Thread heaps in use
-MALLOC:           8192              Tcmalloc page size
-------------------------------------------------
-Call ReleaseFreeMemory() to release freelist memory to the OS (via madvise()).
-Bytes released to the OS take up virtual address space but no physical memory.
-```
-
-指标说明：
-
-* `Bytes in use by application`: BE 实际使用的内存。
-* `Bytes in page heap freelist`: BE 已不再使用，但是尚未归还给操作系统的内存。
-* `Actual memory used`: 操作系统监测到 BE 实际内存使用（BE 会预留一些空闲内存，不还给操作系统或是缓慢返还给操作系统）。
-* `Bytes released to OS`: BE 已设置为可回收状态，但是操作系统尚未回收的内存。
+分配器保留的内存可能高于对象当前实际使用的内存。建议结合 `/mem_tracker` 和 `/memz`，对比 StarRocks 内存 Tracker 与进程级分配器统计信息。
 
 ## 内存分类
 
