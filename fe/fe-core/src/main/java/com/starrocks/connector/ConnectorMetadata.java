@@ -14,6 +14,7 @@
 
 package com.starrocks.connector;
 
+import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
@@ -129,6 +130,16 @@ public interface ConnectorMetadata {
      */
     default Table getTable(ConnectContext context, String dbName, String tblName) {
         return null;
+    }
+
+    /**
+     * Lazily fetch the table comment when a caller really needs it.
+     * The default implementation reuses the comment already carried by
+     * getTable(); JDBC overrides this to issue a dedicated REMARKS query.
+     */
+    default String getTableComment(ConnectContext context, String dbName, String tblName) {
+        Table table = getTable(context, dbName, tblName);
+        return table == null ? "" : Strings.nullToEmpty(table.getComment());
     }
 
     /**
