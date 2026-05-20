@@ -15,7 +15,6 @@
 #include "exec/pipeline/scan/split_morsel_queue.h"
 
 #include <algorithm>
-#include <limits>
 #include <memory>
 
 #include "exec/olap_utils.h"
