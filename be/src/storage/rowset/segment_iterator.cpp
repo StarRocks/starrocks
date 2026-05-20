@@ -2415,10 +2415,10 @@ Status SegmentIterator::_do_get_next(Chunk* result, vector<rowid_t>* rowid) {
             // in a release build. Fail loudly instead — this indicates that the planner's
             // late-materialization pruning let through a query without keeping the embedding
             // column eager, despite VectorIndexReadiness reporting the index as ready.
-            return Status::InternalError(strings::Substitute(
-                    "brute-force vector fallback: vector column $0 missing in both output chunk "
-                    "and _dict_chunk; late-materialization pruned a column that the BE still needs",
-                    vec_col_id));
+            return Status::InternalError(
+                    strings::Substitute("brute-force vector fallback: vector column $0 missing in both output chunk "
+                                        "and _dict_chunk; late-materialization pruned a column that the BE still needs",
+                                        vec_col_id));
         }
         DCHECK_EQ(vector_column->size(), chunk->num_rows())
                 << "brute-force vector column row count must match chunk; row alignment was lost";
