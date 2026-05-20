@@ -18,6 +18,7 @@
 
 #include "exec/pipeline/scan/meta_scan_context.h"
 #include "exec/pipeline/scan/meta_scan_operator.h"
+#include "exec/pipeline/scan/olap_morsel_queue.h"
 #include "gen_cpp/Types_types.h"
 #include "storage/olap_common.h"
 
@@ -31,7 +32,9 @@ LakeMetaScanPrepareOperator::LakeMetaScanPrepareOperator(OperatorFactory* factor
           _scan_node(scan_node) {}
 
 Status LakeMetaScanPrepareOperator::_prepare_scan_context(RuntimeState* state) {
-    auto meta_scan_ranges = _morsel_queue->prepare_olap_scan_ranges();
+    auto* olap_morsel_queue = dynamic_cast<OlapMorselQueue*>(_morsel_queue);
+    DCHECK(olap_morsel_queue != nullptr);
+    auto meta_scan_ranges = olap_morsel_queue->prepare_olap_scan_ranges();
     for (auto& scan_range : meta_scan_ranges) {
         MetaScannerParams params;
         params.scan_range = scan_range;

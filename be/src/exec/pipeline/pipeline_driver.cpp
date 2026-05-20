@@ -34,6 +34,7 @@
 #include "exec/pipeline/query_context.h"
 #include "exec/pipeline/scan/olap_scan_operator.h"
 #include "exec/pipeline/scan/scan_operator.h"
+#include "exec/pipeline/scan/ticketed_morsel_queue.h"
 #include "exec/pipeline/schedule/timeout_tasks.h"
 #include "exec/pipeline/source_operator.h"
 #include "exec/query_cache/cache_operator.h"
@@ -191,16 +192,17 @@ Status PipelineDriver::prepare(RuntimeState* runtime_state) {
     const auto use_cache = _fragment_ctx->enable_cache();
 
     // attach ticket_checker to both ScanOperator and SplitMorselQueue
+    auto* ticketed_morsel_queue = dynamic_cast<TicketedMorselQueue*>(_morsel_queue);
     auto should_attach_ticket_checker =
             (dynamic_cast<ScanOperator*>(source_op) != nullptr) && _morsel_queue != nullptr &&
-            _morsel_queue->could_attch_ticket_checker() &&
+            ticketed_morsel_queue != nullptr && ticketed_morsel_queue->could_attch_ticket_checker() &&
             (use_cache || dynamic_cast<BucketSequenceMorselQueue*>(_morsel_queue) != nullptr);
 
     if (should_attach_ticket_checker) {
         auto* scan_op = dynamic_cast<ScanOperator*>(source_op);
         auto ticket_checker = std::make_shared<query_cache::TicketChecker>();
         scan_op->set_ticket_checker(ticket_checker);
-        _morsel_queue->set_ticket_checker(ticket_checker);
+        ticketed_morsel_queue->set_ticket_checker(ticket_checker);
     }
 
     source_op->add_morsel_queue(_morsel_queue);

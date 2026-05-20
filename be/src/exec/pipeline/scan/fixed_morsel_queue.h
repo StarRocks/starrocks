@@ -16,14 +16,14 @@
 
 #include <atomic>
 
-#include "exec/pipeline/scan/morsel_queue.h"
+#include "exec/pipeline/scan/olap_morsel_queue.h"
 
 namespace starrocks::pipeline {
 
 // The morsel queue with a fixed number of morsels, which is determined in the constructor.
-class FixedMorselQueue final : public MorselQueue {
+class FixedMorselQueue final : public OlapMorselQueue {
 public:
-    explicit FixedMorselQueue(Morsels&& morsels) : MorselQueue(std::move(morsels)), _pop_index(0) {}
+    explicit FixedMorselQueue(Morsels&& morsels) : OlapMorselQueue(std::move(morsels)), _pop_index(0) {}
     ~FixedMorselQueue() override = default;
     bool empty() const override { return _unget_morsel == nullptr && _pop_index >= _num_morsels; }
     StatusOr<MorselPtr> try_get() override;
