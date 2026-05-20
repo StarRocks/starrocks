@@ -193,7 +193,8 @@ The following example is based on LDAP.
    ldap_search_group_arg ::= 
        { "ldap_group_dn" = "" 
        | "ldap_group_filter" = "" }, 
-       "ldap_group_identifier_attr" = ""
+       "ldap_group_identifier_attr" = "",
+       "ldap_search_page_size"=""
    
    ldap_search_user_arg ::=
        "ldap_group_member_attr" = "",

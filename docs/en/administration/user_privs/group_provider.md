@@ -60,7 +60,8 @@ ldap_info ::=
 ldap_search_group_arg ::= 
     { "ldap_group_dn" = "" 
     | "ldap_group_filter" = "" }, 
-    "ldap_group_identifier_attr" = ""
+    "ldap_group_identifier_attr" = "",
+    "ldap_search_page_size"=""
 
 ldap_search_user_arg ::=
     "ldap_group_member_attr" = "",
@@ -135,6 +136,10 @@ A customized group filter that can be recognized by the LDAP server. It will be 
 ##### `ldap_group_identifier_attr`
 
 The attribute used as the identifier for the group name.
+
+##### `ldap_search_page_size`
+
+Optional. Configures the number of LDAP entries fetched per page during group search operations. Default: No paging
 
 #### `ldap_search_user_arg` parameter group
 

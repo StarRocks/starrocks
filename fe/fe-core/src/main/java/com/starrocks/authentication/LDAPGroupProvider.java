@@ -47,10 +47,13 @@ import javax.naming.NamingException;
 import javax.naming.PartialResultException;
 import javax.naming.directory.Attribute;
 import javax.naming.directory.Attributes;
-import javax.naming.directory.DirContext;
-import javax.naming.directory.InitialDirContext;
 import javax.naming.directory.SearchControls;
 import javax.naming.directory.SearchResult;
+import javax.naming.ldap.Control;
+import javax.naming.ldap.InitialLdapContext;
+import javax.naming.ldap.LdapContext;
+import javax.naming.ldap.PagedResultsControl;
+import javax.naming.ldap.PagedResultsResponseControl;
 import javax.net.ssl.SSLContext;
 
 public class LDAPGroupProvider extends GroupProvider {
@@ -95,6 +98,11 @@ public class LDAPGroupProvider extends GroupProvider {
      * Control the refresh frequency of ldap group
      */
     public static final String LDAP_CACHE_REFRESH_INTERVAL = "ldap_cache_refresh_interval";
+
+    /**
+     * Control the search page size
+     */
+    public static final String LDAP_SEARCH_PAGE_SIZE = "ldap_search_page_size";
 
     public static final Set<String> REQUIRED_PROPERTIES = new HashSet<>(Arrays.asList(
             LDAP_LDAP_CONN_URL,
@@ -150,23 +158,44 @@ public class LDAPGroupProvider extends GroupProvider {
     public void refreshGroups() {
         LOG.info("refresh ldap group cache for group provider: {}", name);
         Map<String, Set<String>> groups = new ConcurrentHashMap<>();
+        LdapContext ctx = null;
+
         try {
-            DirContext ctx = createDirContextOnConnection(getLdapBindRootDn(), getLdapBindRootPwd());
+            ctx = createDirContextOnConnection(getLdapBindRootDn(), getLdapBindRootPwd());
             UserNameExtractInterface userNameExtractInterface = getUserNameExtractInterface();
 
             if (getLdapGroupFilter() != null) {
                 SearchControls searchControls = new SearchControls();
                 searchControls.setSearchScope(SearchControls.SUBTREE_SCOPE);
-                NamingEnumeration<SearchResult> results = ctx.search(getLdapBaseDn(), getLdapGroupFilter(), searchControls);
-                try {
-                    while (results.hasMore()) {
-                        SearchResult result = results.next();
-                        Attributes attributes = result.getAttributes();
-                        matchUserAndUpdateGroups(groups, attributes, userNameExtractInterface);
+
+                byte[] cookie = null;
+                Optional<Integer> pageSize = getLdapSearchPageSize();
+
+                do {
+                    if (pageSize.isPresent()) {
+                        ctx.setRequestControls(new Control[] {
+                            new PagedResultsControl(pageSize.get(), cookie, Control.NONCRITICAL)
+                        });
                     }
-                } catch (PartialResultException e) {
-                    LOG.warn("LDAP group search partial result exception", e);
-                }
+
+                    NamingEnumeration<SearchResult> results = ctx.search(getLdapBaseDn(), getLdapGroupFilter(), searchControls);
+
+                    try {
+                        while (results.hasMoreElements()) {
+                            SearchResult result = results.next();
+                            Attributes attributes = result.getAttributes();
+                            matchUserAndUpdateGroups(groups, attributes, userNameExtractInterface);
+                        }
+                    } catch (PartialResultException e) {
+                        LOG.warn("LDAP group search partial result exception; stoping paging", e);
+                        break; // safer to stop paging here
+                    } finally {
+                        if (results != null) {
+                            results.close();
+                        }
+                    }
+                    cookie = getResponseCookie(ctx.getResponseControls());
+                } while (cookie != null && cookie.length > 0);
             } else if (getLdapGroupDn() != null) {
                 for (String ldapGroupDN : getLdapGroupDn()) {
                     Attributes attributes =
@@ -179,6 +208,14 @@ public class LDAPGroupProvider extends GroupProvider {
         } catch (Exception e) {
             //Do not affect the normal login process at this time. If an error occurs, an empty group will be returned.
             LOG.error("LDAP group search failed", e);
+        } finally {
+            if (ctx != null) {
+                try {
+                    ctx.close();
+                } catch (Exception e) {
+                    LOG.warn("Exception while closing context", e);
+                }
+            }
         }
 
         if (LOG.isDebugEnabled()) {
@@ -186,6 +223,19 @@ public class LDAPGroupProvider extends GroupProvider {
         }
 
         this.userToGroupCache = groups;
+    }
+
+    private byte[] getResponseCookie(final Control[] controls) {
+        if (controls != null) {
+            for (Control control : controls) {
+                if (control instanceof PagedResultsResponseControl) {
+                    PagedResultsResponseControl pagedControl = (PagedResultsResponseControl) control;
+                    return pagedControl.getCookie();
+                }
+            }
+        }
+
+        return null;
     }
 
     private void matchUserAndUpdateGroups(Map<String, Set<String>> groups,
@@ -297,7 +347,7 @@ public class LDAPGroupProvider extends GroupProvider {
         }
     }
 
-    public DirContext createDirContextOnConnection(String dn, String pwd) throws NamingException, IOException,
+    public LdapContext createDirContextOnConnection(String dn, String pwd) throws NamingException, IOException,
             GeneralSecurityException {
         if (Strings.isNullOrEmpty(pwd)) {
             LOG.warn("empty password is not allowed for simple authentication");
@@ -328,7 +378,7 @@ public class LDAPGroupProvider extends GroupProvider {
             environment.put("java.naming.ldap.factory.socket", LdapSslSocketFactory.class.getName());
         }
 
-        return new InitialDirContext(environment);
+        return new InitialLdapContext(environment, null);
     }
 
     public String getLdapConnUrl() {
@@ -393,6 +443,10 @@ public class LDAPGroupProvider extends GroupProvider {
 
     public Long getLdapCacheRefreshInterval() {
         return Long.parseLong(properties.getOrDefault(LDAP_CACHE_REFRESH_INTERVAL, "300"));
+    }
+
+    public Optional<Integer> getLdapSearchPageSize() {
+        return Optional.ofNullable(properties.get(LDAP_SEARCH_PAGE_SIZE)).map(Integer::parseInt);
     }
 
     private void validateIntegerProp(Map<String, String> propertyMap, String key, int min, int max)
