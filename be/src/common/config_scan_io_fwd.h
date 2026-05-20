@@ -82,6 +82,19 @@ CONF_mBool(enable_lake_adaptive_split_morsel_queue, "true");
 // Whether Lake adaptive split may issue coarse pending tasks when all queued refined/prepare tasks are drained.
 CONF_mBool(enable_lake_adaptive_split_pending_task, "true");
 
+// Whether to update Lake adaptive split morsel queue profile counters. Disable only for profiling overhead A/B tests.
+CONF_mBool(enable_lake_adaptive_split_queue_profile_counters, "true");
+
+// Minimum duration in microseconds that the base queue must stay empty with a live pending candidate before issuing
+// Lake adaptive pending tasks. 0 means issue immediately.
+CONF_mInt64(lake_adaptive_split_pending_min_opportunity_us, "0");
+
+// Whether Lake adaptive pending stops issuing more coarse tasks for a segment once refined children are ready.
+CONF_mBool(lake_adaptive_split_pending_stop_after_refined_ready, "false");
+
+// Maximum rows for one Lake adaptive pending task. 0 means use the normal split row size.
+CONF_mInt64(lake_adaptive_split_pending_max_rows_per_task, "0");
+
 // Whether Lake adaptive segment prepare includes page-level zonemap/bloom pruning in the shared prepared range.
 // Disable this to defer those two page filters to child morsel execution for A/B testing.
 CONF_mBool(enable_lake_prepare_page_filter_pruning, "false");

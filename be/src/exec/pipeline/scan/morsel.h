@@ -17,6 +17,7 @@
 #include <algorithm>
 #include <atomic>
 #include <deque>
+#include <limits>
 #include <memory>
 #include <mutex>
 #include <optional>
@@ -24,6 +25,7 @@
 #include <unordered_map>
 #include <vector>
 
+#include "common/runtime_profile.h"
 #include "exec/query_cache/ticket_checker.h"
 #include "gen_cpp/InternalService_types.h"
 #include "runtime/mem_pool.h"
@@ -417,6 +419,7 @@ public:
         _tablet_rowsets = tablet_rowsets;
     }
     virtual void set_ticket_checker(const query_cache::TicketCheckerPtr& ticket_checker) {}
+    virtual void set_runtime_profile(RuntimeProfile* profile) {}
     virtual bool could_attch_ticket_checker() const { return false; }
 
     virtual size_t num_original_morsels() const { return _num_morsels; }
@@ -504,6 +507,7 @@ public:
     std::string name() const override;
     StatusOr<bool> ready_for_next() const override;
     Status append_morsels(Morsels&& morsels) override { return _morsel_queue->append_morsels(std::move(morsels)); }
+    void set_runtime_profile(RuntimeProfile* profile) override { _morsel_queue->set_runtime_profile(profile); }
     Type type() const override { return BUCKET_SEQUENCE; }
 
     void set_tablet_schema(const TabletSchemaCSPtr& tablet_schema) override {
@@ -712,6 +716,7 @@ public:
     }
 
     bool empty() const override;
+    StatusOr<bool> ready_for_next() const override;
     StatusOr<MorselPtr> try_get() override;
     void unget(MorselPtr&& morsel) override;
     std::string name() const override { return "lake_adaptive_split_morsel_queue"; }
@@ -724,6 +729,7 @@ public:
     void set_max_degree_of_parallelism(size_t degree_of_parallelism) { _degree_of_parallelism = degree_of_parallelism; }
     size_t max_degree_of_parallelism() const override { return _degree_of_parallelism; }
     int64_t splitted_scan_rows() const override { return _splitted_scan_rows; }
+    void set_runtime_profile(RuntimeProfile* profile) override { _init_profile_counters(profile); }
 
 private:
     struct PendingCandidate {
@@ -735,8 +741,18 @@ private:
         size_t segment_index = 0;
     };
 
+    enum class PendingCandidateState {
+        LIVE,
+        NOT_READY,
+        DEAD,
+    };
+
     StatusOr<MorselPtr> _issue_pending_child_locked();
+    void _init_profile_counters(RuntimeProfile* profile);
     bool _has_live_pending_candidate_locked() const;
+    PendingCandidateState _pending_candidate_state(const PendingCandidate& candidate) const;
+    bool _update_pending_opportunity_window_locked() const;
+    void _close_pending_opportunity_window_locked(int64_t now_ns) const;
     bool _is_live_pending_candidate(const PendingCandidate& candidate) const;
     bool _try_issue_pending_rowid_range(const PendingCandidate& candidate, RowidRangeOptionPtr* rowid_range);
     void _maybe_register_pending_candidate(const MorselPtr& morsel);
@@ -744,11 +760,33 @@ private:
 
     std::atomic<int64_t> _size = 0;
     std::deque<MorselPtr> _queue;
-    std::deque<PendingCandidate> _pending_candidates;
+    mutable std::deque<PendingCandidate> _pending_candidates;
     mutable std::mutex _mutex;
+    mutable int64_t _pending_opportunity_start_ns = 0;
     query_cache::TicketCheckerPtr _ticket_checker;
     size_t _degree_of_parallelism = 1;
     int64_t _splitted_scan_rows = 1;
+
+    RuntimeProfile::Counter* _profile_try_get_counter = nullptr;
+    RuntimeProfile::Counter* _profile_base_queue_hit_counter = nullptr;
+    RuntimeProfile::Counter* _profile_pending_attempt_counter = nullptr;
+    RuntimeProfile::Counter* _profile_pending_issued_counter = nullptr;
+    RuntimeProfile::Counter* _profile_pending_no_candidate_counter = nullptr;
+    RuntimeProfile::Counter* _profile_pending_not_live_counter = nullptr;
+    RuntimeProfile::Counter* _profile_pending_not_ready_counter = nullptr;
+    RuntimeProfile::Counter* _profile_pending_closed_counter = nullptr;
+    RuntimeProfile::Counter* _profile_pending_no_rows_counter = nullptr;
+    RuntimeProfile::Counter* _profile_pending_candidate_counter = nullptr;
+    RuntimeProfile::Counter* _profile_pending_registered_counter = nullptr;
+    RuntimeProfile::Counter* _profile_pending_opportunity_time_counter = nullptr;
+    RuntimeProfile::Counter* _profile_pending_opportunity_windows_counter = nullptr;
+    RuntimeProfile::Counter* _profile_pending_opportunity_too_short_counter = nullptr;
+    RuntimeProfile::Counter* _profile_empty_timer = nullptr;
+    RuntimeProfile::Counter* _profile_empty_call_counter = nullptr;
+    RuntimeProfile::Counter* _profile_ready_timer = nullptr;
+    RuntimeProfile::Counter* _profile_ready_call_counter = nullptr;
+    RuntimeProfile::Counter* _profile_try_get_timer = nullptr;
+    RuntimeProfile::Counter* _profile_pending_issue_timer = nullptr;
 };
 
 MorselQueuePtr create_empty_morsel_queue();

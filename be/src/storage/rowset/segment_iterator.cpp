@@ -1871,6 +1871,7 @@ StatusOr<SparseRange<>> SegmentIterator::_get_row_ranges_by_key_ranges() {
 
     if (_opts.cached_seek_range_rowid_bounds != nullptr &&
         _opts.cached_seek_range_rowid_bounds->size() == _opts.ranges.size()) {
+        _opts.stats->seek_range_rowid_bounds_cache_hits += 1;
         for (const auto& rowid_range_opt : *_opts.cached_seek_range_rowid_bounds) {
             if (rowid_range_opt.has_value()) {
                 res.add(rowid_range_opt.value());
@@ -1879,6 +1880,7 @@ StatusOr<SparseRange<>> SegmentIterator::_get_row_ranges_by_key_ranges() {
         return res;
     }
 
+    _opts.stats->seek_range_rowid_bounds_cache_misses += 1;
     RETURN_IF_ERROR(_segment->load_index(_opts.lake_io_opts));
     for (const SeekRange& range : _opts.ranges) {
         ASSIGN_OR_RETURN(auto rowid_range_opt, _seek_range_to_rowid_range(range));

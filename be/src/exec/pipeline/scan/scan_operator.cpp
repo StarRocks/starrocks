@@ -72,6 +72,7 @@ Status ScanOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(SourceOperator::prepare(state));
 
     _unique_metrics->add_info_string("MorselQueueType", _morsel_queue->name());
+    _morsel_queue->set_runtime_profile(_unique_metrics.get());
     auto num_heavy_exprs = down_cast<ScanOperatorFactory*>(_factory)->scan_node()->get_heavy_expr_ctxs().size();
     _unique_metrics->add_info_string("NumHeavyExprs", std::to_string(num_heavy_exprs));
     _peak_buffer_size_counter = _unique_metrics->AddHighWaterMarkCounter(
@@ -409,7 +410,6 @@ Status ScanOperator::_try_to_trigger_next_scan(RuntimeState* state) {
                 skip[i] = false;
             }
         }
-
         int ranked_to_sched[2][_io_tasks_per_scan_operator];
         int ranked_size[2] = {0, 0};
 

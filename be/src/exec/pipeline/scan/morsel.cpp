@@ -19,6 +19,8 @@
 #include <memory>
 #include <mutex>
 
+#include "base/time/time.h"
+#include "base/utility/defer_op.h"
 #include "common/config.h"
 #include "common/statusor.h"
 #include "exec/olap_utils.h"
@@ -38,6 +40,12 @@ namespace starrocks::pipeline {
 /// Morsel.
 
 const std::vector<BaseRowsetSharedPtr> ScanMorselX::kEmptyRowsets;
+
+static void update_profile_counter(RuntimeProfile::Counter* counter, int64_t delta) {
+    if (config::enable_lake_adaptive_split_queue_profile_counters && counter != nullptr) {
+        COUNTER_UPDATE(counter, delta);
+    }
+}
 
 void ScanMorsel::build_scan_morsels(int node_id, const std::vector<TScanRangeParams>& scan_ranges,
                                     bool accept_empty_scan_ranges, pipeline::Morsels* ptr_morsels,
@@ -1096,33 +1104,145 @@ Status DynamicMorselQueue::append_morsels(std::vector<MorselPtr>&& morsels) {
     return Status::OK();
 }
 
-bool LakeAdaptiveSplitMorselQueue::_is_live_pending_candidate(const PendingCandidate& candidate) const {
+LakeAdaptiveSplitMorselQueue::PendingCandidateState LakeAdaptiveSplitMorselQueue::_pending_candidate_state(
+        const PendingCandidate& candidate) const {
     if (!config::enable_lake_adaptive_split_pending_task || candidate.prepared_segment_state == nullptr ||
         candidate.prepared_read_state == nullptr ||
         candidate.rowset_index >= candidate.prepared_read_state->rowsets.size() ||
         candidate.rowset_index >= candidate.prepared_read_state->rowset_segments.size() ||
         candidate.segment_index >= candidate.prepared_read_state->rowset_segments[candidate.rowset_index].size()) {
-        return false;
+        return PendingCandidateState::DEAD;
+    }
+
+    const auto& rowset = candidate.prepared_read_state->rowsets[candidate.rowset_index];
+    const auto& segment = candidate.prepared_read_state->rowset_segments[candidate.rowset_index][candidate.segment_index];
+    if (rowset == nullptr || segment == nullptr) {
+        return PendingCandidateState::DEAD;
     }
 
     const auto& segment_state = candidate.prepared_segment_state;
     std::lock_guard<std::mutex> guard(segment_state->adaptive_issue_lock);
-    return segment_state->adaptive_coarse_scan_range_ready && !segment_state->adaptive_pending_issue_closed &&
-           segment_state->adaptive_coarse_scan_range_iter.has_more();
+    if (config::lake_adaptive_split_pending_stop_after_refined_ready &&
+        segment_state->adaptive_refined_ready_ns.load(std::memory_order_acquire) > 0) {
+        return PendingCandidateState::DEAD;
+    }
+    if (segment_state->adaptive_pending_issue_closed) {
+        return PendingCandidateState::DEAD;
+    }
+    if (!segment_state->adaptive_coarse_scan_range_ready) {
+        return PendingCandidateState::NOT_READY;
+    }
+    if (!segment_state->adaptive_coarse_scan_range_iter.has_more()) {
+        return PendingCandidateState::DEAD;
+    }
+    return PendingCandidateState::LIVE;
+}
+
+bool LakeAdaptiveSplitMorselQueue::_is_live_pending_candidate(const PendingCandidate& candidate) const {
+    return _pending_candidate_state(candidate) == PendingCandidateState::LIVE;
 }
 
 bool LakeAdaptiveSplitMorselQueue::_has_live_pending_candidate_locked() const {
-    for (const auto& candidate : _pending_candidates) {
-        if (_is_live_pending_candidate(candidate)) {
+    for (auto it = _pending_candidates.begin(); it != _pending_candidates.end();) {
+        switch (_pending_candidate_state(*it)) {
+        case PendingCandidateState::LIVE:
             return true;
+        case PendingCandidateState::DEAD:
+            it = _pending_candidates.erase(it);
+            break;
+        case PendingCandidateState::NOT_READY:
+            ++it;
+            break;
         }
     }
     return false;
 }
 
+void LakeAdaptiveSplitMorselQueue::_close_pending_opportunity_window_locked(int64_t now_ns) const {
+    if (_pending_opportunity_start_ns == 0) {
+        return;
+    }
+    update_profile_counter(_profile_pending_opportunity_time_counter, now_ns - _pending_opportunity_start_ns);
+    _pending_opportunity_start_ns = 0;
+}
+
+bool LakeAdaptiveSplitMorselQueue::_update_pending_opportunity_window_locked() const {
+    const auto now_ns = MonotonicNanos();
+    const bool has_pending_opportunity = _queue.empty() && _has_live_pending_candidate_locked();
+    if (has_pending_opportunity) {
+        if (_pending_opportunity_start_ns == 0) {
+            _pending_opportunity_start_ns = now_ns;
+            update_profile_counter(_profile_pending_opportunity_windows_counter, 1);
+        }
+    } else {
+        _close_pending_opportunity_window_locked(now_ns);
+    }
+    return has_pending_opportunity;
+}
+
+void LakeAdaptiveSplitMorselQueue::_init_profile_counters(RuntimeProfile* profile) {
+    if (profile == nullptr || _profile_try_get_counter != nullptr) {
+        return;
+    }
+    _profile_try_get_counter = ADD_COUNTER(profile, "LakeAdaptiveQueueTryGet", TUnit::UNIT);
+    _profile_base_queue_hit_counter = ADD_COUNTER(profile, "LakeAdaptiveQueueBaseQueueHit", TUnit::UNIT);
+    _profile_pending_attempt_counter = ADD_COUNTER(profile, "LakeAdaptiveQueuePendingAttempts", TUnit::UNIT);
+    _profile_pending_issued_counter = ADD_COUNTER(profile, "LakeAdaptiveQueuePendingIssued", TUnit::UNIT);
+    _profile_pending_no_candidate_counter = ADD_COUNTER(profile, "LakeAdaptiveQueuePendingNoCandidate", TUnit::UNIT);
+    _profile_pending_not_live_counter = ADD_COUNTER(profile, "LakeAdaptiveQueuePendingNotLive", TUnit::UNIT);
+    _profile_pending_not_ready_counter = ADD_COUNTER(profile, "LakeAdaptiveQueuePendingNotReady", TUnit::UNIT);
+    _profile_pending_closed_counter = ADD_COUNTER(profile, "LakeAdaptiveQueuePendingClosed", TUnit::UNIT);
+    _profile_pending_no_rows_counter = ADD_COUNTER(profile, "LakeAdaptiveQueuePendingNoRows", TUnit::UNIT);
+    _profile_pending_candidate_counter = ADD_COUNTER(profile, "LakeAdaptiveQueuePendingCandidates", TUnit::UNIT);
+    _profile_pending_registered_counter = ADD_COUNTER(profile, "LakeAdaptiveQueuePendingRegistered", TUnit::UNIT);
+    _profile_pending_opportunity_time_counter = ADD_TIMER(profile, "LakeAdaptiveQueuePendingOpportunityTime");
+    _profile_pending_opportunity_windows_counter =
+            ADD_COUNTER(profile, "LakeAdaptiveQueuePendingOpportunityWindows", TUnit::UNIT);
+    _profile_pending_opportunity_too_short_counter =
+            ADD_COUNTER(profile, "LakeAdaptiveQueuePendingOpportunityTooShort", TUnit::UNIT);
+    _profile_empty_timer = ADD_TIMER(profile, "LakeAdaptiveQueueEmptyTime");
+    _profile_empty_call_counter = ADD_COUNTER(profile, "LakeAdaptiveQueueEmptyCalls", TUnit::UNIT);
+    _profile_ready_timer = ADD_TIMER(profile, "LakeAdaptiveQueueReadyForNextTime");
+    _profile_ready_call_counter = ADD_COUNTER(profile, "LakeAdaptiveQueueReadyForNextCalls", TUnit::UNIT);
+    _profile_try_get_timer = ADD_TIMER(profile, "LakeAdaptiveQueueTryGetTime");
+    _profile_pending_issue_timer = ADD_TIMER(profile, "LakeAdaptiveQueuePendingIssueTime");
+}
+
 bool LakeAdaptiveSplitMorselQueue::empty() const {
+    const auto start_ns = MonotonicNanos();
     std::lock_guard<std::mutex> guard(_mutex);
-    return _queue.empty() && !_has_live_pending_candidate_locked();
+    update_profile_counter(_profile_empty_call_counter, 1);
+    const bool has_pending_opportunity = _update_pending_opportunity_window_locked();
+    const bool is_empty = _queue.empty() && !has_pending_opportunity;
+    update_profile_counter(_profile_empty_timer, MonotonicNanos() - start_ns);
+    return is_empty;
+}
+
+StatusOr<bool> LakeAdaptiveSplitMorselQueue::ready_for_next() const {
+    const auto start_ns = MonotonicNanos();
+    std::lock_guard<std::mutex> guard(_mutex);
+    update_profile_counter(_profile_ready_call_counter, 1);
+    if (!_queue.empty()) {
+        update_profile_counter(_profile_ready_timer, MonotonicNanos() - start_ns);
+        return true;
+    }
+    const bool has_pending_opportunity = _update_pending_opportunity_window_locked();
+    if (!has_pending_opportunity) {
+        update_profile_counter(_profile_ready_timer, MonotonicNanos() - start_ns);
+        return false;
+    }
+    // The opportunity timestamp is only a timer; live candidate detection above decides readiness.
+    const int64_t min_opportunity_ns = std::max<int64_t>(0, config::lake_adaptive_split_pending_min_opportunity_us) * 1000;
+    if (min_opportunity_ns <= 0) {
+        update_profile_counter(_profile_ready_timer, MonotonicNanos() - start_ns);
+        return true;
+    }
+    const bool ready = MonotonicNanos() - _pending_opportunity_start_ns >= min_opportunity_ns;
+    if (!ready) {
+        update_profile_counter(_profile_pending_opportunity_too_short_counter, 1);
+    }
+    update_profile_counter(_profile_ready_timer, MonotonicNanos() - start_ns);
+    return ready;
 }
 
 bool LakeAdaptiveSplitMorselQueue::_try_issue_pending_rowid_range(const PendingCandidate& candidate,
@@ -1139,23 +1259,40 @@ bool LakeAdaptiveSplitMorselQueue::_try_issue_pending_rowid_range(const PendingC
     auto& rowset = candidate.prepared_read_state->rowsets[candidate.rowset_index];
     auto& segment = candidate.prepared_read_state->rowset_segments[candidate.rowset_index][candidate.segment_index];
     if (rowset == nullptr || segment == nullptr) {
+        update_profile_counter(_profile_pending_not_live_counter, 1);
         return false;
     }
 
     auto result = std::make_shared<RowidRangeOption>();
     {
         std::lock_guard<std::mutex> guard(segment_state->adaptive_issue_lock);
-        if (!segment_state->adaptive_coarse_scan_range_ready || segment_state->adaptive_pending_issue_closed ||
-            !segment_state->adaptive_coarse_scan_range_iter.has_more()) {
+        if (!segment_state->adaptive_coarse_scan_range_ready) {
+            update_profile_counter(_profile_pending_not_ready_counter, 1);
+            return false;
+        }
+        if (config::lake_adaptive_split_pending_stop_after_refined_ready &&
+            segment_state->adaptive_refined_ready_ns.load(std::memory_order_acquire) > 0) {
+            update_profile_counter(_profile_pending_closed_counter, 1);
+            return false;
+        }
+        if (segment_state->adaptive_pending_issue_closed) {
+            update_profile_counter(_profile_pending_closed_counter, 1);
+            return false;
+        }
+        if (!segment_state->adaptive_coarse_scan_range_iter.has_more()) {
+            update_profile_counter(_profile_pending_no_rows_counter, 1);
             return false;
         }
 
+        const size_t pending_rows_limit =
+                config::lake_adaptive_split_pending_max_rows_per_task > 0
+                        ? std::max<size_t>(1, static_cast<size_t>(config::lake_adaptive_split_pending_max_rows_per_task))
+                        : static_cast<size_t>(_splitted_scan_rows);
         size_t num_taken_rows = 0;
         while (segment_state->adaptive_coarse_scan_range_iter.has_more() &&
-               num_taken_rows < static_cast<size_t>(_splitted_scan_rows)) {
+               num_taken_rows < pending_rows_limit) {
             size_t remaining_in_segment = segment_state->adaptive_coarse_scan_range_iter.remaining_rows();
-            size_t rows_to_take =
-                    std::min<size_t>(static_cast<size_t>(_splitted_scan_rows) - num_taken_rows, remaining_in_segment);
+            size_t rows_to_take = std::min<size_t>(pending_rows_limit - num_taken_rows, remaining_in_segment);
             if (remaining_in_segment > rows_to_take &&
                 remaining_in_segment - rows_to_take < static_cast<size_t>(_splitted_scan_rows)) {
                 rows_to_take = remaining_in_segment;
@@ -1179,6 +1316,7 @@ bool LakeAdaptiveSplitMorselQueue::_try_issue_pending_rowid_range(const PendingC
     }
 
     if (result->rowid_range_per_segment_per_rowset.empty()) {
+        update_profile_counter(_profile_pending_no_rows_counter, 1);
         return false;
     }
     *rowid_range = std::move(result);
@@ -1186,14 +1324,37 @@ bool LakeAdaptiveSplitMorselQueue::_try_issue_pending_rowid_range(const PendingC
 }
 
 StatusOr<MorselPtr> LakeAdaptiveSplitMorselQueue::_issue_pending_child_locked() {
+    const auto start_ns = MonotonicNanos();
+    auto defer_update_timer = DeferOp([&]() {
+        update_profile_counter(_profile_pending_issue_timer, MonotonicNanos() - start_ns);
+    });
     if (!config::enable_lake_adaptive_split_pending_task) {
         _pending_candidates.clear();
+        _close_pending_opportunity_window_locked(MonotonicNanos());
+        return nullptr;
+    }
+    update_profile_counter(_profile_pending_attempt_counter, 1);
+    const int64_t min_opportunity_ns = std::max<int64_t>(0, config::lake_adaptive_split_pending_min_opportunity_us) * 1000;
+    if (min_opportunity_ns > 0 && _pending_opportunity_start_ns > 0 &&
+        MonotonicNanos() - _pending_opportunity_start_ns < min_opportunity_ns) {
+        update_profile_counter(_profile_pending_opportunity_too_short_counter, 1);
         return nullptr;
     }
 
-    while (!_pending_candidates.empty()) {
+    const size_t candidate_count = _pending_candidates.size();
+    for (size_t i = 0; i < candidate_count && !_pending_candidates.empty(); ++i) {
         PendingCandidate candidate = std::move(_pending_candidates.front());
         _pending_candidates.pop_front();
+
+        const auto state = _pending_candidate_state(candidate);
+        if (state == PendingCandidateState::DEAD) {
+            continue;
+        }
+        if (state == PendingCandidateState::NOT_READY) {
+            _pending_candidates.emplace_back(std::move(candidate));
+            continue;
+        }
+
         RowidRangeOptionPtr rowid_range;
         if (!_try_issue_pending_rowid_range(candidate, &rowid_range)) {
             continue;
@@ -1211,10 +1372,16 @@ StatusOr<MorselPtr> LakeAdaptiveSplitMorselQueue::_issue_pending_child_locked() 
         auto morsel = std::make_unique<ScanMorsel>(candidate.plan_node_id, candidate.scan_range);
         morsel->set_split_context(std::move(split_context));
 
-        _pending_candidates.emplace_back(std::move(candidate));
+        if (_pending_candidate_state(candidate) != PendingCandidateState::DEAD) {
+            _pending_candidates.emplace_back(std::move(candidate));
+        }
+        _update_pending_opportunity_window_locked();
         _enter_ticket(morsel.get());
+        update_profile_counter(_profile_pending_issued_counter, 1);
         return std::move(morsel);
     }
+    _update_pending_opportunity_window_locked();
+    update_profile_counter(_profile_pending_no_candidate_counter, 1);
     return nullptr;
 }
 
@@ -1225,6 +1392,18 @@ void LakeAdaptiveSplitMorselQueue::_maybe_register_pending_candidate(const Morse
 
     const auto* scan_morsel = down_cast<const ScanMorsel*>(morsel.get());
     const auto* split_context = dynamic_cast<const LakeSplitContext*>(scan_morsel->get_split_context());
+    if (split_context != nullptr &&
+        split_context->adaptive_task_source == LakeSplitContext::AdaptiveTaskSource::REFINED_CHILD &&
+        split_context->prepared_segment_state != nullptr) {
+        int64_t expected = 0;
+        const auto now_ns = MonotonicNanos();
+        if (split_context->prepared_segment_state->adaptive_refined_ready_ns.compare_exchange_strong(
+                    expected, now_ns, std::memory_order_acq_rel, std::memory_order_acquire)) {
+            split_context->prepared_segment_state->adaptive_pending_running_at_refined_ready.store(
+                    split_context->prepared_segment_state->adaptive_pending_running_tasks.load(std::memory_order_acquire),
+                    std::memory_order_release);
+        }
+    }
     if (split_context == nullptr ||
         split_context->adaptive_task_source != LakeSplitContext::AdaptiveTaskSource::SEED_LOCAL ||
         split_context->prepared_read_state == nullptr || split_context->prepared_segment_state == nullptr) {
@@ -1238,9 +1417,12 @@ void LakeAdaptiveSplitMorselQueue::_maybe_register_pending_candidate(const Morse
     candidate.prepared_segment_state = split_context->prepared_segment_state;
     candidate.rowset_index = split_context->rowset_index;
     candidate.segment_index = split_context->segment_index;
+    update_profile_counter(_profile_pending_candidate_counter, 1);
     if (!_is_live_pending_candidate(candidate)) {
+        update_profile_counter(_profile_pending_not_live_counter, 1);
         return;
     }
+    update_profile_counter(_profile_pending_registered_counter, 1);
     _pending_candidates.emplace_back(std::move(candidate));
 }
 
@@ -1253,14 +1435,22 @@ void LakeAdaptiveSplitMorselQueue::_enter_ticket(ScanMorsel* morsel) {
 }
 
 StatusOr<MorselPtr> LakeAdaptiveSplitMorselQueue::try_get() {
+    const auto start_ns = MonotonicNanos();
+    auto defer_update_timer = DeferOp([&]() {
+        update_profile_counter(_profile_try_get_timer, MonotonicNanos() - start_ns);
+    });
     std::lock_guard<std::mutex> guard(_mutex);
+    update_profile_counter(_profile_try_get_counter, 1);
     if (!_queue.empty()) {
         _size -= 1;
         MorselPtr ret = std::move(_queue.front());
         _queue.pop_front();
         _enter_ticket(down_cast<ScanMorsel*>(ret.get()));
+        update_profile_counter(_profile_base_queue_hit_counter, 1);
+        _update_pending_opportunity_window_locked();
         return std::move(ret);
     }
+    _update_pending_opportunity_window_locked();
     return _issue_pending_child_locked();
 }
 
@@ -1268,6 +1458,7 @@ void LakeAdaptiveSplitMorselQueue::unget(MorselPtr&& morsel) {
     std::lock_guard<std::mutex> guard(_mutex);
     _size += 1;
     _queue.emplace_front(std::move(morsel));
+    _update_pending_opportunity_window_locked();
 }
 
 Status LakeAdaptiveSplitMorselQueue::append_morsels(std::vector<MorselPtr>&& morsels) {
@@ -1277,6 +1468,7 @@ Status LakeAdaptiveSplitMorselQueue::append_morsels(std::vector<MorselPtr>&& mor
         _maybe_register_pending_candidate(morsel);
     }
     _queue.insert(_queue.begin(), std::make_move_iterator(morsels.begin()), std::make_move_iterator(morsels.end()));
+    _update_pending_opportunity_window_locked();
     return Status::OK();
 }
 

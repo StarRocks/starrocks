@@ -73,6 +73,17 @@ struct PreparedSegmentReadState {
     bool adaptive_coarse_scan_range_ready = false;
     bool adaptive_pending_issue_closed = false;
     bool adaptive_first_issued_split = true;
+    std::atomic<int64_t> adaptive_refined_ready_ns{0};
+    std::atomic<int64_t> adaptive_pending_running_tasks{0};
+    std::atomic<int64_t> adaptive_pending_running_at_refined_ready{0};
+    int64_t adaptive_prepare_build_state_ns = 0;
+    int64_t adaptive_prepare_init_options_ns = 0;
+    int64_t adaptive_prepare_prune_range_ns = 0;
+    int64_t adaptive_prepare_seek_bounds_ns = 0;
+    int64_t adaptive_prepare_tablet_bounds_ns = 0;
+    int64_t adaptive_prepare_schema_ns = 0;
+    int64_t adaptive_prepare_iterator_prune_ns = 0;
+    int64_t adaptive_prepare_split_tasks_ns = 0;
 
     size_t final_pruned_rows = 0;
     size_t estimated_fanout = 0;
