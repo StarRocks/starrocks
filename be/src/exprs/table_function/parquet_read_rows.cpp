@@ -38,7 +38,7 @@
 #include "column/column_helper.h"
 #include "column/fixed_length_column.h"
 #include "column/json_column.h"
-#include "common/config.h"
+#include "common/config_exec_env_fwd.h"
 #include "common/status.h"
 #include "common/statusor.h"
 #include "fs/fs.h"
