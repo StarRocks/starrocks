@@ -16,12 +16,12 @@
 
 #include <gtest/gtest.h>
 
-#include "base/testutil/assert.h"
 #include "column/column_helper.h"
 #include "column/fixed_length_column.h"
 #include "column/nullable_column.h"
 #include "column/vectorized_fwd.h"
 #include "runtime/runtime_state.h"
+#include "testutil/assert.h"
 #include "types/timestamp_value.h"
 
 namespace starrocks {
@@ -83,15 +83,15 @@ protected:
     // Extract the TimestampValue from the nullable DATETIME column at the
     // given 1-indexed slot id, expecting exactly one materialized row.
     TimestampValue read_datetime(const ChunkPtr& chunk, int slot_id) {
-        auto* column = chunk->get_column_raw_ptr_by_slot_id(slot_id);
+        auto* column = chunk->get_column_by_slot_id(slot_id).get();
         auto* nullable = down_cast<NullableColumn*>(column);
         EXPECT_FALSE(nullable->is_null(0));
-        auto* data = down_cast<TimestampColumn*>(nullable->data_column_raw_ptr());
+        auto* data = down_cast<const TimestampColumn*>(nullable->immutable_data_column());
         return data->get_data()[0];
     }
 
     bool is_null_at(const ChunkPtr& chunk, int slot_id) {
-        auto* column = chunk->get_column_raw_ptr_by_slot_id(slot_id);
+        auto* column = chunk->get_column_by_slot_id(slot_id).get();
         return down_cast<NullableColumn*>(column)->is_null(0);
     }
 

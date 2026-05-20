@@ -430,7 +430,7 @@ Status SchemaLoadsScanner::fill_chunk(ChunkPtr* chunk) {
             }
             case 18: {
                 // create time
-                if (_fill_datetime_column_from_ms(column, info.__isset.create_time_ms, info.create_time_ms)) {
+                if (_fill_datetime_column_from_ms(column.get(), info.__isset.create_time_ms, info.create_time_ms)) {
                     break;
                 }
                 DateTimeValue t;
@@ -445,7 +445,8 @@ Status SchemaLoadsScanner::fill_chunk(ChunkPtr* chunk) {
             }
             case 19: {
                 // load start time
-                if (_fill_datetime_column_from_ms(column, info.__isset.load_start_time_ms, info.load_start_time_ms)) {
+                if (_fill_datetime_column_from_ms(column.get(), info.__isset.load_start_time_ms,
+                                                  info.load_start_time_ms)) {
                     break;
                 }
                 DateTimeValue t;
@@ -460,7 +461,8 @@ Status SchemaLoadsScanner::fill_chunk(ChunkPtr* chunk) {
             }
             case 20: {
                 // load commit time
-                if (_fill_datetime_column_from_ms(column, info.__isset.load_commit_time_ms, info.load_commit_time_ms)) {
+                if (_fill_datetime_column_from_ms(column.get(), info.__isset.load_commit_time_ms,
+                                                  info.load_commit_time_ms)) {
                     break;
                 }
                 DateTimeValue t;
@@ -475,7 +477,8 @@ Status SchemaLoadsScanner::fill_chunk(ChunkPtr* chunk) {
             }
             case 21: {
                 // load finish time
-                if (_fill_datetime_column_from_ms(column, info.__isset.load_finish_time_ms, info.load_finish_time_ms)) {
+                if (_fill_datetime_column_from_ms(column.get(), info.__isset.load_finish_time_ms,
+                                                  info.load_finish_time_ms)) {
                     break;
                 }
                 DateTimeValue t;
