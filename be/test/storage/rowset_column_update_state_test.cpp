@@ -150,10 +150,10 @@ public:
 
         auto chunk = ChunkFactory::new_chunk(schema, keys.size());
         EXPECT_TRUE(2 == chunk->num_columns());
-        auto cols = chunk->mutable_columns();
+        auto cols = chunk->columns();
         for (int64_t key : keys) {
-            cols[0]->append_datum(Datum(key));
-            cols[1]->append_datum(Datum((int16_t)(key % 100 + 3)));
+            cols[0]->as_mutable_ptr()->append_datum(Datum(key));
+            cols[1]->as_mutable_ptr()->append_datum(Datum((int16_t)(key % 100 + 3)));
         }
         for (int i = 0; i < segment_num; i++) {
             CHECK_OK(writer->flush_chunk(*chunk));

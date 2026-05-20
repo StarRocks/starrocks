@@ -450,14 +450,14 @@ protected:
 
         auto chunk = ChunkFactory::new_chunk(ChunkHelper::convert_schema(write_schema), ids.size());
         for (auto id : ids) {
-            chunk->mutable_columns()[0]->append_datum(Datum(id));
+            chunk->columns()[0]->as_mutable_ptr()->append_datum(Datum(id));
         }
         for (const auto& vec : vectors) {
             DatumArray arr;
             for (float v : vec) {
                 arr.emplace_back(Datum(v));
             }
-            chunk->mutable_columns()[1]->append_datum(Datum(arr));
+            chunk->columns()[1]->as_mutable_ptr()->append_datum(Datum(arr));
         }
 
         RETURN_IF_ERROR(writer.init());

@@ -99,10 +99,10 @@ protected:
         auto schema = ChunkHelper::convert_schema(build_schema);
         auto chunk = ChunkFactory::new_chunk(schema, nrows);
         for (size_t rid = 0; rid < nrows; ++rid) {
-            auto cols = chunk->mutable_columns();
+            auto cols = chunk->columns();
             for (int cid = 0; cid < build_schema->num_columns(); ++cid) {
                 int row_block_id = rid / opts.num_rows_per_block;
-                cols[cid]->append_datum(generator(rid, cid, row_block_id));
+                cols[cid]->as_mutable_ptr()->append_datum(generator(rid, cid, row_block_id));
             }
         }
         ASSERT_OK(writer.append_chunk(*chunk));
@@ -146,9 +146,9 @@ TEST_F(SegmentReaderWriterTest, estimate_segment_size) {
     auto schema = ChunkHelper::convert_schema(tablet_schema);
     auto chunk = ChunkFactory::new_chunk(schema, nrows);
     for (size_t rid = 0; rid < nrows; ++rid) {
-        auto cols = chunk->mutable_columns();
+        auto cols = chunk->columns();
         for (int cid = 0; cid < tablet_schema->num_columns(); ++cid) {
-            cols[cid]->append_datum(Datum(static_cast<int32_t>(rid * 10 + cid)));
+            cols[cid]->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(rid * 10 + cid)));
         }
     }
     ASSERT_OK(writer.append_chunk(*chunk));
@@ -204,12 +204,12 @@ TEST_F(SegmentReaderWriterTest, TestHorizontalWrite) {
     auto chunk = ChunkFactory::new_chunk(schema, chunk_size);
     for (auto i = 0; i < num_rows % chunk_size; ++i) {
         chunk->reset();
-        auto cols = chunk->mutable_columns();
+        auto cols = chunk->columns();
         for (auto j = 0; j < chunk_size && i * chunk_size + j < num_rows; ++j) {
-            cols[0]->append_datum(Datum(static_cast<int32_t>(i * chunk_size + j)));
-            cols[1]->append_datum(Datum(static_cast<int32_t>(i * chunk_size + j + 1)));
-            cols[2]->append_datum(Datum(static_cast<int32_t>(i * chunk_size + j + 2)));
-            cols[3]->append_datum(Datum(static_cast<int32_t>(i * chunk_size + j + 3)));
+            cols[0]->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(i * chunk_size + j)));
+            cols[1]->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(i * chunk_size + j + 1)));
+            cols[2]->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(i * chunk_size + j + 2)));
+            cols[3]->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(i * chunk_size + j + 3)));
         }
         ASSERT_OK(writer.append_chunk(*chunk));
     }
@@ -313,10 +313,10 @@ TEST_F(SegmentReaderWriterTest, TestVerticalWrite) {
         auto chunk = ChunkFactory::new_chunk(schema, chunk_size);
         for (auto i = 0; i < num_rows % chunk_size; ++i) {
             chunk->reset();
-            auto cols = chunk->mutable_columns();
+            auto cols = chunk->columns();
             for (auto j = 0; j < chunk_size && i * chunk_size + j < num_rows; ++j) {
-                cols[0]->append_datum(Datum(static_cast<int32_t>(i * chunk_size + j)));
-                cols[1]->append_datum(Datum(static_cast<int32_t>(i * chunk_size + j + 1)));
+                cols[0]->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(i * chunk_size + j)));
+                cols[1]->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(i * chunk_size + j + 1)));
             }
             ASSERT_OK(writer.append_chunk(*chunk));
         }
@@ -331,9 +331,9 @@ TEST_F(SegmentReaderWriterTest, TestVerticalWrite) {
         auto chunk = ChunkFactory::new_chunk(schema, chunk_size);
         for (auto i = 0; i < num_rows % chunk_size; ++i) {
             chunk->reset();
-            auto cols = chunk->mutable_columns();
+            auto cols = chunk->columns();
             for (auto j = 0; j < chunk_size && i * chunk_size + j < num_rows; ++j) {
-                cols[0]->append_datum(Datum(static_cast<int32_t>(i * chunk_size + j + 2)));
+                cols[0]->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(i * chunk_size + j + 2)));
             }
             ASSERT_OK(writer.append_chunk(*chunk));
         }
@@ -348,9 +348,9 @@ TEST_F(SegmentReaderWriterTest, TestVerticalWrite) {
         auto chunk = ChunkFactory::new_chunk(schema, chunk_size);
         for (auto i = 0; i < num_rows % chunk_size; ++i) {
             chunk->reset();
-            auto cols = chunk->mutable_columns();
+            auto cols = chunk->columns();
             for (auto j = 0; j < chunk_size && i * chunk_size + j < num_rows; ++j) {
-                cols[0]->append_datum(Datum(static_cast<int32_t>(i * chunk_size + j + 3)));
+                cols[0]->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(i * chunk_size + j + 3)));
             }
             ASSERT_OK(writer.append_chunk(*chunk));
         }
@@ -430,10 +430,10 @@ TEST_F(SegmentReaderWriterTest, TestReadMultipleTypesColumn) {
         auto chunk = ChunkFactory::new_chunk(schema, chunk_size);
         for (auto i = 0; i < num_rows % chunk_size; ++i) {
             chunk->reset();
-            auto cols = chunk->mutable_columns();
+            auto cols = chunk->columns();
             for (auto j = 0; j < chunk_size && i * chunk_size + j < num_rows; ++j) {
-                cols[0]->append_datum(Datum(static_cast<int32_t>(i * chunk_size + j)));
-                cols[1]->append_datum(Datum(static_cast<int32_t>(i * chunk_size + j + 1)));
+                cols[0]->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(i * chunk_size + j)));
+                cols[1]->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(i * chunk_size + j + 1)));
             }
             ASSERT_OK(writer.append_chunk(*chunk));
         }
@@ -448,9 +448,9 @@ TEST_F(SegmentReaderWriterTest, TestReadMultipleTypesColumn) {
         auto chunk = ChunkFactory::new_chunk(schema, chunk_size);
         for (auto i = 0; i < num_rows % chunk_size; ++i) {
             chunk->reset();
-            auto cols = chunk->mutable_columns();
+            auto cols = chunk->columns();
             for (auto j = 0; j < chunk_size && i * chunk_size + j < num_rows; ++j) {
-                cols[0]->append_datum(Datum(data_strs[j % 8]));
+                cols[0]->as_mutable_ptr()->append_datum(Datum(data_strs[j % 8]));
             }
             ASSERT_OK(writer.append_chunk(*chunk));
         }
@@ -506,10 +506,10 @@ TEST_F(SegmentReaderWriterTest, TestTypeConversion) {
     auto chunk = ChunkFactory::new_chunk(write_schema, chunk_size);
     for (auto i = 0; i < num_rows / chunk_size; ++i) {
         chunk->reset();
-        auto cols = chunk->mutable_columns();
+        auto cols = chunk->columns();
         for (auto j = 0; j < chunk_size; ++j) {
-            cols[0]->append_datum(Datum(static_cast<int32_t>(i * chunk_size + j)));
-            cols[1]->append_datum(Datum(static_cast<int32_t>(i * chunk_size + j + 1)));
+            cols[0]->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(i * chunk_size + j)));
+            cols[1]->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(i * chunk_size + j + 1)));
         }
         ASSERT_OK(writer.append_chunk(*chunk));
     }
@@ -595,10 +595,10 @@ TEST_F(SegmentReaderWriterTest, TestCheckColumnUniqueIdUniqueness) {
     auto schema = ChunkHelper::convert_schema(tablet_schema);
     auto chunk = ChunkFactory::new_chunk(schema, 100);
     for (size_t rid = 0; rid < 100; ++rid) {
-        auto cols = chunk->mutable_columns();
+        auto cols = chunk->columns();
         for (int cid = 0; cid < tablet_schema->num_columns(); ++cid) {
             int row_block_id = rid / opts.num_rows_per_block;
-            cols[cid]->append_datum(DefaultIntGenerator(rid, cid, row_block_id));
+            cols[cid]->as_mutable_ptr()->append_datum(DefaultIntGenerator(rid, cid, row_block_id));
         }
     }
     ASSERT_OK(writer.append_chunk(*chunk));

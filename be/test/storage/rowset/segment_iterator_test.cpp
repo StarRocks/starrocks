@@ -129,9 +129,9 @@ struct TabletDataBuilder {
         auto chunk = ChunkFactory::new_chunk(schema, chunk_size);
         for (auto i = 0; i < num_rows % chunk_size; ++i) {
             chunk->reset();
-            auto cols = chunk->mutable_columns();
+            auto cols = chunk->columns();
             for (auto j = 0; j < chunk_size && i * chunk_size + j < num_rows; ++j) {
-                cols[0]->append_datum(provider(static_cast<int32_t>(i * chunk_size + j)));
+                cols[0]->as_mutable_ptr()->append_datum(provider(static_cast<int32_t>(i * chunk_size + j)));
             }
             RETURN_IF_ERROR(writer.append_chunk(*chunk));
         }
@@ -791,10 +791,10 @@ TEST_F(SegmentIteratorTest, testCharToVarcharZoneMapFilter) {
 
     // Fill the chunk with data
     chunk->reset();
-    auto cols = chunk->mutable_columns();
+    auto cols = chunk->columns();
     for (int i = 0; i < 4; ++i) {
-        cols[0]->append_datum(int_provider(i));
-        cols[1]->append_datum(char_provider(i));
+        cols[0]->as_mutable_ptr()->append_datum(int_provider(i));
+        cols[1]->as_mutable_ptr()->append_datum(char_provider(i));
     }
     ASSERT_OK(writer.append_chunk(*chunk));
 
