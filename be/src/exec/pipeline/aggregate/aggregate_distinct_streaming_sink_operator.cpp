@@ -123,7 +123,7 @@ Status AggregateDistinctStreamingSinkOperator::_push_chunk_by_force_preaggregati
 
     _aggregator->build_hash_set(chunk_size);
 
-    COUNTER_SET(_aggregator->hash_table_size(), (int64_t)_aggregator->hash_set_variant().size());
+    _aggregator->update_hash_set_profile_counters();
 
     TRY_CATCH_BAD_ALLOC(_aggregator->try_convert_to_two_level_set());
 
@@ -151,7 +151,7 @@ Status AggregateDistinctStreamingSinkOperator::_push_chunk_by_auto(const ChunkPt
         // hash table is not full or allow expand the hash table according reduction rate
         SCOPED_TIMER(_aggregator->agg_compute_timer());
         TRY_CATCH_BAD_ALLOC(_aggregator->build_hash_set(chunk_size));
-        COUNTER_SET(_aggregator->hash_table_size(), (int64_t)_aggregator->hash_set_variant().size());
+        _aggregator->update_hash_set_profile_counters();
 
         TRY_CATCH_BAD_ALLOC(_aggregator->try_convert_to_two_level_set());
     } else {
@@ -174,7 +174,7 @@ Status AggregateDistinctStreamingSinkOperator::_push_chunk_by_auto(const ChunkPt
             }
         }
 
-        COUNTER_SET(_aggregator->hash_table_size(), (int64_t)_aggregator->hash_set_variant().size());
+        _aggregator->update_hash_set_profile_counters();
     }
 
     return Status::OK();

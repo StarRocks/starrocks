@@ -239,6 +239,109 @@ TEST(ConsecutiveKeyCacheTest, DisableForSmallFixedSizeHashMap) {
     ASSERT_EQ(hash_map_with_key.get_cache_misses(), 0);
 }
 
+TEST(ConsecutiveKeySetCacheTest, NumericKeyCacheHitAllocate) {
+    RuntimeProfile profile("ConsecutiveKeySetCacheTest");
+    AggStatistics statis(&profile);
+
+    using HashSetWithKey = Int32AggHashSetOfOneNumberKey<PhmapSeed1>;
+    HashSetWithKey hash_set_with_key(1024, &statis);
+
+    MemPool pool;
+    const int32_t chunk_size = 4;
+
+    auto col = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), false);
+    col->append_datum(Datum(1));
+    col->append_datum(Datum(1));
+    col->append_datum(Datum(2));
+    col->append_datum(Datum(2));
+
+    Columns key_columns;
+    key_columns.emplace_back(std::move(col));
+
+    hash_set_with_key.build_hash_set(chunk_size, key_columns, &pool);
+
+    // Allocate mode: keys 1,1,2,2 -> first occurrence misses+inserts, second
+    // occurrence hits the cache and skips emplace.
+    ASSERT_EQ(hash_set_with_key.get_cache_hits(), 2);
+    ASSERT_EQ(hash_set_with_key.get_cache_misses(), 2);
+    ASSERT_TRUE(hash_set_with_key.is_cache_enabled());
+    ASSERT_EQ(hash_set_with_key.hash_set.size(), 2);
+}
+
+TEST(ConsecutiveKeySetCacheTest, ProbeOnlyAbsentKeysReplay) {
+    // The probe-only mode (compute_and_allocate=false) stores
+    // (last_key, last_found).  Repeated absent keys MUST still report
+    // not_founds[i]=1 on cache hit -- not 0 -- otherwise the streaming
+    // pre-aggregation first stage would misclassify new keys as known.
+    RuntimeProfile profile("ConsecutiveKeySetCacheTest");
+    AggStatistics statis(&profile);
+
+    using HashSetWithKey = Int32AggHashSetOfOneNumberKey<PhmapSeed1>;
+    HashSetWithKey hash_set_with_key(1024, &statis);
+
+    MemPool pool;
+
+    // Pre-seed the set so a probe of {5} would hit, {1,7} would miss.
+    {
+        auto seed_col = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), false);
+        seed_col->append_datum(Datum(5));
+        Columns seed_columns;
+        seed_columns.emplace_back(std::move(seed_col));
+        hash_set_with_key.build_hash_set(1, seed_columns, &pool);
+    }
+    const auto hits_before = hash_set_with_key.get_cache_hits();
+    const auto misses_before = hash_set_with_key.get_cache_misses();
+
+    // Probe with repeated absent keys.  Expectation: every (*not_founds)[i]
+    // ends up == 1, regardless of cache hit/miss.
+    const int32_t chunk_size = 4;
+    auto col = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), false);
+    col->append_datum(Datum(1));
+    col->append_datum(Datum(1)); // repeat -> cache hit on absent
+    col->append_datum(Datum(7));
+    col->append_datum(Datum(7)); // repeat -> cache hit on absent
+
+    Columns key_columns;
+    key_columns.emplace_back(std::move(col));
+
+    Filter not_founds;
+    hash_set_with_key.build_hash_set_with_selection(chunk_size, key_columns, &pool, &not_founds);
+
+    for (int i = 0; i < chunk_size; ++i) {
+        ASSERT_EQ(not_founds[i], 1) << "row " << i << " incorrectly reported as found";
+    }
+
+    // The set must not have grown (probe-only mode doesn't insert).
+    ASSERT_EQ(hash_set_with_key.hash_set.size(), 1);
+
+    // Cache fired on the two repeats.
+    EXPECT_GE(hash_set_with_key.get_cache_hits() - hits_before, 2u);
+    EXPECT_GE(hash_set_with_key.get_cache_misses() - misses_before, 2u);
+}
+
+TEST(ConsecutiveKeySetCacheTest, DisableForSmallFixedSizeHashSet) {
+    RuntimeProfile profile("ConsecutiveKeySetCacheTest");
+    AggStatistics statis(&profile);
+
+    using HashSetWithKey = Int8AggHashSetOfOneNumberKey<PhmapSeed1>;
+    HashSetWithKey hash_set_with_key(1024, &statis);
+
+    MemPool pool;
+    const int32_t chunk_size = 2;
+    auto col = ColumnHelper::create_column(TypeDescriptor(TYPE_TINYINT), false);
+    col->append_datum(Datum(int8_t{7}));
+    col->append_datum(Datum(int8_t{7}));
+
+    Columns key_columns;
+    key_columns.emplace_back(std::move(col));
+
+    hash_set_with_key.build_hash_set(chunk_size, key_columns, &pool);
+
+    // Direct-array set: cache is bypassed, counters stay at zero.
+    ASSERT_EQ(hash_set_with_key.get_cache_hits(), 0);
+    ASSERT_EQ(hash_set_with_key.get_cache_misses(), 0);
+}
+
 class AggHashMapKeyNotFoundsTest : public ::testing::Test {
 public:
     template <typename HashMapWithKey>

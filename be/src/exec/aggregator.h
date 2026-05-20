@@ -334,6 +334,14 @@ public:
         COUNTER_SET(consecutive_keys_cache_misses(), (int64_t)_hash_map_variant.consecutive_keys_cache_misses());
     }
 
+    // Same shape for the distinct/set side; called from
+    // aggregate_distinct_* sink/source operators.
+    void update_hash_set_profile_counters() {
+        COUNTER_SET(hash_table_size(), (int64_t)_hash_set_variant.size());
+        COUNTER_SET(consecutive_keys_cache_hits(), (int64_t)_hash_set_variant.consecutive_keys_cache_hits());
+        COUNTER_SET(consecutive_keys_cache_misses(), (int64_t)_hash_set_variant.consecutive_keys_cache_misses());
+    }
+
     void sink_complete() { _is_sink_complete.store(true, std::memory_order_release); }
 
     bool is_chunk_buffer_empty();

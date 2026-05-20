@@ -442,6 +442,30 @@ size_t AggHashMapVariant::consecutive_keys_cache_misses() const {
     });
 }
 
+size_t AggHashSetVariant::consecutive_keys_cache_hits() const {
+    return visit([](const auto& hash_set_with_key) -> size_t {
+        if (!hash_set_with_key) return 0;
+        using SetType = std::remove_reference_t<decltype(*hash_set_with_key)>;
+        if constexpr (HasConsecutiveKeyCacheStats<SetType>::value) {
+            return hash_set_with_key->get_cache_hits();
+        } else {
+            return 0;
+        }
+    });
+}
+
+size_t AggHashSetVariant::consecutive_keys_cache_misses() const {
+    return visit([](const auto& hash_set_with_key) -> size_t {
+        if (!hash_set_with_key) return 0;
+        using SetType = std::remove_reference_t<decltype(*hash_set_with_key)>;
+        if constexpr (HasConsecutiveKeyCacheStats<SetType>::value) {
+            return hash_set_with_key->get_cache_misses();
+        } else {
+            return 0;
+        }
+    });
+}
+
 void AggHashSetVariant::init(RuntimeState* state, Type type, AggStatistics* agg_stat) {
     _type = type;
     _agg_stat = agg_stat;
@@ -471,6 +495,7 @@ void AggHashSetVariant::init(RuntimeState* state, Type type, AggStatistics* agg_
                         if constexpr (SrcType::has_single_null_key && DstType::has_single_null_key) {                 \
                             dst->has_null_key = hash_set_with_key->has_null_key;                                      \
                         }                                                                                             \
+                        _carry_over_post_init_state(dst.get(), hash_set_with_key.get());                              \
                     }                                                                                                 \
                 },                                                                                                    \
                 hash_set_with_key);                                                                                   \
