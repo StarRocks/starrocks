@@ -29,6 +29,7 @@
 #include "common/config_vector_index_fwd.h"
 #include "fs/fs_memory.h"
 #include "runtime/mem_pool.h"
+#include "storage/index/index_descriptor.h"
 #include "storage/index/vector/tenann/tenann_index_utils.h"
 #include "storage/index/vector/vector_index_writer.h"
 #include "storage/lake/filenames.h"
