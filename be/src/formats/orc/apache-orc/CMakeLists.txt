@@ -12,7 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+<<<<<<< HEAD
 cmake_minimum_required (VERSION 2.8.12)
+=======
+cmake_minimum_required (VERSION 3.20)
+>>>>>>> f056902013 ([Enhancement] Bump minimum required CMake version (#73578))
 if (POLICY CMP0048)
     cmake_policy(SET CMP0048 NEW)
 endif ()
