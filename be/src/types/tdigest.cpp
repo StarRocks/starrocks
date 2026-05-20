@@ -482,15 +482,22 @@ bool TDigest::deserialize(const char* data, size_t size) {
         _cumulative.clear();
     };
 
-    constexpr size_t kHeaderSize = sizeof(Value) * 5 + sizeof(Index) * 2 + sizeof(uint32_t) * 3;
-    if (size < kHeaderSize) {
-        LOG(WARNING) << "TDigest::deserialize: blob too small for header, size=" << size;
+    // The fixed preamble is five Value fields followed by two Index fields.
+    // Three uint32_t centroid counts are interleaved with their arrays later,
+    // so the minimum legal blob is preamble + 3 * sizeof(uint32_t).
+    constexpr size_t kPreambleSize = sizeof(Value) * 5 + sizeof(Index) * 2;
+    constexpr size_t kMinBlobSize = kPreambleSize + sizeof(uint32_t) * 3;
+    if (size < kMinBlobSize) {
+        LOG(WARNING) << "TDigest::deserialize: blob too small, size=" << size;
         reset_to_empty();
         return false;
     }
 
-    const char* const end = data + size;
+    // Track remaining bytes as a counter rather than computing a past-the-end
+    // pointer. The legacy wrapper passes SIZE_MAX, and `data + SIZE_MAX` would
+    // be undefined behavior even if the value were never dereferenced.
     const char* reader = data;
+    size_t remaining = size;
 
     memcpy(&_compression, reader, sizeof(Value));
     reader += sizeof(Value);
@@ -506,22 +513,24 @@ bool TDigest::deserialize(const char* data, size_t size) {
     reader += sizeof(Value);
     memcpy(&_unprocessed_weight, reader, sizeof(Value));
     reader += sizeof(Value);
+    remaining -= kPreambleSize;
 
     auto read_centroid_array = [&](std::vector<Centroid>& dst, const char* label) -> bool {
-        if (static_cast<size_t>(end - reader) < sizeof(uint32_t)) {
+        if (remaining < sizeof(uint32_t)) {
             LOG(WARNING) << "TDigest::deserialize: truncated before " << label << " count";
             return false;
         }
         uint32_t count;
         memcpy(&count, reader, sizeof(uint32_t));
         reader += sizeof(uint32_t);
+        remaining -= sizeof(uint32_t);
         if (count > kMaxCentroidsDeserialize) {
             LOG(WARNING) << "TDigest::deserialize: " << label << " count " << count << " exceeds limit "
                          << kMaxCentroidsDeserialize;
             return false;
         }
         const size_t bytes = static_cast<size_t>(count) * sizeof(Centroid);
-        if (static_cast<size_t>(end - reader) < bytes) {
+        if (remaining < bytes) {
             LOG(WARNING) << "TDigest::deserialize: truncated " << label << " centroid array";
             return false;
         }
@@ -529,6 +538,7 @@ bool TDigest::deserialize(const char* data, size_t size) {
         if (count > 0) {
             memcpy(dst.data(), reader, bytes);
             reader += bytes;
+            remaining -= bytes;
         }
         return true;
     };
@@ -542,7 +552,7 @@ bool TDigest::deserialize(const char* data, size_t size) {
         return false;
     }
 
-    if (static_cast<size_t>(end - reader) < sizeof(uint32_t)) {
+    if (remaining < sizeof(uint32_t)) {
         LOG(WARNING) << "TDigest::deserialize: truncated before cumulative count";
         reset_to_empty();
         return false;
@@ -550,6 +560,7 @@ bool TDigest::deserialize(const char* data, size_t size) {
     uint32_t cumulative_count;
     memcpy(&cumulative_count, reader, sizeof(uint32_t));
     reader += sizeof(uint32_t);
+    remaining -= sizeof(uint32_t);
     if (cumulative_count > kMaxCentroidsDeserialize) {
         LOG(WARNING) << "TDigest::deserialize: cumulative count " << cumulative_count << " exceeds limit "
                      << kMaxCentroidsDeserialize;
@@ -557,7 +568,7 @@ bool TDigest::deserialize(const char* data, size_t size) {
         return false;
     }
     const size_t cumulative_bytes = static_cast<size_t>(cumulative_count) * sizeof(Weight);
-    if (static_cast<size_t>(end - reader) < cumulative_bytes) {
+    if (remaining < cumulative_bytes) {
         LOG(WARNING) << "TDigest::deserialize: truncated cumulative array";
         reset_to_empty();
         return false;
@@ -571,8 +582,10 @@ bool TDigest::deserialize(const char* data, size_t size) {
 
 void TDigest::deserialize(const char* type_reader) {
     // Legacy unsafe entry point retained for ctors that lack the blob length;
-    // delegates with an unbounded size, preserving pre-bounded behavior. Callers
-    // that have a Slice should prefer the (data, size) overload.
+    // delegates with SIZE_MAX. The bounded path uses a remaining-bytes
+    // counter (not a past-the-end pointer) so SIZE_MAX never participates in
+    // pointer arithmetic. Callers that have a Slice should prefer the
+    // (data, size) overload.
     (void)deserialize(type_reader, std::numeric_limits<size_t>::max());
 }
 
