@@ -481,10 +481,12 @@ struct TBenchmarkScanRange {
 
 // CDC: per-tablet scan range for CHANGES query
 struct TChangesScanRange {
-    1: optional Types.TTabletId tablet_id
-    2: optional i64 base_version            // V_base (left-open): excludes this version
-    3: optional i64 head_version            // V_head (right-closed): includes this version
-    4: optional i64 partition_id
+    1: optional i64 db_id
+    2: optional i64 table_id
+    3: optional i64 partition_id
+    4: optional Types.TTabletId tablet_id
+    5: optional i64 base_version            // V_base (left-open): excludes this version
+    6: optional i64 head_version            // V_head (right-closed): includes this version
 }
 
 // CDC: FE -> CN plan node parameters

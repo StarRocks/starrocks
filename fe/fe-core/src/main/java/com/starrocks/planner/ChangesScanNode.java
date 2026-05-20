@@ -29,7 +29,6 @@ import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.TChangesScanNode;
 import com.starrocks.thrift.TChangesScanRange;
 import com.starrocks.thrift.TExplainLevel;
-import com.starrocks.thrift.TInternalScanRange;
 import com.starrocks.thrift.TKeysType;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TPlanNode;
@@ -85,6 +84,8 @@ public class ChangesScanNode extends AbstractOlapTableScanNode {
     }
 
     public void computeScanRanges(ComputeResource computeResource) {
+        long dbId = getSchemaKey().getDb_id();
+        long tableId = olapTable.getId();
         for (Map.Entry<Long, List<BookmarkChange.PhysicalPartitionChange>> entry :
                 delta.getChanges().entrySet()) {
             for (BookmarkChange.PhysicalPartitionChange change : entry.getValue()) {
@@ -117,22 +118,15 @@ public class ChangesScanNode extends AbstractOlapTableScanNode {
                     TScanRangeLocations scanRangeLocations = new TScanRangeLocations();
 
                     TChangesScanRange changesScanRange = new TChangesScanRange();
+                    changesScanRange.setDb_id(dbId);
+                    changesScanRange.setTable_id(tableId);
+                    changesScanRange.setPartition_id(ppId);
                     changesScanRange.setTablet_id(tablet.getId());
                     changesScanRange.setBase_version(baseVersion);
                     changesScanRange.setHead_version(headVersion);
-                    changesScanRange.setPartition_id(ppId);
-
-                    TInternalScanRange internalRange = new TInternalScanRange();
-                    internalRange.setDb_name("");
-                    internalRange.setPartition_id(ppId);
-                    internalRange.setTablet_id(tablet.getId());
-                    internalRange.setVersion(String.valueOf(visibleVersion));
-                    internalRange.setVersion_hash("0");
-                    internalRange.setSchema_hash(String.valueOf(-1));
 
                     TScanRange scanRange = new TScanRange();
                     scanRange.setChanges_scan_range(changesScanRange);
-                    scanRange.setInternal_scan_range(internalRange);
                     scanRangeLocations.setScan_range(scanRange);
 
                     List<Replica> allQueryableReplicas = Lists.newArrayList();
@@ -155,7 +149,6 @@ public class ChangesScanNode extends AbstractOlapTableScanNode {
                                 new TNetworkAddress(node.getHost(), node.getBePort()));
                         location.setBackend_id(replica.getBackendId());
                         scanRangeLocations.addToLocations(location);
-                        internalRange.addToHosts(new TNetworkAddress(node.getHost(), node.getBePort()));
                     }
 
                     result.add(scanRangeLocations);

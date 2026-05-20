@@ -25,7 +25,7 @@ INSERT INTO part_t VALUES ("2026-06-20", 3, 30);
 [UC]function: bk_head=create_bookmark("${db[0]}", "part_t", "head")
 SELECT * FROM part_t [_CHANGES_${bk_base}_${bk_head}_];
 -- result:
-[REGEX].*CHANGES not trackable: physical partition '<id=[0-9]+>' has been dropped or truncated between base and head.*
+[REGEX].*CHANGES from bookmark [0-9]+ to [0-9]+ on table 'part_t' not trackable: physical partition [0-9]+ dropped\..*
 -- !result
 function: release_bookmark("${db[0]}", "part_t", ${bk_base}, "base")
 -- result:
