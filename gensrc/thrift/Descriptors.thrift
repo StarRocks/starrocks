@@ -286,6 +286,20 @@ struct TTableSchemaKey {
   3: optional i64 schema_id
 }
 
+// Stable identity of a CHANGES metadata column.
+enum TChangesMetaKind {
+    CHANGE_TYPE = 0,
+    ROW_VERSION = 1
+}
+
+// One CHANGES metadata column on the plan node.
+struct TChangesMetaDescriptor {
+    1: optional TChangesMetaKind kind
+    2: optional string name
+    3: optional Types.TTypeDesc type
+    4: optional bool is_nullable
+}
+
 struct TOlapTableTablet {
     1: optional i64 id // tablet id
     2: optional Types.TTabletRange range

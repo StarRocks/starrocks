@@ -4486,7 +4486,8 @@ public class PlanFragmentBuilder {
                     olapTable,
                     scan.getDelta(),
                     scan.getBase(),
-                    scan.getHead());
+                    scan.getHead(),
+                    scan.getChangesMetaDescriptors());
 
             ComputeResource computeResource = ConnectContext.get() != null
                     ? ConnectContext.get().getCurrentComputeResource()

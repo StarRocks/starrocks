@@ -23,6 +23,7 @@ import com.starrocks.catalog.Tablet;
 import com.starrocks.common.Pair;
 import com.starrocks.lake.bookmark.Bookmark;
 import com.starrocks.lake.bookmark.BookmarkChange;
+import com.starrocks.lake.changes.ChangesMetaDescriptor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.system.ComputeNode;
@@ -59,14 +60,18 @@ public class ChangesScanNode extends AbstractOlapTableScanNode {
     private final BookmarkChange delta;
     private final Bookmark base;
     private final Bookmark head;
+    // Serialized onto TChangesScanNode.meta_descriptors.
+    private final List<ChangesMetaDescriptor> changesMetaDescriptors;
     private final List<TScanRangeLocations> result = new ArrayList<>();
 
     public ChangesScanNode(PlanNodeId id, TupleDescriptor desc, OlapTable table,
-                           BookmarkChange delta, Bookmark base, Bookmark head) {
+                           BookmarkChange delta, Bookmark base, Bookmark head,
+                           List<ChangesMetaDescriptor> changesMetaDescriptors) {
         super(id, desc, "ChangesScanNode", table, table.getBaseIndexMetaId());
         this.delta = delta;
         this.base = base;
         this.head = head;
+        this.changesMetaDescriptors = changesMetaDescriptors;
     }
 
     /**
@@ -192,6 +197,11 @@ public class ChangesScanNode extends AbstractOlapTableScanNode {
         scanNode.setTuple_id(desc.getId().asInt());
         // BE fetches the live read schema via TableSchemaService keyed by this triple.
         scanNode.setSchema_key(getSchemaKey());
+        if (changesMetaDescriptors != null && !changesMetaDescriptors.isEmpty()) {
+            scanNode.setMeta_descriptors(changesMetaDescriptors.stream()
+                    .map(ChangesMetaDescriptor::toThrift)
+                    .toList());
+        }
 
         msg.changes_scan_node = scanNode;
     }

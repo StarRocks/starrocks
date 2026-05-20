@@ -18,21 +18,26 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.lake.bookmark.BookmarkRange;
 import com.starrocks.lake.bookmark.BookmarkTestBase;
+import com.starrocks.lake.changes.ChangesMetaDescriptor;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.Field;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.TableRelation;
+import com.starrocks.thrift.TChangesMetaKind;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
+import java.util.List;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.fail;
 
 /**
  * Grammar and analyzer-stage test for the [_CHANGES_&lt;base&gt;_&lt;head&gt;_] hint
@@ -69,6 +74,29 @@ public class ChangesSyntaxTest extends BookmarkTestBase {
         createTableStatic(
                 "CREATE TABLE unique_t (k int, v int) "
                         + "UNIQUE KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1 "
+                        + "PROPERTIES ('replication_num' = '1');");
+
+        // Conflict-fixture tables: each carries a real column that shadows one
+        // or both of the default CDC metadata names so the analyzer must mint
+        // an alternate query name.
+        createTableStatic(
+                "CREATE TABLE dup_ct (k int, `__CHANGE_TYPE__` int) "
+                        + "DUPLICATE KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1 "
+                        + "PROPERTIES ('replication_num' = '1');");
+
+        createTableStatic(
+                "CREATE TABLE dup_rv (k int, `__ROW_VERSION__` int) "
+                        + "DUPLICATE KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1 "
+                        + "PROPERTIES ('replication_num' = '1');");
+
+        createTableStatic(
+                "CREATE TABLE dup_both (k int, `__CHANGE_TYPE__` int, `__ROW_VERSION__` int) "
+                        + "DUPLICATE KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1 "
+                        + "PROPERTIES ('replication_num' = '1');");
+
+        createTableStatic(
+                "CREATE TABLE dup_chain (k int, `__CHANGE_TYPE__` int, `__CHANGE_TYPE_1__` int) "
+                        + "DUPLICATE KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1 "
                         + "PROPERTIES ('replication_num' = '1');");
     }
 
@@ -169,6 +197,100 @@ public class ChangesSyntaxTest extends BookmarkTestBase {
                 () -> UtFrameUtils.parseStmtWithNewParser(sql, connectContext));
         assertTrue(ex.getMessage().contains("CHANGES hint cannot combine with"),
                 "actual: " + ex.getMessage());
+    }
+
+    @Test
+    public void testDefaultMetadataNamesWhenNoConflict() throws Exception {
+        // dup_t has no column shadowing the default names; both descriptors
+        // should resolve to the defaults.
+        String sql = "SELECT __CHANGE_TYPE__, __ROW_VERSION__ FROM dup_t [_CHANGES_1_2_]";
+        TableRelation tr = analyzeChangesRelation(sql);
+        List<ChangesMetaDescriptor> descriptors = tr.getChangesMetaDescriptors().orElseThrow();
+        assertEquals(2, descriptors.size());
+        assertEquals(TChangesMetaKind.CHANGE_TYPE, descriptors.get(0).kind());
+        assertEquals("__CHANGE_TYPE__", descriptors.get(0).name());
+        assertEquals(TChangesMetaKind.ROW_VERSION, descriptors.get(1).kind());
+        assertEquals("__ROW_VERSION__", descriptors.get(1).name());
+    }
+
+    @Test
+    public void testChangeTypeConflictUsesAlternateName() throws Exception {
+        // SELECT real __CHANGE_TYPE__ resolves to the real table column (not the
+        // CDC metadata). The CDC kind takes __CHANGE_TYPE_1__.
+        String sql = "SELECT __CHANGE_TYPE__, __CHANGE_TYPE_1__, __ROW_VERSION__ "
+                + "FROM dup_ct [_CHANGES_1_2_]";
+        TableRelation tr = analyzeChangesRelation(sql);
+        List<ChangesMetaDescriptor> descriptors = tr.getChangesMetaDescriptors().orElseThrow();
+        assertEquals(2, descriptors.size());
+        assertEquals("__CHANGE_TYPE_1__", descriptors.get(0).name());
+        assertEquals("__ROW_VERSION__", descriptors.get(1).name());
+
+        // Scope must contain both names — proves the real column survives and
+        // the alternate metadata name is queryable.
+        assertFieldPresent(tr, "__CHANGE_TYPE__");
+        assertFieldPresent(tr, "__CHANGE_TYPE_1__");
+        assertFieldPresent(tr, "__ROW_VERSION__");
+    }
+
+    @Test
+    public void testRowVersionConflictUsesAlternateName() throws Exception {
+        String sql = "SELECT __CHANGE_TYPE__, __ROW_VERSION__, __ROW_VERSION_1__ "
+                + "FROM dup_rv [_CHANGES_1_2_]";
+        TableRelation tr = analyzeChangesRelation(sql);
+        List<ChangesMetaDescriptor> descriptors = tr.getChangesMetaDescriptors().orElseThrow();
+        assertEquals("__CHANGE_TYPE__", descriptors.get(0).name());
+        assertEquals("__ROW_VERSION_1__", descriptors.get(1).name());
+    }
+
+    @Test
+    public void testBothMetadataNamesConflict() throws Exception {
+        String sql = "SELECT __CHANGE_TYPE_1__, __ROW_VERSION_1__ FROM dup_both [_CHANGES_1_2_]";
+        TableRelation tr = analyzeChangesRelation(sql);
+        List<ChangesMetaDescriptor> descriptors = tr.getChangesMetaDescriptors().orElseThrow();
+        assertEquals("__CHANGE_TYPE_1__", descriptors.get(0).name());
+        assertEquals("__ROW_VERSION_1__", descriptors.get(1).name());
+        assertFieldPresent(tr, "__CHANGE_TYPE__");
+        assertFieldPresent(tr, "__ROW_VERSION__");
+        assertFieldPresent(tr, "__CHANGE_TYPE_1__");
+        assertFieldPresent(tr, "__ROW_VERSION_1__");
+    }
+
+    @Test
+    public void testCandidateChainSkipsToNextSuffix() throws Exception {
+        // Both __CHANGE_TYPE__ and __CHANGE_TYPE_1__ already exist as real
+        // columns; the CHANGE_TYPE metadata kind must skip to _2_.
+        String sql = "SELECT __CHANGE_TYPE_2__, __ROW_VERSION__ FROM dup_chain [_CHANGES_1_2_]";
+        TableRelation tr = analyzeChangesRelation(sql);
+        List<ChangesMetaDescriptor> descriptors = tr.getChangesMetaDescriptors().orElseThrow();
+        assertEquals("__CHANGE_TYPE_2__", descriptors.get(0).name());
+        assertEquals("__ROW_VERSION__", descriptors.get(1).name());
+    }
+
+    @Test
+    public void testSelectStarIncludesAlternateMetadata() throws Exception {
+        // SELECT * exposes the real shadowing column AND the alternate
+        // metadata column — keeps the user's data accessible while still
+        // surfacing CDC metadata.
+        String sql = "SELECT * FROM dup_ct [_CHANGES_1_2_]";
+        TableRelation tr = analyzeChangesRelation(sql);
+        assertFieldPresent(tr, "__CHANGE_TYPE__");
+        assertFieldPresent(tr, "__CHANGE_TYPE_1__");
+        assertFieldPresent(tr, "__ROW_VERSION__");
+    }
+
+    private static TableRelation analyzeChangesRelation(String sql) throws Exception {
+        QueryStatement stmt = (QueryStatement) UtFrameUtils.parseStmtWithNewParser(
+                sql, connectContext);
+        return (TableRelation) ((SelectRelation) stmt.getQueryRelation()).getRelation();
+    }
+
+    private static void assertFieldPresent(TableRelation tr, String name) {
+        for (Field f : tr.getScope().getRelationFields().getAllFields()) {
+            if (f.getName().equalsIgnoreCase(name)) {
+                return;
+            }
+        }
+        fail("expected field '" + name + "' in relation scope");
     }
 
     /**

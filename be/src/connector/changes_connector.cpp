@@ -40,24 +40,21 @@ namespace starrocks::connector {
 
 namespace {
 
-// Per-segment ChunkIterator wrapper that appends __CHANGE_TYPE__ and
-// __ROW_VERSION__ to every chunk. Each instance is bound to its source
-// rowset's version, so a union over multiple wrappers can fan all
-// segments into one chunk stream without losing per-rowset version.
-class CdcStampingIterator final : public ChunkIterator {
+// Per-segment ChunkIterator wrapper that appends one column per requested
+// CHANGES metadata kind onto every chunk it surfaces. Each instance is
+// bound to its source rowset's version, so a union over multiple wrappers
+// can drain all segments into one chunk stream while still writing the
+// right version into each row.
+class ChangesMetaAppendingIterator final : public ChunkIterator {
 public:
-    CdcStampingIterator(ChunkIteratorPtr inner, int64_t version,
-                        const std::vector<std::pair<SlotId, size_t>>& data_slot_chunk_indices,
-                        std::optional<int> change_type_slot_id, bool change_type_nullable,
-                        std::optional<int> row_version_slot_id, bool row_version_nullable)
+    ChangesMetaAppendingIterator(ChunkIteratorPtr inner, int64_t version,
+                                 const std::vector<std::pair<SlotId, size_t>>& data_slot_chunk_indices,
+                                 const std::vector<ChangesMetaSlot>& meta_slots)
             : ChunkIterator(inner->schema(), inner->chunk_size()),
               _inner(std::move(inner)),
               _version(version),
               _data_slot_chunk_indices(&data_slot_chunk_indices),
-              _change_type_slot_id(change_type_slot_id),
-              _change_type_nullable(change_type_nullable),
-              _row_version_slot_id(row_version_slot_id),
-              _row_version_nullable(row_version_nullable) {}
+              _meta_slots(&meta_slots) {}
 
     void close() override {
         if (_inner != nullptr) {
@@ -77,44 +74,46 @@ protected:
             chunk->set_slot_id_to_index(slot_id, col_idx);
         }
         size_t nrows = chunk->num_rows();
-        // INSERT; DUP/AGG CDC has no other change types.
-        if (_change_type_slot_id.has_value()) {
-            auto val_col = Int8Column::create();
-            val_col->reserve(nrows);
-            for (size_t r = 0; r < nrows; r++) {
-                val_col->append(0);
-            }
-            ColumnPtr col = std::move(val_col);
-            if (_change_type_nullable) {
+        for (const auto& meta : *_meta_slots) {
+            ASSIGN_OR_RETURN(ColumnPtr col, _build_metadata_column(meta.kind, nrows));
+            if (meta.slot->is_nullable()) {
                 auto null_col = NullColumn::create(nrows, 0);
                 col = NullableColumn::create(std::move(col), std::move(null_col));
             }
-            chunk->append_column(std::move(col), _change_type_slot_id.value());
-        }
-        if (_row_version_slot_id.has_value()) {
-            auto val_col = Int64Column::create();
-            val_col->reserve(nrows);
-            for (size_t r = 0; r < nrows; r++) {
-                val_col->append(_version);
-            }
-            ColumnPtr col = std::move(val_col);
-            if (_row_version_nullable) {
-                auto null_col = NullColumn::create(nrows, 0);
-                col = NullableColumn::create(std::move(col), std::move(null_col));
-            }
-            chunk->append_column(std::move(col), _row_version_slot_id.value());
+            chunk->append_column(std::move(col), meta.slot->id());
         }
         return Status::OK();
     }
 
 private:
+    StatusOr<ColumnPtr> _build_metadata_column(TChangesMetaKind::type kind, size_t nrows) const {
+        switch (kind) {
+        case TChangesMetaKind::CHANGE_TYPE: {
+            // Always INSERT — DUP/AGG CHANGES does not surface any other type.
+            auto val_col = Int8Column::create();
+            val_col->reserve(nrows);
+            for (size_t r = 0; r < nrows; r++) {
+                val_col->append(0);
+            }
+            return ColumnPtr(std::move(val_col));
+        }
+        case TChangesMetaKind::ROW_VERSION: {
+            auto val_col = Int64Column::create();
+            val_col->reserve(nrows);
+            for (size_t r = 0; r < nrows; r++) {
+                val_col->append(_version);
+            }
+            return ColumnPtr(std::move(val_col));
+        }
+        }
+        return Status::InternalError(
+                fmt::format("unhandled TChangesMetaKind: {}", static_cast<int>(kind)));
+    }
+
     ChunkIteratorPtr _inner;
     int64_t _version;
     const std::vector<std::pair<SlotId, size_t>>* _data_slot_chunk_indices;
-    std::optional<int> _change_type_slot_id;
-    bool _change_type_nullable;
-    std::optional<int> _row_version_slot_id;
-    bool _row_version_nullable;
+    const std::vector<ChangesMetaSlot>* _meta_slots;
 };
 
 lake::TabletManager* lake_tablet_manager(RuntimeState* state) {
@@ -166,13 +165,19 @@ Status ChangesDataSource::open(RuntimeState* state) {
     }
     _tuple_desc = tuple_desc;
 
+    // Classify each tuple slot as data vs. CHANGES metadata by matching its
+    // col_name against the descriptor names in the plan node. A descriptor
+    // whose name has no matching slot was dropped by projection pruning.
+    const auto& meta_descriptors = scan_node.meta_descriptors;
+    std::unordered_map<std::string, const TChangesMetaDescriptor*> name_to_descriptor;
+    name_to_descriptor.reserve(meta_descriptors.size());
+    for (const auto& descriptor : meta_descriptors) {
+        name_to_descriptor.emplace(descriptor.name, &descriptor);
+    }
     for (auto* slot : tuple_desc->slots()) {
-        if (slot->col_name() == "__CHANGE_TYPE__") {
-            _change_type_slot_id = slot->id();
-            _change_type_slot_is_nullable = slot->is_nullable();
-        } else if (slot->col_name() == "__ROW_VERSION__") {
-            _row_version_slot_id = slot->id();
-            _row_version_slot_is_nullable = slot->is_nullable();
+        auto it = name_to_descriptor.find(std::string(slot->col_name()));
+        if (it != name_to_descriptor.end()) {
+            _changes_meta_slots.push_back(ChangesMetaSlot{it->second->kind, slot});
         } else {
             _data_slots.push_back(slot);
         }
@@ -188,12 +193,14 @@ Status ChangesDataSource::open(RuntimeState* state) {
 
     if (_has_delete_predicate) {
         return Status::NotSupported(fmt::format(
-                "DELETE_PREDICATE_FOUND: CDC not supported for DELETE operations on tablet {}", _tablet_id));
+                "DELETE_PREDICATE_FOUND: CHANGES not supported for DELETE operations on tablet {}",
+                _tablet_id));
     }
 
-    // Per-rowset segment iterators get wrapped in CdcStampingIterator so
-    // each surfaced chunk carries the rowset's version plus the CDC
-    // metadata columns; the union iterator below drains them in order.
+    // Wrap each per-segment iterator so the surfaced chunk carries the
+    // source rowset's version plus the requested metadata columns. The
+    // union iterator then drains the wrappers in order, preserving the
+    // per-rowset version each row was tagged with.
     RowsetReadOptions opts;
     opts.stats = &_read_stats;
     opts.chunk_size = _runtime_state->chunk_size();
@@ -205,9 +212,8 @@ Status ChangesDataSource::open(RuntimeState* state) {
     for (auto& rowset : _changes_rowsets) {
         ASSIGN_OR_RETURN(auto iters, rowset->read(_read_schema, opts));
         for (auto& it : iters) {
-            seg_iters.push_back(std::make_shared<CdcStampingIterator>(
-                    std::move(it), rowset->version(), _data_slot_chunk_indices, _change_type_slot_id,
-                    _change_type_slot_is_nullable, _row_version_slot_id, _row_version_slot_is_nullable));
+            seg_iters.push_back(std::make_shared<ChangesMetaAppendingIterator>(
+                    std::move(it), rowset->version(), _data_slot_chunk_indices, _changes_meta_slots));
         }
     }
     _chunk_iter = seg_iters.empty() ? new_empty_iterator(_read_schema, _runtime_state->chunk_size())
@@ -235,8 +241,9 @@ Status ChangesDataSource::get_next(RuntimeState* state, ChunkPtr* chunk) {
 // traversal stops as soon as no ancestor version remains above base.
 Status ChangesDataSource::_do_metadata_traversal() {
     if (_base_version > _head_version) {
-        return Status::InvalidArgument(fmt::format("CDC version range invalid: base_version({}) > head_version({})",
-                                                   _base_version, _head_version));
+        return Status::InvalidArgument(fmt::format(
+                "CHANGES version range invalid: base_version({}) > head_version({})",
+                _base_version, _head_version));
     }
     if (_base_version == _head_version) {
         return Status::OK();

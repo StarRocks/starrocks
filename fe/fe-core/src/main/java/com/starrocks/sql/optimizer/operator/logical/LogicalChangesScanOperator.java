@@ -18,12 +18,14 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Table;
 import com.starrocks.lake.bookmark.Bookmark;
 import com.starrocks.lake.bookmark.BookmarkChange;
+import com.starrocks.lake.changes.ChangesMetaDescriptor;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 
+import java.util.List;
 import java.util.Map;
 
 public class LogicalChangesScanOperator extends LogicalScanOperator {
@@ -31,6 +33,8 @@ public class LogicalChangesScanOperator extends LogicalScanOperator {
     private Bookmark base;
     private Bookmark head;
     private BookmarkChange delta;
+    // CHANGES metadata descriptors for this relation.
+    private List<ChangesMetaDescriptor> changesMetaDescriptors = List.of();
 
     public LogicalChangesScanOperator(Table table,
                                       Map<ColumnRefOperator, Column> colRefToColumnMetaMap,
@@ -38,12 +42,14 @@ public class LogicalChangesScanOperator extends LogicalScanOperator {
                                       Bookmark base,
                                       Bookmark head,
                                       BookmarkChange delta,
-                                      long limit) {
+                                      long limit,
+                                      List<ChangesMetaDescriptor> changesMetaDescriptors) {
         super(OperatorType.LOGICAL_CHANGES_SCAN, table,
                 colRefToColumnMetaMap, columnMetaToColRefMap, limit, null, null);
         this.base = base;
         this.head = head;
         this.delta = delta;
+        this.changesMetaDescriptors = changesMetaDescriptors;
     }
 
     private LogicalChangesScanOperator() {
@@ -60,6 +66,10 @@ public class LogicalChangesScanOperator extends LogicalScanOperator {
 
     public BookmarkChange getDelta() {
         return delta;
+    }
+
+    public List<ChangesMetaDescriptor> getChangesMetaDescriptors() {
+        return changesMetaDescriptors;
     }
 
     @Override
@@ -86,6 +96,7 @@ public class LogicalChangesScanOperator extends LogicalScanOperator {
             builder.base = operator.base;
             builder.head = operator.head;
             builder.delta = operator.delta;
+            builder.changesMetaDescriptors = operator.changesMetaDescriptors;
             return this;
         }
     }

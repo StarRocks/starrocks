@@ -26,6 +26,7 @@
 #include "column/column.h"
 #include "connector/connector.h"
 #include "exec/pipeline/scan/morsel.h"
+#include "gen_cpp/Descriptors_types.h"
 #include "storage/chunk_iterator.h"
 #include "storage/lake/tablet_metadata.h"
 #include "storage/lake/types_fwd.h"
@@ -41,6 +42,12 @@ class TabletManager;
 } // namespace starrocks
 
 namespace starrocks::connector {
+
+// Pairs a tuple slot with the CHANGES metadata kind that fills it.
+struct ChangesMetaSlot {
+    TChangesMetaKind::type kind;
+    const SlotDescriptor* slot;
+};
 
 class ChangesConnector final : public Connector {
 public:
@@ -78,11 +85,10 @@ protected:
     const TChangesScanNode _changes_scan_node;
 };
 
-/// Per-tablet CDC scan over a (base, head] range for duplicate-key and
+/// Per-tablet CHANGES scan over a (base, head] range for duplicate-key and
 /// aggregate-key tables. Walks tablet metadata backwards via
 /// metadata_ancestors to discover LOAD rowsets in range, reads them, and
-/// stamps each row with the __CHANGE_TYPE__ / __ROW_VERSION__ metadata
-/// columns.
+/// appends the metadata columns named in the plan node to every surfaced row.
 class ChangesDataSource final : public DataSource {
 public:
     ~ChangesDataSource() override = default;
@@ -120,28 +126,26 @@ private:
 
     // --- Tuple slots resolved from _tuple_desc ---
     std::vector<SlotDescriptor*> _data_slots;
-    std::optional<int> _change_type_slot_id;
-    std::optional<int> _row_version_slot_id;
-    bool _change_type_slot_is_nullable = false;
-    bool _row_version_slot_is_nullable = false;
+    // Tuple slots that receive CHANGES metadata values, built once in open().
+    std::vector<ChangesMetaSlot> _changes_meta_slots;
 
-    // Stable slot-id -> chunk column index mapping for every materialized data
-    // slot. Built once in _init_read_schema() so CdcStampingIterator does not
-    // re-scan the chunk schema per row batch.
+    // Stable slot-id -> chunk column index mapping for every materialized
+    // data slot. Built once in _init_read_schema() so the per-chunk hot path
+    // does not re-scan the chunk schema.
     std::vector<std::pair<SlotId, size_t>> _data_slot_chunk_indices;
 
     // --- Metadata traversal output ---
     std::shared_ptr<const TabletMetadataPB> _head_metadata;
     TabletSchemaCSPtr _tablet_schema;
     std::vector<lake::RowsetPtr> _changes_rowsets;
-    // Set when an in-range rowset carries a DELETE predicate. DUP/AGG CDC
-    // does not surface deletions, so open() aborts with NotSupported.
+    // True if any in-range rowset carries a DELETE predicate. DUP/AGG
+    // CHANGES does not surface deletions, so open() aborts with NotSupported.
     bool _has_delete_predicate = false;
 
     // --- Read cursor and per-rowset iterator buffer ---
     // Union over per-segment iterators; each segment iterator is wrapped
-    // by CdcStampingIterator so the chunk surfaces with __CHANGE_TYPE__ /
-    // __ROW_VERSION__ already populated from its source rowset's version.
+    // by ChangesMetaAppendingIterator so chunks surface with the metadata columns
+    // already populated from the source rowset's version.
     ChunkIteratorPtr _chunk_iter;
     Schema _read_schema;
     OlapReaderStatistics _read_stats;

@@ -45,7 +45,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * ChangesScanNode.computeScanRanges / getNodeExplainString / toThrift, and
  * StatisticsCalculator.visitLogicalChangesScan.
  */
-public class CloudNativeCdcPlanTest extends BookmarkTestBase {
+public class CloudNativeChangesPlanTest extends BookmarkTestBase {
 
     private static final AtomicInteger COUNTER = new AtomicInteger();
 
@@ -93,15 +93,24 @@ public class CloudNativeCdcPlanTest extends BookmarkTestBase {
                     "plan should record tablet selection:\n" + plan);
 
             // Thrift conversion runs ChangesScanNode.toThrift; the FE → BE
-            // contract carries the live schema key, not column descriptors.
+            // contract carries the live schema key plus the FE-resolved
+            // CHANGES metadata descriptors BE uses for classification.
             String thrift = UtFrameUtils.getPlanThriftString(connectContext, sql);
             assertTrue(thrift.contains("CHANGES_SCAN_NODE"),
                     "thrift plan should reference CHANGES_SCAN_NODE node type:\n" + thrift);
             assertTrue(thrift.contains("changes_scan_node"),
                     "thrift plan should attach changes_scan_node payload:\n" + thrift);
+            assertTrue(thrift.contains("kind:CHANGE_TYPE"),
+                    "thrift plan should carry a CHANGE_TYPE meta descriptor:\n" + thrift);
+            assertTrue(thrift.contains("kind:ROW_VERSION"),
+                    "thrift plan should carry a ROW_VERSION meta descriptor:\n" + thrift);
+            assertTrue(thrift.contains("name:__CHANGE_TYPE__"),
+                    "thrift plan should carry the CHANGE_TYPE default name:\n" + thrift);
+            assertTrue(thrift.contains("name:__ROW_VERSION__"),
+                    "thrift plan should carry the ROW_VERSION default name:\n" + thrift);
 
             // Direct accessor coverage: the scheduler reads these on every
-            // CDC scan node, and runtime adaptive DOP is unsupported.
+            // CHANGES scan node, and runtime adaptive DOP is unsupported.
             Pair<String, ExecPlan> planPair = UtFrameUtils.getPlanAndFragment(connectContext, sql);
             ChangesScanNode scan = null;
             for (ScanNode node : planPair.second.getScanNodes()) {
@@ -158,6 +167,51 @@ public class CloudNativeCdcPlanTest extends BookmarkTestBase {
             // Only the new partition is in the delta, so partitions=1/1.
             assertTrue(plan.contains("partitions=1/1"),
                     "plan should report only the added partition:\n" + plan);
+        } finally {
+            bm.releaseReference(dbId, tableId, base.getBookmarkId(), hBase.getHolderId());
+            bm.releaseReference(dbId, tableId, head.getBookmarkId(), hHead.getHolderId());
+        }
+    }
+
+    @Test
+    public void testChangesPlanWithNameConflict() throws Exception {
+        // A base table whose schema already uses one of the default CHANGES
+        // metadata names must still plan: the analyzer picks the alternate
+        // query name, and PlanFragmentBuilder still wires the metadata
+        // descriptor through to the thrift node.
+        String name = "ch_conflict_" + COUNTER.getAndIncrement();
+        long tableId = createTable("CREATE TABLE " + name + " (k int, `__CHANGE_TYPE__` int) "
+                + "DUPLICATE KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1 "
+                + "PROPERTIES ('replication_num' = '1');");
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getDb(dbId).getTable(tableId);
+        table.maySetDatabaseId(dbId);
+
+        BookmarkManager bm = GlobalStateMgr.getCurrentState().getBookmarkManager();
+        BookmarkHolder hBase = BookmarkHolder.forEmptyInfo("conf_base");
+        BookmarkHolder hHead = BookmarkHolder.forEmptyInfo("conf_head");
+        Bookmark base = bm.create(dbId, tableId, hBase);
+        bumpVisibleVersion(table, 5L);
+        Bookmark head = bm.create(dbId, tableId, hHead);
+
+        try {
+            // Real __CHANGE_TYPE__ column is queryable; CHANGES metadata uses
+            // __CHANGE_TYPE_1__.
+            String sql = String.format(
+                    "SELECT k, `__CHANGE_TYPE__`, __CHANGE_TYPE_1__, __ROW_VERSION__ "
+                            + "FROM %s [_CHANGES_%d_%d_]",
+                    name, base.getBookmarkId(), head.getBookmarkId());
+            String plan = UtFrameUtils.getFragmentPlan(connectContext, sql);
+            assertTrue(plan.contains("ChangesScanNode"),
+                    "plan should include ChangesScanNode:\n" + plan);
+
+            String thrift = UtFrameUtils.getPlanThriftString(connectContext, sql);
+            assertTrue(thrift.contains("name:__CHANGE_TYPE_1__"),
+                    "thrift plan should carry the alternate __CHANGE_TYPE_1__ name under conflict:\n"
+                            + thrift);
+            assertTrue(thrift.contains("name:__ROW_VERSION__"),
+                    "thrift plan should still carry the default __ROW_VERSION__ name:\n"
+                            + thrift);
         } finally {
             bm.releaseReference(dbId, tableId, base.getBookmarkId(), hBase.getHolderId());
             bm.releaseReference(dbId, tableId, head.getBookmarkId(), hHead.getHolderId());

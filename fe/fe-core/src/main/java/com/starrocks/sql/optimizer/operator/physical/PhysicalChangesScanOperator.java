@@ -18,6 +18,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Table;
 import com.starrocks.lake.bookmark.Bookmark;
 import com.starrocks.lake.bookmark.BookmarkChange;
+import com.starrocks.lake.changes.ChangesMetaDescriptor;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.operator.OperatorType;
@@ -25,6 +26,7 @@ import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
+import java.util.List;
 import java.util.Map;
 
 public class PhysicalChangesScanOperator extends PhysicalScanOperator {
@@ -32,6 +34,8 @@ public class PhysicalChangesScanOperator extends PhysicalScanOperator {
     private final Bookmark base;
     private final Bookmark head;
     private final BookmarkChange delta;
+    // CHANGES metadata descriptors for this relation.
+    private final List<ChangesMetaDescriptor> changesMetaDescriptors;
 
     public PhysicalChangesScanOperator(Table table,
                                        Map<ColumnRefOperator, Column> colRefToColumnMetaMap,
@@ -39,12 +43,14 @@ public class PhysicalChangesScanOperator extends PhysicalScanOperator {
                                        ScalarOperator predicate,
                                        Bookmark base,
                                        Bookmark head,
-                                       BookmarkChange delta) {
+                                       BookmarkChange delta,
+                                       List<ChangesMetaDescriptor> changesMetaDescriptors) {
         super(OperatorType.PHYSICAL_CHANGES_SCAN, table,
                 colRefToColumnMetaMap, limit, predicate, null);
         this.base = base;
         this.head = head;
         this.delta = delta;
+        this.changesMetaDescriptors = changesMetaDescriptors;
     }
 
     public Bookmark getBase() {
@@ -57,6 +63,10 @@ public class PhysicalChangesScanOperator extends PhysicalScanOperator {
 
     public BookmarkChange getDelta() {
         return delta;
+    }
+
+    public List<ChangesMetaDescriptor> getChangesMetaDescriptors() {
+        return changesMetaDescriptors;
     }
 
     @Override

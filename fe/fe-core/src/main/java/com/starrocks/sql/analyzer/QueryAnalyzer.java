@@ -48,6 +48,7 @@ import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.lake.bookmark.BookmarkRange;
+import com.starrocks.lake.changes.ChangesMetaDescriptor;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
@@ -105,7 +106,6 @@ import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.common.TypeManager;
 import com.starrocks.sql.optimizer.dump.HiveMetaStoreTableDumpInfo;
-import com.starrocks.sql.optimizer.transformer.CdcUtils;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.type.BooleanType;
 import com.starrocks.type.IntegerType;
@@ -1058,13 +1058,17 @@ public class QueryAnalyzer {
                     throw new SemanticException("Legacy _BINLOG_ queries are no longer supported");
                 }
 
-                // CHANGES hint path: validations already ran in resolveTableRef; here we
-                // synthesize the __CHANGE_TYPE__ / __ROW_VERSION__ metadata columns so
-                // downstream transformation sees one shape.
+                // CHANGES hint path. Validations already ran in resolveTableRef;
+                // here we append the metadata columns so downstream transformation
+                // sees one shape.
                 if (node.getBookmarkRange().isPresent()) {
-                    for (Column column : CdcUtils.getCdcMetadataColumns()) {
-                        SlotRef slot = new SlotRef(tableName, column.getName(), column.getName());
-                        Field field = new Field(column.getName(), column.getType(), tableName, slot, true,
+                    List<ChangesMetaDescriptor> descriptors =
+                            ChangesMetaDescriptor.resolve(table.getBaseSchema());
+                    node.setChangesMetaDescriptors(descriptors);
+                    for (ChangesMetaDescriptor descriptor : descriptors) {
+                        Column column = new Column(descriptor.name(), descriptor.type());
+                        SlotRef slot = new SlotRef(tableName, descriptor.name(), descriptor.name());
+                        Field field = new Field(descriptor.name(), descriptor.type(), tableName, slot, true,
                                 column.isAllowNull());
                         columns.put(field, column);
                         fields.add(field);

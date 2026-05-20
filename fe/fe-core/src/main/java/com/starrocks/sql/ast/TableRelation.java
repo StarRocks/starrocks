@@ -20,6 +20,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableName;
 import com.starrocks.common.tvr.TvrVersionRange;
 import com.starrocks.lake.bookmark.BookmarkRange;
+import com.starrocks.lake.changes.ChangesMetaDescriptor;
 import com.starrocks.sql.analyzer.Field;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.expression.Expr;
@@ -66,6 +67,8 @@ public class TableRelation extends Relation {
     private final Set<TableHint> tableHints = new HashSet<>();
     private OptionalLong bookmarkId = OptionalLong.empty();
     private Optional<BookmarkRange> bookmarkRange = Optional.empty();
+    // CHANGES metadata descriptors for this relation; absent for non-CHANGES relations.
+    private Optional<List<ChangesMetaDescriptor>> changesMetaDescriptors = Optional.empty();
     // used for mysql external table
     private String queryPeriodString;
 
@@ -263,6 +266,14 @@ public class TableRelation extends Relation {
 
     public Optional<BookmarkRange> getBookmarkRange() {
         return bookmarkRange;
+    }
+
+    public Optional<List<ChangesMetaDescriptor>> getChangesMetaDescriptors() {
+        return changesMetaDescriptors;
+    }
+
+    public void setChangesMetaDescriptors(List<ChangesMetaDescriptor> descriptors) {
+        this.changesMetaDescriptors = Optional.of(descriptors);
     }
 
     public Set<TableHint> getTableHints() {

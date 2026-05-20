@@ -21,46 +21,25 @@ import com.starrocks.lake.bookmark.BookmarkChange;
 import com.starrocks.lake.bookmark.BookmarkManager;
 import com.starrocks.lake.bookmark.BookmarkRange;
 import com.starrocks.lake.bookmark.BookmarkScopedTableResolver;
+import com.starrocks.lake.changes.ChangesMetaDescriptor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalChangesScanOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
-import com.starrocks.type.IntegerType;
 
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
-/**
- * Builder for LogicalChangesScanOperator from a BookmarkRange on an OlapTable,
- * shared by SQL and non-SQL (e.g. IVM refresh) callers. PK rejection and the
- * base&lt;=head invariant are enforced by the caller; this builder enforces
- * bookmark resolution and trackability.
- */
-public final class CdcUtils {
-
-    public static final String CDC_CHANGE_TYPE_COLUMN_NAME = "__CHANGE_TYPE__";
-    public static final String CDC_ROW_VERSION_COLUMN_NAME = "__ROW_VERSION__";
-
-    /** Synthetic CDC metadata columns appended after the business columns. */
-    public static List<Column> getCdcMetadataColumns() {
-        List<Column> columns = new ArrayList<>(2);
-        columns.add(new Column(CDC_CHANGE_TYPE_COLUMN_NAME, IntegerType.TINYINT));
-        columns.add(new Column(CDC_ROW_VERSION_COLUMN_NAME, IntegerType.BIGINT));
-        return columns;
-    }
+/** Shared entry point for SQL planning and IVM refresh to build a CHANGES scan. */
+public final class ChangesScanBuilder {
 
     /**
-     * Resolve {@code range}'s base and head ids against the BookmarkManager,
-     * compute the delta, reject non-trackable changes, and produce the scan
-     * operator over a bookmark-scoped view of {@code table}.
-     *
-     * <p>ASSUMES: the caller has already registered column refs for both the
-     * business columns and the CDC metadata columns in
-     * {@code colRefToColumnMetaMap} — this helper only consumes the maps,
-     * it does not populate them.
+     * Resolves {@code range}'s base and head ids against the BookmarkManager,
+     * computes the delta, rejects non-trackable changes, and returns the scan
+     * operator over a bookmark-scoped view of {@code table}. PK rejection and
+     * the base &lt;= head invariant are the caller's responsibility.
      *
      * @throws SemanticException if either bookmark id is not registered for
      *     {@code table}, or the delta contains non-trackable changes
@@ -68,7 +47,8 @@ public final class CdcUtils {
     public static LogicalChangesScanOperator buildScanOperator(
             OlapTable table, BookmarkRange range,
             Map<ColumnRefOperator, Column> colRefToColumnMetaMap,
-            Map<Column, ColumnRefOperator> columnMetaToColRefMap) {
+            Map<Column, ColumnRefOperator> columnMetaToColRefMap,
+            List<ChangesMetaDescriptor> metaDescriptors) {
         long dbId = table.mayGetDatabaseId().orElseThrow(() ->
                 new IllegalStateException(
                         String.format("dbId missing on %s", table.getName())));
@@ -83,7 +63,7 @@ public final class CdcUtils {
         OlapTable scopedTable = BookmarkScopedTableResolver.resolveByChange(table, delta);
         return new LogicalChangesScanOperator(
                 scopedTable, colRefToColumnMetaMap, columnMetaToColRefMap,
-                base, head, delta, Operator.DEFAULT_LIMIT);
+                base, head, delta, Operator.DEFAULT_LIMIT,
+                metaDescriptors);
     }
-
 }

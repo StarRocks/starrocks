@@ -100,7 +100,7 @@ protected:
 
     // Replace the runtime state's DescriptorTbl with a fresh table holding a
     // single tuple (id = 0) containing an INT data column "c0" plus optional
-    // CDC metadata slots controlled by `shape`. Returns 0 (the tuple id).
+    // CHANGES metadata slots controlled by `shape`. Returns 0 (the tuple id).
     TTupleId install_tuple_descriptor(TupleShape shape) {
         TDescriptorTableBuilder tbl_builder;
         TTupleDescriptorBuilder tup;
@@ -151,11 +151,43 @@ protected:
         return -1;
     }
 
-    // -------------------------------------------------------------------
+// -------------------------------------------------------------------
     // TPlanNode / TScanRange / Provider builders
     // -------------------------------------------------------------------
 
+    // Construct one TChangesMetaDescriptor with the supplied kind / name /
+    // nullability. `type` is derived from kind purely to keep the wire
+    // payload self-describing; BE stamping itself looks only at kind.
+    static TChangesMetaDescriptor make_meta_descriptor(TChangesMetaKind::type kind, const std::string& name,
+                                                       bool is_nullable) {
+        TChangesMetaDescriptor d;
+        d.__set_kind(kind);
+        d.__set_name(name);
+        d.__set_is_nullable(is_nullable);
+        TTypeDesc type;
+        TTypeNode node;
+        node.__set_type(TTypeNodeType::SCALAR);
+        TScalarType scalar;
+        scalar.__set_type(kind == TChangesMetaKind::CHANGE_TYPE ? TPrimitiveType::TINYINT : TPrimitiveType::BIGINT);
+        node.__set_scalar_type(scalar);
+        type.types.push_back(node);
+        d.__set_type(type);
+        return d;
+    }
+
+    // Build a TPlanNode carrying both metadata kinds with their default names,
+    // matching the production shape for a relation with no name conflicts.
+    // Tests that need conflict scenarios call make_plan_node_with_descriptors
+    // directly with custom names.
     TPlanNode make_plan_node(TTupleId tuple_id, int64_t schema_id) {
+        std::vector<TChangesMetaDescriptor> descriptors = {
+                make_meta_descriptor(TChangesMetaKind::CHANGE_TYPE, kChangeTypeColumnName, true),
+                make_meta_descriptor(TChangesMetaKind::ROW_VERSION, kRowVersionColumnName, true)};
+        return make_plan_node_with_descriptors(tuple_id, schema_id, descriptors);
+    }
+
+    TPlanNode make_plan_node_with_descriptors(TTupleId tuple_id, int64_t schema_id,
+                                              const std::vector<TChangesMetaDescriptor>& meta_descriptors) {
         TPlanNode tn;
         TChangesScanNode csn;
         csn.__set_tuple_id(tuple_id);
@@ -164,6 +196,9 @@ protected:
         key.__set_table_id(2);
         key.__set_schema_id(schema_id);
         csn.__set_schema_key(key);
+        if (!meta_descriptors.empty()) {
+            csn.__set_meta_descriptors(meta_descriptors);
+        }
         tn.__set_changes_scan_node(csn);
         return tn;
     }
@@ -181,6 +216,7 @@ protected:
     std::unique_ptr<ChangesDataSourceProvider> make_provider(TTupleId tuple_id, int64_t schema_id) {
         return std::make_unique<ChangesDataSourceProvider>(/*scan_node=*/nullptr, make_plan_node(tuple_id, schema_id));
     }
+
 
     // -------------------------------------------------------------------
     // Tablet bootstrap + metadata publishing
@@ -395,7 +431,7 @@ TEST_F(ChangesConnectorTest, test_open_error_paths) {
         Status st = ds->open(_runtime_state.get());
         ASSERT_FALSE(st.ok());
         EXPECT_TRUE(st.is_invalid_argument());
-        EXPECT_NE(std::string::npos, std::string(st.message()).find("CDC version range invalid"));
+        EXPECT_NE(std::string::npos, std::string(st.message()).find("CHANGES version range invalid"));
         ds->close(_runtime_state.get());
     }
 
@@ -452,6 +488,7 @@ TEST_F(ChangesConnectorTest, test_open_error_paths) {
         EXPECT_NE(std::string::npos, std::string(st.message()).find("missing_col"));
         ds->close(_runtime_state.get());
     }
+
 }
 
 // ============================================================================
@@ -573,7 +610,7 @@ TEST_F(ChangesConnectorTest, test_metadata_traversal_scenarios) {
 }
 
 // ============================================================================
-// Test 4 — CdcStampingIterator under each TupleShape: chunk shape (column
+// Test 4 — ChangesMetaAppendingIterator under each TupleShape: chunk shape (column
 // count), column types, slot-id resolution, and stamping values.
 // ============================================================================
 
@@ -689,7 +726,7 @@ TEST_F(ChangesConnectorTest, test_chunk_stamping_with_slot_variants) {
         }
     }
 
-    // Sub-case E: data column only. CdcStampingIterator stays a passthrough.
+    // Sub-case E: data column only. ChangesMetaAppendingIterator stays a passthrough.
     {
         auto tuple_id = install_tuple_descriptor(TupleShape::DATA_ONLY);
         ASSERT_EQ(-1, slot_id_of(tuple_id, kChangeTypeColumnName));

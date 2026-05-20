@@ -679,11 +679,14 @@ public class RelationTransformer implements AstVisitorExtendInterface<LogicalPla
                         .build();
             } else if (node.getBookmarkRange().isPresent()) {
                 OlapTable olapTable = (OlapTable) node.getTable();
-                scanOperator = CdcUtils.buildScanOperator(
+                scanOperator = ChangesScanBuilder.buildScanOperator(
                         olapTable,
                         node.getBookmarkRange().get(),
                         colRefToColumnMetaMapBuilder.build(),
-                        columnMetaToColRefMap);
+                        columnMetaToColRefMap,
+                        node.getChangesMetaDescriptors().orElseThrow(() ->
+                                new IllegalStateException("CHANGES metadata descriptors "
+                                        + "not resolved on " + node.getName())));
             } else {
                 OlapTable scanTable = (OlapTable) node.getTable();
                 if (node.getBookmarkId().isPresent()) {

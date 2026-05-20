@@ -53,16 +53,16 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Tests CdcUtils.buildScanOperator — the [_CHANGES_] entry point shared by the
- * SQL analyzer and non-SQL callers (IVM refresh). Covers bookmark resolution,
- * non-trackable-delta messaging, and the scoped-table substitution that
- * RelationTransformer relies on.
+ * Tests {@link ChangesScanBuilder#buildScanOperator} — the [_CHANGES_] entry
+ * point shared by the SQL analyzer and non-SQL callers (IVM refresh). Covers
+ * bookmark resolution, non-trackable-delta messaging, and the scoped-table
+ * substitution that RelationTransformer relies on.
  *
  * <p>Bookmarks are minted by calling BookmarkManager directly; INSERTs are
  * not available in the FE UT framework, so consecutive create() calls only
  * return distinct bookmarks after bumping physical-partition visibleVersion.
  */
-public class CdcUtilsTest extends BookmarkTestBase {
+public class ChangesScanBuilderTest extends BookmarkTestBase {
 
     private static final AtomicInteger TABLE_COUNTER = new AtomicInteger();
 
@@ -154,11 +154,12 @@ public class CdcUtilsTest extends BookmarkTestBase {
         Bookmark head = synthesizeAndRegister(tableId, liveSnapshot(live));
 
         SemanticException ex = assertThrows(SemanticException.class,
-                () -> CdcUtils.buildScanOperator(
+                () -> ChangesScanBuilder.buildScanOperator(
                         live,
                         new BookmarkRange(base.getBookmarkId(), head.getBookmarkId()),
                         new HashMap<>(),
-                        new HashMap<>()));
+                        new HashMap<>(),
+                        List.of()));
         String expected = String.format(
                 "CHANGES from bookmark %d to %d on table '%s' not trackable: physical partition %d dropped",
                 base.getBookmarkId(), head.getBookmarkId(), tableName, phantomPhysicalId);
@@ -180,11 +181,12 @@ public class CdcUtilsTest extends BookmarkTestBase {
         Bookmark head = synthesizeAndRegister(tableId, headParts);
 
         SemanticException ex = assertThrows(SemanticException.class,
-                () -> CdcUtils.buildScanOperator(
+                () -> ChangesScanBuilder.buildScanOperator(
                         live,
                         new BookmarkRange(base.getBookmarkId(), head.getBookmarkId()),
                         new HashMap<>(),
-                        new HashMap<>()));
+                        new HashMap<>(),
+                        List.of()));
         String expected = String.format(
                 "CHANGES from bookmark %d to %d on table '%s' not trackable: physical partition %d rewritten",
                 base.getBookmarkId(), head.getBookmarkId(), tableName, shiftedPhysicalId);
@@ -206,11 +208,12 @@ public class CdcUtilsTest extends BookmarkTestBase {
         Bookmark head = synthesizeAndRegister(tableId, headParts);
 
         SemanticException ex = assertThrows(SemanticException.class,
-                () -> CdcUtils.buildScanOperator(
+                () -> ChangesScanBuilder.buildScanOperator(
                         live,
                         new BookmarkRange(base.getBookmarkId(), head.getBookmarkId()),
                         new HashMap<>(),
-                        new HashMap<>()));
+                        new HashMap<>(),
+                        List.of()));
         String expected = String.format(
                 "CHANGES from bookmark %d to %d on table '%s' not trackable: physical partition %d resharded",
                 base.getBookmarkId(), head.getBookmarkId(), tableName, shiftedPhysicalId);
@@ -234,11 +237,12 @@ public class CdcUtilsTest extends BookmarkTestBase {
         Bookmark head = bm.create(dbId, tableId, hHead);
 
         try {
-            LogicalChangesScanOperator op = CdcUtils.buildScanOperator(
+            LogicalChangesScanOperator op = ChangesScanBuilder.buildScanOperator(
                     table,
                     new BookmarkRange(base.getBookmarkId(), head.getBookmarkId()),
                     new HashMap<>(),
-                    new HashMap<>());
+                    new HashMap<>(),
+                    List.of());
             assertNotNull(op);
             assertEquals(base.getBookmarkId(), op.getBase().getBookmarkId());
             assertEquals(head.getBookmarkId(), op.getHead().getBookmarkId());
@@ -262,20 +266,22 @@ public class CdcUtilsTest extends BookmarkTestBase {
 
         try {
             SemanticException baseEx = assertThrows(SemanticException.class,
-                    () -> CdcUtils.buildScanOperator(
+                    () -> ChangesScanBuilder.buildScanOperator(
                             table,
                             new BookmarkRange(99999L, real.getBookmarkId()),
                             new HashMap<>(),
-                            new HashMap<>()));
+                            new HashMap<>(),
+                            List.of()));
             assertTrue(baseEx.getMessage().contains("bookmark 99999 not found"),
                     "actual: " + baseEx.getMessage());
 
             SemanticException headEx = assertThrows(SemanticException.class,
-                    () -> CdcUtils.buildScanOperator(
+                    () -> ChangesScanBuilder.buildScanOperator(
                             table,
                             new BookmarkRange(real.getBookmarkId(), 99998L),
                             new HashMap<>(),
-                            new HashMap<>()));
+                            new HashMap<>(),
+                            List.of()));
             assertTrue(headEx.getMessage().contains("bookmark 99998 not found"),
                     "actual: " + headEx.getMessage());
         } finally {
@@ -295,11 +301,12 @@ public class CdcUtilsTest extends BookmarkTestBase {
         // Intentionally skip maySetDatabaseId so mayGetDatabaseId stays empty.
 
         IllegalStateException ex = assertThrows(IllegalStateException.class,
-                () -> CdcUtils.buildScanOperator(
+                () -> ChangesScanBuilder.buildScanOperator(
                         table,
                         new BookmarkRange(1L, 2L),
                         new HashMap<>(),
-                        new HashMap<>()));
+                        new HashMap<>(),
+                        List.of()));
         assertTrue(ex.getMessage().contains("dbId missing on " + tableName),
                 "actual: " + ex.getMessage());
     }

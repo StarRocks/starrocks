@@ -497,6 +497,11 @@ struct TChangesScanNode {
     // the head-metadata schema, so CDC observes the same schema-evolution
     // semantics as a regular shared-data scan.
     2: optional Descriptors.TTableSchemaKey schema_key
+    // One descriptor per CHANGES metadata kind this scan can surface, sent
+    // unconditionally (not pruned to selected columns). Each descriptor's
+    // name matches one tuple slot; if no slot matches, the metadata column
+    // was dropped by projection pruning and is skipped.
+    3: optional list<Descriptors.TChangesMetaDescriptor> meta_descriptors
 }
 
 // Specification of an individual data range which is held in its entirety

@@ -41,7 +41,8 @@ public class ChangesScanImplementationRule extends ImplementationRule {
                 logical.getPredicate(),
                 logical.getBase(),
                 logical.getHead(),
-                logical.getDelta());
+                logical.getDelta(),
+                logical.getChangesMetaDescriptors());
         return Lists.newArrayList(OptExpression.create(physical));
     }
 }
