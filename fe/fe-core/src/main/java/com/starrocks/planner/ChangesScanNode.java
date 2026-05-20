@@ -20,16 +20,15 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Tablet;
+import com.starrocks.common.Pair;
 import com.starrocks.lake.bookmark.Bookmark;
 import com.starrocks.lake.bookmark.BookmarkChange;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.TChangesScanNode;
 import com.starrocks.thrift.TChangesScanRange;
 import com.starrocks.thrift.TExplainLevel;
-import com.starrocks.thrift.TKeysType;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TPlanNode;
 import com.starrocks.thrift.TPlanNodeType;
@@ -45,6 +44,15 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * Plans the per-tablet CHANGES scan for a bookmark-scoped delta. The analyzer
+ * guarantees two preconditions before this node is constructed: the
+ * BookmarkChange is trackable (every PhysicalPartitionChange is ADDED or
+ * DATA_CHANGED) and the OlapTable is bookmark-scoped to head, so every
+ * physical partition referenced by the delta still exists with head's
+ * index/tablet layout. Violations indicate a planner bug and surface as
+ * IllegalStateException.
+ */
 public class ChangesScanNode extends AbstractOlapTableScanNode {
     private static final Logger LOG = LogManager.getLogger(ChangesScanNode.class);
 
@@ -62,21 +70,17 @@ public class ChangesScanNode extends AbstractOlapTableScanNode {
     }
 
     /**
-     * Extracts the (baseVersion, headVersion] visible-version pair for one
-     * physical-partition change. Only ADDED and DATA_CHANGED are handled; the
-     * analyzer rejects non-trackable changes before reaching the planner.
+     * Returns the (baseVersion, headVersion] visible-version pair for one
+     * physical-partition change. Throws on non-trackable change types — the
+     * analyzer rejects those upstream, so reaching the else is a planner bug.
      */
-    private static long[] versionPair(BookmarkChange.PhysicalPartitionChange change) {
-        if (change instanceof BookmarkChange.DataChanged) {
-            BookmarkChange.DataChanged dc = (BookmarkChange.DataChanged) change;
-            return new long[] {
-                    dc.getBasePartition().getVisibleVersion(),
-                    dc.getHeadPartition().getVisibleVersion()
-            };
-        } else if (change instanceof BookmarkChange.PartitionAdded) {
-            BookmarkChange.PartitionAdded pa = (BookmarkChange.PartitionAdded) change;
+    private static Pair<Long, Long> versionPair(BookmarkChange.PhysicalPartitionChange change) {
+        if (change instanceof BookmarkChange.DataChanged dc) {
+            return Pair.create(dc.getBasePartition().getVisibleVersion(),
+                    dc.getHeadPartition().getVisibleVersion());
+        } else if (change instanceof BookmarkChange.PartitionAdded pa) {
             // Partition was absent at base; emit every rowset reachable at head.
-            return new long[] {0L, pa.getHeadPartition().getVisibleVersion()};
+            return Pair.create(0L, pa.getHeadPartition().getVisibleVersion());
         } else {
             throw new IllegalStateException(
                     "non-trackable change in CDC plan: " + change.getChangeType());
@@ -89,21 +93,17 @@ public class ChangesScanNode extends AbstractOlapTableScanNode {
         for (Map.Entry<Long, List<BookmarkChange.PhysicalPartitionChange>> entry :
                 delta.getChanges().entrySet()) {
             for (BookmarkChange.PhysicalPartitionChange change : entry.getValue()) {
-                BookmarkChange.ChangeType type = change.getChangeType();
-                // Defensive: the analyzer rejects non-trackable types upstream.
-                if (type != BookmarkChange.ChangeType.ADDED
-                        && type != BookmarkChange.ChangeType.DATA_CHANGED) {
-                    continue;
-                }
+                Pair<Long, Long> versions = versionPair(change);
+                long baseVersion = versions.first;
+                long headVersion = versions.second;
+
                 long ppId = change.getPhysicalPartitionId();
                 PhysicalPartition partition = olapTable.getPhysicalPartition(ppId);
                 if (partition == null) {
-                    continue;
+                    throw new IllegalStateException(
+                            "physical partition " + ppId + " missing from bookmark-scoped table '"
+                                    + olapTable.getName() + "'");
                 }
-
-                long[] versions = versionPair(change);
-                long baseVersion = versions[0];
-                long headVersion = versions[1];
 
                 // Pin replica selection to headVersion rather than
                 // partition.getVisibleVersion(): the partition's visible
@@ -168,15 +168,14 @@ public class ChangesScanNode extends AbstractOlapTableScanNode {
         int totalTablets = 0;
         for (List<BookmarkChange.PhysicalPartitionChange> changes : delta.getChanges().values()) {
             for (BookmarkChange.PhysicalPartitionChange change : changes) {
-                BookmarkChange.ChangeType type = change.getChangeType();
-                if (type != BookmarkChange.ChangeType.ADDED
-                        && type != BookmarkChange.ChangeType.DATA_CHANGED) {
-                    continue;
+                long ppId = change.getPhysicalPartitionId();
+                PhysicalPartition pp = olapTable.getPhysicalPartition(ppId);
+                if (pp == null) {
+                    throw new IllegalStateException(
+                            "physical partition " + ppId + " missing from bookmark-scoped table '"
+                                    + olapTable.getName() + "'");
                 }
-                PhysicalPartition pp = olapTable.getPhysicalPartition(change.getPhysicalPartitionId());
-                if (pp != null) {
-                    totalTablets += pp.getLatestBaseIndex().getTablets().size();
-                }
+                totalTablets += pp.getLatestBaseIndex().getTablets().size();
             }
         }
         int selectedTablets = result.size();
@@ -196,7 +195,6 @@ public class ChangesScanNode extends AbstractOlapTableScanNode {
 
         TChangesScanNode scanNode = new TChangesScanNode();
         scanNode.setTuple_id(desc.getId().asInt());
-        scanNode.setTable_type(toThriftKeysType(olapTable.getKeysType()));
         // BE fetches the live read schema via TableSchemaService keyed by this triple.
         scanNode.setSchema_key(getSchemaKey());
 
@@ -206,14 +204,5 @@ public class ChangesScanNode extends AbstractOlapTableScanNode {
     @Override
     public boolean canUseRuntimeAdaptiveDop() {
         return false;
-    }
-
-    private TKeysType toThriftKeysType(KeysType keysType) {
-        return switch (keysType) {
-            case DUP_KEYS -> TKeysType.DUP_KEYS;
-            case AGG_KEYS -> TKeysType.AGG_KEYS;
-            case UNIQUE_KEYS -> TKeysType.UNIQUE_KEYS;
-            case PRIMARY_KEYS -> TKeysType.PRIMARY_KEYS;
-        };
     }
 }
