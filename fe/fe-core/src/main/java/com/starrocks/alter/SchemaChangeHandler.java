@@ -222,15 +222,26 @@ public class SchemaChangeHandler extends AlterHandler {
         }
 
         HashDistributionDesc hashDistributionDesc = (HashDistributionDesc) distributionDesc;
-        HashDistributionInfo hashDistributionInfo = (HashDistributionInfo) defaultDistributionInfo;
-        if (hashDistributionDesc.getBuckets() <= 0
-                || hashDistributionDesc.getBuckets() == hashDistributionInfo.getBucketNum()) {
+        if (hashDistributionDesc.getBuckets() <= 0 || optimizeClause.getSourcePartitionIds().isEmpty()) {
             return false;
         }
 
-        List<String> originalDistributionColumns = MetaUtils.getColumnNamesByColumnIds(
-                olapTable.getIdToColumn(), hashDistributionInfo.getDistributionColumns());
-        return originalDistributionColumns.equals(hashDistributionDesc.getDistributionColumnNames());
+        boolean hasBucketCountChange = false;
+        for (long partitionId : optimizeClause.getSourcePartitionIds()) {
+            Partition partition = olapTable.getPartition(partitionId);
+            if (partition == null || !(partition.getDistributionInfo() instanceof HashDistributionInfo)) {
+                return false;
+            }
+
+            HashDistributionInfo hashDistributionInfo = (HashDistributionInfo) partition.getDistributionInfo();
+            List<String> originalDistributionColumns = MetaUtils.getColumnNamesByColumnIds(
+                    olapTable.getIdToColumn(), hashDistributionInfo.getDistributionColumns());
+            if (!originalDistributionColumns.equals(hashDistributionDesc.getDistributionColumnNames())) {
+                return false;
+            }
+            hasBucketCountChange |= hashDistributionDesc.getBuckets() != hashDistributionInfo.getBucketNum();
+        }
+        return hasBucketCountChange;
     }
 
     private Column buildColumnForAdd(ColumnDef columnDef, OlapTable table) throws DdlException {
