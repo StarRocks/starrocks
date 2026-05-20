@@ -279,6 +279,54 @@ public class OnlineOptimizeJobV2Test extends DDLTestBase {
         Assertions.assertEquals(JobState.FINISHED, replayOptimizeJob.getJobState());
     }
 
+    @Test
+    public void testOptimizeWaitsForCommittedNotVisible() throws Exception {
+        SchemaChangeHandler schemaChangeHandler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(GlobalStateMgrTestUtil.testDb1);
+        OlapTable olapTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    .getTable(db.getFullName(), GlobalStateMgrTestUtil.testTable7);
+
+        schemaChangeHandler.process(alterTableStmt.getAlterClauseList(), db, olapTable);
+        Map<Long, AlterJobV2> alterJobsV2 = schemaChangeHandler.getAlterJobsV2();
+        Assertions.assertEquals(1, alterJobsV2.size());
+        OnlineOptimizeJobV2 optimizeJob =
+                spyPreviousTxnFinished((OnlineOptimizeJobV2) alterJobsV2.values().stream().findAny().get());
+
+        optimizeJob.runPendingJob();
+        Assertions.assertEquals(JobState.WAITING_TXN, optimizeJob.getJobState());
+
+        optimizeJob.runWaitingTxnJob();
+        Assertions.assertEquals(JobState.RUNNING, optimizeJob.getJobState());
+
+        // Stub executeSql to no-op so the future completes immediately with SUCCESS
+        Mockito.doNothing().when(optimizeJob).executeSql(Mockito.anyString());
+
+        // Simulate committed-but-not-visible transactions on temp partition
+        Mockito.doReturn(true).when(optimizeJob).hasCommittedNotVisible(Mockito.anyLong());
+
+        // First tick: task transitions PENDING -> RUNNING (enables double-write, sets watershed)
+        optimizeJob.runRunningJob();
+        Assertions.assertEquals(JobState.RUNNING, optimizeJob.getJobState());
+
+        // Second tick: previous loads finished, submit the INSERT future
+        optimizeJob.runRunningJob();
+        Assertions.assertEquals(JobState.RUNNING, optimizeJob.getJobState());
+
+        // Third tick: future is done (SUCCESS), but hasCommittedNotVisible=true -> should wait
+        optimizeJob.runRunningJob();
+        Assertions.assertEquals(JobState.RUNNING, optimizeJob.getJobState());
+        // Task should still be RUNNING since we deferred setting SUCCESS
+        List<OptimizeTask> optimizeTasks = optimizeJob.getOptimizeTasks();
+        Assertions.assertEquals(Constants.TaskRunState.RUNNING, optimizeTasks.get(0).getOptimizeTaskState());
+
+        // Now simulate all committed transactions become visible
+        Mockito.doReturn(false).when(optimizeJob).hasCommittedNotVisible(Mockito.anyLong());
+
+        // Fourth tick: hasCommittedNotVisible=false -> proceed to replace partition
+        optimizeJob.runRunningJob();
+        Assertions.assertEquals(JobState.FINISHED, optimizeJob.getJobState());
+    }
+
     private OnlineOptimizeJobV2 spyPreviousTxnFinished(OnlineOptimizeJobV2 job) throws AnalysisException {
         // Detach the job from schema change handler to prevent background scheduler from changing state
         SchemaChangeHandler schemaChangeHandler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
@@ -291,6 +339,7 @@ public class OnlineOptimizeJobV2Test extends DDLTestBase {
 
         OnlineOptimizeJobV2 spy = Mockito.spy(job);
         Mockito.doReturn(true).when(spy).isPreviousLoadFinished();
+        Mockito.doReturn(false).when(spy).hasCommittedNotVisible(Mockito.anyLong());
         return spy;
     }
 }
