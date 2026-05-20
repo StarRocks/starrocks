@@ -231,6 +231,131 @@ TEST_F(LakeDataSourceTest, test_convert_scan_range_to_morsel_queue) {
     ASSERT_TRUE(morsel_queue->max_degree_of_parallelism() == 1);
 }
 
+// Drives LakeDataSourceProvider::convert_scan_range_to_morsel_queue through the
+// new vector-query + session-var bypass: when the scan node carries
+// vector_search_options.enable_use_ann == true and the session variable
+// enable_per_segment_scan_parallel is on, the helper promotes the call to
+// FORCE_SPLIT mode even when the caller passes enable_tablet_internal_parallel
+// = false. Verifies could_split() / could_split_physically() became true as a
+// result of the bypass (which they would not without it on this small dataset).
+TEST_F(LakeDataSourceTest, test_convert_scan_range_to_morsel_queue_with_ann_bypass) {
+    create_rowsets_for_testing(_tablet_metadata.get(), 2);
+
+    // RuntimeState with enable_per_segment_scan_parallel = true.
+    TQueryOptions query_options;
+    query_options.__set_enable_per_segment_scan_parallel(true);
+    auto runtime_state = create_runtime_state(query_options);
+
+    std::vector<TypeDescriptor> types;
+    types.emplace_back(TYPE_INT);
+    auto* descs = create_table_desc(runtime_state.get(), types);
+
+    // Mirror create_tplan_node_cloud() but add vector_search_options that
+    // trigger the bypass below. The bypass only inspects enable_use_ann; the
+    // rest of the vector params are unused on this code path.
+    std::vector<::starrocks::TTupleId> tuple_ids{0};
+    TPlanNode tnode;
+    tnode.__set_node_id(1);
+    tnode.__set_node_type(TPlanNodeType::LAKE_SCAN_NODE);
+    tnode.__set_row_tuples(tuple_ids);
+    tnode.__set_limit(-1);
+    TConnectorScanNode connector_scan_node;
+    connector_scan_node.connector_name = connector::Connector::LAKE;
+    tnode.__set_connector_scan_node(connector_scan_node);
+    TLakeScanNode lake_scan_node;
+    lake_scan_node.__set_tuple_id(0);
+    TVectorSearchOptions vec_opts;
+    vec_opts.__set_enable_use_ann(true);
+    lake_scan_node.__set_vector_search_options(vec_opts);
+    tnode.__set_lake_scan_node(lake_scan_node);
+
+    auto scan_node = std::make_shared<starrocks::ConnectorScanNode>(runtime_state->obj_pool(), tnode, *descs);
+    ASSERT_OK(scan_node->init(tnode, runtime_state.get()));
+
+    auto* data_source_provider = dynamic_cast<connector::LakeDataSourceProvider*>(scan_node->data_source_provider());
+    data_source_provider->set_lake_tablet_manager(_tablet_mgr);
+
+    config::tablet_internal_parallel_max_splitted_scan_bytes = 32;
+    config::tablet_internal_parallel_min_splitted_scan_rows = 4;
+    config::tablet_internal_parallel_min_scan_dop = 4;
+
+    auto tablet_metas = std::vector<TabletMetadata*>{_tablet_metadata.get()};
+    auto scan_ranges = create_scan_ranges_cloud(tablet_metas);
+    std::map<int32_t, std::vector<TScanRangeParams>> no_scan_ranges_per_driver_seq;
+
+    // Caller passes enable_tablet_internal_parallel = false and mode = AUTO.
+    // Without the bypass, the helper would early-return a FixedMorselQueue.
+    // With the bypass, both get promoted (true, FORCE_SPLIT) so the split path
+    // runs and _could_split / _could_split_physically flip to true.
+    ASSIGN_OR_ABORT(auto morsel_queue_factory,
+                    scan_node->convert_scan_range_to_morsel_queue_factory(
+                            scan_ranges, no_scan_ranges_per_driver_seq, scan_node->id(), /*pipeline_dop=*/2,
+                            /*in_colocate_exec_group=*/false,
+                            /*enable_tablet_internal_parallel=*/false,
+                            TTabletInternalParallelMode::type::AUTO));
+
+    // Both flags flipping to true means the bypass at lake_connector.cpp
+    // executed _could_tablet_internal_parallel in FORCE_SPLIT mode and the
+    // tablet passed _could_split_tablet_physically. Without the bypass, the
+    // helper would have returned at the early `enable_tablet_internal_parallel
+    // == false` gate, leaving both flags at their false defaults.
+    EXPECT_TRUE(data_source_provider->could_split())
+            << "ANN + session var must promote to FORCE_SPLIT and pass _could_tablet_internal_parallel";
+    EXPECT_TRUE(data_source_provider->could_split_physically());
+}
+
+// Mirror of the test above, but with enable_per_segment_scan_parallel = false.
+// The bypass guard must hold and the helper falls back to FixedMorselQueue
+// because enable_tablet_internal_parallel stays false. Locks in that the
+// bypass does not fire on non-vector queries or with the session variable off.
+TEST_F(LakeDataSourceTest, test_convert_scan_range_to_morsel_queue_ann_bypass_guards) {
+    create_rowsets_for_testing(_tablet_metadata.get(), 2);
+
+    TQueryOptions query_options; // enable_per_segment_scan_parallel unset
+    auto runtime_state = create_runtime_state(query_options);
+
+    std::vector<TypeDescriptor> types;
+    types.emplace_back(TYPE_INT);
+    auto* descs = create_table_desc(runtime_state.get(), types);
+
+    std::vector<::starrocks::TTupleId> tuple_ids{0};
+    TPlanNode tnode;
+    tnode.__set_node_id(1);
+    tnode.__set_node_type(TPlanNodeType::LAKE_SCAN_NODE);
+    tnode.__set_row_tuples(tuple_ids);
+    tnode.__set_limit(-1);
+    TConnectorScanNode connector_scan_node;
+    connector_scan_node.connector_name = connector::Connector::LAKE;
+    tnode.__set_connector_scan_node(connector_scan_node);
+    TLakeScanNode lake_scan_node;
+    lake_scan_node.__set_tuple_id(0);
+    TVectorSearchOptions vec_opts;
+    vec_opts.__set_enable_use_ann(true);
+    lake_scan_node.__set_vector_search_options(vec_opts);
+    tnode.__set_lake_scan_node(lake_scan_node);
+
+    auto scan_node = std::make_shared<starrocks::ConnectorScanNode>(runtime_state->obj_pool(), tnode, *descs);
+    ASSERT_OK(scan_node->init(tnode, runtime_state.get()));
+
+    auto* data_source_provider = dynamic_cast<connector::LakeDataSourceProvider*>(scan_node->data_source_provider());
+    data_source_provider->set_lake_tablet_manager(_tablet_mgr);
+
+    auto tablet_metas = std::vector<TabletMetadata*>{_tablet_metadata.get()};
+    auto scan_ranges = create_scan_ranges_cloud(tablet_metas);
+    std::map<int32_t, std::vector<TScanRangeParams>> no_scan_ranges_per_driver_seq;
+
+    ASSIGN_OR_ABORT(auto morsel_queue_factory,
+                    scan_node->convert_scan_range_to_morsel_queue_factory(
+                            scan_ranges, no_scan_ranges_per_driver_seq, scan_node->id(), /*pipeline_dop=*/2,
+                            /*in_colocate_exec_group=*/false,
+                            /*enable_tablet_internal_parallel=*/false,
+                            TTabletInternalParallelMode::type::AUTO));
+
+    EXPECT_FALSE(data_source_provider->could_split())
+            << "without the bypass, the small-tablet gate keeps could_split() false";
+    EXPECT_FALSE(data_source_provider->could_split_physically());
+}
+
 TEST_F(LakeDataSourceTest, get_tablet_schema) {
     SyncPoint::GetInstance()->EnableProcessing();
     DeferOp defer([&]() {

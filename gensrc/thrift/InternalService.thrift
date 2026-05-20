@@ -391,9 +391,17 @@ struct TQueryOptions {
   216: optional bool http_request_allow_private_in_allowlist = false;
   217: optional bool enable_cache_udaf = false;
 
+  // Pre-built JSON anchor of the streaming source for a routine-load
+  // task fragment (e.g. {"format":"kafka","topic":"t","partitions":[0,1],
+  // "begin_offsets":[10,20]}). When set, BE writes it to the
+  // _statistics_.rejected_records.source_info column instead of the
+  // hardcoded "stream-load-pipe" filename. Optional and unused for
+  // non-routine-load query paths.
+  218: optional string routine_load_source_info;
+
   // Opt-in per-segment scan split for ANN queries. Gated on enable_use_ann
   // at the scan operator; non-vector queries are unaffected.
-  218: optional bool enable_per_segment_scan_parallel = false;
+  219: optional bool enable_per_segment_scan_parallel = false;
 }
 
 // A scan range plus the parameters needed to execute that scan.

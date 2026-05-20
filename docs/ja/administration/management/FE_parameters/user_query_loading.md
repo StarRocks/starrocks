@@ -1171,6 +1171,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明：準備されたトランザクションのデフォルトのタイムアウト期間。
 - 導入時期：-
 
+### `rejected_records_retained_days`
+
+- デフォルト：7
+- タイプ：Int
+- 単位：Days
+- 変更可能：Yes
+- 説明：内部システムテーブル `_statistics_.rejected_records` に保持する日次パーティション数。値は `TableKeeper` に渡され（最小 1 にクランプされます）、各 keeper ティックでターゲットテーブルの `partition_live_number` プロパティに反映されます。拒否された行の履歴をデフォルトの 1 週間より長く保持したい場合（監査または長めの再取り込みウィンドウ用）や、ストレージ予算が厳しい場合にこの値を調整します。この値は新しい日次パーティションと keeper の TTL 調整にのみ影響し、すでに削除されたパーティションを復元することはありません。
+- 導入時期：-
+
 ### `routine_load_task_consume_second`
 
 - デフォルト：15

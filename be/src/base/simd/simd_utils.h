@@ -14,28 +14,50 @@
 
 #pragma once
 
+#include <algorithm>
+#include <cstddef>
+#include <cstdint>
+#include <cstring>
+
 #ifdef __AVX2__
 #include <emmintrin.h>
 #include <immintrin.h>
+#elif defined(__ARM_NEON) && defined(__aarch64__)
+#include <arm_neon.h>
+#endif
 
 namespace starrocks {
+
 class SIMDUtils {
 public:
+#ifdef __AVX2__
     template <class T>
     static __m256i set_data(T data) {
+        // Bit-cast via memcpy to avoid strict-aliasing UB when T is float/double:
+        // reinterpret_cast<int32_t*>(&float_value) and reading through it is UB
+        // under -O2/-O3 -fstrict-aliasing and can miscompile.
         if constexpr (sizeof(T) == 1) {
             return _mm256_set1_epi8(data);
         } else if constexpr (sizeof(T) == 2) {
             return _mm256_set1_epi16(data);
         } else if constexpr (sizeof(T) == 4) {
-            return _mm256_set1_epi32(*reinterpret_cast<int32_t*>(&data));
+            int32_t bits;
+            std::memcpy(&bits, &data, sizeof(bits));
+            return _mm256_set1_epi32(bits);
         } else if constexpr (sizeof(T) == 8) {
-            return _mm256_set1_epi64x(*reinterpret_cast<int64_t*>(&data));
+            int64_t bits;
+            std::memcpy(&bits, &data, sizeof(bits));
+            return _mm256_set1_epi64x(bits);
         } else {
-            static_assert(sizeof(T) > 8, "only support sizeof type LE than 8");
+            static_assert(sizeof(T) == 0, "set_data only supports sizeof(T) == 1, 2, 4, or 8");
         }
     }
-};
-} // namespace starrocks
-
 #endif
+
+    template <class T>
+    static void simd_fill(T* dest, T value, size_t count) {
+        std::fill_n(dest, count, value);
+    }
+};
+
+} // namespace starrocks

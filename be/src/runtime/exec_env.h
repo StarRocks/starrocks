@@ -61,6 +61,7 @@ class ExternalScanContextMgr;
 class FragmentMgr;
 class BaseLoadPathMgr;
 class LoadPathMgr;
+class RejectedRecordSyncDaemon;
 class LoadStreamMgr;
 class LookUpDispatcherMgr;
 class StreamContextMgr;
@@ -308,6 +309,7 @@ public:
     ThreadPool* dictionary_cache_pool() { return _dictionary_cache_pool.get(); }
     FragmentMgr* fragment_mgr() { return _fragment_mgr; }
     BaseLoadPathMgr* load_path_mgr() { return _load_path_mgr; }
+    RejectedRecordSyncDaemon* rejected_record_sync_daemon() { return _rejected_record_sync_daemon; }
     BrokerMgr* broker_mgr() const { return _broker_mgr; }
     BrpcStubCache* brpc_stub_cache() const { return _brpc_stub_cache; }
     LoadChannelMgr* load_channel_mgr() { return _load_channel_mgr; }
@@ -428,6 +430,7 @@ private:
     int64_t _max_executor_threads = 0; // Max thread number of executor
 
     BaseLoadPathMgr* _load_path_mgr = nullptr;
+    RejectedRecordSyncDaemon* _rejected_record_sync_daemon = nullptr;
 
     BrokerMgr* _broker_mgr = nullptr;
     LoadChannelMgr* _load_channel_mgr = nullptr;

@@ -24,6 +24,7 @@ set(EXEC_FILES
         ./common/uri_test.cpp
         ./connector/benchmark_connector_test.cpp
         ./connector/file_scan_metrics_test.cpp
+        ./connector/file_connector_rejected_record_test.cpp
         ./connector/hive_connector_test.cpp
         ./connector/deletion_vector/deletion_vector_test.cpp
         ./connector_sink/hive_chunk_sink_test.cpp
@@ -109,6 +110,7 @@ set(EXEC_FILES
         ./exec/connector_scan_node_test.cpp
         ./exec/catalog_scan_metrics_test.cpp
         ./exec/exec_factory_test.cpp
+        ./exec/file_scan_node_rejected_record_test.cpp
         ./exec/file_scan_node_test.cpp
         ./exec/hdfs_scan_node_test.cpp
         ./exec/json_parser_test.cpp
@@ -225,6 +227,7 @@ set(EXEC_FILES
         ./formats/avro/cpp/utils_test.cpp
         ./formats/orc/orc_chunk_reader_test.cpp
         ./formats/orc/orc_column_reader_test.cpp
+        ./formats/orc/orc_emit_rejected_rows_test.cpp
         ./formats/orc/orc_file_writer_test.cpp
         ./formats/orc/orc_lazy_load_test.cpp
         ./formats/orc/utils_test.cpp
@@ -284,6 +287,9 @@ set(EXEC_FILES
         ./runtime/load_channel_mgr_test.cpp
         ./runtime/runtime_metrics_test.cpp
         ./runtime/stream_load_metrics_test.cpp
+        ./runtime/rejected_record_sync_daemon_test.cpp
+        ./runtime/rejected_record_writer_test.cpp
+        ./runtime/runtime_state_helper_test.cpp
         ./runtime/result_queue_mgr_test.cpp
         ./runtime/batch_write/batch_write_mgr_test.cpp
         ./runtime/batch_write/batch_write_util_test.cpp

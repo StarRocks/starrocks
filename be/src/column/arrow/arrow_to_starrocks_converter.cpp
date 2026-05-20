@@ -55,10 +55,10 @@ static bool has_arrow_convert_error_reporter(const ArrowConvertContext* ctx) {
     return ctx != nullptr && ctx->report_error_message != nullptr;
 }
 
-static void report_arrow_convert_error(ArrowConvertContext* ctx, const std::string& reason,
-                                       const std::string& raw_data) {
+static void report_arrow_convert_error(ArrowConvertContext* ctx, const std::string& reason, const std::string& raw_data,
+                                       int64_t row_offset_in_array = -1) {
     if (has_arrow_convert_error_reporter(ctx)) {
-        ctx->report_error_message(reason, raw_data);
+        ctx->report_error_message(reason, raw_data, row_offset_in_array);
     }
 }
 
@@ -383,7 +383,13 @@ struct ArrowConverter<AT, LT, is_nullable, is_strict, BinaryATGuard<AT>, StringO
                             std::string raw_data = std::string(s_data, s_size);
                             std::string reason =
                                     strings::Substitute("string length $0 exceeds max length $1", s_size, max_length);
-                            report_arrow_convert_error(ctx, reason, raw_data);
+                            // `i` indexes into the Arrow array; subtract
+                            // array_start_idx so the anchor's row offset
+                            // is relative to the RecordBatch start (which
+                            // is what ctx->current_batch_first_row_in_file
+                            // tracks).
+                            report_arrow_convert_error(ctx, reason, raw_data,
+                                                       static_cast<int64_t>(i - array_start_idx));
                         }
                     }
                 }

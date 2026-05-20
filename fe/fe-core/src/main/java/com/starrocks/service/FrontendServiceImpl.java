@@ -136,6 +136,7 @@ import com.starrocks.load.pipe.PipeFileRecord;
 import com.starrocks.load.pipe.PipeId;
 import com.starrocks.load.pipe.PipeManager;
 import com.starrocks.load.pipe.filelist.RepoAccessor;
+import com.starrocks.load.rejected.RejectedRecordsTable;
 import com.starrocks.load.routineload.RoutineLoadJob;
 import com.starrocks.load.routineload.RoutineLoadMgr;
 import com.starrocks.load.streamload.AbstractStreamLoadTask;
@@ -565,8 +566,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                 }
 
                 try {
-                    tbl = metadataMgr.getBasicTable(context, catalogName, params.db, tableName,
-                            Config.enable_external_catalog_information_schema_tables_access_full_metadata);
+                    tbl = metadataMgr.getBasicTable(context, catalogName, params.db, tableName);
                 } catch (Exception e) {
                     LOG.warn(e.getMessage(), e);
                 }
@@ -1140,6 +1140,32 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         return currentUser;
     }
 
+    // Cluster-internal trust bypass for system-table loads driven by BE
+    // daemons (currently the rejected_records sync daemon). When the
+    // request carries an `internal_token` that matches the FE cluster
+    // token AND the target is the rejected_records system table, we
+    // dispatch the load as ROOT without checking the caller's password
+    // or INSERT privilege. The same model is used by
+    // {@link com.starrocks.http.rest.LoadAction#tryInternalTokenBypass}
+    // for the HTTP entry; this thrift entry mirrors it. Returns false
+    // for any other table or any other token value -- never opens up a
+    // privilege escalation path for non-system tables.
+    //
+    // Package-private for testability (FrontendServiceImplTest exercises
+    // each fall-through branch directly rather than through the full
+    // requestMergeCommit RPC).
+    boolean isAuthorizedByInternalToken(String token, String db, String tbl) {
+        if (token == null || token.isEmpty()) {
+            return false;
+        }
+        if (!RejectedRecordsTable.DATABASE_NAME.equals(db)
+                || !RejectedRecordsTable.TABLE_NAME.equals(tbl)) {
+            return false;
+        }
+        String expected = GlobalStateMgr.getCurrentState().getNodeMgr().getToken();
+        return expected != null && !expected.isEmpty() && expected.equals(token);
+    }
+
     private boolean checkIsInternalLoad(String user, String passwd, String db, String tbl,
                                         String clientIp) {
         for (Frontend fe : GlobalStateMgr.getCurrentState().getNodeMgr().getAllFrontends()) {
@@ -1662,8 +1688,13 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             if (table == null) {
                 throw new StarRocksException(String.format("unknown table [%s.%s]", request.getDb(), request.getTbl()));
             }
-            UserIdentity userIdentity = checkPasswordAndLoadPriv(request.getUser(), request.getPasswd(), request.getDb(),
-                    request.getTbl(), request.getUser_ip());
+            UserIdentity userIdentity;
+            if (isAuthorizedByInternalToken(request.getInternal_token(), request.getDb(), request.getTbl())) {
+                userIdentity = UserIdentity.ROOT;
+            } else {
+                userIdentity = checkPasswordAndLoadPriv(request.getUser(), request.getPasswd(), request.getDb(),
+                        request.getTbl(), request.getUser_ip());
+            }
             TableId tableId = new TableId(request.getDb(), request.getTbl());
             StreamLoadKvParams params = new StreamLoadKvParams(request.getParams());
             RequestLoadResult loadResult = GlobalStateMgr.getCurrentState().getBatchWriteMgr().requestLoad(

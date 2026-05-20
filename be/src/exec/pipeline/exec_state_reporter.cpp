@@ -119,9 +119,10 @@ std::unique_ptr<TReportExecStatusParams> ExecStateReporter::create_report_exec_s
         if (!runtime_state->get_error_log_file_path().empty()) {
             params.__set_tracking_url(to_load_error_http_path(runtime_state->get_error_log_file_path()));
         }
-        if (!runtime_state->get_rejected_record_file_path().empty()) {
-            params.__set_rejected_record_path(runtime_state->get_rejected_record_file_path());
-        }
+        // Legacy rejected-record file removed; see
+        // RuntimeStateHelper::append_rejected_record_to_file for the
+        // writer-based replacement. The `rejected_record_path` Thrift
+        // field is kept for wire-compat but is no longer populated.
         if (!runtime_state->export_output_files().empty()) {
             params.__isset.export_files = true;
             params.export_files = runtime_state->export_output_files();

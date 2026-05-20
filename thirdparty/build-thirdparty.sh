@@ -680,6 +680,7 @@ build_zlib() {
     cd build
     $CMAKE_CMD .. \
         -DCMAKE_INSTALL_PREFIX=$TP_INSTALL_DIR \
+        -DCMAKE_INSTALL_LIBDIR=lib \
         -DZLIB_COMPAT=ON \
         -DBUILD_SHARED_LIBS=OFF \
         -DCMAKE_BUILD_TYPE=Release
