@@ -54,6 +54,7 @@
 #include "common/config_exec_fwd.h"
 #include "common/runtime_profile.h"
 #include "exec/aggregate/agg_hash_map.h"
+#include "exec/aggregate/agg_hash_set.h"
 #include "exec/aggregate/agg_profile.h"
 #include "exec/aggregator.h"
 #include "runtime/mem_pool.h"
@@ -70,6 +71,10 @@ inline constexpr int64_t kHighCardRows = 10'000'000;
 
 using OneStringWrapper = AggHashMapWithOneStringKey<SliceAggHashMap<PhmapSeed1>>;
 using SerializedWrapper = AggHashMapWithSerializedKey<SliceAggHashMap<PhmapSeed1>>;
+
+// Set-side wrappers (DISTINCT / COUNT DISTINCT hot path)
+using OneStringSetWrapper = AggHashSetOfOneStringKey<SliceAggHashSet<PhmapSeed1>>;
+using SerializedSetWrapper = AggHashSetOfSerializedKey<SliceAggHashSet<PhmapSeed1>>;
 
 enum class DataShape : int {
     UUID36_rl1 = 0,        // 100% UUID36, no consecutive runs (kDistinctKeys distinct, cyclic)
@@ -344,6 +349,17 @@ inline MechSnapshot<Wrapper> snapshot(Wrapper* w, MemPool* pool) {
 }
 
 template <typename Wrapper>
+inline MechSnapshot<Wrapper> snapshot_set(Wrapper* w, MemPool* pool) {
+    MechSnapshot<Wrapper> s;
+    s.cache_hits = w->get_cache_hits();
+    s.cache_misses = w->get_cache_misses();
+    s.final_size = w->hash_set.size();
+    s.hash_table_bytes = w->hash_set.dump_bound();
+    s.pool_bytes = pool ? pool->total_allocated_bytes() : 0;
+    return s;
+}
+
+template <typename Wrapper>
 inline void publish(benchmark::State& state, const MechSnapshot<Wrapper>& s) {
     state.counters["cache_hits"] = s.cache_hits;
     state.counters["cache_misses"] = s.cache_misses;
@@ -546,6 +562,171 @@ static void BM_SerializedBuildOnly(benchmark::State& state) {
 }
 
 // ============================================================================
+// Section E -- single-Slice SET wrapper, full DISTINCT (compute_and_allocate=true).
+// Mirrors Section A but exercises the Set-side cache port: build_hash_set
+// instead of build_hash_map; cache hit skips emplace, not state allocation.
+// ============================================================================
+static void BM_OneStringSetBuild(benchmark::State& state) {
+    const int64_t num_rows = state.range(0);
+    const DataShape shape = static_cast<DataShape>(state.range(1));
+    const FeatureCombo combo = static_cast<FeatureCombo>(state.range(2));
+    const int distinct = (shape == DataShape::UUID36_high) ? kHighDistinctKeys : kDistinctKeys;
+
+    BenchSuite suite;
+    suite.SetUp();
+    StringChunkStream stream(num_rows, distinct, shape);
+
+    int64_t total_rows = 0;
+    int64_t cum_checksum = 0;
+    MechSnapshot<OneStringSetWrapper> snap;
+    for (auto _ : state) {
+        state.PauseTiming();
+        auto wrapper = std::make_unique<OneStringSetWrapper>(kBenchChunkSize, suite._agg_stat.get());
+        apply_combo(wrapper.get(), combo);
+        state.ResumeTiming();
+
+        for (const auto& chunk_col : stream.chunks()) {
+            Columns key_columns;
+            key_columns.emplace_back(chunk_col);
+            wrapper->build_hash_set(kBenchChunkSize, key_columns, suite._mem_pool.get());
+            total_rows += kBenchChunkSize;
+        }
+        benchmark::ClobberMemory();
+
+        state.PauseTiming();
+        snap = snapshot_set(wrapper.get(), suite._mem_pool.get());
+        cum_checksum += static_cast<int64_t>(wrapper->hash_set.size());
+        wrapper.reset();
+        suite._mem_pool->clear();
+    }
+    benchmark::DoNotOptimize(cum_checksum);
+    state.SetItemsProcessed(total_rows);
+    state.counters["shape"] = static_cast<int>(shape);
+    state.counters["combo"] = static_cast<int>(combo);
+    state.counters["distinct"] = distinct;
+    state.counters["rows_per_iter"] = num_rows;
+    publish(state, snap);
+
+    suite.TearDown();
+}
+
+// ============================================================================
+// Section F -- single-Slice SET wrapper, probe-only path
+// (compute_and_allocate=false, streaming preaggregation first stage).  We
+// pre-seed the set with half the distinct key universe so the input is a
+// mix of "known present" and "absent" runs, exercising the
+// (last_key, last_found) replay logic the codex review flagged.
+// ============================================================================
+static void BM_OneStringSetProbeOnly(benchmark::State& state) {
+    const int64_t num_rows = state.range(0);
+    const DataShape shape = static_cast<DataShape>(state.range(1));
+    const FeatureCombo combo = static_cast<FeatureCombo>(state.range(2));
+    const int distinct = (shape == DataShape::UUID36_high) ? kHighDistinctKeys : kDistinctKeys;
+
+    BenchSuite suite;
+    suite.SetUp();
+    StringChunkStream stream(num_rows, distinct, shape);
+
+    // Pre-seed with the same shape but half the key universe so the probed
+    // chunk sees a 50/50 present/absent mix, exercising both
+    // (last_key=present) and (last_key=absent) replay paths.  Seed size is
+    // sized to populate ~half the distinct space (cap at 64 chunks to keep
+    // setup bounded for high-cardinality shapes).
+    const int64_t seed_rows =
+            std::min<int64_t>(int64_t{kBenchChunkSize} * 64, static_cast<int64_t>(distinct / 2) * kBenchChunkSize);
+    StringChunkStream seed_stream(seed_rows, distinct / 2, shape);
+    int64_t total_rows = 0;
+    int64_t cum_checksum = 0;
+    MechSnapshot<OneStringSetWrapper> snap;
+    for (auto _ : state) {
+        state.PauseTiming();
+        auto wrapper = std::make_unique<OneStringSetWrapper>(kBenchChunkSize, suite._agg_stat.get());
+        apply_combo(wrapper.get(), combo);
+        // Pre-fill so subsequent probes see ~50% present, ~50% absent.
+        for (const auto& seed_col : seed_stream.chunks()) {
+            Columns seed_columns;
+            seed_columns.emplace_back(seed_col);
+            wrapper->build_hash_set(kBenchChunkSize, seed_columns, suite._mem_pool.get());
+        }
+        Filter not_founds;
+        state.ResumeTiming();
+
+        for (const auto& chunk_col : stream.chunks()) {
+            Columns key_columns;
+            key_columns.emplace_back(chunk_col);
+            wrapper->build_hash_set_with_selection(kBenchChunkSize, key_columns, suite._mem_pool.get(), &not_founds);
+            total_rows += kBenchChunkSize;
+        }
+        benchmark::DoNotOptimize(not_founds.data());
+        benchmark::ClobberMemory();
+
+        state.PauseTiming();
+        snap = snapshot_set(wrapper.get(), suite._mem_pool.get());
+        int64_t cs = 0;
+        for (int i = 0; i < kBenchChunkSize; ++i) cs += not_founds[i];
+        cum_checksum += cs;
+        wrapper.reset();
+        suite._mem_pool->clear();
+    }
+    benchmark::DoNotOptimize(cum_checksum);
+    state.SetItemsProcessed(total_rows);
+    state.counters["shape"] = static_cast<int>(shape);
+    state.counters["combo"] = static_cast<int>(combo);
+    state.counters["distinct"] = distinct;
+    state.counters["rows_per_iter"] = num_rows;
+    publish(state, snap);
+
+    suite.TearDown();
+}
+
+// ============================================================================
+// Section G -- serialized multi-column SET wrapper, full DISTINCT.
+// Mirrors Section D for the set-side wrapper.
+// ============================================================================
+static void BM_SerializedSetBuild(benchmark::State& state) {
+    const int64_t num_rows = state.range(0);
+    const SerializedShape shape = static_cast<SerializedShape>(state.range(1));
+    const FeatureCombo combo = static_cast<FeatureCombo>(state.range(2));
+
+    BenchSuite suite;
+    suite.SetUp();
+    TwoStringChunkStream stream(num_rows, kDistinctKeys, shape);
+
+    int64_t total_rows = 0;
+    int64_t cum_checksum = 0;
+    MechSnapshot<SerializedSetWrapper> snap;
+    for (auto _ : state) {
+        state.PauseTiming();
+        auto wrapper = std::make_unique<SerializedSetWrapper>(kBenchChunkSize, suite._agg_stat.get());
+        apply_combo(wrapper.get(), combo);
+        state.ResumeTiming();
+
+        for (size_t c = 0; c < stream.num_chunks(); ++c) {
+            Columns key_columns;
+            key_columns.emplace_back(stream.col0(c));
+            key_columns.emplace_back(stream.col1(c));
+            wrapper->build_hash_set(kBenchChunkSize, key_columns, suite._mem_pool.get());
+            total_rows += kBenchChunkSize;
+        }
+        benchmark::ClobberMemory();
+
+        state.PauseTiming();
+        snap = snapshot_set(wrapper.get(), suite._mem_pool.get());
+        cum_checksum += static_cast<int64_t>(wrapper->hash_set.size());
+        wrapper.reset();
+        suite._mem_pool->clear();
+    }
+    benchmark::DoNotOptimize(cum_checksum);
+    state.SetItemsProcessed(total_rows);
+    state.counters["shape"] = static_cast<int>(shape);
+    state.counters["combo"] = static_cast<int>(combo);
+    state.counters["rows_per_iter"] = num_rows;
+    publish(state, snap);
+
+    suite.TearDown();
+}
+
+// ============================================================================
 // Args registration
 // ============================================================================
 
@@ -580,6 +761,10 @@ BENCHMARK(BM_OneStringBuildAndCount)->Apply(RegisterArgs_SectionA);
 BENCHMARK(BM_OneStringConstruct)->Unit(benchmark::kMicrosecond);
 BENCHMARK(BM_SerializedConstruct)->Unit(benchmark::kMicrosecond);
 BENCHMARK(BM_SerializedBuildOnly)->Apply(RegisterArgs_SectionD);
+
+BENCHMARK(BM_OneStringSetBuild)->Apply(RegisterArgs_SectionA);
+BENCHMARK(BM_OneStringSetProbeOnly)->Apply(RegisterArgs_SectionA);
+BENCHMARK(BM_SerializedSetBuild)->Apply(RegisterArgs_SectionD);
 
 } // namespace starrocks
 
