@@ -671,20 +671,18 @@ build_gperftools() {
     make install
 }
 
-# zlib
+# zlib-ng (compat mode: drop-in replacement for zlib with SSE/AVX2/NEON optimizations)
 build_zlib() {
     check_if_source_exist $ZLIB_SOURCE
     cd $TP_SOURCE_DIR/$ZLIB_SOURCE
 
-    LDFLAGS="-L${TP_LIB_DIR}" \
-    ./configure --prefix=$TP_INSTALL_DIR --static
-    make -j$PARALLEL
-    make install
-
-    # build minizip
-    cd $TP_SOURCE_DIR/$ZLIB_SOURCE/contrib/minizip
-    autoreconf --force --install
-    ./configure --prefix=$TP_INSTALL_DIR --enable-static=yes --enable-shared=no
+    mkdir -p build
+    cd build
+    $CMAKE_CMD .. \
+        -DCMAKE_INSTALL_PREFIX=$TP_INSTALL_DIR \
+        -DZLIB_COMPAT=ON \
+        -DBUILD_SHARED_LIBS=OFF \
+        -DCMAKE_BUILD_TYPE=Release
     make -j$PARALLEL
     make install
 }
