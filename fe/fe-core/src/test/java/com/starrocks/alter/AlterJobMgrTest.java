@@ -197,7 +197,7 @@ public class AlterJobMgrTest {
     }
 
     @Test
-    public void testStopGracefullyTolerantsClusterHandlerThrowing() {
+    public void testStopGracefullyToleratesClusterHandlerThrowing() {
         // The last handler in the fan-out is SystemHandler (a.k.a. clusterHandler). Its
         // try/catch arm has no successor to verify, so we just assert the call completes
         // without propagating the exception - the safety net must absorb it.

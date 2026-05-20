@@ -60,6 +60,7 @@ import java.util.UUID;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
@@ -370,6 +371,40 @@ public class RoutineLoadTaskSchedulerTest {
         Assertions.assertFalse(rebuiltThreadPool.isShutdown());
 
         scheduler.setStop();
+    }
+
+    @Test
+    public void testOnStoppedClearsQueueAfterPoolsTerminate() {
+        // Race fix: a delay-runnable scheduled by the previous leader can fire mid-onStopped()
+        // and call needScheduleTasksQueue.put() before the interrupt from shutdownNow() lands.
+        // If clear() runs before the pools drain, that stale put survives demotion and the
+        // next leader polls it. Pin the invariant by routing the production clear() through a
+        // queue subclass that records whether both pools were already terminated at the
+        // moment clear() ran.
+        RoutineLoadTaskScheduler scheduler = new RoutineLoadTaskScheduler();
+        ScheduledExecutorService sched = Deencapsulation.getField(scheduler, "scheduledExecutorService");
+        ExecutorService pool = Deencapsulation.getField(scheduler, "threadPool");
+        boolean[] schedTerminatedAtClear = {false};
+        boolean[] poolTerminatedAtClear = {false};
+        LinkedBlockingQueue<RoutineLoadTaskInfo> trackingQueue = new LinkedBlockingQueue<RoutineLoadTaskInfo>() {
+            @Override
+            public void clear() {
+                schedTerminatedAtClear[0] = sched.isTerminated();
+                poolTerminatedAtClear[0] = pool.isTerminated();
+                super.clear();
+            }
+        };
+        Deencapsulation.setField(scheduler, "needScheduleTasksQueue", trackingQueue);
+
+        Deencapsulation.invoke(scheduler, "onStopped");
+
+        Assertions.assertTrue(schedTerminatedAtClear[0],
+                "scheduledExecutorService must be terminated before clear() runs");
+        Assertions.assertTrue(poolTerminatedAtClear[0],
+                "threadPool must be terminated before clear() runs");
+        Long watermark = Deencapsulation.getField(scheduler, "lastBackendSlotUpdateTime");
+        Assertions.assertEquals(-1L, watermark.longValue(),
+                "slot watermark must be reset for the next leader");
     }
 
     @Test

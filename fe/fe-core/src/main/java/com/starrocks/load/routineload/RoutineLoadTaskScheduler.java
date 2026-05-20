@@ -136,11 +136,6 @@ public class RoutineLoadTaskScheduler extends LeaderDaemon {
 
     @Override
     protected void onStopped() {
-        // The task queue holds RoutineLoadTaskInfo refs that are leader-session bookkeeping;
-        // RoutineLoadMgr re-divides routine load jobs into tasks when the next leader activates.
-        // The slot watermark is reset so the next leader re-queries BE slot capacity.
-        needScheduleTasksQueue.clear();
-        lastBackendSlotUpdateTime = -1;
         // shutdownNow() interrupts the delay-scheduler / dispatch workers so they exit even
         // if blocked on metadata locks. Wait boundedly for both pools to actually terminate so
         // a subsequent start() does not rebuild and run new workers in parallel with the old
@@ -152,6 +147,16 @@ public class RoutineLoadTaskScheduler extends LeaderDaemon {
         long deadline = System.currentTimeMillis() + timeoutMs;
         awaitTermination("scheduledExecutorService", scheduledExecutorService, deadline);
         awaitTermination("threadPool", threadPool, deadline);
+        // Clear AFTER both pools have terminated: a delay-runnable scheduled by the previous
+        // leader can fire mid-onStopped() and call needScheduleTasksQueue.put() before the
+        // interrupt from shutdownNow() lands. Clearing before the pools drain would leave any
+        // such stale put in the queue, where the next leader would poll it as if it were its
+        // own work.
+        // The task queue holds RoutineLoadTaskInfo refs that are leader-session bookkeeping;
+        // RoutineLoadMgr re-divides routine load jobs into tasks when the next leader activates.
+        // The slot watermark is reset so the next leader re-queries BE slot capacity.
+        needScheduleTasksQueue.clear();
+        lastBackendSlotUpdateTime = -1;
     }
 
     private static void awaitTermination(String name, java.util.concurrent.ExecutorService pool, long deadlineMs) {
