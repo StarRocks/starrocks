@@ -1,18 +1,7 @@
 -- name: test_vector_index_hnsw_lazymat @sequential @native
 
--- End-to-end correctness for HNSW vector queries under global lazy-materialization.
---
--- Three scenarios:
---   1. SELECT excludes the embedding column → lazy-mat prunes v from scan output
---      entirely; result must still be correct (id + distance).
---   2. SELECT includes the embedding column → lazy-mat defers v to a FETCH above
---      the final TopN; result must include v for the K survivors.
---   3. IVFPQ keeps v eager (rule does not rewrite order-by, so v reaches TopN
---      for the refine pass).
---
--- This test guards against regressions in OlapScanLazyMaterializationSupport
--- (the planner-side carve-out) and in the BE brute-force fallback path's
--- handling of FE-pruned embedding columns.
+-- HNSW vector queries under global lazy-materialization: SELECT id only (prune),
+-- SELECT with v (defer + fetch K survivors), predicate + ANN (eager), IVFPQ (eager).
 
 ADMIN SET FRONTEND CONFIG("enable_experimental_vector" = "true");
 
