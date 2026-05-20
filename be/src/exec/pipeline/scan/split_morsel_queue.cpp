@@ -92,11 +92,10 @@ StatusOr<RowidRangeOptionPtr> PhysicalSplitMorselQueue::_try_get_split_from_sing
             rowid_range = std::make_shared<RowidRangeOption>();
         }
 
-        // Drain the segment in one split; SparseRangeIterator defaults to
-        // rowid_t, so its max value acts as the "no row limit" sentinel.
+        // Drain the rest of the segment's scan range in one split.
         if (_split_by_segment) {
             SparseRange<> taken_range;
-            _segment_range_iter.next_range(std::numeric_limits<rowid_t>::max(), &taken_range);
+            _segment_range_iter.next_range(_num_segment_rest_rows, &taken_range);
             _num_segment_rest_rows = 0;
             rowid_range->add(_cur_rowset(), _cur_segment(), std::make_shared<SparseRange<>>(std::move(taken_range)),
                              /*is_first_split_of_segment=*/true);
