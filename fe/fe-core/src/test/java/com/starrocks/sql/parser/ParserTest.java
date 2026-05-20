@@ -146,6 +146,18 @@ class ParserTest {
     }
 
     @Test
+    void testAlterTableWithoutAlterClause() {
+        String sql = "alter table tbl";
+        SessionVariable sessionVariable = new SessionVariable();
+        try {
+            SqlParser.parse(sql, sessionVariable);
+            fail("sql should fail to parse.");
+        } catch (Exception e) {
+            assertContains(e.getMessage(), "ALTER TABLE requires at least one alter clause");
+        }
+    }
+
+    @Test
     void testNonReservedWords_1() {
         String sql = "select anti, authentication, auto_increment, cancel, distributed, enclose, escape, export," +
                 "host, incremental, minus, nodes, optimizer, privileges, qualify, skip_header, semi, trace, trim_space " +
