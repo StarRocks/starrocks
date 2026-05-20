@@ -610,6 +610,7 @@ public class VectorIndexTest extends PlanTestBase {
         // projection nor the FETCH operator references it. The BE only fills the virtual
         // distance slot via id2distance_map and ships row_id columns up; the FETCH at the
         // coordinator fetches only the small c0 column for the K survivors.
+        boolean originalLazyMat = connectContext.getSessionVariable().isEnableGlobalLateMaterialization();
         connectContext.getSessionVariable().setEnableGlobalLateMaterialization(true);
         try {
             String sql = "select c0, approx_cosine_similarity([1.1,2.2,3.3,4.4,5.5], c1) as score "
@@ -622,7 +623,7 @@ public class VectorIndexTest extends PlanTestBase {
             assertContains(plan, "<slot 1> => c0");
             assertNotContains(plan, "=> c1");
         } finally {
-            connectContext.getSessionVariable().setEnableGlobalLateMaterialization(true);
+            connectContext.getSessionVariable().setEnableGlobalLateMaterialization(originalLazyMat);
         }
     }
 
@@ -631,6 +632,7 @@ public class VectorIndexTest extends PlanTestBase {
         // Quadrant 2: HNSW + SELECT v explicitly. The embedding c1 is in the projection so
         // global lazy-mat defers it to the FETCH operator above the final TopN, which reads
         // only the K survivors' rows of c1 via row-id lookup.
+        boolean originalLazyMat = connectContext.getSessionVariable().isEnableGlobalLateMaterialization();
         connectContext.getSessionVariable().setEnableGlobalLateMaterialization(true);
         try {
             String sql = "select c1, approx_cosine_similarity([1.1,2.2,3.3,4.4,5.5], c1) as score "
@@ -642,7 +644,7 @@ public class VectorIndexTest extends PlanTestBase {
             assertContains(plan, "FETCH");
             assertContains(plan, "=> c1");
         } finally {
-            connectContext.getSessionVariable().setEnableGlobalLateMaterialization(true);
+            connectContext.getSessionVariable().setEnableGlobalLateMaterialization(originalLazyMat);
         }
     }
 
@@ -651,6 +653,7 @@ public class VectorIndexTest extends PlanTestBase {
         // IVFPQ: the rule skipped the order-by rewrite, the TopN evaluates
         // approx_*_distance(v, [...]) row by row. The embedding c1 must remain eager at scan
         // output. No FETCH should appear in the plan (everything stays eager).
+        boolean originalLazyMat = connectContext.getSessionVariable().isEnableGlobalLateMaterialization();
         connectContext.getSessionVariable().setEnableGlobalLateMaterialization(true);
         try {
             String sql = "select c0, approx_l2_distance([1.1,2.2,3.3,4.4], c1) as score "
@@ -660,7 +663,7 @@ public class VectorIndexTest extends PlanTestBase {
             assertContains(plan, "IVFPQ: ON");
             assertNotContains(plan, "FETCH");
         } finally {
-            connectContext.getSessionVariable().setEnableGlobalLateMaterialization(true);
+            connectContext.getSessionVariable().setEnableGlobalLateMaterialization(originalLazyMat);
         }
     }
 

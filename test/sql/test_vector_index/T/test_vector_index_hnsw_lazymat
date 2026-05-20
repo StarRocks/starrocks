@@ -29,23 +29,25 @@ insert into lm_hnsw values
 
 -- Scenario 1: SELECT id only (v not in projection) — lazy-mat must prune v from
 -- scan output; the result must still be correct top-K ordered by distance.
+-- Tie-breaker on id keeps the recorded output deterministic for distance ties.
 select id, approx_l2_distance(v, [1, 1, 1, 1, 1]) as d
 from lm_hnsw
-order by d limit 3;
+order by d, id limit 3;
 
 -- Scenario 2: SELECT v and id (v in projection) — lazy-mat must defer v and
 -- FETCH it for the K survivors. The embedding values must match the original
--- inserts.
+-- inserts. Distance to [3,3,3,3,3] ties for id=2 and id=4 (both d=5); the id
+-- tie-breaker pins the second row.
 select id, v, approx_l2_distance(v, [3, 3, 3, 3, 3]) as d
 from lm_hnsw
-order by d limit 2;
+order by d, id limit 2;
 
 -- Scenario 3: query with a non-ANN predicate that also uses v — embedding must
 -- be eager (predicate evaluation needs raw v) and the result must be correct.
 select id, array_length(v) as len, approx_l2_distance(v, [1, 1, 1, 1, 1]) as d
 from lm_hnsw
 where array_length(v) = 5
-order by d limit 3;
+order by d, id limit 3;
 
 drop table lm_hnsw;
 
@@ -73,7 +75,7 @@ insert into lm_ivfpq values
 
 select id, approx_l2_distance(v, [1, 1, 1, 1]) as d
 from lm_ivfpq
-order by d limit 2;
+order by d, id limit 2;
 
 drop table lm_ivfpq;
 
