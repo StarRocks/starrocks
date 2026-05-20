@@ -488,9 +488,6 @@ public class LoadJobTest {
         loadInfo = loadJob.toThrift();
         Assertions.assertEquals("", loadInfo.getWarehouse());
     }
-<<<<<<< HEAD
-=======
-
     @Test
     public void testToThrift_timestampMsFields() {
         // Regression coverage: BE materializes information_schema.loads DATETIME
@@ -564,5 +561,4 @@ public class LoadJobTest {
         properties.put(LoadStmt.STRIP_OUTER_ARRAY, "true");
         Assertions.assertThrows(DdlException.class, () -> loadJob.setJobProperties(properties));
     }
->>>>>>> 6ddadce8cb ([BugFix] carry load times as UTC epoch ms across BE/FE thrift (#73365))
 }
