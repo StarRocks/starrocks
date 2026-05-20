@@ -12,16 +12,17 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "exec/pipeline/scan/morsel_queue.h"
+#include "exec/pipeline/scan/olap_morsel_queue.h"
 
 namespace starrocks::pipeline {
 
-void MorselQueue::unget(MorselPtr&& morsel) {
-    _unget_morsel = std::move(morsel);
-}
-
-Status MorselQueue::append_morsels(Morsels&& morsels) {
-    return Status::NotSupported("MorselQueue::append_morsels not supported");
+std::vector<TInternalScanRange*> OlapMorselQueue::prepare_olap_scan_ranges() const {
+    std::vector<TInternalScanRange*> scan_ranges;
+    scan_ranges.reserve(_morsels.size());
+    for (const auto& morsel : _morsels) {
+        scan_ranges.emplace_back(morsel->get_olap_scan_range());
+    }
+    return scan_ranges;
 }
 
 } // namespace starrocks::pipeline

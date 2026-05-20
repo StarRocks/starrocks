@@ -18,8 +18,14 @@
 
 #include "exec/pipeline/scan/olap_morsel_queue.h"
 #include "exec/pipeline/scan/ticketed_morsel_queue.h"
+#include "gutil/casts.h"
+#include "runtime/mem_pool.h"
+#include "storage/range.h"
 #include "storage/rowset/rowid_range_option.h"
+#include "storage/rowset/segment_group.h"
 #include "storage/rowset/short_key_range_option.h"
+#include "storage/seek_range.h"
+#include "storage/tablet.h"
 
 namespace starrocks::pipeline {
 
