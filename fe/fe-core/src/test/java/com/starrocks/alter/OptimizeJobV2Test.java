@@ -708,21 +708,6 @@ public class OptimizeJobV2Test extends DDLTestBase {
         Assertions.assertEquals(JobState.RUNNING, optimizeJob.getJobState());
     }
 
-<<<<<<< HEAD
-=======
-    private void removeTaskFromScheduler(OptimizeTask task) {
-        TaskRunManager trm = GlobalStateMgr.getCurrentState().getTaskManager().getTaskRunManager();
-        TaskRunScheduler trs = trm.getTaskRunScheduler();
-        if (trm.tryTaskRunLock()) {
-            try {
-                trs.removePendingTask(task);
-                trs.removeRunningTask(task.getId());
-            } finally {
-                trm.taskRunUnlock();
-            }
-        }
-    }
-
     @Test
     public void testReplayFinishedWithNullDistributionInfo() throws Exception {
         // Regression: a job persisted with allPartitionOptimized=true but no distribution change
@@ -749,7 +734,6 @@ public class OptimizeJobV2Test extends DDLTestBase {
                 "replay must not null out defaultDistributionInfo when persisted job has null distributionInfo");
     }
 
->>>>>>> 681fff555c ([BugFix] Reject empty ALTER TABLE clause and improve OPTIMIZE replay (#73352))
     private OptimizeJobV2 spyPreviousTxnFinished(OptimizeJobV2 job) {
         // Detach the job from schema change handler to prevent the background scheduler
         // from mutating its state in parallel with the UT driven state machine, which
