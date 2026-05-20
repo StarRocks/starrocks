@@ -49,8 +49,22 @@
 
 namespace starrocks {
 
+// percentile_approx* return SQL NULL on empty / all-rejected state (zero total
+// weight) via PercentileApproxAggEmptyPred. The predicate lives in the
+// nullable wrapper, so the resolver must select the nullable mapping even when
+// all arguments are non-nullable; otherwise the raw aggregate path would
+// finalize the empty digest to NaN.
 static const std::unordered_set<std::string> ALWAYS_NULLABLE_RESULT_AGG_FUNCS = {
-        "variance_samp", "var_samp", "stddev_samp", "covar_samp", "corr", "max_by_v2", "min_by_v2"};
+        "variance_samp",
+        "var_samp",
+        "stddev_samp",
+        "covar_samp",
+        "corr",
+        "max_by_v2",
+        "min_by_v2",
+        "percentile_approx",
+        "percentile_approx_weighted",
+};
 
 static const std::string FUNCTION_COUNT = "count";
 
