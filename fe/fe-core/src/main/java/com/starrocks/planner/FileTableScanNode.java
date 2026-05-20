@@ -110,7 +110,9 @@ public class FileTableScanNode extends ScanNode {
             if (fileFormat.isTextFormat()) {
                 hdfsScanRange.setText_file_desc(file.getTextFileFormatDesc().toThrift());
             }
-            hdfsScanRange.setUse_avro_jni_reader(sv.getAvroUseJNIReader());
+            if (fileFormat == HiveStorageFormat.AVRO) {
+                hdfsScanRange.setUse_avro_jni_reader(sv.getAvroUseJNIReader());
+            }
 
             TScanRange scanRange = new TScanRange();
             scanRange.setHdfs_scan_range(hdfsScanRange);
