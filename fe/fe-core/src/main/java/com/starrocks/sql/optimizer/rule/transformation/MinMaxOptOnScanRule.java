@@ -17,6 +17,8 @@ package com.starrocks.sql.optimizer.rule.transformation;
 import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.IcebergTable;
+import com.starrocks.catalog.PaimonTable;
+import com.starrocks.catalog.Table;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.operator.Operator;
@@ -39,11 +41,12 @@ import java.util.Set;
 
 public class MinMaxOptOnScanRule extends TransformationRule {
     private static final Set<OperatorType> SUPPORTED = Set.of(
-            OperatorType.LOGICAL_ICEBERG_SCAN
+            OperatorType.LOGICAL_ICEBERG_SCAN,
+            OperatorType.LOGICAL_PAIMON_SCAN
     );
 
     public MinMaxOptOnScanRule() {
-        // agg -> project -> iceberg scan
+        // agg -> project -> scan (iceberg/paimon)
         super(RuleType.TF_REWRITE_MIN_MAX_COUNT_AGG,
                 Pattern.create(OperatorType.LOGICAL_AGGR).
                         addChildren(Pattern.create(OperatorType.LOGICAL_PROJECT).
@@ -86,8 +89,17 @@ public class MinMaxOptOnScanRule extends TransformationRule {
             }
             // must be un-partitioned table, or partition columns are identity columns.
             // otherwise partition values will be materialized from files but the same in a single file.
-            IcebergTable table = (IcebergTable) scanOperator.getTable();
-            if (!(table.isUnPartitioned() || table.isAllPartitionColumnsAlwaysIdentity())) {
+            Table table = scanOperator.getTable();
+            if (table instanceof IcebergTable) {
+                IcebergTable icebergTable = (IcebergTable) table;
+                if (!(icebergTable.isUnPartitioned() || icebergTable.isAllPartitionColumnsAlwaysIdentity())) {
+                    return false;
+                }
+            } else if (table instanceof PaimonTable) {
+                // Paimon partition columns are always identity transforms, so only
+                // need to check un-partitioned for the group-by-partition-only case.
+                // (If we got here, all group-by keys are partition columns.)
+            } else {
                 return false;
             }
         }
