@@ -61,11 +61,11 @@ public class LocalMetastoreTvrTest {
     // ---- getCurrentTvrSnapshot ----
 
     @Test
-    public void testSnapshot_dupKeys_returnsMaxVersion() {
+    public void testSnapshot_dupKeys_returnsSumVersion() {
         OlapTable table = mockOlapTable(KeysType.DUP_KEYS, 3L, 5L, 2L);
         TvrTableSnapshot snap = store.getCurrentTvrSnapshot("db", table);
         assertFalse(snap.isEmpty());
-        assertEquals(5L, snap.getSnapshotId());
+        assertEquals(10L, snap.getSnapshotId()); // 3 + 5 + 2
     }
 
     @Test
@@ -83,22 +83,22 @@ public class LocalMetastoreTvrTest {
     }
 
     @Test
-    public void testSnapshot_primaryKeys_returnsMaxVersion() {
+    public void testSnapshot_primaryKeys_returnsSumVersion() {
         OlapTable table = mockOlapTable(KeysType.PRIMARY_KEYS, 10L, 8L);
         TvrTableSnapshot snap = store.getCurrentTvrSnapshot("db", table);
         assertFalse(snap.isEmpty());
-        assertEquals(10L, snap.getSnapshotId());
+        assertEquals(18L, snap.getSnapshotId()); // 10 + 8
     }
 
     // ---- listTableDeltaTraits ----
 
     @Test
-    public void testDeltaTraits_dupKeys_monotonic() {
+    public void testDeltaTraits_dupKeys_retractable() {
         OlapTable table = mockOlapTable(KeysType.DUP_KEYS, 5L);
         List<TvrTableDeltaTrait> traits = store.listTableDeltaTraits(
                 "db", table, TvrTableSnapshot.empty(), TvrTableSnapshot.of(5L));
         assertEquals(1, traits.size());
-        assertTrue(traits.get(0).isAppendOnly());
+        assertFalse(traits.get(0).isAppendOnly()); // DUP_KEYS supports DELETE; conservative = retractable
     }
 
     @Test
