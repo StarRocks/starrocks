@@ -819,6 +819,8 @@ public class DatabaseTransactionMgr {
         info.add(String.valueOf(txnState.getTimeoutMs()));
         info.add(String.valueOf(txnState.getPreparedTimeoutMs()));
         info.add(txnState.getErrMsg());
+        info.add(String.valueOf(txnState.isNoOpPublish()));
+        info.add(txnState.getNoOpPublishReason());
     }
 
     public TransactionStateSnapshot getLabelState(String label) {
@@ -1679,6 +1681,197 @@ public class DatabaseTransactionMgr {
             throws StarRocksException {
         abortTransaction(transactionId, true, reason, txnCommitAttachment,
                 Collections.emptyList(), Collections.emptyList());
+    }
+
+    /**
+     * Mark a COMMITTED but publish-stuck transaction as a no-op publish. The
+     * txn's data contribution is discarded; partition visible version still
+     * advances by writing a metadata file with no data changes from this txn.
+     * Used by the ADMIN SKIP COMMITTED TRANSACTION SQL.
+     *
+     * <p>Phase-1 scope: only supports load (incl. routine/stream) and
+     * compaction txns on lake tables with {@code file_bundling=true}.
+     * Alter / schema-change txns are rejected (will be supported in phase 2).
+     *
+     * <p>Behavior:
+     * <ol>
+     *   <li>Validate state is COMMITTED, source type is allowed, all affected
+     *       tables are lake + file_bundling.</li>
+     *   <li>Mark the txn with {@code isNoOpPublish=true} and persist to edit
+     *       log (durable before any BE RPC).</li>
+     *   <li>Return immediately. {@link PublishVersionDaemon} picks up the
+     *       flag on its next tick and propagates it to BE via
+     *       {@link com.starrocks.proto.TxnInfoPB#noOpPublish}, where BE's
+     *       publish loop bypasses txn-log loading and apply for this txn.</li>
+     * </ol>
+     *
+     * <p>Race resolution: if a publish RPC was already in flight when the
+     * admin command landed, FE waits for it to complete or fail naturally;
+     * subsequent retries (or the first retry after failure) pick up the
+     * persisted flag. If the in-flight publish happens to succeed first,
+     * the txn becomes VISIBLE normally and the no-op publish flag becomes a
+     * no-op itself (audit log records the race outcome).
+     */
+    public void markCommittedTransactionAsNoOpPublish(long transactionId, String reason) throws StarRocksException {
+        if (!Config.enable_admin_skip_committed_txn) {
+            throw new StarRocksException(
+                    "ADMIN SKIP COMMITTED TRANSACTION is disabled. "
+                            + "Set FE config enable_admin_skip_committed_txn=true to enable it. "
+                            + "This is an operator-only escape hatch for publish-stuck transactions; "
+                            + "use with care.");
+        }
+
+        TransactionState transactionState;
+        writeLock();
+        try {
+            transactionState = unprotectedGetTransactionState(transactionId);
+            if (transactionState == null) {
+                throw new StarRocksException("transaction " + transactionId + " does not exist");
+            }
+        } finally {
+            writeUnlock();
+        }
+        // NOTE: the per-txn writeLock acquired below does NOT prevent a concurrent
+        // finishTransaction() from copy-on-writing the entry to VISIBLE and moving
+        // it from idToRunningTransactionState to idToFinalStatusTransactionState
+        // BEFORE we even try to take that lock. finishTransaction modifies a copy,
+        // so our `transactionState` reference would still read COMMITTED even
+        // though the canonical map entry is already VISIBLE. Without re-validating
+        // identity inside the per-txn lock we would happily overwrite the VISIBLE
+        // entry with a stale COMMITTED-with-marker copy and resurrect the txn.
+        // Identity re-check is performed below after acquiring the per-txn lock.
+
+        // Validate source type. v1 supports load + compaction only. See
+        // TransactionState.LoadJobSourceType for the canonical list.
+        TransactionState.LoadJobSourceType sourceType = transactionState.getSourceType();
+        switch (sourceType) {
+            case FRONTEND:
+            case BACKEND_STREAMING:
+            case INSERT_STREAMING:
+            case ROUTINE_LOAD_TASK:
+            case BATCH_LOAD_JOB:
+            case FRONTEND_STREAMING:
+            case BYPASS_WRITE:
+            case MULTI_STATEMENT_STREAMING:
+            case LAKE_COMPACTION:
+                break;
+            default:
+                throw new StarRocksException(
+                        "transaction " + transactionId + " has source type " + sourceType
+                                + " which is not supported by ADMIN SKIP COMMITTED TRANSACTION in this version. "
+                                + "Only load and lake-compaction txns are supported in phase 1; "
+                                + "alter/schema-change txns will be supported in a later release.");
+        }
+
+        // Validate all affected tables are lake + file_bundling. Per the design,
+        // non-file-bundling tables can have partial-publish states that this
+        // feature cannot make atomic; bundled mode's aggregator-write guarantees
+        // partition-wide atomicity for the no-op-publish path.
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+        if (db == null) {
+            throw new StarRocksException("database " + dbId + " does not exist");
+        }
+        for (Long tableId : transactionState.getTableIdList()) {
+            Table table = db.getTable(tableId);
+            if (table == null) {
+                // Same posture as finishTransaction: a table dropped between
+                // commit and recovery has no live state to validate against;
+                // the partition-version advance is still safe because there is
+                // nothing left to be inconsistent with. Log so operators see
+                // it in the same way as the normal publish path.
+                LOG.warn("ADMIN SKIP COMMITTED TRANSACTION: table {} is dropped, skipping "
+                        + "file_bundling validation for txn {}", tableId, transactionId);
+                continue;
+            }
+            if (!(table instanceof OlapTable) || !((OlapTable) table).isCloudNativeTable()) {
+                throw new StarRocksException("table " + table.getName()
+                        + " is not a shared-data (lake) table; ADMIN SKIP COMMITTED TRANSACTION only "
+                        + "supports shared-data tables");
+            }
+            OlapTable olapTable = (OlapTable) table;
+            if (!Boolean.TRUE.equals(olapTable.isFileBundling())) {
+                throw new StarRocksException("table " + table.getName()
+                        + " does not have file_bundling=true; ADMIN SKIP COMMITTED TRANSACTION only "
+                        + "supports lake tables with file_bundling enabled. "
+                        + "Enable it via: ALTER TABLE " + table.getName()
+                        + " SET ('file_bundling' = 'true'); or use other recovery paths "
+                        + "(drop partition / rebuild).");
+            }
+        }
+
+        // Validate state and persist the no-op-publish flag. Done under per-txn
+        // write lock so we don't race with finishTransaction marking it VISIBLE.
+        TransactionState copiedState;
+        transactionState.writeLock();
+        try {
+            // Identity re-check: if finishTransaction completed between our
+            // snapshot and lock acquisition, the canonical map entry is now a
+            // *different* TransactionState object (VISIBLE), and our reference
+            // points at an orphaned copy whose status field still reads
+            // COMMITTED. Refusing here avoids resurrecting the finished txn by
+            // upserting a stale COMMITTED-with-marker entry.
+            writeLock();
+            TransactionState canonical;
+            try {
+                canonical = unprotectedGetTransactionState(transactionId);
+            } finally {
+                writeUnlock();
+            }
+            if (canonical != transactionState) {
+                throw new StarRocksException("transaction " + transactionId
+                        + " state changed concurrently (likely completed publish or aborted "
+                        + "between lookup and lock acquisition); retry the ADMIN SKIP if it "
+                        + "is still stuck in COMMITTED");
+            }
+            if (transactionState.getTransactionStatus() == TransactionStatus.VISIBLE) {
+                throw new StarRocksException("transaction " + transactionId
+                        + " is already VISIBLE; cannot mark a finished transaction as no-op publish");
+            }
+            if (transactionState.getTransactionStatus() == TransactionStatus.ABORTED) {
+                throw new StarRocksException("transaction " + transactionId
+                        + " is already ABORTED; cannot mark an aborted transaction as no-op publish");
+            }
+            if (transactionState.getTransactionStatus() != TransactionStatus.COMMITTED) {
+                throw new StarRocksException("transaction " + transactionId
+                        + " is in state " + transactionState.getTransactionStatus()
+                        + ", not COMMITTED; ADMIN SKIP COMMITTED TRANSACTION only handles COMMITTED txns. "
+                        + "PREPARED loads usually time out on their own or can be cancelled via the "
+                        + "loader-specific path (e.g. CANCEL LOAD for broker load, "
+                        + "POST /api/transaction/rollback for stream load).");
+            }
+            if (transactionState.isNoOpPublish()) {
+                // Idempotent: already marked. Just log and return.
+                LOG.info("transaction {} already marked as no-op publish (reason: {}), re-issue ignored",
+                        transactionId, transactionState.getNoOpPublishReason());
+                return;
+            }
+
+            copiedState = new TransactionState(transactionState);
+            copiedState.markAsNoOpPublish(reason);
+
+            // Persist + upsert MUST stay inside the per-txn writeLock window.
+            // Releasing the lock here and then upserting reopens the race we
+            // just guarded against: finishTransaction() could finalize the txn
+            // as VISIBLE in the gap, and our stale copiedState upsert would
+            // resurrect it as COMMITTED. All other state-transition paths in
+            // this file follow this same lock-then-persist-then-unlock layout.
+            final TransactionState finalState = copiedState;
+            persistTxnStateInTxnLevelLock(finalState, wal -> {
+                writeLock();
+                try {
+                    unprotectUpsertTransactionState(finalState);
+                } finally {
+                    writeUnlock();
+                }
+            });
+
+            LOG.warn("ADMIN SKIP COMMITTED TRANSACTION: marked txn {} as no-op publish, reason='{}', "
+                    + "sourceType={}, affectedTables={}. PublishVersionDaemon will propagate the flag "
+                    + "to BE on next tick.",
+                    transactionId, reason, sourceType, transactionState.getTableIdList());
+        } finally {
+            transactionState.writeUnlock();
+        }
     }
 
     private void processNotFoundTxn(long transactionId, String reason, TxnCommitAttachment txnCommitAttachment) {
