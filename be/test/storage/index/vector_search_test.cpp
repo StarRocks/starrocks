@@ -28,6 +28,7 @@
 #include "base/utility/defer_op.h"
 #include "column/array_column.h"
 #include "column/chunk.h"
+#include "column/chunk_factory.h"
 #include "column/column_helper.h"
 #include "column/fixed_length_column.h"
 #include "column/nullable_column.h"
@@ -937,7 +938,7 @@ TEST_F(BruteForceVectorFallbackTest, test_brute_force_with_lazy_mat_pruned_embed
     // matters.
     ASSERT_OK(chunk_iter->init_output_schema({}));
 
-    auto chunk = ChunkHelper::new_chunk(chunk_iter->output_schema(), 1024);
+    auto chunk = ChunkFactory::new_chunk(chunk_iter->output_schema(), 1024);
     std::vector<uint32_t> rowids;
     auto st = chunk_iter->get_next(chunk.get(), &rowids);
 
@@ -945,10 +946,7 @@ TEST_F(BruteForceVectorFallbackTest, test_brute_force_with_lazy_mat_pruned_embed
     // _dict_chunk must have the embedding column for the distance computation
     // to succeed. A regression that leaves _dict_chunk without v would surface
     // as a non-OK status here.
-    ASSERT_OK(st) << "brute-force fallback returned non-OK; the defensive ladder "
-                     "in _compute_brute_force_distances probably did not find the "
-                     "embedding column in either chunk or _dict_chunk. Check that "
-                     "_setup_brute_force_fallback's _schema.append() path is intact.";
+    ASSERT_OK(st);
 
     ASSERT_EQ(chunk->num_rows(), 3);
 
