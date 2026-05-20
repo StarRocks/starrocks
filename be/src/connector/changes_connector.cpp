@@ -46,13 +46,14 @@ namespace {
 // segments into one chunk stream without losing per-rowset version.
 class CdcStampingIterator final : public ChunkIterator {
 public:
-    CdcStampingIterator(ChunkIteratorPtr inner, int64_t version, const std::vector<SlotDescriptor*>& data_slots,
+    CdcStampingIterator(ChunkIteratorPtr inner, int64_t version,
+                        const std::vector<std::pair<SlotId, size_t>>& data_slot_chunk_indices,
                         std::optional<int> change_type_slot_id, bool change_type_nullable,
                         std::optional<int> row_version_slot_id, bool row_version_nullable)
             : ChunkIterator(inner->schema(), inner->chunk_size()),
               _inner(std::move(inner)),
               _version(version),
-              _data_slots(&data_slots),
+              _data_slot_chunk_indices(&data_slot_chunk_indices),
               _change_type_slot_id(change_type_slot_id),
               _change_type_nullable(change_type_nullable),
               _row_version_slot_id(row_version_slot_id),
@@ -70,11 +71,10 @@ protected:
         RETURN_IF_ERROR(_inner->get_next(chunk));
         // Post-read conjunct evaluation resolves SlotRef by slot id, so the
         // inner segment iterator's name-indexed columns need a slot-id map.
-        for (auto* slot : *_data_slots) {
-            size_t col_idx = chunk->schema()->get_field_index_by_name(slot->col_name());
-            if (col_idx != -1UL) {
-                chunk->set_slot_id_to_index(slot->id(), col_idx);
-            }
+        // The mapping is precomputed against the projected read schema and
+        // stays valid for every chunk this iterator surfaces.
+        for (const auto& [slot_id, col_idx] : *_data_slot_chunk_indices) {
+            chunk->set_slot_id_to_index(slot_id, col_idx);
         }
         size_t nrows = chunk->num_rows();
         // INSERT; DUP/AGG CDC has no other change types.
@@ -110,7 +110,7 @@ protected:
 private:
     ChunkIteratorPtr _inner;
     int64_t _version;
-    const std::vector<SlotDescriptor*>* _data_slots;
+    const std::vector<std::pair<SlotId, size_t>>* _data_slot_chunk_indices;
     std::optional<int> _change_type_slot_id;
     bool _change_type_nullable;
     std::optional<int> _row_version_slot_id;
@@ -206,8 +206,8 @@ Status ChangesDataSource::open(RuntimeState* state) {
         ASSIGN_OR_RETURN(auto iters, rowset->read(_read_schema, opts));
         for (auto& it : iters) {
             seg_iters.push_back(std::make_shared<CdcStampingIterator>(
-                    std::move(it), rowset->version(), _data_slots, _change_type_slot_id, _change_type_slot_is_nullable,
-                    _row_version_slot_id, _row_version_slot_is_nullable));
+                    std::move(it), rowset->version(), _data_slot_chunk_indices, _change_type_slot_id,
+                    _change_type_slot_is_nullable, _row_version_slot_id, _row_version_slot_is_nullable));
         }
     }
     _chunk_iter = seg_iters.empty() ? new_empty_iterator(_read_schema, _runtime_state->chunk_size())
@@ -364,15 +364,31 @@ Status ChangesDataSource::_init_read_schema() {
                                              schema_key_pb, _tablet_id, _runtime_state->query_id(),
                                              _runtime_state->fragment_ctx()->fe_addr(), _head_metadata));
 
+    // Tablet column index resolved per slot; we sort the index list before
+    // building _read_schema, so each slot's position in the sorted list is
+    // exactly the column index it will occupy in surfaced chunks.
+    std::vector<std::pair<SlotId, uint32_t>> slot_tablet_indices;
+    slot_tablet_indices.reserve(_data_slots.size());
     std::vector<uint32_t> column_indices;
+    column_indices.reserve(_data_slots.size());
     for (auto* slot : _data_slots) {
         int32_t index = _tablet_schema->field_index(slot->col_name());
-        if (index >= 0) {
-            column_indices.push_back(static_cast<uint32_t>(index));
+        if (index < 0) {
+            return Status::InternalError(fmt::format("invalid field name: {}", slot->col_name()));
         }
+        column_indices.push_back(static_cast<uint32_t>(index));
+        slot_tablet_indices.emplace_back(slot->id(), static_cast<uint32_t>(index));
     }
     std::sort(column_indices.begin(), column_indices.end());
     _read_schema = ChunkHelper::convert_schema(_tablet_schema, column_indices);
+
+    _data_slot_chunk_indices.clear();
+    _data_slot_chunk_indices.reserve(slot_tablet_indices.size());
+    for (const auto& [slot_id, tablet_idx] : slot_tablet_indices) {
+        auto it = std::lower_bound(column_indices.begin(), column_indices.end(), tablet_idx);
+        DCHECK(it != column_indices.end() && *it == tablet_idx);
+        _data_slot_chunk_indices.emplace_back(slot_id, static_cast<size_t>(it - column_indices.begin()));
+    }
     return Status::OK();
 }
 

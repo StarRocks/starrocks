@@ -418,6 +418,40 @@ TEST_F(ChangesConnectorTest, test_open_error_paths) {
         EXPECT_NE(std::string::npos, std::string(st.message()).find("DELETE_PREDICATE_FOUND"));
         ds->close(_runtime_state.get());
     }
+
+    // Sub-case D: tuple descriptor advertises a data slot whose column name
+    // is absent from the tablet schema. _init_read_schema must fail fast
+    // with InternalError("invalid field name: ...") so the slot id -> chunk
+    // column index map is never built over a partial projection.
+    {
+        TDescriptorTableBuilder tbl_builder;
+        TTupleDescriptorBuilder tup;
+        tup.add_slot(TSlotDescriptorBuilder()
+                             .type(TYPE_INT)
+                             .column_name("missing_col")
+                             .column_pos(0)
+                             .nullable(false)
+                             .build());
+        tup.build(&tbl_builder);
+        DescriptorTbl* desc_tbl = nullptr;
+        CHECK_OK(DescriptorTbl::create(_runtime_state.get(), _runtime_state->obj_pool(), tbl_builder.desc_tbl(),
+                                       &desc_tbl, config::vector_chunk_size));
+        _runtime_state->set_desc_tbl(desc_tbl);
+
+        int64_t schema_id = next_id();
+        int64_t tablet_id = next_id();
+        initialize_tablet(tablet_id, schema_id);
+        publish_metadata(tablet_id, /*version=*/2, schema_id, /*ancestors=*/{}, /*rowsets=*/nullptr);
+
+        auto provider = make_provider(/*tuple_id=*/0, schema_id);
+        auto ds = provider->create_data_source(make_scan_range(tablet_id, /*base=*/1, /*head=*/2));
+        Status st = ds->open(_runtime_state.get());
+        ASSERT_FALSE(st.ok());
+        EXPECT_TRUE(st.is_internal_error());
+        EXPECT_NE(std::string::npos, std::string(st.message()).find("invalid field name"));
+        EXPECT_NE(std::string::npos, std::string(st.message()).find("missing_col"));
+        ds->close(_runtime_state.get());
+    }
 }
 
 // ============================================================================

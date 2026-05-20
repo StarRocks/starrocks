@@ -19,6 +19,7 @@
 #include <optional>
 #include <string>
 #include <unordered_set>
+#include <utility>
 #include <vector>
 
 #include "column/chunk.h"
@@ -123,6 +124,11 @@ private:
     std::optional<int> _row_version_slot_id;
     bool _change_type_slot_is_nullable = false;
     bool _row_version_slot_is_nullable = false;
+
+    // Stable slot-id -> chunk column index mapping for every materialized data
+    // slot. Built once in _init_read_schema() so CdcStampingIterator does not
+    // re-scan the chunk schema per row batch.
+    std::vector<std::pair<SlotId, size_t>> _data_slot_chunk_indices;
 
     // --- Metadata traversal output ---
     std::shared_ptr<const TabletMetadataPB> _head_metadata;
