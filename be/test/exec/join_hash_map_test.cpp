@@ -834,7 +834,7 @@ void JoinHashMapTest::check_empty_hash_map(TJoinOp::type join_type, int num_prob
                 check_int32_column(*ColumnHelper::get_data_column(result_chunk->columns()[i].get()), num_probe_rows,
                                    i * 10 + 1);
             } else {
-                check_int32_column(*result_chunk->mutable_columns()[i], num_probe_rows, i * 10 + 1);
+                check_int32_column(*result_chunk->columns()[i], num_probe_rows, i * 10 + 1);
             }
         }
         if (expect_num_colums > 3) {
@@ -1092,7 +1092,7 @@ TEST_F(JoinHashMapTest, ProbeNullOutput) {
     ASSERT_EQ(chunk->num_columns(), 3);
 
     for (size_t i = 0; i < chunk->num_columns(); i++) {
-        auto null_column = ColumnHelper::as_raw_column<NullableColumn>(chunk->mutable_columns()[i])->null_column();
+        auto null_column = ColumnHelper::as_raw_column<NullableColumn>(chunk->columns()[i])->null_column();
         for (size_t j = 0; j < 2; j++) {
             ASSERT_EQ(null_column->immutable_data()[j], 1);
         }
@@ -1126,7 +1126,7 @@ TEST_F(JoinHashMapTest, BuildDefaultOutput) {
     ASSERT_EQ(chunk->num_columns(), 3);
 
     for (size_t i = 0; i < chunk->num_columns(); i++) {
-        auto null_column = ColumnHelper::as_raw_column<NullableColumn>(chunk->mutable_columns()[i])->null_column();
+        auto null_column = ColumnHelper::as_raw_column<NullableColumn>(chunk->columns()[i])->null_column();
         for (size_t j = 0; j < 2; j++) {
             ASSERT_EQ(null_column->immutable_data()[j], 1);
         }
@@ -2059,7 +2059,7 @@ TEST_F(JoinHashMapTest, OneKeyJoinHashTable) {
     Columns probe_key_columns;
     probe_key_columns.emplace_back(probe_chunk->columns()[0]);
 
-    Columns build_keys_column{build_chunk->mutable_columns()[0]};
+    Columns build_keys_column{build_chunk->columns()[0]};
     hash_table.append_chunk(build_chunk, build_keys_column);
     (void)hash_table.build(_runtime_state.get());
 
@@ -2111,7 +2111,7 @@ TEST_F(JoinHashMapTest, OneNullableKeyJoinHashTable) {
     probe_key_columns.emplace_back(probe_chunk->columns()[0]);
 
     Columns build_key_columns;
-    build_key_columns.emplace_back(build_chunk->mutable_columns()[0]);
+    build_key_columns.emplace_back(build_chunk->columns()[0]);
     hash_table.append_chunk(build_chunk, build_key_columns);
     (void)hash_table.build(_runtime_state.get());
 
@@ -2164,7 +2164,7 @@ TEST_F(JoinHashMapTest, FixedSizeJoinHashTable) {
     probe_key_columns.emplace_back(probe_chunk->columns()[0]);
     probe_key_columns.emplace_back(probe_chunk->columns()[1]);
 
-    Columns build_key_columns{build_chunk->mutable_columns()[0], build_chunk->mutable_columns()[1]};
+    Columns build_key_columns{build_chunk->columns()[0], build_chunk->columns()[1]};
     hash_table.append_chunk(build_chunk, build_key_columns);
     (void)hash_table.build(_runtime_state.get());
 
@@ -2215,7 +2215,7 @@ TEST_F(JoinHashMapTest, SerializeJoinHashTable) {
     probe_key_columns.emplace_back(probe_chunk->columns()[0]);
     probe_key_columns.emplace_back(probe_chunk->columns()[1]);
 
-    Columns build_key_columns{build_chunk->mutable_columns()[0], build_chunk->mutable_columns()[1]};
+    Columns build_key_columns{build_chunk->columns()[0], build_chunk->columns()[1]};
     hash_table.append_chunk(build_chunk, build_key_columns);
     (void)hash_table.build(_runtime_state.get());
 
@@ -2639,9 +2639,9 @@ TEST_F(JoinHashMapTest, NormalHashMapTestLazyOutputAll) {
 
     // prepare data
     auto build_chunk = create_int32_build_chunk(num_build_rows, 0, false);
-    Columns build_key_columns{build_chunk->mutable_columns()[0]};
+    Columns build_key_columns{build_chunk->columns()[0]};
     auto probe_chunk = create_int32_probe_chunk(num_probe_rows, 0, false);
-    Columns probe_key_columns = {probe_chunk->mutable_columns()[0]};
+    Columns probe_key_columns = {probe_chunk->columns()[0]};
     ChunkPtr result_chunk = std::make_shared<Chunk>();
 
     // create param
@@ -2711,9 +2711,9 @@ TEST_F(JoinHashMapTest, NormalHashMapTestLazyOutputPart) {
 
     // prepare data
     auto build_chunk = create_int32_build_chunk(num_build_rows, 0, false);
-    Columns key_columns{build_chunk->mutable_columns()[0]};
+    Columns key_columns{build_chunk->columns()[0]};
     auto probe_chunk = create_int32_probe_chunk(num_probe_rows, 0, false);
-    Columns probe_key_columns = {probe_chunk->mutable_columns()[0]};
+    Columns probe_key_columns = {probe_chunk->columns()[0]};
     ChunkPtr result_chunk = std::make_shared<Chunk>();
 
     // create param
@@ -2783,10 +2783,10 @@ TEST_F(JoinHashMapTest, NormalHashMapTestLazyOutputPartRemain) {
 
     // prepare data
     ChunkPtr build_chunk = create_int32_build_chunk(num_build_rows, 1, false);
-    Columns build_key_columns = {build_chunk->mutable_columns()[0]};
+    Columns build_key_columns = {build_chunk->columns()[0]};
     ChunkPtr probe_chunk = create_int32_probe_chunk(num_probe_rows, 0, false);
     ChunkPtr result_chunk = std::make_shared<Chunk>();
-    Columns probe_key_columns = {probe_chunk->mutable_columns()[0]};
+    Columns probe_key_columns = {probe_chunk->columns()[0]};
 
     // create param
     auto param = create_table_param_int(TJoinOp::RIGHT_OUTER_JOIN, 3);

@@ -17,7 +17,14 @@
 #include <cstdint>
 #include <type_traits>
 
+<<<<<<< HEAD:be/src/util/unaligned_access.h
 namespace starrocks {
+=======
+namespace starrocks::config {
+// Enable cow optimization for column operations, used to avoid the overhead of reference counting when accessing
+// columns.
+CONF_mBool(enable_cow_optimization, "false");
+>>>>>>> 8dbc74b70e ([BugFix] Disable COW optimization due to design flaws causing crashes (#73480)):be/src/common/config_cow_fwd.h
 
 template <typename T>
 inline T unaligned_load(const void* p) {

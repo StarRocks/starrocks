@@ -59,11 +59,11 @@ public:
         auto chunk = ChunkHelper::new_chunk(schema, 1024);
         for (size_t i = 0; i < 1500 * pow(config::size_tiered_level_multiple + 3, level - 2); ++i) {
             test_data.emplace_back("well" + std::to_string(id++));
-            auto cols = chunk->mutable_columns();
-            cols[0]->append_datum(Datum(static_cast<int32_t>(id++)));
+            auto cols = chunk->columns();
+            cols[0]->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(id++)));
             Slice field_1(test_data[i]);
-            cols[1]->append_datum(Datum(field_1));
-            cols[2]->append_datum(Datum(static_cast<int32_t>(10000 + id++)));
+            cols[1]->as_mutable_ptr()->append_datum(Datum(field_1));
+            cols[2]->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(10000 + id++)));
         }
         CHECK_OK(writer->add_chunk(*chunk));
     }

@@ -88,13 +88,18 @@ public:
         std::unique_ptr<RowsetWriter> writer;
         EXPECT_TRUE(RowsetFactory::create_rowset_writer(writer_context, &writer).ok());
         auto schema = ChunkHelper::convert_schema(tablet->tablet_schema());
+<<<<<<< HEAD
         auto chunk = ChunkHelper::new_chunk(schema, keys.size());
         auto cols = chunk->mutable_columns();
+=======
+        auto chunk = ChunkFactory::new_chunk(schema, keys.size());
+        auto cols = chunk->columns();
+>>>>>>> 8dbc74b70e ([BugFix] Disable COW optimization due to design flaws causing crashes (#73480))
         size_t size = keys.size();
         for (size_t i = 0; i < size; i++) {
-            cols[0]->append_datum(Datum(keys[i]));
-            cols[1]->append_datum(Datum((int16_t)(keys[i] % size + 1)));
-            cols[2]->append_datum(Datum((int32_t)(keys[i] % size + 2)));
+            cols[0]->as_mutable_ptr()->append_datum(Datum(keys[i]));
+            cols[1]->as_mutable_ptr()->append_datum(Datum((int16_t)(keys[i] % size + 1)));
+            cols[2]->as_mutable_ptr()->append_datum(Datum((int32_t)(keys[i] % size + 2)));
         }
         if (one_delete == nullptr && !keys.empty()) {
             CHECK_OK(writer->flush_chunk(*chunk));

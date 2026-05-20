@@ -103,24 +103,29 @@ public:
         EXPECT_TRUE(RowsetFactory::create_rowset_writer(writer_context, &writer).ok());
 
         auto schema = ChunkHelper::convert_schema(tablet->tablet_schema());
+<<<<<<< HEAD
         auto chunk = ChunkHelper::new_chunk(schema, keys.size());
         auto cols = chunk->mutable_columns();
+=======
+        auto chunk = ChunkFactory::new_chunk(schema, keys.size());
+        auto cols = chunk->columns();
+>>>>>>> 8dbc74b70e ([BugFix] Disable COW optimization due to design flaws causing crashes (#73480))
         for (int64_t key : keys) {
             if (schema.num_key_fields() == 1) {
-                cols[0]->append_datum(Datum(key));
+                cols[0]->as_mutable_ptr()->append_datum(Datum(key));
             } else {
-                cols[0]->append_datum(Datum(key));
+                cols[0]->as_mutable_ptr()->append_datum(Datum(key));
                 string v = fmt::to_string(key * 234234342345);
-                cols[1]->append_datum(Datum(Slice(v)));
-                cols[2]->append_datum(Datum((int32_t)key));
+                cols[1]->as_mutable_ptr()->append_datum(Datum(Slice(v)));
+                cols[2]->as_mutable_ptr()->append_datum(Datum((int32_t)key));
             }
             int vcol_start = schema.num_key_fields();
-            cols[vcol_start]->append_datum(Datum((int16_t)(key % 100 + 1)));
+            cols[vcol_start]->as_mutable_ptr()->append_datum(Datum((int16_t)(key % 100 + 1)));
             if (cols[vcol_start + 1]->is_binary()) {
                 string v = fmt::to_string(key % 1000 + 2);
-                cols[vcol_start + 1]->append_datum(Datum(Slice(v)));
+                cols[vcol_start + 1]->as_mutable_ptr()->append_datum(Datum(Slice(v)));
             } else {
-                cols[vcol_start + 1]->append_datum(Datum((int32_t)(key % 1000 + 2)));
+                cols[vcol_start + 1]->as_mutable_ptr()->append_datum(Datum((int32_t)(key % 1000 + 2)));
             }
         }
         if (!keys.empty()) {
@@ -261,11 +266,11 @@ public:
         auto chunk = ChunkHelper::new_chunk(schema, 1024);
         for (size_t i = 0; i < 1024; ++i) {
             test_data.push_back("well" + std::to_string(i));
-            auto cols = chunk->mutable_columns();
-            cols[0]->append_datum(Datum(static_cast<int32_t>(i)));
+            auto cols = chunk->columns();
+            cols[0]->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(i)));
             Slice field_1(test_data[i]);
-            cols[1]->append_datum(Datum(field_1));
-            cols[2]->append_datum(Datum(static_cast<int32_t>(10000 + i)));
+            cols[1]->as_mutable_ptr()->append_datum(Datum(field_1));
+            cols[2]->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(10000 + i)));
         }
         auto st = writer->add_chunk(*chunk);
         ASSERT_TRUE(st.ok()) << st.to_string() << ", version:" << writer->version();
@@ -475,11 +480,11 @@ TEST_F(EngineStorageMigrationTaskTest, test_concurrent_ingestion_and_migration) 
         for (size_t i = 0; i < 1024; ++i) {
             indexes.push_back(i);
             test_data.push_back("well" + std::to_string(i));
-            auto cols = chunk->mutable_columns();
-            cols[0]->append_datum(Datum(static_cast<int32_t>(i)));
+            auto cols = chunk->columns();
+            cols[0]->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(i)));
             Slice field_1(test_data[i]);
-            cols[1]->append_datum(Datum(field_1));
-            cols[2]->append_datum(Datum(static_cast<int32_t>(10000 + i)));
+            cols[1]->as_mutable_ptr()->append_datum(Datum(field_1));
+            cols[2]->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(10000 + i)));
         }
         auto st = delta_writer->write(*chunk, indexes.data(), 0, indexes.size());
         ASSERT_TRUE(st.ok());
@@ -553,10 +558,10 @@ TEST_F(EngineStorageMigrationTaskTest, test_concurrent_ingestion_and_migration_p
         indexes.reserve(1024);
         for (size_t i = 0; i < 1024; ++i) {
             indexes.push_back(i);
-            auto cols = chunk->mutable_columns();
-            cols[0]->append_datum(Datum(static_cast<int64_t>(i)));
-            cols[1]->append_datum(Datum(static_cast<int16_t>(i + 1)));
-            cols[2]->append_datum(Datum(static_cast<int32_t>(i + 2)));
+            auto cols = chunk->columns();
+            cols[0]->as_mutable_ptr()->append_datum(Datum(static_cast<int64_t>(i)));
+            cols[1]->as_mutable_ptr()->append_datum(Datum(static_cast<int16_t>(i + 1)));
+            cols[2]->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(i + 2)));
         }
         auto st = delta_writer->write(*chunk, indexes.data(), 0, indexes.size());
         ASSERT_TRUE(st.ok());

@@ -68,6 +68,7 @@ static ChunkIteratorPtr create_tablet_iterator(TabletReader& reader, Schema& sch
 }
 
 static ssize_t read_and_compare(const ChunkIteratorPtr& iter, const vector<int64_t>& keys) {
+<<<<<<< HEAD
     auto chunk = ChunkHelper::new_chunk(iter->schema(), 100);
     auto full_chunk = ChunkHelper::new_chunk(iter->schema(), keys.size());
     auto cols = full_chunk->mutable_columns();
@@ -75,6 +76,15 @@ static ssize_t read_and_compare(const ChunkIteratorPtr& iter, const vector<int64
         cols[0]->append_datum(Datum(key));
         cols[1]->append_datum(Datum((int16_t)(key % 100 + 1)));
         cols[2]->append_datum(Datum((int32_t)(key % 1000 + 2)));
+=======
+    auto chunk = ChunkFactory::new_chunk(iter->schema(), 100);
+    auto full_chunk = ChunkFactory::new_chunk(iter->schema(), keys.size());
+    auto cols = full_chunk->columns();
+    for (int64_t key : keys) {
+        cols[0]->as_mutable_ptr()->append_datum(Datum(key));
+        cols[1]->as_mutable_ptr()->append_datum(Datum((int16_t)(key % 100 + 1)));
+        cols[2]->as_mutable_ptr()->append_datum(Datum((int32_t)(key % 1000 + 2)));
+>>>>>>> 8dbc74b70e ([BugFix] Disable COW optimization due to design flaws causing crashes (#73480))
     }
     size_t count = 0;
     while (true) {
@@ -169,13 +179,21 @@ ssize_t read_tablet_and_compare_schema_changed(const TabletSharedPtr& tablet, in
     if (iter == nullptr) {
         return -1;
     }
+<<<<<<< HEAD
     auto full_chunk = ChunkHelper::new_chunk(iter->schema(), keys.size());
     auto cols = full_chunk->mutable_columns();
     for (long key : keys) {
         cols[0]->append_datum(Datum((int64_t)key));
         cols[1]->append_datum(Datum((int16_t)(key % 100 + 1)));
+=======
+    auto full_chunk = ChunkFactory::new_chunk(iter->schema(), keys.size());
+    auto cols = full_chunk->columns();
+    for (int64_t key : keys) {
+        cols[0]->as_mutable_ptr()->append_datum(Datum((int64_t)key));
+        cols[1]->as_mutable_ptr()->append_datum(Datum((int16_t)(key % 100 + 1)));
+>>>>>>> 8dbc74b70e ([BugFix] Disable COW optimization due to design flaws causing crashes (#73480))
         auto v = std::to_string((int64_t)(key % 1000 + 2));
-        cols[2]->append_datum(Datum(Slice{v}));
+        cols[2]->as_mutable_ptr()->append_datum(Datum(Slice{v}));
     }
     auto chunk = ChunkHelper::new_chunk(iter->schema(), 100);
     size_t count = 0;
@@ -205,12 +223,21 @@ ssize_t read_tablet_and_compare_schema_changed_sort_key1(const TabletSharedPtr& 
         return -1;
     }
     const auto nkeys = keys.size();
+<<<<<<< HEAD
     auto full_chunk = ChunkHelper::new_chunk(iter->schema(), nkeys);
     auto cols = full_chunk->mutable_columns();
     for (long key : keys) {
         cols[0]->append_datum(Datum((int64_t)(nkeys - 1 - key)));
         cols[1]->append_datum(Datum((int16_t)key));
         cols[2]->append_datum(Datum((int32_t)(nkeys - 1 - key)));
+=======
+    auto full_chunk = ChunkFactory::new_chunk(iter->schema(), nkeys);
+    auto cols = full_chunk->columns();
+    for (int64_t key : keys) {
+        cols[0]->as_mutable_ptr()->append_datum(Datum((int64_t)(nkeys - 1 - key)));
+        cols[1]->as_mutable_ptr()->append_datum(Datum((int16_t)key));
+        cols[2]->as_mutable_ptr()->append_datum(Datum((int32_t)(nkeys - 1 - key)));
+>>>>>>> 8dbc74b70e ([BugFix] Disable COW optimization due to design flaws causing crashes (#73480))
     }
     auto chunk = ChunkHelper::new_chunk(iter->schema(), 100);
     size_t count = 0;
@@ -240,12 +267,21 @@ ssize_t read_tablet_and_compare_schema_changed_sort_key2(const TabletSharedPtr& 
         return -1;
     }
     const auto nkeys = keys.size();
+<<<<<<< HEAD
     auto full_chunk = ChunkHelper::new_chunk(iter->schema(), nkeys);
     auto cols = full_chunk->mutable_columns();
     for (long key : keys) {
         cols[0]->append_datum(Datum((int64_t)key));
         cols[1]->append_datum(Datum((int16_t)(nkeys - 1 - key)));
         cols[2]->append_datum(Datum((int32_t)key));
+=======
+    auto full_chunk = ChunkFactory::new_chunk(iter->schema(), nkeys);
+    auto cols = full_chunk->columns();
+    for (int64_t key : keys) {
+        cols[0]->as_mutable_ptr()->append_datum(Datum((int64_t)key));
+        cols[1]->as_mutable_ptr()->append_datum(Datum((int16_t)(nkeys - 1 - key)));
+        cols[2]->as_mutable_ptr()->append_datum(Datum((int32_t)key));
+>>>>>>> 8dbc74b70e ([BugFix] Disable COW optimization due to design flaws causing crashes (#73480))
     }
     auto chunk = ChunkHelper::new_chunk(iter->schema(), 100);
     size_t count = 0;
@@ -274,12 +310,17 @@ static ssize_t read_tablet_and_compare_sort_key_error_encode_case(const TabletSh
     if (iter == nullptr) {
         return -1;
     }
+<<<<<<< HEAD
     auto full_chunk = ChunkHelper::new_chunk(iter->schema(), keys.size());
     auto cols = full_chunk->mutable_columns();
+=======
+    auto full_chunk = ChunkFactory::new_chunk(iter->schema(), keys.size());
+    auto cols = full_chunk->columns();
+>>>>>>> 8dbc74b70e ([BugFix] Disable COW optimization due to design flaws causing crashes (#73480))
     for (auto i = 0; i < keys.size(); ++i) {
-        cols[0]->append_datum(Datum((int64_t)keys[i]));
-        cols[1]->append_datum(Datum((int16_t)1));
-        cols[2]->append_datum(Datum((int32_t)i));
+        cols[0]->as_mutable_ptr()->append_datum(Datum((int64_t)keys[i]));
+        cols[1]->as_mutable_ptr()->append_datum(Datum((int16_t)1));
+        cols[2]->as_mutable_ptr()->append_datum(Datum((int32_t)i));
     }
     auto chunk = ChunkHelper::new_chunk(iter->schema(), 100);
     size_t count = 0;
@@ -309,12 +350,17 @@ static ssize_t read_tablet_and_compare_nullable_sort_key(const TabletSharedPtr& 
         return -1;
     }
     const auto keys_size = all_cols[0].size();
+<<<<<<< HEAD
     auto full_chunk = ChunkHelper::new_chunk(iter->schema(), keys_size);
     auto cols = full_chunk->mutable_columns();
+=======
+    auto full_chunk = ChunkFactory::new_chunk(iter->schema(), keys_size);
+    auto cols = full_chunk->columns();
+>>>>>>> 8dbc74b70e ([BugFix] Disable COW optimization due to design flaws causing crashes (#73480))
     for (auto i = 0; i < keys_size; ++i) {
-        append_datum_func(cols[0], static_cast<int64_t>(all_cols[0][i]));
-        append_datum_func(cols[1], static_cast<int16_t>(all_cols[1][i]));
-        append_datum_func(cols[2], static_cast<int32_t>(all_cols[2][i]));
+        append_datum_func(cols[0]->as_mutable_ptr(), static_cast<int64_t>(all_cols[0][i]));
+        append_datum_func(cols[1]->as_mutable_ptr(), static_cast<int16_t>(all_cols[1][i]));
+        append_datum_func(cols[2]->as_mutable_ptr(), static_cast<int32_t>(all_cols[2][i]));
     }
     auto chunk = ChunkHelper::new_chunk(iter->schema(), 100);
     size_t count = 0;
@@ -1543,13 +1589,18 @@ TEST_F(TabletUpdatesTest, horizontal_compaction_with_sort_key) {
     EXPECT_EQ(best_tablet->updates()->get_compaction_score(), -1);
 
     auto schema = ChunkHelper::convert_schema(_tablet->thread_safe_get_tablet_schema());
+<<<<<<< HEAD
     auto sk_chunk = ChunkHelper::new_chunk(schema, loop);
     auto cols = sk_chunk->mutable_columns();
+=======
+    auto sk_chunk = ChunkFactory::new_chunk(schema, loop);
+    auto cols = sk_chunk->columns();
+>>>>>>> 8dbc74b70e ([BugFix] Disable COW optimization due to design flaws causing crashes (#73480))
     for (int i = 0; i < loop; i++) {
         int64_t key = sorted_keys[i * 100];
-        cols[0]->append_datum(Datum(key));
-        cols[1]->append_datum(Datum((int16_t)(key % 100 + 1)));
-        cols[2]->append_datum(Datum((int32_t)(key % 1000 + 2)));
+        cols[0]->as_mutable_ptr()->append_datum(Datum(key));
+        cols[1]->as_mutable_ptr()->append_datum(Datum((int16_t)(key % 100 + 1)));
+        cols[2]->as_mutable_ptr()->append_datum(Datum((int32_t)(key % 1000 + 2)));
     }
     std::vector<RowsetSharedPtr> rowsets;
     ASSERT_TRUE(_tablet->updates()->get_applied_rowsets(loop + 1, &rowsets).ok());
@@ -1878,13 +1929,18 @@ TEST_F(TabletUpdatesTest, vertical_compaction_with_sort_key) {
     EXPECT_EQ(best_tablet->updates()->get_compaction_score(), -1);
 
     auto schema = ChunkHelper::convert_schema(_tablet->thread_safe_get_tablet_schema());
+<<<<<<< HEAD
     auto sk_chunk = ChunkHelper::new_chunk(schema, loop);
     auto cols = sk_chunk->mutable_columns();
+=======
+    auto sk_chunk = ChunkFactory::new_chunk(schema, loop);
+    auto cols = sk_chunk->columns();
+>>>>>>> 8dbc74b70e ([BugFix] Disable COW optimization due to design flaws causing crashes (#73480))
     for (int i = 0; i < loop; i++) {
         int64_t key = sorted_keys[i * 100];
-        cols[0]->append_datum(Datum(key));
-        cols[1]->append_datum(Datum((int16_t)(key % 100 + 1)));
-        cols[2]->append_datum(Datum((int32_t)(key % 1000 + 2)));
+        cols[0]->as_mutable_ptr()->append_datum(Datum(key));
+        cols[1]->as_mutable_ptr()->append_datum(Datum((int16_t)(key % 100 + 1)));
+        cols[2]->as_mutable_ptr()->append_datum(Datum((int32_t)(key % 1000 + 2)));
     }
     std::vector<RowsetSharedPtr> rowsets;
     ASSERT_TRUE(_tablet->updates()->get_applied_rowsets(loop + 1, &rowsets).ok());
@@ -2070,12 +2126,17 @@ void TabletUpdatesTest::test_load_snapshot_incremental_with_merge_condition(bool
         std::unique_ptr<RowsetWriter> writer;
         CHECK_OK(RowsetFactory::create_rowset_writer(writer_context, &writer));
         auto schema = ChunkHelper::convert_schema(tablet->thread_safe_get_tablet_schema());
+<<<<<<< HEAD
         auto chunk = ChunkHelper::new_chunk(schema, keys.size());
         auto cols = chunk->mutable_columns();
+=======
+        auto chunk = ChunkFactory::new_chunk(schema, keys.size());
+        auto cols = chunk->columns();
+>>>>>>> 8dbc74b70e ([BugFix] Disable COW optimization due to design flaws causing crashes (#73480))
         for (size_t i = 0; i < keys.size(); i++) {
-            cols[0]->append_datum(Datum(keys[i]));
-            cols[1]->append_datum(Datum((int16_t)(keys[i] % 100 + 1)));
-            cols[2]->append_datum(Datum(v2_data[i]));
+            cols[0]->as_mutable_ptr()->append_datum(Datum(keys[i]));
+            cols[1]->as_mutable_ptr()->append_datum(Datum((int16_t)(keys[i] % 100 + 1)));
+            cols[2]->as_mutable_ptr()->append_datum(Datum(v2_data[i]));
         }
         CHECK_OK(writer->flush_chunk(*chunk));
         return *writer->build();
@@ -3464,12 +3525,17 @@ TEST_F(TabletUpdatesTest, multiple_delete_and_upsert) {
             keys.emplace_back(i);
         }
         auto schema = ChunkHelper::convert_schema(_tablet->thread_safe_get_tablet_schema());
+<<<<<<< HEAD
         auto chunk = ChunkHelper::new_chunk(schema, keys.size());
         auto cols = chunk->mutable_columns();
+=======
+        auto chunk = ChunkFactory::new_chunk(schema, keys.size());
+        auto cols = chunk->columns();
+>>>>>>> 8dbc74b70e ([BugFix] Disable COW optimization due to design flaws causing crashes (#73480))
         for (int64_t key : keys) {
-            cols[0]->append_datum(Datum(key));
-            cols[1]->append_datum(Datum((int16_t)(key % 100 + 2)));
-            cols[2]->append_datum(Datum((int32_t)(key % 100 + 3)));
+            cols[0]->as_mutable_ptr()->append_datum(Datum(key));
+            cols[1]->as_mutable_ptr()->append_datum(Datum((int16_t)(key % 100 + 2)));
+            cols[2]->as_mutable_ptr()->append_datum(Datum((int32_t)(key % 100 + 3)));
         }
         CHECK_OK(writer->flush_chunk(*chunk));
     }
@@ -3486,12 +3552,17 @@ TEST_F(TabletUpdatesTest, multiple_delete_and_upsert) {
         }
 
         auto schema = ChunkHelper::convert_schema(_tablet->thread_safe_get_tablet_schema());
+<<<<<<< HEAD
         auto chunk = ChunkHelper::new_chunk(schema, keys.size());
         auto cols = chunk->mutable_columns();
+=======
+        auto chunk = ChunkFactory::new_chunk(schema, keys.size());
+        auto cols = chunk->columns();
+>>>>>>> 8dbc74b70e ([BugFix] Disable COW optimization due to design flaws causing crashes (#73480))
         for (int64_t key : keys) {
-            cols[0]->append_datum(Datum(key));
-            cols[1]->append_datum(Datum((int16_t)(key % 100 + 1)));
-            cols[2]->append_datum(Datum((int32_t)(key % 100 + 2)));
+            cols[0]->as_mutable_ptr()->append_datum(Datum(key));
+            cols[1]->as_mutable_ptr()->append_datum(Datum((int16_t)(key % 100 + 1)));
+            cols[2]->as_mutable_ptr()->append_datum(Datum((int32_t)(key % 100 + 2)));
         }
         CHECK_OK(writer->flush_chunk_with_deletes(*chunk, deletes));
     }
@@ -3519,19 +3590,25 @@ TEST_F(TabletUpdatesTest, multiple_delete_and_upsert) {
     for (int i = 100; i < 150; i++) {
         keys.emplace_back(i);
     }
+<<<<<<< HEAD
     auto chunk = ChunkHelper::new_chunk(iter->schema(), 100);
     auto full_chunk = ChunkHelper::new_chunk(iter->schema(), keys.size());
     auto cols = full_chunk->mutable_columns();
+=======
+    auto chunk = ChunkFactory::new_chunk(iter->schema(), 100);
+    auto full_chunk = ChunkFactory::new_chunk(iter->schema(), keys.size());
+    auto cols = full_chunk->columns();
+>>>>>>> 8dbc74b70e ([BugFix] Disable COW optimization due to design flaws causing crashes (#73480))
     for (int i = 0; i < 50; i++) {
-        cols[0]->append_datum(Datum(keys[i]));
-        cols[1]->append_datum(Datum((int16_t)(keys[i] % 100 + 2)));
-        cols[2]->append_datum(Datum((int32_t)(keys[i] % 100 + 3)));
+        cols[0]->as_mutable_ptr()->append_datum(Datum(keys[i]));
+        cols[1]->as_mutable_ptr()->append_datum(Datum((int16_t)(keys[i] % 100 + 2)));
+        cols[2]->as_mutable_ptr()->append_datum(Datum((int32_t)(keys[i] % 100 + 3)));
     }
 
     for (int i = 50; i < 100; i++) {
-        cols[0]->append_datum(Datum(keys[i]));
-        cols[1]->append_datum(Datum((int16_t)(keys[i] % 100 + 1)));
-        cols[2]->append_datum(Datum((int32_t)(keys[i] % 100 + 2)));
+        cols[0]->as_mutable_ptr()->append_datum(Datum(keys[i]));
+        cols[1]->as_mutable_ptr()->append_datum(Datum((int16_t)(keys[i] % 100 + 1)));
+        cols[2]->as_mutable_ptr()->append_datum(Datum((int32_t)(keys[i] % 100 + 2)));
     }
 
     size_t count = 0;

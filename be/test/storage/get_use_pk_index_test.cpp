@@ -66,12 +66,17 @@ public:
         auto schema = ChunkHelper::convert_schema(tablet->tablet_schema());
         for (size_t i = 0; i < segments.size(); i++) {
             auto& segment = segments[i];
+<<<<<<< HEAD
             auto chunk = ChunkHelper::new_chunk(schema, segment.size());
             auto cols = chunk->mutable_columns();
+=======
+            auto chunk = ChunkFactory::new_chunk(schema, segment.size());
+            auto cols = chunk->columns();
+>>>>>>> 8dbc74b70e ([BugFix] Disable COW optimization due to design flaws causing crashes (#73480))
             for (auto& row : segment) {
                 CHECK(cols.size() == row.size());
                 for (size_t j = 0; j < row.size(); j++) {
-                    cols[j]->append_datum(row[j]);
+                    cols[j]->as_mutable_ptr()->append_datum(row[j]);
                 }
             }
             CHECK_OK(writer->flush_chunk(*chunk));

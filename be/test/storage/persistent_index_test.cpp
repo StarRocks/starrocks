@@ -1471,19 +1471,24 @@ RowsetSharedPtr create_rowset(const TabletSharedPtr& tablet, const vector<int64_
     auto schema = ChunkHelper::convert_schema(tablet->tablet_schema());
     size_t size = (tablet->tablet_schema()->column(0).type() == TYPE_VARCHAR) ? varlen_keys.size() : keys.size();
     LOG(INFO) << "key column type: " << tablet->tablet_schema()->column(0).type() << ", size: " << size;
+<<<<<<< HEAD
     auto chunk = ChunkHelper::new_chunk(schema, size);
     auto cols = chunk->mutable_columns();
+=======
+    auto chunk = ChunkFactory::new_chunk(schema, size);
+    auto cols = chunk->columns();
+>>>>>>> 8dbc74b70e ([BugFix] Disable COW optimization due to design flaws causing crashes (#73480))
     if (tablet->tablet_schema()->column(0).type() == TYPE_VARCHAR) {
         for (size_t i = 0; i < size; i++) {
-            cols[0]->append_datum(Datum(varlen_keys[i]));
-            cols[1]->append_datum(Datum((int16_t)(i + 1)));
-            cols[2]->append_datum(Datum((int32_t)(i + 2)));
+            cols[0]->as_mutable_ptr()->append_datum(Datum(varlen_keys[i]));
+            cols[1]->as_mutable_ptr()->append_datum(Datum((int16_t)(i + 1)));
+            cols[2]->as_mutable_ptr()->append_datum(Datum((int32_t)(i + 2)));
         }
     } else {
         for (size_t i = 0; i < size; i++) {
-            cols[0]->append_datum(Datum(keys[i]));
-            cols[1]->append_datum(Datum((int16_t)(keys[i] % size + 1)));
-            cols[2]->append_datum(Datum((int32_t)(keys[i] % size + 2)));
+            cols[0]->as_mutable_ptr()->append_datum(Datum(keys[i]));
+            cols[1]->as_mutable_ptr()->append_datum(Datum((int16_t)(keys[i] % size + 1)));
+            cols[2]->as_mutable_ptr()->append_datum(Datum((int32_t)(keys[i] % size + 2)));
         }
     }
     if (one_delete == nullptr && (size > 0)) {

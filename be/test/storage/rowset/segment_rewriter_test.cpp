@@ -82,11 +82,11 @@ TEST_F(SegmentRewriterTest, rewrite_test) {
 
     for (auto i = 0; i < num_rows % chunk_size; ++i) {
         partial_chunk->reset();
-        auto cols = partial_chunk->mutable_columns();
+        auto cols = partial_chunk->columns();
         for (auto j = 0; j < chunk_size && i * chunk_size + j < num_rows; ++j) {
-            cols[0]->append_datum(Datum(static_cast<int32_t>(i * chunk_size + j)));
-            cols[1]->append_datum(Datum(static_cast<int32_t>(i * chunk_size + j + 1)));
-            cols[2]->append_datum(Datum(static_cast<int32_t>(i * chunk_size + j + 3)));
+            cols[0]->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(i * chunk_size + j)));
+            cols[1]->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(i * chunk_size + j + 1)));
+            cols[2]->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(i * chunk_size + j + 3)));
         }
         ASSERT_OK(writer.append_chunk(*partial_chunk));
     }
@@ -116,7 +116,7 @@ TEST_F(SegmentRewriterTest, rewrite_test) {
         auto column = ChunkHelper::column_from_field_type(tablet_column.type(), tablet_column.is_nullable());
         write_columns[i] = column->clone_empty();
         for (auto j = 0; j < num_rows; ++j) {
-            write_columns[i]->append_datum(Datum(static_cast<int32_t>(j + read_column_ids[i])));
+            write_columns[i]->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(j + read_column_ids[i])));
         }
     }
 

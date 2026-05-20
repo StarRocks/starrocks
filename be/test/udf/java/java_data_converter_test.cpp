@@ -145,10 +145,13 @@ TEST_F(DataConverterTest, cast_to_jval) {
         tdesc.children.emplace_back(ta);
 
         auto keys = Int32Column::create();
-        auto& elements_data = keys->get_data();
-        elements_data.resize(20);
-        for (size_t i = 0; i < elements_data.size(); ++i) {
-            elements_data[i] = i;
+        size_t num_elements = 20;
+        {
+            auto& elements_data = keys->get_data();
+            elements_data.resize(num_elements);
+            for (size_t i = 0; i < elements_data.size(); ++i) {
+                elements_data[i] = i;
+            }
         }
         auto nullable = NullableColumn::wrap_if_necessary(std::move(keys));
         auto offsets = UInt32Column::create();
@@ -161,9 +164,9 @@ TEST_F(DataConverterTest, cast_to_jval) {
 
         auto values = Int32Column::create();
         auto& values_data = values->get_data();
-        values_data.resize(elements_data.size());
-        for (size_t i = 0; i < elements_data.size(); ++i) {
-            values_data[i] = elements_data.size() - i;
+        values_data.resize(num_elements);
+        for (size_t i = 0; i < num_elements; ++i) {
+            values_data[i] = num_elements - i;
         }
         auto vnullable = NullableColumn::wrap_if_necessary(std::move(values));
         auto map_column = MapColumn::create(std::move(nullable), std::move(vnullable), std::move(offsets));

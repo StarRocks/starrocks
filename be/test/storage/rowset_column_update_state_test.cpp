@@ -149,10 +149,17 @@ public:
 
         auto chunk = ChunkHelper::new_chunk(schema, keys.size());
         EXPECT_TRUE(2 == chunk->num_columns());
+<<<<<<< HEAD
         auto cols = chunk->mutable_columns();
         for (long key : keys) {
             cols[0]->append_datum(Datum(key));
             cols[1]->append_datum(Datum((int16_t)(key % 100 + 3)));
+=======
+        auto cols = chunk->columns();
+        for (int64_t key : keys) {
+            cols[0]->as_mutable_ptr()->append_datum(Datum(key));
+            cols[1]->as_mutable_ptr()->append_datum(Datum((int16_t)(key % 100 + 3)));
+>>>>>>> 8dbc74b70e ([BugFix] Disable COW optimization due to design flaws causing crashes (#73480))
         }
         for (int i = 0; i < segment_num; i++) {
             CHECK_OK(writer->flush_chunk(*chunk));
