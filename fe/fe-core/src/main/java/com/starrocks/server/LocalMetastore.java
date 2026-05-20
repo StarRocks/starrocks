@@ -121,6 +121,9 @@ import com.starrocks.common.util.concurrent.CountingLatch;
 import com.starrocks.common.util.concurrent.lock.AutoCloseableLock;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
+import com.starrocks.common.tvr.TvrTableDelta;
+import com.starrocks.common.tvr.TvrTableDeltaTrait;
+import com.starrocks.common.tvr.TvrTableSnapshot;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.journal.SerializeException;
@@ -5754,5 +5757,53 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
                 info, wal -> addOrReplaceAutoIncrementIdByTableId(tableId, newAutoIncrementValue));
 
         LOG.info("Set auto_increment value for table {}.{} to {}", dbName, tableName, newAutoIncrementValue);
+    }
+
+    @Override
+    public TvrTableSnapshot getCurrentTvrSnapshot(String dbName, Table table) {
+        if (!(table instanceof OlapTable)) {
+            return TvrTableSnapshot.empty();
+        }
+        OlapTable olapTable = (OlapTable) table;
+        long maxVersion = olapTable.getAllPhysicalPartitions().stream()
+                .mapToLong(PhysicalPartition::getVisibleVersion)
+                .max()
+                .orElse(0L);
+        return maxVersion > 0 ? TvrTableSnapshot.of(maxVersion) : TvrTableSnapshot.empty();
+    }
+
+    @Override
+    public List<TvrTableDeltaTrait> listTableDeltaTraits(String dbName, Table table,
+                                                          TvrTableSnapshot fromSnapshotExclusive,
+                                                          TvrTableSnapshot toSnapshotInclusive) {
+        if (fromSnapshotExclusive.equals(toSnapshotInclusive)) {
+            return Collections.emptyList();
+        }
+        if (!(table instanceof OlapTable)) {
+            return Collections.emptyList();
+        }
+        OlapTable olapTable = (OlapTable) table;
+        long toVersion = toSnapshotInclusive.end()
+                .orElseThrow(() -> new StarRocksConnectorException(
+                        "toSnapshotInclusive must have a valid snapshot ID"));
+        if (!fromSnapshotExclusive.isEmpty()) {
+            long fromVersion = fromSnapshotExclusive.getSnapshotId();
+            if (fromVersion > toVersion) {
+                throw new StarRocksConnectorException(
+                        "from snapshot %s is not a parent ancestor of end snapshot %s",
+                        fromVersion, toVersion);
+            }
+        }
+        Optional<Long> fromOpt = fromSnapshotExclusive.isEmpty()
+                ? Optional.empty()
+                : Optional.of(fromSnapshotExclusive.getSnapshotId());
+        TvrTableDelta delta = TvrTableDelta.of(fromOpt, Optional.of(toVersion));
+        return Collections.singletonList(classifyNativeDelta(olapTable, delta));
+    }
+
+    private static TvrTableDeltaTrait classifyNativeDelta(OlapTable table, TvrTableDelta delta) {
+        return table.getKeysType() == KeysType.DUP_KEYS
+                ? TvrTableDeltaTrait.ofMonotonic(delta)
+                : TvrTableDeltaTrait.ofRetractable(delta);
     }
 }
