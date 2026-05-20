@@ -27,7 +27,12 @@ import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.InternalCatalog;
+<<<<<<< HEAD
 import com.starrocks.catalog.KeysType;
+=======
+import com.starrocks.catalog.JDBCTable;
+import com.starrocks.catalog.MaterializedIndex;
+>>>>>>> db2d5b956d ([BugFix] Defer JDBC REMARKS fetch out of getTable() hot path (#73488))
 import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
@@ -542,6 +547,7 @@ public class InformationSchemaDataSource {
                         continue;
                     }
 
+<<<<<<< HEAD
                     BasicTable table = null;
                     try {
                         table = metadataMgr.getBasicTable(context, catalogName, dbName, tableName,
@@ -552,6 +558,26 @@ public class InformationSchemaDataSource {
                     if (table == null) {
                         continue;
                     }
+=======
+                BasicTable table = null;
+                try {
+                    table = metadataMgr.getBasicTable(context, catalogName, dbName, tableName,
+                        Config.enable_external_catalog_information_schema_tables_access_full_metadata);
+                } catch (Exception e) {
+                    LOG.warn(e.getMessage(), e);
+                }
+                if (table == null) {
+                    continue;
+                }
+                if (table instanceof JDBCTable jt
+                        && Config.enable_external_catalog_information_schema_tables_access_full_metadata
+                        && !jt.isCommentFetched()) {
+                    metadataMgr.getOptionalMetadata(catalogName).ifPresent(m -> {
+                        jt.setComment(m.getTableComment(context, dbName, tableName));
+                        jt.setCommentFetched(true);
+                    });
+                }
+>>>>>>> db2d5b956d ([BugFix] Defer JDBC REMARKS fetch out of getTable() hot path (#73488))
 
                     try {
                         Authorizer.checkAnyActionOnTableLikeObject(context, dbName, table);
