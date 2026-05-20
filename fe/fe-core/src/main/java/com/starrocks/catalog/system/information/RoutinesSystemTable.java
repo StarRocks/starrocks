@@ -67,4 +67,40 @@ public class RoutinesSystemTable {
                         .column("DATABASE_COLLATION", TypeFactory.createVarcharType(NAME_CHAR_LEN))
                         .build(), SCH_PROCEDURES);
     }
+
+    // MySQL 5.7 layout: omits the eight return-type descriptor columns
+    // (DATA_TYPE..COLLATION_NAME) that MySQL 8 inserted between ROUTINE_TYPE
+    // and DTD_IDENTIFIER. Served when Config.mysql_server_version starts with "5.".
+    public static SystemTable createV5(String catalogName) {
+        return new SystemTable(
+                catalogName,
+                SystemId.ROUTINES_V5_ID,
+                NAME,
+                Table.TableType.SCHEMA,
+                builder()
+                        .column("SPECIFIC_NAME", TypeFactory.createVarcharType(NAME_CHAR_LEN))
+                        .column("ROUTINE_CATALOG", TypeFactory.createVarcharType(NAME_CHAR_LEN))
+                        .column("ROUTINE_SCHEMA", TypeFactory.createVarcharType(NAME_CHAR_LEN))
+                        .column("ROUTINE_NAME", TypeFactory.createVarcharType(NAME_CHAR_LEN))
+                        .column("ROUTINE_TYPE", TypeFactory.createVarcharType(NAME_CHAR_LEN))
+                        .column("DTD_IDENTIFIER", TypeFactory.createVarcharType(NAME_CHAR_LEN))
+                        .column("ROUTINE_BODY", TypeFactory.createVarcharType(NAME_CHAR_LEN))
+                        .column("ROUTINE_DEFINITION", TypeFactory.createVarcharType(NAME_CHAR_LEN))
+                        .column("EXTERNAL_NAME", TypeFactory.createVarcharType(NAME_CHAR_LEN))
+                        .column("EXTERNAL_LANGUAGE", TypeFactory.createVarcharType(NAME_CHAR_LEN))
+                        .column("PARAMETER_STYLE", TypeFactory.createVarcharType(NAME_CHAR_LEN))
+                        .column("IS_DETERMINISTIC", TypeFactory.createVarcharType(NAME_CHAR_LEN))
+                        .column("SQL_DATA_ACCESS", TypeFactory.createVarcharType(NAME_CHAR_LEN))
+                        .column("SQL_PATH", TypeFactory.createVarcharType(NAME_CHAR_LEN))
+                        .column("SECURITY_TYPE", TypeFactory.createVarcharType(NAME_CHAR_LEN))
+                        .column("CREATED", DateType.DATETIME)
+                        .column("LAST_ALTERED", DateType.DATETIME)
+                        .column("SQL_MODE", TypeFactory.createVarcharType(NAME_CHAR_LEN))
+                        .column("ROUTINE_COMMENT", TypeFactory.createVarcharType(NAME_CHAR_LEN))
+                        .column("DEFINER", TypeFactory.createVarcharType(NAME_CHAR_LEN))
+                        .column("CHARACTER_SET_CLIENT", TypeFactory.createVarcharType(NAME_CHAR_LEN))
+                        .column("COLLATION_CONNECTION", TypeFactory.createVarcharType(NAME_CHAR_LEN))
+                        .column("DATABASE_COLLATION", TypeFactory.createVarcharType(NAME_CHAR_LEN))
+                        .build(), SCH_PROCEDURES);
+    }
 }

@@ -53,4 +53,33 @@ public class StatisticsSystemTable {
                         .column("EXPRESSION", TypeFactory.createVarcharType(MAX_FIELD_VARCHAR_LENGTH))
                         .build(), TSchemaTableType.SCH_STATISTICS);
     }
+
+    // MySQL 5.7 layout: omits both IS_VISIBLE and EXPRESSION, which were
+    // introduced together with MySQL 8 functional-index metadata. Served when
+    // Config.mysql_server_version starts with "5.".
+    public static SystemTable createV5(String catalogName) {
+        return new SystemTable(
+                catalogName,
+                SystemId.STATISTICS_V5_ID,
+                NAME,
+                Table.TableType.SCHEMA,
+                builder()
+                        .column("TABLE_CATALOG", TypeFactory.createVarcharType(512))
+                        .column("TABLE_SCHEMA", TypeFactory.createVarcharType(64))
+                        .column("TABLE_NAME", TypeFactory.createVarcharType(64))
+                        .column("NON_UNIQUE", IntegerType.BIGINT)
+                        .column("INDEX_SCHEMA", TypeFactory.createVarcharType(64))
+                        .column("INDEX_NAME", TypeFactory.createVarcharType(64))
+                        .column("SEQ_IN_INDEX", IntegerType.BIGINT)
+                        .column("COLUMN_NAME", TypeFactory.createVarcharType(64))
+                        .column("COLLATION", TypeFactory.createVarcharType(1))
+                        .column("CARDINALITY", IntegerType.BIGINT)
+                        .column("SUB_PART", IntegerType.BIGINT)
+                        .column("PACKED", TypeFactory.createVarcharType(10))
+                        .column("NULLABLE", TypeFactory.createVarcharType(3))
+                        .column("INDEX_TYPE", TypeFactory.createVarcharType(16))
+                        .column("COMMENT", TypeFactory.createVarcharType(16))
+                        .column("INDEX_COMMENT", TypeFactory.createVarcharType(1024))
+                        .build(), TSchemaTableType.SCH_STATISTICS);
+    }
 }
