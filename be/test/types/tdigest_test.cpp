@@ -270,22 +270,25 @@ TEST_F(TDigestTest, SerializeRoundTrip) {
     EXPECT_NEAR(source.quantile(0.99), decoded.quantile(0.99), 1.0);
 }
 
-// D3: serialize() canonicalizes by running compress() first, so after a
-// round-trip the unprocessed array is empty even when the source had pending
-// centroids at the time of serialization.
-TEST_F(TDigestTest, SerializeProducesCanonicalForm) {
+// Regression: serialize() must not mutate the digest. Callers size their
+// output buffer from serialize_size() before calling serialize(); if
+// serialize() ran compress() first, the post-compress footprint
+// (rebuilt _cumulative with M+1 weights) would exceed the caller buffer
+// for unprocessed-only states and overflow the heap.
+TEST_F(TDigestTest, SerializeDoesNotGrowUnprocessedOnly) {
     TDigest source(1000);
     for (int i = 0; i < 30; ++i) {
         source.add(static_cast<float>(i));
     }
+    ASSERT_FALSE(source.unprocessed().empty());
+    ASSERT_TRUE(source.processed().empty());
+
+    const uint64_t declared = source.serialize_size();
+    std::vector<uint8_t> buffer(declared, 0xCC);
+    const size_t written = source.serialize(buffer.data());
+    EXPECT_EQ(declared, written);
     EXPECT_FALSE(source.unprocessed().empty());
-
-    std::vector<uint8_t> buffer(source.serialize_size());
-    source.serialize(buffer.data());
-
-    TDigest decoded;
-    ASSERT_TRUE(decoded.deserialize(reinterpret_cast<const char*>(buffer.data()), buffer.size()));
-    EXPECT_TRUE(decoded.unprocessed().empty());
+    EXPECT_TRUE(source.processed().empty());
 }
 
 // P15: deserialize must reject a blob whose declared header does not fit.
