@@ -479,8 +479,8 @@ Status publish_log_version(TabletManager* tablet_mgr, int64_t tablet_id, std::sp
             auto txn_id = txn_infos[i].txn_id();
             auto log_version = log_versions[i];
             auto expected_count = txn_infos[i].load_ids_size();
-            ASSIGN_OR_RETURN(auto txn_logs_vector, load_txn_log(tablet_mgr, {tablet_id}, txn_infos[i]));
-            auto& txn_logs = txn_logs_vector[0];
+            ASSIGN_OR_RETURN(auto txn_logs_ptr, load_txn_log(tablet_mgr, tablet_id, txn_infos[i]));
+            auto& txn_logs = *txn_logs_ptr;
 
             if (static_cast<int>(txn_logs.size()) < expected_count) {
                 // load_txn_log silently skips per-load_id files that are NotFound, so any
@@ -492,7 +492,7 @@ Status publish_log_version(TabletManager* tablet_mgr, int64_t tablet_id, std::sp
                 // surface NotFound so FE retries / fails the publish instead of advancing
                 // visibility with incomplete statement data.
                 auto txn_vlog_path = tablet_mgr->txn_vlog_location(tablet_id, log_version);
-                ASSIGN_OR_RETURN(auto fs, FileSystemFactory::CreateSharedFromString(txn_vlog_path));
+                ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(txn_vlog_path));
                 auto check_st = fs->path_exists(txn_vlog_path);
                 if (check_st.ok()) {
                     for (const auto& load_id : txn_infos[i].load_ids()) {
