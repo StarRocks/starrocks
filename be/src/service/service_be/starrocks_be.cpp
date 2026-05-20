@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include <gperftools/malloc_extension.h>
 #include <unistd.h>
 
 #if defined(LEAK_SANITIZER)
