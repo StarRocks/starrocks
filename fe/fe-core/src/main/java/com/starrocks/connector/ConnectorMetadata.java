@@ -14,6 +14,7 @@
 
 package com.starrocks.connector;
 
+import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
@@ -128,10 +129,72 @@ public interface ConnectorMetadata {
         return null;
     }
 
+<<<<<<< HEAD
     default TableVersionRange getTableVersionRange(String dbName, Table table,
                                                    Optional<ConnectorTableVersion> startVersion,
                                                    Optional<ConnectorTableVersion> endVersion) {
         return TableVersionRange.empty();
+=======
+    /**
+     * Lazily fetch the table comment when a caller really needs it
+     * (e.g. information_schema.tables). Default implementation returns
+     * the comment already on the cached Table object — i.e. for Iceberg
+     * the comment travels with getTable() so this is free. JDBC overrides
+     * to issue a dedicated REMARKS query.
+     */
+    default String getTableComment(ConnectContext context, String dbName, String tblName) {
+        Table table = getTable(context, dbName, tblName);
+        return table == null ? "" : Strings.nullToEmpty(table.getComment());
+    }
+
+    /**
+     * Build a temporary table from a pass-through query when the connector can infer the result schema.
+     */
+    default Table getTableFromQuery(ConnectContext context, String dbName, String query) {
+        return null;
+    }
+
+    /**
+     * Get the Time Varying Relation (TVR) version range for the table between the specified versions.
+     */
+    default TvrVersionRange getTableVersionRange(String dbName, Table table,
+                                                 Optional<ConnectorTableVersion> startVersion,
+                                                 Optional<ConnectorTableVersion> endVersion) {
+        return TvrTableSnapshot.empty();
+    }
+
+    /**
+     * @param dbName database name of the table
+     * @param table table name
+     * @return the current latest snapshot info of the input table.
+     */
+    default TvrTableSnapshot getCurrentTvrSnapshot(String dbName, Table table) {
+        return TvrTableSnapshot.empty();
+    }
+
+    /**
+     * Like {@link #getCurrentTvrSnapshot} but lets storages that pin snapshots
+     * per caller attach a reference for {@code mvId} as a side effect. Default
+     * is a pure read.
+     */
+    default TvrTableSnapshot acquireTvrSnapshot(String dbName, Table table, MvId mvId) {
+        return getCurrentTvrSnapshot(dbName, table);
+    }
+
+    /**
+     * NOTE: ensure the last snapshot is at the last of the collection.
+     *
+     * @param dbName  database name
+     * @param table table name
+     * @param fromSnapshotExclusive from snapshot which is exclusive
+     * @param toSnapshotInclusive  to snapshot which is inclusive
+     * @return ordered delta traits which are from the start snapshot to the start snapshot.
+     */
+    default List<TvrTableDeltaTrait> listTableDeltaTraits(String dbName, Table table,
+                                                          TvrTableSnapshot fromSnapshotExclusive,
+                                                          TvrTableSnapshot toSnapshotInclusive) {
+        return Lists.newArrayList();
+>>>>>>> db2d5b956d ([BugFix] Defer JDBC REMARKS fetch out of getTable() hot path (#73488))
     }
 
     default boolean tableExists(ConnectContext context, String dbName, String tblName) {

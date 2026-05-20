@@ -150,9 +150,61 @@ public class CatalogConnectorMetadata implements ConnectorMetadata {
     }
 
     @Override
+<<<<<<< HEAD
     public TableVersionRange getTableVersionRange(String dbName, Table table,
                                                   Optional<ConnectorTableVersion> startVersion,
                                                   Optional<ConnectorTableVersion> endVersion) {
+=======
+    public String getTableComment(ConnectContext context, String dbName, String tblName) {
+        ConnectorMetadata metadata = metadataOfTable(tblName);
+        if (metadata == null) {
+            metadata = metadataOfDb(dbName);
+        }
+        return metadata.getTableComment(context, dbName, tblName);
+    }
+
+    @Override
+    public Table getTableFromQuery(ConnectContext context, String dbName, String query) {
+        return normal.getTableFromQuery(context, dbName, query);
+    }
+
+    @Override
+    public TvrTableSnapshot getCurrentTvrSnapshot(String dbName, Table table) {
+        ConnectorMetadata metadata = metadataOfTable(table);
+        if (metadata == null) {
+            metadata = metadataOfDb(dbName);
+        }
+
+        return metadata.getCurrentTvrSnapshot(dbName, table);
+    }
+
+    @Override
+    public TvrTableSnapshot acquireTvrSnapshot(String dbName, Table table, MvId mvId) {
+        ConnectorMetadata metadata = metadataOfTable(table);
+        if (metadata == null) {
+            metadata = metadataOfDb(dbName);
+        }
+
+        return metadata.acquireTvrSnapshot(dbName, table, mvId);
+    }
+
+    @Override
+    public List<TvrTableDeltaTrait> listTableDeltaTraits(String dbName, Table table,
+                                                         TvrTableSnapshot fromSnapshotExclusive,
+                                                         TvrTableSnapshot toSnapshotInclusive) {
+        ConnectorMetadata metadata = metadataOfTable(table);
+        if (metadata == null) {
+            metadata = metadataOfDb(dbName);
+        }
+
+        return metadata.listTableDeltaTraits(dbName, table, fromSnapshotExclusive, toSnapshotInclusive);
+    }
+
+    @Override
+    public TvrVersionRange getTableVersionRange(String dbName, Table table,
+                                                Optional<ConnectorTableVersion> startVersion,
+                                                Optional<ConnectorTableVersion> endVersion) {
+>>>>>>> db2d5b956d ([BugFix] Defer JDBC REMARKS fetch out of getTable() hot path (#73488))
         ConnectorMetadata metadata = metadataOfTable(table);
         if (metadata == null) {
             metadata = metadataOfDb(dbName);
