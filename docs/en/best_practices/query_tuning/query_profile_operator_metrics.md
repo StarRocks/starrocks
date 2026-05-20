@@ -101,6 +101,34 @@ High-level execution statistics:
 | QueryPeakScheduleTime | Maximum Pipeline ScheduleTime | < 1s normal for simple queries |
 | QuerySpillBytes | Data spilled to disk | < 1GB normal |
 
+### Per-Table Scan Stats
+
+A `PerTableScanStats` summary is attached to the merged query profile, breaking down scan
+work by table and by backend host. It is built by walking the per-instance profile tree
+before the isomorphic merge collapses host-level information, aggregating the `RowsRead`,
+`BytesRead`, and `RawRowsRead` counters that scan operators publish on `UniqueMetrics`
+together with the `Table` info string. Useful for spotting data skew across BE nodes and
+identifying which tables dominate a query's scan cost.
+
+Structure:
+
+```
+PerTableScanStats
+  TableNum / ScanRows / ScanBytes / RawScanRows   -- query-wide totals
+  Table: <table_name>
+    HostNum / ScanRows / ScanBytes / RawScanRows  -- per-table totals
+    Host: <host:port>
+      ScanRows / ScanBytes / RawScanRows          -- per (table, host)
+```
+
+| Metric | Description |
+|--------|-------------|
+| TableNum | Number of distinct tables scanned (top-level only) |
+| HostNum | Number of BE hosts that scanned this table (table-level only) |
+| ScanRows | Filtered rows read, aggregated by scope |
+| ScanBytes | Bytes read after filtering, aggregated by scope (not reported by every connector) |
+| RawScanRows | Raw rows read before predicate filtering, aggregated by scope |
+
 ### Fragment Metrics
 
 Fragment-level execution details:
