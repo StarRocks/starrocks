@@ -531,7 +531,7 @@ Status publish_log_version(TabletManager* tablet_mgr, int64_t tablet_id, std::sp
                 // surface NotFound so FE retries / fails the publish instead of advancing
                 // visibility with incomplete statement data.
                 auto txn_vlog_path = tablet_mgr->txn_vlog_location(tablet_id, log_version);
-                ASSIGN_OR_RETURN(auto fs, FileSystemFactory::CreateSharedFromString(txn_vlog_path));
+                ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(txn_vlog_path));
                 auto check_st = fs->path_exists(txn_vlog_path);
                 if (check_st.ok()) {
                     for (const auto& load_id : txn_infos[i].load_ids()) {
