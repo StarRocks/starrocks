@@ -892,4 +892,38 @@ TEST_F(BruteForceVectorFallbackTest, test_brute_force_dim_mismatch_truncates) {
     chunk_iter->close();
 }
 
+// Documents the underlying Chunk::get_column_by_id behavior that motivates the
+// brute-force fallback defensive check: when called with a cid that is not in
+// the chunk, the non-const overload silently default-inserts into the lookup
+// map and returns _columns[0] — a different column. Downcasting that arbitrary
+// column to ArrayColumn in _compute_brute_force_distances would corrupt memory
+// and crash the BE.
+//
+// _compute_brute_force_distances therefore now guards every read with
+// is_cid_exist() and returns Status::InternalError when both the output chunk
+// and _dict_chunk lack the embedding column — a state that should never arise
+// in production but can otherwise turn into a SIGSEGV.
+TEST(BruteForceChunkLookupContractTest, get_column_by_id_default_inserts_on_missing_cid) {
+    // Build a Chunk holding a single Int64 column at cid=10.
+    auto schema = std::make_shared<Schema>();
+    auto id_field = std::make_shared<Field>(0, "id", get_type_info(TYPE_BIGINT), false);
+    id_field->set_uid(10);
+    schema->append(id_field);
+
+    auto chunk = ChunkHelper::new_chunk(*schema, 1);
+    ASSERT_TRUE(chunk->is_cid_exist(10));
+
+    // Probe with a missing cid (42). is_cid_exist must report false BEFORE the
+    // get_column_by_id call — that's the gate that the defensive check relies on.
+    ASSERT_FALSE(chunk->is_cid_exist(42));
+
+    // After a non-const get_column_by_id on the missing cid, the cid is now
+    // present in the lookup map (default-inserted) and points to _columns[0]
+    // (the Int64 column, not an ArrayColumn). The defensive check must guard
+    // this call to avoid the wrong-type downcast.
+    auto& bogus = chunk->get_column_by_id(42);
+    ASSERT_EQ(bogus.get(), chunk->get_column_by_index(0).get());
+    ASSERT_TRUE(chunk->is_cid_exist(42)); // contract documented: now inserted
+}
+
 } // namespace starrocks

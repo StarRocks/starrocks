@@ -1,0 +1,91 @@
+-- name: test_vector_index_hnsw_lazymat @sequential @native
+
+-- End-to-end correctness for HNSW vector queries under global lazy-materialization.
+--
+-- Three scenarios:
+--   1. SELECT excludes the embedding column → lazy-mat prunes v from scan output
+--      entirely; result must still be correct (id + distance).
+--   2. SELECT includes the embedding column → lazy-mat defers v to a FETCH above
+--      the final TopN; result must include v for the K survivors.
+--   3. IVFPQ keeps v eager (rule does not rewrite order-by, so v reaches TopN
+--      for the refine pass).
+--
+-- This test guards against regressions in OlapScanLazyMaterializationSupport
+-- (the planner-side carve-out) and in the BE brute-force fallback path's
+-- handling of FE-pruned embedding columns.
+
+ADMIN SET FRONTEND CONFIG("enable_experimental_vector" = "true");
+
+CREATE TABLE lm_hnsw (
+    id bigint(20) NOT NULL,
+    v ARRAY<FLOAT> NOT NULL,
+    INDEX index_vector (v) USING VECTOR (
+        "index_type" = "hnsw",
+        "dim" = "5",
+        "metric_type" = "l2_distance",
+        "is_vector_normed" = "false",
+        "M" = "16",
+        "efconstruction" = "100")
+) ENGINE=OLAP
+DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+
+insert into lm_hnsw values
+    (1, [1.0, 1.0, 1.0, 1.0, 1.0]),
+    (2, [2.0, 2.0, 2.0, 2.0, 2.0]),
+    (3, [3.0, 3.0, 3.0, 3.0, 3.0]),
+    (4, [4.0, 4.0, 4.0, 4.0, 4.0]),
+    (5, [5.0, 5.0, 5.0, 5.0, 5.0]);
+
+-- Scenario 1: SELECT id only (v not in projection) — lazy-mat must prune v from
+-- scan output; the result must still be correct top-K ordered by distance.
+select id, approx_l2_distance(v, [1, 1, 1, 1, 1]) as d
+from lm_hnsw
+order by d limit 3;
+
+-- Scenario 2: SELECT v and id (v in projection) — lazy-mat must defer v and
+-- FETCH it for the K survivors. The embedding values must match the original
+-- inserts.
+select id, v, approx_l2_distance(v, [3, 3, 3, 3, 3]) as d
+from lm_hnsw
+order by d limit 2;
+
+-- Scenario 3: query with a non-ANN predicate that also uses v — embedding must
+-- be eager (predicate evaluation needs raw v) and the result must be correct.
+select id, array_length(v) as len, approx_l2_distance(v, [1, 1, 1, 1, 1]) as d
+from lm_hnsw
+where array_length(v) = 5
+order by d limit 3;
+
+drop table lm_hnsw;
+
+-- IVFPQ: rule does not rewrite the order-by; v must remain eager (no FETCH).
+CREATE TABLE lm_ivfpq (
+    id bigint(20) NOT NULL,
+    v ARRAY<FLOAT> NOT NULL,
+    INDEX index_vector (v) USING VECTOR (
+        "index_type" = "ivfpq",
+        "dim" = "4",
+        "metric_type" = "l2_distance",
+        "is_vector_normed" = "false",
+        "nbits" = "8",
+        "m_ivfpq" = "2",
+        "nlist" = "1")
+) ENGINE=OLAP
+DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+
+insert into lm_ivfpq values
+    (1, [1.0, 1.0, 1.0, 1.0]),
+    (2, [2.0, 2.0, 2.0, 2.0]),
+    (3, [3.0, 3.0, 3.0, 3.0]);
+
+select id, approx_l2_distance(v, [1, 1, 1, 1]) as d
+from lm_ivfpq
+order by d limit 2;
+
+drop table lm_ivfpq;
+
+ADMIN SET FRONTEND CONFIG("enable_experimental_vector" = "false");
