@@ -4747,7 +4747,15 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     }
 
     @Override
+<<<<<<< HEAD
     public ParseNode visitOptimizeClause(StarRocksParser.OptimizeClauseContext context) {
+=======
+    public ParseNode visitOptimizeClause(com.starrocks.sql.parser.StarRocksParser.OptimizeClauseContext context) {
+        if (context.keyDesc() == null && context.partitionDesc() == null && context.distributionDesc() == null
+                && context.orderByDesc() == null && context.partitionNames() == null && context.optimizeRange() == null) {
+            throw new ParsingException("ALTER TABLE requires at least one alter clause", createPos(context));
+        }
+>>>>>>> 681fff555c ([BugFix] Reject empty ALTER TABLE clause and improve OPTIMIZE replay (#73352))
         return new OptimizeClause(
                 context.keyDesc() == null ? null : getKeysDesc(context.keyDesc()),
                 context.partitionDesc() == null ? null : getPartitionDesc(context.partitionDesc(), null),
