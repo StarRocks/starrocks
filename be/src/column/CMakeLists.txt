@@ -40,6 +40,7 @@ ADD_BE_LIB(ColumnCore
         append_with_mask.cpp
         column_helper.cpp
         column_helper_time.cpp
+        arrow/arrow_to_starrocks_converter.cpp
         arrow/arrow_to_json_converter.cpp
         arrow/column_to_arrow_converter.cpp
         datum_convert.cpp
