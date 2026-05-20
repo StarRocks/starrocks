@@ -2067,7 +2067,7 @@ public class FrontendServiceImplTest {
                             TGetProfileRequest forwardedRequest = clientInvocation.getArgument(0);
                             Assertions.assertEquals(Lists.newArrayList(queryId), forwardedRequest.getQuery_id());
                             Assertions.assertFalse(forwardedRequest.isIs_request_all_frontend());
-                            if (address.getHostname() == failedFrontend.getHost()) {
+                            if (failedFrontend.getHost().equals(address.getHostname())) {
                                 throw new TException("rpc failure");
                             }
                             return new TGetProfileResponse();
