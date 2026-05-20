@@ -246,6 +246,8 @@ public class StreamLoadScanNode extends LoadScanNode {
         params.setEscape(streamLoadInfo.getEscape());
         params.setStrict_mode(streamLoadInfo.isStrictMode());
         params.setJson_file_size_limit(Config.json_file_size_limit);
+        params.setProperties(streamLoadInfo.getCustomProperties());
+
         if (streamLoadInfo.getConfluentSchemaRegistryUrl() != null) {
             params.setConfluent_schema_registry_url(streamLoadInfo.getConfluentSchemaRegistryUrl());
         }

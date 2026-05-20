@@ -374,10 +374,10 @@ AVRO_SOURCE="avro-release-1.12.0"
 AVRO_MD5SUM="0657ab3ab89d264ccccbca317dbfa54b"
 
 # serdes
-SERDES_DOWNLOAD="https://github.com/confluentinc/libserdes/archive/refs/tags/v7.3.1.tar.gz"
-SERDES_NAME="libserdes-7.3.1.tar.gz"
-SERDES_SOURCE="libserdes-7.3.1"
-SERDES_MD5SUM="61012487a8845f37540710ac4ac2f7ab"
+SERDES_DOWNLOAD="https://github.com/deep-bi/libserdes/archive/refs/heads/feature/mTLS-implementation.tar.gz"
+SERDES_NAME="mTLS-implementation.tar.gz"
+SERDES_SOURCE="libserdes-7.3.1-with-mTLS"
+SERDES_MD5SUM="e8e348988ee954173a63b5134b57acd5"
 
 # lzo
 LZO2_DOWNLOAD="http://www.oberhumer.com/opensource/lzo/download/lzo-2.10.tar.gz"
