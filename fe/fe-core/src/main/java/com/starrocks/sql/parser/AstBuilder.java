@@ -5193,6 +5193,10 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
 
     @Override
     public ParseNode visitOptimizeClause(com.starrocks.sql.parser.StarRocksParser.OptimizeClauseContext context) {
+        if (context.keyDesc() == null && context.partitionDesc() == null && context.distributionDesc() == null
+                && context.orderByDesc() == null && context.partitionNames() == null && context.optimizeRange() == null) {
+            throw new ParsingException("ALTER TABLE requires at least one alter clause", createPos(context));
+        }
         return new OptimizeClause(
                 context.keyDesc() == null ? null : getKeysDesc(context.keyDesc()),
                 context.partitionDesc() == null ? null : getPartitionDesc(context.partitionDesc(), null),
