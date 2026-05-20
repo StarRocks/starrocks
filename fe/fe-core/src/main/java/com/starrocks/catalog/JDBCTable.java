@@ -51,6 +51,11 @@ public class JDBCTable extends Table {
     private String resourceName;
     @SerializedName(value = "qt")
     private boolean queryTable;
+    // True when this table is a derived-table wrapper synthesized for JDBC join pushdown
+    // (jdbcTable holds "(SELECT ... ) sr_merged"). In-memory only: such tables are built
+    // per-query by PushDownJoinToJDBCRule.buildMergedScan and never enter the catalog or
+    // edit log, so no @SerializedName is needed.
+    private boolean derivedTable;
 
     private Map<String, String> connectInfo;
     private String catalogName;
@@ -85,6 +90,22 @@ public class JDBCTable extends Table {
         this.dbName = dbName;
         this.partitionColumns = partitionColumns;
         validate(properties);
+    }
+
+    // Shallow-copy constructor to derive a per-query JDBCTable.
+    // The connection metadata (resource/connectInfo/catalog/db) is referenced as-is;
+    // jdbcTable will be overwritten by setPushDownQuery on the new instance.
+    public JDBCTable(JDBCTable other) {
+        super(other.id, other.name, TableType.JDBC, other.fullSchema);
+        this.jdbcTable = other.jdbcTable;
+        this.resourceName = other.resourceName;
+        this.queryTable = other.queryTable;
+        this.derivedTable = other.derivedTable;
+        this.connectInfo = other.connectInfo;
+        this.catalogName = other.catalogName;
+        this.dbName = other.dbName;
+        this.partitionColumns = other.partitionColumns;
+        this.originalJdbcColumnTypes = other.originalJdbcColumnTypes;
     }
 
     @Override
@@ -166,6 +187,17 @@ public class JDBCTable extends Table {
         queryTable = true;
     }
 
+    public boolean isDerivedTable() {
+        return derivedTable;
+    }
+
+    // Wraps the given query as a derived-table expression and marks the table as such.
+    // The query is assumed to be a valid SELECT produced by the optimizer
+    public void setPushDownQuery(String query) {
+        jdbcTable = "(" + query + ") sr_merged";
+        derivedTable = true;
+    }
+
     public static String normalizePassThroughQuery(String query) {
         String normalizedQuery = StringUtils.trimToEmpty(query);
         while (normalizedQuery.endsWith(";")) {
@@ -241,11 +273,7 @@ public class JDBCTable extends Table {
                     Strings.isNullOrEmpty(properties.get(JDBCResource.DRIVER_CLASS))) {
                 throw new DdlException("all catalog properties must be set");
             }
-            if (properties.get(JDBCTable.JDBC_TABLENAME) == null) {
-                jdbcTable = name;
-            } else {
-                jdbcTable = properties.get(JDBCTable.JDBC_TABLENAME);
-            }
+            jdbcTable = properties.getOrDefault(JDBCTable.JDBC_TABLENAME, name);
             this.connectInfo = properties;
             return;
         }
@@ -327,7 +355,7 @@ public class JDBCTable extends Table {
             tJDBCTable.setJdbc_driver_checksum(connectInfo.get(JDBCResource.CHECK_SUM));
             tJDBCTable.setJdbc_driver_class(connectInfo.get(JDBCResource.DRIVER_CLASS));
 
-            if (connectInfo.get(JDBC_TABLENAME) != null || queryTable || Strings.isNullOrEmpty(dbName)) {
+            if (connectInfo.get(JDBC_TABLENAME) != null || queryTable || derivedTable || Strings.isNullOrEmpty(dbName)) {
                 tJDBCTable.setJdbc_url(uri);
             } else {
                 int delimiterIndex = uri.indexOf("?");

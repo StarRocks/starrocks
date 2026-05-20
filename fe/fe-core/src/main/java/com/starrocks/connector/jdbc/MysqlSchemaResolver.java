@@ -17,8 +17,10 @@ package com.starrocks.connector.jdbc;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
+import com.starrocks.catalog.Column;
 import com.starrocks.catalog.JDBCTable;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.DdlException;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.type.PrimitiveType;
@@ -32,7 +34,9 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Types;
 import java.util.Collection;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 import static java.lang.Math.max;
 
@@ -81,6 +85,24 @@ public class MysqlSchemaResolver extends JDBCSchemaResolver {
             }
             return false;
         }
+    }
+
+    // For MySQL / MariaDB, qualify the table name with the remote database at construction time.
+    // Mirrors the pattern in PostgresSchemaResolver / OracleSchemaResolver.
+    @Override
+    public Table getTable(long id, String name, List<Column> schema, String dbName, String catalogName,
+                          Map<String, String> properties) throws DdlException {
+        Map<String, String> newProp = new HashMap<>(properties);
+        newProp.putIfAbsent(JDBCTable.JDBC_TABLENAME, "`" + dbName + "`.`" + name + "`");
+        return new JDBCTable(id, name, schema, dbName, catalogName, newProp);
+    }
+
+    @Override
+    public Table getTable(long id, String name, List<Column> schema, List<Column> partitionColumns, String dbName,
+                          String catalogName, Map<String, String> properties) throws DdlException {
+        Map<String, String> newProp = new HashMap<>(properties);
+        newProp.putIfAbsent(JDBCTable.JDBC_TABLENAME, "`" + dbName + "`.`" + name + "`");
+        return new JDBCTable(id, name, schema, partitionColumns, dbName, catalogName, newProp);
     }
 
     @Override
@@ -251,7 +273,10 @@ public class MysqlSchemaResolver extends JDBCSchemaResolver {
         String query = getPartitionQuery(table);
         try (PreparedStatement ps = connection.prepareStatement(query)) {
             ps.setString(1, jdbcTable.getCatalogDBName());
-            ps.setString(2, jdbcTable.getCatalogTableName());
+            // Bind the raw remote table name. getCatalogTableName() is the FROM-clause form,
+            // which after JDBC_TABLENAME injection is a quoted `db`.`tbl` and would never match
+            // information_schema.partitions.TABLE_NAME.
+            ps.setString(2, jdbcTable.getName());
             ps.setQueryTimeout(getQueryTimeoutSeconds());
             ResultSet rs = ps.executeQuery();
             ImmutableList.Builder<Partition> list = ImmutableList.builder();

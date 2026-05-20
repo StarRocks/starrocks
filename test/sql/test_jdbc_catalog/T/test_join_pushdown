@@ -1,0 +1,207 @@
+-- name: test_jdbc_catalog_join_pushdown
+-- prepare external MySQL tables
+shell: mysql -h${external_mysql_ip} -u${external_mysql_user} -p${external_mysql_password} -P${external_mysql_port} -e 'drop database if exists db_join_pushdown_${uuid0}; create database db_join_pushdown_${uuid0};'
+shell: mysql -h${external_mysql_ip} -u${external_mysql_user} -p${external_mysql_password} -P${external_mysql_port} -e 'use db_join_pushdown_${uuid0}; CREATE TABLE orders (order_id int not null, customer_id int not null, amount int not null, status varchar(20));'
+shell: mysql -h${external_mysql_ip} -u${external_mysql_user} -p${external_mysql_password} -P${external_mysql_port} -e 'use db_join_pushdown_${uuid0}; CREATE TABLE customers (customer_id int not null, region varchar(20));'
+shell: mysql -h${external_mysql_ip} -u${external_mysql_user} -p${external_mysql_password} -P${external_mysql_port} -e 'use db_join_pushdown_${uuid0}; CREATE TABLE regions (customer_id int not null, region_group varchar(20));'
+shell: mysql -h${external_mysql_ip} -u${external_mysql_user} -p${external_mysql_password} -P${external_mysql_port} -e 'use db_join_pushdown_${uuid0}; INSERT INTO orders VALUES (1,10,15,"open"),(2,10,25,"open"),(3,20,30,"paid"),(4,30,45,"open"),(5,40,55,"paid"),(6,50,18,NULL);'
+shell: mysql -h${external_mysql_ip} -u${external_mysql_user} -p${external_mysql_password} -P${external_mysql_port} -e 'use db_join_pushdown_${uuid0}; INSERT INTO customers VALUES (10,"east"),(20,"west"),(30,"north"),(50,"east");'
+shell: mysql -h${external_mysql_ip} -u${external_mysql_user} -p${external_mysql_password} -P${external_mysql_port} -e 'use db_join_pushdown_${uuid0}; INSERT INTO regions VALUES (10,"coastal"),(20,"inland"),(30,"inland");'
+
+-- create catalog
+set catalog default_catalog;
+create external catalog jdbc_join_pushdown_${uuid0}
+properties
+(
+    "type"="jdbc",
+    "user"="${external_mysql_user}",
+    "password"="${external_mysql_password}",
+    "jdbc_uri"="jdbc:mysql://${external_mysql_ip}:${external_mysql_port}",
+    "driver_url"="${jdbc_url}",
+    "driver_class"="com.mysql.cj.jdbc.Driver"
+);
+
+create external catalog jdbc_join_pushdown_alt_${uuid0}
+properties
+(
+    "type"="jdbc",
+    "user"="${external_mysql_user}",
+    "password"="${external_mysql_password}",
+    "jdbc_uri"="jdbc:mysql://${external_mysql_ip}:${external_mysql_port}",
+    "driver_url"="${jdbc_url}",
+    "driver_class"="com.mysql.cj.jdbc.Driver"
+);
+
+create database db_join_pushdown_internal_${uuid0};
+create table db_join_pushdown_internal_${uuid0}.vip_customers (
+    customer_id int,
+    label varchar(20)
+)
+duplicate key(customer_id)
+distributed by hash(customer_id) buckets 1
+properties("replication_num" = "1");
+insert into db_join_pushdown_internal_${uuid0}.vip_customers values (10, 'gold'), (30, 'silver'), (40, 'bronze');
+
+set enable_jdbc_join_push_down=true;
+
+explain select o.order_id, c.region, o.amount
+from jdbc_join_pushdown_${uuid0}.db_join_pushdown_${uuid0}.orders o
+join jdbc_join_pushdown_${uuid0}.db_join_pushdown_${uuid0}.customers c
+on o.customer_id = c.customer_id
+where o.amount >= 20 and c.region in ('east', 'west')
+order by o.order_id;
+
+select o.order_id, c.region, o.amount
+from jdbc_join_pushdown_${uuid0}.db_join_pushdown_${uuid0}.orders o
+join jdbc_join_pushdown_${uuid0}.db_join_pushdown_${uuid0}.customers c
+on o.customer_id = c.customer_id
+where o.amount >= 20 and c.region in ('east', 'west')
+order by o.order_id;
+
+-- Predicate-only columns can introduce a JDBC scan projection and should not be rewritten.
+explain select o.order_id, c.region
+from jdbc_join_pushdown_${uuid0}.db_join_pushdown_${uuid0}.orders o
+join jdbc_join_pushdown_${uuid0}.db_join_pushdown_${uuid0}.customers c
+on o.customer_id = c.customer_id
+where o.amount >= 20
+order by o.order_id;
+
+select o.order_id, c.region
+from jdbc_join_pushdown_${uuid0}.db_join_pushdown_${uuid0}.orders o
+join jdbc_join_pushdown_${uuid0}.db_join_pushdown_${uuid0}.customers c
+on o.customer_id = c.customer_id
+where o.amount >= 20
+order by o.order_id;
+
+explain select o.order_id, r.region_group, o.status, o.amount
+from jdbc_join_pushdown_${uuid0}.db_join_pushdown_${uuid0}.orders o
+join jdbc_join_pushdown_${uuid0}.db_join_pushdown_${uuid0}.customers c
+on o.customer_id = c.customer_id
+join jdbc_join_pushdown_${uuid0}.db_join_pushdown_${uuid0}.regions r
+on c.customer_id = r.customer_id
+where o.amount between 20 and 50
+order by o.order_id;
+
+select o.order_id, r.region_group, o.status, o.amount
+from jdbc_join_pushdown_${uuid0}.db_join_pushdown_${uuid0}.orders o
+join jdbc_join_pushdown_${uuid0}.db_join_pushdown_${uuid0}.customers c
+on o.customer_id = c.customer_id
+join jdbc_join_pushdown_${uuid0}.db_join_pushdown_${uuid0}.regions r
+on c.customer_id = r.customer_id
+where o.amount between 20 and 50
+order by o.order_id;
+
+explain select o.order_id, c.region, coalesce(o.status, 'missing')
+from jdbc_join_pushdown_${uuid0}.db_join_pushdown_${uuid0}.orders o
+join jdbc_join_pushdown_${uuid0}.db_join_pushdown_${uuid0}.customers c
+on o.customer_id = c.customer_id
+where o.status is null
+order by o.order_id;
+
+select o.order_id, c.region, coalesce(o.status, 'missing')
+from jdbc_join_pushdown_${uuid0}.db_join_pushdown_${uuid0}.orders o
+join jdbc_join_pushdown_${uuid0}.db_join_pushdown_${uuid0}.customers c
+on o.customer_id = c.customer_id
+where o.status is null
+order by o.order_id;
+
+explain select o.order_id, c.customer_id
+from jdbc_join_pushdown_${uuid0}.db_join_pushdown_${uuid0}.orders o
+join jdbc_join_pushdown_${uuid0}.db_join_pushdown_${uuid0}.customers c
+on abs(o.customer_id - 20) = c.customer_id
+where o.order_id in (1, 2)
+order by o.order_id, c.customer_id;
+
+select o.order_id, c.customer_id
+from jdbc_join_pushdown_${uuid0}.db_join_pushdown_${uuid0}.orders o
+join jdbc_join_pushdown_${uuid0}.db_join_pushdown_${uuid0}.customers c
+on abs(o.customer_id - 20) = c.customer_id
+where o.order_id in (1, 2)
+order by o.order_id, c.customer_id;
+
+explain select o.order_id, c.region, o.amount
+from jdbc_join_pushdown_${uuid0}.db_join_pushdown_${uuid0}.orders o
+left join jdbc_join_pushdown_${uuid0}.db_join_pushdown_${uuid0}.customers c
+on o.customer_id = c.customer_id
+where o.amount >= 45
+order by o.order_id;
+
+select o.order_id, c.region, o.amount
+from jdbc_join_pushdown_${uuid0}.db_join_pushdown_${uuid0}.orders o
+left join jdbc_join_pushdown_${uuid0}.db_join_pushdown_${uuid0}.customers c
+on o.customer_id = c.customer_id
+where o.amount >= 45
+order by o.order_id;
+
+explain select o.order_id, c.region, v.label, o.amount
+from jdbc_join_pushdown_${uuid0}.db_join_pushdown_${uuid0}.orders o
+join jdbc_join_pushdown_${uuid0}.db_join_pushdown_${uuid0}.customers c
+on o.customer_id = c.customer_id
+join default_catalog.db_join_pushdown_internal_${uuid0}.vip_customers v
+on o.customer_id = v.customer_id
+where o.amount >= 20
+order by o.order_id;
+
+select o.order_id, c.region, v.label, o.amount
+from jdbc_join_pushdown_${uuid0}.db_join_pushdown_${uuid0}.orders o
+join jdbc_join_pushdown_${uuid0}.db_join_pushdown_${uuid0}.customers c
+on o.customer_id = c.customer_id
+join default_catalog.db_join_pushdown_internal_${uuid0}.vip_customers v
+on o.customer_id = v.customer_id
+where o.amount >= 20
+order by o.order_id;
+
+explain select o.order_id, c.region, o.amount
+from jdbc_join_pushdown_${uuid0}.db_join_pushdown_${uuid0}.orders o
+join jdbc_join_pushdown_alt_${uuid0}.db_join_pushdown_${uuid0}.customers c
+on o.customer_id = c.customer_id
+where o.order_id in (2, 3, 4)
+order by o.order_id;
+
+select o.order_id, c.region, o.amount
+from jdbc_join_pushdown_${uuid0}.db_join_pushdown_${uuid0}.orders o
+join jdbc_join_pushdown_alt_${uuid0}.db_join_pushdown_${uuid0}.customers c
+on o.customer_id = c.customer_id
+where o.order_id in (2, 3, 4)
+order by o.order_id;
+
+explain select o.order_id, c.region, ao.order_id, ac.region
+from jdbc_join_pushdown_${uuid0}.db_join_pushdown_${uuid0}.orders o
+join jdbc_join_pushdown_${uuid0}.db_join_pushdown_${uuid0}.customers c
+on o.customer_id = c.customer_id
+join jdbc_join_pushdown_alt_${uuid0}.db_join_pushdown_${uuid0}.orders ao
+join jdbc_join_pushdown_alt_${uuid0}.db_join_pushdown_${uuid0}.customers ac
+on ao.customer_id = ac.customer_id
+where o.order_id = 2 and ao.order_id in (3, 4)
+order by o.order_id, ao.order_id;
+
+select o.order_id, c.region, ao.order_id, ac.region
+from jdbc_join_pushdown_${uuid0}.db_join_pushdown_${uuid0}.orders o
+join jdbc_join_pushdown_${uuid0}.db_join_pushdown_${uuid0}.customers c
+on o.customer_id = c.customer_id
+join jdbc_join_pushdown_alt_${uuid0}.db_join_pushdown_${uuid0}.orders ao
+join jdbc_join_pushdown_alt_${uuid0}.db_join_pushdown_${uuid0}.customers ac
+on ao.customer_id = ac.customer_id
+where o.order_id = 2 and ao.order_id in (3, 4)
+order by o.order_id, ao.order_id;
+
+set enable_jdbc_join_push_down=false;
+explain select o.order_id, c.region, o.amount
+from jdbc_join_pushdown_${uuid0}.db_join_pushdown_${uuid0}.orders o
+join jdbc_join_pushdown_${uuid0}.db_join_pushdown_${uuid0}.customers c
+on o.customer_id = c.customer_id
+where o.amount >= 20 and c.region in ('east', 'west')
+order by o.order_id;
+
+select o.order_id, c.region, o.amount
+from jdbc_join_pushdown_${uuid0}.db_join_pushdown_${uuid0}.orders o
+join jdbc_join_pushdown_${uuid0}.db_join_pushdown_${uuid0}.customers c
+on o.customer_id = c.customer_id
+where o.amount >= 20 and c.region in ('east', 'west')
+order by o.order_id;
+
+-- cleanup
+drop catalog jdbc_join_pushdown_${uuid0};
+drop catalog jdbc_join_pushdown_alt_${uuid0};
+drop database db_join_pushdown_internal_${uuid0} force;
+shell: mysql -h${external_mysql_ip} -u${external_mysql_user} -p${external_mysql_password} -P${external_mysql_port} -e 'drop database db_join_pushdown_${uuid0};'

@@ -21,6 +21,7 @@ import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJDBCScanOperator;
 
 public class PhysicalJDBCScanOperator extends PhysicalScanOperator {
+
     public PhysicalJDBCScanOperator(LogicalJDBCScanOperator scanOperator) {
         super(OperatorType.PHYSICAL_JDBC_SCAN, scanOperator);
     }

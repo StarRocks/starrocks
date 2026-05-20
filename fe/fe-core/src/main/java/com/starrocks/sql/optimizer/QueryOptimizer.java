@@ -75,6 +75,7 @@ import com.starrocks.sql.optimizer.rule.transformation.PullUpScanPredicateRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownAggregateGroupingSetsRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownAsofJoinTemporalExpressionToChildProject;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownJoinOnExpressionToChildProject;
+import com.starrocks.sql.optimizer.rule.transformation.PushDownJoinToJDBCRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownLimitRankingWindowRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownPredicateRankingWindowRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownProjectLimitRule;
@@ -700,6 +701,16 @@ public class QueryOptimizer extends Optimizer {
         tree = pushDownAggregation(tree, rootTaskContext, requiredColumns);
         scheduler.rewriteOnce(tree, rootTaskContext, RuleSet.MERGE_LIMIT_RULES);
 
+        if (sessionVariable.isEnableJdbcJoinPushDown()) {
+            scheduler.rewriteIterative(tree, rootTaskContext, new MergeProjectWithChildRule());
+            scheduler.rewriteOnce(tree, rootTaskContext, new PushDownJoinToJDBCRule());
+            tree = new SeparateProjectRule().rewrite(tree, rootTaskContext);
+            deriveLogicalProperty(tree);
+            rootTaskContext.setRequiredColumns(requiredColumns.clone());
+            scheduler.rewriteOnce(tree, rootTaskContext, RuleSet.PRUNE_COLUMNS_RULES);
+            scheduler.rewriteOnce(tree, rootTaskContext, RuleSet.MERGE_LIMIT_RULES);
+        }
+
         CTEUtils.collectCteOperators(tree, context);
         // inline CTE if consume use once
         while (cteContext.hasInlineCTE()) {
@@ -720,6 +731,7 @@ public class QueryOptimizer extends Optimizer {
         scheduler.rewriteIterative(tree, rootTaskContext, new MergeProjectWithChildRule());
         scheduler.rewriteOnce(tree, rootTaskContext, new EliminateSortColumnWithEqualityPredicateRule());
         scheduler.rewriteOnce(tree, rootTaskContext, new PushDownTopNBelowOuterJoinRule());
+
         // intersect rewrite depend on statistics
         Utils.calculateStatistics(tree, rootTaskContext.getOptimizerContext());
         scheduler.rewriteOnce(tree, rootTaskContext, RuleSet.INTERSECT_REWRITE_RULES);

@@ -57,6 +57,14 @@ import java.util.regex.Pattern;
 public class JDBCScanNode extends ScanNode {
     private final List<String> columns = new ArrayList<>();
     private final List<String> filters = new ArrayList<>();
+    // The table expression used in the FROM clause.
+    // For a base-table scan, this is the quoted remote table name (e.g., `tbl0`).
+    // For a pushed-down multi-table JOIN, this is a wrapped subquery
+    // (e.g., "(SELECT ... FROM t0 JOIN t1 ON ...) sr_merged") whose wrapping is set on a
+    // per-query JDBCTable via JDBCTable.setPushDownQuery (table.isDerivedTable() == true).
+    // For a JDBC query-table function (pass-through query), this is also a wrapped
+    // subquery (e.g., "(select ...) starrocks_query") set via JDBCTable.setPassThroughQuery
+    // (table.isQueryTable() == true); column/filter generation must still run for it.
     private String tableName;
     private JDBCTable table;
 
@@ -104,15 +112,20 @@ public class JDBCScanNode extends ScanNode {
     public JDBCScanNode(PlanNodeId id, TupleDescriptor desc, JDBCTable tbl) {
         super(id, desc, "SCAN JDBC");
         table = tbl;
-        if (tbl.isQueryTable()) {
+        if (tbl.isQueryTable() || tbl.isDerivedTable()) {
             tableName = tbl.getCatalogTableName();
         } else {
-            String objectIdentifier = getIdentifierSymbol();
+            String objectIdentifier = getIdentifierSymbol(getJdbcUri());
             tableName = wrapWithIdentifier(tbl.getCatalogTableName(), objectIdentifier);
         }
     }
 
-    private String wrapWithIdentifier(String name, String identifier) {
+    /**
+     * Wrap a dot-separated identifier (e.g., {@code db.tbl} or a single {@code tbl}) by quoting
+     * each segment with {@code identifier} (e.g., {@code `}, {@code "}). Already-quoted segments
+     * are left alone.
+     */
+    public static String wrapWithIdentifier(String name, String identifier) {
         if (name == null) {
             return "";
         }
@@ -146,13 +159,6 @@ public class JDBCScanNode extends ScanNode {
         return helper.addValue(super.debugString()).toString();
     }
 
-    @Override
-    public void finalizeStats() throws StarRocksException {
-        createJDBCTableColumns();
-        createJDBCTableFilters();
-        computeStats();
-    }
-
     public void computeColumnsAndFilters() {
         createJDBCTableColumns();
         createJDBCTableFilters();
@@ -176,11 +182,15 @@ public class JDBCScanNode extends ScanNode {
             sql.append(Joiner.on(") AND (").join(filters));
             sql.append(")");
         }
+
+        if (limit > 0) {
+            sql.append(" LIMIT ").append(limit);
+        }
         return sql.toString();
     }
 
     private void createJDBCTableColumns() {
-        String objectIdentifier = getIdentifierSymbol();
+        String objectIdentifier = getIdentifierSymbol(getJdbcUri());
         for (SlotDescriptor slot : desc.getSlots()) {
             if (!slot.isMaterialized()) {
                 continue;
@@ -206,8 +216,10 @@ public class JDBCScanNode extends ScanNode {
         return resource != null ? resource.getProperty(JDBCResource.URI) : table.getConnectInfo(JDBCResource.URI);
     }
 
-    private String getIdentifierSymbol() {
-        String jdbcUri = getJdbcUri();
+    /**
+     * Return the SQL identifier quote character for the given JDBC URI's dialect.
+     */
+    public static String getIdentifierSymbol(String jdbcUri) {
         if (jdbcUri == null) {
             return "";
         }
@@ -388,6 +400,13 @@ public class JDBCScanNode extends ScanNode {
         return new OracleTemporalLiteralExpr(keyword + " '" + escapedValue + "'");
     }
 
+    /**
+     * Converts scan conjuncts to JDBC-side predicate strings and appends them to
+     * {@link #filters}. Slot labels are rewritten with the dialect identifier quote so that
+     * {@link AstToStringBuilder} emits valid SQL for the remote DB. Merged push-down scans
+     * always have an empty conjuncts list (all filters are baked into the pushdown SQL string),
+     * so this method becomes a no-op for them via the early return below.
+     */
     private void createJDBCTableFilters() {
         if (conjuncts.isEmpty()) {
             return;
@@ -395,7 +414,7 @@ public class JDBCScanNode extends ScanNode {
         List<SlotRef> slotRefs = Lists.newArrayList();
         ExprUtils.collectList(conjuncts, SlotRef.class, slotRefs);
         ExprSubstitutionMap sMap = new ExprSubstitutionMap();
-        String identifier = getIdentifierSymbol();
+        String identifier = getIdentifierSymbol(getJdbcUri());
         for (SlotRef slotRef : slotRefs) {
             SlotRef tmpRef = (SlotRef) slotRef.clone();
             tmpRef.setTblName(null);

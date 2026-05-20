@@ -2241,8 +2241,9 @@ public class PlanFragmentBuilder {
             }
             tupleDescriptor.computeMemLayout();
 
-            JDBCScanNode scanNode = new JDBCScanNode(context.getNextNodeId(), tupleDescriptor,
-                    (JDBCTable) node.getTable());
+            JDBCScanNode scanNode =
+                    new JDBCScanNode(context.getNextNodeId(), tupleDescriptor, (JDBCTable) node.getTable());
+
             currentExecGroup.add(scanNode, true);
 
             // set predicate

@@ -27,6 +27,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import java.util.Map;
 
 public class LogicalJDBCScanOperator extends LogicalScanOperator {
+
     public LogicalJDBCScanOperator(Table table,
                                    Map<ColumnRefOperator, Column> columnRefOperatorColumnMap,
                                    Map<Column, ColumnRefOperator> columnMetaToColRefMap,

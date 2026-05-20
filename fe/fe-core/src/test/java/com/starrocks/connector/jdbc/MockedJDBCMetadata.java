@@ -55,6 +55,7 @@ public class MockedJDBCMetadata implements ConnectorMetadata {
     public static final String MOCKED_STRING_PARTITIONED_TABLE_NAME2 = "part_tbl2";
     public static final String MOCKED_STRING_PARTITIONED_TABLE_NAME3 = "part_tbl3";
     private Map<String, String> properties;
+    private String catalogName;
     private Map<String, JDBCTable> tables = new HashMap<>();
 
     private List<String> partitionNames = Arrays.asList("20230801", "20230802", "20230803", "MAXVALUE");
@@ -67,9 +68,14 @@ public class MockedJDBCMetadata implements ConnectorMetadata {
     private static ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
 
     public MockedJDBCMetadata(Map<String, String> properties) {
+        this(properties, MOCKED_JDBC_CATALOG_NAME);
+    }
+
+    public MockedJDBCMetadata(Map<String, String> properties, String catalogName) {
         readLock();
         try {
             this.properties = properties;
+            this.catalogName = catalogName;
         } finally {
             readUnlock();
         }
@@ -81,22 +87,22 @@ public class MockedJDBCMetadata implements ConnectorMetadata {
             if (tables.get(tblName) == null) {
                 if (tblName.equals(MOCKED_PARTITIONED_TABLE_NAME0)) {
                     tables.put(tblName, new JDBCTable(100000, MOCKED_PARTITIONED_TABLE_NAME0, getSchema(tblName),
-                            getPartitionColumns(tblName), MOCKED_PARTITIONED_DB_NAME, MOCKED_JDBC_CATALOG_NAME, properties));
+                            getPartitionColumns(tblName), MOCKED_PARTITIONED_DB_NAME, catalogName, properties));
                 } else if (tblName.equals(MOCKED_PARTITIONED_TABLE_NAME1)) {
                     tables.put(tblName, new JDBCTable(100001, MOCKED_PARTITIONED_TABLE_NAME1, getSchema(tblName),
-                            getPartitionColumns(tblName), MOCKED_PARTITIONED_DB_NAME, MOCKED_JDBC_CATALOG_NAME, properties));
+                            getPartitionColumns(tblName), MOCKED_PARTITIONED_DB_NAME, catalogName, properties));
                 } else if (tblName.equals(MOCKED_PARTITIONED_TABLE_NAME2)) {
                     tables.put(tblName, new JDBCTable(100002, MOCKED_PARTITIONED_TABLE_NAME2, getSchema(tblName),
-                            getPartitionColumns(tblName), MOCKED_PARTITIONED_DB_NAME, MOCKED_JDBC_CATALOG_NAME, properties));
+                            getPartitionColumns(tblName), MOCKED_PARTITIONED_DB_NAME, catalogName, properties));
                 } else if (tblName.equals(MOCKED_PARTITIONED_TABLE_NAME3)) {
                     tables.put(tblName, new JDBCTable(100003, MOCKED_PARTITIONED_TABLE_NAME3, getSchema(tblName),
-                            getPartitionColumns(tblName), MOCKED_PARTITIONED_DB_NAME, MOCKED_JDBC_CATALOG_NAME, properties));
+                            getPartitionColumns(tblName), MOCKED_PARTITIONED_DB_NAME, catalogName, properties));
                 } else if (tblName.equals(MOCKED_PARTITIONED_TABLE_NAME5)) {
                     tables.put(tblName, new JDBCTable(100005, MOCKED_PARTITIONED_TABLE_NAME5, getSchema(tblName),
-                            getPartitionColumns(tblName), MOCKED_PARTITIONED_DB_NAME, MOCKED_JDBC_CATALOG_NAME, properties));
+                            getPartitionColumns(tblName), MOCKED_PARTITIONED_DB_NAME, catalogName, properties));
                 } else {
                     tables.put(tblName, new JDBCTable(tblName.hashCode(), tblName, getSchema(tblName),
-                            getPartitionColumns(tblName), MOCKED_PARTITIONED_DB_NAME, MOCKED_JDBC_CATALOG_NAME, properties));
+                            getPartitionColumns(tblName), MOCKED_PARTITIONED_DB_NAME, catalogName, properties));
                 }
             }
             return tables.get(tblName);

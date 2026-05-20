@@ -1,0 +1,426 @@
+-- name: test_jdbc_catalog_join_pushdown
+shell: mysql -h${external_mysql_ip} -u${external_mysql_user} -p${external_mysql_password} -P${external_mysql_port} -e 'drop database if exists db_join_pushdown_${uuid0}; create database db_join_pushdown_${uuid0};'
+-- result:
+0
+
+-- !result
+shell: mysql -h${external_mysql_ip} -u${external_mysql_user} -p${external_mysql_password} -P${external_mysql_port} -e 'use db_join_pushdown_${uuid0}; CREATE TABLE orders (order_id int not null, customer_id int not null, amount int not null, status varchar(20));'
+-- result:
+0
+
+-- !result
+shell: mysql -h${external_mysql_ip} -u${external_mysql_user} -p${external_mysql_password} -P${external_mysql_port} -e 'use db_join_pushdown_${uuid0}; CREATE TABLE customers (customer_id int not null, region varchar(20));'
+-- result:
+0
+
+-- !result
+shell: mysql -h${external_mysql_ip} -u${external_mysql_user} -p${external_mysql_password} -P${external_mysql_port} -e 'use db_join_pushdown_${uuid0}; CREATE TABLE regions (customer_id int not null, region_group varchar(20));'
+-- result:
+0
+
+-- !result
+shell: mysql -h${external_mysql_ip} -u${external_mysql_user} -p${external_mysql_password} -P${external_mysql_port} -e 'use db_join_pushdown_${uuid0}; INSERT INTO orders VALUES (1,10,15,"open"),(2,10,25,"open"),(3,20,30,"paid"),(4,30,45,"open"),(5,40,55,"paid"),(6,50,18,NULL);'
+-- result:
+0
+
+-- !result
+shell: mysql -h${external_mysql_ip} -u${external_mysql_user} -p${external_mysql_password} -P${external_mysql_port} -e 'use db_join_pushdown_${uuid0}; INSERT INTO customers VALUES (10,"east"),(20,"west"),(30,"north"),(50,"east");'
+-- result:
+0
+
+-- !result
+shell: mysql -h${external_mysql_ip} -u${external_mysql_user} -p${external_mysql_password} -P${external_mysql_port} -e 'use db_join_pushdown_${uuid0}; INSERT INTO regions VALUES (10,"coastal"),(20,"inland"),(30,"inland");'
+-- result:
+0
+
+-- !result
+set catalog default_catalog;
+-- result:
+-- !result
+create external catalog jdbc_join_pushdown_${uuid0}
+properties
+(
+    "type"="jdbc",
+    "user"="${external_mysql_user}",
+    "password"="${external_mysql_password}",
+    "jdbc_uri"="jdbc:mysql://${external_mysql_ip}:${external_mysql_port}",
+    "driver_url"="${jdbc_url}",
+    "driver_class"="com.mysql.cj.jdbc.Driver"
+);
+-- result:
+-- !result
+create external catalog jdbc_join_pushdown_alt_${uuid0}
+properties
+(
+    "type"="jdbc",
+    "user"="${external_mysql_user}",
+    "password"="${external_mysql_password}",
+    "jdbc_uri"="jdbc:mysql://${external_mysql_ip}:${external_mysql_port}",
+    "driver_url"="${jdbc_url}",
+    "driver_class"="com.mysql.cj.jdbc.Driver"
+);
+-- result:
+-- !result
+create database db_join_pushdown_internal_${uuid0};
+-- result:
+-- !result
+create table db_join_pushdown_internal_${uuid0}.vip_customers (
+    customer_id int,
+    label varchar(20)
+)
+duplicate key(customer_id)
+distributed by hash(customer_id) buckets 1
+properties("replication_num" = "1");
+-- result:
+-- !result
+insert into db_join_pushdown_internal_${uuid0}.vip_customers values (10, 'gold'), (30, 'silver'), (40, 'bronze');
+-- result:
+-- !result
+set enable_jdbc_join_push_down=true;
+-- result:
+-- !result
+explain select o.order_id, c.region, o.amount
+from jdbc_join_pushdown_${uuid0}.db_join_pushdown_${uuid0}.orders o
+join jdbc_join_pushdown_${uuid0}.db_join_pushdown_${uuid0}.customers c
+on o.customer_id = c.customer_id
+where o.amount >= 20 and c.region in ('east', 'west')
+order by o.order_id;
+-- result:
+[REGEX](?s)^(?!.*HASH JOIN).*PLAN FRAGMENT 1[ \t]*
+.*
+  [0-9]+:SCAN JDBC[ \t]*
+     TABLE: \(SELECT t0\.`order_id` AS c1, t0\.`customer_id` AS c2, t0\.`amount` AS c3, t1\.`customer_id` AS c5, t1\.`region` AS c6 FROM \(SELECT `order_id`, `customer_id`, `amount` FROM `db_join_pushdown_[a-f0-9]+`\.`orders` WHERE \(`amount` >= 20\)\) t0 INNER JOIN \(SELECT `customer_id`, `region` FROM `db_join_pushdown_[a-f0-9]+`\.`customers` WHERE \(`region` IN \('east', 'west'\)\)\) t1 ON \(t0\.`customer_id` = t1\.`customer_id`\)\) sr_merged[ \t]*
+     QUERY: SELECT `c1`, `c3`, `c6` FROM \(SELECT t0\.`order_id` AS c1, t0\.`customer_id` AS c2, t0\.`amount` AS c3, t1\.`customer_id` AS c5, t1\.`region` AS c6 FROM \(SELECT `order_id`, `customer_id`, `amount` FROM `db_join_pushdown_[a-f0-9]+`\.`orders` WHERE \(`amount` >= 20\)\) t0 INNER JOIN \(SELECT `customer_id`, `region` FROM `db_join_pushdown_[a-f0-9]+`\.`customers` WHERE \(`region` IN \('east', 'west'\)\)\) t1 ON \(t0\.`customer_id` = t1\.`customer_id`\)\) sr_merged[ \t]*
+-- !result
+select o.order_id, c.region, o.amount
+from jdbc_join_pushdown_${uuid0}.db_join_pushdown_${uuid0}.orders o
+join jdbc_join_pushdown_${uuid0}.db_join_pushdown_${uuid0}.customers c
+on o.customer_id = c.customer_id
+where o.amount >= 20 and c.region in ('east', 'west')
+order by o.order_id;
+-- result:
+2	east	25
+3	west	30
+-- !result
+explain select o.order_id, c.region
+from jdbc_join_pushdown_${uuid0}.db_join_pushdown_${uuid0}.orders o
+join jdbc_join_pushdown_${uuid0}.db_join_pushdown_${uuid0}.customers c
+on o.customer_id = c.customer_id
+where o.amount >= 20
+order by o.order_id;
+-- result:
+[REGEX](?s)^(?!.*sr_merged).*PLAN FRAGMENT 1[ \t]*
+.*
+  [0-9]+:HASH JOIN[ \t]*
+  \|  join op: INNER JOIN .*[ \t]*
+  \|  equal join conjunct: .*[ \t]*
+.*
+PLAN FRAGMENT 2[ \t]*
+.*
+  [0-9]+:SCAN JDBC[ \t]*
+     TABLE: `db_join_pushdown_[a-f0-9]+`\.`orders`[ \t]*
+     QUERY: SELECT `order_id`, `customer_id`, `amount` FROM `db_join_pushdown_[a-f0-9]+`\.`orders` WHERE \(`amount` >= 20\)[ \t]*
+.*
+PLAN FRAGMENT 3[ \t]*
+.*
+  [0-9]+:SCAN JDBC[ \t]*
+     TABLE: `db_join_pushdown_[a-f0-9]+`\.`customers`[ \t]*
+     QUERY: SELECT `customer_id`, `region` FROM `db_join_pushdown_[a-f0-9]+`\.`customers` WHERE \(`customer_id` IS NOT NULL\)[ \t]*
+-- !result
+select o.order_id, c.region
+from jdbc_join_pushdown_${uuid0}.db_join_pushdown_${uuid0}.orders o
+join jdbc_join_pushdown_${uuid0}.db_join_pushdown_${uuid0}.customers c
+on o.customer_id = c.customer_id
+where o.amount >= 20
+order by o.order_id;
+-- result:
+2	east
+3	west
+4	north
+-- !result
+explain select o.order_id, r.region_group, o.status, o.amount
+from jdbc_join_pushdown_${uuid0}.db_join_pushdown_${uuid0}.orders o
+join jdbc_join_pushdown_${uuid0}.db_join_pushdown_${uuid0}.customers c
+on o.customer_id = c.customer_id
+join jdbc_join_pushdown_${uuid0}.db_join_pushdown_${uuid0}.regions r
+on c.customer_id = r.customer_id
+where o.amount between 20 and 50
+order by o.order_id;
+-- result:
+[REGEX](?s)^(?!.*HASH JOIN).*PLAN FRAGMENT 1[ \t]*
+.*
+  [0-9]+:SCAN JDBC[ \t]*
+     TABLE: \(SELECT t0\.`order_id` AS c1, t0\.`customer_id` AS c2, t0\.`amount` AS c3, t0\.`status` AS c4, t1\.`customer_id` AS c5, t2\.`customer_id` AS c7, t2\.`region_group` AS c8 FROM \(SELECT `order_id`, `customer_id`, `amount`, `status` FROM `db_join_pushdown_[a-f0-9]+`\.`orders` WHERE \(`amount` >= 20\) AND \(`amount` <= 50\)\) t0 INNER JOIN \(SELECT `customer_id` FROM `db_join_pushdown_[a-f0-9]+`\.`customers` WHERE \(`customer_id` IS NOT NULL\)\) t1 ON \(t0\.`customer_id` = t1\.`customer_id`\) INNER JOIN \(SELECT `customer_id`, `region_group` FROM `db_join_pushdown_[a-f0-9]+`\.`regions` WHERE \(`customer_id` IS NOT NULL\)\) t2 ON \(t1\.`customer_id` = t2\.`customer_id`\)\) sr_merged[ \t]*
+     QUERY: SELECT `c1`, `c3`, `c4`, `c8` FROM \(SELECT t0\.`order_id` AS c1, t0\.`customer_id` AS c2, t0\.`amount` AS c3, t0\.`status` AS c4, t1\.`customer_id` AS c5, t2\.`customer_id` AS c7, t2\.`region_group` AS c8 FROM \(SELECT `order_id`, `customer_id`, `amount`, `status` FROM `db_join_pushdown_[a-f0-9]+`\.`orders` WHERE \(`amount` >= 20\) AND \(`amount` <= 50\)\) t0 INNER JOIN \(SELECT `customer_id` FROM `db_join_pushdown_[a-f0-9]+`\.`customers` WHERE \(`customer_id` IS NOT NULL\)\) t1 ON \(t0\.`customer_id` = t1\.`customer_id`\) INNER JOIN \(SELECT `customer_id`, `region_group` FROM `db_join_pushdown_[a-f0-9]+`\.`regions` WHERE \(`customer_id` IS NOT NULL\)\) t2 ON \(t1\.`customer_id` = t2\.`customer_id`\)\) sr_merged[ \t]*
+-- !result
+select o.order_id, r.region_group, o.status, o.amount
+from jdbc_join_pushdown_${uuid0}.db_join_pushdown_${uuid0}.orders o
+join jdbc_join_pushdown_${uuid0}.db_join_pushdown_${uuid0}.customers c
+on o.customer_id = c.customer_id
+join jdbc_join_pushdown_${uuid0}.db_join_pushdown_${uuid0}.regions r
+on c.customer_id = r.customer_id
+where o.amount between 20 and 50
+order by o.order_id;
+-- result:
+2	coastal	open	25
+3	inland	paid	30
+4	inland	open	45
+-- !result
+explain select o.order_id, c.region, coalesce(o.status, 'missing')
+from jdbc_join_pushdown_${uuid0}.db_join_pushdown_${uuid0}.orders o
+join jdbc_join_pushdown_${uuid0}.db_join_pushdown_${uuid0}.customers c
+on o.customer_id = c.customer_id
+where o.status is null
+order by o.order_id;
+-- result:
+[REGEX](?s)^(?!.*HASH JOIN).*PLAN FRAGMENT 1[ \t]*
+.*
+  [0-9]+:SCAN JDBC[ \t]*
+     TABLE: \(SELECT t0\.`order_id` AS c1, t0\.`customer_id` AS c2, t0\.`status` AS c4, t1\.`customer_id` AS c5, t1\.`region` AS c6 FROM \(SELECT `order_id`, `customer_id`, `status` FROM `db_join_pushdown_[a-f0-9]+`\.`orders` WHERE \(`status` IS NULL\)\) t0 INNER JOIN \(SELECT `customer_id`, `region` FROM `db_join_pushdown_[a-f0-9]+`\.`customers` WHERE \(`customer_id` IS NOT NULL\)\) t1 ON \(t0\.`customer_id` = t1\.`customer_id`\)\) sr_merged[ \t]*
+     QUERY: SELECT `c1`, `c4`, `c6` FROM \(SELECT t0\.`order_id` AS c1, t0\.`customer_id` AS c2, t0\.`status` AS c4, t1\.`customer_id` AS c5, t1\.`region` AS c6 FROM \(SELECT `order_id`, `customer_id`, `status` FROM `db_join_pushdown_[a-f0-9]+`\.`orders` WHERE \(`status` IS NULL\)\) t0 INNER JOIN \(SELECT `customer_id`, `region` FROM `db_join_pushdown_[a-f0-9]+`\.`customers` WHERE \(`customer_id` IS NOT NULL\)\) t1 ON \(t0\.`customer_id` = t1\.`customer_id`\)\) sr_merged[ \t]*
+-- !result
+select o.order_id, c.region, coalesce(o.status, 'missing')
+from jdbc_join_pushdown_${uuid0}.db_join_pushdown_${uuid0}.orders o
+join jdbc_join_pushdown_${uuid0}.db_join_pushdown_${uuid0}.customers c
+on o.customer_id = c.customer_id
+where o.status is null
+order by o.order_id;
+-- result:
+6	east	missing
+-- !result
+explain select o.order_id, c.customer_id
+from jdbc_join_pushdown_${uuid0}.db_join_pushdown_${uuid0}.orders o
+join jdbc_join_pushdown_${uuid0}.db_join_pushdown_${uuid0}.customers c
+on abs(o.customer_id - 20) = c.customer_id
+where o.order_id in (1, 2)
+order by o.order_id, c.customer_id;
+-- result:
+[REGEX](?s)^(?!.*sr_merged).*PLAN FRAGMENT 1[ \t]*
+.*
+  [0-9]+:HASH JOIN[ \t]*
+  \|  join op: INNER JOIN .*[ \t]*
+  \|  equal join conjunct: .*abs.*cast[ \t]*
+.*
+PLAN FRAGMENT 2[ \t]*
+.*
+  [0-9]+:SCAN JDBC[ \t]*
+     TABLE: `db_join_pushdown_[a-f0-9]+`\.`customers`[ \t]*
+     QUERY: SELECT `customer_id` FROM `db_join_pushdown_[a-f0-9]+`\.`customers` WHERE \(`customer_id` IS NOT NULL\)[ \t]*
+.*
+PLAN FRAGMENT 3[ \t]*
+.*
+  [0-9]+:SCAN JDBC[ \t]*
+     TABLE: `db_join_pushdown_[a-f0-9]+`\.`orders`[ \t]*
+     QUERY: SELECT `order_id`, `customer_id` FROM `db_join_pushdown_[a-f0-9]+`\.`orders` WHERE \(`order_id` IN \(1, 2\)\)[ \t]*
+-- !result
+select o.order_id, c.customer_id
+from jdbc_join_pushdown_${uuid0}.db_join_pushdown_${uuid0}.orders o
+join jdbc_join_pushdown_${uuid0}.db_join_pushdown_${uuid0}.customers c
+on abs(o.customer_id - 20) = c.customer_id
+where o.order_id in (1, 2)
+order by o.order_id, c.customer_id;
+-- result:
+1	10
+2	10
+-- !result
+explain select o.order_id, c.region, o.amount
+from jdbc_join_pushdown_${uuid0}.db_join_pushdown_${uuid0}.orders o
+left join jdbc_join_pushdown_${uuid0}.db_join_pushdown_${uuid0}.customers c
+on o.customer_id = c.customer_id
+where o.amount >= 45
+order by o.order_id;
+-- result:
+[REGEX](?s)^(?!.*sr_merged).*PLAN FRAGMENT 1[ \t]*
+.*
+  [0-9]+:HASH JOIN[ \t]*
+  \|  join op: (LEFT|RIGHT) OUTER JOIN .*[ \t]*
+  \|  equal join conjunct: .*[ \t]*
+.*
+PLAN FRAGMENT 2[ \t]*
+.*
+  [0-9]+:SCAN JDBC[ \t]*
+     TABLE: `db_join_pushdown_[a-f0-9]+`\.`orders`[ \t]*
+     QUERY: SELECT `order_id`, `customer_id`, `amount` FROM `db_join_pushdown_[a-f0-9]+`\.`orders` WHERE \(`amount` >= 45\)[ \t]*
+.*
+PLAN FRAGMENT 3[ \t]*
+.*
+  [0-9]+:SCAN JDBC[ \t]*
+     TABLE: `db_join_pushdown_[a-f0-9]+`\.`customers`[ \t]*
+     QUERY: SELECT `customer_id`, `region` FROM `db_join_pushdown_[a-f0-9]+`\.`customers`[ \t]*
+-- !result
+select o.order_id, c.region, o.amount
+from jdbc_join_pushdown_${uuid0}.db_join_pushdown_${uuid0}.orders o
+left join jdbc_join_pushdown_${uuid0}.db_join_pushdown_${uuid0}.customers c
+on o.customer_id = c.customer_id
+where o.amount >= 45
+order by o.order_id;
+-- result:
+4	north	45
+5	None	55
+-- !result
+explain select o.order_id, c.region, v.label, o.amount
+from jdbc_join_pushdown_${uuid0}.db_join_pushdown_${uuid0}.orders o
+join jdbc_join_pushdown_${uuid0}.db_join_pushdown_${uuid0}.customers c
+on o.customer_id = c.customer_id
+join default_catalog.db_join_pushdown_internal_${uuid0}.vip_customers v
+on o.customer_id = v.customer_id
+where o.amount >= 20
+order by o.order_id;
+-- result:
+[REGEX](?s).*PLAN FRAGMENT 1[ \t]*
+.*
+  [0-9]+:HASH JOIN[ \t]*
+  \|  join op: INNER JOIN .*[ \t]*
+  \|  equal join conjunct: .*[ \t]*
+  \|[ \t]*
+  \|----[0-9]+:EXCHANGE[ \t]*
+  \|[ \t]*
+  [0-9]+:OlapScanNode[ \t]*
+     TABLE: vip_customers[ \t]*
+.*
+PLAN FRAGMENT 2[ \t]*
+.*
+  [0-9]+:SCAN JDBC[ \t]*
+     TABLE: \(SELECT t0\.`order_id` AS c1, t0\.`customer_id` AS c2, t0\.`amount` AS c3, t1\.`customer_id` AS c5, t1\.`region` AS c6 FROM \(SELECT `order_id`, `customer_id`, `amount` FROM `db_join_pushdown_[a-f0-9]+`\.`orders` WHERE \(`amount` >= 20\)\) t0 INNER JOIN \(SELECT `customer_id`, `region` FROM `db_join_pushdown_[a-f0-9]+`\.`customers` WHERE \(`customer_id` IS NOT NULL\)\) t1 ON \(t0\.`customer_id` = t1\.`customer_id`\)\) sr_merged[ \t]*
+     QUERY: SELECT `c1`, `c2`, `c3`, `c6` FROM \(SELECT t0\.`order_id` AS c1, t0\.`customer_id` AS c2, t0\.`amount` AS c3, t1\.`customer_id` AS c5, t1\.`region` AS c6 FROM \(SELECT `order_id`, `customer_id`, `amount` FROM `db_join_pushdown_[a-f0-9]+`\.`orders` WHERE \(`amount` >= 20\)\) t0 INNER JOIN \(SELECT `customer_id`, `region` FROM `db_join_pushdown_[a-f0-9]+`\.`customers` WHERE \(`customer_id` IS NOT NULL\)\) t1 ON \(t0\.`customer_id` = t1\.`customer_id`\)\) sr_merged[ \t]*
+-- !result
+select o.order_id, c.region, v.label, o.amount
+from jdbc_join_pushdown_${uuid0}.db_join_pushdown_${uuid0}.orders o
+join jdbc_join_pushdown_${uuid0}.db_join_pushdown_${uuid0}.customers c
+on o.customer_id = c.customer_id
+join default_catalog.db_join_pushdown_internal_${uuid0}.vip_customers v
+on o.customer_id = v.customer_id
+where o.amount >= 20
+order by o.order_id;
+-- result:
+2	east	gold	25
+4	north	silver	45
+-- !result
+explain select o.order_id, c.region, o.amount
+from jdbc_join_pushdown_${uuid0}.db_join_pushdown_${uuid0}.orders o
+join jdbc_join_pushdown_alt_${uuid0}.db_join_pushdown_${uuid0}.customers c
+on o.customer_id = c.customer_id
+where o.order_id in (2, 3, 4)
+order by o.order_id;
+-- result:
+[REGEX](?s)^(?!.*sr_merged).*PLAN FRAGMENT 1[ \t]*
+.*
+  [0-9]+:HASH JOIN[ \t]*
+  \|  join op: INNER JOIN .*[ \t]*
+  \|  equal join conjunct: .*[ \t]*
+.*
+PLAN FRAGMENT 2[ \t]*
+.*
+  [0-9]+:SCAN JDBC[ \t]*
+     TABLE: `db_join_pushdown_[a-f0-9]+`\.`orders`[ \t]*
+     QUERY: SELECT `order_id`, `customer_id`, `amount` FROM `db_join_pushdown_[a-f0-9]+`\.`orders` WHERE \(`order_id` IN \(2, 3, 4\)\)[ \t]*
+.*
+PLAN FRAGMENT 3[ \t]*
+.*
+  [0-9]+:SCAN JDBC[ \t]*
+     TABLE: `db_join_pushdown_[a-f0-9]+`\.`customers`[ \t]*
+     QUERY: SELECT `customer_id`, `region` FROM `db_join_pushdown_[a-f0-9]+`\.`customers` WHERE \(`customer_id` IS NOT NULL\)[ \t]*
+-- !result
+select o.order_id, c.region, o.amount
+from jdbc_join_pushdown_${uuid0}.db_join_pushdown_${uuid0}.orders o
+join jdbc_join_pushdown_alt_${uuid0}.db_join_pushdown_${uuid0}.customers c
+on o.customer_id = c.customer_id
+where o.order_id in (2, 3, 4)
+order by o.order_id;
+-- result:
+2	east	25
+3	west	30
+4	north	45
+-- !result
+explain select o.order_id, c.region, ao.order_id, ac.region
+from jdbc_join_pushdown_${uuid0}.db_join_pushdown_${uuid0}.orders o
+join jdbc_join_pushdown_${uuid0}.db_join_pushdown_${uuid0}.customers c
+on o.customer_id = c.customer_id
+join jdbc_join_pushdown_alt_${uuid0}.db_join_pushdown_${uuid0}.orders ao
+join jdbc_join_pushdown_alt_${uuid0}.db_join_pushdown_${uuid0}.customers ac
+on ao.customer_id = ac.customer_id
+where o.order_id = 2 and ao.order_id in (3, 4)
+order by o.order_id, ao.order_id;
+-- result:
+[REGEX](?s).*PLAN FRAGMENT 1[ \t]*
+.*
+  [0-9]+:NESTLOOP JOIN[ \t]*
+  \|  join op: CROSS JOIN[ \t]*
+.*
+  \|----[0-9]+:EXCHANGE[ \t]*
+  \|[ \t]*
+  [0-9]+:SCAN JDBC[ \t]*
+     TABLE: \(SELECT t0\.`order_id` AS c1, t0\.`customer_id` AS c2, t1\.`customer_id` AS c5, t1\.`region` AS c6 FROM \(SELECT `order_id`, `customer_id` FROM `db_join_pushdown_[a-f0-9]+`\.`orders` WHERE \(`order_id` = 2\)\) t0 INNER JOIN \(SELECT `customer_id`, `region` FROM `db_join_pushdown_[a-f0-9]+`\.`customers` WHERE \(`customer_id` IS NOT NULL\)\) t1 ON \(t0\.`customer_id` = t1\.`customer_id`\)\) sr_merged[ \t]*
+     QUERY: SELECT `c1`, `c6` FROM \(SELECT t0\.`order_id` AS c1, t0\.`customer_id` AS c2, t1\.`customer_id` AS c5, t1\.`region` AS c6 FROM \(SELECT `order_id`, `customer_id` FROM `db_join_pushdown_[a-f0-9]+`\.`orders` WHERE \(`order_id` = 2\)\) t0 INNER JOIN \(SELECT `customer_id`, `region` FROM `db_join_pushdown_[a-f0-9]+`\.`customers` WHERE \(`customer_id` IS NOT NULL\)\) t1 ON \(t0\.`customer_id` = t1\.`customer_id`\)\) sr_merged[ \t]*
+.*
+PLAN FRAGMENT 2[ \t]*
+.*
+  [0-9]+:SCAN JDBC[ \t]*
+     TABLE: \(SELECT t0\.`order_id` AS c7, t0\.`customer_id` AS c8, t1\.`customer_id` AS c11, t1\.`region` AS c12 FROM \(SELECT `order_id`, `customer_id` FROM `db_join_pushdown_[a-f0-9]+`\.`orders` WHERE \(`order_id` IN \(3, 4\)\)\) t0 INNER JOIN \(SELECT `customer_id`, `region` FROM `db_join_pushdown_[a-f0-9]+`\.`customers` WHERE \(`customer_id` IS NOT NULL\)\) t1 ON \(t0\.`customer_id` = t1\.`customer_id`\)\) sr_merged[ \t]*
+     QUERY: SELECT `c7`, `c12` FROM \(SELECT t0\.`order_id` AS c7, t0\.`customer_id` AS c8, t1\.`customer_id` AS c11, t1\.`region` AS c12 FROM \(SELECT `order_id`, `customer_id` FROM `db_join_pushdown_[a-f0-9]+`\.`orders` WHERE \(`order_id` IN \(3, 4\)\)\) t0 INNER JOIN \(SELECT `customer_id`, `region` FROM `db_join_pushdown_[a-f0-9]+`\.`customers` WHERE \(`customer_id` IS NOT NULL\)\) t1 ON \(t0\.`customer_id` = t1\.`customer_id`\)\) sr_merged[ \t]*
+-- !result
+select o.order_id, c.region, ao.order_id, ac.region
+from jdbc_join_pushdown_${uuid0}.db_join_pushdown_${uuid0}.orders o
+join jdbc_join_pushdown_${uuid0}.db_join_pushdown_${uuid0}.customers c
+on o.customer_id = c.customer_id
+join jdbc_join_pushdown_alt_${uuid0}.db_join_pushdown_${uuid0}.orders ao
+join jdbc_join_pushdown_alt_${uuid0}.db_join_pushdown_${uuid0}.customers ac
+on ao.customer_id = ac.customer_id
+where o.order_id = 2 and ao.order_id in (3, 4)
+order by o.order_id, ao.order_id;
+-- result:
+2	east	3	west
+2	east	4	north
+-- !result
+set enable_jdbc_join_push_down=false;
+-- result:
+-- !result
+explain select o.order_id, c.region, o.amount
+from jdbc_join_pushdown_${uuid0}.db_join_pushdown_${uuid0}.orders o
+join jdbc_join_pushdown_${uuid0}.db_join_pushdown_${uuid0}.customers c
+on o.customer_id = c.customer_id
+where o.amount >= 20 and c.region in ('east', 'west')
+order by o.order_id;
+-- result:
+[REGEX](?s)^(?!.*sr_merged).*PLAN FRAGMENT 1[ \t]*
+.*
+  [0-9]+:HASH JOIN[ \t]*
+  \|  join op: INNER JOIN .*[ \t]*
+  \|  equal join conjunct: .*[ \t]*
+.*
+PLAN FRAGMENT 2[ \t]*
+.*
+  [0-9]+:SCAN JDBC[ \t]*
+     TABLE: `db_join_pushdown_[a-f0-9]+`\.`orders`[ \t]*
+     QUERY: SELECT `order_id`, `customer_id`, `amount` FROM `db_join_pushdown_[a-f0-9]+`\.`orders` WHERE \(`amount` >= 20\)[ \t]*
+.*
+PLAN FRAGMENT 3[ \t]*
+.*
+  [0-9]+:SCAN JDBC[ \t]*
+     TABLE: `db_join_pushdown_[a-f0-9]+`\.`customers`[ \t]*
+     QUERY: SELECT `customer_id`, `region` FROM `db_join_pushdown_[a-f0-9]+`\.`customers` WHERE \(`region` IN \('east', 'west'\)\)[ \t]*
+-- !result
+select o.order_id, c.region, o.amount
+from jdbc_join_pushdown_${uuid0}.db_join_pushdown_${uuid0}.orders o
+join jdbc_join_pushdown_${uuid0}.db_join_pushdown_${uuid0}.customers c
+on o.customer_id = c.customer_id
+where o.amount >= 20 and c.region in ('east', 'west')
+order by o.order_id;
+-- result:
+2	east	25
+3	west	30
+-- !result
+drop catalog jdbc_join_pushdown_${uuid0};
+-- result:
+-- !result
+drop catalog jdbc_join_pushdown_alt_${uuid0};
+-- result:
+-- !result
+drop database db_join_pushdown_internal_${uuid0} force;
+-- result:
+-- !result
+shell: mysql -h${external_mysql_ip} -u${external_mysql_user} -p${external_mysql_password} -P${external_mysql_port} -e 'drop database db_join_pushdown_${uuid0};'
+-- result:
+0
+
+-- !result

@@ -15,6 +15,10 @@
 package com.starrocks.connector.jdbc;
 
 import com.google.common.collect.ImmutableSet;
+import com.starrocks.catalog.Column;
+import com.starrocks.catalog.JDBCTable;
+import com.starrocks.catalog.Table;
+import com.starrocks.common.DdlException;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.type.PrimitiveType;
 import com.starrocks.type.Type;
@@ -26,7 +30,9 @@ import java.sql.SQLException;
 import java.sql.Types;
 import java.util.Arrays;
 import java.util.Collection;
+import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -39,6 +45,24 @@ public class ClickhouseSchemaResolver extends JDBCSchemaResolver {
 
     public ClickhouseSchemaResolver(Map<String, String> properties) {
         this.properties = properties;
+    }
+
+    // Qualify the table name with the remote database at construction time.
+    // Mirrors the pattern in MysqlSchemaResolver / PostgresSchemaResolver.
+    @Override
+    public Table getTable(long id, String name, List<Column> schema, String dbName, String catalogName,
+                          Map<String, String> properties) throws DdlException {
+        Map<String, String> newProp = new HashMap<>(properties);
+        newProp.putIfAbsent(JDBCTable.JDBC_TABLENAME, "`" + dbName + "`.`" + name + "`");
+        return new JDBCTable(id, name, schema, dbName, catalogName, newProp);
+    }
+
+    @Override
+    public Table getTable(long id, String name, List<Column> schema, List<Column> partitionColumns, String dbName,
+                          String catalogName, Map<String, String> properties) throws DdlException {
+        Map<String, String> newProp = new HashMap<>(properties);
+        newProp.putIfAbsent(JDBCTable.JDBC_TABLENAME, "`" + dbName + "`.`" + name + "`");
+        return new JDBCTable(id, name, schema, partitionColumns, dbName, catalogName, newProp);
     }
 
     @Override

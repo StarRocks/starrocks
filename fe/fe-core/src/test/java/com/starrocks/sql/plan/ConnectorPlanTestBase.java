@@ -368,7 +368,7 @@ public class ConnectorPlanTestBase extends PlanTestBase {
         GlobalStateMgr.getCurrentState().getCatalogMgr().
                 createCatalog("jdbc", MockedJDBCMetadata.MOCKED_JDBC_PG_CATALOG_NAME, "", pgProperties);
         metadataMgr.registerMockedMetadata(MockedJDBCMetadata.MOCKED_JDBC_PG_CATALOG_NAME,
-                new MockedJDBCMetadata(pgProperties));
+                new MockedJDBCMetadata(pgProperties, MockedJDBCMetadata.MOCKED_JDBC_PG_CATALOG_NAME));
     }
 
     private static void mockIcebergCatalogImpl(MockedMetadataMgr metadataMgr) throws DdlException {

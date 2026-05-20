@@ -13,8 +13,8 @@ properties
     "user"="${external_mysql_user}",
     "password"="${external_mysql_password}",
     "jdbc_uri"="jdbc:mysql://${external_mysql_ip}:${external_mysql_port}",
-    "driver_url"="${udf_url}/starrocks-jdbc%2Fmysql-connector-java-5.1.37.jar",
-    "driver_class"="com.mysql.jdbc.Driver"
+    "driver_url"="${jdbc_url}",
+    "driver_class"="com.mysql.cj.jdbc.Driver"
 );
 
 -- query table function can infer columns from the pass-through query and apply outer predicates.
