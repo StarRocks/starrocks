@@ -238,6 +238,8 @@ set(PIPELINE_OPERATORS_BATCH_SRCS
     pipeline/scan/balanced_chunk_buffer.cpp
     pipeline/scan/chunk_source.cpp
     pipeline/scan/bucket_sequence_morsel_queue.cpp
+    pipeline/scan/dynamic_morsel_queue.cpp
+    pipeline/scan/fixed_morsel_queue.cpp
     pipeline/scan/olap_dynamic_morsel_queue.cpp
     pipeline/scan/olap_fixed_morsel_queue.cpp
     pipeline/scan/morsel.cpp
