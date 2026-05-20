@@ -82,10 +82,9 @@ public class ChangesScanNode extends AbstractOlapTableScanNode {
             // Partition was absent at base; emit every rowset reachable at head.
             return Pair.create(0L, pa.getHeadPartition().getVisibleVersion());
         } else {
-            throw new IllegalStateException(
-                    "non-trackable change in CDC plan for table '" + olapTable.getName()
-                            + "', physical partition " + change.getPhysicalPartitionId()
-                            + ": " + change.getChangeType());
+            throw new IllegalStateException(String.format(
+                    "non-trackable change in CDC plan for table '%s', physical partition %d: %s",
+                    olapTable.getName(), change.getPhysicalPartitionId(), change.getChangeType()));
         }
     }
 
