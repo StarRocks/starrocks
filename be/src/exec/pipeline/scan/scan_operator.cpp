@@ -32,6 +32,7 @@
 #include "exec/workgroup/scan_executor.h"
 #include "exec/workgroup/work_group.h"
 #include "exprs/expr_executor.h"
+#include "gutil/casts.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
 #include "util/debug/query_trace.h"
