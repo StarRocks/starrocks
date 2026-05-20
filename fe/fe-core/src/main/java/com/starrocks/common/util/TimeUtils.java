@@ -74,14 +74,12 @@ public class TimeUtils {
     public static final ImmutableMap<String, String> TIME_ZONE_ALIAS_MAP = ImmutableMap.of(
             "CST", DEFAULT_TIME_ZONE, "PRC", DEFAULT_TIME_ZONE);
 
-    //Used to convert a string to a date. Compatible: 2013-2-29
-    private static final DateTimeFormatter STRING_TO_DATE_FORMAT = DateTimeFormatter.ofPattern("y-M-d").withZone(TIME_ZONE);
-    //Used to convert a string to a datetime. Compatible: 2013-2-28 2:3:4
+    // Proleptic year ("u") is required so that year 0000 can be parsed.
+    // Single-letter components allow non-padded inputs, e.g. "2013-2-2".
+    private static final DateTimeFormatter STRING_TO_DATE_FORMAT = DateTimeFormatter.ofPattern("u-M-d").withZone(TIME_ZONE);
     private static final DateTimeFormatter STRING_TO_DATETIME_FORMAT =
-            DateTimeFormatter.ofPattern("y-M-d H:m:s").withZone(TIME_ZONE);
+            DateTimeFormatter.ofPattern("u-M-d H:m:s").withZone(TIME_ZONE);
 
-    //Used to convert a date to a string.
-    private static final DateTimeFormatter DATE_TO_STRING_FORMAT = DateTimeFormatter.ofPattern("yyyy-MM-dd").withZone(TIME_ZONE);
     //Used to convert a datetime to a string.
     private static final DateTimeFormatter DATETIME_TO_STRING_FORMAT =
             DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss").withZone(TIME_ZONE);
@@ -122,8 +120,17 @@ public class TimeUtils {
         return System.nanoTime() - startTime;
     }
 
+    /**
+     * Returns the current wall-clock time formatted as "yyyy-MM-dd HH:mm:ss" in the
+     * cluster-wide storage zone (fixed +08:00), NOT the JVM default zone and NOT the
+     * caller's session timezone. Matches the pre-#66360 contract relied on by metadata
+     * and scheduler timestamps that must stay stable across FE hosts.
+     *
+     * <p>Note: the input must be an {@link Instant} - {@link DateTimeFormatter#withZone}
+     * is a no-op when formatting a {@link LocalDateTime}, which was the #66360 regression.
+     */
     public static String getCurrentFormatTime() {
-        return DATETIME_TO_STRING_FORMAT.format(LocalDateTime.now());
+        return DATETIME_TO_STRING_FORMAT.format(Instant.now());
     }
 
     public static TimeZone getTimeZone() {
@@ -167,11 +174,28 @@ public class TimeUtils {
         return dateFormat.format(Instant.ofEpochMilli(timeStamp));
     }
 
+    /**
+     * Formats an epoch-millisecond timestamp as "yyyy-MM-dd HH:mm:ss" in the caller's
+     * SESSION timezone (resolved via {@link #getTimeZone()}). Returns
+     * {@link FeConstants#NULL_STRING} for non-positive timestamps.
+     *
+     * <p>This is the user-facing default used by SHOW / proc / load / metadata code
+     * paths; the output is intentionally session-zone dependent so that two clients
+     * connected with different {@code time_zone} session variables see their own
+     * local wall-clock. Switching this to a fixed zone is what regressed in #66360;
+     * keep it session-zoned. Callers that need a fixed zone should build their own
+     * formatter and use {@link #longToTimeString(long, DateTimeFormatter)} instead.
+     */
     public static String longToTimeString(long timeStamp) {
+        // Fast-path sentinel timestamps (unset / negative) before touching the session
+        // timezone - those code paths are hot in SHOW / load metadata and resolving the
+        // session zone can fail when the thread has no ConnectContext.
         if (timeStamp <= 0L) {
             return FeConstants.NULL_STRING;
         }
-        return longToTimeString(timeStamp, DATETIME_TO_STRING_FORMAT);
+        // Reuse the pre-parsed pattern (DATETIME_TO_STRING_FORMAT) and only rebind the
+        // zone per call - .withZone(...) returns a thin wrapper without re-parsing.
+        return longToTimeString(timeStamp, DATETIME_TO_STRING_FORMAT.withZone(getTimeZone().toZoneId()));
     }
 
     /**
@@ -341,14 +365,20 @@ public class TimeUtils {
         }
     }
 
+    /**
+     * Returns the effective session timezone string:
+     *   1. the per-request value from the current {@link ConnectContext}, or
+     *   2. the cluster-wide default from GlobalStateMgr's VariableMgr, or
+     *   3. {@link #DEFAULT_TIME_ZONE} ("Asia/Shanghai") as a last-resort fallback.
+     */
     public static String getSessionTimeZone() {
-        String timezone;
+        String timezone = null;
         if (ConnectContext.get() != null) {
             timezone = ConnectContext.get().getSessionVariable().getTimeZone();
         } else {
             timezone = GlobalStateMgr.getCurrentState().getVariableMgr().getDefaultSessionVariable().getTimeZone();
         }
-        return timezone;
+        return timezone != null ? timezone : DEFAULT_TIME_ZONE;
     }
 
     /**
