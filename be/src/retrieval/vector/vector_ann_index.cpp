@@ -14,21 +14,7 @@
 
 #include "retrieval/vector/vector_ann_index.h"
 
-#include "types/bitmap_value_detail.h"
-
 namespace starrocks {
-
-BitmapRowIdFilter::BitmapRowIdFilter(std::unique_ptr<detail::Roaring64Map> bitmap) : _bitmap(std::move(bitmap)) {}
-
-BitmapRowIdFilter::~BitmapRowIdFilter() = default;
-
-bool BitmapRowIdFilter::is_member(int64_t row_id) const {
-    return _bitmap && _bitmap->contains(static_cast<uint64_t>(row_id));
-}
-
-int64_t BitmapRowIdFilter::cardinality() const {
-    return _bitmap ? static_cast<int64_t>(_bitmap->cardinality()) : 0;
-}
 
 // Default filtered_search: oversample + post-filter.
 Status VectorAnnIndex::filtered_search(const VectorQuery& query, const RowIdFilter& filter, VectorAnnResult* result) {

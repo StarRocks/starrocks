@@ -20,13 +20,11 @@
 #include <string>
 #include <vector>
 
+#include <roaring/roaring.hh>
+
 #include "common/status.h"
 
 namespace starrocks {
-
-namespace detail {
-class Roaring64Map;
-} // namespace detail
 
 // ============================================================
 // Enums (shared with legacy vector_index_reader.h)
@@ -106,19 +104,23 @@ public:
 };
 
 // Roaring bitmap-backed filter. Owns the bitmap.
+//
+// Uses 32-bit roaring::Roaring: segment-local row ids fit in uint32,
+// matching the convention used by storage's DelIdFilter.
 class BitmapRowIdFilter final : public RowIdFilter {
 public:
-    explicit BitmapRowIdFilter(std::unique_ptr<detail::Roaring64Map> bitmap);
-    ~BitmapRowIdFilter() override;
+    explicit BitmapRowIdFilter(roaring::Roaring bitmap) : _bitmap(std::move(bitmap)) {}
 
-    bool is_member(int64_t row_id) const override;
+    bool is_member(int64_t row_id) const override {
+        return row_id >= 0 && row_id <= UINT32_MAX && _bitmap.contains(static_cast<uint32_t>(row_id));
+    }
 
-    int64_t cardinality() const;
+    uint64_t cardinality() const { return _bitmap.cardinality(); }
 
-    const detail::Roaring64Map* bitmap() const { return _bitmap.get(); }
+    const roaring::Roaring& bitmap() const { return _bitmap; }
 
 private:
-    std::unique_ptr<detail::Roaring64Map> _bitmap;
+    roaring::Roaring _bitmap;
 };
 
 // ============================================================

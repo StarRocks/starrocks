@@ -153,8 +153,8 @@ Core type system without runtime/storage/exec coupling.
 ### Retrieval (`retrieval`)
 Pure retrieval framework: ANN index interface, row-id filter contracts, and search strategy orchestration under retrieval/vector/. Designed to also host future full-text and hybrid retrieval abstractions under sibling subdirectories without storage/exec/runtime/connector coupling.
 - Targets: `Retrieval`
-- Allowed internal include prefixes: `retrieval/`, `types/`, `common/`, `base/`, `gutil/`, `gen_cpp/`
-- Allowed target deps: `TypesCore`, `Common`, `Base`, `Gutil`, `StarRocksGen`
+- Allowed internal include prefixes: `retrieval/`, `common/`, `base/`, `gutil/`, `gen_cpp/`
+- Allowed target deps: `Common`, `Base`, `Gutil`
 - Core tests: `retrieval_test`
 - Remediation: Keep Retrieval as a pure interface layer; concrete index implementations (TenANN/HNSW/Paimon/full-text) and scanner integration belong in their owning modules and depend on Retrieval downward.
 
