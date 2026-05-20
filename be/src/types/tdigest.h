@@ -170,8 +170,19 @@ public:
     // been reached.
     bool add(Value x, Weight w);
     void add(std::vector<Centroid>::const_iterator iter, std::vector<Centroid>::const_iterator end);
+    // Upper bound for centroid array sizes in a deserialized blob. Mirrors
+    // ClickHouse QuantileTDigest::max_centroids_deserialize and protects
+    // against OOM from corrupted or truncated input.
+    static constexpr size_t kMaxCentroidsDeserialize = 65536;
+
     uint64_t serialize_size() const;
     size_t serialize(uint8_t* writer) const;
+    // Bounded variant. Returns false and resets the digest to an empty state
+    // if the blob is truncated or declares an oversized centroid array.
+    bool deserialize(const char* data, size_t size);
+    // Legacy unsafe wrapper for callers that do not carry the blob length;
+    // delegates to the bounded variant with an unbounded size. Prefer the
+    // bounded overload at new call sites.
     void deserialize(const char* type_reader);
 
 private:

@@ -36,7 +36,11 @@
 
 #include <gtest/gtest.h>
 
+#include <cstdint>
+#include <cstring>
+#include <limits>
 #include <random>
+#include <vector>
 
 #include "common/logging.h"
 
@@ -231,6 +235,128 @@ TEST_F(TDigestTest, ExtremeQuantiles) {
     for (auto q : quantiles) {
         EXPECT_NEAR(quantile(q, values), digest.quantile(q), 0.01) << "q = " << q;
     }
+}
+
+// Regression for D1: serialize_size() must match the number of bytes
+// written by serialize(). Before the fix it over-reported by 12 B
+// (3 * (sizeof(size_t) - sizeof(uint32_t))) and the trailing space leaked
+// uninitialized memory to disk on every cell.
+TEST_F(TDigestTest, SerializeSizeMatchesSerialized) {
+    TDigest digest(1000);
+    for (int i = 0; i < 50; ++i) {
+        digest.add(static_cast<float>(i));
+    }
+    digest.compress();
+
+    const uint64_t declared = digest.serialize_size();
+    std::vector<uint8_t> buffer(declared, 0xCC);
+    const size_t written = digest.serialize(buffer.data());
+    EXPECT_EQ(declared, written);
+}
+
+TEST_F(TDigestTest, SerializeRoundTrip) {
+    TDigest source(1000);
+    for (int i = 0; i < 200; ++i) {
+        source.add(static_cast<float>(i));
+    }
+    source.compress();
+
+    std::vector<uint8_t> buffer(source.serialize_size());
+    source.serialize(buffer.data());
+
+    TDigest decoded;
+    ASSERT_TRUE(decoded.deserialize(reinterpret_cast<const char*>(buffer.data()), buffer.size()));
+    EXPECT_NEAR(source.quantile(0.5), decoded.quantile(0.5), 0.5);
+    EXPECT_NEAR(source.quantile(0.99), decoded.quantile(0.99), 1.0);
+}
+
+// D3: serialize() canonicalizes by running compress() first, so after a
+// round-trip the unprocessed array is empty even when the source had pending
+// centroids at the time of serialization.
+TEST_F(TDigestTest, SerializeProducesCanonicalForm) {
+    TDigest source(1000);
+    for (int i = 0; i < 30; ++i) {
+        source.add(static_cast<float>(i));
+    }
+    EXPECT_FALSE(source.unprocessed().empty());
+
+    std::vector<uint8_t> buffer(source.serialize_size());
+    source.serialize(buffer.data());
+
+    TDigest decoded;
+    ASSERT_TRUE(decoded.deserialize(reinterpret_cast<const char*>(buffer.data()), buffer.size()));
+    EXPECT_TRUE(decoded.unprocessed().empty());
+}
+
+// P15: deserialize must reject a blob whose declared header does not fit.
+TEST_F(TDigestTest, DeserializeRejectsTruncatedHeader) {
+    TDigest digest(1000);
+    digest.add(1.0f);
+    digest.compress();
+    std::vector<uint8_t> buffer(digest.serialize_size());
+    digest.serialize(buffer.data());
+
+    TDigest decoded;
+    ASSERT_FALSE(decoded.deserialize(reinterpret_cast<const char*>(buffer.data()), 10));
+    EXPECT_TRUE(decoded.processed().empty());
+    EXPECT_TRUE(decoded.unprocessed().empty());
+}
+
+// P15: deserialize must reject a centroid count that exceeds the cap, which
+// previously would have done a multi-GiB resize() and OOM'd.
+TEST_F(TDigestTest, DeserializeRejectsOversizedCount) {
+    TDigest digest(1000);
+    digest.add(1.0f);
+    digest.compress();
+    std::vector<uint8_t> buffer(digest.serialize_size());
+    digest.serialize(buffer.data());
+
+    // First centroid count lives right after the fixed header.
+    constexpr size_t header_size = sizeof(float) * 5 + sizeof(size_t) * 2;
+    const uint32_t evil = TDigest::kMaxCentroidsDeserialize + 1;
+    std::memcpy(buffer.data() + header_size, &evil, sizeof(uint32_t));
+
+    TDigest decoded;
+    ASSERT_FALSE(decoded.deserialize(reinterpret_cast<const char*>(buffer.data()), buffer.size()));
+    EXPECT_TRUE(decoded.processed().empty());
+}
+
+// P15: deserialize must reject when the declared count does not fit in the
+// remaining bytes.
+TEST_F(TDigestTest, DeserializeRejectsTruncatedBody) {
+    TDigest digest(1000);
+    for (int i = 0; i < 5; ++i) {
+        digest.add(static_cast<float>(i));
+    }
+    digest.compress();
+    std::vector<uint8_t> buffer(digest.serialize_size());
+    digest.serialize(buffer.data());
+
+    TDigest decoded;
+    // Chop off the last few centroid bytes.
+    const size_t truncated = buffer.size() - 4;
+    ASSERT_FALSE(decoded.deserialize(reinterpret_cast<const char*>(buffer.data()), truncated));
+    EXPECT_TRUE(decoded.processed().empty());
+}
+
+// Backward compat: legacy blobs were written into a 60+body buffer where the
+// last 12 B were uninitialized. The reader only consumed 48 B of header and
+// ignored the trailing bytes. Simulate that by appending 12 B of garbage and
+// confirm deserialize still recovers the digest.
+TEST_F(TDigestTest, LegacyTrailingBytesIgnored) {
+    TDigest source(1000);
+    for (int i = 0; i < 20; ++i) {
+        source.add(static_cast<float>(i));
+    }
+    source.compress();
+    std::vector<uint8_t> buffer(source.serialize_size());
+    source.serialize(buffer.data());
+
+    buffer.insert(buffer.end(), {0xDE, 0xAD, 0xBE, 0xEF, 0xCA, 0xFE, 0xBA, 0xBE, 0x01, 0x23, 0x45, 0x67});
+
+    TDigest decoded;
+    ASSERT_TRUE(decoded.deserialize(reinterpret_cast<const char*>(buffer.data()), buffer.size()));
+    EXPECT_NEAR(source.quantile(0.5), decoded.quantile(0.5), 0.5);
 }
 
 TEST_F(TDigestTest, Montonicity) {

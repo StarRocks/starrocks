@@ -14,6 +14,9 @@
 
 #pragma once
 
+#include <limits>
+
+#include "common/logging.h"
 #include "types/tdigest.h"
 
 namespace starrocks {
@@ -24,14 +27,8 @@ public:
     explicit PercentileValue(double compression) : _tdigest(compression) { _type = TDIGEST; }
 
     explicit PercentileValue(const Slice& src) {
-        switch (*src.data) {
-        case PercentileDataType::TDIGEST:
-            _type = TDIGEST;
-            break;
-        default:
-            DCHECK(false);
-        }
-        _tdigest.deserialize(src.data + 1);
+        _type = TDIGEST;
+        (void)deserialize(src.data, src.size);
     }
 
     void add(float value) { _tdigest.add(value); }
@@ -48,25 +45,42 @@ public:
     uint64_t mem_usage() const { return 1 + _tdigest.serialize_size(); }
 
     size_t serialize(uint8_t* writer) const {
+        // Canonicalize before writing so on-disk cells carry only merged
+        // processed centroids; the now-empty unprocessed array still
+        // serializes with count=0, keeping byte layout unchanged for readers.
+        _tdigest.compress();
         *(writer) = _type;
         return _tdigest.serialize(writer + 1);
     }
-    void deserialize(const char* type_reader) {
-        switch (*type_reader) {
+    // Bounded entry point. Returns false on truncation or unrecognized type
+    // tag and leaves the digest in an empty state.
+    bool deserialize(const char* data, size_t size) {
+        if (size < 1) {
+            LOG(WARNING) << "PercentileValue::deserialize: missing type tag";
+            return false;
+        }
+        switch (*data) {
         case PercentileDataType::TDIGEST:
             _type = TDIGEST;
             break;
         default:
-            DCHECK(false);
+            LOG(WARNING) << "PercentileValue::deserialize: unknown type tag " << static_cast<int>(*data);
+            return false;
         }
-        _tdigest.deserialize(type_reader + 1);
+        return _tdigest.deserialize(data + 1, size - 1);
     }
+    // Legacy unsafe entry point retained for callers that do not carry the
+    // blob length; delegates with an unbounded size.
+    void deserialize(const char* type_reader) { (void)deserialize(type_reader, std::numeric_limits<size_t>::max()); }
 
     Value quantile(Value q) { return _tdigest.quantile(q); }
 
 private:
     enum PercentileDataType { TDIGEST = 0 };
-    TDigest _tdigest;
+    // `mutable` lets serialize() canonicalize via TDigest::compress() while
+    // staying logically const — aggregate functions reach PercentileValue
+    // through ConstAggDataPtr.
+    mutable TDigest _tdigest;
     PercentileDataType _type;
 };
 } // namespace starrocks
