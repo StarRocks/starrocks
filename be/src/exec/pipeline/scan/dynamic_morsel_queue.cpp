@@ -16,7 +16,57 @@
 
 #include <iterator>
 
+#include "exec/pipeline/scan/dynamic_morsel_queue_builder.h"
+
 namespace starrocks::pipeline {
+
+namespace {
+
+class DynamicMorselQueueBuilder final : public MorselQueueBuilder {
+public:
+    DynamicMorselQueueBuilder(Morsels&& morsels, bool has_more_scan_ranges, size_t max_dop)
+            : _morsels(std::move(morsels)), _has_more_scan_ranges(has_more_scan_ranges), _max_dop(max_dop) {}
+    ~DynamicMorselQueueBuilder() override = default;
+
+    size_t num_original_morsels() const override { return _morsels.size(); }
+    size_t max_degree_of_parallelism() const override { return _max_dop > 0 ? _max_dop : _morsels.size(); }
+    bool can_uniform_distribute() const override { return true; }
+
+    bool has_more_scan_ranges() const override { return _has_more_scan_ranges; }
+    void set_has_more_scan_ranges(bool value) override { _has_more_scan_ranges = value; }
+    bool has_more_from_split() const override { return _has_more_from_split; }
+    void set_has_more_from_split(bool value) override { _has_more_from_split = value; }
+
+    StatusOr<MorselQueuePtr> build() override {
+        auto dynamic_queue = std::make_unique<DynamicMorselQueue>(take_morsels(), _has_more_scan_ranges);
+        if (_max_dop > 0) {
+            dynamic_queue->set_max_degree_of_parallelism(_max_dop);
+        }
+        MorselQueuePtr queue = std::move(dynamic_queue);
+        queue->set_has_more_from_split(_has_more_from_split);
+        return queue;
+    }
+
+    Morsels take_morsels() override {
+        Morsels morsels;
+        morsels.swap(_morsels);
+        return morsels;
+    }
+
+    StatusOr<MorselQueuePtr> build_from_morsels(Morsels&& morsels) const override {
+        MorselQueuePtr queue = std::make_unique<DynamicMorselQueue>(std::move(morsels), _has_more_scan_ranges);
+        queue->set_has_more_from_split(_has_more_from_split);
+        return queue;
+    }
+
+private:
+    Morsels _morsels;
+    bool _has_more_scan_ranges = false;
+    bool _has_more_from_split = false;
+    size_t _max_dop = 0;
+};
+
+} // namespace
 
 MorselQueuePtr create_empty_morsel_queue() {
     // instead of creating FixedMorselQueue, DynamicMorselQueue permits to add scan ranges dynamically
@@ -51,6 +101,10 @@ Status DynamicMorselQueue::append_morsels(std::vector<MorselPtr>&& morsels) {
     // so this new morsels share same owner_id with recently processed morsel.
     _queue.insert(_queue.begin(), std::make_move_iterator(morsels.begin()), std::make_move_iterator(morsels.end()));
     return Status::OK();
+}
+
+MorselQueueBuilderPtr make_dynamic_morsel_queue_builder(Morsels&& morsels, bool has_more_scan_ranges, size_t max_dop) {
+    return std::make_unique<DynamicMorselQueueBuilder>(std::move(morsels), has_more_scan_ranges, max_dop);
 }
 
 } // namespace starrocks::pipeline

@@ -18,6 +18,7 @@
 #include <memory>
 
 #include "exec/olap_utils.h"
+#include "exec/pipeline/scan/split_morsel_queue_builder.h"
 #include "exec/pipeline/scan/split_scan_morsel.h"
 #include "storage/chunk_helper.h"
 #include "storage/lake/tablet_reader.h"
@@ -28,6 +29,86 @@
 #include "storage/tablet_reader_params.h"
 
 namespace starrocks::pipeline {
+
+namespace {
+
+class SplitMorselQueueBuilderBase : public MorselQueueBuilder {
+public:
+    SplitMorselQueueBuilderBase(Morsels&& morsels, int64_t degree_of_parallelism, int64_t splitted_scan_rows)
+            : _morsels(std::move(morsels)),
+              _degree_of_parallelism(degree_of_parallelism),
+              _splitted_scan_rows(splitted_scan_rows) {}
+    ~SplitMorselQueueBuilderBase() override = default;
+
+    size_t num_original_morsels() const override { return _morsels.size(); }
+    size_t max_degree_of_parallelism() const override { return _degree_of_parallelism; }
+    bool can_uniform_distribute() const override { return false; }
+
+    bool has_more_scan_ranges() const override { return _has_more_scan_ranges; }
+    void set_has_more_scan_ranges(bool value) override { _has_more_scan_ranges = value; }
+    bool has_more_from_split() const override { return _has_more_from_split; }
+    void set_has_more_from_split(bool value) override { _has_more_from_split = value; }
+
+    StatusOr<MorselQueuePtr> build() override { return build_split_queue(take_morsels()); }
+
+    Morsels take_morsels() override {
+        Morsels morsels;
+        morsels.swap(_morsels);
+        return morsels;
+    }
+
+    StatusOr<MorselQueuePtr> build_from_morsels([[maybe_unused]] Morsels&& morsels) const override {
+        return Status::NotSupported("split morsel queue builder does not support build_from_morsels");
+    }
+
+protected:
+    virtual StatusOr<MorselQueuePtr> build_split_queue(Morsels&& morsels) const = 0;
+
+    void apply_flags(MorselQueue* queue) const {
+        queue->set_has_more_scan_ranges(_has_more_scan_ranges);
+        queue->set_has_more_from_split(_has_more_from_split);
+    }
+
+    int64_t degree_of_parallelism() const { return _degree_of_parallelism; }
+    int64_t splitted_scan_rows() const { return _splitted_scan_rows; }
+
+private:
+    Morsels _morsels;
+    bool _has_more_scan_ranges = false;
+    bool _has_more_from_split = false;
+    int64_t _degree_of_parallelism;
+    int64_t _splitted_scan_rows;
+};
+
+class PhysicalSplitMorselQueueBuilder final : public SplitMorselQueueBuilderBase {
+public:
+    using SplitMorselQueueBuilderBase::SplitMorselQueueBuilderBase;
+    ~PhysicalSplitMorselQueueBuilder() override = default;
+
+protected:
+    StatusOr<MorselQueuePtr> build_split_queue(Morsels&& morsels) const override {
+        MorselQueuePtr queue = std::make_unique<PhysicalSplitMorselQueue>(std::move(morsels), degree_of_parallelism(),
+                                                                          splitted_scan_rows());
+        apply_flags(queue.get());
+        return queue;
+    }
+};
+
+class LogicalSplitMorselQueueBuilder final : public SplitMorselQueueBuilderBase {
+public:
+    using SplitMorselQueueBuilderBase::SplitMorselQueueBuilderBase;
+    ~LogicalSplitMorselQueueBuilder() override = default;
+
+protected:
+    StatusOr<MorselQueuePtr> build_split_queue(Morsels&& morsels) const override {
+        MorselQueuePtr queue = std::make_unique<LogicalSplitMorselQueue>(std::move(morsels), degree_of_parallelism(),
+                                                                         splitted_scan_rows());
+        apply_flags(queue.get());
+        return queue;
+    }
+};
+
+} // namespace
 
 void PhysicalSplitMorselQueue::set_key_ranges(const std::vector<std::unique_ptr<OlapScanRange>>& key_ranges) {
     for (const auto& key_range : key_ranges) {
@@ -701,6 +782,18 @@ ShortKeyIndexGroupIterator LogicalSplitMorselQueue::_upper_bound_ordinal(const S
 
 bool LogicalSplitMorselQueue::_is_last_split_of_current_morsel() {
     return _has_init_any_tablet && _segment_group != nullptr && _cur_tablet_finished();
+}
+
+MorselQueueBuilderPtr make_physical_split_morsel_queue_builder(Morsels&& morsels, int64_t degree_of_parallelism,
+                                                               int64_t splitted_scan_rows) {
+    return std::make_unique<PhysicalSplitMorselQueueBuilder>(std::move(morsels), degree_of_parallelism,
+                                                             splitted_scan_rows);
+}
+
+MorselQueueBuilderPtr make_logical_split_morsel_queue_builder(Morsels&& morsels, int64_t degree_of_parallelism,
+                                                              int64_t splitted_scan_rows) {
+    return std::make_unique<LogicalSplitMorselQueueBuilder>(std::move(morsels), degree_of_parallelism,
+                                                            splitted_scan_rows);
 }
 
 } // namespace starrocks::pipeline
