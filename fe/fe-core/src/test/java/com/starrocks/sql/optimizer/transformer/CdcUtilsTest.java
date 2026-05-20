@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package com.starrocks.cdc;
+package com.starrocks.sql.optimizer.transformer;
 
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
@@ -34,9 +34,6 @@ import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalChangesScanOperator;
-import com.starrocks.sql.optimizer.transformer.CdcUtils;
-import com.starrocks.sql.optimizer.transformer.LogicalPlan;
-import com.starrocks.sql.optimizer.transformer.RelationTransformer;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
@@ -56,15 +53,16 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Planner-level test for the bookmark-resolution side of the _CHANGES_ hint:
- * scoped-table substitution in the transformer, non-trackable-delta messaging,
- * and the CdcUtils.buildScanOperator entry point that production callers reuse.
+ * Tests CdcUtils.buildScanOperator — the [_CHANGES_] entry point shared by the
+ * SQL analyzer and non-SQL callers (IVM refresh). Covers bookmark resolution,
+ * non-trackable-delta messaging, and the scoped-table substitution that
+ * RelationTransformer relies on.
  *
  * <p>Bookmarks are minted by calling BookmarkManager directly; INSERTs are
  * not available in the FE UT framework, so consecutive create() calls only
  * return distinct bookmarks after bumping physical-partition visibleVersion.
  */
-public class ChangesBookmarkResolutionTest extends BookmarkTestBase {
+public class CdcUtilsTest extends BookmarkTestBase {
 
     private static final AtomicInteger TABLE_COUNTER = new AtomicInteger();
 
@@ -251,7 +249,7 @@ public class ChangesBookmarkResolutionTest extends BookmarkTestBase {
     }
 
     @Test
-    public void testBuildFromBookmarkRangeBaseNotFound() throws Exception {
+    public void testBuildRejectsUnknownBookmarks() throws Exception {
         String tableName = "dup_brnf_" + TABLE_COUNTER.getAndIncrement();
         long tableId = createDupTable(tableName);
         OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
@@ -259,21 +257,51 @@ public class ChangesBookmarkResolutionTest extends BookmarkTestBase {
         table.maySetDatabaseId(dbId);
 
         BookmarkManager bm = GlobalStateMgr.getCurrentState().getBookmarkManager();
-        BookmarkHolder hHead = BookmarkHolder.forEmptyInfo("range_nf_head");
-        Bookmark head = bm.create(dbId, tableId, hHead);
+        BookmarkHolder hReal = BookmarkHolder.forEmptyInfo("range_nf_real");
+        Bookmark real = bm.create(dbId, tableId, hReal);
 
         try {
-            SemanticException ex = assertThrows(SemanticException.class,
+            SemanticException baseEx = assertThrows(SemanticException.class,
                     () -> CdcUtils.buildScanOperator(
                             table,
-                            new BookmarkRange(99999L, head.getBookmarkId()),
+                            new BookmarkRange(99999L, real.getBookmarkId()),
                             new HashMap<>(),
                             new HashMap<>()));
-            assertTrue(ex.getMessage().contains("bookmark 99999 not found"),
-                    "actual: " + ex.getMessage());
+            assertTrue(baseEx.getMessage().contains("bookmark 99999 not found"),
+                    "actual: " + baseEx.getMessage());
+
+            SemanticException headEx = assertThrows(SemanticException.class,
+                    () -> CdcUtils.buildScanOperator(
+                            table,
+                            new BookmarkRange(real.getBookmarkId(), 99998L),
+                            new HashMap<>(),
+                            new HashMap<>()));
+            assertTrue(headEx.getMessage().contains("bookmark 99998 not found"),
+                    "actual: " + headEx.getMessage());
         } finally {
-            bm.releaseReference(dbId, tableId, head.getBookmarkId(), hHead.getHolderId());
+            bm.releaseReference(dbId, tableId, real.getBookmarkId(), hReal.getHolderId());
         }
+    }
+
+    @Test
+    public void testBuildRejectsMissingDbId() throws Exception {
+        // buildScanOperator is the entry point IVM refresh + other non-SQL callers
+        // share with the analyzer; production callers always populate dbId, but the
+        // method documents the IllegalStateException for callers that skip the step.
+        String tableName = "dup_nodbid_" + TABLE_COUNTER.getAndIncrement();
+        long tableId = createDupTable(tableName);
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getDb(dbId).getTable(tableId);
+        // Intentionally skip maySetDatabaseId so mayGetDatabaseId stays empty.
+
+        IllegalStateException ex = assertThrows(IllegalStateException.class,
+                () -> CdcUtils.buildScanOperator(
+                        table,
+                        new BookmarkRange(1L, 2L),
+                        new HashMap<>(),
+                        new HashMap<>()));
+        assertTrue(ex.getMessage().contains("dbId missing on " + tableName),
+                "actual: " + ex.getMessage());
     }
 
     /** Capture {@code live}'s current partition state in the map shape a Bookmark holds. */
