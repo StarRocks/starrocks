@@ -49,4 +49,14 @@ TENANN_MD5SUM="b4ac5be487dd136c4903fe5db1bbd11f"
 STARCACHE_DOWNLOAD="https://cdn-thirdparty.starrocks.com/starcache/v4.0.4/starcache-centos7_amd64.tar.gz"
 STARCACHE_NAME="starcache.tar.gz"
 STARCACHE_SOURCE="starcache"
+<<<<<<< HEAD
 STARCACHE_MD5SUM="4e53fb36f67e5e7b9bf24a9d542c026f"
+=======
+STARCACHE_MD5SUM="23b115d131c8c7738c9a57c41d7b791f"
+
+# pprof
+PPROF_DOWNLOAD="https://github.com/StarRocks/pprof/releases/download/release%2F20260520/pprof-linux-amd64"
+PPROF_NAME="pprof"
+PPROF_SOURCE="pprof"
+PPROF_MD5SUM="30a62ea6859604e11c9f40efa8d9954b"
+>>>>>>> 7e04e7ad94 ([BugFix] upgrade pprof, eliminate golang CVE (#73545))
