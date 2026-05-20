@@ -291,8 +291,7 @@ TEST_F(LakeDataSourceTest, test_convert_scan_range_to_morsel_queue_with_ann_bypa
                     scan_node->convert_scan_range_to_morsel_queue_factory(
                             scan_ranges, no_scan_ranges_per_driver_seq, scan_node->id(), /*pipeline_dop=*/2,
                             /*in_colocate_exec_group=*/false,
-                            /*enable_tablet_internal_parallel=*/false,
-                            TTabletInternalParallelMode::type::AUTO));
+                            /*enable_tablet_internal_parallel=*/false, TTabletInternalParallelMode::type::AUTO));
 
     // Both flags flipping to true means the bypass at lake_connector.cpp
     // executed _could_tablet_internal_parallel in FORCE_SPLIT mode and the
@@ -348,8 +347,7 @@ TEST_F(LakeDataSourceTest, test_convert_scan_range_to_morsel_queue_ann_bypass_gu
                     scan_node->convert_scan_range_to_morsel_queue_factory(
                             scan_ranges, no_scan_ranges_per_driver_seq, scan_node->id(), /*pipeline_dop=*/2,
                             /*in_colocate_exec_group=*/false,
-                            /*enable_tablet_internal_parallel=*/false,
-                            TTabletInternalParallelMode::type::AUTO));
+                            /*enable_tablet_internal_parallel=*/false, TTabletInternalParallelMode::type::AUTO));
 
     EXPECT_FALSE(data_source_provider->could_split())
             << "without the bypass, the small-tablet gate keeps could_split() false";
