@@ -108,6 +108,12 @@ CONF_mBool(enable_rejected_record_sync, "false");
 // the FE-side commit queue briefly.
 CONF_mInt32(rejected_record_sync_post_timeout_sec, "60");
 
+// Upper bound on the number of source_info anchors processed in a single
+// `parquet_read_rows()` invocation chunk. Each anchor causes a parquet file
+// re-open + a row-group read, so the cost scales with the number of rejected
+// rows fed in. Setting the cap to <=0 disables the check (not recommended).
+CONF_mInt64(parquet_read_rows_max_anchors, "10000");
+
 CONF_Int32(streaming_load_thread_pool_num_min, "0");
 
 CONF_Int32(streaming_load_thread_pool_idle_time_ms, "2000");

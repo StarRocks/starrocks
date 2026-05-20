@@ -253,6 +253,7 @@
         "put_combined_txn_log_thread_pool_num_max",
         "python_envs",
         "enable_rejected_record_sync",
+        "parquet_read_rows_max_anchors",
         "rejected_record_local_retention_hours",
         "rejected_record_sync_interval_sec",
         "rejected_record_sync_max_backoff_sec",
