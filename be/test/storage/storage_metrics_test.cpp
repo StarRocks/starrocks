@@ -64,6 +64,34 @@ TEST(StorageMetricsTest, InstallRegistersLoadMetrics) {
     assert_metric_value(&registry, "engine_requests_total",
                         MetricLabels().add("type", "storage_migrate").add("status", "total"), "8");
 
+    metrics.create_tablet_requests_total.increment(37);
+    assert_metric_value(&registry, "engine_requests_total",
+                        MetricLabels().add("type", "create_tablet").add("status", "total"), "37");
+
+    metrics.create_tablet_requests_failed.increment(38);
+    assert_metric_value(&registry, "engine_requests_total",
+                        MetricLabels().add("type", "create_tablet").add("status", "failed"), "38");
+
+    metrics.drop_tablet_requests_total.increment(39);
+    assert_metric_value(&registry, "engine_requests_total",
+                        MetricLabels().add("type", "drop_tablet").add("status", "total"), "39");
+
+    metrics.report_tablet_requests_total.increment(40);
+    assert_metric_value(&registry, "engine_requests_total",
+                        MetricLabels().add("type", "report_tablet").add("status", "total"), "40");
+
+    metrics.report_all_tablets_requests_total.increment(41);
+    assert_metric_value(&registry, "engine_requests_total",
+                        MetricLabels().add("type", "report_all_tablets").add("status", "total"), "41");
+
+    metrics.create_rollup_requests_total.increment(42);
+    assert_metric_value(&registry, "engine_requests_total",
+                        MetricLabels().add("type", "create_rollup").add("status", "total"), "42");
+
+    metrics.create_rollup_requests_failed.increment(43);
+    assert_metric_value(&registry, "engine_requests_total",
+                        MetricLabels().add("type", "create_rollup").add("status", "failed"), "43");
+
     metrics.delete_requests_failed.increment(9);
     assert_metric_value(&registry, "engine_requests_total",
                         MetricLabels().add("type", "delete").add("status", "failed"), "9");

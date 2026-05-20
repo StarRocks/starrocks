@@ -16,6 +16,10 @@ set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/connector")
 
 ADD_BE_LIB(Connector
         connector.cpp
+        data_source.cpp
+        data_source_provider.cpp
+        connector_registry.cpp
+        connector_registry_init.cpp
         hive_connector.cpp
         es_connector.cpp
         jdbc_connector.cpp

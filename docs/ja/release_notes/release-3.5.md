@@ -26,6 +26,44 @@ displayed_sidebar: docs
 
 :::
 
+## 3.5.17
+
+リリース日：2026 年 5 月 13 日
+
+### 動作変更
+
+- `SHOW CREATE TABLE` と `DESC` で Paimon テーブルの主キーを表示するようになりました。 [#70535](https://github.com/StarRocks/starrocks/pull/70535)
+- Hive Catalog で insert-only ACID Hive テーブルへの INSERT を無効化しました。 [#71460](https://github.com/StarRocks/starrocks/pull/71460)
+- Profile の `START_TIME` と `END_TIME` をセッションタイムゾーンで表示するようになりました。 [#71429](https://github.com/StarRocks/starrocks/pull/71429)
+
+### 改善点
+
+- `INSERT INTO FILES` の CSV エクスポートで `csv.enclose` と `csv.escape` をサポートしました。 [#71589](https://github.com/StarRocks/starrocks/pull/71589)
+- 監査ログにクエリ対象の relation 情報を記録できるようにしました。 [#71596](https://github.com/StarRocks/starrocks/pull/71596)
+- FE 設定 `star_mgr_meta_sync_interval_sec` を動的に変更できるようにしました。 [#71675](https://github.com/StarRocks/starrocks/pull/71675)
+- テーブルメタデータおよび行数統計関連のパスで、メタデータ読み込みとロックのオーバーヘッドを削減しました。 [#72053](https://github.com/StarRocks/starrocks/pull/72053) [#72042](https://github.com/StarRocks/starrocks/pull/72042) [#71672](https://github.com/StarRocks/starrocks/pull/71672)
+- Broker Builder を FE ビルドに統合し、WildFly OpenSSL を削除して、ビルドと依存関係管理を改善しました。 [#71823](https://github.com/StarRocks/starrocks/pull/71823) [#71908](https://github.com/StarRocks/starrocks/pull/71908)
+
+### バグ修正
+
+以下の問題を修正しました：
+
+- OFFSET を含む Local Shuffle 集約クエリで誤った結果が返される問題。 [#71997](https://github.com/StarRocks/starrocks/pull/71997)
+- Exchange Shuffle 列の pruning 後に Join の出力プロパティが正しく更新されない問題。 [#72003](https://github.com/StarRocks/starrocks/pull/72003)
+- 複数の依存関係 CVE 問題。 [#71762](https://github.com/StarRocks/starrocks/pull/71762) [#71914](https://github.com/StarRocks/starrocks/pull/71914)
+- Oracle JDBC の NLS フォーマット処理の問題。 [#71412](https://github.com/StarRocks/starrocks/pull/71412)
+- Iceberg Manifest Data File Cache で列統計情報が失われる問題。 [#71913](https://github.com/StarRocks/starrocks/pull/71913)
+- INSERT OVERWRITE の commit 前に Hive パーティションディレクトリが作成されない問題。 [#71810](https://github.com/StarRocks/starrocks/pull/71810)
+- Iceberg ベーステーブルでの集約 Join Pushdown MV Rewrite および Min/Max 最適化の問題。 [#71856](https://github.com/StarRocks/starrocks/pull/71856) [#71863](https://github.com/StarRocks/starrocks/pull/71863)
+- `ConnectorSinkPassthroughExchanger` と `LoadChannel::get_load_replica_status` の競合問題。 [#71848](https://github.com/StarRocks/starrocks/pull/71848) [#71843](https://github.com/StarRocks/starrocks/pull/71843)
+- INSERT FILES 操作における認証情報のマスキング問題。 [#71245](https://github.com/StarRocks/starrocks/pull/71245)
+- `reverse(DecimalV3)` の結果が誤る問題。 [#71834](https://github.com/StarRocks/starrocks/pull/71834)
+- Java UDF コードで JNI 例外処理チェックが不足していた問題。 [#71734](https://github.com/StarRocks/starrocks/pull/71734)
+- `EventScheduler` の Short-circuit チェックが正しくない問題。 [#71740](https://github.com/StarRocks/starrocks/pull/71740)
+- Arrow Flight の空結果セットで列名が誤る問題。 [#71534](https://github.com/StarRocks/starrocks/pull/71534)
+- パーティションのバージョンギャップにより Batch Publish がデッドロックする問題。 [#71483](https://github.com/StarRocks/starrocks/pull/71483)
+- スカラーサブクエリプランで Apply Attachment が重複する問題。 [#71155](https://github.com/StarRocks/starrocks/pull/71155)
+
 ## 3.5.16
 
 リリース日：2026 年 4 月 20 日

@@ -54,7 +54,7 @@ Since v3.3, `SHOW MATERIALIZED VIEWS` command will track the state of all task_r
 | last_refresh_start_time    | The start time of the last refresh of the materialized view. |
 | last_refresh_finished_time | The end time of the last refresh of the materialized view.   |
 | last_refresh_duration      | The time taken by the last refresh. Unit: seconds.           |
-| last_refresh_state         | The status of the last refresh, including PENDING, RUNNING, FAILED, and SUCCESS. |
+| last_refresh_state         | The status of the last refresh, including PENDING, RUNNING, FAILED, SUCCESS, and SKIPPED. When no data changes are detected on the base table partition, the refresh for the corresponding materialized view partition is skipped. |
 | last_refresh_force_refresh | Whether the last refresh is a FORCE refresh.                 |
 | last_refresh_start_partition | The start partition of the last refresh in the materialized view. |
 | last_refresh_end_partition | The end partition of the last refresh in the materialized view. |

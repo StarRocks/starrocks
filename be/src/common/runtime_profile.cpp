@@ -825,11 +825,18 @@ void RuntimeProfile::to_thrift(std::vector<TRuntimeProfileNode>* nodes) {
         counter.__set_value(iter_counter->value());
         counter.__set_type(iter_counter->type());
         counter.__set_strategy(iter_counter->strategy());
-        if (iter_counter->_min_value.has_value()) {
-            counter.__set_min_value(iter_counter->_min_value.value());
+        std::optional<int64_t> min_value;
+        std::optional<int64_t> max_value;
+        {
+            std::lock_guard<std::mutex> l(_counter_lock);
+            min_value = iter_counter->_min_value;
+            max_value = iter_counter->_max_value;
         }
-        if (iter_counter->_max_value.has_value()) {
-            counter.__set_max_value(iter_counter->_max_value.value());
+        if (min_value.has_value()) {
+            counter.__set_min_value(min_value.value());
+        }
+        if (max_value.has_value()) {
+            counter.__set_max_value(max_value.value());
         }
         node.counters.push_back(counter);
     }

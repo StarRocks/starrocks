@@ -37,6 +37,7 @@
 #include <memory>
 
 #include "base/utility/defer_op.h"
+#include "column/chunk_factory.h"
 #include "common/config_exec_fwd.h"
 #include "common/config_storage_fwd.h"
 #include "runtime/current_thread.h"
@@ -121,7 +122,7 @@ Status EngineChecksumTask::_compute_checksum() {
 
     int64_t checksum = 0;
 
-    auto chunk = ChunkHelper::new_chunk(schema, reader_params.chunk_size);
+    auto chunk = ChunkFactory::new_chunk(schema, reader_params.chunk_size);
     st = reader.get_next(chunk.get());
 
     bool bg_worker_stopped = StorageEngine::instance()->bg_worker_stopped();

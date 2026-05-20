@@ -108,6 +108,17 @@ public:
     static Status append_incremental_scan_ranges(ExecEnv* exec_env, const TExecPlanFragmentParams& request,
                                                  TExecPlanFragmentResult* response);
 
+    // Register the partition_value of each scan range into its HiveTableDescriptor's
+    // _partition_id_to_desc_map. The HdfsPartitionDescriptor is allocated from the
+    // query-level ObjectPool (RuntimeStateHelper::global_obj_pool) so that the map's
+    // entries outlive any single fragment instance — see the function body for the
+    // UAF this prevents.
+    //
+    // Exposed here so unit tests can pin the contract; production callers go through
+    // _prepare_exec_plan / append_incremental_scan_ranges, not this entry point.
+    static Status add_scan_ranges_partition_values(RuntimeState* runtime_state,
+                                                   const std::vector<TScanRangeParams>& scan_ranges);
+
     Status prepare_global_state(ExecEnv* exec_env, const TExecPlanFragmentParams& common_request);
     void _fail_cleanup(bool fragment_has_registed);
 

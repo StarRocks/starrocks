@@ -20,8 +20,8 @@
 #include "column/column.h" // Column
 #include "column/column_helper.h"
 #include "column/raw_data_visitor.h"
+#include "common/bloom_filter.h"
 #include "common/object_pool.h"
-#include "olap_type_infra.h"
 #include "storage/column_predicate.h"
 #include "storage/olap_common.h" // ColumnId
 #include "storage/range.h"
@@ -29,7 +29,7 @@
 #include "storage/types.h"
 #include "storage/zone_map_detail.h"
 #include "types/datum.h"
-#include "util/bloom_filter.h"
+#include "types/olap_type_infra.h"
 
 namespace starrocks {
 class BloomFilter;
@@ -1154,6 +1154,9 @@ std::ostream& operator<<(std::ostream& os, PredicateType p) {
         break;
     case PredicateType::kPlaceHolder:
         os << "placeholder";
+        break;
+    case PredicateType::kGinFallback:
+        os << "gin_fallback";
         break;
     default:
         CHECK(false) << "unknown predicate " << p;

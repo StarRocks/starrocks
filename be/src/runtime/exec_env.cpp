@@ -55,6 +55,8 @@
 #include "common/system/mem_info.h"
 #include "common/thread/priority_thread_pool.hpp"
 #include "common/thread/threadpool.h"
+#include "connector/builtin_connector_registry.h"
+#include "connector/connector_registry.h"
 #include "connector/connector_sink_executor.h"
 #include "exec/pipeline/driver_limiter.h"
 #include "exec/pipeline/pipeline_driver_executor.h"
@@ -104,7 +106,6 @@
 #include "runtime/stream_load/stream_load_executor.h"
 #include "runtime/stream_load/transaction_mgr.h"
 #include "runtime/thrift_rpc_helper.h"
-#include "service/staros_worker.h"
 #include "storage/lake/fixed_location_provider.h"
 #include "storage/lake/lake_persistent_index_parallel_compact_mgr.h"
 #include "storage/lake/replication_txn_manager.h"
@@ -117,6 +118,10 @@
 #include "storage/update_manager.h"
 #include "types/hll.h"
 #include "udf/python/env.h"
+
+#ifdef USE_STAROS
+#include <fslib/configuration.h>
+#endif
 
 #ifdef STARROCKS_JIT_ENABLE
 #include "exprs/jit/jit_engine.h"
@@ -445,6 +450,7 @@ void ExecEnv::_refresh_service_contexts() {
 Status ExecEnv::init(const std::vector<StorePath>& store_paths, ProcessMetricsRegistry* process_metrics_registry,
                      bool as_cn) {
     DCHECK(process_metrics_registry != nullptr);
+    RETURN_IF_ERROR(connector::install_builtin_connectors(connector::ConnectorRegistry::default_instance()));
     _process_metrics_registry = process_metrics_registry;
     _metrics = process_metrics_registry->root_registry();
     _table_metrics_mgr = process_metrics_registry->table_metrics_mgr();

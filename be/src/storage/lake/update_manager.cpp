@@ -20,6 +20,8 @@
 #include "base/testutil/sync_point.h"
 #include "base/utility/defer_op.h"
 #include "base/utility/pretty_printer.h"
+#include "column/chunk_factory.h"
+#include "column/chunk_schema_helper.h"
 #include "common/config_compaction_fwd.h"
 #include "common/config_lake_fwd.h"
 #include "common/config_primary_key_fwd.h"
@@ -315,7 +317,7 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
     // only use state entry once, remove it when publish finish or fail
     DeferOp remove_state_entry([&] { _update_state_cache.remove(state_entry); });
     auto& state = state_entry->value();
-    // Snapshot IO stats before publish to exclude preload IO from trace counters.
+    // Snapshot IO stats so trace counters reflect only this publish call (state may be reused on retry).
     const int64_t io_local_disk_ns_before = state.stats().io_ns_read_local_disk;
     const int64_t io_remote_ns_before = state.stats().io_ns_remote;
     const int64_t io_count_local_disk_before = state.stats().io_count_local_disk;
@@ -627,7 +629,7 @@ Status UpdateManager::_read_chunk_for_upsert(const TxnLogPB_OpWrite& op_write, c
                                              const std::vector<uint32_t>& insert_rowids,
                                              const std::vector<uint32_t>& update_cids, ChunkPtr* out_chunk) {
     auto full_schema = ChunkHelper::convert_schema(tschema);
-    auto full_chunk = ChunkHelper::new_chunk(full_schema, insert_rowids.size());
+    auto full_chunk = ChunkFactory::new_chunk(full_schema, insert_rowids.size());
 
     {
         FileInfo info;
@@ -695,7 +697,7 @@ Status UpdateManager::_read_chunk_for_upsert(const TxnLogPB_OpWrite& op_write, c
     }
 
     {
-        auto char_indexes = ChunkHelper::get_char_field_indexes(full_schema);
+        auto char_indexes = ChunkSchemaHelper::get_char_field_indexes(full_schema);
         ChunkHelper::padding_char_columns(char_indexes, full_schema, tschema, full_chunk.get());
     }
 
@@ -1036,12 +1038,12 @@ Status UpdateManager::_process_single_chunk_update_with_condition(
         RowsetUpdateState::plan_read_by_rssid(old_rowids, &num_default, &old_rowids_by_rssid, &idxes);
         MutableColumns old_columns(1);
         auto old_unordered_column =
-                ChunkHelper::column_from_field_type(tablet_column.type(), tablet_column.is_nullable());
+                ChunkFactory::column_from_field_type(tablet_column.type(), tablet_column.is_nullable());
         old_columns[0] = old_unordered_column->clone_empty();
         // Batch read condition values from all old row locations
         RETURN_IF_ERROR(get_column_values(params, read_column_ids, num_default > 0, old_rowids_by_rssid, &old_columns));
         // Reorder values to match the order of PKs in current chunk (idxes provides mapping)
-        auto old_column = ChunkHelper::column_from_field_type(tablet_column.type(), tablet_column.is_nullable());
+        auto old_column = ChunkFactory::column_from_field_type(tablet_column.type(), tablet_column.is_nullable());
         old_column->append_selective(*old_columns[0], idxes.data(), 0, idxes.size());
 
         // STEP 2: Read condition column values from new rows (from SST files)
@@ -1056,7 +1058,7 @@ Status UpdateManager::_process_single_chunk_update_with_condition(
         // Read condition values from SST file for new rows
         // LIMITATION: Only single condition column is supported (not composite conditions)
         MutableColumns new_columns(1);
-        auto new_column = ChunkHelper::column_from_field_type(tablet_column.type(), tablet_column.is_nullable());
+        auto new_column = ChunkFactory::column_from_field_type(tablet_column.type(), tablet_column.is_nullable());
         new_columns[0] = new_column->clone_empty();
         RETURN_IF_ERROR(get_column_values(params, read_column_ids, false, new_rowids_by_rssid, &new_columns));
 
@@ -1229,11 +1231,11 @@ static Status process_single_chunk_update_with_condition_no_sst(
     std::vector<uint32_t> idxes;
     RowsetUpdateState::plan_read_by_rssid(old_rowids, &num_default, &old_rowids_by_rssid, &idxes);
     MutableColumns old_columns(1);
-    auto old_unordered_column = ChunkHelper::column_from_field_type(tablet_column.type(), tablet_column.is_nullable());
+    auto old_unordered_column = ChunkFactory::column_from_field_type(tablet_column.type(), tablet_column.is_nullable());
     old_columns[0] = old_unordered_column->clone_empty();
     RETURN_IF_ERROR(
             mgr->get_column_values(params, read_column_ids, num_default > 0, old_rowids_by_rssid, &old_columns));
-    auto old_column = ChunkHelper::column_from_field_type(tablet_column.type(), tablet_column.is_nullable());
+    auto old_column = ChunkFactory::column_from_field_type(tablet_column.type(), tablet_column.is_nullable());
     old_column->append_selective(*old_columns[0], idxes.data(), 0, idxes.size());
 
     // Read new-row condition values from the freshly-ingested segment; rowid in this segment
@@ -1247,7 +1249,7 @@ static Status process_single_chunk_update_with_condition_no_sst(
     new_rowids_by_rssid[rowset_id + upsert_idx] = std::move(rowids);
     // only support condition update on single column
     MutableColumns new_columns(1);
-    auto new_column = ChunkHelper::column_from_field_type(tablet_column.type(), tablet_column.is_nullable());
+    auto new_column = ChunkFactory::column_from_field_type(tablet_column.type(), tablet_column.is_nullable());
     new_columns[0] = new_column->clone_empty();
     RETURN_IF_ERROR(mgr->get_column_values(params, read_column_ids, false, new_rowids_by_rssid, &new_columns));
 
@@ -1727,7 +1729,7 @@ Status UpdateManager::get_column_values(const RowsetUpdateStateParams& params, c
         }
 
         if (params.container.rssid_to_file().count(rssid) == 0) {
-            // It may happen when preload partial update state by old tablet meta
+            // It may happen when partial update state was loaded with old tablet meta
             return Status::Cancelled(fmt::format("tablet id {} version {} rowset_segment_id {} no exist",
                                                  params.metadata->id(), params.metadata->version(), rssid));
         }
@@ -2200,71 +2202,6 @@ void UpdateManager::try_remove_cache(uint32_t tablet_id, int64_t txn_id) {
     auto key = cache_key(tablet_id, txn_id);
     _update_state_cache.try_remove_by_key(key);
     _compaction_cache.try_remove_by_key(key);
-}
-
-void UpdateManager::preload_update_state(const TxnLog& txnlog, Tablet* tablet) {
-    // use process mem tracker instread of load mem tracker here.
-    SCOPED_THREAD_LOCAL_MEM_SETTER(GlobalEnv::GetInstance()->process_mem_tracker(), true);
-    SCOPED_THREAD_LOCAL_SINGLETON_CHECK_MEM_TRACKER_SETTER(config::enable_pk_strict_memcheck ? _update_mem_tracker
-                                                                                             : nullptr);
-    scoped_refptr<Trace> trace_guard(new Trace);
-    ADOPT_TRACE(trace_guard.get());
-    TRACE("start preload_update_state tablet_id=$0 txn_id=$1", tablet->id(), txnlog.txn_id());
-    auto start_ts = MonotonicMillis();
-    // use tabletid-txnid as update state cache's key, so it can retry safe.
-    auto state_entry = _update_state_cache.get_or_create(cache_key(tablet->id(), txnlog.txn_id()));
-    state_entry->update_expire_time(MonotonicMillis() + get_cache_expire_ms());
-    auto& state = state_entry->value();
-    // get latest metadata from cache, it is not matter if it isn't the real latest metadata.
-    auto metadata_ptr = _tablet_mgr->get_latest_cached_tablet_metadata(tablet->id());
-    const int segments_size = txnlog.op_write().rowset().segments_size();
-    // skip preload if memory limit exceed
-    if (metadata_ptr != nullptr && segments_size > 0 && !_update_state_mem_tracker->any_limit_exceeded()) {
-        auto tablet_schema = std::make_shared<TabletSchema>(metadata_ptr->schema());
-        RssidFileInfoContainer rssid_fileinfo_container;
-        rssid_fileinfo_container.add_rssid_to_file(*metadata_ptr);
-        RowsetUpdateStateParams params{
-                .op_write = txnlog.op_write(),
-                .tablet_schema = tablet_schema,
-                .metadata = metadata_ptr,
-                .tablet = tablet,
-                .container = rssid_fileinfo_container,
-        };
-        state.init(params);
-        auto st = Status::OK();
-        for (uint32_t segment_id = 0; segment_id < segments_size && !_update_state_mem_tracker->any_limit_exceeded();
-             segment_id++) {
-            st = state.load_segment(segment_id, params, metadata_ptr->version(), false /* resolve conflict*/,
-                                    true /* need lock */);
-            _update_state_cache.update_object_size(state_entry, state.memory_usage());
-            if (!st.ok()) {
-                break;
-            }
-        }
-        if (!st.ok()) {
-            _update_state_cache.remove(state_entry);
-            if (!st.is_uninitialized() && !st.is_cancelled()) {
-                LOG(ERROR) << strings::Substitute("lake primary table preload_update_state id:$0 error:$1",
-                                                  tablet->id(), st.to_string());
-            } else {
-                LOG(INFO) << strings::Substitute("lake primary table preload_update_state id:$0 failed:$1",
-                                                 tablet->id(), st.to_string());
-            }
-            // not return error even it fail, because we can load update state in publish again.
-        } else {
-            // just release it, will use it again in publish
-            _update_state_cache.release(state_entry);
-        }
-    } else {
-        _update_state_cache.remove(state_entry);
-    }
-    auto cost_ms = MonotonicMillis() - start_ts;
-    if (cost_ms >= config::lake_publish_version_slow_log_ms) {
-        LOG(INFO) << "Slow preload_update_state tablet_id=" << tablet->id() << " txn_id=" << txnlog.txn_id()
-                  << " segments=" << segments_size << " cost=" << cost_ms
-                  << "ms, trace: " << trace_guard->MetricsAsJSON();
-    }
-    TEST_SYNC_POINT("UpdateManager::preload_update_state:return");
 }
 
 void UpdateManager::preload_compaction_state(const TxnLog& txnlog, const Tablet& tablet,

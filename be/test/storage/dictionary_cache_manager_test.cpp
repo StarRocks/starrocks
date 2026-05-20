@@ -21,10 +21,12 @@
 #include <fstream>
 
 #include "base/testutil/assert.h"
+#include "column/chunk_factory.h"
 #include "exec/tablet_info.h"
 #include "exprs/dictionary_get_expr.h"
 #include "exprs/mock_vectorized_expr.h"
 #include "runtime/descriptor_helper.h"
+#include "storage/chunk_helper.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_manager.h"
 #include "testutil/column_test_helper.h"
@@ -91,7 +93,7 @@ public:
                                             int64_t txn_id, const TabletSharedPtr& tablet,
                                             const std::vector<TColumn>* tcolumns = nullptr) {
         auto schema = ChunkHelper::convert_schema(tablet->thread_safe_get_tablet_schema());
-        auto chunk = ChunkHelper::new_chunk(schema, 0);
+        auto chunk = ChunkFactory::new_chunk(schema, 0);
         chunk->reset_slot_id_to_index();
         for (size_t i = 0; i < chunk->num_columns(); ++i) {
             chunk->set_slot_id_to_index(i + 1, i);
@@ -198,7 +200,7 @@ public:
         ASSERT_TRUE(dictionary.get() != nullptr);
 
         auto schema = dictionary_cache_manager->get_dictionary_schema_by_id(dict_id);
-        auto chunk = ChunkHelper::new_chunk(*schema, 0);
+        auto chunk = ChunkFactory::new_chunk(*schema, 0);
         chunk->reset_slot_id_to_index();
         for (size_t i = 0; i < chunk->num_columns(); ++i) {
             chunk->set_slot_id_to_index(i + 1, i);
@@ -215,10 +217,10 @@ public:
             vids.emplace_back(id);
         }
 
-        ChunkPtr key_chunk = ChunkHelper::new_chunk(Schema(schema.get(), kids), 0);
+        ChunkPtr key_chunk = ChunkFactory::new_chunk(Schema(schema.get(), kids), 0);
         key_chunk->get_column_raw_ptr_by_index(0)->append(*chunk->get_column_raw_ptr_by_index(0));
 
-        ChunkPtr value_chunk = ChunkHelper::new_chunk(Schema(schema.get(), vids), 0);
+        ChunkPtr value_chunk = ChunkFactory::new_chunk(Schema(schema.get(), vids), 0);
         auto st = DictionaryCacheManager::probe_given_dictionary_cache(
                 *key_chunk->schema().get(), *value_chunk->schema().get(), dictionary, key_chunk, value_chunk, nullptr);
         ASSERT_TRUE(st.ok());

@@ -40,6 +40,7 @@
 
 #include "base/string/utf8.h"
 #include "bitmap_range_iterator.h"
+#include "column/chunk_factory.h"
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
 #include "exprs/function_context.h"
@@ -190,7 +191,7 @@ Status BitmapIndexIterator::seek_dict_by_ngram(const void* value, roaring::Roari
         RETURN_IF_ERROR(_ngram_bitmap_column_iter->seek_to_ordinal(_ngram_dict_column_iter->get_current_ordinal()));
         size_t num_to_read = 1;
         size_t num_read = num_to_read;
-        auto column = ChunkHelper::column_from_field_type(TYPE_VARCHAR, false);
+        auto column = ChunkFactory::column_from_field_type(TYPE_VARCHAR, false);
         RETURN_IF_ERROR(_ngram_bitmap_column_iter->next_batch(&num_read, column.get()));
         if (num_to_read != num_read) {
             return Status::InternalError(fmt::format(
@@ -230,7 +231,7 @@ StatusOr<Buffer<rowid_t>> BitmapIndexIterator::filter_dict_by_predicate(
         RETURN_IF_ERROR(_dict_column_iter->seek_at_or_after(&min_value, &exact_match));
 
         const auto num_dicts = num_dictionaries();
-        auto col = ChunkHelper::column_from_field_type(TYPE_VARCHAR, false);
+        auto col = ChunkFactory::column_from_field_type(TYPE_VARCHAR, false);
 
         // Read all dictionaries starting from current position
         rowid_t start_ordinal = _dict_column_iter->get_current_ordinal();
@@ -258,7 +259,7 @@ StatusOr<Buffer<rowid_t>> BitmapIndexIterator::filter_dict_by_predicate(
         uint32_t from, to;
         const auto max_range = rowids->cardinality();
         while (it.next_range(max_range, &from, &to)) {
-            auto col = ChunkHelper::column_from_field_type(TYPE_VARCHAR, false);
+            auto col = ChunkFactory::column_from_field_type(TYPE_VARCHAR, false);
             RETURN_IF_ERROR(_dict_column_iter->seek_to_ordinal(from));
             size_t num_to_read = to - from;
             size_t read = num_to_read;
@@ -297,7 +298,7 @@ Status BitmapIndexIterator::read_ngram_bitmap(rowid_t ordinal, Roaring* result) 
         if (!(0 <= ordinal && ordinal < _reader->ngram_bitmap_nums())) {
             return Status::InvalidArgument("ordinal is out of range while reading ngram bitmap");
         }
-        auto column = ChunkHelper::column_from_field_type(TYPE_VARCHAR, false);
+        auto column = ChunkFactory::column_from_field_type(TYPE_VARCHAR, false);
         RETURN_IF_ERROR(_ngram_bitmap_column_iter->seek_to_ordinal(ordinal));
         size_t num_to_read = 1;
         size_t num_read = num_to_read;
@@ -331,7 +332,7 @@ StatusOr<Buffer<rowid_t>> BitmapIndexIterator::seek_dictionary_by_predicate(cons
     if (_reader->type_info()->type() != TYPE_VARCHAR && _reader->type_info()->type() != TYPE_CHAR) {
         return Status::NotSupported("predicate seek for dictionary only support string/char type bitmap index");
     }
-    auto column = ChunkHelper::column_from_field_type(TYPE_VARCHAR, false);
+    auto column = ChunkFactory::column_from_field_type(TYPE_VARCHAR, false);
     bool exact_match;
     RETURN_IF_ERROR(seek_dictionary(&from_value, &exact_match));
     size_t beg_rowid = _current_rowid;
@@ -351,7 +352,7 @@ StatusOr<Buffer<rowid_t>> BitmapIndexIterator::seek_dictionary_by_predicate(cons
 Status BitmapIndexIterator::read_bitmap(rowid_t ordinal, Roaring* result) {
     DCHECK(0 <= ordinal && ordinal < _reader->bitmap_nums());
 
-    auto column = ChunkHelper::column_from_field_type(TYPE_VARCHAR, false);
+    auto column = ChunkFactory::column_from_field_type(TYPE_VARCHAR, false);
     RETURN_IF_ERROR(_bitmap_column_iter->seek_to_ordinal(ordinal));
     size_t num_to_read = 1;
     size_t num_read = num_to_read;

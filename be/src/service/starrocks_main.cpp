@@ -78,7 +78,6 @@
 #include "runtime/memory/roaring_hook.h"
 #include "service/daemon.h"
 #include "service/service.h"
-#include "service/staros_worker.h"
 #include "storage/options.h"
 #include "storage/storage_engine.h"
 #include "util/logging.h"

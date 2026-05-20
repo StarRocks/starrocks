@@ -26,6 +26,8 @@
 #include "base/utility/defer_op.h"
 #include "base/utility/pretty_printer.h"
 #include "base/utility/scoped_cleanup.h"
+#include "column/chunk_factory.h"
+#include "column/chunk_schema_helper.h"
 #include "common/config_compaction_fwd.h"
 #include "common/config_exec_fwd.h"
 #include "common/config_primary_key_fwd.h"
@@ -1761,7 +1763,15 @@ Status TabletUpdates::_apply_normal_rowset_commit(const EditVersionInfo& version
             auto r = rowset->total_segment_data_size();
             if (r.ok()) {
                 full_rowset_size = r.value();
+                const bool has_merge_condition = rowset_meta_pb.txn_meta().has_merge_condition();
+                std::string merge_condition;
+                if (has_merge_condition) {
+                    merge_condition = rowset_meta_pb.txn_meta().merge_condition();
+                }
                 rowset->rowset_meta()->clear_txn_meta();
+                if (has_merge_condition) {
+                    rowset->rowset_meta()->set_merge_condition(merge_condition);
+                }
                 rowset->rowset_meta()->set_total_row_size(full_row_size);
                 const auto index_disk_size = rowset->rowset_meta()->index_disk_size();
                 // full_rowset_size is the segment file bytes (column data + embedded indexes).
@@ -1976,11 +1986,11 @@ Status TabletUpdates::_do_update(uint32_t rowset_id, int32_t upsert_idx, int32_t
             RowsetUpdateState::plan_read_by_rssid(old_rowids, &num_default, &old_rowids_by_rssid, &idxes);
             MutableColumns old_columns(1);
             auto old_unordered_column =
-                    ChunkHelper::column_from_field_type(tablet_column.type(), tablet_column.is_nullable());
+                    ChunkFactory::column_from_field_type(tablet_column.type(), tablet_column.is_nullable());
             old_columns[0] = old_unordered_column->clone_empty();
             RETURN_IF_ERROR(get_column_values(read_column_ids, read_version, num_default > 0, old_rowids_by_rssid,
                                               &old_columns, nullptr, tablet_schema));
-            auto old_column = ChunkHelper::column_from_field_type(tablet_column.type(), tablet_column.is_nullable());
+            auto old_column = ChunkFactory::column_from_field_type(tablet_column.type(), tablet_column.is_nullable());
             old_column->append_selective(*old_columns[0], idxes.data(), 0, idxes.size());
 
             std::map<uint32_t, std::vector<uint32_t>> new_rowids_by_rssid;
@@ -1991,7 +2001,7 @@ Status TabletUpdates::_do_update(uint32_t rowset_id, int32_t upsert_idx, int32_t
             }
             new_rowids_by_rssid[rowset_id + upsert_idx] = rowids;
             MutableColumns new_columns(1);
-            auto new_column = ChunkHelper::column_from_field_type(tablet_column.type(), tablet_column.is_nullable());
+            auto new_column = ChunkFactory::column_from_field_type(tablet_column.type(), tablet_column.is_nullable());
             new_columns[0] = new_column->clone_empty();
             RETURN_IF_ERROR(get_column_values(read_column_ids, read_version, false, new_rowids_by_rssid, &new_columns,
                                               nullptr, tablet_schema));
@@ -4414,9 +4424,9 @@ Status TabletUpdates::convert_from(const std::shared_ptr<Tablet>& base_tablet, i
 Status TabletUpdates::_convert_from_base_rowset(const Schema& base_schema, const Schema& new_schema,
                                                 const ChunkIteratorPtr& seg_iterator, ChunkChanger* chunk_changer,
                                                 const std::unique_ptr<RowsetWriter>& rowset_writer) {
-    ChunkPtr base_chunk = ChunkHelper::new_chunk(base_schema, config::vector_chunk_size);
-    ChunkPtr new_chunk = ChunkHelper::new_chunk(new_schema, config::vector_chunk_size);
-    auto char_field_indexes = ChunkHelper::get_char_field_indexes(new_schema);
+    ChunkPtr base_chunk = ChunkFactory::new_chunk(base_schema, config::vector_chunk_size);
+    ChunkPtr new_chunk = ChunkFactory::new_chunk(new_schema, config::vector_chunk_size);
+    auto char_field_indexes = ChunkSchemaHelper::get_char_field_indexes(new_schema);
 
     std::unique_ptr<MemPool> mem_pool(new MemPool());
 
@@ -4522,7 +4532,7 @@ Status TabletUpdates::reorder_from(const std::shared_ptr<Tablet>& base_tablet, i
         cids.push_back(i);
     }
     Schema new_schema = ChunkHelper::convert_schema(tschema, cids);
-    auto char_field_indexes = ChunkHelper::get_char_field_indexes(new_schema);
+    auto char_field_indexes = ChunkSchemaHelper::get_char_field_indexes(new_schema);
     for (int i = 0; i < src_rowsets.size(); i++) {
         const auto& src_rowset = src_rowsets[i];
 
@@ -4558,14 +4568,14 @@ Status TabletUpdates::reorder_from(const std::shared_ptr<Tablet>& base_tablet, i
 
         std::unique_ptr<RowsetWriter> rowset_writer;
         RETURN_IF_ERROR(RowsetFactory::create_rowset_writer(writer_context, &rowset_writer));
-        ChunkPtr base_chunk = ChunkHelper::new_chunk(base_schema, config::vector_chunk_size);
+        ChunkPtr base_chunk = ChunkFactory::new_chunk(base_schema, config::vector_chunk_size);
 
         for (auto& seg_iterator : seg_iterators) {
             if (seg_iterator.get() == nullptr) {
                 continue;
             }
             while (true) {
-                ChunkPtr new_chunk = ChunkHelper::new_chunk(new_schema, config::vector_chunk_size);
+                ChunkPtr new_chunk = ChunkFactory::new_chunk(new_schema, config::vector_chunk_size);
                 base_chunk->reset();
                 Status status = seg_iterator->get_next(base_chunk.get());
                 if (!status.ok()) {

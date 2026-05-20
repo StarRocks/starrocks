@@ -20,8 +20,6 @@
 #include <filesystem>
 #include <set>
 
-#include "agent/agent_server.h"
-#include "agent/task_signatures_manager.h"
 #include "base/string/string_parser.hpp"
 #include "base/utility/defer_op.h"
 #include "common/config_http_fwd.h"

@@ -43,6 +43,8 @@
 
 #include "base/utility/pretty_printer.h"
 #include "column/chunk.h"
+#include "column/chunk_factory.h"
+#include "column/chunk_schema_helper.h"
 #include "common/config_compaction_fwd.h"
 #include "common/config_exec_fwd.h"
 #include "common/config_rowset_fwd.h"
@@ -914,7 +916,7 @@ Status HorizontalRowsetWriter::_final_merge() {
         _context.max_rows_per_segment = CompactionUtils::get_segment_max_rows(config::max_segment_file_size,
                                                                               _num_rows_written, _total_data_size);
 
-        auto chunk_shared_ptr = ChunkHelper::new_chunk(schema, config::vector_chunk_size);
+        auto chunk_shared_ptr = ChunkFactory::new_chunk(schema, config::vector_chunk_size);
         auto chunk = chunk_shared_ptr.get();
 
         _segment_encryption_metas.clear();
@@ -945,7 +947,7 @@ Status HorizontalRowsetWriter::_final_merge() {
             return Status::InternalError(ss.str());
         }
 
-        auto char_field_indexes = ChunkHelper::get_char_field_indexes(schema);
+        auto char_field_indexes = ChunkSchemaHelper::get_char_field_indexes(schema);
 
         size_t total_rows = 0;
         size_t total_chunk = 0;
@@ -1011,10 +1013,10 @@ Status HorizontalRowsetWriter::_final_merge() {
             }
             RETURN_IF_ERROR(itr->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS));
 
-            auto chunk_shared_ptr = ChunkHelper::new_chunk(schema, config::vector_chunk_size);
+            auto chunk_shared_ptr = ChunkFactory::new_chunk(schema, config::vector_chunk_size);
             auto chunk = chunk_shared_ptr.get();
 
-            auto char_field_indexes = ChunkHelper::get_char_field_indexes(schema);
+            auto char_field_indexes = ChunkSchemaHelper::get_char_field_indexes(schema);
 
             while (true) {
                 chunk->reset();
@@ -1085,7 +1087,7 @@ Status HorizontalRowsetWriter::_final_merge() {
         }
         RETURN_IF_ERROR(itr->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS));
 
-        auto chunk_shared_ptr = ChunkHelper::new_chunk(schema, config::vector_chunk_size);
+        auto chunk_shared_ptr = ChunkFactory::new_chunk(schema, config::vector_chunk_size);
         auto chunk = chunk_shared_ptr.get();
 
         _segment_encryption_metas.clear();
@@ -1108,7 +1110,7 @@ Status HorizontalRowsetWriter::_final_merge() {
         // method to create segment data files, rather than temporary segment files.
         _context.segments_overlap = NONOVERLAPPING;
 
-        auto char_field_indexes = ChunkHelper::get_char_field_indexes(schema);
+        auto char_field_indexes = ChunkSchemaHelper::get_char_field_indexes(schema);
 
         size_t total_rows = 0;
         size_t total_chunk = 0;

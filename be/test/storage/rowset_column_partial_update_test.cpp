@@ -20,6 +20,7 @@
 
 #include "base/testutil/assert.h"
 #include "base/utility/defer_op.h"
+#include "column/chunk_factory.h"
 #include "column/datum_tuple.h"
 #include "common/config_compaction_fwd.h"
 #include "common/config_exec_fwd.h"
@@ -49,7 +50,6 @@ namespace starrocks {
 
 struct RowsetColumnPartialUpdateParam {
     int64_t primary_key_batch_get_index_memory_limit;
-    bool skip_pk_preload;
 };
 
 class RowsetColumnPartialUpdateTest : public ::testing::Test,
@@ -59,7 +59,6 @@ public:
         _compaction_mem_tracker = std::make_unique<MemTracker>(-1);
         _update_mem_tracker = std::make_unique<MemTracker>();
         config::primary_key_batch_get_index_memory_limit = GetParam().primary_key_batch_get_index_memory_limit;
-        config::skip_pk_preload = GetParam().skip_pk_preload;
         config::enable_pk_size_tiered_compaction_strategy = false;
     }
 
@@ -71,7 +70,6 @@ public:
             }
         }
         config::enable_pk_size_tiered_compaction_strategy = true;
-        config::skip_pk_preload = false;
     }
 
     RowsetSharedPtr create_rowset(const TabletSharedPtr& tablet, const vector<int64_t>& keys, bool add_v3 = false) {
@@ -90,7 +88,7 @@ public:
         std::unique_ptr<RowsetWriter> writer;
         EXPECT_TRUE(RowsetFactory::create_rowset_writer(writer_context, &writer).ok());
         auto schema = ChunkHelper::convert_schema(tablet->tablet_schema());
-        auto chunk = ChunkHelper::new_chunk(schema, keys.size());
+        auto chunk = ChunkFactory::new_chunk(schema, keys.size());
         auto cols = chunk->mutable_columns();
         for (int64_t key : keys) {
             cols[0]->append_datum(Datum(key));
@@ -186,7 +184,7 @@ public:
         EXPECT_TRUE(RowsetFactory::create_rowset_writer(writer_context, &writer).ok());
         auto schema = ChunkHelper::convert_schema(partial_schema);
 
-        auto chunk = ChunkHelper::new_chunk(schema, keys.size());
+        auto chunk = ChunkFactory::new_chunk(schema, keys.size());
         for (int64_t key : keys) {
             int idx = 0;
             for (int colid : column_indexes) {
@@ -203,7 +201,7 @@ public:
         }
         if (spilt_keys) {
             for (int i = 0; i < segment_num; i++) {
-                auto tmp_chunk = ChunkHelper::new_chunk(schema, keys.size() / segment_num);
+                auto tmp_chunk = ChunkFactory::new_chunk(schema, keys.size() / segment_num);
                 std::vector<uint32_t> indexes;
                 for (int j = i; j < chunk->num_rows(); j += segment_num) {
                     indexes.emplace_back(j);
@@ -259,7 +257,7 @@ static ChunkIteratorPtr create_tablet_iterator(TabletReader& reader, Schema& sch
 
 static bool check_until_eof(const ChunkIteratorPtr& iter, int64_t check_rows_cnt,
                             const std::function<bool(int64_t, int16_t, int32_t, int32_t)>& check_fn, bool check_v3) {
-    auto chunk = ChunkHelper::new_chunk(iter->schema(), 100);
+    auto chunk = ChunkFactory::new_chunk(iter->schema(), 100);
     int64_t rows_cnt = 0;
     while (true) {
         auto st = iter->get_next(chunk.get());
@@ -852,7 +850,7 @@ TEST_P(RowsetColumnPartialUpdateTest, test_get_column_values) {
         auto read_column_schema = ChunkHelper::convert_schema(tablet->tablet_schema(), column_ids);
         MutableColumns columns(column_ids.size());
         for (int colid = 0; colid < column_ids.size(); colid++) {
-            auto column = ChunkHelper::column_from_field(*read_column_schema.field(colid).get());
+            auto column = ChunkFactory::column_from_field(*read_column_schema.field(colid).get());
             columns[colid] = column->clone_empty();
         }
         ASSERT_OK(tablet->updates()->get_column_values(column_ids, version, false, rowids_by_rssid, &columns, nullptr,
@@ -1679,8 +1677,7 @@ TEST_P(RowsetColumnPartialUpdateTest, test_meta_reader_with_multiple_dcg_columns
 }
 
 INSTANTIATE_TEST_SUITE_P(RowsetColumnPartialUpdateTest, RowsetColumnPartialUpdateTest,
-                         ::testing::Values(RowsetColumnPartialUpdateParam{1, false},
-                                           RowsetColumnPartialUpdateParam{1024, true},
-                                           RowsetColumnPartialUpdateParam{104857600, false}));
+                         ::testing::Values(RowsetColumnPartialUpdateParam{1}, RowsetColumnPartialUpdateParam{1024},
+                                           RowsetColumnPartialUpdateParam{104857600}));
 
 } // namespace starrocks

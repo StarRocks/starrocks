@@ -20,6 +20,11 @@
 
 namespace starrocks::io {
 
+// Out-of-line so gcov can attribute coverage to a concrete `.cpp` line.
+IoStatsSnapshot SeekableInputStreamWrapper::get_io_stats_snapshot() const {
+    return _impl->get_io_stats_snapshot();
+}
+
 StatusOr<int64_t> SeekableInputStream::read_at(int64_t offset, void* data, int64_t count) {
     RETURN_IF_ERROR(seek(offset));
     return read(data, count);

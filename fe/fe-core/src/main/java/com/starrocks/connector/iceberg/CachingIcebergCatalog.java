@@ -90,6 +90,8 @@ public class CachingIcebergCatalog implements IcebergCatalog {
     private final Map<IcebergTableName, Set<String>> metaFileCacheMap = new ConcurrentHashMap<>(); // table -> metadata file paths
     private final Map<IcebergTableName, Long> tableLatestAccessTime = new ConcurrentHashMap<>();
     private final Map<IcebergTableName, Long> tableLatestRefreshTime = new ConcurrentHashMap<>();
+    // Per-table lock strings: avoids catalog-wide serialization during concurrent refresh of different tables.
+    private final ConcurrentHashMap<String, String> tableRefreshLockMap = new ConcurrentHashMap<>();
 
     private final com.github.benmanes.caffeine.cache.LoadingCache<IcebergTableName, Map<String, Partition>> partitionCache;
 
@@ -386,7 +388,16 @@ public class CachingIcebergCatalog implements IcebergCatalog {
     }
 
     @Override
-    public synchronized void refreshTable(String dbName, String tableName, ConnectContext ctx, ExecutorService executorService) {
+    public void refreshTable(String dbName, String tableName, ConnectContext ctx, ExecutorService executorService) {
+        String lockKey = dbName.toLowerCase(Locale.ROOT) + "." + tableName.toLowerCase(Locale.ROOT);
+        tableRefreshLockMap.putIfAbsent(lockKey, lockKey);
+        String lock = tableRefreshLockMap.get(lockKey);
+        synchronized (lock) {
+            refreshTableUnderLock(dbName, tableName, ctx, executorService);
+        }
+    }
+
+    private void refreshTableUnderLock(String dbName, String tableName, ConnectContext ctx, ExecutorService executorService) {
         IcebergTableName icebergTableName = new IcebergTableName(dbName, tableName);
         Table cachedTable = tables.getIfPresent(icebergTableName);
         if (cachedTable == null) {
@@ -440,9 +451,7 @@ public class CachingIcebergCatalog implements IcebergCatalog {
         // update tables before refresh partition cache
         // so when refreshing partition cache, `getTables` can return the latest one.
         // another way to fix is to call `delegate.getTables` when refreshing partition cache.
-        synchronized (this) {
-            tables.put(keyWithoutSnap, updatedTable);
-        }
+        tables.put(keyWithoutSnap, updatedTable);
 
         partitionCache.invalidate(baseIcebergTableName);
         partitionCache.get(updatedIcebergTableName);

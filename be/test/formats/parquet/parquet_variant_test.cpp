@@ -293,10 +293,13 @@ TEST_F(ParquetVariantTest, TimestampValue) {
 }
 
 std::string epoch_day_to_date(int32_t epoch_days) {
-    std::time_t raw_time = epoch_days * 86400; // to seconds
-    std::tm* ptm = std::gmtime(&raw_time);     // to UTC
+    std::time_t raw_time = static_cast<std::time_t>(epoch_days) * 86400; // to seconds
+    std::tm tm_buf{};
+    if (gmtime_r(&raw_time, &tm_buf) == nullptr) {
+        return {};
+    }
     char buffer[11];
-    std::strftime(buffer, sizeof(buffer), "%Y-%m-%d", ptm);
+    std::strftime(buffer, sizeof(buffer), "%Y-%m-%d", &tm_buf);
     return buffer;
 }
 

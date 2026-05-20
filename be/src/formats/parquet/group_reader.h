@@ -180,6 +180,9 @@ private:
         SlotId slot_id;                       // synthetic negative id (-1, -2, ...) that identifies this source
         std::unique_ptr<ColumnReader> reader; // reader for the underlying VARIANT column
         bool is_active = false;               // active (pre-conjunct) vs lazy (post-conjunct)
+        // true when ALL virtual slots backed by this source are promoted to VariantTypedValueProxy
+        // readers in Phase 2; skip IO and Phase 3 reads for this source entirely.
+        bool fully_promoted = false;
     };
 
     void _set_end_offset(int64_t value) { _end_offset = value; }
@@ -225,6 +228,11 @@ private:
     StatusOr<ColumnReaderPtr> _create_column_reader(const GroupReaderParam::Column& column);
     VariantShreddedReadHints _get_variant_shredded_hints(std::string_view column_name) const;
     Status _prepare_column_readers() const;
+    // Promotes variant virtual columns to VariantTypedValueProxy readers in Phase 2 when the
+    // backing hidden source has _skip_base_payload=true (all paths are scalar typed-value leaves).
+    // Promoted slots are placed in _column_readers instead of _variant_virtual_projections and
+    // the hidden source is marked fully_promoted=true to skip Phase 3 IO/reads.
+    Status _promote_variant_virtual_columns();
     // Creates a lightweight VIEW chunk of _read_chunk containing the given slot_ids.
     // Each entry in slot_ids must already exist as a column in _read_chunk. _init_read_chunk()
     // pre-allocates physical slots and active hidden variant source slots; lazy hidden sources
@@ -293,6 +301,11 @@ private:
     // slot ids of virtual columns that have at least one deferred conjunct.
     // used in _apply_deferred_variant_conjuncts to detect invariant violations.
     std::unordered_set<SlotId> _deferred_conjunct_slot_ids;
+
+    // Slot ids of virtual variant columns promoted to VariantTypedValueProxy readers in Phase 2.
+    // These slots appear in _column_readers (not _variant_virtual_projections) and participate
+    // in dict filter like normal physical columns.
+    std::unordered_set<SlotId> _promoted_virtual_slots;
 
     // active columns that hold read_col index
     std::vector<int> _active_column_indices;

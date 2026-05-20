@@ -75,7 +75,7 @@ target_link_libraries(ExecSchemaScannerCore PUBLIC
     RuntimeCore
     ChunkCore
     ColumnCore
-    TypesCore
+    Types
     Common
     Base
     Gutil
@@ -103,7 +103,7 @@ target_link_libraries(ExecSchemaScanners PUBLIC
     RuntimeCore
     ChunkCore
     ColumnCore
-    TypesCore
+    Types
     Common
     Base
     Gutil
@@ -129,7 +129,7 @@ target_link_libraries(ExecSortingCore PUBLIC
     RuntimeCore
     ChunkCore
     ColumnCore
-    TypesCore
+    Types
     Common
     Base
     Gutil
@@ -154,11 +154,11 @@ ADD_BE_LIB(ExecJoinCore
 target_link_libraries(ExecJoinCore PUBLIC
     ExecSortingCore
     ExprCore
-    SerdeCore
+    Serde
     RuntimeCore
     ChunkCore
     ColumnCore
-    TypesCore
+    Types
     Common
     Base
     Gutil
@@ -237,7 +237,15 @@ set(PIPELINE_OPERATORS_BATCH_SRCS
     pipeline/scan/glm_manager.cpp
     pipeline/scan/balanced_chunk_buffer.cpp
     pipeline/scan/chunk_source.cpp
+    pipeline/scan/bucket_sequence_morsel_queue.cpp
+    pipeline/scan/dynamic_morsel_queue.cpp
+    pipeline/scan/fixed_morsel_queue.cpp
     pipeline/scan/morsel.cpp
+    pipeline/scan/morsel_queue.cpp
+    pipeline/scan/morsel_queue_factory.cpp
+    pipeline/scan/scan_morsel.cpp
+    pipeline/scan/split_morsel_queue.cpp
+    pipeline/scan/split_scan_morsel.cpp
     pipeline/scan/scan_operator.cpp
     pipeline/scan/olap_chunk_source.cpp
     pipeline/scan/olap_scan_operator.cpp
@@ -404,8 +412,6 @@ set(EXEC_NON_PIPELINE_FILES
     raw_values_node.cpp
     except_hash_set.cpp
     except_node.cpp
-    arrow_to_starrocks_converter.cpp
-    arrow_to_json_converter.cpp
     parquet_schema_builder.cpp
     parquet_reader.cpp
     parquet_writer.cpp
@@ -431,6 +437,7 @@ set(EXEC_NON_PIPELINE_FILES
     hdfs_scanner/hdfs_scanner_partition.cpp
     hdfs_scanner/hdfs_scanner_parquet.cpp
     hdfs_scanner/hdfs_scanner_orc.cpp
+    hdfs_scanner/hdfs_scanner_avro.cpp
     hdfs_scanner/hdfs_scanner.cpp
     hdfs_scanner/jni_scanner.cpp
     file_scanner/avro_cpp_scanner.cpp
@@ -488,6 +495,9 @@ set(EXEC_NON_PIPELINE_FILES
     schema_scanner/schema_keywords_scanner.cpp
     schema_scanner/schema_tablet_reshard_jobs_scanner.cpp
     jdbc_scanner.cpp
+    jdbc/type_checker.cpp
+    jdbc/type_checker_manager.cpp
+    jdbc/type_checker_xml_loader.cpp
     sorting/merge_path.cpp
     connector_scan_node.cpp
     workgroup/work_group.cpp
@@ -542,7 +552,7 @@ target_link_libraries(PipelinePrimitives PUBLIC
     RuntimeCore
     ChunkCore
     ColumnCore
-    TypesCore
+    Types
     Common
     Base
     Gutil

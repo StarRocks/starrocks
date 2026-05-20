@@ -21,6 +21,10 @@
 #include <gtest/gtest.h>
 
 #include <atomic>
+#include <memory>
+#include <string>
+#include <utility>
+#include <vector>
 
 #include "base/bthreads/util.h"
 #include "base/concurrency/await.h"
@@ -29,8 +33,11 @@
 #include "base/testutil/id_generator.h"
 #include "base/testutil/sync_point.h"
 #include "base/utility/defer_op.h"
+#include "column/array_column.h"
 #include "column/chunk.h"
+#include "column/chunk_factory.h"
 #include "column/fixed_length_column.h"
+#include "column/nullable_column.h"
 #include "common/config_lake_fwd.h"
 #include "fs/fs_util.h"
 #include "gutil/strings/util.h"
@@ -39,6 +46,7 @@
 #include "service/brpc_service_test_util.h"
 #include "storage/chunk_helper.h"
 #include "storage/del_vector.h"
+#include "storage/lake/filenames.h"
 #include "storage/lake/fixed_location_provider.h"
 #include "storage/lake/join_path.h"
 #include "storage/lake/meta_file.h"
@@ -48,6 +56,7 @@
 #include "storage/lake/tablet_metadata.h"
 #include "storage/lake/test_util.h"
 #include "storage/lake/txn_log.h"
+#include "storage/rowset/segment_writer.h"
 #include "storage/variant_tuple.h"
 
 namespace starrocks {
@@ -612,6 +621,130 @@ TEST_F(LakeServiceTest, test_publish_version_for_write) {
         ASSIGN_OR_ABORT(auto metadata, tablet.get_metadata(4));
         EXPECT_EQ(0, metadata->commit_time());
     }
+}
+
+// Verifies the publish-time async VI dispatch gate: only async-mode tables
+// (index_build_mode = "async") generate vector_index_build_infos in the publish
+// response. Sync-mode tables build VI inline during write/compaction, so the FE
+// scheduler should not be involved.
+TEST_F(LakeServiceTest, test_publish_version_vector_index_dispatch_gate) {
+    auto make_vi_metadata = [&](bool async_mode) {
+        auto metadata = lake::generate_simple_tablet_metadata(DUP_KEYS);
+        auto* schema = metadata->mutable_schema();
+        auto* idx = schema->add_table_indices();
+        idx->set_index_id(next_id());
+        idx->set_index_type(VECTOR);
+        idx->add_col_unique_id(schema->column(1).unique_id());
+        std::string props_json = R"({"common_properties": {"index_type": "hnsw")";
+        if (async_mode) {
+            props_json += R"(, "index_build_mode": "async")";
+        }
+        props_json += "}}";
+        idx->set_index_properties(props_json);
+        return metadata;
+    };
+
+    auto sync_metadata = make_vi_metadata(false);
+    auto async_metadata = make_vi_metadata(true);
+    auto sync_tablet_id = sync_metadata->id();
+    auto async_tablet_id = async_metadata->id();
+    auto sync_index_id = sync_metadata->schema().table_indices(0).index_id();
+    auto async_index_id = async_metadata->schema().table_indices(0).index_id();
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(sync_metadata));
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(async_metadata));
+
+    auto build_vi_txn_log = [&](int64_t tablet_id, int64_t index_id) {
+        auto txn_id = next_id();
+        TxnLog log;
+        log.set_tablet_id(tablet_id);
+        log.set_partition_id(_partition_id);
+        log.set_txn_id(txn_id);
+        log.mutable_op_write()->mutable_rowset()->add_segments(generate_segment_file_for_tablet(tablet_id, txn_id));
+        log.mutable_op_write()->mutable_rowset()->add_segment_size(1024);
+        auto* segment_meta = log.mutable_op_write()->mutable_rowset()->add_segment_metas();
+        segment_meta->set_num_rows(100);
+        segment_meta->add_vector_index_ids(index_id);
+        log.mutable_op_write()->mutable_rowset()->set_data_size(1024);
+        log.mutable_op_write()->mutable_rowset()->set_num_rows(100);
+        log.mutable_op_write()->mutable_rowset()->set_overlapped(false);
+        return log;
+    };
+
+    auto sync_log = build_vi_txn_log(sync_tablet_id, sync_index_id);
+    auto async_log = build_vi_txn_log(async_tablet_id, async_index_id);
+    ASSERT_OK(_tablet_mgr->put_txn_log(sync_log));
+    ASSERT_OK(_tablet_mgr->put_txn_log(async_log));
+
+    // Sync-mode table: response should NOT contain vector_index_build_infos.
+    {
+        PublishVersionRequest request;
+        request.set_base_version(1);
+        request.set_new_version(2);
+        request.add_tablet_ids(sync_tablet_id);
+        request.add_txn_ids(sync_log.txn_id());
+        PublishVersionResponse response;
+        _lake_service.publish_version(nullptr, &request, &response, nullptr);
+        ASSERT_EQ(0, response.failed_tablets_size());
+        EXPECT_EQ(0, response.vector_index_build_infos_size())
+                << "sync-mode tablet must not appear in vector_index_build_infos";
+    }
+
+    // Async-mode table: response should contain one vector_index_build_infos entry
+    // pointing at this tablet/version.
+    {
+        PublishVersionRequest request;
+        request.set_base_version(1);
+        request.set_new_version(2);
+        request.add_tablet_ids(async_tablet_id);
+        request.add_txn_ids(async_log.txn_id());
+        PublishVersionResponse response;
+        _lake_service.publish_version(nullptr, &request, &response, nullptr);
+        ASSERT_EQ(0, response.failed_tablets_size());
+        ASSERT_EQ(1, response.vector_index_build_infos_size())
+                << "async-mode tablet with new vector_index_ids must be reported";
+        EXPECT_EQ(async_tablet_id, response.vector_index_build_infos(0).tablet_id());
+        EXPECT_EQ(2, response.vector_index_build_infos(0).version());
+    }
+}
+
+// Async-mode table whose new rowset has no vector_index_ids (segment under
+// threshold) should also not appear in vector_index_build_infos.
+TEST_F(LakeServiceTest, test_publish_version_async_table_no_vi_ids_skipped) {
+    auto metadata = lake::generate_simple_tablet_metadata(DUP_KEYS);
+    auto* schema = metadata->mutable_schema();
+    auto* idx = schema->add_table_indices();
+    idx->set_index_id(next_id());
+    idx->set_index_type(VECTOR);
+    idx->add_col_unique_id(schema->column(1).unique_id());
+    idx->set_index_properties(R"({"common_properties": {"index_type": "hnsw", "index_build_mode": "async"}})");
+    auto tablet_id = metadata->id();
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(metadata));
+
+    auto txn_id = next_id();
+    TxnLog log;
+    log.set_tablet_id(tablet_id);
+    log.set_partition_id(_partition_id);
+    log.set_txn_id(txn_id);
+    log.mutable_op_write()->mutable_rowset()->add_segments(generate_segment_file_for_tablet(tablet_id, txn_id));
+    log.mutable_op_write()->mutable_rowset()->add_segment_size(1024);
+    auto* segment_meta = log.mutable_op_write()->mutable_rowset()->add_segment_metas();
+    segment_meta->set_num_rows(100);
+    // intentionally do NOT add vector_index_ids: simulates async + below-threshold
+    log.mutable_op_write()->mutable_rowset()->set_data_size(1024);
+    log.mutable_op_write()->mutable_rowset()->set_num_rows(100);
+    log.mutable_op_write()->mutable_rowset()->set_overlapped(false);
+    ASSERT_OK(_tablet_mgr->put_txn_log(log));
+
+    PublishVersionRequest request;
+    request.set_base_version(1);
+    request.set_new_version(2);
+    request.add_tablet_ids(tablet_id);
+    request.add_txn_ids(txn_id);
+    PublishVersionResponse response;
+    _lake_service.publish_version(nullptr, &request, &response, nullptr);
+    ASSERT_EQ(0, response.failed_tablets_size());
+    EXPECT_EQ(0, response.vector_index_build_infos_size())
+            << "async-mode tablet without vector_index_ids must not be reported";
 }
 
 TEST_F(LakeServiceTest, test_publish_version_for_write_batch) {
@@ -4986,6 +5119,183 @@ TEST_F(LakeServiceTest, test_get_txn_ids_string_priority) {
 }
 
 // ==================== build_vector_index RPC ====================
+
+class LakeServiceVectorIndexBuildTest : public lake::TestBase {
+public:
+    LakeServiceVectorIndexBuildTest()
+            : lake::TestBase("lake_service_vector_index_build_test_" + std::to_string(GetCurrentTimeMicros())) {
+        clear_and_init_test_dir();
+    }
+
+protected:
+    static constexpr int64_t kTabletId = 10001;
+    static constexpr int64_t kIndexId = 100;
+    static constexpr int32_t kVectorColUniqueId = 2;
+    uint32_t _next_rowset_id = 1;
+
+    TabletSchemaPB create_schema_pb() {
+        TabletSchemaPB schema_pb;
+        schema_pb.set_keys_type(DUP_KEYS);
+        schema_pb.set_num_short_key_columns(1);
+
+        auto c0 = schema_pb.add_column();
+        c0->set_unique_id(1);
+        c0->set_name("pk");
+        c0->set_type("INT");
+        c0->set_is_key(true);
+        c0->set_is_nullable(false);
+
+        auto c1 = schema_pb.add_column();
+        c1->set_unique_id(kVectorColUniqueId);
+        c1->set_name("vector");
+        c1->set_type("ARRAY");
+        c1->set_is_key(false);
+        c1->set_is_nullable(false);
+
+        auto* child = c1->add_children_columns();
+        child->set_unique_id(3);
+        child->set_name("element");
+        child->set_type("FLOAT");
+        child->set_is_nullable(true);
+
+        auto* idx = schema_pb.add_table_indices();
+        idx->set_index_id(kIndexId);
+        idx->set_index_name("vec_idx");
+        idx->set_index_type(IndexType::VECTOR);
+        idx->add_col_unique_id(kVectorColUniqueId);
+        idx->set_index_properties(R"({
+            "common_properties": {
+                "index_type": "hnsw",
+                "dim": "3",
+                "is_vector_normed": "false",
+                "metric_type": "l2_distance",
+                "index_build_mode": "async"
+            },
+            "index_properties": {
+                "efconstruction": "40",
+                "m": "16"
+            }
+        })");
+
+        return schema_pb;
+    }
+
+    StatusOr<std::string> write_segment(const TabletSchemaCSPtr& tablet_schema, int64_t txn_id, int num_rows) {
+        auto seg_name = lake::gen_segment_filename(txn_id);
+        auto seg_path = _tablet_mgr->segment_location(kTabletId, seg_name);
+
+        SegmentWriterOptions opts;
+        opts.is_compaction = false;
+        opts.defer_vector_index_build = true;
+
+        auto vi_name = lake::gen_vector_index_filename(seg_name, kIndexId);
+        opts.vector_index_file_paths[kIndexId] = _tablet_mgr->segment_location(kTabletId, vi_name);
+
+        ASSIGN_OR_RETURN(auto wfile, fs::new_writable_file(seg_path));
+        auto writer = std::make_unique<SegmentWriter>(std::move(wfile), 0, tablet_schema, opts);
+        RETURN_IF_ERROR(writer->init());
+
+        auto schema = ChunkHelper::convert_schema(tablet_schema);
+        auto chunk = ChunkFactory::new_chunk(schema, num_rows);
+        for (int i = 0; i < num_rows; ++i) {
+            chunk->get_column_raw_ptr_by_index(0)->append_datum(Datum(static_cast<int32_t>(i)));
+            DatumArray arr;
+            arr.emplace_back(static_cast<float>(i) + 0.1f);
+            arr.emplace_back(static_cast<float>(i) + 0.2f);
+            arr.emplace_back(static_cast<float>(i) + 0.3f);
+            chunk->get_column_raw_ptr_by_index(1)->append_datum(Datum(arr));
+        }
+
+        uint64_t seg_size = 0;
+        uint64_t idx_size = 0;
+        uint64_t footer_pos = 0;
+        RETURN_IF_ERROR(writer->append_chunk(*chunk));
+        RETURN_IF_ERROR(writer->finalize(&seg_size, &idx_size, &footer_pos));
+        return seg_name;
+    }
+
+    void create_metadata(const TabletSchemaPB& schema_pb, int64_t version,
+                         const std::vector<std::pair<int64_t, std::string>>& rowset_infos) {
+        auto metadata = std::make_shared<TabletMetadataPB>();
+        metadata->set_id(kTabletId);
+        metadata->set_version(version);
+        *metadata->mutable_schema() = schema_pb;
+
+        for (const auto& [rv, seg_name] : rowset_infos) {
+            auto* rowset = metadata->add_rowsets();
+            rowset->set_id(_next_rowset_id++);
+            rowset->add_segments(seg_name);
+            rowset->set_num_rows(10);
+            rowset->set_data_size(1024);
+            rowset->set_overlapped(false);
+            rowset->set_version(rv);
+            rowset->add_segment_metas()->add_vector_index_ids(kIndexId);
+        }
+
+        CHECK_OK(_tablet_mgr->put_tablet_metadata(metadata));
+    }
+};
+
+// Drives the end-to-end LakeServiceImpl::build_vector_index RPC: schema with vector
+// index -> segment written in defer mode -> metadata records vector_index_ids -> call
+// the RPC and verify the .vi file lands on disk with the watermark advanced. This
+// exercises the parallel latch.wait() / thread_pool->submit path in lake_service.cpp
+// that the task-level tests cannot reach.
+TEST_F(LakeServiceVectorIndexBuildTest, test_build_vector_index_full_path) {
+    auto schema_pb = create_schema_pb();
+    auto tablet_schema = TabletSchema::create(schema_pb);
+    ASSIGN_OR_ABORT(auto seg_name, write_segment(tablet_schema, 1001, 10));
+    create_metadata(schema_pb, 2, {{2, seg_name}});
+
+    LakeServiceImpl service(ExecEnv::GetInstance(), _tablet_mgr.get());
+
+    BuildVectorIndexRequest request;
+    request.set_tablet_id(kTabletId);
+    request.set_version(2);
+    BuildVectorIndexResponse response;
+    brpc::Controller cntl;
+    service.build_vector_index(&cntl, &request, &response, nullptr);
+
+    ASSERT_FALSE(cntl.Failed()) << cntl.ErrorText();
+    ASSERT_TRUE(response.has_status());
+    EXPECT_EQ(0, response.status().status_code());
+    ASSERT_TRUE(response.has_new_built_version());
+    EXPECT_EQ(2, response.new_built_version());
+
+    auto vi_path = _tablet_mgr->segment_location(kTabletId, lake::gen_vector_index_filename(seg_name, kIndexId));
+    EXPECT_TRUE(fs::path_exist(vi_path)) << "deferred .vi should have been built by the RPC";
+}
+
+// Same RPC end-to-end path but with one good rowset (v=2) and one whose segment is
+// broken (v=3). Watermark must advance to v=2 and pause at v=3, exercising the
+// parallel worker error reporting + compute_built_version partial-progress path.
+TEST_F(LakeServiceVectorIndexBuildTest, test_build_vector_index_partial_failure) {
+    auto schema_pb = create_schema_pb();
+    auto tablet_schema = TabletSchema::create(schema_pb);
+
+    ASSIGN_OR_ABORT(auto seg_ok, write_segment(tablet_schema, 1001, 10));
+    auto seg_bad = lake::gen_segment_filename(2002);
+
+    create_metadata(schema_pb, 3, {{2, seg_ok}, {3, seg_bad}});
+
+    LakeServiceImpl service(ExecEnv::GetInstance(), _tablet_mgr.get());
+    BuildVectorIndexRequest request;
+    request.set_tablet_id(kTabletId);
+    request.set_version(3);
+    BuildVectorIndexResponse response;
+    brpc::Controller cntl;
+    service.build_vector_index(&cntl, &request, &response, nullptr);
+
+    ASSERT_FALSE(cntl.Failed()) << cntl.ErrorText();
+    EXPECT_EQ(0, response.status().status_code());
+    ASSERT_TRUE(response.has_new_built_version());
+    EXPECT_EQ(2, response.new_built_version());
+
+    EXPECT_TRUE(fs::path_exist(
+            _tablet_mgr->segment_location(kTabletId, lake::gen_vector_index_filename(seg_ok, kIndexId))));
+    EXPECT_FALSE(fs::path_exist(
+            _tablet_mgr->segment_location(kTabletId, lake::gen_vector_index_filename(seg_bad, kIndexId))));
+}
 
 TEST_F(LakeServiceTest, test_build_vector_index_missing_tablet_id) {
     BuildVectorIndexRequest request;

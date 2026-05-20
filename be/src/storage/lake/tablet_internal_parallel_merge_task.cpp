@@ -14,6 +14,8 @@
 
 #include "storage/lake/tablet_internal_parallel_merge_task.h"
 
+#include "column/chunk_factory.h"
+#include "column/chunk_schema_helper.h"
 #include "common/config_exec_fwd.h"
 #include "common/runtime_profile.h"
 #include "exec/spill/options.h"
@@ -58,8 +60,8 @@ void TabletInternalParallelMergeTask::run() {
     SCOPED_THREAD_LOCAL_MEM_SETTER(_merge_mem_tracker.get(), false);
     MonotonicStopWatch timer;
     timer.start();
-    auto char_field_indexes = ChunkHelper::get_char_field_indexes(*_schema);
-    auto chunk_shared_ptr = ChunkHelper::new_chunk(*_schema, config::vector_chunk_size);
+    auto char_field_indexes = ChunkSchemaHelper::get_char_field_indexes(*_schema);
+    auto chunk_shared_ptr = ChunkFactory::new_chunk(*_schema, config::vector_chunk_size);
     auto chunk = chunk_shared_ptr.get();
     auto st = Status::OK();
 

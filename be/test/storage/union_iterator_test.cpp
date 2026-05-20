@@ -20,6 +20,7 @@
 #include <vector>
 
 #include "column/chunk.h"
+#include "column/chunk_factory.h"
 #include "column/fixed_length_column.h"
 #include "column/schema.h"
 #include "common/config_exec_fwd.h"
@@ -92,7 +93,7 @@ TEST_F(UnionIteratorTest, union_two) {
         return c->immutable_data()[row];
     };
 
-    ChunkPtr chunk = ChunkHelper::new_chunk(iter->schema(), config::vector_chunk_size);
+    ChunkPtr chunk = ChunkFactory::new_chunk(iter->schema(), config::vector_chunk_size);
     ASSERT_TRUE(iter->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS).ok());
 
     Status st = iter->get_next(chunk.get());
@@ -142,7 +143,7 @@ TEST_F(UnionIteratorTest, union_one) {
         return c->immutable_data()[row];
     };
 
-    ChunkPtr chunk = ChunkHelper::new_chunk(iter->schema(), config::vector_chunk_size);
+    ChunkPtr chunk = ChunkFactory::new_chunk(iter->schema(), config::vector_chunk_size);
     Status st = iter->get_next(chunk.get());
     ASSERT_TRUE(st.ok());
     ASSERT_EQ(5U, chunk->num_rows());

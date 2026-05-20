@@ -45,7 +45,9 @@
 #include "io/core/seekable_input_stream.h"
 #include "io/core/throttled_output_stream.h"
 #include "io/core/throttled_seekable_input_stream.h"
-#include "service/staros_worker.h"
+#include "staros_integration/staros_status.h"
+#include "staros_integration/staros_worker.h"
+#include "staros_integration/staros_worker_runtime.h"
 #include "storage/lake/filenames.h"
 #include "storage/olap_common.h"
 
@@ -218,6 +220,20 @@ public:
         stats->append(kPrefetchWaitFinishNs, read_stats.prefetch_wait_finish_ns);
         stats->append(kPrefetchPendingNs, read_stats.prefetch_pending_ns);
         return std::move(stats);
+    }
+
+    io::IoStatsSnapshot get_io_stats_snapshot() const override {
+        auto stream_st = _file_ptr->stream();
+        if (!stream_st.ok()) {
+            return {};
+        }
+        const auto& s = (*stream_st)->get_io_stats();
+        return {
+                s.bytes_read_local_disk,  s.bytes_read_remote,  s.bytes_write_local_disk, s.bytes_write_remote,
+                s.io_count_local_disk,    s.io_count_remote,    s.io_ns_read_local_disk,  s.io_ns_read_remote,
+                s.io_ns_write_local_disk, s.io_ns_write_remote, s.prefetch_hit_count,     s.prefetch_wait_finish_ns,
+                s.prefetch_pending_ns,
+        };
     }
 
 private:
@@ -635,7 +651,7 @@ private:
         if (_shard_fs != nullptr) {
             return _shard_fs;
         }
-        return g_worker->get_shard_filesystem(shard_id, _conf);
+        return get_staros_worker()->get_shard_filesystem(shard_id, _conf);
     }
 
 private:
@@ -737,10 +753,10 @@ std::shared_ptr<FileSystem> new_fs_starlet(int64_t shard_id, bool use_raw_path) 
     absl::StatusOr<std::shared_ptr<staros::starlet::fslib::FileSystem>> fs_st(absl::UnimplementedError(""));
     TEST_SYNC_POINT_CALLBACK("new_fs_starlet::get_shard_filesystem", &fs_st);
     if (absl::IsUnimplemented(fs_st.status())) {
-        fs_st = g_worker->get_shard_filesystem(shard_id, conf);
+        fs_st = get_staros_worker()->get_shard_filesystem(shard_id, conf);
     }
 #else
-    auto fs_st = g_worker->get_shard_filesystem(shard_id, conf);
+    auto fs_st = get_staros_worker()->get_shard_filesystem(shard_id, conf);
 #endif
     if (!fs_st.ok()) {
         LOG(WARNING) << "Failed to get shard filesystem, shard_id: " << shard_id << ", use_raw_path: " << use_raw_path

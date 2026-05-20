@@ -535,6 +535,8 @@ endif()
 
 # Set starrocks libraries
 set(STARROCKS_LINK_LIBS
+    Webserver
+    Tools
     ${WL_START_GROUP}
     Agent
     Connector
@@ -542,33 +544,28 @@ set(STARROCKS_LINK_LIBS
     ${WL_WHOLE_ARCHIVE_PREFIX} Exprs ${WL_WHOLE_ARCHIVE_SUFFIX}
     FileSystem
     Formats
-    HttpClient
     IO
-    Serde
     Storage
     Rowset
     Runtime
-    Service
-    ServiceBE
-    Types
     Udf
     Util
     Script
-    Webserver
-    TestUtil
-    Tools
-    Geo
     orc
     ${WL_END_GROUP}
     ${WL_WHOLE_ARCHIVE_PREFIX} $<TARGET_FILE:ExprCore> ${WL_WHOLE_ARCHIVE_SUFFIX}
+    Serde
     $<TARGET_FILE:Cache>
     RuntimeCore
+    Platform
     $<TARGET_FILE:HttpCore>
     $<TARGET_FILE:ChunkCore>
     $<TARGET_FILE:ColumnCore>
-    $<TARGET_FILE:TypesCore>
+    $<TARGET_FILE:Types>
     $<TARGET_FILE:FSCore>
     $<TARGET_FILE:IOCore>
+    StarOSIntegration
+    Geo
     $<TARGET_FILE:Common>
     $<TARGET_FILE:Base>
     $<TARGET_FILE:Gutil>
@@ -862,13 +859,18 @@ if (WITH_GCOV)
     set(STARROCKS_LINK_LIBS ${STARROCKS_LINK_LIBS} --coverage)
 endif()
 
-# Set libraries for test
+# Set libraries for test. TestUtil is UT-only and intentionally stays out of
+# STARROCKS_LINK_LIBS so normal BE, format-lib, and benchmark builds do not
+# compile or link test helper code.
 set (TEST_LINK_LIBS ${STARROCKS_LINK_LIBS}
+    TestUtil
     ${WL_START_GROUP}
     gmock
     gtest
     ${WL_END_GROUP}
 )
+
+set (BENCH_LINK_LIBS ${STARROCKS_LINK_LIBS})
 
 # Only build static libs
 set(BUILD_SHARED_LIBS OFF)
@@ -937,7 +939,7 @@ FUNCTION(ADD_BE_BENCH BENCH_NAME)
 
     find_package(benchmark REQUIRED)
     ADD_EXECUTABLE(${BENCH_FILE_NAME} ${BENCH_NAME}.cpp)
-    TARGET_LINK_LIBRARIES(${BENCH_FILE_NAME} benchmark benchmark_main ${TEST_LINK_LIBS})
+    TARGET_LINK_LIBRARIES(${BENCH_FILE_NAME} benchmark benchmark_main ${BENCH_LINK_LIBS})
     STARROCKS_FORCE_LOAD_LIBS(${BENCH_FILE_NAME} Exprs ExprCore)
 
     SET_TARGET_PROPERTIES(${BENCH_FILE_NAME} PROPERTIES COMPILE_FLAGS "-fno-access-control ${CXX_FLAGS_RELEASE}")
@@ -953,6 +955,7 @@ add_subdirectory(${SRC_DIR}/common)
 add_subdirectory(${SRC_DIR}/connector)
 add_subdirectory(${SRC_DIR}/column)
 add_subdirectory(${SRC_DIR}/formats)
+add_subdirectory(${SRC_DIR}/staros_integration)
 add_subdirectory(${SRC_DIR}/fs)
 add_subdirectory(${SRC_DIR}/exec)
 add_subdirectory(${SRC_DIR}/exprs)
@@ -961,11 +964,11 @@ add_subdirectory(${SRC_DIR}/geo)
 add_subdirectory(${SRC_DIR}/gutil)
 add_subdirectory(${SRC_DIR}/http)
 add_subdirectory(${SRC_DIR}/io)
+add_subdirectory(${SRC_DIR}/platform)
 add_subdirectory(${SRC_DIR}/storage)
 add_subdirectory(${SRC_DIR}/runtime)
 add_subdirectory(${SRC_DIR}/serde)
 add_subdirectory(${SRC_DIR}/service)
-add_subdirectory(${SRC_DIR}/testutil)
 add_subdirectory(${SRC_DIR}/types)
 add_subdirectory(${SRC_DIR}/udf)
 add_subdirectory(${SRC_DIR}/cache)
@@ -1018,8 +1021,11 @@ install(FILES
     ${BASE_DIR}/../conf/udf_security.policy
     ${BASE_DIR}/../conf/core-site.xml
     ${BASE_DIR}/../conf/asan_suppressions.conf
-    ${BASE_DIR}/../conf/type_checker_config.xml
     DESTINATION ${OUTPUT_DIR}/conf)
+
+install(FILES
+    ${BASE_DIR}/../conf/type_checker_config.xml
+    DESTINATION ${OUTPUT_DIR}/lib)
 
 install(DIRECTORY
     ${BASE_DIR}/../webroot/be/

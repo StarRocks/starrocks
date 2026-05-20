@@ -120,6 +120,7 @@ import com.starrocks.planner.FileScanNode;
 import com.starrocks.planner.HiveTableSink;
 import com.starrocks.planner.IcebergDeleteSink;
 import com.starrocks.planner.IcebergMetadataDeleteNode;
+import com.starrocks.planner.IcebergRowDeltaSink;
 import com.starrocks.planner.IcebergScanNode;
 import com.starrocks.planner.IcebergTableSink;
 import com.starrocks.planner.OlapScanNode;
@@ -1586,6 +1587,7 @@ public class StmtExecutor {
         // This process will get information from the context, so it must be executed synchronously.
         // Otherwise, the context may be changed, for example, containing the wrong query id.
         profile = buildTopLevelProfile();
+        maybeEmbedExplainPlanInProfile(profile, plan);
         // Capture the session timezone now so that the async profile task uses the same zone
         // as START_TIME (the context may change before the async task runs).
         java.time.ZoneId profileZoneForAsync = TimeUtils.getTimeZone().toZoneId();
@@ -1639,6 +1641,44 @@ public class StmtExecutor {
             }
         };
         return coord.tryProcessProfileAsync(task);
+    }
+
+    /**
+     * When the {@code enable_explain_in_profile} session variable is true and an executed plan is
+     * available, render its {@link TExplainLevel#COSTS} text and embed it into the profile's
+     * {@code Summary} section under {@link ProfileKeyDictionary#EXPLAIN_PLAN}. Honors the existing
+     * SQL desensitization signals so the embedded plan does not reintroduce sensitive values.
+     * Any failure here is swallowed and logged so it never prevents the rest of profile processing.
+     */
+    private void maybeEmbedExplainPlanInProfile(RuntimeProfile profile, ExecPlan plan) {
+        SessionVariable sv = context.getSessionVariable();
+        if (plan == null || sv == null || !sv.isEnableExplainInProfile()) {
+            return;
+        }
+        try {
+            RuntimeProfile summaryProfile = profile.getChild(ProfileKeyDictionary.SUMMARY);
+            // Honor both the cluster-wide FE config `enable_sql_desensitize_in_log` (which
+            // already governs the sibling "Sql Statement" info-string in this same Summary)
+            // and the session variable `enable_desensitize_explain` (which governs literal
+            // digesting in EXPLAIN output via PlanNode.explainExpr). Temporarily force-on
+            // `enable_desensitize_explain` while rendering when either signal is set, then
+            // restore the previous value.
+            boolean prevDesensitize = sv.isEnableDesensitizeExplain();
+            boolean forceDesensitize = Config.enable_sql_desensitize_in_log || prevDesensitize;
+            String explainPlan;
+            try {
+                sv.setEnableDesensitizeExplain(forceDesensitize);
+                explainPlan = plan.getExplainString(TExplainLevel.COSTS);
+            } finally {
+                sv.setEnableDesensitizeExplain(prevDesensitize);
+            }
+            // Defense in depth: also strip credential-bearing literals (e.g. FILES("...")
+            // properties) that the digest pass does not specifically target.
+            summaryProfile.addInfoString(ProfileKeyDictionary.EXPLAIN_PLAN,
+                    SqlCredentialRedactor.redact(explainPlan));
+        } catch (Exception e) {
+            LOG.warn("Failed to embed explain plan in profile", e);
+        }
     }
 
     public void registerSubStmtExecutor(StmtExecutor subStmtExecutor) {
@@ -3482,7 +3522,15 @@ public class StmtExecutor {
                 List<TSinkCommitInfo> commitInfos = coord.getSinkCommitInfos();
 
                 DataSink dataSink = execPlan.getFragments().get(0).getSink();
-                if (dataSink instanceof IcebergDeleteSink deleteSink) {
+                if (dataSink instanceof IcebergRowDeltaSink rowDeltaSink) {
+                    // This is an UPDATE/MERGE operation, use IcebergRowDeltaSink.
+                    // NOTE: the row-delta commit path in MetadataMgr.finishSink (mixing new DATA files
+                    // with POSITION_DELETES into a single Iceberg RowDelta) is added in a follow-up PR;
+                    // this PR only wires the FE planner / executor entry points.
+                    IcebergMetadata.IcebergSinkExtra extra = rowDeltaSink.getSinkExtraInfo();
+                    context.getGlobalStateMgr().getMetadataMgr().finishSink(
+                            catalogName, dbName, tableName, commitInfos, null, extra, context);
+                } else if (dataSink instanceof IcebergDeleteSink deleteSink) {
                     // This is a DELETE operation, use IcebergDeleteSink
                     IcebergMetadata.IcebergSinkExtra extra = deleteSink.getSinkExtraInfo();
                     context.getGlobalStateMgr().getMetadataMgr().finishSink(
@@ -3722,7 +3770,9 @@ public class StmtExecutor {
             return;
         }
 
-        if (dmlType == DmlType.DELETE) {
+        if (dmlType == DmlType.UPDATE) {
+            ConnectorMetricsMgr.increaseUpdateTotalFail(connectorType, t);
+        } else if (dmlType == DmlType.DELETE) {
             ConnectorMetricsMgr.increaseDeleteTotalFail(connectorType, t, "position");
         } else {
             String writeType = dmlType == DmlType.INSERT_OVERWRITE ? "overwrite" : "insert";
@@ -3914,6 +3964,8 @@ public class StmtExecutor {
                     getPreparedStmtId());
             // Set query source from context
             queryDetail.setQuerySource(context.getQuerySource());
+            queryDetail.setUserIdentity(context.getCurrentUserIdentity() == null
+                    ? null : context.getCurrentUserIdentity().toString());
             queryDetail.setImpersonatedUser(resolveImpersonatedUser());
             context.setQueryDetail(queryDetail);
             // copy queryDetail, cause some properties can be changed in future

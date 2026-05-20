@@ -23,6 +23,7 @@
 #include "base/testutil/sync_point.h"
 #include "base/time/timezone_utils.h"
 #include "base/utility/defer_op.h"
+#include "column/chunk_factory.h"
 #include "common/config_exec_fwd.h"
 #include "common/config_path_fwd.h"
 #include "common/config_rowset_fwd.h"
@@ -34,6 +35,7 @@
 #include "exec/pipeline/query_context.h"
 #include "fs/fs_util.h"
 #include "fs/key_cache.h"
+#include "runtime/chunk_helper.h"
 #include "runtime/current_thread.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/descriptors.h"
@@ -111,7 +113,7 @@ public:
         EXPECT_TRUE(RowsetFactory::create_rowset_writer(writer_context, &writer).ok());
 
         auto schema = ChunkHelper::convert_schema(tablet->tablet_schema());
-        auto chunk = ChunkHelper::new_chunk(schema, keys.size());
+        auto chunk = ChunkFactory::new_chunk(schema, keys.size());
         auto cols = chunk->mutable_columns();
         for (int64_t key : keys) {
             if (schema.num_key_fields() == 1) {
@@ -266,7 +268,7 @@ public:
     static void rowset_writer_add_rows(std::unique_ptr<RowsetWriter>& writer, const TabletSchemaCSPtr& tablet_schema) {
         std::vector<std::string> test_data;
         auto schema = ChunkHelper::convert_schema(tablet_schema);
-        auto chunk = ChunkHelper::new_chunk(schema, 1024);
+        auto chunk = ChunkFactory::new_chunk(schema, 1024);
         for (size_t i = 0; i < 1024; ++i) {
             test_data.push_back("well" + std::to_string(i));
             auto cols = chunk->mutable_columns();
@@ -477,7 +479,7 @@ TEST_F(EngineStorageMigrationTaskTest, test_concurrent_ingestion_and_migration) 
         ASSERT_TRUE(new_tablet_uid.hi == old_tablet_uid.hi && new_tablet_uid.lo == old_tablet_uid.lo);
         // prepare chunk
         std::vector<std::string> test_data;
-        auto chunk = ChunkHelper::new_chunk(tuple_desc->slots(), 1024);
+        auto chunk = RuntimeChunkHelper::new_chunk(tuple_desc->slots(), 1024);
         std::vector<uint32_t> indexes;
         indexes.reserve(1024);
         for (size_t i = 0; i < 1024; ++i) {
@@ -556,7 +558,7 @@ TEST_F(EngineStorageMigrationTaskTest, test_concurrent_ingestion_and_migration_p
         ASSERT_TRUE(new_tablet_uid.hi == old_tablet_uid.hi && new_tablet_uid.lo == old_tablet_uid.lo);
         // prepare chunk
         std::vector<std::string> test_data;
-        auto chunk = ChunkHelper::new_chunk(tuple_desc->slots(), 1024);
+        auto chunk = RuntimeChunkHelper::new_chunk(tuple_desc->slots(), 1024);
         std::vector<uint32_t> indexes;
         indexes.reserve(1024);
         for (size_t i = 0; i < 1024; ++i) {

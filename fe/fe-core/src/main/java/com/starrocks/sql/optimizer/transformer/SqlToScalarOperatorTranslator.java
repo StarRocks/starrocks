@@ -290,7 +290,10 @@ public final class SqlToScalarOperatorTranslator {
 
     private static class Visitor implements AstVisitorExtendInterface<ScalarOperator, Context> {
         private ExpressionMapping expressionMapping;
-        private final ColumnRefFactory columnRefFactory;
+        // protected so that nested subclasses (LoadExprVisitor) can reach the factory-scoped
+        // lambda-arg cache. javac rejects inherited private access here even though both classes
+        // are nestmates of the enclosing top-level class.
+        protected final ColumnRefFactory columnRefFactory;
         private final List<ColumnRefOperator> correlation;
         private final ConnectContext session;
         private final CTETransformerContext cteContext;
@@ -456,11 +459,10 @@ public final class SqlToScalarOperatorTranslator {
 
         @Override
         public ScalarOperator visitLambdaArguments(LambdaArgument node, Context context) {
-            // To avoid the ids of lambda arguments are different after each visit()
-            if (node.getTransformed() == null) {
-                node.setTransformed(columnRefFactory.create(node.getName(), node.getType(), node.isNullable(), true));
-            }
-            return node.getTransformed();
+            // Cache by AST identity on the factory so repeated visits within one plan share the same id,
+            // while a re-plan (new factory) starts fresh.
+            return columnRefFactory.computeLambdaArgRefIfAbsent(node,
+                    n -> columnRefFactory.create(n.getName(), n.getType(), n.isNullable(), true));
         }
 
         @Override
@@ -1003,15 +1005,13 @@ public final class SqlToScalarOperatorTranslator {
 
         @Override
         public ScalarOperator visitLambdaArguments(LambdaArgument node, Context context) {
-            // To avoid the ids of lambda arguments are different after each visit()
-            if (node.getTransformed() == null) {
+            return columnRefFactory.computeLambdaArgRefIfAbsent(node, n -> {
                 SlotRef slotRef = new SlotRef(
-                        new TableName(TableName.LAMBDA_FUNC_TABLE, TableName.LAMBDA_FUNC_TABLE), node.getName());
-                slotRef.setType(node.getType());
-                slotRef.setNullable(node.isNullable());
-                node.setTransformed(slotResolver.apply(slotRef));
-            }
-            return node.getTransformed();
+                        new TableName(TableName.LAMBDA_FUNC_TABLE, TableName.LAMBDA_FUNC_TABLE), n.getName());
+                slotRef.setType(n.getType());
+                slotRef.setNullable(n.isNullable());
+                return slotResolver.apply(slotRef);
+            });
         }
     }
 

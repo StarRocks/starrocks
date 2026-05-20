@@ -1,0 +1,79 @@
+-- name: test_ivm_with_iceberg_partition_shape_error @slow
+create external catalog mv_iceberg_${uuid0}
+properties
+(
+    "type" = "iceberg",
+    "iceberg.catalog.type" = "hive",
+    "hive.metastore.uris" = "${iceberg_catalog_hive_metastore_uris}"
+);
+set catalog mv_iceberg_${uuid0};
+create database mv_ice_db_${uuid0};
+use mv_ice_db_${uuid0};
+
+create table t1 (
+  col_str string,
+  col_int int,
+  dt date
+) partition by(dt)
+properties ('history.expire.max-snapshot-age-ms' = '1');
+
+insert into t1 values
+  ('a', 1, '2023-12-01'), ('a', 2, '2023-12-01'),
+  ('b', 3, '2023-12-02'), ('b', 4, '2023-12-02'),
+  ('c', 5, '2023-12-03'), ('c', 6, '2023-12-03');
+
+set catalog default_catalog;
+create database db_${uuid0};
+use db_${uuid0};
+
+set enable_materialized_view_rewrite = false;
+
+-- ==============================================================
+-- Case 1: INCREMENTAL + DELETE -> non-append-only delta
+-- ==============================================================
+CREATE MATERIALIZED VIEW test_mv1 PARTITION BY dt
+REFRESH DEFERRED MANUAL
+properties ("refresh_mode" = "incremental")
+AS SELECT col_str, col_int, dt FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1;
+
+[UC]REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+[UC]TASK_NAME=SELECT TASK_NAME FROM information_schema.materialized_views WHERE TABLE_SCHEMA = 'db_${uuid0}' AND TABLE_NAME='test_mv1';
+
+DELETE FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 WHERE col_int = 2;
+[UC]REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+SELECT STATE FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME}' ORDER BY FINISH_TIME DESC LIMIT 1;
+SELECT ERROR_MESSAGE LIKE '%non-append-only%' FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME}' ORDER BY FINISH_TIME DESC LIMIT 1;
+SELECT ERROR_MESSAGE LIKE '%Drop and recreate%' FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME}' ORDER BY FINISH_TIME DESC LIMIT 1;
+
+DROP MATERIALIZED VIEW test_mv1;
+
+-- ==============================================================
+-- Case 2: INCREMENTAL + expire_snapshots -> snapshot ancestry broken
+-- ==============================================================
+CREATE MATERIALIZED VIEW test_mv2 PARTITION BY dt
+REFRESH DEFERRED MANUAL
+properties ("refresh_mode" = "incremental")
+AS SELECT col_str, col_int, dt FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1;
+
+[UC]REFRESH MATERIALIZED VIEW test_mv2 WITH SYNC MODE;
+[UC]TASK_NAME2=SELECT TASK_NAME FROM information_schema.materialized_views WHERE TABLE_SCHEMA = 'db_${uuid0}' AND TABLE_NAME='test_mv2';
+
+-- Produce newer snapshots, age them past the expire window, then expire the anchor.
+insert into mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 values ('d', 7, '2023-12-04');
+insert into mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 values ('e', 8, '2023-12-05');
+shell: sleep 2
+ALTER TABLE mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 EXECUTE expire_snapshots(retain_last = 1);
+
+[UC]REFRESH MATERIALIZED VIEW test_mv2 WITH SYNC MODE;
+SELECT STATE FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME2}' ORDER BY FINISH_TIME DESC LIMIT 1;
+SELECT ERROR_MESSAGE LIKE '%snapshot ancestry broken%' FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME2}' ORDER BY FINISH_TIME DESC LIMIT 1;
+SELECT ERROR_MESSAGE LIKE '%Drop and recreate%' FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME2}' ORDER BY FINISH_TIME DESC LIMIT 1;
+
+DROP MATERIALIZED VIEW test_mv2;
+
+-- ==============================================================
+-- Cleanup
+-- ==============================================================
+drop table mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 force;
+drop database mv_iceberg_${uuid0}.mv_ice_db_${uuid0} force;
+drop database db_${uuid0} force;

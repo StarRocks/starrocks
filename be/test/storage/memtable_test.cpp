@@ -23,10 +23,12 @@
 #include <unordered_set>
 
 #include "base/testutil/assert.h"
+#include "column/chunk_factory.h"
 #include "column/datum_tuple.h"
 #include "common/config_exec_fwd.h"
 #include "fs/fs_util.h"
 #include "gutil/strings/split.h"
+#include "runtime/chunk_helper.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/descriptors.h"
 #include "runtime/mem_tracker.h"
@@ -170,7 +172,7 @@ static const std::vector<SlotDescriptor*>* create_tuple_desc_slots(RuntimeState*
 }
 
 static shared_ptr<Chunk> gen_chunk(const std::vector<SlotDescriptor*>& slots, size_t size) {
-    shared_ptr<Chunk> ret = ChunkHelper::new_chunk(slots, size);
+    shared_ptr<Chunk> ret = RuntimeChunkHelper::new_chunk(slots, size);
     auto cols = ret->mutable_columns();
     for (int ci = 0; ci < cols.size(); ci++) {
         MutableColumnPtr& c = cols[ci];
@@ -275,7 +277,7 @@ TEST_F(MemTableTest, testDupKeysInsertFlushRead) {
     rs_opts.stats = &stats;
     auto itr = rowset->new_iterator(*read_schema, rs_opts);
     ASSERT_TRUE(itr.ok()) << itr.status().to_string();
-    ChunkPtr chunk = ChunkHelper::new_chunk(*read_schema, 4096);
+    ChunkPtr chunk = ChunkFactory::new_chunk(*read_schema, 4096);
     size_t pkey_read = 0;
     while (true) {
         Status st = (*itr)->get_next(chunk.get());
@@ -323,7 +325,7 @@ TEST_F(MemTableTest, testUniqKeysInsertFlushRead) {
     rs_opts.use_page_cache = false;
     rs_opts.stats = &stats;
     auto itr = rowset->new_iterator(*read_schema, rs_opts);
-    ChunkPtr chunk = ChunkHelper::new_chunk(*read_schema, 4096);
+    ChunkPtr chunk = ChunkFactory::new_chunk(*read_schema, 4096);
     size_t pkey_read = 0;
     while (true) {
         Status st = (*itr)->get_next(chunk.get());
@@ -347,7 +349,7 @@ TEST_F(MemTableTest, testPrimaryKeysWithDeletes) {
     const string path = "./MemTableTest_testPrimaryKeysWithDeletes";
     MySetUp(create_tablet_schema("pk bigint,v1 int", 1, KeysType::PRIMARY_KEYS), "pk bigint,v1 int,__op tinyint", path);
     const size_t n = 1000;
-    shared_ptr<Chunk> chunk = ChunkHelper::new_chunk(*_slots, n);
+    shared_ptr<Chunk> chunk = RuntimeChunkHelper::new_chunk(*_slots, n);
     for (int i = 0; i < n; i++) {
         Datum v;
         v.set_int64(i);
@@ -379,7 +381,7 @@ TEST_F(MemTableTest, testPrimaryKeysNullableSortKey) {
     auto tablet_schema = create_tablet_schema("pk bigint,v1 int, v2 tinyint null", 1, KeysType::PRIMARY_KEYS, {2});
     MySetUp(tablet_schema, "pk bigint,v1 int, v2 tinyint null", path);
     const size_t n = 10;
-    shared_ptr<Chunk> chunk = ChunkHelper::new_chunk(*_slots, n);
+    shared_ptr<Chunk> chunk = RuntimeChunkHelper::new_chunk(*_slots, n);
     for (int i = 0; i < n; i++) {
         chunk->get_column_raw_ptr_by_index(0)->append_datum(Datum(static_cast<int64_t>(i)));
         chunk->get_column_raw_ptr_by_index(1)->append_datum(Datum(static_cast<int32_t>(n - 1 - i)));
@@ -404,7 +406,7 @@ TEST_F(MemTableTest, testPrimaryKeysNullableSortKey) {
     ASSERT_OK(_mem_table->flush());
     RowsetSharedPtr rowset = *_writer->build();
 
-    shared_ptr<Chunk> expected_chunk = ChunkHelper::new_chunk(*_slots, n);
+    shared_ptr<Chunk> expected_chunk = RuntimeChunkHelper::new_chunk(*_slots, n);
     for (int i = 0; i < n / 2; i++) {
         expected_chunk->get_column_raw_ptr_by_index(0)->append_datum(Datum(static_cast<int64_t>(2 * i)));
         expected_chunk->get_column_raw_ptr_by_index(1)->append_datum(Datum(static_cast<int32_t>(n - 1 - 2 * i)));
@@ -424,7 +426,7 @@ TEST_F(MemTableTest, testPrimaryKeysNullableSortKey) {
     rs_opts.use_page_cache = false;
     rs_opts.stats = &stats;
     auto itr = rowset->new_iterator(read_schema, rs_opts);
-    ChunkPtr read_chunk = ChunkHelper::new_chunk(read_schema, 4096);
+    ChunkPtr read_chunk = ChunkFactory::new_chunk(read_schema, 4096);
     size_t pkey_read = 0;
     while (true) {
         Status st = (*itr)->get_next(read_chunk.get());
@@ -445,7 +447,7 @@ TEST_F(MemTableTest, testPrimaryKeysSizeLimitSinglePK) {
     MySetUp(create_tablet_schema("pk varchar,v1 int", 1, KeysType::PRIMARY_KEYS), "pk varchar,v1 int,__op tinyint",
             path);
     const size_t n = 1000;
-    shared_ptr<Chunk> chunk = ChunkHelper::new_chunk(*_slots, n);
+    shared_ptr<Chunk> chunk = RuntimeChunkHelper::new_chunk(*_slots, n);
     string tmpstr(128, 's');
     tmpstr[tmpstr.size() - 1] = '\0';
     for (int i = 0; i < n; i++) {
@@ -476,7 +478,7 @@ TEST_F(MemTableTest, testPrimaryKeysSizeLimitCompositePK) {
     MySetUp(create_tablet_schema("pk int, pk varchar, pk smallint, pk boolean,v1 int", 4, KeysType::PRIMARY_KEYS),
             "pk int, pk varchar, pk smallint, pk boolean ,v1 int,__op tinyint", path);
     const size_t n = 1000;
-    shared_ptr<Chunk> chunk = ChunkHelper::new_chunk(*_slots, n);
+    shared_ptr<Chunk> chunk = RuntimeChunkHelper::new_chunk(*_slots, n);
     string tmpstr(121, 's');
     tmpstr[tmpstr.size() - 1] = '\0';
     for (int i = 0; i < n; i++) {

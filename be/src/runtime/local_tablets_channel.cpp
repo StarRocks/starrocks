@@ -199,6 +199,35 @@ Status LocalTabletsChannel::open(const PTabletWriterOpenRequest& params, PTablet
 
 void LocalTabletsChannel::add_segment(brpc::Controller* cntl, const PTabletWriterAddSegmentRequest* request,
                                       PTabletWriterAddSegmentResult* response, google::protobuf::Closure* done) const {
+    // NOTE: This entrypoint does NOT deduplicate duplicate RPCs (unlike
+    // add_chunk below, which dedups by packet_seq sliding window).
+    // Duplicate tablet_writer_add_segment requests - whether from brpc
+    // framework retries, InternalServiceRecoverableStub reconnects, or
+    // primary-side application retries - are forwarded straight to the
+    // per-tablet DeltaWriter, and the SegmentFlushToken dispatches them
+    // concurrently because CONCURRENT mode is the designed parallelism
+    // for segment replication throughput.
+    //
+    // Downstream code MUST therefore remain correct and thread-safe under
+    // concurrent processing of identical RPCs. The invariants currently
+    // relied on are:
+    //   - DeltaWriter::write_segment creates the segment file with
+    //     MUST_CREATE, so same-seg_id duplicates fail at the disk layer
+    //     and the writer is cancelled (benign abort, no crash).
+    //   - DeltaWriter::close is idempotent: returns OK when already in
+    //     kClosed state.
+    //   - DeltaWriter::commit serialises concurrent callers via a
+    //     std::call_once over the commit body (see delta_writer.cpp).
+    //     The first caller runs the body; concurrent duplicates block
+    //     inside call_once until it finishes and then return the same
+    //     captured Status. The wait-and-return-final-state design is
+    //     required so that duplicate callers (notably
+    //     SegmentFlushTask::run, which unconditionally cancels the
+    //     writer on any non-OK commit status) do not turn a successful
+    //     commit into an aborted one.
+    // If you change any of those invariants - or add a new method that
+    // mutates per-writer state from this path - you must keep the
+    // duplicate-RPC contract intact.
     std::shared_lock<bthreads::BThreadSharedMutex> lk(_rw_mtx);
     ClosureGuard closure_guard(done);
     auto it = _delta_writers.find(request->tablet_id());
@@ -1180,7 +1209,6 @@ void LocalTabletsChannel::_update_peer_replica_profile(DeltaWriter* writer, Runt
     ADD_AND_SET_TIMER(profile, "CommitTime", writer_stat.commit_time_ns.load());
     ADD_AND_SET_TIMER(profile, "CommitWaitFlushTime", writer_stat.commit_wait_flush_time_ns.load());
     ADD_AND_SET_TIMER(profile, "CommitRowsetBuildTime", writer_stat.commit_rowset_build_time_ns.load());
-    ADD_AND_SET_TIMER(profile, "CommitPkPreloadTime", writer_stat.commit_pk_preload_time_ns.load());
     ADD_AND_SET_TIMER(profile, "CommitWaitReplicaTime", writer_stat.commit_wait_replica_time_ns.load());
     ADD_AND_SET_TIMER(profile, "CommitTxnCommitTime", writer_stat.commit_txn_commit_time_ns.load());
 
@@ -1235,7 +1263,6 @@ void LocalTabletsChannel::_update_secondary_replica_profile(DeltaWriter* writer,
     ADD_AND_SET_TIMER(profile, "AddSegmentIOTime", writer_stat.add_segment_io_time_ns.load());
     ADD_AND_SET_TIMER(profile, "CommitTime", writer_stat.commit_time_ns.load());
     ADD_AND_SET_TIMER(profile, "CommitRowsetBuildTime", writer_stat.commit_rowset_build_time_ns.load());
-    ADD_AND_SET_TIMER(profile, "CommitPkPreloadTime", writer_stat.commit_pk_preload_time_ns.load());
     ADD_AND_SET_TIMER(profile, "CommitTxnCommitTime", writer_stat.commit_txn_commit_time_ns.load());
 
     auto* segment_flush_token = writer->segment_flush_token();

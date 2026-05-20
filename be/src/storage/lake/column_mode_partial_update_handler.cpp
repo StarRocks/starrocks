@@ -18,6 +18,8 @@
 #include "base/phmap/phmap.h"
 #include "base/time/time.h"
 #include "base/utility/defer_op.h"
+#include "column/chunk_factory.h"
+#include "column/chunk_schema_helper.h"
 #include "common/config_compaction_fwd.h"
 #include "common/config_primary_key_fwd.h"
 #include "common/config_rowset_fwd.h"
@@ -189,8 +191,8 @@ StatusOr<ChunkPtr> ColumnModePartialUpdateHandler::_read_from_source_segment(con
     // not use delvec loader
     seg_options.dcg_loader = std::make_shared<LakeDeltaColumnGroupLoader>(params.metadata);
     ASSIGN_OR_RETURN(auto seg_iter, segment->new_iterator(schema, seg_options));
-    auto source_chunk_ptr = ChunkHelper::new_chunk(schema, segment->num_rows());
-    auto tmp_chunk_ptr = ChunkHelper::new_chunk(schema, 1024);
+    auto source_chunk_ptr = ChunkFactory::new_chunk(schema, segment->num_rows());
+    auto tmp_chunk_ptr = ChunkFactory::new_chunk(schema, 1024);
     while (true) {
         tmp_chunk_ptr->reset();
         auto st = seg_iter->get_next(tmp_chunk_ptr.get());
@@ -239,7 +241,7 @@ Status ColumnModePartialUpdateHandler::_update_source_chunk_by_upt(const UptidTo
     for (const auto& each : upt_id_to_rowid_pairs) {
         const uint32_t upt_id = each.first;
         // 1. get chunk from upt file
-        ChunkUniquePtr upt_chunk = ChunkHelper::new_chunk(partial_schema, DEFAULT_CHUNK_SIZE);
+        ChunkUniquePtr upt_chunk = ChunkFactory::new_chunk(partial_schema, DEFAULT_CHUNK_SIZE);
         DeferOp iter_defer([&]() {
             if (segment_iters[upt_id] != nullptr) {
                 segment_iters[upt_id]->close();
@@ -283,7 +285,7 @@ Status ColumnModePartialUpdateHandler::_update_source_chunk_by_upt(const UptidTo
         if (sorted_source_rowids.empty()) {
             continue;
         }
-        auto tmp_chunk = ChunkHelper::new_chunk(partial_schema, unsorted_upt_rowids.size());
+        auto tmp_chunk = ChunkFactory::new_chunk(partial_schema, unsorted_upt_rowids.size());
         TRY_CATCH_BAD_ALLOC(
                 tmp_chunk->append_selective(*upt_chunk, unsorted_upt_rowids.data(), 0, unsorted_upt_rowids.size()));
         RETURN_IF_EXCEPTION((*source_chunk)->update_rows(*tmp_chunk, sorted_source_rowids.data()));
@@ -301,7 +303,7 @@ static std::vector<T> append_fixed_batch(const std::vector<T>& base_array, size_
 }
 
 static void padding_char_columns(const Schema& schema, const TabletSchemaCSPtr& tschema, Chunk* chunk) {
-    auto char_field_indexes = ChunkHelper::get_char_field_indexes(schema);
+    auto char_field_indexes = ChunkSchemaHelper::get_char_field_indexes(schema);
     ChunkHelper::padding_char_columns(char_field_indexes, schema, tschema, chunk);
 }
 

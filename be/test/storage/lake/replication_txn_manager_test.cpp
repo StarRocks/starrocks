@@ -23,6 +23,7 @@
 #include "base/path/filesystem_util.h"
 #include "base/testutil/assert.h"
 #include "base/testutil/id_generator.h"
+#include "column/chunk_factory.h"
 #include "common/config_rowset_fwd.h"
 #include "common/config_storage_fwd.h"
 #include "fs/fs.h"
@@ -181,7 +182,7 @@ public:
             return *writer->build();
         }
         auto schema = ChunkHelper::convert_schema(tablet->thread_safe_get_tablet_schema());
-        auto chunk = ChunkHelper::new_chunk(schema, keys.size());
+        auto chunk = ChunkFactory::new_chunk(schema, keys.size());
         auto cols = chunk->mutable_columns();
         for (int64_t key : keys) {
             if (schema.num_key_fields() == 1) {
@@ -313,7 +314,7 @@ TEST_P(LakeReplicationTxnManagerTest, test_replicate_snapshot_failed) {
     replicate_snapshot_request.__set_src_visible_version(_src_version);
     replicate_snapshot_request.__set_src_snapshot_infos({remote_snapshot_info});
 
-    status = _replication_txn_manager->replicate_snapshot(replicate_snapshot_request);
+    status = _replication_txn_manager->replicate_snapshot(replicate_snapshot_request, nullptr);
     EXPECT_FALSE(status.ok()) << status;
 
     auto slog_path = _tablet_manager->txn_slog_location(_tablet_id, _transaction_id);
@@ -394,10 +395,10 @@ TEST_P(LakeReplicationTxnManagerTest, test_run_normal) {
     replicate_snapshot_request.__set_src_visible_version(_src_version);
     replicate_snapshot_request.__set_src_snapshot_infos({remote_snapshot_info});
 
-    status = _replication_txn_manager->replicate_snapshot(replicate_snapshot_request);
+    status = _replication_txn_manager->replicate_snapshot(replicate_snapshot_request, nullptr);
     EXPECT_TRUE(status.ok()) << status;
 
-    status = _replication_txn_manager->replicate_snapshot(replicate_snapshot_request);
+    status = _replication_txn_manager->replicate_snapshot(replicate_snapshot_request, nullptr);
     EXPECT_TRUE(status.ok()) << status;
 
     auto txn_info = TxnInfoPB();
@@ -463,10 +464,10 @@ TEST_P(LakeReplicationTxnManagerTest, test_run_normal_encrypted) {
     replicate_snapshot_request.__set_src_visible_version(_src_version);
     replicate_snapshot_request.__set_src_snapshot_infos({remote_snapshot_info});
 
-    status = _replication_txn_manager->replicate_snapshot(replicate_snapshot_request);
+    status = _replication_txn_manager->replicate_snapshot(replicate_snapshot_request, nullptr);
     EXPECT_TRUE(status.ok()) << status;
 
-    status = _replication_txn_manager->replicate_snapshot(replicate_snapshot_request);
+    status = _replication_txn_manager->replicate_snapshot(replicate_snapshot_request, nullptr);
     EXPECT_TRUE(status.ok()) << status;
 
     auto txn_info = TxnInfoPB();
@@ -546,7 +547,7 @@ TEST_P(LakeReplicationTxnManagerTest, test_incremental_non_pk_skips_dcg_download
     replicate_snapshot_request.__set_src_visible_version(_src_version);
     replicate_snapshot_request.__set_src_snapshot_infos({remote_snapshot_info});
 
-    status = _replication_txn_manager->replicate_snapshot(replicate_snapshot_request);
+    status = _replication_txn_manager->replicate_snapshot(replicate_snapshot_request, nullptr);
     EXPECT_TRUE(status.ok()) << status;
 
     // Verify txn_log has no DCG metadata (the .dcgs_snapshot file was skipped)
@@ -610,7 +611,7 @@ TEST_P(LakeReplicationTxnManagerTest, test_full_snapshot_creates_dcg_file_even_w
     replicate_snapshot_request.__set_src_visible_version(_src_version);
     replicate_snapshot_request.__set_src_snapshot_infos({remote_snapshot_info});
 
-    status = _replication_txn_manager->replicate_snapshot(replicate_snapshot_request);
+    status = _replication_txn_manager->replicate_snapshot(replicate_snapshot_request, nullptr);
     EXPECT_TRUE(status.ok()) << status;
 
     // Verify txn_log has no DCG metadata (empty .dcgs_snapshot produces no DCGs)

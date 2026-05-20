@@ -624,22 +624,27 @@ public class StarOSAgent {
         return shardInfos.stream().map(ShardInfo::getShardId).collect(Collectors.toList());
     }
 
-    public void createShards(Map<Long, List<Long>> oldToNewShardIds, FilePathInfo pathInfo, FileCacheInfo cacheInfo,
-            long groupId, @NotNull Map<String, String> properties, ComputeResource computeResource)
-            throws DdlException {
-        createShardsForSplit(oldToNewShardIds, pathInfo, cacheInfo, groupId, properties, computeResource);
-    }
-
-    public void createShardsForSplit(Map<Long, List<Long>> oldToNewShardIds, FilePathInfo pathInfo,
-            FileCacheInfo cacheInfo, long groupId, @NotNull Map<String, String> properties,
-            ComputeResource computeResource) throws DdlException {
+    /**
+     * Create shards for a tablet split.
+     *
+     * <p>{@code oldShardIdToGroupIds} carries one entry per old tablet, mapping that old tablet's
+     * id to the list of group ids each new shard spawned from it should join. For non-colocate
+     * range tables this is a single-element list with the SPREAD shard group; for range-colocate
+     * tables it is {@code [SPREAD, <old-tablet's PACK shard group>]} per old tablet, and the PACK
+     * group differs per old tablet once the colocate group has multiple ranges.
+     */
+    public void createShardsForSplit(Map<Long, List<Long>> oldShardIdToGroupIds,
+                                     Map<Long, List<Long>> oldToNewShardIds,
+                                     FilePathInfo pathInfo,
+                                     FileCacheInfo cacheInfo,
+                                     @NotNull Map<String, String> properties,
+                                     ComputeResource computeResource) throws DdlException {
         long workerGroupId = computeResource.getWorkerGroupId();
         prepare();
         List<ShardInfo> shardInfos = null;
         try {
             CreateShardInfo.Builder builder = CreateShardInfo.newBuilder();
             builder.setReplicaCount(1)
-                    .addGroupIds(groupId)
                     .setPathInfo(pathInfo)
                     .setCacheInfo(cacheInfo)
                     .putAllShardProperties(properties)
@@ -648,6 +653,11 @@ public class StarOSAgent {
             List<CreateShardInfo> createShardInfoList = new ArrayList<>(oldToNewShardIds.size() * 2);
             for (Map.Entry<Long, List<Long>> entry : oldToNewShardIds.entrySet()) {
                 builder.clearPlacementPreferences();
+                builder.clearGroupIds();
+                List<Long> groupIds = oldShardIdToGroupIds.get(entry.getKey());
+                Preconditions.checkArgument(groupIds != null && !groupIds.isEmpty(),
+                        "Missing group ids for old shard " + entry.getKey());
+                builder.addAllGroupIds(groupIds);
                 PlacementPreference preference = PlacementPreference.newBuilder()
                         .setPlacementPolicy(PlacementPolicy.PACK)
                         .setPlacementRelationship(PlacementRelationship.WITH_SHARD)
@@ -664,6 +674,58 @@ public class StarOSAgent {
             LOG.debug("Create shards success. shard infos: {}", shardInfos);
         } catch (Exception e) {
             throw new DdlException("Failed to create shards. error: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Per-new-shard variant of {@link #createShardsForSplit} used by the colocate checker.
+     * Each new shard joins its own list of group ids (PACK group per
+     * colocate range), while still pinning placement to its old shard via
+     * {@code PlacementRelationship.WITH_SHARD}.
+     *
+     * <p>{@code newToOldShardId} maps each new shard id to its parent old shard id.
+     * {@code newShardIdToGroupIds} maps each new shard id to its target group ids
+     * (typically {@code [SPREAD, PACK-for-this-shard's-ColocateRange]}). Both maps must
+     * have the same key set; the call fails if a new shard has no group assignment.
+     */
+    public void createShardsForSplitPerNewShard(Map<Long, Long> newToOldShardId,
+                                                 Map<Long, List<Long>> newShardIdToGroupIds,
+                                                 FilePathInfo pathInfo,
+                                                 FileCacheInfo cacheInfo,
+                                                 @NotNull Map<String, String> properties,
+                                                 ComputeResource computeResource) throws DdlException {
+        long workerGroupId = computeResource.getWorkerGroupId();
+        prepare();
+        try {
+            CreateShardInfo.Builder builder = CreateShardInfo.newBuilder();
+            builder.setReplicaCount(1)
+                    .setPathInfo(pathInfo)
+                    .setCacheInfo(cacheInfo)
+                    .putAllShardProperties(properties)
+                    .setScheduleToWorkerGroup(workerGroupId);
+            List<CreateShardInfo> createShardInfoList = new ArrayList<>(newToOldShardId.size());
+            for (Map.Entry<Long, Long> entry : newToOldShardId.entrySet()) {
+                long newShardId = entry.getKey();
+                long oldShardId = entry.getValue();
+                List<Long> groupIds = newShardIdToGroupIds.get(newShardId);
+                Preconditions.checkArgument(groupIds != null && !groupIds.isEmpty(),
+                        "Missing group ids for new shard " + newShardId);
+                builder.clearPlacementPreferences();
+                builder.clearGroupIds();
+                builder.addAllGroupIds(groupIds);
+                builder.addPlacementPreferences(PlacementPreference.newBuilder()
+                        .setPlacementPolicy(PlacementPolicy.PACK)
+                        .setPlacementRelationship(PlacementRelationship.WITH_SHARD)
+                        .setRelationshipTargetId(oldShardId)
+                        .build());
+                builder.setShardId(newShardId);
+                createShardInfoList.add(builder.build());
+            }
+            List<ShardInfo> shardInfos = client.createShard(serviceId, createShardInfoList);
+            Preconditions.checkState(shardInfos.size() == createShardInfoList.size());
+            LOG.debug("Create per-new-shard split shards success. shard infos: {}", shardInfos);
+        } catch (Exception e) {
+            throw new DdlException("Failed to create per-new-shard split shards. error: " + e.getMessage());
         }
     }
 

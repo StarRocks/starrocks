@@ -305,4 +305,9 @@ int64_t SharedBufferedInputStream::current_range_ref_sum() const {
     return ref;
 }
 
+// Out-of-line so gcov can attribute coverage to a concrete `.cpp` line.
+IoStatsSnapshot SharedBufferedInputStream::get_io_stats_snapshot() const {
+    return _stream->get_io_stats_snapshot();
+}
+
 } // namespace starrocks::io

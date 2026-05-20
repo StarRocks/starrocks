@@ -58,7 +58,7 @@ public class TemporaryTableCleanerTest {
                 return result;
             }
         };
-        cleaner.runAfterCatalogReady();
+        cleaner.runAfterLeaseValid();
         Assertions.assertTrue(mgr.sessionExists(session1));
         Assertions.assertFalse(mgr.sessionExists(session2));
     }
@@ -95,11 +95,11 @@ public class TemporaryTableCleanerTest {
                 }
             }
         };
-        cleaner.runAfterCatalogReady();
+        cleaner.runAfterLeaseValid();
         Assertions.assertFalse(mgr.sessionExists(session1));
         Assertions.assertTrue(mgr.sessionExists(session2));
 
-        cleaner.runAfterCatalogReady();
+        cleaner.runAfterLeaseValid();
         Assertions.assertFalse(mgr.sessionExists(session2));
     }
 }

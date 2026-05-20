@@ -25,4 +25,10 @@ TEST(CommandExecutorTest, not_support) {
     EXPECT_TRUE(execute_command("set_config_11", "{}", &result).is_not_supported());
 }
 
+TEST(CommandExecutorTest, set_config_rejects_invalid_json_shape) {
+    std::string result;
+    auto st = execute_command("set_config", R"({"name":1,"value":"x"})", &result);
+    EXPECT_TRUE(st.is_invalid_argument()) << st;
+}
+
 } // namespace starrocks

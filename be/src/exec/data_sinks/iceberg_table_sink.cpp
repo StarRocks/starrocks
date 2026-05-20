@@ -16,8 +16,9 @@
 
 #include <unordered_map>
 
-#include "common/config.h"
+#include "common/config_exec_fwd.h"
 #include "common/runtime_profile.h"
+#include "connector/connector_registry.h"
 #include "connector/iceberg_row_delta_sink.h"
 #include "exec/hdfs_scanner/hdfs_scanner.h"
 #include "exec/pipeline/fragment_context.h"
@@ -186,7 +187,12 @@ Status IcebergTableSink::create_delete_sink_context(
     auto delete_sink_ctx = std::make_shared<connector::IcebergDeleteSinkContext>();
     delete_sink_ctx->path = t_iceberg_sink.data_location;
     delete_sink_ctx->cloud_configuration = t_iceberg_sink.cloud_configuration;
-    delete_sink_ctx->compression_type = t_iceberg_sink.compression_type;
+    // Position-delete codec lives in delete_compression_type; fall back to
+    // compression_type so old FE planners (rolling upgrade with BE upgraded
+    // first) continue to pick up the right codec.
+    delete_sink_ctx->compression_type = t_iceberg_sink.__isset.delete_compression_type
+                                                ? t_iceberg_sink.delete_compression_type
+                                                : t_iceberg_sink.compression_type;
     if (t_iceberg_sink.__isset.target_max_file_size) {
         delete_sink_ctx->max_file_size = t_iceberg_sink.target_max_file_size;
     }
@@ -240,7 +246,7 @@ Status IcebergTableSink::create_delete_sink_context(
     }
 
     sink_ctx = delete_sink_ctx;
-    auto connector = connector::ConnectorManager::default_instance()->get(connector::Connector::ICEBERG);
+    auto connector = connector::ConnectorRegistry::default_instance()->get(connector::Connector::ICEBERG);
     sink_provider = connector->create_delete_sink_provider();
 
     return Status::OK();
@@ -318,7 +324,7 @@ Status IcebergTableSink::create_data_sink_context(const TDataSink& thrift_sink, 
     }
 
     sink_ctx = data_sink_ctx;
-    auto connector = connector::ConnectorManager::default_instance()->get(connector::Connector::ICEBERG);
+    auto connector = connector::ConnectorRegistry::default_instance()->get(connector::Connector::ICEBERG);
     sink_provider = connector->create_data_sink_provider();
 
     if (iceberg_table_desc->is_unpartitioned_table()) {
@@ -409,7 +415,11 @@ Status IcebergTableSink::create_row_delta_sink_context(
     delete_sink_ctx->writer_tag = "delete";
     delete_sink_ctx->path = t_iceberg_sink.data_location;
     delete_sink_ctx->cloud_configuration = t_iceberg_sink.cloud_configuration;
-    delete_sink_ctx->compression_type = t_iceberg_sink.compression_type;
+    // Row-delta sinks carry distinct codecs for data vs delete files; fall back to
+    // the data codec when the planner did not populate delete_compression_type.
+    delete_sink_ctx->compression_type = t_iceberg_sink.__isset.delete_compression_type
+                                                ? t_iceberg_sink.delete_compression_type
+                                                : t_iceberg_sink.compression_type;
     if (t_iceberg_sink.__isset.target_max_file_size) {
         delete_sink_ctx->max_file_size = t_iceberg_sink.target_max_file_size;
     }
@@ -552,7 +562,7 @@ Status IcebergTableSink::create_row_delta_sink_context(
     row_delta_ctx->op_code_index = op_code_index;
 
     sink_ctx = row_delta_ctx;
-    auto connector = connector::ConnectorManager::default_instance()->get(connector::Connector::ICEBERG);
+    auto connector = connector::ConnectorRegistry::default_instance()->get(connector::Connector::ICEBERG);
     sink_provider = connector->create_row_delta_sink_provider();
 
     return Status::OK();

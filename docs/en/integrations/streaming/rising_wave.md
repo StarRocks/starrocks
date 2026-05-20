@@ -4,7 +4,7 @@ displayed_sidebar: docs
 
 # Sink data from RisingWave to StarRocks
 
-RisingWave is a distributed SQL streaming database that enables simple, efficient, and reliable processing of streaming data. To quickly get started with RisingWave, see [Get started](https://docs.risingwave.com/docs/current/get-started/).
+RisingWave is a distributed SQL streaming database that enables simple, efficient, and reliable processing of streaming data. To quickly get started with RisingWave, see [Get started](https://docs.risingwave.com/get-started/quickstart/).
 
 RisingWave provides the data sinking feature to enable users to directly sink data to StarRocks without requiring any other third-party components. This feature can work with all StarRocks table types: Duplicate Key, Primary Key, Aggregate, and Unique Key tables.
 

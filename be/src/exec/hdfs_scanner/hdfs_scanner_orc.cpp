@@ -29,8 +29,8 @@
 #include "formats/orc/orc_min_max_decoder.h"
 #include "formats/orc/utils.h"
 #include "gen_cpp/orc_proto.pb.h"
+#include "runtime/chunk_helper.h"
 #include "runtime/runtime_state.h"
-#include "storage/chunk_helper.h"
 
 namespace starrocks {
 
@@ -113,8 +113,8 @@ bool OrcRowReaderFilter::filterMinMax(size_t rowGroupIdx,
                                       const std::unordered_map<uint64_t, orc::proto::RowIndex>& rowIndexes,
                                       const std::map<uint32_t, orc::BloomFilterIndex>& bloomFilter) {
     const TupleDescriptor* min_max_tuple_desc = _scanner_ctx.min_max_tuple_desc;
-    ChunkPtr min_chunk = ChunkHelper::new_chunk(*min_max_tuple_desc, 0);
-    ChunkPtr max_chunk = ChunkHelper::new_chunk(*min_max_tuple_desc, 0);
+    ChunkPtr min_chunk = RuntimeChunkHelper::new_chunk(*min_max_tuple_desc, 0);
+    ChunkPtr max_chunk = RuntimeChunkHelper::new_chunk(*min_max_tuple_desc, 0);
     for (size_t i = 0; i < min_max_tuple_desc->slots().size(); i++) {
         SlotDescriptor* slot = min_max_tuple_desc->slots()[i];
         const orc::Type* orc_type = _reader->get_orc_type_by_slot_id(slot->id());
