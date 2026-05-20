@@ -52,7 +52,6 @@ import com.starrocks.http.rest.RestBaseResult;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Authorizer;
-import com.starrocks.sql.ast.UserIdentity;
 import io.netty.handler.codec.http.HttpHeaderNames;
 import io.netty.handler.codec.http.HttpMethod;
 import io.netty.handler.codec.http.HttpResponseStatus;
@@ -175,32 +174,22 @@ public class WebBaseAction extends BaseAction {
         ActionAuthorizationInfo authInfo;
         try {
             authInfo = getAuthorizationInfo(request);
-            UserIdentity currentUser = checkPassword(authInfo);
+            ConnectContext context = checkPassword(authInfo);
             if (needAdmin()) {
                 try {
-                    ConnectContext context = new ConnectContext();
-                    context.setCurrentUserIdentity(currentUser);
-                    context.setCurrentRoleIds(currentUser);
-
                     Authorizer.checkSystemAction(context, PrivilegeType.NODE);
                 } catch (AccessDeniedException e) {
-                    checkUserOwnsAdminRole(currentUser);
+                    checkUserOwnsAdminRole(context.getCurrentUserIdentity());
                 }
             }
             request.setAuthorized(true);
             SessionValue value = new SessionValue();
-            value.currentUser = currentUser;
+            value.currentUser = context.getCurrentUserIdentity();
             addSession(request, response, value);
 
-            ConnectContext ctx = new ConnectContext(null);
-            ctx.setQualifiedUser(authInfo.fullUserName);
-            ctx.setQueryId(UUIDUtil.genUUID());
-            ctx.setRemoteIP(authInfo.remoteIp);
-            ctx.setCurrentUserIdentity(currentUser);
-            ctx.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
-            ctx.setCurrentRoleIds(currentUser);
-
-            ctx.setThreadLocalInfo();
+            context.setQueryId(UUIDUtil.genUUID());
+            context.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
+            context.setThreadLocalInfo();
 
             return true;
         } catch (AccessDeniedException e) {

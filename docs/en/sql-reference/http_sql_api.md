@@ -49,6 +49,12 @@ Authorization: Basic <credentials>
 
 Basic authentication is used, that is, enter the username and password for `credentials` (`-u '<username>:<password>'`). If no password is set for the username, you can pass in only `<username>:` and leave the password empty. For example, if the root account is used, you can enter `-u 'root:'`.
 
+To authenticate a user through Security Integration, include the `PluginInfo` header in the request. This header specifies the authentication plugin to be used.
+
+```shell
+PluginInfo: mysql_clear_password
+```
+
 ### Request body
 
 ```shell

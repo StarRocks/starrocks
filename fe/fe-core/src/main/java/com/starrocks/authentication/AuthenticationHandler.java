@@ -196,8 +196,10 @@ public class AuthenticationHandler {
             }
         }
 
-        // Step 6: Check Role based connection limit
-        ExecuteEnv.getInstance().getScheduler().getRoleConnectionManager().registerConnection(context);
+        // Step 6: Check Role based connection limit if it is not the REST call
+        if (!context.isRestCall()) {
+            ExecuteEnv.getInstance().getScheduler().getRoleConnectionManager().registerConnection(context);
+        }
 
         // Step 7: Apply user properties for non-ephemeral users
         // Load and apply user-specific properties (session variables, resource limits, etc.)

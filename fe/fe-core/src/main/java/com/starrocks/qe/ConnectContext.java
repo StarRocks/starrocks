@@ -124,6 +124,7 @@ public class ConnectContext {
     protected long stmtId;
     protected long forwardedStmtId;
     private int forwardTimes = 0;
+    private boolean isRestCall = false;
 
     // The queryId of the last query processed by this session.
     // In some scenarios, the user can get the output of a request by queryId,
@@ -455,6 +456,10 @@ public class ConnectContext {
 
     public void setThreadLocalInfo() {
         threadLocalInfo.set(this);
+    }
+
+    public void setRestCall(boolean isRestCall) {
+        this.isRestCall = isRestCall;
     }
 
     public Optional<Boolean> getUseConnectorMetadataCache() {
@@ -1585,6 +1590,10 @@ public class ConnectContext {
 
     public long getCurrentThreadAllocatedMemory() {
         return currentThreadAllocatedMemory.get();
+    }
+
+    public boolean isRestCall() {
+        return isRestCall;
     }
 
     public void setCurrentThreadAllocatedMemory(long currentThreadAllocatedMemory) {

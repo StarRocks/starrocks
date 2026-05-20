@@ -145,8 +145,7 @@ public class RestBaseAction extends BaseAction {
     public void execute(BaseRequest request, BaseResponse response) throws DdlException, AccessDeniedException {
         ActionAuthorizationInfo authInfo = getAuthorizationInfo(request);
         // check password
-        UserIdentity currentUser = checkPassword(authInfo);
-
+        ConnectContext currentContext = checkPassword(authInfo);
         HttpConnectContext ctx = request.getConnectContext();
 
         // Change user for ConnectContext if necessary
@@ -154,8 +153,8 @@ public class RestBaseAction extends BaseAction {
         Set<Long> prevRoleIds = ctx.getCurrentRoleIds();
         String prevUserName = ctx.getQualifiedUser();
 
-        ctx.setCurrentUserIdentity(currentUser);
-        ctx.setCurrentRoleIds(currentUser);
+        ctx.setCurrentUserIdentity(currentContext.getCurrentUserIdentity());
+        ctx.setCurrentRoleIds(currentContext.getCurrentRoleIds());
         ctx.setQualifiedUser(authInfo.fullUserName);
 
         if (ctx.isRegistered() && prevUserName != null && !prevUserName.equals(authInfo.fullUserName)) {

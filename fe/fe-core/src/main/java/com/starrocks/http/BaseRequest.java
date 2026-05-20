@@ -164,6 +164,10 @@ public class BaseRequest {
         return request.headers().get("Authorization");
     }
 
+    public String getPluginInfoHeader() {
+        return request.headers().get("PluginInfo");
+    }
+
     public String getHostString() {
         // get client host
         InetSocketAddress clientSocket = (InetSocketAddress) context.channel().remoteAddress();
