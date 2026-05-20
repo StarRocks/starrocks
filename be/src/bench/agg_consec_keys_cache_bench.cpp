@@ -381,8 +381,8 @@ static void BM_OneStringBuildOnly(benchmark::State& state) {
         for (const auto& chunk_col : stream.chunks()) {
             Columns key_columns;
             key_columns.emplace_back(chunk_col);
-            wrapper->build_hash_map(kBenchChunkSize, key_columns, suite._mem_pool.get(),
-                                    BenchAllocateState{&allocator}, &agg_states);
+            wrapper->build_hash_map(kBenchChunkSize, key_columns, suite._mem_pool.get(), BenchAllocateState{&allocator},
+                                    &agg_states);
             total_rows += kBenchChunkSize;
         }
         benchmark::DoNotOptimize(agg_states.data());
@@ -433,8 +433,8 @@ static void BM_OneStringBuildAndCount(benchmark::State& state) {
         for (const auto& chunk_col : stream.chunks()) {
             Columns key_columns;
             key_columns.emplace_back(chunk_col);
-            wrapper->build_hash_map(kBenchChunkSize, key_columns, suite._mem_pool.get(),
-                                    BenchAllocateState{&allocator}, &agg_states);
+            wrapper->build_hash_map(kBenchChunkSize, key_columns, suite._mem_pool.get(), BenchAllocateState{&allocator},
+                                    &agg_states);
             for (int i = 0; i < kBenchChunkSize; ++i) {
                 ++(*reinterpret_cast<int64_t*>(agg_states[i]));
             }
@@ -520,8 +520,8 @@ static void BM_SerializedBuildOnly(benchmark::State& state) {
             Columns key_columns;
             key_columns.emplace_back(stream.col0(c));
             key_columns.emplace_back(stream.col1(c));
-            wrapper->build_hash_map(kBenchChunkSize, key_columns, suite._mem_pool.get(),
-                                    BenchAllocateState{&allocator}, &agg_states);
+            wrapper->build_hash_map(kBenchChunkSize, key_columns, suite._mem_pool.get(), BenchAllocateState{&allocator},
+                                    &agg_states);
             total_rows += kBenchChunkSize;
         }
         benchmark::DoNotOptimize(agg_states.data());
