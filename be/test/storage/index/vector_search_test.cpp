@@ -892,6 +892,102 @@ TEST_F(BruteForceVectorFallbackTest, test_brute_force_dim_mismatch_truncates) {
     chunk_iter->close();
 }
 
+// End-to-end test for the lazy-mat + brute-force degraded path that motivated the
+// defensive ladder in _compute_brute_force_distances:
+//
+//   FE plan: HNSW vector search, lazy-mat pruned the embedding column from the
+//            scan's output schema (SELECT id ORDER BY approx_*_distance ...).
+//   BE state: .vi file missing → _init_ann_reader returns NotFound →
+//             _setup_brute_force_fallback fires → embedding re-added to BE-internal
+//             _schema via tablet_schema lookup → _dict_chunk has v, output chunk
+//             does not.
+//   Defensive ladder must:
+//     - chunk->is_cid_exist(vec_col_id) = false   (output chunk pruned by FE)
+//     - _dict_chunk->is_cid_exist(vec_col_id) = true (re-added by fallback)
+//     - read v from _dict_chunk, compute distance, write to output's distance slot
+//     - never propagate v to output
+//     - never return InternalError (the defensive else branch is unreachable in
+//       this production-shaped scenario)
+//
+// Regression target: a future change that lets _dict_chunk lose the embedding
+// column under the same FE/BE setup would either crash (pre-F1) or surface an
+// InternalError (post-F1). Either way this test catches it.
+TEST_F(BruteForceVectorFallbackTest, test_brute_force_with_lazy_mat_pruned_embedding) {
+    std::vector<int64_t> ids = {1, 2, 3};
+    std::vector<std::vector<float>> vectors = {
+            {0.0f, 0.0f, 0.0f}, // dist to [1,1,1] = 3
+            {1.0f, 1.0f, 1.0f}, // dist to [1,1,1] = 0
+            {2.0f, 2.0f, 2.0f}, // dist to [1,1,1] = 3
+    };
+    ASSIGN_OR_ABORT(auto segment, write_segment(ids, vectors));
+
+    // Confirm the segment has a real .vi expectation (footer does NOT skip_vector_index);
+    // the brute-force path here is the runtime-NotFound branch, not the footer-hint
+    // branch. This pins down which fallback we're testing.
+    ASSERT_FALSE(segment->skip_vector_index());
+
+    auto schema = build_read_schema_with_vector_index();
+    OlapReaderStatistics stats;
+    SegmentReadOptions seg_opts;
+    seg_opts.fs = _fs;
+    seg_opts.stats = &stats;
+    seg_opts.tablet_schema = schema;
+    auto opt = make_vector_search_opt(/*slot_id=*/100, schema->num_columns(), {1.0f, 1.0f, 1.0f});
+    seg_opts.use_vector_index = true;
+    seg_opts.vector_search_option = opt;
+
+    // Read schema with ONLY id — this models the FE plan after lazy-mat has pruned
+    // the embedding column from the scan output (HNSW + SELECT id pattern). The
+    // vector column does NOT appear in the read schema we hand to the iterator.
+    Schema lazy_mat_read_schema;
+    auto id_field = std::make_shared<Field>(0, "id", get_type_info(TYPE_BIGINT), false);
+    id_field->set_uid(0);
+    lazy_mat_read_schema.append(id_field);
+
+    auto chunk_iter = new_segment_iterator(segment, lazy_mat_read_schema, seg_opts);
+    // Freeze the output schema BEFORE the iterator's lazy init runs. This is the
+    // production shape: TabletReader / OlapChunkSource pins output_schema early,
+    // so _setup_brute_force_fallback's late _schema mutation cannot flow back into
+    // the output chunk — exactly the condition under which the defensive ladder
+    // matters.
+    ASSERT_OK(chunk_iter->init_output_schema({}));
+
+    auto chunk = ChunkHelper::new_chunk(chunk_iter->output_schema(), 1024);
+    std::vector<uint32_t> rowids;
+    auto st = chunk_iter->get_next(chunk.get(), &rowids);
+
+    // Must NOT be the defensive InternalError branch — the brute-force path's
+    // _dict_chunk must have the embedding column for the distance computation
+    // to succeed. A regression that leaves _dict_chunk without v would surface
+    // as a non-OK status here.
+    ASSERT_OK(st) << "brute-force fallback returned non-OK; the defensive ladder "
+                     "in _compute_brute_force_distances probably did not find the "
+                     "embedding column in either chunk or _dict_chunk. Check that "
+                     "_setup_brute_force_fallback's _schema.append() path is intact.";
+
+    ASSERT_EQ(chunk->num_rows(), 3);
+
+    // Critical: the output chunk has ONLY id + distance, NOT the embedding.
+    // The embedding was read into _dict_chunk internally, consumed by the distance
+    // kernel, and dropped before emit. A regression that propagates v to the
+    // output (e.g. removes the FE-pruned schema's restriction) would fail here.
+    ASSERT_EQ(chunk->num_columns(), 2);
+
+    // L2 distances against [1,1,1]:
+    //   id=1 vec=[0,0,0] -> 1+1+1 = 3
+    //   id=2 vec=[1,1,1] -> 0
+    //   id=3 vec=[2,2,2] -> 1+1+1 = 3
+    auto dist_col = chunk->get_column_by_slot_id(opt->vector_slot_id);
+    ASSERT_NE(dist_col, nullptr);
+    const auto* distances = down_cast<const FloatColumn*>(dist_col.get());
+    ASSERT_EQ(distances->size(), 3);
+    EXPECT_FLOAT_EQ(distances->get_data()[0], 3.0f);
+    EXPECT_FLOAT_EQ(distances->get_data()[1], 0.0f);
+    EXPECT_FLOAT_EQ(distances->get_data()[2], 3.0f);
+
+    chunk_iter->close();
+}
+
 // Documents the underlying Chunk::get_column_by_id behavior that motivates the
 // brute-force fallback defensive check: when called with a cid that is not in
 // the chunk, the non-const overload silently default-inserts into the lookup
