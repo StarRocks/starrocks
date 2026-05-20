@@ -16,7 +16,9 @@ package com.starrocks.service;
 
 import com.google.gson.Gson;
 import com.starrocks.catalog.UserIdentity;
+import com.starrocks.common.PatternMatcher;
 import com.starrocks.server.RunMode;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.thrift.TAuthInfo;
 import com.starrocks.thrift.TGetPartitionsMetaRequest;
 import com.starrocks.thrift.TGetPartitionsMetaResponse;
@@ -26,7 +28,11 @@ import com.starrocks.thrift.TPartitionMetaInfo;
 import com.starrocks.thrift.TTableConfigInfo;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
+import mockit.Invocation;
+import mockit.Mock;
+import mockit.MockUp;
 import mockit.Mocked;
+import org.apache.thrift.TException;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -258,5 +264,31 @@ public class LakeInformationSchemaDataSourceTest {
         TGetTablesConfigResponse response = impl.getTablesConfig(req);
 
         Assertions.assertTrue(response.getTables_config_infos().isEmpty());
+    }
+
+    @Test
+    public void testGetTablesConfigWithInvalidTableNamePattern() {
+        String invalidPattern = "invalid_table_pattern";
+        new MockUp<PatternMatcher>() {
+            @Mock
+            public PatternMatcher createMysqlPattern(Invocation invocation, String mysqlPattern, boolean caseSensitive) {
+                if (invalidPattern.equals(mysqlPattern)) {
+                    throw new SemanticException("bad table name pattern");
+                }
+                return invocation.proceed(mysqlPattern, caseSensitive);
+            }
+        };
+
+        TGetTablesConfigRequest req = new TGetTablesConfigRequest();
+        TAuthInfo authInfo = new TAuthInfo();
+        authInfo.setPattern("db_empty_filter");
+        authInfo.setUser("root");
+        authInfo.setUser_ip("%");
+        req.setAuth_info(authInfo);
+        req.setTable_name(invalidPattern);
+
+        TException exception = Assertions.assertThrows(TException.class,
+                () -> InformationSchemaDataSource.generateTablesConfigResponse(req));
+        Assertions.assertEquals("Pattern is in bad format: " + invalidPattern, exception.getMessage());
     }
 }
