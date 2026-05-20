@@ -27,6 +27,7 @@
 #include "exprs/agg/aggregate_factory.h"
 #include "exprs/agg/aggregate_state_allocator.h"
 #include "exprs/function_context.h"
+#include "runtime/memory/counting_allocator.h"
 #include "testutil/function_utils.h"
 #include "types/logical_type.h"
 
