@@ -199,6 +199,16 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 
 MySQL クライアント互換性のために使用されます。実際の用途はありません。
 
+### avro_use_jni_reader
+
+* **スコープ**: Session
+* **説明**: Hive などの外部 Catalog にある Avro データをスキャンする際に、JNI ベースの Avro Reader を使用するかどうかを制御します。有効にすると（`true`）、FE は Avro scan range にこのセッション変数を設定し、BE はネイティブ Avro スキャン経路ではなく `HdfsAvroScanner` を優先して使用します。現在この変数は主に互換性確保のためのフォールバックとして利用されます。
+
+  現在の制限: `CHAR(n)` 列は JNI Reader と非 JNI Avro Reader の間で完全には互換ではありません。たとえば `CHAR(10)` 列に対して Avro の値 `Char` を読み込む場合、現在のネイティブ Reader は `Char` の後ろに 6 個の空白を付けず、非パディングの値をそのまま保持します。一方で JNI Reader は異なる挙動を示す可能性があります。`avro_use_jni_reader` を切り替えた際の結果不一致を避けるため、現時点では `CHAR(n)` の空白パディングの意味論に依存しないことを推奨します。可能であれば `VARCHAR` を使用してください。
+* **デフォルト**: `true`
+* **データ型**: boolean
+* **導入バージョン**: v4.1.1
+
 ### binary_encoding_format
 
 * **スコープ**: Session

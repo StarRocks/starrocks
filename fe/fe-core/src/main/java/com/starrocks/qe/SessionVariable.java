@@ -2786,7 +2786,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     private boolean paimonForceJNIReader = false;
 
     @VariableMgr.VarAttr(name = AVRO_USE_JNI_READER)
-    private boolean avroUseJNIReader = false;
+    private boolean avroUseJNIReader = true;
 
     @VarAttr(name = ENABLE_QUERY_CACHE)
     private boolean enableQueryCache = false;
