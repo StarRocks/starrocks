@@ -14,10 +14,12 @@
 
 #pragma once
 
+#include "column/array_column.h"
 #include "column/column_helper.h"
 #include "column/object_column.h"
 #include "column/vectorized_fwd.h"
 #include "exprs/agg/aggregate.h"
+#include "exprs/function_context.h"
 #include "gutil/casts.h"
 #include "types/percentile_value.h"
 #include "types/tdigest.h"
