@@ -22,15 +22,22 @@
 // parallel: low_cardinality_key8.
 //
 // Driver: production callsite build_hash_map with a production-shaped
-// HashTableKeyAllocator (sizeof(int64_t) state matching COUNT(*)).  Density
-// caps at 255 because dict codes only span [0, 255] under
-// Config.low_cardinality_threshold = 255; higher densities are blocked at
-// FE.  Construction is cheap (256-cell array = ~2 KiB) so Section C is a
-// regression guard, not a primary signal.
+// HashTableKeyAllocator (sizeof(int64_t) state matching COUNT(*)).
+//
+// Density and code-range semantics:
+//   * Config.low_cardinality_threshold caps dictionary size at <=255
+//     entries; the FE guard rejects marking a slot when threshold > 255.
+//     With threshold=255 a dictionary holds up to 255 entries giving
+//     codes in [0, 254].  density=255 in the bench produces exactly that
+//     worst-case shape (255 distinct codes 0..254 filling the array).
+//   * density=256 cannot occur in production with the current guard and
+//     is not benched.  If the guard is relaxed in the future, codes 0..255
+//     remain a single read of the array (cell 256 is the sentinel slot
+//     reserved by SmallFixedSizeHashMap, see fixed_hash_map.h).
 
-#include <base/testutil/assert.h>
 #include <benchmark/benchmark.h>
 
+#include <cmath>
 #include <memory>
 #include <random>
 #include <vector>
@@ -71,6 +78,7 @@ enum class Distribution : int {
     Random = 0,
     Sorted = 1,
     Clustered64 = 2,
+    Zipf = 3, // skewed: ~90% of mass on top decile (s=1.5)
 };
 
 // Production-shaped allocator -- same shape as the SMALLINT bench so the
@@ -84,9 +92,36 @@ struct BenchAllocateState {
     }
 };
 
+// Build a 4096-entry Zipf code table over [0, distinct_count) so the
+// chunk-gen loop just samples a slot in this pre-built table.
+static std::vector<int> build_zipf_codes(int distinct_count) {
+    constexpr int table_size = 4096;
+    constexpr double s = 1.5;
+    if (distinct_count <= 0) return {};
+    std::vector<double> cum(distinct_count);
+    double total = 0.0;
+    for (int k = 0; k < distinct_count; ++k) {
+        total += 1.0 / std::pow(k + 1, s);
+        cum[k] = total;
+    }
+    std::vector<int> codes(table_size);
+    std::mt19937 rng(0xBEEFCAFE);
+    std::uniform_real_distribution<double> uni(0.0, total);
+    for (int i = 0; i < table_size; ++i) {
+        double r = uni(rng);
+        int lo = 0, hi = distinct_count - 1;
+        while (lo < hi) {
+            int mid = (lo + hi) >> 1;
+            if (cum[mid] < r) lo = mid + 1; else hi = mid;
+        }
+        codes[i] = lo;
+    }
+    return codes;
+}
+
 // Generate (num_rows / kBenchChunkSize) Int32 chunks of kBenchChunkSize rows
 // each, each chunk a fresh Int32Column owning its own buffer.  Values are
-// FE-generated dict codes in [0, distinct_count - 1] (distinct_count <= 256).
+// FE-generated dict codes in [0, distinct_count - 1] (distinct_count <= 255).
 class Int32CodeChunkStream {
 public:
     Int32CodeChunkStream(int64_t num_rows, int distinct_count, Distribution dist) {
@@ -94,6 +129,13 @@ public:
         std::uniform_int_distribution<int> uni(0, distinct_count > 0 ? distinct_count - 1 : 0);
         const int64_t num_chunks = (num_rows + kBenchChunkSize - 1) / kBenchChunkSize;
         _chunks.reserve(num_chunks);
+
+        std::vector<int> zipf_codes;
+        if (dist == Distribution::Zipf) {
+            zipf_codes = build_zipf_codes(distinct_count);
+        }
+        std::uniform_int_distribution<int> zipf_pick(0, zipf_codes.empty() ? 0 : zipf_codes.size() - 1);
+
         for (int64_t c = 0; c < num_chunks; ++c) {
             auto col = Int32Column::create();
             auto& data = col->get_data();
@@ -118,6 +160,12 @@ public:
                 for (int i = 0; i < kBenchChunkSize; ++i) {
                     if (i > 0 && i % 64 == 0) current = uni(rng);
                     data[i] = current;
+                }
+                break;
+            }
+            case Distribution::Zipf: {
+                for (int i = 0; i < kBenchChunkSize; ++i) {
+                    data[i] = zipf_codes[zipf_pick(rng)];
                 }
                 break;
             }
@@ -199,11 +247,16 @@ public:
     std::unique_ptr<AggStatistics> _agg_stat;
 };
 
+template <typename Wrapper>
+inline size_t hash_table_bytes(Wrapper* w) {
+    return w->hash_map.dump_bound();
+}
+
 // ============================================================================
-// Section A — main steady-state win (hash insert only)
+// Section A -- main steady-state win (hash insert only)
 // ============================================================================
 template <typename Wrapper>
-static void BM_LowCardColdBuild(benchmark::State& state) {
+static void BM_LowCardBuildOnly(benchmark::State& state) {
     const int64_t num_rows = state.range(0);
     const int distinct = static_cast<int>(state.range(1));
     const Distribution dist = static_cast<Distribution>(state.range(2));
@@ -213,6 +266,10 @@ static void BM_LowCardColdBuild(benchmark::State& state) {
     Int32CodeChunkStream stream(num_rows, distinct, dist);
 
     int64_t total_rows = 0;
+    size_t final_groups = 0;
+    size_t final_ht_bytes = 0;
+    size_t final_pool_bytes = 0;
+    int64_t cum_checksum = 0;
     for (auto _ : state) {
         state.PauseTiming();
         auto wrapper = std::make_unique<Wrapper>(kBenchChunkSize, suite._agg_stat.get());
@@ -229,23 +286,36 @@ static void BM_LowCardColdBuild(benchmark::State& state) {
             wrapper->build_hash_map(kBenchChunkSize, key_columns, suite._mem_pool.get(), alloc, &agg_states);
             total_rows += kBenchChunkSize;
         }
+        benchmark::DoNotOptimize(agg_states.data());
+        benchmark::ClobberMemory();
 
         state.PauseTiming();
+        final_groups = wrapper->hash_map.size();
+        final_ht_bytes = hash_table_bytes(wrapper.get());
+        final_pool_bytes = suite._mem_pool->total_allocated_bytes();
+        int64_t cs = 0;
+        for (int i = 0; i < kBenchChunkSize; ++i) cs += reinterpret_cast<intptr_t>(agg_states[i]);
+        cum_checksum += cs;
         wrapper.reset();
         suite._mem_pool->clear();
     }
+    benchmark::DoNotOptimize(cum_checksum);
     state.SetItemsProcessed(total_rows);
     state.counters["distinct"] = distinct;
+    state.counters["dist"] = static_cast<int>(dist);
     state.counters["rows_per_iter"] = num_rows;
+    state.counters["final_groups"] = final_groups;
+    state.counters["hash_table_bytes"] = final_ht_bytes;
+    state.counters["pool_bytes"] = final_pool_bytes;
 
     suite.TearDown();
 }
 
 // ============================================================================
-// Section A (continued) — hash insert + COUNT(*) update
+// Section A (continued) -- hash insert + COUNT(*) update
 // ============================================================================
 template <typename Wrapper>
-static void BM_LowCardColdBuildAndCount(benchmark::State& state) {
+static void BM_LowCardBuildAndCount(benchmark::State& state) {
     const int64_t num_rows = state.range(0);
     const int distinct = static_cast<int>(state.range(1));
     const Distribution dist = static_cast<Distribution>(state.range(2));
@@ -255,6 +325,10 @@ static void BM_LowCardColdBuildAndCount(benchmark::State& state) {
     Int32CodeChunkStream stream(num_rows, distinct, dist);
 
     int64_t total_rows = 0;
+    size_t final_groups = 0;
+    size_t final_ht_bytes = 0;
+    size_t final_pool_bytes = 0;
+    int64_t cum_checksum = 0;
     for (auto _ : state) {
         state.PauseTiming();
         auto wrapper = std::make_unique<Wrapper>(kBenchChunkSize, suite._agg_stat.get());
@@ -274,20 +348,33 @@ static void BM_LowCardColdBuildAndCount(benchmark::State& state) {
             }
             total_rows += kBenchChunkSize;
         }
+        benchmark::DoNotOptimize(agg_states.data());
+        benchmark::ClobberMemory();
 
         state.PauseTiming();
+        final_groups = wrapper->hash_map.size();
+        final_ht_bytes = hash_table_bytes(wrapper.get());
+        final_pool_bytes = suite._mem_pool->total_allocated_bytes();
+        int64_t cs = 0;
+        for (int i = 0; i < kBenchChunkSize; ++i) cs += *reinterpret_cast<int64_t*>(agg_states[i]);
+        cum_checksum += cs;
         wrapper.reset();
         suite._mem_pool->clear();
     }
+    benchmark::DoNotOptimize(cum_checksum);
     state.SetItemsProcessed(total_rows);
     state.counters["distinct"] = distinct;
+    state.counters["dist"] = static_cast<int>(dist);
     state.counters["rows_per_iter"] = num_rows;
+    state.counters["final_groups"] = final_groups;
+    state.counters["hash_table_bytes"] = final_ht_bytes;
+    state.counters["pool_bytes"] = final_pool_bytes;
 
     suite.TearDown();
 }
 
 // ============================================================================
-// Section C — construction-only cost
+// Section C -- construction-only cost
 // LowCardUInt8Map is a 257-cell array (~2 KiB heap); phmap starts at zero
 // capacity.  This section just verifies the array path does not regress
 // construction cost in the small-table regime.
@@ -307,10 +394,10 @@ static void BM_LowCardConstruct(benchmark::State& state) {
 }
 
 // ============================================================================
-// Section D — nullable coverage
+// Section D -- nullable coverage
 // ============================================================================
 template <typename Wrapper>
-static void BM_LowCardNullableColdBuild(benchmark::State& state) {
+static void BM_LowCardNullableBuildOnly(benchmark::State& state) {
     const int64_t num_rows = state.range(0);
     const int distinct = static_cast<int>(state.range(1));
     const double null_fraction = state.range(2) * 0.01;
@@ -320,6 +407,7 @@ static void BM_LowCardNullableColdBuild(benchmark::State& state) {
     NullableInt32CodeChunkStream stream(num_rows, distinct, null_fraction);
 
     int64_t total_rows = 0;
+    int64_t cum_checksum = 0;
     for (auto _ : state) {
         state.PauseTiming();
         auto wrapper = std::make_unique<Wrapper>(kBenchChunkSize, suite._agg_stat.get());
@@ -336,11 +424,17 @@ static void BM_LowCardNullableColdBuild(benchmark::State& state) {
             wrapper->build_hash_map(kBenchChunkSize, key_columns, suite._mem_pool.get(), alloc, &agg_states);
             total_rows += kBenchChunkSize;
         }
+        benchmark::DoNotOptimize(agg_states.data());
+        benchmark::ClobberMemory();
 
         state.PauseTiming();
+        int64_t cs = 0;
+        for (int i = 0; i < kBenchChunkSize; ++i) cs += reinterpret_cast<intptr_t>(agg_states[i]);
+        cum_checksum += cs;
         wrapper.reset();
         suite._mem_pool->clear();
     }
+    benchmark::DoNotOptimize(cum_checksum);
     state.SetItemsProcessed(total_rows);
     state.counters["distinct"] = distinct;
     state.counters["null_pct"] = state.range(2);
@@ -352,20 +446,20 @@ static void BM_LowCardNullableColdBuild(benchmark::State& state) {
 // Args registration
 // ============================================================================
 
-// Section A: density caps at 255 because Config.low_cardinality_threshold
-// = 255 by default; dict codes above 255 are blocked at FE in this PR (see
-// PlanFragmentBuilder.visitPhysicalHashAggregate guard).
-//   1   -> pathological single value
+// Section A: density caps at 255.  Codes are 0..(distinct-1); at
+// distinct=255 codes 0..254 fill the array short by one sentinel slot
+// (cell 255 reserved by SmallFixedSizeHashMap).
+//   1   -> pathological single value (boundary, not headline)
 //   4   -> typical enum bucket
 //   24  -> hour-of-day
 //   100 -> typical low-card column (status, segment)
 //   200 -> deeper realistic GROUP BY low-card range
-//   255 -> threshold ceiling, array fills its full 256-cell table
+//   255 -> threshold ceiling, worst-case fill of the array
 static void RegisterArgs_SectionA(benchmark::internal::Benchmark* b) {
     b->ArgNames({"rows", "distinct", "dist"});
     constexpr int64_t kRows = 100'000'000;
     for (int distinct : {1, 4, 24, 100, 200, 255}) {
-        for (int d = 0; d <= 2; ++d) {
+        for (int d = 0; d <= 3; ++d) {
             b->Args({kRows, distinct, d});
         }
     }
@@ -396,20 +490,20 @@ static void RegisterArgs_SectionD(benchmark::internal::Benchmark* b) {
     b->Iterations(3);
 }
 
-BENCHMARK_TEMPLATE(BM_LowCardColdBuild, PhmapInt32Wrapper)->Apply(RegisterArgs_SectionA);
-BENCHMARK_TEMPLATE(BM_LowCardColdBuild, LowCardWrapper)->Apply(RegisterArgs_SectionA);
+BENCHMARK_TEMPLATE(BM_LowCardBuildOnly, PhmapInt32Wrapper)->Apply(RegisterArgs_SectionA);
+BENCHMARK_TEMPLATE(BM_LowCardBuildOnly, LowCardWrapper)->Apply(RegisterArgs_SectionA);
 
-BENCHMARK_TEMPLATE(BM_LowCardColdBuildAndCount, PhmapInt32Wrapper)->Apply(RegisterArgs_SectionA);
-BENCHMARK_TEMPLATE(BM_LowCardColdBuildAndCount, LowCardWrapper)->Apply(RegisterArgs_SectionA);
+BENCHMARK_TEMPLATE(BM_LowCardBuildAndCount, PhmapInt32Wrapper)->Apply(RegisterArgs_SectionA);
+BENCHMARK_TEMPLATE(BM_LowCardBuildAndCount, LowCardWrapper)->Apply(RegisterArgs_SectionA);
 
-BENCHMARK_TEMPLATE(BM_LowCardColdBuild, PhmapInt32Wrapper)->Apply(RegisterArgs_SectionB);
-BENCHMARK_TEMPLATE(BM_LowCardColdBuild, LowCardWrapper)->Apply(RegisterArgs_SectionB);
+BENCHMARK_TEMPLATE(BM_LowCardBuildOnly, PhmapInt32Wrapper)->Apply(RegisterArgs_SectionB);
+BENCHMARK_TEMPLATE(BM_LowCardBuildOnly, LowCardWrapper)->Apply(RegisterArgs_SectionB);
 
 BENCHMARK_TEMPLATE(BM_LowCardConstruct, PhmapInt32Wrapper)->Unit(benchmark::kMicrosecond);
 BENCHMARK_TEMPLATE(BM_LowCardConstruct, LowCardWrapper)->Unit(benchmark::kMicrosecond);
 
-BENCHMARK_TEMPLATE(BM_LowCardNullableColdBuild, PhmapInt32NullableWrapper)->Apply(RegisterArgs_SectionD);
-BENCHMARK_TEMPLATE(BM_LowCardNullableColdBuild, LowCardNullableWrapper)->Apply(RegisterArgs_SectionD);
+BENCHMARK_TEMPLATE(BM_LowCardNullableBuildOnly, PhmapInt32NullableWrapper)->Apply(RegisterArgs_SectionD);
+BENCHMARK_TEMPLATE(BM_LowCardNullableBuildOnly, LowCardNullableWrapper)->Apply(RegisterArgs_SectionD);
 
 } // namespace starrocks
 
