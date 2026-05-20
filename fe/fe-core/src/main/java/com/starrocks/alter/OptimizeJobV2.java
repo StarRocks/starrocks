@@ -747,7 +747,7 @@ public class OptimizeJobV2 extends AlterJobV2 implements GsonPostProcessable {
         }
         sourceTablets.forEach(GlobalStateMgr.getCurrentState().getTabletInvertedIndex()::markTabletForceDelete);
 
-        if (allPartitionOptimized) {
+        if (allPartitionOptimized && replayedJob.distributionInfo != null) {
             this.distributionInfo = replayedJob.distributionInfo;
             LOG.debug("set distribution info to table: {}", distributionInfo);
             targetTable.setDefaultDistributionInfo(distributionInfo);
