@@ -16,6 +16,8 @@
 
 #include <fmt/compile.h>
 
+#include "gutil/casts.h"
+
 namespace starrocks::pipeline {
 
 BucketSequenceMorselQueue::BucketSequenceMorselQueue(MorselQueuePtr&& morsel_queue)

@@ -16,6 +16,7 @@
 
 #include "exec/pipeline/scan/bucket_sequence_morsel_queue.h"
 #include "exec/pipeline/scan/dynamic_morsel_queue.h"
+#include "gutil/casts.h"
 
 namespace starrocks::pipeline {
 

@@ -45,6 +45,7 @@
 #include "exprs/jsonpath.h"
 #include "gen_cpp/Metrics_types.h"
 #include "gen_cpp/RuntimeProfile_types.h"
+#include "gutil/casts.h"
 #include "gutil/map_util.h"
 #include "io/core/io_profiler.h"
 #include "runtime/chunk_helper.h"
