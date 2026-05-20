@@ -102,7 +102,32 @@ public class TabletPreSplitCoordinatorTest {
         Column scalarKey = mock(Column.class);
         Type scalarType = IntegerType.BIGINT;
         when(scalarKey.getType()).thenReturn(scalarType);
-        when(table.getKeyColumnsInOrder()).thenReturn(List.of(scalarKey));
+        // Stub the sort-key path the coordinator uses (MetaUtils.getRangeDistributionColumns →
+        // table.getIndexMetaByMetaId(...).getSchema/getSortKeyIdxes). Default to a single scalar
+        // sort-key column; individual tests override via stubSortKeyColumns(...).
+        stubSortKeyColumns(scalarKey);
+    }
+
+    /**
+     * Stub the indexMeta the coordinator's sort-key accessor walks so it yields {@code columns}
+     * as the sort-key column list. Each column's {@code isKey()} is forced to {@code true} so the
+     * fallback path inside {@link MetaUtils#getRangeDistributionColumns} also works if
+     * {@code sortKeyIdxes} is null.
+     */
+    private void stubSortKeyColumns(Column... columns) {
+        MaterializedIndexMeta indexMeta = mock(MaterializedIndexMeta.class);
+        when(indexMeta.getSchema()).thenReturn(List.of(columns));
+        if (columns.length == 0) {
+            when(indexMeta.getSortKeyIdxes()).thenReturn(List.of());
+        } else {
+            List<Integer> sortKeyIdxes = new java.util.ArrayList<>();
+            for (int columnIndex = 0; columnIndex < columns.length; columnIndex++) {
+                sortKeyIdxes.add(columnIndex);
+                when(columns[columnIndex].isKey()).thenReturn(true);
+            }
+            when(indexMeta.getSortKeyIdxes()).thenReturn(sortKeyIdxes);
+        }
+        when(table.getIndexMetaByMetaId(BASE_INDEX_META_ID)).thenReturn(indexMeta);
     }
 
     @AfterEach
@@ -205,14 +230,14 @@ public class TabletPreSplitCoordinatorTest {
         Type nonScalarType = mock(Type.class);
         when(nonScalarType.isScalarType()).thenReturn(false);
         when(nonScalarKey.getType()).thenReturn(nonScalarType);
-        when(table.getKeyColumnsInOrder()).thenReturn(List.of(nonScalarKey));
+        stubSortKeyColumns(nonScalarKey);
 
         assertSkipped(invokeMaybeAct(), SkipReason.UNSUPPORTED_SORT_KEY);
     }
 
     @Test
     public void testEmptyKeyColumnsSkipped() {
-        when(table.getKeyColumnsInOrder()).thenReturn(List.of());
+        stubSortKeyColumns();
 
         assertSkipped(invokeMaybeAct(), SkipReason.UNSUPPORTED_SORT_KEY);
     }

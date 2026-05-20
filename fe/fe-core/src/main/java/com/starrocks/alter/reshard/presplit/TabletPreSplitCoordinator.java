@@ -25,6 +25,7 @@ import com.starrocks.common.StarRocksException;
 import com.starrocks.common.TimeoutException;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.common.MetaUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -127,14 +128,21 @@ public final class TabletPreSplitCoordinator {
     }
 
     private static boolean isFirstSortKeyColumnSupported(OlapTable table) {
-        List<Column> keyColumns = table.getKeyColumnsInOrder();
-        if (keyColumns.isEmpty()) {
+        // Use the same sort-key accessor the substrate's BE-side
+        // validate_new_tablet_ranges expects boundaries to match. For
+        // DUPLICATE KEY + ORDER BY tables the substrate's sort-key arity
+        // includes the ORDER BY trailing columns that the KEY clause omits;
+        // boundaries produced from getKeyColumnsInOrder() (KEY columns only)
+        // would mismatch the substrate's expected schema and trigger the
+        // identical-fallback safety net.
+        List<Column> sortKeyColumns = MetaUtils.getRangeDistributionColumns(table);
+        if (sortKeyColumns.isEmpty()) {
             return false;
         }
         // Deeper per-column validation (decimal precision/scale, primitive-type match against
         // sampler tuples) is BoundaryPlanner's job at plan time; this gate only needs to keep
         // composite/complex types out of the external-boundaries split path.
-        return keyColumns.get(0).getType().isScalarType();
+        return sortKeyColumns.get(0).getType().isScalarType();
     }
 
     /**
@@ -170,7 +178,7 @@ public final class TabletPreSplitCoordinator {
         }
 
         SampleRequest sampleRequest = new SampleRequest(
-                scanContext, table.getKeyColumnsInOrder(),
+                scanContext, MetaUtils.getRangeDistributionColumns(table),
                 Config.tablet_pre_split_sample_byte_limit, /*seed*/ 0L);
         Duration preSubmitTimeout = Duration.ofSeconds(Config.tablet_pre_split_pre_submit_timeout_seconds);
 
