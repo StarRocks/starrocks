@@ -55,6 +55,10 @@ public class JDBCTable extends Table {
     private String dbName;
     private List<Column> partitionColumns;
 
+    // Transient marker used by information_schema.tables to avoid fetching JDBC
+    // REMARKS more than once for the same cached table instance.
+    private transient boolean commentFetched;
+
     public JDBCTable() {
         super(TableType.JDBC);
     }
@@ -134,6 +138,14 @@ public class JDBCTable extends Table {
     public boolean isMySQLCompatible() {
         String uri = getJdbcUri();
         return uri != null && (uri.startsWith("jdbc:mysql") || uri.startsWith("jdbc:mariadb"));
+    }
+
+    public boolean isCommentFetched() {
+        return commentFetched;
+    }
+
+    public void setCommentFetched(boolean commentFetched) {
+        this.commentFetched = commentFetched;
     }
 
     private void validate(Map<String, String> properties) throws DdlException {
