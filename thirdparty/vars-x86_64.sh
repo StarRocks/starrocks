@@ -43,14 +43,10 @@ JINDOSDK_MD5SUM="5436e4fe39c4dfdc942e41821f1dd8a9"
 STARCACHE_DOWNLOAD="https://cdn-thirdparty.starrocks.com/starcache/v3.5.3/starcache-centos7_amd64.tar.gz"
 STARCACHE_NAME="starcache.tar.gz"
 STARCACHE_SOURCE="starcache"
-<<<<<<< HEAD
 STARCACHE_MD5SUM="a0934da2b9863608980374d53b7bbf1e"
-=======
-STARCACHE_MD5SUM="23b115d131c8c7738c9a57c41d7b791f"
 
 # pprof
 PPROF_DOWNLOAD="https://github.com/StarRocks/pprof/releases/download/release%2F20260520/pprof-linux-amd64"
 PPROF_NAME="pprof"
 PPROF_SOURCE="pprof"
 PPROF_MD5SUM="30a62ea6859604e11c9f40efa8d9954b"
->>>>>>> 7e04e7ad94 ([BugFix] upgrade pprof, eliminate golang CVE (#73545))
