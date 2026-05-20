@@ -2079,11 +2079,11 @@ void TabletUpdatesTest::test_load_snapshot_incremental_with_merge_condition(bool
         CHECK_OK(RowsetFactory::create_rowset_writer(writer_context, &writer));
         auto schema = ChunkHelper::convert_schema(tablet->thread_safe_get_tablet_schema());
         auto chunk = ChunkFactory::new_chunk(schema, keys.size());
-        auto cols = chunk->mutable_columns();
+        auto cols = chunk->columns();
         for (size_t i = 0; i < keys.size(); i++) {
-            cols[0]->append_datum(Datum(keys[i]));
-            cols[1]->append_datum(Datum((int16_t)(keys[i] % 100 + 1)));
-            cols[2]->append_datum(Datum(v2_data[i]));
+            cols[0]->as_mutable_ptr()->append_datum(Datum(keys[i]));
+            cols[1]->as_mutable_ptr()->append_datum(Datum((int16_t)(keys[i] % 100 + 1)));
+            cols[2]->as_mutable_ptr()->append_datum(Datum(v2_data[i]));
         }
         CHECK_OK(writer->flush_chunk(*chunk));
         return *writer->build();
