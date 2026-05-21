@@ -53,7 +53,7 @@ public class LocalMetastoreTvrTest {
             when(p.getVisibleVersion()).thenReturn(v);
             partitions.add(p);
         }
-        when(table.getAllPhysicalPartitions()).thenReturn(partitions);
+        when(table.getPhysicalPartitions()).thenReturn(partitions);
         when(table.getKeysType()).thenReturn(keysType);
         return table;
     }
@@ -143,6 +143,15 @@ public class LocalMetastoreTvrTest {
         TvrTableSnapshot to = TvrTableSnapshot.of(3L);
         StarRocksConnectorException ex = assertThrows(StarRocksConnectorException.class,
                 () -> store.listTableDeltaTraits("db", table, from, to));
+        assertTrue(ex.getMessage().contains("is not a parent ancestor"));
+    }
+
+    @Test
+    public void testDeltaTraits_emptyToSnapshot_throwsAncestryError() {
+        OlapTable table = mockOlapTable(KeysType.DUP_KEYS, 5L);
+        TvrTableSnapshot from = TvrTableSnapshot.of(3L);
+        StarRocksConnectorException ex = assertThrows(StarRocksConnectorException.class,
+                () -> store.listTableDeltaTraits("db", table, from, TvrTableSnapshot.empty()));
         assertTrue(ex.getMessage().contains("is not a parent ancestor"));
     }
 
