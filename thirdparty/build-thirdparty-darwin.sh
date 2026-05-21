@@ -1880,15 +1880,20 @@ build_xxhash() {
           -f "${TP_INCLUDE_DIR}/xxhash.h" &&
           ! -L "${TP_INCLUDE_DIR}/xxhash.h" &&
           -f "${TP_INCLUDE_DIR}/xxhash/xxhash.h" &&
-          ! -L "${TP_INCLUDE_DIR}/xxhash/xxhash.h" ]]; then
+          ! -L "${TP_INCLUDE_DIR}/xxhash/xxhash.h" &&
+          -f "${TP_INSTALL_DIR}/lib/pkgconfig/libxxhash.pc" &&
+          ! -L "${TP_INSTALL_DIR}/lib/pkgconfig/libxxhash.pc" &&
+          -d "${TP_INSTALL_DIR}/lib/cmake/xxHash" &&
+          ! -L "${TP_INSTALL_DIR}/lib/cmake/xxHash" ]]; then
         return 0
     fi
 
     check_if_source_exist "${XXHASH_SOURCE}"
     cd "${TP_SOURCE_DIR}/${XXHASH_SOURCE}"
-    make clean >/dev/null 2>&1 || true
+    rm -rf "${BUILD_DIR}"
 
-    rm -rf "${TP_INCLUDE_DIR}/xxhash"
+    rm -rf "${TP_INCLUDE_DIR}/xxhash" \
+        "${TP_INSTALL_DIR}/lib/cmake/xxHash"
     rm -f "${TP_INCLUDE_DIR}/xxhash.h" \
         "${TP_INCLUDE_DIR}/xxh3.h" \
         "${TP_INCLUDE_DIR}/xxh_x86dispatch.h" \
@@ -1896,25 +1901,19 @@ build_xxhash() {
         "${TP_INSTALL_DIR}/lib64/libxxhash"* \
         "${TP_INSTALL_DIR}/lib/pkgconfig/libxxhash.pc"
 
-    make -j"${PARALLEL}" libxxhash.a libxxhash.pc \
-        PREFIX="${TP_INSTALL_DIR}" \
-        LIBDIR="${TP_INSTALL_DIR}/lib" \
-        INCLUDEDIR="${TP_INCLUDE_DIR}" \
-        PKGCONFIGDIR="${TP_INSTALL_DIR}/lib/pkgconfig" \
-        CC="${CC}" \
-        AR="${AR}" \
-        CFLAGS="${CFLAGS}" \
-        CPPFLAGS="${CPPFLAGS}"
-    make install_libxxhash.a install_libxxhash.includes install_libxxhash.pc \
-        PREFIX="${TP_INSTALL_DIR}" \
-        LIBDIR="${TP_INSTALL_DIR}/lib" \
-        INCLUDEDIR="${TP_INCLUDE_DIR}" \
-        PKGCONFIGDIR="${TP_INSTALL_DIR}/lib/pkgconfig" \
-        CC="${CC}" \
-        AR="${AR}"
+    "${CMAKE_CMD}" -G "${CMAKE_GENERATOR}" \
+        -S cmake_unofficial -B "${BUILD_DIR}" \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DCMAKE_INSTALL_PREFIX="${TP_INSTALL_DIR}" \
+        -DCMAKE_INSTALL_LIBDIR=lib \
+        -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
+        -DBUILD_SHARED_LIBS=OFF \
+        -DXXHASH_BUILD_XXHSUM=OFF
+    "${CMAKE_CMD}" --build "${BUILD_DIR}" -j "${PARALLEL}"
+    "${CMAKE_CMD}" --install "${BUILD_DIR}"
 
     mkdir -p "${TP_INCLUDE_DIR}/xxhash"
-    cp xxhash.h "${TP_INCLUDE_DIR}/xxhash/xxhash.h"
+    cp "${TP_INCLUDE_DIR}/xxhash.h" "${TP_INCLUDE_DIR}/xxhash/xxhash.h"
     sync_lib64_links
 }
 
