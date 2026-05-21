@@ -76,12 +76,19 @@ Status SpillMemTableSink::flush_chunk(const Chunk& chunk, starrocks::SegmentPB* 
         *flush_data_size = res.value();
     }
 
-    // Eager merge: overlap merging with subsequent flushes. has_enough_for_pipeline_merge_task()
-    // is a cheap pre-check to skip the heavier work inside task_iterator.init().
-    if (config::enable_load_spill_parallel_merge &&
-        _load_chunk_spiller->total_bytes() >= config::pk_index_eager_build_threshold_bytes) {
+    // EAGER MERGE OPTIMIZATION: When spilled data accumulates to a threshold, proactively
+    // start merging blocks in the background BEFORE all flushes complete. This provides:
+    // 1. Better parallelism - merge tasks run concurrently with ongoing memtable flushes
+    // 2. Reduced final merge time - much of the merge work completes during the load phase
+    // 3. Lower memory pressure - blocks get merged and reclaimed earlier
+    //
+    // WHY THIS THRESHOLD: pk_index_eager_build_threshold_bytes indicates bulk load scenario
+    // where parallel merge benefits outweigh task coordination overhead.
+    if (_load_chunk_spiller->total_bytes() >= config::pk_index_eager_build_threshold_bytes &&
+        config::enable_load_spill_parallel_merge) {
         _pipeline_merge_context->init_parallel_merge();
-
+        
+        // Cheap pre-check to skip task_iterator.init() when no task can be produced.
         if (_pipeline_merge_context->token() != nullptr &&
             _load_chunk_spiller->has_enough_for_pipeline_merge_task(config::load_spill_max_merge_bytes,
                                                                     config::load_spill_memory_usage_per_merge)) {
