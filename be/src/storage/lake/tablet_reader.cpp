@@ -24,6 +24,7 @@
 #include "common/config_json_flat_fwd.h"
 #include "common/config_lake_fwd.h"
 #include "common/config_scan_io_fwd.h"
+#include "common/config_secondary_index_fwd.h"
 #include "common/status.h"
 #include "common/thread/threadpool.h"
 #include "exec/pipeline/scan/morsel.h"

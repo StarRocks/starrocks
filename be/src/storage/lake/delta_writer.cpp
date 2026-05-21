@@ -27,6 +27,7 @@
 #include "common/config_ingest_fwd.h"
 #include "common/config_lake_fwd.h"
 #include "common/config_primary_key_fwd.h"
+#include "common/config_secondary_index_fwd.h"
 #include "common/config_storage_fwd.h"
 #include "common/system/master_info.h"
 #include "fs/bundle_file.h"

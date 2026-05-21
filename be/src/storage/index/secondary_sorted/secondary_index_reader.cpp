@@ -20,7 +20,9 @@
 #include "common/config.h"
 #include "common/logging.h"
 #include "fs/fs.h"
+#include "runtime/chunk_helper.h"
 #include "storage/chunk_helper.h"
+#include "storage/chunk_iterator.h"
 #include "storage/column_predicate.h"
 #include "storage/index/secondary_sorted/types.h"
 #include "storage/lake/tablet_manager.h"
@@ -129,18 +131,16 @@ StatusOr<PerSegmentRowidBitmap> SecondaryIndexReader::lookup(
     SegmentReadOptions read_opts;
     read_opts.fs = _fs;
     read_opts.stats = &stats;
-    // Wire predicates against the synthetic index-file column IDs (0..K-1).
-    PredicateTree pred_tree;
-    for (auto* p : index_col_predicates) {
-        if (p == nullptr) continue;
-        pred_tree.add(p);
-    }
-    read_opts.pred_tree = std::move(pred_tree);
+    // PoC v1: predicate translation from source-schema column ids to the
+    // synthetic index-file column ids is not implemented; leave pred_tree
+    // empty so the lookup scans the entire index file. v2 will fill this
+    // in to actually narrow the candidate set.
+    (void)index_col_predicates;
 
     ASSIGN_OR_RETURN(auto iter, _segment->new_iterator(read_schema, read_opts));
     if (iter == nullptr) return result;
 
-    auto chunk = ChunkHelper::new_chunk(read_schema, kReadChunkSize);
+    ASSIGN_OR_RETURN(auto chunk, RuntimeChunkHelper::new_chunk_checked(read_schema, kReadChunkSize));
     while (true) {
         chunk->reset();
         Status s = iter->get_next(chunk.get());
@@ -151,8 +151,9 @@ StatusOr<PerSegmentRowidBitmap> SecondaryIndexReader::lookup(
 
         auto pos_col_any = chunk->get_column_by_index(_encoded_pos_col_idx);
         // We constructed __sidx_pos__ as a non-nullable BIGINT, so the
-        // resulting column should always be Int64Column.
-        auto* pos_col = down_cast<Int64Column*>(pos_col_any.get());
+        // resulting column should always be Int64Column. Use the const
+        // overload because the column is held via the COW-immutable Ptr.
+        const auto* pos_col = down_cast<const Int64Column*>(pos_col_any.get());
         const auto& data = pos_col->get_data();
         for (size_t r = 0; r < n; ++r) {
             uint32_t seg_id = 0;

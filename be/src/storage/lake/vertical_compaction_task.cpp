@@ -20,6 +20,7 @@
 #include "column/chunk_schema_helper.h"
 #include "common/config_compaction_fwd.h"
 #include "common/config_lake_fwd.h"
+#include "common/config_secondary_index_fwd.h"
 #include "common/config_storage_fwd.h"
 #include "common/system/master_info.h"
 #include "runtime/current_thread.h"

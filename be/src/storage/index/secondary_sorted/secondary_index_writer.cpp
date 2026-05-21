@@ -26,7 +26,9 @@
 #include "exec/sorting/sorting.h"
 #include "fs/fs.h"
 #include "gen_cpp/segment.pb.h"
+#include "runtime/chunk_helper.h"
 #include "storage/chunk_helper.h"
+#include "storage/chunk_iterator.h"
 #include "storage/index/secondary_sorted/types.h"
 #include "storage/lake/location_provider.h"
 #include "storage/lake/tablet_manager.h"
@@ -51,20 +53,6 @@ std::string make_index_filename(int64_t txn_id, const std::string& index_name) {
 // Resolve the absolute file path inside the Lake fileset's data directory.
 std::string make_index_file_path(lake::TabletManager* tablet_mgr, int64_t tablet_id, const std::string& basename) {
     return tablet_mgr->segment_location(tablet_id, basename);
-}
-
-// Materialize a Chunk holding `index_col_columns + encoded_pos_column` for a
-// row sub-range [start, end). We slice using cloned columns so the SegmentWriter
-// can consume incremental chunks without aliasing.
-ChunkPtr slice_chunk(const Columns& all_columns, const Schema& output_schema, size_t start, size_t end) {
-    Columns sliced;
-    sliced.reserve(all_columns.size());
-    for (const auto& col : all_columns) {
-        auto out = col->clone_empty();
-        out->append(*col, start, end - start);
-        sliced.push_back(std::move(out));
-    }
-    return std::make_shared<Chunk>(std::move(sliced), std::make_shared<Schema>(output_schema));
 }
 
 } // namespace
@@ -137,21 +125,18 @@ StatusOr<SecondaryIndexFilePB> SecondaryIndexWriter::build(const BuildInput& inp
     auto index_schema = build_index_schema(*input.source_schema, index_col_ids);
     TabletSchemaCSPtr index_schema_csptr = index_schema;
 
-    // Read schema used to pull idx_cols out of source segments. Built from
-    // the source schema (not the synthetic one) so column ids match the
-    // segments on disk.
-    auto read_tablet_schema = TabletSchema::create(*input.source_schema,
-                                                   std::vector<int32_t>(index_col_ids.begin(), index_col_ids.end()));
+    // Read schema used to pull idx_cols out of source segments. We pass the
+    // source schema shared_ptr directly because TabletSchema::create() takes
+    // it by const ref to the smart pointer.
+    std::vector<int32_t> read_cids(index_col_ids.begin(), index_col_ids.end());
+    auto read_tablet_schema = TabletSchema::create(input.source_schema, read_cids);
     Schema read_schema = ChunkHelper::convert_schema(read_tablet_schema);
 
-    // Accumulate one Column per index col + one Int64Column for the encoded
-    // (seg_id, rowid) position. All allocated to fit the rowset row count.
-    Columns acc_index_cols;
-    acc_index_cols.reserve(index_col_ids.size());
-    for (size_t i = 0; i < index_col_ids.size(); ++i) {
-        const TabletColumn& tc = index_schema->column(i);
-        acc_index_cols.push_back(ChunkHelper::column_from_field_type(tc.type(), tc.is_nullable()));
-    }
+    // Lazily-initialised accumulator columns. Stored as MutableColumns so we
+    // can append into them; the COW pattern of regular Columns/ColumnPtr does
+    // not allow in-place mutation through an immutable Ptr. We move them into
+    // a `Columns` view at sort time.
+    MutableColumns acc_index_cols;
     auto encoded_pos_col = Int64Column::create();
 
     int64_t total_rows = 0;
@@ -177,7 +162,7 @@ StatusOr<SecondaryIndexFilePB> SecondaryIndexWriter::build(const BuildInput& inp
         // Track per-segment local rowid so the encoded position is correct
         // even when a segment yields multiple chunks.
         uint32_t seg_local_rowid = 0;
-        auto chunk = ChunkHelper::new_chunk(read_schema, kAppendChunkSize);
+        ASSIGN_OR_RETURN(auto chunk, RuntimeChunkHelper::new_chunk_checked(read_schema, kAppendChunkSize));
         while (true) {
             chunk->reset();
             Status s = iter->get_next(chunk.get());
@@ -185,6 +170,15 @@ StatusOr<SecondaryIndexFilePB> SecondaryIndexWriter::build(const BuildInput& inp
             RETURN_IF_ERROR(s);
             const size_t n = chunk->num_rows();
             if (n == 0) continue;
+
+            // First time we see real data: clone empty columns from the
+            // chunk so the accumulator has matching types.
+            if (acc_index_cols.empty()) {
+                acc_index_cols.reserve(index_col_ids.size());
+                for (size_t c = 0; c < index_col_ids.size(); ++c) {
+                    acc_index_cols.push_back(chunk->get_column_by_index(c)->clone_empty());
+                }
+            }
 
             for (size_t c = 0; c < index_col_ids.size(); ++c) {
                 acc_index_cols[c]->append(*chunk->get_column_by_index(c), 0, n);
@@ -219,27 +213,32 @@ StatusOr<SecondaryIndexFilePB> SecondaryIndexWriter::build(const BuildInput& inp
         return pb;
     }
 
-    // Sort columns by the index column prefix.
-    SortDescs sort_descs(std::vector<int>(index_col_ids.size(), 1) /* asc */,
-                        std::vector<int>(index_col_ids.size(), -1) /* nulls first */);
+    // Move MutableColumns into a Columns view for sorting. acc_index_cols is
+    // unusable after this conversion.
+    Columns sort_view;
+    sort_view.reserve(acc_index_cols.size());
+    for (auto& mcol : acc_index_cols) {
+        sort_view.emplace_back(std::move(mcol));
+    }
+    acc_index_cols.clear();
+
     Permutation perm;
     std::atomic<bool> cancel{false};
-    RETURN_IF_ERROR(sort_and_tie_columns(cancel, acc_index_cols, sort_descs, &perm));
+    RETURN_IF_ERROR(sort_and_tie_columns(cancel, sort_view, SortDescs::asc_null_first(sort_view.size()), &perm));
 
-    // Apply permutation to all columns (index cols + encoded_pos). The
-    // resulting Columns are sorted by the index prefix; ties broken by
-    // input order. SegmentWriter requires data fed in sort-key order.
-    Columns sorted_cols;
-    sorted_cols.reserve(acc_index_cols.size() + 1);
-    for (auto& col : acc_index_cols) {
-        auto reordered = col->clone_empty();
-        for (auto& p : perm) reordered->append(*col, p.index_in_chunk, 1);
-        sorted_cols.push_back(std::move(reordered));
-    }
-    {
-        auto reordered = encoded_pos_col->clone_empty();
-        for (auto& p : perm) reordered->append(*encoded_pos_col, p.index_in_chunk, 1);
-        sorted_cols.push_back(std::move(reordered));
+    // Build a source chunk holding all columns (idx + encoded_pos) and use
+    // Chunk::append_selective with the permutation to produce sorted output.
+    Schema output_schema = ChunkHelper::convert_schema(index_schema_csptr);
+    auto schema_ptr = std::make_shared<Schema>(output_schema);
+    Columns src_columns = std::move(sort_view);
+    // ColumnPtr is COW-immutable; we explicitly construct the int64 column
+    // and add it to the trailing slot.
+    src_columns.emplace_back(std::move(encoded_pos_col));
+    auto src_chunk = std::make_shared<Chunk>(std::move(src_columns), schema_ptr);
+
+    std::vector<uint32_t> indexes(perm.size());
+    for (size_t i = 0; i < perm.size(); ++i) {
+        indexes[i] = perm[i].index_in_chunk;
     }
 
     // Allocate the output WritableFile in the Lake fileset.
@@ -254,12 +253,12 @@ StatusOr<SecondaryIndexFilePB> SecondaryIndexWriter::build(const BuildInput& inp
     auto seg_writer = std::make_unique<SegmentWriter>(std::move(wfile), /*segment_id=*/0, index_schema_csptr, seg_opts);
     RETURN_IF_ERROR(seg_writer->init());
 
-    Schema output_schema = ChunkHelper::convert_schema(index_schema_csptr);
-    const size_t total = sorted_cols.front()->size();
+    const size_t total = perm.size();
     for (size_t start = 0; start < total; start += kAppendChunkSize) {
         size_t end = std::min(total, start + kAppendChunkSize);
-        auto chunk = slice_chunk(sorted_cols, output_schema, start, end);
-        RETURN_IF_ERROR(seg_writer->append_chunk(*chunk));
+        ASSIGN_OR_RETURN(auto out_chunk, RuntimeChunkHelper::new_chunk_checked(output_schema, end - start));
+        out_chunk->append_selective(*src_chunk, indexes.data() + start, 0, end - start);
+        RETURN_IF_ERROR(seg_writer->append_chunk(*out_chunk));
     }
 
     uint64_t segment_size = 0;
