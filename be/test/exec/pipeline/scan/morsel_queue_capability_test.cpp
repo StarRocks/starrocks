@@ -17,6 +17,8 @@
 #include <memory>
 
 #include "exec/pipeline/scan/bucket_sequence_morsel_queue.h"
+#include "exec/pipeline/scan/dynamic_morsel_queue.h"
+#include "exec/pipeline/scan/fixed_morsel_queue.h"
 #include "exec/pipeline/scan/olap_dynamic_morsel_queue.h"
 #include "exec/pipeline/scan/olap_fixed_morsel_queue.h"
 #include "exec/pipeline/scan/olap_morsel_queue.h"
@@ -26,6 +28,20 @@
 namespace starrocks::pipeline {
 
 class MorselQueueCapabilityTest : public ::testing::Test {};
+
+TEST_F(MorselQueueCapabilityTest, primitive_fixed_queue_has_no_olap_or_ticket_capability) {
+    FixedMorselQueue queue(Morsels{});
+
+    EXPECT_EQ(nullptr, dynamic_cast<OlapMorselQueue*>(&queue));
+    EXPECT_EQ(nullptr, dynamic_cast<TicketedMorselQueue*>(&queue));
+}
+
+TEST_F(MorselQueueCapabilityTest, primitive_dynamic_queue_has_ticket_capability_only) {
+    DynamicMorselQueue queue(Morsels{}, false);
+
+    EXPECT_EQ(nullptr, dynamic_cast<OlapMorselQueue*>(&queue));
+    EXPECT_NE(nullptr, dynamic_cast<TicketedMorselQueue*>(&queue));
+}
 
 TEST_F(MorselQueueCapabilityTest, fixed_queue_is_olap_capable_only) {
     OlapFixedMorselQueue queue(Morsels{});

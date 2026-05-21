@@ -17,6 +17,8 @@
 #include <memory>
 #include <utility>
 
+#include "exec/pipeline/scan/dynamic_morsel_queue_builder.h"
+#include "exec/pipeline/scan/fixed_morsel_queue_builder.h"
 #include "exec/pipeline/scan/olap_dynamic_morsel_queue_builder.h"
 #include "exec/pipeline/scan/olap_fixed_morsel_queue_builder.h"
 #include "exec/pipeline/scan/split_morsel_queue_builder.h"
@@ -34,6 +36,65 @@ protected:
         return morsels;
     }
 };
+
+TEST_F(MorselQueueBuilderTest, primitive_fixed_builder_builds_fixed_queue) {
+    auto builder = make_fixed_morsel_queue_builder(make_morsels(3));
+    ASSERT_TRUE(builder->can_uniform_distribute());
+    ASSERT_EQ(3, builder->num_original_morsels());
+    ASSERT_EQ(3, builder->max_degree_of_parallelism());
+
+    builder->set_has_more_scan_ranges(true);
+    builder->set_has_more_from_split(true);
+    ASSERT_TRUE(builder->has_more_scan_ranges());
+    ASSERT_TRUE(builder->has_more_from_split());
+
+    auto queue_or = builder->build();
+    ASSERT_TRUE(queue_or.ok()) << queue_or.status().to_string();
+    auto queue = std::move(queue_or).value();
+    ASSERT_EQ(MorselQueue::Type::FIXED, queue->type());
+    ASSERT_EQ(3, queue->num_original_morsels());
+    ASSERT_EQ(3, queue->max_degree_of_parallelism());
+    ASSERT_TRUE(queue->has_more_scan_ranges());
+    ASSERT_TRUE(queue->has_more_from_split());
+}
+
+TEST_F(MorselQueueBuilderTest, primitive_dynamic_builder_build_preserves_max_dop) {
+    auto builder = make_dynamic_morsel_queue_builder(make_morsels(2), true, 8);
+    ASSERT_TRUE(builder->can_uniform_distribute());
+    ASSERT_EQ(2, builder->num_original_morsels());
+    ASSERT_EQ(8, builder->max_degree_of_parallelism());
+
+    builder->set_has_more_from_split(true);
+    auto queue_or = builder->build();
+    ASSERT_TRUE(queue_or.ok()) << queue_or.status().to_string();
+    auto queue = std::move(queue_or).value();
+    ASSERT_EQ(MorselQueue::Type::DYNAMIC, queue->type());
+    ASSERT_EQ(2, queue->num_original_morsels());
+    ASSERT_EQ(8, queue->max_degree_of_parallelism());
+    ASSERT_TRUE(queue->has_more_scan_ranges());
+    ASSERT_TRUE(queue->has_more_from_split());
+}
+
+TEST_F(MorselQueueBuilderTest, primitive_dynamic_builder_build_from_morsels_does_not_preserve_aggregate_max_dop) {
+    auto builder = make_dynamic_morsel_queue_builder(make_morsels(2), true, 8);
+    builder->set_has_more_from_split(true);
+
+    auto queue_or = builder->build_from_morsels(make_morsels(1));
+    ASSERT_TRUE(queue_or.ok()) << queue_or.status().to_string();
+    auto queue = std::move(queue_or).value();
+    ASSERT_EQ(MorselQueue::Type::DYNAMIC, queue->type());
+    ASSERT_EQ(1, queue->num_original_morsels());
+    ASSERT_EQ(1, queue->max_degree_of_parallelism());
+    ASSERT_TRUE(queue->has_more_scan_ranges());
+    ASSERT_TRUE(queue->has_more_from_split());
+}
+
+TEST_F(MorselQueueBuilderTest, primitive_builder_take_morsels_moves_owned_morsels) {
+    auto builder = make_fixed_morsel_queue_builder(make_morsels(2));
+    auto morsels = builder->take_morsels();
+    ASSERT_EQ(2, morsels.size());
+    ASSERT_EQ(0, builder->num_original_morsels());
+}
 
 TEST_F(MorselQueueBuilderTest, fixed_builder_builds_fixed_queue) {
     auto builder = make_olap_fixed_morsel_queue_builder(make_morsels(3));
