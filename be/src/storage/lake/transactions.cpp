@@ -553,12 +553,16 @@ StatusOr<TabletMetadataPtr> publish_version(TabletManager* tablet_mgr, const Pub
         new_metadata->set_vector_index_built_version(std::max(prev_bv, fe_built_version));
     }
 
-    // ori_base_version is the originally-requested base (base_version may have
-    // been advanced by cal_new_base_version when earlier txns in this batch
-    // were already published). base_metadata is at base_version, so we can
-    // only carry over its chain when ori_base_version == base_version; in the
-    // advanced case we record ori_base_version alone rather than fetching its
-    // metadata with an extra GetTabletMetadata RPC.
+    // In the advanced case (ori_base_version < base_version), base_metadata
+    // was written by a prior publish_version attempt of the same batch that
+    // failed to ack to FE; FE's visibleVersion therefore stays at
+    // ori_base_version. Compactions FE schedules pick input_rowsets against
+    // visibleVersion, so compactions appearing later in the apply loop cannot
+    // eat rowsets stamped at v in (ori_base_version, base_version] - they
+    // only eat rowsets at v <= ori_base_version, which CHANGES recovers via
+    // meta_at(ori_base_version)'s own chain. Recording ori_base_version as
+    // the direct parent is sufficient; we pass nullptr instead of fetching
+    // meta_at(ori_base_version) with an extra GetTabletMetadata RPC.
     const TabletMetadataPB* ancestor_source = (ori_base_version == base_version) ? base_metadata.get() : nullptr;
     build_metadata_ancestors(new_metadata.get(), ori_base_version, ancestor_source);
 
