@@ -30,11 +30,16 @@
 #include "gen_cpp/lake_types.pb.h"
 #include "persistent_index_sstable.h"
 #include "replication_txn_manager.h"
+#include "storage/del_file_stream_converter.h"
 #include "storage/lake/filenames.h"
 #include "storage/lake/join_path.h"
+#include "storage/lake/meta_file.h"
 #include "storage/lake/tablet.h"
 #include "storage/lake/tablet_manager.h"
+#include "storage/primary_key_encoding_types.h"
 #include "storage/segment_stream_converter.h"
+#include "storage/tablet_schema.h"
+#include "types/logical_type.h"
 #include "util/dynamic_cache.h"
 #include "vacuum.h"
 
@@ -248,8 +253,41 @@ Status LakeReplicationTxnManager::replicate_lake_remote_storage(const TReplicate
     std::vector<std::string> files_to_delete;
     CancelableDefer clean_files([&files_to_delete]() { lake::delete_files_async(std::move(files_to_delete)); });
 
-    auto file_converters = lake::ReplicationTxnManager::build_file_converters(_tablet_manager, request, filename_map,
-                                                                              column_unique_id_map, files_to_delete);
+    // Guard: lake-to-lake replication routes .del files through copy_non_segment_file_with_retry
+    // (a raw byte copy), not through file_converters. So if source/target use different PK
+    // encodings in a way that produces non-byte-compatible .del bytes (single non-string
+    // fixed-length PK + V1->V2), the byte copy would silently corrupt the target. Reject
+    // explicitly until lake-to-lake routes .del through a transcoding converter as well.
+    //
+    // V1 source vs V2 target shows up when the source tablet is from a pre-#69939 cloud-native
+    // cluster (V1 default) and the target is post-#69939 (V2 default for new cloud-native tables).
+    if (is_primary_key(*target_tablet_meta)) {
+        // src_tablet_meta->has_schema() is guaranteed above (early Corruption otherwise).
+        TabletSchema source_schema(src_tablet_meta->schema());
+        TabletSchema target_schema(target_tablet_meta->schema());
+        ASSIGN_OR_RETURN(auto source_encoding, source_schema.primary_key_encoding_type_or_error());
+        ASSIGN_OR_RETURN(auto target_encoding, target_schema.primary_key_encoding_type_or_error());
+        // Both directions of V1<->V2 are byte-incompatible for single non-string fixed-length PK,
+        // and the lake-to-lake path raw-copies .del files. Reject either direction explicitly until
+        // .del is routed through a transcoding converter here as well.
+        if (source_encoding != target_encoding && is_single_fixed_length_non_string_primary_key(target_schema)) {
+            LOG(WARNING) << "Lake-to-lake replication with PK encoding mismatch is not supported, src_tablet: "
+                         << src_tablet_id << ", target_tablet: " << target_tablet_id
+                         << ", source_encoding: " << static_cast<int>(source_encoding)
+                         << ", target_encoding: " << static_cast<int>(target_encoding)
+                         << ", pk_logical_type: " << logical_type_to_string(target_schema.column(0).type());
+            return Status::NotSupported(
+                    "Lake-to-lake replication with V1<->V2 primary-key encoding change on a single "
+                    "non-string fixed-length PK column is not supported; .del files in this path "
+                    "are byte-copied without re-encoding and would fail to apply on the target.");
+        }
+    }
+
+    // PK transcoding is gated above; pass nullptr/NONE so the converter never enters the .del
+    // transcode branch in this code path.
+    auto file_converters = lake::ReplicationTxnManager::build_file_converters(
+            _tablet_manager, request, filename_map, column_unique_id_map, files_to_delete, /*pkey_schema=*/nullptr,
+            PrimaryKeyEncodingType::PK_ENCODING_TYPE_NONE, PrimaryKeyEncodingType::PK_ENCODING_TYPE_NONE);
 
     // Track which segments have size changes
     std::unordered_map<std::string, size_t> segment_size_changes;

@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include "column/vectorized_fwd.h"
 #include "common/status.h"
 #include "fs/encryption.h"
 #include "gen_cpp/AgentService_types.h"
@@ -24,6 +25,7 @@
 #include "storage/lake/txn_log.h"
 #include "storage/lake/types_fwd.h"
 #include "storage/olap_common.h"
+#include "storage/primary_key_encoding_types.h"
 #include "storage/rowset/rowset_meta.h"
 #include "tablet_manager.h"
 
@@ -51,10 +53,17 @@ public:
 
     DISALLOW_COPY_AND_MOVE(ReplicationTxnManager);
 
+    // pkey_schema, source_pk_encoding, target_pk_encoding describe the on-disk PK encoding of
+    // .del files arriving in this snapshot. When source != target on a shape that is NOT
+    // byte-compatible (V1 -> V2 + single non-string fixed-length PK), the converter for .del
+    // files is swapped for a DelFileStreamConverter that re-encodes the payload at intake.
+    // Pass nullptr / PK_ENCODING_TYPE_NONE for non-PK tables (no .del transcoding considered).
     static FileConverterCreatorFunc build_file_converters(
             const TabletManager* tablet_manager, const TReplicateSnapshotRequest& request,
             const std::unordered_map<std::string, std::pair<std::string, FileEncryptionPair>>& filename_map,
-            std::unordered_map<uint32_t, uint32_t>& column_unique_id_map, std::vector<std::string>& files_to_delete);
+            std::unordered_map<uint32_t, uint32_t>& column_unique_id_map, std::vector<std::string>& files_to_delete,
+            SchemaPtr pkey_schema, PrimaryKeyEncodingType source_pk_encoding,
+            PrimaryKeyEncodingType target_pk_encoding);
 
     // Convert DeltaColumnGroupSnapshotPB from shared-nothing non-PK table snapshot
     // into DeltaColumnGroupMetadataPB for shared-data replication.
