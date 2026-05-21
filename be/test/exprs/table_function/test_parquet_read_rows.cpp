@@ -12,9 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "exprs/table_function/parquet_read_rows.h"
-
 #include <gtest/gtest.h>
+#include <sys/stat.h>
 
 #include <cstdio>
 #include <filesystem>
@@ -22,7 +21,6 @@
 #include <memory>
 #include <random>
 #include <string>
-#include <sys/stat.h>
 
 #include "base/testutil/assert.h"
 #include "column/binary_column.h"
@@ -31,6 +29,7 @@
 #include "column/fixed_length_column.h"
 #include "column/json_column.h"
 #include "common/statusor.h"
+#include "exprs/table_function/parquet_read_rows.h"
 #include "formats/parquet/file_writer.h"
 #include "formats/parquet/parquet_test_util/util.h"
 #include "fs/fs.h"
@@ -48,8 +47,7 @@ public:
         std::random_device rd;
         std::mt19937_64 gen(rd());
         char buf[64];
-        std::snprintf(buf, sizeof(buf), "/tmp/parquet_read_rows_ut_%016llx",
-                      static_cast<unsigned long long>(gen()));
+        std::snprintf(buf, sizeof(buf), "/tmp/parquet_read_rows_ut_%016llx", static_cast<unsigned long long>(gen()));
         _tmp_dir = buf;
         std::filesystem::create_directories(_tmp_dir);
     }
@@ -64,8 +62,7 @@ public:
 protected:
     // Write a small (id INT, val INT, name VARCHAR) parquet file to `path`. Returns
     // (file_size_bytes, file_mtime_seconds) for anchor construction.
-    StatusOr<std::pair<int64_t, int64_t>> _write_fixture(const std::string& path,
-                                                         const std::vector<int32_t>& ids,
+    StatusOr<std::pair<int64_t, int64_t>> _write_fixture(const std::string& path, const std::vector<int32_t>& ids,
                                                          const std::vector<int32_t>& vals,
                                                          const std::vector<std::string>& names) {
         std::vector<TypeDescriptor> type_descs{
@@ -91,9 +88,8 @@ protected:
 
         std::vector<std::string> type_names;
         for (auto& d : type_descs) type_names.push_back(d.debug_string());
-        ASSIGN_OR_RETURN(auto schema,
-                         parquet::ParquetBuildHelper::make_schema(type_names, type_descs,
-                                                                  std::vector<FileColumnId>(type_descs.size())));
+        ASSIGN_OR_RETURN(auto schema, parquet::ParquetBuildHelper::make_schema(
+                                              type_names, type_descs, std::vector<FileColumnId>(type_descs.size())));
         ASSIGN_OR_RETURN(auto file, FileSystem::Default()->new_writable_file(path));
         ASSIGN_OR_RETURN(auto properties,
                          parquet::ParquetBuildHelper::make_properties(parquet::ParquetBuilderOptions()));
@@ -124,8 +120,7 @@ protected:
         return col;
     }
 
-    std::string _make_anchor(const std::string& file, int64_t row_in_file, int64_t file_size,
-                             int64_t file_mtime_ms) {
+    std::string _make_anchor(const std::string& file, int64_t row_in_file, int64_t file_size, int64_t file_mtime_ms) {
         return strings::Substitute(
                 R"({"format":"parquet","file":"$0","row_in_file":$1,"file_size":$2,"file_mtime_ms":$3})", file,
                 row_in_file, file_size, file_mtime_ms);
@@ -139,8 +134,7 @@ protected:
 // ---------- happy path: rehydrate the second row of a 3-row file ----------
 TEST_F(ParquetReadRowsTableFunctionTest, RehydrateMiddleRow) {
     std::string parquet_path = _tmp_dir + "/fixture.parquet";
-    ASSIGN_OR_ABORT(auto meta,
-                    _write_fixture(parquet_path, {1, 2, 3}, {100, 200, 300}, {"alice", "bob", "carol"}));
+    ASSIGN_OR_ABORT(auto meta, _write_fixture(parquet_path, {1, 2, 3}, {100, 200, 300}, {"alice", "bob", "carol"}));
     int64_t file_size = meta.first;
     int64_t file_mtime_ms = meta.second * 1000;
 
@@ -184,8 +178,7 @@ TEST_F(ParquetReadRowsTableFunctionTest, RehydrateMiddleRow) {
 // ---------- 3 anchors in one process() call to also exercise per-row append ----------
 TEST_F(ParquetReadRowsTableFunctionTest, RehydrateMultipleRowsSameFile) {
     std::string parquet_path = _tmp_dir + "/fixture.parquet";
-    ASSIGN_OR_ABORT(auto meta,
-                    _write_fixture(parquet_path, {1, 2, 3}, {100, 200, 300}, {"alice", "bob", "carol"}));
+    ASSIGN_OR_ABORT(auto meta, _write_fixture(parquet_path, {1, 2, 3}, {100, 200, 300}, {"alice", "bob", "carol"}));
     int64_t file_size = meta.first;
     int64_t file_mtime_ms = meta.second * 1000;
 
@@ -216,8 +209,7 @@ TEST_F(ParquetReadRowsTableFunctionTest, RehydrateMultipleRowsSameFile) {
 // ---------- fail-closed: file_size mismatch ----------
 TEST_F(ParquetReadRowsTableFunctionTest, SizeMismatchFailsClosed) {
     std::string parquet_path = _tmp_dir + "/fixture.parquet";
-    ASSIGN_OR_ABORT(auto meta,
-                    _write_fixture(parquet_path, {1, 2, 3}, {100, 200, 300}, {"alice", "bob", "carol"}));
+    ASSIGN_OR_ABORT(auto meta, _write_fixture(parquet_path, {1, 2, 3}, {100, 200, 300}, {"alice", "bob", "carol"}));
     int64_t actual_size = meta.first;
     int64_t file_mtime_ms = meta.second * 1000;
 
@@ -275,8 +267,8 @@ TEST_F(ParquetReadRowsTableFunctionTest, MissingFileFieldRejected) {
 
 // ---------- parse error: row_in_file is negative ----------
 TEST_F(ParquetReadRowsTableFunctionTest, NegativeRowRejected) {
-    auto input = _make_source_info_column(
-            {R"({"file":"/tmp/x.parquet","row_in_file":-1,"file_size":1,"file_mtime_ms":1})"});
+    auto input =
+            _make_source_info_column({R"({"file":"/tmp/x.parquet","row_in_file":-1,"file_size":1,"file_mtime_ms":1})"});
 
     TableFunctionState* state = nullptr;
     TFunction fn;
