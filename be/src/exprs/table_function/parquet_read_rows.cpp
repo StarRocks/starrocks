@@ -42,6 +42,7 @@
 #include "common/status.h"
 #include "common/statusor.h"
 #include "fs/fs.h"
+#include "fs/fs_factory.h"
 #include "gutil/casts.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/runtime_state.h"
@@ -58,7 +59,8 @@ namespace {
 // from a TableFunction context.
 class ArrowRandomAccessFile final : public arrow::io::RandomAccessFile {
 public:
-    ArrowRandomAccessFile(std::shared_ptr<RandomAccessFile> file, int64_t size) : _file(std::move(file)), _size(size) {}
+    ArrowRandomAccessFile(std::shared_ptr<starrocks::RandomAccessFile> file, int64_t size)
+            : _file(std::move(file)), _size(size) {}
 
     arrow::Status Close() override {
         _file.reset();
@@ -108,7 +110,7 @@ public:
     arrow::Result<int64_t> GetSize() override { return _size; }
 
 private:
-    std::shared_ptr<RandomAccessFile> _file;
+    std::shared_ptr<starrocks::RandomAccessFile> _file;
     int64_t _size = 0;
     int64_t _pos = 0;
 };
@@ -351,7 +353,7 @@ Status rehydrate_one(const Anchor& anchor, std::string* out_json) {
 
     // 2. Open file + adapt to arrow IO.
     ASSIGN_OR_RETURN(auto raf, fs->new_random_access_file(anchor.file));
-    auto shared_raf = std::shared_ptr<RandomAccessFile>(std::move(raf));
+    auto shared_raf = std::shared_ptr<starrocks::RandomAccessFile>(std::move(raf));
     auto arrow_file = std::make_shared<ArrowRandomAccessFile>(shared_raf, file_size);
 
     // 3. Open parquet metadata.
