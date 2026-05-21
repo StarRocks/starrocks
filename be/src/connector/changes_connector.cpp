@@ -35,6 +35,7 @@
 #include "storage/lake/tablet_manager.h"
 #include "storage/rowset/rowset_options.h"
 #include "storage/union_iterator.h"
+#include "storage/virtual_column_utils.h"
 
 namespace starrocks::connector {
 
@@ -370,6 +371,10 @@ Status ChangesDataSource::_init_read_schema() {
     ASSIGN_OR_RETURN(_tablet_schema, tablet_mgr->table_schema_service()->get_schema_for_scan(
                                              schema_key_pb, _tablet_id, _runtime_state->query_id(),
                                              _runtime_state->fragment_ctx()->fe_addr(), _head_metadata));
+    // Virtual columns (e.g. _tablet_id_) aren't part of the storage schema; the
+    // analyzer attaches them to every OlapTable relation, so add them to the
+    // schema we look slots up in. Matches LakeDataSource::build_tablet_reader.
+    ASSIGN_OR_RETURN(_tablet_schema, extend_schema_by_virtual_columns(_tablet_schema, _data_slots));
 
     // Tablet column index resolved per slot; we sort the index list before
     // building _read_schema, so each slot's position in the sorted list is
