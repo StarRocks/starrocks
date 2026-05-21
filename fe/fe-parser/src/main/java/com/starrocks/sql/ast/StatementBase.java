@@ -66,8 +66,8 @@ public abstract class StatementBase implements ParseNode {
     // True if this QueryStmt is the top level query from an EXPLAIN <query>
     protected boolean isExplain = false;
 
-    // True if the explain output should render column references with mock names
-    // (e.g. for `EXPLAIN COSTS MOCK <query>`).
+    // Set when `EXPLAIN ... MOCK` is used; the rendered output gets post-processed
+    // to anonymize column names.
     private boolean mockColumnNames = false;
 
     // Original statement to further usage, eg: enable_sql_blacklist.

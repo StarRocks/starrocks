@@ -27,18 +27,15 @@ import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 /**
- * Post-processes rendered explain output and mocked SQL for `EXPLAIN COSTS MOCK`,
- * replacing each column reference name with a stable `mock_col_<N>`.
+ * Done as a post-process over the rendered string (rather than a hook in
+ * ColumnRefOperator / visitors) so all rendering paths stay untouched.
+ * Numbering keys off ColumnRefOperator.id so the same column always maps to
+ * the same mock name within one query.
  *
- * Building the mapping from the optimizer's ColumnRefFactory keeps all rendering
- * code paths (PlanNode, expression visitors, AstToSQLBuilder) untouched - the
- * substitution happens once on the final string. Numbering is by ColumnRefOperator
- * id so the same column always maps to the same mock name within a query.
- *
- * Limitations: substitution is whole-word, case-insensitive over the column-name
- * set. Column names that collide with SQL keywords, function names, or other
- * identifiers in the output may be over-replaced; this is acceptable for an
- * opt-in MOCK explain since it errs on the side of hiding more.
+ * Caveat: substitution is whole-word case-insensitive over the column-name
+ * set, so a column whose name collides with a SQL keyword or builtin name can
+ * be replaced in unrelated positions of the output. Acceptable for an opt-in
+ * anonymizer that errs on the side of hiding more.
  */
 public final class ExplainMockRewriter {
 
@@ -66,8 +63,8 @@ public final class ExplainMockRewriter {
         if (mapping.isEmpty()) {
             this.pattern = null;
         } else {
-            // Order alternatives by length descending so longer column names take
-            // precedence over shorter ones that may share a prefix.
+            // Longest alternative first so a longer column name wins over a shorter
+            // one that's its prefix.
             String alternation = mapping.keySet().stream()
                     .sorted(Comparator.comparingInt(String::length).reversed())
                     .map(Pattern::quote)

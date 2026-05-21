@@ -122,8 +122,6 @@ public class ExplainTest extends PlanTestBase {
 
     @Test
     public void testExplainCostsMockRewriterPlan() throws Exception {
-        // Rewriter substitutes every column reference in the rendered cost plan
-        // with a stable `mock_col_<N>` and leaves table/keyword names alone.
         String sql = "SELECT DISTINCT t0.v1 FROM t0 LEFT JOIN t1 ON t0.v1 = t1.v4";
         ExecPlan execPlan = getExecPlan(sql);
         String plan = execPlan.getExplainString(com.starrocks.thrift.TExplainLevel.COSTS);
@@ -131,19 +129,15 @@ public class ExplainTest extends PlanTestBase {
 
         String rewritten = rewriter.rewrite(plan);
         Assertions.assertTrue(rewritten.contains("mock_col_"), rewritten);
-        // Column names from t0 and t1 should be gone from the substituted output.
         Assertions.assertFalse(java.util.regex.Pattern.compile("\\bv1\\b").matcher(rewritten).find(),
                 rewritten);
         Assertions.assertFalse(java.util.regex.Pattern.compile("\\bv4\\b").matcher(rewritten).find(),
                 rewritten);
-        // Table names must still be present.
         Assertions.assertTrue(rewritten.contains("table: t0"), rewritten);
     }
 
     @Test
     public void testExplainCostsMockRewriterSql() throws Exception {
-        // Running the rewriter against AstToSQLBuilder output yields a SQL where
-        // every column reference matches the names used in the mocked plan.
         String sql = "SELECT t0.v1 FROM t0 WHERE t0.v2 > 1";
         StatementBase parsedStmt = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         ExecPlan execPlan = getExecPlan(sql);
@@ -156,8 +150,8 @@ public class ExplainTest extends PlanTestBase {
                 mockedSql);
         Assertions.assertFalse(java.util.regex.Pattern.compile("\\bv2\\b").matcher(mockedSql).find(),
                 mockedSql);
-        // Same column gets the same mock name in the plan as in the SQL, so
-        // intersecting both rewrites must yield matching identifiers.
+        // SQL and plan must share the same mock_col_<N> mapping so the two
+        // halves of the rendered output can be correlated.
         String mockedPlan = rewriter.rewrite(
                 execPlan.getExplainString(com.starrocks.thrift.TExplainLevel.COSTS));
         for (String mock : rewriter.getMapping().values()) {
