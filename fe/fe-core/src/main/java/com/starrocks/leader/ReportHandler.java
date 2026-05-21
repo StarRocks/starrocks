@@ -1149,6 +1149,28 @@ public class ReportHandler extends LeaderDaemon implements MemoryTrackable {
                     LOG.debug("delete tablet {} in partition {} of table {} in db {} from meta. backend[{}]",
                             tabletId, partitionId, tableId, dbId, backendId);
 
+                    // Fast path: probe via the inverted index to skip the heavy db/table/partition/index
+                    // walk when the BE's report is already stale and the disk is still online. The probe
+                    // result is only used for this filter — downstream code re-fetches the replica from
+                    // the tablet because TabletInvertedIndex.addReplica appends without dedup, while
+                    // LocalTablet.deleteRedundantReplica does not synchronously prune the inverted index,
+                    // so invertedIndex may return a replica that has been replaced on the tablet.
+                    long currentBackendReportVersion = GlobalStateMgr.getCurrentState().getNodeMgr()
+                            .getClusterInfo().getBackendReportVersion(backendId);
+                    Replica probeReplica = invertedIndex.getReplica(tabletId, backendId);
+                    if (probeReplica == null) {
+                        continue;
+                    }
+                    DiskInfo probeDiskInfo = hashToDiskInfo.get(probeReplica.getPathHash());
+                    if (probeDiskInfo != null
+                            && probeDiskInfo.getState() == DiskInfo.DiskState.ONLINE
+                            && backendReportVersion < currentBackendReportVersion) {
+                        LOG.warn("report Version from be: {} is outdated, report version in request: {}, " +
+                                        "latest report version: {}, ignore tablet: {}",
+                                backendId, backendReportVersion, currentBackendReportVersion, tabletId);
+                        continue;
+                    }
+
                     OlapTable olapTable = (OlapTable) globalStateMgr.getLocalMetastore().getTableIncludeRecycleBin(db, tableId);
                     if (olapTable == null) {
                         continue;
@@ -1188,20 +1210,8 @@ public class ReportHandler extends LeaderDaemon implements MemoryTrackable {
                         continue;
                     }
 
-                    long currentBackendReportVersion =
-                            GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendReportVersion(backendId);
                     DiskInfo diskInfo = hashToDiskInfo.get(replica.getPathHash());
-
-                    // Only check reportVersion when the disk is online,
-                    // as there will be no tablet changes on an unavailable disk
-                    if (diskInfo != null
-                            && diskInfo.getState() == DiskInfo.DiskState.ONLINE
-                            && backendReportVersion < currentBackendReportVersion) {
-                        LOG.warn("report Version from be: {} is outdated, report version in request: {}, " +
-                                        "latest report version: {}, ignore tablet: {}",
-                                backendId, backendReportVersion, currentBackendReportVersion, tabletId);
-                        continue;
-                    } else if (diskInfo == null) {
+                    if (diskInfo == null) {
                         LOG.warn("disk of path hash {} dose not exist, delete tablet {} on backend {} from meta",
                                 replica.getPathHash(), tabletId, backendId);
                     } else if (diskInfo.getState() != DiskInfo.DiskState.ONLINE) {
