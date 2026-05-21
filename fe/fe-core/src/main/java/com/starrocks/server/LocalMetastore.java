@@ -5767,7 +5767,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         OlapTable olapTable = (OlapTable) table;
         // Sum all partition visible versions so that a load into any partition advances the
         // watermark, not just loads that beat the current per-partition maximum.
-        long watermark = olapTable.getAllPhysicalPartitions().stream()
+        long watermark = olapTable.getPhysicalPartitions().stream()
                 .mapToLong(PhysicalPartition::getVisibleVersion)
                 .sum();
         return watermark > 0 ? TvrTableSnapshot.of(watermark) : TvrTableSnapshot.empty();
@@ -5785,7 +5785,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         }
         long toVersion = toSnapshotInclusive.end()
                 .orElseThrow(() -> new StarRocksConnectorException(
-                        "toSnapshotInclusive must have a valid snapshot ID"));
+                        "from snapshot is not a parent ancestor of empty target snapshot"));
         if (!fromSnapshotExclusive.isEmpty()) {
             long fromVersion = fromSnapshotExclusive.getSnapshotId();
             if (fromVersion > toVersion) {
