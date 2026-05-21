@@ -52,6 +52,7 @@ import com.starrocks.sql.ast.DeleteStmt;
 import com.starrocks.sql.ast.DmlStmt;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.KeysType;
+import com.starrocks.sql.ast.MergeIntoStmt;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.StatementBase;
@@ -169,6 +170,12 @@ public class StatementPlanner {
                 return new UpdatePlanner().plan((UpdateStmt) stmt, session);
             } else if (stmt instanceof DeleteStmt) {
                 return new DeletePlanner().plan((DeleteStmt) stmt, session);
+            } else if (stmt instanceof MergeIntoStmt) {
+                MergeIntoPlanner planner = new MergeIntoPlanner();
+                planner.plan((MergeIntoStmt) stmt, session);
+                MergeIntoStmt mergeStmt = (MergeIntoStmt) stmt;
+                return mergeStmt.getDeletePlan() != null
+                        ? mergeStmt.getDeletePlan() : mergeStmt.getInsertPlan();
             }
         } catch (OutOfMemoryError e) {
             LOG.warn("planner out of memory, sql is:" + stmt.getOrigStmt().getOrigStmt());
