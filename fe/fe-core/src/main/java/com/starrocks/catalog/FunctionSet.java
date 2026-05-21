@@ -793,6 +793,7 @@ public class FunctionSet {
                     .add(UUID_NUMERIC)
                     .add(UUID_V7)
                     .add(UUID_V7_NUMERIC)
+                    .add(QUERY_ID)
                     .add(SLEEP)
                     .add(HTTP_REQUEST)
                     .build();
