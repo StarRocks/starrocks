@@ -481,7 +481,6 @@ HADOOPSRC_NAME="hadoop-3.4.3-src.tar.gz"
 HADOOPSRC_SOURCE="hadoop-3.4.3-src"
 HADOOPSRC_MD5SUM="c5ac53ca70cc667189ec824c6048914a"
 
-# blake3
 BLAKE3_DOWNLOAD="https://github.com/BLAKE3-team/BLAKE3/archive/refs/tags/1.8.5.tar.gz"
 BLAKE3_NAME="BLAKE3-1.8.5.tar.gz"
 BLAKE3_SOURCE="BLAKE3-1.8.5"
