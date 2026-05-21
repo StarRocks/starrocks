@@ -35,6 +35,8 @@
 #include "storage/aggregate_iterator.h"
 #include "storage/chunk_helper.h"
 #include "storage/column_predicate_rewriter.h"
+#include "storage/index/secondary_sorted/index_registry.h"
+#include "storage/index/secondary_sorted/secondary_index_reader.h"
 #include "storage/conjunctive_predicates.h"
 #include "storage/empty_iterator.h"
 #include "storage/lake/rowset.h"
@@ -391,6 +393,47 @@ Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std
 
     SCOPED_RAW_TIMER(&_stats.create_segment_iter_ns);
 
+    // ---- PoC: per-rowset secondary index lookup ----
+    // When the caller has opted in (use_secondary_index) and the index read
+    // path is enabled globally, walk over rowsets that carry a secondary
+    // index file in their metadata and pre-compute a per-segment Roaring
+    // bitmap of candidate row ids. The bitmap is threaded into Rowset::read()
+    // via the `presupplied_rowid_filter_per_segment` field on RowsetReadOptions.
+    //
+    // PoC v1 limitation: predicate translation from params.pred_tree into
+    // the index file's synthetic schema is NOT implemented yet, so lookup()
+    // returns ALL row ids of the index file (i.e. every base-table row
+    // visited via the index, which still validates end-to-end wiring and
+    // measures the write-path cost). Predicate translation lives behind a
+    // small TODO at the lookup() call site; querying a fully-pruned
+    // candidate set requires plumbing the source-column-id remap.
+    std::unordered_map<uint32_t /*rowset_id*/, std::unordered_map<uint32_t, roaring::Roaring>> sidx_per_rowset;
+    if (params.use_secondary_index && config::enable_secondary_index_read) {
+        // Resolve a Lake-aware FileSystem rooted at the tablet directory; we
+        // reuse it across all index files for this query.
+        const std::string root = _tablet_mgr->tablet_root_location(_tablet_metadata->id());
+        ASSIGN_OR_RETURN(auto sidx_fs, FileSystemFactory::CreateSharedFromString(root));
+        for (auto& rowset : _rowsets) {
+            const auto& meta = rowset->metadata();
+            if (meta.secondary_indexes_size() == 0) continue;
+            // PoC v1: only the first declared index per rowset is consulted.
+            secondary_sorted::SecondaryIndexReader::OpenInput open_in;
+            open_in.fs = sidx_fs;
+            open_in.tablet_mgr = _tablet_mgr;
+            open_in.tablet_id = rowset->tablet_id();
+            open_in.file_pb = meta.secondary_indexes(0);
+            open_in.source_schema = _tablet_schema;
+            ASSIGN_OR_RETURN(auto reader, secondary_sorted::SecondaryIndexReader::open(open_in));
+            // TODO(PoC v2): translate params.pred_tree's predicates from the
+            // source schema's column ids to the index file's synthetic
+            // column ids before passing them in. For now we pass none and
+            // accept that the candidate set equals the full index.
+            std::vector<const ColumnPredicate*> preds;
+            ASSIGN_OR_RETURN(auto per_seg, reader->lookup(preds));
+            sidx_per_rowset[rowset->id()] = std::move(per_seg);
+        }
+    }
+
     std::vector<std::future<StatusOr<std::vector<ChunkIteratorPtr>>>> futures;
     // The parallel tasks capture local variables and |this| by reference.
     // Must wait for all tasks to complete before returning, otherwise
@@ -407,7 +450,21 @@ Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std
             continue;
         }
 
-        if (config::enable_load_segment_parallel) {
+        // PoC: thread this rowset's per-segment rowid filter into rs_opts
+        // just before invoking rowset->read(). When no entry exists for this
+        // rowset (typical case), the field stays null and Rowset::read()
+        // falls back to the normal scan.
+        if (auto it = sidx_per_rowset.find(rowset->id()); it != sidx_per_rowset.end()) {
+            rs_opts.presupplied_rowid_filter_per_segment = &it->second;
+        } else {
+            rs_opts.presupplied_rowid_filter_per_segment = nullptr;
+        }
+
+        // PoC: parallel load captures rs_opts by reference; mutating
+        // presupplied_rowid_filter_per_segment per iteration would race.
+        // Force the serial path whenever a secondary index lookup is in use.
+        const bool use_parallel = config::enable_load_segment_parallel && !params.use_secondary_index;
+        if (use_parallel) {
             auto task = std::make_shared<std::packaged_task<StatusOr<std::vector<ChunkIteratorPtr>>()>>([&, rowset]() {
 #ifdef BE_TEST
                 Status injected_st;
