@@ -410,9 +410,9 @@ Status ReplicationTxnManager::replicate_remote_snapshot(const TReplicateSnapshot
     // non-PK tables and cause build_file_converters to skip the .del transcode branch.
     ASSIGN_OR_RETURN(auto del_transcode_ctx, prepare_del_transcode_context(*tablet_metadata, *source_schema_pb));
 
-    auto file_converters = build_file_converters(
-            _tablet_manager, request, filename_map, column_unique_id_map, files_to_delete,
-            del_transcode_ctx.pkey_schema, del_transcode_ctx.source_encoding, del_transcode_ctx.target_encoding);
+    auto file_converters = build_file_converters(_tablet_manager, request, filename_map, column_unique_id_map,
+                                                 files_to_delete, del_transcode_ctx.pkey_schema,
+                                                 del_transcode_ctx.source_encoding, del_transcode_ctx.target_encoding);
 
     RETURN_IF_ERROR(ReplicationUtils::download_remote_snapshot(
             src_snapshot_info.backend.host, src_snapshot_info.backend.http_port, request.src_token,
@@ -694,11 +694,11 @@ StatusOr<DelTranscodeContext> ReplicationTxnManager::prepare_del_transcode_conte
     if (ctx.source_encoding == PrimaryKeyEncodingType::PK_ENCODING_TYPE_V2 &&
         ctx.target_encoding == PrimaryKeyEncodingType::PK_ENCODING_TYPE_V1 &&
         is_single_fixed_length_non_string_primary_key(*target_schema)) {
-        return Status::NotSupported(strings::Substitute(
-                "V2 source -> V1 target cross-cluster replication is not supported on a single "
-                "non-string fixed-length PK column (.del files would byte-copy and be misread on "
-                "the target). Tablet $0, pk_logical_type $1",
-                tablet_metadata.id(), logical_type_to_string(target_schema->column(0).type())));
+        return Status::NotSupported(
+                strings::Substitute("V2 source -> V1 target cross-cluster replication is not supported on a single "
+                                    "non-string fixed-length PK column (.del files would byte-copy and be misread on "
+                                    "the target). Tablet $0, pk_logical_type $1",
+                                    tablet_metadata.id(), logical_type_to_string(target_schema->column(0).type())));
     }
 
     std::vector<ColumnId> pk_idxes(target_schema->num_key_columns());

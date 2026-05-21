@@ -791,7 +791,7 @@ namespace {
 //   keys_type=PRIMARY_KEYS, single (or composite) PK columns with the given types,
 //   set primary_key_encoding_type to the requested value.
 TabletMetadataPB make_pk_tablet_metadata(int64_t id, PrimaryKeyEncodingTypePB encoding,
-                                          const std::vector<std::string>& pk_type_names) {
+                                         const std::vector<std::string>& pk_type_names) {
     TabletMetadataPB meta;
     meta.set_id(id);
     auto* schema = meta.mutable_schema();

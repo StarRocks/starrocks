@@ -76,7 +76,7 @@ public:
     // Returns Status::InternalError if either side reports PK_ENCODING_TYPE_NONE for a PK
     // table (corrupted metadata: TabletSchema falls back to V1 for pre-PR-69939 schemas).
     static StatusOr<DelTranscodeContext> prepare_del_transcode_context(const TabletMetadata& tablet_metadata,
-                                                                        const TabletSchemaPB& source_schema_pb);
+                                                                       const TabletSchemaPB& source_schema_pb);
 
     // pkey_schema, source_pk_encoding, target_pk_encoding describe the on-disk PK encoding of
     // .del files arriving in this snapshot. When source != target on a shape that is NOT
