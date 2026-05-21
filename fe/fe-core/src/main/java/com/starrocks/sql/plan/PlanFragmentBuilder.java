@@ -4494,6 +4494,13 @@ public class PlanFragmentBuilder {
                     : WarehouseManager.DEFAULT_RESOURCE;
             scanNode.computeScanRanges(computeResource);
 
+            List<ScalarOperator> predicates = Utils.extractConjuncts(scan.getPredicate());
+            ScalarOperatorToExpr.FormatterContext formatterContext =
+                    new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr());
+            for (ScalarOperator predicate : predicates) {
+                scanNode.getConjuncts().add(ScalarOperatorToExpr.buildExecExpression(predicate, formatterContext));
+            }
+
             currentExecGroup.add(scanNode, true);
             context.getScanNodes().add(scanNode);
 
