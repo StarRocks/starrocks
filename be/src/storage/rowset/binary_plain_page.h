@@ -119,7 +119,8 @@ public:
             put_fixed32_le(&_buffer, _offset);
         }
         put_fixed32_le(&_buffer, _offsets.size());
-        if (!_offsets.empty()) {
+        _single_huge_value = _offsets.size() == 1 && is_huge_slice(_value_at(0));
+        if (!_offsets.empty() && !_single_huge_value) {
             _copy_value_at(0, &_first_value);
             _copy_value_at(_offsets.size() - 1, &_last_value);
         }
@@ -138,7 +139,7 @@ public:
         if (_offsets.empty()) {
             return Status::NotFound("page is empty");
         }
-        *reinterpret_cast<Slice*>(value) = Slice(_first_value);
+        *reinterpret_cast<Slice*>(value) = _single_huge_value ? _value_at(0) : Slice(_first_value);
         return Status::OK();
     }
 
@@ -147,22 +148,26 @@ public:
         if (_offsets.empty()) {
             return Status::NotFound("page is empty");
         }
-        *reinterpret_cast<Slice*>(value) = Slice(_last_value);
+        *reinterpret_cast<Slice*>(value) = _single_huge_value ? _value_at(0) : Slice(_last_value);
         return Status::OK();
     }
 
     Slice get_value(size_t idx) const {
         DCHECK(!_finished);
-        DCHECK_LT(idx, _offsets.size());
-        size_t end = (idx + 1) < _offsets.size() ? _offsets[idx + 1] : _next_offset;
-        size_t off = _offsets[idx];
-        return {&_buffer[_reserved_head_size + off], end - off};
+        return _value_at(idx);
     }
 
 private:
     void _copy_value_at(size_t idx, faststring* value) const {
-        Slice s = get_value(idx);
+        Slice s = _value_at(idx);
         value->assign_copy((const uint8_t*)s.data, s.size);
+    }
+
+    Slice _value_at(size_t idx) const {
+        DCHECK_LT(idx, _offsets.size());
+        size_t end = (idx + 1) < _offsets.size() ? _offsets[idx + 1] : _next_offset;
+        size_t off = _offsets[idx];
+        return {&_buffer[_reserved_head_size + off], end - off};
     }
 
     uint8_t _reserved_head_size{0};
@@ -174,6 +179,7 @@ private:
     PageBuilderOptions _options;
     faststring _first_value;
     faststring _last_value;
+    bool _single_huge_value{false};
     bool _finished{false};
 };
 

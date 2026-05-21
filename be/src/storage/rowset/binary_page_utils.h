@@ -20,7 +20,7 @@
 
 namespace starrocks {
 
-static constexpr uint32_t kHugeSliceThreshold = 256 * 1024; // 256KB
+static constexpr uint32_t kHugeSliceThreshold = 1024 * 1024; // 1MB
 
 inline bool is_huge_slice(const Slice& s) {
     return s.size > kHugeSliceThreshold;

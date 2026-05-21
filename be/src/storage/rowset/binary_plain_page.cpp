@@ -44,6 +44,7 @@ void BinaryPlainPageBuilder::reset() {
     _buffer.resize(_reserved_head_size);
     _next_offset = 0;
     _size_estimate = sizeof(uint32_t);
+    _single_huge_value = false;
     _finished = false;
 }
 
