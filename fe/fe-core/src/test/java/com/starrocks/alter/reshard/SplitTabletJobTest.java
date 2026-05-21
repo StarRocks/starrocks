@@ -14,6 +14,8 @@
 
 package com.starrocks.alter.reshard;
 
+import com.staros.proto.FileCacheInfo;
+import com.staros.proto.FilePathInfo;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
@@ -24,9 +26,11 @@ import com.starrocks.catalog.TabletRange;
 import com.starrocks.catalog.Tuple;
 import com.starrocks.catalog.Variant;
 import com.starrocks.common.Config;
+import com.starrocks.common.DdlException;
 import com.starrocks.common.Range;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.PropertyAnalyzer;
+import com.starrocks.lake.StarOSAgent;
 import com.starrocks.lake.Utils;
 import com.starrocks.proto.AggregatePublishVersionRequest;
 import com.starrocks.proto.PublishVersionRequest;
@@ -181,6 +185,13 @@ public class SplitTabletJobTest {
 
         TabletReshardJob tabletReshardJob = createTabletReshardJob();
         Assertions.assertNotNull(tabletReshardJob);
+
+        // In production the original leader's runPendingJob calls createShardsOnStarOS
+        // before the followers ever replay this job, so the new shards exist on staros
+        // at replay time. Mirror that here so subsequent tests (which reuse the shared
+        // static table fixture) find every tablet in the FE catalog backed by a real
+        // staros shard.
+        ((SplitTabletJob) tabletReshardJob).createShardsOnStarOS();
 
         Assertions.assertEquals(TabletReshardJob.JobState.PENDING, tabletReshardJob.getJobState());
         tabletReshardJob.replay();
@@ -643,5 +654,33 @@ public class SplitTabletJobTest {
         Assertions.assertNotNull(tabletReshardJob.getInfo());
 
         return tabletReshardJob;
+    }
+
+    /**
+     * createShardsOnStarOS wraps any StarRocksException from the StarOS RPC as a
+     * TabletReshardException so the run() catch-and-abort wrapper can fire cleanly.
+     */
+    @Test
+    public void testCreateShardsOnStarOSWrapsStarRocksException() throws Exception {
+        SplitTabletJob job = (SplitTabletJob) createTabletReshardJob();
+
+        new MockUp<StarOSAgent>() {
+            @Mock
+            public void createShardsForSplit(Map<Long, Long> newToOldShardId,
+                                             Map<Long, List<Long>> newShardIdToGroupIds,
+                                             FilePathInfo pathInfo,
+                                             FileCacheInfo cacheInfo,
+                                             Map<String, String> properties,
+                                             ComputeResource computeResource) throws DdlException {
+                throw new DdlException("simulated StarOS failure");
+            }
+        };
+
+        TabletReshardException thrown = Assertions.assertThrows(TabletReshardException.class,
+                job::createShardsOnStarOS);
+        Assertions.assertTrue(thrown.getMessage().contains("Failed to create new shards on StarOS"),
+                "expected wrap message, got: " + thrown.getMessage());
+        Assertions.assertTrue(thrown.getMessage().contains("simulated StarOS failure"),
+                "expected original cause message, got: " + thrown.getMessage());
     }
 }

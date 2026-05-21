@@ -58,9 +58,11 @@ import java.util.Set;
  *
  * <p>Leader-state is gated at the manager level: {@code TabletReshardJobMgr} is only started
  * inside {@code GlobalStateMgr.startLeaderOnlyDaemonThreads}, so the checker never runs on a
- * non-leader FE. (Main has an additional per-RPC leader-admission re-check for the
- * demoted-leader edge case; that machinery is not on branch-4.1, so this backport relies on
- * the manager-level gate alone.)
+ * brand-new follower. For the demoted-leader edge case, the alignment job's StarOS shard
+ * creation is journal-first (runs in {@link SplitTabletJob#runPendingJob} after the job is
+ * persisted), and the journal write inside {@link
+ * ColocateTableIndex#markAllGroupsWithSameColocateGroupIdStable} is admission-gated — these
+ * together prevent shard-leak on demotion.
  *
  * <h3>What a cycle does</h3>
  * Iterates every unstable range-colocate {@code colocateGroupId}; for each peer {@link
@@ -234,11 +236,9 @@ public class ColocateChecker {
             return alignedSoFar;
         }
 
-        // Note: main branch has a per-cycle leader-admission re-check here to guard the
-        // demoted-leader edge case (forColocateAlignment creates StarOS shards BEFORE
-        // addTabletReshardJob writes the journal record). That admission machinery is not
-        // present on branch-4.1; the manager-level leader gate via startLeaderOnlyDaemonThreads
-        // is the only safety net here.
+        // The factory now only builds local state and journals the job; the StarOS shard
+        // creation runs in SplitTabletJob.runPendingJob (after the journal write), so a
+        // leader demotion at this point cannot leak external shards.
         TabletReshardJob job = SplitTabletJobFactory.forColocateAlignment(db, table, alignmentMap);
         GlobalStateMgr.getCurrentState().getTabletReshardJobMgr().addTabletReshardJob(job);
         LOG.info("submitted SplitTabletJob {} for table {}.{} covering {} partitions",
