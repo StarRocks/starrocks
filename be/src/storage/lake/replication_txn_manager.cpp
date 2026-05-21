@@ -408,58 +408,11 @@ Status ReplicationTxnManager::replicate_remote_snapshot(const TReplicateSnapshot
 
     // Determine source/target PK encoding for .del-file transcoding. NONE sentinels stay set for
     // non-PK tables and cause build_file_converters to skip the .del transcode branch.
-    SchemaPtr pkey_schema_for_del;
-    auto target_pk_encoding = PrimaryKeyEncodingType::PK_ENCODING_TYPE_NONE;
-    auto source_pk_encoding = PrimaryKeyEncodingType::PK_ENCODING_TYPE_NONE;
-    if (is_primary_key(*tablet_metadata)) {
-        // target_schema is shared because ChunkHelper::convert_schema takes TabletSchemaCSPtr;
-        // source_schema is only read locally for validation, so a stack instance suffices.
-        auto target_schema = std::make_shared<TabletSchema>(tablet_metadata->schema());
-        TabletSchema source_schema(*source_schema_pb);
-        // PK encoding must be valid on both sides; PK_ENCODING_TYPE_NONE here would indicate
-        // corrupted metadata (TabletSchema falls back to V1 for pre-PR-69939 PK tables, so
-        // an invalid value should not slip through silently).
-        ASSIGN_OR_RETURN(target_pk_encoding, target_schema->primary_key_encoding_type_or_error());
-        ASSIGN_OR_RETURN(source_pk_encoding, source_schema.primary_key_encoding_type_or_error());
+    ASSIGN_OR_RETURN(auto del_transcode_ctx, prepare_del_transcode_context(*tablet_metadata, *source_schema_pb));
 
-        // Cross-cluster PK contract: column count and per-column logical type must agree.
-        // Cluster-to-cluster replication only makes sense if PK structure matches; surface
-        // any mismatch loudly instead of attempting unsafe transcoding.
-        if (source_schema.num_key_columns() != target_schema->num_key_columns()) {
-            return Status::NotSupported(strings::Substitute(
-                    "PK column count mismatch between source ($0) and target ($1) on tablet $2",
-                    source_schema.num_key_columns(), target_schema->num_key_columns(), tablet_metadata->id()));
-        }
-        for (size_t i = 0; i < target_schema->num_key_columns(); ++i) {
-            if (source_schema.column(i).type() != target_schema->column(i).type()) {
-                return Status::NotSupported(strings::Substitute(
-                        "PK column[$0] logical type mismatch between source ($1) and target ($2) on tablet $3", i,
-                        logical_type_to_string(source_schema.column(i).type()),
-                        logical_type_to_string(target_schema->column(i).type()), tablet_metadata->id()));
-            }
-        }
-
-        // Explicitly reject V2 -> V1 on the byte-incompatible PK shape. The reverse direction
-        // is not transcodable (no V2 -> typed-column decoder) and a byte copy would leave
-        // V2-shaped bytes that the V1 target reader misinterprets.
-        if (source_pk_encoding == PrimaryKeyEncodingType::PK_ENCODING_TYPE_V2 &&
-            target_pk_encoding == PrimaryKeyEncodingType::PK_ENCODING_TYPE_V1 &&
-            is_single_fixed_length_non_string_primary_key(*target_schema)) {
-            return Status::NotSupported(strings::Substitute(
-                    "V2 source -> V1 target cross-cluster replication is not supported on a single "
-                    "non-string fixed-length PK column (.del files would byte-copy and be misread on "
-                    "the target). Tablet $0, pk_logical_type $1",
-                    tablet_metadata->id(), logical_type_to_string(target_schema->column(0).type())));
-        }
-
-        std::vector<ColumnId> pk_idxes(target_schema->num_key_columns());
-        std::iota(pk_idxes.begin(), pk_idxes.end(), 0);
-        pkey_schema_for_del = std::make_shared<Schema>(ChunkHelper::convert_schema(target_schema, pk_idxes));
-    }
-
-    auto file_converters =
-            build_file_converters(_tablet_manager, request, filename_map, column_unique_id_map, files_to_delete,
-                                  pkey_schema_for_del, source_pk_encoding, target_pk_encoding);
+    auto file_converters = build_file_converters(
+            _tablet_manager, request, filename_map, column_unique_id_map, files_to_delete,
+            del_transcode_ctx.pkey_schema, del_transcode_ctx.source_encoding, del_transcode_ctx.target_encoding);
 
     RETURN_IF_ERROR(ReplicationUtils::download_remote_snapshot(
             src_snapshot_info.backend.host, src_snapshot_info.backend.http_port, request.src_token,
@@ -699,6 +652,59 @@ Status ReplicationTxnManager::convert_dcg_column_unique_ids(
         }
     }
     return Status::OK();
+}
+
+StatusOr<DelTranscodeContext> ReplicationTxnManager::prepare_del_transcode_context(
+        const TabletMetadata& tablet_metadata, const TabletSchemaPB& source_schema_pb) {
+    DelTranscodeContext ctx;
+    if (!is_primary_key(tablet_metadata)) {
+        return ctx;
+    }
+
+    // target_schema is shared because ChunkHelper::convert_schema takes TabletSchemaCSPtr;
+    // source_schema is only read locally for validation, so a stack instance suffices.
+    auto target_schema = std::make_shared<TabletSchema>(tablet_metadata.schema());
+    TabletSchema source_schema(source_schema_pb);
+    // PK encoding must be valid on both sides; PK_ENCODING_TYPE_NONE here would indicate
+    // corrupted metadata (TabletSchema falls back to V1 for pre-PR-69939 PK tables, so
+    // an invalid value should not slip through silently).
+    ASSIGN_OR_RETURN(ctx.target_encoding, target_schema->primary_key_encoding_type_or_error());
+    ASSIGN_OR_RETURN(ctx.source_encoding, source_schema.primary_key_encoding_type_or_error());
+
+    // Cross-cluster PK contract: column count and per-column logical type must agree.
+    // Cluster-to-cluster replication only makes sense if PK structure matches; surface
+    // any mismatch loudly instead of attempting unsafe transcoding.
+    if (source_schema.num_key_columns() != target_schema->num_key_columns()) {
+        return Status::NotSupported(strings::Substitute(
+                "PK column count mismatch between source ($0) and target ($1) on tablet $2",
+                source_schema.num_key_columns(), target_schema->num_key_columns(), tablet_metadata.id()));
+    }
+    for (size_t i = 0; i < target_schema->num_key_columns(); ++i) {
+        if (source_schema.column(i).type() != target_schema->column(i).type()) {
+            return Status::NotSupported(strings::Substitute(
+                    "PK column[$0] logical type mismatch between source ($1) and target ($2) on tablet $3", i,
+                    logical_type_to_string(source_schema.column(i).type()),
+                    logical_type_to_string(target_schema->column(i).type()), tablet_metadata.id()));
+        }
+    }
+
+    // Explicitly reject V2 -> V1 on the byte-incompatible PK shape. The reverse direction
+    // is not transcodable (no V2 -> typed-column decoder) and a byte copy would leave
+    // V2-shaped bytes that the V1 target reader misinterprets.
+    if (ctx.source_encoding == PrimaryKeyEncodingType::PK_ENCODING_TYPE_V2 &&
+        ctx.target_encoding == PrimaryKeyEncodingType::PK_ENCODING_TYPE_V1 &&
+        is_single_fixed_length_non_string_primary_key(*target_schema)) {
+        return Status::NotSupported(strings::Substitute(
+                "V2 source -> V1 target cross-cluster replication is not supported on a single "
+                "non-string fixed-length PK column (.del files would byte-copy and be misread on "
+                "the target). Tablet $0, pk_logical_type $1",
+                tablet_metadata.id(), logical_type_to_string(target_schema->column(0).type())));
+    }
+
+    std::vector<ColumnId> pk_idxes(target_schema->num_key_columns());
+    std::iota(pk_idxes.begin(), pk_idxes.end(), 0);
+    ctx.pkey_schema = std::make_shared<Schema>(ChunkHelper::convert_schema(target_schema, pk_idxes));
+    return ctx;
 }
 
 // Helper function to create replication txn log with converted metadata

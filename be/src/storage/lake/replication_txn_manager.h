@@ -39,6 +39,15 @@ namespace starrocks::lake {
 
 class TabletManager;
 
+// Inputs needed by ReplicationTxnManager::build_file_converters to drive .del-file
+// transcoding for cross-cluster replication intake. NONE encodings + null pkey_schema
+// signal "no transcoding" (non-PK tables or compatible PK shapes).
+struct DelTranscodeContext {
+    SchemaPtr pkey_schema;
+    PrimaryKeyEncodingType source_encoding = PrimaryKeyEncodingType::PK_ENCODING_TYPE_NONE;
+    PrimaryKeyEncodingType target_encoding = PrimaryKeyEncodingType::PK_ENCODING_TYPE_NONE;
+};
+
 class ReplicationTxnManager {
 public:
     explicit ReplicationTxnManager(lake::TabletManager* tablet_manager) : _tablet_manager(tablet_manager) {
@@ -52,6 +61,22 @@ public:
     Status clear_snapshots(const TxnLogPtr& txn_slog);
 
     DISALLOW_COPY_AND_MOVE(ReplicationTxnManager);
+
+    // Validates source/target PK structure for cross-cluster replication intake and computes
+    // the PK encoding pair + pkey schema needed to drive .del-file transcoding.
+    //
+    // For non-PK target tablets, returns a context with NONE encodings and null pkey_schema --
+    // the caller passes those through to build_file_converters as the "no transcoding" signal.
+    //
+    // Returns Status::NotSupported on:
+    //   - PK column count mismatch between source and target
+    //   - per-column logical type mismatch
+    //   - V2 source -> V1 target on the byte-incompatible single-non-string-fixed-length PK
+    //     shape (no V2 -> typed-column decoder exists).
+    // Returns Status::InternalError if either side reports PK_ENCODING_TYPE_NONE for a PK
+    // table (corrupted metadata: TabletSchema falls back to V1 for pre-PR-69939 schemas).
+    static StatusOr<DelTranscodeContext> prepare_del_transcode_context(const TabletMetadata& tablet_metadata,
+                                                                        const TabletSchemaPB& source_schema_pb);
 
     // pkey_schema, source_pk_encoding, target_pk_encoding describe the on-disk PK encoding of
     // .del files arriving in this snapshot. When source != target on a shape that is NOT
