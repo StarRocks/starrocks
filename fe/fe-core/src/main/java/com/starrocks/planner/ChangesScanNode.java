@@ -25,6 +25,7 @@ import com.starrocks.lake.bookmark.Bookmark;
 import com.starrocks.lake.bookmark.BookmarkChange;
 import com.starrocks.lake.changes.ChangesMetaDescriptor;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.TChangesScanNode;
@@ -136,7 +137,7 @@ public class ChangesScanNode extends AbstractOlapTableScanNode {
                         throw new StarRocksPlannerException(
                                 "No queryable replica found for CDC scan on tablet " + tablet.getId() +
                                         ". Check if compute nodes are available in the warehouse.",
-                                com.starrocks.sql.common.ErrorType.INTERNAL_ERROR);
+                                ErrorType.INTERNAL_ERROR);
                     }
                     Collections.shuffle(allQueryableReplicas);
                     boolean hasAliveReplica = false;
@@ -156,7 +157,7 @@ public class ChangesScanNode extends AbstractOlapTableScanNode {
                     if (!hasAliveReplica) {
                         throw new StarRocksPlannerException(
                                 "tablet " + tablet.getId() + " have no alive replicas",
-                                com.starrocks.sql.common.ErrorType.INTERNAL_ERROR);
+                                ErrorType.INTERNAL_ERROR);
                     }
 
                     result.add(scanRangeLocations);
