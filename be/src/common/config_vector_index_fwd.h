@@ -53,4 +53,12 @@ CONF_mDouble(vector_adaptive_ef_cap, "8.0");
 
 CONF_mInt64(vector_adaptive_ef_baseline_rows, "300000");
 
+// Per-builder in-memory row buffer cap before tenann does an intermediate
+// add into the faiss in-memory index. Bounds peak memory during HNSWFlat
+// build by capping data_buffer_ at |rows| × dim × 4 bytes (does NOT cap
+// the trained index storage itself, only the staging buffer).
+// 256K rows ≈ 128 MiB at dim=128. Lower this if BE memory is tight.
+// Set to 0 to disable intermediate flushing (whole tablet buffered in RAM).
+CONF_mInt64(vector_index_build_flush_threshold_rows, "262144");
+
 } // namespace starrocks::config

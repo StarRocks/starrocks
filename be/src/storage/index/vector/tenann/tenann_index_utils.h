@@ -38,6 +38,15 @@ static const std::string DIM = "dim";
 static const std::string IS_VECTOR_NORMED = "is_vector_normed";
 static const std::string RANGE_SEARCH_CONFIDENCE = "range_search_confidence";
 
+// HNSW quantizer parameters (V1: HNSW only).
+//   QUANTIZER: scalar/product quantizer name. One of {"flat", "sq4", "sq8", "pq"}.
+//              Stored in tenann::IndexMeta as int (tenann::ScalarQuantizerType).
+//   M_PQ:      number of PQ sub-quantizers. Required when QUANTIZER == "pq".
+//   NBITS_PQ:  bits per PQ sub-quantizer code. Optional, default 8.
+static const std::string QUANTIZER = "quantizer";
+static const std::string M_PQ = "m_pq";
+static const std::string NBITS_PQ = "nbits_pq";
+
 }; // namespace starrocks::index::vector
 
 namespace starrocks {
