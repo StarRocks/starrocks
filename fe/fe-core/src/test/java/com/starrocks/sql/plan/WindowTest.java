@@ -1918,6 +1918,31 @@ public class WindowTest extends PlanTestBase {
     }
 
     @Test
+    public void testFirstLastValueRangeRewriteToRowsOnlyWhenEquivalent() throws Exception {
+        String firstValuePlan = getFragmentPlan(
+                "select first_value(v3) over(partition by v1 order by v2) from t0");
+        assertContains(firstValuePlan, "window: ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW");
+
+        String lastValuePlan = getFragmentPlan(
+                "select last_value(v3) over(partition by v1 order by v2) from t0");
+        assertContains(lastValuePlan, "window: RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW");
+
+        String firstValueIgnoreNullsPlan = getFragmentPlan(
+                "select first_value(v3 ignore nulls) over(partition by v1 order by v2) from t0");
+        assertContains(firstValueIgnoreNullsPlan, "window: RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW");
+
+        String currentRowPeerFramePlan = getFragmentPlan(
+                "select first_value(v3) over(" +
+                        "partition by v1 order by v2 range between current row and current row) from t0");
+        assertContains(currentRowPeerFramePlan, "window: RANGE BETWEEN CURRENT ROW AND CURRENT ROW");
+
+        String fullPartitionPlan = getFragmentPlan(
+                "select last_value(v3 ignore nulls) over(" +
+                        "partition by v1 order by v2 range between unbounded preceding and unbounded following) from t0");
+        assertContains(fullPartitionPlan, "window: ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING");
+    }
+
+    @Test
     public void testRowNumberWithAggregate() throws Exception {
         // Test for issue: row_number() with count(*) and max() in SELECT with GROUP BY
         // This tests that aggregate columns are not pruned when window operator is above aggregate

@@ -213,12 +213,8 @@ public class WindowTransformer {
             Preconditions.checkState(!orderByElements.isEmpty(), "Range window frame requires order by columns");
         }
 
-        // Change first_value/last_value RANGE windows to ROWS
-        if ((callExpr.getFunctionName().equalsIgnoreCase(AnalyticExpr.FIRSTVALUE)
-                || callExpr.getFunctionName().equalsIgnoreCase(AnalyticExpr.LASTVALUE))
-                && windowFrame != null
-                && windowFrame.getType() == AnalyticWindow.Type.RANGE
-                && !hasOffsetBoundary(windowFrame)) {
+        // Change first_value/last_value RANGE windows to ROWS only when peer-group semantics cannot affect the result.
+        if (canRewriteRangeFirstLastValueToRows(callExpr, windowFrame)) {
             windowFrame = new AnalyticWindow(AnalyticWindow.Type.ROWS, windowFrame.getLeftBoundary(),
                     windowFrame.getRightBoundary());
         }
@@ -254,6 +250,29 @@ public class WindowTransformer {
     private static boolean hasOffsetBoundary(AnalyticWindow windowFrame) {
         return windowFrame.getLeftBoundary().getBoundaryType().isOffset() ||
                 windowFrame.getRightBoundary().getBoundaryType().isOffset();
+    }
+
+    private static boolean canRewriteRangeFirstLastValueToRows(FunctionCallExpr callExpr, AnalyticWindow windowFrame) {
+        if (windowFrame == null || windowFrame.getType() != AnalyticWindow.Type.RANGE || hasOffsetBoundary(windowFrame)) {
+            return false;
+        }
+
+        boolean isFirstValue = callExpr.getFunctionName().equalsIgnoreCase(AnalyticExpr.FIRSTVALUE);
+        boolean isLastValue = callExpr.getFunctionName().equalsIgnoreCase(AnalyticExpr.LASTVALUE);
+        if (!isFirstValue && !isLastValue) {
+            return false;
+        }
+
+        AnalyticWindowBoundary.BoundaryType leftBoundaryType = windowFrame.getLeftBoundary().getBoundaryType();
+        AnalyticWindowBoundary.BoundaryType rightBoundaryType = windowFrame.getRightBoundary().getBoundaryType();
+        if (leftBoundaryType == AnalyticWindowBoundary.BoundaryType.UNBOUNDED_PRECEDING
+                && rightBoundaryType == AnalyticWindowBoundary.BoundaryType.UNBOUNDED_FOLLOWING) {
+            return true;
+        }
+
+        return isFirstValue && !callExpr.getIgnoreNulls()
+                && leftBoundaryType == AnalyticWindowBoundary.BoundaryType.UNBOUNDED_PRECEDING
+                && rightBoundaryType == AnalyticWindowBoundary.BoundaryType.CURRENT_ROW;
     }
 
     /**
