@@ -55,11 +55,11 @@ public:
     ~LoadSpillPipelineMergeContext();
 
     /**
-     * Lazily create thread pool token for submitting parallel merge tasks.
-     * 
-     * THREAD SAFETY: thread-safe, must be called once during initialization
+     * Initialize parallel merge under a single lock. Idempotent: only the first caller
+     * configures the writer and creates the thread pool token. Any thread that observes
+     * a non-null token() is guaranteed to also see the writer configuration (happens-before).
      */
-    void create_thread_pool_token();
+    void init_parallel_merge();
 
     /**
      * Register a merge task for later result collection.

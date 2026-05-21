@@ -76,20 +76,13 @@ Status SpillMemTableSink::flush_chunk(const Chunk& chunk, starrocks::SegmentPB* 
         *flush_data_size = res.value();
     }
 
-    // EAGER MERGE OPTIMIZATION: Split mode-switch from task-submit to avoid redundant
-    // LoadSpillPipelineMergeIterator::init() calls for flushes between thresholds.
-    // CAS guarantees the mode-switch block runs exactly once even under concurrent flush_chunk().
-    if (config::enable_load_spill_parallel_merge) {
-        bool expected = false;
-        if (!_eager_mode_entered.load(std::memory_order_acquire) &&
-            _load_chunk_spiller->total_bytes() >= config::pk_index_eager_build_threshold_bytes &&
-            _eager_mode_entered.compare_exchange_strong(expected, true, std::memory_order_acq_rel)) {
-            _writer->set_auto_flush(false);
-            _writer->try_enable_pk_index_eager_build();
-            _pipeline_merge_context->create_thread_pool_token();
-        }
+    // Eager merge: overlap merging with subsequent flushes. has_enough_for_pipeline_merge_task()
+    // is a cheap pre-check to skip the heavier work inside task_iterator.init().
+    if (config::enable_load_spill_parallel_merge &&
+        _load_chunk_spiller->total_bytes() >= config::pk_index_eager_build_threshold_bytes) {
+        _pipeline_merge_context->init_parallel_merge();
 
-        if (_eager_mode_entered.load(std::memory_order_acquire) &&
+        if (_pipeline_merge_context->token() != nullptr &&
             _load_chunk_spiller->has_enough_for_pipeline_merge_task(config::load_spill_max_merge_bytes,
                                                                     config::load_spill_memory_usage_per_merge)) {
             // Generate ONE merge task eagerly (not all tasks). Pipeline execution generates
@@ -150,7 +143,7 @@ Status SpillMemTableSink::merge_blocks_to_segments() {
 
     // Lazy token creation: may already exist from eager merge in flush_chunk()
     if (config::enable_load_spill_parallel_merge) {
-        _pipeline_merge_context->create_thread_pool_token();
+        _pipeline_merge_context->init_parallel_merge();
     }
 
     // FINAL MERGE PHASE: Merge all remaining spilled blocks to final tablet segments.

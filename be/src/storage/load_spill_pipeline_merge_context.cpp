@@ -29,9 +29,11 @@ LoadSpillPipelineMergeContext::~LoadSpillPipelineMergeContext() {
     }
 }
 
-void LoadSpillPipelineMergeContext::create_thread_pool_token() {
+void LoadSpillPipelineMergeContext::init_parallel_merge() {
     std::lock_guard<std::mutex> lg(_merge_tasks_mutex);
     if (_token == nullptr) {
+        _writer->set_auto_flush(false);
+        _writer->try_enable_pk_index_eager_build();
         _token = StorageEngine::instance()
                          ->load_spill_block_merge_executor()
                          ->create_tablet_internal_parallel_merge_token();

@@ -14,8 +14,6 @@
 
 #pragma once
 
-#include <atomic>
-
 #include "common/runtime_profile.h"
 #include "runtime/mem_tracker.h"
 #include "storage/load_chunk_spiller.h"
@@ -73,10 +71,6 @@ private:
 
     // Manages spilling chunks to disk and provides merge capabilities
     std::unique_ptr<LoadChunkSpiller> _load_chunk_spiller = nullptr;
-
-    // Atomic: flush_chunk() runs under a CONCURRENT FlushToken; CAS makes the
-    // one-shot eager-mode setup happen exactly once.
-    std::atomic<bool> _eager_mode_entered{false};
 };
 
 } // namespace lake
