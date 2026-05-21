@@ -224,13 +224,39 @@ public class TabletInvertedIndex implements MemoryTrackable {
         try {
             CopyOnWriteArrayList<Replica> replicas = tabletToReplicaList.computeIfAbsent(tabletId,
                     k -> new CopyOnWriteArrayList<>());
-            replicas.add(replica);
+            long backendId = replica.getBackendId();
 
-            Set<Long> tabletIds = backendToTabletIdList.computeIfAbsent(replica.getBackendId(),
+            // Restore the per-(tabletId, backendId) uniqueness invariant that the
+            // prior Map<backendId, Replica> inner container provided in branch-3.5
+            // before #66288. Replace the first existing entry in place so concurrent
+            // readers see an atomic swap (never a transient absence). Sweep any
+            // remaining duplicates left behind by historical addReplica leaks (e.g.
+            // LocalTablet.deleteRedundantReplica drops a replica from the tablet
+            // without notifying this index) so legacy state self-heals on the next
+            // add for that backend.
+            int firstIdx = -1;
+            for (int i = 0; i < replicas.size(); i++) {
+                if (replicas.get(i).getBackendId() == backendId) {
+                    firstIdx = i;
+                    break;
+                }
+            }
+            if (firstIdx >= 0) {
+                replicas.set(firstIdx, replica);
+                for (int i = replicas.size() - 1; i > firstIdx; i--) {
+                    if (replicas.get(i).getBackendId() == backendId) {
+                        replicas.remove(i);
+                    }
+                }
+            } else {
+                replicas.add(replica);
+            }
+
+            Set<Long> tabletIds = backendToTabletIdList.computeIfAbsent(backendId,
                     k -> ConcurrentHashMap.newKeySet());
             tabletIds.add(tabletId);
 
-            LOG.debug("add replica {} of tablet {} in backend {}", replica.getId(), tabletId, replica.getBackendId());
+            LOG.debug("add replica {} of tablet {} in backend {}", replica.getId(), tabletId, backendId);
         } finally {
             mutationLock.unlock();
         }

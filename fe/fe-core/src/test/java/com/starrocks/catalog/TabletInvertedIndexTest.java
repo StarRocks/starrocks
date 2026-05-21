@@ -262,4 +262,83 @@ public class TabletInvertedIndexTest {
         }
         Assertions.assertEquals(result1, result2);
     }
+
+    @Test
+    public void testAddReplicaDeduplicatesSameBackendId() {
+        long tabletId = 2000L;
+        long backendId = 5000L;
+        tabletInvertedIndex.addTablet(tabletId, tabletMeta);
+
+        Replica first = new Replica(200L, backendId, 1L, 123, 0L, 0L,
+                Replica.ReplicaState.NORMAL, -1L, 1L);
+        Replica second = new Replica(201L, backendId, 2L, 123, 0L, 0L,
+                Replica.ReplicaState.NORMAL, -1L, 2L);
+
+        tabletInvertedIndex.addReplica(tabletId, first);
+        Assertions.assertSame(first, tabletInvertedIndex.getReplica(tabletId, backendId));
+        Assertions.assertEquals(1, tabletInvertedIndex.getReplicasByTabletId(tabletId).size());
+
+        // Re-adding for the same (tabletId, backendId) must replace, not append.
+        tabletInvertedIndex.addReplica(tabletId, second);
+        Assertions.assertSame(second, tabletInvertedIndex.getReplica(tabletId, backendId));
+        List<Replica> replicas = tabletInvertedIndex.getReplicasByTabletId(tabletId);
+        Assertions.assertEquals(1, replicas.size(),
+                "expected unique entry per (tabletId, backendId), got: " + replicas);
+        Assertions.assertSame(second, replicas.get(0));
+    }
+
+    @Test
+    public void testAddReplicaPreservesDistinctBackends() {
+        long tabletId = 2001L;
+        tabletInvertedIndex.addTablet(tabletId, tabletMeta);
+
+        Replica r1 = new Replica(210L, 6000L, 1L, 123, 0L, 0L,
+                Replica.ReplicaState.NORMAL, -1L, 1L);
+        Replica r2 = new Replica(211L, 6001L, 1L, 123, 0L, 0L,
+                Replica.ReplicaState.NORMAL, -1L, 1L);
+        Replica r3 = new Replica(212L, 6002L, 1L, 123, 0L, 0L,
+                Replica.ReplicaState.NORMAL, -1L, 1L);
+
+        tabletInvertedIndex.addReplica(tabletId, r1);
+        tabletInvertedIndex.addReplica(tabletId, r2);
+        tabletInvertedIndex.addReplica(tabletId, r3);
+
+        Assertions.assertEquals(3, tabletInvertedIndex.getReplicasByTabletId(tabletId).size());
+        Assertions.assertSame(r1, tabletInvertedIndex.getReplica(tabletId, 6000L));
+        Assertions.assertSame(r2, tabletInvertedIndex.getReplica(tabletId, 6001L));
+        Assertions.assertSame(r3, tabletInvertedIndex.getReplica(tabletId, 6002L));
+    }
+
+    @Test
+    public void testAddReplicaSelfHealsLegacyDuplicates() {
+        // Reproduce the state that legacy LocalTablet.deleteRedundantReplica leaks
+        // could leave behind on upgrade: multiple entries for the same
+        // (tabletId, backendId). The next addReplica for that backend must drop
+        // them all and keep only the new replica.
+        long tabletId = 2002L;
+        long backendId = 7000L;
+        tabletInvertedIndex.addTablet(tabletId, tabletMeta);
+
+        Replica stale1 = new Replica(220L, backendId, 1L, 123, 0L, 0L,
+                Replica.ReplicaState.NORMAL, -1L, 1L);
+        Replica stale2 = new Replica(221L, backendId, 2L, 123, 0L, 0L,
+                Replica.ReplicaState.NORMAL, -1L, 2L);
+        Replica fresh = new Replica(222L, backendId, 3L, 123, 0L, 0L,
+                Replica.ReplicaState.NORMAL, -1L, 3L);
+
+        tabletInvertedIndex.addReplica(tabletId, stale1);
+        // Forcibly inject a duplicate via the public Map to simulate the legacy
+        // leak (the fixed addReplica would otherwise prevent this).
+        tabletInvertedIndex.getReplicaMetaTable().get(tabletId).add(stale2);
+        Assertions.assertEquals(2, tabletInvertedIndex.getReplicasByTabletId(tabletId).size(),
+                "test setup should have produced a duplicate");
+
+        tabletInvertedIndex.addReplica(tabletId, fresh);
+
+        Assertions.assertSame(fresh, tabletInvertedIndex.getReplica(tabletId, backendId));
+        List<Replica> replicas = tabletInvertedIndex.getReplicasByTabletId(tabletId);
+        Assertions.assertEquals(1, replicas.size(),
+                "duplicates should have been swept, got: " + replicas);
+        Assertions.assertSame(fresh, replicas.get(0));
+    }
 }
