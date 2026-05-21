@@ -44,12 +44,12 @@
 #        value: simple
 #      - key: username
 #        value: starrocks
-#   - name: my_adls2_volume
-#     type: ADLS2
-#     location: adls2://defaultbucket/shared_data
-#     comment: my primary ADLS volume
-#     properties:
-#       - key: azure.adls2.endpoint
-#         value: https://starrocksadls.dfs.core.windows.net
-#       - key: azure.adls2.shared_key
-#         value: xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+#  - name: my_adls2_volume
+#    type: ADLS2
+#    location: adls2://defaultbucket/shared_data
+#    comment: my primary ADLS volume
+#    properties:
+#      - key: azure.adls2.endpoint
+#        value: https://starrocksadls.dfs.core.windows.net
+#      - key: azure.adls2.shared_key
+#        value: xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
