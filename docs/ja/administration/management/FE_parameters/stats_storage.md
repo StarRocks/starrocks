@@ -595,7 +595,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - タイプ：Long
 - 単位：Seconds
 - 変更可能：Yes
-- 説明：サンプリングベースのタブレット事前分割のコーディネーターが、受理済み reshard ジョブの `FINISHED` を待機する最長時間。超過するとコーディネーターは `PreSplitPostSubmitTimeoutException` を送出し、取り込みトランザクションは安全に中止されます。古いタブレットメタデータに対してコミットすることは安全ではないためです。
+- 説明：サンプリングベースのタブレット事前分割のコーディネーターが、受理済み reshard ジョブの `FINISHED` を待機する最長時間。取り込み経路ごとに意味が異なります：INSERT-from-FILES は同期的に待機し、タイムアウト時は **中止せずに継続実行** します — INSERT はその時点で可視のタブレットレイアウトに対してプランされます（デーモンがまだ遷移していなければ元の単一タブレットレイアウト、待機放棄後にデーモンがレースで完了した場合は部分的／完全に分割後のレイアウトとなり得ます）。`tablet_pre_split_post_submit_hard_cap` カウンタがタイムアウトを記録します。テスト用の厳格な `runPreSplit` ラッパーはタイムアウト時に `PreSplitPostSubmitTimeoutException` を送出して呼び出し元の取り込みを中止します。Broker Load は fire-and-forget で全く待機しません（取り込みが reshard デーモンを待つことはありません）。
 - 導入時期：v4.1.0
 
 ### `tablet_pre_split_sample_byte_limit`

@@ -258,28 +258,54 @@ public final class TabletPreSplitCoordinator {
             return outcome;
         }
         Duration postSubmitTimeout = Duration.ofSeconds(Config.tablet_pre_split_post_submit_wait_seconds);
-        long postSubmitStartMillis = System.currentTimeMillis();
         try {
-            pipeline.awaitFinished(submitted.preparedJob(), postSubmitTimeout);
-        } catch (TimeoutException timeout) {
+            awaitFinishedAndRecordMetrics(pipeline, submitted.preparedJob(), postSubmitTimeout);
+        } catch (PreSplitPostSubmitTimeoutException timeout) {
+            // Strict-abort semantics: caller opted into runPreSplit, so a timeout
+            // aborts the calling load. The hard-cap counter was bumped inside
+            // awaitFinishedAndRecordMetrics; bump the abort counter and rethrow.
             if (MetricRepo.hasInit) {
-                MetricRepo.COUNTER_TABLET_PRE_SPLIT_POST_SUBMIT_HARD_CAP.increase(1L);
                 MetricRepo.COUNTER_TABLET_PRE_SPLIT_LOAD_ABORT.increase(1L);
             }
             LOG.warn("Pre-split post-submit timeout for table {} after {}s: {}",
                     table.getName(), postSubmitTimeout.toSeconds(), timeout.getMessage());
-            throw PreSplitPostSubmitTimeoutException.from(timeout);
+            throw timeout;
         } catch (StarRocksException waitFailure) {
             LOG.warn("Pre-split skipped for table {}: admitted job entered terminal-error state — {}",
                     table.getName(), waitFailure.getMessage());
             return new PreSplitOutcome.Skipped(SkipReason.JOB_FAILED_BEFORE_FINISH);
+        }
+        return new PreSplitOutcome.Finished();
+    }
+
+    /**
+     * Block on {@link PreSplitPipeline#awaitFinished} for the admitted reshard job
+     * and record the latency histogram + post-submit hard-cap counter consistently
+     * across the two callers ({@link #runPreSplit} for abort-on-timeout semantics,
+     * {@link com.starrocks.alter.reshard.presplit.InsertFromFilesPreSplitHook} for
+     * fail-safe semantics). Translates the generic {@link TimeoutException} the
+     * pipeline declares into the package-typed
+     * {@link PreSplitPostSubmitTimeoutException}; callers decide whether to abort
+     * the load or fall back. Always updates the histogram, including on timeout
+     * or failure, so operators see the wait distribution even for failed waits.
+     */
+    static void awaitFinishedAndRecordMetrics(
+            PreSplitPipeline pipeline, PreSplitPipeline.PreparedReshardJob preparedJob, Duration timeout)
+            throws PreSplitPostSubmitTimeoutException, StarRocksException {
+        long postSubmitStartMillis = System.currentTimeMillis();
+        try {
+            pipeline.awaitFinished(preparedJob, timeout);
+        } catch (TimeoutException timeoutException) {
+            if (MetricRepo.hasInit) {
+                MetricRepo.COUNTER_TABLET_PRE_SPLIT_POST_SUBMIT_HARD_CAP.increase(1L);
+            }
+            throw PreSplitPostSubmitTimeoutException.from(timeoutException);
         } finally {
             if (MetricRepo.hasInit) {
                 MetricRepo.HISTO_TABLET_PRE_SPLIT_POST_SUBMIT_WAIT_MS.update(
                         System.currentTimeMillis() - postSubmitStartMillis);
             }
         }
-        return new PreSplitOutcome.Finished();
     }
 
     /**

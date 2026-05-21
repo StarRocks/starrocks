@@ -595,7 +595,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: Long
 - 单位: Seconds
 - 是否可变: Yes
-- 描述: 基于采样的 Tablet 预分裂协调器等待已提交 reshard 作业到达 `FINISHED` 的最长时间。超时后协调器抛出 `PreSplitPostSubmitTimeoutException`，导入事务安全回滚——若提交到陈旧的 Tablet 元数据上是不安全的。
+- 描述: 基于采样的 Tablet 预分裂协调器等待已提交 reshard 作业到达 `FINISHED` 的最长时间。各导入路径语义不同：INSERT-from-FILES 同步等待，超时后 **不中止地继续执行** —— INSERT 随后按当时可见的 Tablet 布局做计划（守护线程还未推进则仍为原单 tablet 布局；若守护线程在我们放弃等待之后才完成则可能已部分／完全分裂）；`tablet_pre_split_post_submit_hard_cap` 计数器记录超时事件。测试使用的严格 `runPreSplit` 包装路径在超时后抛出 `PreSplitPostSubmitTimeoutException` 中止调用方的导入。Broker Load 采用 fire-and-forget，根本不等待（导入永远不会等 reshard 守护线程）。
 - 引入版本: v4.1.0
 
 ### `tablet_pre_split_sample_byte_limit`

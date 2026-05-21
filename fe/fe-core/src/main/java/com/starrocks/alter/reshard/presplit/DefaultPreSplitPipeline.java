@@ -22,6 +22,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.TabletRange;
 import com.starrocks.catalog.Tuple;
+import com.starrocks.common.Config;
 import com.starrocks.common.Range;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.metric.MetricRepo;
@@ -124,7 +125,8 @@ public final class DefaultPreSplitPipeline implements PreSplitPipeline {
      */
     public static DefaultPreSplitPipeline forLoadKind(
             Database database, OlapTable table, long oldTabletId, long fileTotalBytes, LoadKind loadKind) {
-        ParquetMetadataSampler metaTierSampler = new ParquetMetadataSampler(rowGroupStatisticsProviderFor(loadKind));
+        ParquetMetadataSampler metaTierSampler = new ParquetMetadataSampler(
+                rowGroupStatisticsProviderFor(loadKind), Config.tablet_pre_split_meta_tier_overlap_threshold);
         Sampler dataTierSampler = new ReservoirSampler(sampleSubqueryExecutorFor(loadKind));
         TabletReshardJobMgr tabletReshardJobManager = GlobalStateMgr.getCurrentState().getTabletReshardJobMgr();
         return new DefaultPreSplitPipeline(

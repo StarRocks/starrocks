@@ -703,19 +703,19 @@ description: "Alphabetical q - z"
 
 - 单位：毫秒
 - 类型：直方图
-- 描述：协调器等待已提交的预分裂 reshard 作业到达 `FINISHED` 状态所耗费的墙钟时间。仅在使用可选的同步等待包装路径（目前为测试路径以及未来可能的同步集成）时更新；生产导入路径采用 fire-and-forget 模式，因此该指标在生产中保持为零。
+- 描述：协调器等待已提交的预分裂 reshard 作业到达 `FINISHED` 状态所耗费的墙钟时间。INSERT-from-FILES 生产路径上触发（hook 同步等待 FINISHED，使本次 INSERT 直接看到分裂后的 tablet 布局）；测试用的 `runPreSplit` 同步包装路径也触发。Broker Load 生产路径采用 fire-and-forget，不会更新此直方图。
 
 ## `starrocks_fe_tablet_pre_split_post_submit_hard_cap`
 
 - 单位：计数
 - 类型：累计
-- 描述：基于采样的 Tablet 预分裂触发提交后硬上限的事件总数。已提交的 reshard 作业未能在 `tablet_pre_split_post_submit_wait_seconds` 内到达 `FINISHED` 时递增。仅在可选的同步等待包装路径上触发（目前为测试路径以及未来可能的同步集成）；生产导入路径采用 fire-and-forget 模式，因此该指标在生产中保持为零。
+- 描述：基于采样的 Tablet 预分裂触发提交后硬上限的事件总数。已提交的 reshard 作业未能在 `tablet_pre_split_post_submit_wait_seconds` 内到达 `FINISHED` 时递增。INSERT-from-FILES 生产路径超时后会触发（INSERT 此时**不中止地继续执行**，按当时可见的 Tablet 布局做计划 —— 守护线程还未推进则仍为原单 tablet 布局，若守护线程在我们放弃等待之后才完成则可能已部分／完全分裂；**不**递增 `tablet_pre_split_load_abort`，因为 INSERT 本身未被中止）；测试用的 `runPreSplit` 同步包装路径也会触发。Broker Load 生产路径不等待，因此不会更新此计数器。
 
 ## `starrocks_fe_tablet_pre_split_load_abort`
 
 - 单位：计数
 - 类型：累计
-- 描述：因基于采样的 Tablet 预分裂未能在限定时间内确认 reshard 作业到达 `FINISHED` 而导致回滚的导入事务总数。`tablet_pre_split_post_submit_hard_cap` 的姊妹计数器。仅在可选的同步等待包装路径上触发；生产中导入不会因预分裂而回滚，因此该指标在生产中保持为零。
+- 描述：因基于采样的 Tablet 预分裂未能在限定时间内确认 reshard 作业到达 `FINISHED` 而导致回滚的导入事务总数。`tablet_pre_split_post_submit_hard_cap` 的姊妹计数器。生产导入路径超时后不中止地继续执行（按当时可见的布局做计划）而非中止事务，因此该计数器在当前生产环境保持为零；仅在使用严格语义的 `runPreSplit` 包装路径（测试，或未来选择 "超时即中止" 的调用方）时触发。
 
 ## `starrocks_fe_tablet_max_compaction_score`
 

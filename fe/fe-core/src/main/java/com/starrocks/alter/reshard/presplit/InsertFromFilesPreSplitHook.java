@@ -14,6 +14,8 @@
 
 package com.starrocks.alter.reshard.presplit;
 
+import com.starrocks.authorization.AccessDeniedException;
+import com.starrocks.authorization.PrivilegeType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
@@ -21,10 +23,13 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableFunctionTable;
 import com.starrocks.catalog.TableName;
 import com.starrocks.common.Config;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.planner.LoadScanNode;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
+import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.analyzer.QueryAnalyzer;
 import com.starrocks.sql.ast.DmlStmt;
 import com.starrocks.sql.ast.FileTableFunctionRelation;
@@ -39,10 +44,12 @@ import com.starrocks.sql.ast.StatementBase.ExplainLevel;
 import com.starrocks.sql.ast.TableRef;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.thrift.TBrokerFileStatus;
+import com.starrocks.warehouse.Warehouse;
 import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.time.Duration;
 import java.util.List;
 
 /**
@@ -55,13 +62,15 @@ import java.util.List;
  * reshard daemon's write lock on the same table — the daemon needs the
  * write lock to transition the table to {@code TABLET_RESHARD}.
  *
- * <h2>Fire-and-forget semantics</h2>
- * <p>The hook calls
- * {@link TabletPreSplitCoordinator#submitAsynchronously} and returns. The
- * load planning that follows runs against whatever tablet layout is current
- * at plan time. The reshard daemon completes the split asynchronously after
- * the planner releases its meta-lock, so subsequent loads on this table
- * see the post-split layout.
+ * <h2>Sync-await semantics</h2>
+ * <p>The hook submits the reshard job, then synchronously waits for it to
+ * reach {@code FINISHED} (bounded by
+ * {@code tablet_pre_split_post_submit_wait_seconds}) so the triggering
+ * {@code INSERT}'s plan sees the post-split tablet layout — not just
+ * subsequent loads. The Broker Load path takes the fire-and-forget route
+ * instead; see {@link #awaitFinishedAllowingFallback} for why sync-await is
+ * deadlock-safe for {@code INSERT INTO ... SELECT * FROM FILES(...)}
+ * specifically and what happens on timeout.
  *
  * <h2>Detection</h2>
  * <p>The hook only matches the strict {@code INSERT INTO target SELECT *
@@ -119,7 +128,8 @@ public final class InsertFromFilesPreSplitHook {
         }
     }
 
-    private static void tryRunPreSplit(StatementBase parsedStmt, ConnectContext context) {
+    private static void tryRunPreSplit(StatementBase parsedStmt, ConnectContext context)
+            throws AccessDeniedException {
         InsertStmt insertStmt = qualifyingInsertStmt(parsedStmt, context);
         if (insertStmt == null) {
             return;
@@ -137,6 +147,28 @@ public final class InsertFromFilesPreSplitHook {
         PreSplitTargets.EligibleTarget target = resolveEligibleTarget(insertStmt, context);
         if (target == null) {
             return;
+        }
+        // Authorize the side effects this hook is about to trigger: INSERT on
+        // the resolved target (gates the journaled reshard job) and USAGE on
+        // the non-default active warehouse (gates the sampler sub-query that
+        // runs in context.currentComputeResource — the planner's later check
+        // applies the same default-warehouse exemption). The planner's full
+        // Authorizer.check still covers everything else (FILES function,
+        // catalog, etc.); we do not call it here because the AST is not yet
+        // analyzed and `Authorizer.check(stmt, ctx)` on an unnormalized
+        // TableRef would throw on unqualified `INSERT INTO t`. The outer
+        // try/catch in maybeRunPreSplit swallows the throw; the planner
+        // re-runs its full check and surfaces the actual auth error.
+        if (!context.isBypassAuthorizerCheck()) {
+            Authorizer.checkTableAction(context,
+                    target.database().getFullName(),
+                    target.olapTable().getName(),
+                    PrivilegeType.INSERT);
+            Warehouse currentWarehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr()
+                    .getWarehouse(context.getCurrentComputeResource().getWarehouseId());
+            if (currentWarehouse.getId() != WarehouseManager.DEFAULT_WAREHOUSE_ID) {
+                Authorizer.checkWarehouseAction(context, currentWarehouse.getName(), PrivilegeType.USAGE);
+            }
         }
         TableFunctionTable sourceTable = resolveSourceTable(insertStmt, filesRelation, context);
         if (sourceTable == null) {
@@ -354,6 +386,45 @@ public final class InsertFromFilesPreSplitHook {
                 LoadKind.INSERT_FROM_FILES, pipeline, activeComputeNodeCount);
         LOG.info("Sample-Based Tablet Pre-Split outcome for table {}: {}",
                 target.olapTable().getName(), outcome);
+
+        if (outcome instanceof PreSplitOutcome.Submitted submitted) {
+            awaitFinishedAllowingFallback(target.olapTable(), pipeline, submitted.preparedJob());
+        }
+    }
+
+    /**
+     * Fail-safe variant of {@link TabletPreSplitCoordinator#awaitFinishedAndRecordMetrics}:
+     * any timeout or wait failure is logged and the INSERT proceeds without
+     * abort — its plan sees whatever tablet layout is currently visible
+     * (could be the original layout if the daemon hasn't progressed, or
+     * partially / fully post-split if it raced past the wait giving up).
+     * {@code tablet_pre_split_load_abort} is intentionally not incremented
+     * (the INSERT itself is not aborted) — the shared helper updates the
+     * latency histogram and hard-cap counter.
+     *
+     * <p>Sync-await is deadlock-safe here specifically because this hook runs
+     * in {@code StmtExecutor.executeStmt} <b>before</b>
+     * {@code StatementPlanner.plan()} opens the load transaction. The reshard
+     * daemon's cleaning-phase {@code isPreviousTransactionsFinished} wait
+     * therefore does not include the not-yet-allocated load txn, so the AB-BA
+     * cycle the Broker Load path has to dodge with fire-and-forget does not
+     * exist on this path.
+     */
+    private static void awaitFinishedAllowingFallback(
+            OlapTable olapTable, DefaultPreSplitPipeline pipeline,
+            PreSplitPipeline.PreparedReshardJob preparedJob) {
+        Duration postSubmitTimeout = Duration.ofSeconds(Config.tablet_pre_split_post_submit_wait_seconds);
+        try {
+            TabletPreSplitCoordinator.awaitFinishedAndRecordMetrics(pipeline, preparedJob, postSubmitTimeout);
+        } catch (PreSplitPostSubmitTimeoutException timeout) {
+            LOG.warn("Pre-split awaitFinished timed out for table {} after {}s; "
+                            + "INSERT will proceed without abort against the currently visible layout: {}",
+                    olapTable.getName(), postSubmitTimeout.toSeconds(), timeout.getMessage());
+        } catch (StarRocksException waitFailure) {
+            LOG.warn("Pre-split awaitFinished failed for table {}; "
+                            + "INSERT will proceed without abort against the currently visible layout: {}",
+                    olapTable.getName(), waitFailure.getMessage());
+        }
     }
 
     /**

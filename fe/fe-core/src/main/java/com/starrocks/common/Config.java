@@ -4451,9 +4451,14 @@ public class Config extends ConfigBase {
     public static long tablet_pre_split_pre_submit_timeout_seconds = 30L;
 
     @ConfField(mutable = true, comment = "Maximum time the coordinator will wait for an admitted "
-            + "Sample-Based Tablet Pre-Split reshard job to reach FINISHED. On expiry the "
-            + "coordinator throws PreSplitPostSubmitTimeoutException and the load transaction "
-            + "aborts cleanly — committing against stale tablet metadata is unsafe.")
+            + "Sample-Based Tablet Pre-Split reshard job to reach FINISHED. Semantics differ by "
+            + "load path: INSERT-from-FILES synchronously waits and on expiry proceeds without "
+            + "abort — the INSERT then plans against the currently visible tablet layout (still "
+            + "the original layout if the daemon has not yet transitioned, or partially / fully "
+            + "post-split if the daemon raced past the wait), and the hard-cap counter records "
+            + "the timeout; the strict runPreSplit wrapper used by tests aborts the calling load "
+            + "via PreSplitPostSubmitTimeoutException; Broker Load is fire-and-forget and does "
+            + "not wait at all.")
     public static long tablet_pre_split_post_submit_wait_seconds = 300L;
 
     @ConfField(mutable = true, comment = "Soft byte cap on the FE-side accumulation buffer of the "

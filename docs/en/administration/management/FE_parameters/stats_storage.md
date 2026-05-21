@@ -595,7 +595,7 @@ This topic introduces the following types of FE configurations:
 - Type: Long
 - Unit: Seconds
 - Is mutable: Yes
-- Description: Maximum time the coordinator will wait for an admitted Sample-Based Tablet Pre-Split reshard job to reach `FINISHED`. On expiry the coordinator throws `PreSplitPostSubmitTimeoutException` and the load transaction aborts cleanly — committing against stale tablet metadata is unsafe.
+- Description: Maximum time the coordinator will wait for an admitted Sample-Based Tablet Pre-Split reshard job to reach `FINISHED`. Semantics differ by load path: INSERT-from-FILES synchronously waits and on expiry **proceeds without abort** — the INSERT then plans against the currently visible tablet layout (still the original layout if the daemon hasn't transitioned, or partially / fully post-split if the daemon raced past the wait); the `tablet_pre_split_post_submit_hard_cap` counter records the timeout. The strict `runPreSplit` wrapper used by tests aborts the calling load via `PreSplitPostSubmitTimeoutException`. Broker Load is fire-and-forget and does not wait at all (the load never waits on the reshard daemon).
 - Introduced in: v4.1.0
 
 ### `tablet_pre_split_sample_byte_limit`

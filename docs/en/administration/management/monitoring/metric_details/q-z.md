@@ -701,19 +701,19 @@ All transaction metrics share the following labels:
 
 - Unit: ms
 - Type: Histogram
-- Description: Wall-clock time the coordinator spent awaiting `FINISHED` on the admitted Sample-Based Tablet Pre-Split reshard job. Only updated when the optional synchronous-await wrapper is used (today: test paths and any future synchronous integration); the production load path is fire-and-forget so this metric stays at zero.
+- Description: Wall-clock time the coordinator spent awaiting `FINISHED` on the admitted Sample-Based Tablet Pre-Split reshard job. Fires on the INSERT-from-FILES production path (the hook synchronously awaits FINISHED so the triggering INSERT plans against the post-split layout) and on the optional `runPreSplit` synchronous-await wrapper used by tests. The Broker Load production path is fire-and-forget and does not update this histogram.
 
 ## `starrocks_fe_tablet_pre_split_post_submit_hard_cap`
 
 - Unit: Count
 - Type: Cumulative
-- Description: Total Sample-Based Tablet Pre-Split post-submit hard-cap events. Incremented when an admitted reshard job did not reach `FINISHED` within `tablet_pre_split_post_submit_wait_seconds`. Only fires on the optional synchronous-await wrapper (today: test paths and any future synchronous integration); the production load path is fire-and-forget so this metric stays at zero.
+- Description: Total Sample-Based Tablet Pre-Split post-submit hard-cap events. Incremented when the admitted reshard job did not reach `FINISHED` within `tablet_pre_split_post_submit_wait_seconds`. Fires on the INSERT-from-FILES production path on timeout (the INSERT then proceeds without abort against the currently visible tablet layout — still the original layout if the daemon hasn't transitioned, or partially / fully post-split if the daemon raced past the wait. `tablet_pre_split_load_abort` is NOT incremented because the INSERT itself is not aborted) and on the `runPreSplit` synchronous-await wrapper. The Broker Load production path does not await and so does not update this counter.
 
 ## `starrocks_fe_tablet_pre_split_load_abort`
 
 - Unit: Count
 - Type: Cumulative
-- Description: Total load transactions aborted because Sample-Based Tablet Pre-Split could not confirm the admitted reshard job reached `FINISHED` in time. Sibling counter of `tablet_pre_split_post_submit_hard_cap`. Only fires on the optional synchronous-await wrapper; production loads never abort due to pre-split, so this metric stays at zero in production.
+- Description: Total load transactions aborted because Sample-Based Tablet Pre-Split could not confirm the admitted reshard job reached `FINISHED` in time. Sibling counter of `tablet_pre_split_post_submit_hard_cap`. Production load paths proceed without abort against the currently visible layout on post-submit timeout rather than abort, so this counter stays at zero in production today; it only fires when a caller uses the strict `runPreSplit` wrapper (tests, or a future caller that opts into abort-on-timeout).
 
 ## `starrocks_fe_tablet_max_compaction_score`
 
