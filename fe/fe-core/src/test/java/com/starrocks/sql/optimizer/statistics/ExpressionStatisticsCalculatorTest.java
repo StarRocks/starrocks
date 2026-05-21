@@ -46,6 +46,7 @@ import java.time.ZoneId;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.function.Function;
 
 import static com.starrocks.sql.optimizer.Utils.getLongFromDateTime;
@@ -1781,6 +1782,243 @@ public class ExpressionStatisticsCalculatorTest {
         Assertions.assertEquals(2, mcv.size());
         Assertions.assertEquals(100L + 200L, mcv.get("2024-01-01"));
         Assertions.assertEquals(50L, mcv.get("2024-02-01"));
+    }
+
+    @Test
+    public void testBinaryPredicateExpressionStatisticIsBoolean() {
+        ColumnRefOperator col1 = new ColumnRefOperator(0, VarcharType.VARCHAR, "col1", true);
+        Statistics statistics = Statistics.builder()
+                .setOutputRowCount(1000)
+                .addColumnStatistic(col1, ColumnStatistic.builder()
+                        .setMinValue(Double.NEGATIVE_INFINITY)
+                        .setMaxValue(Double.POSITIVE_INFINITY)
+                        .setNullsFraction(0.0)
+                        .setAverageRowSize(8)
+                        .setDistinctValuesCount(62)
+                        .setHistogram(new Histogram(Collections.emptyList(), Map.of("mcv1", 236L)))
+                        .build())
+                .build();
+
+        BinaryPredicateOperator predicate = new BinaryPredicateOperator(
+                BinaryType.EQ_FOR_NULL, col1, ConstantOperator.createVarchar("mcv1"));
+
+        ColumnStatistic predicateStatistic = ExpressionStatisticCalculator.calculate(predicate, statistics);
+
+        Assertions.assertEquals(0.0, predicateStatistic.getMinValue(), 0.001);
+        Assertions.assertEquals(1.0, predicateStatistic.getMaxValue(), 0.001);
+        Assertions.assertEquals(0.0, predicateStatistic.getNullsFraction(), 0.001);
+        Assertions.assertEquals(2.0, predicateStatistic.getDistinctValuesCount(), 0.001);
+        Assertions.assertNotNull(predicateStatistic.getHistogram());
+        Assertions.assertEquals(236L, predicateStatistic.getHistogram().getMCV().get("1"));
+        Assertions.assertEquals(764L, predicateStatistic.getHistogram().getMCV().get("0"));
+        Assertions.assertFalse(predicateStatistic.getHistogram().getMCV().containsKey("mcv1"));
+    }
+
+    @Test
+    public void testBinaryPredicateExpressionStatisticForAbsentMcvDoesNotPreserveSourceMcv() {
+        ColumnRefOperator col1 = new ColumnRefOperator(0, VarcharType.VARCHAR, "col1", true);
+        Statistics statistics = Statistics.builder()
+                .setOutputRowCount(1000)
+                .addColumnStatistic(col1, ColumnStatistic.builder()
+                        .setMinValue(Double.NEGATIVE_INFINITY)
+                        .setMaxValue(Double.POSITIVE_INFINITY)
+                        .setNullsFraction(0.0)
+                        .setAverageRowSize(8)
+                        .setDistinctValuesCount(62)
+                        .setHistogram(new Histogram(Collections.emptyList(), Map.of("mcv1", 236L)))
+                        .build())
+                .build();
+
+        BinaryPredicateOperator predicate = new BinaryPredicateOperator(
+                BinaryType.EQ_FOR_NULL, col1, ConstantOperator.createVarchar("const1"));
+
+        ColumnStatistic predicateStatistic = ExpressionStatisticCalculator.calculate(predicate, statistics);
+
+        assertBooleanPredicateStatistic(predicateStatistic);
+        assertOnlyBooleanMcvs(predicateStatistic, 1000L);
+        Assertions.assertTrue(predicateStatistic.getHistogram().getMCV().getOrDefault("0", 0L) >
+                predicateStatistic.getHistogram().getMCV().getOrDefault("1", 0L));
+        Assertions.assertFalse(predicateStatistic.getHistogram().getMCV().containsKey("mcv1"));
+        Assertions.assertFalse(predicateStatistic.getHistogram().getMCV().containsKey("const1"));
+    }
+
+    @Test
+    public void testConstantBinaryPredicateExpressionStatistic() {
+        Statistics statistics = Statistics.builder().setOutputRowCount(1000).build();
+
+        assertConstantBinaryPredicateStatistic(statistics,
+                new BinaryPredicateOperator(BinaryType.GT,
+                        ConstantOperator.createVarchar("season"), ConstantOperator.createVarchar("a.season")),
+                1.0, Map.of("1", 1000L));
+        assertConstantBinaryPredicateStatistic(statistics,
+                new BinaryPredicateOperator(BinaryType.LT,
+                        ConstantOperator.createVarchar("season"), ConstantOperator.createVarchar("a.season")),
+                0.0, Map.of("0", 1000L));
+        assertConstantBinaryPredicateStatistic(statistics,
+                new BinaryPredicateOperator(BinaryType.EQ_FOR_NULL,
+                        ConstantOperator.createNull(VarcharType.VARCHAR), ConstantOperator.createNull(VarcharType.VARCHAR)),
+                1.0, Map.of("1", 1000L));
+        assertConstantBinaryPredicateStatistic(statistics,
+                new BinaryPredicateOperator(BinaryType.EQ_FOR_NULL,
+                        ConstantOperator.createNull(VarcharType.VARCHAR), ConstantOperator.createVarchar("season")),
+                0.0, Map.of("0", 1000L));
+    }
+
+    @Test
+    public void testConstantBinaryPredicateExpressionStatisticWithRegularNull() {
+        Statistics statistics = Statistics.builder().setOutputRowCount(1000).build();
+        BinaryPredicateOperator predicate = new BinaryPredicateOperator(
+                BinaryType.EQ, ConstantOperator.createNull(VarcharType.VARCHAR), ConstantOperator.createVarchar("season"));
+
+        ColumnStatistic predicateStatistic = ExpressionStatisticCalculator.calculate(predicate, statistics);
+
+        Assertions.assertEquals(1.0, predicateStatistic.getNullsFraction(), 0.001);
+        Assertions.assertEquals(0.0, predicateStatistic.getDistinctValuesCount(), 0.001);
+        Assertions.assertNull(predicateStatistic.getHistogram());
+    }
+
+    @Test
+    public void testNullSafeBinaryPredicateExpressionStatisticForNullConstant() {
+        ColumnRefOperator col1 = new ColumnRefOperator(0, VarcharType.VARCHAR, "col1", true);
+        Statistics statistics = Statistics.builder()
+                .setOutputRowCount(1000)
+                .addColumnStatistic(col1, ColumnStatistic.builder()
+                        .setMinValue(Double.NEGATIVE_INFINITY)
+                        .setMaxValue(Double.POSITIVE_INFINITY)
+                        .setNullsFraction(0.25)
+                        .setAverageRowSize(8)
+                        .setDistinctValuesCount(62)
+                        .setHistogram(new Histogram(Collections.emptyList(), Map.of("mcv1", 236L)))
+                        .build())
+                .build();
+
+        BinaryPredicateOperator predicate = new BinaryPredicateOperator(
+                BinaryType.EQ_FOR_NULL, col1, ConstantOperator.createNull(VarcharType.VARCHAR));
+
+        ColumnStatistic predicateStatistic = ExpressionStatisticCalculator.calculate(predicate, statistics);
+
+        assertBooleanPredicateStatistic(predicateStatistic, 2.0, Map.of("1", 250L, "0", 750L));
+        Assertions.assertFalse(predicateStatistic.getHistogram().getMCV().containsKey("mcv1"));
+    }
+
+    @Test
+    public void testRegularEqWithNullableColumnHasNullFraction() {
+        ColumnRefOperator col1 = new ColumnRefOperator(0, VarcharType.VARCHAR, "col1", true);
+        Statistics statistics = Statistics.builder()
+                .setOutputRowCount(1000)
+                .addColumnStatistic(col1, ColumnStatistic.builder()
+                        .setMinValue(Double.NEGATIVE_INFINITY)
+                        .setMaxValue(Double.POSITIVE_INFINITY)
+                        .setNullsFraction(0.2)
+                        .setAverageRowSize(8)
+                        .setDistinctValuesCount(62)
+                        .setHistogram(new Histogram(Collections.emptyList(), Map.of("mcv1", 236L)))
+                        .build())
+                .build();
+
+        BinaryPredicateOperator predicate = new BinaryPredicateOperator(
+                BinaryType.EQ, col1, ConstantOperator.createVarchar("mcv1"));
+
+        ColumnStatistic predicateStatistic = ExpressionStatisticCalculator.calculate(predicate, statistics);
+        Map<String, Long> mcvs = predicateStatistic.getHistogram().getMCV();
+
+        Assertions.assertEquals(0.0, predicateStatistic.getMinValue(), 0.001);
+        Assertions.assertEquals(1.0, predicateStatistic.getMaxValue(), 0.001);
+        Assertions.assertEquals(236, mcvs.getOrDefault("1", 0L));
+        Assertions.assertEquals(564, mcvs.getOrDefault("0", 0L));
+
+    }
+
+    @Test
+    public void testLessThanWithNullableColumnHasNullFraction() {
+        ColumnRefOperator col = new ColumnRefOperator(0, IntegerType.INT, "x", true);
+        Statistics statistics = Statistics.builder()
+                .setOutputRowCount(1000)
+                .addColumnStatistic(col, ColumnStatistic.builder()
+                        .setMinValue(0)
+                        .setMaxValue(100)
+                        .setNullsFraction(0.1)
+                        .setAverageRowSize(4)
+                        .setDistinctValuesCount(100)
+                        .build())
+                .build();
+
+        BinaryPredicateOperator predicate = new BinaryPredicateOperator(
+                BinaryType.LT, col, ConstantOperator.createInt(50));
+
+        ColumnStatistic predicateStatistic = ExpressionStatisticCalculator.calculate(predicate, statistics);
+
+        Assertions.assertEquals(0.0, predicateStatistic.getMinValue(), 0.001);
+        Assertions.assertEquals(1.0, predicateStatistic.getMaxValue(), 0.001);
+        Assertions.assertEquals(0.1, predicateStatistic.getNullsFraction(), 0.001);
+
+        Map<String, Long> mcvs = predicateStatistic.getHistogram().getMCV();
+
+        assertOnlyBooleanMcvs(predicateStatistic, 900L);
+        Assertions.assertEquals(450, mcvs.getOrDefault("1", 0L));
+        Assertions.assertEquals(450, mcvs.getOrDefault("0", 0L));
+    }
+
+    @Test
+    public void testEqForNullWithNullableColumnHasZeroNullFraction() {
+        ColumnRefOperator col = new ColumnRefOperator(0, IntegerType.INT, "x", true);
+        Statistics statistics = Statistics.builder()
+                .setOutputRowCount(1000)
+                .addColumnStatistic(col, ColumnStatistic.builder()
+                        .setMinValue(0)
+                        .setMaxValue(100)
+                        .setNullsFraction(0.3)
+                        .setAverageRowSize(4)
+                        .setDistinctValuesCount(100)
+                        .build())
+                .build();
+
+        BinaryPredicateOperator predicate = new BinaryPredicateOperator(
+                BinaryType.EQ_FOR_NULL, col, ConstantOperator.createInt(50));
+
+        ColumnStatistic predicateStatistic = ExpressionStatisticCalculator.calculate(predicate, statistics);
+
+        Assertions.assertEquals(0.0, predicateStatistic.getMinValue(), 0.001);
+        Assertions.assertEquals(1.0, predicateStatistic.getMaxValue(), 0.001);
+        Assertions.assertEquals(0.0, predicateStatistic.getNullsFraction(), 0.001);
+        assertOnlyBooleanMcvs(predicateStatistic, 1000L);
+    }
+
+    private static void assertBooleanPredicateStatistic(ColumnStatistic predicateStatistic, double ndv,
+                                                        Map<String, Long> expectedMcvs) {
+        assertBooleanPredicateStatistic(predicateStatistic);
+        Assertions.assertEquals(ndv, predicateStatistic.getDistinctValuesCount(), 0.001);
+        Assertions.assertNotNull(predicateStatistic.getHistogram());
+        Assertions.assertEquals(expectedMcvs, predicateStatistic.getHistogram().getMCV());
+    }
+
+    private static void assertConstantBinaryPredicateStatistic(Statistics statistics,
+                                                               BinaryPredicateOperator predicate,
+                                                               double expectedValue,
+                                                               Map<String, Long> expectedMcvs) {
+        ColumnStatistic predicateStatistic = ExpressionStatisticCalculator.calculate(predicate, statistics);
+
+        Assertions.assertEquals(expectedValue, predicateStatistic.getMinValue(), 0.001);
+        Assertions.assertEquals(expectedValue, predicateStatistic.getMaxValue(), 0.001);
+        Assertions.assertEquals(0.0, predicateStatistic.getNullsFraction(), 0.001);
+        Assertions.assertEquals(1.0, predicateStatistic.getDistinctValuesCount(), 0.001);
+        Assertions.assertNotNull(predicateStatistic.getHistogram());
+        Assertions.assertEquals(expectedMcvs, predicateStatistic.getHistogram().getMCV());
+    }
+
+    private static void assertBooleanPredicateStatistic(ColumnStatistic predicateStatistic) {
+        Assertions.assertEquals(0.0, predicateStatistic.getMinValue(), 0.001);
+        Assertions.assertEquals(1.0, predicateStatistic.getMaxValue(), 0.001);
+        Assertions.assertEquals(0.0, predicateStatistic.getNullsFraction(), 0.001);
+        Assertions.assertNotNull(predicateStatistic.getHistogram());
+        Assertions.assertEquals(predicateStatistic.getHistogram().getMCV().size(),
+                predicateStatistic.getDistinctValuesCount(), 0.001);
+    }
+
+    private static void assertOnlyBooleanMcvs(ColumnStatistic predicateStatistic, long expectedRows) {
+        Map<String, Long> mcvs = predicateStatistic.getHistogram().getMCV();
+        Assertions.assertTrue(Set.of("0", "1").containsAll(mcvs.keySet()));
+        Assertions.assertEquals(expectedRows, mcvs.values().stream().mapToLong(Long::longValue).sum());
     }
 
 }

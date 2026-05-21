@@ -18,12 +18,14 @@ package com.starrocks.sql.optimizer.statistics;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.FunctionSet;
+import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.ast.expression.LargeIntLiteral;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.ConstantOperatorUtils;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.OperatorType;
+import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CaseWhenOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
@@ -35,6 +37,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorFunctions;
 import com.starrocks.sql.spm.SPMFunctions;
+import com.starrocks.type.BooleanType;
 import com.starrocks.type.Type;
 import com.starrocks.type.VarcharType;
 import org.apache.logging.log4j.LogManager;
@@ -142,7 +145,106 @@ public class ExpressionStatisticCalculator {
             }
             return builder.build();
         }
+        @Override
+        public ColumnStatistic visitBinaryPredicate(BinaryPredicateOperator operator, Void context) {
+            // Constant binary predicates can be introduced after the normal scalar constant-folding pass,
+            // for example `(SELECT 'season') > (SELECT 'a.season')` becomes `'season' > 'a.season'`
+            // when uncorrelated scalar subqueries are rewritten and merged into projections.
+            Optional<ConstantOperator> constantResult = evaluateConstantBinaryPredicate(operator);
+            if (constantResult.isPresent()) {
+                return constantResult.get().accept(this, context);
+            }
 
+            if (inputStatistics == null || Double.isNaN(inputStatistics.getOutputRowCount())) {
+                return ColumnStatistic.unknown();
+            }
+
+            Statistics predicateStatistics = PredicateStatisticsCalculator.statisticsCalculate(operator, inputStatistics);
+            if (predicateStatistics == null || Double.isNaN(predicateStatistics.getOutputRowCount())) {
+                return ColumnStatistic.unknown();
+            }
+
+            long inputRows = Math.max(1L, Math.round(inputStatistics.getOutputRowCount()));
+
+            // For non-null-safe predicates (=, <, >, <=, >=, !=), if either operand is NULL
+            // the result is NULL (SQL three-valued logic). Only <=> is guaranteed non-null.
+            long nullRows = 0;
+            double nullsFraction = 0.0;
+            if (operator.getBinaryType() != BinaryType.EQ_FOR_NULL) {
+                ColumnStatistic leftStat = operator.getChild(0).accept(this, context);
+                ColumnStatistic rightStat = operator.getChild(1).accept(this, context);
+                double leftNullFrac = leftStat.isUnknown() ? 0.0 : leftStat.getNullsFraction();
+                double rightNullFrac = rightStat.isUnknown() ? 0.0 : rightStat.getNullsFraction();
+                // Probability that at least one operand is NULL
+                nullsFraction = 1.0 - (1.0 - leftNullFrac) * (1.0 - rightNullFrac);
+                nullRows = Math.round(inputRows * nullsFraction);
+            }
+
+            long nonNullRows = Math.max(0L, inputRows - nullRows);
+            long nonNullTrueRows = Math.min(inputRows, Math.round(predicateStatistics.getOutputRowCount()));
+            long trueRows = Math.min(Math.max(0L, nonNullTrueRows), nonNullRows);
+            long falseRows = nonNullRows - trueRows;
+            Map<String, Long> mcvs = new HashMap<>();
+            if (trueRows > 0) {
+                ConstantOperator.createBoolean(true).castTo(VarcharType.VARCHAR)
+                        .ifPresent(trueOp -> mcvs.put(trueOp.toString(), trueRows));
+            }
+            if (falseRows > 0) {
+                ConstantOperator.createBoolean(false).castTo(VarcharType.VARCHAR)
+                        .ifPresent(falseOp -> mcvs.put(falseOp.toString(), falseRows));
+            }
+
+            ColumnStatistic.Builder builder = ColumnStatistic.builder()
+                    .setMinValue(0)
+                    .setMaxValue(1)
+                    .setNullsFraction(nullsFraction)
+                    .setAverageRowSize(operator.getType().getTypeSize())
+                    .setDistinctValuesCount(mcvs.size());
+
+            if (!mcvs.isEmpty()) {
+                builder.setHistogram(new Histogram(Collections.emptyList(), mcvs));
+            }
+
+            return builder.build();
+        }
+
+        private Optional<ConstantOperator> evaluateConstantBinaryPredicate(BinaryPredicateOperator operator) {
+            if (!operator.getChild(0).isConstantRef() || !operator.getChild(1).isConstantRef()) {
+                return Optional.empty();
+            }
+
+            ConstantOperator left = (ConstantOperator) operator.getChild(0);
+            ConstantOperator right = (ConstantOperator) operator.getChild(1);
+
+            if (operator.getBinaryType() != BinaryType.EQ_FOR_NULL && (left.isNull() || right.isNull())) {
+                return Optional.of(ConstantOperator.createNull(BooleanType.BOOLEAN));
+            }
+
+            switch (operator.getBinaryType()) {
+                case EQ:
+                    return Optional.of(ConstantOperator.createBoolean(left.compareTo(right) == 0));
+                case NE:
+                    return Optional.of(ConstantOperator.createBoolean(left.compareTo(right) != 0));
+                case EQ_FOR_NULL:
+                    if (left.isNull() && right.isNull()) {
+                        return Optional.of(ConstantOperator.createBoolean(true));
+                    } else if (!left.isNull() && !right.isNull()) {
+                        return Optional.of(ConstantOperator.createBoolean(left.compareTo(right) == 0));
+                    } else {
+                        return Optional.of(ConstantOperator.createBoolean(false));
+                    }
+                case GE:
+                    return Optional.of(ConstantOperator.createBoolean(left.compareTo(right) >= 0));
+                case GT:
+                    return Optional.of(ConstantOperator.createBoolean(left.compareTo(right) > 0));
+                case LE:
+                    return Optional.of(ConstantOperator.createBoolean(left.compareTo(right) <= 0));
+                case LT:
+                    return Optional.of(ConstantOperator.createBoolean(left.compareTo(right) < 0));
+                default:
+                    return Optional.empty();
+            }
+        }
         @Override
         public ColumnStatistic visitCaseWhenOperator(CaseWhenOperator caseWhenOperator, Void context) {
             // 1. compute children column statistics
@@ -180,6 +282,7 @@ public class ExpressionStatisticCalculator {
         @Override
         public ColumnStatistic visitIsNullPredicate(IsNullPredicateOperator operator, Void context) {
             final var inputStat = operator.getChild(0).accept(this, context);
+
 
             Map<String, Long> mcvs = new HashMap<>();
             if (!inputStat.isUnknown()) {
