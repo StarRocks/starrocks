@@ -38,7 +38,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 
-public class OpaHttpClient implements OpaPolicyClient {
+class OpaHttpClient implements OpaPolicyClient {
     private static final Logger LOG = LogManager.getLogger(OpaHttpClient.class);
     private static final MediaType JSON = MediaType.parse("application/json; charset=utf-8");
 
@@ -49,7 +49,7 @@ public class OpaHttpClient implements OpaPolicyClient {
     private final String columnMaskingUrl;
     private final String batchColumnMaskingUrl;
 
-    public OpaHttpClient() {
+    OpaHttpClient() {
         this(Config.opa_policy_url, Config.opa_row_filters_url, Config.opa_column_masking_url,
                 Config.opa_batch_column_masking_url, Config.opa_connect_timeout_ms, Config.opa_read_timeout_ms);
     }
