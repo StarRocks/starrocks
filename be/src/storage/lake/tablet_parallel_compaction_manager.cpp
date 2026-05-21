@@ -1308,6 +1308,9 @@ void TabletParallelCompactionManager::execute_subtask(int64_t tablet_id, int64_t
             int64_t enqueue_time = it->second.start_time;
             int64_t in_queue_time_sec = start_time > enqueue_time ? (start_time - enqueue_time) : 0;
             context->stats->in_queue_time_sec += in_queue_time_sec;
+            // Snapshot the subtask input footprint onto the context so list_tasks() can
+            // surface it consistently for both running and completed subtasks.
+            context->subtask_input_rowsets = static_cast<int64_t>(it->second.input_rowset_ids.size());
             // Store context pointer for real-time progress/status tracking
             it->second.context = context.get();
         }
@@ -1487,10 +1490,16 @@ void TabletParallelCompactionManager::list_tasks(std::vector<CompactionTaskInfo>
                 info.progress = 0;
             }
             info.status = Status::OK();
-            // Build profile with subtask-specific info
+            // Build profile combining CompactionTaskStats (from the running context, when
+            // available) with subtask-specific metadata. Falling back to a default-constructed
+            // stats object keeps the JSON schema stable when the context has not yet been linked.
+            CompactionTaskStats empty_stats;
+            const CompactionTaskStats* stats_ptr = &empty_stats;
+            if (subtask_info.context != nullptr && subtask_info.context->stats) {
+                stats_ptr = subtask_info.context->stats.get();
+            }
             info.profile =
-                    fmt::format(R"({{"subtask_id":{},"input_rowsets":{},"input_bytes":{},"is_parallel_subtask":true}})",
-                                subtask_id, subtask_info.input_rowset_ids.size(), subtask_info.input_bytes);
+                    stats_ptr->to_json_stats_with_subtask_metadata(subtask_id, subtask_info.input_rowset_ids.size());
         }
 
         // Add completed subtasks that haven't been cleaned up yet
@@ -1505,7 +1514,15 @@ void TabletParallelCompactionManager::list_tasks(std::vector<CompactionTaskInfo>
             info.finish_time = ctx->finish_time.load(std::memory_order_acquire);
             info.progress = ctx->progress.value();
             if (info.runs > 0 && ctx->stats) {
-                info.profile = ctx->stats->to_json_stats();
+                // Keep the PROFILE schema consistent with the running-subtasks branch above:
+                // emit subtask metadata alongside the stats whenever the context belongs to a
+                // parallel subtask.
+                if (ctx->subtask_id >= 0) {
+                    info.profile = ctx->stats->to_json_stats_with_subtask_metadata(
+                            ctx->subtask_id, static_cast<size_t>(ctx->subtask_input_rowsets));
+                } else {
+                    info.profile = ctx->stats->to_json_stats();
+                }
             }
             if (info.finish_time > 0) {
                 info.status = ctx->status;
@@ -2002,6 +2019,7 @@ void TabletParallelCompactionManager::execute_subtask_segment_range(int64_t tabl
             int64_t enqueue_time = it->second.start_time;
             int64_t in_queue_time_sec = start_time > enqueue_time ? (start_time - enqueue_time) : 0;
             context->stats->in_queue_time_sec += in_queue_time_sec;
+            context->subtask_input_rowsets = static_cast<int64_t>(it->second.input_rowset_ids.size());
             it->second.context = context.get();
         }
     }
