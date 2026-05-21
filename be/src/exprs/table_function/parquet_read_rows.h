@@ -25,7 +25,7 @@ namespace starrocks {
 // used as the right side of an implicit join with `_statistics_.rejected_records`:
 //
 //     SELECT ... FROM rejected_records r,
-//                     TABLE(parquet_read_rows(r.source_info)) p
+//                     parquet_read_rows(r.source_info) p
 //     WHERE r.format = 'parquet';
 //
 // `source_info` must carry `file`, `row_in_file`, `file_size`, and `file_mtime_ms`.

@@ -281,7 +281,7 @@ select cast(json_extract_string(p.raw_record, '$.id') as int),
                  else json_extract_string(p.raw_record, '$.val') end as int),
        json_extract_string(p.raw_record, '$.name')
 from _statistics_.rejected_records r,
-     table(parquet_read_rows(r.source_info)) p
+     parquet_read_rows(r.source_info) p
 where r.target_database='db_${uuid0}' and r.target_table='t' and r.format='parquet';
 
 select id, val, name from t order by id;
