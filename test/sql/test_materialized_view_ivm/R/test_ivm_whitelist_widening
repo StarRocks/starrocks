@@ -1,4 +1,4 @@
--- name: test_ivm_whitelist_widening @slow
+-- name: test_ivm_whitelist_widening
 -- Verifies the widened IVM aggregate-function whitelist:
 --   * MIN/MAX(VARCHAR) — enabled by #73095 (state_union accepts compatible string types)
 --   * AVG(DECIMAL)     — enabled by #73012 (preserve AggStateDesc on state_union)
@@ -95,7 +95,7 @@ AS SELECT k, dt, ARRAY_AGG(s_short ORDER BY k) AS arr_s
    FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1
    GROUP BY k, dt;
 -- result:
-E: (1064, 'Getting analyzing error. Detail message: Failed to rewrite the query for IVM: Getting analyzing error. Detail message: IVMAnalyzer does not support array_agg with argument types [VARCHAR(1073741824), INT]..')
+E: (1064, 'Getting analyzing error. Detail message: IVMAnalyzer does not support array_agg with argument types [VARCHAR(1073741824), INT].')
 -- !result
 CREATE MATERIALIZED VIEW mv_hll PARTITION BY dt
 REFRESH DEFERRED MANUAL
@@ -104,7 +104,7 @@ AS SELECT k, dt, HLL_UNION(HLL_HASH(s_short)) AS h
    FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1
    GROUP BY k, dt;
 -- result:
-E: (1064, 'Getting analyzing error. Detail message: Failed to rewrite the query for IVM: Getting analyzing error. Detail message: IVMAnalyzer does not support aggregate function: hll_union. Supported functions: [count, sum, avg, min, max, array_agg, bool_or, approx_count_distinct, ndv]..')
+E: (1064, 'Getting analyzing error. Detail message: IVMAnalyzer does not support aggregate function: hll_union. Supported functions: [count, sum, avg, min, max, array_agg, bool_or, approx_count_distinct, ndv].')
 -- !result
 CREATE MATERIALIZED VIEW mv_bmp PARTITION BY dt
 REFRESH DEFERRED MANUAL
@@ -113,7 +113,7 @@ AS SELECT k, dt, BITMAP_UNION(TO_BITMAP(k)) AS b
    FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1
    GROUP BY k, dt;
 -- result:
-E: (1064, 'Getting analyzing error. Detail message: Failed to rewrite the query for IVM: Getting analyzing error. Detail message: IVMAnalyzer does not support aggregate function: bitmap_agg. Supported functions: [count, sum, avg, min, max, array_agg, bool_or, approx_count_distinct, ndv]..')
+E: (1064, 'Getting analyzing error. Detail message: IVMAnalyzer does not support aggregate function: bitmap_agg. Supported functions: [count, sum, avg, min, max, array_agg, bool_or, approx_count_distinct, ndv].')
 -- !result
 drop database db_${uuid0} force;
 -- result:
