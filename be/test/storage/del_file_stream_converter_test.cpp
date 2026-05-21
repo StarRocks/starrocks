@@ -122,8 +122,8 @@ class DelFileStreamConverterTest : public ::testing::Test {};
 
 // Golden path: single INT PK, V1 source -> V2 target.
 TEST_F(DelFileStreamConverterTest, V1ToV2_SingleInt) {
-    check_v1_to_v2<int32_t>(TYPE_INT, {42, 100, -5, 0, std::numeric_limits<int32_t>::min(),
-                                       std::numeric_limits<int32_t>::max()});
+    check_v1_to_v2<int32_t>(TYPE_INT,
+                            {42, 100, -5, 0, std::numeric_limits<int32_t>::min(), std::numeric_limits<int32_t>::max()});
 }
 
 // Chunked append should produce the same output as a single-shot append.
@@ -133,8 +133,7 @@ TEST_F(DelFileStreamConverterTest, ChunkedAppend) {
 }
 
 TEST_F(DelFileStreamConverterTest, V1ToV2_SingleBigInt) {
-    check_v1_to_v2<int64_t>(TYPE_BIGINT,
-                             {123456789012LL, -42, 0, std::numeric_limits<int64_t>::max()});
+    check_v1_to_v2<int64_t>(TYPE_BIGINT, {123456789012LL, -42, 0, std::numeric_limits<int64_t>::max()});
 }
 
 // Declared input size shorter than what is appended -> Corruption on append (overflow guard).

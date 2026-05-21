@@ -457,9 +457,9 @@ Status ReplicationTxnManager::replicate_remote_snapshot(const TReplicateSnapshot
         pkey_schema_for_del = std::make_shared<Schema>(ChunkHelper::convert_schema(target_schema, pk_idxes));
     }
 
-    auto file_converters = build_file_converters(_tablet_manager, request, filename_map, column_unique_id_map,
-                                                  files_to_delete, pkey_schema_for_del, source_pk_encoding,
-                                                  target_pk_encoding);
+    auto file_converters =
+            build_file_converters(_tablet_manager, request, filename_map, column_unique_id_map, files_to_delete,
+                                  pkey_schema_for_del, source_pk_encoding, target_pk_encoding);
 
     RETURN_IF_ERROR(ReplicationUtils::download_remote_snapshot(
             src_snapshot_info.backend.host, src_snapshot_info.backend.http_port, request.src_token,
@@ -706,15 +706,14 @@ FileConverterCreatorFunc ReplicationTxnManager::build_file_converters(
         const TabletManager* tablet_manager, const TReplicateSnapshotRequest& request,
         const std::unordered_map<std::string, std::pair<std::string, FileEncryptionPair>>& filename_map,
         std::unordered_map<uint32_t, uint32_t>& column_unique_id_map, std::vector<std::string>& files_to_delete,
-        SchemaPtr pkey_schema, PrimaryKeyEncodingType source_pk_encoding,
-        PrimaryKeyEncodingType target_pk_encoding) {
-    const bool need_del_transcode = pkey_schema != nullptr && requires_v1_to_v2_del_transcode(
-                                                                      source_pk_encoding, target_pk_encoding,
-                                                                      *pkey_schema);
-    auto file_converters = [tablet_manager, request, filename_map, &column_unique_id_map, &files_to_delete,
-                            pkey_schema, source_pk_encoding, target_pk_encoding, need_del_transcode](
-                                   const std::string& file_name,
-                                   uint64_t file_size) -> StatusOr<std::unique_ptr<FileStreamConverter>> {
+        SchemaPtr pkey_schema, PrimaryKeyEncodingType source_pk_encoding, PrimaryKeyEncodingType target_pk_encoding) {
+    const bool need_del_transcode =
+            pkey_schema != nullptr &&
+            requires_v1_to_v2_del_transcode(source_pk_encoding, target_pk_encoding, *pkey_schema);
+    auto file_converters = [tablet_manager, request, filename_map, &column_unique_id_map, &files_to_delete, pkey_schema,
+                            source_pk_encoding, target_pk_encoding,
+                            need_del_transcode](const std::string& file_name,
+                                                uint64_t file_size) -> StatusOr<std::unique_ptr<FileStreamConverter>> {
         if (request.transaction_id < get_master_info().min_active_txn_id) {
             LOG(WARNING) << "Transaction is aborted, txn_id: " << request.transaction_id
                          << ", tablet_id: " << request.tablet_id << ", src_tablet_id: " << request.src_tablet_id

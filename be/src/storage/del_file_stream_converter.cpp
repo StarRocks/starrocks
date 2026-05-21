@@ -47,8 +47,7 @@ bool is_single_fixed_length_non_string_primary_key(const Schema& pkey_schema) {
 }
 
 bool is_single_fixed_length_non_string_primary_key(const TabletSchema& tablet_schema) {
-    return tablet_schema.num_key_columns() == 1 &&
-           is_fixed_length_non_string_pk_type(tablet_schema.column(0).type());
+    return tablet_schema.num_key_columns() == 1 && is_fixed_length_non_string_pk_type(tablet_schema.column(0).type());
 }
 
 bool requires_v1_to_v2_del_transcode(PrimaryKeyEncodingType source_encoding, PrimaryKeyEncodingType target_encoding,
