@@ -484,8 +484,7 @@ StatusOr<LoadSpillPipelineMergeTaskPtr> LoadChunkSpiller::generate_pipeline_merg
     return result_task;
 }
 
-bool LoadChunkSpiller::has_enough_for_pipeline_merge_task(size_t target_size,
-                                                          size_t memory_usage_per_merge) {
+bool LoadChunkSpiller::has_enough_for_pipeline_merge_task(size_t target_size, size_t memory_usage_per_merge) {
     std::lock_guard<std::mutex> lg(*_block_manager->block_container()->block_groups_mutex());
     auto& groups = _block_manager->block_container()->block_groups();
     if (groups.empty()) {

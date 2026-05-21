@@ -93,14 +93,13 @@ Status SpillMemTableSink::flush_chunk(const Chunk& chunk, starrocks::SegmentPB* 
         }
 
         if (_eager_mode_entered &&
-            _load_chunk_spiller->has_enough_for_pipeline_merge_task(
-                    config::load_spill_max_merge_bytes, config::load_spill_memory_usage_per_merge)) {
+            _load_chunk_spiller->has_enough_for_pipeline_merge_task(config::load_spill_max_merge_bytes,
+                                                                    config::load_spill_memory_usage_per_merge)) {
             // Generate ONE merge task eagerly (not all tasks). Pipeline execution generates
             // tasks incrementally as the merge pool drains; final_round=false means this merges
             // to intermediate blocks, not final tablet.
             LoadSpillPipelineMergeIterator task_iterator(_load_chunk_spiller.get(), _writer,
-                                                         _pipeline_merge_context->quit_flag(),
-                                                         false /* final_round */);
+                                                         _pipeline_merge_context->quit_flag(), false /* final_round */);
             task_iterator.init();
             if (task_iterator.has_more()) {
                 auto current_task = task_iterator.current_task();
