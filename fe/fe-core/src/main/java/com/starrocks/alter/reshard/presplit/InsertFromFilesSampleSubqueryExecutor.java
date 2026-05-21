@@ -22,14 +22,14 @@ import com.starrocks.thrift.TBrokerFileStatus;
 import java.util.List;
 
 /**
- * Production Tier 2 {@link SampleSubqueryExecutor} for the INSERT-from-FILES
+ * Production data-tier {@link SampleSubqueryExecutor} for the INSERT-from-FILES
  * path. Re-issues the load's original {@code FILES(...)} properties verbatim
  * via {@link FilesSampleSubqueryExecutor}'s shared scaffolding so the BE scan
  * covers the same files the load will scan.
  */
 final class InsertFromFilesSampleSubqueryExecutor extends FilesSampleSubqueryExecutor {
 
-    private static final String ERROR_PREFIX = "INSERT-from-FILES Tier 2 ";
+    private static final String ERROR_PREFIX = "INSERT-from-FILES data tier ";
 
     InsertFromFilesSampleSubqueryExecutor() {
         super(ERROR_PREFIX);

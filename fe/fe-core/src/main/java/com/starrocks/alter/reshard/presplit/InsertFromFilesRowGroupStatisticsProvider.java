@@ -25,7 +25,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Production Tier 1 {@link RowGroupStatisticsProvider} for the INSERT-from-FILES
+ * Production meta-tier {@link RowGroupStatisticsProvider} for the INSERT-from-FILES
  * load path. Enumerates the {@link TableFunctionTable}'s already-resolved file
  * list, opens each Parquet file's footer via
  * {@link ParquetRowGroupStatisticsReader}, and concatenates per-row-group
@@ -64,21 +64,21 @@ final class InsertFromFilesRowGroupStatisticsProvider implements RowGroupStatist
     }
 
     private static InsertFromFilesScanContext requireInsertFromFilesContext(SampleRequest request)
-            throws Tier1UnavailableException {
+            throws MetaTierUnavailableException {
         ScanContext scanContext = request.getScanContext();
         if (!(scanContext instanceof InsertFromFilesScanContext insertFromFilesContext)) {
-            throw new Tier1UnavailableException(
+            throw new MetaTierUnavailableException(
                     "InsertFromFilesRowGroupStatisticsProvider received a " + scanContext.getClass().getSimpleName()
                             + " — wire only the INSERT-from-FILES load kind here");
         }
         return insertFromFilesContext;
     }
 
-    private static void rejectNonParquetFormat(TableFunctionTable sourceTable) throws Tier1UnavailableException {
+    private static void rejectNonParquetFormat(TableFunctionTable sourceTable) throws MetaTierUnavailableException {
         String format = sourceTable.getFormat();
         if (format == null || !"parquet".equalsIgnoreCase(format)) {
-            throw new Tier1UnavailableException(
-                    "Tier 1 supports Parquet sources only; FILES() reported format \"" + format + "\"");
+            throw new MetaTierUnavailableException(
+                    "meta tier supports Parquet sources only; FILES() reported format \"" + format + "\"");
         }
     }
 }

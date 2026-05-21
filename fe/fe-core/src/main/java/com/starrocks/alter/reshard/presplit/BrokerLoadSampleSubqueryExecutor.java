@@ -30,7 +30,7 @@ import java.util.Locale;
 import java.util.Map;
 
 /**
- * Production Tier 2 {@link SampleSubqueryExecutor} for the Broker Load path.
+ * Production data-tier {@link SampleSubqueryExecutor} for the Broker Load path.
  * Translates the load's resolved {@link BrokerLoadScanContext} into a FILES
  * property map and delegates the SQL synthesis, BE invocation, and JSON
  * decode to {@link FilesSampleSubqueryExecutor}.
@@ -56,7 +56,7 @@ import java.util.Map;
  */
 final class BrokerLoadSampleSubqueryExecutor extends FilesSampleSubqueryExecutor {
 
-    private static final String ERROR_PREFIX = "Broker Load Tier 2 ";
+    private static final String ERROR_PREFIX = "Broker Load data tier ";
 
     BrokerLoadSampleSubqueryExecutor() {
         super(ERROR_PREFIX);
@@ -95,7 +95,7 @@ final class BrokerLoadSampleSubqueryExecutor extends FilesSampleSubqueryExecutor
         BrokerDesc brokerDesc = context.brokerDesc();
         if (brokerDesc == null) {
             // BrokerLoadJob's construction requires a BrokerDesc; surface as a
-            // clean Tier 2 failure rather than NPE if a future caller violates
+            // clean data tier failure rather than NPE if a future caller violates
             // that invariant.
             throw new StarRocksException(ERROR_PREFIX + "scan context is missing BrokerDesc");
         }
@@ -154,7 +154,7 @@ final class BrokerLoadSampleSubqueryExecutor extends FilesSampleSubqueryExecutor
             String declaredFormat = fileGroup.getFileFormat();
             if (declaredFormat == null) {
                 throw new StarRocksException(ERROR_PREFIX
-                        + "file group has no declared format (extension inference is not supported by Tier 2)");
+                        + "file group has no declared format (extension inference is not supported by data tier)");
             }
             String normalizedFormat = declaredFormat.toLowerCase(Locale.ROOT);
             if (sharedFormat == null) {

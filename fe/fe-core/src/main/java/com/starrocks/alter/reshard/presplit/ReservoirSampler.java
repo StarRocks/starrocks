@@ -25,7 +25,7 @@ import java.util.List;
 import java.util.Objects;
 
 /**
- * Tier 2 {@link Sampler}. Accumulates rows from a
+ * Data-tier {@link Sampler}. Accumulates rows from a
  * {@link SampleSubqueryExecutor} until the soft byte limit is hit. Unbiased
  * sampling is the executor's job — this class only handles FE-side
  * accumulation. The first row is always admitted so an unusually wide first

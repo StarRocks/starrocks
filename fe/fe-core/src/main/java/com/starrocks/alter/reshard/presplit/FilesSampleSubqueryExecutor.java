@@ -39,7 +39,7 @@ import java.util.Objects;
 import java.util.stream.Collectors;
 
 /**
- * Shared scaffolding for Tier 2 sample sub-query executors that translate the
+ * Shared scaffolding for data-tier sample sub-query executors that translate the
  * load's source into a {@code SELECT <sort_key> FROM FILES(...)} sub-query.
  * Subclasses provide a {@link Source} (FILES property map plus the load's
  * total input byte total and {@link ComputeResource}); everything else —
@@ -56,7 +56,7 @@ import java.util.stream.Collectors;
  */
 abstract class FilesSampleSubqueryExecutor implements SampleSubqueryExecutor {
 
-    private static final String EXECUTOR_NAME = "TabletPreSplitTier2FilesSubquery";
+    private static final String EXECUTOR_NAME = "TabletPreSplitDataTierFilesSubquery";
 
     private static final SimpleExecutor PRODUCTION_SIMPLE_EXECUTOR =
             new SimpleExecutor(EXECUTOR_NAME, TResultSinkType.HTTP_PROTOCAL);

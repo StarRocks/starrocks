@@ -27,7 +27,7 @@ import com.starrocks.catalog.Tuple;
  * whose footer carries no statistics, or null-only statistics, or
  * truncated string statistics — all conditions that
  * {@link ParquetMetadataSampler} surfaces as
- * {@link Tier1UnavailableException}.
+ * {@link MetaTierUnavailableException}.
  */
 public final class RowGroupStatistics {
     private final Tuple minTuple;
@@ -58,7 +58,7 @@ public final class RowGroupStatistics {
     /**
      * @return true when the source (e.g. Parquet) truncated this row group's
      *         string min/max for length, making the bounds unreliable for
-     *         quantile selection. Triggers Tier 1 fallback.
+     *         quantile selection. Triggers meta-tier fallback.
      */
     public boolean isTruncated() {
         return truncated;

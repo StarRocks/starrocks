@@ -604,16 +604,16 @@ This topic introduces the following types of FE configurations:
 - Type: Long
 - Unit: Bytes
 - Is mutable: Yes
-- Description: Soft byte cap on the FE-side accumulation buffer of the Tier 2 reservoir sampler used by Sample-Based Tablet Pre-Split. The sampler stops reading once accumulated values exceed this limit. The first row is always admitted so an oversize row still produces a non-empty sample.
+- Description: Soft byte cap on the FE-side accumulation buffer of the data-tier reservoir sampler used by Sample-Based Tablet Pre-Split. The sampler stops reading once accumulated values exceed this limit. The first row is always admitted so an oversize row still produces a non-empty sample.
 - Introduced in: v4.1.0
 
-### `tablet_pre_split_tier1_overlap_threshold`
+### `tablet_pre_split_meta_tier_overlap_threshold`
 
 - Default: 0.3
 - Type: Double
 - Unit: -
 - Is mutable: Yes
-- Description: Maximum overlap fraction tolerated when Sample-Based Tablet Pre-Split's Tier 1 (Parquet/ORC row-group metadata) computes boundaries. Above this threshold the cumulative-row count stops being monotone in sorted-min order so Tier 1 falls back to Tier 2 (row sampling).
+- Description: Maximum overlap fraction tolerated when Sample-Based Tablet Pre-Split's meta tier (Parquet/ORC row-group metadata) computes boundaries. Above this threshold the cumulative-row count stops being monotone in sorted-min order so meta tier falls back to data tier (row sampling).
 - Introduced in: v4.1.0
 
 #### Rolling back Sample-Based Tablet Pre-Split

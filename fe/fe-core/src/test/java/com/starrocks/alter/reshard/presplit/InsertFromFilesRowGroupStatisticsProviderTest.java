@@ -85,7 +85,7 @@ class InsertFromFilesRowGroupStatisticsProviderTest {
     }
 
     @Test
-    void nonParquetFormatFallsBackToTier2() throws Exception {
+    void nonParquetFormatFallsBackToDataTier() throws Exception {
         TableFunctionTable csvSourceTable = mockTableFunctionTable("csv", Collections.emptyList());
         SampleRequest request = new SampleRequest(
                 new InsertFromFilesScanContext(csvSourceTable, Mockito.mock(ComputeResource.class)),
@@ -93,11 +93,11 @@ class InsertFromFilesRowGroupStatisticsProviderTest {
                 Long.MAX_VALUE,
                 /*seed=*/ 0L);
 
-        Assertions.assertThrows(Tier1UnavailableException.class, () -> provider.fetch(request));
+        Assertions.assertThrows(MetaTierUnavailableException.class, () -> provider.fetch(request));
     }
 
     @Test
-    void wrongScanContextTypeFallsBackToTier2() throws Exception {
+    void wrongScanContextTypeFallsBackToDataTier() throws Exception {
         SampleRequest request = new SampleRequest(
                 new BrokerLoadScanContext(
                         null, Collections.emptyList(), Collections.emptyList(),
@@ -106,7 +106,7 @@ class InsertFromFilesRowGroupStatisticsProviderTest {
                 Long.MAX_VALUE,
                 /*seed=*/ 0L);
 
-        Assertions.assertThrows(Tier1UnavailableException.class, () -> provider.fetch(request));
+        Assertions.assertThrows(MetaTierUnavailableException.class, () -> provider.fetch(request));
     }
 
     private Path writeBigintParquet(int rowCount, long valueOffset) throws IOException {

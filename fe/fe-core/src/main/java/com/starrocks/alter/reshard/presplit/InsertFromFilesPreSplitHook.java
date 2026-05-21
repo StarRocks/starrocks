@@ -85,8 +85,8 @@ import java.util.List;
  * columns. By-name INSERT mapping skips this check.
  *
  * <p>Sampler-executor selection is delegated to
- * {@link DefaultPreSplitPipeline#forLoadKind}: Tier 1 uses
- * {@link InsertFromFilesRowGroupStatisticsProvider}, Tier 2 uses
+ * {@link DefaultPreSplitPipeline#forLoadKind}: meta tier uses
+ * {@link InsertFromFilesRowGroupStatisticsProvider}, data tier uses
  * {@link InsertFromFilesSampleSubqueryExecutor}. The per-path Config flag
  * {@code enable_tablet_pre_split_for_insert_from_files} defaults to
  * {@code true} as of v4.1.0 (GA flip); set it to {@code false} to disable

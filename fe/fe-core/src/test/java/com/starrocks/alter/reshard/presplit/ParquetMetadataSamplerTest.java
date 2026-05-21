@@ -150,21 +150,21 @@ public class ParquetMetadataSamplerTest {
 
     @Test
     public void testSingleRowGroupWithRangeFallback() {
-        // A single row group spans 0..99 with 100 rows. Tier 1 can only emit row-group
+        // A single row group spans 0..99 with 100 rows. Meta tier can only emit row-group
         // minTuples and they all equal the global minimum → no useful cut. But the data
-        // has range, so Tier 2 (row sampling) might succeed → throw Tier1Unavailable so
+        // has range, so data tier (row sampling) might succeed → throw MetaTierUnavailable so
         // the coordinator retries.
         List<RowGroupStatistics> statistics = List.of(rowGroup(0, 99, 100));
         ParquetMetadataSampler sampler = new ParquetMetadataSampler(new FakeProvider(statistics));
 
-        Assertions.assertThrows(Tier1UnavailableException.class,
+        Assertions.assertThrows(MetaTierUnavailableException.class,
                 () -> sampler.tryPlan(singleColumnRequest(), 4));
     }
 
     @Test
     public void testAllEqualRangeIsNoSplit() throws Exception {
         // Row groups with min == max (all-equal data) → genuinely no useful split, even
-        // for Tier 2. Should return NO_SPLIT, not Tier1Unavailable.
+        // for data tier. Should return NO_SPLIT, not MetaTierUnavailable.
         List<RowGroupStatistics> statistics = List.of(rowGroup(42, 42, 50), rowGroup(42, 42, 50));
         ParquetMetadataSampler sampler = new ParquetMetadataSampler(new FakeProvider(statistics));
 
@@ -197,7 +197,7 @@ public class ParquetMetadataSamplerTest {
         SampleRequest request = new SampleRequest(
                 DUMMY_CONTEXT, List.of(bigintColumn("k"), varcharColumn("g")), 1024L, 0L);
 
-        Tier1UnavailableException exception = Assertions.assertThrows(Tier1UnavailableException.class,
+        MetaTierUnavailableException exception = Assertions.assertThrows(MetaTierUnavailableException.class,
                 () -> sampler.tryPlan(request, 4));
         Assertions.assertTrue(exception.getMessage().contains("composite sort key"),
                 "expected composite-key error, got: " + exception.getMessage());
@@ -208,7 +208,7 @@ public class ParquetMetadataSamplerTest {
         ParquetMetadataSampler sampler = new ParquetMetadataSampler(
                 new FakeProvider(List.of(rowGroup(0, 99, 100), rowGroupMissingMin(100))));
 
-        Tier1UnavailableException exception = Assertions.assertThrows(Tier1UnavailableException.class,
+        MetaTierUnavailableException exception = Assertions.assertThrows(MetaTierUnavailableException.class,
                 () -> sampler.tryPlan(singleColumnRequest(), 4));
         Assertions.assertTrue(exception.getMessage().contains("missing min/max"));
     }
@@ -218,7 +218,7 @@ public class ParquetMetadataSamplerTest {
         ParquetMetadataSampler sampler = new ParquetMetadataSampler(
                 new FakeProvider(List.of(rowGroup(0, 99, 100), rowGroupTruncated(100, 199, 100))));
 
-        Tier1UnavailableException exception = Assertions.assertThrows(Tier1UnavailableException.class,
+        MetaTierUnavailableException exception = Assertions.assertThrows(MetaTierUnavailableException.class,
                 () -> sampler.tryPlan(singleColumnRequest(), 4));
         Assertions.assertTrue(exception.getMessage().contains("truncated"));
     }
@@ -228,7 +228,7 @@ public class ParquetMetadataSamplerTest {
         ParquetMetadataSampler sampler = new ParquetMetadataSampler(
                 new FakeProvider(List.of(rowGroup(0, 99, 100), rowGroupAllNull(100))));
 
-        Tier1UnavailableException exception = Assertions.assertThrows(Tier1UnavailableException.class,
+        MetaTierUnavailableException exception = Assertions.assertThrows(MetaTierUnavailableException.class,
                 () -> sampler.tryPlan(singleColumnRequest(), 4));
         Assertions.assertTrue(exception.getMessage().contains("all-null"));
     }
@@ -243,7 +243,7 @@ public class ParquetMetadataSamplerTest {
                 rowGroup(150, 350, 100));
         ParquetMetadataSampler sampler = new ParquetMetadataSampler(new FakeProvider(statistics));
 
-        Tier1UnavailableException exception = Assertions.assertThrows(Tier1UnavailableException.class,
+        MetaTierUnavailableException exception = Assertions.assertThrows(MetaTierUnavailableException.class,
                 () -> sampler.tryPlan(singleColumnRequest(), 4));
         Assertions.assertTrue(exception.getMessage().contains("overlap"));
     }
@@ -257,9 +257,9 @@ public class ParquetMetadataSamplerTest {
 
         StarRocksException exception = Assertions.assertThrows(StarRocksException.class,
                 () -> sampler.tryPlan(singleColumnRequest(), 4));
-        // Not a Tier1UnavailableException — generic sampling failure; coordinator
-        // treats as "skip pre-split entirely", not "try Tier 2".
-        Assertions.assertFalse(exception instanceof Tier1UnavailableException);
+        // Not a MetaTierUnavailableException — generic sampling failure; coordinator
+        // treats as "skip pre-split entirely", not "try data tier".
+        Assertions.assertFalse(exception instanceof MetaTierUnavailableException);
         Assertions.assertEquals("connector unavailable", exception.getMessage());
     }
 
@@ -297,7 +297,7 @@ public class ParquetMetadataSamplerTest {
 
         StarRocksException exception = Assertions.assertThrows(StarRocksException.class,
                 () -> sampler.tryPlan(singleColumnRequest(), 4));
-        Assertions.assertFalse(exception instanceof Tier1UnavailableException);
+        Assertions.assertFalse(exception instanceof MetaTierUnavailableException);
         Assertions.assertTrue(exception.getMessage().contains("null"),
                 "expected null in message, got: " + exception.getMessage());
     }
@@ -315,7 +315,7 @@ public class ParquetMetadataSamplerTest {
                 rowGroup(70, 80, 100));
         ParquetMetadataSampler sampler = new ParquetMetadataSampler(new FakeProvider(statistics));
 
-        Tier1UnavailableException exception = Assertions.assertThrows(Tier1UnavailableException.class,
+        MetaTierUnavailableException exception = Assertions.assertThrows(MetaTierUnavailableException.class,
                 () -> sampler.tryPlan(singleColumnRequest(), 4));
         Assertions.assertTrue(exception.getMessage().contains("overlap"));
     }
@@ -323,11 +323,11 @@ public class ParquetMetadataSamplerTest {
     @Test
     public void testInvalidMinMaxOrderingFallback() {
         // minTuple > maxTuple is treated as unreliable footer statistics — same class
-        // as missing/truncated/all-null. Tier 2 (row sampling) can still try.
+        // as missing/truncated/all-null. Data tier (row sampling) can still try.
         RowGroupStatistics inverted = new RowGroupStatistics(bigintTuple(99), bigintTuple(0), 100, false);
         ParquetMetadataSampler sampler = new ParquetMetadataSampler(new FakeProvider(List.of(inverted)));
 
-        Tier1UnavailableException exception = Assertions.assertThrows(Tier1UnavailableException.class,
+        MetaTierUnavailableException exception = Assertions.assertThrows(MetaTierUnavailableException.class,
                 () -> sampler.tryPlan(singleColumnRequest(), 4));
         Assertions.assertTrue(exception.getMessage().contains("minTuple > maxTuple"),
                 "expected min>max error, got: " + exception.getMessage());
@@ -343,7 +343,7 @@ public class ParquetMetadataSamplerTest {
 
         StarRocksException exception = Assertions.assertThrows(StarRocksException.class,
                 () -> sampler.tryPlan(singleColumnRequest(), 4));
-        Assertions.assertFalse(exception instanceof Tier1UnavailableException);
+        Assertions.assertFalse(exception instanceof MetaTierUnavailableException);
         Assertions.assertTrue(exception.getMessage().contains("minTuple"),
                 "expected error to mention minTuple, got: " + exception.getMessage());
         Assertions.assertTrue(exception.getMessage().toLowerCase().contains("primitive type"),
@@ -361,7 +361,7 @@ public class ParquetMetadataSamplerTest {
 
         StarRocksException exception = Assertions.assertThrows(StarRocksException.class,
                 () -> sampler.tryPlan(singleColumnRequest(), 4));
-        Assertions.assertFalse(exception instanceof Tier1UnavailableException);
+        Assertions.assertFalse(exception instanceof MetaTierUnavailableException);
         Assertions.assertTrue(exception.getMessage().contains("maxTuple"),
                 "expected error to mention maxTuple, got: " + exception.getMessage());
     }

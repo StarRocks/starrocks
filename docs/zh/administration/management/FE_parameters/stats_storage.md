@@ -604,16 +604,16 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: Long
 - 单位: Bytes
 - 是否可变: Yes
-- 描述: 基于采样的 Tablet 预分裂 Tier 2 储水池采样器在 FE 端累积缓冲的软字节上限。累积值超过该上限后采样器停止读取。首行始终被接纳，超大单行仍会产生非空样本。
+- 描述: 基于采样的 Tablet 预分裂 data-tier 储水池采样器在 FE 端累积缓冲的软字节上限。累积值超过该上限后采样器停止读取。首行始终被接纳，超大单行仍会产生非空样本。
 - 引入版本: v4.1.0
 
-### `tablet_pre_split_tier1_overlap_threshold`
+### `tablet_pre_split_meta_tier_overlap_threshold`
 
 - 默认值: 0.3
 - 类型: Double
 - 单位: -
 - 是否可变: Yes
-- 描述: 基于采样的 Tablet 预分裂 Tier 1（Parquet/ORC row-group 元数据）计算边界时容忍的最大重叠率。超过该阈值时按最小值排序的累计行数将不再单调，Tier 1 会回退到 Tier 2（行采样）。
+- 描述: 基于采样的 Tablet 预分裂 meta tier（Parquet/ORC row-group 元数据）计算边界时容忍的最大重叠率。超过该阈值时按最小值排序的累计行数将不再单调，meta tier 会回退到 data tier（行采样）。
 - 引入版本: v4.1.0
 
 #### 回滚基于采样的 Tablet 预分裂

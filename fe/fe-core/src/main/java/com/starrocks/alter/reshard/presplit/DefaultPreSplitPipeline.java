@@ -43,8 +43,8 @@ import java.util.Optional;
  * and {@link TabletReshardJobMgr}. Constructor-injected dependencies keep the
  * class testable without static mocking.
  *
- * <p>Tier routing: Tier 1 ({@link ParquetMetadataSampler#tryPlan}) is invoked
- * first. {@link Tier1UnavailableException} switches the run to Tier 2
+ * <p>Tier routing: meta tier ({@link ParquetMetadataSampler#tryPlan}) is invoked
+ * first. {@link MetaTierUnavailableException} switches the run to data tier
  * ({@link ReservoirSampler#sample} + {@link BoundaryPlanner}). Any other
  * sampler throw propagates as {@link StarRocksException} and the coordinator
  * maps it to {@link SkipReason#SAMPLE_FAILED}.
@@ -65,20 +65,20 @@ public final class DefaultPreSplitPipeline implements PreSplitPipeline {
     static final Duration DEFAULT_POLL_INTERVAL = Duration.ofMillis(500);
 
     /**
-     * Metric label for a Tier 1 success path: boundaries computed from Parquet/ORC row-group
-     * statistics ({@code metadata}), no row data read.
+     * Metric label for a meta tier success path: boundaries computed from Parquet/ORC row-group
+     * statistics ({@code meta_tier}), no row data read.
      */
-    static final String TIER_LABEL_METADATA = "metadata";
+    static final String TIER_LABEL_META_TIER = "meta_tier";
 
     /**
-     * Metric label for a Tier 2 success path: boundaries computed from actual row samples
-     * ({@code data}) collected via a FILES sub-query. Covers both direct Tier 2 invocations
-     * and Tier 1 → Tier 2 fallbacks.
+     * Metric label for a data tier success path: boundaries computed from actual row samples
+     * ({@code data_tier}) collected via a FILES sub-query. Covers both direct data-tier invocations
+     * and meta-tier → data-tier fallbacks.
      */
-    static final String TIER_LABEL_DATA = "data";
+    static final String TIER_LABEL_DATA_TIER = "data_tier";
 
-    private final Tier1Sampler tier1Sampler;
-    private final Sampler tier2Sampler;
+    private final MetaTierSampler metaTierSampler;
+    private final Sampler dataTierSampler;
     private final TabletReshardJobMgr tabletReshardJobManager;
     private final Database database;
     private final OlapTable table;
@@ -88,8 +88,8 @@ public final class DefaultPreSplitPipeline implements PreSplitPipeline {
     private final Clock clock;
 
     public DefaultPreSplitPipeline(
-            Tier1Sampler tier1Sampler,
-            Sampler tier2Sampler,
+            MetaTierSampler metaTierSampler,
+            Sampler dataTierSampler,
             TabletReshardJobMgr tabletReshardJobManager,
             Database database,
             OlapTable table,
@@ -97,8 +97,8 @@ public final class DefaultPreSplitPipeline implements PreSplitPipeline {
             long fileTotalBytes,
             Duration pollInterval,
             Clock clock) {
-        this.tier1Sampler = Objects.requireNonNull(tier1Sampler, "tier1Sampler");
-        this.tier2Sampler = Objects.requireNonNull(tier2Sampler, "tier2Sampler");
+        this.metaTierSampler = Objects.requireNonNull(metaTierSampler, "metaTierSampler");
+        this.dataTierSampler = Objects.requireNonNull(dataTierSampler, "dataTierSampler");
         this.tabletReshardJobManager = Objects.requireNonNull(tabletReshardJobManager, "tabletReshardJobManager");
         this.database = Objects.requireNonNull(database, "database");
         this.table = Objects.requireNonNull(table, "table");
@@ -115,7 +115,7 @@ public final class DefaultPreSplitPipeline implements PreSplitPipeline {
      * Centralizes the construction so all hooks (D1 INSERT-from-FILES, D2
      * Broker Load, future callers) share the same plumbing.
      *
-     * <p>Tier 1 and Tier 2 are both production for both load kinds:
+     * <p>Meta tier and data tier are both production for both load kinds:
      * {@link InsertFromFilesRowGroupStatisticsProvider} +
      * {@link InsertFromFilesSampleSubqueryExecutor} for
      * {@link LoadKind#INSERT_FROM_FILES};
@@ -124,11 +124,11 @@ public final class DefaultPreSplitPipeline implements PreSplitPipeline {
      */
     public static DefaultPreSplitPipeline forLoadKind(
             Database database, OlapTable table, long oldTabletId, long fileTotalBytes, LoadKind loadKind) {
-        ParquetMetadataSampler tier1Sampler = new ParquetMetadataSampler(rowGroupStatisticsProviderFor(loadKind));
-        Sampler tier2Sampler = new ReservoirSampler(sampleSubqueryExecutorFor(loadKind));
+        ParquetMetadataSampler metaTierSampler = new ParquetMetadataSampler(rowGroupStatisticsProviderFor(loadKind));
+        Sampler dataTierSampler = new ReservoirSampler(sampleSubqueryExecutorFor(loadKind));
         TabletReshardJobMgr tabletReshardJobManager = GlobalStateMgr.getCurrentState().getTabletReshardJobMgr();
         return new DefaultPreSplitPipeline(
-                tier1Sampler::tryPlan, tier2Sampler, tabletReshardJobManager,
+                metaTierSampler::tryPlan, dataTierSampler, tabletReshardJobManager,
                 database, table, oldTabletId, fileTotalBytes,
                 DEFAULT_POLL_INTERVAL, Clock.systemUTC());
     }
@@ -212,36 +212,36 @@ public final class DefaultPreSplitPipeline implements PreSplitPipeline {
     }
 
     /**
-     * Try Tier 1 first; on {@link Tier1UnavailableException}, fall back to
-     * Tier 2 against the same deadline. The deadline is checked at phase
-     * boundaries — no in-flight sampler RPC is preempted.
+     * Try the meta tier first; on {@link MetaTierUnavailableException}, fall back
+     * to the data tier against the same deadline. The deadline is checked at
+     * phase boundaries — no in-flight sampler RPC is preempted.
      */
     private TierOutcome planBoundariesWithFallback(SampleRequest request, int requestedTabletCount, Instant deadline)
             throws PreSplitPreSubmitTimeoutException, StarRocksException {
         try {
-            return runTier1(request, requestedTabletCount, deadline);
-        } catch (Tier1UnavailableException tier1Unavailable) {
-            LOG.info("Sample-Based Tablet Pre-Split: Tier 1 unavailable for table {} — falling back to Tier 2: {}",
-                    table.getName(), tier1Unavailable.getMessage());
-            return runTier2(request, requestedTabletCount, deadline);
+            return runMetaTier(request, requestedTabletCount, deadline);
+        } catch (MetaTierUnavailableException metaTierUnavailable) {
+            LOG.info("Sample-Based Tablet Pre-Split: meta tier unavailable for table {} — falling back to data tier: {}",
+                    table.getName(), metaTierUnavailable.getMessage());
+            return runDataTier(request, requestedTabletCount, deadline);
         }
     }
 
-    private TierOutcome runTier1(SampleRequest request, int requestedTabletCount, Instant deadline)
+    private TierOutcome runMetaTier(SampleRequest request, int requestedTabletCount, Instant deadline)
             throws PreSplitPreSubmitTimeoutException, StarRocksException {
-        BoundaryPlannerResult result = tier1Sampler.tryPlan(request, requestedTabletCount);
+        BoundaryPlannerResult result = metaTierSampler.tryPlan(request, requestedTabletCount);
         checkDeadline(deadline);
-        return new TierOutcome(result, TIER_LABEL_METADATA);
+        return new TierOutcome(result, TIER_LABEL_META_TIER);
     }
 
-    private TierOutcome runTier2(SampleRequest request, int requestedTabletCount, Instant deadline)
+    private TierOutcome runDataTier(SampleRequest request, int requestedTabletCount, Instant deadline)
             throws PreSplitPreSubmitTimeoutException, StarRocksException {
         checkDeadline(deadline);
-        SampleSet sampleSet = tier2Sampler.sample(request);
+        SampleSet sampleSet = dataTierSampler.sample(request);
         checkDeadline(deadline);
         BoundaryPlannerResult result =
                 BoundaryPlanner.planRowQuantileBoundaries(sampleSet, requestedTabletCount, request.getSortKey());
-        return new TierOutcome(result, TIER_LABEL_DATA);
+        return new TierOutcome(result, TIER_LABEL_DATA_TIER);
     }
 
     /** Cuts {@code c1 < c2 < ... < c_{K-1}} → tablet ranges

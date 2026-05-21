@@ -41,8 +41,8 @@ import java.util.List;
  * wait against this same load txn.
  *
  * <p>Sampler-executor selection is delegated to
- * {@link DefaultPreSplitPipeline#forLoadKind}: Tier 1 uses
- * {@link BrokerLoadRowGroupStatisticsProvider}, Tier 2 uses
+ * {@link DefaultPreSplitPipeline#forLoadKind}: meta tier uses
+ * {@link BrokerLoadRowGroupStatisticsProvider}, data tier uses
  * {@link BrokerLoadSampleSubqueryExecutor}. The per-path Config flag
  * {@code enable_tablet_pre_split_for_broker_load} defaults to
  * {@code true} as of v4.1.0 (GA flip); set it to {@code false} to disable

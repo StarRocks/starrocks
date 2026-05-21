@@ -27,15 +27,15 @@ import java.util.List;
 import java.util.Objects;
 
 /**
- * Tier 1 boundary planner. Turns per-row-group {@code (minTuple, rowCount)}
+ * Meta-tier boundary planner. Turns per-row-group {@code (minTuple, rowCount)}
  * statistics into {@code requestedTabletCount - 1} row-quantile boundaries
  * directly, without materializing a row sample.
  *
  * <p>Restricted to single-column sort keys — per-column Parquet min/max
  * doesn't imply real composite lex-tuples. Throws
- * {@link Tier1UnavailableException} when statistics are
+ * {@link MetaTierUnavailableException} when statistics are
  * missing/all-null/truncated or row-group ranges overlap above
- * {@code overlapThreshold}; the caller then retries with Tier 2.
+ * {@code overlapThreshold}; the caller then retries with data tier.
  */
 public final class ParquetMetadataSampler {
 
@@ -56,8 +56,8 @@ public final class ParquetMetadataSampler {
     }
 
     /**
-     * @throws Tier1UnavailableException when Tier 1 cannot produce boundaries
-     *         with sufficient precision and the caller should fall back to Tier 2.
+     * @throws MetaTierUnavailableException when meta tier cannot produce boundaries
+     *         with sufficient precision and the caller should fall back to data tier.
      * @throws StarRocksException any other sampling failure (provider RPC error,
      *         provider contract violation, etc.) — coordinator treats as
      *         "skip pre-split".
@@ -88,12 +88,12 @@ public final class ParquetMetadataSampler {
 
     /**
      * Decide the final outcome from the placed cuts. Empty cuts plus a
-     * non-degenerate stats envelope signals "Tier 1 was too coarse" — Tier 2
+     * non-degenerate stats envelope signals "meta tier was too coarse" — data tier
      * (row sampling) may still find an interior boundary, so signal fallback.
      * Genuinely all-equal data returns {@link BoundaryPlannerResult#NO_SPLIT}.
      */
     private static BoundaryPlannerResult classifyResult(List<Tuple> cuts, List<RowGroupStatistics> sortedRowGroups)
-            throws Tier1UnavailableException {
+            throws MetaTierUnavailableException {
         if (!cuts.isEmpty()) {
             return new BoundaryPlannerResult(cuts);
         }
@@ -101,17 +101,17 @@ public final class ParquetMetadataSampler {
         boolean hasRange = sortedRowGroups.stream()
                 .anyMatch(rowGroup -> rowGroup.getMaxTuple().compareTo(globalMin) > 0);
         if (hasRange) {
-            throw new Tier1UnavailableException(
+            throw new MetaTierUnavailableException(
                     "row-group metadata too coarse to place row-quantile boundaries");
         }
         return BoundaryPlannerResult.NO_SPLIT;
     }
 
-    private static void rejectCompositeSortKey(SampleRequest request) throws Tier1UnavailableException {
+    private static void rejectCompositeSortKey(SampleRequest request) throws MetaTierUnavailableException {
         int arity = request.getSortKey().size();
         if (arity != 1) {
-            throw new Tier1UnavailableException(
-                    "composite sort key (arity " + arity + ") — Tier 1 supports single-column only");
+            throw new MetaTierUnavailableException(
+                    "composite sort key (arity " + arity + ") — meta tier supports single-column only");
         }
     }
 
@@ -130,16 +130,16 @@ public final class ParquetMetadataSampler {
                 continue;
             }
             if (rowGroup.getMinTuple() == null || rowGroup.getMaxTuple() == null) {
-                throw new Tier1UnavailableException(
+                throw new MetaTierUnavailableException(
                         "row group missing min/max statistics; rowCount=" + rowGroup.getRowCount());
             }
             if (rowGroup.isTruncated()) {
-                throw new Tier1UnavailableException(
+                throw new MetaTierUnavailableException(
                         "row group has truncated min/max statistics (Parquet string truncation); "
                                 + "ordering on truncated bounds is unreliable");
             }
             if (isAllNullTuple(rowGroup.getMinTuple()) || isAllNullTuple(rowGroup.getMaxTuple())) {
-                throw new Tier1UnavailableException("row group has all-null min/max statistics");
+                throw new MetaTierUnavailableException("row group has all-null min/max statistics");
             }
             BoundaryPlanner.validateTupleAgainstSchema(
                     rowGroup.getMinTuple(), sortKey, "Row group [" + index + "] minTuple");
@@ -147,8 +147,8 @@ public final class ParquetMetadataSampler {
                     rowGroup.getMaxTuple(), sortKey, "Row group [" + index + "] maxTuple");
             if (rowGroup.getMinTuple().compareTo(rowGroup.getMaxTuple()) > 0) {
                 // Treat unreliable bound ordering like other "footer stats are bad"
-                // signals — Tier 2 can still sample real rows.
-                throw new Tier1UnavailableException(
+                // signals — data tier can still sample real rows.
+                throw new MetaTierUnavailableException(
                         "Row group [" + index + "]: minTuple > maxTuple (unreliable footer statistics)");
             }
             usable.add(rowGroup);
@@ -164,7 +164,7 @@ public final class ParquetMetadataSampler {
      * overlaps).
      */
     private long checkOverlapAndSumRowCount(List<RowGroupStatistics> sortedRowGroups)
-            throws Tier1UnavailableException {
+            throws MetaTierUnavailableException {
         long totalRowCount = sortedRowGroups.get(0).getRowCount();
         Tuple maxSeen = sortedRowGroups.get(0).getMaxTuple();
         int overlappingPairCount = 0;
@@ -181,7 +181,7 @@ public final class ParquetMetadataSampler {
         if (sortedRowGroups.size() > 1) {
             double overlapFraction = (double) overlappingPairCount / (sortedRowGroups.size() - 1);
             if (overlapFraction > overlapThreshold) {
-                throw new Tier1UnavailableException(String.format(
+                throw new MetaTierUnavailableException(String.format(
                         "row-group overlap fraction %.3f > threshold %.3f", overlapFraction, overlapThreshold));
             }
         }

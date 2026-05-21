@@ -18,8 +18,8 @@ import java.util.List;
 import java.util.Objects;
 
 /**
- * Placeholder Tier 1 statistics provider: reports Tier 1 unavailable so the
- * pipeline falls through to Tier 2. The production implementation reads
+ * Placeholder meta-tier statistics provider: reports meta tier unavailable so the
+ * pipeline falls through to data tier. The production implementation reads
  * Parquet/ORC footers (via the connector for INSERT-from-FILES, via the
  * broker for Broker Load).
  */
@@ -32,8 +32,8 @@ final class PendingRowGroupStatisticsProvider implements RowGroupStatisticsProvi
     }
 
     @Override
-    public List<RowGroupStatistics> fetch(SampleRequest request) throws Tier1UnavailableException {
-        throw new Tier1UnavailableException(
+    public List<RowGroupStatistics> fetch(SampleRequest request) throws MetaTierUnavailableException {
+        throw new MetaTierUnavailableException(
                 "row-group statistics provider not yet wired for " + loadKind.displayName());
     }
 }

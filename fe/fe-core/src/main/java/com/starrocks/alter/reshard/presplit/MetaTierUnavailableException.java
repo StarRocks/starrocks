@@ -17,18 +17,14 @@ package com.starrocks.alter.reshard.presplit;
 import com.starrocks.common.StarRocksException;
 
 /**
- * Tier 1 path-planner contract used by {@link DefaultPreSplitPipeline}.
- * Concrete production impl is {@link ParquetMetadataSampler#tryPlan}; tests
- * supply a lambda. Decoupled from the (final) {@code ParquetMetadataSampler}
- * class so tests don't need an inline Mockito mock-maker.
+ * Signal raised by {@link ParquetMetadataSampler#tryPlan} that means
+ * "retry with data tier". Distinct from a plain {@link StarRocksException}
+ * thrown by meta tier, which means "sampling failed, skip pre-split".
  */
-@FunctionalInterface
-public interface Tier1Sampler {
+public final class MetaTierUnavailableException extends StarRocksException {
+    private static final long serialVersionUID = 1L;
 
-    /**
-     * @throws Tier1UnavailableException when the caller should retry with Tier 2.
-     * @throws StarRocksException any other failure — the pipeline maps it to
-     *         {@link SkipReason#SAMPLE_FAILED}.
-     */
-    BoundaryPlannerResult tryPlan(SampleRequest request, int requestedTabletCount) throws StarRocksException;
+    public MetaTierUnavailableException(String reason) {
+        super(reason);
+    }
 }

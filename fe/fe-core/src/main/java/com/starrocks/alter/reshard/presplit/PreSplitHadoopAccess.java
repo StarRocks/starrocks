@@ -23,7 +23,7 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * Shared Hadoop-side wiring for the Tier-1 row-group statistics providers
+ * Shared Hadoop-side wiring for the meta-tier row-group statistics providers
  * (one per load kind). Builds a Hadoop {@link Configuration} that disables
  * the per-scheme filesystem cache for every credentialed scheme StarRocks
  * exposes, and translates {@link TBrokerFileStatus} entries into Hadoop

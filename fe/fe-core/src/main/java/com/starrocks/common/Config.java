@@ -4457,16 +4457,16 @@ public class Config extends ConfigBase {
     public static long tablet_pre_split_post_submit_wait_seconds = 300L;
 
     @ConfField(mutable = true, comment = "Soft byte cap on the FE-side accumulation buffer of the "
-            + "Tier 2 reservoir sampler used by Sample-Based Tablet Pre-Split. The sampler stops "
+            + "data-tier reservoir sampler used by Sample-Based Tablet Pre-Split. The sampler stops "
             + "reading once accumulated values exceed this limit. The first row is always admitted "
             + "so an oversize row still produces a non-empty sample.")
     public static long tablet_pre_split_sample_byte_limit = 16L * 1024L * 1024L;
 
     @ConfField(mutable = true, comment = "Maximum overlap fraction tolerated when Sample-Based "
-            + "Tablet Pre-Split's Tier 1 (Parquet/ORC row-group metadata) computes boundaries. "
+            + "Tablet Pre-Split's meta tier (Parquet/ORC row-group metadata) computes boundaries. "
             + "Above this threshold the cumulative-row count stops being monotone in sorted-min "
-            + "order so Tier 1 falls back to Tier 2 (row sampling).")
-    public static double tablet_pre_split_tier1_overlap_threshold = 0.3;
+            + "order so meta tier falls back to data tier (row sampling).")
+    public static double tablet_pre_split_meta_tier_overlap_threshold = 0.3;
 
     /**
      * Whether to enable tracing historical nodes when cluster scale

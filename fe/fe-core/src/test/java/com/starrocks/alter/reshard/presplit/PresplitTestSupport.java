@@ -117,7 +117,7 @@ final class PresplitTestSupport {
 
     /**
      * Builds a {@link TResultBatch} carrying {@code rowJsons} as UTF-8 row
-     * buffers — matches the HTTP_PROTOCAL sink shape the Tier 2 executors
+     * buffers — matches the HTTP_PROTOCAL sink shape the data tier executors
      * decode in production.
      */
     static TResultBatch jsonResultBatch(String... rowJsons) {
@@ -153,7 +153,7 @@ final class PresplitTestSupport {
 
     /**
      * Write a small Parquet fixture into {@code tempDirectory} for tests that
-     * exercise the Tier-1 reader / provider. Tiny page/block sizes coax the
+     * exercise the meta-tier reader / provider. Tiny page/block sizes coax the
      * writer into emitting multiple row groups even at row counts well below
      * a normal block boundary.
      */

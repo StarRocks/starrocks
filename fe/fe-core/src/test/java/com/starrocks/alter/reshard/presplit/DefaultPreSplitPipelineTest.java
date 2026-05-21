@@ -86,21 +86,21 @@ public class DefaultPreSplitPipelineTest {
         Config.tablet_reshard_max_split_count = savedConfigMaxSplitCount;
     }
 
-    private DefaultPreSplitPipeline newPipeline(Tier1Sampler tier1Sampler, Sampler tier2Sampler, Clock clock) {
+    private DefaultPreSplitPipeline newPipeline(MetaTierSampler metaTierSampler, Sampler dataTierSampler, Clock clock) {
         return new DefaultPreSplitPipeline(
-                tier1Sampler, tier2Sampler, tabletReshardJobManager,
+                metaTierSampler, dataTierSampler, tabletReshardJobManager,
                 database, table, OLD_TABLET_ID, FILE_TOTAL_BYTES,
                 POLL_INTERVAL, clock);
     }
 
     @Test
-    public void testTier1ReturnsBoundariesProducesPreparedJobAndSkipsTier2() throws Exception {
-        BoundaryPlannerResult tier1Result = new BoundaryPlannerResult(List.of(bigintTuple(50)));
-        AtomicReference<SampleRequest> tier2CallCapture = new AtomicReference<>();
-        Tier1Sampler tier1 = (request, requestedTabletCount) -> tier1Result;
-        Sampler tier2 = request -> {
-            tier2CallCapture.set(request);
-            throw new StarRocksException("tier2 should not be called");
+    public void testMetaTierReturnsBoundariesProducesPreparedJobAndSkipsDataTier() throws Exception {
+        BoundaryPlannerResult metaTierResult = new BoundaryPlannerResult(List.of(bigintTuple(50)));
+        AtomicReference<SampleRequest> dataTierCallCapture = new AtomicReference<>();
+        MetaTierSampler metaTier = (request, requestedTabletCount) -> metaTierResult;
+        Sampler dataTier = request -> {
+            dataTierCallCapture.set(request);
+            throw new StarRocksException("dataTier should not be called");
         };
 
         TabletReshardJob fakeJob = mock(TabletReshardJob.class);
@@ -108,22 +108,22 @@ public class DefaultPreSplitPipelineTest {
             mocked.when(() -> SplitTabletJobFactory.forExternalBoundaries(eq(database), eq(table), eq(OLD_TABLET_ID), any()))
                     .thenReturn(fakeJob);
 
-            DefaultPreSplitPipeline pipeline = newPipeline(tier1, tier2, Clock.systemUTC());
+            DefaultPreSplitPipeline pipeline = newPipeline(metaTier, dataTier, Clock.systemUTC());
             Optional<PreSplitPipeline.PreparedReshardJob> prepared =
                     pipeline.preSubmit(sampleRequest, ACTIVE_COMPUTE_NODES, PRE_SUBMIT_TIMEOUT);
 
             Assertions.assertTrue(prepared.isPresent());
             Assertions.assertSame(fakeJob, prepared.get().payload());
-            Assertions.assertNull(tier2CallCapture.get(), "Tier 2 must not be invoked when Tier 1 succeeds");
+            Assertions.assertNull(dataTierCallCapture.get(), "data tier must not be invoked when meta tier succeeds");
         }
     }
 
     @Test
-    public void testTier1UnavailableFallsBackToTier2() throws Exception {
-        Tier1Sampler tier1 = (request, requestedTabletCount) -> {
-            throw new Tier1UnavailableException("test: row-group statistics overlap");
+    public void testMetaTierUnavailableFallsBackToDataTier() throws Exception {
+        MetaTierSampler metaTier = (request, requestedTabletCount) -> {
+            throw new MetaTierUnavailableException("test: row-group statistics overlap");
         };
-        Sampler tier2 = request -> new SampleSet(
+        Sampler dataTier = request -> new SampleSet(
                 List.of(bigintTuple(10), bigintTuple(20), bigintTuple(30), bigintTuple(40)),
                 new Estimates(FILE_TOTAL_BYTES, 4L));
 
@@ -132,7 +132,7 @@ public class DefaultPreSplitPipelineTest {
             mocked.when(() -> SplitTabletJobFactory.forExternalBoundaries(any(), any(), eq(OLD_TABLET_ID), any()))
                     .thenReturn(fakeJob);
 
-            DefaultPreSplitPipeline pipeline = newPipeline(tier1, tier2, Clock.systemUTC());
+            DefaultPreSplitPipeline pipeline = newPipeline(metaTier, dataTier, Clock.systemUTC());
             Optional<PreSplitPipeline.PreparedReshardJob> prepared =
                     pipeline.preSubmit(sampleRequest, ACTIVE_COMPUTE_NODES, PRE_SUBMIT_TIMEOUT);
 
@@ -141,14 +141,14 @@ public class DefaultPreSplitPipelineTest {
     }
 
     @Test
-    public void testTier1NoSplitShortCircuitsBeforeFactory() throws Exception {
-        Tier1Sampler tier1 = (request, requestedTabletCount) -> BoundaryPlannerResult.NO_SPLIT;
-        Sampler tier2 = request -> {
-            throw new AssertionError("tier 2 must not be invoked when tier 1 returns NO_SPLIT");
+    public void testMetaTierNoSplitShortCircuitsBeforeFactory() throws Exception {
+        MetaTierSampler metaTier = (request, requestedTabletCount) -> BoundaryPlannerResult.NO_SPLIT;
+        Sampler dataTier = request -> {
+            throw new AssertionError("data tier must not be invoked when meta tier returns NO_SPLIT");
         };
 
         try (MockedStatic<SplitTabletJobFactory> mocked = Mockito.mockStatic(SplitTabletJobFactory.class)) {
-            DefaultPreSplitPipeline pipeline = newPipeline(tier1, tier2, Clock.systemUTC());
+            DefaultPreSplitPipeline pipeline = newPipeline(metaTier, dataTier, Clock.systemUTC());
             Optional<PreSplitPipeline.PreparedReshardJob> prepared =
                     pipeline.preSubmit(sampleRequest, ACTIVE_COMPUTE_NODES, PRE_SUBMIT_TIMEOUT);
 
@@ -158,15 +158,15 @@ public class DefaultPreSplitPipelineTest {
     }
 
     @Test
-    public void testTier2NoSplitShortCircuitsBeforeFactory() throws Exception {
-        Tier1Sampler tier1 = (request, requestedTabletCount) -> {
-            throw new Tier1UnavailableException("test: composite sort key");
+    public void testDataTierNoSplitShortCircuitsBeforeFactory() throws Exception {
+        MetaTierSampler metaTier = (request, requestedTabletCount) -> {
+            throw new MetaTierUnavailableException("test: composite sort key");
         };
         // Empty sample set produces NO_SPLIT in BoundaryPlanner.planRowQuantileBoundaries.
-        Sampler tier2 = request -> SampleSet.EMPTY;
+        Sampler dataTier = request -> SampleSet.EMPTY;
 
         try (MockedStatic<SplitTabletJobFactory> mocked = Mockito.mockStatic(SplitTabletJobFactory.class)) {
-            DefaultPreSplitPipeline pipeline = newPipeline(tier1, tier2, Clock.systemUTC());
+            DefaultPreSplitPipeline pipeline = newPipeline(metaTier, dataTier, Clock.systemUTC());
             Optional<PreSplitPipeline.PreparedReshardJob> prepared =
                     pipeline.preSubmit(sampleRequest, ACTIVE_COMPUTE_NODES, PRE_SUBMIT_TIMEOUT);
 
@@ -176,15 +176,15 @@ public class DefaultPreSplitPipelineTest {
     }
 
     @Test
-    public void testTier2FailurePropagatesAsSampleFailed() {
-        Tier1Sampler tier1 = (request, requestedTabletCount) -> {
-            throw new Tier1UnavailableException("test: stats missing");
+    public void testDataTierFailurePropagatesAsSampleFailed() {
+        MetaTierSampler metaTier = (request, requestedTabletCount) -> {
+            throw new MetaTierUnavailableException("test: stats missing");
         };
-        Sampler tier2 = request -> {
+        Sampler dataTier = request -> {
             throw new StarRocksException("simulated executor RPC failure");
         };
 
-        DefaultPreSplitPipeline pipeline = newPipeline(tier1, tier2, Clock.systemUTC());
+        DefaultPreSplitPipeline pipeline = newPipeline(metaTier, dataTier, Clock.systemUTC());
         StarRocksException thrown = Assertions.assertThrows(StarRocksException.class,
                 () -> pipeline.preSubmit(sampleRequest, ACTIVE_COMPUTE_NODES, PRE_SUBMIT_TIMEOUT));
         Assertions.assertTrue(thrown.getMessage().contains("simulated executor RPC failure"));
@@ -193,15 +193,15 @@ public class DefaultPreSplitPipelineTest {
     @Test
     public void testPreSubmitDeadlineElapsedBetweenTiersTriggersTimeout() {
         AdvanceableClock clock = new AdvanceableClock(Instant.parse("2026-01-01T00:00:00Z"));
-        Tier1Sampler tier1 = (request, requestedTabletCount) -> {
+        MetaTierSampler metaTier = (request, requestedTabletCount) -> {
             clock.advance(Duration.ofSeconds(31));
-            throw new Tier1UnavailableException("test: stale stats");
+            throw new MetaTierUnavailableException("test: stale stats");
         };
-        Sampler tier2 = request -> {
-            throw new AssertionError("tier 2 must not run after the deadline elapsed");
+        Sampler dataTier = request -> {
+            throw new AssertionError("data tier must not run after the deadline elapsed");
         };
 
-        DefaultPreSplitPipeline pipeline = newPipeline(tier1, tier2, clock);
+        DefaultPreSplitPipeline pipeline = newPipeline(metaTier, dataTier, clock);
         Assertions.assertThrows(PreSplitPreSubmitTimeoutException.class,
                 () -> pipeline.preSubmit(sampleRequest, ACTIVE_COMPUTE_NODES, Duration.ofSeconds(30)));
     }

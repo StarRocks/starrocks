@@ -21,8 +21,8 @@ import java.util.Optional;
 
 /**
  * Runtime collaborators the coordinator needs to actually run pre-split: a
- * sampler-and-planner (tier routing lives here — Tier 1 first when the sort
- * key has arity 1, Tier 2 on {@link Tier1UnavailableException}), the job
+ * sampler-and-planner (tier routing lives here — meta tier first when the sort
+ * key has arity 1, data tier on {@link MetaTierUnavailableException}), the job
  * factory + admission step, and the post-submit FINISHED wait.
  *
  * <p>Bundled into one interface so the integrating load path (D1 / D2) ships

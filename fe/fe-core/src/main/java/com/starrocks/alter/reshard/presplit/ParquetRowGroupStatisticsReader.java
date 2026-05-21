@@ -52,11 +52,11 @@ import java.util.Objects;
  *   <li>Unannotated Parquet INT32/INT64 → StarRocks TINYINT/SMALLINT/INT/BIGINT</li>
  *   <li>Unannotated Parquet BOOLEAN → StarRocks BOOLEAN</li>
  *   <li>Parquet BINARY with UTF8 (string) logical annotation → StarRocks CHAR/VARCHAR
- *       (always marked truncated → forces Tier 2 fallback for string sort keys)</li>
+ *       (always marked truncated → forces data-tier fallback for string sort keys)</li>
  * </ul>
  * Anything else (DATE, DECIMAL, UINT_*, TIMESTAMP, JSON, BSON, UUID, FLOAT, DOUBLE,
  * INT96, FIXED_LEN_BYTE_ARRAY, raw BINARY for VARBINARY) makes the reader throw
- * {@link Tier1UnavailableException} so the pipeline falls back to Tier 2 — not a
+ * {@link MetaTierUnavailableException} so the pipeline falls back to data tier — not a
  * load failure. Pure I/O failures surface as {@link StarRocksException}.
  */
 public final class ParquetRowGroupStatisticsReader {
@@ -89,7 +89,7 @@ public final class ParquetRowGroupStatisticsReader {
     }
 
     private static SortKeyLocation locateSortKeyColumn(MessageType schema, Column sortKeyColumn)
-            throws Tier1UnavailableException {
+            throws MetaTierUnavailableException {
         String columnName = sortKeyColumn.getName();
         int fieldIndex = -1;
         for (int i = 0; i < schema.getFieldCount(); i++) {
@@ -98,22 +98,22 @@ public final class ParquetRowGroupStatisticsReader {
             }
             // Parquet schemas allow case-distinct siblings (e.g. "id" and "ID"). StarRocks
             // column names are case-insensitive, so we cannot pick one silently — fall back
-            // to Tier 2 rather than risk projecting onto the wrong column.
+            // to data tier rather than risk projecting onto the wrong column.
             if (fieldIndex >= 0) {
-                throw new Tier1UnavailableException(String.format(
+                throw new MetaTierUnavailableException(String.format(
                         "Parquet schema has multiple case-variant matches for sort-key column \"%s\" "
                                 + "(at indexes %d and %d)", columnName, fieldIndex, i));
             }
             fieldIndex = i;
         }
         if (fieldIndex < 0) {
-            throw new Tier1UnavailableException(
+            throw new MetaTierUnavailableException(
                     "Parquet schema does not contain sort-key column \"" + columnName + "\"");
         }
         org.apache.parquet.schema.Type fieldType = schema.getType(fieldIndex);
         if (!fieldType.isPrimitive()) {
-            throw new Tier1UnavailableException(
-                    "sort-key column \"" + columnName + "\" is a group type; Tier 1 supports primitive scalars only");
+            throw new MetaTierUnavailableException(
+                    "sort-key column \"" + columnName + "\" is a group type; meta tier supports primitive scalars only");
         }
         PrimitiveTypeName parquetTypeName = fieldType.asPrimitiveType().getPrimitiveTypeName();
         LogicalTypeAnnotation logicalAnnotation = fieldType.getLogicalTypeAnnotation();
@@ -123,9 +123,9 @@ public final class ParquetRowGroupStatisticsReader {
     }
 
     /**
-     * Reject Parquet/StarRocks type pairings outside Tier 1's supported window
+     * Reject Parquet/StarRocks type pairings outside meta tier's supported window
      * eagerly, before iterating row groups. Anything outside the window means
-     * "fall back to Tier 2", not "fail the load". Logical annotations
+     * "fall back to data tier", not "fail the load". Logical annotations
      * (DATE, DECIMAL, UINT_*, TIMESTAMP, JSON, BSON, UUID, ...) change the
      * value's meaning and ordering and are deferred to a future commit; the
      * supported window here is the unannotated subset plus the UTF8 string
@@ -134,7 +134,7 @@ public final class ParquetRowGroupStatisticsReader {
     private static void rejectIncompatibleTypeMapping(
             PrimitiveTypeName parquetTypeName,
             LogicalTypeAnnotation logicalAnnotation,
-            Column sortKeyColumn) throws Tier1UnavailableException {
+            Column sortKeyColumn) throws MetaTierUnavailableException {
         PrimitiveType starRocksPrimitive = sortKeyColumn.getType().getPrimitiveType();
         boolean compatible = switch (parquetTypeName) {
             case INT32, INT64 -> logicalAnnotation == null
@@ -148,7 +148,7 @@ public final class ParquetRowGroupStatisticsReader {
             default -> false;
         };
         if (!compatible) {
-            throw new Tier1UnavailableException(String.format(
+            throw new MetaTierUnavailableException(String.format(
                     "Parquet %s%s cannot map to StarRocks %s for sort-key column \"%s\"",
                     parquetTypeName,
                     logicalAnnotation == null ? "" : " (" + logicalAnnotation + ")",
@@ -177,9 +177,9 @@ public final class ParquetRowGroupStatisticsReader {
             // Variant.of and its subclass constructors throw IllegalArgumentException
             // (e.g. unsupported type) or RuntimeException (e.g. BoolVariant on a
             // malformed literal) when a stat value cannot be represented. Translate
-            // to a Tier-1 fallback signal so the pipeline retries with Tier 2 rather
+            // to a meta-tier fallback signal so the pipeline retries with data tier rather
             // than aborting the load.
-            throw new Tier1UnavailableException(String.format(
+            throw new MetaTierUnavailableException(String.format(
                     "Parquet stats value not representable for sort-key column \"%s\": %s",
                     location.starRocksColumn.getName(), conversionFailure.getMessage()));
         }
@@ -187,7 +187,7 @@ public final class ParquetRowGroupStatisticsReader {
         // to 64 bytes). Truncation does not just inflate spurious overlap — it can also
         // hide real overlap when adjacent row groups share a long common prefix, which
         // the downstream overlap detector cannot recover. Mark binary stats as
-        // truncated unconditionally so the pipeline falls back to Tier 2 for string
+        // truncated unconditionally so the pipeline falls back to data tier for string
         // sort keys until column-index exactness flags are read explicitly. Numeric
         // and boolean stats are always exact and stay false.
         boolean truncated = location.parquetTypeName == PrimitiveTypeName.BINARY;

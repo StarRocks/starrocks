@@ -21,8 +21,8 @@ import java.util.Objects;
 
 /**
  * {@link ScanContext} concrete for the INSERT-from-FILES integration. The
- * sampler executors that consume this context (Tier 1 row-group statistics
- * provider, Tier 2 sub-query executor) build their own {@code FileScanNode}
+ * sampler executors that consume this context (meta-tier row-group statistics
+ * provider, data-tier sub-query executor) build their own {@code FileScanNode}
  * from the {@link TableFunctionTable} and the {@link ComputeResource}; the
  * pipeline itself does not introspect.
  *

@@ -83,7 +83,7 @@ class ParquetRowGroupStatisticsReaderTest {
         String globalMax = null;
         for (RowGroupStatistics rowGroup : rowGroupStatistics) {
             // Binary stats are conservatively marked truncated so string sort keys
-            // route through Tier 2 — see the class javadoc for rationale.
+            // route through data tier — see the class javadoc for rationale.
             Assertions.assertTrue(rowGroup.isTruncated());
             String minValue = rowGroup.getMinTuple().getValues().get(0).getStringValue();
             String maxValue = rowGroup.getMaxTuple().getValues().get(0).getStringValue();
@@ -96,7 +96,7 @@ class ParquetRowGroupStatisticsReaderTest {
     }
 
     @Test
-    void dateAnnotatedColumnFallsBackToTier2() throws Exception {
+    void dateAnnotatedColumnFallsBackToDataTier() throws Exception {
         // INT32+DATE is days-since-epoch; mapping its raw int32 stats into a BIGINT
         // sort-key column would produce nonsensical boundaries. Logical annotations
         // are deferred to a follow-up commit.
@@ -105,23 +105,23 @@ class ParquetRowGroupStatisticsReaderTest {
                 /*rowCount=*/ 3,
                 (group, rowIndex) -> group.append("event_day", rowIndex + 19000));
 
-        Assertions.assertThrows(Tier1UnavailableException.class, () ->
+        Assertions.assertThrows(MetaTierUnavailableException.class, () ->
                 ParquetRowGroupStatisticsReader.read(
                         statusOf(parquetPath), new Configuration(),
                         new Column("event_day", IntegerType.BIGINT)));
     }
 
     @Test
-    void unannotatedBinaryColumnFallsBackToTier2() throws Exception {
+    void unannotatedBinaryColumnFallsBackToDataTier() throws Exception {
         // Parquet BINARY without a UTF8/string annotation could hold arbitrary bytes;
-        // toStringUsingUTF8 would corrupt non-UTF8 data and change ordering. Tier 1
+        // toStringUsingUTF8 would corrupt non-UTF8 data and change ordering. Meta tier
         // only admits BINARY when the string annotation is explicit.
         Path parquetPath = writeParquet(
                 "message schema { required binary opaque_bytes; }",
                 /*rowCount=*/ 2,
                 (group, rowIndex) -> group.append("opaque_bytes", "value-" + rowIndex));
 
-        Assertions.assertThrows(Tier1UnavailableException.class, () ->
+        Assertions.assertThrows(MetaTierUnavailableException.class, () ->
                 ParquetRowGroupStatisticsReader.read(
                         statusOf(parquetPath), new Configuration(),
                         new Column("opaque_bytes", VarcharType.VARCHAR)));
@@ -157,49 +157,49 @@ class ParquetRowGroupStatisticsReaderTest {
     }
 
     @Test
-    void columnAbsentFromSchemaFallsBackToTier2() throws Exception {
+    void columnAbsentFromSchemaFallsBackToDataTier() throws Exception {
         Path parquetPath = writeParquet(
                 "message schema { required int64 other; }",
                 /*rowCount=*/ 3,
                 (group, rowIndex) -> group.append("other", (long) rowIndex));
 
-        Assertions.assertThrows(Tier1UnavailableException.class, () ->
+        Assertions.assertThrows(MetaTierUnavailableException.class, () ->
                 ParquetRowGroupStatisticsReader.read(
                         statusOf(parquetPath), new Configuration(),
                         new Column("missing_sort_key", IntegerType.BIGINT)));
     }
 
     @Test
-    void unsupportedParquetTypeFallsBackToTier2() throws Exception {
+    void unsupportedParquetTypeFallsBackToDataTier() throws Exception {
         Path parquetPath = writeParquet(
                 "message schema { required double payload; }",
                 /*rowCount=*/ 2,
                 (group, rowIndex) -> group.append("payload", rowIndex * 1.5));
 
-        // Even with a numeric StarRocks sort key, DOUBLE is outside the Tier-1
+        // Even with a numeric StarRocks sort key, DOUBLE is outside the meta-tier
         // mapping window — caller should fall through to reservoir sampling.
-        Assertions.assertThrows(Tier1UnavailableException.class, () ->
+        Assertions.assertThrows(MetaTierUnavailableException.class, () ->
                 ParquetRowGroupStatisticsReader.read(
                         statusOf(parquetPath), new Configuration(),
                         new Column("payload", IntegerType.BIGINT)));
     }
 
     @Test
-    void mismatchedStarRocksTypeFallsBackToTier2() throws Exception {
+    void mismatchedStarRocksTypeFallsBackToDataTier() throws Exception {
         Path parquetPath = writeParquet(
                 "message schema { required int32 region_id; }",
                 /*rowCount=*/ 2,
                 (group, rowIndex) -> group.append("region_id", rowIndex));
 
         // Parquet INT32 cannot route into a VARCHAR sort-key column.
-        Assertions.assertThrows(Tier1UnavailableException.class, () ->
+        Assertions.assertThrows(MetaTierUnavailableException.class, () ->
                 ParquetRowGroupStatisticsReader.read(
                         statusOf(parquetPath), new Configuration(),
                         new Column("region_id", VarcharType.VARCHAR)));
     }
 
     @Test
-    void caseVariantDuplicatesFallBackToTier2() throws Exception {
+    void caseVariantDuplicatesFallBackToDataTier() throws Exception {
         // Parquet's schema spec permits sibling fields that differ only in case;
         // StarRocks column names are case-insensitive, so the reader cannot pick
         // one silently. Both must be rejected as ambiguous.
@@ -211,23 +211,23 @@ class ParquetRowGroupStatisticsReaderTest {
                     group.append("SORT_KEY", (long) -rowIndex);
                 });
 
-        Assertions.assertThrows(Tier1UnavailableException.class, () ->
+        Assertions.assertThrows(MetaTierUnavailableException.class, () ->
                 ParquetRowGroupStatisticsReader.read(
                         statusOf(parquetPath), new Configuration(),
                         new Column("sort_key", IntegerType.BIGINT)));
     }
 
     @Test
-    void outOfRangeStatsValueFallsBackToTier2() throws Exception {
+    void outOfRangeStatsValueFallsBackToDataTier() throws Exception {
         // INT64 stats (260) outside StarRocks TINYINT range. IntVariant's
         // Preconditions.checkArgument fires, the reader's catch wraps it as
-        // Tier1UnavailableException so the pipeline retries with Tier 2.
+        // MetaTierUnavailableException so the pipeline retries with data tier.
         Path parquetPath = writeParquet(
                 "message schema { required int64 wide_value; }",
                 /*rowCount=*/ 2,
                 (group, rowIndex) -> group.append("wide_value", 260L + rowIndex));
 
-        Assertions.assertThrows(Tier1UnavailableException.class, () ->
+        Assertions.assertThrows(MetaTierUnavailableException.class, () ->
                 ParquetRowGroupStatisticsReader.read(
                         statusOf(parquetPath), new Configuration(),
                         new Column("wide_value", IntegerType.TINYINT)));

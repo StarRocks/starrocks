@@ -28,7 +28,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Production Tier 1 {@link RowGroupStatisticsProvider} for the Broker Load
+ * Production meta-tier {@link RowGroupStatisticsProvider} for the Broker Load
  * path. Mirrors {@link InsertFromFilesRowGroupStatisticsProvider} but
  * consumes the file-status snapshot the load already resolved (carried on
  * {@link BrokerLoadScanContext#fileStatusesPerGroup()}); re-globbing here
@@ -39,14 +39,14 @@ import java.util.List;
  * ({@link Load#getFormatType}): the file group's declared
  * {@code FileFormat} takes precedence; when absent we fall back to the
  * file-extension inference the load uses at scan time. Any non-Parquet
- * file makes the provider throw {@link Tier1UnavailableException} so the
- * pipeline falls back to Tier 2.
+ * file makes the provider throw {@link MetaTierUnavailableException} so the
+ * pipeline falls back to data tier.
  *
  * <p>Only direct HDFS-style loads (no broker) are supported today. When
  * {@code brokerDesc.hasBroker()} is true the real load reads through the
  * broker, whose filesystem and auth semantics may differ from the FE-local
  * Hadoop {@code FileSystem} this provider uses to read footers — we fall
- * back to Tier 2 rather than risk a credentialed-via-broker source that
+ * back to data tier rather than risk a credentialed-via-broker source that
  * FE-local access cannot reach. Routing footer reads through a
  * broker-backed seekable input is a deliberate follow-up.
  *
@@ -91,45 +91,45 @@ final class BrokerLoadRowGroupStatisticsProvider implements RowGroupStatisticsPr
     }
 
     private static BrokerLoadScanContext requireBrokerLoadContext(SampleRequest request)
-            throws Tier1UnavailableException {
+            throws MetaTierUnavailableException {
         ScanContext scanContext = request.getScanContext();
         if (!(scanContext instanceof BrokerLoadScanContext brokerLoadContext)) {
-            throw new Tier1UnavailableException(
+            throw new MetaTierUnavailableException(
                     "BrokerLoadRowGroupStatisticsProvider received a " + scanContext.getClass().getSimpleName()
                             + " — wire only the Broker Load load kind here");
         }
         return brokerLoadContext;
     }
 
-    private static void rejectIfBrokerBacked(BrokerDesc brokerDesc) throws Tier1UnavailableException {
+    private static void rejectIfBrokerBacked(BrokerDesc brokerDesc) throws MetaTierUnavailableException {
         if (brokerDesc.hasBroker()) {
-            throw new Tier1UnavailableException(
-                    "Broker-backed Broker Load is not yet supported by Tier 1 — FE-local Hadoop access "
-                            + "would not honor the broker's filesystem/auth; falling back to Tier 2");
+            throw new MetaTierUnavailableException(
+                    "Broker-backed Broker Load is not yet supported by meta tier — FE-local Hadoop access "
+                            + "would not honor the broker's filesystem/auth; falling back to data tier");
         }
     }
 
-    private static BrokerDesc requireBrokerDesc(BrokerLoadScanContext context) throws Tier1UnavailableException {
+    private static BrokerDesc requireBrokerDesc(BrokerLoadScanContext context) throws MetaTierUnavailableException {
         BrokerDesc brokerDesc = context.brokerDesc();
         if (brokerDesc == null) {
             // Broker Load always has a BrokerDesc in practice (BrokerLoadJob's
-            // construction requires it); we surface this as a Tier-1 fallback
+            // construction requires it); we surface this as a meta-tier fallback
             // rather than NPE if a future caller violates the invariant.
-            throw new Tier1UnavailableException(
+            throw new MetaTierUnavailableException(
                     "Broker Load pre-split sample request is missing BrokerDesc");
         }
         return brokerDesc;
     }
 
-    private static void rejectIfNotParquet(String declaredFormat, String filePath) throws Tier1UnavailableException {
+    private static void rejectIfNotParquet(String declaredFormat, String filePath) throws MetaTierUnavailableException {
         // Load.getFormatType matches Broker Load's own scan-time decision:
         // declared FileFormat wins; otherwise the file extension is consulted.
         // Both `*.parquet`-without-FORMAT-AS-PARQUET and explicit-Parquet groups
-        // route through Tier 1 here.
+        // route through meta tier here.
         TFileFormatType formatType = Load.getFormatType(declaredFormat, filePath);
         if (formatType != TFileFormatType.FORMAT_PARQUET) {
-            throw new Tier1UnavailableException(String.format(
-                    "Tier 1 supports Parquet sources only; Broker Load file \"%s\" resolved to format %s",
+            throw new MetaTierUnavailableException(String.format(
+                    "meta tier supports Parquet sources only; Broker Load file \"%s\" resolved to format %s",
                     filePath, formatType));
         }
     }

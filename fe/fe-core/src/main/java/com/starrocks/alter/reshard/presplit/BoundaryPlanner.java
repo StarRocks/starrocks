@@ -104,7 +104,7 @@ public final class BoundaryPlanner {
 
     /**
      * Validate a single tuple against the sort-key schema. Used by both the
-     * Tier-2 planner (sample tuples) and Tier 1 (row-group min/max tuples).
+     * data-tier planner (sample tuples) and meta tier (row-group min/max tuples).
      * The {@code tupleLabel} is prepended to every error message.
      */
     static void validateTupleAgainstSchema(Tuple tuple, List<Column> sortKey, String tupleLabel)

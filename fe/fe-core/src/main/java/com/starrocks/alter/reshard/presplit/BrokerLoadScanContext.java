@@ -24,14 +24,14 @@ import java.util.Objects;
 
 /**
  * {@link ScanContext} concrete for the Broker Load integration. The sampler
- * executors that consume this context (Tier 1 row-group statistics provider,
- * Tier 2 sub-query executor) build their own {@code FileScanNode} from the
+ * executors that consume this context (meta-tier row-group statistics provider,
+ * data-tier sub-query executor) build their own {@code FileScanNode} from the
  * {@link BrokerDesc}, the {@link BrokerFileGroup} list, and the
  * {@link ComputeResource}; the pipeline itself does not introspect.
  *
  * <p>{@code fileStatusesPerGroup} carries the file-status snapshot the load
- * pending task already resolved, parallel to {@link #fileGroups()}. Tier 1
- * reads exactly this snapshot rather than re-globbing — re-listing would
+ * pending task already resolved, parallel to {@link #fileGroups()}. The meta
+ * tier reads exactly this snapshot rather than re-globbing — re-listing would
  * race with the load's own enumeration and risk planning quantile cuts
  * from a different file set than the one actually loaded.
  *

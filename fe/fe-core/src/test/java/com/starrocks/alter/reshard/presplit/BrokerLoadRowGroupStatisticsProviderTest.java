@@ -89,10 +89,10 @@ class BrokerLoadRowGroupStatisticsProviderTest {
     }
 
     @Test
-    void declaredOrcFormatFallsBackToTier2() throws Exception {
+    void declaredOrcFormatFallsBackToDataTier() throws Exception {
         // ORC is in Load.getFormatType's explicit branch, so it overrides
         // the file-extension fallback. Sampling Parquet footers against ORC
-        // data is nonsensical, so route through Tier 2.
+        // data is nonsensical, so route through data tier.
         Path parquetPath = writeBigintParquet(/*rowCount=*/ 4, /*valueOffset=*/ 0L);
         BrokerFileGroup orcGroup = Mockito.mock(BrokerFileGroup.class);
         Mockito.when(orcGroup.getFileFormat()).thenReturn("orc");
@@ -100,14 +100,14 @@ class BrokerLoadRowGroupStatisticsProviderTest {
         SampleRequest request = bigintSampleRequest(
                 List.of(orcGroup), List.of(List.of(brokerFileStatus(parquetPath))));
 
-        Assertions.assertThrows(Tier1UnavailableException.class, () -> provider.fetch(request));
+        Assertions.assertThrows(MetaTierUnavailableException.class, () -> provider.fetch(request));
     }
 
     @Test
     void nullDeclaredFormatInfersParquetFromFileExtension() throws Exception {
         // Broker Load auto-detects format from the extension when FileFormat is
         // not declared. A .parquet file with a null-format group must still
-        // reach Tier 1 — the previous strict null rejection skipped it.
+        // reach meta tier — the previous strict null rejection skipped it.
         Path parquetPath = writeBigintParquet(/*rowCount=*/ 8, /*valueOffset=*/ 0L);
         BrokerFileGroup nullFormatGroup = Mockito.mock(BrokerFileGroup.class);
         Mockito.when(nullFormatGroup.getFileFormat()).thenReturn(null);
@@ -119,9 +119,9 @@ class BrokerLoadRowGroupStatisticsProviderTest {
     }
 
     @Test
-    void nonParquetExtensionWithNullFormatFallsBackToTier2() throws Exception {
+    void nonParquetExtensionWithNullFormatFallsBackToDataTier() throws Exception {
         // Mirror of the previous test: null format + non-parquet extension
-        // means Broker Load would have read CSV, so Tier 1 must defer.
+        // means Broker Load would have read CSV, so meta tier must defer.
         BrokerFileGroup nullFormatGroup = Mockito.mock(BrokerFileGroup.class);
         Mockito.when(nullFormatGroup.getFileFormat()).thenReturn(null);
         TBrokerFileStatus csvFileStatus = new TBrokerFileStatus(
@@ -130,11 +130,11 @@ class BrokerLoadRowGroupStatisticsProviderTest {
         SampleRequest request = bigintSampleRequest(
                 List.of(nullFormatGroup), List.of(List.of(csvFileStatus)));
 
-        Assertions.assertThrows(Tier1UnavailableException.class, () -> provider.fetch(request));
+        Assertions.assertThrows(MetaTierUnavailableException.class, () -> provider.fetch(request));
     }
 
     @Test
-    void wrongScanContextTypeFallsBackToTier2() throws Exception {
+    void wrongScanContextTypeFallsBackToDataTier() throws Exception {
         SampleRequest request = new SampleRequest(
                 new InsertFromFilesScanContext(
                         Mockito.mock(com.starrocks.catalog.TableFunctionTable.class),
@@ -143,13 +143,13 @@ class BrokerLoadRowGroupStatisticsProviderTest {
                 Long.MAX_VALUE,
                 /*seed=*/ 0L);
 
-        Assertions.assertThrows(Tier1UnavailableException.class, () -> provider.fetch(request));
+        Assertions.assertThrows(MetaTierUnavailableException.class, () -> provider.fetch(request));
     }
 
     @Test
-    void brokerBackedLoadFallsBackToTier2() throws Exception {
+    void brokerBackedLoadFallsBackToDataTier() throws Exception {
         // Broker-backed loads route IO through the broker; FE-local Hadoop
-        // access may use different filesystem/auth, so Tier 1 only handles
+        // access may use different filesystem/auth, so meta tier only handles
         // direct (no-broker) loads today. A future commit will route footer
         // reads through a broker-backed seekable input.
         Path parquetPath = writeBigintParquet(/*rowCount=*/ 4, /*valueOffset=*/ 0L);
@@ -167,11 +167,11 @@ class BrokerLoadRowGroupStatisticsProviderTest {
                 Long.MAX_VALUE,
                 /*seed=*/ 0L);
 
-        Assertions.assertThrows(Tier1UnavailableException.class, () -> provider.fetch(request));
+        Assertions.assertThrows(MetaTierUnavailableException.class, () -> provider.fetch(request));
     }
 
     @Test
-    void missingBrokerDescFallsBackToTier2() throws Exception {
+    void missingBrokerDescFallsBackToDataTier() throws Exception {
         SampleRequest request = new SampleRequest(
                 new BrokerLoadScanContext(
                         /*brokerDesc=*/ null,
@@ -182,7 +182,7 @@ class BrokerLoadRowGroupStatisticsProviderTest {
                 Long.MAX_VALUE,
                 /*seed=*/ 0L);
 
-        Assertions.assertThrows(Tier1UnavailableException.class, () -> provider.fetch(request));
+        Assertions.assertThrows(MetaTierUnavailableException.class, () -> provider.fetch(request));
     }
 
     private Path writeBigintParquet(int rowCount, long valueOffset) throws IOException {
