@@ -350,7 +350,7 @@ bool AggHashMapVariant::need_expand(size_t increasement) const {
     return visit([increasement](const auto& hash_map_with_key) {
         using HashMap = std::remove_reference_t<decltype(hash_map_with_key->hash_map)>;
         const size_t size = hash_map_with_key->hash_map.size() + increasement;
-        if constexpr (requires { HashMap::bucket_byte_size(); }) {
+        if constexpr (is_fixed_hash_map_v<HashMap>) {
             return size > HashMap::hash_table_size;
         }
         const size_t capacity = hash_map_with_key->hash_map.capacity();
@@ -369,7 +369,7 @@ size_t AggHashMapVariant::allocated_memory_usage(const MemPool* pool) const {
     return visit([pool](const auto& hash_map_with_key) {
         using HashMap = std::remove_reference_t<decltype(hash_map_with_key->hash_map)>;
         size_t hash_map_bytes;
-        if constexpr (requires { HashMap::bucket_byte_size(); }) {
+        if constexpr (is_fixed_hash_map_v<HashMap>) {
             // SmallFixedSizeHashMap pre-allocates a dense pointer array; the
             // SMALLINT path is ~512 KiB and must be reported as such, not as
             // sizeof(KeyType) * capacity.
@@ -455,7 +455,7 @@ bool AggHashSetVariant::need_expand(size_t increasement) const {
     return visit([increasement](const auto& hash_set_with_key) {
         using HashSet = std::remove_reference_t<decltype(hash_set_with_key->hash_set)>;
         const size_t size = hash_set_with_key->hash_set.size() + increasement;
-        if constexpr (requires { HashSet::bucket_byte_size(); }) {
+        if constexpr (is_fixed_hash_set_v<HashSet>) {
             return size > HashSet::hash_table_size;
         }
         const size_t capacity = hash_set_with_key->hash_set.capacity();
@@ -474,7 +474,7 @@ size_t AggHashSetVariant::allocated_memory_usage(const MemPool* pool) const {
     return visit([&](auto& hash_set_with_key) {
         using HashSet = std::remove_reference_t<decltype(hash_set_with_key->hash_set)>;
         size_t hash_set_bytes;
-        if constexpr (requires { HashSet::bucket_byte_size(); }) {
+        if constexpr (is_fixed_hash_set_v<HashSet>) {
             hash_set_bytes = HashSet::bucket_byte_size();
         } else {
             hash_set_bytes = sizeof(typename HashSet::key_type) * hash_set_with_key->hash_set.capacity();

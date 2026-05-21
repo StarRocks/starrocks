@@ -238,4 +238,22 @@ constexpr bool is_no_prefetch_set = no_prefetch_set<T>::value;
 template <class T>
 constexpr bool is_no_prefetch_map = no_prefetch_map<T>::value;
 
+template <typename T>
+struct is_fixed_hash_map : std::false_type {};
+
+template <typename KeyType, typename ValueType, PhmapSeed seed>
+struct is_fixed_hash_map<SmallFixedSizeHashMap<KeyType, ValueType, seed>> : std::true_type {};
+
+template <typename T>
+struct is_fixed_hash_set : std::false_type {};
+
+template <typename KeyType, PhmapSeed seed>
+struct is_fixed_hash_set<SmallFixedSizeHashSet<KeyType, seed>> : std::true_type {};
+
+template <class T>
+constexpr bool is_fixed_hash_map_v = is_fixed_hash_map<T>::value;
+
+template <class T>
+constexpr bool is_fixed_hash_set_v = is_fixed_hash_set<T>::value;
+
 } // namespace starrocks
