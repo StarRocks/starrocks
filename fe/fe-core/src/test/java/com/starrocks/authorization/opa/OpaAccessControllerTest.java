@@ -24,9 +24,11 @@ import com.starrocks.authorization.ObjectType;
 import com.starrocks.authorization.PEntryObject;
 import com.starrocks.authorization.PrivilegeType;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.TableName;
 import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.util.UUIDUtil;
+import com.starrocks.load.rejected.RejectedRecordsTable;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.ast.AstTraverser;
@@ -76,6 +78,7 @@ public class OpaAccessControllerTest {
                 "\"replication_num\" = \"1\",\n" +
                 "\"in_memory\" = \"false\"\n" +
                 ");");
+        starRocksAssert.withUser("alice");
     }
 
     @Test
@@ -207,6 +210,20 @@ public class OpaAccessControllerTest {
         Expr rowFilter = controller.getRowAccessPolicy(context(), new TableName("db", "tbl"));
 
         Assertions.assertTrue(rowFilter instanceof BinaryPredicate);
+    }
+
+    @Test
+    public void testRejectedRecordsRowAccessPolicyPrecedesOpa() {
+        FakeOpaPolicyClient client = new FakeOpaPolicyClient();
+        OpaAccessController controller = new OpaAccessController(client);
+
+        Expr rowFilter = controller.getRowAccessPolicy(context(), new TableName(
+                InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
+                RejectedRecordsTable.DATABASE_NAME,
+                RejectedRecordsTable.TABLE_NAME));
+
+        Assertions.assertNotNull(rowFilter);
+        Assertions.assertTrue(client.rowFilterRequests.isEmpty());
     }
 
     @Test

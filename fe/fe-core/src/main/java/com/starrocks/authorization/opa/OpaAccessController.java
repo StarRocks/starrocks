@@ -22,6 +22,7 @@ import com.starrocks.authorization.NativeAccessController;
 import com.starrocks.authorization.ObjectType;
 import com.starrocks.authorization.PEntryObject;
 import com.starrocks.authorization.PrivilegeType;
+import com.starrocks.authorization.RejectedRecordsRowAccessPolicy;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Function;
@@ -260,6 +261,10 @@ public class OpaAccessController extends ExternalAccessController implements Aut
 
     @Override
     public Expr getRowAccessPolicy(ConnectContext context, TableName tableName) {
+        if (RejectedRecordsRowAccessPolicy.matches(tableName)) {
+            return RejectedRecordsRowAccessPolicy.buildPolicy(context, tableName);
+        }
+
         List<String> filters = opaClient.getRowFilters(
                 OpaRequest.create(context, OpaRequest.OPERATION_GET_ROW_FILTERS, PrivilegeType.SELECT,
                         ObjectType.TABLE, OpaResource.table(tableName))).stream()
