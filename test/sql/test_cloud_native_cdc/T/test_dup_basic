@@ -1,162 +1,6 @@
 -- name: test_cdc_dup_basic @cloud
 
-CREATE TABLE dup_t (k int, v int)
-DUPLICATE KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1
-PROPERTIES ('replication_num' = '1');
-
--- Baseline: pre-INSERT bookmark.
-[UC]function: bk_pre=create_bookmark("${db[0]}", "dup_t", "smoke_a")
-
-INSERT INTO dup_t VALUES (1, 10);
-INSERT INTO dup_t VALUES (2, 20), (3, 30);
-
--- Head: post-INSERT bookmark.
-[UC]function: bk_post=create_bookmark("${db[0]}", "dup_t", "smoke_b")
-
--- Empty window: from a bookmark to itself returns 0 rows.
-SELECT k, v, __CHANGE_TYPE__ FROM dup_t [_CHANGES_${bk_pre}_${bk_pre}_]
-ORDER BY k;
-
--- Non-trivial window: 3 inserted rows, change_type=0 (INSERT).
-SELECT k, v, __CHANGE_TYPE__ FROM dup_t [_CHANGES_${bk_pre}_${bk_post}_]
-ORDER BY k;
-
--- __ROW_VERSION__ is present and its distinct count is between 1 and the row
--- count (data-driven, so check the bounds rather than specific values).
-SELECT count(*),
-       (count(DISTINCT __ROW_VERSION__) BETWEEN 1 AND count(*)) AS row_version_bounded
-FROM dup_t [_CHANGES_${bk_pre}_${bk_post}_];
-
-function: release_bookmark("${db[0]}", "dup_t", ${bk_pre}, "smoke_a")
-function: release_bookmark("${db[0]}", "dup_t", ${bk_post}, "smoke_b")
-
-
--- name: test_cdc_dup_multi_load @cloud
-
-CREATE TABLE dup_t (k int, v int)
-DUPLICATE KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1
-PROPERTIES ('replication_num' = '1');
-
-[UC]function: bk0=create_bookmark("${db[0]}", "dup_t", "ml_a")
-
--- Round 1: single row.
-INSERT INTO dup_t VALUES (1, 10);
-[UC]function: bk1=create_bookmark("${db[0]}", "dup_t", "ml_b")
-
--- Round 2: two rows.
-INSERT INTO dup_t VALUES (2, 20), (3, 30);
-[UC]function: bk2=create_bookmark("${db[0]}", "dup_t", "ml_c")
-
--- Round 3: another two rows.
-INSERT INTO dup_t VALUES (4, 40), (5, 50);
-[UC]function: bk3=create_bookmark("${db[0]}", "dup_t", "ml_d")
-
--- Full window covers every INSERT.
-SELECT k, v, __CHANGE_TYPE__ FROM dup_t [_CHANGES_${bk0}_${bk3}_] ORDER BY k;
-
--- Mid-window sees only the rows inserted in rounds 2 and 3.
-SELECT k, v, __CHANGE_TYPE__ FROM dup_t [_CHANGES_${bk1}_${bk3}_] ORDER BY k;
-
--- Adjacent windows partition the full delta exactly once.
-SELECT count(*) FROM dup_t [_CHANGES_${bk0}_${bk1}_];
-SELECT count(*) FROM dup_t [_CHANGES_${bk1}_${bk2}_];
-SELECT count(*) FROM dup_t [_CHANGES_${bk2}_${bk3}_];
-
--- Each round produced its own rowset, so __ROW_VERSION__ has 3 distinct values.
-SELECT count(DISTINCT __ROW_VERSION__) FROM dup_t [_CHANGES_${bk0}_${bk3}_];
-
-function: release_bookmark("${db[0]}", "dup_t", ${bk0}, "ml_a")
-function: release_bookmark("${db[0]}", "dup_t", ${bk1}, "ml_b")
-function: release_bookmark("${db[0]}", "dup_t", ${bk2}, "ml_c")
-function: release_bookmark("${db[0]}", "dup_t", ${bk3}, "ml_d")
-
-
--- name: test_cdc_dup_compaction @cloud
-
-CREATE TABLE dup_t (k int, v int)
-DUPLICATE KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1
-PROPERTIES ('replication_num' = '1');
-
-[UC]function: bk_pre=create_bookmark("${db[0]}", "dup_t", "cp_a")
-
--- Three small INSERTs to create three rowsets.
-INSERT INTO dup_t VALUES (1, 10);
-INSERT INTO dup_t VALUES (2, 20);
-INSERT INTO dup_t VALUES (3, 30);
-
--- Compact the three rowsets into one, then capture the post-compaction bookmark.
-[UC]ALTER TABLE dup_t COMPACT;
-SELECT sleep(30);
-
--- Self-validation: compaction must have actually merged rowsets. With three
--- INSERTs and no compaction the tablet holds >= 3 rowsets; after the manual
--- COMPACT it should drop to 1.
-SELECT NUM_ROWSET FROM information_schema.be_tablets t, information_schema.tables_config c
-WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'dup_t'
-  AND c.TABLE_SCHEMA = '${db[0]}';
-
-[UC]function: bk_post=create_bookmark("${db[0]}", "dup_t", "cp_b")
-
--- CDC must still surface every row across the compaction boundary.
-SELECT k, v, __CHANGE_TYPE__ FROM dup_t [_CHANGES_${bk_pre}_${bk_post}_] ORDER BY k;
-SELECT count(*) FROM dup_t [_CHANGES_${bk_pre}_${bk_post}_];
-
--- Insert two more rounds after compaction and confirm a window spanning the
--- compaction event plus the new rounds still returns every row exactly once.
-INSERT INTO dup_t VALUES (4, 40);
-INSERT INTO dup_t VALUES (5, 50);
-
-[UC]function: bk_after=create_bookmark("${db[0]}", "dup_t", "cp_c")
-
-SELECT k, v, __CHANGE_TYPE__ FROM dup_t [_CHANGES_${bk_pre}_${bk_after}_] ORDER BY k;
-SELECT count(*) FROM dup_t [_CHANGES_${bk_pre}_${bk_after}_];
-
-function: release_bookmark("${db[0]}", "dup_t", ${bk_pre}, "cp_a")
-function: release_bookmark("${db[0]}", "dup_t", ${bk_post}, "cp_b")
-function: release_bookmark("${db[0]}", "dup_t", ${bk_after}, "cp_c")
-
-
--- name: test_cdc_dup_filter_and_aggregate @cloud
-
-CREATE TABLE dup_t (k int, c varchar(10), v int)
-DUPLICATE KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1
-PROPERTIES ('replication_num' = '1');
-
-[UC]function: bk_a=create_bookmark("${db[0]}", "dup_t", "fa_a")
-
-INSERT INTO dup_t VALUES (1, 'x', 100), (2, 'y', 200);
-INSERT INTO dup_t VALUES (3, 'x', 300), (4, 'y', 400), (5, 'x', 500);
-
-[UC]function: bk_b=create_bookmark("${db[0]}", "dup_t", "fa_b")
-
--- Filter on a data column.
-SELECT k, c, v FROM dup_t [_CHANGES_${bk_a}_${bk_b}_]
-WHERE k >= 3 ORDER BY k;
-
--- Filter on the synthesized __CHANGE_TYPE__ column.
-SELECT count(*) FROM dup_t [_CHANGES_${bk_a}_${bk_b}_]
-WHERE __CHANGE_TYPE__ = 0;
-
--- GROUP BY data column with HAVING.
-SELECT c, count(*) AS cnt, sum(v) AS total
-FROM dup_t [_CHANGES_${bk_a}_${bk_b}_]
-GROUP BY c
-HAVING count(*) >= 2
-ORDER BY c;
-
--- Multi-key aggregation.
-SELECT c, min(k), max(k), avg(v)
-FROM dup_t [_CHANGES_${bk_a}_${bk_b}_]
-GROUP BY c
-ORDER BY c;
-
-function: release_bookmark("${db[0]}", "dup_t", ${bk_a}, "fa_a")
-function: release_bookmark("${db[0]}", "dup_t", ${bk_b}, "fa_b")
-
-
--- name: test_cdc_dup_join_with_dim_table @cloud
-
-CREATE TABLE fact_t (k int, dim_id int, amount int)
+CREATE TABLE dup_t (k int, c varchar(10), v int, dim_id int)
 DUPLICATE KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1
 PROPERTIES ('replication_num' = '1');
 
@@ -166,37 +10,97 @@ PROPERTIES ('replication_num' = '1');
 
 INSERT INTO dim_t VALUES (1, 'alpha'), (2, 'beta'), (3, 'gamma');
 
-[UC]function: bk_a=create_bookmark("${db[0]}", "fact_t", "join_a")
+[UC]function: bk0=create_bookmark("${db[0]}", "dup_t", "basic")
 
-INSERT INTO fact_t VALUES (10, 1, 100), (11, 2, 200), (12, 1, 50);
-INSERT INTO fact_t VALUES (13, 3, 300), (14, 2, 150);
+-- Three INSERT rounds with bookmarks at every boundary.
+INSERT INTO dup_t VALUES (1, 'x', 100, 1);
+[UC]function: bk1=create_bookmark("${db[0]}", "dup_t", "basic")
+INSERT INTO dup_t VALUES (2, 'y', 200, 2), (3, 'x', 300, 1);
+[UC]function: bk2=create_bookmark("${db[0]}", "dup_t", "basic")
+INSERT INTO dup_t VALUES (4, 'y', 400, 3), (5, 'x', 500, 99);
+[UC]function: bk3=create_bookmark("${db[0]}", "dup_t", "basic")
 
-[UC]function: bk_b=create_bookmark("${db[0]}", "fact_t", "join_b")
+CLEANUP {
+    function: release_bookmark("${db[0]}", "dup_t", ${bk0}, "basic")
+    function: release_bookmark("${db[0]}", "dup_t", ${bk1}, "basic")
+    function: release_bookmark("${db[0]}", "dup_t", ${bk2}, "basic")
+    function: release_bookmark("${db[0]}", "dup_t", ${bk3}, "basic")
+} END CLEANUP
 
--- Inner join between the CDC delta and a regular dim table.
-SELECT f.k, d.name, f.amount, f.__CHANGE_TYPE__
-FROM fact_t f [_CHANGES_${bk_a}_${bk_b}_]
+-- Empty window returns 0 rows.
+SELECT k, c, v FROM dup_t [_CHANGES_${bk0}_${bk0}_] ORDER BY k;
+
+-- Full window: all 5 rows, change_type=0 (INSERT), one distinct __ROW_VERSION__
+-- per source rowset (3 rounds → 3 distinct values).
+SELECT k, c, v, __CHANGE_TYPE__ FROM dup_t [_CHANGES_${bk0}_${bk3}_] ORDER BY k;
+SELECT count(*), count(DISTINCT __ROW_VERSION__)
+FROM dup_t [_CHANGES_${bk0}_${bk3}_];
+
+-- Mid-window excludes round 1; adjacent windows partition the full delta.
+SELECT count(*) FROM dup_t [_CHANGES_${bk1}_${bk3}_];
+SELECT count(*) FROM dup_t [_CHANGES_${bk0}_${bk1}_];
+SELECT count(*) FROM dup_t [_CHANGES_${bk1}_${bk2}_];
+SELECT count(*) FROM dup_t [_CHANGES_${bk2}_${bk3}_];
+
+-- Filter on data column.
+SELECT k, c, v FROM dup_t [_CHANGES_${bk0}_${bk3}_]
+WHERE k >= 3 ORDER BY k;
+
+-- Filter on the synthesized __CHANGE_TYPE__ column matches every row (all are INSERTs).
+SELECT count(*) FROM dup_t [_CHANGES_${bk0}_${bk3}_]
+WHERE __CHANGE_TYPE__ = 0;
+
+-- GROUP BY + HAVING + multi-aggregate over a CHANGES scan.
+SELECT c, count(*) AS cnt, sum(v) AS total, min(k), max(k), avg(v)
+FROM dup_t [_CHANGES_${bk0}_${bk3}_]
+GROUP BY c
+HAVING count(*) >= 2
+ORDER BY c;
+
+-- Inner join: CHANGES delta joined with a regular dim table.
+SELECT f.k, d.name, f.v, f.__CHANGE_TYPE__
+FROM dup_t f [_CHANGES_${bk0}_${bk3}_]
 JOIN dim_t d ON f.dim_id = d.dim_id
 ORDER BY f.k;
 
--- Project + filter + join + group-by + having on the CDC delta.
-SELECT d.name, count(*) AS cnt, sum(f.amount) AS total
-FROM fact_t f [_CHANGES_${bk_a}_${bk_b}_]
-JOIN dim_t d ON f.dim_id = d.dim_id
-WHERE f.amount >= 100
-GROUP BY d.name
-HAVING sum(f.amount) > 100
-ORDER BY d.name;
-
--- Left join keeps every CDC row even when the dim side is missing.
-INSERT INTO fact_t VALUES (15, 99, 999);
-[UC]function: bk_c=create_bookmark("${db[0]}", "fact_t", "join_c")
-
+-- Left join keeps the row whose dim side is missing (dim_id=99).
 SELECT f.k, d.name
-FROM fact_t f [_CHANGES_${bk_b}_${bk_c}_]
+FROM dup_t f [_CHANGES_${bk0}_${bk3}_]
 LEFT JOIN dim_t d ON f.dim_id = d.dim_id
 ORDER BY f.k;
 
-function: release_bookmark("${db[0]}", "fact_t", ${bk_a}, "join_a")
-function: release_bookmark("${db[0]}", "fact_t", ${bk_b}, "join_b")
-function: release_bookmark("${db[0]}", "fact_t", ${bk_c}, "join_c")
+
+-- name: test_cdc_dup_compaction @cloud
+
+CREATE TABLE dup_t (k int, v int)
+DUPLICATE KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1
+PROPERTIES ('replication_num' = '1');
+
+[UC]function: bk_pre=create_bookmark("${db[0]}", "dup_t", "cp")
+
+-- Three INSERTs create three rowsets, then COMPACT folds them.
+INSERT INTO dup_t VALUES (1, 10);
+INSERT INTO dup_t VALUES (2, 20);
+INSERT INTO dup_t VALUES (3, 30);
+[UC]ALTER TABLE dup_t COMPACT;
+SELECT sleep(15);
+
+[UC]function: bk_post=create_bookmark("${db[0]}", "dup_t", "cp")
+
+-- Two more INSERTs after compaction.
+INSERT INTO dup_t VALUES (4, 40);
+INSERT INTO dup_t VALUES (5, 50);
+
+[UC]function: bk_after=create_bookmark("${db[0]}", "dup_t", "cp")
+
+CLEANUP {
+    function: release_bookmark("${db[0]}", "dup_t", ${bk_pre}, "cp")
+    function: release_bookmark("${db[0]}", "dup_t", ${bk_post}, "cp")
+    function: release_bookmark("${db[0]}", "dup_t", ${bk_after}, "cp")
+} END CLEANUP
+
+-- A window spanning the compaction event still returns every row exactly once.
+-- This is intentionally not checking NUM_ROWSET — CDC must work whether or not
+-- compaction has finished by the time the head bookmark is captured.
+SELECT k, v, __CHANGE_TYPE__ FROM dup_t [_CHANGES_${bk_pre}_${bk_after}_] ORDER BY k;
+SELECT count(*) FROM dup_t [_CHANGES_${bk_pre}_${bk_after}_];

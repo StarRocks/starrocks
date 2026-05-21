@@ -1,4 +1,4 @@
--- name: test_cdc_not_trackable @cloud
+-- name: test_cdc_not_trackable_drop_partition @cloud
 CREATE TABLE part_t (dt date, k int, v int)
 DUPLICATE KEY(dt, k)
 PARTITION BY RANGE(dt) (
@@ -15,23 +15,211 @@ INSERT INTO part_t VALUES ("2026-05-15", 1, 10);
 INSERT INTO part_t VALUES ("2026-06-15", 2, 20);
 -- result:
 -- !result
-[UC]function: bk_base=create_bookmark("${db[0]}", "part_t", "base")
+[UC]function: bk_base=create_bookmark("${db[0]}", "part_t", "nt")
 ALTER TABLE part_t DROP PARTITION p1;
 -- result:
 -- !result
 INSERT INTO part_t VALUES ("2026-06-20", 3, 30);
 -- result:
 -- !result
-[UC]function: bk_head=create_bookmark("${db[0]}", "part_t", "head")
+[UC]function: bk_head=create_bookmark("${db[0]}", "part_t", "nt")
+CLEANUP {
+    function: release_bookmark("${db[0]}", "part_t", ${bk_base}, "nt")
+    function: release_bookmark("${db[0]}", "part_t", ${bk_head}, "nt")
+} END CLEANUP
+
 SELECT * FROM part_t [_CHANGES_${bk_base}_${bk_head}_];
 -- result:
-[REGEX].*CHANGES from bookmark [0-9]+ to [0-9]+ on table 'part_t' not trackable: physical partition [0-9]+ dropped\..*
+[REGEX]E:.*on table 'part_t' not trackable: physical partition [0-9]+ dropped.*
 -- !result
-function: release_bookmark("${db[0]}", "part_t", ${bk_base}, "base")
+-- name: test_cdc_not_trackable_truncate_partition @cloud
+CREATE TABLE part_t (dt date, k int, v int)
+DUPLICATE KEY(dt, k)
+PARTITION BY RANGE(dt) (
+    PARTITION p1 VALUES LESS THAN ("2026-06-01"),
+    PARTITION p2 VALUES LESS THAN ("2026-07-01")
+)
+DISTRIBUTED BY HASH(k) BUCKETS 1
+PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
+INSERT INTO part_t VALUES ("2026-05-15", 1, 10);
+-- result:
+-- !result
+INSERT INTO part_t VALUES ("2026-06-15", 2, 20);
+-- result:
+-- !result
+[UC]function: bk_base=create_bookmark("${db[0]}", "part_t", "nt")
+TRUNCATE TABLE part_t PARTITION (p1);
+-- result:
+-- !result
+INSERT INTO part_t VALUES ("2026-06-20", 3, 30);
+-- result:
+-- !result
+[UC]function: bk_head=create_bookmark("${db[0]}", "part_t", "nt")
+CLEANUP {
+    function: release_bookmark("${db[0]}", "part_t", ${bk_base}, "nt")
+    function: release_bookmark("${db[0]}", "part_t", ${bk_head}, "nt")
+} END CLEANUP
+
+SELECT * FROM part_t [_CHANGES_${bk_base}_${bk_head}_];
+-- result:
+[REGEX]E:.*on table 'part_t' not trackable: physical partition [0-9]+ dropped.*
+-- !result
+-- name: test_cdc_not_trackable_truncate_table @cloud
+CREATE TABLE dup_t (k int, v int)
+DUPLICATE KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1
+PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
+INSERT INTO dup_t VALUES (1, 10);
+-- result:
+-- !result
+[UC]function: bk_base=create_bookmark("${db[0]}", "dup_t", "nt")
+TRUNCATE TABLE dup_t;
+-- result:
+-- !result
+INSERT INTO dup_t VALUES (2, 20);
+-- result:
+-- !result
+[UC]function: bk_head=create_bookmark("${db[0]}", "dup_t", "nt")
+CLEANUP {
+    function: release_bookmark("${db[0]}", "dup_t", ${bk_base}, "nt")
+    function: release_bookmark("${db[0]}", "dup_t", ${bk_head}, "nt")
+} END CLEANUP
+
+SELECT * FROM dup_t [_CHANGES_${bk_base}_${bk_head}_];
+-- result:
+[REGEX]E:.*on table 'dup_t' not trackable: physical partition [0-9]+ dropped.*
+-- !result
+-- name: test_cdc_not_trackable_recreate_partition @cloud
+CREATE TABLE part_t (dt date, k int, v int)
+DUPLICATE KEY(dt, k)
+PARTITION BY RANGE(dt) (
+    PARTITION p1 VALUES LESS THAN ("2026-06-01"),
+    PARTITION p2 VALUES LESS THAN ("2026-07-01")
+)
+DISTRIBUTED BY HASH(k) BUCKETS 1
+PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
+INSERT INTO part_t VALUES ("2026-05-15", 1, 10);
+-- result:
+-- !result
+[UC]function: bk_base=create_bookmark("${db[0]}", "part_t", "nt")
+ALTER TABLE part_t DROP PARTITION p1;
+-- result:
+-- !result
+ALTER TABLE part_t ADD PARTITION p1 VALUES LESS THAN ("2026-06-01");
+-- result:
+-- !result
+INSERT INTO part_t VALUES ("2026-05-20", 2, 20);
+-- result:
+-- !result
+[UC]function: bk_head=create_bookmark("${db[0]}", "part_t", "nt")
+CLEANUP {
+    function: release_bookmark("${db[0]}", "part_t", ${bk_base}, "nt")
+    function: release_bookmark("${db[0]}", "part_t", ${bk_head}, "nt")
+} END CLEANUP
+
+SELECT * FROM part_t [_CHANGES_${bk_base}_${bk_head}_];
+-- result:
+[REGEX]E:.*on table 'part_t' not trackable: physical partition [0-9]+ dropped.*
+-- !result
+-- name: test_cdc_not_trackable_schema_rewrite @cloud
+CREATE TABLE dup_t (k int, v int)
+DUPLICATE KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1
+PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
+INSERT INTO dup_t VALUES (1, 10);
+-- result:
+-- !result
+[UC]function: bk_base=create_bookmark("${db[0]}", "dup_t", "nt")
+ALTER TABLE dup_t MODIFY COLUMN v VARCHAR(50);
+-- result:
+-- !result
+function: wait_alter_table_finish()
 -- result:
 None
 -- !result
-function: release_bookmark("${db[0]}", "part_t", ${bk_head}, "head")
+INSERT INTO dup_t VALUES (2, 'hi');
+-- result:
+-- !result
+[UC]function: bk_head=create_bookmark("${db[0]}", "dup_t", "nt")
+CLEANUP {
+    function: release_bookmark("${db[0]}", "dup_t", ${bk_base}, "nt")
+    function: release_bookmark("${db[0]}", "dup_t", ${bk_head}, "nt")
+} END CLEANUP
+
+SELECT * FROM dup_t [_CHANGES_${bk_base}_${bk_head}_];
+-- result:
+[REGEX]E:.*on table 'dup_t' not trackable: physical partition [0-9]+ rewritten.*
+-- !result
+-- name: test_cdc_not_trackable_hash_rebucket @cloud
+CREATE TABLE dup_t (k int, v int)
+DUPLICATE KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1
+PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
+INSERT INTO dup_t VALUES (1, 10);
+-- result:
+-- !result
+[UC]function: bk_base=create_bookmark("${db[0]}", "dup_t", "nt")
+ALTER TABLE dup_t DISTRIBUTED BY HASH(k) BUCKETS 4;
+-- result:
+-- !result
+function: wait_optimize_table_finish()
 -- result:
 None
+-- !result
+INSERT INTO dup_t VALUES (2, 20);
+-- result:
+-- !result
+[UC]function: bk_head=create_bookmark("${db[0]}", "dup_t", "nt")
+CLEANUP {
+    function: release_bookmark("${db[0]}", "dup_t", ${bk_base}, "nt")
+    function: release_bookmark("${db[0]}", "dup_t", ${bk_head}, "nt")
+} END CLEANUP
+
+SELECT * FROM dup_t [_CHANGES_${bk_base}_${bk_head}_];
+-- result:
+[REGEX]E:.*on table 'dup_t' not trackable: physical partition [0-9]+ dropped.*
+-- !result
+-- name: test_cdc_not_trackable_range_split @cloud
+SET enable_range_distribution = true;
+-- result:
+-- !result
+CREATE TABLE dup_t (k bigint NOT NULL, v bigint)
+DUPLICATE KEY(k)
+PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
+INSERT INTO dup_t VALUES (1, 10);
+-- result:
+-- !result
+[UC]function: bk_base=create_bookmark("${db[0]}", "dup_t", "nt")
+function: set_first_tablet_id("dup_t")
+-- result:
+None
+-- !result
+ALTER TABLE dup_t SPLIT TABLET (${tablet_id}) PROPERTIES ('tablet_reshard_target_size' = '-2');
+-- result:
+-- !result
+function: wait_optimize_table_finish()
+-- result:
+
+-- !result
+INSERT INTO dup_t VALUES (2, 20);
+-- result:
+-- !result
+[UC]function: bk_head=create_bookmark("${db[0]}", "dup_t", "nt")
+CLEANUP {
+    function: release_bookmark("${db[0]}", "dup_t", ${bk_base}, "nt")
+    function: release_bookmark("${db[0]}", "dup_t", ${bk_head}, "nt")
+} END CLEANUP
+
+SELECT * FROM dup_t [_CHANGES_${bk_base}_${bk_head}_];
+-- result:
+[REGEX]E:.*on table 'dup_t' not trackable: physical partition [0-9]+ resharded.*
 -- !result

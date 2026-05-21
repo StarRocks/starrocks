@@ -1,4 +1,10 @@
--- name: test_cdc_not_trackable @cloud
+-- All cases here cover scenarios that break CHANGES trackability between the
+-- base and head bookmarks. Each case sets up the break differently, then runs
+-- a CHANGES query that must surface a `SemanticException`. The expected error
+-- format is `CHANGES from bookmark X to Y on table 'T' not trackable: physical
+-- partition P <dropped|rewritten|resharded>`, so cases assert via [REGEX].
+
+-- name: test_cdc_not_trackable_drop_partition @cloud
 
 CREATE TABLE part_t (dt date, k int, v int)
 DUPLICATE KEY(dt, k)
@@ -12,17 +18,185 @@ PROPERTIES ('replication_num' = '1');
 INSERT INTO part_t VALUES ("2026-05-15", 1, 10);
 INSERT INTO part_t VALUES ("2026-06-15", 2, 20);
 
-[UC]function: bk_base=create_bookmark("${db[0]}", "part_t", "base")
+[UC]function: bk_base=create_bookmark("${db[0]}", "part_t", "nt")
 
 ALTER TABLE part_t DROP PARTITION p1;
-
--- Keep the table from being completely empty so create() finds state.
 INSERT INTO part_t VALUES ("2026-06-20", 3, 30);
 
-[UC]function: bk_head=create_bookmark("${db[0]}", "part_t", "head")
+[UC]function: bk_head=create_bookmark("${db[0]}", "part_t", "nt")
 
--- Expect a SemanticException: bookmark base contains a partition that no longer exists.
+CLEANUP {
+    function: release_bookmark("${db[0]}", "part_t", ${bk_base}, "nt")
+    function: release_bookmark("${db[0]}", "part_t", ${bk_head}, "nt")
+} END CLEANUP
+
 SELECT * FROM part_t [_CHANGES_${bk_base}_${bk_head}_];
 
-function: release_bookmark("${db[0]}", "part_t", ${bk_base}, "base")
-function: release_bookmark("${db[0]}", "part_t", ${bk_head}, "head")
+
+-- name: test_cdc_not_trackable_truncate_partition @cloud
+
+CREATE TABLE part_t (dt date, k int, v int)
+DUPLICATE KEY(dt, k)
+PARTITION BY RANGE(dt) (
+    PARTITION p1 VALUES LESS THAN ("2026-06-01"),
+    PARTITION p2 VALUES LESS THAN ("2026-07-01")
+)
+DISTRIBUTED BY HASH(k) BUCKETS 1
+PROPERTIES ('replication_num' = '1');
+
+INSERT INTO part_t VALUES ("2026-05-15", 1, 10);
+INSERT INTO part_t VALUES ("2026-06-15", 2, 20);
+
+[UC]function: bk_base=create_bookmark("${db[0]}", "part_t", "nt")
+
+-- TRUNCATE PARTITION replaces the partition data; the physical partition id changes.
+TRUNCATE TABLE part_t PARTITION (p1);
+INSERT INTO part_t VALUES ("2026-06-20", 3, 30);
+
+[UC]function: bk_head=create_bookmark("${db[0]}", "part_t", "nt")
+
+CLEANUP {
+    function: release_bookmark("${db[0]}", "part_t", ${bk_base}, "nt")
+    function: release_bookmark("${db[0]}", "part_t", ${bk_head}, "nt")
+} END CLEANUP
+
+SELECT * FROM part_t [_CHANGES_${bk_base}_${bk_head}_];
+
+
+-- name: test_cdc_not_trackable_truncate_table @cloud
+
+CREATE TABLE dup_t (k int, v int)
+DUPLICATE KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1
+PROPERTIES ('replication_num' = '1');
+
+INSERT INTO dup_t VALUES (1, 10);
+
+[UC]function: bk_base=create_bookmark("${db[0]}", "dup_t", "nt")
+
+-- TRUNCATE TABLE wipes the default partition; its physical id changes.
+TRUNCATE TABLE dup_t;
+INSERT INTO dup_t VALUES (2, 20);
+
+[UC]function: bk_head=create_bookmark("${db[0]}", "dup_t", "nt")
+
+CLEANUP {
+    function: release_bookmark("${db[0]}", "dup_t", ${bk_base}, "nt")
+    function: release_bookmark("${db[0]}", "dup_t", ${bk_head}, "nt")
+} END CLEANUP
+
+SELECT * FROM dup_t [_CHANGES_${bk_base}_${bk_head}_];
+
+
+-- name: test_cdc_not_trackable_recreate_partition @cloud
+
+CREATE TABLE part_t (dt date, k int, v int)
+DUPLICATE KEY(dt, k)
+PARTITION BY RANGE(dt) (
+    PARTITION p1 VALUES LESS THAN ("2026-06-01"),
+    PARTITION p2 VALUES LESS THAN ("2026-07-01")
+)
+DISTRIBUTED BY HASH(k) BUCKETS 1
+PROPERTIES ('replication_num' = '1');
+
+INSERT INTO part_t VALUES ("2026-05-15", 1, 10);
+
+[UC]function: bk_base=create_bookmark("${db[0]}", "part_t", "nt")
+
+-- DROP then re-ADD with the same name creates a fresh partition id; the
+-- bookmark's physical id is orphaned.
+ALTER TABLE part_t DROP PARTITION p1;
+ALTER TABLE part_t ADD PARTITION p1 VALUES LESS THAN ("2026-06-01");
+INSERT INTO part_t VALUES ("2026-05-20", 2, 20);
+
+[UC]function: bk_head=create_bookmark("${db[0]}", "part_t", "nt")
+
+CLEANUP {
+    function: release_bookmark("${db[0]}", "part_t", ${bk_base}, "nt")
+    function: release_bookmark("${db[0]}", "part_t", ${bk_head}, "nt")
+} END CLEANUP
+
+SELECT * FROM part_t [_CHANGES_${bk_base}_${bk_head}_];
+
+
+-- name: test_cdc_not_trackable_schema_rewrite @cloud
+
+CREATE TABLE dup_t (k int, v int)
+DUPLICATE KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1
+PROPERTIES ('replication_num' = '1');
+
+INSERT INTO dup_t VALUES (1, 10);
+
+[UC]function: bk_base=create_bookmark("${db[0]}", "dup_t", "nt")
+
+-- INT → VARCHAR can't reuse the zonemap, so the alter rewrites partition data
+-- and advances the base index meta id.
+ALTER TABLE dup_t MODIFY COLUMN v VARCHAR(50);
+function: wait_alter_table_finish()
+
+INSERT INTO dup_t VALUES (2, 'hi');
+
+[UC]function: bk_head=create_bookmark("${db[0]}", "dup_t", "nt")
+
+CLEANUP {
+    function: release_bookmark("${db[0]}", "dup_t", ${bk_base}, "nt")
+    function: release_bookmark("${db[0]}", "dup_t", ${bk_head}, "nt")
+} END CLEANUP
+
+SELECT * FROM dup_t [_CHANGES_${bk_base}_${bk_head}_];
+
+
+-- name: test_cdc_not_trackable_hash_rebucket @cloud
+
+CREATE TABLE dup_t (k int, v int)
+DUPLICATE KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1
+PROPERTIES ('replication_num' = '1');
+
+INSERT INTO dup_t VALUES (1, 10);
+
+[UC]function: bk_base=create_bookmark("${db[0]}", "dup_t", "nt")
+
+-- Changing bucket count drops the source partition and creates a new one
+-- under a fresh physical id.
+ALTER TABLE dup_t DISTRIBUTED BY HASH(k) BUCKETS 4;
+function: wait_optimize_table_finish()
+
+INSERT INTO dup_t VALUES (2, 20);
+
+[UC]function: bk_head=create_bookmark("${db[0]}", "dup_t", "nt")
+
+CLEANUP {
+    function: release_bookmark("${db[0]}", "dup_t", ${bk_base}, "nt")
+    function: release_bookmark("${db[0]}", "dup_t", ${bk_head}, "nt")
+} END CLEANUP
+
+SELECT * FROM dup_t [_CHANGES_${bk_base}_${bk_head}_];
+
+
+-- name: test_cdc_not_trackable_range_split @cloud
+
+SET enable_range_distribution = true;
+
+CREATE TABLE dup_t (k bigint NOT NULL, v bigint)
+DUPLICATE KEY(k)
+PROPERTIES ('replication_num' = '1');
+
+INSERT INTO dup_t VALUES (1, 10);
+
+[UC]function: bk_base=create_bookmark("${db[0]}", "dup_t", "nt")
+
+-- SPLIT TABLET advances baseMaterializedIndexId; the partition's physical id
+-- is preserved, so the resolver classifies the change as a reshard.
+function: set_first_tablet_id("dup_t")
+ALTER TABLE dup_t SPLIT TABLET (${tablet_id}) PROPERTIES ('tablet_reshard_target_size' = '-2');
+function: wait_optimize_table_finish()
+
+INSERT INTO dup_t VALUES (2, 20);
+
+[UC]function: bk_head=create_bookmark("${db[0]}", "dup_t", "nt")
+
+CLEANUP {
+    function: release_bookmark("${db[0]}", "dup_t", ${bk_base}, "nt")
+    function: release_bookmark("${db[0]}", "dup_t", ${bk_head}, "nt")
+} END CLEANUP
+
+SELECT * FROM dup_t [_CHANGES_${bk_base}_${bk_head}_];
