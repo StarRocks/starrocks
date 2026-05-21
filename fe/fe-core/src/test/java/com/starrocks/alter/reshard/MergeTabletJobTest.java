@@ -15,6 +15,8 @@
 package com.starrocks.alter.reshard;
 
 import com.google.common.base.Preconditions;
+import com.staros.proto.FileCacheInfo;
+import com.staros.proto.FilePathInfo;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndex.IndexState;
@@ -27,11 +29,13 @@ import com.starrocks.catalog.Tuple;
 import com.starrocks.catalog.Variant;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
+import com.starrocks.common.DdlException;
 import com.starrocks.common.Range;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.lake.LakeTablet;
+import com.starrocks.lake.StarOSAgent;
 import com.starrocks.lake.Utils;
 import com.starrocks.proto.AggregatePublishVersionRequest;
 import com.starrocks.proto.PublishVersionRequest;
@@ -523,6 +527,12 @@ public class MergeTabletJobTest {
         MaterializedIndex materializedIndex = physicalPartition.getLatestBaseIndex();
         long oldVersion = physicalPartition.getVisibleVersion();
 
+        // Replay paths do not call createShardsOnStarOS, but in production the original
+        // leader's runPendingJob did. Mirror that here so every tablet inserted into the
+        // FE catalog by replay has a backing staros shard for the subsequent tests
+        // sharing the static table fixture.
+        mergeJob.createShardsOnStarOS();
+
         Assertions.assertEquals(TabletReshardJob.JobState.PENDING, mergeJob.getJobState());
         mergeJob.replay();
 
@@ -927,8 +937,10 @@ public class MergeTabletJobTest {
         reshardingPartitions.put(physicalPartition.getId(),
                 new ReshardingPhysicalPartition(physicalPartition.getId(), reshardingIndexes));
 
-        createNewShards(physicalPartition, newIndex, reshardingTablets);
-
+        // Do not pre-create new shards on StarOS here; MergeTabletJob.runPendingJob calls
+        // createShardsOnStarOS as part of the run-state machine. Tests that bypass run()
+        // (replay-only) must call mergeJob.createShardsOnStarOS() explicitly to simulate
+        // the original leader's PENDING step.
         return new MergeTabletJob(GlobalStateMgr.getCurrentState().getNextId(),
                 db.getId(), table.getId(), reshardingPartitions);
     }
@@ -955,6 +967,34 @@ public class MergeTabletJobTest {
                 table.getPartitionFileCacheInfo(physicalPartition.getId()),
                 newIndex.getShardGroupId(),
                 properties, WarehouseManager.DEFAULT_RESOURCE);
+    }
+
+    /**
+     * createShardsOnStarOS wraps any StarRocksException from the StarOS RPC as a
+     * TabletReshardException so the run() catch-and-abort wrapper can fire cleanly.
+     */
+    @Test
+    public void testCreateShardsOnStarOSWrapsStarRocksException() throws Exception {
+        MergeTabletJob mergeJob = createMergeTabletReshardJob();
+
+        new MockUp<StarOSAgent>() {
+            @Mock
+            public void createShardsForMerge(Map<Long, List<Long>> newToOldTabletIds,
+                                             FilePathInfo pathInfo,
+                                             FileCacheInfo cacheInfo,
+                                             long groupId,
+                                             Map<String, String> properties,
+                                             ComputeResource computeResource) throws DdlException {
+                throw new DdlException("simulated StarOS failure");
+            }
+        };
+
+        TabletReshardException thrown = Assertions.assertThrows(TabletReshardException.class,
+                mergeJob::createShardsOnStarOS);
+        Assertions.assertTrue(thrown.getMessage().contains("Failed to create new shards on StarOS"),
+                "expected wrap message, got: " + thrown.getMessage());
+        Assertions.assertTrue(thrown.getMessage().contains("simulated StarOS failure"),
+                "expected original cause message, got: " + thrown.getMessage());
     }
 
 }
