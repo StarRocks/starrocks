@@ -1248,6 +1248,24 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: 是否启用周期性 Hive 元数据缓存刷新。启用后，StarRocks 会轮询 Hive 集群的 metastore（Hive Metastore 或 AWS Glue），并刷新频繁访问的 Hive Catalog 的缓存元数据，以感知数据变化。`true` 表示启用 Hive 元数据缓存刷新，`false` 表示禁用。
 - 引入版本: v2.5.5
 
+### `refresh_other_fe_dispatch_executor_thread_num`
+
+- 默认值: 4
+- 类型: Integer
+- 单位: -
+- 是否可变: Yes
+- 描述: FE 全局异步调度线程池中的线程数，用于处理来自 Connector 写入路径的 “refresh other FE” 后台任务。这些线程仅负责调度后台刷新任务，不会直接向其他 FE 发送刷新 RPC。修改后可在运行中的 FE 上动态生效，无需重启。
+- 引入版本: -
+
+### `refresh_other_fe_rpc_executor_thread_num`
+
+- 默认值: 4
+- 类型: Integer
+- 单位: -
+- 是否可变: Yes
+- 描述: FE 全局 RPC 线程池中的线程数，用于执行 “refresh other FE” 的 fan-out 调用。该线程池限制同步和异步外表刷新流程中，向其他 FE 并发发送刷新 RPC 的数量。修改后可在运行中的 FE 上动态生效，无需重启。
+- 引入版本: -
+
 ### `enable_collect_query_detail_info`
 
 - 默认值: false
