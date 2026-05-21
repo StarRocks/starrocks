@@ -24,16 +24,16 @@
 
 namespace starrocks::pipeline {
 
-class DynamicMorselQueue final : public OlapMorselQueue, public TicketedMorselQueue {
+class OlapDynamicMorselQueue final : public OlapMorselQueue, public TicketedMorselQueue {
 public:
-    explicit DynamicMorselQueue(Morsels&& morsels, bool has_more) {
+    explicit OlapDynamicMorselQueue(Morsels&& morsels, bool has_more) {
         (void)append_morsels(std::move(morsels));
         _size = _num_morsels = _queue.size();
         _degree_of_parallelism = _num_morsels;
         _has_more_scan_ranges = has_more;
     }
 
-    ~DynamicMorselQueue() override = default;
+    ~OlapDynamicMorselQueue() override = default;
     bool empty() const override { return _size.load(std::memory_order_relaxed) == 0; }
     StatusOr<MorselPtr> try_get() override;
     void unget(MorselPtr&& morsel) override;

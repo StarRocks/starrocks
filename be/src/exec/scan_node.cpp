@@ -36,10 +36,10 @@
 
 #include "common/config_scan_io_fwd.h"
 #include "exec/pipeline/query_context.h"
-#include "exec/pipeline/scan/dynamic_morsel_queue.h"
-#include "exec/pipeline/scan/fixed_morsel_queue_builder.h"
 #include "exec/pipeline/scan/morsel_queue_builder.h"
 #include "exec/pipeline/scan/morsel_queue_factory.h"
+#include "exec/pipeline/scan/olap_dynamic_morsel_queue.h"
+#include "exec/pipeline/scan/olap_fixed_morsel_queue_builder.h"
 #include "exec/pipeline/scan/scan_morsel.h"
 #include "exprs/expr_factory.h"
 #include "runtime/runtime_state.h"
@@ -227,7 +227,7 @@ StatusOr<pipeline::MorselQueueBuilderPtr> ScanNode::convert_scan_range_to_morsel
     pipeline::ScanMorsel::build_scan_morsels(node_id, scan_ranges, accept_empty_scan_ranges(), &morsels,
                                              &has_more_morsel);
     DCHECK(has_more_morsel == false);
-    return pipeline::make_fixed_morsel_queue_builder(std::move(morsels));
+    return pipeline::make_olap_fixed_morsel_queue_builder(std::move(morsels));
 }
 
 void ScanNode::enable_shared_scan(bool enable) {
