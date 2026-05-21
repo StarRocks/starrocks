@@ -14,6 +14,8 @@
 
 #include <gtest/gtest.h>
 
+#include <limits>
+
 #include "base/container/raw_container.h"
 #include "base/testutil/assert.h"
 #include "column/chunk.h"
@@ -368,6 +370,35 @@ TEST_F(LoadSpillPipelineMergeTest, test_duplicate_slot_idx) {
     ASSERT_NE(task->merge_itr, nullptr);
     // Should only merge first continuous sequence
     ASSERT_GE(task->total_block_groups, 1);
+}
+
+TEST_F(LoadSpillPipelineMergeTest, has_enough_returns_true_when_target_size_reached) {
+    auto bytes = spill_chunks_with_slot_idx({{0, 0}, {100, 1}, {200, 2}});
+    ASSERT_GT(bytes, 0u);
+
+    EXPECT_TRUE(_spiller->has_enough_for_pipeline_merge_task(
+            /*target_size=*/bytes - 1,
+            /*memory_usage_per_merge=*/std::numeric_limits<size_t>::max()));
+}
+
+TEST_F(LoadSpillPipelineMergeTest, has_enough_returns_true_when_memory_budget_reached) {
+    spill_chunks_with_slot_idx({{0, 0}});
+
+    EXPECT_TRUE(_spiller->has_enough_for_pipeline_merge_task(
+            /*target_size=*/std::numeric_limits<size_t>::max(),
+            /*memory_usage_per_merge=*/static_cast<size_t>(config::load_spill_max_chunk_bytes)));
+}
+
+TEST_F(LoadSpillPipelineMergeTest, has_enough_returns_false_when_neither_bound_reached) {
+    ASSERT_TRUE(_spiller->empty());
+    EXPECT_FALSE(_spiller->has_enough_for_pipeline_merge_task(
+            /*target_size=*/std::numeric_limits<size_t>::max(),
+            /*memory_usage_per_merge=*/std::numeric_limits<size_t>::max()));
+
+    auto bytes = spill_chunks_with_slot_idx({{0, 0}, {100, 1}, {200, 2}});
+    EXPECT_FALSE(_spiller->has_enough_for_pipeline_merge_task(
+            /*target_size=*/bytes * 100,
+            /*memory_usage_per_merge=*/std::numeric_limits<size_t>::max()));
 }
 
 } // namespace starrocks

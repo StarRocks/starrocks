@@ -76,48 +76,43 @@ Status SpillMemTableSink::flush_chunk(const Chunk& chunk, starrocks::SegmentPB* 
         *flush_data_size = res.value();
     }
 
-    // EAGER MERGE OPTIMIZATION: When spilled data accumulates to a threshold, proactively
-    // start merging blocks in the background BEFORE all flushes complete. This provides:
-    // 1. Better parallelism - merge tasks run concurrently with ongoing memtable flushes
-    // 2. Reduced final merge time - much of the merge work completes during the load phase
-    // 3. Lower memory pressure - blocks get merged and reclaimed earlier
+    // EAGER MERGE OPTIMIZATION: Split mode-switch from task-submit to avoid redundant
+    // LoadSpillPipelineMergeIterator::init() calls for flushes between thresholds.
     //
-    // WHY THIS THRESHOLD: pk_index_eager_build_threshold_bytes indicates bulk load scenario
-    // where parallel merge benefits outweigh task coordination overhead.
-    if (_load_chunk_spiller->total_bytes() >= config::pk_index_eager_build_threshold_bytes &&
-        config::enable_load_spill_parallel_merge) {
-        // Disable auto-flush to manually control segment finalization timing
-        _writer->set_auto_flush(false);
-
-        // For PK tables in bulk load, eagerly build primary key index during merge
-        // instead of waiting until commit. This parallelizes expensive index construction.
-        _writer->try_enable_pk_index_eager_build();
-
-        // Lazy initialization: create thread pool token only when first needed
-        _pipeline_merge_context->create_thread_pool_token();
-        if (!_pipeline_merge_context->token()) {
-            // Thread pool exhausted - cannot submit merge tasks now
-            // Skip eager merge for this flush
-            return Status::OK();
+    // Mode-switch (once per sink): enter eager PK index build mode when total_bytes crosses
+    // pk_index_eager_build_threshold_bytes.
+    // Task-submit (per flush): submit merge task only when has_enough_for_pipeline_merge_task
+    // indicates generate_pipeline_merge_task would succeed.
+    if (config::enable_load_spill_parallel_merge) {
+        if (!_eager_mode_entered &&
+            _load_chunk_spiller->total_bytes() >= config::pk_index_eager_build_threshold_bytes) {
+            _writer->set_auto_flush(false);
+            _writer->try_enable_pk_index_eager_build();
+            _pipeline_merge_context->create_thread_pool_token();
+            _eager_mode_entered = true;
         }
 
-        // Generate ONE merge task eagerly (not all tasks). This allows pipeline execution
-        // where merge tasks are generated and submitted incrementally as resources allow,
-        // rather than all upfront which would consume excessive memory.
-        // final_round=false means this merges to intermediate blocks, not final tablet.
-        LoadSpillPipelineMergeIterator task_iterator(_load_chunk_spiller.get(), _writer,
-                                                     _pipeline_merge_context->quit_flag(), false /* final_round */);
-        task_iterator.init();
-        if (task_iterator.has_more()) {
-            auto current_task = task_iterator.current_task();
-            _pipeline_merge_context->add_merge_task(current_task);
-            auto submit_st = _pipeline_merge_context->token()->submit(current_task);
-            if (!submit_st.ok()) {
-                // Submit failure doesn't fail the flush - task will report error when checked later
-                current_task->update_status(submit_st);
+        if (_eager_mode_entered &&
+            _load_chunk_spiller->has_enough_for_pipeline_merge_task(
+                    config::load_spill_max_merge_bytes, config::load_spill_memory_usage_per_merge)) {
+            // Generate ONE merge task eagerly (not all tasks). Pipeline execution generates
+            // tasks incrementally as the merge pool drains; final_round=false means this merges
+            // to intermediate blocks, not final tablet.
+            LoadSpillPipelineMergeIterator task_iterator(_load_chunk_spiller.get(), _writer,
+                                                         _pipeline_merge_context->quit_flag(),
+                                                         false /* final_round */);
+            task_iterator.init();
+            if (task_iterator.has_more()) {
+                auto current_task = task_iterator.current_task();
+                _pipeline_merge_context->add_merge_task(current_task);
+                auto submit_st = _pipeline_merge_context->token()->submit(current_task);
+                if (!submit_st.ok()) {
+                    // Submit failure doesn't fail the flush — task will report error when checked later.
+                    current_task->update_status(submit_st);
+                }
             }
+            RETURN_IF_ERROR(task_iterator.status());
         }
-        RETURN_IF_ERROR(task_iterator.status());
     }
     return Status::OK();
 }
