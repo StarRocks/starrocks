@@ -886,7 +886,7 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
         use_kudu_jni_reader = scan_range.use_kudu_jni_reader;
     }
 
-    bool use_avro_jni_reader = false;
+    bool use_avro_jni_reader = true;
     if (scan_range.__isset.use_avro_jni_reader) {
         use_avro_jni_reader = scan_range.use_avro_jni_reader;
     }

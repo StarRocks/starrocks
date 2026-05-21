@@ -16,6 +16,7 @@ package com.starrocks.hive.reader;
 
 import com.starrocks.jni.connector.ColumnType;
 import com.starrocks.jni.connector.ColumnValue;
+import org.apache.hadoop.hive.common.type.HiveChar;
 import org.apache.hadoop.hive.common.type.HiveDecimal;
 import org.apache.hadoop.hive.serde2.io.TimestampWritableV2;
 import org.apache.hadoop.hive.serde2.objectinspector.ListObjectInspector;
@@ -94,6 +95,9 @@ public class HiveColumnValue implements ColumnValue {
     @Override
     public String getString(ColumnType.TypeValue type) {
         Object o = inspectObject();
+        if (o instanceof HiveChar) {
+            return ((HiveChar) o).getStrippedValue();
+        }
         return o.toString();
     }
 
