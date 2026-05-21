@@ -330,9 +330,11 @@ set(STORAGE_FILES
     index/inverted/clucene/clucene_inverted_reader.cpp
     index/inverted/clucene/match_operator.cpp
     index/vector/empty_index_reader.cpp
+    index/vector/vector_index_cache.cpp
     index/vector/vector_index_builder_factory.cpp
     index/vector/vector_index_writer.cpp
     index/vector/vector_index_builder.cpp
+    index/vector/vector_index_file_reader.cpp
     index/vector/vector_index_reader_factory.cpp
     index/vector/tenann_index_reader.cpp
     index/vector/tenann/del_id_filter.cpp

@@ -87,6 +87,9 @@ class GlobalSpillManager;
 
 class HeartbeatFlags;
 class DiagnoseDaemon;
+#ifdef WITH_TENANN
+class VectorIndexCache;
+#endif
 
 namespace pipeline {
 class DriverExecutor;
@@ -216,6 +219,10 @@ public:
 
     DiagnoseDaemon* diagnose_daemon() const { return _diagnose_daemon; }
 
+#ifdef WITH_TENANN
+    VectorIndexCache* vector_index_cache() { return _vector_index_cache.get(); }
+#endif
+
 private:
     void _refresh_service_contexts();
     void _wait_for_fragments_finish();
@@ -275,6 +282,12 @@ private:
     AgentServices _agent_services;
     QueryExecutionServices _query_execution_services;
     AdminServices _admin_services;
+
+#ifdef WITH_TENANN
+    // SR-owned LRU behind tenann::IndexCache. Must be destructed before the
+    // mem tracker hierarchy (see ExecEnv::destroy()).
+    std::unique_ptr<VectorIndexCache> _vector_index_cache;
+#endif
 };
 
 } // namespace starrocks
