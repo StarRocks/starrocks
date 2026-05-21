@@ -94,7 +94,10 @@ enum class Distribution : int {
 struct BenchAllocateState {
     HashTableKeyAllocator* allocator;
     AggDataPtr operator()(std::nullptr_t) { return allocator->allocate_null_key_data(); }
-    AggDataPtr operator()(int16_t /*key*/) { return allocator->allocate(); }
+    template <typename K>
+    AggDataPtr operator()(K /*key*/) {
+        return allocator->allocate();
+    }
 };
 
 // Build (num_rows / kBenchChunkSize) Int16 chunks of kBenchChunkSize rows
@@ -547,6 +550,93 @@ static void BM_Int16NullableBuildOnly(benchmark::State& state) {
 }
 
 // ============================================================================
+// Section E -- cx1 (compressed-key int8) vs direct array (int16) for
+// SMALLINT GROUP BY when the FE-supplied value range fits in 8 bits.
+//
+// Today our slice_cx1 guard on TINYINT/BOOL/SMALLINT (aggregator.cpp) means
+// we always pick the 65 536-cell int16 direct array, even when the range
+// stats say only 8 bits are used.  stdpain raised on #73558 that for int16
+// with an 8-bit range, slice_cx1 may actually win: footprint drops from
+// 524 KiB to 2 KiB (L1-resident) at the cost of a bitcompress_serialize
+// step per row.  This section answers that head-on.
+//
+// SliceCx1Wrapper is the production wrapper used when slice_cx1 routing
+// fires: AggHashMapWithCompressedKeyFixedSize over Int8AggHashMap
+// (SmallFixedSizeHashMap<int8_t>).  The wrapper requires bases/offsets/
+// used_bits set up before build_hash_map, normally done by Aggregator's
+// _build_hash_variant; we mirror that setup explicitly.
+// ============================================================================
+using SliceCx1Wrapper = AggHashMapWithCompressedKeyFixedSize<Int8AggHashMap<PhmapSeed1>>;
+
+template <typename Wrapper>
+static void BM_Int16Cx1BuildOnly(benchmark::State& state) {
+    const int64_t num_rows = state.range(0);
+    const int distinct = static_cast<int>(state.range(1));
+    const Distribution dist = static_cast<Distribution>(state.range(2));
+
+    BenchSuite suite;
+    suite.SetUp();
+    Int16ChunkStream stream(num_rows, distinct, dist);
+
+    // Same range Int16ChunkStream uses: keys live in
+    // [-distinct/2, distinct/2).  delta = distinct - 1, used_bits is the
+    // number of bits Aggregator would have computed via get_used_bits.
+    const int16_t range_start = static_cast<int16_t>(-distinct / 2);
+    const int16_t range_end = static_cast<int16_t>(range_start + distinct - 1);
+    const uint16_t delta = static_cast<uint16_t>(static_cast<uint16_t>(range_end) - static_cast<uint16_t>(range_start));
+    const int used_bits = delta == 0 ? 0 : (32 - __builtin_clz(static_cast<uint32_t>(delta)));
+
+    int64_t total_rows = 0;
+    size_t final_groups = 0;
+    size_t final_ht_bytes = 0;
+    int64_t cum_checksum = 0;
+    for (auto _ : state) {
+        state.PauseTiming();
+        auto wrapper = std::make_unique<Wrapper>(kBenchChunkSize, suite._agg_stat.get());
+        // Mirror Aggregator::_build_hash_variant's CompressKeyContext setup
+        // for a single int16 column: base = min value, offset = 0,
+        // used_bits = ceil_log2(range + 1).
+        wrapper->bases = std::vector<std::any>{range_start};
+        wrapper->offsets = std::vector<int>{0};
+        wrapper->used_bits = std::vector<int>{used_bits};
+        HashTableKeyAllocator allocator;
+        allocator.aggregate_key_size = sizeof(int64_t);
+        allocator.pool = suite._mem_pool.get();
+        BenchAllocateState alloc{&allocator};
+        Buffer<AggDataPtr> agg_states(kBenchChunkSize);
+        state.ResumeTiming();
+
+        for (const auto& chunk_col : stream.chunks()) {
+            Columns key_columns;
+            key_columns.emplace_back(chunk_col);
+            wrapper->build_hash_map(kBenchChunkSize, key_columns, suite._mem_pool.get(), alloc, &agg_states);
+            total_rows += kBenchChunkSize;
+        }
+        benchmark::DoNotOptimize(agg_states.data());
+        benchmark::ClobberMemory();
+
+        state.PauseTiming();
+        final_groups = wrapper->hash_map.size();
+        final_ht_bytes = wrapper->hash_map.dump_bound();
+        int64_t cs = 0;
+        for (int i = 0; i < kBenchChunkSize; ++i) cs += reinterpret_cast<intptr_t>(agg_states[i]);
+        cum_checksum += cs;
+        wrapper.reset();
+        suite._mem_pool->clear();
+    }
+    benchmark::DoNotOptimize(cum_checksum);
+    state.SetItemsProcessed(total_rows);
+    state.counters["distinct"] = distinct;
+    state.counters["dist"] = static_cast<int>(dist);
+    state.counters["rows_per_iter"] = num_rows;
+    state.counters["final_groups"] = final_groups;
+    state.counters["hash_table_bytes"] = final_ht_bytes;
+    state.counters["used_bits"] = used_bits;
+
+    suite.TearDown();
+}
+
+// ============================================================================
 // Args registration
 // ============================================================================
 
@@ -598,6 +688,22 @@ static void RegisterArgs_SectionD(benchmark::internal::Benchmark* b) {
     b->Iterations(3);
 }
 
+// Section E: cx1 vs direct for SMALLINT with 8-bit value range.  All
+// distincts <= 256 so slice_cx1 is a legal routing (8 used_bits).
+// Random and Sorted cover the prefetch-vs-no-prefetch axis; cx1 has
+// prefetch-on under flat_hash_map but no_prefetch under
+// SmallFixedSizeHashMap<int8>, so Sorted is the cleanest read.
+static void RegisterArgs_SectionE(benchmark::internal::Benchmark* b) {
+    b->ArgNames({"rows", "distinct", "dist"});
+    constexpr int64_t kRows = 100'000'000;
+    for (int distinct : {16, 64, 128, 200, 256}) {
+        b->Args({kRows, distinct, /*Sorted*/ 1});
+        b->Args({kRows, distinct, /*Random*/ 0});
+    }
+    b->Unit(benchmark::kMillisecond);
+    b->Iterations(3);
+}
+
 BENCHMARK_TEMPLATE(BM_Int16BuildOnly, PhmapInt16Wrapper)->Apply(RegisterArgs_SectionA);
 BENCHMARK_TEMPLATE(BM_Int16BuildOnly, ArrayInt16Wrapper)->Apply(RegisterArgs_SectionA);
 
@@ -615,6 +721,9 @@ BENCHMARK_TEMPLATE(BM_Int16Construct, ArrayInt16Wrapper)->Unit(benchmark::kMicro
 
 BENCHMARK_TEMPLATE(BM_Int16NullableBuildOnly, PhmapInt16NullableWrapper)->Apply(RegisterArgs_SectionD);
 BENCHMARK_TEMPLATE(BM_Int16NullableBuildOnly, ArrayInt16NullableWrapper)->Apply(RegisterArgs_SectionD);
+
+BENCHMARK_TEMPLATE(BM_Int16BuildOnly, ArrayInt16Wrapper)->Apply(RegisterArgs_SectionE);
+BENCHMARK_TEMPLATE(BM_Int16Cx1BuildOnly, SliceCx1Wrapper)->Apply(RegisterArgs_SectionE);
 
 } // namespace starrocks
 
