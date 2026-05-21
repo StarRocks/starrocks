@@ -30,6 +30,8 @@
 
 namespace starrocks::lake {
 
+using google::protobuf::RepeatedPtrField;
+
 namespace {
 
 static VariantTuple make_int_tuple(int32_t value) {
@@ -813,6 +815,155 @@ TEST(TabletRangeHelperTest, test_sst_seek_range_null_as_min_unsupported_type) {
     ASSERT_FALSE(res.ok());
     ASSERT_TRUE(res.status().is_not_supported());
     ASSERT_THAT(res.status().to_string(), testing::HasSubstr("unsupported type for PK min datum"));
+}
+
+// =============================================================================
+// validate_new_tablet_ranges: structural (schema-free) validator used by the
+// external-boundaries path. These tests exercise every rejection branch directly so coverage
+// does not rely on routing through compute_split_ranges_from_external_boundaries.
+// =============================================================================
+
+namespace {
+
+// Builds a closed-open [lower, upper) range with INT bounds. nullopt skips
+// the corresponding bound — used to construct half-bounded edge ranges.
+static TabletRangePB make_int_range_pb(std::optional<int32_t> lower, std::optional<int32_t> upper) {
+    TabletRangePB r;
+    if (lower.has_value()) {
+        *r.mutable_lower_bound() = make_int_tuple_pb(*lower);
+        r.set_lower_bound_included(true);
+    }
+    if (upper.has_value()) {
+        *r.mutable_upper_bound() = make_int_tuple_pb(*upper);
+        r.set_upper_bound_included(false);
+    }
+    return r;
+}
+
+static RepeatedPtrField<TabletRangePB> as_pb_list(std::initializer_list<TabletRangePB> ranges) {
+    RepeatedPtrField<TabletRangePB> out;
+    for (const auto& r : ranges) {
+        *out.Add() = r;
+    }
+    return out;
+}
+
+} // namespace
+
+TEST(TabletRangeHelperTest, validate_new_tablet_ranges_empty_list_rejected) {
+    TabletRangePB parent = make_int_range_pb(0, 100);
+    auto ranges = as_pb_list({});
+    auto s = TabletRangeHelper::validate_new_tablet_ranges(parent, ranges);
+    ASSERT_FALSE(s.ok());
+    ASSERT_TRUE(s.is_invalid_argument()) << s;
+    ASSERT_THAT(s.to_string(), testing::HasSubstr("new_tablet_ranges is empty"));
+}
+
+TEST(TabletRangeHelperTest, validate_new_tablet_ranges_zero_width_range_rejected) {
+    TabletRangePB parent = make_int_range_pb(0, 100);
+    // Synthesize a single range whose lower and upper bounds are byte-equal.
+    TabletRangePB r;
+    *r.mutable_lower_bound() = make_int_tuple_pb(50);
+    *r.mutable_upper_bound() = make_int_tuple_pb(50);
+    r.set_lower_bound_included(true);
+    r.set_upper_bound_included(false);
+    auto ranges = as_pb_list({r});
+    auto s = TabletRangeHelper::validate_new_tablet_ranges(parent, ranges);
+    ASSERT_FALSE(s.ok());
+    ASSERT_THAT(s.to_string(), testing::HasSubstr("zero-width"));
+}
+
+TEST(TabletRangeHelperTest, validate_new_tablet_ranges_first_lower_must_be_inclusive) {
+    TabletRangePB parent = make_int_range_pb(0, 100);
+    TabletRangePB r = make_int_range_pb(0, 100);
+    r.set_lower_bound_included(false); // Violation: first.lower must be inclusive when set.
+    auto ranges = as_pb_list({r});
+    auto s = TabletRangeHelper::validate_new_tablet_ranges(parent, ranges);
+    ASSERT_FALSE(s.ok());
+    // The per-range guard (validate_tablet_range) fires before the positional
+    // "first.lower_bound must be inclusive" check and emits the generic message.
+    ASSERT_THAT(s.to_string(), testing::HasSubstr("Lower bound is exclusive"));
+}
+
+TEST(TabletRangeHelperTest, validate_new_tablet_ranges_first_lower_mismatch_rejected) {
+    TabletRangePB parent = make_int_range_pb(0, 100);
+    TabletRangePB r = make_int_range_pb(10, 100); // first.lower=10 != parent.lower=0
+    auto ranges = as_pb_list({r});
+    auto s = TabletRangeHelper::validate_new_tablet_ranges(parent, ranges);
+    ASSERT_FALSE(s.ok());
+    ASSERT_THAT(s.to_string(), testing::HasSubstr("first.lower_bound != old_tablet_range.lower_bound"));
+}
+
+TEST(TabletRangeHelperTest, validate_new_tablet_ranges_last_upper_mismatch_rejected) {
+    TabletRangePB parent = make_int_range_pb(0, 100);
+    TabletRangePB r = make_int_range_pb(0, 99); // last.upper=99 != parent.upper=100
+    auto ranges = as_pb_list({r});
+    auto s = TabletRangeHelper::validate_new_tablet_ranges(parent, ranges);
+    ASSERT_FALSE(s.ok());
+    ASSERT_THAT(s.to_string(), testing::HasSubstr("last.upper_bound != old_tablet_range.upper_bound"));
+}
+
+TEST(TabletRangeHelperTest, validate_new_tablet_ranges_last_upper_must_be_exclusive) {
+    TabletRangePB parent = make_int_range_pb(0, 100);
+    TabletRangePB r = make_int_range_pb(0, 100);
+    r.set_upper_bound_included(true); // Violation: last.upper must be exclusive when set.
+    auto ranges = as_pb_list({r});
+    auto s = TabletRangeHelper::validate_new_tablet_ranges(parent, ranges);
+    ASSERT_FALSE(s.ok());
+    // The per-range guard (validate_tablet_range) fires before the positional
+    // "last.upper_bound must be exclusive" check and emits the generic message.
+    ASSERT_THAT(s.to_string(), testing::HasSubstr("Upper bound is inclusive"));
+}
+
+TEST(TabletRangeHelperTest, validate_new_tablet_ranges_interior_gap_missing_bound_rejected) {
+    TabletRangePB parent = make_int_range_pb(0, 100);
+    TabletRangePB first = make_int_range_pb(0, 50);
+    TabletRangePB second = make_int_range_pb(std::nullopt, 100); // missing lower
+    auto ranges = as_pb_list({first, second});
+    auto s = TabletRangeHelper::validate_new_tablet_ranges(parent, ranges);
+    ASSERT_FALSE(s.ok());
+    ASSERT_THAT(s.to_string(), testing::HasSubstr("gap at boundary 0"));
+}
+
+TEST(TabletRangeHelperTest, validate_new_tablet_ranges_interior_bound_flags_rejected) {
+    TabletRangePB parent = make_int_range_pb(0, 100);
+    TabletRangePB first = make_int_range_pb(0, 50);
+    first.set_upper_bound_included(true); // Violation: left boundary must be exclusive.
+    TabletRangePB second = make_int_range_pb(50, 100);
+    auto ranges = as_pb_list({first, second});
+    auto s = TabletRangeHelper::validate_new_tablet_ranges(parent, ranges);
+    ASSERT_FALSE(s.ok());
+    // The per-range guard (validate_tablet_range) fires before the positional
+    // "invalid bound flags" check and emits the generic message.
+    ASSERT_THAT(s.to_string(), testing::HasSubstr("Upper bound is inclusive"));
+}
+
+TEST(TabletRangeHelperTest, validate_new_tablet_ranges_adjacency_gap_rejected) {
+    TabletRangePB parent = make_int_range_pb(0, 100);
+    TabletRangePB first = make_int_range_pb(0, 40);
+    TabletRangePB second = make_int_range_pb(50, 100); // gap: first.upper=40 != second.lower=50
+    auto ranges = as_pb_list({first, second});
+    auto s = TabletRangeHelper::validate_new_tablet_ranges(parent, ranges);
+    ASSERT_FALSE(s.ok());
+    ASSERT_THAT(s.to_string(), testing::HasSubstr("gap or overlap at boundary 0"));
+}
+
+TEST(TabletRangeHelperTest, validate_new_tablet_ranges_happy_path_two_adjacent_ranges) {
+    TabletRangePB parent = make_int_range_pb(0, 100);
+    TabletRangePB first = make_int_range_pb(0, 50);
+    TabletRangePB second = make_int_range_pb(50, 100);
+    auto ranges = as_pb_list({first, second});
+    auto s = TabletRangeHelper::validate_new_tablet_ranges(parent, ranges);
+    ASSERT_TRUE(s.ok()) << s;
+}
+
+TEST(TabletRangeHelperTest, validate_new_tablet_ranges_happy_path_unbounded_parent) {
+    // Parent is (-inf, +inf); 3-way split with explicit interior boundaries.
+    TabletRangePB parent;
+    auto ranges = as_pb_list(
+            {make_int_range_pb(std::nullopt, 50), make_int_range_pb(50, 100), make_int_range_pb(100, std::nullopt)});
+    auto s = TabletRangeHelper::validate_new_tablet_ranges(parent, ranges);
+    ASSERT_TRUE(s.ok()) << s;
 }
 
 } // namespace starrocks::lake

@@ -14,6 +14,8 @@
 
 #include "storage/lake/tablet_range_helper.h"
 
+#include <google/protobuf/util/message_differencer.h>
+
 #include <memory>
 
 #include "column/binary_column.h"
@@ -78,7 +80,7 @@ static StatusOr<Datum> datum_from_type_min(LogicalType type) {
     }
 }
 
-Status TabletRangeHelper::_validate_tablet_range(const TabletRangePB& tablet_range_pb) {
+Status TabletRangeHelper::validate_tablet_range(const TabletRangePB& tablet_range_pb) {
     if (!tablet_range_pb.has_lower_bound() && !tablet_range_pb.has_upper_bound()) {
         return Status::OK();
     }
@@ -108,7 +110,7 @@ StatusOr<SeekRange> TabletRangeHelper::create_seek_range_from(const TabletRangeP
                                                               const TabletSchemaCSPtr& tablet_schema,
                                                               MemPool* mem_pool) {
     SeekRange tablet_range;
-    RETURN_IF_ERROR(_validate_tablet_range(tablet_range_pb));
+    RETURN_IF_ERROR(validate_tablet_range(tablet_range_pb));
     if (!tablet_range_pb.has_lower_bound() && !tablet_range_pb.has_upper_bound()) {
         // (-inf, +inf)
         return tablet_range;
@@ -158,7 +160,7 @@ StatusOr<SeekRange> TabletRangeHelper::create_seek_range_from(const TabletRangeP
 StatusOr<SstSeekRange> TabletRangeHelper::create_sst_seek_range_from(const TabletRangePB& tablet_range_pb,
                                                                      const TabletSchemaCSPtr& tablet_schema) {
     SstSeekRange sst_seek_range;
-    RETURN_IF_ERROR(_validate_tablet_range(tablet_range_pb));
+    RETURN_IF_ERROR(validate_tablet_range(tablet_range_pb));
     if (!tablet_range_pb.has_lower_bound() && !tablet_range_pb.has_upper_bound()) {
         // (-inf, +inf)
         return sst_seek_range;
@@ -282,6 +284,95 @@ StatusOr<TabletRangePB> TabletRangeHelper::convert_t_range_to_pb_range(const TTa
         pb_range.set_upper_bound_included(t_range.upper_bound_included);
     }
     return pb_range;
+}
+
+// Structural (proto byte-for-byte) equality of two TuplePB messages. Used by
+// validate_new_tablet_ranges to detect zero-width and adjacency-tile mismatches.
+namespace {
+bool tuple_pb_equal(const TuplePB& lhs, const TuplePB& rhs) {
+    return google::protobuf::util::MessageDifferencer::Equals(lhs, rhs);
+}
+
+// Same as tuple_pb_equal but treats "neither side has the bound" as equal —
+// used at the first.lower / last.upper endpoint checks where the parent range
+// may be unbounded.
+bool tuple_bound_equal(bool lhs_has, const TuplePB& lhs, bool rhs_has, const TuplePB& rhs) {
+    if (lhs_has != rhs_has) return false;
+    if (!lhs_has) return true;
+    return tuple_pb_equal(lhs, rhs);
+}
+} // namespace
+
+Status TabletRangeHelper::validate_new_tablet_ranges(
+        const TabletRangePB& old_tablet_range,
+        const google::protobuf::RepeatedPtrField<TabletRangePB>& new_tablet_ranges) {
+    if (new_tablet_ranges.empty()) {
+        return Status::InvalidArgument("validate_new_tablet_ranges: new_tablet_ranges is empty");
+    }
+
+    // 0. The old tablet's own range must be well-formed too — otherwise our
+    //    "first.lower matches old.lower" / "last.upper matches old.upper"
+    //    checks below could be comparing against a malformed reference.
+    RETURN_IF_ERROR(validate_tablet_range(old_tablet_range));
+
+    // 1. Each new-tablet range must be individually well-formed, and the two
+    //    bounds (when both set) must not be byte-equal (catches zero-width
+    //    children). Strict semantic ordering (lower < upper) requires a
+    //    schema for type-aware comparison and is the caller's responsibility
+    //    (e.g., compute_split_ranges_from_external_boundaries compares via
+    //    the tablet schema).
+    for (const auto& r : new_tablet_ranges) {
+        RETURN_IF_ERROR(validate_tablet_range(r));
+        if (r.has_lower_bound() && r.has_upper_bound() && tuple_pb_equal(r.lower_bound(), r.upper_bound())) {
+            return Status::InvalidArgument(
+                    "validate_new_tablet_ranges: range with lower_bound == upper_bound (zero-width)");
+        }
+    }
+
+    // 2. First range's lower bound must match the old tablet's lower bound.
+    const auto& first = new_tablet_ranges[0];
+    if (!tuple_bound_equal(first.has_lower_bound(), first.lower_bound(), old_tablet_range.has_lower_bound(),
+                           old_tablet_range.lower_bound())) {
+        return Status::InvalidArgument("validate_new_tablet_ranges: first.lower_bound != old_tablet_range.lower_bound");
+    }
+    if (first.has_lower_bound() && !first.lower_bound_included()) {
+        return Status::InvalidArgument("validate_new_tablet_ranges: first.lower_bound must be inclusive when set");
+    }
+
+    // 3. Last range's upper bound must match the old tablet's upper bound.
+    const auto& last = new_tablet_ranges[new_tablet_ranges.size() - 1];
+    if (!tuple_bound_equal(last.has_upper_bound(), last.upper_bound(), old_tablet_range.has_upper_bound(),
+                           old_tablet_range.upper_bound())) {
+        return Status::InvalidArgument("validate_new_tablet_ranges: last.upper_bound != old_tablet_range.upper_bound");
+    }
+    if (last.has_upper_bound() && last.upper_bound_included()) {
+        return Status::InvalidArgument("validate_new_tablet_ranges: last.upper_bound must be exclusive when set");
+    }
+
+    // 4. Adjacent ranges must tile exactly: ranges[i].upper == ranges[i+1].lower,
+    //    upper exclusive on the left, lower inclusive on the right.
+    for (int i = 0; i + 1 < new_tablet_ranges.size(); ++i) {
+        const auto& current_range = new_tablet_ranges[i];
+        const auto& next_range = new_tablet_ranges[i + 1];
+        if (!current_range.has_upper_bound() || !next_range.has_lower_bound()) {
+            return Status::InvalidArgument(
+                    fmt::format("validate_new_tablet_ranges: gap at boundary {} (interior bounds must be set)", i));
+        }
+        if (current_range.upper_bound_included() || !next_range.lower_bound_included()) {
+            return Status::InvalidArgument(
+                    fmt::format("validate_new_tablet_ranges: invalid bound flags at boundary {} "
+                                "(left must be exclusive, right must be inclusive)",
+                                i));
+        }
+        if (!tuple_pb_equal(current_range.upper_bound(), next_range.lower_bound())) {
+            return Status::InvalidArgument(
+                    fmt::format("validate_new_tablet_ranges: gap or overlap at boundary {} "
+                                "(ranges[i].upper_bound != ranges[i+1].lower_bound)",
+                                i));
+        }
+    }
+
+    return Status::OK();
 }
 
 } // namespace starrocks::lake

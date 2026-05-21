@@ -107,4 +107,43 @@ StatusOr<std::unordered_map<int64_t, MutableTabletMetadataPtr>> split_tablet(
         TabletManager* tablet_manager, const TabletMetadataPtr& old_tablet_metadata,
         const SplittingTabletInfoPB& splitting_tablet, int64_t new_version, const TxnInfoPB& txn_info);
 
+// Per-rowset estimated stats; used by the external boundaries split path's per-range output.
+struct Statistic {
+    int64_t num_rows = 0;
+    int64_t data_size = 0;
+    int64_t num_dels = 0;
+};
+
+// A new-tablet range plus the per-rowset stats that should be carried into it.
+struct TabletRangeInfo {
+    TabletRangePB range;
+    std::unordered_map<uint32_t, Statistic> rowset_stats;
+};
+
+// Data-driven peer of compute_split_ranges_from_external_boundaries:
+// computes K-1 boundaries from the old tablet's segment distribution and
+// emits K TabletRangeInfo with per-rowset anchored stats. Exposed for unit
+// testing (parity comparison with the external-boundaries path); the production call site
+// is in split_tablet().
+//
+// `tablet_manager` is only dereferenced by build_rowset_anchor's primary-key
+// delvec fallback. For tests using DUP_KEYS metadata with num_dels populated
+// directly, `tablet_manager` may be nullptr.
+Status get_tablet_split_ranges(TabletManager* tablet_manager, const TabletMetadataPtr& tablet_metadata,
+                               int32_t split_count, std::vector<TabletRangeInfo>* split_ranges,
+                               int32_t colocate_column_count = 0);
+
+// external-boundaries peer of get_tablet_split_ranges: produces a vector<TabletRangeInfo>
+// from FE-supplied boundaries instead of computing them from segment
+// distribution. Exposed for unit testing of the validation paths; the
+// production call site is in split_tablet().
+//
+// `tablet_manager` is only dereferenced when the old tablet has rowsets
+// (build_rowset_anchor at step 9). For empty-tablet validation tests
+// `tablet_manager` may be nullptr.
+Status compute_split_ranges_from_external_boundaries(
+        TabletManager* tablet_manager, const TabletMetadataPtr& old_tablet_metadata,
+        const google::protobuf::RepeatedPtrField<TabletRangePB>& external_ranges,
+        std::vector<TabletRangeInfo>* split_ranges);
+
 } // namespace starrocks::lake
