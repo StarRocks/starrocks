@@ -17,6 +17,7 @@
 #include <atomic>
 #include <memory>
 
+#include "base/status_fmt.hpp"
 #include "common/config_ingest_fwd.h"
 #include "common/config_scan_io_fwd.h"
 #include "common/thread/priority_thread_pool.hpp"
