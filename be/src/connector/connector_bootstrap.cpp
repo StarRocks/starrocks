@@ -12,21 +12,17 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include "connector/connector_bootstrap.h"
+
 #include <memory>
 #include <string>
 
-#include "connector/builtin_connector_registry.h"
-#include "connector/cache_stats_connector.h"
 #include "connector/connector_registry.h"
-#include "connector/es_connector.h"
-#include "connector/file_connector.h"
-#include "connector/hive_connector.h"
-#ifndef __APPLE__
-#include "connector/iceberg_connector.h"
+
+#ifdef STARROCKS_WITH_CONNECTOR_BENCHMARK
+#include "connector/benchmark/benchmark_connector.h"
+#include "connector/connector.h"
 #endif
-#include "connector/jdbc_connector.h"
-#include "connector/lake_connector.h"
-#include "connector/mysql_connector.h"
 
 namespace starrocks::connector {
 
@@ -41,17 +37,11 @@ void install_if_absent(ConnectorRegistry* registry, const std::string& name) {
 
 } // namespace
 
-Status install_builtin_connectors(ConnectorRegistry* registry) {
+Status bootstrap_builtin_connectors() {
+    auto* registry = ConnectorRegistry::default_instance();
     DCHECK(registry != nullptr);
-    install_if_absent<HiveConnector>(registry, Connector::HIVE);
-    install_if_absent<ESConnector>(registry, Connector::ES);
-    install_if_absent<JDBCConnector>(registry, Connector::JDBC);
-    install_if_absent<MySQLConnector>(registry, Connector::MYSQL);
-    install_if_absent<CacheStatsConnector>(registry, Connector::CACHE_STATS);
-    install_if_absent<FileConnector>(registry, Connector::FILE);
-    install_if_absent<LakeConnector>(registry, Connector::LAKE);
-#ifndef __APPLE__
-    install_if_absent<IcebergConnector>(registry, Connector::ICEBERG);
+#ifdef STARROCKS_WITH_CONNECTOR_BENCHMARK
+    install_if_absent<BenchmarkConnector>(registry, Connector::BENCHMARK);
 #endif
     return Status::OK();
 }

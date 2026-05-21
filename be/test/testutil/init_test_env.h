@@ -27,6 +27,7 @@
 #include "common/system/cpu_info.h"
 #include "common/system/disk_info.h"
 #include "common/system/mem_info.h"
+#include "connector/connector_bootstrap.h"
 #include "exec/pipeline/query_context.h"
 #include "fs/fs_provider_bootstrap.h"
 #include "gtest/gtest.h"
@@ -130,6 +131,8 @@ int init_test_env(int argc, char** argv) {
     CHECK(st.ok()) << st;
 
     auto* exec_env = ExecEnv::GetInstance();
+    st = connector::bootstrap_builtin_connectors();
+    CHECK(st.ok()) << st;
     st = exec_env->init(paths, process_metrics_registry);
     CHECK(st.ok()) << st;
 

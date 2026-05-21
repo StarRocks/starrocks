@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "exec/benchmark_scanner.h"
+#include "connector/benchmark/benchmark_scanner.h"
 
 #include <arrow/status.h>
 #include <arrow/type.h>
@@ -26,11 +26,10 @@
 #include "common/config_exec_fwd.h"
 #include "common/config_metrics_fwd.h"
 #include "runtime/descriptor_helper.h"
-#include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
 #include "types/type_descriptor.h"
 
-namespace starrocks {
+namespace starrocks::connector {
 
 class BenchmarkScannerTest : public ::testing::Test {
 public:
@@ -38,8 +37,6 @@ public:
         config::enable_system_metrics = false;
         config::enable_metric_calculator = false;
 
-        _exec_env = ExecEnv::GetInstance();
-        _exec_env->metrics()->set_collect_hook_enabled(true);
         _runtime_state = _create_runtime_state();
         _pool = _runtime_state->obj_pool();
     }
@@ -50,8 +47,9 @@ protected:
         TQueryOptions query_options;
         query_options.batch_size = 16;
         TQueryGlobals query_globals;
-        auto runtime_state = std::make_shared<RuntimeState>(fragment_id, query_options, query_globals,
-                                                            &_exec_env->query_execution_services(), _exec_env);
+        auto runtime_state =
+                std::make_shared<RuntimeState>(fragment_id, query_options, query_globals,
+                                               static_cast<const QueryExecutionServices*>(nullptr), nullptr);
         TUniqueId id;
         runtime_state->init_mem_trackers(id);
         return runtime_state;
@@ -121,7 +119,6 @@ protected:
         return false;
     }
 
-    ExecEnv* _exec_env = nullptr;
     std::shared_ptr<RuntimeState> _runtime_state = nullptr;
     ObjectPool* _pool = nullptr;
 };
@@ -180,4 +177,4 @@ TEST_F(BenchmarkScannerTest, OpenAndGetNext) {
     scanner.close(_runtime_state.get());
 }
 
-} // namespace starrocks
+} // namespace starrocks::connector

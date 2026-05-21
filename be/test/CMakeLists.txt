@@ -22,7 +22,6 @@ set(EXEC_FILES
         ./column/object_column_test.cpp
         ./column/column_cow_test.cpp
         ./common/uri_test.cpp
-        ./connector/benchmark_connector_test.cpp
         ./connector/file_scan_metrics_test.cpp
         ./connector/file_connector_rejected_record_test.cpp
         ./connector/hive_connector_test.cpp
@@ -107,7 +106,6 @@ set(EXEC_FILES
         ./exec/pipeline/olap_scan_operator_test.cpp
         ./exec/analytor_test.cpp
         ./exec/analytor_test.cpp
-        ./exec/benchmark_scanner_test.cpp
         ./exec/chunks_sorter_heap_sort_test.cpp
         ./exec/chunks_sorter_test.cpp
         ./exec/connector_scan_node_test.cpp

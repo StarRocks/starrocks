@@ -367,7 +367,6 @@ set(EXEC_NON_PIPELINE_FILES
     tablet_info.cpp
     write_combined_txn_log.cpp
     mysql_scanner.cpp
-    benchmark_scanner.cpp
     cache_stats_scanner.cpp
     es/es_predicate.cpp
     es/es_scan_reader.cpp
