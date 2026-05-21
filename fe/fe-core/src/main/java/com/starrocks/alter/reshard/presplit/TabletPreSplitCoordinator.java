@@ -81,7 +81,7 @@ public final class TabletPreSplitCoordinator {
         if (table.getVisibleIndexMetas().size() != 1) {
             return skipEligibility(SkipReason.HAS_MATERIALIZED_VIEW_OR_ROLLUP);
         }
-        if (!isFirstSortKeyColumnSupported(table)) {
+        if (!areSortKeyColumnsSupported(table)) {
             return skipEligibility(SkipReason.UNSUPPORTED_SORT_KEY);
         }
 
@@ -127,7 +127,7 @@ public final class TabletPreSplitCoordinator {
         return null;
     }
 
-    private static boolean isFirstSortKeyColumnSupported(OlapTable table) {
+    private static boolean areSortKeyColumnsSupported(OlapTable table) {
         // Use the same sort-key accessor the substrate's BE-side
         // validate_new_tablet_ranges expects boundaries to match. For
         // DUPLICATE KEY + ORDER BY tables the substrate's sort-key arity
@@ -139,10 +139,19 @@ public final class TabletPreSplitCoordinator {
         if (sortKeyColumns.isEmpty()) {
             return false;
         }
-        // Deeper per-column validation (decimal precision/scale, primitive-type match against
-        // sampler tuples) is BoundaryPlanner's job at plan time; this gate only needs to keep
-        // composite/complex types out of the external-boundaries split path.
-        return sortKeyColumns.get(0).getType().isScalarType();
+        // Every sort-key column must be scalar — the sampler projects all of them
+        // and BoundaryPlanner per-column-validates each at plan time. Rejecting
+        // unsupported trailing columns here (UNSUPPORTED_SORT_KEY) is cheaper
+        // than running the sampler only to fail at decode/validation with
+        // SAMPLE_FAILED. Deeper per-column validation (decimal precision/scale,
+        // primitive-type match against sampler tuples) is still BoundaryPlanner's
+        // job at plan time.
+        for (Column column : sortKeyColumns) {
+            if (!column.getType().isScalarType()) {
+                return false;
+            }
+        }
+        return true;
     }
 
     /**

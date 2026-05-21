@@ -66,6 +66,10 @@ final class PresplitTestSupport {
         return new Column(name, IntegerType.BIGINT);
     }
 
+    static Column nullableBigintColumn(String name) {
+        return new Column(name, IntegerType.BIGINT, /*isAllowNull=*/ true);
+    }
+
     static Column varcharColumn(String name) {
         return new Column(name, VarcharType.VARCHAR);
     }

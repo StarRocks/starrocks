@@ -17,7 +17,6 @@ package com.starrocks.alter.reshard.presplit;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
-import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Variant;
@@ -281,18 +280,29 @@ abstract class FilesSampleSubqueryExecutor implements SampleSubqueryExecutor {
     }
 
     /**
-     * Each row arrives as a UTF-8 JSON document of shape
-     * {@code {"data":[<val0>, <val1>, ...],"meta":[...]}}; we read each
-     * {@code data} cell and feed it to {@link Variant#of} using the
-     * corresponding sort-key column's declared type. A null cell would imply
-     * a null in the sort key — sort-key columns reject nulls upstream, so we
-     * surface this as an executor failure rather than silently dropping the
-     * row. Any shape deviation (non-object root, missing/non-array
-     * {@code data}, wrong arity, type-coerce failure) becomes a
+     * Decode one HTTP_PROTOCAL JSON row ({@code {"data":[<val0>, ...]}}) into
+     * a sort-key tuple. Nullable columns accept JSON nulls and decode to
+     * {@link com.starrocks.catalog.NullVariant}; non-nullable columns surface
+     * a null cell as an executor failure rather than silently dropping the
+     * row. Any shape deviation or type-coerce failure becomes a
      * {@link StarRocksException} so the coordinator records SAMPLE_FAILED
      * instead of letting an unchecked exception unwind the load thread.
      */
     private List<Variant> decodeRow(ByteBuffer rowBuffer, List<Column> sortKeyColumns) throws StarRocksException {
+        JsonArray dataArray = extractDataArray(rowBuffer, sortKeyColumns.size());
+        List<Variant> tupleValues = new ArrayList<>(sortKeyColumns.size());
+        for (int columnIndex = 0; columnIndex < sortKeyColumns.size(); columnIndex++) {
+            tupleValues.add(decodeCell(dataArray.get(columnIndex), sortKeyColumns.get(columnIndex)));
+        }
+        return tupleValues;
+    }
+
+    /**
+     * Parse {@code rowBuffer} as JSON and return its {@code data} array,
+     * validating shape (non-empty UTF-8, root is JSON object, has a
+     * {@code data} array, arity matches the expected projection count).
+     */
+    private JsonArray extractDataArray(ByteBuffer rowBuffer, int expectedArity) throws StarRocksException {
         String jsonRow = StandardCharsets.UTF_8.decode(rowBuffer.duplicate()).toString();
         JsonElement root;
         try {
@@ -304,32 +314,39 @@ abstract class FilesSampleSubqueryExecutor implements SampleSubqueryExecutor {
         if (!root.isJsonObject()) {
             throw new StarRocksException(errorPrefix + "row root is not a JSON object: " + jsonRow);
         }
-        JsonObject rootObject = root.getAsJsonObject();
-        JsonElement dataElement = rootObject.get("data");
+        JsonElement dataElement = root.getAsJsonObject().get("data");
         if (dataElement == null || !dataElement.isJsonArray()) {
             throw new StarRocksException(errorPrefix + "row is missing a JSON array `data` field: " + jsonRow);
         }
         JsonArray dataArray = dataElement.getAsJsonArray();
-        if (dataArray.size() != sortKeyColumns.size()) {
-            throw new StarRocksException(errorPrefix + "expected " + sortKeyColumns.size()
+        if (dataArray.size() != expectedArity) {
+            throw new StarRocksException(errorPrefix + "expected " + expectedArity
                     + " projected column(s) per row but row carried " + dataArray.size());
         }
-        List<Variant> tupleValues = new ArrayList<>(sortKeyColumns.size());
-        for (int columnIndex = 0; columnIndex < sortKeyColumns.size(); columnIndex++) {
-            Column column = sortKeyColumns.get(columnIndex);
-            JsonElement valueElement = dataArray.get(columnIndex);
-            if (valueElement.isJsonNull()) {
-                throw new StarRocksException(errorPrefix + "sample returned a null value for sort-key column "
-                        + column.getName() + " — sort keys must be non-null");
+        return dataArray;
+    }
+
+    /**
+     * Coerce one JSON cell into a {@link Variant} of {@code column}'s declared
+     * type. Null cells produce a typed {@link Variant#nullVariant} for nullable
+     * columns (BoundaryPlanner's compareTo orders {@code NullVariant} lower
+     * than any non-null value); non-nullable columns reject null as a schema
+     * invariant violation.
+     */
+    private Variant decodeCell(JsonElement valueElement, Column column) throws StarRocksException {
+        if (valueElement.isJsonNull()) {
+            if (column.isAllowNull()) {
+                return Variant.nullVariant(column.getType());
             }
-            try {
-                tupleValues.add(Variant.of(column.getType(), valueElement.getAsString()));
-            } catch (RuntimeException variantFailure) {
-                throw new StarRocksException(errorPrefix + "failed to coerce sample value for column "
-                        + column.getName() + " to " + column.getType().toSql() + ": " + variantFailure.getMessage(),
-                        variantFailure);
-            }
+            throw new StarRocksException(errorPrefix + "sample returned a null value for non-nullable sort-key column "
+                    + column.getName());
         }
-        return tupleValues;
+        try {
+            return Variant.of(column.getType(), valueElement.getAsString());
+        } catch (RuntimeException variantFailure) {
+            throw new StarRocksException(errorPrefix + "failed to coerce sample value for column "
+                    + column.getName() + " to " + column.getType().toSql() + ": " + variantFailure.getMessage(),
+                    variantFailure);
+        }
     }
 }

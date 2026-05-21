@@ -15,6 +15,8 @@
 package com.starrocks.alter.reshard.presplit;
 
 import com.google.common.collect.Lists;
+import com.starrocks.catalog.Column;
+import com.starrocks.catalog.NullVariant;
 import com.starrocks.catalog.Variant;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.load.BrokerFileGroup;
@@ -34,6 +36,7 @@ import java.util.Map;
 import static com.starrocks.alter.reshard.presplit.PresplitTestSupport.bigintColumn;
 import static com.starrocks.alter.reshard.presplit.PresplitTestSupport.brokerFileStatus;
 import static com.starrocks.alter.reshard.presplit.PresplitTestSupport.jsonResultBatch;
+import static com.starrocks.alter.reshard.presplit.PresplitTestSupport.nullableBigintColumn;
 
 class BrokerLoadSampleSubqueryExecutorTest {
 
@@ -314,6 +317,37 @@ class BrokerLoadSampleSubqueryExecutorTest {
         Assertions.assertEquals(2, rows.get(0).size());
         Assertions.assertEquals("10", rows.get(0).get(0).getStringValue());
         Assertions.assertEquals("20", rows.get(0).get(1).getStringValue());
+    }
+
+    @Test
+    void compositeSortKeyWithNullableTrailingColumnDecodesNullVariant() throws Exception {
+        // Mirrors the InsertFromFiles coverage: ORDER BY(group_id, nullable_col)
+        // is valid, and null cells in the nullable column must decode to
+        // NullVariant rather than failing SAMPLE_FAILED.
+        BrokerLoadSampleSubqueryExecutor executor = new BrokerLoadSampleSubqueryExecutor(
+                /*sampleQueryRunner=*/ (sql, computeResource) -> List.of(jsonResultBatch(
+                        "{\"data\":[1, null]}",
+                        "{\"data\":[2, 42]}")));
+        Column groupId = bigintColumn("group_id");
+        Column nullableTrailing = nullableBigintColumn("trailing");
+        SampleRequest request = new SampleRequest(
+                new BrokerLoadScanContext(
+                        new BrokerDesc(Map.of()),
+                        List.of(mockFileGroup("parquet")),
+                        List.of(List.of(brokerFileStatus("s3://b/x.parquet", 1024L))),
+                        Mockito.mock(ComputeResource.class)),
+                List.of(groupId, nullableTrailing),
+                /*sampleByteLimit=*/ Long.MAX_VALUE,
+                /*seed=*/ 0L);
+
+        SampleSubqueryExecutor.SampleExecution execution = executor.execute(request);
+
+        List<List<Variant>> rows = Lists.newArrayList(execution.rows());
+        Assertions.assertEquals(2, rows.size());
+        Assertions.assertEquals("1", rows.get(0).get(0).getStringValue());
+        Assertions.assertInstanceOf(NullVariant.class, rows.get(0).get(1),
+                "nullable trailing column null cell must decode to NullVariant");
+        Assertions.assertEquals("42", rows.get(1).get(1).getStringValue());
     }
 
     @Test

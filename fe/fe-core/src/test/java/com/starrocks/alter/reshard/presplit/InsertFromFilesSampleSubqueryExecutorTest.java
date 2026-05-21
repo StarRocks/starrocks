@@ -16,6 +16,7 @@ package com.starrocks.alter.reshard.presplit;
 
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.NullVariant;
 import com.starrocks.catalog.TableFunctionTable;
 import com.starrocks.catalog.Variant;
 import com.starrocks.common.StarRocksException;
@@ -36,6 +37,7 @@ import java.util.Map;
 import static com.starrocks.alter.reshard.presplit.PresplitTestSupport.bigintColumn;
 import static com.starrocks.alter.reshard.presplit.PresplitTestSupport.brokerFileStatus;
 import static com.starrocks.alter.reshard.presplit.PresplitTestSupport.jsonResultBatch;
+import static com.starrocks.alter.reshard.presplit.PresplitTestSupport.nullableBigintColumn;
 
 class InsertFromFilesSampleSubqueryExecutorTest {
 
@@ -126,13 +128,40 @@ class InsertFromFilesSampleSubqueryExecutorTest {
     }
 
     @Test
-    void nullSortKeyValueThrows() {
+    void nullSortKeyValueOnNonNullColumnThrows() {
+        // bigintColumn("sort_key") is non-null by default — a null sample
+        // violates the schema invariant, sampler must reject.
         TableFunctionTable sourceTable = mockSourceTable(Map.of("format", "parquet"), List.of());
         InsertFromFilesSampleSubqueryExecutor executor = new InsertFromFilesSampleSubqueryExecutor(
                 /*sampleQueryRunner=*/ (sql, computeResource) -> List.of(jsonResultBatch("{\"data\":[null]}")));
 
         Assertions.assertThrows(StarRocksException.class,
                 () -> executor.execute(bigintRequest(sourceTable, bigintColumn("sort_key"))));
+    }
+
+    @Test
+    void nullSortKeyValueOnNullableColumnDecodesToNullVariant() throws Exception {
+        // ORDER BY can include nullable trailing columns; rejecting null cells
+        // here would force SAMPLE_FAILED on every load with nulls. Variant
+        // carries a first-class NullVariant subtype whose compareTo sorts
+        // lower than any non-null value, so BoundaryPlanner handles it.
+        TableFunctionTable sourceTable = mockSourceTable(
+                Map.of("path", "s3://b/x/*.parquet", "format", "parquet"),
+                List.of(brokerFileStatus("s3://b/x/a.parquet", 1024L)));
+        Column nullableSortKey = nullableBigintColumn("trailing");
+        InsertFromFilesSampleSubqueryExecutor executor = new InsertFromFilesSampleSubqueryExecutor(
+                /*sampleQueryRunner=*/ (sql, computeResource) -> List.of(jsonResultBatch(
+                        "{\"data\":[null]}", "{\"data\":[42]}")));
+
+        SampleSubqueryExecutor.SampleExecution execution = executor.execute(new SampleRequest(
+                new InsertFromFilesScanContext(sourceTable, Mockito.mock(ComputeResource.class)),
+                List.of(nullableSortKey), /*sampleByteLimit=*/ Long.MAX_VALUE, /*seed=*/ 0L));
+
+        List<List<Variant>> rows = Lists.newArrayList(execution.rows());
+        Assertions.assertEquals(2, rows.size());
+        Assertions.assertInstanceOf(NullVariant.class, rows.get(0).get(0),
+                "nullable column null cell must decode to NullVariant");
+        Assertions.assertEquals("42", rows.get(1).get(0).getStringValue());
     }
 
     @Test

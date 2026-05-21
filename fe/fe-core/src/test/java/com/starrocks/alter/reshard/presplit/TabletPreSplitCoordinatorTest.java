@@ -109,24 +109,20 @@ public class TabletPreSplitCoordinatorTest {
     }
 
     /**
-     * Stub the indexMeta the coordinator's sort-key accessor walks so it yields {@code columns}
-     * as the sort-key column list. Each column's {@code isKey()} is forced to {@code true} so the
-     * fallback path inside {@link MetaUtils#getRangeDistributionColumns} also works if
-     * {@code sortKeyIdxes} is null.
+     * Stub the indexMeta the coordinator's sort-key accessor walks
+     * ({@link MetaUtils#getRangeDistributionColumns}) so it yields {@code columns}
+     * as the sort-key column list. The schema is {@code columns} verbatim and
+     * {@code sortKeyIdxes} indexes them in order — the production accessor
+     * prefers this path over the isKey() fallback so we don't stub the latter.
      */
     private void stubSortKeyColumns(Column... columns) {
+        List<Integer> sortKeyIdxes = new java.util.ArrayList<>(columns.length);
+        for (int columnIndex = 0; columnIndex < columns.length; columnIndex++) {
+            sortKeyIdxes.add(columnIndex);
+        }
         MaterializedIndexMeta indexMeta = mock(MaterializedIndexMeta.class);
         when(indexMeta.getSchema()).thenReturn(List.of(columns));
-        if (columns.length == 0) {
-            when(indexMeta.getSortKeyIdxes()).thenReturn(List.of());
-        } else {
-            List<Integer> sortKeyIdxes = new java.util.ArrayList<>();
-            for (int columnIndex = 0; columnIndex < columns.length; columnIndex++) {
-                sortKeyIdxes.add(columnIndex);
-                when(columns[columnIndex].isKey()).thenReturn(true);
-            }
-            when(indexMeta.getSortKeyIdxes()).thenReturn(sortKeyIdxes);
-        }
+        when(indexMeta.getSortKeyIdxes()).thenReturn(sortKeyIdxes);
         when(table.getIndexMetaByMetaId(BASE_INDEX_META_ID)).thenReturn(indexMeta);
     }
 
@@ -238,6 +234,22 @@ public class TabletPreSplitCoordinatorTest {
     @Test
     public void testEmptyKeyColumnsSkipped() {
         stubSortKeyColumns();
+
+        assertSkipped(invokeMaybeAct(), SkipReason.UNSUPPORTED_SORT_KEY);
+    }
+
+    @Test
+    public void testUnsupportedTrailingSortKeyColumnTypeSkipped() {
+        // Composite sort key where the leading column is scalar but a trailing
+        // column is non-scalar. Eligibility must fail up front rather than let
+        // the sampler reach SAMPLE_FAILED at decode time.
+        Column scalarLead = mock(Column.class);
+        when(scalarLead.getType()).thenReturn(IntegerType.BIGINT);
+        Column nonScalarTrailing = mock(Column.class);
+        Type nonScalarType = mock(Type.class);
+        when(nonScalarType.isScalarType()).thenReturn(false);
+        when(nonScalarTrailing.getType()).thenReturn(nonScalarType);
+        stubSortKeyColumns(scalarLead, nonScalarTrailing);
 
         assertSkipped(invokeMaybeAct(), SkipReason.UNSUPPORTED_SORT_KEY);
     }
