@@ -39,7 +39,12 @@ static constexpr double kChunkBufferMemRatio = pipeline::ConnectorScanOperatorMe
 ConnectorScanNode::ConnectorScanNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs)
         : ScanNode(pool, tnode, descs) {
     _name = "connector_scan";
-    auto c = connector::ConnectorRegistry::default_instance()->get(tnode.connector_scan_node.connector_name);
+    const auto& connector_name = tnode.connector_scan_node.connector_name;
+    auto c = connector::ConnectorRegistry::default_instance()->get(connector_name);
+    if (c == nullptr) {
+        _connector_status = Status::Unknown("Unknown connector: {}", connector_name);
+        return;
+    }
     _connector_type = c->connector_type();
     if (tnode.connector_scan_node.__isset.catalog_type) {
         _catalog_type = tnode.connector_scan_node.catalog_type;
@@ -56,6 +61,7 @@ ConnectorScanNode::~ConnectorScanNode() {
 }
 
 Status ConnectorScanNode::init(const TPlanNode& tnode, RuntimeState* state) {
+    RETURN_IF_ERROR(_connector_status);
     RETURN_IF_ERROR(ScanNode::init(tnode, state));
     RETURN_IF_ERROR(_data_source_provider->init(_pool, state));
 

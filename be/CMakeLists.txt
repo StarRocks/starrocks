@@ -863,6 +863,8 @@ endif()
 # STARROCKS_LINK_LIBS so normal BE, format-lib, and benchmark builds do not
 # compile or link test helper code.
 set (TEST_LINK_LIBS ${STARROCKS_LINK_LIBS}
+    ConnectorBuiltinRegistry
+    ConnectorBootstrap
     TestUtil
     ${WL_START_GROUP}
     gmock
