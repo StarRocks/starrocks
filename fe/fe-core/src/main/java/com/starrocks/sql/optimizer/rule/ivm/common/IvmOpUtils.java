@@ -33,7 +33,11 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.type.AggStateDesc;
+import com.starrocks.type.ArrayType;
+import com.starrocks.type.MapType;
 import com.starrocks.type.ScalarType;
+import com.starrocks.type.StructField;
+import com.starrocks.type.StructType;
 import com.starrocks.type.Type;
 import com.starrocks.type.VarbinaryType;
 import com.starrocks.type.VarcharType;
@@ -191,12 +195,38 @@ public class IvmOpUtils {
         if (intermediate.equals(mvColumn)) {
             return true;
         }
-        // MaterializedViewAnalyzer caps VARCHAR length at OlapMaxVarcharLength (65533)
-        // when persisting MV column types, so the delta side's narrower VARCHAR(N) is
-        // semantically compatible with the MV side's wider VARCHAR(65533). Same logic
+        // MaterializedViewAnalyzer caps VARCHAR length at OlapMaxVarcharLength when
+        // persisting MV column types, so the delta side's wider VARCHAR(N) is
+        // semantically compatible with the MV side's narrower VARCHAR. Same logic
         // applies to other string types sharing a primitive kind.
         if (intermediate.isStringType() && mvColumn.isStringType()
                 && intermediate.getPrimitiveType() == mvColumn.getPrimitiveType()) {
+            return true;
+        }
+        // Recurse so the rule above reaches nested strings — e.g. ARRAY_AGG's
+        // state is struct<array<varchar>> with differing VARCHAR lengths on each side.
+        if (intermediate.isArrayType() && mvColumn.isArrayType()) {
+            return typesCompatibleForStateUnion(
+                    ((ArrayType) intermediate).getItemType(),
+                    ((ArrayType) mvColumn).getItemType());
+        }
+        if (intermediate.isMapType() && mvColumn.isMapType()) {
+            MapType im = (MapType) intermediate;
+            MapType mm = (MapType) mvColumn;
+            return typesCompatibleForStateUnion(im.getKeyType(), mm.getKeyType())
+                    && typesCompatibleForStateUnion(im.getValueType(), mm.getValueType());
+        }
+        if (intermediate.isStructType() && mvColumn.isStructType()) {
+            List<StructField> iFields = ((StructType) intermediate).getFields();
+            List<StructField> mFields = ((StructType) mvColumn).getFields();
+            if (iFields.size() != mFields.size()) {
+                return false;
+            }
+            for (int i = 0; i < iFields.size(); i++) {
+                if (!typesCompatibleForStateUnion(iFields.get(i).getType(), mFields.get(i).getType())) {
+                    return false;
+                }
+            }
             return true;
         }
         return false;
