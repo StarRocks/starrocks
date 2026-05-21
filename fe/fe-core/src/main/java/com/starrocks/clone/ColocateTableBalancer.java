@@ -55,7 +55,7 @@ import com.starrocks.clone.TabletSchedCtx.Priority;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
-import com.starrocks.common.util.FrontendDaemon;
+import com.starrocks.common.util.LeaderDaemon;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.persist.ColocatePersistInfo;
@@ -81,7 +81,7 @@ import java.util.stream.IntStream;
 /**
  * ColocateTableBalancer is responsible for tablets' repair and balance of colocated tables.
  */
-public class ColocateTableBalancer extends FrontendDaemon {
+public class ColocateTableBalancer extends LeaderDaemon {
     private static final Logger LOG = LogManager.getLogger(ColocateTableBalancer.class);
 
     private static final long CHECK_INTERVAL_MS = 20 * 1000L; // 20 second
@@ -250,13 +250,24 @@ public class ColocateTableBalancer extends FrontendDaemon {
      *   Otherwise, mark the group as stable
      */
     @Override
-    protected void runAfterCatalogReady() {
+    protected void runAfterLeaseValid() {
         if (!Config.tablet_sched_disable_colocate_balance && isSystemStable(GlobalStateMgr
                 .getCurrentState().getNodeMgr().getClusterInfo())) {
             relocateAndBalancePerGroup();
             relocateAndBalanceAllGroups();
         }
         matchGroups();
+    }
+
+    @Override
+    protected void onStopped() {
+        // aliveBackendIds and systemStableStartTime are leader-session watermarks used to gate
+        // balancing on cluster stability. Reset both so the next leader re-observes BE liveness
+        // and re-times the stability window from scratch instead of trusting the demoted
+        // leader's view. group2ColocateRelocationInfo is left as-is: it tracks in-progress
+        // relocation decisions tied to ColocateTableIndex and is reused on re-election.
+        aliveBackendIds = new HashSet<>();
+        systemStableStartTime = -1L;
     }
 
     /**

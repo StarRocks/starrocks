@@ -2000,7 +2000,7 @@ public class SchemaChangeHandler extends AlterHandler {
 
         if (RunMode.isSharedDataMode()) {
             // check warehouse
-            this.computeResource = connectContext != null ?
+            final ComputeResource computeResource = connectContext != null ?
                     connectContext.getCurrentComputeResource() : WarehouseManager.DEFAULT_RESOURCE;
             final WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
             if (!warehouseManager.isResourceAvailable(computeResource)) {
@@ -2029,8 +2029,8 @@ public class SchemaChangeHandler extends AlterHandler {
     }
 
     @Override
-    protected void runAfterCatalogReady() {
-        super.runAfterCatalogReady();
+    protected void runAfterLeaseValid() {
+        super.runAfterLeaseValid();
         runAlterJobV2();
     }
 

@@ -769,21 +769,21 @@ public abstract class LakeFastSchemaChangeTestBase extends StarRocksTestBase {
 
         SchemaChangeHandler schemaChangeHandler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
         job1.setFinishedTimeMs(System.currentTimeMillis() / 1000 - Config.alter_table_timeout_second - 100);
-        schemaChangeHandler.runAfterCatalogReady();
+        schemaChangeHandler.runAfterLeaseValid();
         Assertions.assertSame(job1, schemaChangeHandler.getAlterJobsV2().get(job1.getJobId()));
         Assertions.assertFalse(getHistorySchema(job1).isExpired());
         GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().abortTransaction(db.getId(), runningTxn1, "fail1");
-        schemaChangeHandler.runAfterCatalogReady();
+        schemaChangeHandler.runAfterLeaseValid();
         Assertions.assertNull(schemaChangeHandler.getAlterJobsV2().get(job1.getJobId()));
 
         GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().abortTransaction(db.getId(), runningTxn2, "fail2");
-        schemaChangeHandler.runAfterCatalogReady();
+        schemaChangeHandler.runAfterLeaseValid();
         Assertions.assertSame(job2, schemaChangeHandler.getAlterJobsV2().get(job2.getJobId()));
         Assertions.assertTrue(historySchema2.isExpired());
         Assertions.assertNull(historySchema2.getSchemaByIndexMetaId(baseIndexMetaId).orElse(null));
         Assertions.assertNull(historySchema2.getSchemaBySchemaId(preAlterIndexMeta2.getSchemaId()).orElse(null));
         job2.setFinishedTimeMs(System.currentTimeMillis() / 1000 - Config.alter_table_timeout_second - 100);
-        schemaChangeHandler.runAfterCatalogReady();
+        schemaChangeHandler.runAfterLeaseValid();
         Assertions.assertNull(schemaChangeHandler.getAlterJobsV2().get(job2.getJobId()));
     }
 
