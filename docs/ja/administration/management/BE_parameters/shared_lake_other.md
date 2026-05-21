@@ -58,6 +58,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 説明: クラウドネイティブ主キーインデックスのリビルド時に許容される最大行数。リビルドが必要な行数がこの閾値を超えた場合、StarRocks はメモリ内の MemTable を即座にフラッシュし、インデックス再構築のコストを削減します。`0` に設定するとこの早期フラッシュ戦略は無効になります。`cloud_native_pk_index_rebuild_files_threshold` と連携して動作し、いずれかの閾値を超えるとフラッシュがトリガーされます。
 - 導入バージョン: -
 
+### cloud_native_tablet_metadata_ancestors_recorded
+
+- デフォルト: 5
+- タイプ: Int
+- 単位: -
+- 変更可能: Yes
+- 説明: tablet ごとに保持される過去の tablet metadata 祖先バージョンの数。CHANGES クエリで遡れるバージョン範囲を決定します。値を大きくすると CHANGES がより古い base バージョンまで遡れるようになりますが、metadata ストレージのコストが増加します。
+- 導入バージョン: -
+
 ### download_buffer_size
 
 - デフォルト: 4194304
