@@ -104,12 +104,10 @@ StatusOr<ColumnPtr> UtilityFunctions::query_id(FunctionContext* context, const C
     // TUniqueId.hi/lo map bit-for-bit to UUID most/least significant bits.
     uint64_t hi = static_cast<uint64_t>(id.hi);
     uint64_t lo = static_cast<uint64_t>(id.lo);
-    std::string s = fmt::format("{:08x}-{:04x}-{:04x}-{:04x}-{:012x}",
-                                static_cast<uint32_t>((hi >> 32) & 0xFFFFFFFFull),
-                                static_cast<uint32_t>((hi >> 16) & 0xFFFFull),
-                                static_cast<uint32_t>(hi & 0xFFFFull),
-                                static_cast<uint32_t>((lo >> 48) & 0xFFFFull),
-                                static_cast<uint64_t>(lo & 0xFFFFFFFFFFFFull));
+    std::string s =
+            fmt::format("{:08x}-{:04x}-{:04x}-{:04x}-{:012x}", static_cast<uint32_t>((hi >> 32) & 0xFFFFFFFFull),
+                        static_cast<uint32_t>((hi >> 16) & 0xFFFFull), static_cast<uint32_t>(hi & 0xFFFFull),
+                        static_cast<uint32_t>((lo >> 48) & 0xFFFFull), static_cast<uint64_t>(lo & 0xFFFFFFFFFFFFull));
     return ColumnHelper::create_const_column<TYPE_VARCHAR>(s, 1);
 }
 
