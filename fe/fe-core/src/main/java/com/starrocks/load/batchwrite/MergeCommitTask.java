@@ -925,6 +925,24 @@ public class MergeCommitTask extends AbstractStreamLoadTask implements Runnable 
             info.setLoad_start_time(TimeUtils.longToTimeString(loadTimeTrace.startTimeMs.get()));
             info.setLoad_commit_time(TimeUtils.longToTimeString(loadTimeTrace.commitTimeMs.get()));
             info.setLoad_finish_time(TimeUtils.longToTimeString(endTimeMs()));
+            // New BE prefers these UTC epoch-ms fields (rendered in the session zone),
+            // so the displayed column value and any predicate literal evaluated in the
+            // same session agree on the wall-clock representation.
+            long startMs = loadTimeTrace.startTimeMs.get();
+            long commitMs = loadTimeTrace.commitTimeMs.get();
+            long finishMs = endTimeMs();
+            if (loadTimeTrace.createTimeMs > 0) {
+                info.setCreate_time_ms(loadTimeTrace.createTimeMs);
+            }
+            if (startMs > 0) {
+                info.setLoad_start_time_ms(startMs);
+            }
+            if (commitMs > 0) {
+                info.setLoad_commit_time_ms(commitMs);
+            }
+            if (finishMs > 0) {
+                info.setLoad_finish_time_ms(finishMs);
+            }
 
             info.setWarehouse(warehouseName);
             info.setRuntime_details(getRuntimeDetails());

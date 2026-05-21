@@ -13,6 +13,7 @@
 // limitations under the License.
 package com.starrocks.catalog.system.information;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Database;
@@ -204,24 +205,32 @@ public class LoadsSystemTable {
         if (value == null || value < 0) {
             return true;
         }
-        if (lowerBound != null && value < lowerBound) {
+        // Truncate the full-ms job timestamp to second so this prefilter
+        // matches BE's second-precision materialized column. Otherwise a job
+        // at e.g. ...:08.789 with a `<= ...:08` upper bound is dropped here
+        // but kept by BE's post-filter on the rendered column. To enable ms
+        // support, drop the truncation (the wire carries full ms).
+        long secondAlignedValue = (value / 1000) * 1000;
+        if (lowerBound != null && secondAlignedValue < lowerBound) {
             return false;
         }
-        return upperBound == null || value <= upperBound;
+        return upperBound == null || secondAlignedValue <= upperBound;
     }
 
-    private static class LoadRequestFilter {
-        private Long dbId;
-        private String tableName;
-        private String user;
-        private String state;
-        private Long loadStartTimeFrom;
-        private Long loadStartTimeTo;
-        private Long loadFinishTimeFrom;
-        private Long loadFinishTimeTo;
-        private Long createTimeFrom;
-        private Long createTimeTo;
+    @VisibleForTesting
+    static class LoadRequestFilter {
+        Long dbId;
+        String tableName;
+        String user;
+        String state;
+        Long loadStartTimeFrom;
+        Long loadStartTimeTo;
+        Long loadFinishTimeFrom;
+        Long loadFinishTimeTo;
+        Long createTimeFrom;
+        Long createTimeTo;
 
+        @VisibleForTesting
         static LoadRequestFilter from(TGetLoadsParams request) {
             LoadRequestFilter filter = new LoadRequestFilter();
 
@@ -240,21 +249,43 @@ public class LoadsSystemTable {
             if (request.isSetState()) {
                 filter.state = request.getState();
             }
-            filter.loadStartTimeFrom = parseTime(request.isSetLoad_start_time_from() ? request.getLoad_start_time_from() : null);
-            filter.loadStartTimeTo = parseTime(request.isSetLoad_start_time_to() ? request.getLoad_start_time_to() : null);
-            filter.loadFinishTimeFrom =
-                    parseTime(request.isSetLoad_finish_time_from() ? request.getLoad_finish_time_from() : null);
-            filter.loadFinishTimeTo = parseTime(request.isSetLoad_finish_time_to() ? request.getLoad_finish_time_to() : null);
-            filter.createTimeFrom = parseTime(request.isSetCreate_time_from() ? request.getCreate_time_from() : null);
-            filter.createTimeTo = parseTime(request.isSetCreate_time_to() ? request.getCreate_time_to() : null);
+
+            // Prefer the new UTC epoch-ms fields when the BE sets them - those are
+            // already comparable to LoadJob.finishTimestamp (System.currentTimeMillis).
+            // Fall back to parsing the legacy wall-clock string fields only when an
+            // older BE hasn't been upgraded yet; that path keeps the historical
+            // (buggy on non-Asia/Shanghai sessions) semantics rather than introducing
+            // a third interpretation.
+            filter.loadStartTimeFrom = pickTime(
+                    request.isSetLoad_start_time_from_ms() ? request.getLoad_start_time_from_ms() : null,
+                    request.isSetLoad_start_time_from() ? request.getLoad_start_time_from() : null);
+            filter.loadStartTimeTo = pickTime(
+                    request.isSetLoad_start_time_to_ms() ? request.getLoad_start_time_to_ms() : null,
+                    request.isSetLoad_start_time_to() ? request.getLoad_start_time_to() : null);
+            filter.loadFinishTimeFrom = pickTime(
+                    request.isSetLoad_finish_time_from_ms() ? request.getLoad_finish_time_from_ms() : null,
+                    request.isSetLoad_finish_time_from() ? request.getLoad_finish_time_from() : null);
+            filter.loadFinishTimeTo = pickTime(
+                    request.isSetLoad_finish_time_to_ms() ? request.getLoad_finish_time_to_ms() : null,
+                    request.isSetLoad_finish_time_to() ? request.getLoad_finish_time_to() : null);
+            filter.createTimeFrom = pickTime(
+                    request.isSetCreate_time_from_ms() ? request.getCreate_time_from_ms() : null,
+                    request.isSetCreate_time_from() ? request.getCreate_time_from() : null);
+            filter.createTimeTo = pickTime(
+                    request.isSetCreate_time_to_ms() ? request.getCreate_time_to_ms() : null,
+                    request.isSetCreate_time_to() ? request.getCreate_time_to() : null);
             return filter;
         }
 
-        private static Long parseTime(String value) {
-            if (value == null) {
+        @VisibleForTesting
+        static Long pickTime(Long msField, String legacyStringField) {
+            if (msField != null) {
+                return msField;
+            }
+            if (legacyStringField == null) {
                 return null;
             }
-            long ts = TimeUtils.timeStringToLong(value);
+            long ts = TimeUtils.timeStringToLong(legacyStringField);
             return ts >= 0 ? ts : null;
         }
     }

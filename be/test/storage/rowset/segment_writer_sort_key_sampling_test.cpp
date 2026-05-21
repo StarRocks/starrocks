@@ -68,10 +68,10 @@ protected:
     ChunkUniquePtr make_increasing_chunk(int64_t n, int32_t start_key) {
         auto s = ChunkHelper::convert_schema(_schema);
         auto chunk = ChunkFactory::new_chunk(s, n);
-        auto cols = chunk->mutable_columns();
+        auto cols = chunk->columns();
         for (int64_t i = 0; i < n; ++i) {
-            cols[0]->append_datum(Datum(static_cast<int32_t>(start_key + i)));
-            cols[1]->append_datum(Datum(static_cast<int32_t>(0)));
+            cols[0]->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(start_key + i)));
+            cols[1]->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(0)));
         }
         return chunk;
     }
@@ -164,14 +164,14 @@ TEST_F(SegmentWriterSortKeySamplingTest, leading_min_duplicate_samples) {
 
     auto s = ChunkHelper::convert_schema(_schema);
     auto chunk = ChunkFactory::new_chunk(s, num_rows);
-    auto cols = chunk->mutable_columns();
+    auto cols = chunk->columns();
     for (int64_t i = 0; i < leading; ++i) {
-        cols[0]->append_datum(Datum(static_cast<int32_t>(0)));
-        cols[1]->append_datum(Datum(static_cast<int32_t>(0)));
+        cols[0]->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(0)));
+        cols[1]->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(0)));
     }
     for (int64_t i = 0; i < trailing; ++i) {
-        cols[0]->append_datum(Datum(static_cast<int32_t>(1 + i)));
-        cols[1]->append_datum(Datum(static_cast<int32_t>(0)));
+        cols[0]->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(1 + i)));
+        cols[1]->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(0)));
     }
     ASSERT_OK(w->append_chunk(*chunk));
 
@@ -191,10 +191,10 @@ TEST_F(SegmentWriterSortKeySamplingTest, all_identical_key) {
 
     auto s = ChunkHelper::convert_schema(_schema);
     auto chunk = ChunkFactory::new_chunk(s, num_rows);
-    auto cols = chunk->mutable_columns();
+    auto cols = chunk->columns();
     for (int64_t i = 0; i < num_rows; ++i) {
-        cols[0]->append_datum(Datum(static_cast<int32_t>(42)));
-        cols[1]->append_datum(Datum(static_cast<int32_t>(0)));
+        cols[0]->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(42)));
+        cols[1]->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(0)));
     }
     ASSERT_OK(w->append_chunk(*chunk));
 
@@ -222,7 +222,7 @@ TEST_F(SegmentWriterSortKeySamplingTest, vertical_writer_reinit_preserves_sample
     // Append key-column-only chunks.
     auto key_schema_view = ChunkHelper::convert_schema(_schema, key_cols);
     auto key_chunk = ChunkFactory::new_chunk(key_schema_view, num_rows);
-    auto* key_col = key_chunk->mutable_columns()[0].get();
+    auto* key_col = key_chunk->columns()[0]->as_mutable_ptr().get();
     for (int64_t i = 0; i < num_rows; ++i) {
         key_col->append_datum(Datum(static_cast<int32_t>(i)));
     }

@@ -240,9 +240,12 @@ set(PIPELINE_OPERATORS_BATCH_SRCS
     pipeline/scan/bucket_sequence_morsel_queue.cpp
     pipeline/scan/dynamic_morsel_queue.cpp
     pipeline/scan/fixed_morsel_queue.cpp
+    pipeline/scan/olap_dynamic_morsel_queue.cpp
+    pipeline/scan/olap_fixed_morsel_queue.cpp
     pipeline/scan/morsel.cpp
     pipeline/scan/morsel_queue.cpp
     pipeline/scan/morsel_queue_factory.cpp
+    pipeline/scan/olap_morsel_queue.cpp
     pipeline/scan/scan_morsel.cpp
     pipeline/scan/split_morsel_queue.cpp
     pipeline/scan/split_scan_morsel.cpp

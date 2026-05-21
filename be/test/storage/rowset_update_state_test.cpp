@@ -166,10 +166,10 @@ public:
 
         auto chunk = ChunkFactory::new_chunk(schema, keys.size());
         EXPECT_TRUE(2 == chunk->num_columns());
-        auto cols = chunk->mutable_columns();
+        auto cols = chunk->columns();
         for (int64_t key : keys) {
-            cols[0]->append_datum(Datum(key));
-            cols[1]->append_datum(Datum((int16_t)(key % 100 + 3)));
+            cols[0]->as_mutable_ptr()->append_datum(Datum(key));
+            cols[1]->as_mutable_ptr()->append_datum(Datum((int16_t)(key % 100 + 3)));
         }
         CHECK_OK(writer->flush_chunk(*chunk));
         RowsetSharedPtr partial_rowset = *writer->build();
@@ -340,11 +340,11 @@ TEST_F(RowsetUpdateStateTest, check_conflict) {
     EXPECT_TRUE(RowsetFactory::create_rowset_writer(writer_context, &writer).ok());
     auto schema = ChunkHelper::convert_schema(_tablet->tablet_schema());
     auto chunk = ChunkFactory::new_chunk(schema, N);
-    auto cols = chunk->mutable_columns();
+    auto cols = chunk->columns();
     for (uint64_t i = 0; i < N; i++) {
-        cols[0]->append_datum(Datum(i));
-        cols[1]->append_datum(Datum((int16_t)(i % 100 + 1)));
-        cols[2]->append_datum(Datum((int32_t)(i % 1000 + 3)));
+        cols[0]->as_mutable_ptr()->append_datum(Datum(i));
+        cols[1]->as_mutable_ptr()->append_datum(Datum((int16_t)(i % 100 + 1)));
+        cols[2]->as_mutable_ptr()->append_datum(Datum((int32_t)(i % 1000 + 3)));
     }
     CHECK_OK(writer->flush_chunk(*chunk));
     RowsetSharedPtr new_rowset = *writer->build();

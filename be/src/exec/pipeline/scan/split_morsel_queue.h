@@ -16,16 +16,23 @@
 
 #include <mutex>
 
-#include "exec/pipeline/scan/morsel_queue.h"
+#include "exec/pipeline/scan/olap_morsel_queue.h"
+#include "exec/pipeline/scan/ticketed_morsel_queue.h"
+#include "gutil/casts.h"
+#include "runtime/mem_pool.h"
+#include "storage/range.h"
 #include "storage/rowset/rowid_range_option.h"
+#include "storage/rowset/segment_group.h"
 #include "storage/rowset/short_key_range_option.h"
+#include "storage/seek_range.h"
+#include "storage/tablet.h"
 
 namespace starrocks::pipeline {
 
-class SplitMorselQueue : public MorselQueue {
+class SplitMorselQueue : public OlapMorselQueue, public TicketedMorselQueue {
 public:
     SplitMorselQueue(Morsels&& morsels, int64_t degree_of_parallelism, int64_t splitted_scan_rows)
-            : MorselQueue(std::move(morsels)),
+            : OlapMorselQueue(std::move(morsels)),
               _degree_of_parallelism(degree_of_parallelism),
               _splitted_scan_rows(splitted_scan_rows) {}
     void set_ticket_checker(const query_cache::TicketCheckerPtr& ticket_checker) override {

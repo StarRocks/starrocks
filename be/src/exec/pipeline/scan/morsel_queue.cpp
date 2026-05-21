@@ -16,21 +16,6 @@
 
 namespace starrocks::pipeline {
 
-static std::vector<TInternalScanRange*> convert_morsels_to_olap_scan_ranges(const Morsels& morsels) {
-    std::vector<TInternalScanRange*> scan_ranges;
-    scan_ranges.reserve(morsels.size());
-    for (const auto& morsel : morsels) {
-        auto* scan_morsel = down_cast<ScanMorsel*>(morsel.get());
-        auto* scan_range = scan_morsel->get_olap_scan_range();
-        scan_ranges.emplace_back(scan_range);
-    }
-    return scan_ranges;
-}
-
-std::vector<TInternalScanRange*> MorselQueue::prepare_olap_scan_ranges() const {
-    return convert_morsels_to_olap_scan_ranges(_morsels);
-}
-
 void MorselQueue::unget(MorselPtr&& morsel) {
     _unget_morsel = std::move(morsel);
 }

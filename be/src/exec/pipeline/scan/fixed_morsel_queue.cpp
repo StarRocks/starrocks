@@ -14,7 +14,48 @@
 
 #include "exec/pipeline/scan/fixed_morsel_queue.h"
 
+#include "exec/pipeline/scan/fixed_morsel_queue_builder.h"
+
 namespace starrocks::pipeline {
+
+namespace {
+
+class FixedMorselQueueBuilder final : public MorselQueueBuilder {
+public:
+    explicit FixedMorselQueueBuilder(Morsels&& morsels) : _morsels(std::move(morsels)) {}
+    ~FixedMorselQueueBuilder() override = default;
+
+    size_t num_original_morsels() const override { return _morsels.size(); }
+    size_t max_degree_of_parallelism() const override { return _morsels.size(); }
+    bool can_uniform_distribute() const override { return true; }
+
+    bool has_more_scan_ranges() const override { return _has_more_scan_ranges; }
+    void set_has_more_scan_ranges(bool value) override { _has_more_scan_ranges = value; }
+    bool has_more_from_split() const override { return _has_more_from_split; }
+    void set_has_more_from_split(bool value) override { _has_more_from_split = value; }
+
+    StatusOr<MorselQueuePtr> build() override { return build_from_morsels(take_morsels()); }
+
+    Morsels take_morsels() override {
+        Morsels morsels;
+        morsels.swap(_morsels);
+        return morsels;
+    }
+
+    StatusOr<MorselQueuePtr> build_from_morsels(Morsels&& morsels) const override {
+        MorselQueuePtr queue = std::make_unique<FixedMorselQueue>(std::move(morsels));
+        queue->set_has_more_scan_ranges(_has_more_scan_ranges);
+        queue->set_has_more_from_split(_has_more_from_split);
+        return queue;
+    }
+
+private:
+    Morsels _morsels;
+    bool _has_more_scan_ranges = false;
+    bool _has_more_from_split = false;
+};
+
+} // namespace
 
 StatusOr<MorselPtr> FixedMorselQueue::try_get() {
     if (_unget_morsel != nullptr) {
@@ -27,13 +68,14 @@ StatusOr<MorselPtr> FixedMorselQueue::try_get() {
     }
     idx = _pop_index.fetch_add(1);
     if (idx < _num_morsels) {
-        if (!_tablet_rowsets.empty()) {
-            _morsels[idx]->set_rowsets(_tablet_rowsets[idx]);
-        }
         return std::move(_morsels[idx]);
     } else {
         return nullptr;
     }
+}
+
+MorselQueueBuilderPtr make_fixed_morsel_queue_builder(Morsels&& morsels) {
+    return std::make_unique<FixedMorselQueueBuilder>(std::move(morsels));
 }
 
 } // namespace starrocks::pipeline

@@ -143,6 +143,29 @@ public class AlterJobMgr {
         clusterHandler.setStop();
     }
 
+    /**
+     * Coordinated stop for leader demotion: drain each handler so onStopped() runs and the
+     * worker threads exit cleanly. Wraps each handler call in its own try-catch so a
+     * misbehaving handler cannot abort the remaining handlers' drain.
+     */
+    public void stopGracefully(long timeoutMs) {
+        try {
+            schemaChangeHandler.stopGracefully(timeoutMs);
+        } catch (Throwable t) {
+            LOG.warn("stop schemaChangeHandler failed", t);
+        }
+        try {
+            materializedViewHandler.stopGracefully(timeoutMs);
+        } catch (Throwable t) {
+            LOG.warn("stop materializedViewHandler failed", t);
+        }
+        try {
+            clusterHandler.stopGracefully(timeoutMs);
+        } catch (Throwable t) {
+            LOG.warn("stop clusterHandler failed", t);
+        }
+    }
+
     public void processDropMaterializedView(DropMaterializedViewStmt stmt) throws DdlException, MetaNotFoundException {
         // check db
         String dbName = stmt.getDbName();

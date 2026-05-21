@@ -1660,23 +1660,38 @@ public class GlobalStateMgr {
         stopOne("reportHandler", () -> reportHandler.stopGracefully(timeoutMs));
         stopOne("temporaryTableCleaner", () -> temporaryTableCleaner.stopGracefully(timeoutMs));
         stopOne("metaRecoveryDaemon", () -> metaRecoveryDaemon.stopGracefully(timeoutMs));
+        stopOne("replicationMgr", () -> replicationMgr.stopGracefully(timeoutMs));
         stopOne("safeModeChecker", () -> safeModeChecker.stopGracefully(timeoutMs));
         stopOne("spmAutoCapturer", () -> spmAutoCapturer.stopGracefully(timeoutMs));
         stopOne("mvActiveChecker", () -> mvActiveChecker.stopGracefully(timeoutMs));
+        stopOne("statisticAutoCollector", () -> statisticAutoCollector.stopGracefully(timeoutMs));
+        stopOne("statisticsMetaManager", () -> statisticsMetaManager.stopGracefully(timeoutMs));
         stopOne("updateDbUsedDataQuotaDaemon", () -> updateDbUsedDataQuotaDaemon.stopGracefully(timeoutMs));
+        stopOne("dynamicPartitionScheduler", () -> dynamicPartitionScheduler.stopGracefully(timeoutMs));
+        stopOne("batchWriteMgr", () -> batchWriteMgr.stopGracefully(timeoutMs));
+        stopOne("routineLoadTaskScheduler", () -> routineLoadTaskScheduler.stopGracefully(timeoutMs));
+        stopOne("routineLoadScheduler", () -> routineLoadScheduler.stopGracefully(timeoutMs));
         if (timePrinter != null) {
             stopOne("timePrinter", () -> timePrinter.stopGracefully(timeoutMs));
         }
+        stopOne("recycleBin", () -> getRecycleBin().stopGracefully(timeoutMs));
+        stopOne("backupHandler", () -> getBackupHandler().stopGracefully(timeoutMs));
         stopOne("consistencyChecker", () -> consistencyChecker.stopGracefully(timeoutMs));
+        stopOne("alterJobMgr", () -> getAlterJobMgr().stopGracefully(timeoutMs));
         if (txnTimeoutChecker != null) {
             stopOne("txnTimeoutChecker", () -> txnTimeoutChecker.stopGracefully(timeoutMs));
         }
         stopOne("publishVersionDaemon", () -> publishVersionDaemon.stopGracefully(timeoutMs));
         stopOne("loadLoadingChecker", () -> loadLoadingChecker.stopGracefully(timeoutMs));
         stopOne("loadEtlChecker", () -> loadEtlChecker.stopGracefully(timeoutMs));
+        stopOne("loadsHistorySyncer", () -> loadsHistorySyncer.stopGracefully(timeoutMs));
         stopOne("loadTimeoutChecker", () -> loadTimeoutChecker.stopGracefully(timeoutMs));
+        stopOne("loadJobScheduler", () -> loadJobScheduler.stopGracefully(timeoutMs));
         if (!RunMode.isSharedDataMode()) {
+            stopOne("colocateTableBalancer",
+                    () -> ColocateTableBalancer.getInstance().stopGracefully(timeoutMs));
             stopOne("tabletScheduler", () -> tabletScheduler.stopGracefully(timeoutMs));
+            stopOne("tabletChecker", () -> tabletChecker.stopGracefully(timeoutMs));
         }
         stopOne("heartbeatMgr", () -> heartbeatMgr.stopGracefully(timeoutMs));
         stopOne("keyRotationDaemon", () -> keyRotationDaemon.stopGracefully(timeoutMs));
