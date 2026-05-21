@@ -363,7 +363,7 @@ public class RewriteToVectorPlanRule extends TransformationRule {
      * `CastOperator(child=ArrayOperator(type=ArrayType(numeric_type)), type=ArrayType(float))` or
      * `CastOperator(child=ConstantOperator(VARCHAR, "[...]"), type=ArrayType(float))`
      * (the last form is used by prepared statements that send the array as a string parameter,
-     * cf. Doris-style `CAST(? AS ARRAY<FLOAT>)`).
+     * via `CAST(? AS ARRAY<FLOAT>)`).
      */
     private boolean isConstantArrayFloat(ScalarOperator scalarOperator) {
         if (!scalarOperator.isConstant()) {
@@ -378,7 +378,7 @@ public class RewriteToVectorPlanRule extends TransformationRule {
             if (!arrayType.getItemType().isFloatingPointType()) {
                 return false;
             }
-            // Doris-compatible prepared-statement form: CAST(StringLiteral AS ARRAY<FLOAT>).
+            // Prepared-statement form: CAST(StringLiteral AS ARRAY<FLOAT>).
             if (isCastStringToArrayFloat(scalarOperator)) {
                 return true;
             }
