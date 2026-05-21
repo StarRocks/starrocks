@@ -597,20 +597,58 @@ public class LowCardinalityStructTest extends PlanTestBase {
     @Test
     public void testPartialEncoding() throws Exception {
         String sql = """
-                select array_agg(VARCHAR_COL order by VARCHAR_COL2), array_agg(INTEGER_COL order by VARCHAR_COL2)
+                select array_agg(VARCHAR_COL order by VARCHAR_COL2), GROUP_CONCAT(VARCHAR_COL2)
                 from T JOIN T2 ON (KEY_COL = KEY_COL2)
                 """;
         String plan = getVerboseExplain(sql);
-        Assertions.assertTrue(plan.contains("  9:Decode\n" +
+        Assertions.assertTrue(plan.contains(" 9:Decode\n" +
                 "  |  <dict id 13> : <string id 9>\n" +
                 "  |  cardinality: 1\n" +
                 "  |  \n" +
                 "  8:AGGREGATE (merge finalize)\n" +
-                "  |  aggregate: array_agg[([13: array_agg, struct<`col1` array<int(11)>, " +
-                "`col2` array<varchar(25)>>, true]); args: INT,VARCHAR; result: ARRAY<INT>; args nullable: true;" +
-                " result nullable: true], " +
-                "array_agg[([10: array_agg, struct<`col1` array<int(11)>, `col2` array<varchar(25)>>, true]); " +
-                "args: INT,VARCHAR; result: ARRAY<INT>; args nullable: true; result nullable: true]\n" +
+                "  |  aggregate: array_agg[([13: array_agg, struct<`col1` array<int(11)>, `col2` array<varchar(25)>>," +
+                " true]); args: INT,VARCHAR; result: ARRAY<INT>; args nullable: true; result nullable: true], " +
+                "group_concat[([10: group_concat, struct<`col1` array<varchar>, `col2` array<varchar>>, true], ',');" +
+                " args: VARCHAR,VARCHAR; result: VARCHAR; args nullable: true; result nullable: true]\n" +
+                "  |  cardinality: 1"), plan);
+    }
+
+    @Test
+    public void testArrayAggSortOnlyEncodingSingleStage() throws Exception {
+        String sql = """
+                SELECT /*+ SET_VAR(new_planner_agg_stage='1') */ ARRAY_AGG(INTEGER_COL ORDER BY VARCHAR_COL)
+                FROM T
+                """;
+        String plan = getVerboseExplain(sql);
+        Assertions.assertTrue(plan.contains("1:AGGREGATE (update finalize)\n" +
+                "  |  aggregate: array_agg[([4: INTEGER_COL, INT, true], [6: VARCHAR_COL, INT, true]); args: INT,INT;" +
+                " result: ARRAY<INT>; args nullable: true; result nullable: true]\n" +
+                "  |  cardinality: 1"), plan);
+    }
+
+    @Test
+    public void testArrayAggSortOnlyEncodingTwoStage() throws Exception {
+        String sql = """
+                SELECT /*+ SET_VAR(new_planner_agg_stage='2') */ ARRAY_AGG(INTEGER_COL ORDER BY VARCHAR_COL)
+                FROM T
+                """;
+        String plan = getVerboseExplain(sql);
+        Assertions.assertTrue(plan.contains("3:AGGREGATE (merge finalize)\n" +
+                "  |  aggregate: array_agg[([5: array_agg, struct<`col1` array<int(11)>, `col2` array<int(11)>>, " +
+                "true]); args: INT,INT; result: ARRAY<INT>; args nullable: true; result nullable: true]\n" +
+                "  |  cardinality: 1"), plan);
+    }
+
+    @Test
+    public void testArrayAggArrayOfString() throws Exception {
+        String sql = """
+                SELECT /*+ SET_VAR(new_planner_agg_stage='2') */ ARRAY_AGG(ARRAY_VARCHAR_COL)
+                FROM T
+                """;
+        String plan = getVerboseExplain(sql);
+        Assertions.assertTrue(plan.contains(" 1:AGGREGATE (update serialize)\n" +
+                "  |  aggregate: array_agg[([3: ARRAY_VARCHAR_COL, ARRAY<VARCHAR(40)>, true]); args: INVALID_TYPE; " +
+                "result: struct<`col1` array<array<varchar(40)>>>; args nullable: true; result nullable: true]\n" +
                 "  |  cardinality: 1"), plan);
     }
 }
