@@ -100,15 +100,16 @@ keywords: ['profile', 'query']
 
 合并后的查询 Profile 中会附加一个 `PerTableScanStats` 子树，按"表 × BE 节点"两个维度汇总 Scan 算子的输出。它在各
 Instance Profile 还未被同构合并时遍历 Profile 树，把每个 Scan 算子 `UniqueMetrics` 上发布的 `RowsRead`、`BytesRead`、
-`RawRowsRead` 计数器以及 `Table` InfoString 与所在 Instance 的 `Address` 组合后聚合得到。该汇总可用于快速识别表在不同
-BE 上的扫描倾斜，以及哪些表是某次查询扫描成本的主要来源。
+`RawRowsRead` 计数器以及 `Database`、`Table` InfoString 与所在 Instance 的 `Address` 组合后聚合得到。聚合键包含库名，
+因此不同数据库下的同名表（如 `db1.orders` 与 `db2.orders`）不会被合并到同一桶；若 BE 未上报库名则回退使用裸表名。该汇总可用于
+快速识别表在不同 BE 上的扫描倾斜，以及哪些表是某次查询扫描成本的主要来源。
 
 结构如下：
 
 ```
 PerTableScanStats
   TableNum / ScanRows / ScanBytes / RawScanRows   -- 全查询合计
-  Table: <表名>
+  Table: <库名>.<表名>                            -- 缺少库名时退化为 <表名>
     HostNum / ScanRows / ScanBytes / RawScanRows  -- 表级合计
     Host: <host:port>
       ScanRows / ScanBytes / RawScanRows          -- 单 (表, BE) 维度

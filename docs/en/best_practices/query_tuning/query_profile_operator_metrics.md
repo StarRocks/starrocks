@@ -107,15 +107,18 @@ A `PerTableScanStats` summary is attached to the merged query profile, breaking 
 work by table and by backend host. It is built by walking the per-instance profile tree
 before the isomorphic merge collapses host-level information, aggregating the `RowsRead`,
 `BytesRead`, and `RawRowsRead` counters that scan operators publish on `UniqueMetrics`
-together with the `Table` info string. Useful for spotting data skew across BE nodes and
-identifying which tables dominate a query's scan cost.
+together with the `Database` and `Table` info strings. The key is qualified with the
+database name so that same-named tables in different databases (for example `db1.orders`
+vs `db2.orders`) are kept in separate buckets. If the BE does not report a database for a
+given scan, the bare table name is used as a fallback. Useful for spotting data skew
+across BE nodes and identifying which tables dominate a query's scan cost.
 
 Structure:
 
 ```
 PerTableScanStats
   TableNum / ScanRows / ScanBytes / RawScanRows   -- query-wide totals
-  Table: <table_name>
+  Table: <database>.<table>                       -- bare <table> if database absent
     HostNum / ScanRows / ScanBytes / RawScanRows  -- per-table totals
     Host: <host:port>
       ScanRows / ScanBytes / RawScanRows          -- per (table, host)

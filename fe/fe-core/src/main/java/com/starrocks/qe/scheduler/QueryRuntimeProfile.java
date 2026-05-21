@@ -630,11 +630,13 @@ public class QueryRuntimeProfile {
         return newQueryProfile;
     }
 
-    // Aggregate scan rows/bytes per (table, host) by walking the original instance-level profile
-    // tree. Each scan operator's UniqueMetrics carries a "Table" InfoString, and each instance
-    // profile carries an "Address" InfoString; together they form the aggregation key.
+    // Aggregate scan rows/bytes per (qualified table, host) by walking the original instance-level
+    // profile tree. Each scan operator's UniqueMetrics carries "Table" (and, when emitted by the BE,
+    // "Database") InfoStrings, and each instance profile carries an "Address" InfoString. The
+    // database is included in the key so that same-named tables in different databases (e.g.
+    // db1.orders vs db2.orders) are not collapsed into a single bucket.
     Optional<RuntimeProfile> buildScanStatsByTableAndHost() {
-        // table -> host -> [rowsRead, bytesRead, rawRowsRead]
+        // qualifiedTable -> host -> [rowsRead, bytesRead, rawRowsRead]
         Map<String, Map<String, long[]>> tableHostStats = Maps.newTreeMap();
 
         for (RuntimeProfile fragmentProfile : fragmentProfiles) {
@@ -656,8 +658,9 @@ public class QueryRuntimeProfile {
                         if (table == null) {
                             continue;
                         }
+                        String qualifiedTable = qualifyTableName(uniqueMetrics.getInfoString("Database"), table);
                         long[] agg = tableHostStats
-                                .computeIfAbsent(table, k -> Maps.newTreeMap())
+                                .computeIfAbsent(qualifiedTable, k -> Maps.newTreeMap())
                                 .computeIfAbsent(host, k -> new long[3]);
                         agg[0] += counterValueOrZero(uniqueMetrics, "RowsRead");
                         agg[1] += counterValueOrZero(uniqueMetrics, "BytesRead");
@@ -676,9 +679,9 @@ public class QueryRuntimeProfile {
         long queryTotalBytes = 0;
         long queryTotalRawRows = 0;
         for (Map.Entry<String, Map<String, long[]>> tableEntry : tableHostStats.entrySet()) {
-            String table = tableEntry.getKey();
+            String qualifiedTable = tableEntry.getKey();
             Map<String, long[]> hostStats = tableEntry.getValue();
-            RuntimeProfile tableProfile = new RuntimeProfile("Table: " + table);
+            RuntimeProfile tableProfile = new RuntimeProfile("Table: " + qualifiedTable);
             long tableRows = 0;
             long tableBytes = 0;
             long tableRawRows = 0;
@@ -711,6 +714,13 @@ public class QueryRuntimeProfile {
         perTableProfile.addCounter("RawScanRows", TUnit.UNIT, null).setValue(queryTotalRawRows);
 
         return Optional.of(perTableProfile);
+    }
+
+    private static String qualifyTableName(String database, String table) {
+        if (database == null || database.isEmpty()) {
+            return table;
+        }
+        return database + "." + table;
     }
 
     private static long counterValueOrZero(RuntimeProfile profile, String name) {

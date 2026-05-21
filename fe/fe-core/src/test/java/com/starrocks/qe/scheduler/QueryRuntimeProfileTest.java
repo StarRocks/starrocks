@@ -193,10 +193,10 @@ public class QueryRuntimeProfileTest {
         // Two instances scanning the same table on two different hosts, plus a second
         // table touched only on host1, to exercise per-table and per-host aggregation.
         fragmentProfile.addChild(buildInstanceProfile("inst-1", "10.0.0.1:9060",
-                new ScanLeaf("t_orders", 100, 1024, 200),
-                new ScanLeaf("t_lineitem", 50, 512, 75)));
+                new ScanLeaf("db1", "t_orders", 100, 1024, 200),
+                new ScanLeaf("db1", "t_lineitem", 50, 512, 75)));
         fragmentProfile.addChild(buildInstanceProfile("inst-2", "10.0.0.2:9060",
-                new ScanLeaf("t_orders", 300, 4096, 600)));
+                new ScanLeaf("db1", "t_orders", 300, 4096, 600)));
 
         Optional<RuntimeProfile> result = profile.buildScanStatsByTableAndHost();
         Assertions.assertTrue(result.isPresent(), "PerTableScanStats should be produced");
@@ -207,7 +207,7 @@ public class QueryRuntimeProfileTest {
         Assertions.assertEquals(5632, perTable.getCounter("ScanBytes").getValue());
         Assertions.assertEquals(875, perTable.getCounter("RawScanRows").getValue());
 
-        RuntimeProfile orders = perTable.getChild("Table: t_orders");
+        RuntimeProfile orders = perTable.getChild("Table: db1.t_orders");
         Assertions.assertNotNull(orders);
         Assertions.assertEquals("2", orders.getInfoString("HostNum"));
         Assertions.assertEquals(400, orders.getCounter("ScanRows").getValue());
@@ -225,11 +225,51 @@ public class QueryRuntimeProfileTest {
         Assertions.assertEquals(300, ordersHost2.getCounter("ScanRows").getValue());
         Assertions.assertEquals(4096, ordersHost2.getCounter("ScanBytes").getValue());
 
-        RuntimeProfile lineitem = perTable.getChild("Table: t_lineitem");
+        RuntimeProfile lineitem = perTable.getChild("Table: db1.t_lineitem");
         Assertions.assertNotNull(lineitem);
         Assertions.assertEquals("1", lineitem.getInfoString("HostNum"));
         Assertions.assertEquals(50, lineitem.getCounter("ScanRows").getValue());
         Assertions.assertEquals(512, lineitem.getCounter("ScanBytes").getValue());
+    }
+
+    @Test
+    public void testPerTableScanStatsKeepsSameNamedTablesSeparate() {
+        QueryRuntimeProfile profile = new QueryRuntimeProfile(connectContext, jobSpec, false);
+        profile.initFragmentProfiles(1);
+        RuntimeProfile fragmentProfile = profile.getFragmentProfiles().get(0);
+
+        // Same table name in two databases must NOT be aggregated together.
+        fragmentProfile.addChild(buildInstanceProfile("inst-1", "10.0.0.1:9060",
+                new ScanLeaf("db1", "orders", 100, 1024, 200),
+                new ScanLeaf("db2", "orders", 700, 8192, 900)));
+
+        Optional<RuntimeProfile> result = profile.buildScanStatsByTableAndHost();
+        Assertions.assertTrue(result.isPresent());
+        RuntimeProfile perTable = result.get();
+        Assertions.assertEquals("2", perTable.getInfoString("TableNum"));
+
+        RuntimeProfile db1Orders = perTable.getChild("Table: db1.orders");
+        Assertions.assertNotNull(db1Orders, "db1.orders must stay separate from db2.orders");
+        Assertions.assertEquals(100, db1Orders.getCounter("ScanRows").getValue());
+        Assertions.assertEquals(1024, db1Orders.getCounter("ScanBytes").getValue());
+
+        RuntimeProfile db2Orders = perTable.getChild("Table: db2.orders");
+        Assertions.assertNotNull(db2Orders, "db2.orders must stay separate from db1.orders");
+        Assertions.assertEquals(700, db2Orders.getCounter("ScanRows").getValue());
+        Assertions.assertEquals(8192, db2Orders.getCounter("ScanBytes").getValue());
+    }
+
+    @Test
+    public void testPerTableScanStatsFallsBackWhenDatabaseMissing() {
+        QueryRuntimeProfile profile = new QueryRuntimeProfile(connectContext, jobSpec, false);
+        profile.initFragmentProfiles(1);
+        // Older BE without the Database InfoString — fall back to the bare table name.
+        profile.getFragmentProfiles().get(0).addChild(buildInstanceProfile("inst-1", "10.0.0.1:9060",
+                new ScanLeaf(null, "orders", 42, 256, 50)));
+
+        Optional<RuntimeProfile> result = profile.buildScanStatsByTableAndHost();
+        Assertions.assertTrue(result.isPresent());
+        Assertions.assertNotNull(result.get().getChild("Table: orders"));
     }
 
     @Test
@@ -251,12 +291,14 @@ public class QueryRuntimeProfileTest {
     }
 
     private static final class ScanLeaf {
+        final String database;
         final String table;
         final long rowsRead;
         final long bytesRead;
         final long rawRowsRead;
 
-        ScanLeaf(String table, long rowsRead, long bytesRead, long rawRowsRead) {
+        ScanLeaf(String database, String table, long rowsRead, long bytesRead, long rawRowsRead) {
+            this.database = database;
             this.table = table;
             this.rowsRead = rowsRead;
             this.bytesRead = bytesRead;
@@ -276,6 +318,9 @@ public class QueryRuntimeProfileTest {
             op.addChild(new RuntimeProfile("CommonMetrics"));
             RuntimeProfile unique = new RuntimeProfile("UniqueMetrics");
             unique.addInfoString("Table", scan.table);
+            if (scan.database != null) {
+                unique.addInfoString("Database", scan.database);
+            }
             unique.addCounter("RowsRead", TUnit.UNIT, null).setValue(scan.rowsRead);
             unique.addCounter("BytesRead", TUnit.BYTES, null).setValue(scan.bytesRead);
             unique.addCounter("RawRowsRead", TUnit.UNIT, null).setValue(scan.rawRowsRead);

@@ -675,6 +675,9 @@ void HiveDataSource::_init_counter(RuntimeState* state) {
     if (hdfs_scan_node.__isset.table_name) {
         _runtime_profile->add_info_string("Table", hdfs_scan_node.table_name);
     }
+    if (hdfs_scan_node.__isset.database_name) {
+        _runtime_profile->add_info_string("Database", hdfs_scan_node.database_name);
+    }
     if (hdfs_scan_node.__isset.sql_predicates) {
         _runtime_profile->add_info_string("Predicates", hdfs_scan_node.sql_predicates);
     }
