@@ -1168,6 +1168,11 @@ public class SharedDataStorageVolumeMgrTest {
         DdlException ex = Assertions.assertThrows(DdlException.class,
                 () -> svm.updateStorageVolume(svName, null, newLocations, new HashMap<>(), Optional.empty(), ""));
         Assertions.assertTrue(ex.getMessage().contains("locations cannot be changed after creation"));
+
+        // Empty (but non-null) locations list must also be rejected to prevent clearing LOCATIONS.
+        DdlException emptyEx = Assertions.assertThrows(DdlException.class,
+                () -> svm.updateStorageVolume(svName, null, new ArrayList<>(), new HashMap<>(), Optional.empty(), ""));
+        Assertions.assertTrue(emptyEx.getMessage().contains("locations cannot be changed after creation"));
     }
 
     @Test

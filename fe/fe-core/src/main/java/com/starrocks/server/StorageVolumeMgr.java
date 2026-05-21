@@ -180,7 +180,7 @@ public abstract class StorageVolumeMgr implements Writable, GsonPostProcessable 
         if (!Strings.isNullOrEmpty(svType)) {
             throw new DdlException("Storage volume type cannot be changed after creation");
         }
-        if (locations != null && !locations.isEmpty()) {
+        if (locations != null) {
             throw new DdlException("Storage volume locations cannot be changed after creation");
         }
 
