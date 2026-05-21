@@ -192,6 +192,7 @@ set(EXEC_FILES
         ./exprs/variant_functions_test.cpp
         ./exprs/min_max_predicate_test.cpp
         ./exprs/table_function/test_list_rowsets.cpp
+        ./exprs/table_function/test_parquet_read_rows.cpp
         ./exprs/dict_expr_test.cpp
         ./exprs/http_request_functions_test.cpp
         ./formats/csv/array_converter_test.cpp
