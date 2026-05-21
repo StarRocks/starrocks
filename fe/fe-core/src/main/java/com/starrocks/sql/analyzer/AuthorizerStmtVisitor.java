@@ -148,6 +148,11 @@ import com.starrocks.sql.ast.InstallPluginStmt;
 import com.starrocks.sql.ast.KillAnalyzeStmt;
 import com.starrocks.sql.ast.KillStmt;
 import com.starrocks.sql.ast.LoadStmt;
+import com.starrocks.sql.ast.MergeIntoStmt;
+import com.starrocks.sql.ast.MergeWhenClause;
+import com.starrocks.sql.ast.MergeWhenMatchedDeleteClause;
+import com.starrocks.sql.ast.MergeWhenMatchedUpdateClause;
+import com.starrocks.sql.ast.MergeWhenNotMatchedInsertClause;
 import com.starrocks.sql.ast.NormalizedTableFunctionRelation;
 import com.starrocks.sql.ast.PauseRoutineLoadStmt;
 import com.starrocks.sql.ast.QueryStatement;
@@ -372,6 +377,61 @@ public class AuthorizerStmtVisitor implements AstVisitorExtendInterface<Void, Co
                     context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
                     PrivilegeType.UPDATE.name(), ObjectType.TABLE.name(), tableName.getTbl());
         }
+        TableName tableNameForSelect = TableName.fromTableRef(tableRef);
+        checkSelectTableAction(context, statement.getQueryStatement(), Lists.newArrayList(tableNameForSelect));
+        return null;
+    }
+
+    @Override
+    public Void visitMergeIntoStatement(MergeIntoStmt statement, ConnectContext context) {
+        TableRef tableRef = statement.getTableRef();
+        if (tableRef == null) {
+            throw new SemanticException("Table ref is null");
+        }
+        TableName tableName = new TableName(tableRef.getCatalogName(), tableRef.getDbName(),
+                tableRef.getTableName(), tableRef.getPos());
+
+        boolean needsInsert = false;
+        boolean needsUpdate = false;
+        boolean needsDelete = false;
+        for (MergeWhenClause clause : statement.getWhenClauses()) {
+            if (clause instanceof MergeWhenNotMatchedInsertClause) {
+                needsInsert = true;
+            } else if (clause instanceof MergeWhenMatchedUpdateClause) {
+                needsUpdate = true;
+            } else if (clause instanceof MergeWhenMatchedDeleteClause) {
+                needsDelete = true;
+            }
+        }
+
+        if (needsInsert) {
+            try {
+                Authorizer.checkTableAction(context, tableName, PrivilegeType.INSERT);
+            } catch (AccessDeniedException e) {
+                AccessDeniedException.reportAccessDenied(tableName.getCatalog(),
+                        context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                        PrivilegeType.INSERT.name(), ObjectType.TABLE.name(), tableName.getTbl());
+            }
+        }
+        if (needsUpdate) {
+            try {
+                Authorizer.checkTableAction(context, tableName, PrivilegeType.UPDATE);
+            } catch (AccessDeniedException e) {
+                AccessDeniedException.reportAccessDenied(tableName.getCatalog(),
+                        context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                        PrivilegeType.UPDATE.name(), ObjectType.TABLE.name(), tableName.getTbl());
+            }
+        }
+        if (needsDelete) {
+            try {
+                Authorizer.checkTableAction(context, tableName, PrivilegeType.DELETE);
+            } catch (AccessDeniedException e) {
+                AccessDeniedException.reportAccessDenied(tableName.getCatalog(),
+                        context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                        PrivilegeType.DELETE.name(), ObjectType.TABLE.name(), tableName.getTbl());
+            }
+        }
+
         TableName tableNameForSelect = TableName.fromTableRef(tableRef);
         checkSelectTableAction(context, statement.getQueryStatement(), Lists.newArrayList(tableNameForSelect));
         return null;

@@ -73,6 +73,7 @@ import com.starrocks.sql.ast.FileTableFunctionRelation;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.JoinRelation;
 import com.starrocks.sql.ast.ListPartitionDesc;
+import com.starrocks.sql.ast.MergeIntoStmt;
 import com.starrocks.sql.ast.MultiItemListPartitionDesc;
 import com.starrocks.sql.ast.NormalizedTableFunctionRelation;
 import com.starrocks.sql.ast.OrderByElement;
@@ -414,6 +415,16 @@ public class AnalyzerUtils {
             getDB(tableName);
             //If support DML operations through query results in the future,
             //need to add the corresponding `visit(node.getQueryStatement())`
+            return null;
+        }
+
+        @Override
+        public Void visitMergeIntoStatement(MergeIntoStmt node, Void context) {
+            TableName tableName = TableName.fromTableRef(node.getTableRef());
+            getDB(tableName);
+            if (node.getQueryStatement() != null) {
+                return visit(node.getQueryStatement());
+            }
             return null;
         }
 
@@ -767,6 +778,14 @@ public class AnalyzerUtils {
             TableName tableName = TableName.fromTableRef(node.getTableRef());
             tables.put(tableName, table);
             return super.visitDeleteStatement(node, context);
+        }
+
+        @Override
+        public Void visitMergeIntoStatement(MergeIntoStmt node, Void context) {
+            Table table = node.getTable();
+            TableName tableName = TableName.fromTableRef(node.getTableRef());
+            tables.put(tableName, table);
+            return super.visitMergeIntoStatement(node, context);
         }
 
         @Override

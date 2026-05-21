@@ -14,9 +14,12 @@
 
 package com.starrocks.sql.analyzer;
 
+import com.starrocks.authorization.PrivilegeType;
+import com.starrocks.catalog.TableName;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.ast.MergeIntoStmt;
 import com.starrocks.sql.ast.RecoverDbStmt;
 import com.starrocks.sql.ast.ShowCreateDbStmt;
 import com.starrocks.sql.parser.SqlParser;
@@ -25,6 +28,11 @@ import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
+import org.mockito.MockedStatic;
+import org.mockito.Mockito;
+
+import java.util.ArrayList;
+import java.util.List;
 
 public class AuthorizerStmtVisitorTest {
 
@@ -131,5 +139,29 @@ public class AuthorizerStmtVisitorTest {
             Assertions.assertFalse(e.getMessage().contains("No catalog selected"),
                     "Should not throw noCatalogSelected exception when catalog is set: " + e.getMessage());
         }
+    }
+
+    @Test
+    public void testMergeIntoPureInsertChecksOnlyInsertPrivilege() {
+        MergeIntoStmt stmt = (MergeIntoStmt) SqlParser.parse(
+                "MERGE INTO iceberg0.unpartitioned_db.t0_v2 AS t " +
+                        "USING (SELECT 1 AS id, 'new' AS data, '2024-01-01' AS date) AS s " +
+                        "ON t.id = s.id " +
+                        "WHEN NOT MATCHED THEN INSERT (id, data, date) VALUES (s.id, s.data, s.date)",
+                connectContext.getSessionVariable()).get(0);
+        List<PrivilegeType> checkedPrivileges = new ArrayList<>();
+
+        try (MockedStatic<Authorizer> authorizerMockedStatic = Mockito.mockStatic(Authorizer.class)) {
+            authorizerMockedStatic.when(() -> Authorizer.checkTableAction(
+                    Mockito.any(ConnectContext.class), Mockito.any(TableName.class), Mockito.any(PrivilegeType.class)))
+                    .thenAnswer(invocation -> {
+                        checkedPrivileges.add(invocation.getArgument(2));
+                        return null;
+                    });
+
+            new AuthorizerStmtVisitor().visitMergeIntoStatement(stmt, connectContext);
+        }
+
+        Assertions.assertEquals(List.of(PrivilegeType.INSERT), checkedPrivileges);
     }
 }

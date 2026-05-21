@@ -17,6 +17,7 @@ package com.starrocks.qe;
 import com.starrocks.sql.ast.DeleteStmt;
 import com.starrocks.sql.ast.DmlStmt;
 import com.starrocks.sql.ast.InsertStmt;
+import com.starrocks.sql.ast.MergeIntoStmt;
 import com.starrocks.sql.ast.StreamLoadStmt;
 import com.starrocks.sql.ast.UpdateStmt;
 
@@ -29,6 +30,7 @@ public enum DmlType {
     INSERT_OVERWRITE,
     UPDATE,
     DELETE,
+    MERGE_INTO,
     STREAM_LOAD;
 
     public static DmlType fromStmt(DmlStmt stmt) {
@@ -43,6 +45,8 @@ public enum DmlType {
             return UPDATE;
         } else if (stmt instanceof DeleteStmt) {
             return DELETE;
+        } else if (stmt instanceof MergeIntoStmt) {
+            return MERGE_INTO;
         } else if (stmt instanceof StreamLoadStmt) {
             return STREAM_LOAD;
         } else {
