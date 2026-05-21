@@ -367,11 +367,9 @@ public class AggregateFunction extends Function {
 
     @Override
     public String toSql(boolean ifNotExists) {
-        StringBuilder sb = new StringBuilder("CREATE AGGREGATE FUNCTION ");
-        if (ifNotExists) {
-            sb.append("IF NOT EXISTS ");
-        }
-        sb.append(dbName()).append(".").append(signatureString()).append("\n")
+        StringBuilder sb = new StringBuilder();
+        appendCreateHeader(sb, "AGGREGATE", ifNotExists);
+        sb.append(signatureString()).append("\n")
                 .append("RETURNS ").append(getReturnType()).append("\n");
 
         Map<String, String> props = synthesizePropertiesFromFields();

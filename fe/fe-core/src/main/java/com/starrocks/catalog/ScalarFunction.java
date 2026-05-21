@@ -233,11 +233,9 @@ public class ScalarFunction extends Function {
 
     @Override
     public String toSql(boolean ifNotExists) {
-        StringBuilder sb = new StringBuilder("CREATE FUNCTION ");
-        if (ifNotExists) {
-            sb.append("IF NOT EXISTS ");
-        }
-        sb.append(dbName()).append(".").append(signatureString()).append("\n")
+        StringBuilder sb = new StringBuilder();
+        appendCreateHeader(sb, "", ifNotExists);
+        sb.append(signatureString()).append("\n")
                 .append("RETURNS ").append(getReturnType()).append("\n");
 
         Map<String, String> props = synthesizePropertiesFromFields();

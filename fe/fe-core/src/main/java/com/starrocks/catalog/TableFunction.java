@@ -187,11 +187,9 @@ public class TableFunction extends Function {
 
     @Override
     public String toSql(boolean ifNotExists) {
-        StringBuilder sb = new StringBuilder("CREATE TABLE FUNCTION ");
-        if (ifNotExists) {
-            sb.append("IF NOT EXISTS ");
-        }
-        sb.append(dbName()).append(".").append(signatureString()).append("\n")
+        StringBuilder sb = new StringBuilder();
+        appendCreateHeader(sb, "TABLE", ifNotExists);
+        sb.append(signatureString()).append("\n")
                 .append("RETURNS ").append(getReturnType()).append("\n");
 
         Map<String, String> props = synthesizePropertiesFromFields();

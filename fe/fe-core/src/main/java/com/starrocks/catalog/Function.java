@@ -799,6 +799,24 @@ public class Function implements Writable {
         return "";
     }
 
+    protected void appendCreateHeader(StringBuilder sb, String functionTypeKeyword, boolean ifNotExists) {
+        boolean isGlobal = getFunctionName().isGlobalFunction();
+        sb.append("CREATE ");
+        if (isGlobal) {
+            sb.append("GLOBAL ");
+        }
+        if (functionTypeKeyword != null && !functionTypeKeyword.isEmpty()) {
+            sb.append(functionTypeKeyword).append(" ");
+        }
+        sb.append("FUNCTION ");
+        if (ifNotExists) {
+            sb.append("IF NOT EXISTS ");
+        }
+        if (!isGlobal) {
+            sb.append(dbName()).append(".");
+        }
+    }
+
     protected static void appendPropertiesBlock(StringBuilder sb, Map<String, String> props) {
         if (props == null || props.isEmpty()) {
             return;

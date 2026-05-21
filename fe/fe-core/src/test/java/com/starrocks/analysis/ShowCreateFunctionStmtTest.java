@@ -73,6 +73,12 @@ public class ShowCreateFunctionStmtTest {
         starRocksAssert.withFunction(
                 "CREATE TABLE FUNCTION IF NOT EXISTS test_udf_db.my_table_fn(int) RETURNS bigint PROPERTIES " +
                         "(\"symbol\" = \"com.example.MyTableFn\", \"type\" = \"StarrocksJar\", \"file\" = \"xxx\");");
+        starRocksAssert.withFunction(
+                "CREATE GLOBAL FUNCTION my_global_udf(int) RETURNS bigint PROPERTIES " +
+                        "(\"symbol\" = \"com.example.MyGlobalUdf\", \"type\" = \"StarrocksJar\", " +
+                        "\"file\" = \"file:///tmp/global.jar\");");
+        starRocksAssert.withFunction(
+                "CREATE FUNCTION test_udf_db.sql_add_one(x INT) RETURNS INT AS x + 1;");
     }
 
     @Test
@@ -225,6 +231,30 @@ public class ShowCreateFunctionStmtTest {
         Assertions.assertTrue(createSql.contains("AS $$"), createSql);
         Assertions.assertTrue(createSql.contains("import pyarrow.compute"), createSql);
         Assertions.assertTrue(createSql.contains("def add(x)"), createSql);
+    }
+
+    @Test
+    public void testExecuteShowCreateGlobalFunctionRoundTripsWithoutDbPrefix() throws Exception {
+        ShowCreateFunctionStmt stmt = (ShowCreateFunctionStmt) UtFrameUtils.parseStmtWithNewParser(
+                "show create global function my_global_udf(int)", ctx);
+        ShowResultSet rs = ShowExecutor.execute(stmt, ctx);
+        String createSql = rs.getResultRows().get(0).get(0);
+        Assertions.assertTrue(createSql.startsWith("CREATE GLOBAL FUNCTION"), createSql);
+        Assertions.assertFalse(createSql.contains("__global_udf_db__"), createSql);
+        Assertions.assertTrue(createSql.contains("my_global_udf("), createSql);
+    }
+
+    @Test
+    public void testExecuteShowCreateSqlFunction() throws Exception {
+        ctx.setDatabase("test_udf_db");
+        ShowCreateFunctionStmt stmt = (ShowCreateFunctionStmt) UtFrameUtils.parseStmtWithNewParser(
+                "show create function sql_add_one(int)", ctx);
+        ShowResultSet rs = ShowExecutor.execute(stmt, ctx);
+        Assertions.assertEquals(1, rs.getResultRows().size());
+        String createSql = rs.getResultRows().get(0).get(0);
+        Assertions.assertTrue(createSql.startsWith("CREATE FUNCTION"), createSql);
+        Assertions.assertTrue(createSql.contains("sql_add_one("), createSql);
+        Assertions.assertTrue(createSql.contains("RETURNS"), createSql);
     }
 
 }
