@@ -45,6 +45,7 @@ import com.google.gson.JsonParser;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.Pair;
 import com.starrocks.common.io.Writable;
+import com.starrocks.common.util.PrintableMap;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.sql.ast.CreateFunctionStmt;
 import com.starrocks.sql.ast.HdfsURI;
@@ -62,7 +63,6 @@ import org.apache.commons.lang.ArrayUtils;
 
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -803,17 +803,9 @@ public class Function implements Writable {
         if (props == null || props.isEmpty()) {
             return;
         }
-        sb.append("PROPERTIES (\n");
-        Iterator<Map.Entry<String, String>> it = props.entrySet().iterator();
-        while (it.hasNext()) {
-            Map.Entry<String, String> e = it.next();
-            sb.append("    \"").append(e.getKey()).append("\" = \"").append(e.getValue()).append("\"");
-            if (it.hasNext()) {
-                sb.append(",");
-            }
-            sb.append("\n");
-        }
-        sb.append(")\n");
+        sb.append("PROPERTIES (\n")
+                .append(new PrintableMap<>(props, "=", true, true, true))
+                .append("\n)\n");
     }
 
     protected static String binaryTypeToPropertyValue(TFunctionBinaryType type) {

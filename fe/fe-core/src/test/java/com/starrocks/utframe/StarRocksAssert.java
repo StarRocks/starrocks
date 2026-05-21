@@ -40,6 +40,7 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.alter.AlterJobV2;
+import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Function;
@@ -54,6 +55,7 @@ import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.ScalarFunction;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.TableFunction;
 import com.starrocks.catalog.TableName;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.common.AlreadyExistsException;
@@ -116,6 +118,7 @@ import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.sql.ast.DropTemporaryTableStmt;
 import com.starrocks.sql.ast.FunctionArgsDef;
 import com.starrocks.sql.ast.FunctionRef;
+import com.starrocks.sql.ast.HdfsURI;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.LoadStmt;
 import com.starrocks.sql.ast.ModifyTablePropertiesClause;
@@ -136,6 +139,7 @@ import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.system.BackendResourceStat;
 import com.starrocks.thrift.TFunctionBinaryType;
+import com.starrocks.type.TypeFactory;
 import mockit.Mock;
 import mockit.MockUp;
 import org.apache.commons.lang.StringUtils;
@@ -360,10 +364,43 @@ public class StarRocksAssert {
         TypeDefAnalyzer.analyze(returnType);
         FunctionName functionName = FunctionRefAnalyzer.resolveFunctionName(functionRef, defaultDb);
 
-        Function function = ScalarFunction.createUdf(
-                functionName, argsDef.getArgTypes(),
-                returnType.getType(), argsDef.isVariadic(), TFunctionBinaryType.SRJAR,
-                "", "", "", "", !"shared".equalsIgnoreCase(""), null);
+        Map<String, String> props = createFunctionStmt.getProperties();
+        String fileProp = props.getOrDefault(CreateFunctionStmt.FILE_KEY, "");
+        String symbolProp = props.getOrDefault(CreateFunctionStmt.SYMBOL_KEY, "");
+        boolean isolated = !"shared".equalsIgnoreCase(
+                props.getOrDefault(CreateFunctionStmt.ISOLATION_KEY, ""));
+
+        Function function;
+        if (createFunctionStmt.isAggregate()) {
+            AggregateFunction agg = new AggregateFunction(
+                    functionName,
+                    Arrays.asList(argsDef.getArgTypes()),
+                    returnType.getType(),
+                    TypeFactory.createVarcharType(TypeFactory.getOlapMaxVarcharLength()),
+                    argsDef.isVariadic(),
+                    "true".equalsIgnoreCase(props.get(CreateFunctionStmt.IS_ANALYTIC_NAME)));
+            agg.setBinaryType(TFunctionBinaryType.SRJAR);
+            agg.setLocation(new HdfsURI(fileProp));
+            agg.setIsolationType(isolated);
+            function = agg;
+        } else if (createFunctionStmt.isTable()) {
+            TableFunction tbl = new TableFunction(
+                    functionName,
+                    Lists.newArrayList(functionName.getFunction()),
+                    Arrays.asList(argsDef.getArgTypes()),
+                    Lists.newArrayList(returnType.getType()),
+                    argsDef.isVariadic());
+            tbl.setBinaryType(TFunctionBinaryType.SRJAR);
+            tbl.setLocation(new HdfsURI(fileProp));
+            tbl.setSymbolName(symbolProp);
+            function = tbl;
+        } else {
+            // Scalar — preserve existing behavior (empty typed fields) for back-compatibility
+            function = ScalarFunction.createUdf(
+                    functionName, argsDef.getArgTypes(),
+                    returnType.getType(), argsDef.isVariadic(), TFunctionBinaryType.SRJAR,
+                    fileProp, symbolProp, "", "", isolated, null);
+        }
 
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(ctx.getDatabase());
         db.addFunction(function, true, false);

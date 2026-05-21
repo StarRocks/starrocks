@@ -50,6 +50,20 @@ public class ShowCreateFunctionStmtTest {
         starRocksAssert.withFunction(
                 "CREATE GLOBAL FUNCTION echo_python(int) RETURNS int PROPERTIES " +
                         "(\"symbol\" = \"Echo\", \"type\" = \"python\", \"file\" = \"xxx\", \"cust_prop\" = \"cust_val\");");
+        starRocksAssert.withFunction(
+                "CREATE AGGREGATE FUNCTION test_udf_db.my_agg(int) RETURNS bigint PROPERTIES " +
+                        "(\"symbol\" = \"com.example.MyAgg\", \"type\" = \"StarrocksJar\", \"file\" = \"xxx\");");
+        starRocksAssert.withFunction(
+                "CREATE AGGREGATE FUNCTION test_udf_db.my_agg_analytic(int) RETURNS bigint PROPERTIES " +
+                        "(\"symbol\" = \"com.example.MyWindow\", \"type\" = \"StarrocksJar\", " +
+                        "\"file\" = \"xxx\", \"analytic\" = \"true\");");
+        starRocksAssert.withFunction(
+                "CREATE AGGREGATE FUNCTION test_udf_db.my_agg_shared(int) RETURNS bigint PROPERTIES " +
+                        "(\"symbol\" = \"com.example.MyShared\", \"type\" = \"StarrocksJar\", " +
+                        "\"file\" = \"xxx\", \"isolation\" = \"shared\");");
+        starRocksAssert.withFunction(
+                "CREATE TABLE FUNCTION test_udf_db.my_table_fn(int) RETURNS bigint PROPERTIES " +
+                        "(\"symbol\" = \"com.example.MyTableFn\", \"type\" = \"StarrocksJar\", \"file\" = \"xxx\");");
     }
 
     @Test
@@ -138,4 +152,52 @@ public class ShowCreateFunctionStmtTest {
             ShowExecutor.execute(stmt, ctx);
         });
     }
+
+    @Test
+    public void testExecuteShowCreateAggregateFunction() throws Exception {
+        ctx.setDatabase("test_udf_db");
+        ShowCreateFunctionStmt stmt = (ShowCreateFunctionStmt) UtFrameUtils.parseStmtWithNewParser(
+                "show create function my_agg(int)", ctx);
+        ShowResultSet rs = ShowExecutor.execute(stmt, ctx);
+        String createSql = rs.getResultRows().get(0).get(0);
+        Assertions.assertTrue(createSql.startsWith("CREATE AGGREGATE FUNCTION"), createSql);
+        Assertions.assertTrue(createSql.contains("\"type\" = \"StarrocksJar\""), createSql);
+        Assertions.assertTrue(createSql.contains("\"file\" = \"xxx\""), createSql);
+        Assertions.assertTrue(createSql.contains("\"intermediate\""), createSql);
+        Assertions.assertFalse(createSql.contains("\"isolation\""), createSql);
+        Assertions.assertFalse(createSql.contains("\"analytic\""), createSql);
+    }
+
+    @Test
+    public void testExecuteShowCreateAggregateFunctionAnalytic() throws Exception {
+        ctx.setDatabase("test_udf_db");
+        ShowCreateFunctionStmt stmt = (ShowCreateFunctionStmt) UtFrameUtils.parseStmtWithNewParser(
+                "show create function my_agg_analytic(int)", ctx);
+        ShowResultSet rs = ShowExecutor.execute(stmt, ctx);
+        String createSql = rs.getResultRows().get(0).get(0);
+        Assertions.assertTrue(createSql.contains("\"analytic\" = \"true\""), createSql);
+    }
+
+    @Test
+    public void testExecuteShowCreateAggregateFunctionShared() throws Exception {
+        ctx.setDatabase("test_udf_db");
+        ShowCreateFunctionStmt stmt = (ShowCreateFunctionStmt) UtFrameUtils.parseStmtWithNewParser(
+                "show create function my_agg_shared(int)", ctx);
+        ShowResultSet rs = ShowExecutor.execute(stmt, ctx);
+        String createSql = rs.getResultRows().get(0).get(0);
+        Assertions.assertTrue(createSql.contains("\"isolation\" = \"shared\""), createSql);
+    }
+
+    @Test
+    public void testExecuteShowCreateTableFunction() throws Exception {
+        ctx.setDatabase("test_udf_db");
+        ShowCreateFunctionStmt stmt = (ShowCreateFunctionStmt) UtFrameUtils.parseStmtWithNewParser(
+                "show create function my_table_fn(int)", ctx);
+        ShowResultSet rs = ShowExecutor.execute(stmt, ctx);
+        String createSql = rs.getResultRows().get(0).get(0);
+        Assertions.assertTrue(createSql.startsWith("CREATE TABLE FUNCTION"), createSql);
+        Assertions.assertTrue(createSql.contains("\"type\" = \"StarrocksJar\""), createSql);
+        Assertions.assertTrue(createSql.contains("\"file\" = \"xxx\""), createSql);
+    }
+
 }

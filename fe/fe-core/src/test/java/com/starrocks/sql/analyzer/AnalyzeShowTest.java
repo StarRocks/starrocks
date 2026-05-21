@@ -185,4 +185,27 @@ public class AnalyzeShowTest {
         Assertions.assertEquals(" LIMIT 10",
                 AstToStringBuilder.toString(showPartitionsStmt.getLimitElement()));
     }
+
+    @Test
+    public void testShowCreateFunctionResolvesDatabase() {
+        analyzeSuccess("show create function some_fn(int)");
+        analyzeSuccess("show create function test.some_fn(int, varchar(32))");
+    }
+
+    @Test
+    public void testShowCreateGlobalFunction() {
+        analyzeSuccess("show create global function my_global_fn(int)");
+        analyzeSuccess("show create global function my_global_fn(varchar(12), string)");
+    }
+
+    @Test
+    public void testShowCreateFunctionRejectsInvalidArgSize() {
+        analyzeFail("show create function test.some_fn(varchar(0))",
+                "Varchar size must be > 0: 0");
+    }
+
+    @Test
+    public void testShowCreateGlobalFunctionRejectsDbQualifier() {
+        analyzeFail("show create global function some_db.my_global_fn(int)");
+    }
 }

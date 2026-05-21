@@ -1318,10 +1318,15 @@ public class ShowExecutor {
                 } else {
                     Authorizer.checkAnyActionOnFunction(context, dbFullName, fn);
                 }
-                rows.add(Lists.newArrayList(fn.toSql(false)));
             } catch (AccessDeniedException e) {
-                // No privilege on the resolved function — return empty result set.
+                AccessDeniedException.reportAccessDenied(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
+                        context.getCurrentUserIdentity(),
+                        context.getCurrentRoleIds(),
+                        PrivilegeType.ANY.name(),
+                        isGlobal ? ObjectType.GLOBAL_FUNCTION.name() : ObjectType.FUNCTION.name(),
+                        functionRef.getFnName().toString());
             }
+            rows.add(Lists.newArrayList(fn.toSql(false)));
 
             return new ShowResultSet(showResultMetaFactory.getMetadata(statement), rows);
         }
