@@ -20,20 +20,26 @@ set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/exec")
 # where to put generated binaries
 set(EXECUTABLE_OUTPUT_PATH "${BUILD_DIR}/src/exec")
 
-set(EXEC_CORE_FILES
+set(EXEC_PRIMITIVE_FILES
     exec_node.cpp
     runtime_filter/runtime_filter_descriptor.cpp
     runtime_filter/runtime_filter_probe.cpp
     runtime_filter/runtime_filter_probe_wait.cpp
     runtime_filter/runtime_filter_registry.cpp
     runtime_filter/runtime_filter_helper.cpp
+    pipeline/operator.cpp
+    pipeline/scan/dynamic_morsel_queue.cpp
+    pipeline/scan/fixed_morsel_queue.cpp
+    pipeline/scan/morsel_queue.cpp
+    pipeline/scan/scan_morsel.cpp
+    query_cache/ticket_checker.cpp
 )
 
-ADD_BE_LIB(ExecCore
-    ${EXEC_CORE_FILES}
+ADD_BE_LIB(ExecPrimitive
+    ${EXEC_PRIMITIVE_FILES}
 )
 
-target_link_libraries(ExecCore PUBLIC ExprCore RuntimeCore)
+target_link_libraries(ExecPrimitive PUBLIC ExprCore RuntimeCore)
 
 set(EXEC_SINK_CORE_FILES
     data_sink.cpp
@@ -177,10 +183,6 @@ endif()
 # Staged pipeline compatibility groups. These source lists are not final clean
 # module boundaries yet; keep them named by intended ownership so later
 # cycle-cut leaves can promote them into real targets incrementally.
-set(PIPELINE_PRIMITIVES_SRCS
-    pipeline/operator.cpp
-)
-
 set(PIPELINE_GRAPH_SRCS
     pipeline/pipeline.cpp
     pipeline/group_execution/execution_group.cpp
@@ -238,15 +240,11 @@ set(PIPELINE_OPERATORS_BATCH_SRCS
     pipeline/scan/balanced_chunk_buffer.cpp
     pipeline/scan/chunk_source.cpp
     pipeline/scan/bucket_sequence_morsel_queue.cpp
-    pipeline/scan/dynamic_morsel_queue.cpp
-    pipeline/scan/fixed_morsel_queue.cpp
     pipeline/scan/olap_dynamic_morsel_queue.cpp
     pipeline/scan/olap_fixed_morsel_queue.cpp
     pipeline/scan/morsel.cpp
-    pipeline/scan/morsel_queue.cpp
     pipeline/scan/morsel_queue_factory.cpp
     pipeline/scan/olap_morsel_queue.cpp
-    pipeline/scan/scan_morsel.cpp
     pipeline/scan/split_morsel_queue.cpp
     pipeline/scan/split_scan_morsel.cpp
     pipeline/scan/scan_operator.cpp
@@ -339,7 +337,6 @@ set(PIPELINE_EXTENSIONS_SRCS
     query_cache/cache_manager.cpp
     query_cache/lane_arbiter.cpp
     query_cache/conjugate_operator.cpp
-    query_cache/ticket_checker.cpp
     spill/spill_components.cpp
     spill/executor.cpp
     spill/spiller.cpp
@@ -545,23 +542,6 @@ set(EXEC_DATA_SINK_FILES
     data_sinks/variable_result_writer.cpp
 )
 
-ADD_BE_LIB(PipelinePrimitives
-    ${PIPELINE_PRIMITIVES_SRCS}
-)
-
-target_link_libraries(PipelinePrimitives PUBLIC
-    ExecCore
-    ExprCore
-    RuntimeCore
-    ChunkCore
-    ColumnCore
-    Types
-    Common
-    Base
-    Gutil
-    StarRocksGen
-)
-
 # `pipeline/aggregate/aggregate_operators.cpp` intentionally includes the
 # aggregate operator implementation .cpp files to control template
 # instantiation. Do not add those implementation files separately here.
@@ -596,4 +576,4 @@ ADD_BE_LIB(Exec
     $<TARGET_OBJECTS:pipeline_extensions_exec_objs>
 )
 
-target_link_libraries(Exec PUBLIC PipelinePrimitives ExecSinkCore ExecCore SpillCore ExecSchemaScannerCore ExecSchemaScanners ExecSortingCore ExecJoinCore)
+target_link_libraries(Exec PUBLIC ExecPrimitive ExecSinkCore SpillCore ExecSchemaScannerCore ExecSchemaScanners ExecSortingCore ExecJoinCore)

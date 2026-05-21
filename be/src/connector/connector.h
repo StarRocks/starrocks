@@ -17,7 +17,7 @@
 #include <memory>
 #include <string>
 
-#include "connector/connector_chunk_sink.h"
+#include "common/logging.h"
 #include "connector/data_source_provider.h"
 #include "gen_cpp/PlanNodes_types.h"
 
@@ -26,6 +26,8 @@ namespace starrocks {
 class ConnectorScanNode;
 
 namespace connector {
+
+class ConnectorChunkSinkProvider;
 
 enum ConnectorType {
     HIVE = 0,
