@@ -488,8 +488,16 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - タイプ：Boolean
 - 単位：-
 - 変更可能：Yes
-- 説明：LockManager が `logSlowLockTrace` によって出力される低速ロック警告の JSON ペイロードに、所有スレッドの完全なスタックトレースを含めることを許可するかどうか ("stack" 配列は `LogUtil.getStackTraceToJsonArray` を使用して `start=0` および `max=Short.MAX_VALUE` で設定されます)。この設定は、ロック取得が `slow_lock_threshold_ms` で設定されたしきい値を超えたときに表示されるロック所有者に関する追加のスタック情報のみを制御します。この機能を有効にすると、ロックを保持している正確なスレッドスタックを提供することでデバッグに役立ちます。無効にすると、高並行環境でスタックトレースをキャプチャしてシリアル化することによるログのボリュームと CPU/メモリのオーバーヘッドが減少します。
+- 説明：LockManager が `logSlowLockTrace` によって出力される低速ロック警告の JSON ペイロードに、所有スレッドの完全なスタックトレースを含めることを許可するかどうか ("stack" 配列は `LogUtil.getStackTraceToJsonArray` を使用して `start=0` および `max=Short.MAX_VALUE` で設定されます)。この設定は、ロック取得が `slow_lock_threshold_ms` で設定されたしきい値を超えたときに表示されるロック所有者に関する追加のスタック情報のみを制御します。この機能を有効にすると、ロックを保持している正確なスレッドスタックを提供することでデバッグに役立ちます。無効にすると、高並行環境でスタックトレースをキャプチャしてシリアル化することによるログのボリュームと CPU/メモリのオーバーヘッドが減少します。有効時、キャプチャの頻度はさらに `slow_lock_stack_print_interval_ms` によってレート制限されます。
 - 導入時期：v3.3.16, v3.4.5, v3.5.1
+
+### `slow_lock_stack_print_interval_ms`
+
+- デフォルト：30000
+- タイプ：Long
+- 単位：Milliseconds
+- 変更可能：Yes
+- 説明：LockManager の低速ロックログイベント内で所有者スタックトレースをキャプチャする最小間隔。`slow_lock_print_stack` が `true` の場合にのみ適用されます。スイッチはオンだが前回のキャプチャからこの間隔が経過していない場合、各所有者の `"stack"` フィールドは `"throttled"` マーカーに置き換えられ、warn ログの残り (rid、owners、waiters、queryId、タイミング情報) は通常どおり出力されます。`0` (または負の値) に設定するとレート制限が無効になり、すべての低速ロックイベントでスタックをキャプチャする以前の動作に戻ります。`Thread.getStackTrace` は JVM safepoint を発動し、低速ロックイベントが頻発する大規模クラスタではコストが大きくなります — このゲートは診断ログ自体を抑制せずにそのコストを抑えます。
 
 ### `slow_lock_threshold_ms`
 

@@ -496,8 +496,16 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: Boolean
 - 单位: -
 - 是否可变: Yes
-- 描述: 是否允许 LockManager 在 `logSlowLockTrace` 发出的慢锁警告的 JSON 负载中包含拥有线程的完整堆栈跟踪（"stack" 数组通过 `LogUtil.getStackTraceToJsonArray` 填充，`start=0` 且 `max=Short.MAX_VALUE`）。此配置仅控制当锁获取超过由 `slow_lock_threshold_ms` 配置的阈值时显示的锁所有者的额外堆栈信息。启用此功能通过提供持有锁的精确线程堆栈来帮助调试；禁用它可减少日志量和在高并发环境中捕获和序列化堆栈跟踪导致的 CPU/内存开销。
+- 描述: 是否允许 LockManager 在 `logSlowLockTrace` 发出的慢锁警告的 JSON 负载中包含拥有线程的完整堆栈跟踪（"stack" 数组通过 `LogUtil.getStackTraceToJsonArray` 填充，`start=0` 且 `max=Short.MAX_VALUE`）。此配置仅控制当锁获取超过由 `slow_lock_threshold_ms` 配置的阈值时显示的锁所有者的额外堆栈信息。启用此功能通过提供持有锁的精确线程堆栈来帮助调试；禁用它可减少日志量和在高并发环境中捕获和序列化堆栈跟踪导致的 CPU/内存开销。开启后，捕获频率还会受到 `slow_lock_stack_print_interval_ms` 的限速控制。
 - 引入版本: v3.3.16, v3.4.5, v3.5.1
+
+### `slow_lock_stack_print_interval_ms`
+
+- 默认值: 30000
+- 类型: Long
+- 单位: 毫秒
+- 是否可变: Yes
+- 描述: LockManager 慢锁日志事件中 owner 堆栈抓取的最小时间间隔。仅在 `slow_lock_print_stack` 为 `true` 时生效。当开关打开但距上次抓取的时间未达到该间隔时，每个 owner 的 `"stack"` 字段将被替换为标记 `"throttled"`，warn 日志的其余部分（rid、owners、waiters、queryId、时间统计等）仍正常输出。设置为 `0`（或负数）可禁用限速，恢复每次慢锁事件都抓取堆栈的旧行为。`Thread.getStackTrace` 会触发 JVM safepoint，在慢锁事件频繁的大集群中开销显著——该参数在不影响诊断日志输出的前提下限制这部分开销。
 
 ### `slow_lock_threshold_ms`
 

@@ -498,8 +498,16 @@ This topic introduces the following types of FE configurations:
 - Type: Boolean
 - Unit: -
 - Is mutable: Yes
-- Description: Whether to allow LockManager to include the owning thread's full stack trace in the JSON payload of slow-lock warnings emitted by `logSlowLockTrace` (the "stack" array is populated via `LogUtil.getStackTraceToJsonArray` with `start=0` and `max=Short.MAX_VALUE`). This configuration controls only the extra stack information for lock owners shown when a lock acquisition exceeds the threshold configured by `slow_lock_threshold_ms`. Enabling this feature helps debugging by giving precise thread stacks that hold the lock; disabling it reduces log volume and CPU/memory overhead caused by capturing and serializing stack traces in high concurrency environments.
+- Description: Whether to allow LockManager to include the owning thread's full stack trace in the JSON payload of slow-lock warnings emitted by `logSlowLockTrace` (the "stack" array is populated via `LogUtil.getStackTraceToJsonArray` with `start=0` and `max=Short.MAX_VALUE`). This configuration controls only the extra stack information for lock owners shown when a lock acquisition exceeds the threshold configured by `slow_lock_threshold_ms`. Enabling this feature helps debugging by giving precise thread stacks that hold the lock; disabling it reduces log volume and CPU/memory overhead caused by capturing and serializing stack traces in high concurrency environments. When enabled, the capture frequency is additionally rate-limited by `slow_lock_stack_print_interval_ms`.
 - Introduced in: v3.3.16, v3.4.5, v3.5.1
+
+### `slow_lock_stack_print_interval_ms`
+
+- Default: 30000
+- Type: Long
+- Unit: Milliseconds
+- Is mutable: Yes
+- Description: Minimum interval between owner stack-trace captures inside LockManager slow-lock log events. Only applies when `slow_lock_print_stack` is `true`. When the switch is on but the interval has not elapsed since the last capture, the per-owner `"stack"` field is replaced with the marker `"throttled"` and the rest of the warn log (rid, owners, waiters, queryIds, timings) is still emitted. Set to `0` (or negative) to disable rate limiting and restore the prior behavior of capturing stacks on every slow-lock event. `Thread.getStackTrace` triggers a JVM safepoint that becomes expensive in large clusters where slow-lock events are frequent — this gate caps that cost without suppressing the diagnostic log itself.
 
 ### `slow_lock_threshold_ms`
 

@@ -27,9 +27,16 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicLong;
 
 public class LockManager {
     private static final Logger LOG = LogManager.getLogger(LockManager.class);
+
+    // Gate for stack-trace capture in slow-lock logs. Thread.getStackTrace involves a JVM
+    // safepoint operation that is expensive when slow-lock events fire frequently in large
+    // clusters. The capture is rate-limited at the event level (all-or-nothing per event)
+    // by Config.slow_lock_stack_print_interval_ms; the warn log itself still fires every event.
+    private static final AtomicLong LAST_STACK_PRINT_MS = new AtomicLong(0L);
 
     private final int lockTablesSize;
     private final Object[] lockTableMutexes;
@@ -400,6 +407,24 @@ public class LockManager {
             waiters = lock.cloneWaiters();
         }
 
+        // Decide once per event whether owner stacks are captured. The warn log itself still
+        // fires every event; only the expensive Thread.getStackTrace path is throttled. When
+        // the switch is on but rate-limited, mark stacks "throttled" so operators can tell the
+        // capture was suppressed rather than the switch being off.
+        boolean stackEnabled = Config.slow_lock_print_stack;
+        boolean captureStack = false;
+        if (stackEnabled) {
+            if (Config.slow_lock_stack_print_interval_ms <= 0) {
+                captureStack = true;
+            } else {
+                long last = LAST_STACK_PRINT_MS.get();
+                if (nowMs - last >= Config.slow_lock_stack_print_interval_ms
+                        && LAST_STACK_PRINT_MS.compareAndSet(last, nowMs)) {
+                    captureStack = true;
+                }
+            }
+        }
+
         JsonObject ownerInfo = new JsonObject();
         ownerInfo.addProperty("rid", rid);
 
@@ -421,9 +446,11 @@ public class LockManager {
                 readerInfo.addProperty("queryId", locker.getQueryId().toString());
             }
             readerInfo.addProperty("waitTime", owner.getLockAcquireTimeMs() - locker.getLockRequestTimeMs());
-            if (Config.slow_lock_print_stack) {
+            if (captureStack) {
                 readerInfo.add("stack", LogUtil.getStackTraceToJsonArray(
                         locker.getLockerThread(), 0, Short.MAX_VALUE));
+            } else if (stackEnabled) {
+                readerInfo.addProperty("stack", "throttled");
             }
             ownerArray.add(readerInfo);
         }
