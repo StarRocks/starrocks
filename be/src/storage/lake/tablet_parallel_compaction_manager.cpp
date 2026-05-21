@@ -1308,6 +1308,9 @@ void TabletParallelCompactionManager::execute_subtask(int64_t tablet_id, int64_t
             int64_t enqueue_time = it->second.start_time;
             int64_t in_queue_time_sec = start_time > enqueue_time ? (start_time - enqueue_time) : 0;
             context->stats->in_queue_time_sec += in_queue_time_sec;
+            // Snapshot the subtask input footprint onto the context so list_tasks() can
+            // surface it consistently for both running and completed subtasks.
+            context->subtask_input_rowsets = static_cast<int64_t>(it->second.input_rowset_ids.size());
             // Store context pointer for real-time progress/status tracking
             it->second.context = context.get();
         }
@@ -1487,10 +1490,16 @@ void TabletParallelCompactionManager::list_tasks(std::vector<CompactionTaskInfo>
                 info.progress = 0;
             }
             info.status = Status::OK();
-            // Build profile with subtask-specific info
+            // Build profile combining CompactionTaskStats (from the running context, when
+            // available) with subtask-specific metadata. Falling back to a default-constructed
+            // stats object keeps the JSON schema stable when the context has not yet been linked.
+            CompactionTaskStats empty_stats;
+            const CompactionTaskStats* stats_ptr = &empty_stats;
+            if (subtask_info.context != nullptr && subtask_info.context->stats) {
+                stats_ptr = subtask_info.context->stats.get();
+            }
             info.profile =
-                    fmt::format(R"({{"subtask_id":{},"input_rowsets":{},"input_bytes":{},"is_parallel_subtask":true}})",
-                                subtask_id, subtask_info.input_rowset_ids.size(), subtask_info.input_bytes);
+                    stats_ptr->to_json_stats_with_subtask_metadata(subtask_id, subtask_info.input_rowset_ids.size());
         }
 
         // Add completed subtasks that haven't been cleaned up yet
@@ -1505,7 +1514,15 @@ void TabletParallelCompactionManager::list_tasks(std::vector<CompactionTaskInfo>
             info.finish_time = ctx->finish_time.load(std::memory_order_acquire);
             info.progress = ctx->progress.value();
             if (info.runs > 0 && ctx->stats) {
-                info.profile = ctx->stats->to_json_stats();
+                // Keep the PROFILE schema consistent with the running-subtasks branch above:
+                // emit subtask metadata alongside the stats whenever the context belongs to a
+                // parallel subtask.
+                if (ctx->subtask_id >= 0) {
+                    info.profile = ctx->stats->to_json_stats_with_subtask_metadata(
+                            ctx->subtask_id, static_cast<size_t>(ctx->subtask_input_rowsets));
+                } else {
+                    info.profile = ctx->stats->to_json_stats();
+                }
             }
             if (info.finish_time > 0) {
                 info.status = ctx->status;
@@ -2002,6 +2019,7 @@ void TabletParallelCompactionManager::execute_subtask_segment_range(int64_t tabl
             int64_t enqueue_time = it->second.start_time;
             int64_t in_queue_time_sec = start_time > enqueue_time ? (start_time - enqueue_time) : 0;
             context->stats->in_queue_time_sec += in_queue_time_sec;
+            context->subtask_input_rowsets = static_cast<int64_t>(it->second.input_rowset_ids.size());
             it->second.context = context.get();
         }
     }
@@ -2178,4 +2196,270 @@ Status TabletParallelCompactionManager::_merge_subtask_lcrm_files(int64_t tablet
     return st;
 }
 
+<<<<<<< HEAD
+=======
+// ================================================================================
+// Range split related functions
+// ================================================================================
+
+bool TabletParallelCompactionManager::_can_use_range_split(const std::vector<RowsetPtr>& rowsets) {
+    if (rowsets.empty()) {
+        return false;
+    }
+    for (const auto& rowset : rowsets) {
+        const auto& rowset_meta = rowset->metadata();
+        if (rowset_meta.segment_metas_size() == 0) {
+            return false;
+        }
+        for (const auto& segment_meta : rowset_meta.segment_metas()) {
+            if (!segment_meta.has_sort_key_min() || !segment_meta.has_sort_key_max()) {
+                return false;
+            }
+            if (segment_meta.sort_key_min().values_size() == 0 || segment_meta.sort_key_max().values_size() == 0) {
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
+StatusOr<std::vector<SegmentSplitInfo>> TabletParallelCompactionManager::_collect_segment_key_bounds(
+        const std::vector<RowsetPtr>& rowsets) {
+    std::vector<SegmentSplitInfo> segments;
+
+    for (const auto& rowset : rowsets) {
+        const auto& rowset_meta = rowset->metadata();
+        int32_t num_segments = rowset_meta.segment_metas_size();
+        int64_t rowset_data_size = rowset->data_size();
+        int64_t rowset_num_rows = rowset->num_rows();
+
+        for (const auto& segment_meta : rowset_meta.segment_metas()) {
+            SegmentSplitInfo segment;
+            RETURN_IF_ERROR(segment.min_key.from_proto(segment_meta.sort_key_min()));
+            RETURN_IF_ERROR(segment.max_key.from_proto(segment_meta.sort_key_max()));
+            segment.num_rows = segment_meta.has_num_rows() ? segment_meta.num_rows() : 0;
+            if (segment.num_rows > 0 && rowset_num_rows > 0) {
+                segment.data_size = rowset_data_size * segment.num_rows / rowset_num_rows;
+            } else if (num_segments > 0) {
+                segment.data_size = rowset_data_size / num_segments;
+            }
+            RETURN_IF_ERROR(segment.load_sort_key_samples(segment_meta));
+            segments.push_back(std::move(segment));
+        }
+    }
+
+    return segments;
+}
+
+OlapTuple TabletParallelCompactionManager::_variant_tuple_to_olap_tuple(const VariantTuple& vt) {
+    OlapTuple olap;
+    olap.reserve(vt.size());
+    for (size_t i = 0; i < vt.size(); i++) {
+        const auto& dv = vt[i];
+        if (dv.value().is_null()) {
+            olap.add_null();
+        } else {
+            olap.add_value(datum_to_string(dv.type().get(), dv.value()));
+        }
+    }
+    return olap;
+}
+
+std::vector<SubtaskGroup> TabletParallelCompactionManager::_create_range_split_groups(
+        int64_t tablet_id, const std::vector<RowsetPtr>& rowsets, int32_t max_parallel, int64_t max_bytes_per_subtask) {
+    // Collect segment key bounds
+    auto segments_or = _collect_segment_key_bounds(rowsets);
+    if (!segments_or.ok() || segments_or.value().empty()) {
+        VLOG(1) << "Range split: tablet=" << tablet_id << " failed to collect segment key bounds, fallback";
+        return {};
+    }
+    auto& segments = segments_or.value();
+
+    // Calculate total data
+    int64_t total_bytes = 0;
+    for (const auto& segment : segments) {
+        total_bytes += segment.data_size;
+    }
+
+    int32_t target_subtasks = std::min(
+            max_parallel, static_cast<int32_t>((total_bytes + max_bytes_per_subtask - 1) / max_bytes_per_subtask));
+    target_subtasks = std::max(2, target_subtasks);
+
+    // Use calculate_range_split_boundaries from tablet_splitter to compute boundaries
+    auto split_result_or = calculate_range_split_boundaries(segments, target_subtasks, max_bytes_per_subtask,
+                                                            /*use_num_rows=*/false);
+    if (!split_result_or.ok() || split_result_or.value().boundaries.empty()) {
+        VLOG(1) << "Range split: tablet=" << tablet_id << " failed to calculate boundaries, fallback";
+        return {};
+    }
+    auto& split_result = split_result_or.value();
+    auto& boundaries = split_result.boundaries;
+
+    // Create subtask groups
+    int32_t num_subtasks = static_cast<int32_t>(boundaries.size()) + 1;
+    std::vector<SubtaskGroup> groups;
+
+    for (int32_t i = 0; i < num_subtasks; i++) {
+        SubtaskGroup group;
+        group.type = SubtaskType::RANGE_SPLIT;
+        group.range_split_rowsets = rowsets;
+        group.is_first_range = (i == 0);
+        group.is_last_range = (i == num_subtasks - 1);
+
+        if (i == 0) {
+            // First range: [MIN, boundaries[0])
+            group.range_lower_inclusive = true;
+            group.range_upper_inclusive = false;
+            group.range_upper_bound = boundaries[0];
+        } else if (i == num_subtasks - 1) {
+            // Last range: [boundaries[i-1], MAX]
+            group.range_lower_bound = boundaries[i - 1];
+            group.range_lower_inclusive = true;
+            group.range_upper_inclusive = true;
+        } else {
+            // Middle range: [boundaries[i-1], boundaries[i])
+            group.range_lower_bound = boundaries[i - 1];
+            group.range_upper_bound = boundaries[i];
+            group.range_lower_inclusive = true;
+            group.range_upper_inclusive = false;
+        }
+
+        group.total_bytes = split_result.range_data_sizes[i];
+
+        groups.push_back(std::move(group));
+    }
+
+    VLOG(1) << "Range split: tablet=" << tablet_id << " created " << groups.size() << " range split subtasks"
+            << " from " << rowsets.size() << " rowsets, " << segments.size() << " segments"
+            << ", boundaries=" << boundaries.size() << ", total_bytes=" << total_bytes;
+
+    return groups;
+}
+
+void TabletParallelCompactionManager::execute_subtask_range_split(
+        int64_t tablet_id, int64_t txn_id, int32_t subtask_id, std::vector<RowsetPtr> all_rowsets,
+        const VariantTuple& range_lower, const VariantTuple& range_upper, bool lower_inclusive, bool upper_inclusive,
+        bool is_first_range, bool is_last_range, int64_t version, bool force_base_compaction,
+        const ReleaseTokenFunc& release_token) {
+    VLOG(1) << "Executing parallel compaction range-split subtask " << subtask_id << " for tablet " << tablet_id
+            << ", txn_id=" << txn_id << ", is_first=" << is_first_range << ", is_last=" << is_last_range;
+
+    auto state = get_tablet_state(tablet_id, txn_id);
+    if (state == nullptr) {
+        _running_subtasks--;
+        if (release_token) {
+            release_token(false);
+        }
+        LOG(WARNING) << "Tablet state not found during range-split subtask execution, tablet=" << tablet_id
+                     << ", txn_id=" << txn_id << ", subtask_id=" << subtask_id;
+        return;
+    }
+
+    auto context = CompactionTaskContext::create_for_subtask(txn_id, tablet_id, version, force_base_compaction,
+                                                             true /* skip_write_txnlog */, state->callback, subtask_id);
+
+    auto start_time = ::time(nullptr);
+    context->start_time.store(start_time, std::memory_order_relaxed);
+
+    {
+        std::lock_guard<std::mutex> lock(state->mutex);
+        auto it = state->running_subtasks.find(subtask_id);
+        if (it != state->running_subtasks.end()) {
+            int64_t enqueue_time = it->second.start_time;
+            int64_t in_queue_time_sec = start_time > enqueue_time ? (start_time - enqueue_time) : 0;
+            context->stats->in_queue_time_sec += in_queue_time_sec;
+            context->subtask_input_rowsets = static_cast<int64_t>(it->second.input_rowset_ids.size());
+            it->second.context = context.get();
+        }
+    }
+
+    // Set range split info on context so compaction task applies range filtering.
+    //
+    // has_lower_bound / has_upper_bound explicitly indicate whether the range has a
+    // finite bound on each side. For open-ended ranges (first range has no lower bound,
+    // last range has no upper bound), we set the corresponding flag to false and the
+    // compaction task skips setting that side of the range filter entirely, rather than
+    // relying on empty OlapTuple producing an unbounded SeekTuple in the iterator.
+    context->has_range_split = true;
+    context->is_first_range = is_first_range;
+    context->is_last_range = is_last_range;
+
+    context->has_lower_bound = !is_first_range && !range_lower.empty();
+    context->has_upper_bound = !is_last_range && !range_upper.empty();
+
+    OlapTuple lower_olap = context->has_lower_bound ? _variant_tuple_to_olap_tuple(range_lower) : OlapTuple();
+    OlapTuple upper_olap = context->has_upper_bound ? _variant_tuple_to_olap_tuple(range_upper) : OlapTuple();
+    context->range_start_key.push_back(std::move(lower_olap));
+    context->range_end_key.push_back(std::move(upper_olap));
+    context->range_lower_inclusive = context->has_lower_bound ? lower_inclusive : true;
+    context->range_upper_inclusive = context->has_upper_bound ? upper_inclusive : true;
+
+    auto compaction_task_or = _tablet_mgr->compact(context.get(), std::move(all_rowsets));
+    if (!compaction_task_or.ok()) {
+        LOG(WARNING) << "Failed to create compaction task for range-split subtask " << subtask_id << ": "
+                     << compaction_task_or.status();
+        context->status = compaction_task_or.status();
+        on_subtask_complete(tablet_id, txn_id, subtask_id, std::move(context));
+        if (release_token) {
+            release_token(compaction_task_or.status().is_mem_limit_exceeded());
+        }
+        return;
+    }
+
+    auto compaction_task = compaction_task_or.value();
+    context->runs.fetch_add(1, std::memory_order_relaxed);
+
+    auto cancel_func = [this, tablet_id, txn_id, subtask_id, version]() {
+        if (get_tablet_state(tablet_id, txn_id) == nullptr) {
+            return Status::Cancelled(strings::Substitute(
+                    "Tablet parallel compaction state has been cleaned up: tablet_id=$0, txn_id=$1, "
+                    "version=$2, subtask_id=$3",
+                    tablet_id, txn_id, version, subtask_id));
+        }
+        return Status::OK();
+    };
+
+    ThreadPool* flush_pool = nullptr;
+    if (config::lake_enable_compaction_async_write) {
+        flush_pool = StorageEngine::instance()->lake_memtable_flush_executor()->get_thread_pool();
+    }
+
+    auto exec_st = compaction_task->execute(cancel_func, flush_pool);
+
+    auto finish_time = std::max<int64_t>(::time(nullptr), start_time);
+    auto cost = finish_time - start_time;
+
+    if (!exec_st.ok()) {
+        LOG(WARNING) << "Range-split compaction subtask " << subtask_id << " failed for tablet " << tablet_id << ": "
+                     << exec_st << ", cost=" << cost << "s";
+        context->status = exec_st;
+    } else {
+        VLOG(1) << "Range-split compaction subtask " << subtask_id << " completed for tablet " << tablet_id
+                << ", cost=" << cost << "s";
+
+        // Store range info in OpCompaction for merge logic
+        if (context->txn_log != nullptr && context->txn_log->has_op_compaction()) {
+            auto* op = context->txn_log->mutable_op_compaction();
+            if (!range_lower.empty()) {
+                range_lower.to_proto(op->mutable_range_split_lower_bound());
+                op->set_range_split_lower_inclusive(lower_inclusive);
+            }
+            if (!range_upper.empty()) {
+                range_upper.to_proto(op->mutable_range_split_upper_bound());
+                op->set_range_split_upper_inclusive(upper_inclusive);
+            }
+        }
+    }
+
+    context->finish_time.store(finish_time, std::memory_order_release);
+
+    bool mem_limit_exceeded = exec_st.is_mem_limit_exceeded();
+    on_subtask_complete(tablet_id, txn_id, subtask_id, std::move(context));
+
+    if (release_token) {
+        release_token(mem_limit_exceeded);
+    }
+}
+
+>>>>>>> 1528c77da4 ([BugFix] Preserve CompactionTaskStats in be_cloud_native_compactions PROFILE for parallel subtasks (#72331))
 } // namespace starrocks::lake
