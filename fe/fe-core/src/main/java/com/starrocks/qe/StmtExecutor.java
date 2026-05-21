@@ -203,6 +203,7 @@ import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.KillAnalyzeStmt;
 import com.starrocks.sql.ast.KillStmt;
 import com.starrocks.sql.ast.LoadStmt;
+import com.starrocks.sql.ast.MergeIntoStmt;
 import com.starrocks.sql.ast.OriginStatement;
 import com.starrocks.sql.ast.PrepareStmt;
 import com.starrocks.sql.ast.QueryStatement;
@@ -707,6 +708,8 @@ public class StmtExecutor {
             return "Update";
         } else if (parsedStmt instanceof DeleteStmt) {
             return "Delete";
+        } else if (parsedStmt instanceof MergeIntoStmt) {
+            return "MergeInto";
         } else {
             return "Query";
         }
@@ -3525,7 +3528,7 @@ public class StmtExecutor {
                 return;
             }
             if (loadedRows == 0 && filteredRows == 0 && (stmt instanceof DeleteStmt || stmt instanceof InsertStmt
-                    || stmt instanceof UpdateStmt)) {
+                    || stmt instanceof UpdateStmt || stmt instanceof MergeIntoStmt)) {
                 // when the target table is not ExternalOlapTable or OlapTable
                 // if there is no data to load, the result of the insert statement is success
                 // otherwise, the result of the insert statement is failed
@@ -3816,6 +3819,8 @@ public class StmtExecutor {
             ConnectorMetricsMgr.increaseUpdateTotalFail(connectorType, t);
         } else if (dmlType == DmlType.DELETE) {
             ConnectorMetricsMgr.increaseDeleteTotalFail(connectorType, t, "position");
+        } else if (dmlType == DmlType.MERGE_INTO) {
+            ConnectorMetricsMgr.increaseIcebergMergeTotalFail(t);
         } else {
             String writeType = dmlType == DmlType.INSERT_OVERWRITE ? "overwrite" : "insert";
             ConnectorMetricsMgr.increaseWriteTotalFail(connectorType, t, writeType);

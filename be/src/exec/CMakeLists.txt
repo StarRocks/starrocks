@@ -246,6 +246,7 @@ set(PIPELINE_OPERATORS_BATCH_SRCS
     pipeline/bucket_process_operator.cpp
     pipeline/table_function_operator.cpp
     pipeline/assert_num_rows_operator.cpp
+    pipeline/enforce_unique_operator.cpp
     pipeline/set/union_passthrough_operator.cpp
     pipeline/set/union_const_source_operator.cpp
     pipeline/set/raw_values_source_operator.cpp
@@ -354,6 +355,7 @@ set(EXEC_NON_PIPELINE_FILES
     parquet_builder.cpp
     file_scan_node.cpp
     assert_num_rows_node.cpp
+    enforce_unique_node.cpp
     intersect_hash_set.cpp
     intersect_node.cpp
     json_parser.cpp
