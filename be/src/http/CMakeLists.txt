@@ -62,7 +62,8 @@ set(WEB_SERVER_FILES
   action/datacache_action.cpp
   action/pipeline_blocking_drivers_action.cpp
   action/lake/dump_tablet_metadata_action.cpp
-  action/stop_be_action.cpp)
+  action/stop_be_action.cpp
+  action/fe_auth_checker.cpp)
 
 if(STARROCKS_JIT_ENABLE)
     set(WEB_SERVER_FILES ${WEB_SERVER_FILES} action/jit_cache_action.cpp)
