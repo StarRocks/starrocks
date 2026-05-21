@@ -231,7 +231,6 @@ public class IcebergMetadata implements ConnectorMetadata {
     // FileScanTaskSchema -> Pair<schema_string, partition_string>
     private final Map<FileScanTaskSchema, Pair<String, String>> fileScanTaskSchemas = new ConcurrentHashMap<>();
     private final ExecutorService jobPlanningExecutor;
-    private final ExecutorService refreshOtherFeExecutor;
     private final IcebergCatalogProperties catalogProperties;
     private final ConnectorProperties properties;
     private final IcebergProcedureRegistry procedureRegistry;
@@ -240,30 +239,29 @@ public class IcebergMetadata implements ConnectorMetadata {
     private final IcebergCommitQueueManager commitQueueManager;
 
     public IcebergMetadata(String catalogName, HdfsEnvironment hdfsEnvironment, IcebergCatalog icebergCatalog,
-                           ExecutorService jobPlanningExecutor, ExecutorService refreshOtherFeExecutor,
+                           ExecutorService jobPlanningExecutor,
                            IcebergCatalogProperties catalogProperties) {
-        this(catalogName, hdfsEnvironment, icebergCatalog, jobPlanningExecutor, refreshOtherFeExecutor,
+        this(catalogName, hdfsEnvironment, icebergCatalog, jobPlanningExecutor,
                 catalogProperties, new ConnectorProperties(ConnectorType.ICEBERG), new IcebergProcedureRegistry(),
                 null);
     }
 
     public IcebergMetadata(String catalogName, HdfsEnvironment hdfsEnvironment, IcebergCatalog icebergCatalog,
-                           ExecutorService jobPlanningExecutor, ExecutorService refreshOtherFeExecutor,
+                           ExecutorService jobPlanningExecutor,
                            IcebergCatalogProperties catalogProperties, ConnectorProperties properties,
                            IcebergProcedureRegistry procedureRegistry) {
-        this(catalogName, hdfsEnvironment, icebergCatalog, jobPlanningExecutor, refreshOtherFeExecutor,
+        this(catalogName, hdfsEnvironment, icebergCatalog, jobPlanningExecutor,
                 catalogProperties, properties, procedureRegistry, null);
     }
 
     public IcebergMetadata(String catalogName, HdfsEnvironment hdfsEnvironment, IcebergCatalog icebergCatalog,
-                           ExecutorService jobPlanningExecutor, ExecutorService refreshOtherFeExecutor,
+                           ExecutorService jobPlanningExecutor,
                            IcebergCatalogProperties catalogProperties, ConnectorProperties properties,
                            IcebergProcedureRegistry procedureRegistry, IcebergCommitQueueManager commitQueueManager) {
         this.catalogName = catalogName;
         this.hdfsEnvironment = hdfsEnvironment;
         this.icebergCatalog = icebergCatalog;
         this.jobPlanningExecutor = jobPlanningExecutor;
-        this.refreshOtherFeExecutor = refreshOtherFeExecutor;
         this.catalogProperties = catalogProperties;
         this.properties = properties;
         this.procedureRegistry = procedureRegistry;
@@ -276,6 +274,31 @@ public class IcebergMetadata implements ConnectorMetadata {
         } else {
             LOG.info("IcebergMetadata will use direct commit (no queue) for catalog {}", catalogName);
         }
+    }
+
+    @Deprecated
+    public IcebergMetadata(String catalogName, HdfsEnvironment hdfsEnvironment, IcebergCatalog icebergCatalog,
+                           ExecutorService jobPlanningExecutor, ExecutorService refreshOtherFeExecutor,
+                           IcebergCatalogProperties catalogProperties) {
+        this(catalogName, hdfsEnvironment, icebergCatalog, jobPlanningExecutor, catalogProperties);
+    }
+
+    @Deprecated
+    public IcebergMetadata(String catalogName, HdfsEnvironment hdfsEnvironment, IcebergCatalog icebergCatalog,
+                           ExecutorService jobPlanningExecutor, ExecutorService refreshOtherFeExecutor,
+                           IcebergCatalogProperties catalogProperties, ConnectorProperties properties,
+                           IcebergProcedureRegistry procedureRegistry) {
+        this(catalogName, hdfsEnvironment, icebergCatalog, jobPlanningExecutor, catalogProperties, properties,
+                procedureRegistry);
+    }
+
+    @Deprecated
+    public IcebergMetadata(String catalogName, HdfsEnvironment hdfsEnvironment, IcebergCatalog icebergCatalog,
+                           ExecutorService jobPlanningExecutor, ExecutorService refreshOtherFeExecutor,
+                           IcebergCatalogProperties catalogProperties, ConnectorProperties properties,
+                           IcebergProcedureRegistry procedureRegistry, IcebergCommitQueueManager commitQueueManager) {
+        this(catalogName, hdfsEnvironment, icebergCatalog, jobPlanningExecutor, catalogProperties, properties,
+                procedureRegistry, commitQueueManager);
     }
 
     @Override
@@ -2079,17 +2102,9 @@ public class IcebergMetadata implements ConnectorMetadata {
     }
 
     private void asyncRefreshOthersFeMetadataCache(String dbName, String tableName) {
-        refreshOtherFeExecutor.execute(() -> {
-            LOG.info("Start to refresh others fe iceberg metadata cache on {}.{}.{}", catalogName, dbName, tableName);
-            try {
-                GlobalStateMgr.getCurrentState().refreshOthersFeTable(
-                        new TableName(catalogName, dbName, tableName), new ArrayList<>(), false);
-            } catch (DdlException e) {
-                LOG.error("Failed to refresh others fe iceberg metadata cache {}.{}.{}", catalogName, dbName, tableName, e);
-                throw new StarRocksConnectorException(e.getMessage());
-            }
-            LOG.info("Finish to refresh others fe iceberg metadata cache on {}.{}.{}", catalogName, dbName, tableName);
-        });
+        LOG.info("Submit async refresh others fe iceberg metadata cache on {}.{}.{}", catalogName, dbName, tableName);
+        GlobalStateMgr.getCurrentState().refreshOthersFeTableAsync(
+                new TableName(catalogName, dbName, tableName), new ArrayList<>());
     }
 
     public BatchWrite getBatchWrite(Transaction transaction, boolean isOverwrite, boolean isRewrite) {
