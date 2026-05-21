@@ -62,8 +62,7 @@ public:
         return *this;
     }
     explicit DataSketchesTheta(const Slice& src, int64_t* memory_usage);
-    DataSketchesTheta(DataSketchesTheta&& other) noexcept
-            : _memory_usage(other._memory_usage), _lg_k(other._lg_k) {}
+    DataSketchesTheta(DataSketchesTheta&& other) noexcept : _memory_usage(other._memory_usage), _lg_k(other._lg_k) {}
 
     ~DataSketchesTheta() = default;
 
