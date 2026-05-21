@@ -95,9 +95,7 @@
 #include "runtime/stream_load/load_stream_mgr.h"
 #include "runtime/stream_load/stream_load_executor.h"
 #include "runtime/stream_load/transaction_mgr.h"
-#ifdef WITH_TENANN
 #include "storage/index/vector/vector_index_cache.h"
-#endif
 #include "storage/lake/fixed_location_provider.h"
 #include "storage/lake/lake_persistent_index_parallel_compact_mgr.h"
 #include "storage/lake/replication_txn_manager.h"
@@ -735,8 +733,8 @@ void ExecEnv::destroy() {
     _global_env->destroy_thread_pools();
 #ifdef WITH_TENANN
     tenann::SetGlobalIndexCache(nullptr);
-    _vector_index_cache.reset();
 #endif
+    _vector_index_cache.reset();
     _query_execution_services.process_metrics = nullptr;
     _table_metrics_mgr = nullptr;
     _process_metrics_registry = nullptr;

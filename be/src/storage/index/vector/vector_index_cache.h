@@ -14,11 +14,16 @@
 
 #pragma once
 
+#include <cstddef>
+#include <cstdint>
+
+namespace starrocks {
+class MemTracker;
+}
+
 #ifdef WITH_TENANN
 
 #include <atomic>
-#include <cstddef>
-#include <cstdint>
 #include <mutex>
 #include <ostream>
 #include <string>
@@ -27,8 +32,6 @@
 #include "util/dynamic_cache.h"
 
 namespace starrocks {
-
-class MemTracker;
 
 // VectorIndexCacheEntry holds the cached tenann::IndexRef. All access to _ref
 // goes through guard() — read or write. This matches PrimaryIndex /
@@ -90,6 +93,28 @@ private:
     Cache _cache;
     std::atomic<uint64_t> _lookup_count{0};
     std::atomic<uint64_t> _hit_count{0};
+};
+
+} // namespace starrocks
+
+#else // !WITH_TENANN
+
+namespace starrocks {
+
+// Stub used in non-tenann builds (e.g. Darwin). The BE never constructs a
+// VectorIndexCache when tenann is not linked, so this stub is only here so
+// callers can hold a `VectorIndexCache*` and reference its stat accessors
+// without their own WITH_TENANN guards. All public methods return zero/no-op
+// values, matching the "no cache exists" semantics those callers handle via
+// the nullptr check on ExecEnv::vector_index_cache().
+class VectorIndexCache {
+public:
+    VectorIndexCache(size_t, MemTracker*) {}
+    void SetCapacity(size_t) {}
+    size_t capacity() const { return 0; }
+    size_t memory_usage() const { return 0; }
+    uint64_t lookup_count() const { return 0; }
+    uint64_t hit_count() const { return 0; }
 };
 
 } // namespace starrocks
