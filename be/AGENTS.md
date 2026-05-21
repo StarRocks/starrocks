@@ -190,20 +190,21 @@ Core expression infrastructure that depends only on RuntimeCore and lower layers
 - Core tests: `expr_core_test`
 - Remediation: Keep ExprCore limited to core expression infrastructure; move aggregate/UDF/integration code into Exprs.
 
-### ExecCore (`execcore`)
-Execution-node base and runtime-filter infrastructure on top of ExprCore without broader Exec/Runtime service coupling.
-- Targets: `ExecCore`
-- Allowed internal include prefixes: `exec/runtime_filter/`, `exec/pipeline/pipeline_fwd.h`, `exprs/`, `runtime/`, `column/`, `types/`, `common/`, `base/`, `gutil/`, `gen_cpp/`
+### ExecPrimitive (`execprimitive`)
+Primitive execution contracts, runtime-filter infrastructure, generic morsel queues, and stable pipeline operator primitives without broader Exec runtime, scheduler, factory, storage, service, or connector coupling.
+- Targets: `ExecPrimitive`
+- Allowed internal include prefixes: `exec/runtime_filter/`, `exec/query_cache/ticket_checker.h`, `exec/pipeline/pipeline_fwd.h`, `exec/pipeline/operator.h`, `exec/pipeline/primitives/`, `exec/pipeline/runtime_filter_core_types.h`, `exec/pipeline/scan/scan_morsel.h`, `exec/pipeline/scan/morsel_queue.h`, `exec/pipeline/scan/morsel_queue_builder.h`, `exec/pipeline/scan/fixed_morsel_queue.h`, `exec/pipeline/scan/fixed_morsel_queue_builder.h`, `exec/pipeline/scan/dynamic_morsel_queue.h`, `exec/pipeline/scan/dynamic_morsel_queue_builder.h`, `exec/pipeline/scan/ticketed_morsel_queue.h`, `exprs/`, `runtime/`, `column/`, `types/`, `common/`, `base/`, `gutil/`, `gen_cpp/`
 - Allowed target deps: `ExprCore`, `RuntimeCore`, `ChunkCore`, `ColumnCore`, `Types`, `Common`, `Base`, `Gutil`, `StarRocksGen`
-- Core tests: `exec_core_test`
-- Remediation: Keep ExecCore limited to the legacy execution-node base and runtime-filter orchestration; only the pipeline forward header is allowed from broader pipeline code.
+- Core tests: `exec_primitive_test`
+- Remediation: Keep ExecPrimitive limited to execution contracts, runtime filters, generic morsel queues, and stable operator primitives; move runtime, scheduler, factory, concrete operators, storage, service, and connector integration upward.
 
-### PipelinePrimitives (`pipelineprimitives`)
-Stable pipeline operator primitives without pipeline runtime, scheduler, context, factory, or concrete operator coupling.
-- Targets: `PipelinePrimitives`
-- Allowed internal include prefixes: `exec/pipeline/operator.h`, `exec/pipeline/primitives/`, `exec/pipeline/runtime_filter_core_types.h`, `exec/runtime_filter/`, `exprs/`, `runtime/`, `column/`, `types/`, `common/`, `base/`, `gutil/`, `gen_cpp/`
-- Allowed target deps: `ExecCore`, `ExprCore`, `RuntimeCore`, `ChunkCore`, `ColumnCore`, `Types`, `Common`, `Base`, `Gutil`, `StarRocksGen`
-- Remediation: Keep pipeline primitives limited to base operator contracts and narrow helper types; move runtime, scheduler, factory, and concrete operator behavior into higher pipeline modules.
+### ConnectorPrimitive (`connectorprimitive`)
+Read-side connector contracts, DataSource, and DataSourceProvider default mechanics without concrete connectors, sinks, registry composition, storage, service, or full Exec coupling.
+- Targets: `ConnectorPrimitive`
+- Allowed internal include prefixes: `connector/connector.h`, `connector/data_source.h`, `connector/data_source_provider.h`, `exec/pipeline/scan/scan_morsel.h`, `exec/pipeline/scan/morsel_queue_builder.h`, `exec/pipeline/scan/dynamic_morsel_queue_builder.h`, `exec/runtime_filter/`, `exprs/`, `runtime/`, `column/`, `types/`, `common/`, `base/`, `gutil/`, `gen_cpp/`
+- Allowed target deps: `ExecPrimitive`, `ExprCore`, `RuntimeCore`, `ChunkCore`, `ColumnCore`, `Types`, `Common`, `Base`, `Gutil`, `StarRocksGen`
+- Core tests: `connector_primitive_test`
+- Remediation: Keep ConnectorPrimitive limited to read-side connector contracts and default scan-range-to-morsel mechanics; move concrete connectors, sinks, registry wiring, storage, service, and full Exec integration upward.
 
 ### ExecSinkCore (`execsinkcore`)
 DataSink base contract and default mechanics without concrete sink, pipeline, connector, storage, service, or Runtime coupling.

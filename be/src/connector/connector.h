@@ -17,7 +17,7 @@
 #include <memory>
 #include <string>
 
-#include "connector/connector_chunk_sink.h"
+#include "common/logging.h"
 #include "connector/data_source_provider.h"
 #include "gen_cpp/PlanNodes_types.h"
 
@@ -26,6 +26,8 @@ namespace starrocks {
 class ConnectorScanNode;
 
 namespace connector {
+
+class ConnectorChunkSinkProvider;
 
 enum ConnectorType {
     HIVE = 0,
@@ -77,7 +79,10 @@ public:
         __builtin_unreachable();
     }
 
-    virtual std::unique_ptr<ConnectorChunkSinkProvider> create_row_delta_sink_provider() const { return nullptr; }
+    virtual std::unique_ptr<ConnectorChunkSinkProvider> create_row_delta_sink_provider() const {
+        CHECK(false) << connector_type() << " connector does not implement row delta sink yet";
+        __builtin_unreachable();
+    }
 
     virtual ConnectorType connector_type() const = 0;
 };

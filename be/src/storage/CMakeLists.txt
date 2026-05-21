@@ -326,4 +326,4 @@ ADD_BE_LIB(Storage
     ${STORAGE_FILES}
 )
 
-target_link_libraries(Storage PUBLIC ExecCore Serde)
+target_link_libraries(Storage PUBLIC ExecPrimitive Serde)

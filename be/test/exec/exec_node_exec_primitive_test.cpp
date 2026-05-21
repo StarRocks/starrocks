@@ -38,9 +38,9 @@ ChunkPtr make_int_chunk(int32_t first, int num_rows) {
     return chunk;
 }
 
-class ExecNodeExecCoreTest : public ::testing::Test {
+class ExecNodeExecPrimitiveTest : public ::testing::Test {
 public:
-    ExecNodeExecCoreTest() : _runtime_state(TQueryGlobals()) {}
+    ExecNodeExecPrimitiveTest() : _runtime_state(TQueryGlobals()) {}
 
 protected:
     void SetUp() override {
@@ -70,7 +70,7 @@ protected:
     TTupleId _tuple_id = 0;
 };
 
-TEST_F(ExecNodeExecCoreTest, TreeHelpersAndDefaultPipelineDecomposition) {
+TEST_F(ExecNodeExecPrimitiveTest, TreeHelpersAndDefaultPipelineDecomposition) {
     auto root_node = make_plan_node(TPlanNodeType::SELECT_NODE, 10);
     auto child_node = make_plan_node(TPlanNodeType::EMPTY_SET_NODE, 11);
     ExecNode root(&_object_pool, root_node, *_desc_tbl);
@@ -91,7 +91,7 @@ TEST_F(ExecNodeExecCoreTest, TreeHelpersAndDefaultPipelineDecomposition) {
     EXPECT_TRUE(factories.value().empty());
 }
 
-TEST_F(ExecNodeExecCoreTest, GetNextBigChunkMergesSmallChunks) {
+TEST_F(ExecNodeExecPrimitiveTest, GetNextBigChunkMergesSmallChunks) {
     _runtime_state.set_chunk_size(4);
 
     ChunkPtr pre_output_chunk;
