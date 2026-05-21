@@ -51,6 +51,36 @@ public:
         int64_t write_cache_fail_bytes = 0;
         int64_t read_block_buffer_bytes = 0;
         int64_t read_block_buffer_count = 0;
+
+        // Fold another stream's counters in. Used when a scan reads through more than one
+        // CacheInputStream (e.g. CACHE SELECT routes reader-owned reads through a second
+        // populate stream) and the per-stream stats must be reported as a single total.
+        Stats& operator+=(const Stats& o) {
+            read_block_cache_ns += o.read_block_cache_ns;
+            write_block_cache_ns += o.write_block_cache_ns;
+            read_block_cache_count += o.read_block_cache_count;
+            write_block_cache_count += o.write_block_cache_count;
+            write_mem_cache_bytes += o.write_mem_cache_bytes;
+            write_disk_cache_bytes += o.write_disk_cache_bytes;
+            read_block_cache_bytes += o.read_block_cache_bytes;
+            read_mem_cache_bytes += o.read_mem_cache_bytes;
+            read_disk_cache_bytes += o.read_disk_cache_bytes;
+            read_peer_cache_bytes += o.read_peer_cache_bytes;
+            read_peer_cache_count += o.read_peer_cache_count;
+            read_peer_cache_ns += o.read_peer_cache_ns;
+            write_block_cache_bytes += o.write_block_cache_bytes;
+            skip_read_cache_count += o.skip_read_cache_count;
+            skip_read_cache_bytes += o.skip_read_cache_bytes;
+            skip_read_peer_cache_count += o.skip_read_peer_cache_count;
+            skip_read_peer_cache_bytes += o.skip_read_peer_cache_bytes;
+            skip_write_cache_count += o.skip_write_cache_count;
+            skip_write_cache_bytes += o.skip_write_cache_bytes;
+            write_cache_fail_count += o.write_cache_fail_count;
+            write_cache_fail_bytes += o.write_cache_fail_bytes;
+            read_block_buffer_bytes += o.read_block_buffer_bytes;
+            read_block_buffer_count += o.read_block_buffer_count;
+            return *this;
+        }
     };
 
     explicit CacheInputStream(const std::shared_ptr<SharedBufferedInputStream>& stream, const std::string& filename,
