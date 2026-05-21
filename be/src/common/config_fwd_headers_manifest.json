@@ -454,7 +454,9 @@
         "max_download_speed_kbps",
         "download_low_speed_limit_kbps",
         "download_low_speed_time",
-        "enable_token_check"
+        "enable_token_check",
+        "enable_stop_be_action",
+        "enable_stop_be_action_fe_auth"
       ]
     },
     {
