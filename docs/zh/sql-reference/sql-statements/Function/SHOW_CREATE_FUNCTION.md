@@ -14,9 +14,11 @@ SHOW CREATE [GLOBAL] FUNCTION <function_name> ( <arg_type> [, ...] )
 
 ## 示例
 
-```Plain
-MySQL > SHOW CREATE FUNCTION default_db.python_add(BIGINT);
+```sql
+SHOW CREATE FUNCTION default_db.python_add(BIGINT);
+```
 
+```sql
 CREATE FUNCTION default_db.python_add(BIGINT)
 RETURNS BIGINT
 PROPERTIES (
