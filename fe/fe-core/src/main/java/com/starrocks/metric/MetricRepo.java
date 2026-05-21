@@ -386,7 +386,7 @@ public final class MetricRepo {
     public static Histogram HISTO_SHORTCIRCUIT_RPC_LATENCY;
     public static Histogram HISTO_DEPLOY_PLAN_FRAGMENTS_LATENCY;
     public static Histogram HISTO_TABLET_RESHARD_JOB_DURATION;
-    public static Histogram HISTO_LAKE_COMPACTION_SCORE_AT_TRIGGER;
+    public static LeaderAwareHistogramMetric HISTO_LAKE_COMPACTION_SCORE_AT_TRIGGER;
 
     // following metrics will be updated by metric calculator
     public static GaugeMetricImpl<Double> GAUGE_QUERY_PER_SECOND;
@@ -898,9 +898,8 @@ public final class MetricRepo {
             }
         };
         STARROCKS_METRIC_REGISTER.addMetric(GAUGE_LAKE_COMPACTION_RUNNING);
-        // Reports the same value as lake_compaction_running under the metric name explicitly
-        // requested by the maintainer on PR #72941. Kept alongside lake_compaction_running so the
-        // reviewer can decide which name to keep before merge.
+        // Alias of lake_compaction_running exposed under the *_tasks suffix to match other
+        // task-count gauges across the codebase.
         GAUGE_LAKE_COMPACTION_RUNNING_TASKS = new LeaderAwareGaugeMetricLong(
                 "lake_compaction_running_tasks", MetricUnit.NOUNIT,
                 "number of lake compaction jobs currently tracked in the FE leader's runningCompactions map") {
@@ -1034,8 +1033,9 @@ public final class MetricRepo {
         // Centiscore (raw score * 100) of partitions at the moment a lake compaction job is created.
         // Multiplied by 100 to preserve two decimal places of precision in a long-valued histogram;
         // dashboards should divide by 100 to recover the original score.
-        HISTO_LAKE_COMPACTION_SCORE_AT_TRIGGER = METRIC_REGISTER.histogram(
-                MetricRegistry.name("lake_compaction", "score_at_trigger"));
+        HISTO_LAKE_COMPACTION_SCORE_AT_TRIGGER =
+                new LeaderAwareHistogramMetric("lake_compaction_score_at_trigger");
+        METRIC_REGISTER.register("lake_compaction_score_at_trigger", HISTO_LAKE_COMPACTION_SCORE_AT_TRIGGER);
 
         // init system metrics
         initSystemMetrics();

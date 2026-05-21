@@ -184,9 +184,13 @@ public class CompactionScheduler extends Daemon {
                 long cost = job.getFinishTs() - job.getStartTs();
                 LOG.debug("Finished compaction. {}, cost={}s", job.getDebugString(), cost / 1000);
                 if (MetricRepo.hasInit) {
-                    MetricRepo.COUNTER_LAKE_COMPACTION_SUCCESS.increase(1L);
+                    // Mutually exclusive status counters: a partial-success commit lands
+                    // only in PARTIAL_SUCCESS, not also in SUCCESS, so dashboards can sum
+                    // success + partial + failed without double-counting.
                     if (job.isPartialSuccess()) {
                         MetricRepo.COUNTER_LAKE_COMPACTION_PARTIAL_SUCCESS.increase(1L);
+                    } else {
+                        MetricRepo.COUNTER_LAKE_COMPACTION_SUCCESS.increase(1L);
                     }
                 }
                 int factor = (statistics != null) ? statistics.getPunishFactor() : 1;
