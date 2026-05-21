@@ -24,8 +24,10 @@
 #include "benchgen/table.h"
 #include "common/config_exec_fwd.h"
 #include "common/config_metrics_fwd.h"
+#include "common/object_pool.h"
 #include "gen_cpp/PlanNodes_types.h"
 #include "runtime/descriptor_helper.h"
+#include "runtime/descriptors.h"
 #include "runtime/runtime_state.h"
 #include "types/type_descriptor.h"
 
@@ -68,10 +70,17 @@ protected:
         tuple_desc_builder.add_slot(slot_desc_builder.build());
         tuple_desc_builder.build(&desc_tbl_builder);
 
-        DescriptorTbl* tbl = nullptr;
-        CHECK(DescriptorTbl::create(_runtime_state.get(), _pool, desc_tbl_builder.desc_tbl(), &tbl,
-                                    config::vector_chunk_size)
-                      .ok());
+        auto thrift_tbl = desc_tbl_builder.desc_tbl();
+        auto* tbl = _pool->add(new DescriptorTbl());
+        for (const auto& tuple_desc : thrift_tbl.tupleDescriptors) {
+            auto* tuple = _pool->add(new TupleDescriptor(tuple_desc));
+            tbl->_tuple_desc_map.emplace(tuple->id(), tuple);
+        }
+        for (const auto& slot_desc : thrift_tbl.slotDescriptors) {
+            auto* slot = _pool->add(new SlotDescriptor(slot_desc));
+            tbl->_slot_desc_map.emplace(slot->id(), slot);
+            tbl->get_tuple_descriptor(slot->parent())->add_slot(slot);
+        }
         _runtime_state->set_desc_tbl(tbl);
         return tbl;
     }
