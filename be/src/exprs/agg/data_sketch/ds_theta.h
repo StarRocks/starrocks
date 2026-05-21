@@ -21,6 +21,7 @@
 #include "common/mem_chunk.h"
 #include "runtime/memory/counting_allocator.h"
 #include "runtime/memory/mem_chunk_allocator.h"
+#include "types/constexpr.h"
 
 //  enum flags { IS_BIG_ENDIAN, IS_READ_ONLY, IS_EMPTY, IS_COMPACT, IS_ORDERED };
 #pragma push_macro("IS_BIG_ENDIAN")
@@ -39,20 +40,30 @@ public:
     using theta_compact_sketch = datasketches::compact_theta_sketch_alloc<alloc_type>;
     using wrapped_compact_theta_sketch = datasketches::wrapped_compact_theta_sketch_alloc<alloc_type>;
 
+    // 2-byte StarRocks-specific header [magic=0xFE][lg_k] prepended to the compact
+    // theta sketch bytes so lg_k survives serialize/deserialize. Compact theta sketches
+    // start with pre_longs in {1,2,3}, so 0xFE unambiguously identifies our header
+    // and lets us fall back to header-less legacy data.
+    static constexpr uint8_t kMagicByte = 0xFE;
+    static constexpr size_t kHeaderSize = 2;
+
     DataSketchesTheta(const DataSketchesTheta& other) = delete;
     DataSketchesTheta& operator=(const DataSketchesTheta& other) = delete;
 
     explicit DataSketchesTheta(int64_t* memory_usage) : _memory_usage(memory_usage) {}
+    DataSketchesTheta(uint8_t lg_k, int64_t* memory_usage) : _memory_usage(memory_usage), _lg_k(lg_k) {}
     DataSketchesTheta& operator=(DataSketchesTheta&& other) noexcept {
         if (this != &other) {
             this->_memory_usage = other._memory_usage;
+            this->_lg_k = other._lg_k;
             this->_sketch_update = std::move(other._sketch_update);
             this->_sketch_union = std::move(other._sketch_union);
         }
         return *this;
     }
     explicit DataSketchesTheta(const Slice& src, int64_t* memory_usage);
-    DataSketchesTheta(DataSketchesTheta&& other) noexcept : _memory_usage(other._memory_usage) {}
+    DataSketchesTheta(DataSketchesTheta&& other) noexcept
+            : _memory_usage(other._memory_usage), _lg_k(other._lg_k) {}
 
     ~DataSketchesTheta() = default;
 
@@ -60,6 +71,8 @@ public:
     void merge(const DataSketchesTheta& other);
 
     int64_t mem_usage() const { return _memory_usage == nullptr ? 0L : *_memory_usage; }
+    // Returns sketch's configured lg_k value.
+    uint8_t get_lg_config_k() const { return _lg_k; }
     size_t serialize(uint8_t* dst) const;
     uint64_t serialize_size() const;
     bool deserialize(const Slice& slice);
@@ -68,16 +81,16 @@ public:
 
     theta_sketch_type* get_sketch_update() {
         if (!_sketch_update) {
-            _sketch_update =
-                    std::make_unique<theta_sketch_type>(theta_sketch_type::builder(alloc_type(_memory_usage)).build());
+            _sketch_update = std::make_unique<theta_sketch_type>(
+                    theta_sketch_type::builder(alloc_type(_memory_usage)).set_lg_k(_lg_k).build());
         }
         return _sketch_update.get();
     }
 
     theta_union_type* get_sketch_union() {
         if (!_sketch_union) {
-            _sketch_union =
-                    std::make_unique<theta_union_type>(theta_union_type::builder(alloc_type(_memory_usage)).build());
+            _sketch_union = std::make_unique<theta_union_type>(
+                    theta_union_type::builder(alloc_type(_memory_usage)).set_lg_k(_lg_k).build());
         }
         return _sketch_union.get();
     }
@@ -93,6 +106,7 @@ public:
 
 private:
     int64_t* _memory_usage;
+    uint8_t _lg_k = DEFAULT_THETA_LOG_K;
     std::unique_ptr<theta_sketch_type> _sketch_update = nullptr;
     std::unique_ptr<theta_union_type> _sketch_union = nullptr;
 };
