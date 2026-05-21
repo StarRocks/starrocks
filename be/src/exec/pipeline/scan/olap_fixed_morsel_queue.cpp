@@ -12,18 +12,18 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "exec/pipeline/scan/fixed_morsel_queue.h"
+#include "exec/pipeline/scan/olap_fixed_morsel_queue.h"
 
-#include "exec/pipeline/scan/fixed_morsel_queue_builder.h"
+#include "exec/pipeline/scan/olap_fixed_morsel_queue_builder.h"
 
 namespace starrocks::pipeline {
 
 namespace {
 
-class FixedMorselQueueBuilder final : public MorselQueueBuilder {
+class OlapFixedMorselQueueBuilder final : public MorselQueueBuilder {
 public:
-    explicit FixedMorselQueueBuilder(Morsels&& morsels) : _morsels(std::move(morsels)) {}
-    ~FixedMorselQueueBuilder() override = default;
+    explicit OlapFixedMorselQueueBuilder(Morsels&& morsels) : _morsels(std::move(morsels)) {}
+    ~OlapFixedMorselQueueBuilder() override = default;
 
     size_t num_original_morsels() const override { return _morsels.size(); }
     size_t max_degree_of_parallelism() const override { return _morsels.size(); }
@@ -43,7 +43,7 @@ public:
     }
 
     StatusOr<MorselQueuePtr> build_from_morsels(Morsels&& morsels) const override {
-        MorselQueuePtr queue = std::make_unique<FixedMorselQueue>(std::move(morsels));
+        MorselQueuePtr queue = std::make_unique<OlapFixedMorselQueue>(std::move(morsels));
         queue->set_has_more_scan_ranges(_has_more_scan_ranges);
         queue->set_has_more_from_split(_has_more_from_split);
         return queue;
@@ -57,7 +57,7 @@ private:
 
 } // namespace
 
-StatusOr<MorselPtr> FixedMorselQueue::try_get() {
+StatusOr<MorselPtr> OlapFixedMorselQueue::try_get() {
     if (_unget_morsel != nullptr) {
         return std::move(_unget_morsel);
     }
@@ -77,8 +77,8 @@ StatusOr<MorselPtr> FixedMorselQueue::try_get() {
     }
 }
 
-MorselQueueBuilderPtr make_fixed_morsel_queue_builder(Morsels&& morsels) {
-    return std::make_unique<FixedMorselQueueBuilder>(std::move(morsels));
+MorselQueueBuilderPtr make_olap_fixed_morsel_queue_builder(Morsels&& morsels) {
+    return std::make_unique<OlapFixedMorselQueueBuilder>(std::move(morsels));
 }
 
 } // namespace starrocks::pipeline

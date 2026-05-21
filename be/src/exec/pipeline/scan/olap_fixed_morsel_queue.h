@@ -14,13 +14,25 @@
 
 #pragma once
 
-#include <cstddef>
+#include <atomic>
 
-#include "exec/pipeline/scan/morsel_queue_builder.h"
+#include "exec/pipeline/scan/olap_morsel_queue.h"
 
 namespace starrocks::pipeline {
 
-MorselQueueBuilderPtr make_dynamic_morsel_queue_builder(Morsels&& morsels, bool has_more_scan_ranges,
-                                                        size_t max_dop = 0);
+// The morsel queue with a fixed number of morsels, which is determined in the constructor.
+class OlapFixedMorselQueue final : public OlapMorselQueue {
+public:
+    explicit OlapFixedMorselQueue(Morsels&& morsels) : OlapMorselQueue(std::move(morsels)), _pop_index(0) {}
+    ~OlapFixedMorselQueue() override = default;
+    bool empty() const override { return _unget_morsel == nullptr && _pop_index >= _num_morsels; }
+    StatusOr<MorselPtr> try_get() override;
+
+    std::string name() const override { return "fixed_morsel_queue"; }
+    Type type() const override { return FIXED; }
+
+private:
+    std::atomic<size_t> _pop_index;
+};
 
 } // namespace starrocks::pipeline

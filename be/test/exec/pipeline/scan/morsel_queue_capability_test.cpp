@@ -17,8 +17,8 @@
 #include <memory>
 
 #include "exec/pipeline/scan/bucket_sequence_morsel_queue.h"
-#include "exec/pipeline/scan/dynamic_morsel_queue.h"
-#include "exec/pipeline/scan/fixed_morsel_queue.h"
+#include "exec/pipeline/scan/olap_dynamic_morsel_queue.h"
+#include "exec/pipeline/scan/olap_fixed_morsel_queue.h"
 #include "exec/pipeline/scan/olap_morsel_queue.h"
 #include "exec/pipeline/scan/split_morsel_queue.h"
 #include "exec/pipeline/scan/ticketed_morsel_queue.h"
@@ -28,14 +28,14 @@ namespace starrocks::pipeline {
 class MorselQueueCapabilityTest : public ::testing::Test {};
 
 TEST_F(MorselQueueCapabilityTest, fixed_queue_is_olap_capable_only) {
-    FixedMorselQueue queue(Morsels{});
+    OlapFixedMorselQueue queue(Morsels{});
 
     EXPECT_NE(nullptr, dynamic_cast<OlapMorselQueue*>(&queue));
     EXPECT_EQ(nullptr, dynamic_cast<TicketedMorselQueue*>(&queue));
 }
 
 TEST_F(MorselQueueCapabilityTest, dynamic_queue_is_olap_and_ticket_capable) {
-    DynamicMorselQueue queue(Morsels{}, false);
+    OlapDynamicMorselQueue queue(Morsels{}, false);
 
     EXPECT_NE(nullptr, dynamic_cast<OlapMorselQueue*>(&queue));
     EXPECT_NE(nullptr, dynamic_cast<TicketedMorselQueue*>(&queue));
@@ -52,7 +52,7 @@ TEST_F(MorselQueueCapabilityTest, split_queues_are_olap_and_ticket_capable) {
 }
 
 TEST_F(MorselQueueCapabilityTest, bucket_sequence_queue_is_olap_and_ticket_capable) {
-    auto nested_queue = std::make_unique<FixedMorselQueue>(Morsels{});
+    auto nested_queue = std::make_unique<OlapFixedMorselQueue>(Morsels{});
     BucketSequenceMorselQueue queue(std::move(nested_queue));
 
     EXPECT_NE(nullptr, dynamic_cast<OlapMorselQueue*>(&queue));

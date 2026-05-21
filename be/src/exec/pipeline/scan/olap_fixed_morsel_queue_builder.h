@@ -18,6 +18,6 @@
 
 namespace starrocks::pipeline {
 
-MorselQueueBuilderPtr make_fixed_morsel_queue_builder(Morsels&& morsels);
+MorselQueueBuilderPtr make_olap_fixed_morsel_queue_builder(Morsels&& morsels);
 
 } // namespace starrocks::pipeline
