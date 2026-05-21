@@ -78,21 +78,18 @@ Status SpillMemTableSink::flush_chunk(const Chunk& chunk, starrocks::SegmentPB* 
 
     // EAGER MERGE OPTIMIZATION: Split mode-switch from task-submit to avoid redundant
     // LoadSpillPipelineMergeIterator::init() calls for flushes between thresholds.
-    //
-    // Mode-switch (once per sink): enter eager PK index build mode when total_bytes crosses
-    // pk_index_eager_build_threshold_bytes.
-    // Task-submit (per flush): submit merge task only when has_enough_for_pipeline_merge_task
-    // indicates generate_pipeline_merge_task would succeed.
+    // CAS guarantees the mode-switch block runs exactly once even under concurrent flush_chunk().
     if (config::enable_load_spill_parallel_merge) {
-        if (!_eager_mode_entered &&
-            _load_chunk_spiller->total_bytes() >= config::pk_index_eager_build_threshold_bytes) {
+        bool expected = false;
+        if (!_eager_mode_entered.load(std::memory_order_acquire) &&
+            _load_chunk_spiller->total_bytes() >= config::pk_index_eager_build_threshold_bytes &&
+            _eager_mode_entered.compare_exchange_strong(expected, true, std::memory_order_acq_rel)) {
             _writer->set_auto_flush(false);
             _writer->try_enable_pk_index_eager_build();
             _pipeline_merge_context->create_thread_pool_token();
-            _eager_mode_entered = true;
         }
 
-        if (_eager_mode_entered &&
+        if (_eager_mode_entered.load(std::memory_order_acquire) &&
             _load_chunk_spiller->has_enough_for_pipeline_merge_task(config::load_spill_max_merge_bytes,
                                                                     config::load_spill_memory_usage_per_merge)) {
             // Generate ONE merge task eagerly (not all tasks). Pipeline execution generates
