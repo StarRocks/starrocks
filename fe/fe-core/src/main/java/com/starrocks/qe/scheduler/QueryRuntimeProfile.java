@@ -86,6 +86,7 @@ public class QueryRuntimeProfile {
     private static final Long MARKED_COUNT_DOWN_VALUE = -1L;
 
     public static final String LOAD_CHANNEL_PROFILE_NAME = "LoadChannel";
+    public static final String PER_TABLE_SCAN_STATS_PROFILE_NAME = "PerTableScanStats";
 
     private final JobSpec jobSpec;
 
@@ -670,7 +671,7 @@ public class QueryRuntimeProfile {
             return Optional.empty();
         }
 
-        RuntimeProfile perTableProfile = new RuntimeProfile("PerTableScanStats");
+        RuntimeProfile perTableProfile = new RuntimeProfile(PER_TABLE_SCAN_STATS_PROFILE_NAME);
         long queryTotalRows = 0;
         long queryTotalBytes = 0;
         long queryTotalRawRows = 0;
