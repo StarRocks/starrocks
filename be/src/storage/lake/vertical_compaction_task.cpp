@@ -27,6 +27,7 @@
 #include "runtime/runtime_state.h"
 #include "storage/chunk_helper.h"
 #include "storage/compaction_utils.h"
+#include "storage/index/secondary_sorted/build_hook.h"
 #include "storage/lake/rowset.h"
 #include "storage/lake/tablet_metadata.h"
 #include "storage/lake/tablet_reader.h"
@@ -108,6 +109,22 @@ Status VerticalCompactionTask::execute(CancelFunc cancel_func, ThreadPool* flush
     txn_log->set_txn_id(_txn_id);
     RETURN_IF_ERROR(fill_compaction_segment_info(op_compaction, writer.get()));
     op_compaction->set_compact_version(_tablet.metadata()->version());
+
+    // ---- PoC: Build secondary index for the new compacted rowset ----
+    // Mirrors the hook in HorizontalCompactionTask::execute; the writer
+    // contract is identical so we can use the same helper.
+    if (config::enable_secondary_index_write && !writer->segments().empty()) {
+        std::vector<SecondaryIndexFilePB> sidx_pbs;
+        const std::string root = _tablet.tablet_manager()->tablet_root_location(_tablet.id());
+        ASSIGN_OR_RETURN(auto sidx_fs, FileSystemFactory::CreateSharedFromString(root));
+        RETURN_IF_ERROR(secondary_sorted::maybe_build_secondary_indexes(
+                _tablet.id(), _txn_id, _tablet_schema, writer->segments(), sidx_fs, _tablet.tablet_manager(),
+                &sidx_pbs));
+        for (auto& pb : sidx_pbs) {
+            *(op_compaction->mutable_output_rowset()->add_secondary_indexes()) = std::move(pb);
+        }
+    }
+
     RETURN_IF_ERROR(execute_index_major_compaction(txn_log.get()));
     TEST_ERROR_POINT("VerticalCompactionTask::execute::1");
     if (_context->skip_write_txnlog) {

@@ -44,6 +44,7 @@
 #include "storage/lake/spill_mem_table_sink.h"
 #include "storage/lake/table_schema_service.h"
 #include "storage/lake/tablet.h"
+#include "storage/index/secondary_sorted/build_hook.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_write_log_manager.h"
 #include "storage/lake/tablet_writer.h"
@@ -902,6 +903,25 @@ StatusOr<TxnLogPtr> DeltaWriterImpl::finish_with_txnlog(DeltaWriterFinishMode mo
             }
         }
     }
+
+    // ---- PoC: Build rowset-level secondary index files ----
+    // After all segments have been recorded into op_write->rowset(), but
+    // before the txn log is sealed, optionally scan those segments and emit
+    // one index file per configured (tablet, index). The resulting PB entries
+    // are attached to the same RowsetMetadataPB so they travel atomically
+    // with the rowset on commit.
+    if (config::enable_secondary_index_write && !_tablet_writer->segments().empty()) {
+        std::vector<SecondaryIndexFilePB> sidx_pbs;
+        const std::string root = _tablet_manager->tablet_root_location(_tablet_id);
+        ASSIGN_OR_RETURN(auto sidx_fs, FileSystemFactory::CreateSharedFromString(root));
+        RETURN_IF_ERROR(secondary_sorted::maybe_build_secondary_indexes(
+                _tablet_id, _txn_id, _tablet_schema, _tablet_writer->segments(), sidx_fs, _tablet_manager,
+                &sidx_pbs));
+        for (auto& pb : sidx_pbs) {
+            *(op_write->mutable_rowset()->add_secondary_indexes()) = std::move(pb);
+        }
+    }
+
     auto prepare_txn_log_ts = watch.elapsed_time();
     ADD_COUNTER_RELAXED(_stats.finish_prepare_txn_log_time_ns, prepare_txn_log_ts - wait_flush_ts);
     if (mode == kWriteTxnLog) {
