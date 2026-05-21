@@ -887,53 +887,53 @@ TEST_F(LakeReplicationTxnManagerStaticFunctionTest, test_prepare_del_transcode_c
     ASSERT_TRUE(ctx_or.ok()) << ctx_or.status();
 }
 
-// check_pk_encoding_compat_for_lake_to_lake: non-PK target -> OK.
+// check_pk_encoding_compat: non-PK target -> OK.
 TEST_F(LakeReplicationTxnManagerStaticFunctionTest, test_lake_to_lake_compat_non_pk) {
     auto src = make_non_pk_tablet_metadata(1);
     auto tgt = make_non_pk_tablet_metadata(2);
-    auto st = lake::LakeReplicationTxnManager::check_pk_encoding_compat_for_lake_to_lake(1, 2, src, tgt);
+    auto st = lake::LakeReplicationTxnManager::check_pk_encoding_compat(1, 2, src, tgt);
     EXPECT_TRUE(st.ok()) << st;
 }
 
-// check_pk_encoding_compat_for_lake_to_lake: matching V2 encoding -> OK.
+// check_pk_encoding_compat: matching V2 encoding -> OK.
 TEST_F(LakeReplicationTxnManagerStaticFunctionTest, test_lake_to_lake_compat_same_encoding) {
     auto src = make_pk_tablet_metadata(1, PrimaryKeyEncodingTypePB::PK_ENCODING_TYPE_V2, {"INT"});
     auto tgt = make_pk_tablet_metadata(2, PrimaryKeyEncodingTypePB::PK_ENCODING_TYPE_V2, {"INT"});
-    auto st = lake::LakeReplicationTxnManager::check_pk_encoding_compat_for_lake_to_lake(1, 2, src, tgt);
+    auto st = lake::LakeReplicationTxnManager::check_pk_encoding_compat(1, 2, src, tgt);
     EXPECT_TRUE(st.ok()) << st;
 }
 
-// check_pk_encoding_compat_for_lake_to_lake: V1 -> V2 on single fixed PK -> NotSupported.
+// check_pk_encoding_compat: V1 -> V2 on single fixed PK -> NotSupported.
 TEST_F(LakeReplicationTxnManagerStaticFunctionTest, test_lake_to_lake_compat_v1_to_v2_rejected) {
     auto src = make_pk_tablet_metadata(1, PrimaryKeyEncodingTypePB::PK_ENCODING_TYPE_V1, {"BIGINT"});
     auto tgt = make_pk_tablet_metadata(2, PrimaryKeyEncodingTypePB::PK_ENCODING_TYPE_V2, {"BIGINT"});
-    auto st = lake::LakeReplicationTxnManager::check_pk_encoding_compat_for_lake_to_lake(1, 2, src, tgt);
+    auto st = lake::LakeReplicationTxnManager::check_pk_encoding_compat(1, 2, src, tgt);
     ASSERT_FALSE(st.ok());
     EXPECT_TRUE(st.is_not_supported()) << st;
 }
 
-// check_pk_encoding_compat_for_lake_to_lake: V2 -> V1 on single fixed PK -> NotSupported.
+// check_pk_encoding_compat: V2 -> V1 on single fixed PK -> NotSupported.
 TEST_F(LakeReplicationTxnManagerStaticFunctionTest, test_lake_to_lake_compat_v2_to_v1_rejected) {
     auto src = make_pk_tablet_metadata(1, PrimaryKeyEncodingTypePB::PK_ENCODING_TYPE_V2, {"INT"});
     auto tgt = make_pk_tablet_metadata(2, PrimaryKeyEncodingTypePB::PK_ENCODING_TYPE_V1, {"INT"});
-    auto st = lake::LakeReplicationTxnManager::check_pk_encoding_compat_for_lake_to_lake(1, 2, src, tgt);
+    auto st = lake::LakeReplicationTxnManager::check_pk_encoding_compat(1, 2, src, tgt);
     ASSERT_FALSE(st.ok());
     EXPECT_TRUE(st.is_not_supported()) << st;
 }
 
-// check_pk_encoding_compat_for_lake_to_lake: V1 -> V2 on VARCHAR PK -> OK (byte-compatible).
+// check_pk_encoding_compat: V1 -> V2 on VARCHAR PK -> OK (byte-compatible).
 TEST_F(LakeReplicationTxnManagerStaticFunctionTest, test_lake_to_lake_compat_varchar_pk_allowed) {
     auto src = make_pk_tablet_metadata(1, PrimaryKeyEncodingTypePB::PK_ENCODING_TYPE_V1, {"VARCHAR"});
     auto tgt = make_pk_tablet_metadata(2, PrimaryKeyEncodingTypePB::PK_ENCODING_TYPE_V2, {"VARCHAR"});
-    auto st = lake::LakeReplicationTxnManager::check_pk_encoding_compat_for_lake_to_lake(1, 2, src, tgt);
+    auto st = lake::LakeReplicationTxnManager::check_pk_encoding_compat(1, 2, src, tgt);
     EXPECT_TRUE(st.ok()) << st;
 }
 
-// check_pk_encoding_compat_for_lake_to_lake: V1 -> V2 on composite PK -> OK (byte-compatible).
+// check_pk_encoding_compat: V1 -> V2 on composite PK -> OK (byte-compatible).
 TEST_F(LakeReplicationTxnManagerStaticFunctionTest, test_lake_to_lake_compat_composite_pk_allowed) {
     auto src = make_pk_tablet_metadata(1, PrimaryKeyEncodingTypePB::PK_ENCODING_TYPE_V1, {"INT", "INT"});
     auto tgt = make_pk_tablet_metadata(2, PrimaryKeyEncodingTypePB::PK_ENCODING_TYPE_V2, {"INT", "INT"});
-    auto st = lake::LakeReplicationTxnManager::check_pk_encoding_compat_for_lake_to_lake(1, 2, src, tgt);
+    auto st = lake::LakeReplicationTxnManager::check_pk_encoding_compat(1, 2, src, tgt);
     EXPECT_TRUE(st.ok()) << st;
 }
 

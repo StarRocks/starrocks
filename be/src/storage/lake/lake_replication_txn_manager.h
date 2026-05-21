@@ -111,7 +111,7 @@ public:
     // without re-encoding). Specifically rejects either direction of V1<->V2 on a single
     // non-string fixed-length PK column. Returns Status::OK for safe combinations and for
     // non-PK target tablets.
-    static Status check_pk_encoding_compat_for_lake_to_lake(int64_t src_tablet_id, int64_t target_tablet_id,
+    static Status check_pk_encoding_compat(int64_t src_tablet_id, int64_t target_tablet_id,
                                                             const TabletMetadata& src_tablet_meta,
                                                             const TabletMetadata& target_tablet_meta);
 
