@@ -57,7 +57,6 @@
 #include "common/logging.h"
 #include "gutil/atomicops.h"
 #include "gutil/dynamic_annotations.h"
-#include "gutil/once.h"
 #include "gutil/strings/substitute.h"
 
 namespace starrocks {
@@ -74,7 +73,7 @@ __thread Thread* Thread::_tls = nullptr;
 static std::shared_ptr<ThreadMgr> thread_manager;
 //
 // Controls the single (lazy) initialization of thread_manager.
-static GoogleOnceType once = GOOGLE_ONCE_INIT;
+static std::once_flag thread_manager_once;
 
 // A singleton class that tracks all live threads, and groups them together for easy
 // auditing. Used only by Thread.
@@ -220,7 +219,7 @@ void ThreadMgr::get_thread_infos(std::vector<BeThreadInfo>& infos) {
 }
 
 void Thread::get_thread_infos(std::vector<BeThreadInfo>& infos) {
-    GoogleOnceInit(&once, &init_threadmgr);
+    std::call_once(thread_manager_once, init_threadmgr);
     thread_manager->get_thread_infos(infos);
 }
 
@@ -333,7 +332,7 @@ int64_t Thread::wait_for_tid() const {
 
 Status Thread::start_thread(const std::string& category, const std::string& name, const ThreadFunctor& functor,
                             uint64_t flags, scoped_refptr<Thread>* holder) {
-    GoogleOnceInit(&once, &init_threadmgr);
+    std::call_once(thread_manager_once, init_threadmgr);
 
     // Temporary reference for the duration of this function.
     scoped_refptr<Thread> t(new Thread(category, name, functor));
