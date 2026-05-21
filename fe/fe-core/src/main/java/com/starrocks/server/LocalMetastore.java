@@ -5783,7 +5783,6 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         if (!(table instanceof OlapTable)) {
             return Collections.emptyList();
         }
-        OlapTable olapTable = (OlapTable) table;
         long toVersion = toSnapshotInclusive.end()
                 .orElseThrow(() -> new StarRocksConnectorException(
                         "toSnapshotInclusive must have a valid snapshot ID"));
