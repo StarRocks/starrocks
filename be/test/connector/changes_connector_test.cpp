@@ -156,7 +156,7 @@ protected:
         return -1;
     }
 
-// -------------------------------------------------------------------
+    // -------------------------------------------------------------------
     // TPlanNode / TScanRange / Provider builders
     // -------------------------------------------------------------------
 
@@ -221,7 +221,6 @@ protected:
     std::unique_ptr<ChangesDataSourceProvider> make_provider(TTupleId tuple_id, int64_t schema_id) {
         return std::make_unique<ChangesDataSourceProvider>(/*scan_node=*/nullptr, make_plan_node(tuple_id, schema_id));
     }
-
 
     // -------------------------------------------------------------------
     // Tablet bootstrap + metadata publishing
@@ -493,7 +492,6 @@ TEST_F(ChangesConnectorTest, test_open_error_paths) {
         EXPECT_NE(std::string::npos, std::string(st.message()).find("missing_col"));
         ds->close(_runtime_state.get());
     }
-
 }
 
 // ============================================================================
@@ -750,8 +748,7 @@ TEST_F(ChangesConnectorTest, test_chunk_stamping_with_slot_variants) {
     // every chunk would surface with num_rows() == 0 and the data source would
     // drop the whole rowset before stamping metadata.
     {
-        auto tuple_id =
-                install_tuple_descriptor(TupleShape::ROW_VERSION_ONLY, /*include_data=*/false);
+        auto tuple_id = install_tuple_descriptor(TupleShape::ROW_VERSION_ONLY, /*include_data=*/false);
         SlotId rv_id = slot_id_of(tuple_id, kRowVersionColumnName);
         ASSERT_NE(-1, rv_id);
         ASSERT_EQ(-1, slot_id_of(tuple_id, kChangeTypeColumnName));
@@ -770,8 +767,7 @@ TEST_F(ChangesConnectorTest, test_chunk_stamping_with_slot_variants) {
     // Sub-case G: only __CHANGE_TYPE__ in the tuple, no data slot. Same
     // row-count-driver concern as Sub-case F.
     {
-        auto tuple_id =
-                install_tuple_descriptor(TupleShape::CHANGE_TYPE_ONLY, /*include_data=*/false);
+        auto tuple_id = install_tuple_descriptor(TupleShape::CHANGE_TYPE_ONLY, /*include_data=*/false);
         SlotId ct_id = slot_id_of(tuple_id, kChangeTypeColumnName);
         ASSERT_NE(-1, ct_id);
         ASSERT_EQ(-1, slot_id_of(tuple_id, kRowVersionColumnName));

@@ -107,8 +107,7 @@ private:
             return ColumnPtr(std::move(val_col));
         }
         }
-        return Status::InternalError(
-                fmt::format("unhandled TChangesMetaKind: {}", static_cast<int>(kind)));
+        return Status::InternalError(fmt::format("unhandled TChangesMetaKind: {}", static_cast<int>(kind)));
     }
 
     ChunkIteratorPtr _inner;
@@ -194,8 +193,7 @@ Status ChangesDataSource::open(RuntimeState* state) {
 
     if (_has_delete_predicate) {
         return Status::NotSupported(fmt::format(
-                "DELETE_PREDICATE_FOUND: CHANGES not supported for DELETE operations on tablet {}",
-                _tablet_id));
+                "DELETE_PREDICATE_FOUND: CHANGES not supported for DELETE operations on tablet {}", _tablet_id));
     }
 
     // Wrap each per-segment iterator so the surfaced chunk carries the
@@ -242,9 +240,8 @@ Status ChangesDataSource::get_next(RuntimeState* state, ChunkPtr* chunk) {
 // traversal stops as soon as no ancestor version remains above base.
 Status ChangesDataSource::_do_metadata_traversal() {
     if (_base_version > _head_version) {
-        return Status::InvalidArgument(fmt::format(
-                "CHANGES version range invalid: base_version({}) > head_version({})",
-                _base_version, _head_version));
+        return Status::InvalidArgument(fmt::format("CHANGES version range invalid: base_version({}) > head_version({})",
+                                                   _base_version, _head_version));
     }
     if (_base_version == _head_version) {
         return Status::OK();
