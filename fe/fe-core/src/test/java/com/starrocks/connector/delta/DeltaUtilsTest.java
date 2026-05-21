@@ -16,9 +16,11 @@ package com.starrocks.connector.delta;
 
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
+import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DeltaLakeTable;
 import com.starrocks.connector.metastore.MetastoreTable;
 import com.starrocks.sql.optimizer.validate.ValidateException;
+import com.starrocks.type.Type;
 import io.delta.kernel.data.ArrayValue;
 import io.delta.kernel.data.ColumnVector;
 import io.delta.kernel.engine.Engine;
@@ -27,6 +29,7 @@ import io.delta.kernel.internal.actions.Metadata;
 import io.delta.kernel.internal.actions.Protocol;
 import io.delta.kernel.internal.util.ColumnMapping;
 import io.delta.kernel.types.DateType;
+import io.delta.kernel.types.FieldMetadata;
 import io.delta.kernel.types.IntegerType;
 import io.delta.kernel.types.StructField;
 import io.delta.kernel.types.StructType;
@@ -39,6 +42,7 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
+import java.util.Optional;
 
 import static io.delta.kernel.internal.util.ColumnMapping.COLUMN_MAPPING_MODE_KEY;
 import static io.delta.kernel.internal.util.ColumnMapping.COLUMN_MAPPING_MODE_NAME;
@@ -70,12 +74,20 @@ public class DeltaUtilsTest {
     }
 
     @Test
-    public void testConvertDeltaSnapshotToSRTable(@Mocked SnapshotImpl snapshot) {
+    public void testConvertDeltaSnapshotToSRTable(@Mocked SnapshotImpl snapshot, @Mocked Metadata metadata) {
         new Expectations() {
             {
                 snapshot.getSchema((Engine) any);
                 result = new StructType(Lists.newArrayList(new StructField("col1", IntegerType.INTEGER, true),
                         new StructField("col2", DateType.DATE, true)));
+                minTimes = 0;
+
+                snapshot.getMetadata();
+                result = metadata;
+                minTimes = 0;
+
+                metadata.getDescription();
+                result = Optional.empty();
                 minTimes = 0;
             }
         };
@@ -101,6 +113,46 @@ public class DeltaUtilsTest {
         Assertions.assertEquals("catalog0", deltaLakeTable.getCatalogName());
         Assertions.assertEquals("db0", deltaLakeTable.getCatalogDBName());
         Assertions.assertEquals("table0", deltaLakeTable.getCatalogTableName());
+        Assertions.assertEquals("", deltaLakeTable.getComment());
+    }
+
+    @Test
+    public void testConvertDeltaSnapshotToSRTablePreservesDescription(@Mocked SnapshotImpl snapshot,
+                                                                      @Mocked Metadata metadata) {
+        new Expectations() {
+            {
+                snapshot.getSchema((Engine) any);
+                result = new StructType(Lists.newArrayList(new StructField("col1", IntegerType.INTEGER, true)));
+                minTimes = 0;
+
+                snapshot.getMetadata();
+                result = metadata;
+                minTimes = 0;
+
+                metadata.getDescription();
+                result = Optional.of("my table description");
+                minTimes = 0;
+            }
+        };
+
+        new MockUp<ColumnMapping>() {
+            @Mock
+            public String getColumnMappingMode(Configuration configuration) {
+                return COLUMN_MAPPING_MODE_NONE;
+            }
+        };
+
+        new MockUp<DeltaUtils>() {
+            @Mock
+            public List<String> loadPartitionColumnNames(SnapshotImpl snapshot) {
+                return Lists.newArrayList();
+            }
+        };
+
+        DeltaLakeTable deltaLakeTable = DeltaUtils.convertDeltaSnapshotToSRTable("catalog0",
+                new DeltaLakeSnapshot("db0", "table0", null, snapshot,
+                        new MetastoreTable("db1", "table1", "s3://bucket/path/to/table", 123)));
+        Assertions.assertEquals("my table description", deltaLakeTable.getComment());
     }
 
     @Test
@@ -198,6 +250,64 @@ public class DeltaUtilsTest {
         Throwable exception = assertThrows(IllegalArgumentException.class, () ->
                 DeltaUtils.loadPartitionColumnNames(snapshot));
         assertThat(exception.getMessage(), containsString("Expected a non-null partition column name"));
+    }
+
+    @Test
+    public void testBuildColumnWithColumnMappingPreservesComment(@Mocked StructField field,
+                                                                 @Mocked FieldMetadata fieldMetadata,
+                                                                 @Mocked Type type) {
+        new Expectations() {
+            {
+                field.getName();
+                result = "col1";
+
+                field.getMetadata();
+                result = fieldMetadata;
+
+                fieldMetadata.contains("comment");
+                result = true;
+                fieldMetadata.get("comment");
+                result = "first column comment";
+
+                fieldMetadata.contains(ColumnMapping.COLUMN_MAPPING_ID_KEY);
+                result = false;
+                fieldMetadata.contains(ColumnMapping.COLUMN_MAPPING_PHYSICAL_NAME_KEY);
+                result = false;
+            }
+        };
+
+        Column column = DeltaUtils.buildColumnWithColumnMapping(field, type, COLUMN_MAPPING_MODE_NONE);
+
+        Assertions.assertEquals("col1", column.getName());
+        Assertions.assertEquals("first column comment", column.getComment());
+    }
+
+    @Test
+    public void testBuildColumnWithColumnMappingNoCommentMetadata(@Mocked StructField field,
+                                                                  @Mocked FieldMetadata fieldMetadata,
+                                                                  @Mocked Type type) {
+        new Expectations() {
+            {
+                field.getName();
+                result = "col1";
+
+                field.getMetadata();
+                result = fieldMetadata;
+
+                fieldMetadata.contains("comment");
+                result = false;
+
+                fieldMetadata.contains(ColumnMapping.COLUMN_MAPPING_ID_KEY);
+                result = false;
+                fieldMetadata.contains(ColumnMapping.COLUMN_MAPPING_PHYSICAL_NAME_KEY);
+                result = false;
+            }
+        };
+
+        Column column = DeltaUtils.buildColumnWithColumnMapping(field, type, COLUMN_MAPPING_MODE_NONE);
+
+        Assertions.assertEquals("col1", column.getName());
+        Assertions.assertEquals("", column.getComment());
     }
 
     @Test
