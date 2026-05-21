@@ -19,12 +19,14 @@
 #include <memory>
 #include <vector>
 
+#include "base/testutil/assert.h"
 #include "column/chunk.h"
 #include "column/schema.h"
 #include "fs/fs.h"
 #include "fs/fs_memory.h"
 #include "serde/column_array_serde.h"
 #include "storage/primary_key_encoder.h"
+#include "storage/tablet_schema.h"
 #include "types/datum.h"
 
 namespace starrocks {
@@ -41,6 +43,51 @@ SchemaPtr create_single_pk_schema(LogicalType type) {
     fd->set_uid(0);
     fields.emplace_back(fd);
     return std::make_shared<Schema>(std::move(fields), PRIMARY_KEYS, std::vector<ColumnId>{0});
+}
+
+// Maps LogicalType -> the protobuf-side type-name string used by TabletColumnPB.
+const char* pk_type_name(LogicalType type) {
+    switch (type) {
+    case TYPE_BOOLEAN:
+        return "BOOLEAN";
+    case TYPE_TINYINT:
+        return "TINYINT";
+    case TYPE_SMALLINT:
+        return "SMALLINT";
+    case TYPE_INT:
+        return "INT";
+    case TYPE_BIGINT:
+        return "BIGINT";
+    case TYPE_LARGEINT:
+        return "LARGEINT";
+    case TYPE_DATE:
+        return "DATE";
+    case TYPE_DATETIME:
+        return "DATETIME";
+    case TYPE_VARCHAR:
+        return "VARCHAR";
+    default:
+        return "UNKNOWN";
+    }
+}
+
+// Build a TabletSchema with the given PK column types. Each column is keyed.
+std::shared_ptr<TabletSchema> create_tablet_schema_with_pk_columns(const std::vector<LogicalType>& pk_types) {
+    TabletSchemaPB pb;
+    pb.set_keys_type(PRIMARY_KEYS);
+    pb.set_primary_key_encoding_type(PrimaryKeyEncodingTypePB::PK_ENCODING_TYPE_V2);
+    for (size_t i = 0; i < pk_types.size(); ++i) {
+        auto* col = pb.add_column();
+        col->set_unique_id(static_cast<uint32_t>(i));
+        col->set_name("c" + std::to_string(i));
+        col->set_type(pk_type_name(pk_types[i]));
+        if (pk_types[i] == TYPE_VARCHAR) {
+            col->set_length(32);
+        }
+        col->set_is_key(true);
+        col->set_is_nullable(false);
+    }
+    return std::make_shared<TabletSchema>(pb);
 }
 
 // Serialize a column with ColumnArraySerde into a string buffer.
@@ -178,6 +225,135 @@ TEST_F(DelFileStreamConverterTest, CorruptInput) {
     std::string garbage = "\xff\xff\xff\xff\xde\xad\xbe\xef";
     auto status_or_out = run_converter(schema, garbage, garbage.size());
     ASSERT_FALSE(status_or_out.ok());
+}
+
+// Zero-byte append should be a fast no-op (covers the size==0 early return in append()).
+TEST_F(DelFileStreamConverterTest, AppendZeroSize) {
+    auto schema = create_single_pk_schema(TYPE_INT);
+    MemoryFileSystem fs;
+    auto wfile_or = fs.new_writable_file("/del-zero");
+    ASSERT_TRUE(wfile_or.ok());
+
+    // Declared input is a valid 1-row Int32Column payload.
+    MutableColumnPtr v1_col;
+    ASSERT_TRUE(PrimaryKeyEncoder::create_column(*schema, &v1_col, PrimaryKeyEncodingType::PK_ENCODING_TYPE_V1).ok());
+    Datum d;
+    d.set<int32_t>(42);
+    v1_col->append_datum(d);
+    const std::string v1_bytes = serialize_column(*v1_col);
+
+    DelFileStreamConverter converter("zero.del", v1_bytes.size(), std::move(wfile_or.value()), schema,
+                                     PrimaryKeyEncodingType::PK_ENCODING_TYPE_V1,
+                                     PrimaryKeyEncodingType::PK_ENCODING_TYPE_V2);
+    // A zero-byte append must not advance the buffer.
+    ASSERT_OK(converter.append(nullptr, 0));
+    ASSERT_OK(converter.append(v1_bytes.data(), v1_bytes.size()));
+    // Another zero-byte append after a full payload is also a no-op.
+    ASSERT_OK(converter.append(nullptr, 0));
+    ASSERT_OK(converter.close());
+}
+
+// Declared size larger than the actual serialized PK column leaves trailing bytes that
+// ColumnArraySerde::deserialize will not consume, exercising the "did not consume full
+// buffer" Corruption branch in close().
+TEST_F(DelFileStreamConverterTest, DeserializeLeavesTrailingBytes) {
+    auto schema = create_single_pk_schema(TYPE_INT);
+
+    MutableColumnPtr v1_col;
+    ASSERT_TRUE(PrimaryKeyEncoder::create_column(*schema, &v1_col, PrimaryKeyEncodingType::PK_ENCODING_TYPE_V1).ok());
+    Datum d;
+    d.set<int32_t>(7);
+    v1_col->append_datum(d);
+    std::string v1_bytes = serialize_column(*v1_col);
+    // Append a stray byte so deserialize stops short of the buffer end.
+    v1_bytes.push_back('\0');
+
+    MemoryFileSystem fs;
+    auto wfile_or = fs.new_writable_file("/del-trailing");
+    ASSERT_TRUE(wfile_or.ok());
+    DelFileStreamConverter converter("trailing.del", v1_bytes.size(), std::move(wfile_or.value()), schema,
+                                     PrimaryKeyEncodingType::PK_ENCODING_TYPE_V1,
+                                     PrimaryKeyEncodingType::PK_ENCODING_TYPE_V2);
+    ASSERT_OK(converter.append(v1_bytes.data(), v1_bytes.size()));
+    auto st = converter.close();
+    ASSERT_FALSE(st.ok());
+    ASSERT_TRUE(st.is_corruption()) << st;
+}
+
+// Round-trip golden tests for every supported single non-string fixed-length PK type.
+// These also incidentally cover the macro expansion in is_fixed_length_non_string_pk_type.
+TEST_F(DelFileStreamConverterTest, V1ToV2_SingleBoolean) {
+    check_v1_to_v2<uint8_t>(TYPE_BOOLEAN, {0, 1});
+}
+TEST_F(DelFileStreamConverterTest, V1ToV2_SingleTinyInt) {
+    check_v1_to_v2<int8_t>(TYPE_TINYINT, {-128, -1, 0, 1, 127});
+}
+TEST_F(DelFileStreamConverterTest, V1ToV2_SingleSmallInt) {
+    check_v1_to_v2<int16_t>(TYPE_SMALLINT, {std::numeric_limits<int16_t>::min(), 0, std::numeric_limits<int16_t>::max()});
+}
+TEST_F(DelFileStreamConverterTest, V1ToV2_SingleDate) {
+    // DATE storage type is int32 (Julian day count). Use representative values.
+    check_v1_to_v2<int32_t>(TYPE_DATE, {0, 700000, 999999});
+}
+TEST_F(DelFileStreamConverterTest, V1ToV2_SingleDateTime) {
+    check_v1_to_v2<int64_t>(TYPE_DATETIME, {0, 20260521000000LL, std::numeric_limits<int64_t>::max()});
+}
+
+// Predicate matrix: is_single_fixed_length_non_string_primary_key(const Schema&)
+// and requires_v1_to_v2_del_transcode(...) for every combination that matters.
+TEST_F(DelFileStreamConverterTest, Predicates_SchemaOverload) {
+    // Single fixed-length non-string types -> true.
+    for (LogicalType t : {TYPE_BOOLEAN, TYPE_TINYINT, TYPE_SMALLINT, TYPE_INT, TYPE_BIGINT, TYPE_LARGEINT, TYPE_DATE,
+                          TYPE_DATETIME}) {
+        ASSERT_TRUE(is_single_fixed_length_non_string_primary_key(*create_single_pk_schema(t)))
+                << "type=" << static_cast<int>(t);
+    }
+    // Single VARCHAR -> false (BinaryColumn on both V1/V2, byte-compatible).
+    ASSERT_FALSE(is_single_fixed_length_non_string_primary_key(*create_single_pk_schema(TYPE_VARCHAR)));
+
+    // Composite PK -> false. Build (INT, INT) schema directly.
+    Fields composite;
+    {
+        auto* a = new Field(0, "a", TYPE_INT, false);
+        a->set_is_key(true);
+        a->set_aggregate_method(STORAGE_AGGREGATE_NONE);
+        auto* b = new Field(1, "b", TYPE_INT, false);
+        b->set_is_key(true);
+        b->set_aggregate_method(STORAGE_AGGREGATE_NONE);
+        composite.emplace_back(a);
+        composite.emplace_back(b);
+    }
+    Schema composite_schema(std::move(composite), PRIMARY_KEYS, std::vector<ColumnId>{0, 1});
+    ASSERT_FALSE(is_single_fixed_length_non_string_primary_key(composite_schema));
+}
+
+TEST_F(DelFileStreamConverterTest, Predicates_TabletSchemaOverload) {
+    // Single fixed-length non-string -> true.
+    ASSERT_TRUE(is_single_fixed_length_non_string_primary_key(*create_tablet_schema_with_pk_columns({TYPE_INT})));
+    ASSERT_TRUE(is_single_fixed_length_non_string_primary_key(*create_tablet_schema_with_pk_columns({TYPE_DATETIME})));
+    // Single VARCHAR -> false.
+    ASSERT_FALSE(is_single_fixed_length_non_string_primary_key(*create_tablet_schema_with_pk_columns({TYPE_VARCHAR})));
+    // Composite -> false.
+    ASSERT_FALSE(
+            is_single_fixed_length_non_string_primary_key(*create_tablet_schema_with_pk_columns({TYPE_INT, TYPE_INT})));
+}
+
+TEST_F(DelFileStreamConverterTest, Predicates_RequiresV1ToV2DelTranscodeMatrix) {
+    auto int_schema = *create_single_pk_schema(TYPE_INT);
+    auto varchar_schema = *create_single_pk_schema(TYPE_VARCHAR);
+
+    using PKE = PrimaryKeyEncodingType;
+    // Supported direction on a byte-incompatible shape.
+    ASSERT_TRUE(requires_v1_to_v2_del_transcode(PKE::PK_ENCODING_TYPE_V1, PKE::PK_ENCODING_TYPE_V2, int_schema));
+    // V2 -> V1 on the same shape: not supported (no decoder); predicate must say false.
+    ASSERT_FALSE(requires_v1_to_v2_del_transcode(PKE::PK_ENCODING_TYPE_V2, PKE::PK_ENCODING_TYPE_V1, int_schema));
+    // Same encoding on both sides: no transcoding needed.
+    ASSERT_FALSE(requires_v1_to_v2_del_transcode(PKE::PK_ENCODING_TYPE_V1, PKE::PK_ENCODING_TYPE_V1, int_schema));
+    ASSERT_FALSE(requires_v1_to_v2_del_transcode(PKE::PK_ENCODING_TYPE_V2, PKE::PK_ENCODING_TYPE_V2, int_schema));
+    // VARCHAR PK: byte-compatible on V1/V2, no transcoding even with direction match.
+    ASSERT_FALSE(requires_v1_to_v2_del_transcode(PKE::PK_ENCODING_TYPE_V1, PKE::PK_ENCODING_TYPE_V2, varchar_schema));
+    // NONE encoding: never transcode.
+    ASSERT_FALSE(requires_v1_to_v2_del_transcode(PKE::PK_ENCODING_TYPE_NONE, PKE::PK_ENCODING_TYPE_V2, int_schema));
 }
 
 } // namespace starrocks
