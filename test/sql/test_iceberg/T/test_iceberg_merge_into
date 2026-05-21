@@ -1,0 +1,309 @@
+-- name: test_iceberg_merge_into_unpartitioned
+
+create external catalog iceberg_merge_unp_${uuid0}
+PROPERTIES ( "type"  =  "iceberg",
+    "iceberg.catalog.type"  =  "hive",
+    "iceberg.catalog.hive.metastore.uris"="${hive_metastore_uris}",
+    "aws.s3.access_key"  =  "${oss_ak}",
+    "aws.s3.secret_key"  =  "${oss_sk}",
+    "aws.s3.endpoint"  =  "${oss_endpoint}",
+    "enable_iceberg_metadata_cache"="false");
+
+create database iceberg_merge_unp_${uuid0}.iceberg_merge_db_${uuid0} properties (
+    "location" = "oss://${oss_bucket}/test_iceberg_merge_into/${uuid0}/iceberg_merge_db_${uuid0}"
+);
+
+-- Create non-partitioned V2 table
+create table iceberg_merge_unp_${uuid0}.iceberg_merge_db_${uuid0}.t_merge (
+    id INT,
+    name STRING,
+    age INT,
+    salary BIGINT
+) PROPERTIES ("format-version" = "2");
+
+-- Insert initial data
+INSERT INTO iceberg_merge_unp_${uuid0}.iceberg_merge_db_${uuid0}.t_merge VALUES
+    (1, 'Alice', 25, 50000),
+    (2, 'Bob', 30, 60000),
+    (3, 'Charlie', 35, 70000),
+    (4, 'David', 28, 55000),
+    (5, 'Eve', 32, 65000);
+
+-- Verify initial data
+SELECT * FROM iceberg_merge_unp_${uuid0}.iceberg_merge_db_${uuid0}.t_merge ORDER BY id;
+
+-- ================================================
+-- Test 1: WHEN MATCHED THEN UPDATE only
+-- ================================================
+MERGE INTO iceberg_merge_unp_${uuid0}.iceberg_merge_db_${uuid0}.t_merge AS t
+USING (SELECT 3 AS id, 'UPDATED' AS name, 35 AS age, 75000 AS salary) AS s
+ON t.id = s.id
+WHEN MATCHED THEN UPDATE SET name = s.name, salary = s.salary;
+
+SELECT * FROM iceberg_merge_unp_${uuid0}.iceberg_merge_db_${uuid0}.t_merge ORDER BY id;
+
+-- ================================================
+-- Test 2: WHEN MATCHED THEN DELETE
+-- ================================================
+MERGE INTO iceberg_merge_unp_${uuid0}.iceberg_merge_db_${uuid0}.t_merge AS t
+USING (SELECT 2 AS id) AS s
+ON t.id = s.id
+WHEN MATCHED THEN DELETE;
+
+SELECT * FROM iceberg_merge_unp_${uuid0}.iceberg_merge_db_${uuid0}.t_merge ORDER BY id;
+
+-- ================================================
+-- Test 3: WHEN NOT MATCHED THEN INSERT
+-- ================================================
+MERGE INTO iceberg_merge_unp_${uuid0}.iceberg_merge_db_${uuid0}.t_merge AS t
+USING (SELECT 10 AS id, 'Frank' AS name, 40 AS age, 80000 AS salary) AS s
+ON t.id = s.id
+WHEN NOT MATCHED THEN INSERT (id, name, age, salary) VALUES (s.id, s.name, s.age, s.salary);
+
+SELECT * FROM iceberg_merge_unp_${uuid0}.iceberg_merge_db_${uuid0}.t_merge ORDER BY id;
+
+-- ================================================
+-- Test 4: WHEN MATCHED (no match — no-op)
+-- ================================================
+MERGE INTO iceberg_merge_unp_${uuid0}.iceberg_merge_db_${uuid0}.t_merge AS t
+USING (SELECT 999 AS id, 'Ghost' AS name, 99 AS age, 99999 AS salary) AS s
+ON t.id = s.id
+WHEN MATCHED THEN UPDATE SET name = s.name;
+
+SELECT * FROM iceberg_merge_unp_${uuid0}.iceberg_merge_db_${uuid0}.t_merge ORDER BY id;
+
+-- ================================================
+-- Test 5: Source is empty (no rows — no-op for all clauses)
+-- ================================================
+MERGE INTO iceberg_merge_unp_${uuid0}.iceberg_merge_db_${uuid0}.t_merge AS t
+USING (SELECT 1 AS id, 'X' AS name, 0 AS age, 0 AS salary WHERE 1 = 0) AS s
+ON t.id = s.id
+WHEN MATCHED THEN DELETE
+WHEN NOT MATCHED THEN INSERT (id, name, age, salary) VALUES (s.id, s.name, s.age, s.salary);
+
+SELECT * FROM iceberg_merge_unp_${uuid0}.iceberg_merge_db_${uuid0}.t_merge ORDER BY id;
+
+-- ================================================
+-- Test 6: Combined — conditional WHEN MATCHED UPDATE and WHEN NOT MATCHED INSERT
+-- ================================================
+MERGE INTO iceberg_merge_unp_${uuid0}.iceberg_merge_db_${uuid0}.t_merge AS t
+USING (
+    SELECT 1 AS id, 'Alice_v2' AS name, 26 AS age, 55000 AS salary
+    UNION ALL
+    SELECT 20 AS id, 'Grace' AS name, 29 AS age, 58000 AS salary
+) AS s
+ON t.id = s.id
+WHEN MATCHED THEN UPDATE SET name = s.name, age = s.age, salary = s.salary
+WHEN NOT MATCHED THEN INSERT (id, name, age, salary) VALUES (s.id, s.name, s.age, s.salary);
+
+SELECT * FROM iceberg_merge_unp_${uuid0}.iceberg_merge_db_${uuid0}.t_merge ORDER BY id;
+
+-- ================================================
+-- Test 7: Conditional WHEN MATCHED DELETE and conditional WHEN MATCHED UPDATE
+-- ================================================
+-- Reset table state: delete row 5 and insert fresh rows for this test
+INSERT INTO iceberg_merge_unp_${uuid0}.iceberg_merge_db_${uuid0}.t_merge VALUES
+    (30, 'Heidi', 50, 100000),
+    (31, 'Ivan', 45, 90000);
+
+MERGE INTO iceberg_merge_unp_${uuid0}.iceberg_merge_db_${uuid0}.t_merge AS t
+USING (
+    SELECT 30 AS id, 'D' AS op
+    UNION ALL
+    SELECT 31 AS id, 'U' AS op
+) AS s
+ON t.id = s.id
+WHEN MATCHED AND s.op = 'D' THEN DELETE
+WHEN MATCHED AND s.op = 'U' THEN UPDATE SET salary = 95000;
+
+SELECT id, name, salary FROM iceberg_merge_unp_${uuid0}.iceberg_merge_db_${uuid0}.t_merge WHERE id IN (30, 31) ORDER BY id;
+
+-- ================================================
+-- Test 8: Verify snapshot is created after MERGE
+-- ================================================
+SELECT count(*) > 1 FROM iceberg_merge_unp_${uuid0}.iceberg_merge_db_${uuid0}.t_merge$snapshots;
+
+-- ================================================
+-- Test 9: Duplicate-match detection with high DOP
+-- Regression: each EnforceUniqueOperator driver keeps its own seen-set, so
+-- correctness under pipeline_dop > 1 relies on the local column-hash shuffle
+-- exchange (interpolate_local_column_hash_partition_exchange) routing equal
+-- (_file, _pos) keys to the same driver. This test verifies duplicates are
+-- still caught under high DOP settings.
+-- ================================================
+set pipeline_dop = 4;
+set pipeline_sink_dop = 4;
+
+MERGE INTO iceberg_merge_unp_${uuid0}.iceberg_merge_db_${uuid0}.t_merge AS t
+USING (
+    SELECT 1 AS id, 'dup1' AS name, 26 AS age, 55000 AS salary
+    UNION ALL
+    SELECT 1 AS id, 'dup2' AS name, 27 AS age, 56000 AS salary
+) AS s
+ON t.id = s.id
+WHEN MATCHED THEN UPDATE SET name = s.name;
+
+set pipeline_dop = 0;
+set pipeline_sink_dop = 0;
+
+-- ================================================
+-- Error tests
+-- ================================================
+
+-- Test E1: MERGE INTO on V1 table should fail
+create table iceberg_merge_unp_${uuid0}.iceberg_merge_db_${uuid0}.t_v1 (
+    id INT, name STRING
+) PROPERTIES ("format-version" = "1");
+
+MERGE INTO iceberg_merge_unp_${uuid0}.iceberg_merge_db_${uuid0}.t_v1 AS t
+USING (SELECT 1 AS id, 'X' AS name) AS s
+ON t.id = s.id
+WHEN MATCHED THEN UPDATE SET name = s.name;
+
+drop table iceberg_merge_unp_${uuid0}.iceberg_merge_db_${uuid0}.t_v1 force;
+
+-- Test E2: MERGE INTO on non-Iceberg (OLAP) table should fail
+create database default_catalog.olap_merge_db_${uuid0};
+
+create table default_catalog.olap_merge_db_${uuid0}.t_olap (
+    id INT, name STRING
+) DUPLICATE KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+
+MERGE INTO default_catalog.olap_merge_db_${uuid0}.t_olap AS t
+USING (SELECT 1 AS id, 'X' AS name) AS s
+ON t.id = s.id
+WHEN MATCHED THEN UPDATE SET name = s.name;
+
+drop table default_catalog.olap_merge_db_${uuid0}.t_olap force;
+drop database default_catalog.olap_merge_db_${uuid0};
+
+-- Test E3: UPDATE non-existent column should fail
+MERGE INTO iceberg_merge_unp_${uuid0}.iceberg_merge_db_${uuid0}.t_merge AS t
+USING (SELECT 1 AS id) AS s
+ON t.id = s.id
+WHEN MATCHED THEN UPDATE SET nonexistent_col = 1;
+
+-- Test E4: UPDATE hidden metadata column should fail
+MERGE INTO iceberg_merge_unp_${uuid0}.iceberg_merge_db_${uuid0}.t_merge AS t
+USING (SELECT 1 AS id) AS s
+ON t.id = s.id
+WHEN MATCHED THEN UPDATE SET _file = 'fake.parquet';
+
+-- Test E5: INSERT column/value count mismatch should fail
+MERGE INTO iceberg_merge_unp_${uuid0}.iceberg_merge_db_${uuid0}.t_merge AS t
+USING (SELECT 99 AS id, 'New' AS name) AS s
+ON t.id = s.id
+WHEN NOT MATCHED THEN INSERT (id, name) VALUES (s.id, s.name, 0);
+
+-- Cleanup
+drop table iceberg_merge_unp_${uuid0}.iceberg_merge_db_${uuid0}.t_merge force;
+drop database iceberg_merge_unp_${uuid0}.iceberg_merge_db_${uuid0};
+set catalog default_catalog;
+drop catalog iceberg_merge_unp_${uuid0};
+
+shell: ossutil64 rm -rf oss://${oss_bucket}/test_iceberg_merge_into/${uuid0} >/dev/null || echo "exit 0" >/dev/null
+
+-- name: test_iceberg_merge_into_partitioned
+
+create external catalog iceberg_merge_part_${uuid0}
+PROPERTIES ( "type"  =  "iceberg",
+    "iceberg.catalog.type"  =  "hive",
+    "iceberg.catalog.hive.metastore.uris"="${hive_metastore_uris}",
+    "aws.s3.access_key"  =  "${oss_ak}",
+    "aws.s3.secret_key"  =  "${oss_sk}",
+    "aws.s3.endpoint"  =  "${oss_endpoint}",
+    "enable_iceberg_metadata_cache"="false");
+
+create database iceberg_merge_part_${uuid0}.iceberg_merge_part_db_${uuid0} properties (
+    "location" = "oss://${oss_bucket}/test_iceberg_merge_into_partitioned/${uuid0}/iceberg_merge_part_db_${uuid0}"
+);
+
+-- Create date-partitioned V2 table
+create table iceberg_merge_part_${uuid0}.iceberg_merge_part_db_${uuid0}.orders (
+    id INT,
+    product STRING,
+    amount DECIMAL(10,2),
+    status STRING,
+    order_date DATE
+) PARTITION BY (order_date) PROPERTIES ("format-version" = "2");
+
+INSERT INTO iceberg_merge_part_${uuid0}.iceberg_merge_part_db_${uuid0}.orders VALUES
+    (1, 'Widget', 100.00, 'PENDING', '2024-01-01'),
+    (2, 'Gadget', 200.00, 'PENDING', '2024-01-01'),
+    (3, 'Widget', 150.00, 'SHIPPED', '2024-01-02'),
+    (4, 'Gadget', 300.00, 'PENDING', '2024-01-02'),
+    (5, 'Widget', 250.00, 'PENDING', '2024-01-03');
+
+SELECT * FROM iceberg_merge_part_${uuid0}.iceberg_merge_part_db_${uuid0}.orders ORDER BY id;
+
+-- ================================================
+-- Test P1: MERGE into partitioned table — update within one partition
+-- ================================================
+MERGE INTO iceberg_merge_part_${uuid0}.iceberg_merge_part_db_${uuid0}.orders AS t
+USING (
+    SELECT 1 AS id, 'Widget' AS product, 100.00 AS amount, 'CANCELLED' AS status, DATE '2024-01-01' AS order_date
+) AS s
+ON t.id = s.id
+WHEN MATCHED THEN UPDATE SET status = s.status;
+
+SELECT * FROM iceberg_merge_part_${uuid0}.iceberg_merge_part_db_${uuid0}.orders ORDER BY id;
+
+-- ================================================
+-- Test P2: MERGE — insert into a new partition
+-- ================================================
+MERGE INTO iceberg_merge_part_${uuid0}.iceberg_merge_part_db_${uuid0}.orders AS t
+USING (
+    SELECT 6 AS id, 'Gizmo' AS product, 500.00 AS amount, 'PENDING' AS status, DATE '2024-01-04' AS order_date
+) AS s
+ON t.id = s.id
+WHEN NOT MATCHED THEN INSERT (id, product, amount, status, order_date)
+    VALUES (s.id, s.product, s.amount, s.status, s.order_date);
+
+SELECT * FROM iceberg_merge_part_${uuid0}.iceberg_merge_part_db_${uuid0}.orders ORDER BY id;
+
+-- ================================================
+-- Test P3: MERGE — delete rows across multiple partitions
+-- ================================================
+MERGE INTO iceberg_merge_part_${uuid0}.iceberg_merge_part_db_${uuid0}.orders AS t
+USING (
+    SELECT 2 AS id
+    UNION ALL
+    SELECT 4 AS id
+) AS s
+ON t.id = s.id
+WHEN MATCHED THEN DELETE;
+
+SELECT * FROM iceberg_merge_part_${uuid0}.iceberg_merge_part_db_${uuid0}.orders ORDER BY id;
+
+-- ================================================
+-- Test P4: MERGE — update + insert combined on partitioned table
+-- ================================================
+MERGE INTO iceberg_merge_part_${uuid0}.iceberg_merge_part_db_${uuid0}.orders AS t
+USING (
+    SELECT 3 AS id, 'Widget' AS product, 165.00 AS amount, 'DELIVERED' AS status, DATE '2024-01-02' AS order_date
+    UNION ALL
+    SELECT 7 AS id, 'Sprocket' AS product, 75.00 AS amount, 'PENDING' AS status, DATE '2024-01-05' AS order_date
+) AS s
+ON t.id = s.id
+WHEN MATCHED THEN UPDATE SET status = s.status, amount = s.amount
+WHEN NOT MATCHED THEN INSERT (id, product, amount, status, order_date)
+    VALUES (s.id, s.product, s.amount, s.status, s.order_date);
+
+SELECT * FROM iceberg_merge_part_${uuid0}.iceberg_merge_part_db_${uuid0}.orders ORDER BY id;
+
+-- ================================================
+-- Error test P-E1: UPDATE partition column should fail
+-- ================================================
+MERGE INTO iceberg_merge_part_${uuid0}.iceberg_merge_part_db_${uuid0}.orders AS t
+USING (SELECT 1 AS id, DATE '2099-01-01' AS order_date) AS s
+ON t.id = s.id
+WHEN MATCHED THEN UPDATE SET order_date = s.order_date;
+
+-- Cleanup
+drop table iceberg_merge_part_${uuid0}.iceberg_merge_part_db_${uuid0}.orders force;
+drop database iceberg_merge_part_${uuid0}.iceberg_merge_part_db_${uuid0};
+set catalog default_catalog;
+drop catalog iceberg_merge_part_${uuid0};
+
+shell: ossutil64 rm -rf oss://${oss_bucket}/test_iceberg_merge_into_partitioned/${uuid0} >/dev/null || echo "exit 0" >/dev/null

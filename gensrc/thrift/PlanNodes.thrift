@@ -89,7 +89,8 @@ enum TPlanNodeType {
   FETCH_NODE,
   LOOKUP_NODE,
   BENCHMARK_SCAN_NODE,
-  LAKE_CACHE_STATS_SCAN_NODE
+  LAKE_CACHE_STATS_SCAN_NODE,
+  ENFORCE_UNIQUE_NODE
 }
 
 // phases of an execution node
@@ -1265,6 +1266,10 @@ struct TAssertNumRowsNode {
     3: optional TAssertion assertion;
 }
 
+struct TEnforceUniqueNode {
+    1: optional list<i32> unique_key_col_indices
+}
+
 struct THdfsScanNode {
     1: optional Types.TTupleId tuple_id
 
@@ -1569,6 +1574,8 @@ struct TPlanNode {
   84: optional TBenchmarkScanNode benchmark_scan_node;
 
   85: optional TCacheStatsScanNode cache_stats_scan_node;
+
+  86: optional TEnforceUniqueNode enforce_unique_node
 }
 
 // A flattened representation of a tree of PlanNodes, obtained by depth-first
