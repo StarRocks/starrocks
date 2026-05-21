@@ -224,6 +224,16 @@ If you want to activate the roles assigned to you in a session, use the [SET ROL
 
 Used for MySQL client compatibility. No practical usage.
 
+### avro_use_jni_reader
+
+* **Scope**: Session
+* **Description**: Controls whether StarRocks uses the JNI-based Avro reader when scanning Avro data from external catalogs such as Hive. When enabled (`true`), the FE sets this session variable on Avro scan ranges and the BE chooses `HdfsAvroScanner` instead of the native Avro scanner path. This option can be used as a compatibility fallback when the native reader does not meet your needs.
+
+  Current limitation: `CHAR(n)` columns are not fully compatible between the JNI and non-JNI Avro readers. For Avro values such as `Char` read into a `CHAR(10)` column, the current native reader keeps the unpadded value instead of returning `Char` followed by six spaces, while the JNI reader may behave differently. To avoid inconsistent results, we recommend not relying on `CHAR(n)` padding semantics when switching `avro_use_jni_reader`, and using `VARCHAR` instead when possible.
+* **Default**: `true`
+* **Data Type**: boolean
+* **Introduced in**: v4.1.1
+
 ### big_query_profile_threshold
 
 * **Description**: Used to set the threshold for big queries. When the session variable `enable_profile` is set to `false` and the amount of time taken by a query exceeds the threshold specified by the variable `big_query_profile_threshold`, a profile is generated for that query.
