@@ -79,7 +79,10 @@ public:
         __builtin_unreachable();
     }
 
-    virtual std::unique_ptr<ConnectorChunkSinkProvider> create_row_delta_sink_provider() const { return nullptr; }
+    virtual std::unique_ptr<ConnectorChunkSinkProvider> create_row_delta_sink_provider() const {
+        CHECK(false) << connector_type() << " connector does not implement row delta sink yet";
+        __builtin_unreachable();
+    }
 
     virtual ConnectorType connector_type() const = 0;
 };
