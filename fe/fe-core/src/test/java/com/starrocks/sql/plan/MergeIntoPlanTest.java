@@ -39,8 +39,13 @@ import com.starrocks.sql.MergeIntoPlanner;
 import com.starrocks.sql.StatementPlanner;
 import com.starrocks.sql.ast.JoinOperator;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.ast.expression.SlotRef;
+import com.starrocks.sql.optimizer.OptExpression;
+import com.starrocks.sql.optimizer.base.HashDistributionSpec;
 import com.starrocks.sql.optimizer.dump.QueryDumpInfo;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalDistributionOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalJoinOperator;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.type.IntegerType;
 import com.starrocks.type.VarcharType;
@@ -55,8 +60,10 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Queue;
+import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -85,6 +92,50 @@ public class MergeIntoPlanTest extends PlanTestBase {
     private static String getMergeExecPlanString(String sql) throws Exception {
         ExecPlan execPlan = getMergeExecPlan(sql);
         return execPlan.getExplainString(TExplainLevel.NORMAL);
+    }
+
+    private static boolean containsEnforceUnique(ExecPlan execPlan) {
+        // The EnforceUniqueRowLocatorNode sits in the merge join's fragment, which is
+        // not necessarily the sink fragment, so search across all fragments.
+        return findNode(execPlan, EnforceUniqueRowLocatorNode.class) != null;
+    }
+
+    private static boolean containsPreserveShuffleJoin(OptExpression optExpression) {
+        if (optExpression.getOp() instanceof PhysicalJoinOperator joinOperator &&
+                joinOperator.isPreserveShuffleColumns()) {
+            return true;
+        }
+        return optExpression.getInputs().stream().anyMatch(MergeIntoPlanTest::containsPreserveShuffleJoin);
+    }
+
+    private static List<Integer> findPreservedJoinInputShuffleColumnCounts(OptExpression optExpression) {
+        if (optExpression.getOp() instanceof PhysicalJoinOperator joinOperator &&
+                joinOperator.isPreserveShuffleColumns()) {
+            return optExpression.getInputs().stream()
+                    .map(MergeIntoPlanTest::findFirstShuffleDistributionColumnCount)
+                    .collect(Collectors.toList());
+        }
+        for (OptExpression input : optExpression.getInputs()) {
+            List<Integer> counts = findPreservedJoinInputShuffleColumnCounts(input);
+            if (!counts.isEmpty()) {
+                return counts;
+            }
+        }
+        return List.of();
+    }
+
+    private static Integer findFirstShuffleDistributionColumnCount(OptExpression optExpression) {
+        if (optExpression.getOp() instanceof PhysicalDistributionOperator distributionOperator &&
+                distributionOperator.getDistributionSpec() instanceof HashDistributionSpec hashDistributionSpec) {
+            return hashDistributionSpec.getHashDistributionDesc().getDistributionCols().size();
+        }
+        for (OptExpression input : optExpression.getInputs()) {
+            Integer count = findFirstShuffleDistributionColumnCount(input);
+            if (count != null) {
+                return count;
+            }
+        }
+        return null;
     }
 
     @Test
@@ -141,6 +192,51 @@ public class MergeIntoPlanTest extends PlanTestBase {
     }
 
     @Test
+    public void testMergeElidesEnforceUniqueWhenSourceDistinctKeysCoverOnKeys() throws Exception {
+        String sql = "MERGE INTO iceberg0.unpartitioned_db.t0_v2 AS t " +
+                "USING (SELECT DISTINCT id, date FROM iceberg0.unpartitioned_db.t0_v2) AS s " +
+                "ON t.id = s.id AND t.date = s.date " +
+                "WHEN MATCHED THEN UPDATE SET data = 'updated'";
+        ExecPlan execPlan = getMergeExecPlan(sql);
+        assertFalse(containsEnforceUnique(execPlan),
+                "MERGE should elide ENFORCE UNIQUE when source DISTINCT keys are covered by ON keys");
+    }
+
+    @Test
+    public void testMergeKeepsEnforceUniqueWhenSourceDistinctKeysDoNotCoverOnKeys() throws Exception {
+        String sql = "MERGE INTO iceberg0.unpartitioned_db.t0_v2 AS t " +
+                "USING (SELECT DISTINCT id, data FROM iceberg0.unpartitioned_db.t0_v2) AS s " +
+                "ON t.id = s.id " +
+                "WHEN MATCHED THEN UPDATE SET data = s.data";
+        ExecPlan execPlan = getMergeExecPlan(sql);
+        assertTrue(containsEnforceUnique(execPlan),
+                "MERGE must keep ENFORCE UNIQUE when ON keys do not cover source DISTINCT keys");
+    }
+
+    @Test
+    public void testMergeElidesEnforceUniqueWhenSourceGroupByKeysCoverOnKeys() throws Exception {
+        String sql = "MERGE INTO iceberg0.unpartitioned_db.t0_v2 AS t " +
+                "USING (SELECT id, date FROM iceberg0.unpartitioned_db.t0_v2 GROUP BY id, date) AS s " +
+                "ON t.id = s.id AND t.date = s.date " +
+                "WHEN MATCHED THEN UPDATE SET data = 'updated'";
+        ExecPlan execPlan = getMergeExecPlan(sql);
+        assertFalse(containsEnforceUnique(execPlan),
+                "MERGE should elide ENFORCE UNIQUE when source GROUP BY keys are covered by ON keys");
+    }
+
+    @Test
+    public void testMergeKeepsEnforceUniqueForGroupingSetsSource() throws Exception {
+        String sql = "MERGE INTO iceberg0.unpartitioned_db.t0_v2 AS t " +
+                "USING (SELECT id, date FROM iceberg0.unpartitioned_db.t0_v2 " +
+                "       GROUP BY GROUPING SETS ((id, date), (id))) AS s " +
+                "ON t.id = s.id AND t.date = s.date " +
+                "WHEN MATCHED THEN UPDATE SET data = 'updated'";
+        ExecPlan execPlan = getMergeExecPlan(sql);
+        assertTrue(containsEnforceUnique(execPlan),
+                "MERGE must keep ENFORCE UNIQUE for grouping sets source");
+    }
+
+    @Test
     public void testMergePlanPartitionedTableHasShuffle() throws Exception {
         // t1_v2 is partitioned by 'date' — verify plan generates correctly for partitioned tables.
         // Note: with a trivial constant source, the optimizer may choose NESTLOOP JOIN with
@@ -162,6 +258,46 @@ public class MergeIntoPlanTest extends PlanTestBase {
     }
 
     @Test
+    public void testMergeJoinPreservesShuffleColumns() throws Exception {
+        String sql = "MERGE INTO iceberg0.partitioned_db.t1_v2 AS t " +
+                "USING (SELECT id, data, date FROM iceberg0.partitioned_db.t1_v2) AS s " +
+                "ON t.id = s.id AND t.data = s.data AND t.date = s.date " +
+                "WHEN MATCHED THEN UPDATE SET data = s.data";
+        ExecPlan execPlan = getMergeExecPlan(sql);
+
+        assertTrue(containsPreserveShuffleJoin(execPlan.getPhysicalPlan()),
+                "MERGE top join should keep the preserve-shuffle-columns anti-skew guard");
+        List<Integer> shuffleColumnCounts =
+                findPreservedJoinInputShuffleColumnCounts(execPlan.getPhysicalPlan());
+        assertEquals(List.of(3, 3), shuffleColumnCounts,
+                "MERGE top join inputs should keep all three ON-key shuffle columns (not pruned to one) "
+                        + "to avoid runtime skew before EnforceUnique / the row-delta sink");
+    }
+
+    @Test
+    public void testMergeJoinPreservesShuffleColumnsWithMergeJoinImplementation() throws Exception {
+        String prevJoinImplementationMode = connectContext.getSessionVariable().getJoinImplementationMode();
+        try {
+            connectContext.getSessionVariable().setJoinImplementationMode("merge");
+            String sql = "MERGE INTO iceberg0.partitioned_db.t1_v2 AS t " +
+                    "USING (SELECT id, data, date FROM iceberg0.partitioned_db.t1_v2) AS s " +
+                    "ON t.id = s.id AND t.data = s.data AND t.date = s.date " +
+                    "WHEN MATCHED THEN UPDATE SET data = s.data";
+            ExecPlan execPlan = getMergeExecPlan(sql);
+
+            assertTrue(containsPreserveShuffleJoin(execPlan.getPhysicalPlan()),
+                    "MERGE physical merge join should keep the preserve-shuffle-columns anti-skew guard");
+            List<Integer> shuffleColumnCounts =
+                    findPreservedJoinInputShuffleColumnCounts(execPlan.getPhysicalPlan());
+            assertEquals(List.of(3, 3), shuffleColumnCounts,
+                    "MERGE physical merge join inputs should keep all three ON-key shuffle columns (not pruned "
+                            + "to one) to avoid runtime skew before EnforceUnique / the row-delta sink");
+        } finally {
+            connectContext.getSessionVariable().setJoinImplementationMode(prevJoinImplementationMode);
+        }
+    }
+
+    @Test
     public void testMergePlanContainsIcebergScanNode() throws Exception {
         String sql = "MERGE INTO iceberg0.unpartitioned_db.t0_v2 AS t " +
                 "USING (SELECT 1 AS id, 'new' AS data, '2024-01-01' AS date) AS s " +
@@ -170,6 +306,25 @@ public class MergeIntoPlanTest extends PlanTestBase {
         String explainString = getMergeExecPlanString(sql);
         assertTrue(explainString.contains("IcebergScanNode"),
                 "Explain plan should contain IcebergScanNode");
+    }
+
+    @Test
+    public void testMergeDerivedTargetPredicatePushedDownToTargetIcebergScan() throws Exception {
+        String sql = "MERGE INTO iceberg0.unpartitioned_db.t0_v2 AS t " +
+                "USING (SELECT id, data, date FROM iceberg0.unpartitioned_db.t0_v2 WHERE id % 20 = 0) AS s " +
+                "ON t.id = s.id " +
+                "WHEN MATCHED THEN UPDATE SET data = s.data";
+        ExecPlan execPlan = getMergeExecPlan(sql);
+        IcebergScanNode targetScan = findTargetIcebergScan(execPlan);
+        assertNotNull(targetScan, "MERGE plan should have a target IcebergScanNode marked usedForDelete");
+
+        String targetPredicates = targetScan.getConjuncts().stream()
+                .map(ExprToSql::toSql)
+                .map(String::toLowerCase)
+                .collect(Collectors.joining(", "));
+        assertTrue(targetPredicates.contains("id % 20 = 0"),
+                "Derived source predicate should be pushed to target IcebergScanNode PREDICATES; got: "
+                        + targetPredicates);
     }
 
     @Test
@@ -639,5 +794,16 @@ public class MergeIntoPlanTest extends PlanTestBase {
         } finally {
             connectContext.getSessionVariable().setEnablePipelineEngine(prev);
         }
+    }
+
+    private static IcebergScanNode findTargetIcebergScan(ExecPlan execPlan) {
+        for (PlanFragment fragment : execPlan.getFragments()) {
+            for (PlanNode node : fragment.collectScanNodes().values()) {
+                if (node instanceof IcebergScanNode icebergScanNode && icebergScanNode.isUsedForDelete()) {
+                    return icebergScanNode;
+                }
+            }
+        }
+        return null;
     }
 }

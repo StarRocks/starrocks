@@ -277,6 +277,7 @@ public class DecodeRewriter extends OptExpressionVisitor<OptExpression, ColumnRe
                 join.getJoinType(), newOnPredicate, join.getJoinHint(), join.getLimit(), newPredicate, newProjection,
                 join.getSkewColumn(), join.getSkewValues());
         newJoin.setSkewJoinFriend(join.getSkewJoinFriend().orElse(null));
+        newJoin.setPreserveShuffleColumns(join.isPreserveShuffleColumns());
 
         return rewriteOptExpression(optExpression, newJoin, info.outputStringColumns);
     }

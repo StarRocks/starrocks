@@ -232,6 +232,9 @@ public class SkewShuffleJoinEliminationRule implements TreeRewriteRule {
                             originalShuffleJoinOperator.getLimit(), originalShuffleJoinOperator.getPredicate(),
                             projectionOnJoin, skewSideJoinKeyExpr, nonNullSkewValues);
 
+            newShuffleJoinOpt.setPreserveShuffleColumns(originalShuffleJoinOperator.isPreserveShuffleColumns());
+            newBroadcastJoinOpt.setPreserveShuffleColumns(originalShuffleJoinOperator.isPreserveShuffleColumns());
+
             // we have to let them know each other for runtime filter
             newBroadcastJoinOpt.setSkewJoinFriend(newShuffleJoinOpt);
             newShuffleJoinOpt.setSkewJoinFriend(newBroadcastJoinOpt);

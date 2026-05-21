@@ -203,8 +203,10 @@ public class PruneShuffleColumnRule implements TreeRewriteRule {
             optExpression.getInputs().get(0).getOp().accept(this, optExpression.getInputs().get(0), lc);
             optExpression.getInputs().get(1).getOp().accept(this, optExpression.getInputs().get(1), rc);
 
+            PhysicalJoinOperator joinOperator = (PhysicalJoinOperator) optExpression.getOp();
             if (lc.distributionList.isEmpty() || rc.distributionList.isEmpty() ||
-                    ((PhysicalJoinOperator) optExpression.getOp()).getJoinHint().equals(HintNode.HINT_JOIN_SKEW)) {
+                    joinOperator.getJoinHint().equals(HintNode.HINT_JOIN_SKEW) ||
+                    joinOperator.isPreserveShuffleColumns()) {
                 return optExpression;
             }
 

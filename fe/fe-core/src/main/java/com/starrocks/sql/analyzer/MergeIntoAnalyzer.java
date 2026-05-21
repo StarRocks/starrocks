@@ -258,11 +258,13 @@ public class MergeIntoAnalyzer {
         Relation sourceRelation = stmt.getSourceRelation();
 
         // Create LEFT OUTER JOIN: source (left) JOIN target (right) ON merge_condition
+        Expr joinPredicate = MergeIntoPredicateDeriver.appendDerivedTargetPredicate(
+                sourceRelation, stmt.getMergeCondition(), targetSlotTableName);
         JoinRelation joinRelation = new JoinRelation(
                 JoinOperator.LEFT_OUTER_JOIN,
                 sourceRelation,
                 targetRelation,
-                stmt.getMergeCondition(),
+                joinPredicate,
                 false
         );
         // Pin the join distribution like IcebergEqualityDeleteRewriteRule does: the
@@ -270,6 +272,15 @@ public class MergeIntoAnalyzer {
         // when the TARGET side is never broadcast/replicated (each target row owned by
         // exactly one instance). The planner re-validates the physical join shape.
         joinRelation.setJoinHint(HintNode.HINT_JOIN_SHUFFLE);
+        // Anti-skew guard (NOT a correctness requirement): keep the full multi-column
+        // ON-key shuffle. PruneShuffleColumnRule would otherwise collapse it to a single
+        // high-NDV column; if that column is value-skewed at runtime, rows pile onto a few
+        // instances/drivers and overload the per-driver EnforceUnique seen-set and the
+        // row-delta sink. This matters most for non-partitioned targets, whose sink
+        // inherits this join distribution; partitioned targets re-shuffle by partition
+        // columns above the check anyway. Duplicate-match correctness does not depend on
+        // the column count — it rests on the shuffle hint set above.
+        joinRelation.setPreserveShuffleColumns(true);
 
         // Create SELECT ... FROM (join)
         SelectRelation selectRelation = new SelectRelation(

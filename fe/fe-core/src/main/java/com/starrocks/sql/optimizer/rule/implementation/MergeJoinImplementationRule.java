@@ -54,6 +54,7 @@ public class MergeJoinImplementationRule extends JoinImplementationRule {
                 joinOperator.getLimit(),
                 joinOperator.getPredicate(),
                 joinOperator.getProjection());
+        physicalMergeJoin.setPreserveShuffleColumns(joinOperator.isPreserveShuffleColumns());
         OptExpression result = OptExpression.create(physicalMergeJoin, input.getInputs());
         return Lists.newArrayList(result);
     }

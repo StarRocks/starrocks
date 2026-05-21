@@ -1092,6 +1092,7 @@ public class RelationTransformer implements AstVisitorExtendInterface<LogicalPla
             OptExprBuilder joinOptExprBuilder = new OptExprBuilder(new LogicalJoinOperator.Builder()
                     .setJoinType(JoinOperator.CROSS_JOIN)
                     .setJoinHint(node.getJoinHint())
+                    .setPreserveShuffleColumns(node.isPreserveShuffleColumns())
                     .build(), Lists.newArrayList(leftOpt, rightOpt),
                     expressionMapping);
 
@@ -1144,6 +1145,7 @@ public class RelationTransformer implements AstVisitorExtendInterface<LogicalPla
                 .setJoinHint(node.getJoinHint())
                 .setSkewColumn(skewColumn)
                 .setSkewValues(skewValues)
+                .setPreserveShuffleColumns(node.isPreserveShuffleColumns())
                 .build();
 
         OptExprBuilder joinOptExprBuilder =

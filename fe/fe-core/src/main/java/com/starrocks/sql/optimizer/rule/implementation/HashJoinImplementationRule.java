@@ -57,6 +57,7 @@ public class HashJoinImplementationRule extends JoinImplementationRule {
                 joinOperator.getProjection(),
                 joinOperator.getSkewColumn(),
                 joinOperator.getSkewValues());
+        physicalHashJoin.setPreserveShuffleColumns(joinOperator.isPreserveShuffleColumns());
         OptExpression result = OptExpression.create(physicalHashJoin, input.getInputs());
         return Lists.newArrayList(result);
     }

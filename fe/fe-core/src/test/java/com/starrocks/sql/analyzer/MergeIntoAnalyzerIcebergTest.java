@@ -16,8 +16,12 @@ package com.starrocks.sql.analyzer;
 
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.ast.HintNode;
+import com.starrocks.sql.ast.JoinRelation;
 import com.starrocks.sql.ast.MergeIntoStmt;
+import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
@@ -58,6 +62,13 @@ public class MergeIntoAnalyzerIcebergTest {
     private static MergeIntoStmt parseMerge(String sql) {
         return (MergeIntoStmt) SqlParser.parse(
                 sql, connectContext.getSessionVariable().getSqlMode()).get(0);
+    }
+
+    private static JoinRelation analyzeAndGetSyntheticJoin(String sql) {
+        MergeIntoStmt stmt = parseMerge(sql);
+        MergeIntoAnalyzer.analyze(stmt, connectContext);
+        SelectRelation selectRelation = (SelectRelation) stmt.getQueryStatement().getQueryRelation();
+        return (JoinRelation) selectRelation.getRelation();
     }
 
     // ---- Error cases ----
@@ -520,6 +531,44 @@ public class MergeIntoAnalyzerIcebergTest {
     }
 
     @Test
+    public void testMergeDerivesTargetPredicateFromSourceSubquery() {
+        String sql = "MERGE INTO iceberg0.unpartitioned_db.t0_v2 AS t " +
+                "USING (SELECT id, data, date FROM iceberg0.unpartitioned_db.t0_v2 WHERE id % 20 = 0) AS s " +
+                "ON t.id = s.id " +
+                "WHEN MATCHED THEN UPDATE SET data = s.data";
+        MergeIntoStmt stmt = parseMerge(sql);
+
+        MergeIntoAnalyzer.analyze(stmt, connectContext);
+
+        SelectRelation selectRelation = (SelectRelation) stmt.getQueryStatement().getQueryRelation();
+        JoinRelation joinRelation = (JoinRelation) selectRelation.getRelation();
+        String onPredicate = ExprToSql.toSql(joinRelation.getOnPredicate()).toLowerCase();
+        assertTrue(onPredicate.contains("t.`id` % 20 = 0")
+                        || onPredicate.contains("t.id % 20 = 0")
+                        || onPredicate.contains("`t`.`id` % 20 = 0"),
+                "target-side predicate should be derived from source predicate: " + onPredicate);
+    }
+
+    @Test
+    public void testMergeDoesNotDeriveTargetPredicateFromAliasedSourceProjection() {
+        String sql = "MERGE INTO iceberg0.unpartitioned_db.t0_v2 AS t " +
+                "USING (SELECT id + 1 AS id, data, date FROM iceberg0.unpartitioned_db.t0_v2 WHERE id % 20 = 0) AS s " +
+                "ON t.id = s.id " +
+                "WHEN MATCHED THEN UPDATE SET data = s.data";
+        MergeIntoStmt stmt = parseMerge(sql);
+
+        MergeIntoAnalyzer.analyze(stmt, connectContext);
+
+        SelectRelation selectRelation = (SelectRelation) stmt.getQueryStatement().getQueryRelation();
+        JoinRelation joinRelation = (JoinRelation) selectRelation.getRelation();
+        String onPredicate = ExprToSql.toSql(joinRelation.getOnPredicate()).toLowerCase();
+        assertFalse(onPredicate.contains("t.`id` % 20 = 0")
+                        || onPredicate.contains("t.id % 20 = 0")
+                        || onPredicate.contains("`t`.`id` % 20 = 0"),
+                "target-side predicate should not be derived from a non-slot source projection: " + onPredicate);
+    }
+
+    @Test
     public void testMergeColumnOutputNamesOrder() {
         // User-visible output layout: _file, _pos, data_cols... — op_code is sink-private
         // and added by the planner.
@@ -558,6 +607,32 @@ public class MergeIntoAnalyzerIcebergTest {
         assertTrue(stmt.getTable() instanceof IcebergTable);
         assertNotNull(stmt.getQueryStatement());
         assertNotNull(stmt.getOutputColumnNames());
+    }
+
+    @Test
+    public void testUnpartitionedMergeForcesShuffleJoinHint() {
+        String sql = "MERGE INTO iceberg0.unpartitioned_db.t0_v2 AS t " +
+                "USING (SELECT 1 AS id, 'new' AS data, '2024-01-01' AS date) AS s " +
+                "ON t.id = s.id " +
+                "WHEN MATCHED THEN UPDATE SET data = s.data";
+
+        JoinRelation joinRelation = analyzeAndGetSyntheticJoin(sql);
+
+        assertEquals(HintNode.HINT_JOIN_SHUFFLE, joinRelation.getJoinHint(),
+                "Unpartitioned Iceberg MERGE must not broadcast the target side");
+    }
+
+    @Test
+    public void testPartitionedMergeKeepsDefaultJoinHint() {
+        String sql = "MERGE INTO iceberg0.partitioned_db.t1_v2 AS t " +
+                "USING (SELECT 1 AS id, 'new' AS data, '2024-01-01' AS date) AS s " +
+                "ON t.id = s.id " +
+                "WHEN MATCHED THEN UPDATE SET data = s.data";
+
+        JoinRelation joinRelation = analyzeAndGetSyntheticJoin(sql);
+
+        assertEquals("", joinRelation.getJoinHint(),
+                "Partitioned Iceberg MERGE already has sink-side partition shuffle requirements");
     }
 
     // ---- Positional INSERT VALUES tests ----
