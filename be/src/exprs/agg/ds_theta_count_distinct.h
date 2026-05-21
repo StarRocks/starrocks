@@ -52,7 +52,7 @@ public:
     void update(FunctionContext* ctx, const Column** columns, AggDataPtr __restrict state,
                 size_t row_num) const override {
         // init state if needed
-        _init_if_needed(state);
+        _init_if_needed(ctx, columns, state);
 
         const auto& v = GetContainer<LT>::get_data(columns[0], row_num);
         uint64_t value = HashUtil::murmur_hash64A<T>(v, HashUtil::MURMUR_SEED);
@@ -64,7 +64,7 @@ public:
                                               int64_t peer_group_start, int64_t peer_group_end, int64_t frame_start,
                                               int64_t frame_end) const override {
         // init state if needed
-        _init_if_needed(state);
+        _init_if_needed(ctx, columns, state);
         const auto& datas = GetContainer<LT>::get_data(columns[0]);
         for (size_t i = frame_start; i < frame_end; ++i) {
             uint64_t value = HashUtil::murmur_hash64A<T>(datas[i], HashUtil::MURMUR_SEED);
@@ -75,15 +75,19 @@ public:
     }
 
     void merge(FunctionContext* ctx, const Column* column, AggDataPtr __restrict state, size_t row_num) const override {
-        _init_if_needed(state);
-
         auto* mem_usage = &(this->data(state).memory_usage);
         int64_t prev_memory = *mem_usage;
 
         DCHECK(column->is_binary());
         const BinaryColumn* theta_column = down_cast<const BinaryColumn*>(column);
         auto slice = theta_column->get_slice(row_num);
+        // Build the incoming sketch first so we can adopt its lg_k when the
+        // state is still unset (mirrors the HLL path so lg_k survives shuffle).
         DataSketchesTheta theta(slice, mem_usage);
+        if (UNLIKELY(this->data(state).theta_sketch == nullptr)) {
+            this->data(state).theta_sketch =
+                    std::make_unique<DataSketchesTheta>(theta.get_lg_config_k(), mem_usage);
+        }
         this->data(state).theta_sketch->merge(theta);
 
         ctx->add_mem_usage(*mem_usage - prev_memory);
@@ -116,7 +120,7 @@ public:
         }
     }
 
-    void convert_to_serialize_format([[maybe_unused]] FunctionContext* ctx, const Columns& src, size_t chunk_size,
+    void convert_to_serialize_format(FunctionContext* ctx, const Columns& src, size_t chunk_size,
                                      MutableColumnPtr& dst) const override {
         const auto& datas = GetContainer<LT>::get_data(src[0]);
         auto* result = down_cast<BinaryColumn*>(dst.get());
@@ -124,12 +128,18 @@ public:
         Bytes& bytes = result->get_bytes();
         result->get_offset().resize(chunk_size + 1);
 
+        std::vector<const Column*> src_datas;
+        src_datas.reserve(src.size());
+        std::transform(src.begin(), src.end(), std::back_inserter(src_datas),
+                       [](const ColumnPtr& col) { return col.get(); });
+        uint8_t log_k = _parse_theta_sketch_args(ctx, src_datas.data());
+
         size_t old_size = bytes.size();
         for (size_t i = 0; i < chunk_size; ++i) {
             uint64_t value = HashUtil::murmur_hash64A<T>(datas[i], HashUtil::MURMUR_SEED);
 
             int64_t memory_usage = 0;
-            DataSketchesTheta theta{&memory_usage};
+            DataSketchesTheta theta{log_k, &memory_usage};
             theta.update(value);
 
             size_t new_size = old_size + theta.serialize_size();
@@ -157,10 +167,21 @@ public:
 
 private:
     // init theta sketch if needed
-    void _init_if_needed(AggDataPtr __restrict state) const {
+    void _init_if_needed(FunctionContext* ctx, const Column** columns, AggDataPtr __restrict state) const {
         if (UNLIKELY(this->data(state).theta_sketch == nullptr)) {
-            this->data(state).theta_sketch = std::make_unique<DataSketchesTheta>(&(this->data(state).memory_usage));
+            uint8_t log_k = _parse_theta_sketch_args(ctx, columns);
+            this->data(state).theta_sketch =
+                    std::make_unique<DataSketchesTheta>(log_k, &(this->data(state).memory_usage));
         }
+    }
+
+    // parse log_k from args; falls back to the datasketches default.
+    uint8_t _parse_theta_sketch_args(FunctionContext* ctx, const Column** columns) const {
+        uint8_t log_k = DEFAULT_THETA_LOG_K;
+        if (ctx->get_num_args() == 2) {
+            log_k = static_cast<uint8_t>(columns[1]->get(0).get_int32());
+        }
+        return log_k;
     }
 };
 

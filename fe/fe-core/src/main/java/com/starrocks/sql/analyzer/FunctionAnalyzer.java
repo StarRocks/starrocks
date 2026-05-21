@@ -203,8 +203,10 @@ public class FunctionAnalyzer {
                 throw new SemanticException(String.format("Resolved function %s has no wildcard decimal as return type",
                         fn.functionName()), functionCallExpr.getPos());
             }
-            if (FunctionSet.DS_HLL_COUNT_DISTINCT.equalsIgnoreCase(AggStateUtils.getAggFuncNameOfCombinator(funcName))) {
-                // ds_hll_count_distinct_union's param type should be varbinary type.
+            String baseAggName = AggStateUtils.getAggFuncNameOfCombinator(funcName);
+            if (FunctionSet.DS_HLL_COUNT_DISTINCT.equalsIgnoreCase(baseAggName)
+                    || FunctionSet.DS_THETA_COUNT_DISTINCT.equalsIgnoreCase(baseAggName)) {
+                // ds_hll/ds_theta union's param type should be varbinary type.
                 if (!functionCallExpr.getChild(0).getType().isBinaryType()) {
                     throw new SemanticException(String.format("Resolved function %s has no binary as argument type",
                             fn.functionName()), functionCallExpr.getPos());
@@ -220,8 +222,10 @@ public class FunctionAnalyzer {
                 throw new SemanticException(String.format("Resolved function %s has no wildcard decimal as return type",
                         fn.functionName()), functionCallExpr.getPos());
             }
-            if (FunctionSet.DS_HLL_COUNT_DISTINCT.equalsIgnoreCase(AggStateUtils.getAggFuncNameOfCombinator(funcName))) {
-                // ds_hll_count_distinct_union's param type should be varbinary type.
+            String baseAggName = AggStateUtils.getAggFuncNameOfCombinator(funcName);
+            if (FunctionSet.DS_HLL_COUNT_DISTINCT.equalsIgnoreCase(baseAggName)
+                    || FunctionSet.DS_THETA_COUNT_DISTINCT.equalsIgnoreCase(baseAggName)) {
+                // ds_hll/ds_theta merge's param type should be varbinary type.
                 if (!functionCallExpr.getChild(0).getType().isBinaryType()) {
                     throw new SemanticException(String.format("Resolved function %s has no binary as argument type",
                             fn.functionName()), functionCallExpr.getPos());

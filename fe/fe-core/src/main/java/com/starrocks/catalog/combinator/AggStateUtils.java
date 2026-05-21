@@ -275,16 +275,25 @@ public class AggStateUtils {
         Type arg0Type = argumentTypes[0];
         if (arg0Type.getAggStateDesc() == null) {
             String functionName = inputFunc.functionName();
+            String baseAggName = null;
             if (functionName.startsWith(FunctionSet.DS_HLL_COUNT_DISTINCT)
                     && (functionName.endsWith(FunctionSet.AGG_STATE_MERGE_SUFFIX)
                     || functionName.endsWith(FunctionSet.AGG_STATE_UNION_SUFFIX))) {
-                // ds_hll_count_distinct is a special case, it has no AggStateDesc
-                // but we can still get the agg state function from its name
-                Function dsHllCountDistinctAgg = FunctionAnalyzer.getAnalyzedAggregateFunction(session,
-                        FunctionSet.DS_HLL_COUNT_DISTINCT, new FunctionParams(false, Lists.newArrayList()),
+                baseAggName = FunctionSet.DS_HLL_COUNT_DISTINCT;
+            } else if (functionName.startsWith(FunctionSet.DS_THETA_COUNT_DISTINCT)
+                    && (functionName.endsWith(FunctionSet.AGG_STATE_MERGE_SUFFIX)
+                    || functionName.endsWith(FunctionSet.AGG_STATE_UNION_SUFFIX))) {
+                baseAggName = FunctionSet.DS_THETA_COUNT_DISTINCT;
+            }
+            if (baseAggName != null) {
+                // ds_hll_count_distinct / ds_theta_count_distinct are special cases: their
+                // serialized state can live in a plain varbinary column without AggStateDesc.
+                // Bootstrap the base aggregate from its name so the combinator can resolve.
+                Function baseAgg = FunctionAnalyzer.getAnalyzedAggregateFunction(session,
+                        baseAggName, new FunctionParams(false, Lists.newArrayList()),
                         new Type[] {VarcharType.VARCHAR}, new Boolean[] {false}, pos);
-                if (dsHllCountDistinctAgg != null && dsHllCountDistinctAgg instanceof AggregateFunction) {
-                    return (AggregateFunction) dsHllCountDistinctAgg.copy();
+                if (baseAgg instanceof AggregateFunction) {
+                    return (AggregateFunction) baseAgg.copy();
                 }
             }
             throw new SemanticException(String.format("AggState's AggFunc should have AggStateDesc: %s",

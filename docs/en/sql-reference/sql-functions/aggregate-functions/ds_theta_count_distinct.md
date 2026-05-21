@@ -10,9 +10,11 @@ The relative error is 3.125% (95% confidence). For more information, see the [re
 
 ```Haskell
 BIGINT ds_theta_count_distinct(expr)
+BIGINT ds_theta_count_distinct(expr, log_k)
 ```
 
 - `expr`: The column in which to calculate the approximate count distinct values.
+- `log_k`: Integer. Range [5, 26]. Default: 12. Controls the precision and memory usage of the sketch.
 
 ## Examples
 
