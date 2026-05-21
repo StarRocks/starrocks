@@ -1,4 +1,4 @@
--- name: test_ivm_whitelist_widening @slow
+-- name: test_ivm_whitelist_widening
 -- Verifies the widened IVM aggregate-function whitelist:
 --   * MIN/MAX(VARCHAR) — enabled by #73095 (state_union accepts compatible string types)
 --   * AVG(DECIMAL)     — enabled by #73012 (preserve AggStateDesc on state_union)
