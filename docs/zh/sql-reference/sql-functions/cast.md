@@ -71,19 +71,13 @@ input :: type
     select (1 + 2)::DECIMAL(10,2); -- 带括号的表达式
 ```
 
-`::` 在查询执行时等价于 `CAST(input AS type)`。视图和物化视图始终保留内部规范 SQL 定义。对于 `CREATE VIEW`、`ALTER VIEW ... AS ...` 和 `CREATE MATERIALIZED VIEW`，[`enable_persist_canonical_view_sql`](../System_variable.md#enable_persist_canonical_view_sql) 只控制保存的原始定义文本。启用后，`SHOW CREATE VIEW` 和 `SHOW CREATE MATERIALIZED VIEW` 可能显示为 `CAST(input AS type)`，而不是 `input::type`。
+`::` 等价于 `CAST(input AS type)`，并使用 StarRocks 的 CAST 语义。
 
-如需在保存的原始定义文本中保留 `::` 语法，请在执行 DDL 前将该变量设置为 `false`：
+:::warning
 
-```SQL
-SET enable_persist_canonical_view_sql = false;
-```
+如果视图或物化视图 DDL 使用 `::`，保存的原始定义中可能包含 `::`。这些定义与不支持该简写语法的旧版本 StarRocks 或工具不向后兼容。
 
-> **说明**
->
-> 禁用该变量后，视图和物化视图定义中可能会持久化 `::` 语法。这些定义与不支持 `::` 简写语法的 StarRocks 版本或工具不向后兼容。
-
-该设置不影响内部规范 SQL 定义，也不影响 `ALTER MATERIALIZED VIEW` 的 Schema Change 重写。
+:::
 
 示例三：转换为 ARRAY 类型。
 

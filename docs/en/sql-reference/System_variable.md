@@ -886,11 +886,6 @@ If a Join (other than Broadcast Join and Replicated Join) has multiple equi-join
 * **Default**: true
 * **Introduced in**: v3.0
 
-### enable_persist_canonical_view_sql
-
-* **Description**: Whether to store canonical SQL instead of the raw query text as the original definition for `CREATE VIEW`, `ALTER VIEW ... AS ...`, and `CREATE MATERIALIZED VIEW`. This variable does not affect the internal normalized SQL definition or `ALTER MATERIALIZED VIEW` schema-change rewrites.
-* **Default**: true
-
 ### enable_phased_scheduler
 
 * **Description**: Whether to enable multi-phased scheduling. When multi-phased scheduling is enabled, it will schedule fragments according to their dependencies. For example, the system will first schedule the fragment on the build side of a Shuffle Join, and then the fragment on the probe side (Note that, unlike stage-by-stage scheduling, phased scheduling is still under the MPP execution mode). Enabling multi-phased scheduling can significantly reduce memory usage for a large number of UNION ALL queries.
