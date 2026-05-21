@@ -40,6 +40,7 @@ import org.junit.jupiter.api.TestMethodOrder;
 
 import java.nio.ByteBuffer;
 import java.util.List;
+import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
@@ -569,6 +570,27 @@ public class MetaFunctionsTest extends MVTestBase {
             removeFromQueryDetailQueue(queryId);
             connectContext.setCurrentUserIdentity(UserIdentity.ROOT);
             connectContext.setCurrentRoleIds(UserIdentity.ROOT);
+            connectContext.setThreadLocalInfo();
+        }
+    }
+
+    @Test
+    public void testQueryId() {
+        UUID prev = connectContext.getQueryId();
+        try {
+            UUID id = new UUID(0x1122334455667788L, 0x99aabbccddeeff00L);
+            connectContext.setQueryId(id);
+            connectContext.setThreadLocalInfo();
+            ConstantOperator result = MetaFunctions.queryId();
+            Assertions.assertEquals(VarcharType.VARCHAR, result.getType());
+            Assertions.assertEquals(id.toString(), result.getVarchar());
+
+            connectContext.setQueryId(null);
+            connectContext.setThreadLocalInfo();
+            ConstantOperator nullResult = MetaFunctions.queryId();
+            Assertions.assertTrue(nullResult.isNull());
+        } finally {
+            connectContext.setQueryId(prev);
             connectContext.setThreadLocalInfo();
         }
     }

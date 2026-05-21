@@ -836,4 +836,20 @@ public class MetaFunctions {
         return ConstantOperator.createVarchar(lastQueryId.toString());
     }
 
+    /**
+     * Return the query ID of the currently executing query in the current session.
+     */
+    @ConstantFunction(name = "query_id", argTypes = {}, returnType = VARCHAR, isMetaFunction = true)
+    public static ConstantOperator queryId() {
+        ConnectContext connectContext = ConnectContext.get();
+        if (connectContext == null) {
+            return ConstantOperator.createNull(VarcharType.VARCHAR);
+        }
+        UUID queryId = connectContext.getQueryId();
+        if (queryId == null) {
+            return ConstantOperator.createNull(VarcharType.VARCHAR);
+        }
+        return ConstantOperator.createVarchar(queryId.toString());
+    }
+
 }
