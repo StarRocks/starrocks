@@ -91,8 +91,7 @@ bool DataSketchesTheta::deserialize(const Slice& slice) {
     // of the magic byte; compact-theta's first byte is pre_longs (1, 2, or 3).
     if (size >= 2 && data[0] == kMagicByte) {
         uint8_t lg_k = data[1];
-        if (lg_k >= datasketches::theta_constants::MIN_LG_K &&
-            lg_k <= datasketches::theta_constants::MAX_LG_K) {
+        if (lg_k >= datasketches::theta_constants::MIN_LG_K && lg_k <= datasketches::theta_constants::MAX_LG_K) {
             _lg_k = lg_k;
         }
         data += 2;

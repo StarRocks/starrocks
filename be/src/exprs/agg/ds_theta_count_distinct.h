@@ -85,8 +85,7 @@ public:
         // state is still unset (mirrors the HLL path so lg_k survives shuffle).
         DataSketchesTheta theta(slice, mem_usage);
         if (UNLIKELY(this->data(state).theta_sketch == nullptr)) {
-            this->data(state).theta_sketch =
-                    std::make_unique<DataSketchesTheta>(theta.get_lg_config_k(), mem_usage);
+            this->data(state).theta_sketch = std::make_unique<DataSketchesTheta>(theta.get_lg_config_k(), mem_usage);
         }
         this->data(state).theta_sketch->merge(theta);
 
