@@ -407,6 +407,16 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::read(const Schema& schema, const
             seg_options.is_first_split_of_segment = true;
         }
 
+        // PoC: thread per-segment secondary index lookup result into the
+        // segment iterator. nullptr (no entry for this seg_id) leaves the
+        // normal scan path untouched.
+        if (options.presupplied_rowid_filter_per_segment != nullptr) {
+            auto it = options.presupplied_rowid_filter_per_segment->find(static_cast<uint32_t>(i));
+            if (it != options.presupplied_rowid_filter_per_segment->end()) {
+                seg_options.presupplied_rowid_filter = &it->second;
+            }
+        }
+
         auto res = seg_ptr->new_iterator(*segment_schema, seg_options);
         if (res.status().is_end_of_file()) {
             continue;
