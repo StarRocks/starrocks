@@ -2409,19 +2409,22 @@ class StarrocksSQLApiLib(object):
 
     def check_no_hit_materialized_view(self, query, *expects):
         """
-        assert mv_name is hit in query
+        assert mv_name is not hit in query
         """
         time.sleep(1)
-        sql = "explain %s" % (query)
-        res = self.retry_execute_sql(sql, True)
-        if not res["status"]:
-            print(res)
-        tools.assert_true(res["status"])
-        plan = str(res["result"])
-        for expect in expects:
-            tools.assert_false(
-                plan.find(expect) > 0, "assert expect %s should not be found in plan: %s" % (expect, plan)
-            )
+        def check_mv():
+            sql = "explain %s" % (query)
+            res = self.retry_execute_sql(sql, True)
+            if not res["status"]:
+                print(res)
+            tools.assert_true(res["status"])
+            plan = str(res["result"])
+            for expect in expects:
+                tools.assert_false(
+                    plan.find(expect) > 0, "assert expect %s should not be found in plan: %s" % (expect, plan)
+                )
+
+        return self._with_materialized_view_rewrite(check_mv)
 
     def wait_alter_table_finish(self, alter_type="COLUMN", off=9):
         """
