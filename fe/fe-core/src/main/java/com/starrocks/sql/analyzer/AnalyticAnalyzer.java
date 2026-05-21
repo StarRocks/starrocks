@@ -407,6 +407,7 @@ public class AnalyticAnalyzer {
      * Semantic analysis for expr of a PRECEDING/FOLLOWING clause.
      */
     private static void checkOffsetExpr(AnalyticWindow windowFrame, AnalyticWindowBoundary boundary) {
+        Preconditions.checkState(windowFrame.getType() == AnalyticWindow.Type.ROWS);
         Preconditions.checkState(boundary.getBoundaryType().isOffset());
         Expr e = boundary.getExpr();
         Preconditions.checkNotNull(e);
@@ -425,22 +426,13 @@ public class AnalyticAnalyzer {
             }
         }
 
-        if (windowFrame.getType() == AnalyticWindow.Type.ROWS) {
-            if (!e.isConstant() || !e.getType().isFixedPointType() || !isPos) {
-                throw new SemanticException("For ROWS window, the value of a PRECEDING/FOLLOWING offset must be a "
-                        + "constant positive integer: " + ExprToSql.toSql(boundary), e.getPos());
-            }
-
-            Preconditions.checkNotNull(val);
-            boundary.setOffsetValue(new BigDecimal(val.longValue()));
-        } else {
-            if (!e.isConstant() || !e.getType().isNumericType() || !isPos) {
-                throw new SemanticException("For RANGE window, the value of a PRECEDING/FOLLOWING offset must be a "
-                        + "constant positive number: " + ExprToSql.toSql(boundary), e.getPos());
-            }
-
-            boundary.setOffsetValue(BigDecimal.valueOf(val));
+        if (!e.isConstant() || !e.getType().isFixedPointType() || !isPos) {
+            throw new SemanticException("For ROWS window, the value of a PRECEDING/FOLLOWING offset must be a "
+                    + "constant positive integer: " + ExprToSql.toSql(boundary), e.getPos());
         }
+
+        Preconditions.checkNotNull(val);
+        boundary.setOffsetValue(new BigDecimal(val.longValue()));
     }
 
     /**
