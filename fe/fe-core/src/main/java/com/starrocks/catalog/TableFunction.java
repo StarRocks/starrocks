@@ -155,7 +155,7 @@ public class TableFunction extends Function {
         // in `_statistics_.rejected_records`. The TVF runs lateral against the rejected
         // records table, e.g.:
         //     SELECT ... FROM rejected_records r,
-        //                     TABLE(parquet_read_rows(r.source_info)) p;
+        //                     parquet_read_rows(r.source_info) p;
         // BE enforces a fail-closed check on file_size + file_mtime_ms inside source_info.
         TableFunction parquetReadRows = new TableFunction(new FunctionName(FunctionSet.PARQUET_READ_ROWS),
                 Lists.newArrayList("file", "row_in_file", "raw_record"),

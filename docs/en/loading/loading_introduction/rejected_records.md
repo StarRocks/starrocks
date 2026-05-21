@@ -210,7 +210,7 @@ to the reporting role.
               end AS INT),
          json_extract_string(p.raw_record, '$.name')
   FROM _statistics_.rejected_records r,
-       TABLE(parquet_read_rows(r.source_info)) p
+       parquet_read_rows(r.source_info) p
   WHERE r.target_database = 'db' AND r.target_table = 't'
     AND r.format = 'parquet';
   ```
