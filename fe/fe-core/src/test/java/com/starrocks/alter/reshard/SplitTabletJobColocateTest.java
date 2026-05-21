@@ -99,6 +99,16 @@ public class SplitTabletJobColocateTest {
                 return CompletableFuture.completedFuture(task.call());
             }
         };
+
+        // The TabletReshardJobMgr daemon ticks every 10ms and runs ColocateChecker.runOneCycle,
+        // which re-marks an unstable colocate group stable as soon as every peer is range-aligned.
+        // In these single-DB tests the split itself produces fully-aligned tablets, so the daemon
+        // would race the test thread and clear the unstable bit before the assertion runs.
+        new MockUp<ColocateChecker>() {
+            @Mock
+            public void runOneCycle() {
+            }
+        };
     }
 
     @BeforeEach
