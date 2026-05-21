@@ -87,7 +87,7 @@ Status SpillMemTableSink::flush_chunk(const Chunk& chunk, starrocks::SegmentPB* 
     if (_load_chunk_spiller->total_bytes() >= config::pk_index_eager_build_threshold_bytes &&
         config::enable_load_spill_parallel_merge) {
         _pipeline_merge_context->init_parallel_merge();
-        
+
         // Cheap pre-check to skip task_iterator.init() when no task can be produced.
         if (_pipeline_merge_context->token() != nullptr &&
             _load_chunk_spiller->has_enough_for_pipeline_merge_task(config::load_spill_max_merge_bytes,
