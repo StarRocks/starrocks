@@ -99,18 +99,23 @@ protected:
     };
 
     // Replace the runtime state's DescriptorTbl with a fresh table holding a
-    // single tuple (id = 0) containing an INT data column "c0" plus optional
-    // CHANGES metadata slots controlled by `shape`. Returns 0 (the tuple id).
-    TTupleId install_tuple_descriptor(TupleShape shape) {
+    // single tuple (id = 0). When `include_data` is true the tuple contains an
+    // INT data column "c0" plus optional CHANGES metadata slots controlled by
+    // `shape`; when false, the data column is skipped so the metadata slots
+    // sit on their own (mirroring queries that project only metadata columns).
+    // Returns 0 (the tuple id).
+    TTupleId install_tuple_descriptor(TupleShape shape, bool include_data = true) {
         TDescriptorTableBuilder tbl_builder;
         TTupleDescriptorBuilder tup;
         int col_pos = 0;
-        tup.add_slot(TSlotDescriptorBuilder()
-                             .type(TYPE_INT)
-                             .column_name("c0")
-                             .column_pos(col_pos++)
-                             .nullable(false)
-                             .build());
+        if (include_data) {
+            tup.add_slot(TSlotDescriptorBuilder()
+                                 .type(TYPE_INT)
+                                 .column_name("c0")
+                                 .column_pos(col_pos++)
+                                 .nullable(false)
+                                 .build());
+        }
         const bool include_ct = (shape == TupleShape::CHANGE_TYPE_ONLY || shape == TupleShape::BOTH_NON_NULLABLE ||
                                  shape == TupleShape::BOTH_NULLABLE);
         const bool include_rv = (shape == TupleShape::ROW_VERSION_ONLY || shape == TupleShape::BOTH_NON_NULLABLE ||
@@ -737,6 +742,49 @@ TEST_F(ChangesConnectorTest, test_chunk_stamping_with_slot_variants) {
         ASSERT_FALSE(chunks.empty());
         // Only the data column "c0" is present; no metadata columns appended.
         EXPECT_EQ(1u, chunks.front()->num_columns());
+    }
+
+    // Sub-case F: only __ROW_VERSION__ in the tuple, no data slot (mirrors
+    // SELECT __ROW_VERSION__ FROM t [_CHANGES_b_h_]). _init_read_schema must
+    // force-include a tablet column to drive segment-iterator row count, else
+    // every chunk would surface with num_rows() == 0 and the data source would
+    // drop the whole rowset before stamping metadata.
+    {
+        auto tuple_id =
+                install_tuple_descriptor(TupleShape::ROW_VERSION_ONLY, /*include_data=*/false);
+        SlotId rv_id = slot_id_of(tuple_id, kRowVersionColumnName);
+        ASSERT_NE(-1, rv_id);
+        ASSERT_EQ(-1, slot_id_of(tuple_id, kChangeTypeColumnName));
+
+        std::vector<ChunkPtr> chunks;
+        EXPECT_EQ(kNumRows, open_and_collect(tuple_id, next_id(), next_id(), &chunks));
+        ASSERT_FALSE(chunks.empty());
+        EXPECT_TRUE(chunks.front()->is_slot_exist(rv_id));
+        const auto& rv_col = chunks.front()->get_column_by_slot_id(rv_id);
+        const auto* rv_data = down_cast<const Int64Column*>(rv_col.get());
+        for (size_t i = 0; i < rv_data->size(); i++) {
+            EXPECT_EQ(kRowsetVersion, rv_data->get_data()[i]);
+        }
+    }
+
+    // Sub-case G: only __CHANGE_TYPE__ in the tuple, no data slot. Same
+    // row-count-driver concern as Sub-case F.
+    {
+        auto tuple_id =
+                install_tuple_descriptor(TupleShape::CHANGE_TYPE_ONLY, /*include_data=*/false);
+        SlotId ct_id = slot_id_of(tuple_id, kChangeTypeColumnName);
+        ASSERT_NE(-1, ct_id);
+        ASSERT_EQ(-1, slot_id_of(tuple_id, kRowVersionColumnName));
+
+        std::vector<ChunkPtr> chunks;
+        EXPECT_EQ(kNumRows, open_and_collect(tuple_id, next_id(), next_id(), &chunks));
+        ASSERT_FALSE(chunks.empty());
+        EXPECT_TRUE(chunks.front()->is_slot_exist(ct_id));
+        const auto& ct_col = chunks.front()->get_column_by_slot_id(ct_id);
+        const auto* ct_data = down_cast<const Int8Column*>(ct_col.get());
+        for (size_t i = 0; i < ct_data->size(); i++) {
+            EXPECT_EQ(0, ct_data->get_data()[i]);
+        }
     }
 }
 

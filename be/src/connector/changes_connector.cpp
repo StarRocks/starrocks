@@ -391,6 +391,18 @@ Status ChangesDataSource::_init_read_schema() {
         column_indices.push_back(static_cast<uint32_t>(index));
         slot_tablet_indices.emplace_back(slot->id(), static_cast<uint32_t>(index));
     }
+    // Metadata-only projection (e.g. SELECT __ROW_VERSION__) yields zero data
+    // slots, so the segment iterator would be opened over an empty schema and
+    // every chunk would surface with num_rows() == 0. Force-include the first
+    // tablet column so the iterator drives row count from real segment data;
+    // _data_slot_chunk_indices stays empty, so this anonymous column is not
+    // resolvable via slot id and never reaches the tuple.
+    if (column_indices.empty()) {
+        if (_tablet_schema->num_columns() == 0) {
+            return Status::InternalError("tablet schema has no columns");
+        }
+        column_indices.push_back(0);
+    }
     std::sort(column_indices.begin(), column_indices.end());
     _read_schema = ChunkHelper::convert_schema(_tablet_schema, column_indices);
 
