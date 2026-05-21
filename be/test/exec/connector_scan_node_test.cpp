@@ -22,6 +22,7 @@
 #include "common/config_metrics_fwd.h"
 #include "exec/exec_factory.h"
 #include "exec/pipeline/scan/morsel.h"
+#include "exec/pipeline/scan/olap_morsel_queue.h"
 #include "gen_cpp/PlanNodes_types.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/exec_env.h"
@@ -186,6 +187,25 @@ TEST_F(ConnectorScanNodeTest, test_convert_scan_range_to_morsel_queue_factory_cl
     ASSERT_TRUE(morsel_queue_factory->is_shared());
 }
 
+TEST_F(ConnectorScanNodeTest, lake_morsel_queue_builder_preserves_olap_capability) {
+    std::shared_ptr<RuntimeState> runtime_state = create_runtime_state();
+    std::vector<TypeDescriptor> types;
+    types.emplace_back(TYPE_INT);
+    auto* descs = create_table_desc(runtime_state.get(), types);
+    auto tnode = create_tplan_node_cloud();
+    auto scan_node = std::make_shared<starrocks::ConnectorScanNode>(runtime_state->obj_pool(), *tnode, *descs);
+    ASSERT_OK(scan_node->init(*tnode, runtime_state.get()));
+
+    auto scan_ranges = create_scan_ranges_cloud(1);
+    ASSIGN_OR_ABORT(auto builder, scan_node->convert_scan_range_to_morsel_queue_builder(
+                                          scan_ranges, scan_node->id(), 1,
+                                          /*enable_tablet_internal_parallel=*/false,
+                                          TTabletInternalParallelMode::type::AUTO, scan_ranges.size()));
+    ASSIGN_OR_ABORT(auto queue, builder->build());
+    ASSERT_EQ(pipeline::MorselQueue::Type::DYNAMIC, queue->type());
+    ASSERT_NE(nullptr, dynamic_cast<pipeline::OlapMorselQueue*>(queue.get()));
+}
+
 std::shared_ptr<TPlanNode> ConnectorScanNodeTest::create_tplan_node_hive() {
     std::vector<::starrocks::TTupleId> tuple_ids{0};
 
@@ -261,6 +281,25 @@ TEST_F(ConnectorScanNodeTest, test_convert_scan_range_to_morsel_queue_factory_hi
                             scan_ranges, no_scan_ranges_per_driver_seq, scan_node->id(), pipeline_dop, false,
                             enable_tablet_internal_parallel, tablet_internal_parallel_mode));
     ASSERT_TRUE(morsel_queue_factory->is_shared());
+}
+
+TEST_F(ConnectorScanNodeTest, hive_morsel_queue_builder_uses_generic_dynamic_queue) {
+    std::shared_ptr<RuntimeState> runtime_state = create_runtime_state();
+    std::vector<TypeDescriptor> types;
+    types.emplace_back(TYPE_INT);
+    auto* descs = create_table_desc(runtime_state.get(), types);
+    auto tnode = create_tplan_node_hive();
+    auto scan_node = std::make_shared<starrocks::ConnectorScanNode>(runtime_state->obj_pool(), *tnode, *descs);
+    ASSERT_OK(scan_node->init(*tnode, runtime_state.get()));
+
+    auto scan_ranges = create_scan_ranges_hive(1);
+    ASSIGN_OR_ABORT(auto builder, scan_node->convert_scan_range_to_morsel_queue_builder(
+                                          scan_ranges, scan_node->id(), 1,
+                                          /*enable_tablet_internal_parallel=*/false,
+                                          TTabletInternalParallelMode::type::AUTO, scan_ranges.size()));
+    ASSIGN_OR_ABORT(auto queue, builder->build());
+    ASSERT_EQ(pipeline::MorselQueue::Type::DYNAMIC, queue->type());
+    ASSERT_EQ(nullptr, dynamic_cast<pipeline::OlapMorselQueue*>(queue.get()));
 }
 
 std::shared_ptr<TPlanNode> ConnectorScanNodeTest::create_tplan_node_stream_load() {

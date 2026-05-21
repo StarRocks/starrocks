@@ -17,7 +17,7 @@
 #include <algorithm>
 #include <functional>
 
-#include "exec/pipeline/scan/olap_dynamic_morsel_queue_builder.h"
+#include "exec/pipeline/scan/dynamic_morsel_queue_builder.h"
 #include "exec/pipeline/scan/scan_morsel.h"
 
 namespace starrocks::connector {
@@ -53,7 +53,7 @@ StatusOr<pipeline::MorselQueueBuilderPtr> DataSourceProvider::convert_scan_range
         });
     }
 
-    return pipeline::make_olap_dynamic_morsel_queue_builder(std::move(morsels), has_more_morsel, scan_parallelism);
+    return pipeline::make_dynamic_morsel_queue_builder(std::move(morsels), has_more_morsel, scan_parallelism);
 }
 
 } // namespace starrocks::connector
