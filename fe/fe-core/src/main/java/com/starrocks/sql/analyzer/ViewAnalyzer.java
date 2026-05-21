@@ -91,8 +91,7 @@ public class ViewAnalyzer {
             Preconditions.checkArgument(originalViewDef != null, "View's original view definition is null");
             Preconditions.checkArgument(stmt.getQueryStartIndex() >= 0 && stmt.getQueryStopIndex() >= stmt.getQueryStartIndex(),
                     "View's query start or stop index is invalid");
-            String originalDefineSql = originalViewDef.substring(stmt.getQueryStartIndex(), stmt.getQueryStopIndex());
-            stmt.setOriginalViewDefineSql(getPersistedViewDefineSql(context, originalDefineSql, viewSql));
+            stmt.setOriginalViewDefineSql(originalViewDef.substring(stmt.getQueryStartIndex(), stmt.getQueryStopIndex()));
             return null;
         }
 
@@ -145,17 +144,9 @@ public class ViewAnalyzer {
             Preconditions.checkArgument(alterViewClause.getQueryStartIndex() >= 0 &&
                             alterViewClause.getQueryStopIndex() >= alterViewClause.getQueryStartIndex(),
                     "View's query start or stop index is invalid");
-            String originalDefineSql = originalViewDef.substring(alterViewClause.getQueryStartIndex(),
-                    alterViewClause.getQueryStopIndex());
-            alterViewClause.setOriginalViewDefineSql(getPersistedViewDefineSql(context, originalDefineSql, viewSql));
+            alterViewClause.setOriginalViewDefineSql(
+                    originalViewDef.substring(alterViewClause.getQueryStartIndex(), alterViewClause.getQueryStopIndex()));
             return null;
-        }
-
-        private String getPersistedViewDefineSql(ConnectContext context, String originalDefineSql, String canonicalDefineSql) {
-            if (context.getSessionVariable().isEnablePersistCanonicalViewSql()) {
-                return canonicalDefineSql;
-            }
-            return originalDefineSql;
         }
 
         private List<Column> analyzeViewColumns(QueryRelation queryRelation, List<ColWithComment> colWithComments) {

@@ -14,11 +14,8 @@
 
 package com.starrocks.sql.plan;
 
-import com.starrocks.catalog.View;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
-
-import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
@@ -50,36 +47,4 @@ public class ShorthandCastPlanTest extends PlanTestBase {
         assertContains(exception.getMessage(), "must be a struct type");
     }
 
-    @Test
-    public void testCreateViewPersistsCanonicalSqlByDefault() throws Exception {
-        String viewName = "canonical_regular_view";
-        starRocksAssert.withView("create or replace view " + viewName + " as select v1 + v2 as c1 from t0");
-
-        View view = (View) starRocksAssert.getTable("test", viewName);
-        Assertions.assertEquals(view.getInlineViewDef(), view.getDDLViewDef());
-        Assertions.assertTrue(view.getDDLViewDef().contains("`test`.`t0`.`v1` + `test`.`t0`.`v2`"));
-    }
-
-    @Test
-    public void testCreateViewCanPersistOriginalSqlWhenCanonicalSqlDisabled() throws Exception {
-        boolean oldValue = connectContext.getSessionVariable().isEnablePersistCanonicalViewSql();
-        try {
-            connectContext.getSessionVariable().setEnablePersistCanonicalViewSql(false);
-            String viewName = "shorthand_cast_raw_view";
-            starRocksAssert.withView("create or replace view " + viewName + " as select v1::int as c1 from t0");
-
-            View view = (View) starRocksAssert.getTable("test", viewName);
-            Assertions.assertTrue(view.getInlineViewDef().contains("CAST("));
-            Assertions.assertTrue(view.getDDLViewDef().contains("v1::int"));
-            Assertions.assertFalse(view.getDDLViewDef().contains("CAST("));
-
-            List<List<String>> result = starRocksAssert.show("show create view " + viewName);
-            assertEquals(1, result.size());
-            String showCreateView = result.get(0).get(1);
-            Assertions.assertTrue(showCreateView.contains("v1::int"));
-            Assertions.assertFalse(showCreateView.contains("CAST("));
-        } finally {
-            connectContext.getSessionVariable().setEnablePersistCanonicalViewSql(oldValue);
-        }
-    }
 }

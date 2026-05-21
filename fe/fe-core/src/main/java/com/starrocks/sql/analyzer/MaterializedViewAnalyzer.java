@@ -366,10 +366,8 @@ public class MaterializedViewAnalyzer {
             String originalViewDef = statement.getOrigStmt().originStmt;
             Preconditions.checkArgument(originalViewDef != null,
                     "MV's original view definition is null");
-            String originalDefineSql = originalViewDef.substring(statement.getQueryStartIndex(),
-                    statement.getQueryStopIndex());
-            statement.setOriginalViewDefineSql(context.getSessionVariable().isEnablePersistCanonicalViewSql() ?
-                    statement.getInlineViewDef() : originalDefineSql);
+            statement.setOriginalViewDefineSql(originalViewDef.substring(statement.getQueryStartIndex(),
+                    statement.getQueryStopIndex()));
 
             MaterializedView.RefreshMode refreshMode = IVMAnalyzer.getRefreshMode(statement);
             if (refreshMode.isIncrementalOrAuto()) {
