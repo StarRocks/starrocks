@@ -463,6 +463,10 @@ public class CachingHiveMetastoreTest {
                         cache.partitionStatsCache.asMap().get(name).join().getCommonStats().getRowNums());
             }
 
+            cache.refreshTable("db1", "table1", true);
+            Thread.sleep(100L);
+            Assertions.assertEquals(2, loadCount.get());
+
             allowRefreshComplete.countDown();
             boolean refreshCompleted = false;
             long deadlineNanos = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
@@ -483,6 +487,7 @@ public class CachingHiveMetastoreTest {
                 Thread.sleep(10L);
             }
             Assertions.assertTrue(refreshCompleted);
+            Assertions.assertEquals(2, loadCount.get());
         } finally {
             allowRefreshComplete.countDown();
             Config.enable_refresh_hive_partitions_statistics = previousRefreshPartitionStats;
