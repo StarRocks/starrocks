@@ -342,12 +342,12 @@ public class UpdatePlanTest extends PlanTestBase {
     @Test
     public void testIcebergUpdateOutputExprsMatchSchema() throws Exception {
         // The sink tuple slots are built from execPlan.getOutputExprs() — verify
-        // the planner produces the expected 6 output exprs for a V2 unpartitioned
-        // update: [_file, _pos, id, data, date, op_code].
+        // the planner produces the expected 5 output exprs for a V2 unpartitioned
+        // update: [_file, _pos, id, data, date].
         String sql = "UPDATE iceberg0.unpartitioned_db.t0_v2 SET data = 'x' WHERE id = 1";
         ExecPlan execPlan = getIcebergUpdateExecPlan(sql);
         assertNotNull(execPlan.getOutputExprs());
-        Assertions.assertEquals(6, execPlan.getOutputExprs().size());
+        Assertions.assertEquals(5, execPlan.getOutputExprs().size());
     }
 
     @Test
@@ -366,7 +366,7 @@ public class UpdatePlanTest extends PlanTestBase {
         assertSame(TDataSinkType.ICEBERG_ROW_DELTA_SINK, tDataSink.getType());
         TIcebergTableSink tIcebergTableSink = tDataSink.getIceberg_table_sink();
         assertNotNull(tIcebergTableSink);
-        assertSame(TIcebergWriteMode.ROW_DELTA, tIcebergTableSink.getWrite_mode());
+        assertSame(TIcebergWriteMode.ROW_DELTA_UPDATE, tIcebergTableSink.getWrite_mode());
         assertFalse(tIcebergTableSink.is_static_partition_sink);
         assertNotNull(tIcebergTableSink.getCloud_configuration());
         assertTrue(tIcebergTableSink.getTarget_max_file_size() > 0);
@@ -379,6 +379,36 @@ public class UpdatePlanTest extends PlanTestBase {
                 "delete-file compression codec must be set");
         // Tuple id from sink must match what the planner attached to the fragment.
         assertTrue(sink.getExplainString("", TExplainLevel.NORMAL).contains("TUPLE ID:"));
+    }
+
+    @Test
+    public void testIcebergRowDeltaSinkToThriftSetsMixedWriteModeWhenConfigured() throws Exception {
+        ScalarType varchar = TypeFactory.createVarcharType(1024);
+        TupleDescriptor tuple = buildTupleDescriptor(
+                new String[] {IcebergTable.FILE_PATH, IcebergTable.ROW_POSITION, "data", "op_code"},
+                new com.starrocks.type.Type[] {varchar, IntegerType.BIGINT, varchar, IntegerType.TINYINT});
+        IcebergRowDeltaSink sink = new IcebergRowDeltaSink(
+                lookupV2IcebergTable(), tuple, connectContext.getSessionVariable(), TIcebergWriteMode.ROW_DELTA_MIXED);
+        sink.init();
+
+        java.lang.reflect.Method toThrift = IcebergRowDeltaSink.class.getDeclaredMethod("toThrift");
+        toThrift.setAccessible(true);
+        TDataSink tDataSink = (TDataSink) toThrift.invoke(sink);
+        TIcebergTableSink tIcebergTableSink = tDataSink.getIceberg_table_sink();
+        assertSame(TIcebergWriteMode.ROW_DELTA_MIXED, tIcebergTableSink.getWrite_mode());
+    }
+
+    @Test
+    public void testIcebergRowDeltaSinkRejectsInvalidWriteMode() throws Exception {
+        ScalarType varchar = TypeFactory.createVarcharType(1024);
+        TupleDescriptor tuple = buildTupleDescriptor(
+                new String[] {IcebergTable.FILE_PATH, IcebergTable.ROW_POSITION, "data"},
+                new com.starrocks.type.Type[] {varchar, IntegerType.BIGINT, varchar});
+
+        IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
+                () -> new IcebergRowDeltaSink(
+                        lookupV2IcebergTable(), tuple, connectContext.getSessionVariable(), TIcebergWriteMode.APPEND));
+        assertTrue(ex.getMessage().contains("must be ROW_DELTA_UPDATE or ROW_DELTA_MIXED"));
     }
 
     @Test
@@ -442,7 +472,7 @@ public class UpdatePlanTest extends PlanTestBase {
                 new String[] {IcebergTable.ROW_POSITION, "data"},
                 new com.starrocks.type.Type[] {IntegerType.BIGINT, varchar});
         IcebergRowDeltaSink sink = new IcebergRowDeltaSink(
-                lookupV2IcebergTable(), tuple, connectContext.getSessionVariable());
+                lookupV2IcebergTable(), tuple, connectContext.getSessionVariable(), TIcebergWriteMode.ROW_DELTA_UPDATE);
         StarRocksConnectorException ex = assertThrows(StarRocksConnectorException.class, sink::init);
         assertTrue(ex.getMessage().contains("requires _file and _pos"));
     }
@@ -455,7 +485,7 @@ public class UpdatePlanTest extends PlanTestBase {
                 new String[] {IcebergTable.FILE_PATH, "data"},
                 new com.starrocks.type.Type[] {varchar, varchar});
         IcebergRowDeltaSink sink = new IcebergRowDeltaSink(
-                lookupV2IcebergTable(), tuple, connectContext.getSessionVariable());
+                lookupV2IcebergTable(), tuple, connectContext.getSessionVariable(), TIcebergWriteMode.ROW_DELTA_UPDATE);
         StarRocksConnectorException ex = assertThrows(StarRocksConnectorException.class, sink::init);
         assertTrue(ex.getMessage().contains("requires _file and _pos"));
     }
@@ -467,7 +497,7 @@ public class UpdatePlanTest extends PlanTestBase {
                 new String[] {IcebergTable.FILE_PATH, IcebergTable.ROW_POSITION},
                 new com.starrocks.type.Type[] {IntegerType.INT, IntegerType.BIGINT});
         IcebergRowDeltaSink sink = new IcebergRowDeltaSink(
-                lookupV2IcebergTable(), tuple, connectContext.getSessionVariable());
+                lookupV2IcebergTable(), tuple, connectContext.getSessionVariable(), TIcebergWriteMode.ROW_DELTA_UPDATE);
         StarRocksConnectorException ex = assertThrows(StarRocksConnectorException.class, sink::init);
         assertTrue(ex.getMessage().contains("_file column must be type of VARCHAR"));
     }
@@ -480,7 +510,7 @@ public class UpdatePlanTest extends PlanTestBase {
                 new String[] {IcebergTable.FILE_PATH, IcebergTable.ROW_POSITION},
                 new com.starrocks.type.Type[] {varchar, IntegerType.INT});
         IcebergRowDeltaSink sink = new IcebergRowDeltaSink(
-                lookupV2IcebergTable(), tuple, connectContext.getSessionVariable());
+                lookupV2IcebergTable(), tuple, connectContext.getSessionVariable(), TIcebergWriteMode.ROW_DELTA_UPDATE);
         StarRocksConnectorException ex = assertThrows(StarRocksConnectorException.class, sink::init);
         assertTrue(ex.getMessage().contains("_pos column must be type of BIGINT"));
     }
@@ -593,7 +623,7 @@ public class UpdatePlanTest extends PlanTestBase {
                 new String[] {IcebergTable.FILE_PATH, IcebergTable.ROW_POSITION, null},
                 new com.starrocks.type.Type[] {varchar, IntegerType.BIGINT, IntegerType.INT});
         IcebergRowDeltaSink sink = new IcebergRowDeltaSink(
-                lookupV2IcebergTable(), tuple, connectContext.getSessionVariable());
+                lookupV2IcebergTable(), tuple, connectContext.getSessionVariable(), TIcebergWriteMode.ROW_DELTA_UPDATE);
         sink.init(); // must not throw
     }
 

@@ -33,7 +33,9 @@ struct IcebergRowDeltaSinkContext : public ConnectorChunkSinkContext {
     std::shared_ptr<IcebergDeleteSinkContext> delete_sink_ctx;
     std::shared_ptr<IcebergChunkSinkContext> data_sink_ctx;
 
-    // Index of the op_code column in the input chunk (last column)
+    // Index of the op_code column in the input chunk.
+    // The default -1 means no extra op_code column (such as UPDATE operation),
+    // every row goes to both delete and data sub-sinks.
     int32_t op_code_index = -1;
 
     // Query-level memory manager for creating child managers for sub-sinks.
@@ -43,7 +45,7 @@ struct IcebergRowDeltaSinkContext : public ConnectorChunkSinkContext {
     void set_sink_mem_mgr(SinkMemoryManager* mgr) override { sink_mem_mgr = mgr; }
 };
 
-// IcebergRowDeltaSinkProvider creates IcebergRowDeltaSink for Iceberg UPDATE operations.
+// IcebergRowDeltaSinkProvider creates IcebergRowDeltaSink for Iceberg row-delta operations.
 // It composes an IcebergDeleteSinkProvider and an IcebergChunkSinkProvider.
 class IcebergRowDeltaSinkProvider final : public ConnectorChunkSinkProvider {
 public:
@@ -53,9 +55,9 @@ public:
                                                                     int32_t driver_id) override;
 };
 
-// IcebergRowDeltaSink routes rows from an input chunk to a delete sink and a data sink
-// based on the op_code column. Used for Iceberg UPDATE which atomically deletes old rows
-// and inserts new rows (row-level delta / Merge-On-Read).
+// IcebergRowDeltaSink routes rows from an input chunk to a delete sink and a data sink.
+// Pure UPDATE has no op_code column and forwards every row to both sub-sinks.
+// Mixed row-level operations use an op_code column for per-row routing.
 //
 // Op codes:
 //   0 = no-op (skip)
