@@ -53,20 +53,20 @@ public class OpaResourceTest {
 
         resource = resourceJson(OpaResource.view(new TableName(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, "d1", "v1")));
         assertOnlyKeys(resource, "catalog", "database", "view");
-        Assertions.assertEquals("default_catalog", resource.get("catalog").getAsString());
+        Assertions.assertEquals(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, resource.get("catalog").getAsString());
         Assertions.assertEquals("d1", resource.get("database").getAsString());
         Assertions.assertEquals("v1", resource.get("view").getAsString());
 
         resource = resourceJson(OpaResource.materializedView(
                 new TableName(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, "d1", "mv1")));
         assertOnlyKeys(resource, "catalog", "database", "materialized_view");
-        Assertions.assertEquals("default_catalog", resource.get("catalog").getAsString());
+        Assertions.assertEquals(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, resource.get("catalog").getAsString());
         Assertions.assertEquals("d1", resource.get("database").getAsString());
         Assertions.assertEquals("mv1", resource.get("materialized_view").getAsString());
 
         resource = resourceJson(OpaResource.function(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, "d1", "f1"));
         assertOnlyKeys(resource, "catalog", "database", "function");
-        Assertions.assertEquals("default_catalog", resource.get("catalog").getAsString());
+        Assertions.assertEquals(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, resource.get("catalog").getAsString());
         Assertions.assertEquals("d1", resource.get("database").getAsString());
         Assertions.assertEquals("f1", resource.get("function").getAsString());
 
@@ -88,7 +88,7 @@ public class OpaResourceTest {
 
         resource = resourceJson(OpaResource.pipe("d1", "p1"));
         assertOnlyKeys(resource, "catalog", "database", "pipe");
-        Assertions.assertEquals("default_catalog", resource.get("catalog").getAsString());
+        Assertions.assertEquals(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, resource.get("catalog").getAsString());
         Assertions.assertEquals("d1", resource.get("database").getAsString());
         Assertions.assertEquals("p1", resource.get("pipe").getAsString());
 
