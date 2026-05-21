@@ -39,7 +39,7 @@ import com.google.common.collect.Maps;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.backup.Status.ErrCode;
 import com.starrocks.common.io.Writable;
-import com.starrocks.common.util.Daemon;
+import com.starrocks.common.util.LeaderDaemon;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.server.GlobalStateMgr;
 import org.apache.logging.log4j.LogManager;
@@ -51,9 +51,14 @@ import java.util.Map;
 import java.util.concurrent.locks.ReentrantLock;
 
 /*
- * A manager to manage all backup repositories
+ * A manager to manage all backup repositories.
+ *
+ * Extends {@link LeaderDaemon} so the ping loop is bound to the leader session: when this FE is
+ * demoted the worker is stopped (via {@link BackupHandler}'s lifecycle), and when re-elected the
+ * same singleton can be started again. The persisted state ({@link #repoNameMap}) is preserved
+ * across stop/start cycles because the manager instance is reused.
  */
-public class RepositoryMgr extends Daemon implements Writable, GsonPostProcessable {
+public class RepositoryMgr extends LeaderDaemon implements Writable, GsonPostProcessable {
     private static final Logger LOG = LogManager.getLogger(RepositoryMgr.class);
 
     // all key should be in lower case
@@ -68,7 +73,7 @@ public class RepositoryMgr extends Daemon implements Writable, GsonPostProcessab
     }
 
     @Override
-    protected void runOneCycle() {
+    protected void runAfterLeaseValid() {
         for (Repository repo : repoNameMap.values()) {
             if (!repo.ping()) {
                 LOG.warn("Failed to connect repository {}. msg: {}", repo.getName(), repo.getErrorMsg());

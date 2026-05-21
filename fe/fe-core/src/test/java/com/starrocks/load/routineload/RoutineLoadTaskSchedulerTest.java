@@ -57,7 +57,12 @@ import org.junit.jupiter.api.Test;
 import java.util.Map;
 import java.util.Queue;
 import java.util.UUID;
+import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 
 public class RoutineLoadTaskSchedulerTest {
@@ -127,7 +132,7 @@ public class RoutineLoadTaskSchedulerTest {
 
         RoutineLoadTaskScheduler routineLoadTaskScheduler = new RoutineLoadTaskScheduler();
         Deencapsulation.setField(routineLoadTaskScheduler, "needScheduleTasksQueue", routineLoadTaskInfoQueue);
-        routineLoadTaskScheduler.runAfterCatalogReady();
+        routineLoadTaskScheduler.runAfterLeaseValid();
 
         // The task was submitted to the thread pool waiting for execution, it could be some delay the task didn't get
         // executed at all when main thread thought the testing is done.
@@ -289,5 +294,150 @@ public class RoutineLoadTaskSchedulerTest {
             Assertions.assertEquals("database 1 does not exist", e.getMessage());
             Assertions.assertEquals(RoutineLoadJob.JobState.CANCELLED, routineLoadJob.state);
         }
+    }
+
+    @Test
+    public void testStartRefusesToRestartBeforeScheduledExecutorTerminates() {
+        RoutineLoadTaskScheduler routineLoadTaskScheduler = new RoutineLoadTaskScheduler();
+        ScheduledExecutorService blockedScheduler = Executors.newSingleThreadScheduledExecutor();
+        blockedScheduler.execute(() -> {
+            try {
+                Thread.sleep(30_000L);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+        });
+        blockedScheduler.shutdown();
+        Deencapsulation.setField(routineLoadTaskScheduler, "scheduledExecutorService", blockedScheduler);
+
+        try {
+            Assertions.assertThrows(IllegalStateException.class, routineLoadTaskScheduler::start);
+        } finally {
+            blockedScheduler.shutdownNow();
+        }
+    }
+
+    @Test
+    public void testStartRefusesToRestartBeforeThreadPoolTerminates() {
+        RoutineLoadTaskScheduler routineLoadTaskScheduler = new RoutineLoadTaskScheduler();
+        ThreadPoolExecutor blockedPool = new ThreadPoolExecutor(
+                1, 1, 0L, TimeUnit.MILLISECONDS, new ArrayBlockingQueue<>(1));
+        blockedPool.execute(() -> {
+            try {
+                Thread.sleep(30_000L);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+        });
+        blockedPool.shutdown();
+        Deencapsulation.setField(routineLoadTaskScheduler, "threadPool", blockedPool);
+
+        try {
+            Assertions.assertThrows(IllegalStateException.class, routineLoadTaskScheduler::start);
+        } finally {
+            blockedPool.shutdownNow();
+        }
+    }
+
+    @Test
+    public void testOnStoppedShutsDownPoolsAndStartRebuildsThem() {
+        // onStopped() must shutdownNow() both executors so their worker threads exit promptly
+        // during the drain. A subsequent start() must rebuild both pools so the scheduler is
+        // reusable when the FE is re-elected.
+        RoutineLoadTaskScheduler scheduler = new RoutineLoadTaskScheduler();
+        ScheduledExecutorService originalScheduler =
+                Deencapsulation.getField(scheduler, "scheduledExecutorService");
+        ExecutorService originalThreadPool = Deencapsulation.getField(scheduler, "threadPool");
+
+        Deencapsulation.invoke(scheduler, "onStopped");
+
+        Assertions.assertTrue(originalScheduler.isShutdown(),
+                "scheduledExecutorService must be shut down on demotion");
+        Assertions.assertTrue(originalThreadPool.isShutdown(),
+                "threadPool must be shut down on demotion");
+        Awaitility.await().timeout(5, TimeUnit.SECONDS).until(originalScheduler::isTerminated);
+        Awaitility.await().timeout(5, TimeUnit.SECONDS).until(originalThreadPool::isTerminated);
+
+        // The original pools are terminated, so start() should hit the rebuild branches.
+        scheduler.start();
+        ScheduledExecutorService rebuiltScheduler =
+                Deencapsulation.getField(scheduler, "scheduledExecutorService");
+        ExecutorService rebuiltThreadPool = Deencapsulation.getField(scheduler, "threadPool");
+        Assertions.assertNotSame(originalScheduler, rebuiltScheduler,
+                "scheduledExecutorService must be rebuilt on re-election");
+        Assertions.assertNotSame(originalThreadPool, rebuiltThreadPool,
+                "threadPool must be rebuilt on re-election");
+        Assertions.assertFalse(rebuiltScheduler.isShutdown());
+        Assertions.assertFalse(rebuiltThreadPool.isShutdown());
+
+        scheduler.setStop();
+    }
+
+    @Test
+    public void testOnStoppedClearsQueueAfterPoolsTerminate() {
+        // Race fix: a delay-runnable scheduled by the previous leader can fire mid-onStopped()
+        // and call needScheduleTasksQueue.put() before the interrupt from shutdownNow() lands.
+        // If clear() runs before the pools drain, that stale put survives demotion and the
+        // next leader polls it. Pin the invariant by routing the production clear() through a
+        // queue subclass that records whether both pools were already terminated at the
+        // moment clear() ran.
+        RoutineLoadTaskScheduler scheduler = new RoutineLoadTaskScheduler();
+        ScheduledExecutorService sched = Deencapsulation.getField(scheduler, "scheduledExecutorService");
+        ExecutorService pool = Deencapsulation.getField(scheduler, "threadPool");
+        boolean[] schedTerminatedAtClear = {false};
+        boolean[] poolTerminatedAtClear = {false};
+        LinkedBlockingQueue<RoutineLoadTaskInfo> trackingQueue = new LinkedBlockingQueue<RoutineLoadTaskInfo>() {
+            @Override
+            public void clear() {
+                schedTerminatedAtClear[0] = sched.isTerminated();
+                poolTerminatedAtClear[0] = pool.isTerminated();
+                super.clear();
+            }
+        };
+        Deencapsulation.setField(scheduler, "needScheduleTasksQueue", trackingQueue);
+
+        Deencapsulation.invoke(scheduler, "onStopped");
+
+        Assertions.assertTrue(schedTerminatedAtClear[0],
+                "scheduledExecutorService must be terminated before clear() runs");
+        Assertions.assertTrue(poolTerminatedAtClear[0],
+                "threadPool must be terminated before clear() runs");
+        Long watermark = Deencapsulation.getField(scheduler, "lastBackendSlotUpdateTime");
+        Assertions.assertEquals(-1L, watermark.longValue(),
+                "slot watermark must be reset for the next leader");
+    }
+
+    @Test
+    public void testDelayPutToQueueSkipsWhenStopped() throws Exception {
+        // After onStopped() shuts down scheduledExecutorService, delayPutToQueue must skip
+        // cleanly instead of throwing - the next leader will re-divide the routine load.
+        RoutineLoadTaskScheduler scheduler = new RoutineLoadTaskScheduler();
+        ScheduledExecutorService originalScheduler =
+                Deencapsulation.getField(scheduler, "scheduledExecutorService");
+        Deencapsulation.invoke(scheduler, "onStopped");
+        Awaitility.await().timeout(5, TimeUnit.SECONDS).until(originalScheduler::isTerminated);
+
+        KafkaRoutineLoadJob job = new KafkaRoutineLoadJob(1L, "job1", 1L, 1L, null, "topic1");
+        KafkaTaskInfo taskInfo = new KafkaTaskInfo(new UUID(1, 1), job, 20000,
+                System.currentTimeMillis(), Maps.newHashMap(), Config.routine_load_task_timeout_second * 1000);
+
+        // delayPutToQueue is private; invoke through Deencapsulation. Must not throw.
+        Deencapsulation.invoke(scheduler, "delayPutToQueue", taskInfo, "test-msg");
+    }
+
+    @Test
+    public void testSubmitToScheduleSkipsWhenStopped() throws Exception {
+        // Mirror of the previous test: submitToSchedule's stopped-guard short-circuits when
+        // the threadPool was shut down, preventing RejectedExecutionException leakage.
+        RoutineLoadTaskScheduler scheduler = new RoutineLoadTaskScheduler();
+        ExecutorService originalThreadPool = Deencapsulation.getField(scheduler, "threadPool");
+        Deencapsulation.invoke(scheduler, "onStopped");
+        Awaitility.await().timeout(5, TimeUnit.SECONDS).until(originalThreadPool::isTerminated);
+
+        KafkaRoutineLoadJob job = new KafkaRoutineLoadJob(1L, "job1", 1L, 1L, null, "topic1");
+        KafkaTaskInfo taskInfo = new KafkaTaskInfo(new UUID(1, 1), job, 20000,
+                System.currentTimeMillis(), Maps.newHashMap(), Config.routine_load_task_timeout_second * 1000);
+
+        Deencapsulation.invoke(scheduler, "submitToSchedule", taskInfo);
     }
 }

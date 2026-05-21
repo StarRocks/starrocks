@@ -79,7 +79,7 @@ public class RollupJobV2Test extends DDLTestBase {
     public static void beforeAll() {
         new MockUp<MaterializedViewHandler>() {
             @Mock
-            protected void runAfterCatalogReady() {
+            protected void runAfterLeaseValid() {
                 // do nothing
             }
         };

@@ -844,8 +844,8 @@ public class MaterializedViewHandler extends AlterHandler {
     }
 
     @Override
-    protected void runAfterCatalogReady() {
-        super.runAfterCatalogReady();
+    protected void runAfterLeaseValid() {
+        super.runAfterLeaseValid();
         runAlterJobV2();
     }
 

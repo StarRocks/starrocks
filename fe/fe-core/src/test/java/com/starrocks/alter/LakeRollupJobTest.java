@@ -73,8 +73,8 @@ public class LakeRollupJobTest {
     @BeforeAll
     public static void setUp() throws Exception {
         new MockUp<MaterializedViewHandler>() {
-            @Mock protected void runAfterCatalogReady() {
-                System.out.println("Mocked MaterializedViewHandler.runAfterCatalogReady() called");
+            @Mock protected void runAfterLeaseValid() {
+                System.out.println("Mocked MaterializedViewHandler.runAfterLeaseValid() called");
             }
         };
 

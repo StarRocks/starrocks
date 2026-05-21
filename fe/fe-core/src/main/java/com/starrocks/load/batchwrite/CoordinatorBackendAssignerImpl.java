@@ -71,7 +71,9 @@ public final class CoordinatorBackendAssignerImpl implements CoordinatorBackendA
 
     private final AtomicLong taskIdAllocator;
     private final PriorityBlockingQueue<Task> taskPriorityQueue;
-    private final ExecutorService singleExecutor;
+    // Not final: recreated by {@link #start()} if a previous {@link #stop()} shut it down,
+    // so the assigner is reusable across leader demotion / re-election cycles.
+    private volatile ExecutorService singleExecutor;
 
     // Registered load. load id -> LoadMeta
     private final ConcurrentHashMap<Long, LoadMeta> registeredLoadMetas;
@@ -93,8 +95,7 @@ public final class CoordinatorBackendAssignerImpl implements CoordinatorBackendA
     public CoordinatorBackendAssignerImpl() {
         this.taskIdAllocator = new AtomicLong(0);
         this.taskPriorityQueue = new PriorityBlockingQueue<>(32, TaskComparator.INSTANCE);
-        this.singleExecutor = ThreadPoolManager.newDaemonCacheThreadPool(
-                1, "coordinator-be-assigner", true);
+        this.singleExecutor = null;
         this.registeredLoadMetas = new ConcurrentHashMap<>();
         this.warehouseMetas = new HashMap<>();
         this.numPendingTasksForDetectUnavailableNodes = new AtomicLong(0);
@@ -103,9 +104,62 @@ public final class CoordinatorBackendAssignerImpl implements CoordinatorBackendA
     }
 
     @Override
-    public void start() {
-        this.singleExecutor.submit(this::runSchedule);
+    public synchronized void start() {
+        if (singleExecutor != null && !singleExecutor.isShutdown()) {
+            LOG.warn("CoordinatorBackendAssigner already running, skip duplicate start()");
+            return;
+        }
+        // Refuse to overlap with a previous worker that did not drain. After {@link #stop()}
+        // succeeds the executor is both shutdown and terminated; if it is only shutdown we may
+        // still have a live worker from the previous leader session.
+        if (singleExecutor != null && !singleExecutor.isTerminated()) {
+            throw new IllegalStateException(
+                    "CoordinatorBackendAssigner previous worker has not terminated; refuse to start a new one");
+        }
+        singleExecutor = ThreadPoolManager.newDaemonCacheThreadPool(
+                1, "coordinator-be-assigner", true);
+        singleExecutor.submit(this::runSchedule);
         LOG.info("Start coordinator be assigner");
+    }
+
+    @Override
+    public synchronized void stop() {
+        // shutdownNow() interrupts the runSchedule worker so its blocking poll() returns;
+        // runSchedule treats InterruptedException as an exit signal. Wait boundedly for the
+        // worker to actually exit so a subsequent start() does not race a still-alive worker
+        // against a freshly created one.
+        if (singleExecutor != null && !singleExecutor.isShutdown()) {
+            singleExecutor.shutdownNow();
+        }
+        if (singleExecutor != null) {
+            boolean terminated = false;
+            try {
+                terminated = singleExecutor.awaitTermination(
+                        Config.leader_demotion_drain_timeout_sec, TimeUnit.SECONDS);
+            } catch (InterruptedException ie) {
+                Thread.currentThread().interrupt();
+                LOG.warn("Interrupted while waiting for coordinator-be-assigner to terminate");
+            }
+            if (!terminated) {
+                // The executor remains shutdown-but-not-terminated, so a subsequent start()
+                // refuses to spin up a parallel worker; the stuck worker plus a new one would
+                // corrupt warehouseMetas.
+                LOG.error("CoordinatorBackendAssigner worker did not exit within {}s; refusing future restart",
+                        Config.leader_demotion_drain_timeout_sec);
+                return;
+            }
+        }
+        // Now that the schedule loop has terminated, drop the leader-session state it owned.
+        // BatchWriteMgr.onStopped() pushes async UNREGISTER_LOAD tasks for each merge-commit
+        // job before calling stop(), but those tasks are discarded by shutdownNow(); without
+        // an explicit clear here, warehouseMetas / registeredLoadMetas / taskPriorityQueue
+        // would survive into the next leader session and let stale load ownership leak into
+        // new backend assignments. Safe to mutate without further locking because the only
+        // writer (runSchedule) has just terminated.
+        taskPriorityQueue.clear();
+        registeredLoadMetas.clear();
+        warehouseMetas.clear();
+        numPendingTasksForDetectUnavailableNodes.set(0);
     }
 
     /**
@@ -127,6 +181,12 @@ public final class CoordinatorBackendAssignerImpl implements CoordinatorBackendA
                     LOG.debug("Set schedule interval to {} ms", checkIntervalMs);
                 }
                 task = taskPriorityQueue.poll(checkIntervalMs, TimeUnit.MILLISECONDS);
+            } catch (InterruptedException ie) {
+                // shutdownNow() interrupts this thread on leader demotion; exit the schedule
+                // loop so the worker can be replaced by a fresh one on the next start().
+                Thread.currentThread().interrupt();
+                LOG.info("Coordinator be assigner interrupted, exiting");
+                return;
             } catch (Throwable throwable) {
                 LOG.warn("Failed to poll task queue", throwable);
                 continue;

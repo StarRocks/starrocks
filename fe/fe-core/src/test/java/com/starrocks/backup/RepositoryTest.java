@@ -178,6 +178,26 @@ public class RepositoryTest {
     }
 
     @Test
+    public void testRepositoryMgrRunAfterLeaseValidPingsRepositories() {
+        new Expectations() {
+            {
+                storage.checkPathExist(anyString);
+                times = 2;
+                result = Status.OK;
+            }
+        };
+
+        repo = new Repository(10000, "repo", false, location, storage);
+        RepositoryMgr repositoryMgr = new RepositoryMgr();
+        repositoryMgr.replayAddRepo(repo);
+
+        repositoryMgr.runAfterLeaseValid();
+
+        Assertions.assertTrue(repo.ping());
+        Assertions.assertNull(repo.getErrorMsg());
+    }
+
+    @Test
     public void testListSnapshots() {
         new Expectations() {
             {
