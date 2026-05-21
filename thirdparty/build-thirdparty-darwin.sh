@@ -1874,13 +1874,47 @@ build_formula_azure() {
     sync_lib64_links
 }
 
-build_formula_xxhash() {
-    ensure_formula xxhash
-    local prefix
-    prefix="$(formula_prefix xxhash)"
-    link_if_missing "${prefix}/include/xxhash.h" "${TP_INCLUDE_DIR}/xxhash.h"
-    link_matching_if_missing "${TP_INSTALL_DIR}/lib" "${prefix}/lib/libxxhash.a" "${prefix}/lib/libxxhash"*.dylib
-    link_formula_metadata "${prefix}"
+build_xxhash() {
+    if [[ -f "${TP_INSTALL_DIR}/lib/libxxhash.a" &&
+          ! -L "${TP_INSTALL_DIR}/lib/libxxhash.a" &&
+          -f "${TP_INCLUDE_DIR}/xxhash.h" &&
+          ! -L "${TP_INCLUDE_DIR}/xxhash.h" &&
+          -f "${TP_INCLUDE_DIR}/xxhash/xxhash.h" &&
+          ! -L "${TP_INCLUDE_DIR}/xxhash/xxhash.h" ]]; then
+        return 0
+    fi
+
+    check_if_source_exist "${XXHASH_SOURCE}"
+    cd "${TP_SOURCE_DIR}/${XXHASH_SOURCE}"
+    make clean >/dev/null 2>&1 || true
+
+    rm -rf "${TP_INCLUDE_DIR}/xxhash"
+    rm -f "${TP_INCLUDE_DIR}/xxhash.h" \
+        "${TP_INCLUDE_DIR}/xxh3.h" \
+        "${TP_INCLUDE_DIR}/xxh_x86dispatch.h" \
+        "${TP_INSTALL_DIR}/lib/libxxhash"* \
+        "${TP_INSTALL_DIR}/lib64/libxxhash"* \
+        "${TP_INSTALL_DIR}/lib/pkgconfig/libxxhash.pc"
+
+    make -j"${PARALLEL}" libxxhash.a libxxhash.pc \
+        PREFIX="${TP_INSTALL_DIR}" \
+        LIBDIR="${TP_INSTALL_DIR}/lib" \
+        INCLUDEDIR="${TP_INCLUDE_DIR}" \
+        PKGCONFIGDIR="${TP_INSTALL_DIR}/lib/pkgconfig" \
+        CC="${CC}" \
+        AR="${AR}" \
+        CFLAGS="${CFLAGS}" \
+        CPPFLAGS="${CPPFLAGS}"
+    make install_libxxhash.a install_libxxhash.includes install_libxxhash.pc \
+        PREFIX="${TP_INSTALL_DIR}" \
+        LIBDIR="${TP_INSTALL_DIR}/lib" \
+        INCLUDEDIR="${TP_INCLUDE_DIR}" \
+        PKGCONFIGDIR="${TP_INSTALL_DIR}/lib/pkgconfig" \
+        CC="${CC}" \
+        AR="${AR}"
+
+    mkdir -p "${TP_INCLUDE_DIR}/xxhash"
+    cp xxhash.h "${TP_INCLUDE_DIR}/xxhash/xxhash.h"
     sync_lib64_links
 }
 
@@ -2490,7 +2524,7 @@ for package in "${packages[@]}"; do
             build_flamegraph
             ;;
         xxhash)
-            build_formula_xxhash
+            build_xxhash
             ;;
         blake3)
             build_formula_blake3
