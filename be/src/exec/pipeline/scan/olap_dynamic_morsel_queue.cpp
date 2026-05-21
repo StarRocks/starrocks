@@ -108,4 +108,13 @@ MorselQueueBuilderPtr make_olap_dynamic_morsel_queue_builder(Morsels&& morsels, 
     return std::make_unique<OlapDynamicMorselQueueBuilder>(std::move(morsels), has_more_scan_ranges, max_dop);
 }
 
+MorselQueueBuilderPtr make_olap_dynamic_morsel_queue_builder_from(MorselQueueBuilderPtr builder) {
+    auto has_more_scan_ranges = builder->has_more_scan_ranges();
+    auto has_more_from_split = builder->has_more_from_split();
+    auto max_dop = builder->max_degree_of_parallelism();
+    auto olap_builder = make_olap_dynamic_morsel_queue_builder(builder->take_morsels(), has_more_scan_ranges, max_dop);
+    olap_builder->set_has_more_from_split(has_more_from_split);
+    return olap_builder;
+}
+
 } // namespace starrocks::pipeline
