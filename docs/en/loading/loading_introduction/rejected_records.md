@@ -200,33 +200,44 @@ to the reporting role.
   `_statistics_.rejected_records`:
 
   ```sql
-  -- Rehydrate every parquet row that was rejected for `db.t` and
-  -- replay it with a fix applied in SQL.
+  -- Target table: id INT NOT NULL, val INT NOT NULL, name VARCHAR(8).
+  -- A row with name='bobby_too_long_name' is rejected by the parquet
+  -- scanner because it exceeds VARCHAR(8); the scanner writes a full
+  -- source_info anchor. Rehydrate, truncate the offending column, and
+  -- replay.
   INSERT INTO db.t
-  SELECT cast(json_extract_string(p.raw_record, '$.id')   AS INT),
-         cast(case when json_extract_string(p.raw_record, '$.val') = 'bad_val'
-                   then '0'
-                   else json_extract_string(p.raw_record, '$.val')
-              end AS INT),
-         json_extract_string(p.raw_record, '$.name')
+  SELECT cast(json_query(p.raw_record, '$.id') AS INT),
+         cast(json_query(p.raw_record, '$.val') AS INT),
+         left(cast(json_query(p.raw_record, '$.name') AS varchar), 8)
   FROM _statistics_.rejected_records r,
        parquet_read_rows(r.source_info) p
   WHERE r.target_database = 'db' AND r.target_table = 't'
-    AND r.format = 'parquet';
+    AND cast(json_query(r.source_info, '$.format') AS varchar) = 'parquet';
   ```
 
   `parquet_read_rows` emits one row per anchor with columns
   `(file VARCHAR, row_in_file BIGINT, raw_record JSON)`. `raw_record`
   is a JSON object keyed by Parquet column name carrying the original
-  values as they appeared in the file (so a `STRING` column holding
-  `"bad_val"` arrives back as a string and you re-apply your fix in
-  SQL before re-inserting). When `source_info` carries `file_size` /
-  `file_mtime_ms`, the BE fail-closes the rehydration if the current
-  file has drifted from the recorded size or modification time; if the
-  underlying filesystem does not expose modification time (S3 / OSS),
-  the mtime check is silently skipped. Anchor count per chunk is
-  capped by the BE config `parquet_read_rows_max_anchors` (default
-  10000).
+  values as they appeared in the file. When `source_info` carries
+  `file_size` / `file_mtime_ms`, the BE fail-closes the rehydration if
+  the current file has drifted from the recorded size or modification
+  time; if the underlying filesystem does not expose modification time
+  (S3 / OSS), the mtime check is silently skipped. Anchor count per
+  chunk is capped by the BE config `parquet_read_rows_max_anchors`
+  (default 10000).
+
+  **Scope of `source_info` anchors.** The anchor is written only for
+  rejections captured by the **parquet scanner's per-row path**
+  (string-too-long, decimal precision overflow, scanner-side type
+  mismatch). Rejections coming from the downstream **tablet sink**
+  (NULL_VIOLATION, partition-range miss, etc.) — which include the
+  common `INSERT INTO ... SELECT cast(...) FROM FILES('parquet')`
+  pattern where the SQL `cast` turns a malformed value into `NULL`
+  before the sink rejects it — leave `source_info` as `NULL`. In those
+  cases `raw_record` still holds the sink-rendered row, but
+  `parquet_read_rows()` has nothing to rehydrate from. To exercise the
+  TVF, write the load so the bad cell trips the scanner directly
+  (don't insert a `cast` that masks it as a NULL).
 - **`information_schema.loads.rejected_record_path` is deprecated.**
   The BE-local tab-delimited rejected-record file it used to point at
   was removed; the column is kept for upgrade compatibility but is
