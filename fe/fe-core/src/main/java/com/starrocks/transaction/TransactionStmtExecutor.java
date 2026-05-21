@@ -289,7 +289,7 @@ public class TransactionStmtExecutor {
                     commitInfos,
                     failInfos,
                     txnCommitAttachment,
-                    timeout);
+                    timeout * 1000L);
 
             long publishWaitMs = Config.enable_sync_publish ? jobDeadLineMs - System.currentTimeMillis() :
                     context.getSessionVariable().getTransactionVisibleWaitTimeout() * 1000;
