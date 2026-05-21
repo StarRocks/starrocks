@@ -728,8 +728,18 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
     }
 
     public String getMetaDefaultValue(List<String> extras) {
+        // Generator expressions must win over any materialized defaultValue: schema-change paths freeze
+        // ALTER-time into defaultValue so BE can backfill existing rows, but metadata callers (DESCRIBE,
+        // information_schema.columns) must still report the generator, not the frozen literal.
+        if (defaultExpr != null && isEmptyDefaultTimeFunction(defaultExpr)) {
+            if (extras != null) {
+                extras.add("DEFAULT_GENERATED");
+            }
+            return "CURRENT_TIMESTAMP";
+        }
         if (defaultValue != null) {
             return defaultValue;
+<<<<<<< HEAD
         } else if (defaultExpr != null) {
             if (isEmptyDefaultTimeFunction(defaultExpr)) {
                 if (extras != null) {
@@ -741,7 +751,17 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
                     extras.add("DEFAULT_GENERATED");
                 }
                 return defaultExpr.getExpr();
+=======
+        }
+        if (defaultExpr != null) {
+            if (defaultExpr.hasExprObject()) {
+                return defaultExpr.toSql();
+>>>>>>> 352dd60b03 ([BugFix] Preserve current_timestamp generator on ALTER ADD COLUMN (#73455))
             }
+            if (extras != null) {
+                extras.add("DEFAULT_GENERATED");
+            }
+            return defaultExpr.getExpr();
         }
         return null;
     }
