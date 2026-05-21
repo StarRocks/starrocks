@@ -669,7 +669,7 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
     public Void visitAddMVColumnClause(AddMVColumnClause clause, ConnectContext context) {
         MaterializedView mv = (MaterializedView) table;
         String columnName = clause.getColumnName();
-
+        
         // Check if column already exists
         if (mv.getColumn(columnName) != null) {
             throw new SemanticException("Column '%s' already exists in materialized view", columnName);
