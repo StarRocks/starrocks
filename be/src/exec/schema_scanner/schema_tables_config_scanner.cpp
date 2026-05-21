@@ -62,6 +62,9 @@ Status SchemaTablesConfigScanner::start(RuntimeState* state) {
     }
     TGetTablesConfigRequest tables_config_req;
     tables_config_req.__set_auth_info(auth_info);
+    if (nullptr != _param->table) {
+        tables_config_req.__set_table_name(*(_param->table));
+    }
 
     // init schema scanner state
     RETURN_IF_ERROR(SchemaScanner::init_schema_scanner_state(state));
