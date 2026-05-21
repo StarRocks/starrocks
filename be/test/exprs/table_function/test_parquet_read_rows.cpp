@@ -88,8 +88,9 @@ protected:
 
         std::vector<std::string> type_names;
         for (auto& d : type_descs) type_names.push_back(d.debug_string());
-        ASSIGN_OR_RETURN(auto schema, parquet::ParquetBuildHelper::make_schema(
-                                              type_names, type_descs, std::vector<FileColumnId>(type_descs.size())));
+        ASSIGN_OR_RETURN(auto schema,
+                         parquet::ParquetBuildHelper::make_schema(
+                                 type_names, type_descs, std::vector<parquet::FileColumnId>(type_descs.size())));
         ASSIGN_OR_RETURN(auto file, FileSystem::Default()->new_writable_file(path));
         ASSIGN_OR_RETURN(auto properties,
                          parquet::ParquetBuildHelper::make_properties(parquet::ParquetBuilderOptions()));
@@ -150,9 +151,9 @@ TEST_F(ParquetReadRowsTableFunctionTest, RehydrateMiddleRow) {
     auto [columns, offsets] = _tvf.process(_runtime_state.get(), state);
     ASSERT_OK(state->status());
     ASSERT_EQ(3, columns.size());
-    auto* file_col = down_cast<BinaryColumn*>(columns[0].get());
-    auto* row_col = down_cast<Int64Column*>(columns[1].get());
-    auto* raw_col = down_cast<JsonColumn*>(columns[2].get());
+    auto* file_col = down_cast<const BinaryColumn*>(columns[0].get());
+    auto* row_col = down_cast<const Int64Column*>(columns[1].get());
+    auto* raw_col = down_cast<const JsonColumn*>(columns[2].get());
 
     ASSERT_EQ(1, file_col->size());
     ASSERT_EQ(parquet_path, file_col->get_slice(0).to_string());
@@ -195,7 +196,7 @@ TEST_F(ParquetReadRowsTableFunctionTest, RehydrateMultipleRowsSameFile) {
     auto [columns, offsets] = _tvf.process(_runtime_state.get(), state);
     ASSERT_OK(state->status());
 
-    auto* row_col = down_cast<Int64Column*>(columns[1].get());
+    auto* row_col = down_cast<const Int64Column*>(columns[1].get());
     ASSERT_EQ(2, row_col->size());
     EXPECT_EQ(0, row_col->get_data()[0]);
     EXPECT_EQ(2, row_col->get_data()[1]);
