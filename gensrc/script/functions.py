@@ -862,7 +862,6 @@ vectorized_functions = [
     [100012, 'version', True, False, 'VARCHAR', [], "UtilityFunctions::version"],
     [100013, 'current_version', True, False, 'VARCHAR', [], "UtilityFunctions::current_version"],
     [100014, 'last_query_id', True, False, 'VARCHAR', [], "UtilityFunctions::last_query_id"],
-    [100027, 'query_id', True, False, 'VARCHAR', [], "UtilityFunctions::query_id"],
     [100015, 'uuid', True, False, 'VARCHAR', [], "UtilityFunctions::uuid"],
     [100016, 'uuid_numeric', True, False, 'LARGEINT', [], "UtilityFunctions::uuid_numeric"],
     [100017, 'assert_true', True, False, 'BOOLEAN', ['BOOLEAN'], 'UtilityFunctions::assert_true'],
@@ -872,6 +871,7 @@ vectorized_functions = [
     [100024, 'encode_sort_key', True, False, 'VARBINARY', ['ANY_ELEMENT', '...'], 'UtilityFunctions::encode_sort_key'],
     [100025, 'uuid_v7', True, False, 'VARCHAR', [], "UtilityFunctions::uuid_v7"],
     [100026, 'uuid_v7_numeric', True, False, 'LARGEINT', [], "UtilityFunctions::uuid_v7_numeric"],
+    [100027, 'query_id', True, False, 'VARCHAR', [], "UtilityFunctions::query_id"],
 
     # materialize: identity function that acts as an optimization barrier.
     # Returns the input unchanged but is opaque to the FE optimizer,
