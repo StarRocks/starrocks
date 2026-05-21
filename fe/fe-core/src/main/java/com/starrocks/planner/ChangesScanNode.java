@@ -139,16 +139,24 @@ public class ChangesScanNode extends AbstractOlapTableScanNode {
                                 com.starrocks.sql.common.ErrorType.INTERNAL_ERROR);
                     }
                     Collections.shuffle(allQueryableReplicas);
+                    boolean hasAliveReplica = false;
                     for (Replica replica : allQueryableReplicas) {
                         ComputeNode node = GlobalStateMgr.getCurrentState().getNodeMgr()
                                 .getClusterInfo().getBackendOrComputeNode(replica.getBackendId());
                         if (node == null) {
+                            LOG.debug("replica {} not exists", replica.getBackendId());
                             continue;
                         }
                         TScanRangeLocation location = new TScanRangeLocation(
                                 new TNetworkAddress(node.getHost(), node.getBePort()));
                         location.setBackend_id(replica.getBackendId());
                         scanRangeLocations.addToLocations(location);
+                        hasAliveReplica = true;
+                    }
+                    if (!hasAliveReplica) {
+                        throw new StarRocksPlannerException(
+                                "tablet " + tablet.getId() + " have no alive replicas",
+                                com.starrocks.sql.common.ErrorType.INTERNAL_ERROR);
                     }
 
                     result.add(scanRangeLocations);
