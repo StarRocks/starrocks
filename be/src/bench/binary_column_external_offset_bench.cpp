@@ -41,7 +41,7 @@
 #include "common/memory/mem_hook_allocator.h"
 #include "common/object_pool.h"
 #include "common/system/cpu_info.h"
-#include "exec/arrow_to_starrocks_converter.h"
+#include "column/arrow/arrow_to_starrocks_converter.h"
 #include "exec/join/join_hash_table.h"
 #include "exec/sorting/sort_permute.h"
 #include "exprs/agg/aggregate_state_allocator.h"
