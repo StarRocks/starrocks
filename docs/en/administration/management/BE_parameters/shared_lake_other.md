@@ -58,6 +58,15 @@ This topic introduces the following types of BE configurations:
 - Description: The maximum number of rows that need to be rebuilt in cloud-native Primary Key index. If the number of rows that need to be rebuilt during index recovery exceeds this threshold, StarRocks will flush the in-memory MemTable immediately to reduce the rebuild overhead. Set to `0` to disable this early-flush strategy. Works in conjunction with `cloud_native_pk_index_rebuild_files_threshold`; a flush is triggered if either threshold is exceeded.
 - Introduced in: -
 
+### cloud_native_tablet_metadata_ancestors_recorded
+
+- Default: 5
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: Number of historical tablet-metadata ancestor versions retained per tablet; sets the trackable horizon for CHANGES queries. A larger value lets CHANGES reach further-back base versions at the cost of metadata storage.
+- Introduced in: -
+
 ### download_buffer_size
 
 - Default: 4194304

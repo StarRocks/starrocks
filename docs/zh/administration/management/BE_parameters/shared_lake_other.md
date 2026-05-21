@@ -55,6 +55,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 描述：云原生主键索引在恢复（Rebuild）时允许重建的最大行数。若需要重建的行数超过该阈值，StarRocks 会立即将内存中的 MemTable 刷盘，以降低索引重建开销。设置为 `0` 则禁用此提前刷盘策略。与 `cloud_native_pk_index_rebuild_files_threshold` 配合使用，任一阈值超出均会触发刷盘。
 - 引入版本：-
 
+### cloud_native_tablet_metadata_ancestors_recorded
+
+- 默认值：5
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：每个 tablet 保留的历史 tablet metadata 祖先版本数量，决定 CHANGES 查询可追溯的版本范围。值越大，CHANGES 可回溯到更早的 base 版本，但会增加 metadata 存储开销。
+- 引入版本：-
+
 ### download_buffer_size
 
 - 默认值：4194304
