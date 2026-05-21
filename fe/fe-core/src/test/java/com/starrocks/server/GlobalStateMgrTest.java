@@ -79,22 +79,19 @@ import org.mockito.Mockito;
 
 import java.io.File;
 import java.lang.reflect.Field;
+import java.lang.reflect.Method;
 import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
-<<<<<<< HEAD
-=======
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Future;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ThreadPoolExecutor;
-import java.util.concurrent.atomic.AtomicBoolean;
->>>>>>> 391c048928 ([Refactor] Centralize refresh-other-FE concurrency management in GlobalStateMgr (#73395))
 
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
@@ -387,70 +384,6 @@ public class GlobalStateMgrTest {
         table = newState.getLocalMetastore().getTable("db2", "t1");
         Assertions.assertEquals(1, table.getForeignKeyConstraints().size());
     }
-<<<<<<< HEAD
-=======
-
-    @Test
-    public void testStopOneInvokesAction() throws Exception {
-        GlobalStateMgr mgr = new MyGlobalStateMgr(false);
-        AtomicBoolean ran = new AtomicBoolean(false);
-        Runnable action = () -> ran.set(true);
-
-        Method stopOne = GlobalStateMgr.class.getDeclaredMethod("stopOne", String.class, Runnable.class);
-        stopOne.setAccessible(true);
-        stopOne.invoke(mgr, "fakeDaemon", action);
-
-        Assertions.assertTrue(ran.get(), "stopOne must invoke the action");
-    }
-
-    @Test
-    public void testStopOneSwallowsThrowable() throws Exception {
-        // stopOne wraps each daemon's stopGracefully so that a single misbehaving daemon
-        // does not abort the demotion drain mid-way and leave later daemons running.
-        GlobalStateMgr mgr = new MyGlobalStateMgr(false);
-        AtomicBoolean ran = new AtomicBoolean(false);
-        Runnable action = () -> {
-            ran.set(true);
-            throw new RuntimeException("boom");
-        };
-
-        Method stopOne = GlobalStateMgr.class.getDeclaredMethod("stopOne", String.class, Runnable.class);
-        stopOne.setAccessible(true);
-        // No exception expected to escape.
-        stopOne.invoke(mgr, "throwingDaemon", action);
-
-        Assertions.assertTrue(ran.get(), "action should still run");
-    }
-
-    @Test
-    public void testStopLeaderOnlyDaemonThreadsDrivesEveryWiredDaemon() throws Exception {
-        // Sanity test for the demotion drain wiring: every daemon listed in
-        // stopLeaderOnlyDaemonThreads must be reachable and its stopGracefully invocation must
-        // be shielded by stopOne, so a misbehaving daemon cannot abort the drain. The lazily
-        // initialized timePrinter / txnTimeoutChecker fields are still null here, exercising the
-        // null-skip branches.
-        GlobalStateMgr mgr = new MyGlobalStateMgr(false);
-
-        Method stop = GlobalStateMgr.class.getDeclaredMethod("stopLeaderOnlyDaemonThreads");
-        stop.setAccessible(true);
-        // None of the daemons are running; every stopGracefully is effectively a state reset.
-        // Any throwable from a daemon's onStopped is contained by stopOne, so the call must
-        // complete without propagating.
-        stop.invoke(mgr);
-    }
-
-    @Test
-    public void testStopLeaderOnlyDaemonThreadsCoversLazilyInitializedDaemons() throws Exception {
-        // timePrinter and txnTimeoutChecker are created lazily after the leader has activated;
-        // exercise the non-null branch so the drain stops them too.
-        GlobalStateMgr mgr = new MyGlobalStateMgr(false);
-        mgr.createTxnTimeoutChecker();
-        mgr.createTimePrinter();
-
-        Method stop = GlobalStateMgr.class.getDeclaredMethod("stopLeaderOnlyDaemonThreads");
-        stop.setAccessible(true);
-        stop.invoke(mgr);
-    }
 
     @Test
     public void testRefreshOtherFeExecutorsResizeAfterConfigRefresh() throws Exception {
@@ -734,5 +667,4 @@ public class GlobalStateMgrTest {
         method.setAccessible(true);
         return (TStatus) method.invoke(globalStateMgr, thriftAddress, tableName, partitions);
     }
->>>>>>> 391c048928 ([Refactor] Centralize refresh-other-FE concurrency management in GlobalStateMgr (#73395))
 }
