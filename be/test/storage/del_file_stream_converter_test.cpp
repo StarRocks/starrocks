@@ -289,7 +289,8 @@ TEST_F(DelFileStreamConverterTest, V1ToV2_SingleTinyInt) {
     check_v1_to_v2<int8_t>(TYPE_TINYINT, {-128, -1, 0, 1, 127});
 }
 TEST_F(DelFileStreamConverterTest, V1ToV2_SingleSmallInt) {
-    check_v1_to_v2<int16_t>(TYPE_SMALLINT, {std::numeric_limits<int16_t>::min(), 0, std::numeric_limits<int16_t>::max()});
+    check_v1_to_v2<int16_t>(TYPE_SMALLINT,
+                            {std::numeric_limits<int16_t>::min(), 0, std::numeric_limits<int16_t>::max()});
 }
 TEST_F(DelFileStreamConverterTest, V1ToV2_SingleDate) {
     // DATE storage type is int32 (Julian day count). Use representative values.
@@ -303,8 +304,8 @@ TEST_F(DelFileStreamConverterTest, V1ToV2_SingleDateTime) {
 // and requires_v1_to_v2_del_transcode(...) for every combination that matters.
 TEST_F(DelFileStreamConverterTest, Predicates_SchemaOverload) {
     // Single fixed-length non-string types -> true.
-    for (LogicalType t : {TYPE_BOOLEAN, TYPE_TINYINT, TYPE_SMALLINT, TYPE_INT, TYPE_BIGINT, TYPE_LARGEINT, TYPE_DATE,
-                          TYPE_DATETIME}) {
+    for (LogicalType t :
+         {TYPE_BOOLEAN, TYPE_TINYINT, TYPE_SMALLINT, TYPE_INT, TYPE_BIGINT, TYPE_LARGEINT, TYPE_DATE, TYPE_DATETIME}) {
         ASSERT_TRUE(is_single_fixed_length_non_string_primary_key(*create_single_pk_schema(t)))
                 << "type=" << static_cast<int>(t);
     }
