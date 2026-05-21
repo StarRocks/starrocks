@@ -1275,7 +1275,9 @@ IndexChannel::~IndexChannel() {
 
 Status IndexChannel::init(RuntimeState* state, const std::vector<PTabletWithPartition>& tablets, bool is_incremental) {
     {
+        TEST_SYNC_POINT("IndexChannel::init::before_lock");
         std::unique_lock<std::shared_mutex> lock(_node_channels_mutex);
+        TEST_SYNC_POINT("IndexChannel::init::after_lock");
         for (const auto& tablet : tablets) {
             auto* location = _parent->_location->find_tablet(tablet.tablet_id());
             if (location == nullptr) {
