@@ -74,7 +74,7 @@ class OpaHttpClient implements OpaPolicyClient {
         try {
             return parseBooleanResult(post(policyUrl, request));
         } catch (OpaQueryException e) {
-            LOG.warn("OPA authorization request failed: {}", e.getMessage());
+            LOG.warn("OPA authorization request failed", e);
             return false;
         }
     }
