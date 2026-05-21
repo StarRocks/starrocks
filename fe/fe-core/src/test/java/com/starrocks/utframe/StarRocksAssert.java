@@ -369,6 +369,10 @@ public class StarRocksAssert {
         String symbolProp = props.getOrDefault(CreateFunctionStmt.SYMBOL_KEY, "");
         boolean isolated = !"shared".equalsIgnoreCase(
                 props.getOrDefault(CreateFunctionStmt.ISOLATION_KEY, ""));
+        TFunctionBinaryType binaryType = CreateFunctionStmt.TYPE_STARROCKS_PYTHON.equalsIgnoreCase(
+                props.get(CreateFunctionStmt.TYPE_KEY))
+                ? TFunctionBinaryType.PYTHON
+                : TFunctionBinaryType.SRJAR;
 
         Function function;
         if (createFunctionStmt.isAggregate()) {
@@ -379,7 +383,7 @@ public class StarRocksAssert {
                     TypeFactory.createVarcharType(TypeFactory.getOlapMaxVarcharLength()),
                     argsDef.isVariadic(),
                     "true".equalsIgnoreCase(props.get(CreateFunctionStmt.IS_ANALYTIC_NAME)));
-            agg.setBinaryType(TFunctionBinaryType.SRJAR);
+            agg.setBinaryType(binaryType);
             agg.setLocation(new HdfsURI(fileProp));
             agg.setIsolationType(isolated);
             function = agg;
@@ -390,16 +394,21 @@ public class StarRocksAssert {
                     Arrays.asList(argsDef.getArgTypes()),
                     Lists.newArrayList(returnType.getType()),
                     argsDef.isVariadic());
-            tbl.setBinaryType(TFunctionBinaryType.SRJAR);
+            tbl.setBinaryType(binaryType);
             tbl.setLocation(new HdfsURI(fileProp));
             tbl.setSymbolName(symbolProp);
             function = tbl;
         } else {
             // Scalar — preserve existing behavior (empty typed fields) for back-compatibility
-            function = ScalarFunction.createUdf(
+            ScalarFunction sfn = ScalarFunction.createUdf(
                     functionName, argsDef.getArgTypes(),
-                    returnType.getType(), argsDef.isVariadic(), TFunctionBinaryType.SRJAR,
+                    returnType.getType(), argsDef.isVariadic(), binaryType,
                     fileProp, symbolProp, "", "", isolated, null);
+            sfn.setInputType(props.get(CreateFunctionStmt.INPUT_TYPE));
+            if (createFunctionStmt.getContent() != null) {
+                sfn.setContent(createFunctionStmt.getContent());
+            }
+            function = sfn;
         }
 
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(ctx.getDatabase());

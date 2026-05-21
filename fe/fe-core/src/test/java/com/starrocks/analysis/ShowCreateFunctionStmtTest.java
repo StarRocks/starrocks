@@ -51,6 +51,15 @@ public class ShowCreateFunctionStmtTest {
                 "CREATE GLOBAL FUNCTION echo_python(int) RETURNS int PROPERTIES " +
                         "(\"symbol\" = \"Echo\", \"type\" = \"python\", \"file\" = \"xxx\", \"cust_prop\" = \"cust_val\");");
         starRocksAssert.withFunction(
+                "CREATE FUNCTION test_udf_db.python_add(BIGINT) RETURNS BIGINT PROPERTIES (" +
+                        "\"type\" = \"Python\", \"file\" = \"inline\", " +
+                        "\"symbol\" = \"add\", \"input\" = \"arrow\") " +
+                        "AS $$\n" +
+                        "import pyarrow.compute as pc\n" +
+                        "def add(x):\n" +
+                        "    return pc.add(x, 1)\n" +
+                        "$$;");
+        starRocksAssert.withFunction(
                 "CREATE AGGREGATE FUNCTION test_udf_db.my_agg(int) RETURNS bigint PROPERTIES " +
                         "(\"symbol\" = \"com.example.MyAgg\", \"type\" = \"StarrocksJar\", \"file\" = \"xxx\");");
         starRocksAssert.withFunction(
@@ -62,7 +71,7 @@ public class ShowCreateFunctionStmtTest {
                         "(\"symbol\" = \"com.example.MyShared\", \"type\" = \"StarrocksJar\", " +
                         "\"file\" = \"xxx\", \"isolation\" = \"shared\");");
         starRocksAssert.withFunction(
-                "CREATE TABLE FUNCTION test_udf_db.my_table_fn(int) RETURNS bigint PROPERTIES " +
+                "CREATE TABLE FUNCTION IF NOT EXISTS test_udf_db.my_table_fn(int) RETURNS bigint PROPERTIES " +
                         "(\"symbol\" = \"com.example.MyTableFn\", \"type\" = \"StarrocksJar\", \"file\" = \"xxx\");");
     }
 
@@ -198,6 +207,24 @@ public class ShowCreateFunctionStmtTest {
         Assertions.assertTrue(createSql.startsWith("CREATE TABLE FUNCTION"), createSql);
         Assertions.assertTrue(createSql.contains("\"type\" = \"StarrocksJar\""), createSql);
         Assertions.assertTrue(createSql.contains("\"file\" = \"xxx\""), createSql);
+    }
+
+    @Test
+    public void testExecuteShowCreatePythonInlineFunction() throws Exception {
+        ctx.setDatabase("test_udf_db");
+        ShowCreateFunctionStmt stmt = (ShowCreateFunctionStmt) UtFrameUtils.parseStmtWithNewParser(
+                "show create function python_add(bigint)", ctx);
+        ShowResultSet rs = ShowExecutor.execute(stmt, ctx);
+        Assertions.assertEquals(1, rs.getResultRows().size());
+        String createSql = rs.getResultRows().get(0).get(0);
+        Assertions.assertTrue(createSql.startsWith("CREATE FUNCTION"), createSql);
+        Assertions.assertTrue(createSql.contains("\"type\" = \"Python\""), createSql);
+        Assertions.assertTrue(createSql.contains("\"file\" = \"inline\""), createSql);
+        Assertions.assertTrue(createSql.contains("\"symbol\" = \"add\""), createSql);
+        Assertions.assertTrue(createSql.contains("\"input\" = \"arrow\""), createSql);
+        Assertions.assertTrue(createSql.contains("AS $$"), createSql);
+        Assertions.assertTrue(createSql.contains("import pyarrow.compute"), createSql);
+        Assertions.assertTrue(createSql.contains("def add(x)"), createSql);
     }
 
 }
