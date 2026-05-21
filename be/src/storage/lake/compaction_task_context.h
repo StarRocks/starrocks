@@ -63,7 +63,15 @@ struct CompactionTaskStats {
     void collect(const OlapWriterStatistics& writer_stats);
     CompactionTaskStats operator+(const CompactionTaskStats& that) const;
     CompactionTaskStats operator-(const CompactionTaskStats& that) const;
-    std::string to_json_stats();
+    std::string to_json_stats() const;
+
+    // Same JSON layout as to_json_stats(), with parallel-subtask metadata fields
+    // (subtask_id, input_rowsets, is_parallel_subtask) appended. Used for the
+    // PROFILE column of be_cloud_native_compactions so that both the
+    // CompactionTaskStats counters and per-subtask metadata are visible. Actual
+    // read volume is already reported via read_local_mb / read_remote_mb in the
+    // stats fields, so the planned input_bytes is intentionally omitted.
+    std::string to_json_stats_with_subtask_metadata(int32_t subtask_id, size_t input_rowsets) const;
 };
 
 // Context of a single tablet compaction task.
@@ -119,6 +127,10 @@ struct CompactionTaskContext : public butil::LinkNode<CompactionTaskContext> {
     int32_t subtask_id = -1; // -1 means not a parallel compaction subtask
     // Number of subtasks in this compaction (1 for normal compaction, >1 for parallel compaction)
     int32_t subtask_count = 1;
+    // Snapshot of the parallel-subtask input footprint, copied from SubtaskInfo at execution
+    // start so that the PROFILE column of be_cloud_native_compactions can keep reporting it
+    // after the subtask leaves running_subtasks.
+    int64_t subtask_input_rowsets = 0;
     // Flag to indicate this is a merged context from parallel compaction.
     // When true, cleanup_tablet should be called in remove_states after RPC response is sent.
     bool is_parallel_merged = false;
