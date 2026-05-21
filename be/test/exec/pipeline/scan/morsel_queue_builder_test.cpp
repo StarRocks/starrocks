@@ -21,6 +21,7 @@
 #include "exec/pipeline/scan/fixed_morsel_queue_builder.h"
 #include "exec/pipeline/scan/olap_dynamic_morsel_queue_builder.h"
 #include "exec/pipeline/scan/olap_fixed_morsel_queue_builder.h"
+#include "exec/pipeline/scan/olap_morsel_queue.h"
 #include "exec/pipeline/scan/split_morsel_queue_builder.h"
 
 namespace starrocks::pipeline {
@@ -146,6 +147,28 @@ TEST_F(MorselQueueBuilderTest, dynamic_builder_build_from_morsels_does_not_prese
     ASSERT_EQ(1, queue->max_degree_of_parallelism());
     ASSERT_TRUE(queue->has_more_scan_ranges());
     ASSERT_TRUE(queue->has_more_from_split());
+}
+
+TEST_F(MorselQueueBuilderTest, olap_dynamic_builder_from_preserves_generic_builder_state) {
+    auto generic_builder = make_dynamic_morsel_queue_builder(make_morsels(2), true, 8);
+    generic_builder->set_has_more_from_split(true);
+
+    auto olap_builder = make_olap_dynamic_morsel_queue_builder_from(std::move(generic_builder));
+    ASSERT_TRUE(olap_builder->can_uniform_distribute());
+    ASSERT_EQ(2, olap_builder->num_original_morsels());
+    ASSERT_EQ(8, olap_builder->max_degree_of_parallelism());
+    ASSERT_TRUE(olap_builder->has_more_scan_ranges());
+    ASSERT_TRUE(olap_builder->has_more_from_split());
+
+    auto queue_or = olap_builder->build();
+    ASSERT_TRUE(queue_or.ok()) << queue_or.status().to_string();
+    auto queue = std::move(queue_or).value();
+    ASSERT_EQ(MorselQueue::Type::DYNAMIC, queue->type());
+    ASSERT_EQ(2, queue->num_original_morsels());
+    ASSERT_EQ(8, queue->max_degree_of_parallelism());
+    ASSERT_TRUE(queue->has_more_scan_ranges());
+    ASSERT_TRUE(queue->has_more_from_split());
+    ASSERT_NE(nullptr, dynamic_cast<OlapMorselQueue*>(queue.get()));
 }
 
 TEST_F(MorselQueueBuilderTest, split_builders_build_split_queues) {

@@ -23,4 +23,6 @@ namespace starrocks::pipeline {
 MorselQueueBuilderPtr make_olap_dynamic_morsel_queue_builder(Morsels&& morsels, bool has_more_scan_ranges,
                                                              size_t max_dop = 0);
 
+MorselQueueBuilderPtr make_olap_dynamic_morsel_queue_builder_from(MorselQueueBuilderPtr builder);
+
 } // namespace starrocks::pipeline

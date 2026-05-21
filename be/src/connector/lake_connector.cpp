@@ -32,6 +32,7 @@
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/query_context.h"
 #include "exec/pipeline/scan/glm_manager.h"
+#include "exec/pipeline/scan/olap_dynamic_morsel_queue_builder.h"
 #include "exec/pipeline/scan/scan_morsel.h"
 #include "exec/pipeline/scan/split_scan_morsel.h"
 #include "exec/query_scan_metrics.h"
@@ -1349,6 +1350,7 @@ StatusOr<pipeline::MorselQueueBuilderPtr> LakeDataSourceProvider::convert_scan_r
                      DataSourceProvider::convert_scan_range_to_morsel_queue_builder(
                              *effective_scan_ranges, node_id, pipeline_dop, enable_tablet_internal_parallel,
                              tablet_internal_parallel_mode, num_total_scan_ranges, (size_t)lake_scan_parallelism));
+    builder = pipeline::make_olap_dynamic_morsel_queue_builder_from(std::move(builder));
     if (_could_split) {
         builder->set_has_more_from_split(true);
     }
