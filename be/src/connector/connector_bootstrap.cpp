@@ -28,6 +28,10 @@
 #include "connector/elasticsearch/es_connector.h"
 #endif
 
+#ifdef STARROCKS_WITH_CONNECTOR_MYSQL
+#include "connector/mysql/mysql_connector.h"
+#endif
+
 namespace starrocks::connector {
 
 namespace {
@@ -49,6 +53,9 @@ Status bootstrap_builtin_connectors() {
 #endif
 #ifdef STARROCKS_WITH_CONNECTOR_ELASTICSEARCH
     install_if_absent<ESConnector>(registry, Connector::ES);
+#endif
+#ifdef STARROCKS_WITH_CONNECTOR_MYSQL
+    install_if_absent<MySQLConnector>(registry, Connector::MYSQL);
 #endif
     return Status::OK();
 }
