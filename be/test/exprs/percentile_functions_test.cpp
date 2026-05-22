@@ -17,6 +17,7 @@
 #include <glog/logging.h>
 #include <gtest/gtest.h>
 
+#include "exprs/agg/percentile_union.h"
 #include "exprs/function_context.h"
 #include "types/percentile_value.h"
 
@@ -59,6 +60,28 @@ TEST_F(PercentileFunctionsTest, percentileHashTest) {
     ASSERT_EQ(1, percentile->get_object(0)->quantile(1));
     ASSERT_EQ(2, percentile->get_object(1)->quantile(1));
     ASSERT_EQ(3, percentile->get_object(2)->quantile(1));
+}
+
+TEST_F(PercentileFunctionsTest, percentileUnionStateLazyInitFromFirstUpdate) {
+    // Without the lazy-init fix the union state defaults to TDigest(1000) and
+    // silently downgrades digests stored at higher compression. After the fix
+    // the very first incoming digest's compression seeds the state.
+    PercentileUnionAggregateFunction agg;
+    PercentileUnionState state;
+    ASSERT_FALSE(state.compression_initialized);
+
+    PercentileValue incoming(5000.0);
+    incoming.add(1.0f);
+    agg.update_state(ctx, reinterpret_cast<AggDataPtr>(&state), &incoming);
+
+    ASSERT_TRUE(state.compression_initialized);
+    ASSERT_DOUBLE_EQ(5000.0, state.value.compression());
+
+    // Subsequent updates must not re-seed.
+    PercentileValue second(1000.0);
+    second.add(2.0f);
+    agg.update_state(ctx, reinterpret_cast<AggDataPtr>(&state), &second);
+    ASSERT_DOUBLE_EQ(5000.0, state.value.compression());
 }
 
 TEST_F(PercentileFunctionsTest, percentileNullTest) {

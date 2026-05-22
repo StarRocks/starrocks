@@ -64,6 +64,8 @@ public:
 
     Value quantile(Value q) { return _tdigest.quantile(q); }
 
+    double compression() const { return _tdigest.compression(); }
+
 private:
     enum PercentileDataType { TDIGEST = 0 };
     TDigest _tdigest;
