@@ -17,11 +17,8 @@
 #include <gtest/gtest.h>
 
 #include <chrono>
-<<<<<<< HEAD:be/test/types/int256_test.cpp
-=======
 #include <climits>
 #include <iomanip>
->>>>>>> bd0182bd46 ([Enhancement]Fix compilation errors with GCC 16 / LLVM 22 (#73670)):be/test/base/int256_test.cpp
 #include <sstream>
 #include <string>
 
