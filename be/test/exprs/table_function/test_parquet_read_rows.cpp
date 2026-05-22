@@ -88,8 +88,10 @@ protected:
         chunk->append_column(std::move(col_val), 1);
         chunk->append_column(std::move(col_name), 2);
 
-        std::vector<std::string> type_names;
-        for (auto& d : type_descs) type_names.push_back(d.debug_string());
+        // Use explicit column names so the parquet schema preserves "id" /
+        // "val" / "name" — `debug_string()` would emit type descriptors
+        // (e.g. "INT") and the two INT columns would collide.
+        std::vector<std::string> type_names{"id", "val", "name"};
         auto schema_or = parquet::ParquetBuildHelper::make_schema(
                 type_names, type_descs, std::vector<parquet::FileColumnId>(type_descs.size()));
         if (!schema_or.ok()) {
