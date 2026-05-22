@@ -285,4 +285,36 @@ public class RuntimeProfileParserTest {
 
         checkParser(query);
     }
+
+    @Test
+    public void testUnitCounterAcceptsDecimalValue() {
+        String content = String.join("\n",
+                "profile:",
+                "   - smallDecimal: 5.50",
+                "   - largeDecimal: 3074457345618258400.000",
+                "");
+        RuntimeProfile profile = RuntimeProfileParser.parseFrom(content);
+        Assertions.assertNotNull(profile);
+        Counter small = profile.getCounter("smallDecimal");
+        Assertions.assertNotNull(small);
+        Assertions.assertEquals(TUnit.UNIT, small.getType());
+        Assertions.assertEquals(5, small.getValue());
+        // Above-limit values fall back to the InfoString path so the line stays parseable.
+        Assertions.assertNull(profile.getCounter("largeDecimal"));
+        Assertions.assertEquals("3074457345618258400.000", profile.getInfoString("largeDecimal"));
+    }
+
+    @Test
+    public void testUnitPerSecCounterAcceptsDecimalValue() {
+        String content = String.join("\n",
+                "profile:",
+                "   - rate: 7.25 /sec",
+                "");
+        RuntimeProfile profile = RuntimeProfileParser.parseFrom(content);
+        Assertions.assertNotNull(profile);
+        Counter counter = profile.getCounter("rate");
+        Assertions.assertNotNull(counter);
+        Assertions.assertEquals(TUnit.UNIT_PER_SECOND, counter.getType());
+        Assertions.assertEquals(7, counter.getValue());
+    }
 }
