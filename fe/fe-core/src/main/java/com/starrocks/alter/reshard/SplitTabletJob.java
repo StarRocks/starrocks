@@ -38,13 +38,16 @@ import com.starrocks.catalog.Tuple;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.Range;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.Utils;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.proto.TxnInfoPB;
 import com.starrocks.proto.TxnTypePB;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TTabletReshardJobsItem;
@@ -54,6 +57,7 @@ import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -121,10 +125,11 @@ public class SplitTabletJob extends TabletReshardJob {
     /*
      * 1. Set table state to TABLET_RESHARD
      * 2. Begin transaction (allocate transaction id)
-     * 3. Commit transaction (update next version)
-     * 4. Add new tablets to inverted index
-     * 5. Register resharding tablets
-     * 6. Set job state to PREPARING
+     * 3. Create new shards on StarOS
+     * 4. Commit transaction (update next version)
+     * 5. Add new tablets to inverted index
+     * 6. Register resharding tablets
+     * 7. Set job state to PREPARING
      * Job cannot be cancelled after this step
      */
     @Override
@@ -137,18 +142,26 @@ public class SplitTabletJob extends TabletReshardJob {
         transactionId = globalStateMgr.getGlobalTransactionMgr().getTransactionIDGenerator().getNextTransactionId();
         gtid = globalStateMgr.getGtidGenerator().nextGtid();
 
-        // 3. Commit transaction (update next version)
+        // 3. Create new shards on StarOS — the last "abortable" step before the no-abort
+        //    boundary below. No table lock needed: setTableState above already moved the
+        //    table to TABLET_RESHARD, which blocks concurrent DDL. If this throws, run()
+        //    catches, abort() fires (state still PENDING), runAbortingJob unwinds the
+        //    FE-side mutations, and any orphan staros shards from a partial RPC are reaped
+        //    by StarMgrMetaSyncer's diff-and-purge cycle.
+        createShardsOnStarOS();
+
+        // 4. Commit transaction (update next version)
         // NOTE: After updateNextVersions(), the table's next version is advanced.
         // From this point the job must not abort or throw, because the run() wrapper would attempt to abort.
         updateNextVersions();
 
-        // 4. Add new tablets to inverted index
+        // 5. Add new tablets to inverted index
         addTabletsToInvertedIndex();
 
-        // 5. Register resharding tablets
+        // 6. Register resharding tablets
         registerReshardingTablets();
 
-        // 6. Set job state to PREPARING
+        // 7. Set job state to PREPARING
         setJobState(JobState.PREPARING);
     }
 
@@ -158,7 +171,6 @@ public class SplitTabletJob extends TabletReshardJob {
      */
     @Override
     protected void runPreparingJob() {
-        // 1. Wait for previous versions published
         try (LockedObject<OlapTable> lockedTable = getLockedTable(LockType.READ)) {
             OlapTable olapTable = lockedTable.get();
             for (ReshardingPhysicalPartition reshardingPhysicalPartition : reshardingPhysicalPartitions.values()) {
@@ -167,8 +179,6 @@ public class SplitTabletJob extends TabletReshardJob {
                 if (physicalPartition == null) {
                     continue;
                 }
-
-                // Wait for previous versions published
                 long commitVersion = reshardingPhysicalPartition.getCommitVersion();
                 long visibleVersion = physicalPartition.getVisibleVersion();
                 if (commitVersion != visibleVersion + 1) {
@@ -180,7 +190,6 @@ public class SplitTabletJob extends TabletReshardJob {
             }
         }
 
-        // 2. Set job state to RUNNING
         setJobState(JobState.RUNNING);
     }
 
@@ -343,6 +352,9 @@ public class SplitTabletJob extends TabletReshardJob {
      * 3. Set table state to NORMAL
      * 4. Update metrics
      * 5. Set job state to ABORTED
+     *
+     * Any orphan staros shards from a partial createShardsOnStarOS in runPendingJob are
+     * reaped by StarMgrMetaSyncer's diff-and-purge cycle; no explicit deleteShards here.
      */
     @Override
     protected void runAbortingJob() {
@@ -747,16 +759,17 @@ public class SplitTabletJob extends TabletReshardJob {
     }
 
     private LockedObject<OlapTable> getLockedTable(LockType lockType) {
+        return new LockedObject<>(dbId, List.of(tableId), lockType, getOlapTable());
+    }
+
+    private OlapTable getOlapTable() {
         Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(dbId, tableId);
         if (table == null) { // Table is dropped
             errorMessage = "Table not found";
             setJobState(JobState.ABORTING);
             throw new TabletReshardException("Table not found. " + this);
         }
-
-        OlapTable olapTable = (OlapTable) table;
-
-        return new LockedObject<>(dbId, List.of(tableId), lockType, olapTable);
+        return (OlapTable) table;
     }
 
     private void registerReshardingTablets() {
@@ -787,5 +800,138 @@ public class SplitTabletJob extends TabletReshardJob {
                 }
             }
         }
+    }
+
+    /**
+     * Create StarOS shards for this split job.
+     *
+     * <p>Called from {@link #runPendingJob} as the last "abortable" step, immediately
+     * before {@code updateNextVersions} (the no-abort boundary). A failure surfaces as
+     * a {@link TabletReshardException} that {@code run()} catches and abort()s on;
+     * {@link #runAbortingJob} unwinds the FE-side mutations and any orphan staros
+     * shards from a partial RPC are reaped by {@code StarMgrMetaSyncer}'s
+     * diff-and-purge cycle.
+     */
+    void createShardsOnStarOS() {
+        OlapTable table = getOlapTable();
+        ColocateTableIndex colocateTableIndex = GlobalStateMgr.getCurrentState().getColocateTableIndex();
+        ColocateTableIndex.GroupId rangeColocateGroupId =
+                colocateTableIndex.getRangeColocateGroupId(table.getId());
+        // Snapshot colocate ranges once: the createShard RPCs in the inner loop only ever
+        // read the same grpId, and the ranges list is stable for the duration of this DDL.
+        List<ColocateRange> colocateRanges = rangeColocateGroupId == null ? null
+                : colocateTableIndex.getColocateRangeMgr().getColocateRanges(rangeColocateGroupId.grpId);
+        int colocateColumnCount = rangeColocateGroupId == null ? 0
+                : colocateTableIndex.getGroupSchema(rangeColocateGroupId).getColocateColumnCount();
+
+        try {
+            for (ReshardingPhysicalPartition reshardingPhysicalPartition : reshardingPhysicalPartitions.values()) {
+                PhysicalPartition physicalPartition =
+                        table.getPhysicalPartition(reshardingPhysicalPartition.getPhysicalPartitionId());
+                if (physicalPartition == null) {
+                    continue;
+                }
+                for (ReshardingMaterializedIndex reshardingIndex :
+                        reshardingPhysicalPartition.getReshardingIndexes().values()) {
+                    createShardsForOneIndex(table, physicalPartition, reshardingIndex,
+                            colocateRanges, colocateColumnCount);
+                }
+            }
+        } catch (StarRocksException e) {
+            throw new TabletReshardException(
+                    "Failed to create new shards on StarOS: " + e.getMessage(), e);
+        }
+    }
+
+    private void createShardsForOneIndex(OlapTable table,
+                                         PhysicalPartition physicalPartition,
+                                         ReshardingMaterializedIndex reshardingIndex,
+                                         List<ColocateRange> colocateRanges,
+                                         int colocateColumnCount) throws StarRocksException {
+        MaterializedIndex newIndex = reshardingIndex.getMaterializedIndex();
+        MaterializedIndex oldIndex = physicalPartition.getIndex(reshardingIndex.getMaterializedIndexId());
+        if (colocateRanges != null) {
+            // Range-colocate invariant (P1): the old MaterializedIndex must exist so we can
+            // derive each tablet's TabletRange for the PACK lookup.
+            Preconditions.checkState(oldIndex != null,
+                    "Missing old MaterializedIndex for range-colocate split");
+        }
+
+        // LinkedHashMap so the CreateShardInfo list within each (partition, index) RPC
+        // payload follows the ReshardingTablet iteration order; the same batch produced
+        // by a leader-switch re-run emits a byte-equivalent payload.
+        Map<Long, Long> newToOldShardId = new LinkedHashMap<>();
+        Map<Long, List<Long>> newShardIdToGroupIds = new LinkedHashMap<>();
+        for (ReshardingTablet reshardingTablet : reshardingIndex.getReshardingTablets()) {
+            addShardPlacementsForTablet(reshardingTablet, oldIndex, newIndex,
+                    colocateRanges, colocateColumnCount,
+                    newToOldShardId, newShardIdToGroupIds);
+        }
+        if (newToOldShardId.isEmpty()) {
+            return;
+        }
+
+        long physicalPartitionId = physicalPartition.getId();
+        Map<String, String> shardProperties = new HashMap<>();
+        shardProperties.put(LakeTablet.PROPERTY_KEY_TABLE_ID, Long.toString(table.getId()));
+        shardProperties.put(LakeTablet.PROPERTY_KEY_PARTITION_ID, Long.toString(physicalPartitionId));
+        shardProperties.put(LakeTablet.PROPERTY_KEY_INDEX_ID, Long.toString(newIndex.getId()));
+
+        GlobalStateMgr.getCurrentState().getStarOSAgent().createShardsForSplit(
+                newToOldShardId,
+                newShardIdToGroupIds,
+                table.getPartitionFilePathInfo(physicalPartitionId),
+                table.getPartitionFileCacheInfo(physicalPartitionId),
+                shardProperties, WarehouseManager.DEFAULT_RESOURCE);
+    }
+
+    private static void addShardPlacementsForTablet(ReshardingTablet reshardingTablet,
+                                                    MaterializedIndex oldIndex,
+                                                    MaterializedIndex newIndex,
+                                                    List<ColocateRange> colocateRanges,
+                                                    int colocateColumnCount,
+                                                    Map<Long, Long> newToOldShardId,
+                                                    Map<Long, List<Long>> newShardIdToGroupIds) {
+        long oldTabletId = reshardingTablet.getFirstOldTabletId();
+        List<Long> newTabletIds = reshardingTablet.getNewTabletIds();
+        SplittingTablet splittingTablet = reshardingTablet.getSplittingTablet();
+        List<TabletRange> perNewTabletRanges = splittingTablet != null
+                ? splittingTablet.getNewTabletRanges()
+                : List.of();
+
+        Tablet oldTablet = null;
+        if (colocateRanges != null) {
+            oldTablet = oldIndex.getTablet(oldTabletId);
+            // Range-colocate invariant (P1): every tablet of a range-colocate table has a
+            // TabletRange. Fail fast rather than fall back to prefix=null, which would
+            // silently route new shards into the first ColocateRange's PACK group — wrong
+            // once the group has multiple ranges.
+            Preconditions.checkState(oldTablet != null && oldTablet.getRange() != null,
+                    "Old tablet %s in range-colocate group has no TabletRange", oldTabletId);
+        }
+
+        for (int i = 0; i < newTabletIds.size(); i++) {
+            long newTabletId = newTabletIds.get(i);
+            List<Long> groupIds = new ArrayList<>(2);
+            groupIds.add(newIndex.getShardGroupId()); // SPREAD group is unchanged
+            if (colocateRanges != null) {
+                Range<Tuple> rangeForPackLookup = i < perNewTabletRanges.size()
+                        ? perNewTabletRanges.get(i).getRange()
+                        : oldTablet.getRange().getRange();
+                groupIds.add(lookupPackGroupId(colocateRanges, colocateColumnCount,
+                        rangeForPackLookup, newTabletId));
+            }
+            newToOldShardId.put(newTabletId, oldTabletId);
+            newShardIdToGroupIds.put(newTabletId, groupIds);
+        }
+    }
+
+    private static long lookupPackGroupId(List<ColocateRange> colocateRanges, int colocateColumnCount,
+                                          Range<Tuple> range, long newTabletId) {
+        Tuple prefix = ColocateRangeUtils.extractColocatePrefix(range, colocateColumnCount);
+        int colocateRangeIndex = ColocateRangeMgr.indexOf(colocateRanges, prefix);
+        Preconditions.checkState(colocateRangeIndex >= 0,
+                "Tablet %s has no covering ColocateRange for prefix %s", newTabletId, prefix);
+        return colocateRanges.get(colocateRangeIndex).getShardGroupId();
     }
 }
