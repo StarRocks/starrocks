@@ -308,8 +308,7 @@ static Status convert_arrow_to_json_element(const Array* array, Type::type type_
     }
     case Type::FIXED_SIZE_LIST: {
         vpack::Builder sub_builder;
-        RETURN_IF_ERROR(
-                convert_single_arrow_list(down_cast<const FixedSizeListArray*>(array), offset, &sub_builder));
+        RETURN_IF_ERROR(convert_single_arrow_list(down_cast<const FixedSizeListArray*>(array), offset, &sub_builder));
         builder->add(field_name, sub_builder.slice());
         break;
     }

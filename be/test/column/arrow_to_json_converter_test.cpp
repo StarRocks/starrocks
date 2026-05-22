@@ -70,8 +70,7 @@ TEST(ArrowToJsonConverterTest, ListStructAndMapToJsonColumn) {
     }
 
     {
-        std::vector fields = {arrow::field("id", arrow::int32()),
-                                                             arrow::field("score", arrow::int32())};
+        std::vector fields = {arrow::field("id", arrow::int32()), arrow::field("score", arrow::int32())};
         auto type = arrow::struct_(fields);
         auto id_builder = std::make_shared<arrow::Int32Builder>();
         auto score_builder = std::make_shared<arrow::Int32Builder>();
