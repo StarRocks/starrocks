@@ -78,7 +78,7 @@ public class ShowCreateFunctionStmtTest {
                         "(\"symbol\" = \"com.example.MyGlobalUdf\", \"type\" = \"StarrocksJar\", " +
                         "\"file\" = \"file:///tmp/global.jar\");");
         starRocksAssert.withFunction(
-                "CREATE FUNCTION test_udf_db.sql_add_one(x INT) RETURNS INT AS x + 1;");
+                "CREATE FUNCTION test_udf_db.sql_add_one(x INT) RETURNS x + 1;");
     }
 
     @Test

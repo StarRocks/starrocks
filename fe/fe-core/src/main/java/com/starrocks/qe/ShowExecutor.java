@@ -1281,11 +1281,9 @@ public class ShowExecutor {
             FunctionRef functionRef = statement.getFunctionRef();
             FunctionArgsDef argsDef = statement.getArgsDef();
             boolean isGlobal = statement.isGlobalFunction();
-
             Function fn;
-            String dbFullName;
+            Database db = null;
             if (isGlobal) {
-                dbFullName = null;
                 GlobalFunctionMgr mgr = context.getGlobalStateMgr().getGlobalFunctionMgr();
                 FunctionSearchDesc desc = FunctionRefAnalyzer.buildFunctionSearchDesc(
                         functionRef, argsDef, FunctionRefAnalyzer.GLOBAL_UDF_DB);
@@ -1298,9 +1296,8 @@ public class ShowExecutor {
                         ErrorReport.reportSemanticException(ErrorCode.ERR_NO_DB_ERROR);
                     }
                 }
-                Database db = context.getGlobalStateMgr().getLocalMetastore().getDb(dbName);
+                db = context.getGlobalStateMgr().getLocalMetastore().getDb(dbName);
                 MetaUtils.checkDbNullAndReport(db, dbName);
-                dbFullName = db.getFullName();
                 FunctionSearchDesc desc = FunctionRefAnalyzer.buildFunctionSearchDesc(
                         functionRef, argsDef, dbName);
                 fn = db.getFunction(desc);
@@ -1314,17 +1311,18 @@ public class ShowExecutor {
             List<List<String>> rows = Lists.newArrayList();
             try {
                 if (isGlobal) {
-                    Authorizer.checkAnyActionOnGlobalFunction(context, fn);
+                    Authorizer.checkSystemAction(context, PrivilegeType.CREATE_GLOBAL_FUNCTION);
                 } else {
-                    Authorizer.checkAnyActionOnFunction(context, dbFullName, fn);
+                    Authorizer.checkDbAction(context, InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
+                             db.getFullName(), PrivilegeType.CREATE_FUNCTION);
                 }
             } catch (AccessDeniedException e) {
                 AccessDeniedException.reportAccessDenied(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
                         context.getCurrentUserIdentity(),
                         context.getCurrentRoleIds(),
-                        PrivilegeType.ANY.name(),
-                        isGlobal ? ObjectType.GLOBAL_FUNCTION.name() : ObjectType.FUNCTION.name(),
-                        functionRef.getFnName().toString());
+                        isGlobal ? PrivilegeType.CREATE_GLOBAL_FUNCTION.name() : PrivilegeType.CREATE_FUNCTION.name(),
+                        isGlobal ? ObjectType.SYSTEM.name() : ObjectType.DATABASE.name(),
+                        isGlobal ? null : db.getFullName());
             }
             rows.add(Lists.newArrayList(fn.toSql(false)));
 
