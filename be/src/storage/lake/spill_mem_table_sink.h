@@ -18,14 +18,13 @@
 #include "runtime/mem_tracker.h"
 #include "storage/load_chunk_spiller.h"
 #include "storage/memtable_sink.h"
+#include "storage/load_spill_pipeline_merge_context.h"
 
 namespace starrocks {
 
 class RuntimeState;
 class LoadSpillBlockManager;
 class ThreadPoolToken;
-class LoadSpillPipelineMergeContext;
-
 namespace lake {
 
 class TabletWriter;
