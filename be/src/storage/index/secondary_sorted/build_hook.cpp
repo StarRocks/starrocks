@@ -45,18 +45,38 @@ Status maybe_build_secondary_indexes(int64_t tablet_id, int64_t txn_id, const Ta
     // Reading the segment footer + ordinal index is the per-segment fixed cost
     // we want amortised across N indexes; the per-index work is just an extra
     // column scan + sort + write.
+    //
+    // Skip segments that participate in a bundle file: their on-disk name
+    // refers to a shared file owned by multiple tablets, which we cannot
+    // re-open as a single Segment.
+    //
+    // If any individual Segment::open() fails (most commonly an OSS 404 from
+    // a freshly-flushed segment that the bundle uploader hasn't materialised
+    // yet), log a warning and skip index construction for this rowset
+    // rather than failing the whole commit. This keeps the PoC's write path
+    // non-fatal while production work picks a sturdier hook point.
     std::vector<std::shared_ptr<Segment>> segments;
     segments.reserve(seg_file_infos.size());
     for (size_t i = 0; i < seg_file_infos.size(); ++i) {
         const auto& info = seg_file_infos[i];
+        if (info.bundle_file_offset.has_value() && info.bundle_file_offset.value() >= 0) {
+            LOG(INFO) << "secondary_index: tablet=" << tablet_id << " txn=" << txn_id << " skipping index for bundled segment '"
+                      << info.path << "'";
+            return Status::OK();
+        }
         FileInfo open_info;
         open_info.path = tablet_mgr->segment_location(tablet_id, info.path);
         open_info.size = info.size;
         open_info.encryption_meta = info.encryption_meta;
-        ASSIGN_OR_RETURN(auto seg, Segment::open(fs, open_info, /*segment_id=*/static_cast<uint32_t>(i), source_schema,
-                                                 /*footer_length_hint=*/nullptr,
-                                                 /*partial_rowset_footer=*/nullptr, LakeIOOptions{}, tablet_mgr));
-        segments.push_back(std::move(seg));
+        auto seg_or = Segment::open(fs, open_info, /*segment_id=*/static_cast<uint32_t>(i), source_schema,
+                                     /*footer_length_hint=*/nullptr, /*partial_rowset_footer=*/nullptr,
+                                     LakeIOOptions{}, tablet_mgr);
+        if (!seg_or.ok()) {
+            LOG(WARNING) << "secondary_index: tablet=" << tablet_id << " txn=" << txn_id
+                         << " skipping index, cannot open segment '" << info.path << "': " << seg_or.status();
+            return Status::OK();
+        }
+        segments.push_back(std::move(seg_or).value());
     }
 
     for (const auto& idx_def : idx_defs) {
