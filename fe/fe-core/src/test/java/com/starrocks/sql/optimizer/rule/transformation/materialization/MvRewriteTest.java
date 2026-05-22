@@ -920,6 +920,30 @@ public class MvRewriteTest extends MVTestBase {
     }
 
     @Test
+    public void testPercentileStrictCompressionMatch() throws Exception {
+        String lowCompressionMv = "percentile_strict_low_mv";
+        String highCompressionMv = "percentile_strict_high_mv";
+        String query = "select empid, percentile_approx(salary, 0.95, 5000) from emps group by empid";
+
+        createAndRefreshMv("create materialized view " + lowCompressionMv +
+                " distributed by hash(empid) as select empid, " +
+                "percentile_union(percentile_hash(salary)) from emps group by empid");
+        connectContext.getSessionVariable().setEnableMvPercentileStrictMatch(true);
+        try {
+            PlanTestBase.assertNotContains(getFragmentPlan(query), lowCompressionMv);
+
+            createAndRefreshMv("create materialized view " + highCompressionMv +
+                    " distributed by hash(empid) as select empid, " +
+                    "percentile_union(percentile_hash(salary, 5000)) from emps group by empid");
+            PlanTestBase.assertContains(getFragmentPlan(query), highCompressionMv);
+        } finally {
+            connectContext.getSessionVariable().setEnableMvPercentileStrictMatch(false);
+            dropMv("test", lowCompressionMv);
+            dropMv("test", highCompressionMv);
+        }
+    }
+
+    @Test
     public void testAggExprRewrite() throws Exception {
         // Group by Cast Expr
         starRocksAssert.withMTable("json_tbl",
