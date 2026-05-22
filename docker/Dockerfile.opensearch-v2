@@ -1,0 +1,28 @@
+# 使用支持 Java 17 的环境构建 StarRocks
+FROM starrocks/dev-env-ubuntu:latest as builder
+
+# 复制已编译的 OpenSearch connector 类文件
+COPY output/opensearch-connector/opensearch-connector-classes.jar /tmp/
+
+# 解压
+RUN cd /tmp && jar -xf opensearch-connector-classes.jar
+
+# 最终镜像 - 使用 allin1-ubuntu 作为基础
+FROM starrocks/allin1-ubuntu:3.2.4
+
+# 复制 OpenSearch connector 类文件
+COPY --from=builder /tmp/com/starrocks/connector/opensearch /tmp/opensearch-classes
+
+# 注入到 starrocks-fe.jar
+RUN cd /tmp/opensearch-classes && \
+    jar -uf /data/deploy/starrocks/fe/lib/starrocks-fe.jar com/starrocks/connector/opensearch/*.class && \
+    echo "OpenSearch connector injected"
+
+# 同时复制 ConnectorType（从 dev-env 编译的版本）
+COPY --from=builder /workspace/fe/fe-core/target/classes/com/starrocks/connector/ConnectorType.class /tmp/
+RUN cd /tmp && jar -uf /data/deploy/starrocks/fe/lib/starrocks-fe.jar com/starrocks/connector/ConnectorType.class
+
+EXPOSE 9030 8080
+
+WORKDIR /data/deploy
+CMD ["./entrypoint.sh"]

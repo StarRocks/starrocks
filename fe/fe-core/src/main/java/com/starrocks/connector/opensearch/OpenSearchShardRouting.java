@@ -15,30 +15,23 @@
 // specific language governing permissions and limitations
 // under the License.
 
-package com.starrocks.connector.elasticsearch;
+package com.starrocks.connector.opensearch;
 
-import com.google.gson.annotations.SerializedName;
 import com.starrocks.thrift.TNetworkAddress;
 import org.apache.commons.lang.StringUtils;
 import org.json.JSONObject;
 
-public class EsShardRouting {
+public class OpenSearchShardRouting {
 
-    @SerializedName(value = "in")
     private final String indexName;
-    @SerializedName(value = "sid")
     private final int shardId;
-    @SerializedName(value = "ip")
     private final boolean isPrimary;
-    @SerializedName(value = "addr")
     private final TNetworkAddress address;
 
-    @SerializedName(value = "ha")
     private TNetworkAddress httpAddress;
-    @SerializedName(value = "nid")
     private final String nodeId;
 
-    public EsShardRouting(String indexName, int shardId, boolean isPrimary, TNetworkAddress address, String nodeId) {
+    public OpenSearchShardRouting(String indexName, int shardId, boolean isPrimary, TNetworkAddress address, String nodeId) {
         this.indexName = indexName;
         this.shardId = shardId;
         this.isPrimary = isPrimary;
@@ -46,7 +39,7 @@ public class EsShardRouting {
         this.nodeId = nodeId;
     }
 
-    public static EsShardRouting newSearchShard(String indexName, int shardId, boolean isPrimary,
+    public static OpenSearchShardRouting newSearchShard(String indexName, int shardId, boolean isPrimary,
                                                 String nodeId, JSONObject nodesMap) {
         JSONObject nodeInfo = nodesMap.getJSONObject(nodeId);
         String[] transportAddr = nodeInfo.getString("transport_address").split(":");
@@ -57,7 +50,7 @@ public class EsShardRouting {
         if (!StringUtils.isEmpty(thriftPort)) {
             addr = new TNetworkAddress(transportAddr[0], Integer.parseInt(thriftPort));
         }
-        return new EsShardRouting(indexName, shardId, isPrimary, addr, nodeId);
+        return new OpenSearchShardRouting(indexName, shardId, isPrimary, addr, nodeId);
     }
 
     public int getShardId() {
@@ -90,7 +83,7 @@ public class EsShardRouting {
 
     @Override
     public String toString() {
-        return "EsShardRouting{" +
+        return "OpenSearchShardRouting{" +
                 "indexName='" + indexName + '\'' +
                 ", shardId=" + shardId +
                 ", isPrimary=" + isPrimary +

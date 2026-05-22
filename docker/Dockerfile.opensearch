@@ -1,0 +1,14 @@
+# OpenSearch Connector 增强版 StarRocks Allin1 镜像
+FROM starrocks/allin1-ubuntu:3.2.4
+
+# 复制 OpenSearch connector 类文件到 FE lib 目录
+COPY output/opensearch-connector/opensearch-connector-classes.jar /opt/starrocks/fe/lib/
+
+# 确保文件权限正确
+RUN chmod 644 /opt/starrocks/fe/lib/opensearch-connector-classes.jar
+
+EXPOSE 9030 8080
+
+# 使用工作目录中的 entrypoint
+WORKDIR /data/deploy
+CMD ["./entrypoint.sh"]

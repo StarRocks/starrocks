@@ -1,0 +1,43 @@
+[Feature] Add OpenSearch connector (Phase 1 - HTTP)
+
+## What I'm doing:
+Add OpenSearch 2.9.x external catalog connector with HTTP support.
+
+This PR implements Phase 1 of the OpenSearch connector:
+- HTTP-only connection (no HTTPS/TLS in Phase 1)
+- No authentication required
+- Schema discovery (indices, aliases, mappings)
+- Basic SELECT query support
+- Compatible with OpenSearch 2.9.x
+
+## Implementation:
+- New "opensearch" connector type in ConnectorType
+- 19 Java classes for connector implementation
+- 6 test classes for unit testing
+- Based on existing Elasticsearch connector architecture
+
+## Changes:
+- Modified: ConnectorType.java (add OPENSEARCH enum)
+- Added: connector/opensearch/* (19 source files)
+- Added: connector/opensearch/*Test.java (6 test files)
+- Added: ConnectorTypeTest.java (test for new type)
+
+## Testing:
+- All 19 classes compile successfully
+- Connector registration verified
+- Catalog creation tested
+- Schema discovery (SHOW TABLES, DESCRIBE) working
+- Basic SELECT query execution working
+
+## What type of PR is this:
+- [ ] BugFix
+- [x] Feature
+- [ ] Enhancement
+- [ ] Refactor
+- [ ] UT
+- [ ] Doc
+- [ ] Tool
+
+## Checklist:
+- [x] I have added test cases for my new feature
+- [x] This PR needs user documentation

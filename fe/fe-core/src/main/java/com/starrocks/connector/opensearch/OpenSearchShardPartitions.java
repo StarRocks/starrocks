@@ -32,14 +32,12 @@
 // specific language governing permissions and limitations
 // under the License.
 
-package com.starrocks.connector.elasticsearch;
+package com.starrocks.connector.opensearch;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.connector.exception.StarRocksConnectorException;
-import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.sql.ast.SingleRangePartitionDesc;
 import com.starrocks.thrift.TNetworkAddress;
 import org.apache.logging.log4j.LogManager;
@@ -47,48 +45,26 @@ import org.apache.logging.log4j.Logger;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
-import java.io.IOException;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ThreadLocalRandom;
 
-public class EsShardPartitions implements GsonPostProcessable {
+public class OpenSearchShardPartitions {
 
-    private static final Logger LOG = LogManager.getLogger(EsShardPartitions.class);
+    private static final Logger LOG = LogManager.getLogger(OpenSearchShardPartitions.class);
 
-    @SerializedName(value = "in")
-    private String indexName;
+    private final String indexName;
     // shardid -> host1, host2, host3
-    @SerializedName(value = "sr")
-    private Map<Integer, List<EsShardRouting>> shardRoutings;
-    @SerializedName(value = "pd")
+    private Map<Integer, List<OpenSearchShardRouting>> shardRoutings;
     private SingleRangePartitionDesc partitionDesc;
-    @SerializedName(value = "pk")
     private PartitionKey partitionKey;
-    @SerializedName(value = "pid")
     private long partitionId = -1;
 
-    // Default constructor for Gson deserialization
-    private EsShardPartitions() {
-        this.indexName = "";
-        this.shardRoutings = Maps.newHashMap();
-        this.partitionDesc = null;
-        this.partitionKey = null;
-    }
-
-    public EsShardPartitions(String indexName) {
+    public OpenSearchShardPartitions(String indexName) {
         this.indexName = indexName;
         this.shardRoutings = Maps.newHashMap();
         this.partitionDesc = null;
         this.partitionKey = null;
-    }
-
-    @Override
-    public void gsonPostProcess() throws IOException {
-        // Ensure shardRoutings is not null after deserialization
-        if (shardRoutings == null) {
-            shardRoutings = Maps.newHashMap();
-        }
     }
 
     /**
@@ -98,15 +74,15 @@ public class EsShardPartitions implements GsonPostProcessable {
      * @param searchShards the return value of _search_shards
      * @return shardRoutings is used for searching
      */
-    public static EsShardPartitions findShardPartitions(String indexName, String searchShards)
+    public static OpenSearchShardPartitions findShardPartitions(String indexName, String searchShards)
             throws StarRocksConnectorException {
 
-        EsShardPartitions partitions = new EsShardPartitions(indexName);
+        OpenSearchShardPartitions partitions = new OpenSearchShardPartitions(indexName);
         JSONObject jsonObject = new JSONObject(searchShards);
         JSONArray shards = jsonObject.getJSONArray("shards");
         int length = shards.length();
         for (int i = 0; i < length; i++) {
-            List<EsShardRouting> singleShardRouting = Lists.newArrayList();
+            List<OpenSearchShardRouting> singleShardRouting = Lists.newArrayList();
             JSONArray shardsArray = shards.getJSONArray(i);
             int arrayLength = shardsArray.length();
             for (int j = 0; j < arrayLength; j++) {
@@ -115,7 +91,7 @@ public class EsShardPartitions implements GsonPostProcessable {
                 if ("STARTED".equalsIgnoreCase(shardState) || "RELOCATING".equalsIgnoreCase(shardState)) {
                     try {
                         singleShardRouting.add(
-                                EsShardRouting.newSearchShard(
+                                OpenSearchShardRouting.newSearchShard(
                                         indexShard.getString("index"),
                                         indexShard.getInt("shard"),
                                         indexShard.getBoolean("primary"),
@@ -136,10 +112,10 @@ public class EsShardPartitions implements GsonPostProcessable {
         return partitions;
     }
 
-    public void addHttpAddress(Map<String, EsNodeInfo> nodesInfo) {
-        for (Map.Entry<Integer, List<EsShardRouting>> entry : shardRoutings.entrySet()) {
-            List<EsShardRouting> shardRoutings = entry.getValue();
-            for (EsShardRouting shardRouting : shardRoutings) {
+    public void addHttpAddress(Map<String, OpenSearchNodeInfo> nodesInfo) {
+        for (Map.Entry<Integer, List<OpenSearchShardRouting>> entry : shardRoutings.entrySet()) {
+            List<OpenSearchShardRouting> shardRoutings = entry.getValue();
+            for (OpenSearchShardRouting shardRouting : shardRoutings) {
                 String nodeId = shardRouting.getNodeId();
                 if (nodesInfo.containsKey(nodeId)) {
                     shardRouting.setHttpAddress(nodesInfo.get(nodeId).getPublishAddress());
@@ -150,14 +126,14 @@ public class EsShardPartitions implements GsonPostProcessable {
         }
     }
 
-    public TNetworkAddress randomAddress(Map<String, EsNodeInfo> nodesInfo) {
+    public TNetworkAddress randomAddress(Map<String, OpenSearchNodeInfo> nodesInfo) {
         // return a random value between 0 and 32767 : [0, 32767)
         int seed = ThreadLocalRandom.current().nextInt(Short.MAX_VALUE) % nodesInfo.size();
-        EsNodeInfo[] nodeInfos = nodesInfo.values().toArray(new EsNodeInfo[0]);
+        OpenSearchNodeInfo[] nodeInfos = nodesInfo.values().toArray(new OpenSearchNodeInfo[0]);
         return nodeInfos[seed].getPublishAddress();
     }
 
-    public void addShardRouting(int shardId, List<EsShardRouting> singleShardRouting) {
+    public void addShardRouting(int shardId, List<OpenSearchShardRouting> singleShardRouting) {
         shardRoutings.put(shardId, singleShardRouting);
     }
 
@@ -165,7 +141,7 @@ public class EsShardPartitions implements GsonPostProcessable {
         return indexName;
     }
 
-    public Map<Integer, List<EsShardRouting>> getShardRoutings() {
+    public Map<Integer, List<OpenSearchShardRouting>> getShardRoutings() {
         return shardRoutings;
     }
 
@@ -195,7 +171,7 @@ public class EsShardPartitions implements GsonPostProcessable {
 
     @Override
     public String toString() {
-        return "EsIndexState [indexName=" + indexName + ", partitionDesc=" + partitionDesc + ", partitionKey="
+        return "OpenSearchIndexState [indexName=" + indexName + ", partitionDesc=" + partitionDesc + ", partitionKey="
                 + partitionKey + "]";
     }
 }

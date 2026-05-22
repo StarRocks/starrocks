@@ -98,6 +98,8 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
         BROKER,
         @SerializedName("ELASTICSEARCH")
         ELASTICSEARCH,
+        @SerializedName("OPENSEARCH")
+        OPENSEARCH,
         @SerializedName("HIVE")
         HIVE,
         @SerializedName("ICEBERG")

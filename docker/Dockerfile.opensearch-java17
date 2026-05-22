@@ -1,0 +1,68 @@
+# StarRocks + OpenSearch Connector with Java 17 Runtime
+FROM starrocks/dev-env-ubuntu:latest as builder
+
+# 复制已编译的 OpenSearch connector 类文件到镜像
+COPY output/opensearch-connector/opensearch-connector-classes.jar /tmp/
+COPY fe/fe-core/target/classes/com/starrocks/connector/ConnectorType.class /tmp/
+
+# 解压
+RUN cd /tmp && jar -xf opensearch-connector-classes.jar
+
+# 运行时基础镜像 - 使用 Ubuntu 22.04 with Java 17
+FROM ubuntu:22.04
+
+# 安装 Java 17 和依赖
+RUN apt-get update && apt-get install -y \
+    openjdk-17-jdk \
+    curl \
+    wget \
+    mysql-client \
+    supervisor \
+    nginx \
+    net-tools \
+    && rm -rf /var/lib/apt/lists/*
+
+# 设置 Java 环境
+ENV JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64
+ENV PATH=$JAVA_HOME/bin:$PATH
+
+# 复制 StarRocks 二进制文件（从 allin1-ubuntu:3.2.4 提取）
+# 由于无法直接引用，我们需要手动安装 StarRocks
+# 使用下载方式
+RUN mkdir -p /data/deploy/starrocks
+
+# 下载 StarRocks 3.2.4 社区版
+RUN cd /tmp && \
+    wget -q https://releases.starrocks.io/starrocks/StarRocks-3.2.4.tar.gz 2>/dev/null || \
+    (echo "Downloading from mirror..." && \
+     wget -q https://github.com/StarRocks/starrocks/releases/download/3.2.4/StarRocks-3.2.4.tar.gz) && \
+    tar -xzf StarRocks-3.2.4.tar.gz && \
+    cp -r StarRocks-3.2.4/fe /data/deploy/starrocks/ && \
+    cp -r StarRocks-3.2.4/be /data/deploy/starrocks/ && \
+    rm -rf StarRocks-3.2.4*
+
+# 复制 OpenSearch connector 类文件
+COPY --from=builder /tmp/com/starrocks/connector/opensearch /tmp/opensearch-classes
+COPY --from=builder /tmp/com/starrocks/connector/ConnectorType.class /tmp/
+
+# 注入到 starrocks-fe.jar
+RUN jar -uf /data/deploy/starrocks/fe/lib/starrocks-fe.jar -C /tmp/opensearch-classes com/starrocks/connector/opensearch/ && \
+    jar -uf /data/deploy/starrocks/fe/lib/starrocks-fe.jar -C /tmp com/starrocks/connector/ConnectorType.class && \
+    rm -rf /tmp/opensearch-classes /tmp/ConnectorType.class && \
+    echo "OpenSearch connector injected successfully"
+
+# 创建必要的目录
+RUN mkdir -p /data/deploy/starrocks/fe/meta /data/deploy/starrocks/be/storage
+
+# 配置文件
+COPY docker/dockerfiles/allin1/fe.conf /data/deploy/starrocks/fe/conf/fe.conf
+COPY docker/dockerfiles/allin1/be.conf /data/deploy/starrocks/be/conf/be.conf
+
+# 入口脚本
+COPY docker/dockerfiles/allin1/entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
+EXPOSE 9030 8080 8040 9060
+
+WORKDIR /data/deploy
+ENTRYPOINT ["/entrypoint.sh"]

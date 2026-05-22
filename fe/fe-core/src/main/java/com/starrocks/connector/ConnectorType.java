@@ -26,6 +26,8 @@ import com.starrocks.connector.iceberg.IcebergConnector;
 import com.starrocks.connector.jdbc.JDBCConnector;
 import com.starrocks.connector.kudu.KuduConnector;
 import com.starrocks.connector.odps.OdpsConnector;
+import com.starrocks.connector.opensearch.OpenSearchConfig;
+import com.starrocks.connector.opensearch.OpenSearchConnector;
 import com.starrocks.connector.paimon.PaimonConnector;
 import com.starrocks.connector.unified.UnifiedConnector;
 import org.apache.commons.lang3.EnumUtils;
@@ -36,6 +38,7 @@ import java.util.Set;
 public enum ConnectorType {
 
     ES("es", ElasticsearchConnector.class, EsConfig.class),
+    OPENSEARCH("opensearch", OpenSearchConnector.class, OpenSearchConfig.class),
     HIVE("hive", HiveConnector.class, null),
     ICEBERG("iceberg", IcebergConnector.class, null),
     JDBC("jdbc", JDBCConnector.class, null),
@@ -49,6 +52,7 @@ public enum ConnectorType {
 
     public static final Set<ConnectorType> SUPPORT_TYPE_SET = EnumSet.of(
             ES,
+            OPENSEARCH,
             HIVE,
             ICEBERG,
             JDBC,

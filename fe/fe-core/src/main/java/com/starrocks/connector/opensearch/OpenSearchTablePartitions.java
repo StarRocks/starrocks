@@ -32,11 +32,10 @@
 // specific language governing permissions and limitations
 // under the License.
 
-package com.starrocks.connector.elasticsearch;
+package com.starrocks.connector.opensearch;
 
 import com.google.common.collect.Maps;
 import com.google.common.collect.Range;
-import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.EsTable;
 import com.starrocks.catalog.PartitionInfo;
@@ -45,56 +44,36 @@ import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.common.DdlException;
 import com.starrocks.connector.exception.StarRocksConnectorException;
-import com.starrocks.persist.gson.GsonPostProcessable;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 
 /**
- * save the dynamic info parsed from es cluster state such as shard routing, partition info
+ * save the dynamic info parsed from opensearch cluster state such as shard routing, partition info
  */
-public class EsTablePartitions implements GsonPostProcessable {
+public class OpenSearchTablePartitions {
 
-    private static final Logger LOG = LogManager.getLogger(EsTablePartitions.class);
+    private static final Logger LOG = LogManager.getLogger(OpenSearchTablePartitions.class);
 
-    @SerializedName(value = "pi")
     private PartitionInfo partitionInfo;
-    @SerializedName(value = "piti")
     private Map<Long, String> partitionIdToIndices;
-    @SerializedName(value = "pis")
-    private Map<String, EsShardPartitions> partitionedIndexStates;
-    @SerializedName(value = "upis")
-    private Map<String, EsShardPartitions> unPartitionedIndexStates;
+    private Map<String, OpenSearchShardPartitions> partitionedIndexStates;
+    private Map<String, OpenSearchShardPartitions> unPartitionedIndexStates;
 
-    public EsTablePartitions() {
+    public OpenSearchTablePartitions() {
         partitionInfo = null;
         partitionIdToIndices = Maps.newHashMap();
         partitionedIndexStates = Maps.newHashMap();
         unPartitionedIndexStates = Maps.newHashMap();
     }
 
-    @Override
-    public void gsonPostProcess() throws IOException {
-        // Ensure maps are not null after deserialization
-        if (partitionIdToIndices == null) {
-            partitionIdToIndices = Maps.newHashMap();
-        }
-        if (partitionedIndexStates == null) {
-            partitionedIndexStates = Maps.newHashMap();
-        }
-        if (unPartitionedIndexStates == null) {
-            unPartitionedIndexStates = Maps.newHashMap();
-        }
-    }
-
-    public static EsTablePartitions fromShardPartitions(EsTable esTable, EsShardPartitions shardPartitions)
+    public static OpenSearchTablePartitions fromShardPartitions(EsTable esTable, OpenSearchShardPartitions shardPartitions)
             throws StarRocksConnectorException, DdlException {
-        EsTablePartitions esTablePartitions = new EsTablePartitions();
+        OpenSearchTablePartitions esTablePartitions = new OpenSearchTablePartitions();
         RangePartitionInfo partitionInfo = null;
         if (esTable.getPartitionInfo() != null) {
             if (esTable.getPartitionInfo() instanceof RangePartitionInfo) {
@@ -113,33 +92,33 @@ public class EsTablePartitions implements GsonPostProcessable {
                         idx++;
                     }
                     sb.append(")");
-                    LOG.debug("begin to parse es table [{}] state from search shards,"
+                    LOG.debug("begin to parse opensearch table [{}] state from search shards,"
                             + " with partition info [{}]", esTable.getName(), sb.toString());
                 }
             } else if (esTable.getPartitionInfo() instanceof SinglePartitionInfo) {
-                LOG.debug("begin to parse es table [{}] state from search shards, "
+                LOG.debug("begin to parse opensearch table [{}] state from search shards, "
                         + "with no partition info", esTable.getName());
             } else {
-                throw new StarRocksConnectorException("es table only support range partition, "
+                throw new StarRocksConnectorException("opensearch table only support range partition, "
                         + "but current partition type is "
                         + esTable.getPartitionInfo().getType());
             }
         }
         esTablePartitions.addIndexState(esTable.getIndexName(), shardPartitions);
-        LOG.debug("add index {} to es table {}", shardPartitions, esTable.getName());
+        LOG.debug("add index {} to opensearch table {}", shardPartitions, esTable.getName());
         if (partitionInfo != null) {
             // sort the index state according to partition key and then add to range map
-            List<EsShardPartitions> esShardPartitionsList = new ArrayList<>(
+            List<OpenSearchShardPartitions> esShardPartitionsList = new ArrayList<>(
                     esTablePartitions.getPartitionedIndexStates().values());
-            esShardPartitionsList.sort(Comparator.comparing(EsShardPartitions::getPartitionKey));
+            esShardPartitionsList.sort(Comparator.comparing(OpenSearchShardPartitions::getPartitionKey));
             long partitionId = 0;
-            for (EsShardPartitions esShardPartitions : esShardPartitionsList) {
+            for (OpenSearchShardPartitions esShardPartitions : esShardPartitionsList) {
                 Range<PartitionKey> range = partitionInfo.handleNewSinglePartitionDesc(esTable.getIdToColumn(),
                         esShardPartitions.getPartitionDesc(), partitionId, false);
                 esTablePartitions.addPartition(esShardPartitions.getIndexName(), partitionId);
                 esShardPartitions.setPartitionId(partitionId);
                 ++partitionId;
-                LOG.debug("add parition to es table [{}] with range [{}]", esTable.getName(),
+                LOG.debug("add parition to opensearch table [{}] with range [{}]", esTable.getName(),
                         range);
             }
         }
@@ -162,7 +141,7 @@ public class EsTablePartitions implements GsonPostProcessable {
         partitionIdToIndices.put(partitionId, indexName);
     }
 
-    public void addIndexState(String indexName, EsShardPartitions indexState) {
+    public void addIndexState(String indexName, OpenSearchShardPartitions indexState) {
         if (indexState.getPartitionDesc() != null) {
             partitionedIndexStates.put(indexName, indexState);
         } else {
@@ -170,22 +149,22 @@ public class EsTablePartitions implements GsonPostProcessable {
         }
     }
 
-    public Map<String, EsShardPartitions> getPartitionedIndexStates() {
+    public Map<String, OpenSearchShardPartitions> getPartitionedIndexStates() {
         return partitionedIndexStates;
     }
 
-    public Map<String, EsShardPartitions> getUnPartitionedIndexStates() {
+    public Map<String, OpenSearchShardPartitions> getUnPartitionedIndexStates() {
         return unPartitionedIndexStates;
     }
 
-    public EsShardPartitions getEsShardPartitions(long partitionId) {
+    public OpenSearchShardPartitions getOpenSearchShardPartitions(long partitionId) {
         if (partitionIdToIndices.containsKey(partitionId)) {
             return partitionedIndexStates.get(partitionIdToIndices.get(partitionId));
         }
         return null;
     }
 
-    public EsShardPartitions getEsShardPartitions(String indexName) {
+    public OpenSearchShardPartitions getOpenSearchShardPartitions(String indexName) {
         if (partitionedIndexStates.containsKey(indexName)) {
             return partitionedIndexStates.get(indexName);
         }
