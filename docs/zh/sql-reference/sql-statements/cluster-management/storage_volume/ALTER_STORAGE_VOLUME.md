@@ -14,6 +14,7 @@ displayed_sidebar: docs
 > - 仅拥有特定存储卷 ALTER 权限的用户可以执行该操作。
 > - 已有存储卷的 `TYPE` 、`LOCATIONS` 和其他存储路径相关的参数无法更改，仅能更改认证属性。如果您更改了存储路径相关的配置项，则在此之前创建的数据库和表将变为只读，您无法向其中导入数据。
 > - `enabled` 为 `false` 的存储卷无法被引用。
+> - 在 shared_data 模式下，执行 `ALTER STORAGE VOLUME` 时默认会进行存储可访问性校验；该行为受 FE 配置项 `enable_storage_volume_access_check` 控制，可通过关闭该配置禁用校验。如果更新后的凭证或端点无法访问远端存储，语句会失败。
 
 ## 语法
 
