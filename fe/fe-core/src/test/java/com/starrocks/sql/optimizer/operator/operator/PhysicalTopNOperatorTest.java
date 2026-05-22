@@ -15,6 +15,7 @@
 package com.starrocks.sql.optimizer.operator.operator;
 
 import com.starrocks.catalog.FunctionSet;
+import com.starrocks.catalog.Type;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.OrderSpec;
 import com.starrocks.sql.optimizer.base.Ordering;
@@ -23,7 +24,6 @@ import com.starrocks.sql.optimizer.operator.TopNType;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalTopNOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
-import com.starrocks.type.IntegerType;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
@@ -34,10 +34,10 @@ public class PhysicalTopNOperatorTest {
 
     @Test
     public void testUsedColumns() {
-        ColumnRefOperator orderColumn = new ColumnRefOperator(1, IntegerType.INT, "order_col", true);
-        ColumnRefOperator partitionColumn = new ColumnRefOperator(2, IntegerType.INT, "partition_col", true);
-        ColumnRefOperator preAggInputColumn = new ColumnRefOperator(3, IntegerType.INT, "pre_agg_input_col", true);
-        ColumnRefOperator preAggOutputColumn = new ColumnRefOperator(4, IntegerType.BIGINT, "pre_agg_output_col", true);
+        ColumnRefOperator orderColumn = new ColumnRefOperator(1, Type.INT, "order_col", true);
+        ColumnRefOperator partitionColumn = new ColumnRefOperator(2, Type.INT, "partition_col", true);
+        ColumnRefOperator preAggInputColumn = new ColumnRefOperator(3, Type.INT, "pre_agg_input_col", true);
+        ColumnRefOperator preAggOutputColumn = new ColumnRefOperator(4, Type.BIGINT, "pre_agg_output_col", true);
         PhysicalTopNOperator topN = new PhysicalTopNOperator(
                 new OrderSpec(List.of(new Ordering(orderColumn, true, true))),
                 10,
@@ -52,7 +52,7 @@ public class PhysicalTopNOperatorTest {
                 null,
                 null,
                 Map.of(preAggOutputColumn,
-                        new CallOperator(FunctionSet.SUM, IntegerType.BIGINT, List.of(preAggInputColumn))));
+                        new CallOperator(FunctionSet.SUM, Type.BIGINT, List.of(preAggInputColumn))));
 
         ColumnRefSet usedColumns = topN.getUsedColumns();
         Assertions.assertTrue(usedColumns.contains(orderColumn));
