@@ -134,6 +134,75 @@ protected:
                 row_in_file, file_size, file_mtime_ms);
     }
 
+    // Write a parquet fixture with one row spanning many parquet types so the
+    // append_cell_value branches (BOOL / INT8 / INT16 / INT64 / FLOAT / DOUBLE
+    // / STRING) are all hit by a single rehydrate. Returns the (size, mtime_s)
+    // tuple for anchor construction.
+    StatusOr<std::pair<int64_t, int64_t>> _write_alltypes_fixture(const std::string& path) {
+        std::vector<TypeDescriptor> type_descs{
+                TypeDescriptor::from_logical_type(TYPE_BOOLEAN),
+                TypeDescriptor::from_logical_type(TYPE_TINYINT),
+                TypeDescriptor::from_logical_type(TYPE_SMALLINT),
+                TypeDescriptor::from_logical_type(TYPE_BIGINT),
+                TypeDescriptor::from_logical_type(TYPE_FLOAT),
+                TypeDescriptor::from_logical_type(TYPE_DOUBLE),
+                TypeDescriptor::create_varchar_type(32),
+        };
+
+        auto chunk = std::make_shared<Chunk>();
+        auto col_b = ColumnHelper::create_column(type_descs[0], true);
+        auto col_i8 = ColumnHelper::create_column(type_descs[1], true);
+        auto col_i16 = ColumnHelper::create_column(type_descs[2], true);
+        auto col_i64 = ColumnHelper::create_column(type_descs[3], true);
+        auto col_f = ColumnHelper::create_column(type_descs[4], true);
+        auto col_d = ColumnHelper::create_column(type_descs[5], true);
+        auto col_s = ColumnHelper::create_column(type_descs[6], true);
+
+        bool b = true;
+        int8_t i8 = -7;
+        int16_t i16 = 9999;
+        int64_t i64 = 1234567890123LL;
+        float f = 3.5f;
+        double d = 1.5;
+        col_b->append_numbers(&b, sizeof(bool));
+        col_i8->append_numbers(&i8, sizeof(int8_t));
+        col_i16->append_numbers(&i16, sizeof(int16_t));
+        col_i64->append_numbers(&i64, sizeof(int64_t));
+        col_f->append_numbers(&f, sizeof(float));
+        col_d->append_numbers(&d, sizeof(double));
+        col_s->append_strings(std::vector<Slice>{Slice("seven")});
+
+        chunk->append_column(std::move(col_b), 0);
+        chunk->append_column(std::move(col_i8), 1);
+        chunk->append_column(std::move(col_i16), 2);
+        chunk->append_column(std::move(col_i64), 3);
+        chunk->append_column(std::move(col_f), 4);
+        chunk->append_column(std::move(col_d), 5);
+        chunk->append_column(std::move(col_s), 6);
+
+        std::vector<std::string> type_names{"b", "i8", "i16", "i64", "f", "d", "s"};
+        auto schema_or = parquet::ParquetBuildHelper::make_schema(
+                type_names, type_descs, std::vector<parquet::FileColumnId>(type_descs.size()));
+        if (!schema_or.ok()) {
+            return Status::InternalError(strings::Substitute("make_schema failed: $0", schema_or.status().ToString()));
+        }
+        auto schema = schema_or.ValueOrDie();
+        ASSIGN_OR_RETURN(auto file, FileSystem::Default()->new_writable_file(path));
+        ASSIGN_OR_RETURN(auto properties,
+                         parquet::ParquetBuildHelper::make_properties(parquet::ParquetBuilderOptions()));
+        auto writer = std::make_shared<parquet::SyncFileWriter>(std::move(file), properties, schema, type_descs,
+                                                                _runtime_state.get());
+        RETURN_IF_ERROR(writer->init());
+        RETURN_IF_ERROR(writer->write(chunk.get()));
+        RETURN_IF_ERROR(writer->close());
+
+        struct stat st {};
+        if (::stat(path.c_str(), &st) != 0) {
+            return Status::IOError("stat failed");
+        }
+        return std::make_pair(static_cast<int64_t>(st.st_size), static_cast<int64_t>(st.st_mtime));
+    }
+
     std::unique_ptr<RuntimeState> _runtime_state;
     std::string _tmp_dir;
     ParquetReadRows _tvf;
@@ -219,6 +288,71 @@ TEST_F(ParquetReadRowsTableFunctionTest, RehydrateMultipleRowsSameFile) {
 
     ASSERT_EQ(3, offsets->size());
     EXPECT_EQ(2, offsets->get_data()[2]);
+
+    ASSERT_OK(_tvf.close(_runtime_state.get(), state));
+}
+
+// ---------- rehydrate a row covering many Arrow type branches at once ----------
+TEST_F(ParquetReadRowsTableFunctionTest, RehydrateExtendedTypes) {
+    std::string parquet_path = _tmp_dir + "/alltypes.parquet";
+    ASSIGN_OR_ABORT(auto meta, _write_alltypes_fixture(parquet_path));
+    int64_t file_size = meta.first;
+    int64_t file_mtime_ms = meta.second * 1000;
+
+    auto input = _make_source_info_column({_make_anchor(parquet_path, 0, file_size, file_mtime_ms)});
+
+    TableFunctionState* state = nullptr;
+    TFunction fn;
+    ASSERT_OK(_tvf.init(fn, &state));
+    state->set_params({input});
+
+    auto [columns, offsets] = _tvf.process(_runtime_state.get(), state);
+    ASSERT_OK(state->status());
+    auto* raw_col = down_cast<const JsonColumn*>(columns[2].get());
+    ASSERT_EQ(1, raw_col->size());
+
+    auto* jv = raw_col->get_object(0);
+    vpack::Slice obj = jv->to_vslice();
+    ASSERT_TRUE(obj.isObject());
+
+    // Each branch's value pulled back via the JSON envelope.
+    ASSERT_TRUE(obj.get("b").isBool());
+    EXPECT_TRUE(obj.get("b").getBool());
+    ASSERT_TRUE(obj.get("i8").isNumber());
+    EXPECT_EQ(-7, obj.get("i8").getNumericValue<int64_t>());
+    ASSERT_TRUE(obj.get("i16").isNumber());
+    EXPECT_EQ(9999, obj.get("i16").getNumericValue<int64_t>());
+    ASSERT_TRUE(obj.get("i64").isNumber());
+    EXPECT_EQ(1234567890123LL, obj.get("i64").getNumericValue<int64_t>());
+    ASSERT_TRUE(obj.get("f").isNumber());
+    EXPECT_NEAR(3.5, obj.get("f").getNumericValue<double>(), 1e-4);
+    ASSERT_TRUE(obj.get("d").isNumber());
+    EXPECT_NEAR(1.5, obj.get("d").getNumericValue<double>(), 1e-12);
+    ASSERT_TRUE(obj.get("s").isString());
+    EXPECT_EQ("seven", obj.get("s").copyString());
+
+    ASSERT_OK(_tvf.close(_runtime_state.get(), state));
+}
+
+// ---------- fail-closed: file mtime mismatch ----------
+TEST_F(ParquetReadRowsTableFunctionTest, MtimeMismatchFailsClosed) {
+    std::string parquet_path = _tmp_dir + "/fixture.parquet";
+    ASSIGN_OR_ABORT(auto meta, _write_fixture(parquet_path, {1, 2, 3}, {100, 200, 300}, {"alice", "bob", "carol"}));
+    int64_t file_size = meta.first;
+    int64_t actual_mtime_ms = meta.second * 1000;
+    // Bump the anchor's mtime so the fail-closed check fires.
+    int64_t stale_mtime_ms = actual_mtime_ms + 60'000;
+
+    auto input = _make_source_info_column({_make_anchor(parquet_path, 0, file_size, stale_mtime_ms)});
+
+    TableFunctionState* state = nullptr;
+    TFunction fn;
+    ASSERT_OK(_tvf.init(fn, &state));
+    state->set_params({input});
+
+    _tvf.process(_runtime_state.get(), state);
+    EXPECT_FALSE(state->status().ok());
+    EXPECT_NE(std::string::npos, state->status().to_string().find("mtime changed"));
 
     ASSERT_OK(_tvf.close(_runtime_state.get(), state));
 }
