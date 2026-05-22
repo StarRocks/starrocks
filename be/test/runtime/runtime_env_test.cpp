@@ -14,9 +14,50 @@
 
 #include <gtest/gtest.h>
 
+#include "base/metrics.h"
+#include "common/config_exec_env_fwd.h"
+#include "common/config_lake_fwd.h"
+#include "common/config_primary_key_fwd.h"
+#include "common/config_vector_index_fwd.h"
+#include "common/system/cpu_info.h"
+#include "common/thread/threadpool.h"
 #include "runtime/env/global_env.h"
 
 namespace starrocks {
+namespace {
+
+void set_small_thread_pool_configs() {
+    config::scanner_thread_pool_thread_num = 1;
+    config::scanner_thread_pool_queue_size = 8;
+    config::streaming_load_thread_pool_num_min = 0;
+    config::streaming_load_thread_pool_idle_time_ms = 10;
+    config::udf_thread_pool_size = 1;
+    config::automatic_partition_thread_pool_thread_num = 1;
+    config::pipeline_prepare_thread_pool_thread_num = 1;
+    config::pipeline_prepare_thread_pool_queue_size = 8;
+    config::pipeline_sink_io_thread_pool_thread_num = 1;
+    config::pipeline_sink_io_thread_pool_queue_size = 8;
+    config::internal_service_query_rpc_thread_num = 1;
+    config::internal_service_datacache_rpc_thread_num = 1;
+    config::dictionary_cache_refresh_threadpool_size = 1;
+    config::pipeline_exec_thread_pool_thread_num = 2;
+    config::load_segment_thread_pool_num_max = 1;
+    config::load_segment_thread_pool_queue_size = 8;
+    config::put_combined_txn_log_thread_pool_num_max = 1;
+
+    config::transaction_publish_version_worker_count = 1;
+    config::pk_index_parallel_execution_threadpool_max_threads = 1;
+    config::pk_index_parallel_execution_threadpool_size = 8;
+    config::pk_index_memtable_flush_threadpool_max_threads = 1;
+    config::pk_index_memtable_flush_threadpool_size = 8;
+    config::lake_partial_update_thread_pool_max_threads = 1;
+    config::lake_partial_update_thread_pool_queue_size = 8;
+    config::lake_metadata_fetch_thread_count = 1;
+    config::vector_index_build_max_cpu_ratio = 1.0;
+    config::config_vector_index_build_concurrency = 1;
+}
+
+} // namespace
 
 TEST(GlobalEnvTest, CalcQueryMemLimit) {
     ASSERT_EQ(GlobalEnv::calc_max_query_memory(-1, 80), -1);
@@ -28,6 +69,64 @@ TEST(GlobalEnvTest, CalcQueryMemLimit) {
 TEST(GlobalEnvTest, GetInstanceReturnsStableSingleton) {
     ASSERT_NE(GlobalEnv::GetInstance(), nullptr);
     ASSERT_EQ(GlobalEnv::GetInstance(), GlobalEnv::GetInstance());
+}
+
+TEST(GlobalEnvTest, OwnsExecutionThreadPools) {
+    CpuInfo::init();
+    set_small_thread_pool_configs();
+
+    auto* env = GlobalEnv::GetInstance();
+    env->destroy_thread_pools();
+
+    MetricRegistry metrics("runtime_env_test");
+    auto st = env->init_execution_thread_pools(&metrics);
+    ASSERT_TRUE(st.ok()) << st;
+
+    ASSERT_NE(env->thread_pool(), nullptr);
+    ASSERT_NE(env->streaming_load_thread_pool(), nullptr);
+    ASSERT_NE(env->load_rowset_thread_pool(), nullptr);
+    ASSERT_NE(env->load_segment_thread_pool(), nullptr);
+    ASSERT_NE(env->put_combined_txn_log_thread_pool(), nullptr);
+    ASSERT_NE(env->pipeline_prepare_pool(), nullptr);
+    ASSERT_NE(env->pipeline_sink_io_pool(), nullptr);
+    ASSERT_NE(env->query_rpc_pool(), nullptr);
+    ASSERT_NE(env->datacache_rpc_pool(), nullptr);
+    ASSERT_NE(env->load_rpc_pool(), nullptr);
+    ASSERT_NE(env->dictionary_cache_pool(), nullptr);
+    ASSERT_NE(env->automatic_partition_pool(), nullptr);
+    ASSERT_EQ(env->max_executor_threads(), 2);
+    ASSERT_EQ(env->dictionary_cache_pool()->max_threads(), 1);
+
+    env->shutdown_thread_pools();
+    env->destroy_thread_pools();
+    ASSERT_EQ(env->thread_pool(), nullptr);
+    ASSERT_EQ(env->load_rpc_pool(), nullptr);
+}
+
+TEST(GlobalEnvTest, OwnsLakeThreadPools) {
+    CpuInfo::init();
+    set_small_thread_pool_configs();
+
+    auto* env = GlobalEnv::GetInstance();
+    env->destroy_thread_pools();
+
+    MetricRegistry metrics("runtime_env_lake_test");
+    auto st = env->init_lake_thread_pools(&metrics);
+    ASSERT_TRUE(st.ok()) << st;
+
+    ASSERT_NE(env->lake_metadata_fetch_thread_pool(), nullptr);
+    ASSERT_NE(env->lake_vector_index_build_thread_pool(), nullptr);
+#ifdef BE_TEST
+    ASSERT_NE(env->put_aggregate_metadata_thread_pool(), nullptr);
+    ASSERT_NE(env->pk_index_execution_thread_pool(), nullptr);
+    ASSERT_NE(env->pk_index_memtable_flush_thread_pool(), nullptr);
+    ASSERT_NE(env->lake_partial_update_thread_pool(), nullptr);
+    ASSERT_EQ(env->pk_index_execution_thread_pool()->max_threads(), 1);
+#endif
+
+    env->shutdown_thread_pools();
+    env->destroy_thread_pools();
+    ASSERT_EQ(env->lake_metadata_fetch_thread_pool(), nullptr);
 }
 
 } // namespace starrocks
