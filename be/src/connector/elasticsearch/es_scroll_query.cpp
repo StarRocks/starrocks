@@ -15,13 +15,13 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "exec/es/es_scroll_query.h"
+#include "connector/elasticsearch/es_scroll_query.h"
 
 #include <sstream>
 
 #include "common/logging.h"
-#include "exec/es/es_query_builder.h"
-#include "exec/es/es_scan_reader.h"
+#include "connector/elasticsearch/es_query_builder.h"
+#include "connector/elasticsearch/es_scan_reader.h"
 #include "rapidjson/document.h"
 #include "rapidjson/stringbuffer.h"
 #include "rapidjson/writer.h"

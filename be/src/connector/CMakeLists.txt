@@ -36,7 +36,6 @@ target_link_libraries(ConnectorPrimitive PUBLIC
 ADD_BE_LIB(Connector
         connector_registry.cpp
         hive_connector.cpp
-        es_connector.cpp
         jdbc_connector.cpp
         lake_connector.cpp
         mysql_connector.cpp
@@ -60,6 +59,31 @@ ADD_BE_LIB(Connector
 )
 
 target_link_libraries(Connector PUBLIC ConnectorPrimitive)
+
+if (WITH_CONNECTOR_ELASTICSEARCH)
+    ADD_BE_LIB(ConnectorElasticsearch
+            elasticsearch/es_connector.cpp
+            elasticsearch/es_predicate.cpp
+            elasticsearch/es_query_builder.cpp
+            elasticsearch/es_scan_reader.cpp
+            elasticsearch/es_scroll_parser.cpp
+            elasticsearch/es_scroll_query.cpp
+    )
+
+    target_link_libraries(ConnectorElasticsearch PUBLIC
+            ConnectorPrimitive
+            HttpCore
+            ExprCore
+            RuntimeCore
+            ChunkCore
+            ColumnCore
+            Types
+            Common
+            Base
+            Gutil
+            StarRocksGen
+    )
+endif()
 
 if (WITH_CONNECTOR_BENCHMARK)
     ADD_BE_LIB(ConnectorBenchmark
@@ -105,6 +129,13 @@ if (WITH_CONNECTOR_BENCHMARK)
     target_compile_definitions(ConnectorBootstrap PRIVATE STARROCKS_WITH_CONNECTOR_BENCHMARK)
     target_link_libraries(ConnectorBootstrap PRIVATE
             ConnectorBenchmark
+    )
+endif()
+
+if (WITH_CONNECTOR_ELASTICSEARCH)
+    target_compile_definitions(ConnectorBootstrap PRIVATE STARROCKS_WITH_CONNECTOR_ELASTICSEARCH)
+    target_link_libraries(ConnectorBootstrap PRIVATE
+            ConnectorElasticsearch
     )
 endif()
 

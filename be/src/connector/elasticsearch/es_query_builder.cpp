@@ -32,7 +32,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "exec/es/es_query_builder.h"
+#include "connector/elasticsearch/es_query_builder.h"
 
 #include <utility>
 

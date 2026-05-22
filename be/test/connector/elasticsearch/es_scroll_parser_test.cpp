@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "exec/es/es_scroll_parser.h"
+#include "connector/elasticsearch/es_scroll_parser.h"
 
 #include <gtest/gtest.h>
 

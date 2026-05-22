@@ -505,6 +505,37 @@
       "remediation": "Keep ConnectorBenchmark limited to the benchgen connector implementation; move registration into ConnectorBootstrap and avoid pulling Connector, storage, service, or full Exec code into the connector library."
     },
     {
+      "id": "connectorelasticsearch",
+      "doc_label": "ConnectorElasticsearch",
+      "summary": "Elasticsearch connector implementation above connector contracts without registry composition, storage, service, or full Exec coupling.",
+      "agents_path": "be/src/connector/elasticsearch/AGENTS.md",
+      "owned_targets": ["ConnectorElasticsearch"],
+      "allowed_include_prefixes": [
+        "connector/elasticsearch/",
+        "connector/connector.h",
+        "connector/data_source.h",
+        "connector/data_source_provider.h",
+        "http/",
+        "exprs/",
+        "runtime/",
+        "column/",
+        "types/",
+        "common/",
+        "base/",
+        "gutil/",
+        "gen_cpp/"
+      ],
+      "forbidden_include_prefixes": ["exec/", "storage/", "service/", "cache/", "util/"],
+      "forbidden_includes": [
+        "connector/connector_registry.h",
+        "runtime/exec_env.h"
+      ],
+      "allowed_target_deps": ["ConnectorPrimitive", "HttpCore", "ExprCore", "RuntimeCore", "ChunkCore", "ColumnCore", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
+      "allowed_test_targets": ["connector_elasticsearch_test"],
+      "allowed_test_link_deps": ["ConnectorElasticsearch", "ConnectorPrimitive", "HttpCore", "ExprCore", "RuntimeCore", "ChunkCore", "ColumnCore", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
+      "remediation": "Keep ConnectorElasticsearch limited to Elasticsearch read-side scan, predicate pushdown, scroll query, and parser logic; move registration into ConnectorBootstrap and avoid pulling Connector, storage, service, or full Exec code into the connector library."
+    },
+    {
       "id": "connectorbootstrap",
       "doc_label": "ConnectorBootstrap",
       "summary": "Connector-layer bootstrap for split connector libraries that install into the default registry without depending on the legacy built-in registry.",
@@ -513,6 +544,7 @@
       "allowed_include_prefixes": [
         "connector/connector_bootstrap.h",
         "connector/benchmark/",
+        "connector/elasticsearch/",
         "connector/connector.h",
         "connector/connector_registry.h",
         "common/",
@@ -525,7 +557,7 @@
         "connector/builtin_connector_registry.h",
         "runtime/exec_env.h"
       ],
-      "allowed_target_deps": ["Connector", "ConnectorBenchmark", "ConnectorPrimitive", "Common", "Base", "Gutil", "StarRocksGen"],
+      "allowed_target_deps": ["Connector", "ConnectorBenchmark", "ConnectorElasticsearch", "ConnectorPrimitive", "Common", "Base", "Gutil", "StarRocksGen"],
       "remediation": "Keep split connector bootstrap independent from ConnectorBuiltinRegistry; add newly split connector libraries here and let service-level startup compose legacy registry plus this bootstrap."
     },
     {

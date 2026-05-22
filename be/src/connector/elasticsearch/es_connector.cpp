@@ -12,20 +12,19 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "connector/es_connector.h"
+#include "connector/elasticsearch/es_connector.h"
 
 #include "common/config_scan_io_fwd.h"
 #include "common/system/backend_options.h"
-#include "exec/es/es_predicate.h"
-#include "exec/es/es_query_builder.h"
-#include "exec/es/es_scan_reader.h"
-#include "exec/es/es_scroll_parser.h"
-#include "exec/es/es_scroll_query.h"
+#include "connector/elasticsearch/es_predicate.h"
+#include "connector/elasticsearch/es_query_builder.h"
+#include "connector/elasticsearch/es_scan_reader.h"
+#include "connector/elasticsearch/es_scroll_parser.h"
+#include "connector/elasticsearch/es_scroll_query.h"
 #include "exprs/chunk_predicate_evaluator.h"
 #include "exprs/expr.h"
 #include "runtime/runtime_state.h"
 #include "runtime/service_contexts.h"
-#include "storage/chunk_helper.h"
 
 namespace starrocks::connector {
 
