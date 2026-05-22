@@ -381,6 +381,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 描述：存算分离集群下，是否允许 Vertical Compaction 任务在执行时缓存数据到本地磁盘上。`true` 表示启用，`false` 表示不启用。
 - 引入版本：v3.1.7, v3.2.3
 
+### lake_replication_file_copy_threads
+
+- 默认值：0
+- 类型：Int
+- 单位：-
+- 是否动态：否
+- 描述：存算分离跨集群复制（lake-to-lake replication）逐文件拷贝所使用的独立线程池大小。`0` 表示 `cpu_cores * 4`（与 `replication_threads` 默认语义一致）；负值表示 `-value * cpu_cores`。该线程池与 agent 任务的 `replicate_snapshot` 线程池刻意区分，目的是让外层任务可以安全地通过 `ThreadPoolToken::wait()` 等待逐文件拷贝子任务，而不触发线程池自死锁保护。该线程池在启动时一次性创建，无运行时 resize 入口，调整大小需重启 CN。
+- 引入版本：-
+
 ### lake_service_max_concurrency
 
 - 默认值：0

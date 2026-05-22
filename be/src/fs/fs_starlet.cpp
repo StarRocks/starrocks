@@ -576,7 +576,16 @@ public:
     }
 
     StatusOr<uint64_t> get_file_size(const std::string& path) override {
-        return Status::NotSupported("StarletFileSystem::get_file_size");
+        ASSIGN_OR_RETURN(auto pair, parse_starlet_uri(path));
+        auto fs_st = get_shard_filesystem(pair.second);
+        if (!fs_st.ok()) {
+            return to_status(fs_st.status());
+        }
+        auto fst = (*fs_st)->stat(pair.first);
+        if (!fst.ok()) {
+            return to_status(fst.status());
+        }
+        return fst->size;
     }
 
     StatusOr<uint64_t> get_file_modified_time(const std::string& path) override {

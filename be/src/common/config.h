@@ -221,6 +221,12 @@ CONF_mInt32(lake_replication_max_file_copy_retry, "3");
 // Minimum number of files required to enable parallel copy in lake-to-lake replication.
 // Set to 0 to force disable parallel copy.
 CONF_mInt32(lake_replication_parallel_copy_min_file_count, "2");
+// Number of threads in the dedicated thread pool for per-file copy in lake-to-lake replication.
+// 0 means cpu_cores * 4 (matches replication_threads default semantics); negative means -value * cpu_cores.
+// This pool is intentionally separate from the agent-task replicate_snapshot pool so that per-file
+// copy sub-tasks can be awaited from the outer task without tripping the thread-pool self-deadlock
+// guard. The pool is built once at startup; CN restart is required to change its size.
+CONF_Int32(lake_replication_file_copy_threads, "0");
 
 // The log dir.
 CONF_String(sys_log_dir, "${STARROCKS_HOME}/log");

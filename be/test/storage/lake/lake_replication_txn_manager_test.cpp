@@ -529,6 +529,40 @@ TEST(LakeReplicationTaskRunnerTest, test_should_use_parallel_copy_can_disable_by
     pool->shutdown();
 }
 
+// Regression test for the self-deadlock fix: an outer task running on one pool must be
+// able to submit work into a DISTINCT inner pool and call ThreadPoolToken::wait() on it.
+// This mirrors how the REPLICATE_SNAPSHOT agent task (outer pool) drives per-file copy
+// sub-tasks on the dedicated `replicate_file` pool. If both ends were the same pool,
+// ThreadPool::check_not_pool_thread_unlocked() would LOG(FATAL) and abort the process.
+TEST(LakeReplicationTaskRunnerTest, test_outer_pool_can_wait_on_distinct_inner_pool) {
+    std::unique_ptr<ThreadPool> outer_pool;
+    ASSERT_OK(ThreadPoolBuilder("repl_outer_pool")
+                      .set_min_threads(1)
+                      .set_max_threads(1)
+                      .set_max_queue_size(8)
+                      .build(&outer_pool));
+    std::unique_ptr<ThreadPool> file_pool;
+    ASSERT_OK(ThreadPoolBuilder("repl_file_pool")
+                      .set_min_threads(1)
+                      .set_max_threads(2)
+                      .set_max_queue_size(16)
+                      .build(&file_pool));
+
+    constexpr int kNumFiles = 8;
+    std::atomic<int> done{0};
+    ASSERT_OK(outer_pool->submit_func([&]() {
+        auto token = file_pool->new_token(ThreadPool::ExecutionMode::CONCURRENT);
+        for (int i = 0; i < kNumFiles; ++i) {
+            ASSERT_OK(token->submit_func([&]() { done.fetch_add(1, std::memory_order_relaxed); }));
+        }
+        token->wait();
+    }));
+    outer_pool->wait();
+    EXPECT_EQ(kNumFiles, done.load());
+    outer_pool->shutdown();
+    file_pool->shutdown();
+}
+
 #ifdef USE_STAROS
 TEST(LakeReplicationTxnManagerTest, test_convert_s3_path_to_starlet_uri) {
     // Test case from user: convert S3 path to starlet URI

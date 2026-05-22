@@ -402,6 +402,15 @@ This topic introduces the following types of BE configurations:
 - Description: Maximum number of retry attempts for non-segment file copy (`.sst`, `.delvec`, `.del`, `.cols`) during lake-to-lake (shared-data) cross-cluster replication. Each attempt verifies the copied file size matches the source to detect truncated copies caused by transient object storage issues. Increase this value if experiencing intermittent file corruption during replication over unreliable storage.
 - Introduced in: -
 
+### lake_replication_file_copy_threads
+
+- Default: 0
+- Type: Int
+- Unit: -
+- Is mutable: No
+- Description: Number of threads in the dedicated thread pool used by lake-to-lake (shared-data) cross-cluster replication for per-file copy. `0` means `cpu_cores * 4` (the same default semantics as `replication_threads`); negative values mean `-value * cpu_cores`. This pool is intentionally separate from the agent-task `replicate_snapshot` pool so that per-file copy sub-tasks can be awaited from the outer task without tripping the thread-pool self-deadlock guard. The pool is built once at startup and has no runtime resize hook, so CN restart is required to change its size.
+- Introduced in: -
+
 ### lake_service_max_concurrency
 
 - Default: 0
