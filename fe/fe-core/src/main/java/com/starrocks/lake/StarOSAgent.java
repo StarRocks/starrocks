@@ -80,6 +80,10 @@ import javax.validation.constraints.NotNull;
  */
 public class StarOSAgent {
     private static final Logger LOG = LogManager.getLogger(StarOSAgent.class);
+    // allocateFilePath uses deterministic suffix (dbId/tableId), so bounded retry is safe.
+    // Keep retries conservative to avoid amplifying StarOS load under persistent failures.
+    private static final int ALLOCATE_FILE_PATH_MAX_ATTEMPTS = 3;
+    private static final long ALLOCATE_FILE_PATH_BASE_BACKOFF_MS = 100L;
 
     public static final String SERVICE_NAME = "starrocks";
 
@@ -242,20 +246,49 @@ public class StarOSAgent {
         return String.format("db%d/%d", dbId, tableId);
     }
 
-    public FilePathInfo allocateFilePath(long dbId, long tableId) throws DdlException {
-        prepare();
-        try {
-            FileStoreType fsType = getFileStoreType(Config.cloud_native_storage_type);
-            if (fsType == null || fsType == FileStoreType.INVALID) {
-                throw new DdlException("Invalid cloud native storage type: " + Config.cloud_native_storage_type);
-            }
-            String suffix = constructTablePath(dbId, tableId);
-            FilePathInfo pathInfo = client.allocateFilePath(serviceId, fsType, suffix);
-            LOG.debug("Allocate file path from starmgr: {}", pathInfo);
-            return pathInfo;
-        } catch (StarClientException e) {
-            throw new DdlException("Failed to allocate file path from StarMgr, error: " + e.getMessage());
+    @FunctionalInterface
+    private interface AllocatePathCall {
+        FilePathInfo call() throws StarClientException;
+    }
+
+    private static boolean isRetryableAllocatePathError(StarClientException e) {
+        String msg = e.getMessage();
+        if (msg == null) {
+            return false;
         }
+        String lower = msg.toLowerCase();
+        return lower.contains("timeout")
+                || lower.contains("deadline")
+                || lower.contains("temporarily unavailable")
+                || lower.contains("resource busy")
+                || lower.contains("try again");
+    }
+
+    private FilePathInfo allocateFilePathWithRetry(AllocatePathCall call, String requestDesc) throws DdlException {
+        prepare();
+        for (int attempt = 1; attempt <= ALLOCATE_FILE_PATH_MAX_ATTEMPTS; attempt++) {
+            try {
+                FilePathInfo pathInfo = call.call();
+                LOG.debug("Allocate file path from starmgr: {}", pathInfo);
+                return pathInfo;
+            } catch (StarClientException e) {
+                boolean canRetry = attempt < ALLOCATE_FILE_PATH_MAX_ATTEMPTS && isRetryableAllocatePathError(e);
+                if (!canRetry) {
+                    throw new DdlException("Failed to allocate file path from StarMgr, request="
+                            + requestDesc + ", error: " + e.getMessage());
+                }
+                long backoffMs = ALLOCATE_FILE_PATH_BASE_BACKOFF_MS << (attempt - 1);
+                LOG.warn("Retry allocateFilePath after transient failure, request={}, attempt={}/{}, backoff={}ms, err={}",
+                        requestDesc, attempt, ALLOCATE_FILE_PATH_MAX_ATTEMPTS, backoffMs, e.getMessage());
+                try {
+                    Thread.sleep(backoffMs);
+                } catch (InterruptedException ie) {
+                    Thread.currentThread().interrupt();
+                    throw new DdlException("Interrupted while retrying allocate file path from StarMgr");
+                }
+            }
+        }
+        throw new DdlException("Failed to allocate file path from StarMgr");
     }
 
     /**
@@ -277,16 +310,20 @@ public class StarOSAgent {
         }
     }
 
-    public FilePathInfo allocateFilePath(String storageVolumeId, long dbId, long tableId) throws DdlException {
-        prepare();
-        try {
-            String suffix = constructTablePath(dbId, tableId);
-            FilePathInfo pathInfo = client.allocateFilePath(serviceId, storageVolumeId, suffix);
-            LOG.debug("Allocate file path from starmgr: {}", pathInfo);
-            return pathInfo;
-        } catch (StarClientException e) {
-            throw new DdlException("Failed to allocate file path from StarMgr, error: " + e.getMessage());
+    public FilePathInfo allocateFilePath(long dbId, long tableId) throws DdlException {
+        FileStoreType fsType = getFileStoreType(Config.cloud_native_storage_type);
+        if (fsType == null || fsType == FileStoreType.INVALID) {
+            throw new DdlException("Invalid cloud native storage type: " + Config.cloud_native_storage_type);
         }
+        String suffix = constructTablePath(dbId, tableId);
+        return allocateFilePathWithRetry(() -> client.allocateFilePath(serviceId, fsType, suffix),
+                String.format("default fsType=%s suffix=%s", fsType, suffix));
+    }
+
+    public FilePathInfo allocateFilePath(String storageVolumeId, long dbId, long tableId) throws DdlException {
+        String suffix = constructTablePath(dbId, tableId);
+        return allocateFilePathWithRetry(() -> client.allocateFilePath(serviceId, storageVolumeId, suffix),
+                String.format("svId=%s suffix=%s", storageVolumeId, suffix));
     }
 
     public FilePathInfo allocateFilePath(String storageVolumeId, String rootDir) throws DdlException {
@@ -1156,5 +1193,40 @@ public class StarOSAgent {
     public static FilePathInfo allocatePartitionFilePathInfo(FilePathInfo tableFilePathInfo, long physicalPartitionId) {
         String allocPath = StarClient.allocateFilePath(tableFilePathInfo, Long.hashCode(physicalPartitionId));
         return tableFilePathInfo.toBuilder().setFullPath(String.format("%s/%d", allocPath, physicalPartitionId)).build();
+    }
+
+    /**
+     * Allocate a partition-scoped {@link FilePathInfo} for a specific child SV of a Composite SV.
+     * Each partition is assigned to one child SV via round-robin; all tablets within the same
+     * partition share this path.
+     *
+     * @param storageVolumeId child SV id (must be a regular SV known to StarOS)
+     * @param dbId            database id
+     * @param tableId         table id
+     * @param partitionId     physical partition id (used for file path construction)
+     * @return partition-level FilePathInfo with fs_info from the specified child SV
+     */
+    public FilePathInfo allocatePartitionFilePathInfoForChildSv(String storageVolumeId,
+                                                                long dbId, long tableId, long partitionId)
+            throws DdlException {
+        FilePathInfo tablePathInfo = allocateFilePath(storageVolumeId, dbId, tableId);
+        return allocatePartitionFilePathInfo(tablePathInfo, partitionId);
+    }
+
+    /**
+     * Batch query {@link ShardInfo} for multiple shards in a single StarOS RPC.
+     * Significantly reduces RPC overhead vs. calling {@link #getShardInfo} per shard.
+     *
+     * @param shardIds      shard ids to query
+     * @param workerGroupId worker group id
+     * @return list of ShardInfo (order matches the StarOS response, not input order)
+     */
+    public List<ShardInfo> getShardInfoBatch(List<Long> shardIds, long workerGroupId)
+            throws StarClientException {
+        if (shardIds.isEmpty()) {
+            return Collections.emptyList();
+        }
+        prepare();
+        return client.getShardInfo(serviceId, shardIds, workerGroupId);
     }
 }

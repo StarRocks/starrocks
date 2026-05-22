@@ -65,6 +65,7 @@ import com.starrocks.sql.ast.AddPartitionColumnClause;
 import com.starrocks.sql.ast.AddRollupClause;
 import com.starrocks.sql.ast.AddSqlBlackListStmt;
 import com.starrocks.sql.ast.AddSqlDigestBlackListStmt;
+import com.starrocks.sql.ast.AddStorageVolumeChildClause;
 import com.starrocks.sql.ast.AdminAlterAutomatedSnapshotIntervalStmt;
 import com.starrocks.sql.ast.AdminCancelRepairTableStmt;
 import com.starrocks.sql.ast.AdminCheckTabletsStmt;
@@ -294,6 +295,7 @@ import com.starrocks.sql.ast.RefreshMaterializedViewStatement;
 import com.starrocks.sql.ast.RefreshSchemeClause;
 import com.starrocks.sql.ast.RefreshTableStmt;
 import com.starrocks.sql.ast.Relation;
+import com.starrocks.sql.ast.RemoveStorageVolumeChildClause;
 import com.starrocks.sql.ast.ReorderColumnsClause;
 import com.starrocks.sql.ast.ReplacePartitionClause;
 import com.starrocks.sql.ast.ReplacePartitionColumnClause;
@@ -4740,10 +4742,12 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
 
         String storageType = ((Identifier) visit(context.typeDesc().identifier())).getValue();
 
-        List<com.starrocks.sql.parser.StarRocksParser.StringContext> locationList = context.locationsDesc().stringList().string();
         List<String> locations = new ArrayList<>();
-        for (com.starrocks.sql.parser.StarRocksParser.StringContext location : locationList) {
-            locations.add(((StringLiteral) visit(location)).getValue());
+        if (context.locationsDesc() != null) {
+            List<StarRocksParser.StringContext> locationList = context.locationsDesc().stringList().string();
+            for (StarRocksParser.StringContext location : locationList) {
+                locations.add(((StringLiteral) visit(location)).getValue());
+            }
         }
 
         return new CreateStorageVolumeStmt(context.IF() != null,
@@ -4776,17 +4780,42 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
         List<AlterStorageVolumeClause> alterClauses = visit(context.alterStorageVolumeClause(),
                 AlterStorageVolumeClause.class);
 
-        Map<String, String> properties = new HashMap<>();
+        Map<String, String> properties = null;
         String comment = null;
+        String addVolumeName = null;
+        String removeVolumeName = null;
         for (AlterStorageVolumeClause clause : alterClauses) {
             if (clause.getOpType().equals(AlterStorageVolumeClause.AlterOpType.ALTER_COMMENT)) {
+                if (comment != null) {
+                    throw new ParsingException("Multiple COMMENT clauses are not allowed in a single ALTER statement");
+                }
                 comment = ((AlterStorageVolumeCommentClause) clause).getNewComment();
             } else if (clause.getOpType().equals(AlterStorageVolumeClause.AlterOpType.MODIFY_PROPERTIES)) {
+                if (properties != null) {
+                    throw new ParsingException("Multiple SET clauses are not allowed in a single ALTER statement");
+                }
                 properties = ((ModifyStorageVolumePropertiesClause) clause).getProperties();
+            } else if (clause.getOpType().equals(AlterStorageVolumeClause.AlterOpType.ADD_VOLUME)) {
+                if (addVolumeName != null) {
+                    throw new ParsingException("Multiple ADD VOLUME clauses are not allowed in a single ALTER statement");
+                }
+                addVolumeName = ((AddStorageVolumeChildClause) clause).getChildVolumeName();
+            } else if (clause.getOpType().equals(AlterStorageVolumeClause.AlterOpType.REMOVE_VOLUME)) {
+                if (removeVolumeName != null) {
+                    throw new ParsingException("Multiple REMOVE VOLUME clauses are not allowed in a single ALTER statement");
+                }
+                removeVolumeName = ((RemoveStorageVolumeChildClause) clause).getChildVolumeName();
             }
         }
+        if (addVolumeName != null && removeVolumeName != null) {
+            throw new ParsingException("Cannot combine ADD VOLUME and REMOVE VOLUME in a single ALTER statement");
+        }
+        if (properties == null) {
+            properties = new HashMap<>();
+        }
 
-        return new AlterStorageVolumeStmt(context.IF() != null, svName, properties, comment, pos);
+        return new AlterStorageVolumeStmt(context.IF() != null, svName, properties, comment,
+                addVolumeName, removeVolumeName, pos);
     }
 
     @Override
@@ -4824,6 +4853,20 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
     public ParseNode visitModifyStorageVolumePropertiesClause(
             com.starrocks.sql.parser.StarRocksParser.ModifyStorageVolumePropertiesClauseContext context) {
         return new ModifyStorageVolumePropertiesClause(getCaseSensitivePropertyList(context.propertyList()), createPos(context));
+    }
+
+    @Override
+    public ParseNode visitAddStorageVolumeChildClause(
+            StarRocksParser.AddStorageVolumeChildClauseContext context) {
+        Identifier identifier = (Identifier) visit(context.identifierOrString());
+        return new AddStorageVolumeChildClause(identifier.getValue(), createPos(context));
+    }
+
+    @Override
+    public ParseNode visitRemoveStorageVolumeChildClause(
+            StarRocksParser.RemoveStorageVolumeChildClauseContext context) {
+        Identifier identifier = (Identifier) visit(context.identifierOrString());
+        return new RemoveStorageVolumeChildClause(identifier.getValue(), createPos(context));
     }
 
     // ----------------------------------------------- FailPoint Statement -----------------------------------------------------

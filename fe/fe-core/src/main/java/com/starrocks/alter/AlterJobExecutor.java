@@ -57,6 +57,7 @@ import com.starrocks.persist.ModifyTablePropertyOperationLog;
 import com.starrocks.persist.SwapTableOperationLog;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.StorageVolumeMgr;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AddColumnClause;
 import com.starrocks.sql.ast.AddColumnsClause;
@@ -101,6 +102,7 @@ import com.starrocks.sql.ast.TableRenameClause;
 import com.starrocks.sql.ast.TruncatePartitionClause;
 import com.starrocks.sql.ast.TruncateTableStmt;
 import com.starrocks.sql.ast.expression.DateLiteral;
+import com.starrocks.storagevolume.StorageVolume;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TTabletMetaType;
 import com.starrocks.thrift.TTabletType;
@@ -588,6 +590,53 @@ public class AlterJobExecutor implements AstVisitorExtendInterface<Void, Connect
                         GlobalStateMgr.getCurrentState().getLocalMetastore().alterTableProperties(db, olapTable, properties);
                     } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_DATACACHE_ENABLE)) {
                         GlobalStateMgr.getCurrentState().getLocalMetastore().alterTableProperties(db, olapTable, properties);
+                    } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_VOLUME)) {
+                        String volumeName = properties.get(PropertyAnalyzer.PROPERTIES_STORAGE_VOLUME);
+                        StorageVolumeMgr svm = GlobalStateMgr.getCurrentState().getStorageVolumeMgr();
+
+                        // 1. Pre-validation: ensure the new SV exists and is enabled before any mutation
+                        StorageVolume newSv = svm.getStorageVolumeByName(volumeName);
+                        if (newSv == null) {
+                            throw new DdlException(String.format("Storage volume '%s' not found", volumeName));
+                        }
+                        if (!newSv.getEnabled()) {
+                            throw new DdlException(String.format("Storage volume '%s' is disabled", volumeName));
+                        }
+
+                        // 2. Remember old SV for rollback on failure
+                        String oldSvId = svm.getStorageVolumeIdOfTable(olapTable.getId());
+
+                        // 3. Unbind + bind with rollback on failure
+                        svm.unbindTableToStorageVolume(olapTable.getId());
+                        try {
+                            if (!svm.bindTableToStorageVolume(volumeName, db.getId(), olapTable.getId())) {
+                                throw new DdlException(
+                                        String.format("Failed to bind table to storage volume '%s'", volumeName));
+                            }
+                            // 4. Update table StorageInfo so future partition creation uses the new SV
+                            String storageVolumeId = svm.getStorageVolumeIdOfTable(olapTable.getId());
+                            GlobalStateMgr.getCurrentState().getLocalMetastore()
+                                    .setLakeStorageInfo(db, olapTable, storageVolumeId, new java.util.HashMap<>());
+                        } catch (Exception e) {
+                            // Rollback: restore the old SV binding
+                            if (oldSvId != null) {
+                                try {
+                                    StorageVolume oldSv = svm.getStorageVolume(oldSvId);
+                                    if (oldSv != null) {
+                                        svm.bindTableToStorageVolume(oldSv.getName(), db.getId(), olapTable.getId());
+                                    }
+                                } catch (Exception rollbackEx) {
+                                    LOG.warn("Failed to rollback SV binding for table {}: {}",
+                                            olapTable.getName(), rollbackEx.getMessage());
+                                }
+                            }
+                            throw (e instanceof DdlException) ? (DdlException) e : new DdlException(e.getMessage());
+                        }
+
+                        // 5. Log: existing partitions/tablets remain on the previous SV's bucket
+                        LOG.info("Changed storage_volume of table {}.{} to '{}'. "
+                                + "NOTE: existing partitions remain on the previous storage volume.",
+                                db.getOriginName(), olapTable.getName(), volumeName);
                     } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_LABELS_LOCATION)) {
                         GlobalStateMgr.getCurrentState().getLocalMetastore().alterTableProperties(db, olapTable, properties);
                     } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_ENABLE_STATISTIC_COLLECT_ON_FIRST_LOAD)) {

@@ -84,15 +84,17 @@ public class CreateStorageVolumeStmt extends DdlStmt {
         }
         sb.append(storageVolumeName);
         sb.append(" TYPE = ").append(storageVolumeType);
-        sb.append(" LOCATIONS = (");
-        for (int i = 0; i < locations.size(); ++i) {
-            if (i == 0) {
-                sb.append("'").append(locations.get(i)).append("'");
-            } else {
-                sb.append(", '").append(locations.get(i)).append("'");
+        if (!locations.isEmpty()) {
+            sb.append(" LOCATIONS = (");
+            for (int i = 0; i < locations.size(); ++i) {
+                if (i == 0) {
+                    sb.append("'").append(locations.get(i)).append("'");
+                } else {
+                    sb.append(", '").append(locations.get(i)).append("'");
+                }
             }
+            sb.append(")");
         }
-        sb.append(")");
         if (!comment.isEmpty()) {
             sb.append(" COMMENT '").append(comment).append("'");
         }
