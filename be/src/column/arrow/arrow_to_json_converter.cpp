@@ -49,9 +49,9 @@ static Status convert_multi_arrow_primitive(const Array* array, JsonColumn* outp
 
 // Convert a single row in Array to json
 template <typename ListArrayT>
-static Status convert_single_arrow_list(const ListArrayT* array, int offset, vpack::Builder* builder);
-static Status convert_single_arrow_struct(const StructArray* array, int offset, vpack::Builder* builder);
-static Status convert_single_arrow_map(const MapArray* array, int offset, vpack::Builder* builder);
+static Status convert_single_arrow_list(const ListArrayT* array, int64_t offset, vpack::Builder* builder);
+static Status convert_single_arrow_struct(const StructArray* array, int64_t offset, vpack::Builder* builder);
+static Status convert_single_arrow_map(const MapArray* array, int64_t offset, vpack::Builder* builder);
 
 // Convert the whole array to json array
 static Status convert_arrow_to_json_array(const Array* array, Type::type value_type, vpack::Builder* output);
@@ -59,14 +59,14 @@ static Status convert_arrow_to_json_array(const StringArray* array, vpack::Build
 static Status convert_arrow_to_json_array(const BooleanArray* array, vpack::Builder* builder);
 
 // Convert the element at offset to a json element, which could be both primitive or nested
-static Status convert_arrow_to_json_element(const Array* array, Type::type type_id, int offset, const std::string& name,
-                                            vpack::Builder* output);
+static Status convert_arrow_to_json_element(const Array* array, Type::type type_id, int64_t offset,
+                                            const std::string& name, vpack::Builder* output);
 
 template <class TypeClass, class CType = typename TypeClass::c_type>
 static enable_if_number<TypeClass, Status> convert_arrow_to_json_array(const NumericArray<TypeClass>* array,
                                                                        vpack::Builder* builder) {
     builder->openArray();
-    for (int i = 0; i < array->length(); i++) {
+    for (int64_t i = 0; i < array->length(); i++) {
         CType value = array->Value(i);
         builder->add(vpack::Value(value));
     }
@@ -115,7 +115,7 @@ static bool inline is_physical_signed(Type::type type) {
 template <typename ListArrayT>
 static Status convert_multi_arrow_list(const ListArrayT* array, JsonColumn* output, size_t array_start_idx,
                                        size_t num_elements) {
-    for (int i = array_start_idx; i < array_start_idx + num_elements; i++) {
+    for (size_t i = array_start_idx; i < array_start_idx + num_elements; i++) {
         vpack::Builder builder;
         RETURN_IF_ERROR(convert_single_arrow_list(array, i, &builder));
         JsonValue json(builder.slice());
@@ -126,7 +126,7 @@ static Status convert_multi_arrow_list(const ListArrayT* array, JsonColumn* outp
 
 static Status convert_multi_arrow_struct(const StructArray* array, JsonColumn* output, size_t array_start_idx,
                                          size_t num_elements) {
-    for (int i = array_start_idx; i < array_start_idx + num_elements; i++) {
+    for (size_t i = array_start_idx; i < array_start_idx + num_elements; i++) {
         vpack::Builder builder;
         RETURN_IF_ERROR(convert_single_arrow_struct(array, i, &builder));
         JsonValue json(builder.slice());
@@ -137,7 +137,7 @@ static Status convert_multi_arrow_struct(const StructArray* array, JsonColumn* o
 
 static Status convert_multi_arrow_map(const MapArray* array, JsonColumn* output, size_t array_start_idx,
                                       size_t num_elements) {
-    for (int i = array_start_idx; i < array_start_idx + num_elements; i++) {
+    for (size_t i = array_start_idx; i < array_start_idx + num_elements; i++) {
         vpack::Builder builder;
         RETURN_IF_ERROR(convert_single_arrow_map(array, i, &builder));
         JsonValue json(builder.slice());
@@ -150,25 +150,25 @@ static Status convert_multi_arrow_primitive(const Array* array, JsonColumn* outp
                                             size_t num_elements) {
     auto type_id = array->type_id();
 
-#define M(type)                                                                  \
-    case type: {                                                                 \
-        using TypeClass = TypeIdTraits<type>::Type;                              \
-        using ArrayType = TypeTraits<TypeClass>::ArrayType;                      \
-        auto real_array = down_cast<const ArrayType*>(array);                    \
-        for (int i = array_start_idx; i < array_start_idx + num_elements; i++) { \
-            vpack::Builder builder;                                              \
-            if (is_physical_signed(type)) {                                      \
-                JsonValue json = JsonValue::from_int(real_array->Value(i));      \
-                output->append(std::move(json));                                 \
-            } else if (arrow::is_unsigned_integer(type)) {                       \
-                JsonValue json = JsonValue::from_uint(real_array->Value(i));     \
-                output->append(std::move(json));                                 \
-            } else if (is_floating(type)) {                                      \
-                JsonValue json = JsonValue::from_double(real_array->Value(i));   \
-                output->append(std::move(json));                                 \
-            }                                                                    \
-        }                                                                        \
-        break;                                                                   \
+#define M(type)                                                                     \
+    case type: {                                                                    \
+        using TypeClass = TypeIdTraits<type>::Type;                                 \
+        using ArrayType = TypeTraits<TypeClass>::ArrayType;                         \
+        auto real_array = down_cast<const ArrayType*>(array);                       \
+        for (size_t i = array_start_idx; i < array_start_idx + num_elements; i++) { \
+            vpack::Builder builder;                                                 \
+            if (is_physical_signed(type)) {                                         \
+                JsonValue json = JsonValue::from_int(real_array->Value(i));         \
+                output->append(std::move(json));                                    \
+            } else if (arrow::is_unsigned_integer(type)) {                          \
+                JsonValue json = JsonValue::from_uint(real_array->Value(i));        \
+                output->append(std::move(json));                                    \
+            } else if (is_floating(type)) {                                         \
+                JsonValue json = JsonValue::from_double(real_array->Value(i));      \
+                output->append(std::move(json));                                    \
+            }                                                                       \
+        }                                                                           \
+        break;                                                                      \
     }
 
     switch (type_id) {
@@ -206,12 +206,12 @@ static Status convert_multi_arrow_primitive(const Array* array, JsonColumn* outp
 }
 
 template <typename ListArrayT>
-static Status convert_single_arrow_list(const ListArrayT* array, int offset, vpack::Builder* builder) {
+static Status convert_single_arrow_list(const ListArrayT* array, int64_t offset, vpack::Builder* builder) {
     std::shared_ptr<Array> slice = array->value_slice(offset);
     return convert_arrow_to_json_array(slice.get(), array->value_type()->id(), builder);
 }
 
-static Status convert_single_arrow_struct(const StructArray* array, int offset, vpack::Builder* builder) {
+static Status convert_single_arrow_struct(const StructArray* array, int64_t offset, vpack::Builder* builder) {
     builder->openObject();
     const StructType* struct_type = array->struct_type();
     for (int i = 0; i < array->num_fields(); i++) {
@@ -225,7 +225,7 @@ static Status convert_single_arrow_struct(const StructArray* array, int offset, 
 }
 
 // Support numeric types and string type
-static StatusOr<std::string> convert_array_element_to_string(const Array* array, int offset) {
+static StatusOr<std::string> convert_array_element_to_string(const Array* array, int64_t offset) {
     switch (array->type_id()) {
     case Type::STRING: {
         auto key_array = down_cast<const StringArray*>(array);
@@ -249,7 +249,7 @@ static StatusOr<std::string> convert_array_element_to_string(const Array* array,
     }
 }
 
-static Status convert_single_arrow_map(const MapArray* array, int offset, vpack::Builder* builder) {
+static Status convert_single_arrow_map(const MapArray* array, int64_t offset, vpack::Builder* builder) {
     const auto& item_array = array->items();
 
     builder->openObject();
@@ -262,7 +262,7 @@ static Status convert_single_arrow_map(const MapArray* array, int offset, vpack:
     return Status::OK();
 }
 
-static Status convert_arrow_to_json_element(const Array* array, Type::type type_id, int offset,
+static Status convert_arrow_to_json_element(const Array* array, Type::type type_id, int64_t offset,
                                             const std::string& field_name, vpack::Builder* builder) {
 #define M(type)                                                          \
     case type: {                                                         \
@@ -345,7 +345,7 @@ static Status convert_arrow_to_json_array(const Array* array, Type::type value_t
     case Type::STRUCT: {
         auto real_array = down_cast<const StructArray*>(array);
         builder->openArray();
-        for (int i = 0; i < array->length(); i++) {
+        for (int64_t i = 0; i < array->length(); i++) {
             RETURN_IF_ERROR(convert_single_arrow_struct(real_array, i, builder));
         }
         builder->close();
@@ -354,7 +354,7 @@ static Status convert_arrow_to_json_array(const Array* array, Type::type value_t
     case Type::LIST: {
         const auto* real_array = down_cast<const ListArray*>(array);
         builder->openArray();
-        for (int i = 0; i < array->length(); i++) {
+        for (int64_t i = 0; i < array->length(); i++) {
             RETURN_IF_ERROR(convert_single_arrow_list(real_array, i, builder));
         }
         builder->close();
@@ -363,7 +363,7 @@ static Status convert_arrow_to_json_array(const Array* array, Type::type value_t
     case Type::LARGE_LIST: {
         const auto* real_array = down_cast<const LargeListArray*>(array);
         builder->openArray();
-        for (int i = 0; i < array->length(); i++) {
+        for (int64_t i = 0; i < array->length(); i++) {
             RETURN_IF_ERROR(convert_single_arrow_list(real_array, i, builder));
         }
         builder->close();
@@ -372,7 +372,7 @@ static Status convert_arrow_to_json_array(const Array* array, Type::type value_t
     case Type::FIXED_SIZE_LIST: {
         const auto* real_array = down_cast<const FixedSizeListArray*>(array);
         builder->openArray();
-        for (int i = 0; i < array->length(); i++) {
+        for (int64_t i = 0; i < array->length(); i++) {
             RETURN_IF_ERROR(convert_single_arrow_list(real_array, i, builder));
         }
         builder->close();
@@ -381,7 +381,7 @@ static Status convert_arrow_to_json_array(const Array* array, Type::type value_t
     case Type::MAP: {
         auto real_array = down_cast<const MapArray*>(array);
         builder->openArray();
-        for (int i = 0; i < array->length(); i++) {
+        for (int64_t i = 0; i < array->length(); i++) {
             RETURN_IF_ERROR(convert_single_arrow_map(real_array, i, builder));
         }
         builder->close();
@@ -396,7 +396,7 @@ static Status convert_arrow_to_json_array(const Array* array, Type::type value_t
 
 static Status convert_arrow_to_json_array(const StringArray* array, vpack::Builder* builder) {
     builder->openArray();
-    for (int i = 0; i < array->length(); i++) {
+    for (int64_t i = 0; i < array->length(); i++) {
         auto value = array->Value(i);
         builder->add(vpack::Value(std::string_view{value.data(), value.length()}));
     }
@@ -406,7 +406,7 @@ static Status convert_arrow_to_json_array(const StringArray* array, vpack::Build
 
 static Status convert_arrow_to_json_array(const BooleanArray* array, vpack::Builder* builder) {
     builder->openArray();
-    for (int i = 0; i < array->length(); i++) {
+    for (int64_t i = 0; i < array->length(); i++) {
         auto value = array->Value(i);
         builder->add(vpack::Value(value));
     }
