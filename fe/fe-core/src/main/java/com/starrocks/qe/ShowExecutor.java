@@ -1281,25 +1281,42 @@ public class ShowExecutor {
             FunctionRef functionRef = statement.getFunctionRef();
             FunctionArgsDef argsDef = statement.getArgsDef();
             boolean isGlobal = statement.isGlobalFunction();
-            Function fn;
             Database db = null;
+            String resolvedDbName = null;
+            try {
+                if (isGlobal) {
+                    Authorizer.checkSystemAction(context, PrivilegeType.CREATE_GLOBAL_FUNCTION);
+                } else {
+                    resolvedDbName = functionRef.getDbName();
+                    if (Strings.isNullOrEmpty(resolvedDbName)) {
+                        resolvedDbName = context.getDatabase();
+                        if (Strings.isNullOrEmpty(resolvedDbName)) {
+                            ErrorReport.reportSemanticException(ErrorCode.ERR_NO_DB_ERROR);
+                        }
+                    }
+                    Authorizer.checkDbAction(context, InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
+                            resolvedDbName, PrivilegeType.CREATE_FUNCTION);
+                    db = context.getGlobalStateMgr().getLocalMetastore().getDb(resolvedDbName);
+                    MetaUtils.checkDbNullAndReport(db, resolvedDbName);
+                }
+            } catch (AccessDeniedException e) {
+                AccessDeniedException.reportAccessDenied(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
+                        context.getCurrentUserIdentity(),
+                        context.getCurrentRoleIds(),
+                        isGlobal ? PrivilegeType.CREATE_GLOBAL_FUNCTION.name() : PrivilegeType.CREATE_FUNCTION.name(),
+                        isGlobal ? ObjectType.SYSTEM.name() : ObjectType.DATABASE.name(),
+                        isGlobal ? null : resolvedDbName);
+            }
+
+            Function fn;
             if (isGlobal) {
                 GlobalFunctionMgr mgr = context.getGlobalStateMgr().getGlobalFunctionMgr();
                 FunctionSearchDesc desc = FunctionRefAnalyzer.buildFunctionSearchDesc(
                         functionRef, argsDef, FunctionRefAnalyzer.GLOBAL_UDF_DB);
                 fn = mgr.getFunction(desc);
             } else {
-                String dbName = functionRef.getDbName();
-                if (Strings.isNullOrEmpty(dbName)) {
-                    dbName = context.getDatabase();
-                    if (Strings.isNullOrEmpty(dbName)) {
-                        ErrorReport.reportSemanticException(ErrorCode.ERR_NO_DB_ERROR);
-                    }
-                }
-                db = context.getGlobalStateMgr().getLocalMetastore().getDb(dbName);
-                MetaUtils.checkDbNullAndReport(db, dbName);
                 FunctionSearchDesc desc = FunctionRefAnalyzer.buildFunctionSearchDesc(
-                        functionRef, argsDef, dbName);
+                        functionRef, argsDef, db.getFullName());
                 fn = db.getFunction(desc);
             }
 
@@ -1309,23 +1326,7 @@ public class ShowExecutor {
             }
 
             List<List<String>> rows = Lists.newArrayList();
-            try {
-                if (isGlobal) {
-                    Authorizer.checkSystemAction(context, PrivilegeType.CREATE_GLOBAL_FUNCTION);
-                } else {
-                    Authorizer.checkDbAction(context, InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
-                             db.getFullName(), PrivilegeType.CREATE_FUNCTION);
-                }
-            } catch (AccessDeniedException e) {
-                AccessDeniedException.reportAccessDenied(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
-                        context.getCurrentUserIdentity(),
-                        context.getCurrentRoleIds(),
-                        isGlobal ? PrivilegeType.CREATE_GLOBAL_FUNCTION.name() : PrivilegeType.CREATE_FUNCTION.name(),
-                        isGlobal ? ObjectType.SYSTEM.name() : ObjectType.DATABASE.name(),
-                        isGlobal ? null : db.getFullName());
-            }
             rows.add(Lists.newArrayList(fn.toSql(false)));
-
             return new ShowResultSet(showResultMetaFactory.getMetadata(statement), rows);
         }
 

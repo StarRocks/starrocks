@@ -189,9 +189,10 @@ public class TableFunction extends Function {
     public String toSql(boolean ifNotExists) {
         StringBuilder sb = new StringBuilder();
         appendCreateHeader(sb, "TABLE", ifNotExists);
+        // getReturnType() is always INVALID for TableFunction, use that only when tableFnReturnTypes is empty
+        Type returnType = tableFnReturnTypes.isEmpty() ? getReturnType() : tableFnReturnTypes.get(0);
         sb.append(signatureString()).append("\n")
-                .append("RETURNS ").append(getReturnType()).append("\n");
-
+                .append("RETURNS ").append(returnType.toSql()).append("\n");
         Map<String, String> props = synthesizePropertiesFromFields();
         appendPropertiesBlock(sb, props);
         return sb.toString();
