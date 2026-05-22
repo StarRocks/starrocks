@@ -65,6 +65,16 @@ Status TabletScanner::init(RuntimeState* runtime_state, const TabletScannerParam
     RETURN_IF_ERROR(_init_unused_output_columns(*params.unused_output_columns));
     RETURN_IF_ERROR(_init_return_columns());
     RETURN_IF_ERROR(_init_global_dicts());
+    // _init_global_dicts intersects the FE-level dict map with this scan's
+    // materialized tablet schema, so the resulting size counts columns that
+    // will actually flow through the encoded path on this scan instance.
+    // Mirrors the marker emitted from the pipeline scan paths.
+    if (_params.global_dictmaps != nullptr && !_params.global_dictmaps->empty() &&
+        _parent->runtime_profile() != nullptr) {
+        _parent->runtime_profile()->add_info_string("GlobalDictOptApplied", "true");
+        _parent->runtime_profile()->add_info_string("GlobalDictAppliedSlots",
+                                                    std::to_string(_params.global_dictmaps->size()));
+    }
     RETURN_IF_ERROR(_init_reader_params(params.key_ranges));
     Schema child_schema = ChunkHelper::convert_schema(_tablet_schema, _reader_columns);
     _reader = std::make_shared<TabletReader>(_tablet, Version(0, _version), std::move(child_schema));

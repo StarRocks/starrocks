@@ -624,7 +624,7 @@ void GroupReaderTest::_check_double_column(Column* column, size_t start, size_t 
 void GroupReaderTest::_check_chunk(GroupReaderParam* param, const ChunkPtr& chunk, size_t start, size_t count) {
     ASSERT_EQ(param->read_cols.size(), chunk->num_columns());
     for (size_t i = 0; i < param->read_cols.size(); i++) {
-        auto column = chunk->mutable_columns()[i].get();
+        auto column = chunk->columns()[i]->as_mutable_ptr().get();
         auto _type = param->read_cols[i].type_in_parquet;
         size_t num_rows = count;
 

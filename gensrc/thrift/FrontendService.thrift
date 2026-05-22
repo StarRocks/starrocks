@@ -66,6 +66,23 @@ struct TAuthenticateParams {
     5: optional list<string> table_names;
 }
 
+// Lightweight password + privilege check used by BE admin HTTP endpoints
+// (e.g. /api/_stop_be). The BE forwards the HTTP Basic Auth credentials it
+// received, plus the system-level privilege the endpoint requires; FE
+// validates the password and the privilege and returns a TStatus.
+struct TCheckAuthRequest {
+    1: optional string user
+    2: optional string passwd
+    3: optional string host
+    // Name of a PrivilegeType enum value (e.g. "NODE", "OPERATE", "ADMIN")
+    // that must be granted on the SYSTEM object.
+    4: optional string required_system_privilege
+}
+
+struct TCheckAuthResponse {
+    1: optional Status.TStatus status
+}
+
 struct TColumnDesc {
   1: required string columnName
   2: required Types.TPrimitiveType columnType
@@ -552,12 +569,25 @@ struct TGetLoadsParams {
     6: optional string table_name
     7: optional string user
     8: optional string state
-    9: optional string load_start_time_from
+    // Legacy wall-clock-string bounds. BE writes them in whatever zone its session
+    // is in (no zone marker on the wire) and FE parses them in TimeUtils.TIME_ZONE
+    // (Asia/Shanghai). They are kept for cross-version compatibility only; new
+    // code should rely on the *_ms fields below, which are unambiguous UTC epoch ms.
+    9:  optional string load_start_time_from
     10: optional string load_start_time_to
     11: optional string load_finish_time_from
     12: optional string load_finish_time_to
     13: optional string create_time_from
     14: optional string create_time_to
+    // UTC epoch milliseconds. Preferred by new FE; set by new BE alongside the
+    // legacy string fields. Lets FE filter without round-tripping through a
+    // wall-clock string in some implicit zone.
+    15: optional i64 load_start_time_from_ms
+    16: optional i64 load_start_time_to_ms
+    17: optional i64 load_finish_time_from_ms
+    18: optional i64 load_finish_time_to_ms
+    19: optional i64 create_time_from_ms
+    20: optional i64 create_time_to_ms
 }
 
 struct TTrackingLoadInfo {
@@ -610,6 +640,14 @@ struct TLoadInfo {
     31: optional string runtime_details
     32: optional string properties
     33: optional i64 num_scan_bytes
+    // UTC epoch milliseconds. Preferred by new BE for materializing the DATETIME
+    // columns of information_schema.loads. When set, BE converts to a DateTimeValue
+    // in the session zone via from_unixtime(); the legacy string fields above are
+    // kept only for old BEs whose code path still relies on from_date_str().
+    34: optional i64 create_time_ms
+    35: optional i64 load_start_time_ms
+    36: optional i64 load_commit_time_ms
+    37: optional i64 load_finish_time_ms
 }
 
 struct TGetLoadsResult {
@@ -1515,6 +1553,7 @@ struct TAuthInfo {
 
 struct TGetTablesConfigRequest {
     1: optional TAuthInfo auth_info
+    2: optional string table_name
 }
 
 struct TTableConfigInfo {
@@ -2506,4 +2545,8 @@ service FrontendService {
     TBatchGetTableSchemaResponse getTableSchema(1: TBatchGetTableSchemaRequest request)
 
     TBatchGetTabletMetadataResponse getTabletMetadata(1: optional TBatchGetTabletMetadataRequest request)
+
+    // Validate user/password and a system-level privilege for BE admin HTTP
+    // endpoints. The BE forwards the HTTP Basic Auth credentials it received.
+    TCheckAuthResponse checkAuth(1: optional TCheckAuthRequest request)
 }

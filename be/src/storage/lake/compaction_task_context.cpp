@@ -84,31 +84,48 @@ CompactionTaskStats CompactionTaskStats::operator-(const CompactionTaskStats& th
     return diff;
 }
 
-std::string CompactionTaskStats::to_json_stats() {
-    rapidjson::Document root;
-    root.SetObject();
+static void fill_stats_fields(rapidjson::Document& root, const CompactionTaskStats& s) {
     auto& allocator = root.GetAllocator();
-    // add stats
-    root.AddMember("read_local_sec", rapidjson::Value(io_ns_read_local_disk / TIME_UNIT_NS_PER_SECOND), allocator);
-    root.AddMember("read_local_mb", rapidjson::Value(io_bytes_read_local_disk / BYTES_UNIT_MB), allocator);
-    root.AddMember("read_remote_sec", rapidjson::Value(io_ns_read_remote / TIME_UNIT_NS_PER_SECOND), allocator);
-    root.AddMember("read_remote_mb", rapidjson::Value(io_bytes_read_remote / BYTES_UNIT_MB), allocator);
-    root.AddMember("read_remote_count", rapidjson::Value(io_count_remote), allocator);
-    root.AddMember("read_local_count", rapidjson::Value(io_count_local_disk), allocator);
-    root.AddMember("segment_init_sec", rapidjson::Value(segment_init_ns / TIME_UNIT_NS_PER_SECOND), allocator);
-    root.AddMember("column_iterator_init_sec", rapidjson::Value(column_iterator_init_ns / TIME_UNIT_NS_PER_SECOND),
+    root.AddMember("read_local_sec", rapidjson::Value(s.io_ns_read_local_disk / TIME_UNIT_NS_PER_SECOND), allocator);
+    root.AddMember("read_local_mb", rapidjson::Value(s.io_bytes_read_local_disk / BYTES_UNIT_MB), allocator);
+    root.AddMember("read_remote_sec", rapidjson::Value(s.io_ns_read_remote / TIME_UNIT_NS_PER_SECOND), allocator);
+    root.AddMember("read_remote_mb", rapidjson::Value(s.io_bytes_read_remote / BYTES_UNIT_MB), allocator);
+    root.AddMember("read_remote_count", rapidjson::Value(s.io_count_remote), allocator);
+    root.AddMember("read_local_count", rapidjson::Value(s.io_count_local_disk), allocator);
+    root.AddMember("segment_init_sec", rapidjson::Value(s.segment_init_ns / TIME_UNIT_NS_PER_SECOND), allocator);
+    root.AddMember("column_iterator_init_sec", rapidjson::Value(s.column_iterator_init_ns / TIME_UNIT_NS_PER_SECOND),
                    allocator);
-    root.AddMember("read_segment_count", rapidjson::Value(read_segment_count), allocator);
-    root.AddMember("write_segment_count", rapidjson::Value(write_segment_count), allocator);
-    root.AddMember("write_remote_mb", rapidjson::Value(write_segment_bytes / BYTES_UNIT_MB), allocator);
-    root.AddMember("write_remote_sec", rapidjson::Value(io_ns_write_remote / TIME_UNIT_NS_PER_SECOND), allocator);
-    root.AddMember("in_queue_sec", rapidjson::Value(in_queue_time_sec), allocator);
-    root.AddMember("pk_sst_merge_sec", rapidjson::Value(pk_sst_merge_ns / TIME_UNIT_NS_PER_SECOND), allocator);
-    root.AddMember("input_file_size", rapidjson::Value(input_file_size), allocator);
+    root.AddMember("read_segment_count", rapidjson::Value(s.read_segment_count), allocator);
+    root.AddMember("write_segment_count", rapidjson::Value(s.write_segment_count), allocator);
+    root.AddMember("write_remote_mb", rapidjson::Value(s.write_segment_bytes / BYTES_UNIT_MB), allocator);
+    root.AddMember("write_remote_sec", rapidjson::Value(s.io_ns_write_remote / TIME_UNIT_NS_PER_SECOND), allocator);
+    root.AddMember("in_queue_sec", rapidjson::Value(s.in_queue_time_sec), allocator);
+    root.AddMember("pk_sst_merge_sec", rapidjson::Value(s.pk_sst_merge_ns / TIME_UNIT_NS_PER_SECOND), allocator);
+    root.AddMember("input_file_size", rapidjson::Value(s.input_file_size), allocator);
+}
 
+static std::string serialize(const rapidjson::Document& root) {
     rapidjson::StringBuffer strbuf;
     rapidjson::Writer<rapidjson::StringBuffer> writer(strbuf);
     root.Accept(writer);
     return {strbuf.GetString()};
+}
+
+std::string CompactionTaskStats::to_json_stats() const {
+    rapidjson::Document root;
+    root.SetObject();
+    fill_stats_fields(root, *this);
+    return serialize(root);
+}
+
+std::string CompactionTaskStats::to_json_stats_with_subtask_metadata(int32_t subtask_id, size_t input_rowsets) const {
+    rapidjson::Document root;
+    root.SetObject();
+    fill_stats_fields(root, *this);
+    auto& allocator = root.GetAllocator();
+    root.AddMember("subtask_id", rapidjson::Value(subtask_id), allocator);
+    root.AddMember("input_rowsets", rapidjson::Value(static_cast<int64_t>(input_rowsets)), allocator);
+    root.AddMember("is_parallel_subtask", rapidjson::Value(true), allocator);
+    return serialize(root);
 }
 } // namespace starrocks::lake

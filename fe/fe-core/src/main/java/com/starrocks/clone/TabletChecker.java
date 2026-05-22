@@ -58,7 +58,7 @@ import com.starrocks.common.CloseableLock;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.Pair;
-import com.starrocks.common.util.FrontendDaemon;
+import com.starrocks.common.util.LeaderDaemon;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.qe.ConnectContext;
@@ -88,7 +88,7 @@ import java.util.stream.Collectors;
  * This checker is responsible for checking all unhealthy tablets.
  * It does not responsible for any scheduler of tablet repairing or balance
  */
-public class TabletChecker extends FrontendDaemon {
+public class TabletChecker extends LeaderDaemon {
     private static final Logger LOG = LogManager.getLogger(TabletChecker.class);
 
     private static final long LOG_PRINT_INTERVAL = 60000L;
@@ -215,7 +215,7 @@ public class TabletChecker extends FrontendDaemon {
      * If a tablet is not healthy, a TabletInfo will be created and sent to TabletScheduler for repairing.
      */
     @Override
-    protected void runAfterCatalogReady() {
+    protected void runAfterLeaseValid() {
         int pendingNum = tabletScheduler.getPendingNum();
         int runningNum = tabletScheduler.getRunningNum();
         if (pendingNum > Config.tablet_sched_max_scheduling_tablets
@@ -231,6 +231,18 @@ public class TabletChecker extends FrontendDaemon {
 
         stat.counterTabletCheckRound.incrementAndGet();
         LOG.info(stat.incrementalBrief());
+    }
+
+    @Override
+    protected void onStopped() {
+        // urgentTable is leader-session bookkeeping populated by ADMIN REPAIR TABLE on this
+        // leader; the operator must re-issue ADMIN REPAIR after a re-election if they still
+        // want priority repair. lastLogPrintTime is reset so the next leader's first cycle
+        // logs immediately. stat is intentionally left as-is - it's a process-wide counter.
+        synchronized (urgentTable) {
+            urgentTable.clear();
+        }
+        lastLogPrintTime = -1L;
     }
 
     /**

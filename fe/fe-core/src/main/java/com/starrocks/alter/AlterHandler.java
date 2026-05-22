@@ -41,7 +41,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.ThreadPoolManager;
-import com.starrocks.common.util.FrontendDaemon;
+import com.starrocks.common.util.LeaderDaemon;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.persist.RemoveAlterJobV2OperationLog;
 import com.starrocks.qe.ShowResultSet;
@@ -64,7 +64,7 @@ import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.locks.ReentrantLock;
 
-public abstract class AlterHandler extends FrontendDaemon {
+public abstract class AlterHandler extends LeaderDaemon {
     private static final Logger LOG = LogManager.getLogger(AlterHandler.class);
     protected ConcurrentMap<Long, AlterJobV2> alterJobsV2 = Maps.newConcurrentMap();
 
@@ -77,7 +77,9 @@ public abstract class AlterHandler extends FrontendDaemon {
      */
     protected ReentrantLock lock = new ReentrantLock();
 
-    protected ThreadPoolExecutor executor;
+    // Not final: shutdownNow() in onStopped() interrupts in-flight AlterReplicaTask
+    // submissions; start() rebuilds the pool when the next leader takes over.
+    protected volatile ThreadPoolExecutor executor;
 
     protected void lock() {
         lock.lock();
@@ -89,9 +91,13 @@ public abstract class AlterHandler extends FrontendDaemon {
 
     public AlterHandler(String name) {
         super(name, Config.alter_scheduler_interval_millisecond);
-        executor = ThreadPoolManager
-                .newDaemonCacheThreadPool(Config.alter_max_worker_threads, Config.alter_max_worker_queue_size,
-                        name + "_pool", true);
+        executor = newExecutor();
+    }
+
+    private ThreadPoolExecutor newExecutor() {
+        return ThreadPoolManager.newDaemonCacheThreadPool(
+                Config.alter_max_worker_threads, Config.alter_max_worker_queue_size,
+                getName() + "_pool", true);
     }
 
 
@@ -190,14 +196,43 @@ public abstract class AlterHandler extends FrontendDaemon {
     }
 
     @Override
-    protected void runAfterCatalogReady() {
+    protected void runAfterLeaseValid() {
         clearExpireFinishedOrCancelledAlterJobsV2();
         setInterval(Config.alter_scheduler_interval_millisecond);
     }
 
     @Override
     public synchronized void start() {
+        // Refuse to overlap with a previous pool that has not finished draining. Mirrors the
+        // pattern used by BatchWriteMgr / RoutineLoadTaskScheduler / CoordinatorBackendAssigner:
+        // shutdownNow() in onStopped() is best-effort, so a worker thread that ignores the
+        // interrupt momentarily may still be alive when start() runs. Spinning up a fresh pool
+        // would put two AlterReplicaTask submission workers against the same alterJobsV2 +
+        // handler state.
+        if (executor != null && executor.isShutdown() && !executor.isTerminated()) {
+            throw new IllegalStateException(
+                    "AlterHandler " + getName() + " executor has not terminated; refuse to restart");
+        }
+        // Rebuild the executor if a previous demotion shut it down so handleFinishAlterTask
+        // submissions accepted by the new leader run on a fresh pool.
+        if (executor == null || executor.isShutdown()) {
+            executor = newExecutor();
+        }
         super.start();
+    }
+
+    @Override
+    protected void onStopped() {
+        // alterJobsV2 is persistent (saved/loaded via image and replayed on followers via
+        // editlog), so it must NOT be cleared on demotion - the next leader resumes those
+        // jobs from the same map. Subclasses can override onStopped() to drop derived caches
+        // (e.g. tableNotFinalStateJobMap) that are recomputable from alterJobsV2; just
+        // remember to call super.onStopped() so the executor shutdown still runs.
+        // shutdownNow() interrupts in-flight AlterReplicaTask submissions so threads exit
+        // promptly; no awaitTermination because the drain is bounded.
+        if (executor != null && !executor.isShutdown()) {
+            executor.shutdownNow();
+        }
     }
 
     /*

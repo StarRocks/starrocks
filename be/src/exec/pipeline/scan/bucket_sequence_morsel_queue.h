@@ -16,30 +16,33 @@
 
 #include <mutex>
 
-#include "exec/pipeline/scan/morsel_queue.h"
+#include "exec/pipeline/scan/olap_morsel_queue.h"
+#include "exec/pipeline/scan/ticketed_morsel_queue.h"
 
 namespace starrocks::pipeline {
 
-class BucketSequenceMorselQueue : public MorselQueue {
+class BucketSequenceMorselQueue : public OlapMorselQueue, public TicketedMorselQueue {
 public:
     BucketSequenceMorselQueue(MorselQueuePtr&& morsel_queue);
     std::vector<TInternalScanRange*> prepare_olap_scan_ranges() const override;
 
     void set_key_ranges(const std::vector<std::unique_ptr<OlapScanRange>>& key_ranges) override {
-        _morsel_queue->set_key_ranges(key_ranges);
+        _olap_morsel_queue()->set_key_ranges(key_ranges);
     }
 
     void set_key_ranges(const TabletReaderParams::RangeStartOperation& range_start_op,
                         const TabletReaderParams::RangeEndOperation& range_end_op,
                         const std::vector<OlapTuple>& range_start_key,
                         const std::vector<OlapTuple>& range_end_key) override {
-        _morsel_queue->set_key_ranges(range_start_op, range_end_op, range_start_key, range_end_key);
+        _olap_morsel_queue()->set_key_ranges(range_start_op, range_end_op, range_start_key, range_end_key);
     }
 
-    void set_tablets(const std::vector<BaseTabletSharedPtr>& tablets) override { _morsel_queue->set_tablets(tablets); }
+    void set_tablets(const std::vector<BaseTabletSharedPtr>& tablets) override {
+        _olap_morsel_queue()->set_tablets(tablets);
+    }
 
     void set_tablet_rowsets(const std::vector<std::vector<BaseRowsetSharedPtr>>& tablet_rowsets) override {
-        _morsel_queue->set_tablet_rowsets(tablet_rowsets);
+        _olap_morsel_queue()->set_tablet_rowsets(tablet_rowsets);
     }
 
     void set_ticket_checker(const query_cache::TicketCheckerPtr& ticket_checker) override {
@@ -57,11 +60,17 @@ public:
     Type type() const override { return BUCKET_SEQUENCE; }
 
     void set_tablet_schema(const TabletSchemaCSPtr& tablet_schema) override {
-        MorselQueue::set_tablet_schema(tablet_schema);
-        _morsel_queue->set_tablet_schema(tablet_schema);
+        OlapMorselQueue::set_tablet_schema(tablet_schema);
+        _olap_morsel_queue()->set_tablet_schema(tablet_schema);
     }
 
 private:
+    OlapMorselQueue* _olap_morsel_queue() const {
+        auto* olap_morsel_queue = dynamic_cast<OlapMorselQueue*>(_morsel_queue.get());
+        DCHECK(olap_morsel_queue != nullptr);
+        return olap_morsel_queue;
+    }
+
     StatusOr<int64_t> _peek_sequence_id() const;
     mutable std::mutex _mutex;
 

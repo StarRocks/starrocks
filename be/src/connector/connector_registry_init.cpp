@@ -12,7 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "connector/benchmark_connector.h"
+#include <memory>
+#include <string>
+
 #include "connector/builtin_connector_registry.h"
 #include "connector/cache_stats_connector.h"
 #include "connector/connector_registry.h"
@@ -45,7 +47,6 @@ Status install_builtin_connectors(ConnectorRegistry* registry) {
     install_if_absent<ESConnector>(registry, Connector::ES);
     install_if_absent<JDBCConnector>(registry, Connector::JDBC);
     install_if_absent<MySQLConnector>(registry, Connector::MYSQL);
-    install_if_absent<BenchmarkConnector>(registry, Connector::BENCHMARK);
     install_if_absent<CacheStatsConnector>(registry, Connector::CACHE_STATS);
     install_if_absent<FileConnector>(registry, Connector::FILE);
     install_if_absent<LakeConnector>(registry, Connector::LAKE);

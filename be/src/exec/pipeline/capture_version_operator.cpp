@@ -17,6 +17,7 @@
 #include "base/utility/defer_op.h"
 #include "common/logging.h"
 #include "exec/olap_scan_node.h"
+#include "exec/pipeline/scan/olap_morsel_queue.h"
 #include "runtime/runtime_state.h"
 #include "storage/rowset/rowset.h"
 
@@ -35,7 +36,9 @@ StatusOr<ChunkPtr> CaptureVersionOperator::pull_chunk(RuntimeState* state) {
 
     {
         SCOPED_TIMER(_capture_tablet_rowsets_timer);
-        auto scan_rages = _morsel_queue->prepare_olap_scan_ranges();
+        auto* olap_morsel_queue = dynamic_cast<OlapMorselQueue*>(_morsel_queue);
+        DCHECK(olap_morsel_queue != nullptr);
+        auto scan_rages = olap_morsel_queue->prepare_olap_scan_ranges();
         std::vector<std::vector<RowsetSharedPtr>> tablet_rowsets;
         VLOG_QUERY << "capture rowset scan_ranges nums:" << scan_rages.size();
         for (auto& scan_range : scan_rages) {

@@ -32,6 +32,7 @@
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/query_context.h"
 #include "exec/pipeline/scan/glm_manager.h"
+#include "exec/pipeline/scan/olap_dynamic_morsel_queue_builder.h"
 #include "exec/pipeline/scan/scan_morsel.h"
 #include "exec/pipeline/scan/split_scan_morsel.h"
 #include "exec/query_scan_metrics.h"
@@ -484,6 +485,13 @@ Status LakeDataSource::init_tablet_reader(RuntimeState* runtime_state) {
     RETURN_IF_ERROR(_extend_schema_by_access_paths());
     ASSIGN_OR_RETURN(_tablet_schema, extend_schema_by_virtual_columns(_tablet_schema, *_slots));
     RETURN_IF_ERROR(init_global_dicts(&_params));
+    // init_global_dicts intersects the FE-level dict map with this scan's
+    // materialized tablet schema, so the resulting size counts columns that
+    // will actually flow through the encoded path on this scan instance.
+    if (_params.global_dictmaps != nullptr && !_params.global_dictmaps->empty() && _runtime_profile != nullptr) {
+        _runtime_profile->add_info_string("GlobalDictOptApplied", "true");
+        _runtime_profile->add_info_string("GlobalDictAppliedSlots", std::to_string(_params.global_dictmaps->size()));
+    }
     RETURN_IF_ERROR(init_unused_output_columns(thrift_lake_scan_node.unused_output_column_name));
     RETURN_IF_ERROR(init_reader_params(_scanner_ranges));
 
@@ -1289,7 +1297,7 @@ Status LakeDataSourceProvider::init(ObjectPool* pool, RuntimeState* state) {
             RETURN_IF_ERROR(
                     ExprFactory::create_expr_tree(pool, partition_conjuncts[i], &_partition_conjunct_ctxs[i], state));
         }
-        // Prepare and open once here. convert_scan_range_to_morsel_queue may run multiple times
+        // Prepare and open once here. convert_scan_range_to_morsel_queue_builder may run multiple times
         // per fragment (once per driver sequence), and ExprContext::open short-circuits on
         // repeat calls, so re-opening after an inline close would leave function state stale.
         RETURN_IF_ERROR(ExprExecutor::prepare(_partition_conjunct_ctxs, state));
@@ -1310,7 +1318,7 @@ DataSourceProviderPtr LakeConnector::create_data_source_provider(ConnectorScanNo
     return std::make_unique<LakeDataSourceProvider>(scan_node, plan_node);
 }
 
-StatusOr<pipeline::MorselQueuePtr> LakeDataSourceProvider::convert_scan_range_to_morsel_queue(
+StatusOr<pipeline::MorselQueueBuilderPtr> LakeDataSourceProvider::convert_scan_range_to_morsel_queue_builder(
         const std::vector<TScanRangeParams>& scan_ranges, int node_id, int32_t pipeline_dop,
         bool enable_tablet_internal_parallel, TTabletInternalParallelMode::type tablet_internal_parallel_mode,
         size_t num_total_scan_ranges, size_t scan_parallelism) {
@@ -1339,14 +1347,15 @@ StatusOr<pipeline::MorselQueuePtr> LakeDataSourceProvider::convert_scan_range_to
         }
     }
 
-    ASSIGN_OR_RETURN(auto morsel_queue,
-                     DataSourceProvider::convert_scan_range_to_morsel_queue(
+    ASSIGN_OR_RETURN(auto builder,
+                     DataSourceProvider::convert_scan_range_to_morsel_queue_builder(
                              *effective_scan_ranges, node_id, pipeline_dop, enable_tablet_internal_parallel,
                              tablet_internal_parallel_mode, num_total_scan_ranges, (size_t)lake_scan_parallelism));
+    builder = pipeline::make_olap_dynamic_morsel_queue_builder_from(std::move(builder));
     if (_could_split) {
-        morsel_queue->set_has_more_from_split(true);
+        builder->set_has_more_from_split(true);
     }
-    return morsel_queue;
+    return builder;
 }
 
 StatusOr<bool> LakeDataSourceProvider::_could_tablet_internal_parallel(

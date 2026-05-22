@@ -36,10 +36,11 @@
 #include "exec/pipeline/noop_sink_operator.h"
 #include "exec/pipeline/pipeline_builder.h"
 #include "exec/pipeline/scan/chunk_buffer_limiter.h"
-#include "exec/pipeline/scan/morsel.h"
+#include "exec/pipeline/scan/olap_fixed_morsel_queue_builder.h"
 #include "exec/pipeline/scan/olap_scan_operator.h"
 #include "exec/pipeline/scan/olap_scan_prepare_operator.h"
 #include "exec/pipeline/scan/scan_morsel.h"
+#include "exec/pipeline/scan/split_morsel_queue_builder.h"
 #include "exprs/column_access_path_resolver.h"
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
@@ -441,7 +442,7 @@ Status OlapScanNode::set_scan_ranges(const std::vector<TScanRangeParams>& scan_r
     return Status::OK();
 }
 
-StatusOr<pipeline::MorselQueuePtr> OlapScanNode::convert_scan_range_to_morsel_queue(
+StatusOr<pipeline::MorselQueueBuilderPtr> OlapScanNode::convert_scan_range_to_morsel_queue_builder(
         const std::vector<TScanRangeParams>& scan_ranges, int node_id, int32_t pipeline_dop,
         bool enable_tablet_internal_parallel, TTabletInternalParallelMode::type tablet_internal_parallel_mode,
         size_t num_total_scan_ranges) {
@@ -483,12 +484,12 @@ StatusOr<pipeline::MorselQueuePtr> OlapScanNode::convert_scan_range_to_morsel_qu
 
     // None tablet to read shouldn't use tablet internal parallel.
     if (morsels.empty()) {
-        return std::make_unique<pipeline::FixedMorselQueue>(std::move(morsels));
+        return pipeline::make_olap_fixed_morsel_queue_builder(std::move(morsels));
     }
 
     // Disable by the session variable shouldn't use tablet internal parallel.
     if (!enable_tablet_internal_parallel) {
-        return std::make_unique<pipeline::FixedMorselQueue>(std::move(morsels));
+        return pipeline::make_olap_fixed_morsel_queue_builder(std::move(morsels));
     }
 
     int64_t scan_dop;
@@ -497,16 +498,16 @@ StatusOr<pipeline::MorselQueuePtr> OlapScanNode::convert_scan_range_to_morsel_qu
                      _could_tablet_internal_parallel(pruned_scan_ranges, pipeline_dop, num_total_scan_ranges,
                                                      tablet_internal_parallel_mode, &scan_dop, &splitted_scan_rows));
     if (!could) {
-        return std::make_unique<pipeline::FixedMorselQueue>(std::move(morsels));
+        return pipeline::make_olap_fixed_morsel_queue_builder(std::move(morsels));
     }
 
     // Split tablet physically.
     ASSIGN_OR_RETURN(bool ok, _could_split_tablet_physically(pruned_scan_ranges));
     if (ok) {
-        return std::make_unique<pipeline::PhysicalSplitMorselQueue>(std::move(morsels), scan_dop, splitted_scan_rows);
+        return pipeline::make_physical_split_morsel_queue_builder(std::move(morsels), scan_dop, splitted_scan_rows);
     }
 
-    return std::make_unique<pipeline::LogicalSplitMorselQueue>(std::move(morsels), scan_dop, splitted_scan_rows);
+    return pipeline::make_logical_split_morsel_queue_builder(std::move(morsels), scan_dop, splitted_scan_rows);
 }
 
 StatusOr<bool> OlapScanNode::_could_tablet_internal_parallel(

@@ -1958,7 +1958,7 @@ static std::string evaluateCastToJson(TExprNode& cast_expr, RunTimeCppType<fromT
 
     ColumnPtr ptr = expr->evaluate(nullptr, nullptr);
     if (!ptr) {
-        return nullptr;
+        return "";
     }
     if (ptr->has_null()) {
         return "";

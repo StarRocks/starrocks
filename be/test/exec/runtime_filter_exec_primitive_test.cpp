@@ -73,13 +73,13 @@ TRuntimeFilterDescription make_bucket_fallback_desc(int32_t filter_id) {
 
 } // namespace
 
-class RuntimeFilterExecCoreTest : public ::testing::Test {
+class RuntimeFilterExecPrimitiveTest : public ::testing::Test {
 protected:
     ObjectPool pool;
     RuntimeState runtime_state;
 };
 
-TEST_F(RuntimeFilterExecCoreTest, LayoutHelperInitializesFromExplicitLayout) {
+TEST_F(RuntimeFilterExecPrimitiveTest, LayoutHelperInitializesFromExplicitLayout) {
     RuntimeFilterLayout layout;
     init_runtime_filter_layout(make_build_desc(), &layout);
 
@@ -91,7 +91,7 @@ TEST_F(RuntimeFilterExecCoreTest, LayoutHelperInitializesFromExplicitLayout) {
     EXPECT_EQ(layout.num_drivers_per_instance(), 1);
 }
 
-TEST_F(RuntimeFilterExecCoreTest, LayoutHelperFallsBackToBucketSequence) {
+TEST_F(RuntimeFilterExecPrimitiveTest, LayoutHelperFallsBackToBucketSequence) {
     RuntimeFilterLayout layout;
     init_runtime_filter_layout(make_bucket_fallback_desc(29), &layout);
 
@@ -101,7 +101,7 @@ TEST_F(RuntimeFilterExecCoreTest, LayoutHelperFallsBackToBucketSequence) {
     EXPECT_EQ(layout.bucketseq_to_instance(), std::vector<int32_t>({2, 0, 1}));
 }
 
-TEST_F(RuntimeFilterExecCoreTest, BuildDescriptorInitCapturesPlannerMetadata) {
+TEST_F(RuntimeFilterExecPrimitiveTest, BuildDescriptorInitCapturesPlannerMetadata) {
     RuntimeFilterBuildDescriptor desc;
     ASSERT_OK(desc.init(&pool, make_build_desc(), &runtime_state));
 
@@ -114,7 +114,7 @@ TEST_F(RuntimeFilterExecCoreTest, BuildDescriptorInitCapturesPlannerMetadata) {
     EXPECT_EQ(desc.layout().filter_id(), 7);
 }
 
-TEST_F(RuntimeFilterExecCoreTest, ProbeDescriptorInitDistinguishesJoinAndStreamFilters) {
+TEST_F(RuntimeFilterExecPrimitiveTest, ProbeDescriptorInitDistinguishesJoinAndStreamFilters) {
     RuntimeFilterProbeDescriptor join_desc;
     ASSERT_OK(join_desc.init(&pool, make_probe_desc(17, 11, TRuntimeFilterBuildType::JOIN_FILTER), 11, &runtime_state));
     EXPECT_FALSE(join_desc.is_stream_build_filter());
@@ -131,7 +131,7 @@ TEST_F(RuntimeFilterExecCoreTest, ProbeDescriptorInitDistinguishesJoinAndStreamF
     EXPECT_EQ(stream_desc.num_partition_by_exprs(), 1);
 }
 
-TEST_F(RuntimeFilterExecCoreTest, ProbeDescriptorExposesSlotRefAndAttachedFilter) {
+TEST_F(RuntimeFilterExecPrimitiveTest, ProbeDescriptorExposesSlotRefAndAttachedFilter) {
     auto* probe_expr = pool.add(new ColumnRef(TypeDescriptor(TYPE_INT), 9));
     auto* probe_ctx = pool.add(new ExprContext(probe_expr));
 
@@ -148,7 +148,7 @@ TEST_F(RuntimeFilterExecCoreTest, ProbeDescriptorExposesSlotRefAndAttachedFilter
     EXPECT_EQ(desc.runtime_filter(-1), rf);
 }
 
-TEST_F(RuntimeFilterExecCoreTest, RegistryInstallsLocalFilterAndTracksWaiters) {
+TEST_F(RuntimeFilterExecPrimitiveTest, RegistryInstallsLocalFilterAndTracksWaiters) {
     RuntimeFilterRegistry registry;
 
     auto* left_expr = pool.add(new ColumnRef(TypeDescriptor(TYPE_INT), 9));
@@ -175,7 +175,7 @@ TEST_F(RuntimeFilterExecCoreTest, RegistryInstallsLocalFilterAndTracksWaiters) {
     EXPECT_EQ(right_desc.runtime_filter(-1), rf);
 }
 
-TEST_F(RuntimeFilterExecCoreTest, RegistryInstallsSharedFilter) {
+TEST_F(RuntimeFilterExecPrimitiveTest, RegistryInstallsSharedFilter) {
     RuntimeFilterRegistry registry;
 
     auto* probe_expr = pool.add(new ColumnRef(TypeDescriptor(TYPE_INT), 9));
@@ -192,7 +192,7 @@ TEST_F(RuntimeFilterExecCoreTest, RegistryInstallsSharedFilter) {
     EXPECT_EQ(desc.runtime_filter(-1), shared_rf.get());
 }
 
-TEST_F(RuntimeFilterExecCoreTest, ProbeCollectorWaitLoadsCachedFilter) {
+TEST_F(RuntimeFilterExecPrimitiveTest, ProbeCollectorWaitLoadsCachedFilter) {
     TUniqueId query_id;
     query_id.hi = 1;
     query_id.lo = 2;
@@ -226,7 +226,7 @@ TEST_F(RuntimeFilterExecCoreTest, ProbeCollectorWaitLoadsCachedFilter) {
     EXPECT_EQ(desc.runtime_filter(-1), bloom.get());
 }
 
-TEST_F(RuntimeFilterExecCoreTest, HelperCreatesMinMaxPredicateForNumericButNotString) {
+TEST_F(RuntimeFilterExecPrimitiveTest, HelperCreatesMinMaxPredicateForNumericButNotString) {
     auto* numeric_filter = pool.add(new ComposedRuntimeBloomFilter<TYPE_INT>());
     numeric_filter->insert(10);
     numeric_filter->insert(20);

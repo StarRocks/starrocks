@@ -1099,6 +1099,15 @@ public class Config extends ConfigBase {
     public static int max_mysql_service_task_threads_num = 4096;
 
     /**
+     * Per-packet write timeout for MysqlChannel result delivery. Bounds how long the FE
+     * worker can wait for a slow client's TCP recv buffer to drain; without this the
+     * worker can sit in {@code Selector.select()} indefinitely and the query becomes
+     * unkillable by {@code KILL QUERY}. Set to 0 for the legacy unbounded wait.
+     */
+    @ConfField(mutable = true)
+    public static long mysql_send_packet_timeout_ms = 60_000L;
+
+    /**
      * modifies the version string returned by following situations:
      * select version();
      * handshake packet version.
@@ -2813,6 +2822,22 @@ public class Config extends ConfigBase {
      */
     @ConfField
     public static int background_refresh_file_metadata_concurrency = 4;
+
+    /**
+     * Number of threads used to dispatch asynchronous "refresh other FE" jobs from connector write paths.
+     * These threads do not issue peer RPCs directly; they only run the top-level background refresh task.
+     * Updates take effect on running FEs through ConfigRefreshDaemon without restart.
+     */
+    @ConfField(mutable = true)
+    public static int refresh_other_fe_dispatch_executor_thread_num = 4;
+
+    /**
+     * Number of threads used to fan out "refresh other FE" RPCs to peer FEs.
+     * This pool bounds cross-FE refresh concurrency for both synchronous and asynchronous callers.
+     * Updates take effect on running FEs through ConfigRefreshDaemon without restart.
+     */
+    @ConfField(mutable = true)
+    public static int refresh_other_fe_rpc_executor_thread_num = 4;
 
     /**
      * Background refresh external table metadata interval in milliseconds.

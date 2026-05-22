@@ -15,7 +15,7 @@
 # specific language governing permissions and limitations
 # under the License.
 
-cmake_minimum_required(VERSION 3.16)
+cmake_minimum_required(VERSION 3.20)
 
 set(STARROCKS_PRECONFIG_MODE "AUTO" CACHE STRING "Preconfigure bootstrap mode: AUTO, ON, or OFF")
 set_property(CACHE STARROCKS_PRECONFIG_MODE PROPERTY STRINGS AUTO ON OFF)
@@ -192,6 +192,7 @@ option(WITH_STARCACHE "Build binary with starcache library" ${WITH_STARCACHE_DEF
 option(WITH_BRCP_KEEPALIVE "Build binary with brpc_socket_keepalive (requires brpc 1.8)" OFF)
 
 option(WITH_BENCH "Build binary with bench" OFF)
+option(WITH_CONNECTOR_BENCHMARK "Build the benchgen-backed benchmark connector" ON)
 
 option(USE_STAROS "Use StarOS to manager tablet info" OFF)
 
@@ -289,7 +290,7 @@ set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} $ENV{STARROCKS_CXX_LINKER_
 #  -fno-omit-frame-pointers: Keep frame pointer for functions in register
 set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -Wall -Wno-sign-compare -Wno-unknown-pragmas -pthread -Wno-register")
 set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -Wno-strict-aliasing -fno-omit-frame-pointer")
-set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -std=gnu++20 -D__STDC_FORMAT_MACROS")
+set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -std=gnu++23 -D__STDC_FORMAT_MACROS")
 if (APPLE)
     set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -D_LIBCPP_ENABLE_CXX17_REMOVED_UNARY_BINARY_FUNCTION")
     set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -D_LIBCPP_ENABLE_CXX20_REMOVED_TYPE_TRAITS")
@@ -631,7 +632,6 @@ set(STARROCKS_DEPENDENCIES
     arrow
     arrow_flight
     arrow_flight_sql
-    benchgen
     gRPC::grpc
     gRPC::grpc++
     parquet
@@ -863,6 +863,8 @@ endif()
 # STARROCKS_LINK_LIBS so normal BE, format-lib, and benchmark builds do not
 # compile or link test helper code.
 set (TEST_LINK_LIBS ${STARROCKS_LINK_LIBS}
+    ConnectorBuiltinRegistry
+    ConnectorBootstrap
     TestUtil
     ${WL_START_GROUP}
     gmock

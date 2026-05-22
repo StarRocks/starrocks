@@ -65,6 +65,7 @@ import com.starrocks.sql.optimizer.transformer.OptExprBuilder;
 import com.starrocks.sql.optimizer.transformer.RelationTransformer;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanFragmentBuilder;
+import com.starrocks.thrift.TIcebergWriteMode;
 import com.starrocks.thrift.TPartialUpdateMode;
 import com.starrocks.thrift.TResultSinkType;
 
@@ -237,7 +238,7 @@ public class UpdatePlanner {
 
         descriptorTable.addReferencedTable(icebergTable);
         IcebergRowDeltaSink dataSink = new IcebergRowDeltaSink(
-                icebergTable, rowDeltaTuple, session.getSessionVariable());
+                icebergTable, rowDeltaTuple, session.getSessionVariable(), TIcebergWriteMode.ROW_DELTA_UPDATE);
         dataSink.init();
 
         IcebergMetadata.IcebergSinkExtra icebergSinkExtra = new IcebergMetadata.IcebergSinkExtra();

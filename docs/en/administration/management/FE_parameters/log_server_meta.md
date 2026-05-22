@@ -839,6 +839,15 @@ This topic introduces the following types of FE configurations:
 - Description: The length of the backlog queue held by the MySQL server in the FE node.
 - Introduced in: -
 
+### `mysql_send_packet_timeout_ms`
+
+- Default: 60000
+- Type: Long
+- Unit: Milliseconds
+- Is mutable: Yes
+- Description: Per-packet write timeout for the MySQL protocol channel. Bounds how long the FE worker can wait for a slow client's TCP recv buffer to drain when sending result rows. Without this bound the worker can block in `Selector.select()` indefinitely and the query becomes unkillable via `KILL QUERY`. Set to `0` to disable (legacy unbounded wait).
+- Introduced in: v4.1
+
 ### `mysql_server_version`
 
 - Default: 8.0.33
@@ -1248,6 +1257,24 @@ This topic introduces the following types of FE configurations:
 - Is mutable: Yes
 - Description: Whether to enable the periodic Hive metadata cache refresh. After it is enabled, StarRocks polls the metastore (Hive Metastore or AWS Glue) of your Hive cluster, and refreshes the cached metadata of the frequently accessed Hive catalogs to perceive data changes. `true` indicates to enable the Hive metadata cache refresh, and `false` indicates to disable it.
 - Introduced in: v2.5.5
+
+### `refresh_other_fe_dispatch_executor_thread_num`
+
+- Default: 4
+- Type: Integer
+- Unit: -
+- Is mutable: Yes
+- Description: The number of threads in the FE-global dispatch executor for asynchronous "refresh other FE" jobs. These threads only schedule background refresh tasks from connector write paths. They do not send peer FE refresh RPCs directly. Changes take effect on running FEs without restart.
+- Introduced in: -
+
+### `refresh_other_fe_rpc_executor_thread_num`
+
+- Default: 4
+- Type: Integer
+- Unit: -
+- Is mutable: Yes
+- Description: The number of threads in the FE-global RPC executor for "refresh other FE" fan-out. This executor bounds the number of concurrent refresh RPCs sent to peer FEs for both synchronous and asynchronous external table refresh flows. Changes take effect on running FEs without restart.
+- Introduced in: -
 
 ### `enable_collect_query_detail_info`
 

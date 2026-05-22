@@ -210,6 +210,8 @@ import com.starrocks.thrift.TBatchReportExecStatusParams;
 import com.starrocks.thrift.TBatchReportExecStatusResult;
 import com.starrocks.thrift.TBeginRemoteTxnRequest;
 import com.starrocks.thrift.TBeginRemoteTxnResponse;
+import com.starrocks.thrift.TCheckAuthRequest;
+import com.starrocks.thrift.TCheckAuthResponse;
 import com.starrocks.thrift.TCloudTabletMeta;
 import com.starrocks.thrift.TClusterSnapshotJobsRequest;
 import com.starrocks.thrift.TClusterSnapshotJobsResponse;
@@ -1853,6 +1855,46 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             return response;
         }
         return leaderImpl.beginRemoteTxn(request);
+    }
+
+    @Override
+    public TCheckAuthResponse checkAuth(TCheckAuthRequest request) throws TException {
+        TCheckAuthResponse response = new TCheckAuthResponse();
+        String user = request.isSetUser() ? request.getUser() : "";
+        String host = request.isSetHost() ? request.getHost() : "";
+        String privName = request.isSetRequired_system_privilege() ? request.getRequired_system_privilege() : "";
+        LOG.info("checkAuth request user={} host={} required_system_privilege={}", user, host, privName);
+        try {
+            BaseAction.ActionAuthorizationInfo authInfo = BaseAction.parseAuthInfo(
+                    user, request.isSetPasswd() ? request.getPasswd() : "", host);
+            UserIdentity userIdentity = BaseAction.checkPassword(authInfo);
+
+            PrivilegeType requiredPriv = PrivilegeType.NAME_TO_PRIVILEGE.get(privName);
+            if (requiredPriv == null) {
+                TStatus status = new TStatus(TStatusCode.INTERNAL_ERROR);
+                status.setError_msgs(Lists.newArrayList("unknown system privilege: " + privName));
+                response.setStatus(status);
+                return response;
+            }
+
+            ConnectContext context = new ConnectContext();
+            context.setCurrentUserIdentity(userIdentity);
+            context.setCurrentRoleIds(userIdentity);
+            Authorizer.checkSystemAction(context, requiredPriv);
+
+            response.setStatus(new TStatus(TStatusCode.OK));
+        } catch (AccessDeniedException e) {
+            LOG.warn("checkAuth denied for user={} host={}: {}", user, host, e.getMessage());
+            TStatus status = new TStatus(TStatusCode.NOT_AUTHORIZED);
+            status.setError_msgs(Lists.newArrayList(e.getMessage()));
+            response.setStatus(status);
+        } catch (Exception e) {
+            LOG.warn("checkAuth failed for user={} host={}", user, host, e);
+            TStatus status = new TStatus(TStatusCode.INTERNAL_ERROR);
+            status.setError_msgs(Lists.newArrayList(e.getMessage()));
+            response.setStatus(status);
+        }
+        return response;
     }
 
     @Override

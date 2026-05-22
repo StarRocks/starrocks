@@ -20,7 +20,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
-import com.starrocks.common.util.FrontendDaemon;
+import com.starrocks.common.util.LeaderDaemon;
 import com.starrocks.qe.SimpleExecutor;
 import com.starrocks.scheduler.history.TableKeeper;
 import com.starrocks.server.GlobalStateMgr;
@@ -29,7 +29,7 @@ import org.apache.logging.log4j.Logger;
 
 /**
  */
-public class LoadsHistorySyncer extends FrontendDaemon {
+public class LoadsHistorySyncer extends LeaderDaemon {
     private static final Logger LOG = LogManager.getLogger(LoadsHistorySyncer.class);
 
     public static final String LOADS_HISTORY_DB_NAME = "_statistics_";
@@ -116,7 +116,7 @@ public class LoadsHistorySyncer extends FrontendDaemon {
     }
 
     @Override
-    protected void runAfterCatalogReady() {
+    protected void runAfterLeaseValid() {
         if (FeConstants.runningUnitTest) {
             return;
         }
@@ -138,6 +138,15 @@ public class LoadsHistorySyncer extends FrontendDaemon {
         } catch (Throwable e) {
             LOG.warn("Failed to process one round of LoadJobScheduler with error message {}", e.getMessage(), e);
         }
+    }
+
+    @Override
+    protected void onStopped() {
+        // Reset leader-session bookkeeping: firstSync re-arms the "wait one cycle for table
+        // keeper" warm-up, and syncedLoadFinishTime resets so the next leader does not skip
+        // syncing rows whose finish times pre-date its activation.
+        firstSync = true;
+        syncedLoadFinishTime = -1L;
     }
 
     /**

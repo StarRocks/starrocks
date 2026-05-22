@@ -39,7 +39,7 @@
 namespace starrocks::config {
 // Enable cow optimization for column operations, used to avoid the overhead of reference counting when accessing
 // columns.
-CONF_mBool(enable_cow_optimization, "true");
+CONF_mBool(enable_cow_optimization, "false");
 // The diagnose level for cow optimization, 0 means no diagnose, 1 means diagnose when use_count > 1, 2 means
 // diagnose when use_count > 2.
 CONF_Int32(cow_optimization_diagnose_level, "0");
@@ -538,6 +538,16 @@ CONF_Int32(be_http_port, "8040");
 CONF_Alias(be_http_port, webserver_port);
 // Number of http workers in BE
 CONF_Int32(be_http_num_workers, "48");
+// Whether to enable the BE `/api/_stop_be` HTTP endpoint. When `false`, requests
+// to that endpoint are rejected with HTTP 403 and the BE process is not exited.
+// This config is static and requires a BE restart to take effect.
+CONF_Bool(enable_stop_be_action, "true");
+// Whether `/api/_stop_be` requires HTTP Basic Auth credentials that are then
+// validated against the FE (password + NODE privilege on SYSTEM). Default
+// `false` to preserve historical behavior of accepting unauthenticated shutdown
+// requests; set to `true` to require FE-validated authentication. This config
+// is static and requires a BE restart to take effect.
+CONF_Bool(enable_stop_be_action_fe_auth, "false");
 // Period to update rate counters and sampling counters in ms.
 CONF_mInt32(periodic_counter_update_period_ms, "500");
 

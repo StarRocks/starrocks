@@ -22,7 +22,6 @@ set(EXEC_FILES
         ./column/object_column_test.cpp
         ./column/column_cow_test.cpp
         ./common/uri_test.cpp
-        ./connector/benchmark_connector_test.cpp
         ./connector/file_scan_metrics_test.cpp
         ./connector/file_connector_rejected_record_test.cpp
         ./connector/hive_connector_test.cpp
@@ -86,11 +85,14 @@ set(EXEC_FILES
         ./exec/pipeline/exec_group_test.cpp
         ./exec/pipeline/fragment_executor_test.cpp
         ./exec/pipeline/glm_manager_tablet_adaptor_test.cpp
+        ./exec/pipeline/scan/morsel_queue_builder_test.cpp
+        ./exec/pipeline/scan/morsel_queue_capability_test.cpp
         ./exec/pipeline/scan/physical_split_morsel_queue_test.cpp
         ./exec/query_cache/query_cache_test.cpp
         ./exec/query_cache/transform_operator.cpp
         ./exec/schema_columns_scanner_test.cpp
         ./exec/schema_fe_tablet_schedules_scanner_test.cpp
+        ./exec/schema_loads_scanner_test.cpp
         ./exec/schema_materialized_views_scanner_test.cpp
         ./exec/schema_task_runs_scanner_test.cpp
         ./exec/schema_scanner/schema_be_tablet_write_log_scanner_test.cpp
@@ -104,7 +106,6 @@ set(EXEC_FILES
         ./exec/pipeline/olap_scan_operator_test.cpp
         ./exec/analytor_test.cpp
         ./exec/analytor_test.cpp
-        ./exec/benchmark_scanner_test.cpp
         ./exec/chunks_sorter_heap_sort_test.cpp
         ./exec/chunks_sorter_test.cpp
         ./exec/connector_scan_node_test.cpp
@@ -374,6 +375,7 @@ add_subdirectory(common)
 add_subdirectory(column)
 add_subdirectory(types)
 add_subdirectory(exec)
+add_subdirectory(connector)
 add_subdirectory(runtime)
 add_subdirectory(exprs)
 add_subdirectory(io)

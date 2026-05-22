@@ -32,7 +32,7 @@ class GeneratedSectionMismatchError(RuntimeError):
     pass
 
 
-def render_module_boundaries_section(manifest: dict) -> str:
+def render_module_boundaries_section(modules: list[dict]) -> str:
     lines = [
         "## Module Harness",
         "",
@@ -41,7 +41,7 @@ def render_module_boundaries_section(manifest: dict) -> str:
         "Run `python3 build-support/check_be_module_boundaries.py --mode full` to validate the same rules mechanically.",
         "",
     ]
-    for module in manifest["modules"]:
+    for module in modules:
         lines.append(f"### {module['doc_label']} (`{module['id']}`)")
         if module.get("summary"):
             lines.append(module["summary"])
@@ -61,6 +61,31 @@ def render_module_boundaries_section(manifest: dict) -> str:
     return "\n".join(lines).rstrip() + "\n"
 
 
+def _agents_path_for_module(module: dict, default_agents: str = DEFAULT_AGENTS) -> str:
+    return module.get("agents_path", default_agents)
+
+
+def _agents_paths(manifest: dict, requested_agents: str) -> list[str]:
+    if requested_agents != DEFAULT_AGENTS:
+        return [requested_agents]
+    extra_paths = sorted(
+        {
+            _agents_path_for_module(module)
+            for module in manifest["modules"]
+            if _agents_path_for_module(module) != DEFAULT_AGENTS
+        }
+    )
+    return [DEFAULT_AGENTS] + extra_paths
+
+
+def _modules_for_agents_path(manifest: dict, agents_path: str) -> list[dict]:
+    return [
+        module
+        for module in manifest["modules"]
+        if _agents_path_for_module(module) == agents_path
+    ]
+
+
 def replace_generated_section(content: str, rendered_section: str) -> str:
     replacement = f"{BEGIN_MARKER}\n{rendered_section}{END_MARKER}"
     if BEGIN_MARKER in content and END_MARKER in content:
@@ -73,10 +98,9 @@ def replace_generated_section(content: str, rendered_section: str) -> str:
     return replacement + "\n"
 
 
-def check_agents_file(agents_path: Path, manifest_path: Path) -> None:
-    manifest = json.loads(manifest_path.read_text())
-    rendered_section = render_module_boundaries_section(manifest)
-    current = agents_path.read_text()
+def check_agents_file(agents_path: Path, manifest_path: Path, modules: list[dict]) -> None:
+    rendered_section = render_module_boundaries_section(modules)
+    current = agents_path.read_text() if agents_path.exists() else ""
     expected = replace_generated_section(current, rendered_section)
     if current != expected:
         raise GeneratedSectionMismatchError(
@@ -84,12 +108,12 @@ def check_agents_file(agents_path: Path, manifest_path: Path) -> None:
         )
 
 
-def write_agents_file(agents_path: Path, manifest_path: Path) -> None:
-    manifest = json.loads(manifest_path.read_text())
-    rendered_section = render_module_boundaries_section(manifest)
-    current = agents_path.read_text()
+def write_agents_file(agents_path: Path, modules: list[dict]) -> None:
+    rendered_section = render_module_boundaries_section(modules)
+    current = agents_path.read_text() if agents_path.exists() else ""
     updated = replace_generated_section(current, rendered_section)
     if current != updated:
+        agents_path.parent.mkdir(parents=True, exist_ok=True)
         agents_path.write_text(updated)
 
 
@@ -103,16 +127,24 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     repo_root = Path(__file__).resolve().parent.parent
-    agents_path = repo_root / args.agents
     manifest_path = repo_root / args.manifest
+    manifest = json.loads(manifest_path.read_text())
+    agents_paths = _agents_paths(manifest, args.agents)
 
     try:
+        for agents_arg in agents_paths:
+            agents_path = repo_root / agents_arg
+            modules = _modules_for_agents_path(manifest, agents_arg)
+            if args.check:
+                check_agents_file(agents_path, manifest_path, modules)
+            else:
+                write_agents_file(agents_path, modules)
         if args.check:
-            check_agents_file(agents_path, manifest_path)
-            print(f"OK: {agents_path} matches {manifest_path}.")
+            rendered_paths = ", ".join(str(repo_root / agents_arg) for agents_arg in agents_paths)
+            print(f"OK: {rendered_paths} match {manifest_path}.")
         else:
-            write_agents_file(agents_path, manifest_path)
-            print(f"Updated {agents_path} from {manifest_path}.")
+            rendered_paths = ", ".join(str(repo_root / agents_arg) for agents_arg in agents_paths)
+            print(f"Updated {rendered_paths} from {manifest_path}.")
     except GeneratedSectionMismatchError as exc:
         print(str(exc), file=sys.stderr)
         return 1

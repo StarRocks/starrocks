@@ -153,6 +153,31 @@ protected:
         return chunk;
     }
 
+    ChunkPtr build_update_chunk(const std::vector<std::string>& files, const std::vector<int64_t>& positions,
+                                const std::vector<std::string>& data_values) {
+        auto chunk = std::make_shared<Chunk>();
+
+        auto file_col = BinaryColumn::create();
+        for (const auto& f : files) {
+            file_col->append(f);
+        }
+        chunk->append_column(file_col, 0);
+
+        auto pos_col = FixedLengthColumn<int64_t>::create();
+        for (auto p : positions) {
+            pos_col->append(p);
+        }
+        chunk->append_column(pos_col, 1);
+
+        auto data_col = BinaryColumn::create();
+        for (const auto& v : data_values) {
+            data_col->append(v);
+        }
+        chunk->append_column(data_col, 2);
+
+        return chunk;
+    }
+
     // Create the IcebergRowDeltaSink with mock sub-sinks.
     // Returns the sink and raw pointers to the mock sinks for verification.
     struct SinkWithMocks {
@@ -243,6 +268,21 @@ TEST_F(IcebergRowDeltaSinkTest, op_code_routing) {
     auto* dat_col = down_cast<const BinaryColumn*>(dat_chunk->get_column_by_index(2).get());
     EXPECT_EQ(dat_col->get_slice(0).to_string(), "val2");
     EXPECT_EQ(dat_col->get_slice(1).to_string(), "val3");
+}
+
+TEST_F(IcebergRowDeltaSinkTest, update_without_routing_column_forwards_to_both_sub_sinks) {
+    auto [sink, delete_mock, data_mock] = create_row_delta_sink_with_mocks(/*op_code_index=*/-1);
+
+    auto chunk = build_update_chunk({"file1.parquet", "file2.parquet"}, {0, 7}, {"val0", "val1"});
+
+    ASSERT_OK(sink->add(chunk));
+
+    EXPECT_EQ(delete_mock->total_rows, 2);
+    EXPECT_EQ(data_mock->total_rows, 2);
+    ASSERT_EQ(delete_mock->received_chunks.size(), 1u);
+    ASSERT_EQ(data_mock->received_chunks.size(), 1u);
+    EXPECT_EQ(delete_mock->received_chunks[0].get(), chunk.get());
+    EXPECT_EQ(data_mock->received_chunks[0].get(), chunk.get());
 }
 
 // Test 3: Verify add() with an empty chunk returns OK without invoking sub-sinks

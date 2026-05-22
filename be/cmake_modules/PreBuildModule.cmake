@@ -36,7 +36,6 @@ if ("${USE_STAROS}" STREQUAL "ON")
     set(PROTOBUF_FOUND TRUE)
     # starrocks project has its imported libprotobuf.a and libre2.a
     # add following ALIAS so grpc can find the correct dependent libraries
-    add_library(re2::re2 ALIAS re2)
     add_library(glog::glog ALIAS glog)
     add_library(gflags::gflags_static ALIAS gflags)
     add_library(hdfs::hdfs ALIAS hdfs)
