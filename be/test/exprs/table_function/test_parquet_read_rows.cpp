@@ -162,14 +162,20 @@ TEST_F(ParquetReadRowsTableFunctionTest, RehydrateMiddleRow) {
     ASSERT_EQ(parquet_path, file_col->get_slice(0).to_string());
     ASSERT_EQ(1, row_col->get_data()[0]);
     // raw_record should be JSON object containing id=2, val=200, name="bob".
-    auto jv = raw_col->get_object(0);
-    auto vs = jv->to_string();
-    ASSERT_TRUE(vs.ok());
-    // The vpack-rendered JSON keys come from the parquet schema; their order is
-    // implementation-defined. Just check the values appear.
-    EXPECT_NE(std::string::npos, vs.value().find("\"id\":2"));
-    EXPECT_NE(std::string::npos, vs.value().find("\"val\":200"));
-    EXPECT_NE(std::string::npos, vs.value().find("\"name\":\"bob\""));
+    // Use vpack slice API directly so the assertion is independent of whether
+    // JsonValue::to_string() pretty-prints with whitespace or not.
+    auto* jv = raw_col->get_object(0);
+    vpack::Slice obj = jv->to_vslice();
+    ASSERT_TRUE(obj.isObject());
+    auto id_field = obj.get("id");
+    ASSERT_TRUE(id_field.isInteger());
+    EXPECT_EQ(2, id_field.getInt());
+    auto val_field = obj.get("val");
+    ASSERT_TRUE(val_field.isInteger());
+    EXPECT_EQ(200, val_field.getInt());
+    auto name_field = obj.get("name");
+    ASSERT_TRUE(name_field.isString());
+    EXPECT_EQ("bob", name_field.copyString());
 
     // 1 input → 1 output row.
     ASSERT_EQ(2, offsets->size());
