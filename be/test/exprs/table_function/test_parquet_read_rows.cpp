@@ -140,12 +140,9 @@ protected:
     // tuple for anchor construction.
     StatusOr<std::pair<int64_t, int64_t>> _write_alltypes_fixture(const std::string& path) {
         std::vector<TypeDescriptor> type_descs{
-                TypeDescriptor::from_logical_type(TYPE_BOOLEAN),
-                TypeDescriptor::from_logical_type(TYPE_TINYINT),
-                TypeDescriptor::from_logical_type(TYPE_SMALLINT),
-                TypeDescriptor::from_logical_type(TYPE_BIGINT),
-                TypeDescriptor::from_logical_type(TYPE_FLOAT),
-                TypeDescriptor::from_logical_type(TYPE_DOUBLE),
+                TypeDescriptor::from_logical_type(TYPE_BOOLEAN),  TypeDescriptor::from_logical_type(TYPE_TINYINT),
+                TypeDescriptor::from_logical_type(TYPE_SMALLINT), TypeDescriptor::from_logical_type(TYPE_BIGINT),
+                TypeDescriptor::from_logical_type(TYPE_FLOAT),    TypeDescriptor::from_logical_type(TYPE_DOUBLE),
                 TypeDescriptor::create_varchar_type(32),
         };
 
