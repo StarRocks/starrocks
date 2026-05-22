@@ -30,6 +30,7 @@
 #include "fs/fs_util.h"
 #include "fs/key_cache.h"
 #include "runtime/current_thread.h"
+#include "runtime/env/global_env.h"
 #include "runtime/exec_env.h"
 #include "storage/chunk_helper.h"
 #include "storage/del_vector.h"
@@ -381,8 +382,9 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
     // 2. Process segments in batches. In parallel mode, each batch runs Phase 1 (parallel
     // load+rewrite) then Phase 2 (sequential _do_update), releasing upserts per batch to
     // prevent memory accumulation. In serial mode, batch_size=1 degenerates to original logic.
-    const uint32_t batch_size =
-            use_parallel_partial_update ? ExecEnv::GetInstance()->lake_partial_update_thread_pool()->max_threads() : 1;
+    const uint32_t batch_size = use_parallel_partial_update
+                                        ? GlobalEnv::GetInstance()->lake_partial_update_thread_pool()->max_threads()
+                                        : 1;
 
     for (uint32_t batch_start = 0; batch_start < local_segments; batch_start += batch_size) {
         uint32_t batch_end = std::min(batch_start + batch_size, local_segments);
@@ -396,7 +398,7 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
 
             std::mutex status_mutex;
             Status shared_status;
-            auto token = ExecEnv::GetInstance()->lake_partial_update_thread_pool()->new_token(
+            auto token = GlobalEnv::GetInstance()->lake_partial_update_thread_pool()->new_token(
                     ThreadPool::ExecutionMode::CONCURRENT);
 
             for (uint32_t i = batch_start; i < batch_end; i++) {
@@ -985,7 +987,7 @@ Status UpdateManager::_do_update(uint32_t rowset_id, int32_t upsert_idx, const S
 
     // Note: Only cloud-native index supports parallel_get/parallel_upsert, local index does not support it
     if (config::enable_pk_index_parallel_execution && is_cloud_native_index) {
-        token = ExecEnv::GetInstance()->pk_index_execution_thread_pool()->new_token(
+        token = GlobalEnv::GetInstance()->pk_index_execution_thread_pool()->new_token(
                 ThreadPool::ExecutionMode::CONCURRENT);
     }
 
@@ -1124,7 +1126,7 @@ Status UpdateManager::_do_update_with_condition_parallel(const RowsetUpdateState
     // Obtain thread pool token for parallel execution if enabled
     std::unique_ptr<ThreadPoolToken> token;
     if (config::enable_pk_index_parallel_execution) {
-        token = ExecEnv::GetInstance()->pk_index_execution_thread_pool()->new_token(
+        token = GlobalEnv::GetInstance()->pk_index_execution_thread_pool()->new_token(
                 ThreadPool::ExecutionMode::CONCURRENT);
     }
 
@@ -1309,7 +1311,7 @@ Status UpdateManager::_do_update_with_condition(const RowsetUpdateStateParams& p
 
     std::unique_ptr<ThreadPoolToken> token;
     if (config::enable_pk_index_parallel_execution) {
-        token = ExecEnv::GetInstance()->lake_partial_update_thread_pool()->new_token(
+        token = GlobalEnv::GetInstance()->lake_partial_update_thread_pool()->new_token(
                 ThreadPool::ExecutionMode::CONCURRENT);
     }
 
@@ -1517,7 +1519,7 @@ Status UpdateManager::batch_get_rss_rowids_from_pkindex(int64_t tablet_id, int64
         TRACE_COUNTER_INCREMENT("pcu_load_update_state_cnt", pk_iters.size());
         std::unique_ptr<ThreadPoolToken> token;
         if (config::enable_pk_index_parallel_execution) {
-            token = ExecEnv::GetInstance()->pk_index_execution_thread_pool()->new_token(
+            token = GlobalEnv::GetInstance()->pk_index_execution_thread_pool()->new_token(
                     ThreadPool::ExecutionMode::CONCURRENT);
         }
         TRACE_COUNTER_SCOPE_LATENCY_US("pcu_prepare_partial_update_states_us");

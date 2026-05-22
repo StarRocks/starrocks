@@ -159,24 +159,26 @@ public:
     template <typename T>
     ClientCache<T>* get_client_cache();
 
-    PriorityThreadPool* thread_pool() { return _thread_pool; }
-    ThreadPool* streaming_load_thread_pool() { return _streaming_load_thread_pool; }
-    ThreadPool* load_rowset_thread_pool() { return _load_rowset_thread_pool; }
-    ThreadPool* load_segment_thread_pool() { return _load_segment_thread_pool; }
-    ThreadPool* put_combined_txn_log_thread_pool() { return _put_combined_txn_log_thread_pool; }
+    PriorityThreadPool* thread_pool() { return GlobalEnv::GetInstance()->thread_pool(); }
+    ThreadPool* streaming_load_thread_pool() { return GlobalEnv::GetInstance()->streaming_load_thread_pool(); }
+    ThreadPool* load_rowset_thread_pool() { return GlobalEnv::GetInstance()->load_rowset_thread_pool(); }
+    ThreadPool* load_segment_thread_pool() { return GlobalEnv::GetInstance()->load_segment_thread_pool(); }
+    ThreadPool* put_combined_txn_log_thread_pool() {
+        return GlobalEnv::GetInstance()->put_combined_txn_log_thread_pool();
+    }
 
     pipeline::DriverExecutor* wg_driver_executor();
     workgroup::ScanExecutor* scan_executor();
     workgroup::ScanExecutor* connector_scan_executor();
     workgroup::WorkGroupManager* workgroup_manager() { return _workgroup_manager.get(); }
 
-    PriorityThreadPool* udf_call_pool() { return _udf_call_pool; }
-    PriorityThreadPool* pipeline_prepare_pool() { return _pipeline_prepare_pool; }
-    PriorityThreadPool* pipeline_sink_io_pool() { return _pipeline_sink_io_pool; }
-    PriorityThreadPool* query_rpc_pool() { return _query_rpc_pool; }
-    PriorityThreadPool* datacache_rpc_pool() { return _datacache_rpc_pool; }
-    ThreadPool* load_rpc_pool() { return _load_rpc_pool.get(); }
-    ThreadPool* dictionary_cache_pool() { return _dictionary_cache_pool.get(); }
+    PriorityThreadPool* udf_call_pool() { return GlobalEnv::GetInstance()->udf_call_pool(); }
+    PriorityThreadPool* pipeline_prepare_pool() { return GlobalEnv::GetInstance()->pipeline_prepare_pool(); }
+    PriorityThreadPool* pipeline_sink_io_pool() { return GlobalEnv::GetInstance()->pipeline_sink_io_pool(); }
+    PriorityThreadPool* query_rpc_pool() { return GlobalEnv::GetInstance()->query_rpc_pool(); }
+    PriorityThreadPool* datacache_rpc_pool() { return GlobalEnv::GetInstance()->datacache_rpc_pool(); }
+    ThreadPool* load_rpc_pool() { return GlobalEnv::GetInstance()->load_rpc_pool(); }
+    ThreadPool* dictionary_cache_pool() { return GlobalEnv::GetInstance()->dictionary_cache_pool(); }
     FragmentMgr* fragment_mgr() { return _fragment_mgr; }
     BaseLoadPathMgr* load_path_mgr() { return _load_path_mgr; }
     RejectedRecordSyncDaemon* rejected_record_sync_daemon() { return _rejected_record_sync_daemon; }
@@ -204,7 +206,7 @@ public:
 
     connector::ConnectorSinkSpillExecutor* connector_sink_spill_executor() { return _connector_sink_spill_executor; }
 
-    ThreadPool* automatic_partition_pool() { return _automatic_partition_pool.get(); }
+    ThreadPool* automatic_partition_pool() { return GlobalEnv::GetInstance()->automatic_partition_pool(); }
 
     RuntimeFilterWorker* runtime_filter_worker() { return _runtime_filter_worker; }
     MemTracker* query_pool_mem_tracker() { return GlobalEnv::GetInstance()->query_pool_mem_tracker(); }
@@ -218,7 +220,7 @@ public:
     pipeline::DriverLimiter* driver_limiter() { return _driver_limiter; }
     pipeline::PipelineTimer* pipeline_timer() const { return _pipeline_timer; }
 
-    int64_t max_executor_threads() const { return _max_executor_threads; }
+    int64_t max_executor_threads() const { return GlobalEnv::GetInstance()->max_executor_threads(); }
 
     uint32_t calc_pipeline_dop(int32_t pipeline_dop) const;
 
@@ -242,19 +244,29 @@ public:
 
     ThreadPool* delete_file_thread_pool();
 
-    ThreadPool* put_aggregate_metadata_thread_pool() { return _put_aggregate_metadata_thread_pool.get(); }
+    ThreadPool* put_aggregate_metadata_thread_pool() {
+        return GlobalEnv::GetInstance()->put_aggregate_metadata_thread_pool();
+    }
 
-    ThreadPool* lake_metadata_fetch_thread_pool() { return _lake_metadata_fetch_thread_pool.get(); }
+    ThreadPool* lake_metadata_fetch_thread_pool() {
+        return GlobalEnv::GetInstance()->lake_metadata_fetch_thread_pool();
+    }
 
-    ThreadPool* lake_vector_index_build_thread_pool() { return _lake_vector_index_build_thread_pool.get(); }
+    ThreadPool* lake_vector_index_build_thread_pool() {
+        return GlobalEnv::GetInstance()->lake_vector_index_build_thread_pool();
+    }
 
     lake::LakePersistentIndexParallelCompactMgr* parallel_compact_mgr() { return _parallel_compact_mgr.get(); }
 
-    ThreadPool* pk_index_execution_thread_pool() { return _pk_index_execution_thread_pool.get(); }
+    ThreadPool* pk_index_execution_thread_pool() { return GlobalEnv::GetInstance()->pk_index_execution_thread_pool(); }
 
-    ThreadPool* pk_index_memtable_flush_thread_pool() { return _pk_index_memtable_flush_thread_pool.get(); }
+    ThreadPool* pk_index_memtable_flush_thread_pool() {
+        return GlobalEnv::GetInstance()->pk_index_memtable_flush_thread_pool();
+    }
 
-    ThreadPool* lake_partial_update_thread_pool() { return _lake_partial_update_thread_pool.get(); }
+    ThreadPool* lake_partial_update_thread_pool() {
+        return GlobalEnv::GetInstance()->lake_partial_update_thread_pool();
+    }
 
     void try_release_resource_before_core_dump();
 
@@ -278,26 +290,11 @@ private:
     ClientCache<FrontendServiceClient>* _frontend_client_cache = nullptr;
     ClientCache<TFileBrokerServiceClient>* _broker_client_cache = nullptr;
 
-    PriorityThreadPool* _thread_pool = nullptr;
-    ThreadPool* _streaming_load_thread_pool = nullptr;
-
-    ThreadPool* _load_segment_thread_pool = nullptr;
-    ThreadPool* _load_rowset_thread_pool = nullptr;
-    ThreadPool* _put_combined_txn_log_thread_pool = nullptr;
-
-    PriorityThreadPool* _udf_call_pool = nullptr;
-    PriorityThreadPool* _pipeline_prepare_pool = nullptr;
-    PriorityThreadPool* _pipeline_sink_io_pool = nullptr;
-    PriorityThreadPool* _query_rpc_pool = nullptr;
-    PriorityThreadPool* _datacache_rpc_pool = nullptr;
-    std::unique_ptr<ThreadPool> _load_rpc_pool;
-    std::unique_ptr<ThreadPool> _dictionary_cache_pool;
     FragmentMgr* _fragment_mgr = nullptr;
     pipeline::QueryContextManager* _query_context_mgr = nullptr;
     std::unique_ptr<workgroup::WorkGroupManager> _workgroup_manager;
     pipeline::DriverLimiter* _driver_limiter = nullptr;
     pipeline::PipelineTimer* _pipeline_timer = nullptr;
-    int64_t _max_executor_threads = 0; // Max thread number of executor
 
     BaseLoadPathMgr* _load_path_mgr = nullptr;
     RejectedRecordSyncDaemon* _rejected_record_sync_daemon = nullptr;
@@ -319,8 +316,6 @@ private:
 
     connector::ConnectorSinkSpillExecutor* _connector_sink_spill_executor = nullptr;
 
-    std::unique_ptr<ThreadPool> _automatic_partition_pool;
-
     RuntimeFilterWorker* _runtime_filter_worker = nullptr;
     RuntimeFilterCache* _runtime_filter_cache = nullptr;
 
@@ -330,13 +325,7 @@ private:
     std::shared_ptr<lake::LocationProvider> _lake_location_provider;
     lake::UpdateManager* _lake_update_manager = nullptr;
     lake::ReplicationTxnManager* _lake_replication_txn_manager = nullptr;
-    std::unique_ptr<ThreadPool> _put_aggregate_metadata_thread_pool = nullptr;
-    std::unique_ptr<ThreadPool> _lake_metadata_fetch_thread_pool = nullptr;
-    std::unique_ptr<ThreadPool> _lake_vector_index_build_thread_pool = nullptr;
     std::unique_ptr<lake::LakePersistentIndexParallelCompactMgr> _parallel_compact_mgr;
-    std::unique_ptr<ThreadPool> _pk_index_execution_thread_pool = nullptr;
-    std::unique_ptr<ThreadPool> _pk_index_memtable_flush_thread_pool = nullptr;
-    std::unique_ptr<ThreadPool> _lake_partial_update_thread_pool = nullptr;
 
     AgentServer* _agent_server = nullptr;
     query_cache::CacheManagerRawPtr _cache_mgr = nullptr;

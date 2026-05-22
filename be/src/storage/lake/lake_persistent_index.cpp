@@ -23,7 +23,7 @@
 #include "common/config_primary_key_fwd.h"
 #include "fs/fs_util.h"
 #include "fs/key_cache.h"
-#include "runtime/exec_env.h"
+#include "runtime/env/global_env.h"
 #include "serde/column_array_serde.h"
 #include "storage/chunk_helper.h"
 #include "storage/lake/filenames.h"
@@ -86,7 +86,7 @@ StatusOr<std::vector<PersistentIndexSstableUniquePtr>> LakePersistentIndex::_ope
 
     std::unique_ptr<ThreadPoolToken> token;
     if (config::enable_pk_index_parallel_execution) {
-        token = ExecEnv::GetInstance()->pk_index_execution_thread_pool()->new_token(
+        token = GlobalEnv::GetInstance()->pk_index_execution_thread_pool()->new_token(
                 ThreadPool::ExecutionMode::CONCURRENT);
     }
     for (int i = 0; i < num_sstables; i++) {
@@ -345,7 +345,7 @@ Status LakePersistentIndex::flush_memtable(bool force) {
         // 3. flush current memtable
         bool flush_async = false;
         if (_inactive_memtables.size() + 1 < config::pk_index_memtable_max_count) {
-            if (ExecEnv::GetInstance()->pk_index_memtable_flush_thread_pool()->submit(_memtable).ok()) {
+            if (GlobalEnv::GetInstance()->pk_index_memtable_flush_thread_pool()->submit(_memtable).ok()) {
                 flush_async = true;
             }
         }
@@ -1016,8 +1016,8 @@ Status LakePersistentIndex::load_dels(const RowsetPtr& rowset, const Schema& pke
         pkcs[del_idx] = std::move(res).value();
     };
 
-    auto token =
-            ExecEnv::GetInstance()->pk_index_execution_thread_pool()->new_token(ThreadPool::ExecutionMode::CONCURRENT);
+    auto token = GlobalEnv::GetInstance()->pk_index_execution_thread_pool()->new_token(
+            ThreadPool::ExecutionMode::CONCURRENT);
     for (int del_idx = 0; del_idx < num_del_files; ++del_idx) {
         // Count attempted files here on the orchestrator thread; TRACE_COUNTER_INCREMENT reads
         // a thread-local current trace that worker threads don't inherit, so incrementing from
