@@ -252,7 +252,6 @@ jobs:
       PR_NUMBER: ${{ github.event.number }}
       BRANCH: ${{ github.base_ref }}
       REPO: ${{ github.repository }}
-    continue-on-error: true
     strategy:
       fail-fast: false
       matrix:
@@ -300,32 +299,37 @@ jobs:
       centos7_image_cache_id: ${{ steps.info.outputs.centos7_image_cache_id }}
       ubuntu_image_cache_id: ${{ steps.info.outputs.ubuntu_image_cache_id }}
     steps:
-      - name: Check Result
-        run: |
-          if [[ "${{ needs.thirdparty-update.result }}" == 'failure' ]]; then
-            echo "::error:: Thirdparty Update Error!"
-            exit 1
-          fi
-
       - name: Download Thirdparty Artifact
-        if: needs.thirdparty-update.result == 'success'
         uses: actions/download-artifact@v6
         with:
           pattern: THIRDPARTY-RESULT-*
           path: outputs
 
+      - name: Check Result
+        run: |
+          # Verify each platform's matrix entry produced its artifact.
+          # Defensive against `continue-on-error: true` re-introduction on
+          # thirdparty-update masking matrix-entry failures from
+          # needs.thirdparty-update.result.
+          missing=()
+          for platform in centos7 ubuntu; do
+            f="./outputs/THIRDPARTY-RESULT-${platform}/image_cache.info"
+            if [[ ! -s "$f" ]]; then
+              missing+=("${platform}")
+            fi
+          done
+          if [[ ${#missing[@]} -gt 0 ]]; then
+            echo "::error::Thirdparty Update failed for: ${missing[*]}"
+            exit 1
+          fi
+
       - name: Read Info
         id: info
         run: |
-          if [[ "${{ needs.thirdparty-update.result }}" == 'success' ]]; then
-            image_cache_id=$(cat "./outputs/THIRDPARTY-RESULT-centos7/image_cache.info" || echo "")
-            echo "centos7_image_cache_id=${image_cache_id}" >> $GITHUB_OUTPUT
-            image_cache_id=$(cat "./outputs/THIRDPARTY-RESULT-ubuntu/image_cache.info" || echo "")
-            echo "ubuntu_image_cache_id=${image_cache_id}" >> $GITHUB_OUTPUT
-          else
-            echo "centos7_image_cache_id=" >> $GITHUB_OUTPUT
-            echo "ubuntu_image_cache_id=" >> $GITHUB_OUTPUT
-          fi
+          image_cache_id=$(cat "./outputs/THIRDPARTY-RESULT-centos7/image_cache.info")
+          echo "centos7_image_cache_id=${image_cache_id}" >> $GITHUB_OUTPUT
+          image_cache_id=$(cat "./outputs/THIRDPARTY-RESULT-ubuntu/image_cache.info")
+          echo "ubuntu_image_cache_id=${image_cache_id}" >> $GITHUB_OUTPUT
 
   be-ut:
     runs-on: [self-hosted, normal]
