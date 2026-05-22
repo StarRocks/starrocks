@@ -83,8 +83,11 @@ public class DeltaUtils {
             fullSchema.add(column);
         }
 
-        return new DeltaLakeTable(CONNECTOR_ID_GENERATOR.getNextId().asInt(), catalog, dbName, tblName, fullSchema,
-                loadPartitionColumnNames(snapshotImpl), snapshotImpl, deltaLakeEngine, snapshot.getMetastoreTable());
+        DeltaLakeTable deltaLakeTable = new DeltaLakeTable(CONNECTOR_ID_GENERATOR.getNextId().asInt(), catalog,
+                dbName, tblName, fullSchema, loadPartitionColumnNames(snapshotImpl), snapshotImpl, deltaLakeEngine,
+                snapshot.getMetastoreTable());
+        snapshotImpl.getMetadata().getDescription().ifPresent(deltaLakeTable::setComment);
+        return deltaLakeTable;
     }
 
     public static List<String> loadPartitionColumnNames(SnapshotImpl snapshot) {
@@ -106,7 +109,11 @@ public class DeltaUtils {
         String columnName = field.getName();
         int columnUniqueId = COLUMN_UNIQUE_ID_INIT_VALUE;
         String physicalName = "";
+        String comment = "";
 
+        if (field.getMetadata().contains("comment")) {
+            comment = (String) field.getMetadata().get("comment");
+        }
         if (columnMappingMode.equalsIgnoreCase(ColumnMapping.COLUMN_MAPPING_MODE_ID) &&
                 field.getMetadata().contains(ColumnMapping.COLUMN_MAPPING_ID_KEY)) {
             columnUniqueId = ((Long) field.getMetadata().get(ColumnMapping.COLUMN_MAPPING_ID_KEY)).intValue();
@@ -116,7 +123,7 @@ public class DeltaUtils {
             physicalName = (String) field.getMetadata().get(ColumnMapping.COLUMN_MAPPING_PHYSICAL_NAME_KEY);
         }
         return new Column(columnName, type, false, null, null, true,
-                null, "", columnUniqueId, physicalName);
+                null, comment, columnUniqueId, physicalName);
     }
 
     public static RemoteFileInputFormat getRemoteFileFormat(String format) {
