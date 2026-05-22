@@ -60,6 +60,27 @@ set_target_properties(starrocks_runtime_core_test_objs PROPERTIES COMPILE_FLAGS 
 add_executable(runtime_core_test $<TARGET_OBJECTS:starrocks_runtime_core_test_objs>)
 target_link_libraries(runtime_core_test ${RUNTIME_CORE_TEST_LINK_LIBS} gtest_main)
 
+set(RUNTIME_ENV_TEST_LINK_LIBS
+    RuntimeEnv
+    RuntimeCore
+    Types
+    Common
+    Base
+    Gutil
+    StarRocksGen
+    ${STARROCKS_DEPENDENCIES}
+    ${STARROCKS_STATIC_LINK_LIBS}
+    ${WL_LINK_DYNAMIC} ${STARROCKS_SYSTEM_LINK_LIBS} ${WRAP_LINKER_FLAGS}
+    ${WL_START_GROUP}
+    gmock
+    gtest
+    ${WL_END_GROUP}
+)
+
+add_executable(runtime_env_test ${BE_TEST_MACOS_LINK_STUBS} runtime_env_test.cpp)
+target_link_libraries(runtime_env_test ${RUNTIME_ENV_TEST_LINK_LIBS} gtest_main)
+set_target_properties(runtime_env_test PROPERTIES COMPILE_FLAGS "-fno-access-control")
+
 set(STREAM_LOAD_METRICS_TEST_LINK_LIBS
     RuntimeCore
     Common
