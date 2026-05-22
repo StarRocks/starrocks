@@ -300,6 +300,7 @@ jobs:
       ubuntu_image_cache_id: ${{ steps.info.outputs.ubuntu_image_cache_id }}
     steps:
       - name: Download Thirdparty Artifact
+        if: needs.thirdparty-update.result == 'success'
         uses: actions/download-artifact@v6
         with:
           pattern: THIRDPARTY-RESULT-*
@@ -307,10 +308,20 @@ jobs:
 
       - name: Check Result
         run: |
-          # Verify each platform's matrix entry produced its artifact.
-          # Defensive against `continue-on-error: true` re-introduction on
-          # thirdparty-update masking matrix-entry failures from
-          # needs.thirdparty-update.result.
+          update_result='${{ needs.thirdparty-update.result }}'
+          if [[ "$update_result" == 'failure' || "$update_result" == 'cancelled' ]]; then
+            echo "::error::thirdparty-update did not complete (result=$update_result)"
+            exit 1
+          fi
+          # 'skipped' means this PR didn't touch thirdparty - nothing to verify,
+          # downstream BUILD reuses the default cached image.
+          if [[ "$update_result" != 'success' ]]; then
+            exit 0
+          fi
+          # Defensive (only when update reported success): verify both platforms
+          # produced their artifact. Catches accidental re-introduction of
+          # `continue-on-error: true`, silent upload-artifact failures, and
+          # empty image_cache.info files.
           missing=()
           for platform in centos7 ubuntu; do
             f="./outputs/THIRDPARTY-RESULT-${platform}/image_cache.info"
@@ -319,17 +330,22 @@ jobs:
             fi
           done
           if [[ ${#missing[@]} -gt 0 ]]; then
-            echo "::error::Thirdparty Update failed for: ${missing[*]}"
+            echo "::error::Thirdparty Update succeeded but missing artifact for: ${missing[*]}"
             exit 1
           fi
 
       - name: Read Info
         id: info
         run: |
-          image_cache_id=$(cat "./outputs/THIRDPARTY-RESULT-centos7/image_cache.info")
-          echo "centos7_image_cache_id=${image_cache_id}" >> $GITHUB_OUTPUT
-          image_cache_id=$(cat "./outputs/THIRDPARTY-RESULT-ubuntu/image_cache.info")
-          echo "ubuntu_image_cache_id=${image_cache_id}" >> $GITHUB_OUTPUT
+          if [[ "${{ needs.thirdparty-update.result }}" == 'success' ]]; then
+            image_cache_id=$(cat "./outputs/THIRDPARTY-RESULT-centos7/image_cache.info")
+            echo "centos7_image_cache_id=${image_cache_id}" >> $GITHUB_OUTPUT
+            image_cache_id=$(cat "./outputs/THIRDPARTY-RESULT-ubuntu/image_cache.info")
+            echo "ubuntu_image_cache_id=${image_cache_id}" >> $GITHUB_OUTPUT
+          else
+            echo "centos7_image_cache_id=" >> $GITHUB_OUTPUT
+            echo "ubuntu_image_cache_id=" >> $GITHUB_OUTPUT
+          fi
 
   be-ut:
     runs-on: [self-hosted, normal]
