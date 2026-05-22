@@ -17,10 +17,11 @@ package com.starrocks.sql.plan;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 
-import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -32,10 +33,16 @@ import java.util.stream.Collectors;
  * Numbering keys off ColumnRefOperator.id so the same column always maps to
  * the same mock name within one query.
  *
+ * Source set is intentionally limited to base-table columns (ColumnRefFactory's
+ * columnRefToColumns map): ColumnRefFactory also creates refs named after
+ * function names (e.g. an aggregate output gets the function name as its
+ * nameHint), so feeding the full ref list to the substitution would rewrite
+ * occurrences of sum/min/count in the rendered output.
+ *
  * Caveat: substitution is whole-word case-insensitive over the column-name
- * set, so a column whose name collides with a SQL keyword or builtin name can
- * be replaced in unrelated positions of the output. Acceptable for an opt-in
- * anonymizer that errs on the side of hiding more.
+ * set, so a base-table column whose name still collides with a SQL keyword or
+ * builtin name can be replaced in unrelated positions of the output.
+ * Acceptable for an opt-in anonymizer that errs on the side of hiding more.
  */
 public final class ExplainMockRewriter {
 
@@ -45,15 +52,16 @@ public final class ExplainMockRewriter {
     public ExplainMockRewriter(ColumnRefFactory factory) {
         Map<String, String> mapping = new LinkedHashMap<>();
         if (factory != null) {
-            List<ColumnRefOperator> refs = new ArrayList<>(factory.getColumnRefs());
-            refs.sort(Comparator.comparingInt(ColumnRefOperator::getId));
+            List<ColumnRefOperator> refs = factory.getColumnRefToColumns().keySet().stream()
+                    .sorted(Comparator.comparingInt(ColumnRefOperator::getId))
+                    .collect(Collectors.toList());
             int seq = 1;
             for (ColumnRefOperator col : refs) {
                 String name = col.getName();
                 if (name == null || name.isEmpty()) {
                     continue;
                 }
-                String key = name.toLowerCase();
+                String key = name.toLowerCase(Locale.ROOT);
                 if (!mapping.containsKey(key)) {
                     mapping.put(key, "mock_col_" + seq++);
                 }
@@ -80,7 +88,7 @@ public final class ExplainMockRewriter {
         Matcher m = pattern.matcher(input);
         StringBuilder sb = new StringBuilder();
         while (m.find()) {
-            String mock = nameToMock.get(m.group(1).toLowerCase());
+            String mock = nameToMock.get(m.group(1).toLowerCase(Locale.ROOT));
             m.appendReplacement(sb, Matcher.quoteReplacement(mock == null ? m.group() : mock));
         }
         m.appendTail(sb);
@@ -88,6 +96,6 @@ public final class ExplainMockRewriter {
     }
 
     public Map<String, String> getMapping() {
-        return nameToMock;
+        return Collections.unmodifiableMap(nameToMock);
     }
 }

@@ -163,6 +163,25 @@ public class ExplainTest extends PlanTestBase {
     }
 
     @Test
+    public void testExplainCostsMockRewriterPreservesFunctionNames() throws Exception {
+        // ColumnRefFactory names aggregate outputs after the function name (e.g.
+        // "sum"); rewriter must restrict its mapping to base-table columns so
+        // function and SQL keyword tokens stay intact in the rendered output.
+        String sql = "SELECT sum(t0.v1) FROM t0 WHERE t0.v2 > 1";
+        ExecPlan execPlan = getExecPlan(sql);
+        ExplainMockRewriter rewriter = new ExplainMockRewriter(execPlan.getColumnRefFactory());
+
+        Assertions.assertFalse(rewriter.getMapping().containsKey("sum"),
+                "function-named ColumnRefOperator leaked into mapping: " + rewriter.getMapping());
+        String rewritten = rewriter.rewrite(
+                execPlan.getExplainString(com.starrocks.thrift.TExplainLevel.COSTS));
+        Assertions.assertTrue(rewritten.contains("mock_col_"), rewritten);
+        // Function name "sum" must still appear (aggregate operator label).
+        Assertions.assertTrue(java.util.regex.Pattern.compile("\\bsum\\b").matcher(rewritten).find(),
+                rewritten);
+    }
+
+    @Test
     public void testExplainCostsWithLabels() throws Exception {
         String sql = "SELECT DISTINCT t0.v1 FROM t0 LEFT JOIN t1 ON t0.v1 = t1.v4";
         String plan = getCostExplainWithLabels(sql);
