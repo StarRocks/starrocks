@@ -331,6 +331,31 @@ public class AnalyzeAggregateTest {
     }
 
     @Test
+    public void testPercentileHashFunction() {
+        // percentile_hash is a scalar function; its compression validation must run
+        // on the scalar analyze path (not analyzeBuiltinAggFunction). Wrap in
+        // percentile_approx_raw so the PERCENTILE result has a query-able output type.
+        // 1-arg overload keeps the legacy storage compression and needs no validation.
+        analyzeSuccess("select percentile_approx_raw(percentile_hash(tf), 0.5) from tall");
+        // Valid in-range integer compression literal.
+        analyzeSuccess("select percentile_approx_raw(percentile_hash(tf, 5000), 0.5) from tall");
+        // Out-of-range integer literal is silently clamped to DEFAULT.
+        analyzeSuccess("select percentile_approx_raw(percentile_hash(tf, 1047), 0.5) from tall");
+        // NULL literal is canonicalized to DEFAULT.
+        analyzeSuccess("select percentile_approx_raw(percentile_hash(tf, NULL), 0.5) from tall");
+        // Non-constant compression (column ref) must be rejected up front rather than
+        // reaching BE, where get_const_value would do an invalid ConstColumn downcast.
+        analyzeFail("select percentile_approx_raw(percentile_hash(tf, tc), 0.5) from tall",
+                "compression must be an integer literal");
+        // Non-integer literal compression is rejected.
+        analyzeFail("select percentile_approx_raw(percentile_hash(tf, 5000.0), 0.5) from tall",
+                "compression must be an integer literal");
+        // Casts and arithmetic expressions for compression are rejected.
+        analyzeFail("select percentile_approx_raw(percentile_hash(tf, CAST(5000 AS DOUBLE)), 0.5) from tall",
+                "compression must be an integer literal");
+    }
+
+    @Test
     public void testPercentileApproxWeightedFunction() {
         // Test parameter count validation
         analyzeFail("select percentile_approx_weighted(1, 2) from tall group by tb");

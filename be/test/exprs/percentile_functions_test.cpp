@@ -17,6 +17,10 @@
 #include <glog/logging.h>
 #include <gtest/gtest.h>
 
+#include <cstring>
+#include <vector>
+
+#include "column/const_column.h"
 #include "exprs/function_context.h"
 #include "types/percentile_value.h"
 
@@ -58,6 +62,36 @@ TEST_F(PercentileFunctionsTest, percentileHashTest) {
     auto percentile = ColumnHelper::cast_to<TYPE_PERCENTILE>(column);
     ASSERT_EQ(1, percentile->get_object(0)->quantile(1));
     ASSERT_EQ(2, percentile->get_object(1)->quantile(1));
+    ASSERT_EQ(3, percentile->get_object(2)->quantile(1));
+}
+
+TEST_F(PercentileFunctionsTest, percentileHashWithCompressionPreservesValue) {
+    Columns columns;
+    auto values = DoubleColumn::create();
+    values->append(1);
+    values->append(2);
+    values->append(3);
+    columns.push_back(std::move(values));
+
+    auto compression_col = DoubleColumn::create();
+    compression_col->append(5000.0);
+    columns.push_back(ConstColumn::create(std::move(compression_col), 3));
+
+    auto column = PercentileFunctions::percentile_hash_with_compression(ctx, columns).value();
+    ASSERT_TRUE(column->is_object());
+    auto percentile = ColumnHelper::cast_to<TYPE_PERCENTILE>(column);
+    for (size_t i = 0; i < percentile->size(); ++i) {
+        std::vector<uint8_t> serialized(percentile->get_object(i)->serialize_size());
+        percentile->get_object(i)->serialize(serialized.data());
+
+        // _compression is the first field the TDigest writes (right after the
+        // 1-byte PercentileValue type tag) and its width is the TDigest Value
+        // type, i.e. float -- read it at that width, not as a double.
+        float compression;
+        memcpy(&compression, serialized.data() + 1, sizeof(compression));
+        ASSERT_FLOAT_EQ(5000.0f, compression);
+    }
+    ASSERT_EQ(1, percentile->get_object(0)->quantile(1));
     ASSERT_EQ(3, percentile->get_object(2)->quantile(1));
 }
 

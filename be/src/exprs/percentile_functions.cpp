@@ -14,6 +14,8 @@
 
 #include "exprs/percentile_functions.h"
 
+#include <cmath>
+
 #include "column/column_builder.h"
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
@@ -42,6 +44,35 @@ StatusOr<ColumnPtr> PercentileFunctions::percentile_hash(FunctionContext* contex
     } else {
         return percentile_column;
     }
+}
+
+StatusOr<ColumnPtr> PercentileFunctions::percentile_hash_with_compression(FunctionContext* context,
+                                                                          const Columns& columns) {
+    ColumnViewer<TYPE_DOUBLE> value_viewer(columns[0]);
+    // Compression is a const argument pre-clamped on FE side (see FunctionAnalyzer):
+    // NULL / non-finite / out-of-[MIN, MAX] literals are replaced with the default
+    // compression factor before reaching BE.
+    double compression = ColumnHelper::get_const_value<TYPE_DOUBLE>(columns[1]);
+    DCHECK(std::isfinite(compression));
+    // Mirror PercentileCompression.MIN/MAX on the FE side; FunctionAnalyzer
+    // clamps any literal outside this range to the default before reaching BE.
+    DCHECK_GE(compression, 2048.0);
+    DCHECK_LE(compression, 10000.0);
+
+    auto percentile_column = PercentileColumn::create();
+    size_t size = columns[0]->size();
+    for (int row = 0; row < size; ++row) {
+        PercentileValue value(compression);
+        if (!value_viewer.is_null(row)) {
+            value.add(value_viewer.value(row));
+        }
+        percentile_column->append(&value);
+    }
+
+    if (ColumnHelper::is_all_const(columns)) {
+        return ConstColumn::create(std::move(percentile_column), size);
+    }
+    return percentile_column;
 }
 
 StatusOr<ColumnPtr> PercentileFunctions::percentile_empty(FunctionContext* context, const Columns& columns) {

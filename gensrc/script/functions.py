@@ -1049,6 +1049,8 @@ vectorized_functions = [
     [130001, 'percentile_empty', True, False, 'PERCENTILE', [], 'PercentileFunctions::percentile_empty'],
     [130002, 'percentile_approx_raw', True, False, 'DOUBLE', ['PERCENTILE', 'DOUBLE'],
      'PercentileFunctions::percentile_approx_raw'],
+    [130003, 'percentile_hash', True, False, 'PERCENTILE', ['DOUBLE', 'DOUBLE'],
+     'PercentileFunctions::percentile_hash_with_compression'],
 
     [140000, 'grouping_id', True, False, 'BIGINT', ['BIGINT'], 'GroupingSetsFunctions::grouping_id'],
     [140001, 'grouping', True, False, 'BIGINT', ['BIGINT'], 'GroupingSetsFunctions::grouping'],
