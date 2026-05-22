@@ -550,14 +550,24 @@ TEST(LakeReplicationTaskRunnerTest, test_outer_pool_can_wait_on_distinct_inner_p
 
     constexpr int kNumFiles = 8;
     std::atomic<int> done{0};
+    // Capture per-iteration submit results in the worker and assert on the main thread.
+    // gtest ASSERT_*/EXPECT_* from a non-test thread does not reliably fail the test —
+    // gtest prints to stderr but the test process can still report success.
+    std::vector<Status> inner_submit_status(kNumFiles);
+    std::atomic<bool> outer_body_completed{false};
     ASSERT_OK(outer_pool->submit_func([&]() {
         auto token = file_pool->new_token(ThreadPool::ExecutionMode::CONCURRENT);
         for (int i = 0; i < kNumFiles; ++i) {
-            ASSERT_OK(token->submit_func([&]() { done.fetch_add(1, std::memory_order_relaxed); }));
+            inner_submit_status[i] = token->submit_func([&]() { done.fetch_add(1, std::memory_order_relaxed); });
         }
         token->wait();
+        outer_body_completed.store(true);
     }));
     outer_pool->wait();
+    EXPECT_TRUE(outer_body_completed.load());
+    for (const auto& s : inner_submit_status) {
+        EXPECT_OK(s);
+    }
     EXPECT_EQ(kNumFiles, done.load());
     outer_pool->shutdown();
     file_pool->shutdown();

@@ -781,6 +781,89 @@ TEST_F(NewFsStarletTest, test_new_fs_starlet_separate_cache_for_modes) {
     EXPECT_EQ(2, callback_count);
 }
 
+// MockStarletFileSystem subclass that returns a configurable Stat-or-Status from `stat()`.
+// Used by the get_file_size tests below to exercise both the happy path (Stat.size
+// surfaces through StarletFileSystem::get_file_size) and the error-propagation path
+// (a non-OK stat() turns into the corresponding StarRocks Status).
+class StatMockFileSystem : public MockStarletFileSystem {
+public:
+    explicit StatMockFileSystem(absl::StatusOr<staros::starlet::fslib::Stat> stat_result)
+            : _stat_result(std::move(stat_result)) {}
+
+    absl::StatusOr<staros::starlet::fslib::Stat> stat(std::string_view /*path*/) override { return _stat_result; }
+
+private:
+    absl::StatusOr<staros::starlet::fslib::Stat> _stat_result;
+};
+
+// Happy path: stat() returns a Stat with a known size, get_file_size returns it.
+TEST_F(NewFsStarletTest, test_get_file_size_returns_stat_size) {
+    staros::starlet::fslib::Stat fake_stat{};
+    fake_stat.size = 12345;
+    auto mock_fs = std::make_shared<StatMockFileSystem>(fake_stat);
+    int64_t test_shard_id = 55501;
+    SyncPoint::GetInstance()->SetCallBack("new_fs_starlet::get_shard_filesystem", [&](void* arg) {
+        auto* fs_st = static_cast<absl::StatusOr<std::shared_ptr<staros::starlet::fslib::FileSystem>>*>(arg);
+        *fs_st = mock_fs;
+    });
+
+    auto fs = new_fs_starlet(test_shard_id, false);
+    ASSERT_NE(nullptr, fs);
+    ASSIGN_OR_ABORT(auto sz, fs->get_file_size(fmt::format("staros://{}/anyfile", test_shard_id)));
+    EXPECT_EQ(12345u, sz);
+}
+
+// Object-storage HEAD returning a large size (close to uint64_t domain) must
+// survive the StatusOr<uint64_t> path without truncation.
+TEST_F(NewFsStarletTest, test_get_file_size_handles_large_uint64) {
+    staros::starlet::fslib::Stat fake_stat{};
+    fake_stat.size = static_cast<uint64_t>(1) << 40; // 1 TiB
+    auto mock_fs = std::make_shared<StatMockFileSystem>(fake_stat);
+    int64_t test_shard_id = 55502;
+    SyncPoint::GetInstance()->SetCallBack("new_fs_starlet::get_shard_filesystem", [&](void* arg) {
+        auto* fs_st = static_cast<absl::StatusOr<std::shared_ptr<staros::starlet::fslib::FileSystem>>*>(arg);
+        *fs_st = mock_fs;
+    });
+
+    auto fs = new_fs_starlet(test_shard_id, false);
+    ASSERT_NE(nullptr, fs);
+    ASSIGN_OR_ABORT(auto sz, fs->get_file_size(fmt::format("staros://{}/big", test_shard_id)));
+    EXPECT_EQ(static_cast<uint64_t>(1) << 40, sz);
+}
+
+// stat() error must propagate as the matching StarRocks Status (NotFound for a
+// missing object — the typical S3 404 case during replication file copy).
+TEST_F(NewFsStarletTest, test_get_file_size_propagates_stat_not_found) {
+    auto mock_fs = std::make_shared<StatMockFileSystem>(absl::NotFoundError("missing object"));
+    int64_t test_shard_id = 55503;
+    SyncPoint::GetInstance()->SetCallBack("new_fs_starlet::get_shard_filesystem", [&](void* arg) {
+        auto* fs_st = static_cast<absl::StatusOr<std::shared_ptr<staros::starlet::fslib::FileSystem>>*>(arg);
+        *fs_st = mock_fs;
+    });
+
+    auto fs = new_fs_starlet(test_shard_id, false);
+    ASSERT_NE(nullptr, fs);
+    auto sz_or = fs->get_file_size(fmt::format("staros://{}/missing", test_shard_id));
+    ASSERT_FALSE(sz_or.ok());
+    EXPECT_TRUE(sz_or.status().is_not_found()) << sz_or.status();
+}
+
+// Generic stat() error (permission / unavailable) must also surface as a non-OK
+// Status rather than being silently coerced to a zero size.
+TEST_F(NewFsStarletTest, test_get_file_size_propagates_stat_permission_denied) {
+    auto mock_fs = std::make_shared<StatMockFileSystem>(absl::PermissionDeniedError("AccessDenied"));
+    int64_t test_shard_id = 55504;
+    SyncPoint::GetInstance()->SetCallBack("new_fs_starlet::get_shard_filesystem", [&](void* arg) {
+        auto* fs_st = static_cast<absl::StatusOr<std::shared_ptr<staros::starlet::fslib::FileSystem>>*>(arg);
+        *fs_st = mock_fs;
+    });
+
+    auto fs = new_fs_starlet(test_shard_id, false);
+    ASSERT_NE(nullptr, fs);
+    auto sz_or = fs->get_file_size(fmt::format("staros://{}/locked", test_shard_id));
+    EXPECT_FALSE(sz_or.ok());
+}
+
 // Test failure scenario when the StarOS worker get_shard_filesystem returns error
 TEST_F(NewFsStarletTest, test_new_fs_starlet_get_shard_filesystem_failure) {
     int64_t test_shard_id = 44444;
