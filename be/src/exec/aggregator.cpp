@@ -1538,6 +1538,22 @@ typename HashVariantType::Type Aggregator::_try_to_apply_compressed_key_opt(type
     if (_group_by_types.empty()) {
         return type;
     }
+    // Don't shadow direct-array variants with the slice_cx1 rewrite.
+    // TINYINT / BOOL / SMALLINT route to SmallFixedSizeHashMap-backed
+    // direct arrays; the slice_cx1 path sits on the same direct array
+    // under int8 but adds a per-row bitcompress_serialize step, so any
+    // query that supplies range stats via `group_by_min_max` would
+    // otherwise silently regress to the slower slice path.
+    if (_group_by_types.size() == 1) {
+        switch (_group_by_types[0].result_type.type) {
+        case TYPE_TINYINT:
+        case TYPE_BOOLEAN:
+        case TYPE_SMALLINT:
+            return type;
+        default:
+            break;
+        }
+    }
     for (size_t i = 0; i < _ranges.size(); ++i) {
         if (!_ranges[i].has_value()) {
             return type;
