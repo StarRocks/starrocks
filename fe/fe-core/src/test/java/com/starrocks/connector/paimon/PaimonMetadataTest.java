@@ -149,7 +149,6 @@ import static org.apache.paimon.io.DataFileMeta.EMPTY_MAX_KEY;
 import static org.apache.paimon.io.DataFileMeta.EMPTY_MIN_KEY;
 import static org.apache.paimon.stats.SimpleStats.EMPTY_STATS;
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class PaimonMetadataTest {
@@ -232,7 +231,7 @@ public class PaimonMetadataTest {
         assertEquals("db1", paimonTable.getCatalogDBName());
         assertEquals("tbl1", paimonTable.getCatalogTableName());
         assertEquals("CREATE TABLE `tbl1` (\n" +
-                        "  `col2` int(11) NOT NULL,\n" +
+                        "  `col2` int(11) DEFAULT NULL,\n" +
                         "  `col3` double DEFAULT NULL\n" +
                         ")\n" +
                         "PRIMARY KEY (`col2`)\n" +
@@ -241,7 +240,7 @@ public class PaimonMetadataTest {
         assertEquals(Lists.newArrayList("col1"), paimonTable.getPartitionColumnNames());
         assertEquals("hdfs://127.0.0.1:10000/paimon", paimonTable.getTableLocation());
         assertEquals(IntegerType.INT, paimonTable.getBaseSchema().get(0).getType());
-        assertFalse(paimonTable.getBaseSchema().get(0).isAllowNull());
+        assertTrue(paimonTable.getBaseSchema().get(0).isAllowNull());
         assertEquals(FloatType.DOUBLE, paimonTable.getBaseSchema().get(1).getType());
         assertTrue(paimonTable.getBaseSchema().get(1).isAllowNull());
         assertEquals("paimon_catalog", paimonTable.getCatalogName());
