@@ -25,6 +25,7 @@ import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.pipe.PipeName;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -414,5 +415,21 @@ public class NativeAccessController implements AccessController {
     @Override
     public void checkAnyActionOnWarehouse(ConnectContext context, String name) throws AccessDeniedException {
         checkAnyActionOnObject(context, ObjectType.WAREHOUSE, Collections.singletonList(name));
+    }
+
+    /**
+     * Built-in row access policy for the {@code _statistics_.rejected_records}
+     * system table. Delegates to
+     * {@link RejectedRecordsRowAccessPolicy} so the same rules apply
+     * regardless of whether the cluster runs the native access controller,
+     * Ranger-StarRocks, or Ranger-Hive. Returns {@code null} for tables
+     * that are not the system table so user-defined RLS is unaffected.
+     */
+    @Override
+    public Expr getRowAccessPolicy(ConnectContext currentUser, TableName tableName) {
+        if (!RejectedRecordsRowAccessPolicy.matches(tableName)) {
+            return null;
+        }
+        return RejectedRecordsRowAccessPolicy.buildPolicy(currentUser, tableName);
     }
 }

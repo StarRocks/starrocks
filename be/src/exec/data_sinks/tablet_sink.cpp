@@ -128,6 +128,14 @@ Status OlapTableSink::init(const TDataSink& t_sink, RuntimeState* state) {
     if (table_sink.__isset.db_name) {
         state->set_db(table_sink.db_name);
     }
+    if (table_sink.__isset.table_name) {
+        // Stash destination table on RuntimeState so RejectedRecordWriter
+        // can stamp rows with the correct target_table. Must happen before
+        // any rejection site fires; OlapTableSink::init() runs during
+        // fragment init so both this and the scanner's subsequent
+        // rejections see the populated value.
+        state->set_table_name(table_sink.table_name);
+    }
     state->set_txn_id(table_sink.txn_id);
     if (table_sink.__isset.label) {
         state->set_load_label(table_sink.label);

@@ -104,6 +104,12 @@ public:
     // When set to false, the response body will be returned even for HTTP errors
     void set_fail_on_error(bool fail) { curl_easy_setopt(_curl, CURLOPT_FAILONERROR, fail ? 1L : 0L); }
 
+    // Override the HTTP method string without changing curl's transfer
+    // semantics. Use this when you need PUT with an inline body via
+    // set_payload() -- set_method(PUT) sets CURLOPT_UPLOAD which
+    // conflicts with CURLOPT_POSTFIELDS used by set_payload().
+    void set_custom_method(const char* method) { curl_easy_setopt(_curl, CURLOPT_CUSTOMREQUEST, method); }
+
     // Control whether to follow HTTP redirects (3xx responses)
     // Default is true (follow redirects). Set to false to disable redirect following,
     // which is important for SSRF protection in http_request() function.

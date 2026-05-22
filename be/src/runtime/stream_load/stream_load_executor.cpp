@@ -146,10 +146,12 @@ Status StreamLoadExecutor::execute_plan_fragment(StreamLoadContext* ctx) {
                     ctx->error_url = to_load_error_http_path(executor->runtime_state()->get_error_log_file_path());
                 }
 
-                if (!executor->runtime_state()->get_rejected_record_file_path().empty()) {
-                    ctx->rejected_record_path = fmt::format("{}:{}", BackendOptions::get_localBackend().host,
-                                                            executor->runtime_state()->get_rejected_record_file_path());
-                }
+                // The legacy tab-delimited rejected-record file was removed;
+                // ctx->rejected_record_path is never populated anymore. The
+                // StreamLoadContext response JSON still carries the field
+                // for backward compatibility but it will always be empty.
+                // Clients should query `_statistics_.rejected_records` by
+                // Label or txn_id to retrieve rejected rows.
 
                 if (ctx->unref()) {
                     delete ctx;

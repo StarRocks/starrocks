@@ -448,6 +448,14 @@ Status IsomorphicBatchWrite::_send_rpc_request(StreamLoadContext* data_ctx) {
     request.__set_user(data_ctx->auth.user);
     request.__set_passwd(data_ctx->auth.passwd);
     request.__set_user_ip(data_ctx->auth.user_ip);
+    if (!data_ctx->auth.internal_token.empty()) {
+        // Cluster-internal trust token (RejectedRecordSyncDaemon path):
+        // FE will treat the request as ROOT for system tables whitelisted
+        // in FrontendServiceImpl::isAuthorizedByInternalToken, skipping
+        // password / INSERT-priv checks. For any other table the token is
+        // ignored and the user/passwd above are used as normal.
+        request.__set_internal_token(data_ctx->auth.internal_token);
+    }
     auto backend_id = get_backend_id();
     if (backend_id.has_value()) {
         request.__set_backend_id(backend_id.value());

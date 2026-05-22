@@ -77,6 +77,7 @@ class QueryStatistics;
 class QueryStatisticsRecvr;
 class FragmentDictState;
 class RuntimeStateHelper;
+class RejectedRecordWriter;
 using BroadcastJoinRightOffsprings = std::unordered_set<int32_t>;
 namespace pipeline {
 class QueryContext;
@@ -261,13 +262,30 @@ public:
 
     const std::string& db() const { return _db; }
 
+    // Target table name of the current load. Populated by OlapTableSink on
+    // init so RejectedRecordWriter can stamp rows with the correct
+    // (target_database, target_table) pair. Scanner-phase rejections
+    // inherit whatever the sink set earlier in the fragment's init
+    // sequence; if no sink ran first (rare) this stays empty and the
+    // writer records an empty string, which the FE side treats the
+    // same as NULL.
+    void set_table_name(const std::string& table_name) { _table_name = table_name; }
+
+    const std::string& table_name() const { return _table_name; }
+
     void set_load_label(const std::string& label) { _load_label = label; }
 
     const std::string& load_label() const { return _load_label; }
 
     const std::string& get_error_log_file_path() const { return _error_log_file_path; }
 
-    const std::string& get_rejected_record_file_path() const { return _rejected_record_file_path; }
+    // Lazily-constructed per-fragment writer that persists rejected rows as
+    // JSON Lines for the sync daemon to ship to
+    // `_statistics_.rejected_records`. Returns nullptr when the writer has
+    // not been created; callers should go through
+    // `RuntimeStateHelper::rejected_record_writer(state)` which handles
+    // lazy construction under lock.
+    RejectedRecordWriter* rejected_record_writer_or_null() const { return _rejected_record_writer.get(); }
 
     bool has_reached_max_error_msg_num(bool is_summary = false);
 
@@ -275,6 +293,13 @@ public:
         return _query_options.log_rejected_record_num == -1 ||
                _query_options.log_rejected_record_num > _num_log_rejected_rows;
     }
+
+    // Single accounting point for rejected-row counting, bumped from
+    // inside `RejectedRecordWriter::append_serialized`. All entry paths
+    // that eventually reach the writer (legacy helper, ORC capture,
+    // Parquet ArrowConvertContext) share this counter so the per-load
+    // cap in `log_rejected_record_num` fires symmetrically.
+    void note_rejected_record() { _num_log_rejected_rows.fetch_add(1, std::memory_order_relaxed); }
 
     int64_t num_bytes_load_from_source() const noexcept { return _num_bytes_load_from_source.load(); }
 
@@ -622,9 +647,19 @@ private:
 
     std::mutex _error_log_lock;
 
+    // Guards lazy construction of `_rejected_record_writer`. Used to be
+    // named after the legacy tab-delimited file it guarded; the file is
+    // gone but the mutex keeps the historical name so call sites remain
+    // stable across the deletion.
     std::mutex _rejected_record_lock;
-    std::string _rejected_record_file_path;
-    std::unique_ptr<std::ofstream> _rejected_record_file;
+    // Writer. Lazily constructed by RuntimeStateHelper on first
+    // append so enabled-but-never-triggered loads pay no allocation cost.
+    // Held via shared_ptr so this header does not need RejectedRecordWriter's
+    // complete type for destruction. Letting unique_ptr destruct here would
+    // force runtime_state.cpp (RuntimeCore layer) to include the writer
+    // header, which lives in the higher Runtime layer and breaks the module
+    // boundary check.
+    std::shared_ptr<RejectedRecordWriter> _rejected_record_writer;
 
     // Username of user that is executing the query to which this RuntimeState belongs.
     std::string _user;
@@ -720,6 +755,7 @@ private:
     int64_t _txn_id = 0;
     std::string _load_label;
     std::string _db;
+    std::string _table_name;
 
     std::string _error_log_file_path;
     std::ofstream* _error_log_file = nullptr; // error file path, absolute path

@@ -21,7 +21,11 @@
 #include "exprs/cast_expr.h"
 #include "exprs/column_ref.h"
 #include "fs/fs_broker.h"
+#include "rapidjson/document.h"
+#include "rapidjson/stringbuffer.h"
+#include "rapidjson/writer.h"
 #include "runtime/exec_env.h"
+#include "runtime/rejected_record_writer.h"
 #include "runtime/runtime_state.h"
 #include "runtime/runtime_state_helper.h"
 #include "runtime/stream_load/load_stream_mgr.h"
@@ -42,13 +46,64 @@ ParquetScanner::ParquetScanner(RuntimeState* state, RuntimeProfile* profile, con
     _file_format_str = "parquet";
     _chunk_filter.reserve(_max_chunk_size);
     _conv_ctx.timezone = state->timezone();
-    _conv_ctx.report_error_message = [state, ctx = &_conv_ctx](const std::string& reason, const std::string& raw_data) {
+    _conv_ctx.report_error_message = [state, ctx = &_conv_ctx](const std::string& reason, const std::string& raw_data,
+                                                               int64_t row_offset_in_array) {
         if (ctx->error_message_counter > MAX_ERROR_MESSAGE_COUNTER) return;
         ctx->error_message_counter += 1;
-        std::string error_msg =
-                strings::Substitute("file = $0, column = $1, raw data = $2", ctx->current_file,
-                                    ctx->current_column_name.empty() ? "null" : ctx->current_column_name, raw_data);
+        const std::string& col_name = ctx->current_column_name;
+        std::string error_msg = strings::Substitute("file = $0, column = $1, raw data = $2", ctx->current_file,
+                                                    col_name.empty() ? "null" : col_name, raw_data);
         RuntimeStateHelper::append_error_msg_to_file(state, error_msg, reason);
+
+        // Emit a rejected-records anchor. The `raw_record` column stays as
+        // a single-column diagnostic fragment so users can quickly eyeball
+        // what went wrong without running the TVF; the `source_info` column
+        // carries everything a future `parquet_read_rows()` TVF needs to
+        // rehydrate the full row on demand:
+        //   * `file`          -- Parquet URI (always set)
+        //   * `row_in_file`   -- absolute row index (only when both
+        //                        current_batch_first_row_in_file and
+        //                        row_offset_in_array are known; the
+        //                        Arrow-Flight path and batch-wide errors
+        //                        leave it unset)
+        //   * `file_size`     -- snapshot at scanner open (fail-closed check
+        //                        in the TVF)
+        //   * `file_mtime_ms` -- ditto
+        //
+        // Replay from the anchor requires the TVF to re-read the Parquet
+        // file, which is the price we pay for not building the full ORC-
+        // style broker-load validation pipeline on the Parquet side. See
+        // the rejected-records plan file for the TVF follow-up.
+        auto* writer = RuntimeStateHelper::rejected_record_writer(state);
+        if (writer != nullptr) {
+            const std::string key = col_name.empty() ? std::string("_raw") : col_name;
+
+            rapidjson::Document src_doc;
+            src_doc.SetObject();
+            auto& alloc = src_doc.GetAllocator();
+            src_doc.AddMember("format", rapidjson::Value("parquet", 7, alloc), alloc);
+            src_doc.AddMember("file",
+                              rapidjson::Value(ctx->current_file.c_str(),
+                                               static_cast<rapidjson::SizeType>(ctx->current_file.size()), alloc),
+                              alloc);
+            if (ctx->current_batch_first_row_in_file >= 0 && row_offset_in_array >= 0) {
+                int64_t row_in_file = ctx->current_batch_first_row_in_file + row_offset_in_array;
+                src_doc.AddMember("row_in_file", rapidjson::Value(row_in_file), alloc);
+            }
+            if (ctx->file_size >= 0) {
+                src_doc.AddMember("file_size", rapidjson::Value(ctx->file_size), alloc);
+            }
+            if (ctx->file_mtime_ms >= 0) {
+                src_doc.AddMember("file_mtime_ms", rapidjson::Value(ctx->file_mtime_ms), alloc);
+            }
+            rapidjson::StringBuffer src_buf;
+            rapidjson::Writer<rapidjson::StringBuffer> src_writer(src_buf);
+            src_doc.Accept(src_writer);
+
+            writer->append_from_slices({Slice{raw_data.data(), raw_data.size()}}, {key},
+                                       /*error_code=*/"TYPE_MISMATCH", reason, col_name,
+                                       std::string(src_buf.GetString(), src_buf.GetSize()));
+        }
     };
 }
 
@@ -272,6 +327,12 @@ Status ParquetScanner::next_batch() {
         } else {
             if (status.ok()) {
                 _next_batch_counter++;
+                // Record where this RecordBatch starts in the file BEFORE
+                // `_last_file_scan_rows` is advanced past it. Any
+                // `ctx->report_error_message(..., row_offset_in_array)` fired
+                // during the upcoming conversion pass will resolve
+                // `row_in_file = current_batch_first_row_in_file + row_offset_in_array`.
+                _conv_ctx.current_batch_first_row_in_file = _last_file_scan_rows;
                 _last_file_scan_rows += _batch->num_rows();
                 if (_next_batch_counter % 32 == 0) {
                     auto incr_bytes = (int64_t)((double)_last_file_scan_rows / _curr_file_reader->total_num_rows() *
@@ -306,6 +367,21 @@ Status ParquetScanner::open_next_reader() {
             return st;
         }
         _conv_ctx.current_file = file->filename();
+        // Seed the Parquet rejected-record anchor fields so any
+        // type-conversion error this scanner fires can carry the
+        // `(file, row_in_file, file_size, file_mtime_ms)` tuple the
+        // `parquet_read_rows()` TVF needs to rehydrate the full row on
+        // replay. Reset per file.
+        _conv_ctx.current_batch_first_row_in_file = -1;
+        // TBrokerRangeDesc.modification_time is already in milliseconds:
+        // HiveConnectorScanRangeSource pipes FileStatus.getModificationTime()
+        // into it verbatim, and Hadoop's FileStatus specifies milliseconds.
+        // Consumers elsewhere in BE (cache_input_stream, datacache_options,
+        // page_reader) treat it the same way. Previously this code
+        // multiplied by 1000, which would have produced microseconds and
+        // broken any future TVF that compares the anchor's mtime against
+        // the live file's mtime.
+        _conv_ctx.file_mtime_ms = range_desc.__isset.modification_time ? range_desc.modification_time : -1;
         auto parquet_file = std::make_shared<ParquetChunkFile>(file, 0, _counter);
         auto parquet_reader = std::make_shared<ParquetReaderWrap>(std::move(parquet_file), _num_of_columns_from_file,
                                                                   range_desc.start_offset, range_desc.size);
@@ -320,6 +396,7 @@ Status ParquetScanner::open_next_reader() {
         int64_t file_size;
         RETURN_IF_ERROR(parquet_reader->size(&file_size));
         _last_file_size = file_size;
+        _conv_ctx.file_size = file_size;
         _last_range_size = range_desc.size;
         // switch to next file if the current file is empty
         if (file_size == 0) {

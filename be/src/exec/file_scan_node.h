@@ -114,4 +114,10 @@ private:
     RuntimeProfile::Counter* _scanner_file_reader_timer = nullptr;
 };
 
+// Free predicate helper extracted from FileScanNode::_scanner_scan and
+// FileDataSource::_create_scanner for testability. Returns InternalError when
+// rejected-record logging is enabled but `fmt` is not CSV/JSON/Parquet/ORC.
+// Both call sites use the identical check; the extraction DRYs them.
+Status check_rejected_record_format_support(bool logging_enabled, TFileFormatType::type fmt);
+
 } // namespace starrocks

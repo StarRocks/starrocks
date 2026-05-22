@@ -232,16 +232,25 @@ std::unique_ptr<FileScanner> FileScanNode::_create_scanner(const TBrokerScanRang
     }
 }
 
+// Pure predicate extracted for testability: returns InternalError when
+// rejected-record logging is enabled but `fmt` is not in the supported
+// whitelist (CSV / JSON / Parquet / ORC). The identical check lives in
+// file_connector.cpp; extracting to a free function DRYs both call sites.
+Status check_rejected_record_format_support(bool logging_enabled, TFileFormatType::type fmt) {
+    if (logging_enabled && fmt != TFileFormatType::FORMAT_CSV_PLAIN && fmt != TFileFormatType::FORMAT_JSON &&
+        fmt != TFileFormatType::FORMAT_PARQUET && fmt != TFileFormatType::FORMAT_ORC) {
+        return Status::InternalError("only support csv/json/parquet/orc format to log rejected record");
+    }
+    return Status::OK();
+}
+
 Status FileScanNode::_scanner_scan(const TBrokerScanRange& scan_range, const std::vector<ExprContext*>& conjunct_ctxs,
                                    ScannerCounter* counter) {
     if (scan_range.ranges.empty()) {
         return Status::EndOfFile("scan range is empty");
     }
-    if (runtime_state()->enable_log_rejected_record() &&
-        scan_range.ranges[0].format_type != TFileFormatType::FORMAT_CSV_PLAIN &&
-        scan_range.ranges[0].format_type != TFileFormatType::FORMAT_JSON) {
-        return Status::InternalError("only support csv/json format to log rejected record");
-    }
+    RETURN_IF_ERROR(check_rejected_record_format_support(runtime_state()->enable_log_rejected_record(),
+                                                         scan_range.ranges[0].format_type));
     //create scanner object and open
     std::unique_ptr<FileScanner> scanner = _create_scanner(scan_range, counter);
     if (scanner == nullptr) {
