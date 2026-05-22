@@ -169,12 +169,15 @@ TEST_F(ParquetReadRowsTableFunctionTest, RehydrateMiddleRow) {
     auto* jv = raw_col->get_object(0);
     vpack::Slice obj = jv->to_vslice();
     ASSERT_TRUE(obj.isObject());
+    // vpack may store the round-tripped JSON number as either Integer or
+    // Double depending on the parser path; isNumber() covers both, and
+    // getNumericValue<int64_t> casts safely from either form.
     auto id_field = obj.get("id");
-    ASSERT_TRUE(id_field.isInteger());
-    EXPECT_EQ(2, id_field.getInt());
+    ASSERT_TRUE(id_field.isNumber());
+    EXPECT_EQ(2, id_field.getNumericValue<int64_t>());
     auto val_field = obj.get("val");
-    ASSERT_TRUE(val_field.isInteger());
-    EXPECT_EQ(200, val_field.getInt());
+    ASSERT_TRUE(val_field.isNumber());
+    EXPECT_EQ(200, val_field.getNumericValue<int64_t>());
     auto name_field = obj.get("name");
     ASSERT_TRUE(name_field.isString());
     EXPECT_EQ("bob", name_field.copyString());
