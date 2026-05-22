@@ -490,6 +490,10 @@ Status add_adaptive_nullable_column_by_json_object(Column* column, const TypeDes
 
 Status add_adaptive_nullable_column(Column* column, const TypeDescriptor& type_desc, std::string_view name,
                                     simdjson::ondemand::value* value, bool invalid_as_null) {
+    // Snapshot so a partial nested append (Struct/Map/Array child column) can be
+    // rewound on error. Column::resize cascades to all leaf storage, restoring
+    // orphan keys/values/elements that the inner builders left behind.
+    const size_t snapshot = column->size();
     try {
         if (value == nullptr || value->is_null()) {
             column->append_nulls(1);
@@ -497,12 +501,16 @@ Status add_adaptive_nullable_column(Column* column, const TypeDescriptor& type_d
         }
 
         auto st = add_adaptive_nullable_column(column, type_desc, name, value);
-        if (!st.ok() && invalid_as_null) {
-            column->append_nulls(1);
-            return Status::OK();
+        if (!st.ok()) {
+            column->resize(snapshot);
+            if (invalid_as_null) {
+                column->append_nulls(1);
+                return Status::OK();
+            }
         }
         return st;
     } catch (simdjson::simdjson_error& e) {
+        column->resize(snapshot);
         auto err_msg = strings::Substitute("Failed to parse value, column=$0, error=$1", name,
                                            simdjson::error_message(e.error()));
         return Status::DataQualityError(err_msg);
@@ -511,6 +519,10 @@ Status add_adaptive_nullable_column(Column* column, const TypeDescriptor& type_d
 
 Status add_nullable_column(Column* column, const TypeDescriptor& type_desc, std::string_view name,
                            simdjson::ondemand::value* value, bool invalid_as_null) {
+    // Snapshot so a partial nested append (Struct/Map/Array child column) can be
+    // rewound on error. Column::resize cascades to all leaf storage, restoring
+    // orphan keys/values/elements that the inner builders left behind.
+    const size_t snapshot = column->size();
     try {
         if (value == nullptr || value->is_null()) {
             column->append_nulls(1);
@@ -518,12 +530,16 @@ Status add_nullable_column(Column* column, const TypeDescriptor& type_desc, std:
         }
 
         auto st = add_nullable_column(column, type_desc, name, value);
-        if (!st.ok() && invalid_as_null) {
-            column->append_nulls(1);
-            return Status::OK();
+        if (!st.ok()) {
+            column->resize(snapshot);
+            if (invalid_as_null) {
+                column->append_nulls(1);
+                return Status::OK();
+            }
         }
         return st;
     } catch (simdjson::simdjson_error& e) {
+        column->resize(snapshot);
         auto err_msg = strings::Substitute("Failed to parse value, column=$0, error=$1", name,
                                            simdjson::error_message(e.error()));
         return Status::DataQualityError(err_msg);
