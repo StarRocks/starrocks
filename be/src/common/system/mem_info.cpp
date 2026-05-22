@@ -163,10 +163,29 @@ void MemInfo::set_memlimit_if_container() {
                 StringParser::string_to_int<int64_t>(limit_in_bytes_str.data(), limit_in_bytes_str.size(), &result);
     } else if (fs.f_type == CGROUP2_SUPER_MAGIC) {
         // cgroup v2
-        // Read from /sys/fs/cgroup/memory/memory.max
+        std::string cgroup_info;
+        std::string cgroup_path = "";
+        if (FileUtil::read_whole_content("/proc/self/cgroup", cgroup_info)) {
+            std::vector<std::string> lines = strings::Split(cgroup_info, "\n", strings::SkipEmpty());
+            for (const auto& line : lines) {
+                std::vector<std::string> fields = strings::Split(line, ":");
+                if (fields.size() == 3 && fields[0] == "0" && fields[1].empty()) {
+                    cgroup_path = fields[2];
+                    break;
+                }
+            }
+        }
+
         std::string memory_max;
-        if (!FileUtil::read_whole_content("/sys/fs/cgroup/memory.max", memory_max) &&
-            !FileUtil::read_whole_content("/sys/fs/cgroup/kubepods/memory.max", memory_max)) {
+        bool read_success = false;
+        if (!cgroup_path.empty()) {
+            read_success = FileUtil::read_whole_content("/sys/fs/cgroup" + cgroup_path + "/memory.max", memory_max);
+        }
+        if (!read_success) {
+            read_success = FileUtil::read_whole_content("/sys/fs/cgroup/memory.max", memory_max);
+        }
+
+        if (!read_success) {
             LOG(WARNING) << "Fail to get mem info from cgroup2fs";
             return;
         }
