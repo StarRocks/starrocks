@@ -64,6 +64,23 @@ target_link_libraries(RuntimeCore PRIVATE
     StarRocksGen
 )
 
+set(RUNTIME_ENV_FILES
+    env/global_env.cpp
+)
+
+ADD_BE_LIB(RuntimeEnv
+    ${RUNTIME_ENV_FILES}
+)
+
+target_link_libraries(RuntimeEnv PUBLIC
+    RuntimeCore
+    Types
+    Common
+    Base
+    Gutil
+    StarRocksGen
+)
+
 set(RUNTIME_FILES
     broker_mgr.cpp
     buffer_control_block.cpp
@@ -125,5 +142,5 @@ ADD_BE_LIB(Runtime
     ${RUNTIME_FILES}
     )
 
-target_link_libraries(Runtime PUBLIC RuntimeCore ExecPrimitive ExecSinkCore ExecSortingCore Platform)
+target_link_libraries(Runtime PUBLIC RuntimeEnv RuntimeCore ExecPrimitive ExecSinkCore ExecSortingCore Platform)
 target_link_libraries(Runtime PRIVATE ConnectorBuiltinRegistry)
