@@ -15,10 +15,12 @@
 package com.starrocks.sql.optimizer;
 
 import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.Lists;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.sql.optimizer.base.AnyDistributionSpec;
 import com.starrocks.sql.optimizer.base.DistributionCol;
+import com.starrocks.sql.optimizer.base.DistributionProperty;
 import com.starrocks.sql.optimizer.base.DistributionSpec;
 import com.starrocks.sql.optimizer.base.EquivalentDescriptor;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
@@ -34,12 +36,15 @@ import mockit.Mocked;
 import org.junit.jupiter.api.Test;
 
 import java.lang.reflect.Method;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Direct unit tests for the range-aware branches of {@link OutputPropertyDeriver}:
@@ -56,9 +61,9 @@ class OutputPropertyDeriverRangeTest {
 
     private static RangeDistributionSpec buildRangeSkeleton(long tableId, int... colIds) {
         EquivalentDescriptor descriptor = new EquivalentDescriptor(tableId, Collections.emptyList());
-        List<DistributionCol> cols = java.util.Arrays.stream(colIds)
+        List<DistributionCol> cols = Arrays.stream(colIds)
                 .mapToObj(id -> new DistributionCol(id, true))
-                .collect(java.util.stream.Collectors.toList());
+                .collect(Collectors.toList());
         descriptor.initDistributionUnionFind(cols);
         return new RangeDistributionSpec(cols, descriptor);
     }
@@ -101,8 +106,7 @@ class OutputPropertyDeriverRangeTest {
         // Repeat intersection includes every colocate column id → preserve.
         RangeDistributionSpec childSpec = buildRangeSkeleton(100L, 1, 2);
         PhysicalPropertySet childProperty =
-                new PhysicalPropertySet(
-                        com.starrocks.sql.optimizer.base.DistributionProperty.createProperty(childSpec));
+                new PhysicalPropertySet(DistributionProperty.createProperty(childSpec));
 
         ColumnRefOperator col1 = new ColumnRefOperator(1, IntegerType.INT, "a", true);
         ColumnRefOperator col2 = new ColumnRefOperator(2, IntegerType.INT, "b", true);
@@ -111,9 +115,9 @@ class OutputPropertyDeriverRangeTest {
         new Expectations() {
             {
                 node.getRepeatColumnRef();
-                result = java.util.Arrays.asList(
-                        com.google.common.collect.Lists.newArrayList(col1, col2),
-                        com.google.common.collect.Lists.newArrayList(col1, col2, col3));
+                result = Arrays.asList(
+                        Lists.newArrayList(col1, col2),
+                        Lists.newArrayList(col1, col2, col3));
             }
         };
 
@@ -129,17 +133,16 @@ class OutputPropertyDeriverRangeTest {
         // Intersection drops column 2 (only in first subset) → range dropped.
         RangeDistributionSpec childSpec = buildRangeSkeleton(100L, 1, 2);
         PhysicalPropertySet childProperty =
-                new PhysicalPropertySet(
-                        com.starrocks.sql.optimizer.base.DistributionProperty.createProperty(childSpec));
+                new PhysicalPropertySet(DistributionProperty.createProperty(childSpec));
 
         ColumnRefOperator col1 = new ColumnRefOperator(1, IntegerType.INT, "a", true);
         ColumnRefOperator col2 = new ColumnRefOperator(2, IntegerType.INT, "b", true);
         new Expectations() {
             {
                 node.getRepeatColumnRef();
-                result = java.util.Arrays.asList(
-                        com.google.common.collect.Lists.newArrayList(col1, col2),
-                        com.google.common.collect.Lists.newArrayList(col1));
+                result = Arrays.asList(
+                        Lists.newArrayList(col1, col2),
+                        Lists.newArrayList(col1));
             }
         };
 
@@ -155,8 +158,7 @@ class OutputPropertyDeriverRangeTest {
             @Mocked Projection projection) {
         RangeDistributionSpec childSpec = buildRangeSkeleton(100L, 1);
         PhysicalPropertySet childProperty =
-                new PhysicalPropertySet(
-                        com.starrocks.sql.optimizer.base.DistributionProperty.createProperty(childSpec));
+                new PhysicalPropertySet(DistributionProperty.createProperty(childSpec));
 
         // Projection renames column 1 → column 100 (identity ref).
         ColumnRefOperator aliased = new ColumnRefOperator(100, IntegerType.INT, "a_alias", true);
@@ -177,8 +179,7 @@ class OutputPropertyDeriverRangeTest {
         EquivalentDescriptor equivDesc = childSpec.getEquivalentDescriptor();
         DistributionCol colocateCol = childSpec.getColocateColumns().get(0);
         DistributionCol aliasCol = new DistributionCol(100, true);
-        org.junit.jupiter.api.Assertions.assertTrue(
-                equivDesc.isConnected(aliasCol, colocateCol),
+        assertTrue(equivDesc.isConnected(aliasCol, colocateCol),
                 "alias should be connected to the colocate column in the descriptor");
     }
 
@@ -186,8 +187,7 @@ class OutputPropertyDeriverRangeTest {
     void updatePropertyWithProjectionNoOpOnNullProjection() throws Exception {
         RangeDistributionSpec childSpec = buildRangeSkeleton(100L, 1);
         PhysicalPropertySet childProperty =
-                new PhysicalPropertySet(
-                        com.starrocks.sql.optimizer.base.DistributionProperty.createProperty(childSpec));
+                new PhysicalPropertySet(DistributionProperty.createProperty(childSpec));
         OutputPropertyDeriver deriver = newDeriver(Collections.emptyList());
         // null projection — early-return path. Use reflection directly since
         // JMockit's Deencapsulation.invoke rejects null args.
