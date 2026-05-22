@@ -22,9 +22,9 @@
 #include <string>
 #include <vector>
 
-#include "base/testutil/assert.h"
 #include "column/json_column.h"
 #include "common/status.h"
+#include "testutil/assert.h"
 
 namespace starrocks {
 
