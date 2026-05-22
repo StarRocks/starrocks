@@ -830,6 +830,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明：FE ノードの MySQL サーバーが保持するバックログキューの長さ。
 - 導入時期：-
 
+### `mysql_send_packet_timeout_ms`
+
+- デフォルト：60000
+- タイプ：Long
+- 単位：Milliseconds
+- 変更可能：Yes
+- 説明：MySQL プロトコルチャネルにおけるパケット単位の書き込みタイムアウト。結果行を送信する際、低速クライアントの TCP 受信バッファが空くまで FE ワーカーが待つ時間を制限します。これを設けないと、ワーカーが `Selector.select()` で無期限にブロックし、クエリが `KILL QUERY` で終了できなくなります。`0` に設定するとタイムアウトを無効化します（従来の無期限待機の動作）。
+- 導入時期：v4.1
+
 ### `mysql_server_version`
 
 - デフォルト：8.0.33
