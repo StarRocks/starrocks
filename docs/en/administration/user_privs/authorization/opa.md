@@ -80,27 +80,74 @@ StarRocks sends a POST request to `opa_policy_url` using the OPA Data API format
 
 Return `{"result": true}` to allow the request. Any other result denies it.
 
-For `SELECT` queries, StarRocks authorizes each scanned column after column pruning. To model table-level `SELECT` in OPA, write a `COLUMN` policy that ignores `input.action.resource.column`.
+## Policy examples
+
+The examples below use `package starrocks`, so the `allow` rule is available at `/v1/data/starrocks/allow`.
+
+### Database-level SELECT
+
+For `SELECT` queries, StarRocks authorizes each scanned column after column pruning. To model database-level `SELECT` in OPA, match `COLUMN` requests and ignore `input.action.resource.table` and `input.action.resource.column` when looking up the database grant.
+
+Example query:
+
+```sql
+SELECT amount FROM sales.orders;
+```
 
 Example Rego policy:
 
 ```rego
 package starrocks
 
+import rego.v1
+
 default allow := false
 
 allow if {
+    input.action.operation == "check"
     input.action.privilege == "SELECT"
     input.action.objectType == "COLUMN"
-    input.action.resource.database == "sales"
-    input.action.resource.table == "orders"
     input.context.user == "alice"
+    input.action.resource.catalog == "default_catalog"
+    input.action.resource.database == "sales"
 }
 ```
 
+### Database visibility checks
+
+Database visibility checks control whether a database appears in `SHOW DATABASES` or can be selected with `USE <db>`. For database-level grants, handle the `DATABASE` request with `privilege: "ANY"`.
+
+Example queries:
+
+```sql
+SHOW DATABASES;
+USE sales;
+```
+
+Example Rego policy:
+
+```rego
+package starrocks
+
+import rego.v1
+
+default allow := false
+
+allow if {
+    input.action.operation == "check"
+    input.action.privilege == "ANY"
+    input.action.objectType == "DATABASE"
+    input.context.user == "alice"
+    input.action.resource.catalog == "default_catalog"
+    input.action.resource.database == "sales"
+}
+```
+
+Both statements produce the same `DATABASE` check with `privilege: "ANY"`.
+
 ## Row filters
 
-When `opa_row_filters_url` is set, StarRocks asks OPA for row access expressions before query rewrite:
+When `opa_row_filters_url` is set, StarRocks asks OPA for row access expressions before query rewrite. Return row filters in the `result` array:
 
 ```json
 {
@@ -115,7 +162,7 @@ StarRocks combines multiple returned expressions with `AND`. Expressions must be
 
 ## Column masks
 
-When `opa_column_masking_url` is set, StarRocks asks OPA for each column mask:
+When `opa_column_masking_url` is set, StarRocks asks OPA for each column mask. Return the masking expression in `result.expression`:
 
 ```json
 {
@@ -125,7 +172,7 @@ When `opa_column_masking_url` is set, StarRocks asks OPA for each column mask:
 }
 ```
 
-When `opa_batch_column_masking_url` is set, StarRocks uses it instead of per-column requests:
+When `opa_batch_column_masking_url` is set, StarRocks uses it instead of per-column requests. Return masking expressions in the `result` array:
 
 ```json
 {
@@ -135,6 +182,8 @@ When `opa_batch_column_masking_url` is set, StarRocks uses it instead of per-col
   ]
 }
 ```
+
+In batch requests, each returned mask can identify the target column by `column` name or by zero-based `index` in `action.filterResources`.
 
 Expressions must be valid StarRocks SQL expressions. Invalid row filter or mask expressions fail the query.
 

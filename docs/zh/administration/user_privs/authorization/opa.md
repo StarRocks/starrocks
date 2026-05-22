@@ -80,27 +80,74 @@ StarRocks 按 OPA Data API 格式向 `opa_policy_url` 发送 POST 请求：
 
 返回 `{"result": true}` 表示允许请求。其他任何结果都会拒绝请求。
 
-对于 `SELECT` 查询，StarRocks 会在列裁剪后逐个扫描列进行授权。如需在 OPA 中实现表级 `SELECT` 语义，可以编写 `COLUMN` 策略并忽略 `input.action.resource.column`。
+## 策略示例
+
+以下示例使用 `package starrocks`，因此 `allow` 规则的访问路径为 `/v1/data/starrocks/allow`。
+
+### 数据库级 SELECT
+
+对于 `SELECT` 查询，StarRocks 会在列裁剪后逐个扫描列进行授权。如需在 OPA 中实现数据库级 `SELECT` 语义，需要匹配 `COLUMN` 请求，并在查找数据库授权时忽略 `input.action.resource.table` 和 `input.action.resource.column`。
+
+示例查询：
+
+```sql
+SELECT amount FROM sales.orders;
+```
 
 Rego 策略示例：
 
 ```rego
 package starrocks
 
+import rego.v1
+
 default allow := false
 
 allow if {
+    input.action.operation == "check"
     input.action.privilege == "SELECT"
     input.action.objectType == "COLUMN"
-    input.action.resource.database == "sales"
-    input.action.resource.table == "orders"
     input.context.user == "alice"
+    input.action.resource.catalog == "default_catalog"
+    input.action.resource.database == "sales"
 }
 ```
 
+### 数据库可见性检查
+
+数据库可见性检查控制某个数据库是否出现在 `SHOW DATABASES` 结果中，或是否可通过 `USE <db>` 选中。对于数据库级授权，需要处理 `objectType: "DATABASE"` 且 `privilege: "ANY"` 的请求。
+
+示例查询：
+
+```sql
+SHOW DATABASES;
+USE sales;
+```
+
+Rego 策略示例：
+
+```rego
+package starrocks
+
+import rego.v1
+
+default allow := false
+
+allow if {
+    input.action.operation == "check"
+    input.action.privilege == "ANY"
+    input.action.objectType == "DATABASE"
+    input.context.user == "alice"
+    input.action.resource.catalog == "default_catalog"
+    input.action.resource.database == "sales"
+}
+```
+
+这两个语句都会产生相同的 `DATABASE` 检查，请求中包含 `privilege: "ANY"`。
+
 ## 行过滤
 
-设置 `opa_row_filters_url` 后，StarRocks 会在查询改写前向 OPA 请求行访问表达式：
+设置 `opa_row_filters_url` 后，StarRocks 会在查询改写前向 OPA 请求行访问表达式。需要在 `result` 数组中返回行过滤表达式：
 
 ```json
 {
@@ -115,7 +162,7 @@ StarRocks 会使用 `AND` 连接多个返回表达式。表达式必须是合法
 
 ## 列掩码
 
-设置 `opa_column_masking_url` 后，StarRocks 会逐列向 OPA 请求列掩码：
+设置 `opa_column_masking_url` 后，StarRocks 会逐列向 OPA 请求列掩码。需要在 `result.expression` 中返回掩码表达式：
 
 ```json
 {
@@ -125,7 +172,7 @@ StarRocks 会使用 `AND` 连接多个返回表达式。表达式必须是合法
 }
 ```
 
-设置 `opa_batch_column_masking_url` 后，StarRocks 会优先使用批量列掩码请求，而不是逐列请求：
+设置 `opa_batch_column_masking_url` 后，StarRocks 会优先使用批量列掩码请求，而不是逐列请求。需要在 `result` 数组中返回掩码表达式：
 
 ```json
 {
@@ -135,6 +182,8 @@ StarRocks 会使用 `AND` 连接多个返回表达式。表达式必须是合法
   ]
 }
 ```
+
+在批量请求中，每个返回的掩码可以通过 `column` 列名或 `action.filterResources` 中从 0 开始的 `index` 标识目标列。
 
 表达式必须是合法的 StarRocks SQL 表达式。非法的行过滤或列掩码表达式会导致查询失败。
 
