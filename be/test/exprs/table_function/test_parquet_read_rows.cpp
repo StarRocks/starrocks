@@ -136,6 +136,82 @@ protected:
                 row_in_file, file_size, file_mtime_ms);
     }
 
+    // Write a parquet file with one row whose `val` column is null. Used to
+    // exercise `append_cell_value`'s IsNull branch on a real arrow array.
+    StatusOr<std::pair<int64_t, int64_t>> _write_fixture_with_null_val(const std::string& path) {
+        std::vector<TypeDescriptor> type_descs{
+                TypeDescriptor::from_logical_type(TYPE_INT),
+                TypeDescriptor::from_logical_type(TYPE_INT),
+                TypeDescriptor::create_varchar_type(64),
+        };
+
+        auto chunk = std::make_shared<Chunk>();
+        auto col_id = ColumnHelper::create_column(type_descs[0], true);
+        auto col_val = ColumnHelper::create_column(type_descs[1], true);
+        auto col_name = ColumnHelper::create_column(type_descs[2], true);
+        int32_t id = 1;
+        col_id->append_numbers(&id, sizeof(int32_t));
+        col_val->append_nulls(1);
+        col_name->append_strings(std::vector<Slice>{Slice("alice")});
+        chunk->append_column(std::move(col_id), 0);
+        chunk->append_column(std::move(col_val), 1);
+        chunk->append_column(std::move(col_name), 2);
+
+        std::vector<std::string> type_names{"id", "val", "name"};
+        auto schema_or = parquet::ParquetBuildHelper::make_schema(
+                type_names, type_descs, std::vector<parquet::FileColumnId>(type_descs.size()));
+        if (!schema_or.ok()) {
+            return Status::InternalError(strings::Substitute("make_schema failed: $0", schema_or.status().ToString()));
+        }
+        auto schema = schema_or.ValueOrDie();
+        ASSIGN_OR_RETURN(auto file, FileSystem::Default()->new_writable_file(path));
+        ASSIGN_OR_RETURN(auto properties,
+                         parquet::ParquetBuildHelper::make_properties(parquet::ParquetBuilderOptions()));
+        auto writer = std::make_shared<parquet::SyncFileWriter>(std::move(file), properties, schema, type_descs,
+                                                                _runtime_state.get());
+        RETURN_IF_ERROR(writer->init());
+        RETURN_IF_ERROR(writer->write(chunk.get()));
+        RETURN_IF_ERROR(writer->close());
+        struct stat st {};
+        if (::stat(path.c_str(), &st) != 0) {
+            return Status::IOError("stat failed");
+        }
+        return std::make_pair(static_cast<int64_t>(st.st_size), static_cast<int64_t>(st.st_mtime));
+    }
+
+    // Write a parquet file with a DECIMAL column. Arrow parquet reader
+    // surfaces DECIMAL128 as arrow::Decimal128Type, which is not in the
+    // primitive switch and therefore goes through the ToString fallback.
+    StatusOr<std::pair<int64_t, int64_t>> _write_decimal_fixture(const std::string& path) {
+        std::vector<TypeDescriptor> type_descs{TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL128, 18, 4)};
+        auto col = ColumnHelper::create_column(type_descs[0], true);
+        int128_t v = 12345678LL;
+        col->append_numbers(&v, sizeof(int128_t));
+        auto chunk = std::make_shared<Chunk>();
+        chunk->append_column(std::move(col), 0);
+
+        std::vector<std::string> type_names{"amount"};
+        auto schema_or = parquet::ParquetBuildHelper::make_schema(
+                type_names, type_descs, std::vector<parquet::FileColumnId>(type_descs.size()));
+        if (!schema_or.ok()) {
+            return Status::InternalError(strings::Substitute("make_schema failed: $0", schema_or.status().ToString()));
+        }
+        auto schema = schema_or.ValueOrDie();
+        ASSIGN_OR_RETURN(auto file, FileSystem::Default()->new_writable_file(path));
+        ASSIGN_OR_RETURN(auto properties,
+                         parquet::ParquetBuildHelper::make_properties(parquet::ParquetBuilderOptions()));
+        auto writer = std::make_shared<parquet::SyncFileWriter>(std::move(file), properties, schema, type_descs,
+                                                                _runtime_state.get());
+        RETURN_IF_ERROR(writer->init());
+        RETURN_IF_ERROR(writer->write(chunk.get()));
+        RETURN_IF_ERROR(writer->close());
+        struct stat st {};
+        if (::stat(path.c_str(), &st) != 0) {
+            return Status::IOError("stat failed");
+        }
+        return std::make_pair(static_cast<int64_t>(st.st_size), static_cast<int64_t>(st.st_mtime));
+    }
+
     // Write a parquet fixture with one row spanning many parquet types so the
     // append_cell_value branches (BOOL / INT8 / INT16 / INT64 / FLOAT / DOUBLE
     // / STRING) are all hit by a single rehydrate. Returns the (size, mtime_s)
@@ -669,6 +745,99 @@ TEST_F(ParquetReadRowsTableFunctionTest, MissingRowInFileRejected) {
     _tvf.process(_runtime_state.get(), state);
     EXPECT_FALSE(state->status().ok());
     EXPECT_NE(std::string::npos, state->status().to_string().find("missing required field"));
+
+    ASSERT_OK(_tvf.close(_runtime_state.get(), state));
+}
+
+// ---------- row_in_file present but a string, not a number ----------
+TEST_F(ParquetReadRowsTableFunctionTest, NonNumericRowInFileRejected) {
+    auto input = _make_source_info_column(
+            {R"({"file":"/tmp/x.parquet","row_in_file":"oops","file_size":1,"file_mtime_ms":1})"});
+
+    TableFunctionState* state = nullptr;
+    TFunction fn;
+    ASSERT_OK(_tvf.init(fn, &state));
+    state->set_params({input});
+
+    _tvf.process(_runtime_state.get(), state);
+    EXPECT_FALSE(state->status().ok());
+    EXPECT_NE(std::string::npos, state->status().to_string().find("must be a number"));
+
+    ASSERT_OK(_tvf.close(_runtime_state.get(), state));
+}
+
+// ---------- file_size as JSON double (e.g. 12345.0) — optional_int isDouble ----------
+TEST_F(ParquetReadRowsTableFunctionTest, OptionalFileSizeAsDouble) {
+    std::string parquet_path = _tmp_dir + "/fixture.parquet";
+    ASSIGN_OR_ABORT(auto meta, _write_fixture(parquet_path, {1, 2, 3}, {100, 200, 300}, {"alice", "bob", "carol"}));
+    int64_t mtime_ms = meta.second * 1000;
+    // Inject file_size as `<actual>.0` to take the double branch in
+    // get_optional_int. The numeric value still matches the file on disk.
+    auto input = _make_source_info_column({strings::Substitute(
+            R"({"format":"parquet","file":"$0","row_in_file":0,"file_size":$1.0,"file_mtime_ms":$2})", parquet_path,
+            meta.first, mtime_ms)});
+
+    TableFunctionState* state = nullptr;
+    TFunction fn;
+    ASSERT_OK(_tvf.init(fn, &state));
+    state->set_params({input});
+
+    auto [columns, offsets] = _tvf.process(_runtime_state.get(), state);
+    ASSERT_OK(state->status());
+    EXPECT_EQ(1, columns[0]->size());
+
+    ASSERT_OK(_tvf.close(_runtime_state.get(), state));
+}
+
+// ---------- rehydrate a row whose `val` cell is null in the parquet ----------
+TEST_F(ParquetReadRowsTableFunctionTest, RehydrateRowWithNullValue) {
+    std::string parquet_path = _tmp_dir + "/null.parquet";
+    ASSIGN_OR_ABORT(auto meta, _write_fixture_with_null_val(parquet_path));
+    auto input = _make_source_info_column(
+            {_make_anchor(parquet_path, 0, meta.first, meta.second * 1000)});
+
+    TableFunctionState* state = nullptr;
+    TFunction fn;
+    ASSERT_OK(_tvf.init(fn, &state));
+    state->set_params({input});
+
+    auto [columns, offsets] = _tvf.process(_runtime_state.get(), state);
+    ASSERT_OK(state->status());
+    auto* raw_col = down_cast<const JsonColumn*>(columns[2].get());
+    auto* jv = raw_col->get_object(0);
+    vpack::Slice obj = jv->to_vslice();
+    ASSERT_TRUE(obj.isObject());
+    // `val` was written as null; raw_record JSON should reflect that.
+    EXPECT_TRUE(obj.get("val").isNull());
+    EXPECT_EQ("alice", obj.get("name").copyString());
+
+    ASSERT_OK(_tvf.close(_runtime_state.get(), state));
+}
+
+// ---------- rehydrate a row from a DECIMAL parquet column (default ToString) ----------
+TEST_F(ParquetReadRowsTableFunctionTest, RehydrateDecimalCell) {
+    std::string parquet_path = _tmp_dir + "/decimal.parquet";
+    ASSIGN_OR_ABORT(auto meta, _write_decimal_fixture(parquet_path));
+    auto input = _make_source_info_column(
+            {_make_anchor(parquet_path, 0, meta.first, meta.second * 1000)});
+
+    TableFunctionState* state = nullptr;
+    TFunction fn;
+    ASSERT_OK(_tvf.init(fn, &state));
+    state->set_params({input});
+
+    auto [columns, offsets] = _tvf.process(_runtime_state.get(), state);
+    ASSERT_OK(state->status());
+    auto* raw_col = down_cast<const JsonColumn*>(columns[2].get());
+    auto* jv = raw_col->get_object(0);
+    vpack::Slice obj = jv->to_vslice();
+    ASSERT_TRUE(obj.isObject());
+    // DECIMAL arrow type falls through to the default branch which renders via
+    // `Array::Slice(row,1)->ToString()`. The exact string format is
+    // implementation-defined, so just assert presence + non-empty.
+    auto amount = obj.get("amount");
+    ASSERT_TRUE(amount.isString());
+    EXPECT_GT(amount.copyString().size(), 0u);
 
     ASSERT_OK(_tvf.close(_runtime_state.get(), state));
 }
