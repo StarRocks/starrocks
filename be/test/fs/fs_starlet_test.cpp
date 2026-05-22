@@ -848,6 +848,26 @@ TEST_F(NewFsStarletTest, test_get_file_size_propagates_stat_not_found) {
     EXPECT_TRUE(sz_or.status().is_not_found()) << sz_or.status();
 }
 
+// Covers the get_shard_filesystem error branch inside StarletFileSystem::get_file_size:
+// when the StarletFileSystem instance has no injected `_shard_fs` and the underlying
+// shard-resolution call fails, the failure must surface to the caller rather than
+// dereferencing a non-OK StatusOr or silently returning zero. Uses the
+// "StarletFileSystem::get_shard_filesystem" SyncPoint to inject the error without
+// needing to stand up a real StarOS worker / starlet runtime.
+TEST_F(NewFsStarletTest, test_get_file_size_propagates_get_shard_filesystem_failure) {
+    SyncPoint::GetInstance()->SetCallBack("StarletFileSystem::get_shard_filesystem", [&](void* arg) {
+        auto* fs_st = static_cast<absl::StatusOr<std::shared_ptr<staros::starlet::fslib::FileSystem>>*>(arg);
+        *fs_st = absl::InternalError("Mock error: failed to get shard filesystem");
+    });
+    // Parameterless factory: returns a StarletFileSystem with `_shard_fs == nullptr`,
+    // so get_shard_filesystem() goes through the staros-worker path that the
+    // SyncPoint above intercepts.
+    auto fs = new_fs_starlet();
+    ASSERT_NE(nullptr, fs);
+    auto sz_or = fs->get_file_size("staros://12345/anyfile");
+    EXPECT_FALSE(sz_or.ok());
+}
+
 // Generic stat() error (permission / unavailable) must also surface as a non-OK
 // Status rather than being silently coerced to a zero size.
 TEST_F(NewFsStarletTest, test_get_file_size_propagates_stat_permission_denied) {
