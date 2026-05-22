@@ -221,58 +221,109 @@ StatusOr<std::vector<int64_t>> PrimaryCompactionPolicy::pick_rowset_indexes(
     // Levels containing deletes are also allowed, since delete vectors must eventually
     // be applied/cleaned up via compaction.
     //
-    // PR-1' (#72411 design fix): augment the binary level_score gate with two graduated
-    // signals so the gate doesn't get stuck on partitions whose read amplification keeps
-    // climbing while compaction work itself is uneconomical:
-    //   - benefit/cost ratio: estimated segment-count drop per MB rewritten. If the
-    //     ratio is decent (>= lake_pk_compaction_min_benefit_cost_ratio), allow the
-    //     compaction even when the level score is below the absolute threshold.
-    //   - read-pressure emergency override: if the tablet's overall read pressure
-    //     (segment count across all rowsets) exceeds lake_pk_compaction_emergency_score,
-    //     bypass the gate entirely. Hot partitions need to keep up regardless of
-    //     write-amplification cost.
+    // PR-1' v2 (#72411 design fix, second iteration): replace the binary `has_deletes`
+    // collapse with a quantitative delete_ratio folded into bcr, fix the bcr formula
+    // (real_benefit_segs = input - output, io_mb uses input bytes not read_bytes), and
+    // add a size_overflow_ratio override to bound long-tail mid-tier accumulation.
+    //
+    // Four overrides (any one fires => compaction proceeds):
+    //   [A] has_overlap            - structural read amp, always compact
+    //   [B] size_overflow_ratio    - level total bytes exceed alpha * next-tier-target
+    //   [C] benefit_cost_ratio     - segments saved + delete cleanup density vs rewrite
+    //                                cost is acceptable
+    //   [D] emergency_score        - tablet-wide read pressure forces compaction
     if (pick_level_ptr->score < config::lake_pk_compaction_min_level_score) {
         bool has_overlap = false;
-        bool has_deletes = false;
-        double estimated_benefit_segs = 0.0;
-        double estimated_io_mb = 0.0;
+        double total_dels = 0.0;
+        double total_rows = 0.0;
+        int64_t total_input_bytes = 0;
+        int64_t input_segs = 0;
         auto rs_copy = pick_level_ptr->rowsets;
         while (!rs_copy.empty()) {
             const auto& r = rs_copy.top();
             if (r.multi_segment_with_overlapped()) has_overlap = true;
-            if (r.delete_bytes() > 0) has_deletes = true;
-            estimated_benefit_segs += static_cast<double>(r.rowset_meta_ptr->segments_size());
-            estimated_io_mb += r.read_bytes() / (1024.0 * 1024.0);
+            total_dels += static_cast<double>(r.stat.num_dels);
+            total_rows += static_cast<double>(r.stat.num_rows);
+            // Cost basis uses full bytes (not read_bytes which subtracts delete bytes):
+            // compaction reads the entire rowset to filter via delvec, so the I/O cost
+            // is dominated by the raw byte count.
+            total_input_bytes += static_cast<int64_t>(r.stat.bytes);
+            input_segs += r.rowset_meta_ptr->segments_size();
             rs_copy.pop();
         }
-        if (!has_overlap && !has_deletes) {
-            // Tablet-level read pressure: sum of every rowset's score across all
-            // levels (not just the picked one). High pressure means many fragmented
-            // rowsets, so even uneconomical compactions are worth running to keep
-            // read amplification bounded.
-            double tablet_read_pressure = 0.0;
+        const double delete_ratio = total_rows > 0 ? total_dels / total_rows : 0.0;
+        const double estimated_io_mb = static_cast<double>(total_input_bytes) / (1024.0 * 1024.0);
+
+        bool override_compact = has_overlap;
+
+        // [B] size_overflow_ratio: bound accumulation at alpha * next-tier-target.
+        // next-tier-target = level_size * level_multiple (size-tiered natural promotion
+        // point). alpha=2 means "tolerate 2x the natural promotion threshold before
+        // forced compaction". Scales with level_size so it works uniformly across levels.
+        double size_overflow = 0.0;
+        if (!override_compact) {
+            const int64_t next_level_target = pick_level_ptr->compact_level *
+                                              static_cast<int64_t>(config::size_tiered_level_multiple);
+            if (next_level_target > 0) {
+                size_overflow = static_cast<double>(total_input_bytes) /
+                                static_cast<double>(next_level_target);
+            }
+            if (config::lake_pk_compaction_size_overflow_ratio > 0.0 &&
+                size_overflow >= config::lake_pk_compaction_size_overflow_ratio) {
+                override_compact = true;
+            }
+        }
+
+        // [C] benefit_cost_ratio (corrected formula):
+        //   real_benefit_segs = max(0, input_segs - output_segs)
+        //     where output_segs = ceil(total_input_bytes / lake_compaction_max_rowset_size)
+        //   benefit_score = real_benefit_segs + delete_ratio * input_segs * delvec_benefit_weight
+        //     (folds delete cleanup value into segment-count benefit)
+        //   bcr = benefit_score / io_mb
+        double benefit_cost_ratio = 0.0;
+        if (!override_compact) {
+            const int64_t max_rowset_size_bytes = config::lake_compaction_max_rowset_size;
+            int64_t output_segs = 1;
+            if (max_rowset_size_bytes > 0) {
+                output_segs = std::max<int64_t>(
+                        1, (total_input_bytes + max_rowset_size_bytes - 1) / max_rowset_size_bytes);
+            }
+            const double real_benefit_segs =
+                    std::max(0.0, static_cast<double>(input_segs - output_segs));
+            const double benefit_score = real_benefit_segs +
+                                         delete_ratio * static_cast<double>(input_segs) *
+                                                 config::lake_pk_compaction_delvec_benefit_weight;
+            benefit_cost_ratio = benefit_score / std::max(estimated_io_mb, 1.0);
+            if (config::lake_pk_compaction_min_benefit_cost_ratio > 0.0 &&
+                benefit_cost_ratio >= config::lake_pk_compaction_min_benefit_cost_ratio) {
+                override_compact = true;
+            }
+        }
+
+        // [D] tablet-wide read pressure emergency.
+        double tablet_read_pressure = 0.0;
+        if (!override_compact) {
             for (const auto& rc : rowset_vec) {
                 tablet_read_pressure += rc.score;
             }
-            const bool emergency_override =
-                    config::lake_pk_compaction_emergency_score > 0.0 &&
-                    tablet_read_pressure >= config::lake_pk_compaction_emergency_score;
-            const double benefit_cost_ratio =
-                    estimated_benefit_segs / std::max(estimated_io_mb, 1.0);
-            const bool ratio_ok =
-                    config::lake_pk_compaction_min_benefit_cost_ratio > 0.0 &&
-                    benefit_cost_ratio >= config::lake_pk_compaction_min_benefit_cost_ratio;
-            if (!emergency_override && !ratio_ok) {
-                VLOG(2) << strings::Substitute(
-                        "lake PK compaction skipped: tablet=$0 level_score=$1 < threshold=$2 "
-                        "tablet_read_pressure=$3 (emergency=$4) "
-                        "benefit_cost_ratio=$5 (min_ratio=$6) — sparse mid-tier",
-                        tablet_metadata->id(), pick_level_ptr->score,
-                        config::lake_pk_compaction_min_level_score,
-                        tablet_read_pressure, config::lake_pk_compaction_emergency_score,
-                        benefit_cost_ratio, config::lake_pk_compaction_min_benefit_cost_ratio);
-                return rowset_indexes; // empty -> no compaction this round
+            if (config::lake_pk_compaction_emergency_score > 0.0 &&
+                tablet_read_pressure >= config::lake_pk_compaction_emergency_score) {
+                override_compact = true;
             }
+        }
+
+        if (!override_compact) {
+            VLOG(2) << strings::Substitute(
+                    "lake PK compaction skipped: tablet=$0 level_score=$1 < mls=$2 "
+                    "delete_ratio=$3 size_overflow=$4 (alpha=$5) "
+                    "bcr=$6 (min_bcr=$7) tablet_pressure=$8 (em=$9) — sparse mid-tier",
+                    tablet_metadata->id(), pick_level_ptr->score,
+                    config::lake_pk_compaction_min_level_score,
+                    delete_ratio, size_overflow,
+                    config::lake_pk_compaction_size_overflow_ratio,
+                    benefit_cost_ratio, config::lake_pk_compaction_min_benefit_cost_ratio,
+                    tablet_read_pressure, config::lake_pk_compaction_emergency_score);
+            return rowset_indexes; // empty -> no compaction this round
         }
     }
 
