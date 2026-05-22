@@ -22,6 +22,8 @@
 
 namespace starrocks {
 
+LoadSpillPipelineMergeContext::LoadSpillPipelineMergeContext(lake::TabletWriter* writer) : _writer(writer) {}
+
 LoadSpillPipelineMergeContext::~LoadSpillPipelineMergeContext() {
     _quit_flag.store(true);
     if (_token != nullptr) {
