@@ -16,6 +16,7 @@
 
 #include <gtest/gtest.h>
 
+#include <climits>
 #include <chrono>
 #include <iomanip>
 #include <sstream>
