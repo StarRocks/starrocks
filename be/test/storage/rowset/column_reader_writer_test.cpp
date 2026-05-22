@@ -740,4 +740,25 @@ TEST_F(ColumnReaderWriterTest, test_large_varchar_column_writer) {
     }
 }
 
+// Reproduces SIGSEGV at offset 0x44 in ScalarColumnWriter::finish() when a
+// VARCHAR/CHAR column writer is finalized without any append. String columns
+// set need_speculate_encoding = true, so ScalarColumnWriter::init() skips
+// set_encoding() and _encoding_info stays nullptr. StringColumnWriter::finish()
+// only fixes that up if _buf_column != nullptr (i.e. at least one append
+// happened). With no appends, _encoding_info->encoding() dereferences nullptr
+// and reads _encoding at offset 0x44.
+TEST_F(ColumnReaderWriterTest, test_string_writer_finish_without_append) {
+    const std::string fname = TEST_DIR + "/" + generate_uuid_string() + ".data";
+    ASSIGN_OR_ABORT(auto wfile, _fs->new_writable_file(fname));
+    ColumnMetaPB meta;
+    ColumnWriterOptions writer_opts = make_writer_opts<TYPE_VARCHAR, DEFAULT_ENCODING, 2>(&meta);
+
+    TabletColumn column = create_varchar_key(1, true, 128);
+    ASSIGN_OR_ABORT(auto writer, ColumnWriter::create(writer_opts, &column, wfile.get()));
+    ASSERT_OK(writer->init());
+
+    // No writer->append(...) call here.
+    ASSERT_OK(writer->finish());
+}
+
 } // namespace starrocks
