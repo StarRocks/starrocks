@@ -107,7 +107,7 @@ Place images in `_assets/` and reference:
 
 1. Create doc in appropriate directory
 2. Add to sidebar in `docusaurus/sidebars.js`
-3. Add English, Chinese, and Japanese versions
+3. Add English and Chinese versions; add Japanese version when applicable
 
 ### For Bug Fixes
 
@@ -117,10 +117,10 @@ Place images in `_assets/` and reference:
 
 ### Translation
 
-When updating English docs, update Chinese and Japanese docs too (or vice versa):
-- `docs/en/path/to/file.md`
-- `docs/ja/path/to/file.md`
-- `docs/zh/path/to/file.md`
+When updating English docs, update Chinese docs too (or vice versa). Update Japanese docs when a corresponding `docs/ja/` page exists or when explicitly requested:
+- `docs/en/path/to/file.md` (required)
+- `docs/zh/path/to/file.md` (required)
+- `docs/ja/path/to/file.md` (when applicable)
 
 ## Sidebar Configuration
 
@@ -148,7 +148,7 @@ module.exports = {
 1. Create `docs/en/category/new-page.md`
 2. Add to `sidebars.js`
 3. Create Chinese version `docs/zh/category/new-page.md`
-4. Create Japanese version `docs/ja/category/new-page.md`
+4. Create Japanese version `docs/ja/category/new-page.md` (when applicable)
 
 ### Update Existing Page
 
