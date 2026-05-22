@@ -401,7 +401,11 @@ Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std
     // bitmap of candidate row ids. The bitmap is threaded into Rowset::read()
     // via the `presupplied_rowid_filter_per_segment` field on RowsetReadOptions.
     std::unordered_map<uint32_t /*rowset_id*/, std::unordered_map<uint32_t, roaring::Roaring>> sidx_per_rowset;
-    if (params.use_secondary_index && config::enable_secondary_index_read) {
+    // BE-config-only gate for now: the FE-side session variable that would
+    // set TabletReaderParams::use_secondary_index is not wired yet. Once a
+    // SELECT references columns that any registered index covers, the lookup
+    // automatically fires whenever the BE-level read switch is on.
+    if (config::enable_secondary_index_read) {
         // Resolve a Lake-aware FileSystem rooted at the tablet directory; we
         // reuse it across all index files for this query.
         const std::string root = _tablet_mgr->tablet_root_location(_tablet_metadata->id());
@@ -479,7 +483,7 @@ Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std
         // Parallel load captures rs_opts by reference; mutating
         // presupplied_rowid_filter_per_segment per iteration would race.
         // Force the serial path whenever a secondary index lookup is in use.
-        const bool use_parallel = config::enable_load_segment_parallel && !params.use_secondary_index;
+        const bool use_parallel = config::enable_load_segment_parallel && !config::enable_secondary_index_read;
         if (use_parallel) {
             auto task = std::make_shared<std::packaged_task<StatusOr<std::vector<ChunkIteratorPtr>>()>>([&, rowset]() {
 #ifdef BE_TEST
