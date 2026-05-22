@@ -72,7 +72,7 @@ public class MergeIntoPlanner {
         }
 
         IcebergTable icebergTable = (IcebergTable) targetTable;
-        colNames = mergeIntoStmt.getIcebergColumnOutputNames();
+        colNames = mergeIntoStmt.getOutputColumnNames();
 
         // Use the 3-arg overload: MERGE wraps all data columns in CASE expressions, causing
         // ColumnRefOperator names to become "case" instead of the original column name.
