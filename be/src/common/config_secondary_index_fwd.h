@@ -12,12 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// PoC forward declarations for the lake PK secondary index configs.
-// Mirrors the canonical declarations in be/src/common/config.h so that
-// translation units in the secondary_sorted module and the three hook
-// sites (delta_writer / horizontal_compaction / vertical_compaction /
-// tablet_reader) can pull just these symbols without dragging in the
-// full config.h.
+// Forward declarations for the lake PK secondary index configs. Mirrors
+// the canonical declarations in be/src/common/config.h so that translation
+// units in the secondary_sorted module and the hook sites (delta_writer /
+// horizontal_compaction / vertical_compaction / tablet_reader) can pull
+// just these symbols without dragging in the full config.h.
 
 #pragma once
 
@@ -31,8 +30,8 @@ CONF_mBool(enable_secondary_index_write, "false");
 CONF_mBool(enable_secondary_index_read, "false");
 // Memory limit (in MB) for sorting (idx_cols, seg_id, rowid) entries.
 CONF_mInt64(secondary_index_build_mem_limit_mb, "512");
-// PoC index registry. Format:
+// Per-BE index registry while the FE-side DDL is not yet wired. Format:
 //   "tablet_id:index_name:col1,col2;tablet_id:index_name:col"
-CONF_mString(poc_secondary_index_defs, "");
+CONF_mString(secondary_index_defs, "");
 
 } // namespace starrocks::config

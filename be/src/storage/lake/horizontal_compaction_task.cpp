@@ -161,7 +161,7 @@ Status HorizontalCompactionTask::execute(CancelFunc cancel_func, ThreadPool* flu
     RETURN_IF_ERROR(fill_compaction_segment_info(op_compaction, writer.get()));
     op_compaction->set_compact_version(_tablet.metadata()->version());
 
-    // ---- PoC: Build secondary index for the new compacted rowset ----
+    // ---- Build secondary index for the new compacted rowset ----
     // fill_compaction_segment_info has just populated output_rowset's
     // segments[], segment_metas[] etc. We hook in here so the resulting
     // index file is committed atomically with the new rowset.

@@ -19,14 +19,17 @@
 #include "column/schema.h"
 #include "common/config.h"
 #include "common/logging.h"
+#include "common/object_pool.h"
 #include "fs/fs.h"
 #include "runtime/chunk_helper.h"
 #include "storage/chunk_helper.h"
 #include "storage/chunk_iterator.h"
 #include "storage/column_predicate.h"
+#include "storage/index/secondary_sorted/predicate_remap.h"
 #include "storage/index/secondary_sorted/types.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/olap_common.h"
+#include "storage/predicate_tree/predicate_tree.h"
 #include "storage/rowset/segment.h"
 #include "storage/rowset/segment_options.h"
 #include "storage/tablet_schema.h"
@@ -36,36 +39,6 @@ namespace starrocks::secondary_sorted {
 namespace {
 
 constexpr size_t kReadChunkSize = 4096;
-
-// Reuse the same synthetic-schema construction as SecondaryIndexWriter so
-// reader and writer agree on the on-disk layout. Kept in sync via a single
-// helper here.
-TabletSchemaSPtr build_index_schema_from_source(const TabletSchema& source_schema,
-                                                const std::vector<uint32_t>& index_col_ids) {
-    auto schema = std::make_shared<TabletSchema>();
-    schema->set_id(TabletSchema::invalid_id());
-    std::vector<ColumnId> sort_key_idxes;
-    int32_t next_unique_id = 1;
-    for (size_t i = 0; i < index_col_ids.size(); ++i) {
-        TabletColumn col(source_schema.column(index_col_ids[i]));
-        col.set_unique_id(next_unique_id++);
-        col.set_is_key(true);
-        col.set_is_sort_key(true);
-        col.set_aggregation(STORAGE_AGGREGATE_NONE);
-        col.set_is_bf_column(false);
-        col.set_has_bitmap_index(false);
-        schema->append_column(std::move(col));
-        sort_key_idxes.push_back(static_cast<ColumnId>(i));
-    }
-    TabletColumn pos_col(STORAGE_AGGREGATE_NONE, TYPE_BIGINT, /*is_nullable=*/false, next_unique_id++, sizeof(int64_t));
-    pos_col.set_name(kEncodedPositionColumnName);
-    pos_col.set_is_key(false);
-    pos_col.set_is_sort_key(false);
-    schema->append_column(std::move(pos_col));
-    schema->set_sort_key_idxes(std::move(sort_key_idxes));
-    schema->set_num_short_key_columns(static_cast<uint16_t>(index_col_ids.size()));
-    return schema;
-}
 
 } // namespace
 
@@ -101,7 +74,7 @@ Status SecondaryIndexReader::_init() {
         _source_index_col_ids.push_back(static_cast<uint32_t>(idx));
     }
 
-    _index_schema = build_index_schema_from_source(*_source_schema, _source_index_col_ids);
+    _index_schema = build_index_tablet_schema(*_source_schema, _source_index_col_ids, /*enable_bloom_filter=*/true);
     _encoded_pos_col_idx = static_cast<uint32_t>(_index_schema->num_columns() - 1);
 
     // Resolve full path and open the file as a Segment.
@@ -114,8 +87,8 @@ Status SecondaryIndexReader::_init() {
     return Status::OK();
 }
 
-StatusOr<PerSegmentRowidBitmap> SecondaryIndexReader::lookup(
-        const std::vector<const ColumnPredicate*>& index_col_predicates) {
+StatusOr<PerSegmentRowidBitmap> SecondaryIndexReader::lookup(const PredicateTree& source_pred_tree,
+                                                             ObjectPool* obj_pool) {
     PerSegmentRowidBitmap result;
     if (_segment == nullptr) return result;
 
@@ -128,11 +101,12 @@ StatusOr<PerSegmentRowidBitmap> SecondaryIndexReader::lookup(
     SegmentReadOptions read_opts;
     read_opts.fs = _fs;
     read_opts.stats = &stats;
-    // PoC v1: predicate translation from source-schema column ids to the
-    // synthetic index-file column ids is not implemented; leave pred_tree
-    // empty so the lookup scans the entire index file. v2 will fill this
-    // in to actually narrow the candidate set.
-    (void)index_col_predicates;
+    // Remap source-schema predicates into the synthetic index-file column
+    // id space and push them into the inner segment iterator's pred_tree.
+    // When obj_pool is null (e.g. tests) we fall back to an empty tree.
+    if (obj_pool != nullptr && !source_pred_tree.empty()) {
+        read_opts.pred_tree = build_remapped_predicate_tree(source_pred_tree, _source_index_col_ids, obj_pool);
+    }
 
     ASSIGN_OR_RETURN(auto iter, _segment->new_iterator(read_schema, read_opts));
     if (iter == nullptr) return result;

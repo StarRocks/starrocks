@@ -160,9 +160,9 @@ message SegmentMetadataPB {
     optional int64 sort_key_sample_row_interval = 7;
 }
 
-// PoC: rowset-level lightweight sorted secondary index file metadata.
+// Rowset-level lightweight sorted secondary index file metadata.
 // Each entry describes one secondary index built for a rowset; payload stores
-// (idx_cols..., seg_id, rowid) sorted by idx_cols.
+// (idx_cols..., encoded position) sorted by idx_cols.
 message SecondaryIndexFilePB {
     optional string index_name = 1;       // logical name (e.g. "idx_by_town")
     optional string file_name = 2;        // basename within fileset
@@ -197,7 +197,7 @@ message RowsetMetadataPB {
     repeated SegmentMetadataPB segment_metas = 17;
     // Indicates the effective sort key range of this rowset for range distribution table.
     optional TabletRangePB range = 18;
-    // PoC: rowset-level secondary indexes (one entry per index)
+    // Rowset-level secondary indexes (one entry per index)
     repeated SecondaryIndexFilePB secondary_indexes = 19;
 }
 

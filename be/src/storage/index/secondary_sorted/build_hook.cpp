@@ -32,17 +32,19 @@ Status maybe_build_secondary_indexes(int64_t tablet_id, int64_t txn_id, const Ta
     if (!config::enable_secondary_index_write) return Status::OK();
     if (tablet_mgr == nullptr || fs == nullptr || source_schema == nullptr) return Status::OK();
 
-    auto idx_def_opt = PocIndexRegistry::get_for_tablet(tablet_id);
-    if (!idx_def_opt) return Status::OK();
-    const auto& idx_def = *idx_def_opt;
-    if (idx_def.index_col_names.empty()) return Status::OK();
+    auto idx_defs = SecondaryIndexRegistry::get_for_tablet(tablet_id);
+    if (idx_defs.empty()) return Status::OK();
 
     if (seg_file_infos.empty()) {
-        LOG(INFO) << "PoC sidx: tablet=" << tablet_id << " txn=" << txn_id << " skipping build, no segments written";
+        LOG(INFO) << "secondary_index: tablet=" << tablet_id << " txn=" << txn_id
+                  << " skipping build, no segments written";
         return Status::OK();
     }
 
-    // Open each segment so the writer can scan index columns.
+    // Open each segment once and reuse across all index builds for this rowset.
+    // Reading the segment footer + ordinal index is the per-segment fixed cost
+    // we want amortised across N indexes; the per-index work is just an extra
+    // column scan + sort + write.
     std::vector<std::shared_ptr<Segment>> segments;
     segments.reserve(seg_file_infos.size());
     for (size_t i = 0; i < seg_file_infos.size(); ++i) {
@@ -57,19 +59,22 @@ Status maybe_build_secondary_indexes(int64_t tablet_id, int64_t txn_id, const Ta
         segments.push_back(std::move(seg));
     }
 
-    SecondaryIndexWriter::BuildInput input;
-    input.segments = std::move(segments);
-    input.source_schema = source_schema;
-    input.index_name = idx_def.index_name;
-    input.index_col_names = idx_def.index_col_names;
-    input.tablet_mgr = tablet_mgr;
-    input.fs = std::move(fs);
-    input.tablet_id = tablet_id;
-    input.txn_id = txn_id;
+    for (const auto& idx_def : idx_defs) {
+        if (idx_def.index_col_names.empty()) continue;
+        SecondaryIndexWriter::BuildInput input;
+        input.segments = segments; // shared_ptr copy, reuses footer cache
+        input.source_schema = source_schema;
+        input.index_name = idx_def.index_name;
+        input.index_col_names = idx_def.index_col_names;
+        input.tablet_mgr = tablet_mgr;
+        input.fs = fs;
+        input.tablet_id = tablet_id;
+        input.txn_id = txn_id;
 
-    ASSIGN_OR_RETURN(auto pb, SecondaryIndexWriter::build(input));
-    if (!pb.file_name().empty()) {
-        out_pbs->push_back(std::move(pb));
+        ASSIGN_OR_RETURN(auto pb, SecondaryIndexWriter::build(input));
+        if (!pb.file_name().empty()) {
+            out_pbs->push_back(std::move(pb));
+        }
     }
     return Status::OK();
 }

@@ -38,14 +38,14 @@ namespace starrocks::secondary_sorted {
 // a single segment-format file -- the "secondary index file" -- next to the
 // data segments in the Lake fileset.
 //
-// PoC design choices (documented in the design doc):
+// Design choices:
 //   * One file per (rowset, index). Path: <data_root>/sidx_<txn>_<index>.idx.
 //   * Synthetic TabletSchema = the index columns cloned from the source
 //     schema + one trailing BIGINT column named "__sidx_pos__" encoding
 //     (segment_id, rowid_in_segment) via `encode_position()`.
 //   * In-memory sort only. Memory budget is bounded by
-//     `config::secondary_index_build_mem_limit_mb`; PoC fails the build (and
-//     therefore the rowset commit) if exceeded. Production will spill.
+//     `config::secondary_index_build_mem_limit_mb`; over-budget builds fail
+//     the rowset commit. Spill is a future enhancement.
 class SecondaryIndexWriter {
 public:
     struct BuildInput {

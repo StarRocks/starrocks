@@ -111,7 +111,7 @@ Status VerticalCompactionTask::execute(CancelFunc cancel_func, ThreadPool* flush
     RETURN_IF_ERROR(fill_compaction_segment_info(op_compaction, writer.get()));
     op_compaction->set_compact_version(_tablet.metadata()->version());
 
-    // ---- PoC: Build secondary index for the new compacted rowset ----
+    // ---- Build secondary index for the new compacted rowset ----
     // Mirrors the hook in HorizontalCompactionTask::execute; the writer
     // contract is identical so we can use the same helper.
     if (config::enable_secondary_index_write && !writer->segments().empty()) {

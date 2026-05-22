@@ -39,8 +39,8 @@ namespace starrocks::secondary_sorted {
 //
 // Behaviour:
 //   1. Short-circuit and return Status::OK() with empty `out_pbs` if
-//      `config::enable_secondary_index_write` is false or no PocIndexDef
-//      is registered for `tablet_id`.
+//      `config::enable_secondary_index_write` is false or no
+//      SecondaryIndexDef is registered for `tablet_id`.
 //   2. Otherwise, open the freshly-written segments via Segment::open()
 //      and invoke SecondaryIndexWriter::build() per index def. Append
 //      the resulting PB entries to `out_pbs`.

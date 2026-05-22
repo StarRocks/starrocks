@@ -111,11 +111,11 @@ struct TabletReaderParams {
     bool enable_join_runtime_filter_pushdown = false;
     bool enable_predicate_col_late_materialize = false;
 
-    // PoC: when true, TabletReader will look up any registered secondary
-    // index for the tablet and feed per-segment rowid filters into the
-    // rowset scan. Effective only on Lake PK tables that actually have
-    // built index files in their rowset metadata. Defaults off so the
-    // normal scan path stays untouched.
+    // When true, TabletReader will look up any registered secondary index
+    // for the tablet and feed per-segment rowid filters into the rowset
+    // scan. Effective only on Lake PK tables that actually have built
+    // index files in their rowset metadata. Defaults off so the normal
+    // scan path stays untouched.
     bool use_secondary_index = false;
 
 public:

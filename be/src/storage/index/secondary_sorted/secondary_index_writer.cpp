@@ -73,40 +73,11 @@ StatusOr<std::vector<uint32_t>> SecondaryIndexWriter::resolve_index_col_ids(cons
 
 TabletSchemaSPtr SecondaryIndexWriter::build_index_schema(const TabletSchema& source_schema,
                                                           const std::vector<uint32_t>& index_col_ids) {
-    auto schema = std::make_shared<TabletSchema>();
-    schema->set_id(TabletSchema::invalid_id());
-
-    // Clone the index columns. Mark each as key + sort_key so SegmentWriter
-    // arranges the short-key index and sorted layout we depend on for fast
-    // prefix lookup.
-    std::vector<ColumnId> sort_key_idxes;
-    sort_key_idxes.reserve(index_col_ids.size());
-    int32_t next_unique_id = 1; // synthetic IDs; not joined with source
-    for (size_t i = 0; i < index_col_ids.size(); ++i) {
-        TabletColumn col(source_schema.column(index_col_ids[i]));
-        col.set_unique_id(next_unique_id++);
-        col.set_is_key(true);
-        col.set_is_sort_key(true);
-        col.set_aggregation(STORAGE_AGGREGATE_NONE);
-        // Defensive: secondary index files do not carry bitmap / bloom side
-        // indexes; turn them off on the synthetic columns so SegmentWriter
-        // does not try to emit them.
-        col.set_is_bf_column(false);
-        col.set_has_bitmap_index(false);
-        schema->append_column(std::move(col));
-        sort_key_idxes.push_back(static_cast<ColumnId>(i));
-    }
-
-    // Append the encoded-position column (BIGINT, non-key, non-null).
-    TabletColumn pos_col(STORAGE_AGGREGATE_NONE, TYPE_BIGINT, /*is_nullable=*/false, next_unique_id++, sizeof(int64_t));
-    pos_col.set_name(kEncodedPositionColumnName);
-    pos_col.set_is_key(false);
-    pos_col.set_is_sort_key(false);
-    schema->append_column(std::move(pos_col));
-
-    schema->set_sort_key_idxes(std::move(sort_key_idxes));
-    schema->set_num_short_key_columns(static_cast<uint16_t>(index_col_ids.size()));
-    return schema;
+    // Delegate to the shared helper so the writer and reader cannot drift in
+    // synthetic-schema shape. Bloom on by default: an equality lookup on an
+    // indexed column hits the per-page filter first and short-circuits the
+    // ordinal scan when the value is absent.
+    return build_index_tablet_schema(source_schema, index_col_ids, /*enable_bloom_filter=*/true);
 }
 
 StatusOr<SecondaryIndexFilePB> SecondaryIndexWriter::build(const BuildInput& input) {

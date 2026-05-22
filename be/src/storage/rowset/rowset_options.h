@@ -104,8 +104,8 @@ public:
     bool enable_join_runtime_filter_pushdown = false;
     bool enable_predicate_col_late_materialize = false;
 
-    // PoC: per-segment rowid candidate set produced by a secondary index
-    // lookup for this rowset. Keyed by the segment's ordinal in the rowset.
+    // Per-segment rowid candidate set produced by a secondary index lookup
+    // for this rowset. Keyed by the segment's ordinal in the rowset.
     // Segments not present in the map fall back to the normal full scan.
     const std::unordered_map<uint32_t, roaring::Roaring>* presupplied_rowid_filter_per_segment = nullptr;
 };

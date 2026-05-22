@@ -439,7 +439,7 @@ private:
 
     Status _apply_del_vector();
 
-    // PoC: intersect _scan_range with the rowid set produced upstream by a
+    // Intersect _scan_range with the rowid set produced upstream by a
     // secondary index lookup. No-op when SegmentReadOptions doesn't carry one.
     Status _apply_presupplied_rowid_filter();
 
@@ -935,7 +935,7 @@ Status SegmentIterator::_init_internal() {
     }
     // Support prefilter for now
     RETURN_IF_ERROR(_apply_bitmap_index());
-    // PoC: secondary index narrows scan_range right after bitmap index so
+    // Secondary index narrows scan_range right after bitmap index so
     // downstream zone-map / bloom / inverted index see the smaller range.
     // DelVec subtraction at the end still applies on top.
     RETURN_IF_ERROR(_apply_presupplied_rowid_filter());

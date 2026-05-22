@@ -22,39 +22,38 @@
 
 namespace starrocks::secondary_sorted {
 
-// One PoC index definition: which columns make up the index for one table.
-// For PoC v1 we support a single index per table; multiple indexes for one
-// table is left as v2 work even though the proto and storage allow it.
-struct PocIndexDef {
+// One secondary index definition: which columns make up the index.
+struct SecondaryIndexDef {
     std::string index_name;
     std::vector<std::string> index_col_names;
 };
 
-// PocIndexRegistry parses config::poc_secondary_index_defs and answers
+// SecondaryIndexRegistry parses config::secondary_index_defs and answers
 // per-tablet lookups. The config string format is:
 //   "tablet_id:index_name:col1,col2;tablet_id:index_name:col"
-// Each ';'-separated entry registers one index. Whitespace around delimiters
-// is tolerated. A blank or invalid string makes the registry empty.
+// Each ';'-separated entry registers one index. Repeating the tablet_id
+// prefix registers multiple indexes on the same tablet. Whitespace around
+// delimiters is tolerated. A blank or invalid string makes the registry
+// empty.
 //
 // The registry is a process-wide singleton, repopulated on demand from the
-// current config snapshot. PoC v1 uses a tablet_id key, not a table_id key,
-// because Lake metadata commits are tablet-scoped and we want to keep the
-// hook side trivial.
-class PocIndexRegistry {
+// current config snapshot. Keyed by tablet_id because Lake metadata commits
+// are tablet-scoped and we want to keep the hook sites trivial.
+class SecondaryIndexRegistry {
 public:
-    // Look up the (single) index definition for a given tablet. Returns
-    // std::nullopt if no entry is configured. Triggers a (cheap) reparse if
-    // the config string changed since the last call.
-    static std::optional<PocIndexDef> get_for_tablet(int64_t tablet_id);
+    // Look up all index definitions registered for a given tablet. Returns
+    // an empty vector if no entry is configured. Triggers a (cheap) reparse
+    // if the config string changed since the last call.
+    static std::vector<SecondaryIndexDef> get_for_tablet(int64_t tablet_id);
 
     // For tests / introspection.
     static void force_reload();
 
 private:
-    static PocIndexRegistry& instance();
+    static SecondaryIndexRegistry& instance();
 
     void maybe_reload();
-    std::optional<PocIndexDef> lookup(int64_t tablet_id);
+    std::vector<SecondaryIndexDef> lookup(int64_t tablet_id);
 
     static std::vector<std::string> split(std::string_view s, char delim);
     static std::string trim(std::string_view s);
@@ -63,7 +62,7 @@ private:
     // Snapshot of the config string that produced _by_tablet. We reload when
     // it diverges from the live config.
     std::string _last_seen_config;
-    std::unordered_map<int64_t, PocIndexDef> _by_tablet;
+    std::unordered_map<int64_t, std::vector<SecondaryIndexDef>> _by_tablet;
 };
 
 } // namespace starrocks::secondary_sorted

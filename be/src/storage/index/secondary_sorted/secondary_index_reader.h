@@ -29,6 +29,8 @@
 namespace starrocks {
 class Segment;
 class ColumnPredicate;
+class ObjectPool;
+class PredicateTree;
 } // namespace starrocks
 
 namespace starrocks::lake {
@@ -48,13 +50,11 @@ using PerSegmentRowidBitmap = std::unordered_map<uint32_t, roaring::Roaring>;
 // predicate queries by scanning that segment, applying predicates on the
 // index columns, and decoding the position column.
 //
-// PoC layout choices:
+// Layout choices:
 //   * One index reader per rowset per index (caller decides which to open).
-//   * Predicates passed in must be expressed against the *source* tablet
-//     schema's index columns; the reader translates names internally.
-//   * For PoC v1 we do a simple sequential scan with predicate pushdown.
-//     v2 will exploit the short-key index for prefix narrowing -- segment
-//     v2 already builds one, so this is mostly hook-up work later.
+//   * Predicates passed in are expressed against the *source* tablet
+//     schema's column ids; the reader remaps them into the index file's
+//     synthetic schema before pushing them into the inner segment scan.
 class SecondaryIndexReader {
 public:
     struct OpenInput {
@@ -70,14 +70,17 @@ public:
 
     static StatusOr<std::shared_ptr<SecondaryIndexReader>> open(const OpenInput& input);
 
-    // Lookup: scan the index file with the given predicates restricted to
-    // index columns. Returns one Roaring per source segment that actually
-    // had matches; segments with no matches are absent from the map.
+    // Lookup: scan the index file applying the predicates from
+    // |source_pred_tree| that touch index columns. The reader internally
+    // remaps each predicate's column id from the source tablet schema's
+    // space into the index file's synthetic schema (0..K-1) before
+    // pushing it through the inner SegmentIterator's pred_tree pipeline.
+    // Returns one Roaring per source segment that actually had matches;
+    // segments with no matches are absent from the map.
     //
-    // Predicates that reference non-index columns must have been stripped
-    // by the caller. The reader does not validate this -- it will simply
-    // ignore predicates on columns absent from its read schema.
-    StatusOr<PerSegmentRowidBitmap> lookup(const std::vector<const ColumnPredicate*>& index_col_predicates);
+    // |obj_pool| owns the lifetime of all cloned predicates used during
+    // this lookup and must outlive the returned bitmap consumption.
+    StatusOr<PerSegmentRowidBitmap> lookup(const PredicateTree& source_pred_tree, ObjectPool* obj_pool);
 
     const SecondaryIndexFilePB& file_pb() const { return _file_pb; }
 

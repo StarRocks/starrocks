@@ -394,20 +394,12 @@ Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std
 
     SCOPED_RAW_TIMER(&_stats.create_segment_iter_ns);
 
-    // ---- PoC: per-rowset secondary index lookup ----
+    // ---- Per-rowset secondary index lookup ----
     // When the caller has opted in (use_secondary_index) and the index read
     // path is enabled globally, walk over rowsets that carry a secondary
     // index file in their metadata and pre-compute a per-segment Roaring
     // bitmap of candidate row ids. The bitmap is threaded into Rowset::read()
     // via the `presupplied_rowid_filter_per_segment` field on RowsetReadOptions.
-    //
-    // PoC v1 limitation: predicate translation from params.pred_tree into
-    // the index file's synthetic schema is NOT implemented yet, so lookup()
-    // returns ALL row ids of the index file (i.e. every base-table row
-    // visited via the index, which still validates end-to-end wiring and
-    // measures the write-path cost). Predicate translation lives behind a
-    // small TODO at the lookup() call site; querying a fully-pruned
-    // candidate set requires plumbing the source-column-id remap.
     std::unordered_map<uint32_t /*rowset_id*/, std::unordered_map<uint32_t, roaring::Roaring>> sidx_per_rowset;
     if (params.use_secondary_index && config::enable_secondary_index_read) {
         // Resolve a Lake-aware FileSystem rooted at the tablet directory; we
@@ -417,21 +409,44 @@ Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std
         for (auto& rowset : _rowsets) {
             const auto& meta = rowset->metadata();
             if (meta.secondary_indexes_size() == 0) continue;
-            // PoC v1: only the first declared index per rowset is consulted.
-            secondary_sorted::SecondaryIndexReader::OpenInput open_in;
-            open_in.fs = sidx_fs;
-            open_in.tablet_mgr = _tablet_mgr;
-            open_in.tablet_id = rowset->tablet_id();
-            open_in.file_pb = meta.secondary_indexes(0);
-            open_in.source_schema = _tablet_schema;
-            ASSIGN_OR_RETURN(auto reader, secondary_sorted::SecondaryIndexReader::open(open_in));
-            // TODO(PoC v2): translate params.pred_tree's predicates from the
-            // source schema's column ids to the index file's synthetic
-            // column ids before passing them in. For now we pass none and
-            // accept that the candidate set equals the full index.
-            std::vector<const ColumnPredicate*> preds;
-            ASSIGN_OR_RETURN(auto per_seg, reader->lookup(preds));
-            sidx_per_rowset[rowset->id()] = std::move(per_seg);
+
+            // Look up every secondary index attached to this rowset; intersect
+            // their per-segment candidate bitmaps. A segment that produces an
+            // empty bitmap for any index is fully skipped by the downstream
+            // scan because it cannot satisfy that index's predicates.
+            std::unordered_map<uint32_t, roaring::Roaring> merged;
+            bool first_index = true;
+            for (int i = 0; i < meta.secondary_indexes_size(); ++i) {
+                secondary_sorted::SecondaryIndexReader::OpenInput open_in;
+                open_in.fs = sidx_fs;
+                open_in.tablet_mgr = _tablet_mgr;
+                open_in.tablet_id = rowset->tablet_id();
+                open_in.file_pb = meta.secondary_indexes(i);
+                open_in.source_schema = _tablet_schema;
+                ASSIGN_OR_RETURN(auto reader, secondary_sorted::SecondaryIndexReader::open(open_in));
+                ASSIGN_OR_RETURN(auto per_seg, reader->lookup(params.pred_tree, &_obj_pool));
+
+                if (first_index) {
+                    merged = std::move(per_seg);
+                    first_index = false;
+                    continue;
+                }
+                // Intersect into a fresh map so we drop seg_ids missing from
+                // the new lookup (those segments have zero candidates).
+                std::unordered_map<uint32_t, roaring::Roaring> next;
+                for (auto& [seg_id, bitmap] : merged) {
+                    auto it = per_seg.find(seg_id);
+                    if (it == per_seg.end()) continue;
+                    roaring::Roaring r = bitmap;
+                    r &= it->second;
+                    if (!r.isEmpty()) {
+                        next.emplace(seg_id, std::move(r));
+                    }
+                }
+                merged = std::move(next);
+                if (merged.empty()) break; // no rows can satisfy all indexes
+            }
+            sidx_per_rowset[rowset->id()] = std::move(merged);
         }
     }
 
@@ -451,8 +466,8 @@ Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std
             continue;
         }
 
-        // PoC: thread this rowset's per-segment rowid filter into rs_opts
-        // just before invoking rowset->read(). When no entry exists for this
+        // Thread this rowset's per-segment rowid filter into rs_opts just
+        // before invoking rowset->read(). When no entry exists for this
         // rowset (typical case), the field stays null and Rowset::read()
         // falls back to the normal scan.
         if (auto it = sidx_per_rowset.find(rowset->id()); it != sidx_per_rowset.end()) {
@@ -461,7 +476,7 @@ Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std
             rs_opts.presupplied_rowid_filter_per_segment = nullptr;
         }
 
-        // PoC: parallel load captures rs_opts by reference; mutating
+        // Parallel load captures rs_opts by reference; mutating
         // presupplied_rowid_filter_per_segment per iteration would race.
         // Force the serial path whenever a secondary index lookup is in use.
         const bool use_parallel = config::enable_load_segment_parallel && !params.use_secondary_index;

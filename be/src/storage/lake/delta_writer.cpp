@@ -39,6 +39,7 @@
 #include "storage/chunk_helper.h"
 #include "storage/delta_writer.h"
 #include "storage/index/secondary_sorted/build_hook.h"
+#include "storage/index/secondary_sorted/index_registry.h"
 #include "storage/lake/filenames.h"
 #include "storage/lake/meta_file.h"
 #include "storage/lake/metacache.h"
@@ -905,20 +906,44 @@ StatusOr<TxnLogPtr> DeltaWriterImpl::finish_with_txnlog(DeltaWriterFinishMode mo
         }
     }
 
-    // ---- PoC: Build rowset-level secondary index files ----
+    // ---- Build rowset-level secondary index files ----
     // After all segments have been recorded into op_write->rowset(), but
     // before the txn log is sealed, optionally scan those segments and emit
     // one index file per configured (tablet, index). The resulting PB entries
     // are attached to the same RowsetMetadataPB so they travel atomically
     // with the rowset on commit.
-    if (config::enable_secondary_index_write && !_tablet_writer->segments().empty()) {
-        std::vector<SecondaryIndexFilePB> sidx_pbs;
-        const std::string root = _tablet_manager->tablet_root_location(_tablet_id);
-        ASSIGN_OR_RETURN(auto sidx_fs, FileSystemFactory::CreateSharedFromString(root));
-        RETURN_IF_ERROR(secondary_sorted::maybe_build_secondary_indexes(
-                _tablet_id, _txn_id, _tablet_schema, _tablet_writer->segments(), sidx_fs, _tablet_manager, &sidx_pbs));
-        for (auto& pb : sidx_pbs) {
-            *(op_write->mutable_rowset()->add_secondary_indexes()) = std::move(pb);
+    if (config::enable_secondary_index_write) {
+        // PCU correctness gate: a partial update that modifies any column
+        // referenced by a registered secondary index would leave the index
+        // pointing to stale values. Reject the commit before any side effects.
+        if (is_partial_update()) {
+            auto defs = secondary_sorted::SecondaryIndexRegistry::get_for_tablet(_tablet_id);
+            for (const auto& def : defs) {
+                for (const auto& idx_col_name : def.index_col_names) {
+                    size_t idx_col_pos = _tablet_schema->field_index(idx_col_name);
+                    if (idx_col_pos == static_cast<size_t>(-1)) continue;
+                    for (int32_t write_cid : _write_column_ids) {
+                        if (static_cast<size_t>(write_cid) == idx_col_pos) {
+                            return Status::NotSupported(fmt::format(
+                                    "Column '{}' is referenced by secondary index '{}' and cannot be modified "
+                                    "via partial column update. Use full row upsert or drop the index first.",
+                                    idx_col_name, def.index_name));
+                        }
+                    }
+                }
+            }
+        }
+
+        if (!_tablet_writer->segments().empty()) {
+            std::vector<SecondaryIndexFilePB> sidx_pbs;
+            const std::string root = _tablet_manager->tablet_root_location(_tablet_id);
+            ASSIGN_OR_RETURN(auto sidx_fs, FileSystemFactory::CreateSharedFromString(root));
+            RETURN_IF_ERROR(secondary_sorted::maybe_build_secondary_indexes(
+                    _tablet_id, _txn_id, _tablet_schema, _tablet_writer->segments(), sidx_fs, _tablet_manager,
+                    &sidx_pbs));
+            for (auto& pb : sidx_pbs) {
+                *(op_write->mutable_rowset()->add_secondary_indexes()) = std::move(pb);
+            }
         }
     }
 

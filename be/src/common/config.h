@@ -459,7 +459,7 @@ CONF_mBool(enable_pk_index_eager_build, "true");
 CONF_mInt64(pk_index_eager_build_threshold_bytes, "104857600");
 
 // ============================================================================
-// PoC: Secondary index for Lake PK table (rowset-level lightweight sorted idx)
+// Secondary index for Lake PK table (rowset-level lightweight sorted idx)
 // ============================================================================
 // Enable building secondary index files during load and compaction.
 CONF_mBool(enable_secondary_index_write, "false");
@@ -467,9 +467,11 @@ CONF_mBool(enable_secondary_index_write, "false");
 CONF_mBool(enable_secondary_index_read, "false");
 // Memory limit (in MB) for sorting (idx_cols, seg_id, rowid) entries during build.
 CONF_mInt64(secondary_index_build_mem_limit_mb, "512");
-// PoC index registry. Format: "table_id:index_name:col1,col2;table_id:index_name:col"
-// Multiple indexes for same table allowed by repeating the table_id prefix.
-CONF_mString(poc_secondary_index_defs, "");
+// Per-BE index registry while the FE-side DDL is not yet wired.
+// Format: "tablet_id:index_name:col1,col2;tablet_id:index_name:col"
+// Multiple indexes for the same tablet allowed by repeating the tablet_id
+// prefix.
+CONF_mString(secondary_index_defs, "");
 // Compaction threadpool max thread num for cloud native pk index compact in shared-data mode.
 CONF_mInt32(pk_index_parallel_compaction_threadpool_max_threads, "0");
 // The queue size for pk index parallel compaction threadpool in shared-data mode.

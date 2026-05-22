@@ -22,32 +22,32 @@
 
 namespace starrocks::secondary_sorted {
 
-PocIndexRegistry& PocIndexRegistry::instance() {
-    static PocIndexRegistry inst;
+SecondaryIndexRegistry& SecondaryIndexRegistry::instance() {
+    static SecondaryIndexRegistry inst;
     return inst;
 }
 
-std::optional<PocIndexDef> PocIndexRegistry::get_for_tablet(int64_t tablet_id) {
+std::vector<SecondaryIndexDef> SecondaryIndexRegistry::get_for_tablet(int64_t tablet_id) {
     return instance().lookup(tablet_id);
 }
 
-void PocIndexRegistry::force_reload() {
+void SecondaryIndexRegistry::force_reload() {
     auto& self = instance();
     std::lock_guard<std::mutex> lock(self._mutex);
     self._last_seen_config.clear();
     self._by_tablet.clear();
 }
 
-std::optional<PocIndexDef> PocIndexRegistry::lookup(int64_t tablet_id) {
+std::vector<SecondaryIndexDef> SecondaryIndexRegistry::lookup(int64_t tablet_id) {
     std::lock_guard<std::mutex> lock(_mutex);
     maybe_reload();
     auto it = _by_tablet.find(tablet_id);
-    if (it == _by_tablet.end()) return std::nullopt;
+    if (it == _by_tablet.end()) return {};
     return it->second;
 }
 
-void PocIndexRegistry::maybe_reload() {
-    const std::string& current = config::poc_secondary_index_defs;
+void SecondaryIndexRegistry::maybe_reload() {
+    const std::string& current = config::secondary_index_defs;
     if (current == _last_seen_config) return;
     _last_seen_config = current;
     _by_tablet.clear();
@@ -59,7 +59,7 @@ void PocIndexRegistry::maybe_reload() {
         if (entry.empty()) continue;
         auto parts = split(entry, ':');
         if (parts.size() != 3) {
-            LOG(WARNING) << "PocIndexRegistry: skipping malformed entry: '" << entry << "'";
+            LOG(WARNING) << "SecondaryIndexRegistry: skipping malformed entry: '" << entry << "'";
             continue;
         }
         const std::string tablet_id_str = trim(parts[0]);
@@ -70,11 +70,12 @@ void PocIndexRegistry::maybe_reload() {
         try {
             tablet_id = std::stoll(tablet_id_str);
         } catch (const std::exception&) {
-            LOG(WARNING) << "PocIndexRegistry: invalid tablet_id '" << tablet_id_str << "' in entry '" << entry << "'";
+            LOG(WARNING) << "SecondaryIndexRegistry: invalid tablet_id '" << tablet_id_str << "' in entry '"
+                         << entry << "'";
             continue;
         }
 
-        PocIndexDef def;
+        SecondaryIndexDef def;
         def.index_name = index_name;
         for (auto col : split(cols_csv, ',')) {
             std::string trimmed = trim(col);
@@ -83,16 +84,20 @@ void PocIndexRegistry::maybe_reload() {
             }
         }
         if (def.index_col_names.empty() || def.index_name.empty()) {
-            LOG(WARNING) << "PocIndexRegistry: empty name or columns in entry '" << entry << "'";
+            LOG(WARNING) << "SecondaryIndexRegistry: empty name or columns in entry '" << entry << "'";
             continue;
         }
-        // PoC: last write wins if a tablet has multiple entries
-        _by_tablet[tablet_id] = std::move(def);
+        // Append rather than overwrite: multiple ';'-separated entries with
+        // the same tablet_id register that many distinct indexes.
+        _by_tablet[tablet_id].push_back(std::move(def));
     }
-    LOG(INFO) << "PocIndexRegistry: loaded " << _by_tablet.size() << " index definitions from config";
+    size_t total_indexes = 0;
+    for (auto& [_, defs] : _by_tablet) total_indexes += defs.size();
+    LOG(INFO) << "SecondaryIndexRegistry: loaded " << total_indexes << " index defs across " << _by_tablet.size()
+              << " tablets from config";
 }
 
-std::vector<std::string> PocIndexRegistry::split(std::string_view s, char delim) {
+std::vector<std::string> SecondaryIndexRegistry::split(std::string_view s, char delim) {
     std::vector<std::string> out;
     size_t start = 0;
     for (size_t i = 0; i < s.size(); ++i) {
@@ -105,7 +110,7 @@ std::vector<std::string> PocIndexRegistry::split(std::string_view s, char delim)
     return out;
 }
 
-std::string PocIndexRegistry::trim(std::string_view s) {
+std::string SecondaryIndexRegistry::trim(std::string_view s) {
     size_t b = 0;
     size_t e = s.size();
     while (b < e && std::isspace(static_cast<unsigned char>(s[b]))) ++b;
