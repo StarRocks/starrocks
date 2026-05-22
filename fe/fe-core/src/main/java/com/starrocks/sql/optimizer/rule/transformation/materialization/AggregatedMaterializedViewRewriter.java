@@ -41,6 +41,7 @@ import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.common.AggregateFunctionRollupUtils;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.equivalent.EquivalentShuttleContext;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.equivalent.IRewriteEquivalent;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.equivalent.PercentileRewriteEquivalent;
 import com.starrocks.sql.optimizer.rule.tree.pdagg.AggregatePushDownContext;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -297,6 +298,12 @@ public final class AggregatedMaterializedViewRewriter extends MaterializedViewRe
 
         Pair<ScalarOperator, EquivalentShuttleContext> result =
                 equationRewriter.replaceExprWithEquivalent(rewriteContext, scalarOp);
+        // Check compression mismatch before the result.first null-check below.
+        // In legacy mode the shuttle still produces a non-null rewrite even on
+        // mismatch; in strict mode we must short-circuit without using it.
+        if (handlePercentileMismatch(result.second)) {
+            return null;
+        }
         ScalarOperator rewritten = result.first;
         if (rewritten == null || scalarOp == rewritten) {
             return null;
@@ -306,6 +313,26 @@ public final class AggregatedMaterializedViewRewriter extends MaterializedViewRe
             return null;
         }
         return rewritten;
+    }
+
+    /**
+     * Propagate the PercentileRewriteEquivalent compression-mismatch signal from
+     * the shuttle into MvRewriteContext, and decide whether the caller should
+     * skip this rewrite based on the strict-match session var. Returns true when
+     * the caller must short-circuit to no-rewrite (strict + non-subsume MV).
+     */
+    private boolean handlePercentileMismatch(EquivalentShuttleContext shuttle) {
+        if (shuttle == null || !shuttle.hasPercentileNonSubsumeRewrite()) {
+            return false;
+        }
+        mvRewriteContext.setPercentileNonSubsumeRewrite(true);
+        if (PercentileRewriteEquivalent.isStrictMatchEnabled()) {
+            OptimizerTraceUtil.logMVRewriteFailReason(mvRewriteContext,
+                    "percentile compression mismatch: MV.c={} < query.c={}",
+                    shuttle.getPercentileMismatchMvC(), shuttle.getPercentileMismatchQueryC());
+            return true;
+        }
+        return false;
     }
 
     // NOTE: this method is not exactly right to check whether it's a rollup aggregate:
@@ -788,6 +815,12 @@ public final class AggregatedMaterializedViewRewriter extends MaterializedViewRe
                                                                             ColumnRefSet queryColumnSet,
                                                                             CallOperator aggCall) {
         Pair<ScalarOperator, EquivalentShuttleContext> result = equationRewriter.replaceExprWithRollup(rewriteContext, aggCall);
+        // Check compression mismatch before the targetColumn null-check below.
+        // In legacy mode the shuttle still produces a non-null rewrite even on
+        // mismatch; in strict mode we must short-circuit without using it.
+        if (handlePercentileMismatch(result.second)) {
+            return null;
+        }
         ScalarOperator targetColumn = result.first;
         if (targetColumn == null || !isAllExprReplaced(targetColumn, queryColumnSet)) {
             // it means there is some column that can not be rewritten by outputs of mv

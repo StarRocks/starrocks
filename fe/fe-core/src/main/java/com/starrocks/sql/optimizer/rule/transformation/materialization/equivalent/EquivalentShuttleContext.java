@@ -28,6 +28,15 @@ public class EquivalentShuttleContext {
     private IRewriteEquivalent.RewriteEquivalentType rewriteEquivalentType;
     private Map<ColumnRefOperator, CallOperator> newColumnRefToAggFuncMap;
 
+    // Per-rewrite signal raised by PercentileRewriteEquivalent when the MV's
+    // stored compression is strictly smaller than the query's compression.
+    // BestMvSelector inspects the flag through MvRewriteContext / RewriteResult
+    // to prefer subsume MVs; strict mode (session var) turns this into a hard
+    // skip (caller emits a logMVRewriteFailReason and returns null).
+    private boolean hasPercentileNonSubsumeRewrite;
+    private double percentileMismatchMvC;
+    private double percentileMismatchQueryC;
+
     public EquivalentShuttleContext(RewriteContext rewriteContext, boolean isRollup, boolean isRewrittenByEquivalent,
                                     IRewriteEquivalent.RewriteEquivalentType type) {
         this.rewriteContext = rewriteContext;
@@ -70,5 +79,29 @@ public class EquivalentShuttleContext {
 
     public IRewriteEquivalent.RewriteEquivalentType getRewriteEquivalentType() {
         return rewriteEquivalentType;
+    }
+
+    public boolean hasPercentileNonSubsumeRewrite() {
+        return hasPercentileNonSubsumeRewrite;
+    }
+
+    public void setPercentileNonSubsumeRewrite(boolean v) {
+        this.hasPercentileNonSubsumeRewrite = v;
+    }
+
+    public double getPercentileMismatchMvC() {
+        return percentileMismatchMvC;
+    }
+
+    public void setPercentileMismatchMvC(double v) {
+        this.percentileMismatchMvC = v;
+    }
+
+    public double getPercentileMismatchQueryC() {
+        return percentileMismatchQueryC;
+    }
+
+    public void setPercentileMismatchQueryC(double v) {
+        this.percentileMismatchQueryC = v;
     }
 }

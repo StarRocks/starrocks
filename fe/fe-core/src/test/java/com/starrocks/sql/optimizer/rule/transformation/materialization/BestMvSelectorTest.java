@@ -90,7 +90,7 @@ public class BestMvSelectorTest extends MVTestBase {
         List<OptExpression> mvExpressions = Lists.newArrayList();
         OptExpression queryPlan = createMockQueryPlan();
         
-        BestMvSelector selector = new BestMvSelector(mvExpressions, optimizerContext, queryPlan, rule);
+        BestMvSelector selector = BestMvSelector.forExpressions(mvExpressions, optimizerContext, queryPlan, rule);
         
         Assertions.assertNotNull(selector);
         // Test that constructor works without throwing exceptions
@@ -103,7 +103,7 @@ public class BestMvSelectorTest extends MVTestBase {
         List<OptExpression> mvExpressions = Lists.newArrayList();
         OptExpression queryPlan = createMockAggQueryPlan();
         
-        BestMvSelector selector = new BestMvSelector(mvExpressions, optimizerContext, queryPlan, rule);
+        BestMvSelector selector = BestMvSelector.forExpressions(mvExpressions, optimizerContext, queryPlan, rule);
         
         // Test that constructor works with aggregation query
         Assertions.assertNotNull(selector);
@@ -115,7 +115,7 @@ public class BestMvSelectorTest extends MVTestBase {
         List<OptExpression> mvExpressions = Lists.newArrayList();
         OptExpression queryPlan = createMockQueryPlan();
         
-        BestMvSelector selector = new BestMvSelector(mvExpressions, optimizerContext, queryPlan, rule);
+        BestMvSelector selector = BestMvSelector.forExpressions(mvExpressions, optimizerContext, queryPlan, rule);
         List<OptExpression> result = selector.selectBest(true);
         
         Assertions.assertTrue(result.isEmpty());
@@ -128,7 +128,7 @@ public class BestMvSelectorTest extends MVTestBase {
         OptExpression mvExpression = createMockMvExpression();
         List<OptExpression> mvExpressions = Lists.newArrayList(mvExpression);
         
-        BestMvSelector selector = new BestMvSelector(mvExpressions, optimizerContext, queryPlan, rule);
+        BestMvSelector selector = BestMvSelector.forExpressions(mvExpressions, optimizerContext, queryPlan, rule);
         List<OptExpression> result = selector.selectBest(true);
         
         Assertions.assertEquals(0, result.size());
@@ -148,7 +148,7 @@ public class BestMvSelectorTest extends MVTestBase {
         mvExpression1.setStatistics(stats1);
         mvExpression2.setStatistics(stats2);
         
-        BestMvSelector selector = new BestMvSelector(mvExpressions, optimizerContext, queryPlan, rule);
+        BestMvSelector selector = BestMvSelector.forExpressions(mvExpressions, optimizerContext, queryPlan, rule);
         List<OptExpression> result = selector.selectBest(true);
         
         // Should return the best one (with lower row count)
@@ -161,7 +161,7 @@ public class BestMvSelectorTest extends MVTestBase {
         OptExpression mvExpression = createMockMvExpression();
         List<OptExpression> mvExpressions = Lists.newArrayList(mvExpression);
         
-        BestMvSelector selector = new BestMvSelector(mvExpressions, optimizerContext, queryPlan, rule);
+        BestMvSelector selector = BestMvSelector.forExpressions(mvExpressions, optimizerContext, queryPlan, rule);
         List<OptExpression> result = selector.selectBest(true);
         
         Assertions.assertEquals(0, result.size());
@@ -189,7 +189,7 @@ public class BestMvSelectorTest extends MVTestBase {
         Statistics stats = createMockStatistics(100.0, 50.0);
         mvExpression.setStatistics(stats);
         
-        BestMvSelector selector = new BestMvSelector(mvExpressions, optimizerContext, queryPlan, rule);
+        BestMvSelector selector = BestMvSelector.forExpressions(mvExpressions, optimizerContext, queryPlan, rule);
         List<OptExpression> result = selector.selectBest(true);
         
         Assertions.assertEquals(0, result.size());
@@ -227,7 +227,7 @@ public class BestMvSelectorTest extends MVTestBase {
         Statistics stats = createMockStatistics(100.0, 50.0);
         mvExpression.setStatistics(stats);
         
-        BestMvSelector selector = new BestMvSelector(mvExpressions, optimizerContext, queryPlan, rule);
+        BestMvSelector selector = BestMvSelector.forExpressions(mvExpressions, optimizerContext, queryPlan, rule);
         List<OptExpression> result = selector.selectBest(true);
         
         Assertions.assertEquals(0, result.size());
@@ -244,7 +244,7 @@ public class BestMvSelectorTest extends MVTestBase {
         Statistics stats = createMockStatistics(100.0, 50.0);
         mvExpression.setStatistics(stats);
         
-        BestMvSelector selector = new BestMvSelector(mvExpressions, optimizerContext, queryPlan, rule);
+        BestMvSelector selector = BestMvSelector.forExpressions(mvExpressions, optimizerContext, queryPlan, rule);
         List<OptExpression> result = selector.selectBest(true);
         
         Assertions.assertEquals(0, result.size());
@@ -265,7 +265,7 @@ public class BestMvSelectorTest extends MVTestBase {
             }
         };
         
-        BestMvSelector selector = new BestMvSelector(mvExpressions, optimizerContext, queryPlan, rule);
+        BestMvSelector selector = BestMvSelector.forExpressions(mvExpressions, optimizerContext, queryPlan, rule);
         
         // Should not throw exception, should handle gracefully
         Assertions.assertDoesNotThrow(() -> selector.selectBest(true));
@@ -286,7 +286,7 @@ public class BestMvSelectorTest extends MVTestBase {
             }
         };
         
-        BestMvSelector selector = new BestMvSelector(mvExpressions, optimizerContext, queryPlan, rule);
+        BestMvSelector selector = BestMvSelector.forExpressions(mvExpressions, optimizerContext, queryPlan, rule);
         List<OptExpression> result = selector.selectBest(true);
         
         Assertions.assertTrue(result.isEmpty());
@@ -323,7 +323,7 @@ public class BestMvSelectorTest extends MVTestBase {
             }
         };
         
-        BestMvSelector selector = new BestMvSelector(mvExpressions, optimizerContext, queryPlan, rule);
+        BestMvSelector selector = BestMvSelector.forExpressions(mvExpressions, optimizerContext, queryPlan, rule);
         List<OptExpression> result = selector.selectBest(true);
         
         Assertions.assertTrue(result.isEmpty());
@@ -335,7 +335,7 @@ public class BestMvSelectorTest extends MVTestBase {
         OptExpression queryPlan = createMockQueryPlan();
         List<OptExpression> mvExpressions = Lists.newArrayList();
         
-        BestMvSelector selector = new BestMvSelector(mvExpressions, optimizerContext, queryPlan, rule);
+        BestMvSelector selector = BestMvSelector.forExpressions(mvExpressions, optimizerContext, queryPlan, rule);
         
         // Test calcSortScore method
         Method calcSortScoreMethod = BestMvSelector.class.getDeclaredMethod(
@@ -359,7 +359,7 @@ public class BestMvSelectorTest extends MVTestBase {
         OptExpression queryPlan = createMockQueryPlan();
         List<OptExpression> mvExpressions = Lists.newArrayList();
         
-        BestMvSelector selector = new BestMvSelector(mvExpressions, optimizerContext, queryPlan, rule);
+        BestMvSelector selector = BestMvSelector.forExpressions(mvExpressions, optimizerContext, queryPlan, rule);
         
         // Test calcDistScore method
         Method calcDistScoreMethod = BestMvSelector.class.getDeclaredMethod(
@@ -423,7 +423,7 @@ public class BestMvSelectorTest extends MVTestBase {
             }
         };
         
-        BestMvSelector selector = new BestMvSelector(mvExpressions, optimizerContext, queryPlan, rule);
+        BestMvSelector selector = BestMvSelector.forExpressions(mvExpressions, optimizerContext, queryPlan, rule);
         List<OptExpression> result = selector.selectBest(true);
         
         // Should return empty list when contexts are empty
@@ -445,7 +445,7 @@ public class BestMvSelectorTest extends MVTestBase {
             }
         };
         
-        BestMvSelector selector = new BestMvSelector(mvExpressions, optimizerContext, queryPlan, rule);
+        BestMvSelector selector = BestMvSelector.forExpressions(mvExpressions, optimizerContext, queryPlan, rule);
         
         // Should handle exception gracefully and still return a result
         Assertions.assertDoesNotThrow(() -> {
@@ -460,7 +460,7 @@ public class BestMvSelectorTest extends MVTestBase {
         OptExpression mvExpression = createMockMvExpression();
         List<OptExpression> mvExpressions = Lists.newArrayList(mvExpression);
 
-        BestMvSelector selector = new BestMvSelector(mvExpressions, optimizerContext, queryPlan, rule);
+        BestMvSelector selector = BestMvSelector.forExpressions(mvExpressions, optimizerContext, queryPlan, rule);
         List<OptExpression> result = selector.selectBest(false);
 
         Assertions.assertEquals(1, result.size());
@@ -954,5 +954,37 @@ public class BestMvSelectorTest extends MVTestBase {
             // Should choose the MV with advertiser_id as distribution key for tablet pruning benefit
             PlanTestBase.assertContains(plan, "mv_ad_fact_advertiser");
         }
+    }
+
+    /**
+     * Direct compareTo coverage for the percentile non-subsume signal: when two
+     * candidates have the same structural score, the one whose rewrite needed a
+     * compression downgrade (hasPercentileNonSubsumeRewrite=true) must sort
+     * AFTER the subsume candidate, so BestMvSelector picks the subsume MV.
+     */
+    @Test
+    public void testPercentileSubsumeCandidatePreferredOverNonSubsumeInLegacy() {
+        BestMvSelector.CandidateScore subsume = new BestMvSelector.CandidateScore();
+        subsume.index = 0;
+        subsume.hasPercentileNonSubsumeRewrite = false;
+
+        BestMvSelector.CandidateScore nonSubsume = new BestMvSelector.CandidateScore();
+        nonSubsume.index = 1;
+        nonSubsume.hasPercentileNonSubsumeRewrite = true;
+
+        // Boolean.compare(false, true) = -1 → subsume < nonSubsume → picker
+        // (which uses Comparator.min) returns the subsume one.
+        Assertions.assertTrue(subsume.compareTo(nonSubsume) < 0,
+                "subsume must outrank non-subsume regardless of index");
+        Assertions.assertTrue(nonSubsume.compareTo(subsume) > 0,
+                "non-subsume must rank below subsume");
+
+        // When both flags match the comparison falls through to the existing
+        // tie-breakers (here: index ascending).
+        BestMvSelector.CandidateScore alsoSubsume = new BestMvSelector.CandidateScore();
+        alsoSubsume.index = 2;
+        alsoSubsume.hasPercentileNonSubsumeRewrite = false;
+        Assertions.assertTrue(subsume.compareTo(alsoSubsume) < 0,
+                "ties on the percentile flag must fall through to existing rules");
     }
 }

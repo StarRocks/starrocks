@@ -54,6 +54,12 @@ public class MvRewriteContext {
 
     private AggregatePushDownContext aggregatePushDownContext;
 
+    // Per-MV signal carried out of EquivalentShuttleContext into the per-attempt
+    // RewriteResult (see BaseMaterializedViewRewriteRule). BestMvSelector reads
+    // it to rank subsume candidates above non-subsume ones in legacy mode; in
+    // strict mode the caller logs a fail reason and returns null instead.
+    private boolean hasPercentileNonSubsumeRewrite;
+
     public MvRewriteContext(
             MaterializationContext materializationContext,
             List<Table> queryTables,
@@ -158,5 +164,13 @@ public class MvRewriteContext {
 
     public void setAggregatePushDownContext(AggregatePushDownContext aggregatePushDownContext) {
         this.aggregatePushDownContext = aggregatePushDownContext;
+    }
+
+    public boolean hasPercentileNonSubsumeRewrite() {
+        return hasPercentileNonSubsumeRewrite;
+    }
+
+    public void setPercentileNonSubsumeRewrite(boolean v) {
+        this.hasPercentileNonSubsumeRewrite = v;
     }
 }

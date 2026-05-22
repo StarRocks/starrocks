@@ -789,6 +789,12 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String MATERIALIZED_VIEW_SUBQUERY_TEXT_MATCH_MAX_COUNT =
             "materialized_view_subquery_text_match_max_count";
 
+    // If true, MV rewrite refuses to use a percentile MV whose compression factor is smaller
+    // than the query's compression. The optimizer falls back to a base table scan and logs the
+    // skip reason via OptimizerTraceUtil.logMVRewriteFailReason. Default false keeps the
+    // historical behaviour (silently uses the MV even on compression mismatch).
+    public static final String ENABLE_MV_PERCENTILE_STRICT_MATCH = "enable_mv_percentile_strict_match";
+
     public static final String LARGE_DECIMAL_UNDERLYING_TYPE = "large_decimal_underlying_type";
 
     public static final String ENABLE_ICEBERG_IDENTITY_COLUMN_OPTIMIZE = "enable_iceberg_identity_column_optimize";
@@ -2870,6 +2876,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = ENABLE_MATERIALIZED_VIEW_TEXT_MATCH_REWRITE)
     private boolean enableMaterializedViewTextMatchRewrite = true;
+
+    @VarAttr(name = ENABLE_MV_PERCENTILE_STRICT_MATCH)
+    private boolean enableMvPercentileStrictMatch = false;
 
     @VarAttr(name = MATERIALIZED_VIEW_SUBQUERY_TEXT_MATCH_MAX_COUNT)
     private int materializedViewSubQueryTextMatchMaxCount = 4;
@@ -5231,6 +5240,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setEnableMaterializedViewTextMatchRewrite(boolean enable) {
         this.enableMaterializedViewTextMatchRewrite = enable;
+    }
+
+    public boolean isEnableMvPercentileStrictMatch() {
+        return enableMvPercentileStrictMatch;
+    }
+
+    public void setEnableMvPercentileStrictMatch(boolean enable) {
+        this.enableMvPercentileStrictMatch = enable;
     }
 
     public int getMaterializedViewSubQueryTextMatchMaxCount() {
