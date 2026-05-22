@@ -14,6 +14,8 @@
 
 #include <gtest/gtest.h>
 #include <sys/stat.h>
+#include <velocypack/Iterator.h>
+#include <velocypack/Slice.h>
 
 #include <cstdio>
 #include <filesystem>
