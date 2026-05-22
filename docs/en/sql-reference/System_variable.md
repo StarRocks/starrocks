@@ -227,12 +227,20 @@ Used for MySQL client compatibility. No practical usage.
 ### avro_use_jni_reader
 
 * **Scope**: Session
+<<<<<<< Updated upstream
 * **Description**: Controls whether StarRocks uses the JNI-based Avro reader when scanning Avro data from external catalogs such as Hive. When enabled (`true`), the FE sets this session variable on Avro scan ranges and the BE chooses `HdfsAvroScanner` instead of the native Avro scanner path. This option is mainly used as a compatibility fallback. Because the default value is `true`, StarRocks uses the JNI reader by default.
+=======
+* **Description**: Controls whether StarRocks uses the JNI-based Avro reader when scanning Avro data from external catalogs such as Hive. When enabled (`true`), the FE sets this session variable on Avro scan ranges and the BE chooses `HdfsAvroScanner` instead of the native Avro scanner path. This option is mainly used as a compatibility fallback. Because the default value is `false`, StarRocks uses the native Avro reader by default.
+>>>>>>> Stashed changes
 
   Current notes:
   - The native Avro reader and the JNI reader are now aligned for `CHAR(n)` semantics. See [#73579](https://github.com/StarRocks/starrocks/pull/73579) for the alignment change, so the native and JNI behaviors are currently consistent on this point.
   - The native Avro reader currently supports only `null`, `deflate`, and `snappy`, and does not support other codecs such as `bzip2`. If you encounter a codec that is unsupported by the native reader, we recommend falling back to the JNI reader.
+<<<<<<< Updated upstream
 * **Default**: `true`
+=======
+* **Default**: `false`
+>>>>>>> Stashed changes
 * **Data Type**: boolean
 * **Introduced in**: v4.1.1
 
