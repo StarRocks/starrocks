@@ -82,8 +82,7 @@ inline TabletSchemaSPtr build_index_tablet_schema(const TabletSchema& source_sch
         sort_key_idxes.push_back(static_cast<ColumnId>(i));
     }
 
-    TabletColumn pos_col(STORAGE_AGGREGATE_NONE, TYPE_BIGINT, /*is_nullable=*/false, next_unique_id++,
-                        sizeof(int64_t));
+    TabletColumn pos_col(STORAGE_AGGREGATE_NONE, TYPE_BIGINT, /*is_nullable=*/false, next_unique_id++, sizeof(int64_t));
     pos_col.set_name(kEncodedPositionColumnName);
     pos_col.set_is_key(false);
     pos_col.set_is_sort_key(false);

@@ -54,8 +54,7 @@ const ColumnPredicate* clone_predicate_with_remapped_col_id(const ColumnPredicat
 }
 
 PredicateTree build_remapped_predicate_tree(const PredicateTree& source_tree,
-                                            const std::vector<uint32_t>& source_index_col_ids,
-                                            ObjectPool* obj_pool) {
+                                            const std::vector<uint32_t>& source_index_col_ids, ObjectPool* obj_pool) {
     PredicateAndNode synthetic_root;
     if (source_tree.empty() || source_index_col_ids.empty() || obj_pool == nullptr) {
         return PredicateTree::create(std::move(synthetic_root));

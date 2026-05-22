@@ -938,9 +938,9 @@ StatusOr<TxnLogPtr> DeltaWriterImpl::finish_with_txnlog(DeltaWriterFinishMode mo
             std::vector<SecondaryIndexFilePB> sidx_pbs;
             const std::string root = _tablet_manager->tablet_root_location(_tablet_id);
             ASSIGN_OR_RETURN(auto sidx_fs, FileSystemFactory::CreateSharedFromString(root));
-            RETURN_IF_ERROR(secondary_sorted::maybe_build_secondary_indexes(
-                    _tablet_id, _txn_id, _tablet_schema, _tablet_writer->segments(), sidx_fs, _tablet_manager,
-                    &sidx_pbs));
+            RETURN_IF_ERROR(secondary_sorted::maybe_build_secondary_indexes(_tablet_id, _txn_id, _tablet_schema,
+                                                                            _tablet_writer->segments(), sidx_fs,
+                                                                            _tablet_manager, &sidx_pbs));
             for (auto& pb : sidx_pbs) {
                 *(op_write->mutable_rowset()->add_secondary_indexes()) = std::move(pb);
             }

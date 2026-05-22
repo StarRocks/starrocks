@@ -70,8 +70,8 @@ void SecondaryIndexRegistry::maybe_reload() {
         try {
             tablet_id = std::stoll(tablet_id_str);
         } catch (const std::exception&) {
-            LOG(WARNING) << "SecondaryIndexRegistry: invalid tablet_id '" << tablet_id_str << "' in entry '"
-                         << entry << "'";
+            LOG(WARNING) << "SecondaryIndexRegistry: invalid tablet_id '" << tablet_id_str << "' in entry '" << entry
+                         << "'";
             continue;
         }
 
