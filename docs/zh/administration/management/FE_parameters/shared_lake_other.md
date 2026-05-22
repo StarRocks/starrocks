@@ -389,6 +389,60 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: 如果此项设置为 `true`，则在存算分离集群中，当子任务之一成功时，系统将认为 Compaction 操作成功。
 - 引入版本: v3.5.2
 
+### `enable_lake_autonomous_compaction`
+
+- 默认值: false
+- 类型: Boolean
+- 单位: -
+- 是否可变: Yes
+- 描述: BE 自驱动 compaction 的总开关。开启后，FE 会按 partition 周期性地发起 PUBLISH_ONLY 事务，让每个持有 tablet 的 BE 把本地缓存的 compaction 结果并入一个 OpParallelCompaction TxnLog 发表，并以 `force_publish=true` 推动没有本地结果的 tablet 走空 compaction 路径完成版本对齐。关闭时行为与现有 partition 级调度完全一致。
+- 引入版本: v3.6.0
+
+### `lake_compaction_version_delta_threshold`
+
+- 默认值: 10
+- 类型: Int
+- 单位: -
+- 是否可变: Yes
+- 描述: 当 partition 的 `version - last_publish_version` 累积到该值时触发一次自治 PUBLISH_ONLY 事务。仅在 `enable_lake_autonomous_compaction` 为 `true` 时生效。
+- 引入版本: v3.6.0
+
+### `lake_compaction_high_score_threshold`
+
+- 默认值: 50.0
+- 类型: Double
+- 单位: -
+- 是否可变: Yes
+- 描述: 当 partition 上次记录的 compaction score 严格大于该阈值时，使用 `lake_compaction_min_version_delta_for_high_score` 这个较小的 version_delta 触发 PUBLISH_ONLY 事务。仅在 `enable_lake_autonomous_compaction` 为 `true` 时生效。
+- 引入版本: v3.6.0
+
+### `lake_compaction_min_version_delta_for_high_score`
+
+- 默认值: 5
+- 类型: Int
+- 单位: -
+- 是否可变: Yes
+- 描述: 与 `lake_compaction_high_score_threshold` 配合使用，针对高分区使用更小的 version-delta 阈值。仅在 `enable_lake_autonomous_compaction` 为 `true` 时生效。
+- 引入版本: v3.6.0
+
+### `lake_compaction_max_interval_ms`
+
+- 默认值: 1800000
+- 类型: Long
+- 单位: 毫秒
+- 是否可变: Yes
+- 描述: 兜底时间。在 partition 完成过至少一次 PUBLISH_ONLY 之后，距离上次成功 publish 超过该值时即使没有命中 version-delta / high-score 触发器，下一轮也会强制 publish 一次。功能首次开启时 `lastPublishTimeMs == 0`，故意跳过该检查以避免所有 partition 同时撞触发。仅在 `enable_lake_autonomous_compaction` 为 `true` 时生效。
+- 引入版本: v3.6.0
+
+### `lake_compaction_publish_timeout_seconds`
+
+- 默认值: 300
+- 类型: Long
+- 单位: 秒
+- 是否可变: Yes
+- 描述: 自治 compaction 路径下 FE 到 BE 的 `COLLECT_AND_PUBLISH` 请求 RPC 超时时间。仅在 `enable_lake_autonomous_compaction` 为 `true` 时生效。
+- 引入版本: v3.6.0
+
 ### `lake_compaction_disable_ids`
 
 - 默认值: ""

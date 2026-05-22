@@ -34,6 +34,19 @@ public class PartitionStatistics {
     // default priority is 0, manual compaction will have priority value 1
     @SerializedName(value = "priority")
     private volatile CompactionPriority priority = CompactionPriority.DEFAULT;
+    // For autonomous compaction (PUBLISH_ONLY): the partition.visibleVersion observed
+    // at the moment the most recent PUBLISH_AUTONOMOUS / PUBLISH_ONLY job was scheduled.
+    // Used by schedulePartitionPublish to compute version_delta for the trigger strategy.
+    @SerializedName(value = "lastPublishVisibleVersion")
+    private long lastPublishVisibleVersion = 0L;
+    // For autonomous compaction: epoch milliseconds at which the most recent
+    // PUBLISH_ONLY publish was scheduled. Used by the max_interval trigger.
+    @SerializedName(value = "lastPublishTimeMs")
+    private long lastPublishTimeMs = 0L;
+    // The score observed at the most recent autonomous publish. Used by the
+    // high_score trigger to fire even when version_delta is below the normal threshold.
+    @SerializedName(value = "lastPublishScore")
+    private double lastPublishScore = 0.0;
     // not persist on purpose, used to control the interval of continuous partial success compaction
     private int punishFactor = 1;
 
@@ -145,6 +158,30 @@ public class PartitionStatistics {
 
     public PartitionStatisticsSnapshot getSnapshot() {
         return new PartitionStatisticsSnapshot(this);
+    }
+
+    public long getLastPublishVisibleVersion() {
+        return lastPublishVisibleVersion;
+    }
+
+    public void setLastPublishVisibleVersion(long version) {
+        this.lastPublishVisibleVersion = version;
+    }
+
+    public long getLastPublishTimeMs() {
+        return lastPublishTimeMs;
+    }
+
+    public void setLastPublishTimeMs(long timeMs) {
+        this.lastPublishTimeMs = timeMs;
+    }
+
+    public double getLastPublishScore() {
+        return lastPublishScore;
+    }
+
+    public void setLastPublishScore(double score) {
+        this.lastPublishScore = score;
     }
 
     @Override

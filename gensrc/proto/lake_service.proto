@@ -125,6 +125,22 @@ message TabletParallelConfig {
     optional int64 max_bytes_per_subtask = 3 [default = 1073741824]; // 1GB
 }
 
+// Compaction request mode.
+// EXECUTE (default, legacy): BE runs compaction for the listed tablets and writes
+//   their TxnLog to remote storage so that FE can publish them later.
+// COLLECT_AND_PUBLISH (autonomous-compaction path): BE collects already-finished
+//   compaction results held in its local CompactionResultManager (filtered by
+//   visible_version) and assembles each tablet's results into a single
+//   OpParallelCompaction TxnLog written to remote storage. The actual
+//   publish_version is driven later by FE's PublishVersionDaemon after the
+//   transaction is committed; FE sets force_publish=true on the TxnInfoPB so
+//   tablets without local results take the ignore_txn_log path on the BE and
+//   still get a uniform version bump.
+enum CompactionMode {
+    EXECUTE = 0;
+    COLLECT_AND_PUBLISH = 1;
+}
+
 message CompactRequest {
     repeated int64 tablet_ids = 1;
     optional int64 txn_id = 2;
@@ -134,9 +150,22 @@ message CompactRequest {
     optional bytes encryption_meta = 6;
     optional bool force_base_compaction = 7;
     optional bool skip_write_txnlog = 8;
-    
+
     // Configuration for per-tablet parallel compaction
     optional TabletParallelConfig parallel_config = 13;
+
+    // Autonomous compaction (lake mode). Optional; defaults to EXECUTE.
+    optional CompactionMode mode = 14 [default = EXECUTE];
+    // Required when mode == COLLECT_AND_PUBLISH: the partition's current visible
+    // version. BE filters local results with base_version <= visible_version.
+    optional int64 visible_version = 15;
+    // Required when mode == COLLECT_AND_PUBLISH: target version after publish.
+    optional int64 new_version = 16;
+    // Autonomous-compaction EXECUTE-side flag. When true (and mode == EXECUTE),
+    // BE runs compaction and persists CompactionResultPB locally instead of
+    // writing the txn log to remote storage. A subsequent COLLECT_AND_PUBLISH
+    // request will merge and publish them.
+    optional bool write_to_local_result = 17 [default = false];
 }
 
 message AggregateCompactRequest {

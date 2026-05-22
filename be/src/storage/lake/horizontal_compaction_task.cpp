@@ -25,6 +25,7 @@
 #include "runtime/runtime_state.h"
 #include "storage/chunk_helper.h"
 #include "storage/compaction_utils.h"
+#include "storage/lake/compaction_result_manager.h"
 #include "storage/lake/rowset.h"
 #include "storage/lake/tablet_reader.h"
 #include "storage/lake/tablet_write_log_manager.h"
@@ -163,6 +164,13 @@ Status HorizontalCompactionTask::execute(CancelFunc cancel_func, ThreadPool* flu
     if (_context->skip_write_txnlog) {
         // return txn_log to caller later
         _context->txn_log = txn_log;
+    } else if (_context->write_to_local_result) {
+        // Autonomous compaction path: persist locally instead of writing remote TxnLog.
+        // The eventual COLLECT_AND_PUBLISH request will read these and assemble a
+        // single OpParallelCompaction TxnLog at publish time.
+        _context->txn_log = txn_log;
+        RETURN_IF_ERROR(persist_compaction_result_from_txn_log(_context->result_manager, _tablet.id(),
+                                                               _context->local_result_base_version, *txn_log));
     } else {
         RETURN_IF_ERROR(_tablet.tablet_manager()->put_txn_log(txn_log));
     }

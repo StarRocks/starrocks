@@ -855,7 +855,12 @@
         "lake_metadata_cache_limit",
         "lake_cache_select_in_physical_way",
         "lake_service_max_concurrency",
-        "lake_enable_orphan_delvec_cleanup_on_compaction"
+        "lake_enable_orphan_delvec_cleanup_on_compaction",
+        "enable_lake_autonomous_compaction",
+        "lake_autonomous_compaction_max_concurrent_tasks",
+        "lake_autonomous_compaction_max_tasks_per_tablet",
+        "lake_autonomous_compaction_score_threshold",
+        "lake_autonomous_compaction_local_result_dir_max_bytes"
       ]
     },
     {

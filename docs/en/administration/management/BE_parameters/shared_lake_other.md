@@ -85,6 +85,51 @@ This topic introduces the following types of BE configurations:
 - Description: The reader's remote I/O buffer size for cloud-native table compaction in a shared-data cluster. The default value is 1MB. You can increase this value to accelerate compaction process.
 - Introduced in: v3.2.3
 
+### enable_lake_autonomous_compaction
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Master switch for the BE-side autonomous compaction scheduler. When `false`, BE behavior is unchanged: every compaction is initiated by FE through the existing `compact()` RPC. When `true`, the BE's `LakeCompactionManager` runs an event-driven dispatch loop that picks high-score tablets, executes compaction internally, and persists results locally as `CompactionResultPB` files for a later FE-driven `COLLECT_AND_PUBLISH` to assemble into a single OpParallelCompaction transaction. Must be paired with FE-side `enable_lake_autonomous_compaction = true`.
+- Introduced in: v3.6.0
+
+### lake_autonomous_compaction_max_concurrent_tasks
+
+- Default: 32
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: Global upper bound on simultaneously in-flight autonomous compaction tasks across the BE. The dispatch loop refuses to pop more tablets from the queue once `running_tasks` reaches this value. Only effective when `enable_lake_autonomous_compaction` is `true`.
+- Introduced in: v3.6.0
+
+### lake_autonomous_compaction_max_tasks_per_tablet
+
+- Default: 3
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: Per-tablet upper bound on simultaneously in-flight autonomous compaction tasks. When a tablet hits this cap it is temporarily evicted from the dispatch queue and re-considered after one of its in-flight tasks finishes. Only effective when `enable_lake_autonomous_compaction` is `true`.
+- Introduced in: v3.6.0
+
+### lake_autonomous_compaction_score_threshold
+
+- Default: 10.0
+- Type: Double
+- Unit: -
+- Is mutable: Yes
+- Description: Minimum compaction score required for a tablet to enter the autonomous dispatch queue. Lower values keep more low-score tablets in the queue; higher values reduce dispatch frequency at the cost of letting some tablets accumulate more rowsets. Only effective when `enable_lake_autonomous_compaction` is `true`.
+- Introduced in: v3.6.0
+
+### lake_autonomous_compaction_local_result_dir_max_bytes
+
+- Default: 1073741824
+- Type: Long
+- Unit: Bytes
+- Is mutable: Yes
+- Description: Hard upper bound on the on-disk footprint of locally-cached `CompactionResultPB` files (across all BE store paths combined). Once reached, `append_result` is rejected with `ResourceBusy`, suspending new autonomous compactions until a `COLLECT_AND_PUBLISH` drains some results. Default is 1 GiB. Only effective when `enable_lake_autonomous_compaction` is `true`.
+- Introduced in: v3.6.0
+
 ### lake_pk_compaction_max_input_rowsets
 
 - Default: 500

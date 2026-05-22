@@ -106,6 +106,7 @@ class TabletManager;
 class UpdateManager;
 class ReplicationTxnManager;
 class LakePersistentIndexParallelCompactMgr;
+class CompactionResultManager;
 } // namespace lake
 namespace spill {
 class DirManager;
@@ -362,6 +363,10 @@ public:
 
     lake::ReplicationTxnManager* lake_replication_txn_manager() const { return _lake_replication_txn_manager; }
 
+    lake::CompactionResultManager* lake_compaction_result_manager() const {
+        return _lake_compaction_result_manager.get();
+    }
+
     AgentServer* agent_server() const { return _agent_server; }
 
     query_cache::CacheManagerRawPtr cache_mgr() const { return _cache_mgr; }
@@ -460,6 +465,7 @@ private:
     std::shared_ptr<lake::LocationProvider> _lake_location_provider;
     lake::UpdateManager* _lake_update_manager = nullptr;
     lake::ReplicationTxnManager* _lake_replication_txn_manager = nullptr;
+    std::unique_ptr<lake::CompactionResultManager> _lake_compaction_result_manager;
     std::unique_ptr<ThreadPool> _put_aggregate_metadata_thread_pool = nullptr;
     std::unique_ptr<ThreadPool> _lake_metadata_fetch_thread_pool = nullptr;
     std::unique_ptr<ThreadPool> _lake_vector_index_build_thread_pool = nullptr;

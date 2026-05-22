@@ -46,6 +46,7 @@
 #include "service/brpc_service_test_util.h"
 #include "storage/chunk_helper.h"
 #include "storage/del_vector.h"
+#include "storage/lake/compaction_result_manager.h"
 #include "storage/lake/filenames.h"
 #include "storage/lake/fixed_location_provider.h"
 #include "storage/lake/join_path.h"
@@ -5914,6 +5915,135 @@ TEST_F(LakeServiceTest, test_build_vector_index_request_built_version_floor) {
     ASSERT_FALSE(cntl.Failed()) << cntl.ErrorText();
     ASSERT_EQ(0, response.status().status_code());
     EXPECT_EQ(1, response.new_built_version());
+}
+
+// ===== Autonomous compaction COLLECT_AND_PUBLISH path =====
+// These tests drive LakeServiceImpl::compact_collect_and_publish against the
+// real lake fixture (real TabletManager + real CompactionResultManager from
+// ExecEnv) so we cover the request validation, the result-mgr load/merge/
+// delete loop, and the response.status_code = 0 final write. The BE Coverage
+// Report previously flagged this method at 1.96% (1/51 lines).
+
+TEST_F(LakeServiceTest, test_compact_collect_and_publish_missing_visible_version) {
+    brpc::Controller cntl;
+    CompactRequest request;
+    CompactResponse response;
+    request.add_tablet_ids(_tablet_id);
+    request.set_txn_id(next_id());
+    request.set_new_version(2);
+    // visible_version intentionally missing
+    _lake_service.compact_collect_and_publish(&cntl, &request, &response, nullptr);
+    ASSERT_TRUE(cntl.Failed());
+    ASSERT_NE(std::string::npos, cntl.ErrorText().find("visible_version"));
+}
+
+TEST_F(LakeServiceTest, test_compact_collect_and_publish_missing_new_version) {
+    brpc::Controller cntl;
+    CompactRequest request;
+    CompactResponse response;
+    request.add_tablet_ids(_tablet_id);
+    request.set_txn_id(next_id());
+    request.set_visible_version(1);
+    // new_version intentionally missing
+    _lake_service.compact_collect_and_publish(&cntl, &request, &response, nullptr);
+    ASSERT_TRUE(cntl.Failed());
+    ASSERT_NE(std::string::npos, cntl.ErrorText().find("visible_version"));
+}
+
+TEST_F(LakeServiceTest, test_compact_collect_and_publish_missing_txn_id) {
+    brpc::Controller cntl;
+    CompactRequest request;
+    CompactResponse response;
+    request.add_tablet_ids(_tablet_id);
+    request.set_visible_version(1);
+    request.set_new_version(2);
+    // txn_id intentionally missing
+    _lake_service.compact_collect_and_publish(&cntl, &request, &response, nullptr);
+    ASSERT_TRUE(cntl.Failed());
+    ASSERT_EQ("missing txn_id", cntl.ErrorText());
+}
+
+TEST_F(LakeServiceTest, test_compact_collect_and_publish_no_local_results) {
+    // result_mgr has nothing for _tablet_id -> the tablet is counted as
+    // "without_compaction"; no put_txn_log call, response succeeds with
+    // status_code = 0 (so the FE-side Future<CompactResponse> does NOT see
+    // a null payload). No failed_tablets entries.
+    brpc::Controller cntl;
+    CompactRequest request;
+    CompactResponse response;
+    int64_t fresh_tablet = next_id();
+    request.add_tablet_ids(fresh_tablet);
+    request.set_txn_id(next_id());
+    request.set_visible_version(1);
+    request.set_new_version(2);
+    _lake_service.compact_collect_and_publish(&cntl, &request, &response, nullptr);
+    ASSERT_FALSE(cntl.Failed());
+    ASSERT_EQ(0, response.failed_tablets_size());
+    ASSERT_TRUE(response.has_status());
+    ASSERT_EQ(0, response.status().status_code());
+}
+
+TEST_F(LakeServiceTest, test_compact_collect_and_publish_with_local_results) {
+    // Seed a CompactionResultPB for _tablet_id at base_version=1, then call
+    // compact_collect_and_publish with visible_version=1 / new_version=2.
+    // After the call:
+    //   - put_txn_log must have produced a TxnLog (merge_results_to_txn_log path),
+    //   - local result file must be deleted (delete_results path),
+    //   - response.status_code must be 0,
+    //   - no failed_tablets.
+    auto* result_mgr = ExecEnv::GetInstance()->lake_compaction_result_manager();
+    ASSERT_NE(nullptr, result_mgr);
+
+    int64_t base_version = 1;
+    int64_t txn_id = next_id();
+
+    starrocks::CompactionResultPB seed;
+    seed.set_tablet_id(_tablet_id);
+    seed.set_base_version(base_version);
+    seed.set_result_id(result_mgr->next_result_id(_tablet_id));
+    seed.set_finish_time_ms(time(nullptr) * 1000);
+    auto* op = seed.mutable_op_compaction();
+    op->set_compact_version(base_version);
+    op->add_input_rowsets(1);
+    ASSERT_OK(result_mgr->append_result(seed));
+    // Sanity: the result is now tracked.
+    ASSERT_EQ(1u, result_mgr->list_results_for_tablet(_tablet_id).size());
+
+    brpc::Controller cntl;
+    CompactRequest request;
+    CompactResponse response;
+    request.add_tablet_ids(_tablet_id);
+    request.set_txn_id(txn_id);
+    request.set_visible_version(base_version);
+    request.set_new_version(base_version + 1);
+    _lake_service.compact_collect_and_publish(&cntl, &request, &response, nullptr);
+    ASSERT_FALSE(cntl.Failed());
+    ASSERT_EQ(0, response.failed_tablets_size());
+    ASSERT_TRUE(response.has_status());
+    ASSERT_EQ(0, response.status().status_code());
+    // The local result must be deleted now that the TxnLog is the canonical record.
+    EXPECT_EQ(0u, result_mgr->list_results_for_tablet(_tablet_id).size());
+}
+
+TEST_F(LakeServiceTest, test_compact_collect_and_publish_via_compact_dispatch) {
+    // The public compact() entry point must dispatch COLLECT_AND_PUBLISH mode
+    // straight through to compact_collect_and_publish (line 1421 in lake_service.cpp).
+    // We verify the dispatch by setting mode and observing that the validation
+    // applied is the COLLECT_AND_PUBLISH one (requires visible_version), not the
+    // EXECUTE one (requires version).
+    brpc::Controller cntl;
+    CompactRequest request;
+    CompactResponse response;
+    request.add_tablet_ids(_tablet_id);
+    request.set_txn_id(next_id());
+    request.set_mode(starrocks::CompactionMode::COLLECT_AND_PUBLISH);
+    // visible_version intentionally missing — COLLECT_AND_PUBLISH path must reject.
+    CountDownLatch latch(1);
+    auto* cb = ::google::protobuf::NewCallback(&latch, &CountDownLatch::count_down);
+    _lake_service.compact(&cntl, &request, &response, cb);
+    latch.wait();
+    ASSERT_TRUE(cntl.Failed());
+    ASSERT_NE(std::string::npos, cntl.ErrorText().find("visible_version"));
 }
 
 } // namespace starrocks

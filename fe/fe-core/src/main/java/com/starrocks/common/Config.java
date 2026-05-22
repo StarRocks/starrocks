@@ -3473,6 +3473,33 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static boolean lake_compaction_allow_partial_success = true;
 
+    // ===== Autonomous compaction (lake mode) =====
+    // Master switch. When false, behavior is identical to existing partition-level scheduling.
+    @ConfField(mutable = true, comment =
+            "Enable BE-driven autonomous lake compaction with FE-side periodic publish triggers.")
+    public static boolean enable_lake_autonomous_compaction = false;
+
+    // Trigger strategy thresholds.
+    @ConfField(mutable = true, comment =
+            "Trigger PUBLISH_AUTONOMOUS when partition's version_delta since last publish exceeds this.")
+    public static int lake_compaction_version_delta_threshold = 10;
+
+    @ConfField(mutable = true, comment =
+            "If last_score above this threshold, lower version_delta is enough to trigger publish.")
+    public static double lake_compaction_high_score_threshold = 50.0;
+
+    @ConfField(mutable = true, comment =
+            "Minimum version_delta to publish when last_score exceeds high score threshold.")
+    public static int lake_compaction_min_version_delta_for_high_score = 5;
+
+    @ConfField(mutable = true, comment =
+            "Maximum interval (ms) between two autonomous publishes on a partition; safety net.")
+    public static long lake_compaction_max_interval_ms = 1800000L;
+
+    @ConfField(mutable = true, comment =
+            "RPC timeout (seconds) for the COLLECT_AND_PUBLISH compact request.")
+    public static long lake_compaction_publish_timeout_seconds = 300;
+
     @ConfField(mutable = true, comment = "the max number of previous version files to keep")
     public static int lake_autovacuum_max_previous_versions = 0;
 
