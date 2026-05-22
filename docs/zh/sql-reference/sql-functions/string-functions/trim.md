@@ -102,6 +102,10 @@ MySQL > SELECT rtrim('barxxyz', 'xyz');              -- 'bar'
 
 `FROM` 写法由内置函数 `trim_string(str, remstr)`、`ltrim_string(str, remstr)`、`rtrim_string(str, remstr)` 实现，这些函数也可直接调用。`remstr` 必须为常量字符串字面量。
 
+> **注意**
+>
+> `remstr` 不能为 NULL。向这些内置函数传入 NULL 的 `remstr`（例如 `trim_string('abc', CAST(NULL AS STRING))`）会返回错误而非 NULL。这与逗号写法 `trim(str, characters)` 的行为一致，但与 MySQL 不同（MySQL 返回 NULL）。`str` 为 NULL 时仍会传播为 NULL（例如 `TRIM('x' FROM NULL)` 返回 NULL）。
+
 ## 相关文档
 
 - [ltrim](ltrim.md)

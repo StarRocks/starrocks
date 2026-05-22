@@ -103,6 +103,10 @@ MySQL > SELECT rtrim('barxxyz', 'xyz');              -- 'bar'
 
 The `FROM` form is backed by the builtins `trim_string(str, remstr)`, `ltrim_string(str, remstr)`, and `rtrim_string(str, remstr)`, which can also be called directly. `remstr` must be a constant string literal.
 
+> **NOTE**
+>
+> `remstr` must not be NULL. Passing a NULL `remstr` to these builtins (for example `trim_string('abc', CAST(NULL AS STRING))`) returns an error rather than NULL. This is consistent with the comma form `trim(str, characters)` and differs from MySQL, which returns NULL. A NULL `str` still propagates to NULL (for example `TRIM('x' FROM NULL)` returns NULL).
+
 ## References
 
 - [ltrim](ltrim.md)

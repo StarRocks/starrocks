@@ -359,7 +359,10 @@ TEST_F(StringFunctionTrimTest, trimStringPrepareErrorTest) {
         ctx->set_constant_columns({nullptr, std::move(remove_col)});
         Status st = StringFunctions::trim_string_prepare(ctx.get(), FunctionContext::FRAGMENT_LOCAL);
         EXPECT_TRUE(st.is_invalid_argument());
-        EXPECT_EQ("Invalid argument: The second parameter of trim_string only accept literal value", st.to_string());
+        EXPECT_EQ(
+                "Invalid argument: The second parameter of trim_string/ltrim_string/rtrim_string only accepts a "
+                "literal value",
+                st.to_string());
     }
     {
         // The 2nd parameter must not be null

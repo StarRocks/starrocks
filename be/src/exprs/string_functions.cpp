@@ -2562,7 +2562,8 @@ Status StringFunctions::trim_string_prepare(FunctionContext* context, FunctionCo
         return Status::OK();
     }
     if (!context->is_constant_column(1)) {
-        return Status::InvalidArgument("The second parameter of trim_string only accept literal value");
+        return Status::InvalidArgument(
+                "The second parameter of trim_string/ltrim_string/rtrim_string only accepts a literal value");
     }
     if (!context->is_notnull_constant_column(1)) {
         return Status::InvalidArgument("The second parameter should not be null");

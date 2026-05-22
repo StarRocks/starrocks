@@ -61,3 +61,43 @@ SELECT leading FROM (SELECT 1 AS leading) t;
 -- result:
 1
 -- !result
+CREATE TABLE t_trim_src(id INT, c VARCHAR(65533), c2 VARCHAR(65533))
+        DUPLICATE KEY(id)
+        DISTRIBUTED BY HASH(id)
+        BUCKETS 1
+        PROPERTIES('replication_num'='1');
+-- result:
+-- !result
+INSERT INTO t_trim_src VALUES
+    (1, 'xxxbarxxx', 'xyz'),
+    (2, 'xyzfooxyz', 'abc'),
+    (3, NULL,        'def');
+-- result:
+-- !result
+SELECT TRIM(LEADING 'x' FROM c) FROM t_trim_src ORDER BY id;
+-- result:
+barxxx
+yzfooxyz
+None
+-- !result
+SELECT TRIM(TRAILING 'xyz' FROM c) FROM t_trim_src ORDER BY id;
+-- result:
+xxxbarxxx
+xyzfoo
+None
+-- !result
+SELECT TRIM('x' FROM c) FROM t_trim_src ORDER BY id;
+-- result:
+bar
+yzfooxyz
+None
+-- !result
+SELECT TRIM(LEADING 'xyz' FROM concat(c, c2)) FROM t_trim_src WHERE c IS NOT NULL ORDER BY id;
+-- result:
+xxxbarxxxxyz
+fooxyzabc
+-- !result
+SELECT TRIM('x' FROM CAST(NULL AS STRING));
+-- result:
+None
+-- !result
