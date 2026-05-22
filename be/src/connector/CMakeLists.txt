@@ -35,13 +35,11 @@ target_link_libraries(ConnectorPrimitive PUBLIC
 
 ADD_BE_LIB(Connector
         connector_registry.cpp
-        connector_registry_init.cpp
         hive_connector.cpp
         es_connector.cpp
         jdbc_connector.cpp
         lake_connector.cpp
         mysql_connector.cpp
-        benchmark_connector.cpp
         cache_stats_connector.cpp
         file_connector.cpp
         file_scan_metrics.cpp
@@ -62,3 +60,62 @@ ADD_BE_LIB(Connector
 )
 
 target_link_libraries(Connector PUBLIC ConnectorPrimitive)
+
+if (WITH_CONNECTOR_BENCHMARK)
+    ADD_BE_LIB(ConnectorBenchmark
+            benchmark/benchmark_connector.cpp
+            benchmark/benchmark_scanner.cpp
+    )
+
+    target_link_libraries(ConnectorBenchmark PUBLIC
+            ConnectorPrimitive
+            ExprCore
+            RuntimeCore
+            ChunkCore
+            ColumnCore
+            Types
+            Common
+            Base
+            Gutil
+            StarRocksGen
+    )
+
+    target_link_libraries(ConnectorBenchmark PRIVATE
+            benchgen
+            arrow
+    )
+endif()
+
+ADD_BE_LIB(ConnectorBootstrap
+        connector_bootstrap.cpp
+)
+
+target_link_libraries(ConnectorBootstrap PUBLIC
+        Common
+)
+
+target_link_libraries(ConnectorBootstrap PRIVATE
+        Connector
+        Base
+        Gutil
+        StarRocksGen
+)
+
+if (WITH_CONNECTOR_BENCHMARK)
+    target_compile_definitions(ConnectorBootstrap PRIVATE STARROCKS_WITH_CONNECTOR_BENCHMARK)
+    target_link_libraries(ConnectorBootstrap PRIVATE
+            ConnectorBenchmark
+    )
+endif()
+
+ADD_BE_LIB(ConnectorBuiltinRegistry
+        connector_registry_init.cpp
+)
+
+target_link_libraries(ConnectorBuiltinRegistry PUBLIC
+        Connector
+        Common
+        Base
+        Gutil
+        StarRocksGen
+)

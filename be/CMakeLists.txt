@@ -192,6 +192,7 @@ option(WITH_STARCACHE "Build binary with starcache library" ${WITH_STARCACHE_DEF
 option(WITH_BRCP_KEEPALIVE "Build binary with brpc_socket_keepalive (requires brpc 1.8)" OFF)
 
 option(WITH_BENCH "Build binary with bench" OFF)
+option(WITH_CONNECTOR_BENCHMARK "Build the benchgen-backed benchmark connector" ON)
 
 option(USE_STAROS "Use StarOS to manager tablet info" OFF)
 
@@ -631,7 +632,6 @@ set(STARROCKS_DEPENDENCIES
     arrow
     arrow_flight
     arrow_flight_sql
-    benchgen
     gRPC::grpc
     gRPC::grpc++
     parquet
@@ -863,6 +863,8 @@ endif()
 # STARROCKS_LINK_LIBS so normal BE, format-lib, and benchmark builds do not
 # compile or link test helper code.
 set (TEST_LINK_LIBS ${STARROCKS_LINK_LIBS}
+    ConnectorBuiltinRegistry
+    ConnectorBootstrap
     TestUtil
     ${WL_START_GROUP}
     gmock

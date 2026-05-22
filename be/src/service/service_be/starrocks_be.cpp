@@ -32,6 +32,7 @@
 #include "common/process_exit.h"
 #include "common/status.h"
 #include "common/system/backend_options.h"
+#include "connector/connector_bootstrap.h"
 #include "fs/s3/poco_common.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
@@ -140,6 +141,7 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
     LOG(INFO) << process_name << " start step " << start_step++ << ": storage engine init successfully";
 
     auto* exec_env = ExecEnv::GetInstance();
+    EXIT_IF_ERROR(connector::bootstrap_builtin_connectors());
     EXIT_IF_ERROR(exec_env->init(paths, process_metrics_registry, as_cn));
     LOG(INFO) << process_name << " start step " << start_step++ << ": exec env init successfully";
 

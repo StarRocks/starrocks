@@ -206,6 +206,20 @@ Read-side connector contracts, DataSource, and DataSourceProvider default mechan
 - Core tests: `connector_primitive_test`
 - Remediation: Keep ConnectorPrimitive limited to read-side connector contracts and default scan-range-to-morsel mechanics; move concrete connectors, sinks, registry wiring, storage, service, and full Exec integration upward.
 
+### ConnectorBootstrap (`connectorbootstrap`)
+Connector-layer bootstrap for split connector libraries that install into the default registry without depending on the legacy built-in registry.
+- Targets: `ConnectorBootstrap`
+- Allowed internal include prefixes: `connector/connector_bootstrap.h`, `connector/benchmark/`, `connector/connector.h`, `connector/connector_registry.h`, `common/`, `base/`, `gutil/`, `gen_cpp/`
+- Allowed target deps: `Connector`, `ConnectorBenchmark`, `ConnectorPrimitive`, `Common`, `Base`, `Gutil`, `StarRocksGen`
+- Remediation: Keep split connector bootstrap independent from ConnectorBuiltinRegistry; add newly split connector libraries here and let service-level startup compose legacy registry plus this bootstrap.
+
+### ConnectorBuiltinRegistry (`connectorbuiltinregistry`)
+Top-level built-in connector registration composition above connector contracts and concrete connector libraries.
+- Targets: `ConnectorBuiltinRegistry`
+- Allowed internal include prefixes: `connector/builtin_connector_registry.h`, `connector/`, `common/`, `base/`, `gutil/`, `gen_cpp/`
+- Allowed target deps: `Connector`, `ConnectorPrimitive`, `Common`, `Base`, `Gutil`, `StarRocksGen`
+- Remediation: Keep legacy built-in connector registration as top-level composition for unsplit connector libraries; split connector libraries register through ConnectorBootstrap instead of depending back on this target.
+
 ### ExecSinkCore (`execsinkcore`)
 DataSink base contract and default mechanics without concrete sink, pipeline, connector, storage, service, or Runtime coupling.
 - Targets: `ExecSinkCore`
