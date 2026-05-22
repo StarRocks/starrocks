@@ -14,9 +14,15 @@
 
 #pragma once
 
+#include <atomic>
+#include <cstddef>
+#include <cstdint>
+#include <memory>
 #include <optional>
 #include <unordered_set>
+#include <vector>
 
+#include "common/status.h"
 #include "common/statusor.h"
 #include "gen_cpp/lake_types.pb.h"
 #include "storage/lake/tablet.h"
@@ -32,6 +38,29 @@ namespace starrocks::lake {
 class MetaFileBuilder;
 class TabletManager;
 class TabletWriter;
+
+struct PreparedSegmentReadState {
+    enum class Lifecycle : uint32_t {
+        UNPREPARED = 0,
+        PREPARING = 1,
+        PREPARED = 2,
+        FAILED = 3,
+    };
+
+    std::atomic<uint32_t> lifecycle{static_cast<uint32_t>(Lifecycle::UNPREPARED)};
+    Status prepare_status;
+
+    SparseRangePtr prepared_pruned_scan_range;
+    bool prepared_pruned_scan_range_includes_page_filters = false;
+};
+using PreparedSegmentReadStatePtr = std::shared_ptr<PreparedSegmentReadState>;
+
+struct PreparedTabletReadState {
+    std::vector<RowsetPtr> rowsets;
+    std::vector<std::vector<SegmentPtr>> rowset_segments;
+    std::vector<std::vector<PreparedSegmentReadStatePtr>> rowset_prepared_states;
+};
+using PreparedTabletReadStatePtr = std::shared_ptr<PreparedTabletReadState>;
 
 class Rowset : public BaseRowset {
 public:
