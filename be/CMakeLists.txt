@@ -559,6 +559,7 @@ set(STARROCKS_LINK_LIBS
     ${WL_WHOLE_ARCHIVE_PREFIX} $<TARGET_FILE:ExprCore> ${WL_WHOLE_ARCHIVE_SUFFIX}
     Serde
     $<TARGET_FILE:Cache>
+    RuntimeEnv
     RuntimeCore
     Platform
     $<TARGET_FILE:HttpCore>

@@ -182,6 +182,14 @@ Core runtime building blocks without full Runtime/Exec/Storage coupling.
 - Core tests: `runtime_core_test`
 - Remediation: Keep RuntimeCore restricted to core runtime infrastructure; move service/storage/stream-load/integration code into Runtime.
 
+### RuntimeEnv (`runtimeenv`)
+Process-scoped runtime environment resources below full Runtime and above RuntimeCore.
+- Targets: `RuntimeEnv`
+- Allowed internal include prefixes: `runtime/env/`, `runtime/`, `types/`, `common/`, `base/`, `gutil/`, `gen_cpp/`
+- Allowed target deps: `RuntimeCore`, `Types`, `Common`, `Base`, `Gutil`, `StarRocksGen`
+- Core tests: `runtime_env_test`
+- Remediation: Keep RuntimeEnv limited to process-scoped runtime environment resources; move query execution, storage, service, connector, and UDF integration upward.
+
 ### ExprCore (`exprcore`)
 Core expression infrastructure that depends only on RuntimeCore and lower layers.
 - Targets: `ExprCore`
