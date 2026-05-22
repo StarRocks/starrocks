@@ -793,8 +793,7 @@ TEST_F(ParquetReadRowsTableFunctionTest, OptionalFileSizeAsDouble) {
 TEST_F(ParquetReadRowsTableFunctionTest, RehydrateRowWithNullValue) {
     std::string parquet_path = _tmp_dir + "/null.parquet";
     ASSIGN_OR_ABORT(auto meta, _write_fixture_with_null_val(parquet_path));
-    auto input = _make_source_info_column(
-            {_make_anchor(parquet_path, 0, meta.first, meta.second * 1000)});
+    auto input = _make_source_info_column({_make_anchor(parquet_path, 0, meta.first, meta.second * 1000)});
 
     TableFunctionState* state = nullptr;
     TFunction fn;
@@ -818,8 +817,7 @@ TEST_F(ParquetReadRowsTableFunctionTest, RehydrateRowWithNullValue) {
 TEST_F(ParquetReadRowsTableFunctionTest, RehydrateDecimalCell) {
     std::string parquet_path = _tmp_dir + "/decimal.parquet";
     ASSIGN_OR_ABORT(auto meta, _write_decimal_fixture(parquet_path));
-    auto input = _make_source_info_column(
-            {_make_anchor(parquet_path, 0, meta.first, meta.second * 1000)});
+    auto input = _make_source_info_column({_make_anchor(parquet_path, 0, meta.first, meta.second * 1000)});
 
     TableFunctionState* state = nullptr;
     TFunction fn;
