@@ -60,8 +60,8 @@ Status maybe_build_secondary_indexes(int64_t tablet_id, int64_t txn_id, const Ta
     for (size_t i = 0; i < seg_file_infos.size(); ++i) {
         const auto& info = seg_file_infos[i];
         if (info.bundle_file_offset.has_value() && info.bundle_file_offset.value() >= 0) {
-            LOG(INFO) << "secondary_index: tablet=" << tablet_id << " txn=" << txn_id << " skipping index for bundled segment '"
-                      << info.path << "'";
+            LOG(INFO) << "secondary_index: tablet=" << tablet_id << " txn=" << txn_id
+                      << " skipping index for bundled segment '" << info.path << "'";
             return Status::OK();
         }
         FileInfo open_info;
@@ -69,8 +69,8 @@ Status maybe_build_secondary_indexes(int64_t tablet_id, int64_t txn_id, const Ta
         open_info.size = info.size;
         open_info.encryption_meta = info.encryption_meta;
         auto seg_or = Segment::open(fs, open_info, /*segment_id=*/static_cast<uint32_t>(i), source_schema,
-                                     /*footer_length_hint=*/nullptr, /*partial_rowset_footer=*/nullptr,
-                                     LakeIOOptions{}, tablet_mgr);
+                                    /*footer_length_hint=*/nullptr, /*partial_rowset_footer=*/nullptr, LakeIOOptions{},
+                                    tablet_mgr);
         if (!seg_or.ok()) {
             LOG(WARNING) << "secondary_index: tablet=" << tablet_id << " txn=" << txn_id
                          << " skipping index, cannot open segment '" << info.path << "': " << seg_or.status();
