@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include <cstddef>
 #include <memory>
 #include <string>
 #include <unordered_set>
@@ -28,6 +29,13 @@ using RowidRangeOptionPtr = std::shared_ptr<RowidRangeOption>;
 struct ShortKeyRangesOption;
 using ShortKeyRangesOptionPtr = std::shared_ptr<ShortKeyRangesOption>;
 
+namespace lake {
+struct PreparedSegmentReadState;
+using PreparedSegmentReadStatePtr = std::shared_ptr<PreparedSegmentReadState>;
+struct PreparedTabletReadState;
+using PreparedTabletReadStatePtr = std::shared_ptr<PreparedTabletReadState>;
+} // namespace lake
+
 namespace pipeline {
 
 class SplitMorselQueue;
@@ -38,6 +46,13 @@ struct LakeSplitContext : public ScanSplitContext {
     // logical split
     ShortKeyRangesOptionPtr short_key_range;
     std::shared_ptr<SplitMorselQueue> split_morsel_queue = nullptr;
+
+    // Optional metadata for Lake prepared physical split children.
+    // Valid only for physical split morsels with rowid_range != nullptr.
+    lake::PreparedTabletReadStatePtr prepared_read_state = nullptr;
+    lake::PreparedSegmentReadStatePtr prepared_segment_state = nullptr;
+    size_t rowset_index = 0;
+    size_t segment_index = 0;
 };
 
 class PhysicalSplitScanMorsel final : public ScanMorsel {
