@@ -1362,6 +1362,18 @@ CONF_mDouble(lake_pk_compaction_min_benefit_cost_ratio, "0.0");
 // hot partitions with many small rowsets don't get permanently stuck. Set to 0 to
 // disable the override (gate always applies). Default 0 keeps legacy behavior.
 CONF_mDouble(lake_pk_compaction_emergency_score, "0.0");
+// PR-1' v2: equivalent segment-saved value of cleaning up a level with 100% delete_ratio,
+// folded into the bcr numerator. With w=12, a 20% level-wide delete_ratio adds ~20% to bcr
+// benefit on a sparse mid-tier; making delete-pressured but otherwise-clean levels cross
+// the bcr threshold without a separate binary has_deletes flag. Default 0 disables the
+// delete contribution (bcr falls back to segment-only benefit, equals ba3328b behavior).
+CONF_mDouble(lake_pk_compaction_delvec_benefit_weight, "0.0");
+// PR-1' v2: size accumulation upper-bound. When the picked level's total bytes exceed
+// alpha * level_size * size_tiered_level_multiple, force compaction regardless of mls/bcr.
+// alpha=2 caps long-tail accumulation at 2x the natural size-tiered promotion target,
+// preventing unbounded mid-tier growth while preserving v9 -72% WA benefit. Default 0
+// disables the override (no size cap, equals ba3328b behavior).
+CONF_mDouble(lake_pk_compaction_size_overflow_ratio, "0.0");
 // Enable cleanup of orphan delvec entries during compaction.
 // Orphan delvecs are leaked metadata entries from a historical bug that reference
 // non-existent segments and prevent delvec file garbage collection.
