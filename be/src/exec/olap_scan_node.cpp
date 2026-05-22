@@ -167,6 +167,7 @@ Status OlapScanNode::prepare(RuntimeState* state) {
         return Status::InternalError("Failed to get tuple descriptor.");
     }
     _runtime_profile->add_info_string("Table", _tuple_desc->table_desc()->name());
+    _runtime_profile->add_info_string("Database", _tuple_desc->table_desc()->database());
     if (_olap_scan_node.__isset.rollup_name) {
         _runtime_profile->add_info_string("Rollup", _olap_scan_node.rollup_name);
     }

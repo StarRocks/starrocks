@@ -65,6 +65,7 @@ import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 import static com.starrocks.qe.scheduler.QueryRuntimeProfile.LOAD_CHANNEL_PROFILE_NAME;
+import static com.starrocks.qe.scheduler.QueryRuntimeProfile.PER_TABLE_SCAN_STATS_PROFILE_NAME;
 
 public class ExplainAnalyzer {
     private static final Logger LOG = LogManager.getLogger(ExplainAnalyzer.class);
@@ -252,6 +253,10 @@ public class ExplainAnalyzer {
             RuntimeProfile fragmentProfile = executionProfile.getChildList().get(i).first;
             // TODO support analyze load channel profile
             if (LOAD_CHANNEL_PROFILE_NAME.equals(fragmentProfile.getName())) {
+                continue;
+            }
+            // PerTableScanStats is an aggregated sibling, not a fragment.
+            if (PER_TABLE_SCAN_STATS_PROFILE_NAME.equals(fragmentProfile.getName())) {
                 continue;
             }
 
@@ -478,6 +483,10 @@ public class ExplainAnalyzer {
         Counter maxDriverTotalTime = null;
         for (Pair<RuntimeProfile, Boolean> fragmentProfileKv : executionProfile.getChildList()) {
             RuntimeProfile fragmentProfile = fragmentProfileKv.first;
+            if (LOAD_CHANNEL_PROFILE_NAME.equals(fragmentProfile.getName())
+                    || PER_TABLE_SCAN_STATS_PROFILE_NAME.equals(fragmentProfile.getName())) {
+                continue;
+            }
             for (Pair<RuntimeProfile, Boolean> pipelineProfileKv : fragmentProfile.getChildList()) {
                 RuntimeProfile pipelineProfile = pipelineProfileKv.first;
                 Counter driverTotalTime = pipelineProfile.getMaxCounter("DriverTotalTime");

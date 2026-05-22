@@ -1326,6 +1326,9 @@ struct THdfsScanNode {
     27: optional i64 scan_node_id
 
     28: optional list<TColumnAccessPath> column_access_paths
+
+    // database name it scans, used to disambiguate same-named tables across databases
+    29: optional string database_name
 }
 
 struct TProjectNode {

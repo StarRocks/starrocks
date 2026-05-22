@@ -103,6 +103,7 @@ Status LakeDataSource::open(RuntimeState* state) {
     }
 
     _runtime_profile->add_info_string("Table", tuple_desc->table_desc()->name());
+    _runtime_profile->add_info_string("Database", tuple_desc->table_desc()->database());
     if (thrift_lake_scan_node.__isset.rollup_name) {
         _runtime_profile->add_info_string("Rollup", thrift_lake_scan_node.rollup_name);
     }
