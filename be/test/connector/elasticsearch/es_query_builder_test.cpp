@@ -32,7 +32,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "exec/es/es_query_builder.h"
+#include "connector/elasticsearch/es_query_builder.h"
 
 #include <gtest/gtest.h>
 
@@ -42,7 +42,7 @@
 #include "base/debug/leakcheck_disabler.h"
 #include "column/column_helper.h"
 #include "common/logging.h"
-#include "exec/es/es_predicate.h"
+#include "connector/elasticsearch/es_predicate.h"
 #include "rapidjson/document.h"
 #include "rapidjson/rapidjson.h"
 #include "rapidjson/stringbuffer.h"

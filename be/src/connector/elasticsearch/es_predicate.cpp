@@ -32,7 +32,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "exec/es/es_predicate.h"
+#include "connector/elasticsearch/es_predicate.h"
 
 #include <gutil/strings/substitute.h>
 
@@ -49,7 +49,7 @@
 #include "common/logging.h"
 #include "common/runtime_profile.h"
 #include "common/status.h"
-#include "exec/es/es_query_builder.h"
+#include "connector/elasticsearch/es_query_builder.h"
 #include "exprs/column_ref.h"
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"

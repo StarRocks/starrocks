@@ -62,3 +62,26 @@ if (WITH_CONNECTOR_BENCHMARK)
     target_link_libraries(connector_benchmark_test ${CONNECTOR_BENCHMARK_TEST_LINK_LIBS} gtest_main)
     set_target_properties(connector_benchmark_test PROPERTIES COMPILE_FLAGS "-fno-access-control")
 endif()
+
+if (WITH_CONNECTOR_ELASTICSEARCH)
+    set(CONNECTOR_ELASTICSEARCH_TEST_LINK_LIBS
+        ConnectorElasticsearch
+        ${STARROCKS_DEPENDENCIES}
+        ${STARROCKS_STATIC_LINK_LIBS}
+        ${WL_LINK_DYNAMIC} ${STARROCKS_SYSTEM_LINK_LIBS} ${WRAP_LINKER_FLAGS}
+        ${WL_START_GROUP}
+        gmock
+        gtest
+        ${WL_END_GROUP}
+    )
+
+    add_executable(connector_elasticsearch_test
+            ${BE_TEST_MACOS_LINK_STUBS}
+            ${SRC_DIR}/runtime/descriptors_ext.cpp
+            elasticsearch/es_query_builder_test.cpp
+            elasticsearch/es_scan_reader_test.cpp
+            elasticsearch/es_scroll_parser_test.cpp
+    )
+    target_link_libraries(connector_elasticsearch_test ${CONNECTOR_ELASTICSEARCH_TEST_LINK_LIBS} gtest_main)
+    set_target_properties(connector_elasticsearch_test PROPERTIES COMPILE_FLAGS "-fno-access-control")
+endif()

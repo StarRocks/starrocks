@@ -17,11 +17,15 @@
 #include <memory>
 #include <string>
 
+#include "connector/connector.h"
 #include "connector/connector_registry.h"
 
 #ifdef STARROCKS_WITH_CONNECTOR_BENCHMARK
 #include "connector/benchmark/benchmark_connector.h"
-#include "connector/connector.h"
+#endif
+
+#ifdef STARROCKS_WITH_CONNECTOR_ELASTICSEARCH
+#include "connector/elasticsearch/es_connector.h"
 #endif
 
 namespace starrocks::connector {
@@ -42,6 +46,9 @@ Status bootstrap_builtin_connectors() {
     DCHECK(registry != nullptr);
 #ifdef STARROCKS_WITH_CONNECTOR_BENCHMARK
     install_if_absent<BenchmarkConnector>(registry, Connector::BENCHMARK);
+#endif
+#ifdef STARROCKS_WITH_CONNECTOR_ELASTICSEARCH
+    install_if_absent<ESConnector>(registry, Connector::ES);
 #endif
     return Status::OK();
 }

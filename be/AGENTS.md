@@ -209,8 +209,8 @@ Read-side connector contracts, DataSource, and DataSourceProvider default mechan
 ### ConnectorBootstrap (`connectorbootstrap`)
 Connector-layer bootstrap for split connector libraries that install into the default registry without depending on the legacy built-in registry.
 - Targets: `ConnectorBootstrap`
-- Allowed internal include prefixes: `connector/connector_bootstrap.h`, `connector/benchmark/`, `connector/connector.h`, `connector/connector_registry.h`, `common/`, `base/`, `gutil/`, `gen_cpp/`
-- Allowed target deps: `Connector`, `ConnectorBenchmark`, `ConnectorPrimitive`, `Common`, `Base`, `Gutil`, `StarRocksGen`
+- Allowed internal include prefixes: `connector/connector_bootstrap.h`, `connector/benchmark/`, `connector/elasticsearch/`, `connector/connector.h`, `connector/connector_registry.h`, `common/`, `base/`, `gutil/`, `gen_cpp/`
+- Allowed target deps: `Connector`, `ConnectorBenchmark`, `ConnectorElasticsearch`, `ConnectorPrimitive`, `Common`, `Base`, `Gutil`, `StarRocksGen`
 - Remediation: Keep split connector bootstrap independent from ConnectorBuiltinRegistry; add newly split connector libraries here and let service-level startup compose legacy registry plus this bootstrap.
 
 ### ConnectorBuiltinRegistry (`connectorbuiltinregistry`)

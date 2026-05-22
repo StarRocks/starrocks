@@ -24,6 +24,7 @@
 #include <cstdint>
 #include <cstring>
 #include <thread>
+#include <type_traits>
 #include <utility>
 
 #include "base/compiler_util.h"

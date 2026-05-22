@@ -52,9 +52,6 @@ set(EXEC_FILES
         ./exec/column_value_range_test.cpp
         ./exec/data_sinks/range_router_test.cpp
         ./exec/plain_text_builder_test.cpp
-        ./exec/es/es_query_builder_test.cpp
-        ./exec/es/es_scan_reader_test.cpp
-        ./exec/es/es_scroll_parser_test.cpp
         ./exec/paimon/paimon_delete_file_builder_test.cpp
         ./exec/workgroup/scan_task_queue_test.cpp
         ./exec/workgroup/lock_free_scan_task_queue_test.cpp

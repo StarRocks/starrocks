@@ -62,6 +62,8 @@ Usage: $0 <options>
      --with-aws                     enable to test aws
      --with-bench                   enable to build with benchmark
      --without-connector-benchmark  build without the benchgen-backed benchmark connector
+     --without-connector-elasticsearch
+                                    build without the Elasticsearch connector
      --excluding-test-suit          don't run cases of specific suit
      --module                       module to run uts
      --build-target TARGET          only build the specified target (e.g. base_test)
@@ -116,6 +118,7 @@ OPTS=$(${GETOPT_BIN} \
   -l 'with-aws' \
   -l 'with-bench' \
   -l 'without-connector-benchmark' \
+  -l 'without-connector-elasticsearch' \
   -l 'excluding-test-suit:' \
   -l 'use-staros' \
   -l 'enable-shared-data' \
@@ -147,6 +150,7 @@ WITH_AWS=OFF
 USE_STAROS=OFF
 WITH_GCOV=OFF
 WITH_CONNECTOR_BENCHMARK=ON
+WITH_CONNECTOR_ELASTICSEARCH=ON
 if starrocks_is_darwin; then
     WITH_STARCACHE=OFF
 else
@@ -179,6 +183,7 @@ while true; do
         --with-gcov) WITH_GCOV=ON; shift ;;
         --with-dynamic) WITH_DYNAMIC=ON; shift ;;
         --without-connector-benchmark) WITH_CONNECTOR_BENCHMARK=OFF; shift ;;
+        --without-connector-elasticsearch) WITH_CONNECTOR_ELASTICSEARCH=OFF; shift ;;
         --without-starcache) WITH_STARCACHE=OFF; shift ;;
         --excluding-test-suit) EXCLUDING_TEST_SUIT=$2; shift 2;;
         --enable-shared-data|--use-staros) USE_STAROS=ON; shift ;;
@@ -289,6 +294,7 @@ ${CMAKE_CMD}  -G "${CMAKE_GENERATOR}" \
             -DSTARLET_INSTALL_DIR=${STARLET_INSTALL_DIR}          \
             -DWITH_GCOV=${WITH_GCOV} \
             -DWITH_CONNECTOR_BENCHMARK=${WITH_CONNECTOR_BENCHMARK} \
+            -DWITH_CONNECTOR_ELASTICSEARCH=${WITH_CONNECTOR_ELASTICSEARCH} \
             -DWITH_STARCACHE=${WITH_STARCACHE} \
             -DWITH_TENANN=${WITH_TENANN} \
             -DSTARROCKS_JIT_ENABLE=${ENABLE_JIT} \

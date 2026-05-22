@@ -20,7 +20,7 @@
 #include <string>
 #include <vector>
 
-#include "exec/es/es_predicate.h"
+#include "connector/elasticsearch/es_predicate.h"
 
 namespace starrocks {
 

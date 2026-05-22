@@ -41,7 +41,7 @@
 
 #include "common/compiler_util.h"
 #include "common/status.h"
-#include "exec/es/es_predicate.h"
+#include "connector/elasticsearch/es_predicate.h"
 
 namespace starrocks {
 

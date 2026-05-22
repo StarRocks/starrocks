@@ -32,14 +32,14 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "exec/es/es_scan_reader.h"
+#include "connector/elasticsearch/es_scan_reader.h"
 
 #include <gtest/gtest.h>
 
 #include <string>
 #include <vector>
 
-#include "exec/es/es_scroll_query.h"
+#include "connector/elasticsearch/es_scroll_query.h"
 #include "http/ev_http_server.h"
 #include "http/http_auth.h"
 #include "http/http_channel.h"
