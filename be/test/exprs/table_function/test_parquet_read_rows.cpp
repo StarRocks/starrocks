@@ -30,6 +30,8 @@
 #include "column/column_helper.h"
 #include "column/fixed_length_column.h"
 #include "column/json_column.h"
+#include "column/nullable_column.h"
+#include "common/config_exec_env_fwd.h"
 #include "common/statusor.h"
 #include "exprs/table_function/parquet_read_rows.h"
 #include "formats/parquet/file_writer.h"
@@ -443,6 +445,109 @@ TEST_F(ParquetReadRowsTableFunctionTest, NonObjectAnchorRejected) {
     EXPECT_FALSE(state->status().ok());
     EXPECT_NE(std::string::npos, state->status().to_string().find("must be a JSON object"));
 
+    ASSERT_OK(_tvf.close(_runtime_state.get(), state));
+}
+
+// ---------- anchor omits file_size and file_mtime_ms: fall back to fs query ----------
+TEST_F(ParquetReadRowsTableFunctionTest, AnchorOmitsOptionalSizeAndMtime) {
+    std::string parquet_path = _tmp_dir + "/fixture.parquet";
+    ASSIGN_OR_ABORT(auto meta, _write_fixture(parquet_path, {1, 2, 3}, {100, 200, 300}, {"alice", "bob", "carol"}));
+
+    auto input = _make_source_info_column(
+            {strings::Substitute(R"({"format":"parquet","file":"$0","row_in_file":1})", parquet_path)});
+
+    TableFunctionState* state = nullptr;
+    TFunction fn;
+    ASSERT_OK(_tvf.init(fn, &state));
+    state->set_params({input});
+
+    auto [columns, offsets] = _tvf.process(_runtime_state.get(), state);
+    ASSERT_OK(state->status());
+    auto* raw_col = down_cast<const JsonColumn*>(columns[2].get());
+    ASSERT_EQ(1, raw_col->size());
+    auto* jv = raw_col->get_object(0);
+    vpack::Slice obj = jv->to_vslice();
+    ASSERT_TRUE(obj.isObject());
+    EXPECT_EQ("bob", obj.get("name").copyString());
+
+    ASSERT_OK(_tvf.close(_runtime_state.get(), state));
+}
+
+// ---------- corrupt parquet file: opens but ParquetException on metadata ----------
+TEST_F(ParquetReadRowsTableFunctionTest, CorruptParquetFileSurfaceStatus) {
+    std::string parquet_path = _tmp_dir + "/corrupt.parquet";
+    {
+        std::ofstream o(parquet_path, std::ios::binary);
+        o << "this is not a parquet file at all";
+    }
+    struct stat st {};
+    ASSERT_EQ(0, ::stat(parquet_path.c_str(), &st));
+    int64_t file_size = st.st_size;
+    int64_t file_mtime_ms = static_cast<int64_t>(st.st_mtime) * 1000;
+
+    auto input = _make_source_info_column({_make_anchor(parquet_path, 0, file_size, file_mtime_ms)});
+
+    TableFunctionState* state = nullptr;
+    TFunction fn;
+    ASSERT_OK(_tvf.init(fn, &state));
+    state->set_params({input});
+
+    _tvf.process(_runtime_state.get(), state);
+    EXPECT_FALSE(state->status().ok());
+    // The error string identifies the offending path so users can pinpoint
+    // which fixture in a multi-anchor query was bad.
+    EXPECT_NE(std::string::npos, state->status().to_string().find("corrupt.parquet"));
+
+    ASSERT_OK(_tvf.close(_runtime_state.get(), state));
+}
+
+// ---------- null entry inside the JSON input column ----------
+TEST_F(ParquetReadRowsTableFunctionTest, NullSourceInfoInChunkRejected) {
+    auto input = JsonColumn::create();
+    input->append_default();
+    auto outer = NullableColumn::create(std::move(input), NullColumn::create());
+    outer->append_nulls(1);
+
+    TableFunctionState* state = nullptr;
+    TFunction fn;
+    ASSERT_OK(_tvf.init(fn, &state));
+    state->set_params({outer});
+
+    _tvf.process(_runtime_state.get(), state);
+    EXPECT_FALSE(state->status().ok());
+    EXPECT_NE(std::string::npos, state->status().to_string().find("source_info is NULL"));
+
+    ASSERT_OK(_tvf.close(_runtime_state.get(), state));
+}
+
+// ---------- exceeding parquet_read_rows_max_anchors triggers cap ----------
+TEST_F(ParquetReadRowsTableFunctionTest, MaxAnchorsCapExceeded) {
+    // Lower the cap so we don't need 10001 anchors to trigger it.
+    auto saved = config::parquet_read_rows_max_anchors;
+    config::parquet_read_rows_max_anchors = 2;
+
+    std::string parquet_path = _tmp_dir + "/fixture.parquet";
+    ASSIGN_OR_ABORT(auto meta, _write_fixture(parquet_path, {1, 2, 3}, {100, 200, 300}, {"alice", "bob", "carol"}));
+    int64_t file_size = meta.first;
+    int64_t file_mtime_ms = meta.second * 1000;
+
+    // Three anchors > cap of 2 → expect failure.
+    auto input = _make_source_info_column({
+            _make_anchor(parquet_path, 0, file_size, file_mtime_ms),
+            _make_anchor(parquet_path, 1, file_size, file_mtime_ms),
+            _make_anchor(parquet_path, 2, file_size, file_mtime_ms),
+    });
+
+    TableFunctionState* state = nullptr;
+    TFunction fn;
+    ASSERT_OK(_tvf.init(fn, &state));
+    state->set_params({input});
+
+    _tvf.process(_runtime_state.get(), state);
+    EXPECT_FALSE(state->status().ok());
+    EXPECT_NE(std::string::npos, state->status().to_string().find("exceeds parquet_read_rows_max_anchors"));
+
+    config::parquet_read_rows_max_anchors = saved;
     ASSERT_OK(_tvf.close(_runtime_state.get(), state));
 }
 
