@@ -16,7 +16,7 @@
 
 #include <utility>
 
-#include "exec/data_sinks/async_data_sink.h"
+#include "exec/async_data_sink.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/operator.h"
 
