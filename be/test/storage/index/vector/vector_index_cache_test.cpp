@@ -27,9 +27,12 @@
 
 #include "base/string/slice.h"
 #include "base/testutil/assert.h"
+#include "common/config_update_registry.h"
 #include "common/status.h"
 #include "fs/fs_memory.h"
+#include "runtime/env/global_env.h"
 #include "runtime/mem_tracker.h"
+#include "service/service_be/config_update_hooks.h"
 #include "storage/index/vector/empty_index_reader.h"
 #include "storage/index/vector/tenann/tenann_index_utils.h"
 #include "storage/index/vector/tenann_index_reader.h"
@@ -316,11 +319,72 @@ TEST(TenANNReaderTest, InitSearcher_NoGlobalCache_ReturnsInternalError) {
     tenann::SetGlobalIndexCache(saved);
 }
 
+// Drives init_searcher through the loader's fs!=nullptr branch with a missing
+// path so the captured Status (NotFound) flows back through GetOrCreate to the
+// caller. This is the signal VectorIndexReaderFactory's brute-force fallback
+// keys off — collapsing it to InternalError would silently disable the fallback.
+TEST(TenANNReaderTest, InitSearcher_FileNotFoundViaFs_PropagatesNotFound) {
+    MemTracker tracker(-1, "tenann_reader_test");
+    VectorIndexCache cache(/*capacity=*/1024, &tracker);
+    auto* saved = tenann::GetGlobalIndexCache();
+    tenann::SetGlobalIndexCache(&cache);
+
+    MemoryFileSystem fs;
+    TenANNReader r;
+    tenann::IndexMeta meta;
+    auto st = r.init_searcher(meta, "/no/such/index.vi", &fs);
+    EXPECT_TRUE(st.is_not_found()) << st.to_string();
+
+    tenann::SetGlobalIndexCache(saved);
+}
+
+// Same fs-bound path but the file IS present, just not a real tenann index.
+// tenann::IndexFactory::CreateReaderFromMeta or ReadIndexFile reacts to the
+// default-constructed IndexMeta / garbage payload by throwing tenann::Error,
+// which the loader must catch and surface as a non-OK Status — without the
+// catch arm, tenann::Error (which inherits privately from std::exception)
+// would escape GetOrCreate and crash the BE.
+TEST(TenANNReaderTest, InitSearcher_MalformedFile_ReturnsNonOk) {
+    MemTracker tracker(-1, "tenann_reader_test");
+    VectorIndexCache cache(/*capacity=*/1024, &tracker);
+    auto* saved = tenann::GetGlobalIndexCache();
+    tenann::SetGlobalIndexCache(&cache);
+
+    MemoryFileSystem fs;
+    ASSERT_OK(fs.create_dir("/tmp"));
+    ASSERT_OK(fs.append_file("/tmp/garbage.vi", Slice("not a real index", 16)));
+
+    TenANNReader r;
+    tenann::IndexMeta meta;
+    auto st = r.init_searcher(meta, "/tmp/garbage.vi", &fs);
+    EXPECT_FALSE(st.ok()) << "loader should surface tenann::Error / std::exception, not crash";
+
+    tenann::SetGlobalIndexCache(saved);
+}
+
 TEST(VectorIndexCacheEntryTest, StreamingOperatorPrintsTag) {
     VectorIndexCacheEntry e;
     std::ostringstream os;
     os << e;
     EXPECT_EQ("VectorIndexCacheEntry", os.str());
+}
+
+// register_config_update_hooks(nullptr) is well-defined: callback registration
+// does not dereference exec_env. When /api/update_config?vector_index_cache_limit=...
+// fires, the callback short-circuits on the null exec_env and returns
+// InternalError, which update_config then rolls back. Operators see the failure
+// rather than crashing the BE.
+TEST(ConfigUpdateHooksTest, VectorIndexCacheLimit_NullExecEnv_ReturnsInternalError) {
+    auto* registry = ConfigUpdateRegistry::instance();
+    registry->TEST_reset();
+    register_config_update_hooks(/*exec_env=*/nullptr, *GlobalEnv::GetInstance());
+    registry->set_ready();
+
+    auto st = registry->update_config("vector_index_cache_limit", "1G");
+    EXPECT_FALSE(st.ok()) << st.to_string();
+    EXPECT_TRUE(st.is_internal_error()) << st.to_string();
+
+    registry->TEST_reset();
 }
 
 } // namespace starrocks
