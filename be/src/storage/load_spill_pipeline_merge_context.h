@@ -51,7 +51,7 @@ class TabletWriter;
  */
 class LoadSpillPipelineMergeContext {
 public:
-    LoadSpillPipelineMergeContext(lake::TabletWriter* writer) : _writer(writer) {}
+    explicit LoadSpillPipelineMergeContext(lake::TabletWriter* writer);
     ~LoadSpillPipelineMergeContext();
 
     /**
