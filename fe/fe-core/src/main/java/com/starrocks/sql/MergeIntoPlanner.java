@@ -14,16 +14,18 @@
 
 package com.starrocks.sql;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.connector.iceberg.IcebergMetadata;
-import com.starrocks.planner.DataSink;
+import com.starrocks.connector.iceberg.ScalarOperatorToIcebergExpr;
 import com.starrocks.planner.DescriptorTable;
 import com.starrocks.planner.EnforceUniqueNode;
 import com.starrocks.planner.IcebergRowDeltaSink;
+import com.starrocks.planner.IcebergScanNode;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.PlanNode;
 import com.starrocks.planner.PlanNodeId;
@@ -35,6 +37,9 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.MergeIntoStmt;
 import com.starrocks.sql.ast.QueryRelation;
+import com.starrocks.sql.ast.SelectList;
+import com.starrocks.sql.ast.SelectListItem;
+import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.optimizer.OptExpression;
@@ -51,16 +56,64 @@ import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanFragmentBuilder;
 import com.starrocks.thrift.TIcebergWriteMode;
 import com.starrocks.thrift.TResultSinkType;
+import org.apache.iceberg.expressions.Expression;
 
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 
 public class MergeIntoPlanner {
 
+    private static final String OP_CODE_COLUMN_NAME = "op_code";
+
+    /**
+     * Append the analyzer-prepared routing Expr to the SELECT list as a sink-private
+     * column. After this, the SELECT carries [_file, _pos, data_cols..., op_code] and
+     * the rest of the planner (transformer, optimizer, fragment builder) handles op_code
+     * exactly like any other output column. Since op_code's ColumnRefOperator is part of
+     * the optimizer's required-output set, column pruning cannot remove it; the BE
+     * row-delta sink later validates the trailing TINYINT slot via write_mode = ROW_DELTA_MIXED.
+     */
+    private static void injectOpCodeRoutingColumn(MergeIntoStmt stmt, QueryRelation query) {
+        Expr routingExpr = stmt.getRoutingExpr();
+        Preconditions.checkState(routingExpr != null,
+                "analyzer must produce a routing expression for MERGE INTO");
+        Preconditions.checkState(query instanceof SelectRelation,
+                "MERGE INTO query relation must be a SelectRelation");
+        SelectRelation selectRelation = (SelectRelation) query;
+        SelectList selectList = selectRelation.getSelectList();
+        // This mutates the analyzed AST, so it must run exactly once per statement.
+        // Guard against re-planning paths (e.g. retry loops that re-enter
+        // StatementPlanner.plan with the same parsed statement) appending a second
+        // op_code column.
+        List<SelectListItem> items = selectList.getItems();
+        Preconditions.checkState(items.isEmpty()
+                        || !OP_CODE_COLUMN_NAME.equals(items.get(items.size() - 1).getAlias()),
+                "op_code routing column has already been injected");
+        selectList.addItem(new SelectListItem(routingExpr, OP_CODE_COLUMN_NAME));
+        List<Expr> extendedOutput = Lists.newArrayList(selectRelation.getOutputExpression());
+        extendedOutput.add(routingExpr);
+        selectRelation.setOutputExpr(extendedOutput);
+    }
+
     public ExecPlan plan(MergeIntoStmt mergeIntoStmt, ConnectContext session) {
+        // The BE EnforceUniqueNode is pipeline-engine-only (its non-pipeline entry
+        // points return NotSupported), so fail fast with a clear message instead of
+        // letting the BE error out at runtime.
+        if (!session.getSessionVariable().isEnablePipelineEngine()) {
+            throw new SemanticException("MERGE INTO requires the pipeline engine; " +
+                    "set enable_pipeline_engine=true");
+        }
         QueryRelation query = mergeIntoStmt.getQueryStatement().getQueryRelation();
-        List<String> colNames = query.getColumnOutputNames();
+        // Inject the op_code routing column as a sink-private projection. The analyzer
+        // hands us a routing Expr (resolved against the join scope) and a clean SELECT;
+        // we add op_code here, just before transformation, so it (a) goes through the
+        // standard Expr → ScalarOperator pipeline together with the data columns and
+        // (b) ends up in the optimizer's required-output set so column pruning cannot
+        // drop it. The user-visible columnOutputNames on the stmt remain data-only;
+        // BE consumes the trailing op_code slot via ROW_DELTA_MIXED.
+        injectOpCodeRoutingColumn(mergeIntoStmt, query);
         ColumnRefFactory columnRefFactory = new ColumnRefFactory();
         LogicalPlan logicalPlan = new RelationTransformer(columnRefFactory, session).transform(query);
 
@@ -72,7 +125,10 @@ public class MergeIntoPlanner {
         }
 
         IcebergTable icebergTable = (IcebergTable) targetTable;
-        colNames = mergeIntoStmt.getOutputColumnNames();
+        // Build the sink-tuple column-name list: analyzer-supplied user columns + the
+        // trailing routing column the planner just added.
+        List<String> colNames = Lists.newArrayList(mergeIntoStmt.getOutputColumnNames());
+        colNames.add(OP_CODE_COLUMN_NAME);
 
         // Use the 3-arg overload: MERGE wraps all data columns in CASE expressions, causing
         // ColumnRefOperator names to become "case" instead of the original column name.
@@ -88,14 +144,8 @@ public class MergeIntoPlanner {
                                      OptExpression logicalRoot, ColumnRefFactory columnRefFactory,
                                      List<ColumnRefOperator> outputColumns, List<String> colNames,
                                      IcebergTable icebergTable, PhysicalPropertySet requiredProperty) {
-        boolean isEnablePipeline = session.getSessionVariable().isEnablePipelineEngine();
-        boolean canUsePipeline = isEnablePipeline && DataSink.canTableSinkUsePipeline(icebergTable);
-        boolean forceDisablePipeline = isEnablePipeline && !canUsePipeline;
         boolean prevIsEnableLocalShuffleAgg = session.getSessionVariable().isEnableLocalShuffleAgg();
         try {
-            if (forceDisablePipeline) {
-                session.getSessionVariable().setEnablePipelineEngine(false);
-            }
             session.getSessionVariable().setEnableLocalShuffleAgg(false);
 
             // Optimize
@@ -108,16 +158,14 @@ public class MergeIntoPlanner {
             ExecPlan execPlan = PlanFragmentBuilder.createPhysicalPlan(optimizedPlan, session,
                     outputColumns, columnRefFactory, colNames, TResultSinkType.MYSQL_PROTOCAL, false);
 
-            // Setup Iceberg sink and configure pipeline
+            // Setup Iceberg sink and configure pipeline. plan() already rejected
+            // non-pipeline sessions, so the sink always runs on the pipeline engine.
             setupIcebergMergeSink(execPlan, colNames, icebergTable, session);
-            IcebergPlannerUtils.configureIcebergSinkPipeline(execPlan, session, canUsePipeline);
+            IcebergPlannerUtils.configureIcebergSinkPipeline(execPlan, session, true);
 
             return execPlan;
         } finally {
             session.getSessionVariable().setEnableLocalShuffleAgg(prevIsEnableLocalShuffleAgg);
-            if (forceDisablePipeline) {
-                session.getSessionVariable().setEnablePipelineEngine(true);
-            }
         }
     }
 
@@ -144,12 +192,11 @@ public class MergeIntoPlanner {
         dataSink.init();
 
         IcebergMetadata.IcebergSinkExtra icebergSinkExtra = new IcebergMetadata.IcebergSinkExtra();
-        icebergSinkExtra.setOperationType("MERGE");
+        icebergSinkExtra.setOperationType(IcebergMetadata.IcebergSinkExtra.OperationType.MERGE);
         // For MERGE, the plan has source LEFT JOIN target — there may be multiple
         // IcebergScanNodes (e.g., self-merge or USING another Iceberg table).
         // We must build the conflict filter from the TARGET scan, not the source.
-        org.apache.iceberg.expressions.Expression filterExpr =
-                buildTargetIcebergFilterExpr(execPlan, icebergTable);
+        Expression filterExpr = buildTargetIcebergFilterExpr(execPlan, icebergTable);
         if (filterExpr != null) {
             icebergSinkExtra.setConflictDetectionFilter(filterExpr);
         }
@@ -247,7 +294,8 @@ public class MergeIntoPlanner {
      * the CASE WHEN `_file IS NOT NULL` pattern that MergeIntoAnalyzer emits on
      * every MERGE output column, which the optimizer CSE's out.
      */
-    private static List<SlotId> collectSlotsSortedById(PlanNode node, DescriptorTable descTbl) {
+    @VisibleForTesting
+    static List<SlotId> collectSlotsSortedById(PlanNode node, DescriptorTable descTbl) {
         List<SlotId> slotIds = Lists.newArrayList();
         for (TupleId tid : node.getTupleIds()) {
             TupleDescriptor tupleDesc = descTbl.getTupleDesc(tid);
@@ -293,24 +341,21 @@ public class MergeIntoPlanner {
      * even for self-merges where both scans reference the same native table, because only
      * the target side outputs delete-path metadata.
      */
-    private static org.apache.iceberg.expressions.Expression buildTargetIcebergFilterExpr(
-            ExecPlan execPlan, IcebergTable targetTable) {
+    private static Expression buildTargetIcebergFilterExpr(ExecPlan execPlan, IcebergTable targetTable) {
         if (execPlan == null || execPlan.getScanNodes() == null) {
             return null;
         }
 
         for (PlanNode node : execPlan.getScanNodes()) {
-            if (node instanceof com.starrocks.planner.IcebergScanNode scanNode
-                    && scanNode.isUsedForDelete()) {
+            if (node instanceof IcebergScanNode scanNode && scanNode.isUsedForDelete()) {
                 var predicate = scanNode.getIcebergJobPlanningPredicate();
                 var nativeSchema = scanNode.getIcebergTable().getNativeTable().schema();
                 if (predicate == null || nativeSchema == null) {
                     return null;
                 }
-                var icebergContext = new com.starrocks.connector.iceberg.ScalarOperatorToIcebergExpr
-                        .IcebergContext(nativeSchema.asStruct());
-                return new com.starrocks.connector.iceberg.ScalarOperatorToIcebergExpr()
-                        .convert(java.util.Collections.singletonList(predicate), icebergContext);
+                var icebergContext = new ScalarOperatorToIcebergExpr.IcebergContext(nativeSchema.asStruct());
+                return new ScalarOperatorToIcebergExpr()
+                        .convert(Collections.singletonList(predicate), icebergContext);
             }
         }
         return null;
