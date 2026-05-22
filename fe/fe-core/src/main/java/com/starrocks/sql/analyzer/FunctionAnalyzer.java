@@ -174,6 +174,25 @@ public class FunctionAnalyzer {
                         functionCallExpr.getPos());
             }
         }
+        // percentile_hash is a scalar function: validate here on the scalar path,
+        // because analyzeBuiltinAggFunction only runs for AggregateFunction.
+        // percentile_hash(value [, compression]). The 1-arg overload keeps the
+        // legacy storage compression (1000). The 2-arg overload requires a
+        // constant compression; out-of-range / NULL / non-finite values are
+        // canonicalized to DEFAULT_COMPRESSION_FACTOR so downstream code can
+        // trust the literal.
+        if (fnName.equals(FunctionSet.PERCENTILE_HASH)) {
+            List<Expr> percentileHashChildren = functionCallExpr.getChildren();
+            if (percentileHashChildren.size() == 2) {
+                Expr cArg = functionCallExpr.getChild(1);
+                if (!(cArg instanceof NullLiteral)) {
+                    validateNumericParameter(cArg, "second", "compression",
+                            "percentile_hash", functionCallExpr.getPos());
+                }
+                clampCompressionLiteral(functionCallExpr, 1);
+            }
+        }
+
         Function fn = functionCallExpr.getFn();
         final String funcName = fnName;
         if (fn instanceof StateFunctionCombinator) {
