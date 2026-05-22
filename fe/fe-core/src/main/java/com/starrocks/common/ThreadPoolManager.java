@@ -164,6 +164,11 @@ public class ThreadPoolManager {
                 new BlockedPolicy(poolName, 60), poolName, needRegisterMetric);
     }
 
+    public static ThreadPoolExecutor newDaemonFixedThreadPool(int numThread, String poolName, boolean needRegisterMetric) {
+        return newDaemonThreadPool(numThread, numThread, KEEP_ALIVE_TIME, TimeUnit.SECONDS,
+                new LinkedBlockingQueue<>(), new BlockedPolicy(poolName, 60), poolName, needRegisterMetric);
+    }
+
     public static PriorityThreadPoolExecutor newDaemonFixedPriorityThreadPool(int numThread, int queueSize,
                                                                               String poolName,
                                                                               boolean needRegisterMetric) {
