@@ -16,6 +16,7 @@
 
 #include "base/utility/defer_op.h"
 #include "column/chunk_factory.h"
+#include "column/chunk_schema_helper.h"
 #include "exec/file_scanner/file_scanner.h"
 #include "runtime/runtime_state.h"
 #include "storage/chunk_helper.h"
@@ -62,7 +63,7 @@ Status SparkLoadHandler::_load_convert(VersionedTablet& cur_tablet) {
     auto tablet_schema = cur_tablet.get_schema();
     Schema schema = ChunkHelper::convert_schema(tablet_schema);
     ChunkPtr chunk = ChunkFactory::new_chunk(schema, 0);
-    auto char_field_indexes = ChunkHelper::get_char_field_indexes(schema);
+    auto char_field_indexes = ChunkSchemaHelper::get_char_field_indexes(schema);
 
     // 2. Init PushBrokerReader to read broker file if exist,
     //    in case of empty push this will be skipped.

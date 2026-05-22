@@ -23,6 +23,7 @@
 #include "column/raw_data_visitor.h"
 #include "common/config_primary_key_fwd.h"
 #include "fs/fs_util.h"
+#include "storage/chunk_helper.h"
 #include "storage/lake/join_path.h"
 #include "storage/lake/persistent_index_sstable.h"
 #include "storage/persistent_index.h"

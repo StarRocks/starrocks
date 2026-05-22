@@ -21,6 +21,7 @@
 #include "base/utility/defer_op.h"
 #include "base/utility/pretty_printer.h"
 #include "column/chunk_factory.h"
+#include "column/chunk_schema_helper.h"
 #include "common/config_compaction_fwd.h"
 #include "common/config_lake_fwd.h"
 #include "common/config_primary_key_fwd.h"
@@ -696,7 +697,7 @@ Status UpdateManager::_read_chunk_for_upsert(const TxnLogPB_OpWrite& op_write, c
     }
 
     {
-        auto char_indexes = ChunkHelper::get_char_field_indexes(full_schema);
+        auto char_indexes = ChunkSchemaHelper::get_char_field_indexes(full_schema);
         ChunkHelper::padding_char_columns(char_indexes, full_schema, tschema, full_chunk.get());
     }
 

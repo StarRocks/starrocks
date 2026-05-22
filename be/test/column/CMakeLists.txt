@@ -77,6 +77,7 @@ set(CHUNK_TEST_FILES
     column_access_path_core_test.cpp
     column_to_arrow_converter_test.cpp
     chunk_factory_test.cpp
+    chunk_schema_helper_test.cpp
     chunk_core_test.cpp
     segmented_chunk_core_test.cpp
     field_test.cpp

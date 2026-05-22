@@ -28,6 +28,7 @@
 #include "exprs/expr.h"
 #include "exprs/expr_executor.h"
 #include "exprs/expr_factory.h"
+#include "runtime/chunk_helper.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
 #include "storage/chunk_helper.h"
@@ -92,7 +93,7 @@ Status ShortCircuitHybridScanNode::get_next(RuntimeState* state, ChunkPtr* chunk
     auto tablet_schema = _tablets[0]->tablet_schema()->schema();
     auto column_ids = tablet_schema->field_column_ids();
     auto tablet_schema_without_rowstore = std::make_unique<Schema>(tablet_schema, column_ids);
-    auto result_chunk = ChunkHelper::new_chunk(*_tuple_desc, result_size);
+    auto result_chunk = RuntimeChunkHelper::new_chunk(*_tuple_desc, result_size);
 
     //idx is column id, value is slot id
     if (result_size > 0) {

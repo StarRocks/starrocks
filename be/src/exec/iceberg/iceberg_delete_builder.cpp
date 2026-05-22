@@ -22,6 +22,7 @@
 #include "formats/orc/orc_input_stream.h"
 #include "formats/parquet/file_reader.h"
 #include "gen_cpp/Types_types.h"
+#include "runtime/chunk_helper.h"
 #include "runtime/descriptors.h"
 #include "runtime/runtime_state.h"
 
@@ -140,7 +141,7 @@ Status IcebergDeleteBuilder::build_parquet(const TIcebergDeleteFile& delete_file
 
     while (true) {
         ASSIGN_OR_RETURN(ChunkPtr chunk,
-                         ChunkHelper::new_chunk_checked(slot_descriptors, _runtime_state->chunk_size()));
+                         RuntimeChunkHelper::new_chunk_checked(slot_descriptors, _runtime_state->chunk_size()));
 
         Status status = reader->get_next(&chunk);
         if (status.is_end_of_file()) {

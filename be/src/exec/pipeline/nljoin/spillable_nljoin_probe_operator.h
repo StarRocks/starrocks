@@ -24,6 +24,7 @@
 #include "exec/spill/executor.h"
 #include "exec/spill/spiller_factory.h"
 #include "runtime/runtime_state_fwd.h"
+#include "storage/chunk_helper.h"
 
 namespace starrocks::pipeline {
 

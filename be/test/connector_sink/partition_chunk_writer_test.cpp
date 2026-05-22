@@ -34,8 +34,8 @@
 #include "formats/file_writer.h"
 #include "formats/parquet/parquet_test_util/util.h"
 #include "formats/utils.h"
+#include "runtime/chunk_helper.h"
 #include "runtime/exec_env.h"
-#include "storage/chunk_helper.h"
 
 namespace starrocks::connector {
 namespace {
@@ -214,7 +214,7 @@ TEST_F(PartitionChunkWriterTest, buffer_partition_chunk_writer) {
         EXPECT_OK(partition_writer->init());
 
         // Create a chunk
-        ChunkPtr chunk = ChunkHelper::new_chunk(*tuple_desc, 1);
+        ChunkPtr chunk = RuntimeChunkHelper::new_chunk(*tuple_desc, 1);
         chunk->get_column_raw_ptr_by_index(0)->append_datum(Slice("aaa"));
 
         // Write chunk
@@ -285,7 +285,7 @@ TEST_F(PartitionChunkWriterTest, spill_partition_chunk_writer) {
     {
         writer_helper->reset();
         // Create a chunk
-        ChunkPtr chunk = ChunkHelper::new_chunk(*tuple_desc, 1);
+        ChunkPtr chunk = RuntimeChunkHelper::new_chunk(*tuple_desc, 1);
         chunk->get_column_raw_ptr_by_index(0)->append_datum(Slice("aaa"));
 
         // Write chunk
@@ -310,7 +310,7 @@ TEST_F(PartitionChunkWriterTest, spill_partition_chunk_writer) {
         status = Status::OK();
 
         // Create a chunk
-        ChunkPtr chunk = ChunkHelper::new_chunk(*tuple_desc, 1);
+        ChunkPtr chunk = RuntimeChunkHelper::new_chunk(*tuple_desc, 1);
         chunk->get_column_raw_ptr_by_index(0)->append_datum(Slice("aaa"));
 
         for (size_t i = 0; i < 3; ++i) {
@@ -420,7 +420,7 @@ TEST_F(PartitionChunkWriterTest, spill_writer_for_complex_types) {
         status = Status::OK();
 
         for (size_t i = 0; i < 3; ++i) {
-            ChunkPtr chunk = ChunkHelper::new_chunk(*tuple_desc, 4);
+            ChunkPtr chunk = RuntimeChunkHelper::new_chunk(*tuple_desc, 4);
 
             // Fill ARRAY<INT>
             {
@@ -587,7 +587,7 @@ TEST_F(PartitionChunkWriterTest, sort_column_asc) {
 
         for (size_t i = 0; i < 3; ++i) {
             // Create a chunk
-            ChunkPtr chunk = ChunkHelper::new_chunk(*tuple_desc, 3);
+            ChunkPtr chunk = RuntimeChunkHelper::new_chunk(*tuple_desc, 3);
             std::string suffix = std::to_string(3 - i);
             chunk->get_column_raw_ptr_by_index(0)->append_datum(Slice("ccc" + suffix));
             chunk->get_column_raw_ptr_by_index(0)->append_datum(Slice("bbb" + suffix));
@@ -630,7 +630,7 @@ TEST_F(PartitionChunkWriterTest, sort_column_asc) {
 
         for (size_t i = 0; i < 3; ++i) {
             // Create a chunk
-            ChunkPtr chunk = ChunkHelper::new_chunk(*tuple_desc, 3);
+            ChunkPtr chunk = RuntimeChunkHelper::new_chunk(*tuple_desc, 3);
             std::string suffix = std::to_string(3 - i);
             chunk->get_column_raw_ptr_by_index(0)->append_datum(Slice("ccc" + suffix));
             chunk->get_column_raw_ptr_by_index(0)->append_datum(Slice("bbb" + suffix));
@@ -742,7 +742,7 @@ TEST_F(PartitionChunkWriterTest, sort_column_desc) {
 
         for (size_t i = 0; i < 3; ++i) {
             // Create a chunk
-            ChunkPtr chunk = ChunkHelper::new_chunk(*tuple_desc, 3);
+            ChunkPtr chunk = RuntimeChunkHelper::new_chunk(*tuple_desc, 3);
             std::string suffix = std::to_string(3 - i);
             chunk->get_column_raw_ptr_by_index(0)->append_datum(Slice("ccc" + suffix));
             chunk->get_column_raw_ptr_by_index(0)->append_datum(Slice("bbb" + suffix));
@@ -785,7 +785,7 @@ TEST_F(PartitionChunkWriterTest, sort_column_desc) {
 
         for (size_t i = 0; i < 3; ++i) {
             // Create a chunk
-            ChunkPtr chunk = ChunkHelper::new_chunk(*tuple_desc, 3);
+            ChunkPtr chunk = RuntimeChunkHelper::new_chunk(*tuple_desc, 3);
             std::string suffix = std::to_string(3 - i);
             chunk->get_column_raw_ptr_by_index(0)->append_datum(Slice("ccc" + suffix));
             chunk->get_column_raw_ptr_by_index(0)->append_datum(Slice("bbb" + suffix));
@@ -898,7 +898,7 @@ TEST_F(PartitionChunkWriterTest, sort_multiple_columns) {
 
         for (size_t i = 0; i < 3; ++i) {
             // Create a chunk
-            ChunkPtr chunk = ChunkHelper::new_chunk(*tuple_desc, 3);
+            ChunkPtr chunk = RuntimeChunkHelper::new_chunk(*tuple_desc, 3);
             std::string suffix = std::to_string(3 - i);
             chunk->get_column_raw_ptr_by_index(0)->append_datum(Slice("ccc" + suffix));
             chunk->get_column_raw_ptr_by_index(1)->append_datum(Slice("222" + suffix));
@@ -1164,7 +1164,7 @@ TEST_F(PartitionChunkWriterTest, test_connector_sink_profile_metrics) {
 
         // Write some chunks
         for (size_t i = 0; i < 3; ++i) {
-            ChunkPtr chunk = ChunkHelper::new_chunk(*tuple_desc, 3);
+            ChunkPtr chunk = RuntimeChunkHelper::new_chunk(*tuple_desc, 3);
             chunk->get_column_raw_ptr_by_index(0)->append_datum(Slice("ccc" + std::to_string(i)));
             chunk->get_column_raw_ptr_by_index(0)->append_datum(Slice("bbb" + std::to_string(i)));
             chunk->get_column_raw_ptr_by_index(0)->append_datum(Slice("aaa" + std::to_string(i)));
@@ -1264,7 +1264,7 @@ TEST_F(PartitionChunkWriterTest, test_buffer_partition_writer_profile_metrics) {
 
         // Write some chunks
         for (size_t i = 0; i < 2; ++i) {
-            ChunkPtr chunk = ChunkHelper::new_chunk(*tuple_desc, 3);
+            ChunkPtr chunk = RuntimeChunkHelper::new_chunk(*tuple_desc, 3);
             chunk->get_column_raw_ptr_by_index(0)->append_datum(Slice("data" + std::to_string(i)));
             chunk->get_column_raw_ptr_by_index(0)->append_datum(Slice("data" + std::to_string(i)));
             chunk->get_column_raw_ptr_by_index(0)->append_datum(Slice("data" + std::to_string(i)));

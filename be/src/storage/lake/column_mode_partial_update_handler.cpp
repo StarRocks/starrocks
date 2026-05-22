@@ -19,6 +19,7 @@
 #include "base/time/time.h"
 #include "base/utility/defer_op.h"
 #include "column/chunk_factory.h"
+#include "column/chunk_schema_helper.h"
 #include "common/config_compaction_fwd.h"
 #include "common/config_primary_key_fwd.h"
 #include "common/config_rowset_fwd.h"
@@ -302,7 +303,7 @@ static std::vector<T> append_fixed_batch(const std::vector<T>& base_array, size_
 }
 
 static void padding_char_columns(const Schema& schema, const TabletSchemaCSPtr& tschema, Chunk* chunk) {
-    auto char_field_indexes = ChunkHelper::get_char_field_indexes(schema);
+    auto char_field_indexes = ChunkSchemaHelper::get_char_field_indexes(schema);
     ChunkHelper::padding_char_columns(char_field_indexes, schema, tschema, chunk);
 }
 

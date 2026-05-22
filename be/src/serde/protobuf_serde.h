@@ -27,7 +27,8 @@
 
 namespace starrocks {
 class RowDescriptor;
-}
+class Schema;
+} // namespace starrocks
 
 namespace starrocks::serde {
 
@@ -55,6 +56,8 @@ public:
     //  - is_consts()
     static StatusOr<Chunk> deserialize(const RowDescriptor& row_desc, const ChunkPB& chunk_pb,
                                        const int encode_level = 0);
+
+    static StatusOr<Chunk> deserialize_with_schema(const Schema& schema, std::string_view buff);
 };
 
 struct ProtobufChunkMeta {

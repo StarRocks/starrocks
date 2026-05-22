@@ -30,6 +30,7 @@
 #include "exec/spill/serde.h"
 #include "exec/spill/spiller.h"
 #include "fs/fs.h"
+#include "storage/chunk_helper.h"
 #include "storage/lake/general_tablet_writer.h"
 #include "storage/lake/pk_tablet_writer.h"
 #include "storage/lake/tablet_metadata.h"

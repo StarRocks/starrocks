@@ -26,6 +26,7 @@
 #include "fs/fs_factory.h"
 #include "runtime/runtime_state.h"
 #include "script/script.h"
+#include "storage/chunk_helper.h"
 #include "storage/local_primary_key_recover.h"
 #include "storage/primary_key_dump.h"
 #include "storage/rowset/rowset_meta_manager.h"

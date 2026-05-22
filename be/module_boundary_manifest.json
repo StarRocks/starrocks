@@ -231,6 +231,7 @@
       "excluded_globs": [
         "be/src/column/chunk.*",
         "be/src/column/chunk_factory.*",
+        "be/src/column/chunk_schema_helper.*",
         "be/src/column/chunk_extra_data.*",
         "be/src/column/chunk_slice.*",
         "be/src/column/column_access_path.*",

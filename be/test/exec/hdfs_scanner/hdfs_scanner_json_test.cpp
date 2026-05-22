@@ -20,8 +20,8 @@
 #include "base/testutil/assert.h"
 #include "formats/parquet/parquet_test_util/util.h"
 #include "fs/fs_factory.h"
+#include "runtime/chunk_helper.h"
 #include "runtime/runtime_state.h"
-#include "storage/chunk_helper.h"
 
 namespace starrocks {
 class HdfsScannerJsonReaderTest : public testing::Test {
@@ -107,7 +107,7 @@ TEST_F(HdfsScannerJsonReaderTest, test_read_all_rows) {
     HdfsJsonReader json_reader(_file.get(), tuple_desc->slots());
     ASSERT_OK(json_reader.init());
 
-    auto chunk = ChunkHelper::new_chunk(*tuple_desc, 0);
+    auto chunk = RuntimeChunkHelper::new_chunk(*tuple_desc, 0);
     EXPECT_STATUS(Status::EndOfFile(""), json_reader.next_record(chunk.get(), 4096));
     ASSERT_EQ(chunk->num_rows(), 10);
     ASSERT_EQ(chunk->get_column_by_slot_id(0)->debug_string(), "[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]");
@@ -124,7 +124,7 @@ TEST_F(HdfsScannerJsonReaderTest, test_read_more_rows) {
     HdfsJsonReader json_reader(_file.get(), tuple_desc->slots());
     ASSERT_OK(json_reader.init());
 
-    auto chunk = ChunkHelper::new_chunk(*tuple_desc, 0);
+    auto chunk = RuntimeChunkHelper::new_chunk(*tuple_desc, 0);
     ASSERT_OK(json_reader.next_record(chunk.get(), 4));
     ASSERT_EQ(chunk->num_rows(), 4);
     ASSERT_EQ(chunk->get_column_by_slot_id(0)->debug_string(), "[1, 2, 3, 4]");
@@ -152,7 +152,7 @@ TEST_F(HdfsScannerJsonReaderTest, test_read_large_file) {
     HdfsJsonReader json_reader(_file.get(), tuple_desc->slots());
     ASSERT_OK(json_reader.init());
 
-    auto chunk = ChunkHelper::new_chunk(*tuple_desc, 0);
+    auto chunk = RuntimeChunkHelper::new_chunk(*tuple_desc, 0);
     ASSERT_OK(json_reader.next_record(chunk.get(), 50));
     ASSERT_EQ(chunk->num_rows(), 50);
 
@@ -184,7 +184,7 @@ TEST_F(HdfsScannerJsonReaderTest, test_read_large_rows) {
     HdfsJsonReader json_reader(_file.get(), tuple_desc->slots());
     ASSERT_OK(json_reader.init());
 
-    auto chunk = ChunkHelper::new_chunk(*tuple_desc, 0);
+    auto chunk = RuntimeChunkHelper::new_chunk(*tuple_desc, 0);
     EXPECT_STATUS(Status::NotSupported(""), json_reader.next_record(chunk.get(), 50));
 }
 
@@ -197,7 +197,7 @@ TEST_F(HdfsScannerJsonReaderTest, test_read_wrong_order_json) {
     HdfsJsonReader json_reader(_file.get(), tuple_desc->slots());
     ASSERT_OK(json_reader.init());
 
-    auto chunk = ChunkHelper::new_chunk(*tuple_desc, 0);
+    auto chunk = RuntimeChunkHelper::new_chunk(*tuple_desc, 0);
     EXPECT_STATUS(Status::EndOfFile(""), json_reader.next_record(chunk.get(), 50));
     ASSERT_EQ(chunk->num_rows(), 8);
     ASSERT_EQ(chunk->get_column_by_slot_id(0)->debug_string(), "[1, 2, 3, 4, 5, NULL, 7, NULL]");

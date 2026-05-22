@@ -15,19 +15,26 @@
 #pragma once
 
 #include <cstddef>
+#include <vector>
 
-#include "column/chunk.h"
-#include "common/statusor.h"
+#include "column/vectorized_fwd.h"
+#include "common/column_id.h"
 
 namespace starrocks {
 
 class Schema;
 
-class CheckedChunkFactory {
+class ChunkSchemaHelper {
 public:
-    static StatusOr<Chunk*> new_chunk_pooled_checked(const Schema& schema, size_t n);
-    static StatusOr<ChunkUniquePtr> new_chunk_checked(const Schema& schema, size_t n);
-    static StatusOr<MutableChunkPtr> new_mutable_chunk_checked(const Schema& schema, size_t n);
+    // Get non nullable version schema
+    static SchemaPtr get_non_nullable_schema(const SchemaPtr& schema, const std::vector<int>* keys);
+
+    static ColumnId max_column_id(const Schema& schema);
+
+    // Get char column indexes
+    static std::vector<size_t> get_char_field_indexes(const Schema& schema);
+
+    static ChunkPtr createDummyChunk();
 };
 
 } // namespace starrocks

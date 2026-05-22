@@ -27,6 +27,7 @@
 #include "base/utility/pretty_printer.h"
 #include "base/utility/scoped_cleanup.h"
 #include "column/chunk_factory.h"
+#include "column/chunk_schema_helper.h"
 #include "common/config_compaction_fwd.h"
 #include "common/config_exec_fwd.h"
 #include "common/config_primary_key_fwd.h"
@@ -4425,7 +4426,7 @@ Status TabletUpdates::_convert_from_base_rowset(const Schema& base_schema, const
                                                 const std::unique_ptr<RowsetWriter>& rowset_writer) {
     ChunkPtr base_chunk = ChunkFactory::new_chunk(base_schema, config::vector_chunk_size);
     ChunkPtr new_chunk = ChunkFactory::new_chunk(new_schema, config::vector_chunk_size);
-    auto char_field_indexes = ChunkHelper::get_char_field_indexes(new_schema);
+    auto char_field_indexes = ChunkSchemaHelper::get_char_field_indexes(new_schema);
 
     std::unique_ptr<MemPool> mem_pool(new MemPool());
 
@@ -4531,7 +4532,7 @@ Status TabletUpdates::reorder_from(const std::shared_ptr<Tablet>& base_tablet, i
         cids.push_back(i);
     }
     Schema new_schema = ChunkHelper::convert_schema(tschema, cids);
-    auto char_field_indexes = ChunkHelper::get_char_field_indexes(new_schema);
+    auto char_field_indexes = ChunkSchemaHelper::get_char_field_indexes(new_schema);
     for (int i = 0; i < src_rowsets.size(); i++) {
         const auto& src_rowset = src_rowsets[i];
 

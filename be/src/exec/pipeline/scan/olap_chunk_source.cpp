@@ -47,7 +47,7 @@
 #include "gen_cpp/RuntimeProfile_types.h"
 #include "gutil/map_util.h"
 #include "io/core/io_profiler.h"
-#include "runtime/checked_chunk_factory.h"
+#include "runtime/chunk_helper.h"
 #include "runtime/current_thread.h"
 #include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
@@ -631,8 +631,8 @@ Status OlapChunkSource::_init_olap_reader(RuntimeState* runtime_state) {
 }
 
 Status OlapChunkSource::_read_chunk(RuntimeState* state, ChunkPtr* chunk) {
-    ASSIGN_OR_RETURN(auto chunk_ptr, CheckedChunkFactory::new_chunk_pooled_checked(_prj_iter->output_schema(),
-                                                                                   _runtime_state->chunk_size()));
+    ASSIGN_OR_RETURN(auto chunk_ptr, RuntimeChunkHelper::new_chunk_pooled_checked(_prj_iter->output_schema(),
+                                                                                  _runtime_state->chunk_size()));
     chunk->reset(chunk_ptr);
     auto scope = IOProfiler::scope(IOProfiler::TAG_QUERY, _tablet->tablet_id());
     return _read_chunk_from_storage(_runtime_state, (*chunk).get());
