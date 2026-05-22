@@ -147,7 +147,10 @@ Status FlatJsonColumnWriter::_flat_column(MutableColumns& json_datas) {
         }
         RETURN_IF_ERROR(_write_flat_column());
         _flat_columns.clear();
-        col->resize_uninitialized(0); // release after write
+    }
+    // fallback when all flat columns written
+    for (auto& col : json_datas) {
+        col->resize_uninitialized(0);
     }
     return Status::OK();
 }
