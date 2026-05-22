@@ -422,6 +422,22 @@ public class ConnectContextTest {
     }
 
     @Test
+    public void testOnQueryFinished_clearsListeners() {
+        ConnectContext ctx = new ConnectContext(connection);
+
+        ConnectContext.Listener listener = Mockito.mock(ConnectContext.Listener.class);
+        ctx.registerListener(listener);
+
+        // First call
+        ctx.onQueryFinished();
+        Mockito.verify(listener, Mockito.times(1)).onQueryFinished(ctx);
+
+        // Second call - listener should not be called again (cleared after first call)
+        ctx.onQueryFinished();
+        Mockito.verify(listener, Mockito.times(1)).onQueryFinished(ctx);
+    }
+
+    @Test
     public void testOnQueryFinished_withoutListeners() {
         ConnectContext ctx = new ConnectContext(connection);
 
@@ -671,5 +687,13 @@ public class ConnectContextTest {
         ctx.setGlobalStateMgr(globalStateMgr);
 
         Assertions.assertThrows(DdlException.class, () -> ctx.changeCatalogDb("nonexistent"));
+    }
+    @Test
+    public void testOnQueryFinished_getCNGroupNameFails(@Mocked WarehouseManager warehouseManager) {
+        ConnectContext ctx = new ConnectContext(connection);
+        ctx.setGlobalStateMgr(globalStateMgr);
+
+        // Should not throw exception even if getting CN group name fails
+        Assertions.assertDoesNotThrow(() -> ctx.onQueryFinished());
     }
 }
