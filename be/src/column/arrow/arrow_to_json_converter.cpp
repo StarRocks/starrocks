@@ -36,7 +36,9 @@ using namespace arrow;
 using ArrowStatus = Status;
 
 // Convert multi-row Array to JsonColumn
-static Status convert_multi_arrow_list(const ListArray* array, JsonColumn* output, size_t array_start_idx,
+// ListArrayT is one of arrow::ListArray / LargeListArray / FixedSizeListArray.
+template <typename ListArrayT>
+static Status convert_multi_arrow_list(const ListArrayT* array, JsonColumn* output, size_t array_start_idx,
                                        size_t num_elements);
 static Status convert_multi_arrow_struct(const StructArray* array, JsonColumn* output, size_t array_start_idx,
                                          size_t num_elements);
@@ -46,7 +48,8 @@ static Status convert_multi_arrow_primitive(const Array* array, JsonColumn* outp
                                             size_t num_elements);
 
 // Convert a single row in Array to json
-static Status convert_single_arrow_list(const ListArray* array, int offset, vpack::Builder* builder);
+template <typename ListArrayT>
+static Status convert_single_arrow_list(const ListArrayT* array, int offset, vpack::Builder* builder);
 static Status convert_single_arrow_struct(const StructArray* array, int offset, vpack::Builder* builder);
 static Status convert_single_arrow_map(const MapArray* array, int offset, vpack::Builder* builder);
 
@@ -109,7 +112,8 @@ static bool inline is_physical_signed(Type::type type) {
     return false;
 }
 
-static Status convert_multi_arrow_list(const ListArray* array, JsonColumn* output, size_t array_start_idx,
+template <typename ListArrayT>
+static Status convert_multi_arrow_list(const ListArrayT* array, JsonColumn* output, size_t array_start_idx,
                                        size_t num_elements) {
     for (int i = array_start_idx; i < array_start_idx + num_elements; i++) {
         vpack::Builder builder;
@@ -201,7 +205,8 @@ static Status convert_multi_arrow_primitive(const Array* array, JsonColumn* outp
     return Status::OK();
 }
 
-static Status convert_single_arrow_list(const ListArray* array, int offset, vpack::Builder* builder) {
+template <typename ListArrayT>
+static Status convert_single_arrow_list(const ListArrayT* array, int offset, vpack::Builder* builder) {
     std::shared_ptr<Array> slice = array->value_slice(offset);
     return convert_arrow_to_json_array(slice.get(), array->value_type()->id(), builder);
 }
@@ -295,6 +300,19 @@ static Status convert_arrow_to_json_element(const Array* array, Type::type type_
         builder->add(field_name, sub_builder.slice());
         break;
     }
+    case Type::LARGE_LIST: {
+        vpack::Builder sub_builder;
+        RETURN_IF_ERROR(convert_single_arrow_list(down_cast<const LargeListArray*>(array), offset, &sub_builder));
+        builder->add(field_name, sub_builder.slice());
+        break;
+    }
+    case Type::FIXED_SIZE_LIST: {
+        vpack::Builder sub_builder;
+        RETURN_IF_ERROR(
+                convert_single_arrow_list(down_cast<const FixedSizeListArray*>(array), offset, &sub_builder));
+        builder->add(field_name, sub_builder.slice());
+        break;
+    }
     case Type::MAP: {
         vpack::Builder sub_builder;
         RETURN_IF_ERROR(convert_single_arrow_map(down_cast<const MapArray*>(array), offset, &sub_builder));
@@ -335,7 +353,25 @@ static Status convert_arrow_to_json_array(const Array* array, Type::type value_t
         break;
     }
     case Type::LIST: {
-        auto real_array = down_cast<const ListArray*>(array);
+        const auto* real_array = down_cast<const ListArray*>(array);
+        builder->openArray();
+        for (int i = 0; i < array->length(); i++) {
+            RETURN_IF_ERROR(convert_single_arrow_list(real_array, i, builder));
+        }
+        builder->close();
+        break;
+    }
+    case Type::LARGE_LIST: {
+        const auto* real_array = down_cast<const LargeListArray*>(array);
+        builder->openArray();
+        for (int i = 0; i < array->length(); i++) {
+            RETURN_IF_ERROR(convert_single_arrow_list(real_array, i, builder));
+        }
+        builder->close();
+        break;
+    }
+    case Type::FIXED_SIZE_LIST: {
+        const auto* real_array = down_cast<const FixedSizeListArray*>(array);
         builder->openArray();
         for (int i = 0; i < array->length(); i++) {
             RETURN_IF_ERROR(convert_single_arrow_list(real_array, i, builder));
@@ -382,11 +418,15 @@ static Status convert_arrow_to_json_array(const BooleanArray* array, vpack::Buil
 // Convert array to a json column
 // Support all arrow types, including primitive types and nested data types
 Status convert_arrow_to_json(const Array* array, JsonColumn* output, size_t array_start_idx, size_t num_elements) {
-    // std::cerr << "convert_arrow_to_json: " << array->type()->ToString() << std::endl;
     auto type = array->type_id();
     switch (type) {
     case Type::LIST:
         return convert_multi_arrow_list(down_cast<const ListArray*>(array), output, array_start_idx, num_elements);
+    case Type::LARGE_LIST:
+        return convert_multi_arrow_list(down_cast<const LargeListArray*>(array), output, array_start_idx, num_elements);
+    case Type::FIXED_SIZE_LIST:
+        return convert_multi_arrow_list(down_cast<const FixedSizeListArray*>(array), output, array_start_idx,
+                                        num_elements);
     case Type::STRUCT:
         return convert_multi_arrow_struct(down_cast<const StructArray*>(array), output, array_start_idx, num_elements);
     case Type::MAP:
