@@ -368,11 +368,6 @@ set(EXEC_NON_PIPELINE_FILES
     write_combined_txn_log.cpp
     mysql_scanner.cpp
     cache_stats_scanner.cpp
-    es/es_predicate.cpp
-    es/es_scan_reader.cpp
-    es/es_scroll_query.cpp
-    es/es_query_builder.cpp
-    es/es_scroll_parser.cpp
     local_file_writer.cpp
     plain_text_builder.cpp
     agg_runtime_filter_builder.cpp

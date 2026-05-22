@@ -17,6 +17,7 @@
 
 #include "base/system/errno.h"
 
+#include <cerrno>
 #include <cstring>
 
 #include "gutil/dynamic_annotations.h"
