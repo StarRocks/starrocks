@@ -201,10 +201,12 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 ### avro_use_jni_reader
 
 * **作用域**: Session
-* **描述**: 控制 StarRocks 在扫描 Hive 等外部 Catalog 中的 Avro 数据时，是否使用基于 JNI 的 Avro Reader。启用后（`true`），FE 会在 Avro scan range 上设置该会话变量，BE 会优先选择 `HdfsAvroScanner`，而不是原生 Avro 扫描路径。当前该变量主要用于兼容性兜底。
+* **描述**: 控制 StarRocks 在扫描 Hive 等外部 Catalog 中的 Avro 数据时，是否使用基于 JNI 的 Avro Reader。启用后（`true`），StarRocks 会使用 JNI Reader；关闭后（`false`），StarRocks 会使用原生 Avro Reader。当前该变量主要用于兼容性兜底。该变量默认关闭，因此默认会使用原生 Avro Reader。
 
-  当前限制：`CHAR(n)` 列在 JNI 与非 JNI Avro Reader 之间并不完全兼容。对于写入 `CHAR(10)` 列的 Avro 值 `Char`，当前原生 Reader 会保留未补空格的值，而不会返回带 6 个尾部空格的 `Char`；JNI Reader 的行为可能不同。为了避免切换 `avro_use_jni_reader` 后结果不一致，当前不建议依赖 `CHAR(n)` 的补空格语义；如条件允许，建议优先使用 `VARCHAR`。
-* **默认值**: `true`
+  当前说明：
+  - 原生 Avro Reader 与 JNI Reader 在 `CHAR(n)` 语义上已经对齐。相关对齐见 [#73579](https://github.com/StarRocks/starrocks/pull/73579)，因此当前 native 与 JNI 行为在这一点上保持一致。
+  - 原生 Avro Reader 目前仅支持 `null`、`deflate` 和 `snappy` 这几种 codec，不支持 `bzip2` 等其他 codec。如果需要处理原生 Reader 不支持的 codec，请手动启用 JNI Reader。
+* **默认值**: `false`
 * **数据类型**: boolean
 * **引入版本**: v4.1.1
 
