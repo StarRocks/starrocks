@@ -54,10 +54,21 @@ class PercentileApproxAggregateFunctionBase
 protected:
     static constexpr double MIN_COMPRESSION = 2048.0;
     static constexpr double MAX_COMPRESSION = 10000.0;
-    // Used only as a rolling-upgrade fallback when an old FE ships a legacy
-    // arity (without the canonicalized compression literal). For new-FE calls
-    // FunctionAnalyzer is the single source of truth and DEFAULT lives there.
+    // Kept on BE for rolling upgrades from pre-canonicalization FEs. For
+    // new-FE calls FunctionAnalyzer is the single source of truth and DEFAULT
+    // lives there.
     static constexpr double DEFAULT_COMPRESSION_FACTOR = 10000.0;
+
+    static double clamp_compression_factor(double compression) {
+        if (LIKELY(std::isfinite(compression) && compression >= MIN_COMPRESSION && compression <= MAX_COMPRESSION)) {
+            return compression;
+        }
+        // Old FEs can still ship explicit compression literals without the
+        // analyzer-side [MIN, MAX] clamp during a rolling upgrade.
+        LOG(WARNING) << "Compression factor out of range. Using default compression factor: "
+                     << DEFAULT_COMPRESSION_FACTOR;
+        return DEFAULT_COMPRESSION_FACTOR;
+    }
 
 public:
     virtual double get_compression_factor(FunctionContext* ctx) const = 0;
@@ -107,9 +118,9 @@ public:
 class PercentileApproxAggregateFunction : public PercentileApproxAggregateFunctionBase {
 public:
     double get_compression_factor(FunctionContext* ctx) const override {
-        // FE FunctionAnalyzer is the single source of truth: an explicit
-        // compression literal is always injected (default or user-supplied)
-        // and clamped to [MIN, MAX]. The DCHECKs document that contract.
+        // FE FunctionAnalyzer is the single source of truth for new-FE calls:
+        // an explicit compression literal is always injected (default or
+        // user-supplied) and clamped to [MIN, MAX].
         //
         // Rolling-upgrade fallback: during the upgrade window BEs are upgraded
         // before FEs, so an old FE may still ship 2-arg percentile_approx
@@ -121,10 +132,7 @@ public:
             return DEFAULT_COMPRESSION_FACTOR;
         }
         double compression = ColumnHelper::get_const_value<TYPE_DOUBLE>(ctx->get_constant_column(2));
-        DCHECK(std::isfinite(compression));
-        DCHECK_GE(compression, MIN_COMPRESSION);
-        DCHECK_LE(compression, MAX_COMPRESSION);
-        return compression;
+        return clamp_compression_factor(compression);
     }
 
     void update(FunctionContext* ctx, const Column** columns, AggDataPtr state, size_t row_num) const override {
@@ -187,7 +195,8 @@ class PercentileApproxWeightedAggregateFunction : public PercentileApproxAggrega
 public:
     // SplitAggregateRule passes the const args to merge phase aggregator for performance.
     // Compression parameter is always the last constant parameter (if provided).
-    // FE FunctionAnalyzer pre-clamps the literal to [MIN, MAX] or DEFAULT.
+    // FE FunctionAnalyzer pre-clamps the literal to [MIN, MAX] or DEFAULT for
+    // new-FE calls.
     double get_compression_factor(FunctionContext* ctx) const override {
         // FE always injects the compression argument; it is the last const arg.
         // SplitAggregateRule passes const args verbatim into the merge phase
@@ -209,10 +218,7 @@ public:
             auto const_col = ctx->get_constant_column(i);
             if (const_col != nullptr) {
                 double compression = ColumnHelper::get_const_value<TYPE_DOUBLE>(const_col);
-                DCHECK(std::isfinite(compression));
-                DCHECK_GE(compression, MIN_COMPRESSION);
-                DCHECK_LE(compression, MAX_COMPRESSION);
-                return compression;
+                return clamp_compression_factor(compression);
             }
         }
         DCHECK(false) << "FE invariant broken: percentile_approx_weighted reached BE "
