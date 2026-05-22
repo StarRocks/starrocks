@@ -122,6 +122,22 @@ public class RestoreClusterSnapshotMgrTest {
                     throws StarRocksException {
                 return;
             }
+
+            @Mock
+            public boolean checkPathExist(String remotePath, Map<String, String> properties) throws StarRocksException {
+                return true;
+            }
+
+            @Mock
+            public void writeFile(byte[] data, String destFilePath, Map<String, String> properties)
+                    throws StarRocksException {
+                // no-op: simulate successful write for access check
+            }
+
+            @Mock
+            public void deletePath(String path, Map<String, String> properties) throws StarRocksException {
+                // no-op: simulate successful cleanup of temp access-check file
+            }
         };
 
         new MockUp<Storage>() {
