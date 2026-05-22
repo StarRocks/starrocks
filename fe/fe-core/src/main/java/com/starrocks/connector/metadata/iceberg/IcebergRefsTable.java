@@ -40,7 +40,7 @@ public class IcebergRefsTable extends MetadataTable {
 
     public static IcebergRefsTable create(String catalogName, String originDb, String originTable) {
         return new IcebergRefsTable(catalogName,
-                ConnectorTableId.CONNECTOR_ID_GENERATOR.getNextId().asInt(),
+                ConnectorTableId.CONNECTOR_ID_GENERATOR.getNextId().asLong(),
                 TABLE_NAME,
                 Table.TableType.METADATA,
                 builder()

@@ -68,7 +68,7 @@ public class IcebergPartitionsTable extends MetadataTable {
         }
 
         return new IcebergPartitionsTable(catalogName,
-                ConnectorTableId.CONNECTOR_ID_GENERATOR.getNextId().asInt(),
+                ConnectorTableId.CONNECTOR_ID_GENERATOR.getNextId().asLong(),
                 TABLE_NAME,
                 Table.TableType.METADATA,
                 builder.column("record_count", createType(PrimitiveType.BIGINT))

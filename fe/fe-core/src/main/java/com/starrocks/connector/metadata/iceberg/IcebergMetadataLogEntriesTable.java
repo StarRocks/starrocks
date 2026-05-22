@@ -41,7 +41,7 @@ public class IcebergMetadataLogEntriesTable extends MetadataTable {
 
     public static IcebergMetadataLogEntriesTable create(String catalogName, String originDb, String originTable) {
         return new IcebergMetadataLogEntriesTable(catalogName,
-                ConnectorTableId.CONNECTOR_ID_GENERATOR.getNextId().asInt(),
+                ConnectorTableId.CONNECTOR_ID_GENERATOR.getNextId().asLong(),
                 TABLE_NAME,
                 Table.TableType.METADATA,
                 builder()

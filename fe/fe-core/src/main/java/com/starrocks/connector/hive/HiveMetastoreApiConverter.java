@@ -144,7 +144,7 @@ public class HiveMetastoreApiConverter {
         if (database == null || database.getName() == null) {
             throw new StarRocksConnectorException("Hive database [%s] doesn't exist");
         }
-        return new Database(ConnectorTableId.CONNECTOR_ID_GENERATOR.getNextId().asInt(), dbName.toLowerCase(),
+        return new Database(ConnectorTableId.CONNECTOR_ID_GENERATOR.getNextId().asLong(), dbName.toLowerCase(),
                 database.getLocationUri());
     }
 
@@ -162,7 +162,7 @@ public class HiveMetastoreApiConverter {
         validateHiveTableType(table.getTableType());
 
         HiveTable.Builder tableBuilder = HiveTable.builder()
-                .setId(ConnectorTableId.CONNECTOR_ID_GENERATOR.getNextId().asInt())
+                .setId(ConnectorTableId.CONNECTOR_ID_GENERATOR.getNextId().asLong())
                 .setTableName(table.getTableName())
                 .setCatalogName(catalogName)
                 .setResourceName(toResourceName(catalogName, "hive"))
@@ -299,11 +299,11 @@ public class HiveMetastoreApiConverter {
             TrinoViewDefinition trinoViewDefinition = GsonUtils.GSON.fromJson(new String(bytes),
                     TrinoViewDefinition.class);
             hiveViewText = trinoViewDefinition.getOriginalSql();
-            hiveView = new HiveView(ConnectorTableId.CONNECTOR_ID_GENERATOR.getNextId().asInt(), catalogName,
+            hiveView = new HiveView(ConnectorTableId.CONNECTOR_ID_GENERATOR.getNextId().asLong(), catalogName,
                     table.getDbName(), table.getTableName(), toFullSchemasForTrinoView(table, trinoViewDefinition),
                     hiveViewText, HiveView.Type.Trino);
         } else {
-            hiveView = new HiveView(ConnectorTableId.CONNECTOR_ID_GENERATOR.getNextId().asInt(), catalogName,
+            hiveView = new HiveView(ConnectorTableId.CONNECTOR_ID_GENERATOR.getNextId().asLong(), catalogName,
                     table.getDbName(), table.getTableName(), toFullSchemasForHiveTable(table),
                     table.getViewExpandedText(), HiveView.Type.Hive);
         }
@@ -342,7 +342,7 @@ public class HiveMetastoreApiConverter {
         List<String> partitionColumnNames = toPartitionColumnNamesForHudiTable(table, hudiTableConfig);
 
         HudiTable.Builder tableBuilder = HudiTable.builder()
-                .setId(ConnectorTableId.CONNECTOR_ID_GENERATOR.getNextId().asInt())
+                .setId(ConnectorTableId.CONNECTOR_ID_GENERATOR.getNextId().asLong())
                 .setTableName(table.getTableName())
                 .setCatalogName(catalogName)
                 .setResourceName(toResourceName(catalogName, "hudi"))

@@ -74,7 +74,7 @@ public class HiveMetastore implements IHiveMetastore {
     @Override
     public void createDb(String dbName, Map<String, String> properties) {
         String location = properties.getOrDefault(LOCATION_PROPERTY, "");
-        long dbId = ConnectorTableId.CONNECTOR_ID_GENERATOR.getNextId().asInt();
+        long dbId = ConnectorTableId.CONNECTOR_ID_GENERATOR.getNextId().asLong();
         Database database = new Database(dbId, dbName, location);
         client.createDatabase(HiveMetastoreApiConverter.toMetastoreApiDatabase(database));
     }

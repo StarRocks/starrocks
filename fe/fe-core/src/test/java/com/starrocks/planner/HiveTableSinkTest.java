@@ -63,7 +63,7 @@ public class HiveTableSinkTest {
     @Test
     public void testHiveTableSink(@Mocked CatalogConnector hiveConnector) {
         HiveTable.Builder builder = HiveTable.builder()
-                .setId(ConnectorTableId.CONNECTOR_ID_GENERATOR.getNextId().asInt())
+                .setId(ConnectorTableId.CONNECTOR_ID_GENERATOR.getNextId().asLong())
                 .setTableName("hive_table")
                 .setCatalogName("hive_catalog")
                 .setResourceName(toResourceName("hive_catalog", "hive"))

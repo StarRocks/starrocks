@@ -252,7 +252,7 @@ public class IcebergRESTCatalog implements IcebergCatalog {
     public Database getDB(ConnectContext context, String dbName) {
         try {
             Map<String, String> dbMeta = delegate.loadNamespaceMetadata(buildContext(context), convertDbNameToNamespace(dbName));
-            return new Database(CONNECTOR_ID_GENERATOR.getNextId().asInt(), dbName, dbMeta.get(LOCATION_PROPERTY));
+            return new Database(CONNECTOR_ID_GENERATOR.getNextId().asLong(), dbName, dbMeta.get(LOCATION_PROPERTY));
         } catch (RESTException re) {
             LOG.error("Failed to get database using REST Catalog, for dbName {}", dbName, re);
             throw new StarRocksConnectorException("Failed to get database using REST Catalog",

@@ -178,7 +178,7 @@ public class KuduMetadata implements ConnectorMetadata {
         if (!schemaEmulationEnabled) {
             if (DEFAULT_SCHEMA.equals(dbName)) {
                 return databases.computeIfAbsent(DEFAULT_SCHEMA,
-                        d -> new Database(CONNECTOR_ID_GENERATOR.getNextId().asInt(), d));
+                        d -> new Database(CONNECTOR_ID_GENERATOR.getNextId().asLong(), d));
             }
             return null;
         }
@@ -189,7 +189,7 @@ public class KuduMetadata implements ConnectorMetadata {
                 return schemaTable != null && dbName.equals(schemaTable.first);
             })) {
                 return databases.computeIfAbsent(dbName,
-                        d -> new Database(CONNECTOR_ID_GENERATOR.getNextId().asInt(), d));
+                        d -> new Database(CONNECTOR_ID_GENERATOR.getNextId().asLong(), d));
             }
             LOG.error("Kudu database {}.{} done not exist.", catalogName, dbName);
             return null;

@@ -14,53 +14,46 @@
 
 package com.starrocks.connector.metadata.iceberg;
 
-import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.catalog.Column;
-import com.starrocks.catalog.MapType;
-import com.starrocks.catalog.PrimitiveType;
-import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
 import com.starrocks.connector.ConnectorTableId;
 import com.starrocks.connector.metadata.MetadataTable;
 import com.starrocks.connector.metadata.MetadataTableType;
+import com.starrocks.planner.DescriptorTable;
 import com.starrocks.thrift.THdfsTable;
 import com.starrocks.thrift.TTableDescriptor;
 import com.starrocks.thrift.TTableType;
+import com.starrocks.type.VarcharType;
 
 import java.util.List;
 
 import static com.starrocks.connector.metadata.TableMetaMetadata.METADATA_DB_NAME;
 
-public class IcebergSnapshotsTable extends MetadataTable {
-    public static final String TABLE_NAME = "iceberg_snapshots_table";
+public class IcebergPropertiesTable extends MetadataTable {
+    public static final String TABLE_NAME = "iceberg_properties_table";
 
-    public IcebergSnapshotsTable(String catalogName, long id, String name, TableType type, List<Column> baseSchema,
-                               String originDb, String originTable, MetadataTableType metadataTableType) {
+    public IcebergPropertiesTable(String catalogName, long id, String name, TableType type, List<Column> baseSchema,
+                                  String originDb, String originTable, MetadataTableType metadataTableType) {
         super(catalogName, id, name, type, baseSchema, originDb, originTable, metadataTableType);
     }
 
-    public static IcebergSnapshotsTable create(String catalogName, String originDb, String originTable) {
-        return new IcebergSnapshotsTable(catalogName,
+    public static IcebergPropertiesTable create(String catalogName, String originDb, String originTable) {
+        return new IcebergPropertiesTable(catalogName,
                 ConnectorTableId.CONNECTOR_ID_GENERATOR.getNextId().asLong(),
                 TABLE_NAME,
                 Table.TableType.METADATA,
                 builder()
-                        .column("committed_at", ScalarType.createType(PrimitiveType.DATETIME))
-                        .column("snapshot_id", ScalarType.createType(PrimitiveType.BIGINT))
-                        .column("parent_id", ScalarType.createType(PrimitiveType.BIGINT))
-                        .column("operation", ScalarType.createType(PrimitiveType.VARCHAR))
-                        .column("manifest_list", ScalarType.createType(PrimitiveType.VARCHAR))
-                        .column("summary", new MapType(
-                                ScalarType.createType(PrimitiveType.VARCHAR), ScalarType.createType(PrimitiveType.VARCHAR)))
+                        .column("key", VarcharType.VARCHAR)
+                        .column("value", VarcharType.VARCHAR)
                         .build(),
                 originDb,
                 originTable,
-                MetadataTableType.SNAPSHOTS);
+                MetadataTableType.PROPERTIES);
     }
 
     @Override
     public TTableDescriptor toThrift(List<DescriptorTable.ReferencedPartitionInfo> partitions) {
-        TTableDescriptor tTableDescriptor = new TTableDescriptor(getId(), TTableType.ICEBERG_SNAPSHOTS_TABLE,
+        TTableDescriptor tTableDescriptor = new TTableDescriptor(getId(), TTableType.ICEBERG_PROPERTIES_TABLE,
                 fullSchema.size(), 0, getName(), METADATA_DB_NAME);
         THdfsTable hdfsTable = buildThriftTable(fullSchema);
         tTableDescriptor.setHdfsTable(hdfsTable);

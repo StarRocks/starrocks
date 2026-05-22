@@ -186,7 +186,7 @@ public class HiveMetastoreOperations {
             tableType = HiveTable.HiveTableType.EXTERNAL_TABLE;
         }
         HiveTable.Builder builder = HiveTable.builder()
-                .setId(ConnectorTableId.CONNECTOR_ID_GENERATOR.getNextId().asInt())
+                .setId(ConnectorTableId.CONNECTOR_ID_GENERATOR.getNextId().asLong())
                 .setTableName(tableName)
                 .setCatalogName(catalogName)
                 .setResourceName(toResourceName(catalogName, "hive"))
