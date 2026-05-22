@@ -156,7 +156,6 @@ static Status convert_multi_arrow_primitive(const Array* array, JsonColumn* outp
         using ArrayType = TypeTraits<TypeClass>::ArrayType;                         \
         auto real_array = down_cast<const ArrayType*>(array);                       \
         for (size_t i = array_start_idx; i < array_start_idx + num_elements; i++) { \
-            vpack::Builder builder;                                                 \
             if (is_physical_signed(type)) {                                         \
                 JsonValue json = JsonValue::from_int(real_array->Value(i));         \
                 output->append(std::move(json));                                    \
@@ -180,7 +179,6 @@ static Status convert_multi_arrow_primitive(const Array* array, JsonColumn* outp
         auto real_array = down_cast<const BooleanArray*>(array);
         auto array_end_idx = std::min(array_start_idx + num_elements, static_cast<size_t>(array->length()));
         for (size_t i = array_start_idx; i < array_end_idx; i++) {
-            vpack::Builder builder;
             JsonValue json = JsonValue::from_bool(real_array->Value(i));
             output->append(std::move(json));
         }
@@ -190,7 +188,6 @@ static Status convert_multi_arrow_primitive(const Array* array, JsonColumn* outp
         auto real_array = down_cast<const StringArray*>(array);
         auto array_end_idx = std::min(array_start_idx + num_elements, static_cast<size_t>(array->length()));
         for (size_t i = array_start_idx; i < array_end_idx; i++) {
-            vpack::Builder builder;
             auto view = real_array->GetView(i);
             ASSIGN_OR_RETURN(auto json, JsonValue::parse_json_or_string({view.data(), view.length()}));
             output->append(std::move(json));
