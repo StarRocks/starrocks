@@ -1,0 +1,63 @@
+-- name: test_trim_mysql_syntax
+CREATE DATABASE IF NOT EXISTS test_trim_mysql_syntax_db;
+-- result:
+-- !result
+USE test_trim_mysql_syntax_db;
+-- result:
+-- !result
+SELECT TRIM('  bar   ');
+-- result:
+bar
+-- !result
+SELECT TRIM(BOTH FROM '  bar  ');
+-- result:
+bar
+-- !result
+SELECT TRIM(LEADING FROM '  bar');
+-- result:
+bar
+-- !result
+SELECT TRIM(TRAILING FROM 'bar  ');
+-- result:
+bar
+-- !result
+SELECT TRIM(BOTH 'x' FROM 'xxxbarxxx');
+-- result:
+bar
+-- !result
+SELECT TRIM(LEADING 'x' FROM 'xxxbarxxx');
+-- result:
+barxxx
+-- !result
+SELECT TRIM(TRAILING 'x' FROM 'xxxbarxxx');
+-- result:
+xxxbar
+-- !result
+SELECT TRIM('x' FROM 'xxxbarxxx');
+-- result:
+bar
+-- !result
+SELECT TRIM(TRAILING 'xyz' FROM 'barxxyz');
+-- result:
+barx
+-- !result
+SELECT TRIM(TRAILING 'xyz' FROM 'barxxyzxyz');
+-- result:
+barx
+-- !result
+SELECT TRIM(LEADING 'ab' FROM 'ababfoo');
+-- result:
+foo
+-- !result
+SELECT TRIM(BOTH 'ab' FROM 'abfooab');
+-- result:
+foo
+-- !result
+SELECT TRIM(BOTH '' FROM 'abc');
+-- result:
+abc
+-- !result
+SELECT leading FROM (SELECT 1 AS leading) t;
+-- result:
+1
+-- !result

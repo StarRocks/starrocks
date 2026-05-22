@@ -55,6 +55,53 @@ MySQL > SELECT trim("xxabcdxx", "x");
 +-----------------------+
 ```
 
+## 兼容 MySQL 的 `TRIM(... FROM ...)` 语法
+
+除了 `trim(str)` 和 `trim(str, characters)`，StarRocks 还支持 MySQL/SQL 标准的写法：
+
+```SQL
+TRIM([{BOTH | LEADING | TRAILING}] [remstr] FROM str)
+```
+
+- `BOTH`（省略说明符时的默认值）裁剪两端；`LEADING` 仅裁剪开头；`TRAILING` 仅裁剪结尾。
+- `remstr` 为可选的**字符串字面量**。若省略，则裁剪空格。
+- **`remstr` 作为一个完整的子串被反复移除**，而不是被当作字符集合。这一点与 `trim(str, characters)` 不同，后者的第二个参数是字符集合。
+
+```Plain Text
+MySQL > SELECT TRIM(LEADING 'x' FROM 'xxxbarxxx');
++------------------------------------+
+| TRIM(LEADING 'x' FROM 'xxxbarxxx') |
++------------------------------------+
+| barxxx                             |
++------------------------------------+
+
+MySQL > SELECT TRIM(TRAILING 'xyz' FROM 'barxxyzxyz');
++----------------------------------------+
+| TRIM(TRAILING 'xyz' FROM 'barxxyzxyz') |
++----------------------------------------+
+| barx                                   |
++----------------------------------------+
+
+MySQL > SELECT TRIM(BOTH 'ab' FROM 'abfooab');
++--------------------------------+
+| TRIM(BOTH 'ab' FROM 'abfooab') |
++--------------------------------+
+| foo                            |
++--------------------------------+
+```
+
+注意子串（`FROM`）写法与字符集合（逗号）写法的区别：
+
+```Plain Text
+-- 子串：将完整的 'xyz' 移除一次，得到 'barx'
+MySQL > SELECT TRIM(TRAILING 'xyz' FROM 'barxxyz');  -- 'barx'
+
+-- 字符集合：移除结尾处任意的 x/y/z，得到 'bar'
+MySQL > SELECT rtrim('barxxyz', 'xyz');              -- 'bar'
+```
+
+`FROM` 写法由内置函数 `trim_string(str, remstr)`、`ltrim_string(str, remstr)`、`rtrim_string(str, remstr)` 实现，这些函数也可直接调用。`remstr` 必须为常量字符串字面量。
+
 ## 相关文档
 
 - [ltrim](ltrim.md)

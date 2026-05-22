@@ -308,4 +308,67 @@ INSTANTIATE_TEST_SUITE_P(UnicodeWhitespace, StringFunctionTrimParamTest,
                                           " " + kOghamSpace + kHairSpace, "ab" + kHairSpace + "c"},
                                  // No matching trim characters leaves string unchanged
                                  TrimCase{"abc", " " + kOghamSpace + kHairSpace, "abc"}));
+
+TEST_F(StringFunctionTrimTest, trimStringSubstrTest) {
+    using TrimFn = StatusOr<ColumnPtr> (*)(FunctionContext*, const starrocks::Columns&);
+
+    auto run = [](TrimFn fn, const std::string& input, const std::string& remstr) -> std::string {
+        std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+        auto str_col = BinaryColumn::create();
+        str_col->append(input);
+        ColumnPtr remove_col = ColumnHelper::create_const_column<TYPE_VARCHAR>(remstr, 1);
+        Columns columns{std::move(str_col), std::move(remove_col)};
+        ctx->set_constant_columns(columns);
+        CHECK(StringFunctions::trim_string_prepare(ctx.get(), FunctionContext::FRAGMENT_LOCAL).ok());
+        auto res = fn(ctx.get(), columns);
+        CHECK(res.ok());
+        std::string out = ColumnHelper::cast_to_raw<TYPE_VARCHAR>(res.value())->get_slice(0).to_string();
+        CHECK(StringFunctions::trim_close(ctx.get(), FunctionContext::FRAGMENT_LOCAL).ok());
+        return out;
+    };
+
+    // Single-char remstr (substring == char-set here)
+    EXPECT_EQ("barxxx", run(&StringFunctions::ltrim_string, "xxxbarxxx", "x"));
+    EXPECT_EQ("bar", run(&StringFunctions::trim_string, "xxxbarxxx", "x"));
+    EXPECT_EQ("xxxbar", run(&StringFunctions::rtrim_string, "xxxbarxxx", "x"));
+
+    // Multi-char remstr: removed as a whole unit, repeatedly (the discriminators)
+    EXPECT_EQ("barx", run(&StringFunctions::rtrim_string, "barxxyz", "xyz"));
+    EXPECT_EQ("barx", run(&StringFunctions::rtrim_string, "barxxyzxyz", "xyz"));
+    EXPECT_EQ("foo", run(&StringFunctions::ltrim_string, "ababfoo", "ab"));
+    EXPECT_EQ("foo", run(&StringFunctions::trim_string, "abfooab", "ab"));
+
+    // Empty remstr: no-op
+    EXPECT_EQ("abc", run(&StringFunctions::trim_string, "abc", ""));
+
+    // remstr longer than input / no match
+    EXPECT_EQ("ab", run(&StringFunctions::ltrim_string, "ab", "abc"));
+    EXPECT_EQ("bar", run(&StringFunctions::trim_string, "bar", "x"));
+
+    // UTF-8 substring removed as a unit
+    EXPECT_EQ("abc", run(&StringFunctions::ltrim_string, "🙂🐶abc", "🙂🐶"));
+    EXPECT_EQ("abc", run(&StringFunctions::rtrim_string, "abc🙂🐶", "🙂🐶"));
+}
+
+TEST_F(StringFunctionTrimTest, trimStringPrepareErrorTest) {
+    {
+        // The 2nd parameter must be a constant literal
+        std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+        auto remove_col = BinaryColumn::create();
+        remove_col->append("ab");
+        ctx->set_constant_columns({nullptr, std::move(remove_col)});
+        Status st = StringFunctions::trim_string_prepare(ctx.get(), FunctionContext::FRAGMENT_LOCAL);
+        EXPECT_TRUE(st.is_invalid_argument());
+        EXPECT_EQ("Invalid argument: The second parameter of trim_string only accept literal value", st.to_string());
+    }
+    {
+        // The 2nd parameter must not be null
+        std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+        auto remove_col = ColumnHelper::create_const_null_column(1);
+        ctx->set_constant_columns({nullptr, std::move(remove_col)});
+        Status st = StringFunctions::trim_string_prepare(ctx.get(), FunctionContext::FRAGMENT_LOCAL);
+        EXPECT_TRUE(st.is_invalid_argument());
+        EXPECT_EQ("Invalid argument: The second parameter should not be null", st.to_string());
+    }
+}
 } // namespace starrocks
