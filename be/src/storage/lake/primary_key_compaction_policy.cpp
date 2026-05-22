@@ -238,6 +238,14 @@ StatusOr<std::vector<int64_t>> PrimaryCompactionPolicy::pick_rowset_indexes(
         double total_rows = 0.0;
         int64_t total_input_bytes = 0;
         int64_t input_segs = 0;
+        // Track the largest rowset size across the picked level. This is the
+        // size_overflow basis (not pick_level_ptr->compact_level), because
+        // pick_max_level may MERGE the top level with the second-largest level when the
+        // top is a single non-overlap rowset. After such a merge, compact_level retains
+        // the ORIGINAL top's level_size (e.g., 20 MB from L0), while the merged level
+        // actually contains 500 MB / 5 GB rowsets. Using compact_level directly inflates
+        // size_overflow by orders of magnitude and incorrectly forces compaction.
+        int64_t max_rowset_bytes = 0;
         auto rs_copy = pick_level_ptr->rowsets;
         while (!rs_copy.empty()) {
             const auto& r = rs_copy.top();
@@ -249,6 +257,7 @@ StatusOr<std::vector<int64_t>> PrimaryCompactionPolicy::pick_rowset_indexes(
             // is dominated by the raw byte count.
             total_input_bytes += static_cast<int64_t>(r.stat.bytes);
             input_segs += r.rowset_meta_ptr->segments_size();
+            max_rowset_bytes = std::max(max_rowset_bytes, static_cast<int64_t>(r.stat.bytes));
             rs_copy.pop();
         }
         const double delete_ratio = total_rows > 0 ? total_dels / total_rows : 0.0;
@@ -262,7 +271,10 @@ StatusOr<std::vector<int64_t>> PrimaryCompactionPolicy::pick_rowset_indexes(
         // forced compaction". Scales with level_size so it works uniformly across levels.
         double size_overflow = 0.0;
         if (!override_compact) {
-            const int64_t next_level_target = pick_level_ptr->compact_level *
+            // Use max_rowset_bytes from the actual picked level (which may have been
+            // merged across multiple size-tiered levels by pick_max_level), not the
+            // pick_level_ptr->compact_level field which can be stale post-merge.
+            const int64_t next_level_target = max_rowset_bytes *
                                               static_cast<int64_t>(config::size_tiered_level_multiple);
             if (next_level_target > 0) {
                 size_overflow = static_cast<double>(total_input_bytes) /
