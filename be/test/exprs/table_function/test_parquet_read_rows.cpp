@@ -88,9 +88,12 @@ protected:
 
         std::vector<std::string> type_names;
         for (auto& d : type_descs) type_names.push_back(d.debug_string());
-        ASSIGN_OR_RETURN(auto schema,
-                         parquet::ParquetBuildHelper::make_schema(
-                                 type_names, type_descs, std::vector<parquet::FileColumnId>(type_descs.size())));
+        auto schema_or = parquet::ParquetBuildHelper::make_schema(
+                type_names, type_descs, std::vector<parquet::FileColumnId>(type_descs.size()));
+        if (!schema_or.ok()) {
+            return Status::InternalError(strings::Substitute("make_schema failed: $0", schema_or.status().ToString()));
+        }
+        auto schema = schema_or.ValueOrDie();
         ASSIGN_OR_RETURN(auto file, FileSystem::Default()->new_writable_file(path));
         ASSIGN_OR_RETURN(auto properties,
                          parquet::ParquetBuildHelper::make_properties(parquet::ParquetBuilderOptions()));
