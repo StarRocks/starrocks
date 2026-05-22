@@ -57,8 +57,7 @@ TabletSchemaSPtr build_index_schema_from_source(const TabletSchema& source_schem
         schema->append_column(std::move(col));
         sort_key_idxes.push_back(static_cast<ColumnId>(i));
     }
-    TabletColumn pos_col(STORAGE_AGGREGATE_NONE, TYPE_BIGINT, /*is_nullable=*/false, next_unique_id++,
-                        sizeof(int64_t));
+    TabletColumn pos_col(STORAGE_AGGREGATE_NONE, TYPE_BIGINT, /*is_nullable=*/false, next_unique_id++, sizeof(int64_t));
     pos_col.set_name(kEncodedPositionColumnName);
     pos_col.set_is_key(false);
     pos_col.set_is_sort_key(false);
@@ -83,8 +82,8 @@ StatusOr<std::shared_ptr<SecondaryIndexReader>> SecondaryIndexReader::open(const
     if (input.fs == nullptr || input.tablet_mgr == nullptr || input.source_schema == nullptr) {
         return Status::InvalidArgument("SecondaryIndexReader::open: missing fs/tablet_mgr/source_schema");
     }
-    auto reader = std::shared_ptr<SecondaryIndexReader>(new SecondaryIndexReader(
-            input.fs, input.tablet_mgr, input.tablet_id, input.file_pb, input.source_schema));
+    auto reader = std::shared_ptr<SecondaryIndexReader>(
+            new SecondaryIndexReader(input.fs, input.tablet_mgr, input.tablet_id, input.file_pb, input.source_schema));
     RETURN_IF_ERROR(reader->_init());
     return reader;
 }
@@ -97,8 +96,7 @@ Status SecondaryIndexReader::_init() {
         const std::string& name = _file_pb.index_col_names(i);
         size_t idx = _source_schema->field_index(name);
         if (idx == static_cast<size_t>(-1)) {
-            return Status::NotFound(
-                    fmt::format("secondary index references unknown source column: '{}'", name));
+            return Status::NotFound(fmt::format("secondary index references unknown source column: '{}'", name));
         }
         _source_index_col_ids.push_back(static_cast<uint32_t>(idx));
     }
@@ -111,9 +109,8 @@ Status SecondaryIndexReader::_init() {
     FileInfo info;
     info.path = full_path;
     info.size = _file_pb.file_size();
-    ASSIGN_OR_RETURN(_segment,
-                     Segment::open(_fs, info, /*segment_id=*/0, _index_schema, /*footer_length_hint=*/nullptr,
-                                    /*partial_rowset_footer=*/nullptr, LakeIOOptions{}, _tablet_mgr));
+    ASSIGN_OR_RETURN(_segment, Segment::open(_fs, info, /*segment_id=*/0, _index_schema, /*footer_length_hint=*/nullptr,
+                                             /*partial_rowset_footer=*/nullptr, LakeIOOptions{}, _tablet_mgr));
     return Status::OK();
 }
 

@@ -22,10 +22,9 @@
 #include "common/statusor.h"
 #include "fs/fs.h"
 #include "gen_cpp/lake_types.pb.h"
+#include "roaring/roaring.hh"
 #include "storage/predicate_tree/predicate_tree.hpp"
 #include "storage/tablet_schema.h"
-
-#include "roaring/roaring.hh"
 
 namespace starrocks {
 class Segment;

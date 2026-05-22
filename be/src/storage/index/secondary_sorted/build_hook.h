@@ -50,8 +50,7 @@ namespace starrocks::secondary_sorted {
 // recorded by the tablet writer. We pair them with sequential seg_ids
 // 0..N-1, matching the encoded_pos space used by the writer.
 Status maybe_build_secondary_indexes(int64_t tablet_id, int64_t txn_id, const TabletSchemaCSPtr& source_schema,
-                                     const std::vector<SegmentFileInfo>& seg_file_infos,
-                                     std::shared_ptr<FileSystem> fs, lake::TabletManager* tablet_mgr,
-                                     std::vector<SecondaryIndexFilePB>* out_pbs);
+                                     const std::vector<SegmentFileInfo>& seg_file_infos, std::shared_ptr<FileSystem> fs,
+                                     lake::TabletManager* tablet_mgr, std::vector<SecondaryIndexFilePB>* out_pbs);
 
 } // namespace starrocks::secondary_sorted

@@ -118,9 +118,9 @@ Status VerticalCompactionTask::execute(CancelFunc cancel_func, ThreadPool* flush
         std::vector<SecondaryIndexFilePB> sidx_pbs;
         const std::string root = _tablet.tablet_manager()->tablet_root_location(_tablet.id());
         ASSIGN_OR_RETURN(auto sidx_fs, FileSystemFactory::CreateSharedFromString(root));
-        RETURN_IF_ERROR(secondary_sorted::maybe_build_secondary_indexes(
-                _tablet.id(), _txn_id, _tablet_schema, writer->segments(), sidx_fs, _tablet.tablet_manager(),
-                &sidx_pbs));
+        RETURN_IF_ERROR(secondary_sorted::maybe_build_secondary_indexes(_tablet.id(), _txn_id, _tablet_schema,
+                                                                        writer->segments(), sidx_fs,
+                                                                        _tablet.tablet_manager(), &sidx_pbs));
         for (auto& pb : sidx_pbs) {
             *(op_compaction->mutable_output_rowset()->add_secondary_indexes()) = std::move(pb);
         }

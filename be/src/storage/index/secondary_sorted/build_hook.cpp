@@ -26,9 +26,8 @@
 namespace starrocks::secondary_sorted {
 
 Status maybe_build_secondary_indexes(int64_t tablet_id, int64_t txn_id, const TabletSchemaCSPtr& source_schema,
-                                     const std::vector<SegmentFileInfo>& seg_file_infos,
-                                     std::shared_ptr<FileSystem> fs, lake::TabletManager* tablet_mgr,
-                                     std::vector<SecondaryIndexFilePB>* out_pbs) {
+                                     const std::vector<SegmentFileInfo>& seg_file_infos, std::shared_ptr<FileSystem> fs,
+                                     lake::TabletManager* tablet_mgr, std::vector<SecondaryIndexFilePB>* out_pbs) {
     if (out_pbs == nullptr) return Status::InvalidArgument("out_pbs is null");
     if (!config::enable_secondary_index_write) return Status::OK();
     if (tablet_mgr == nullptr || fs == nullptr || source_schema == nullptr) return Status::OK();
@@ -39,8 +38,7 @@ Status maybe_build_secondary_indexes(int64_t tablet_id, int64_t txn_id, const Ta
     if (idx_def.index_col_names.empty()) return Status::OK();
 
     if (seg_file_infos.empty()) {
-        LOG(INFO) << "PoC sidx: tablet=" << tablet_id << " txn=" << txn_id
-                  << " skipping build, no segments written";
+        LOG(INFO) << "PoC sidx: tablet=" << tablet_id << " txn=" << txn_id << " skipping build, no segments written";
         return Status::OK();
     }
 
@@ -53,10 +51,9 @@ Status maybe_build_secondary_indexes(int64_t tablet_id, int64_t txn_id, const Ta
         open_info.path = tablet_mgr->segment_location(tablet_id, info.path);
         open_info.size = info.size;
         open_info.encryption_meta = info.encryption_meta;
-        ASSIGN_OR_RETURN(auto seg, Segment::open(fs, open_info, /*segment_id=*/static_cast<uint32_t>(i),
-                                                  source_schema,
-                                                  /*footer_length_hint=*/nullptr,
-                                                  /*partial_rowset_footer=*/nullptr, LakeIOOptions{}, tablet_mgr));
+        ASSIGN_OR_RETURN(auto seg, Segment::open(fs, open_info, /*segment_id=*/static_cast<uint32_t>(i), source_schema,
+                                                 /*footer_length_hint=*/nullptr,
+                                                 /*partial_rowset_footer=*/nullptr, LakeIOOptions{}, tablet_mgr));
         segments.push_back(std::move(seg));
     }
 

@@ -57,8 +57,8 @@ std::string make_index_file_path(lake::TabletManager* tablet_mgr, int64_t tablet
 
 } // namespace
 
-StatusOr<std::vector<uint32_t>> SecondaryIndexWriter::resolve_index_col_ids(
-        const TabletSchema& source_schema, const std::vector<std::string>& col_names) {
+StatusOr<std::vector<uint32_t>> SecondaryIndexWriter::resolve_index_col_ids(const TabletSchema& source_schema,
+                                                                            const std::vector<std::string>& col_names) {
     std::vector<uint32_t> ids;
     ids.reserve(col_names.size());
     for (const auto& name : col_names) {
@@ -72,7 +72,7 @@ StatusOr<std::vector<uint32_t>> SecondaryIndexWriter::resolve_index_col_ids(
 }
 
 TabletSchemaSPtr SecondaryIndexWriter::build_index_schema(const TabletSchema& source_schema,
-                                                         const std::vector<uint32_t>& index_col_ids) {
+                                                          const std::vector<uint32_t>& index_col_ids) {
     auto schema = std::make_shared<TabletSchema>();
     schema->set_id(TabletSchema::invalid_id());
 
@@ -98,8 +98,7 @@ TabletSchemaSPtr SecondaryIndexWriter::build_index_schema(const TabletSchema& so
     }
 
     // Append the encoded-position column (BIGINT, non-key, non-null).
-    TabletColumn pos_col(STORAGE_AGGREGATE_NONE, TYPE_BIGINT, /*is_nullable=*/false, next_unique_id++,
-                        sizeof(int64_t));
+    TabletColumn pos_col(STORAGE_AGGREGATE_NONE, TYPE_BIGINT, /*is_nullable=*/false, next_unique_id++, sizeof(int64_t));
     pos_col.set_name(kEncodedPositionColumnName);
     pos_col.set_is_key(false);
     pos_col.set_is_sort_key(false);
@@ -140,8 +139,7 @@ StatusOr<SecondaryIndexFilePB> SecondaryIndexWriter::build(const BuildInput& inp
     auto encoded_pos_col = Int64Column::create();
 
     int64_t total_rows = 0;
-    const int64_t mem_limit_bytes =
-            static_cast<int64_t>(config::secondary_index_build_mem_limit_mb) * 1024L * 1024L;
+    const int64_t mem_limit_bytes = static_cast<int64_t>(config::secondary_index_build_mem_limit_mb) * 1024L * 1024L;
 
     // Scan each source segment. The segment id we record is the segment's
     // ordinal in the rowset, which the caller has already assigned 0..N-1.
@@ -196,9 +194,9 @@ StatusOr<SecondaryIndexFilePB> SecondaryIndexWriter::build(const BuildInput& inp
             for (auto& col : acc_index_cols) approx_bytes += col->byte_size();
             approx_bytes += encoded_pos_col->byte_size();
             if (approx_bytes > mem_limit_bytes) {
-                return Status::MemoryLimitExceeded(fmt::format(
-                        "secondary index build exceeded memory limit: {} bytes > {} bytes (config={} MB)",
-                        approx_bytes, mem_limit_bytes, config::secondary_index_build_mem_limit_mb));
+                return Status::MemoryLimitExceeded(
+                        fmt::format("secondary index build exceeded memory limit: {} bytes > {} bytes (config={} MB)",
+                                    approx_bytes, mem_limit_bytes, config::secondary_index_build_mem_limit_mb));
             }
         }
     }
