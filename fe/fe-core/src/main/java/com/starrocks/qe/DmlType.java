@@ -30,8 +30,8 @@ public enum DmlType {
     INSERT_OVERWRITE,
     UPDATE,
     DELETE,
-    MERGE_INTO,
-    STREAM_LOAD;
+    STREAM_LOAD,
+    MERGE_INTO;
 
     public static DmlType fromStmt(DmlStmt stmt) {
         if (stmt instanceof InsertStmt) {
@@ -45,10 +45,10 @@ public enum DmlType {
             return UPDATE;
         } else if (stmt instanceof DeleteStmt) {
             return DELETE;
-        } else if (stmt instanceof MergeIntoStmt) {
-            return MERGE_INTO;
         } else if (stmt instanceof StreamLoadStmt) {
             return STREAM_LOAD;
+        } else if (stmt instanceof MergeIntoStmt) {
+            return MERGE_INTO;
         } else {
             throw new UnsupportedOperationException("unsupported");
         }

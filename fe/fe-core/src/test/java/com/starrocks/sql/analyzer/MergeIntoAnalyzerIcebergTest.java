@@ -31,6 +31,7 @@ import java.util.List;
 import static com.starrocks.sql.plan.ConnectorPlanTestBase.newFolder;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -247,13 +248,15 @@ public class MergeIntoAnalyzerIcebergTest {
 
         assertNotNull(stmt.getTable());
         assertNotNull(stmt.getQueryStatement());
-        // _file, _pos, id, data, date, op_code = 6 columns
+        // _file, _pos, id, data, date = 5 user columns. The op_code routing column is
+        // sink-private and injected by the planner — it must not appear here.
         List<String> colNames = stmt.getOutputColumnNames();
         assertNotNull(colNames);
-        assertEquals(6, colNames.size());
+        assertEquals(5, colNames.size());
         assertEquals(IcebergTable.FILE_PATH, colNames.get(0));
         assertEquals(IcebergTable.ROW_POSITION, colNames.get(1));
-        assertEquals("op_code", colNames.get(colNames.size() - 1));
+        assertFalse(colNames.contains("op_code"), "op_code must not appear in user-visible output");
+        assertNotNull(stmt.getRoutingExpr(), "analyzer must hand the planner a routing expression");
     }
 
     @Test
@@ -320,15 +323,17 @@ public class MergeIntoAnalyzerIcebergTest {
         assertNotNull(stmt.getTable());
         assertTrue(stmt.getTable() instanceof IcebergTable);
         assertNotNull(stmt.getQueryStatement());
-        // _file, _pos, id, data, date, op_code = 6 columns
+        // _file, _pos, id, data, date = 5 user columns (op_code is sink-private).
         List<String> colNames = stmt.getOutputColumnNames();
         assertNotNull(colNames);
-        assertEquals(6, colNames.size());
+        assertEquals(5, colNames.size());
+        assertNotNull(stmt.getRoutingExpr());
     }
 
     @Test
     public void testMergeColumnOutputNamesOrder() {
-        // Verify the output column layout: _file, _pos, data_cols..., op_code
+        // User-visible output layout: _file, _pos, data_cols... — op_code is sink-private
+        // and added by the planner.
         String sql = "MERGE INTO iceberg0.unpartitioned_db.t0_v2 AS t " +
                 "USING (SELECT 1 AS id, 'new' AS data, '2024-01-01' AS date) AS s " +
                 "ON t.id = s.id " +
@@ -339,14 +344,14 @@ public class MergeIntoAnalyzerIcebergTest {
 
         List<String> colNames = stmt.getOutputColumnNames();
         assertNotNull(colNames);
-        // _file, _pos, id, data, date, op_code
-        assertEquals(6, colNames.size());
+        assertEquals(5, colNames.size());
         assertEquals(IcebergTable.FILE_PATH, colNames.get(0));
         assertEquals(IcebergTable.ROW_POSITION, colNames.get(1));
         assertEquals("id", colNames.get(2));
         assertEquals("data", colNames.get(3));
         assertEquals("date", colNames.get(4));
-        assertEquals("op_code", colNames.get(5));
+        assertFalse(colNames.contains("op_code"));
+        assertNotNull(stmt.getRoutingExpr());
     }
 
     @Test

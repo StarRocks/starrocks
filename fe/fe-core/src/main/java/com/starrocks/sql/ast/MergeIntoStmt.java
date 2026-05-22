@@ -31,7 +31,13 @@ public class MergeIntoStmt extends DmlStmt {
     // Set by analyzer
     private Table table;
     private QueryStatement queryStatement;
+    // User-visible columns the analyzer's SELECT produces: [_file, _pos, data_cols...].
+    // The trailing routing op_code column is NOT included here; it is added by the
+    // planner as a sink-private projection (write_mode = ROW_DELTA_MIXED).
     private List<String> outputColumnNames;
+    // Per-row routing expression (CASE over WHEN clauses → op_code TINYINT). Built by
+    // the analyzer against the join scope and consumed by the planner.
+    private Expr routingExpr;
 
     public MergeIntoStmt(TableRef tableRef, String targetAlias,
                          Relation sourceRelation, String sourceAlias,
@@ -97,6 +103,14 @@ public class MergeIntoStmt extends DmlStmt {
 
     public List<String> getOutputColumnNames() {
         return outputColumnNames;
+    }
+
+    public void setRoutingExpr(Expr routingExpr) {
+        this.routingExpr = routingExpr;
+    }
+
+    public Expr getRoutingExpr() {
+        return routingExpr;
     }
 
     @Override

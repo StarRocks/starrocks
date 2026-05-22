@@ -63,7 +63,7 @@ import java.util.Set;
 public class MergeIntoAnalyzer {
 
     public static void analyze(MergeIntoStmt stmt, ConnectContext session) {
-        // Resolve table — same pattern as UpdateAnalyzer.analyze() lines 226-234
+        // Resolve table — same pattern as UpdateAnalyzer.analyze()
         TableRef tableRef = AnalyzerUtils.normalizedTableRef(stmt.getTableRef(), session);
         stmt.setTableRef(tableRef);
         TableName tableName = TableName.fromTableRef(tableRef);
@@ -148,7 +148,7 @@ public class MergeIntoAnalyzer {
                                 values.size(), targetDataColumnCount);
                     }
                     // Validate target column names exist and are unique.
-                    // Uniqueness matches plain INSERT (InsertAnalyzer line ~287 uses
+                    // Uniqueness matches plain INSERT (InsertAnalyzer uses
                     // the same ErrorCode.ERR_DUP_FIELDNAME); without this check the
                     // emission layer (getNotMatchedColumnValue) would silently keep
                     // the FIRST value for a duplicated column and discard later ones.
@@ -207,9 +207,11 @@ public class MergeIntoAnalyzer {
             selectList.addItem(new SelectListItem(dataExpr, col.getName()));
         }
 
-        // op_code CASE expression
+        // op_code CASE expression — kept OUT of the SELECT list. The analyzer's output
+        // is data-only [_file, _pos, data_cols...]; the planner injects op_code as a
+        // sink-private physical projection so the routing protocol does not ride on
+        // the user-facing SELECT output (mirrors UPDATE PR #73203 routing-decoupling).
         Expr opCodeExpr = buildOpCodeCaseExpr(stmt, targetSlotTableName);
-        selectList.addItem(new SelectListItem(opCodeExpr, "op_code"));
 
         // ---- BUILD FROM: source LEFT OUTER JOIN target ON merge_condition ----
 
@@ -242,8 +244,14 @@ public class MergeIntoAnalyzer {
         // Analyze the query statement
         new QueryAnalyzer(session).analyze(queryStatement);
 
-        // Cast data columns to target schema types (same as UpdateAnalyzer lines 200-208)
-        // Layout: [_file, _pos, data_cols..., op_code]
+        // Resolve the op_code routing expression against the join scope. It references
+        // target._file plus per-WHEN-clause source predicates, none of which appear as
+        // top-level SELECT items, so it has to be analyzed separately.
+        ExpressionAnalyzer.analyzeExpression(
+                opCodeExpr, new AnalyzeState(), joinRelation.getScope(), session);
+
+        // Cast data columns to target schema types (same as UpdateAnalyzer)
+        // Layout: [_file, _pos, data_cols...] — op_code is sink-private, added by planner.
         List<Expr> outputExprs = queryStatement.getQueryRelation().getOutputExpression();
         int dataColumnStart = 2;
         List<Expr> castOutputExprs = Lists.newArrayList(outputExprs);
@@ -263,6 +271,7 @@ public class MergeIntoAnalyzer {
         stmt.setTable(icebergTable);
         stmt.setQueryStatement(queryStatement);
         stmt.setOutputColumnNames(colNames);
+        stmt.setRoutingExpr(opCodeExpr);
     }
 
     /**
