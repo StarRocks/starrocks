@@ -2528,8 +2528,10 @@ public class AggregateTest extends PlanTestBase {
             String testSql = "with cc as (select 1 as a, v1 from t0) select percentile_approx(1, cc.a, cc.v1) from cc;";
             getFragmentPlan(testSql);
         });
-        Assertions.assertTrue(exception.getMessage().contains("Type check failed. want constant arg in " +
-                "percentile_approx (compression), but input is cast(1: v1 as double)"));
+        // FunctionAnalyzer pre-clamps the compression literal at analyze phase
+        // and rejects non-constant inputs up front (SemanticException extends
+        // StarRocksPlannerException so the assertion above still matches).
+        Assertions.assertTrue(exception.getMessage().contains("compression must be an integer literal"));
 
         Throwable exception2 = assertThrows(StarRocksPlannerException.class, () -> {
             getCostExplain("select percentile_approx(1, cast(1.3 as DOUBLE));");
@@ -2595,18 +2597,17 @@ public class AggregateTest extends PlanTestBase {
                 "column 7 to line 1, column 44. Detail message: percentile_approx_weighted requires " +
                 "the third parameter (percentile) to be ARRAY<NUMERIC>, but got: ARRAY<NULL_TYPE>."));
 
-        // Test compression parameter validation
-        Throwable exception6 = assertThrows(StarRocksPlannerException.class, () -> {
-            getCostExplain("select percentile_approx_weighted(v1, v2, 0.5, 0) from t0;");
-        });
-        assertThat(exception6.getMessage(), containsString("Type check failed. " +
-                "compression parameter must be positive in percentile_approx_weighted, but got: 0.0"));
+        // Compression literals outside [MIN_COMPRESSION, MAX_COMPRESSION] are
+        // canonicalized to DEFAULT_COMPRESSION_FACTOR by FunctionAnalyzer; the
+        // query plans successfully and the compression argument is rewritten to
+        // 10000 before reaching the optimizer.
+        sql = "select percentile_approx_weighted(v1, v2, 0.5, 0) from t0;";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "percentile_approx_weighted");
 
-        Throwable exception7 = assertThrows(StarRocksPlannerException.class, () -> {
-            getCostExplain("select percentile_approx_weighted(v1, v2, 0.5, -100) from t0;");
-        });
-        assertThat(exception7.getMessage(), containsString("Type check failed. " +
-                "compression parameter must be positive in percentile_approx_weighted, but got: -100.0"));
+        sql = "select percentile_approx_weighted(v1, v2, 0.5, -100) from t0;";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "percentile_approx_weighted");
 
         // Test valid array percentile
         sql = "select percentile_approx_weighted(v1, v2, [0.0, 0.5, 1.0]) from t0;";
@@ -2671,18 +2672,17 @@ public class AggregateTest extends PlanTestBase {
                 "column 7 to line 1, column 31. Detail message: " +
                 "percentile_approx requires the second parameter (percentile) to be ARRAY<NUMERIC>, but got: ARRAY<NULL_TYPE>."));
 
-        // Test compression parameter validation
-        Throwable exception6 = assertThrows(StarRocksPlannerException.class, () -> {
-            getCostExplain("select percentile_approx(v1, 0.5, 0) from t0;");
-        });
-        assertThat(exception6.getMessage(), containsString("Type check failed. " +
-                "compression parameter must be positive in percentile_approx, but got: 0.0"));
+        // Compression literals outside [MIN_COMPRESSION, MAX_COMPRESSION] are
+        // canonicalized to DEFAULT_COMPRESSION_FACTOR by FunctionAnalyzer; the
+        // query plans successfully and the compression argument is rewritten to
+        // 10000 before reaching the optimizer.
+        sql = "select percentile_approx(v1, 0.5, 0) from t0;";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "percentile_approx");
 
-        Throwable exception7 = assertThrows(StarRocksPlannerException.class, () -> {
-            getCostExplain("select percentile_approx(v1, 0.5, -100) from t0;");
-        });
-        assertThat(exception7.getMessage(), containsString("Type check failed. " +
-                "compression parameter must be positive in percentile_approx, but got: -100.0"));
+        sql = "select percentile_approx(v1, 0.5, -100) from t0;";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "percentile_approx");
 
         // Test valid array percentile
         sql = "select percentile_approx(v1, [0.0, 0.5, 1.0]) from t0;";
