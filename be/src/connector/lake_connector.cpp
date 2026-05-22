@@ -1024,14 +1024,13 @@ Status LakeDataSource::open_reader_for_current_morsel() {
                                split_context->prepared_segment_state->adaptive_prepare_split_tasks_ns);
             }
             COUNTER_UPDATE(_lake_adaptive_seed_prepare_column_iterator_init_timer,
-                           prepare_stats_after.column_iterator_init_ns -
-                                   prepare_stats_before.column_iterator_init_ns);
-            COUNTER_UPDATE(_lake_adaptive_seed_prepare_key_range_filter_timer,
-                           prepare_stats_after.rows_key_range_filter_ns -
-                                   prepare_stats_before.rows_key_range_filter_ns);
-            COUNTER_UPDATE(_lake_adaptive_seed_prepare_bitmap_index_filter_timer,
-                           prepare_stats_after.bitmap_index_filter_timer -
-                                   prepare_stats_before.bitmap_index_filter_timer);
+                           prepare_stats_after.column_iterator_init_ns - prepare_stats_before.column_iterator_init_ns);
+            COUNTER_UPDATE(
+                    _lake_adaptive_seed_prepare_key_range_filter_timer,
+                    prepare_stats_after.rows_key_range_filter_ns - prepare_stats_before.rows_key_range_filter_ns);
+            COUNTER_UPDATE(
+                    _lake_adaptive_seed_prepare_bitmap_index_filter_timer,
+                    prepare_stats_after.bitmap_index_filter_timer - prepare_stats_before.bitmap_index_filter_timer);
             COUNTER_UPDATE(_lake_adaptive_seed_prepare_zone_map_filter_timer,
                            prepare_stats_after.zone_map_filter_ns - prepare_stats_before.zone_map_filter_ns);
             COUNTER_UPDATE(_lake_adaptive_seed_prepare_bloom_filter_timer,
@@ -1042,9 +1041,9 @@ Status LakeDataSource::open_reader_for_current_morsel() {
                            prepare_stats_after.rows_stats_filtered - prepare_stats_before.rows_stats_filtered);
             COUNTER_UPDATE(_lake_adaptive_seed_prepare_bloom_filtered_rows_counter,
                            prepare_stats_after.rows_bf_filtered - prepare_stats_before.rows_bf_filtered);
-            COUNTER_UPDATE(_lake_adaptive_seed_prepare_bitmap_filtered_rows_counter,
-                           prepare_stats_after.rows_bitmap_index_filtered -
-                                   prepare_stats_before.rows_bitmap_index_filtered);
+            COUNTER_UPDATE(
+                    _lake_adaptive_seed_prepare_bitmap_filtered_rows_counter,
+                    prepare_stats_after.rows_bitmap_index_filtered - prepare_stats_before.rows_bitmap_index_filtered);
             COUNTER_UPDATE(_lake_adaptive_seed_prepare_gin_filtered_rows_counter,
                            prepare_stats_after.rows_gin_filtered - prepare_stats_before.rows_gin_filtered);
         }
@@ -1056,7 +1055,8 @@ Status LakeDataSource::open_reader_for_current_morsel() {
         }
         _params.rowid_range_option = std::move(local_rowid_range);
         _params.short_key_ranges_option.reset();
-    } else if (split_context != nullptr && split_context->task_type == pipeline::LakeSplitContext::TaskType::PHYSICAL_SPLIT) {
+    } else if (split_context != nullptr &&
+               split_context->task_type == pipeline::LakeSplitContext::TaskType::PHYSICAL_SPLIT) {
         observe_adaptive_split_task(split_context, _params.rowid_range_option);
         if (split_context->adaptive_task_source == pipeline::LakeSplitContext::AdaptiveTaskSource::PENDING_COARSE) {
             _params.rowid_range_option =
@@ -1528,8 +1528,7 @@ void LakeDataSource::init_counter(RuntimeState* state) {
     _lake_prepared_state_targeted_read_counter =
             ADD_COUNTER(_runtime_profile, "LakeScanPreparedStateTargetedReads", TUnit::UNIT);
     _lake_adaptive_seed_task_counter = ADD_COUNTER(_runtime_profile, "LakeAdaptiveSeedTasks", TUnit::UNIT);
-    _lake_adaptive_seed_issued_rows_counter =
-            ADD_COUNTER(_runtime_profile, "LakeAdaptiveSeedIssuedRows", TUnit::UNIT);
+    _lake_adaptive_seed_issued_rows_counter = ADD_COUNTER(_runtime_profile, "LakeAdaptiveSeedIssuedRows", TUnit::UNIT);
     _lake_adaptive_seed_final_rows_counter = ADD_COUNTER(_runtime_profile, "LakeAdaptiveSeedFinalRows", TUnit::UNIT);
     _lake_adaptive_seed_estimated_fanout_counter =
             ADD_COUNTER(_runtime_profile, "LakeAdaptiveSeedEstimatedFanout", TUnit::UNIT);
@@ -1544,8 +1543,7 @@ void LakeDataSource::init_counter(RuntimeState* state) {
             ADD_TIMER(_runtime_profile, "LakeAdaptiveSeedPrepareSeekBoundsTime");
     _lake_adaptive_seed_prepare_tablet_bounds_timer =
             ADD_TIMER(_runtime_profile, "LakeAdaptiveSeedPrepareTabletBoundsTime");
-    _lake_adaptive_seed_prepare_schema_timer =
-            ADD_TIMER(_runtime_profile, "LakeAdaptiveSeedPrepareSchemaTime");
+    _lake_adaptive_seed_prepare_schema_timer = ADD_TIMER(_runtime_profile, "LakeAdaptiveSeedPrepareSchemaTime");
     _lake_adaptive_seed_prepare_iterator_prune_timer =
             ADD_TIMER(_runtime_profile, "LakeAdaptiveSeedPrepareIteratorPruneTime");
     _lake_adaptive_seed_prepare_split_tasks_timer =
@@ -1571,8 +1569,7 @@ void LakeDataSource::init_counter(RuntimeState* state) {
             ADD_COUNTER(_runtime_profile, "LakeAdaptiveSeedPrepareGinFilteredRows", TUnit::UNIT);
     _lake_adaptive_seed_reader_timer = ADD_TIMER(_runtime_profile, "LakeAdaptiveSeedReaderTime");
     _lake_adaptive_seed_raw_rows_counter = ADD_COUNTER(_runtime_profile, "LakeAdaptiveSeedRawRowsRead", TUnit::UNIT);
-    _lake_adaptive_seed_output_rows_counter =
-            ADD_COUNTER(_runtime_profile, "LakeAdaptiveSeedOutputRows", TUnit::UNIT);
+    _lake_adaptive_seed_output_rows_counter = ADD_COUNTER(_runtime_profile, "LakeAdaptiveSeedOutputRows", TUnit::UNIT);
     _lake_adaptive_refined_task_counter = ADD_COUNTER(_runtime_profile, "LakeAdaptiveRefinedTasks", TUnit::UNIT);
     _lake_adaptive_refined_create_segment_iter_timer =
             ADD_TIMER(_runtime_profile, "LakeAdaptiveRefinedCreateSegmentIterTime");
@@ -1609,7 +1606,8 @@ void LakeDataSource::init_counter(RuntimeState* state) {
             ADD_TIMER(_runtime_profile, "LakeAdaptiveRefinedFirstOutputDelayAfterReadyTime");
     _lake_adaptive_refined_first_output_after_ready_task_counter =
             ADD_COUNTER(_runtime_profile, "LakeAdaptiveRefinedFirstOutputAfterReadyTasks", TUnit::UNIT);
-    _lake_adaptive_refined_raw_rows_counter = ADD_COUNTER(_runtime_profile, "LakeAdaptiveRefinedRawRowsRead", TUnit::UNIT);
+    _lake_adaptive_refined_raw_rows_counter =
+            ADD_COUNTER(_runtime_profile, "LakeAdaptiveRefinedRawRowsRead", TUnit::UNIT);
     _lake_adaptive_refined_output_rows_counter =
             ADD_COUNTER(_runtime_profile, "LakeAdaptiveRefinedOutputRows", TUnit::UNIT);
     _lake_adaptive_pending_task_counter = ADD_COUNTER(_runtime_profile, "LakeAdaptivePendingTasks", TUnit::UNIT);
@@ -1921,8 +1919,7 @@ void LakeDataSource::record_current_adaptive_task_read_stats(const OlapReaderSta
         COUNTER_UPDATE(_lake_adaptive_refined_block_load_timer, stats.block_load_ns);
         COUNTER_UPDATE(_lake_adaptive_refined_column_iterator_init_timer, stats.column_iterator_init_ns);
         COUNTER_UPDATE(_lake_adaptive_refined_key_range_filter_timer, stats.rows_key_range_filter_ns);
-        COUNTER_UPDATE(_lake_adaptive_refined_seek_bounds_cache_hit_counter,
-                       stats.seek_range_rowid_bounds_cache_hits);
+        COUNTER_UPDATE(_lake_adaptive_refined_seek_bounds_cache_hit_counter, stats.seek_range_rowid_bounds_cache_hits);
         COUNTER_UPDATE(_lake_adaptive_refined_seek_bounds_cache_miss_counter,
                        stats.seek_range_rowid_bounds_cache_misses);
         COUNTER_UPDATE(_lake_adaptive_refined_bitmap_index_filter_timer, stats.bitmap_index_filter_timer);
@@ -1947,8 +1944,7 @@ void LakeDataSource::record_current_adaptive_task_read_stats(const OlapReaderSta
         COUNTER_UPDATE(_lake_adaptive_pending_block_load_timer, stats.block_load_ns);
         COUNTER_UPDATE(_lake_adaptive_pending_column_iterator_init_timer, stats.column_iterator_init_ns);
         COUNTER_UPDATE(_lake_adaptive_pending_key_range_filter_timer, stats.rows_key_range_filter_ns);
-        COUNTER_UPDATE(_lake_adaptive_pending_seek_bounds_cache_hit_counter,
-                       stats.seek_range_rowid_bounds_cache_hits);
+        COUNTER_UPDATE(_lake_adaptive_pending_seek_bounds_cache_hit_counter, stats.seek_range_rowid_bounds_cache_hits);
         COUNTER_UPDATE(_lake_adaptive_pending_seek_bounds_cache_miss_counter,
                        stats.seek_range_rowid_bounds_cache_misses);
         COUNTER_UPDATE(_lake_adaptive_pending_bitmap_index_filter_timer, stats.bitmap_index_filter_timer);
@@ -1998,7 +1994,8 @@ void LakeDataSource::record_current_adaptive_task_read_stats(const OlapReaderSta
                        _num_rows_read - _current_adaptive_task_start_num_rows_read);
     }
     if (_current_adaptive_pending_running_counted && _current_adaptive_prepared_segment_state != nullptr) {
-        _current_adaptive_prepared_segment_state->adaptive_pending_running_tasks.fetch_sub(1, std::memory_order_acq_rel);
+        _current_adaptive_prepared_segment_state->adaptive_pending_running_tasks.fetch_sub(1,
+                                                                                           std::memory_order_acq_rel);
     }
     _current_adaptive_task_source = pipeline::LakeSplitContext::AdaptiveTaskSource::NONE;
     _current_adaptive_task_start_ns = 0;

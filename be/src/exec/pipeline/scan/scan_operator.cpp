@@ -722,7 +722,9 @@ Status ScanOperator::_pickup_morsel(RuntimeState* state, int chunk_source_index)
             }
 
             if (_chunk_sources[chunk_source_index] == nullptr) {
-                { _chunk_sources[chunk_source_index] = create_chunk_source(std::move(morsel), chunk_source_index); }
+                {
+                    _chunk_sources[chunk_source_index] = create_chunk_source(std::move(morsel), chunk_source_index);
+                }
                 Status status;
                 { status = _chunk_sources[chunk_source_index]->prepare(state); }
                 if (!status.ok()) {

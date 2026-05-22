@@ -185,9 +185,9 @@ Status prepare_segment_pruned_scan_range(const TabletSchemaCSPtr& tablet_schema,
     {
         SCOPED_RAW_TIMER(&tablet_bounds_ns);
         if (options->tablet_range.has_value() && !options->tablet_range->all_range()) {
-            ASSIGN_OR_RETURN(
-                    pruning_state->tablet_range_rowid_range,
-                    get_segment_rowid_range_by_seek_range(segment, options->tablet_range.value(), options->lake_io_opts));
+            ASSIGN_OR_RETURN(pruning_state->tablet_range_rowid_range,
+                             get_segment_rowid_range_by_seek_range(segment, options->tablet_range.value(),
+                                                                   options->lake_io_opts));
         } else {
             pruning_state->tablet_range_rowid_range.reset();
         }
@@ -349,7 +349,8 @@ rowid_t upper_bound_block_aligned_rowid(Segment* segment, const SeekTuple& key, 
     return end;
 }
 
-StatusOr<SparseRange<>> build_block_aligned_seek_scan_range(const SegmentPtr& segment, const std::vector<SeekRange>& ranges,
+StatusOr<SparseRange<>> build_block_aligned_seek_scan_range(const SegmentPtr& segment,
+                                                            const std::vector<SeekRange>& ranges,
                                                             const LakeIOOptions& lake_io_opts) {
     SparseRange<> scan_range;
     if (ranges.empty()) {
@@ -375,7 +376,8 @@ StatusOr<SparseRange<>> build_block_aligned_seek_scan_range(const SegmentPtr& se
     return scan_range;
 }
 
-StatusOr<SparseRange<>> build_adaptive_coarse_scan_range(const SegmentPtr& segment, const SegmentReadOptions& seg_options) {
+StatusOr<SparseRange<>> build_adaptive_coarse_scan_range(const SegmentPtr& segment,
+                                                         const SegmentReadOptions& seg_options) {
     ASSIGN_OR_RETURN(auto scan_range,
                      build_block_aligned_seek_scan_range(segment, seg_options.ranges, seg_options.lake_io_opts));
     if (seg_options.tablet_range.has_value() && !seg_options.tablet_range->all_range()) {
@@ -429,7 +431,8 @@ bool issue_one_adaptive_coarse_task(const PreparedSegmentReadStatePtr& prepared_
                                     RowidRangeOptionPtr* rowid_range) {
     *rowid_range = nullptr;
     std::lock_guard<std::mutex> guard(prepared_segment_state->adaptive_issue_lock);
-    if (!prepared_segment_state->adaptive_coarse_scan_range_ready || prepared_segment_state->adaptive_pending_issue_closed ||
+    if (!prepared_segment_state->adaptive_coarse_scan_range_ready ||
+        prepared_segment_state->adaptive_pending_issue_closed ||
         !prepared_segment_state->adaptive_coarse_scan_range_iter.has_more()) {
         return false;
     }
@@ -439,9 +442,9 @@ bool issue_one_adaptive_coarse_task(const PreparedSegmentReadStatePtr& prepared_
     while (prepared_segment_state->adaptive_coarse_scan_range_iter.has_more() &&
            num_taken_rows < read_params.splitted_scan_rows) {
         size_t remaining_in_segment = prepared_segment_state->adaptive_coarse_scan_range_iter.remaining_rows();
-        size_t rows_to_take =
-                std::min<size_t>(read_params.splitted_scan_rows - num_taken_rows, remaining_in_segment);
-        if (remaining_in_segment > rows_to_take && remaining_in_segment - rows_to_take < read_params.splitted_scan_rows) {
+        size_t rows_to_take = std::min<size_t>(read_params.splitted_scan_rows - num_taken_rows, remaining_in_segment);
+        if (remaining_in_segment > rows_to_take &&
+            remaining_in_segment - rows_to_take < read_params.splitted_scan_rows) {
             rows_to_take = remaining_in_segment;
         }
 
@@ -496,7 +499,8 @@ void split_segment_scan_range(Rowset* rowset, Segment* segment, const SparseRang
                               const TabletReaderParams& read_params,
                               const PreparedTabletReadStatePtr& prepared_read_state,
                               const PreparedSegmentReadStatePtr& prepared_segment_state, size_t rowset_idx,
-                              size_t segment_idx, bool initial_is_first_split_of_segment, RowidRangeOptionPtr* current_task,
+                              size_t segment_idx, bool initial_is_first_split_of_segment,
+                              RowidRangeOptionPtr* current_task,
                               std::vector<pipeline::ScanSplitContextPtr>* split_tasks, AdaptiveSplitStats* stats) {
     bool is_first_split_of_segment = initial_is_first_split_of_segment;
     auto range_iter = scan_range.new_iterator();
@@ -771,7 +775,8 @@ Status TabletReader::_build_prepared_physical_split_tasks(const TabletReaderPara
     return Status::OK();
 }
 
-Status TabletReader::_build_lake_adaptive_split_seed_tasks(const TabletReaderParams& read_params, size_t segment_count) {
+Status TabletReader::_build_lake_adaptive_split_seed_tasks(const TabletReaderParams& read_params,
+                                                           size_t segment_count) {
     PreparedReadStatePtr prepared_state =
             _prepared_read_state != nullptr ? _prepared_read_state : std::make_shared<PreparedReadState>();
     RETURN_IF_ERROR(build_prepared_read_state(read_params, prepared_state.get()));
@@ -803,9 +808,9 @@ Status TabletReader::_build_lake_adaptive_split_seed_tasks(const TabletReaderPar
                 continue;
             }
             SegmentReadOptions seg_options;
-            RETURN_IF_ERROR(init_lake_segment_read_options(_tablet_schema, _tablet_metadata->id(), _is_asc_hint, &_stats,
-                                                           read_params, rs_opts, lake_io_opts, rowset, segment_idx,
-                                                           delete_preds, &seg_options));
+            RETURN_IF_ERROR(init_lake_segment_read_options(_tablet_schema, _tablet_metadata->id(), _is_asc_hint,
+                                                           &_stats, read_params, rs_opts, lake_io_opts, rowset,
+                                                           segment_idx, delete_preds, &seg_options));
             ASSIGN_OR_RETURN(auto coarse_scan_range, build_adaptive_coarse_scan_range(segment, seg_options));
             if (coarse_scan_range.span_size() == 0) {
                 continue;
@@ -817,9 +822,8 @@ Status TabletReader::_build_lake_adaptive_split_seed_tasks(const TabletReaderPar
                                                 &seed_rowid_range)) {
                 continue;
             }
-            _split_tasks.emplace_back(
-                    make_segment_seed_context(std::move(seed_rowid_range), prepared_state, segment_state, rowset_idx,
-                                              segment_idx));
+            _split_tasks.emplace_back(make_segment_seed_context(std::move(seed_rowid_range), prepared_state,
+                                                                segment_state, rowset_idx, segment_idx));
             ++stats.segment_prepare_tasks;
         }
     }
@@ -919,8 +923,7 @@ Status TabletReader::_prepare_segment_split_task(const TabletReaderParams& read_
         {
             SCOPED_RAW_TIMER(&prepare_prune_range_ns);
             st = prepare_segment_pruned_scan_range(_tablet_schema, segment, &seg_options,
-                                                   read_params.splitted_scan_rows, read_params.scan_dop,
-                                                   segment_state);
+                                                   read_params.splitted_scan_rows, read_params.scan_dop, segment_state);
         }
         if (!st.ok()) {
             return fail_prepare(st);
@@ -968,7 +971,8 @@ Status TabletReader::_prepare_segment_split_task(const TabletReaderParams& read_
             local_scan_range &= *final_scan_range;
             if (local_scan_range.span_size() > 0) {
                 auto rowid_range = std::make_shared<RowidRangeOption>();
-                rowid_range->add(rowset.get(), segment.get(), std::make_shared<SparseRange<>>(std::move(local_scan_range)),
+                rowid_range->add(rowset.get(), segment.get(),
+                                 std::make_shared<SparseRange<>>(std::move(local_scan_range)),
                                  seed_split.is_first_split_of_segment);
                 *local_rowid_range = std::move(rowid_range);
             }
@@ -1269,9 +1273,8 @@ Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std
                                                              &_reusable_rowset_iterators[rowset_idx],
                                                              &prepared_state->rowset_prepared_states[rowset_idx]));
                 }
-                return enhance_error_prompt(rowset->read(schema(), rs_opts,
-                                                         prepared_state->rowset_segments[rowset_idx], nullptr,
-                                                         &prepared_state->rowset_prepared_states[rowset_idx]));
+                return enhance_error_prompt(rowset->read(schema(), rs_opts, prepared_state->rowset_segments[rowset_idx],
+                                                         nullptr, &prepared_state->rowset_prepared_states[rowset_idx]));
             });
 
             auto packaged_func = [task]() { (*task)(); };
@@ -1300,10 +1303,9 @@ Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std
                                                schema(), rs_opts, prepared_state->rowset_segments[rowset_idx],
                                                &_reusable_rowset_iterators[rowset_idx],
                                                &prepared_state->rowset_prepared_states[rowset_idx]))
-                                     : enhance_error_prompt(
-                                               rowset->read(schema(), rs_opts,
-                                                            prepared_state->rowset_segments[rowset_idx], nullptr,
-                                                            &prepared_state->rowset_prepared_states[rowset_idx])));
+                                     : enhance_error_prompt(rowset->read(
+                                               schema(), rs_opts, prepared_state->rowset_segments[rowset_idx], nullptr,
+                                               &prepared_state->rowset_prepared_states[rowset_idx])));
             iters->insert(iters->end(), seg_iters.begin(), seg_iters.end());
         }
     }

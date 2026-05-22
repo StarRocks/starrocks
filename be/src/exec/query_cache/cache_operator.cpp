@@ -490,8 +490,8 @@ std::tuple<int64_t, vector<BaseRowsetSharedPtr>> CacheOperator::delta_version_an
         return make_tuple(0, vector<BaseRowsetSharedPtr>{});
     } else {
         auto& buffer = _per_lane_buffers[lane_it->second];
-        return make_tuple(buffer->cached_version + 1, buffer->rowsets != nullptr ? *buffer->rowsets
-                                                                                 : vector<BaseRowsetSharedPtr>{});
+        return make_tuple(buffer->cached_version + 1,
+                          buffer->rowsets != nullptr ? *buffer->rowsets : vector<BaseRowsetSharedPtr>{});
     }
 }
 

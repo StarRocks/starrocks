@@ -132,10 +132,10 @@ protected:
                                                                         const std::vector<SeekRange>& ranges,
                                                                         const LakeIOOptions& lake_io_opts);
     friend StatusOr<std::vector<std::optional<Range<>>>> get_segment_rowid_ranges_by_seek_ranges(
-            const std::shared_ptr<Segment>& segment, const std::vector<SeekRange>& ranges, const LakeIOOptions& lake_io_opts);
-    friend StatusOr<std::optional<Range<>>> get_segment_rowid_range_by_seek_range(const std::shared_ptr<Segment>& segment,
-                                                                                  const SeekRange& range,
-                                                                                  const LakeIOOptions& lake_io_opts);
+            const std::shared_ptr<Segment>& segment, const std::vector<SeekRange>& ranges,
+            const LakeIOOptions& lake_io_opts);
+    friend StatusOr<std::optional<Range<>>> get_segment_rowid_range_by_seek_range(
+            const std::shared_ptr<Segment>& segment, const SeekRange& range, const LakeIOOptions& lake_io_opts);
     friend StatusOr<SparseRange<>> new_segment_iterator_for_execution_pruning(const std::shared_ptr<Segment>& segment,
                                                                               const Schema& schema,
                                                                               const SegmentReadOptions& options);
@@ -348,8 +348,8 @@ private:
     Status _get_row_ranges_by_rowid_range();
     Status _get_row_ranges_by_row_ids(std::vector<int64_t>* result_ids, SparseRange<>* r);
     StatusOr<SparseRange<>> _get_execution_pruned_row_ranges(bool include_page_level_filters);
-    StatusOr<std::pair<SparseRange<>, bool>> _get_execution_pruned_row_ranges_auto_page_filter(
-            size_t split_rows, size_t fanout_threshold);
+    StatusOr<std::pair<SparseRange<>, bool>> _get_execution_pruned_row_ranges_auto_page_filter(size_t split_rows,
+                                                                                               size_t fanout_threshold);
 
     Status _apply_tablet_range();
     Status _apply_shared_execution_pruned_range();
@@ -904,7 +904,8 @@ Status SegmentIterator::reset(const SegmentReadOptions& options) {
     _opts.enable_join_runtime_filter_pushdown = options.enable_join_runtime_filter_pushdown;
     _opts.chunk_size = options.chunk_size;
     _chunk_size = options.chunk_size;
-    _reserve_chunk_size = static_cast<int32_t>(std::min(static_cast<uint32_t>(options.chunk_size), _segment->num_rows()));
+    _reserve_chunk_size =
+            static_cast<int32_t>(std::min(static_cast<uint32_t>(options.chunk_size), _segment->num_rows()));
     _inited = false;
     return Status::OK();
 }
@@ -2065,10 +2066,9 @@ Status SegmentIterator::_get_row_ranges_by_zone_map() {
         zonemap_scan_range = &coarse_scan_range;
     }
 
-    ASSIGN_OR_RETURN(auto hit_row_ranges,
-                     _opts.pred_tree_for_zone_map.visit(ZoneMapFilterEvaluator{_opts.pred_tree_for_zone_map,
-                                                                                _column_iterators, _del_predicates,
-                                                                                del_columns, zonemap_scan_range}));
+    ASSIGN_OR_RETURN(auto hit_row_ranges, _opts.pred_tree_for_zone_map.visit(ZoneMapFilterEvaluator{
+                                                  _opts.pred_tree_for_zone_map, _column_iterators, _del_predicates,
+                                                  del_columns, zonemap_scan_range}));
     if (hit_row_ranges.has_value()) {
         zm_range &= hit_row_ranges.value();
     }
@@ -4025,7 +4025,8 @@ StatusOr<SparseRange<>> get_segment_scan_range_by_key_ranges(const std::shared_p
 }
 
 StatusOr<std::vector<std::optional<Range<>>>> get_segment_rowid_ranges_by_seek_ranges(
-        const std::shared_ptr<Segment>& segment, const std::vector<SeekRange>& ranges, const LakeIOOptions& lake_io_opts) {
+        const std::shared_ptr<Segment>& segment, const std::vector<SeekRange>& ranges,
+        const LakeIOOptions& lake_io_opts) {
     if (lake_io_opts.fs == nullptr) {
         return Status::InvalidArgument("lake_io_opts.fs is null");
     }

@@ -650,8 +650,7 @@ Status JsonMergeIterator::seek_to_ordinal(ordinal_t ord) {
 
 Status JsonMergeIterator::get_row_ranges_by_zone_map(const std::vector<const ColumnPredicate*>& predicates,
                                                      const ColumnPredicate* del_predicate, SparseRange<>* row_ranges,
-                                                     CompoundNodeType pred_relation,
-                                                     const SparseRange<>* scan_range) {
+                                                     CompoundNodeType pred_relation, const SparseRange<>* scan_range) {
     if (scan_range == nullptr) {
         row_ranges->add({0, static_cast<rowid_t>(_reader->num_rows())});
     } else {

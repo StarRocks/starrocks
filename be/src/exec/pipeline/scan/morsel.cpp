@@ -1115,7 +1115,8 @@ LakeAdaptiveSplitMorselQueue::PendingCandidateState LakeAdaptiveSplitMorselQueue
     }
 
     const auto& rowset = candidate.prepared_read_state->rowsets[candidate.rowset_index];
-    const auto& segment = candidate.prepared_read_state->rowset_segments[candidate.rowset_index][candidate.segment_index];
+    const auto& segment =
+            candidate.prepared_read_state->rowset_segments[candidate.rowset_index][candidate.segment_index];
     if (rowset == nullptr || segment == nullptr) {
         return PendingCandidateState::DEAD;
     }
@@ -1232,7 +1233,8 @@ StatusOr<bool> LakeAdaptiveSplitMorselQueue::ready_for_next() const {
         return false;
     }
     // The opportunity timestamp is only a timer; live candidate detection above decides readiness.
-    const int64_t min_opportunity_ns = std::max<int64_t>(0, config::lake_adaptive_split_pending_min_opportunity_us) * 1000;
+    const int64_t min_opportunity_ns =
+            std::max<int64_t>(0, config::lake_adaptive_split_pending_min_opportunity_us) * 1000;
     if (min_opportunity_ns <= 0) {
         update_profile_counter(_profile_ready_timer, MonotonicNanos() - start_ns);
         return true;
@@ -1286,11 +1288,11 @@ bool LakeAdaptiveSplitMorselQueue::_try_issue_pending_rowid_range(const PendingC
 
         const size_t pending_rows_limit =
                 config::lake_adaptive_split_pending_max_rows_per_task > 0
-                        ? std::max<size_t>(1, static_cast<size_t>(config::lake_adaptive_split_pending_max_rows_per_task))
+                        ? std::max<size_t>(1,
+                                           static_cast<size_t>(config::lake_adaptive_split_pending_max_rows_per_task))
                         : static_cast<size_t>(_splitted_scan_rows);
         size_t num_taken_rows = 0;
-        while (segment_state->adaptive_coarse_scan_range_iter.has_more() &&
-               num_taken_rows < pending_rows_limit) {
+        while (segment_state->adaptive_coarse_scan_range_iter.has_more() && num_taken_rows < pending_rows_limit) {
             size_t remaining_in_segment = segment_state->adaptive_coarse_scan_range_iter.remaining_rows();
             size_t rows_to_take = std::min<size_t>(pending_rows_limit - num_taken_rows, remaining_in_segment);
             if (remaining_in_segment > rows_to_take &&
@@ -1325,16 +1327,16 @@ bool LakeAdaptiveSplitMorselQueue::_try_issue_pending_rowid_range(const PendingC
 
 StatusOr<MorselPtr> LakeAdaptiveSplitMorselQueue::_issue_pending_child_locked() {
     const auto start_ns = MonotonicNanos();
-    auto defer_update_timer = DeferOp([&]() {
-        update_profile_counter(_profile_pending_issue_timer, MonotonicNanos() - start_ns);
-    });
+    auto defer_update_timer =
+            DeferOp([&]() { update_profile_counter(_profile_pending_issue_timer, MonotonicNanos() - start_ns); });
     if (!config::enable_lake_adaptive_split_pending_task) {
         _pending_candidates.clear();
         _close_pending_opportunity_window_locked(MonotonicNanos());
         return nullptr;
     }
     update_profile_counter(_profile_pending_attempt_counter, 1);
-    const int64_t min_opportunity_ns = std::max<int64_t>(0, config::lake_adaptive_split_pending_min_opportunity_us) * 1000;
+    const int64_t min_opportunity_ns =
+            std::max<int64_t>(0, config::lake_adaptive_split_pending_min_opportunity_us) * 1000;
     if (min_opportunity_ns > 0 && _pending_opportunity_start_ns > 0 &&
         MonotonicNanos() - _pending_opportunity_start_ns < min_opportunity_ns) {
         update_profile_counter(_profile_pending_opportunity_too_short_counter, 1);
@@ -1400,7 +1402,8 @@ void LakeAdaptiveSplitMorselQueue::_maybe_register_pending_candidate(const Morse
         if (split_context->prepared_segment_state->adaptive_refined_ready_ns.compare_exchange_strong(
                     expected, now_ns, std::memory_order_acq_rel, std::memory_order_acquire)) {
             split_context->prepared_segment_state->adaptive_pending_running_at_refined_ready.store(
-                    split_context->prepared_segment_state->adaptive_pending_running_tasks.load(std::memory_order_acquire),
+                    split_context->prepared_segment_state->adaptive_pending_running_tasks.load(
+                            std::memory_order_acquire),
                     std::memory_order_release);
         }
     }
@@ -1436,9 +1439,8 @@ void LakeAdaptiveSplitMorselQueue::_enter_ticket(ScanMorsel* morsel) {
 
 StatusOr<MorselPtr> LakeAdaptiveSplitMorselQueue::try_get() {
     const auto start_ns = MonotonicNanos();
-    auto defer_update_timer = DeferOp([&]() {
-        update_profile_counter(_profile_try_get_timer, MonotonicNanos() - start_ns);
-    });
+    auto defer_update_timer =
+            DeferOp([&]() { update_profile_counter(_profile_try_get_timer, MonotonicNanos() - start_ns); });
     std::lock_guard<std::mutex> guard(_mutex);
     update_profile_counter(_profile_try_get_counter, 1);
     if (!_queue.empty()) {

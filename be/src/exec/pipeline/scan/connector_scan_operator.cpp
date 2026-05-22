@@ -350,7 +350,8 @@ bool ConnectorScanOperator::_is_lake_child_reuse_candidate(const Morsel& morsel)
         return false;
     }
     const auto* split_context = dynamic_cast<const LakeSplitContext*>(scan_morsel->get_split_context());
-    return split_context != nullptr && split_context->rowid_range != nullptr && split_context->short_key_range == nullptr;
+    return split_context != nullptr && split_context->rowid_range != nullptr &&
+           split_context->short_key_range == nullptr;
 }
 
 void ConnectorScanOperator::do_close(RuntimeState* state) {
@@ -388,7 +389,8 @@ ChunkSourcePtr ConnectorScanOperator::_take_reusable_chunk_source(RuntimeState* 
     return reusable_chunk_source;
 }
 
-ScanOperator::NewMorselPickupSlotRank ConnectorScanOperator::_rank_new_morsel_pickup_slot(int chunk_source_index) const {
+ScanOperator::NewMorselPickupSlotRank ConnectorScanOperator::_rank_new_morsel_pickup_slot(
+        int chunk_source_index) const {
     if (!config::enable_lake_scan_child_morsel_reuse || connector_type() != connector::ConnectorType::LAKE) {
         return NewMorselPickupSlotRank::kNormal;
     }
@@ -819,9 +821,7 @@ bool ConnectorChunkSource::can_reuse_after_finish() const {
 
 Status ConnectorChunkSource::reset_morsel(RuntimeState* state, MorselPtr&& morsel) {
     auto* scan_morsel = dynamic_cast<ScanMorsel*>(morsel.get());
-    const bool valid_reuse_input = [&]() {
-        return scan_morsel != nullptr;
-    }();
+    const bool valid_reuse_input = [&]() { return scan_morsel != nullptr; }();
     if (!valid_reuse_input) {
         return Status::NotSupported("chunk source morsel reuse is not supported");
     }
