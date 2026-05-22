@@ -60,7 +60,7 @@ concept AllocFunc = HasKeyType<HashMapWithKey>&& requires(T t, const typename Ha
 template <PhmapSeed seed>
 using Int8AggHashMap = SmallFixedSizeHashMap<int8_t, AggDataPtr, seed>;
 template <PhmapSeed seed>
-using Int16AggHashMap = phmap::flat_hash_map<int16_t, AggDataPtr, StdHashWithSeed<int16_t, seed>>;
+using Int16AggHashMap = SmallFixedSizeHashMap<int16_t, AggDataPtr, seed>;
 template <PhmapSeed seed>
 using Int32AggHashMap = phmap::flat_hash_map<int32_t, AggDataPtr, StdHashWithSeed<int32_t, seed>>;
 template <PhmapSeed seed>

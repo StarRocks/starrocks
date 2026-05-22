@@ -56,7 +56,7 @@ static constexpr size_t AGG_HASH_MAP_DEFAULT_PREFETCH_DIST = 16;
 template <PhmapSeed seed>
 using Int8AggHashSet = SmallFixedSizeHashSet<int8_t, seed>;
 template <PhmapSeed seed>
-using Int16AggHashSet = phmap::flat_hash_set<int16_t, StdHashWithSeed<int16_t, seed>>;
+using Int16AggHashSet = SmallFixedSizeHashSet<int16_t, seed>;
 template <PhmapSeed seed>
 using Int32AggHashSet = phmap::flat_hash_set<int32_t, StdHashWithSeed<int32_t, seed>>;
 template <PhmapSeed seed>
