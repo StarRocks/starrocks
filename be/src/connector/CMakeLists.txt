@@ -38,7 +38,6 @@ ADD_BE_LIB(Connector
         hive_connector.cpp
         jdbc_connector.cpp
         lake_connector.cpp
-        mysql_connector.cpp
         cache_stats_connector.cpp
         file_connector.cpp
         file_scan_metrics.cpp
@@ -82,6 +81,30 @@ if (WITH_CONNECTOR_ELASTICSEARCH)
             Base
             Gutil
             StarRocksGen
+    )
+endif()
+
+if (WITH_CONNECTOR_MYSQL)
+    ADD_BE_LIB(ConnectorMySQL
+            mysql/mysql_connector.cpp
+            mysql/mysql_scanner.cpp
+    )
+
+    target_link_libraries(ConnectorMySQL PUBLIC
+            ConnectorPrimitive
+            ExprCore
+            RuntimeCore
+            ChunkCore
+            ColumnCore
+            Types
+            Common
+            Base
+            Gutil
+            StarRocksGen
+    )
+
+    target_link_libraries(ConnectorMySQL PRIVATE
+            mysql
     )
 endif()
 
@@ -136,6 +159,13 @@ if (WITH_CONNECTOR_ELASTICSEARCH)
     target_compile_definitions(ConnectorBootstrap PRIVATE STARROCKS_WITH_CONNECTOR_ELASTICSEARCH)
     target_link_libraries(ConnectorBootstrap PRIVATE
             ConnectorElasticsearch
+    )
+endif()
+
+if (WITH_CONNECTOR_MYSQL)
+    target_compile_definitions(ConnectorBootstrap PRIVATE STARROCKS_WITH_CONNECTOR_MYSQL)
+    target_link_libraries(ConnectorBootstrap PRIVATE
+            ConnectorMySQL
     )
 endif()
 

@@ -366,7 +366,6 @@ set(EXEC_NON_PIPELINE_FILES
     olap_common.cpp
     tablet_info.cpp
     write_combined_txn_log.cpp
-    mysql_scanner.cpp
     cache_stats_scanner.cpp
     local_file_writer.cpp
     plain_text_builder.cpp

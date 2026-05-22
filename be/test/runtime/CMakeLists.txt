@@ -24,6 +24,7 @@ set(RUNTIME_CORE_TEST_FILES
     mem_tracker_test.cpp
     mem_pool_test.cpp
     load_fail_point_test.cpp
+    mysql_table_descriptor_core_test.cpp
     query_statistics_test.cpp
     runtime_state_core_test.cpp
     runtime_filter_core_test.cpp
