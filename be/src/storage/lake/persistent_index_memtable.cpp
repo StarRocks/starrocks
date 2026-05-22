@@ -23,6 +23,9 @@
 
 namespace starrocks::lake {
 
+PersistentIndexMemtable::PersistentIndexMemtable(TabletManager* tablet_mgr, int64_t tablet_id, uint64_t max_rss_rowid)
+        : _tablet_mgr(tablet_mgr), _tablet_id(tablet_id), _max_rss_rowid(max_rss_rowid) {}
+
 PersistentIndexMemtable::~PersistentIndexMemtable() = default;
 
 void PersistentIndexMemtable::update_index_value(IndexValueWithVer* index_value_info, int64_t version,

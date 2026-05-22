@@ -35,27 +35,6 @@ struct AlterMaterializedViewParam {
 };
 using MaterializedViewParamMap = std::unordered_map<std::string, AlterMaterializedViewParam>;
 
-struct SchemaChangeParams {
-    TabletSharedPtr base_tablet;
-    TabletSharedPtr new_tablet;
-    std::vector<std::unique_ptr<TabletReader>> rowset_readers;
-    Version version;
-    int64_t gtid = 0;
-    TabletSchemaCSPtr base_tablet_schema = nullptr;
-    std::vector<RowsetSharedPtr> rowsets_to_change;
-    bool sc_sorting = false;
-    bool sc_directly = false;
-    std::unique_ptr<ChunkChanger> chunk_changer = nullptr;
-
-    TAlterJobType::type alter_job_type;
-
-    // materialzied view parameters
-    DescriptorTbl* desc_tbl = nullptr;
-    std::unique_ptr<TExpr> where_expr;
-    std::vector<std::string> base_table_column_names;
-    MaterializedViewParamMap materialized_params_map;
-};
-
 class ChunkChanger {
 public:
     ChunkChanger(const TabletSchemaCSPtr& base_schema, const TabletSchemaCSPtr& new_schema,
@@ -135,6 +114,27 @@ private:
     std::unordered_map<int, int> _column_ref_mapping;
 
     DISALLOW_COPY(ChunkChanger);
+};
+
+struct SchemaChangeParams {
+    TabletSharedPtr base_tablet;
+    TabletSharedPtr new_tablet;
+    std::vector<std::unique_ptr<TabletReader>> rowset_readers;
+    Version version;
+    int64_t gtid = 0;
+    TabletSchemaCSPtr base_tablet_schema = nullptr;
+    std::vector<RowsetSharedPtr> rowsets_to_change;
+    bool sc_sorting = false;
+    bool sc_directly = false;
+    std::unique_ptr<ChunkChanger> chunk_changer = nullptr;
+
+    TAlterJobType::type alter_job_type;
+
+    // materialized view parameters
+    DescriptorTbl* desc_tbl = nullptr;
+    std::unique_ptr<TExpr> where_expr;
+    std::vector<std::string> base_table_column_names;
+    MaterializedViewParamMap materialized_params_map;
 };
 
 class SchemaChangeUtils {

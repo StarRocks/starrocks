@@ -15,6 +15,7 @@
 #pragma once
 
 #include "storage/load_chunk_spiller.h"
+#include "storage/load_spill_pipeline_merge_context.h"
 #include "storage/memtable_sink.h"
 #include "util/runtime_profile.h"
 
@@ -23,8 +24,6 @@ namespace starrocks {
 class RuntimeState;
 class LoadSpillBlockManager;
 class ThreadPoolToken;
-class LoadSpillPipelineMergeContext;
-
 namespace lake {
 
 class TabletWriter;

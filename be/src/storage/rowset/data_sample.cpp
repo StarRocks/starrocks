@@ -27,6 +27,16 @@
 
 namespace starrocks {
 
+std::unique_ptr<BlockDataSample> DataSample::make_block_sample(int64_t probability_percent, int64_t random_seed,
+                                                               size_t rows_per_block, size_t total_rows) {
+    return std::make_unique<BlockDataSample>(probability_percent, random_seed, rows_per_block, total_rows);
+}
+
+std::unique_ptr<PageDataSample> DataSample::make_page_sample(int64_t probability_percent, int64_t random_seed,
+                                                             size_t num_pages, PageIndexer page_indexer) {
+    return std::make_unique<PageDataSample>(probability_percent, random_seed, num_pages, std::move(page_indexer));
+}
+
 StatusOr<RowIdSparseRange> BlockDataSample::sample(OlapReaderStatistics* stats) {
     RETURN_IF(_probability_percent == 0 || _probability_percent == 100,
               Status::InvalidArgument("percent should be in (0, 100)"));
