@@ -12,8 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "column/arrow/arrow_to_json_converter.h"
-
 #include <arrow/array.h>
 #include <arrow/builder.h>
 #include <gtest/gtest.h>
@@ -24,10 +22,14 @@
 #include <string>
 #include <vector>
 
-#include "base/testutil/assert.h"
 #include "column/json_column.h"
+#include "common/status.h"
+#include "testutil/assert.h"
 
 namespace starrocks {
+
+Status convert_arrow_to_json(const arrow::Array* array, JsonColumn* output, size_t array_start_idx,
+                             size_t num_elements);
 
 static std::string compact_json(const JsonColumn& column, size_t idx) {
     std::string value = column.get(idx).get_json()->to_string_uncheck();
