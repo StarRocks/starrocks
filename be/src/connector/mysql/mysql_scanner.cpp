@@ -37,8 +37,8 @@
 #define __StarRocksMysql MYSQL
 #define __StarRocksMysqlRes MYSQL_RES
 #include "common/logging.h"
+#include "connector/mysql/mysql_scanner.h"
 #include "gutil/strings/substitute.h"
-#include "mysql_scanner.h"
 
 namespace starrocks {
 

@@ -536,6 +536,36 @@
       "remediation": "Keep ConnectorElasticsearch limited to Elasticsearch read-side scan, predicate pushdown, scroll query, and parser logic; move registration into ConnectorBootstrap and avoid pulling Connector, storage, service, or full Exec code into the connector library."
     },
     {
+      "id": "connectormysql",
+      "doc_label": "ConnectorMySQL",
+      "summary": "MySQL connector implementation above connector contracts without registry composition, storage, service, or full Exec coupling.",
+      "agents_path": "be/src/connector/mysql/AGENTS.md",
+      "owned_targets": ["ConnectorMySQL"],
+      "allowed_include_prefixes": [
+        "connector/mysql/",
+        "connector/connector.h",
+        "connector/data_source.h",
+        "connector/data_source_provider.h",
+        "exprs/",
+        "runtime/",
+        "column/",
+        "types/",
+        "common/",
+        "base/",
+        "gutil/",
+        "gen_cpp/"
+      ],
+      "forbidden_include_prefixes": ["exec/", "storage/", "service/", "http/", "cache/", "util/"],
+      "forbidden_includes": [
+        "connector/connector_registry.h",
+        "runtime/exec_env.h"
+      ],
+      "allowed_target_deps": ["ConnectorPrimitive", "ExprCore", "RuntimeCore", "ChunkCore", "ColumnCore", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
+      "allowed_test_targets": ["connector_mysql_test"],
+      "allowed_test_link_deps": ["ConnectorMySQL", "ConnectorPrimitive", "ExprCore", "RuntimeCore", "ChunkCore", "ColumnCore", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
+      "remediation": "Keep ConnectorMySQL limited to MySQL read-side scan and scanner logic; move registration into ConnectorBootstrap and avoid pulling Connector, storage, service, or full Exec code into the connector library."
+    },
+    {
       "id": "connectorbootstrap",
       "doc_label": "ConnectorBootstrap",
       "summary": "Connector-layer bootstrap for split connector libraries that install into the default registry without depending on the legacy built-in registry.",
@@ -545,6 +575,7 @@
         "connector/connector_bootstrap.h",
         "connector/benchmark/",
         "connector/elasticsearch/",
+        "connector/mysql/",
         "connector/connector.h",
         "connector/connector_registry.h",
         "common/",
@@ -557,7 +588,7 @@
         "connector/builtin_connector_registry.h",
         "runtime/exec_env.h"
       ],
-      "allowed_target_deps": ["Connector", "ConnectorBenchmark", "ConnectorElasticsearch", "ConnectorPrimitive", "Common", "Base", "Gutil", "StarRocksGen"],
+      "allowed_target_deps": ["Connector", "ConnectorBenchmark", "ConnectorElasticsearch", "ConnectorMySQL", "ConnectorPrimitive", "Common", "Base", "Gutil", "StarRocksGen"],
       "remediation": "Keep split connector bootstrap independent from ConnectorBuiltinRegistry; add newly split connector libraries here and let service-level startup compose legacy registry plus this bootstrap."
     },
     {

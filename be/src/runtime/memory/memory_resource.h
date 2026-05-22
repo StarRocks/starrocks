@@ -15,6 +15,7 @@
 #pragma once
 
 #include <cstdint>
+#include <memory>
 #include <memory_resource>
 
 #include "base/string/posion.h"

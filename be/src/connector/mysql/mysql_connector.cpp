@@ -12,14 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "connector/mysql_connector.h"
+#include "connector/mysql/mysql_connector.h"
 
 #include "column/chunk.h"
 #include "exprs/expr.h"
 #include "exprs/in_const_predicate.hpp"
-#include "runtime/descriptors_ext.h"
+#include "runtime/descriptors.h"
 #include "runtime/runtime_state.h"
-#include "storage/chunk_helper.h"
 
 namespace starrocks::connector {
 #define APPLY_FOR_NUMERICAL_TYPE(M, APPEND_TO_SQL) \

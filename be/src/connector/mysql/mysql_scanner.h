@@ -37,6 +37,7 @@
 #include <cstdlib>
 #include <list>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 #include "base/string/slice.h"
