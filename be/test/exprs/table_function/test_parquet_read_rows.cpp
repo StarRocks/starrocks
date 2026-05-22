@@ -551,6 +551,128 @@ TEST_F(ParquetReadRowsTableFunctionTest, MaxAnchorsCapExceeded) {
     ASSERT_OK(_tvf.close(_runtime_state.get(), state));
 }
 
+// ---------- anchor with row_in_file as a JSON number whose underlying repr
+// is double (e.g. `1.0`) — exercise parse_anchor's isDouble branch ----------
+TEST_F(ParquetReadRowsTableFunctionTest, AnchorRowInFileAsDouble) {
+    std::string parquet_path = _tmp_dir + "/fixture.parquet";
+    ASSIGN_OR_ABORT(auto meta, _write_fixture(parquet_path, {1, 2, 3}, {100, 200, 300}, {"alice", "bob", "carol"}));
+    int64_t file_size = meta.first;
+    int64_t file_mtime_ms = meta.second * 1000;
+
+    // Build the JSON manually with `row_in_file:1.0` (note the .0); the
+    // vpack parser will tag it as a Double, which exercises the
+    // `v.isDouble()` branch in get_optional_int / get_required_int.
+    auto input = _make_source_info_column({strings::Substitute(
+            R"({"format":"parquet","file":"$0","row_in_file":1.0,"file_size":$1,"file_mtime_ms":$2})", parquet_path,
+            file_size, file_mtime_ms)});
+
+    TableFunctionState* state = nullptr;
+    TFunction fn;
+    ASSERT_OK(_tvf.init(fn, &state));
+    state->set_params({input});
+
+    auto [columns, offsets] = _tvf.process(_runtime_state.get(), state);
+    ASSERT_OK(state->status());
+    auto* row_col = down_cast<const Int64Column*>(columns[1].get());
+    ASSERT_EQ(1, row_col->size());
+    EXPECT_EQ(1, row_col->get_data()[0]);
+
+    ASSERT_OK(_tvf.close(_runtime_state.get(), state));
+}
+
+// ---------- anchor with only file_size present, no file_mtime_ms ----------
+TEST_F(ParquetReadRowsTableFunctionTest, AnchorMissingOnlyMtime) {
+    std::string parquet_path = _tmp_dir + "/fixture.parquet";
+    ASSIGN_OR_ABORT(auto meta, _write_fixture(parquet_path, {1, 2, 3}, {100, 200, 300}, {"alice", "bob", "carol"}));
+    int64_t file_size = meta.first;
+
+    auto input = _make_source_info_column({strings::Substitute(
+            R"({"format":"parquet","file":"$0","row_in_file":0,"file_size":$1})", parquet_path, file_size)});
+
+    TableFunctionState* state = nullptr;
+    TFunction fn;
+    ASSERT_OK(_tvf.init(fn, &state));
+    state->set_params({input});
+
+    auto [columns, offsets] = _tvf.process(_runtime_state.get(), state);
+    ASSERT_OK(state->status());
+    EXPECT_EQ(1, columns[0]->size());
+
+    ASSERT_OK(_tvf.close(_runtime_state.get(), state));
+}
+
+// ---------- anchor with only file_mtime_ms, no file_size ----------
+TEST_F(ParquetReadRowsTableFunctionTest, AnchorMissingOnlySize) {
+    std::string parquet_path = _tmp_dir + "/fixture.parquet";
+    ASSIGN_OR_ABORT(auto meta, _write_fixture(parquet_path, {1, 2, 3}, {100, 200, 300}, {"alice", "bob", "carol"}));
+    int64_t mtime_ms = meta.second * 1000;
+
+    auto input = _make_source_info_column({strings::Substitute(
+            R"({"format":"parquet","file":"$0","row_in_file":2,"file_mtime_ms":$1})", parquet_path, mtime_ms)});
+
+    TableFunctionState* state = nullptr;
+    TFunction fn;
+    ASSERT_OK(_tvf.init(fn, &state));
+    state->set_params({input});
+
+    auto [columns, offsets] = _tvf.process(_runtime_state.get(), state);
+    ASSERT_OK(state->status());
+    EXPECT_EQ(1, columns[0]->size());
+    auto* row_col = down_cast<const Int64Column*>(columns[1].get());
+    EXPECT_EQ(2, row_col->get_data()[0]);
+
+    ASSERT_OK(_tvf.close(_runtime_state.get(), state));
+}
+
+// ---------- file_size field present but not a number ----------
+TEST_F(ParquetReadRowsTableFunctionTest, NonNumericFileSizeRejected) {
+    auto input = _make_source_info_column(
+            {R"({"file":"/tmp/x.parquet","row_in_file":0,"file_size":"big","file_mtime_ms":1})"});
+
+    TableFunctionState* state = nullptr;
+    TFunction fn;
+    ASSERT_OK(_tvf.init(fn, &state));
+    state->set_params({input});
+
+    _tvf.process(_runtime_state.get(), state);
+    EXPECT_FALSE(state->status().ok());
+    EXPECT_NE(std::string::npos, state->status().to_string().find("must be a number"));
+
+    ASSERT_OK(_tvf.close(_runtime_state.get(), state));
+}
+
+// ---------- file field present but not a string ----------
+TEST_F(ParquetReadRowsTableFunctionTest, NonStringFileFieldRejected) {
+    auto input = _make_source_info_column({R"({"file":42,"row_in_file":0,"file_size":1,"file_mtime_ms":1})"});
+
+    TableFunctionState* state = nullptr;
+    TFunction fn;
+    ASSERT_OK(_tvf.init(fn, &state));
+    state->set_params({input});
+
+    _tvf.process(_runtime_state.get(), state);
+    EXPECT_FALSE(state->status().ok());
+    EXPECT_NE(std::string::npos, state->status().to_string().find("must be a string"));
+
+    ASSERT_OK(_tvf.close(_runtime_state.get(), state));
+}
+
+// ---------- row_in_file missing entirely ----------
+TEST_F(ParquetReadRowsTableFunctionTest, MissingRowInFileRejected) {
+    auto input = _make_source_info_column({R"({"file":"/tmp/x.parquet"})"});
+
+    TableFunctionState* state = nullptr;
+    TFunction fn;
+    ASSERT_OK(_tvf.init(fn, &state));
+    state->set_params({input});
+
+    _tvf.process(_runtime_state.get(), state);
+    EXPECT_FALSE(state->status().ok());
+    EXPECT_NE(std::string::npos, state->status().to_string().find("missing required field"));
+
+    ASSERT_OK(_tvf.close(_runtime_state.get(), state));
+}
+
 // ---------- empty input chunk: process() returns 3 empty columns + offset[0]=0 ----------
 TEST_F(ParquetReadRowsTableFunctionTest, EmptyInputChunk) {
     auto input = JsonColumn::create();
