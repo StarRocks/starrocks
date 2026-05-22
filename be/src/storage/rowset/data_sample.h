@@ -42,10 +42,14 @@ public:
             : _probability_percent(probability_percent), _random_seed(random_seed) {}
 
     static std::unique_ptr<BlockDataSample> make_block_sample(int64_t probability_percent, int64_t random_seed,
-                                                              size_t rows_per_block, size_t total_rows);
+                                                              size_t rows_per_block, size_t total_rows) {
+        return std::make_unique<BlockDataSample>(probability_percent, random_seed, rows_per_block, total_rows);
+    }
 
     static std::unique_ptr<PageDataSample> make_page_sample(int64_t probability_percent, int64_t random_seed,
-                                                            size_t num_pages, PageIndexer page_indexer);
+                                                            size_t num_pages, PageIndexer page_indexer) {
+        return std::make_unique<PageDataSample>(probability_percent, random_seed, num_pages, std::move(page_indexer));
+    }
 
     virtual StatusOr<RowIdSparseRange> sample(OlapReaderStatistics* stats) = 0;
 
@@ -116,15 +120,5 @@ private:
 
     std::shared_ptr<SortableZoneMap> _zonemap = nullptr;
 };
-
-inline std::unique_ptr<BlockDataSample> DataSample::make_block_sample(int64_t probability_percent, int64_t random_seed,
-                                                                      size_t rows_per_block, size_t total_rows) {
-    return std::make_unique<BlockDataSample>(probability_percent, random_seed, rows_per_block, total_rows);
-}
-
-inline std::unique_ptr<PageDataSample> DataSample::make_page_sample(int64_t probability_percent, int64_t random_seed,
-                                                                    size_t num_pages, PageIndexer page_indexer) {
-    return std::make_unique<PageDataSample>(probability_percent, random_seed, num_pages, std::move(page_indexer));
-}
 
 } // namespace starrocks
