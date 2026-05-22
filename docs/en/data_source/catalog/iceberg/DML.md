@@ -221,6 +221,112 @@ DELETE FROM iceberg_catalog.db.table1 WHERE id IN (SELECT id FROM temp_table WHE
 DELETE FROM iceberg_catalog.db.table1 t1 WHERE EXISTS (SELECT user_id FROM inactive_users t2 WHERE t2.user_id = t1.user_id);
 ```
 
+## UPDATE
+
+You can use the UPDATE statement to modify rows in an Iceberg table based on specified conditions. This feature is supported from v4.2 and later.
+
+StarRocks implements UPDATE using the Iceberg V2 **Merge-On-Read** model: each UPDATE atomically commits both a position-delete file (marking the old rows) and a new data file (containing the updated rows) in a single Iceberg snapshot. Readers always observe either the pre-UPDATE or post-UPDATE state, never an intermediate one, and the resulting table remains interoperable with Spark and other Iceberg-aware engines.
+
+### Syntax
+
+```SQL
+UPDATE <table_name>
+SET <column_name> = <expression> [, <column_name> = <expression> ...]
+WHERE <condition>
+```
+
+### Parameters
+
+- `table_name`: The name of the Iceberg table you want to update. You can use:
+  - Fully qualified name: `catalog_name.database_name.table_name`
+  - Database-qualified name (after setting catalog): `database_name.table_name`
+  - Table name only (after setting catalog and database): `table_name`
+
+- `column_name = expression`: The target column and the new value. The expression may reference other columns in the same row and any scalar function supported by StarRocks.
+
+- `condition`: The predicate that identifies which rows to update. The supported operators match those of `DELETE` (comparison, logical, `IN`/`NOT IN`, `BETWEEN`, `LIKE`, `IS NULL`/`IS NOT NULL`, and `IN`/`EXISTS` sub-queries).
+
+### Usage notes
+
+- Only Iceberg tables with **format version 2** are supported. UPDATE on V1 tables is rejected at analyze time.
+- A `WHERE` clause is **required** to prevent accidental full-table updates.
+- Partition columns cannot be updated. Use `INSERT OVERWRITE` if you need to rewrite partition assignments.
+- The hidden metadata columns `_file` and `_pos` cannot be assigned in `SET`.
+- `WITH` (CTE) clauses and `FROM` clauses are not allowed in UPDATE on Iceberg tables.
+- `DEFAULT` values are not supported, because Iceberg V2 has no column-default semantics (initial-default / write-default are V3 features).
+- Only Parquet-formatted Iceberg tables are supported, matching the existing Iceberg sink.
+- Concurrent UPDATEs use **serializable isolation**: at commit time StarRocks re-checks the data files against the read snapshot, and a conflicting concurrent write causes the UPDATE to fail rather than silently overwriting.
+
+### Examples
+
+#### Basic UPDATE
+
+Update a single column with a literal value:
+
+```SQL
+UPDATE iceberg_catalog.db.table1 SET status = 'inactive' WHERE id = 3;
+```
+
+#### UPDATE multiple columns
+
+Update several columns in one statement:
+
+```SQL
+UPDATE iceberg_catalog.db.table1
+SET status = 'archived', archived_at = '2026-05-21'
+WHERE last_login < '2024-01-01';
+```
+
+#### UPDATE with an expression
+
+The new value can be computed from the row's existing columns:
+
+```SQL
+UPDATE iceberg_catalog.db.table1
+SET salary = salary * 1.05
+WHERE department = 'engineering';
+```
+
+#### UPDATE with IN and logical operators
+
+```SQL
+UPDATE iceberg_catalog.db.table1
+SET status = 'flagged'
+WHERE id IN (18, 20, 22);
+
+UPDATE iceberg_catalog.db.table1
+SET status = 'inactive'
+WHERE age > 60 OR last_login IS NULL;
+```
+
+#### UPDATE with a sub-query in the WHERE clause
+
+```SQL
+UPDATE iceberg_catalog.db.orders
+SET state = 'cancelled'
+WHERE customer_id IN (SELECT id FROM inactive_customers);
+```
+
+#### UPDATE setting NULL
+
+```SQL
+UPDATE iceberg_catalog.db.table1
+SET email = NULL
+WHERE email_verified = false;
+```
+
+### Monitoring
+
+Each UPDATE statement against an Iceberg table emits the following FE-side metrics. They share the `iceberg_*` namespace with the existing `iceberg_write_*` and `iceberg_delete_*` metrics, and can be scraped via the standard FE metrics endpoint. See [Metrics](../../../administration/management/monitoring/metric_details/i-p.md) for full per-metric documentation.
+
+| Metric | Unit | Labels | Description |
+| --- | --- | --- | --- |
+| `iceberg_update_total` | Count | `status` (`success`, `failed`), `reason` (`none`, `timeout`, `oom`, `access_denied`, `unknown`) | Total number of Iceberg UPDATE tasks, incremented by 1 after each task ends. |
+| `iceberg_update_duration_ms_total` | Millisecond | — | Total execution time of Iceberg UPDATE tasks. |
+| `iceberg_update_rows` | Rows | — | Total number of rows affected by Iceberg UPDATE tasks (counted once per row, not per file). |
+| `iceberg_update_bytes` | Bytes | `file_type` (`data`, `position_delete`) | Total bytes written by Iceberg UPDATE, split between new data files and position-delete files. |
+| `iceberg_update_files` | Count | `file_type` (`data`, `position_delete`) | Total number of files written by Iceberg UPDATE, split between new data files and position-delete files. |
+
 ## TRUNCATE
 
 You can use the TRUNCATE TABLE statement to quickly delete all data from Iceberg tables.

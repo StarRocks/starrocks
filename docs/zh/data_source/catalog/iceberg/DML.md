@@ -210,6 +210,110 @@ DELETE FROM iceberg_catalog.db.table1 WHERE id IN (SELECT id FROM temp_table WHE
 DELETE FROM iceberg_catalog.db.table1 t1 WHERE EXISTS (SELECT user_id FROM inactive_users t2 WHERE t2.user_id = t1.user_id);
 ```
 
+## UPDATE
+
+您可以使用 UPDATE 语句根据指定条件更新 Iceberg 表中的数据。此功能从 StarRocks v4.2 起支持。
+
+StarRocks 通过 Iceberg V2 的 **Merge-On-Read** 模型实现 UPDATE：每次 UPDATE 会在同一个 Iceberg 快照中原子提交位置删除文件（position delete file，用于标记被更新的旧行）和新数据文件（包含更新后的新行）。读者始终只能看到 UPDATE 前或 UPDATE 后的完整状态，不会出现中间态，结果表对 Spark 等其它 Iceberg 引擎完全兼容。
+
+### 语法
+
+```SQL
+UPDATE <table_name>
+SET <column_name> = <expression> [, <column_name> = <expression> ...]
+WHERE <condition>
+```
+
+### 参数
+
+- `table_name`：要更新的 Iceberg 表名称。您可以使用：
+  - 完全限定名称：`catalog_name.database_name.table_name`
+  - 数据库限定名称（设置 catalog 后）：`database_name.table_name`
+  - 仅表名（设置 catalog 和数据库后）：`table_name`
+
+- `column_name = expression`：要更新的列以及新值。表达式可以引用同一行的其它列，以及 StarRocks 支持的标量函数。
+
+- `condition`：用于标识需要更新的行的谓词。支持的运算符与 `DELETE` 一致（比较运算符、逻辑运算符、`IN` / `NOT IN`、`BETWEEN`、`LIKE`、`IS NULL` / `IS NOT NULL`，以及 `IN` / `EXISTS` 子查询）。
+
+### 使用说明
+
+- 仅支持 **format-version 2** 的 Iceberg 表。对 V1 表执行 UPDATE 会在分析阶段被拒绝。
+- 必须指定 `WHERE` 子句，以防误更新全表。
+- 不支持更新分区列。 如需修改分区归属，请使用 `INSERT OVERWRITE`。
+- 不允许在 `SET` 中赋值给隐藏的元数据列 `_file` 和 `_pos`。
+- 对 Iceberg 表的 UPDATE 不支持 `WITH`（CTE）子句和 `FROM` 子句。
+- 不支持 `DEFAULT` 值，因为 Iceberg V2 没有列默认值语义（initial-default / write-default 是 V3 特性）。
+- 仅支持 Parquet 格式的 Iceberg 表，与已有的 Iceberg sink 一致。
+- 并发 UPDATE 使用 **可串行化（serializable）隔离**：提交时 StarRocks 会基于读取快照重新校验数据文件，若与并发写入冲突，UPDATE 会直接失败，而不是默默覆盖。
+
+### 示例
+
+#### 基本 UPDATE 操作
+
+使用字面量更新单个列：
+
+```SQL
+UPDATE iceberg_catalog.db.table1 SET status = 'inactive' WHERE id = 3;
+```
+
+#### 同时更新多个列
+
+```SQL
+UPDATE iceberg_catalog.db.table1
+SET status = 'archived', archived_at = '2026-05-21'
+WHERE last_login < '2024-01-01';
+```
+
+#### 使用表达式更新
+
+新值可以基于当前行的其它列计算得到：
+
+```SQL
+UPDATE iceberg_catalog.db.table1
+SET salary = salary * 1.05
+WHERE department = 'engineering';
+```
+
+#### 带 IN 和逻辑运算符的 UPDATE
+
+```SQL
+UPDATE iceberg_catalog.db.table1
+SET status = 'flagged'
+WHERE id IN (18, 20, 22);
+
+UPDATE iceberg_catalog.db.table1
+SET status = 'inactive'
+WHERE age > 60 OR last_login IS NULL;
+```
+
+#### WHERE 子句中带子查询的 UPDATE
+
+```SQL
+UPDATE iceberg_catalog.db.orders
+SET state = 'cancelled'
+WHERE customer_id IN (SELECT id FROM inactive_customers);
+```
+
+#### 将列设置为 NULL
+
+```SQL
+UPDATE iceberg_catalog.db.table1
+SET email = NULL
+WHERE email_verified = false;
+```
+
+### 监控指标
+
+针对 Iceberg 表的每条 UPDATE 语句都会更新以下 FE 端指标。它们与现有的 `iceberg_write_*`、`iceberg_delete_*` 共用 `iceberg_*` 命名空间，可通过标准 FE 指标接口拉取。完整说明请参考[Metrics](../../../administration/management/monitoring/metric_details/i-p.md)。
+
+| 指标 | 单位 | 标签 | 描述 |
+| --- | --- | --- | --- |
+| `iceberg_update_total` | 计数 | `status`（`success`、`failed`），`reason`（`none`、`timeout`、`oom`、`access_denied`、`unknown`） | 针对 Iceberg 表的 UPDATE 任务总数，每个任务结束后加 1。 |
+| `iceberg_update_duration_ms_total` | 毫秒 | — | Iceberg UPDATE 任务的累计执行时间。 |
+| `iceberg_update_rows` | 行 | — | Iceberg UPDATE 影响的总行数（每行只计一次，与生成的文件数无关）。 |
+| `iceberg_update_bytes` | 字节 | `file_type`（`data`、`position_delete`） | Iceberg UPDATE 写入的总字节数，按新数据文件和位置删除文件分别统计。 |
+| `iceberg_update_files` | 计数 | `file_type`（`data`、`position_delete`） | Iceberg UPDATE 写入的文件总数，按新数据文件和位置删除文件分别统计。 |
+
 ## TRUNCATE
 
 您可以使用 TRUNCATE TABLE 语句快速删除 Iceberg 表中的所有数据。

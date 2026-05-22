@@ -210,6 +210,112 @@ DELETE FROM iceberg_catalog.db.table1 WHERE id IN (SELECT id FROM temp_table WHE
 DELETE FROM iceberg_catalog.db.table1 t1 WHERE EXISTS (SELECT user_id FROM inactive_users t2 WHERE t2.user_id = t1.user_id);
 ```
 
+## UPDATE
+
+指定された条件に基づいて Iceberg テーブルの行を更新するには、UPDATE ステートメントを使用できます。この機能は StarRocks v4.2 以降でサポートされています。
+
+StarRocks は Iceberg V2 の **Merge-On-Read** モデルで UPDATE を実装しています。各 UPDATE は、古い行をマークする position delete ファイルと、更新後の行を含む新しいデータファイルを、単一の Iceberg スナップショットで原子的にコミットします。読み取り側は常に UPDATE 前または UPDATE 後の状態のみを観測し、中間状態を観測することはありません。書き込み結果は Spark などの他の Iceberg 対応エンジンとも相互運用可能です。
+
+### 構文
+
+```SQL
+UPDATE <table_name>
+SET <column_name> = <expression> [, <column_name> = <expression> ...]
+WHERE <condition>
+```
+
+### パラメーター
+
+- `table_name`: 更新対象の Iceberg テーブル名。使用可能な形式：
+  - 完全修飾名：`catalog_name.database_name.table_name`
+  - データベース修飾名（catalog 設定後）：`database_name.table_name`
+  - テーブル名のみ（catalog とデータベース設定後）：`table_name`
+
+- `column_name = expression`: 更新対象列と新しい値。式は同一行の他の列、および StarRocks がサポートする任意のスカラー関数を参照できます。
+
+- `condition`: 更新する行を識別する述語。サポートされる演算子は `DELETE` と同じです（比較演算子、論理演算子、`IN` / `NOT IN`、`BETWEEN`、`LIKE`、`IS NULL` / `IS NOT NULL`、`IN` / `EXISTS` サブクエリ）。
+
+### 使用上の注意
+
+- **format-version 2** の Iceberg テーブルのみサポートされます。V1 テーブルへの UPDATE は解析時に拒否されます。
+- フルテーブル更新を防ぐため、`WHERE` 句は **必須** です。
+- パーティション列は更新できません。 パーティション割り当てを変更する必要がある場合は、`INSERT OVERWRITE` を使用してください。
+- 隠しメタデータ列 `_file` および `_pos` は `SET` で代入できません。
+- Iceberg テーブルへの UPDATE では、`WITH`（CTE）句および `FROM` 句は使用できません。
+- Iceberg V2 には列のデフォルト値セマンティクスが存在しないため、`DEFAULT` 値はサポートされていません（initial-default / write-default は V3 の機能です）。
+- 既存の Iceberg sink と同様に、Parquet 形式の Iceberg テーブルのみサポートされます。
+- 並行 UPDATE は **直列化可能（serializable）分離** で実行されます。コミット時、StarRocks は読み取りスナップショットに対してデータファイルを再検証し、並行書き込みと衝突した場合、UPDATE はサイレントに上書きせずに失敗します。
+
+### 例
+
+#### 基本的な UPDATE 操作
+
+リテラル値で 1 つの列を更新する：
+
+```SQL
+UPDATE iceberg_catalog.db.table1 SET status = 'inactive' WHERE id = 3;
+```
+
+#### 複数列の更新
+
+1 つのステートメントで複数の列を更新する：
+
+```SQL
+UPDATE iceberg_catalog.db.table1
+SET status = 'archived', archived_at = '2026-05-21'
+WHERE last_login < '2024-01-01';
+```
+
+#### 式を使用した UPDATE
+
+新しい値は、行の既存列から計算できます：
+
+```SQL
+UPDATE iceberg_catalog.db.table1
+SET salary = salary * 1.05
+WHERE department = 'engineering';
+```
+
+#### IN および論理演算子を使用した UPDATE
+
+```SQL
+UPDATE iceberg_catalog.db.table1
+SET status = 'flagged'
+WHERE id IN (18, 20, 22);
+
+UPDATE iceberg_catalog.db.table1
+SET status = 'inactive'
+WHERE age > 60 OR last_login IS NULL;
+```
+
+#### WHERE 句にサブクエリを含む UPDATE
+
+```SQL
+UPDATE iceberg_catalog.db.orders
+SET state = 'cancelled'
+WHERE customer_id IN (SELECT id FROM inactive_customers);
+```
+
+#### NULL への設定
+
+```SQL
+UPDATE iceberg_catalog.db.table1
+SET email = NULL
+WHERE email_verified = false;
+```
+
+### モニタリング指標
+
+Iceberg テーブルに対する各 UPDATE ステートメントは、以下の FE 側指標を更新します。これらは既存の `iceberg_write_*` および `iceberg_delete_*` と同じ `iceberg_*` 名前空間を共有し、標準の FE メトリクスエンドポイントから取得できます。
+
+| 指標 | 単位 | ラベル | 説明 |
+| --- | --- | --- | --- |
+| `iceberg_update_total` | 件数 | `status`（`success`、`failed`）、`reason`（`none`、`timeout`、`oom`、`access_denied`、`unknown`） | Iceberg テーブルを対象とする UPDATE タスク総数。各タスク終了時に 1 ずつ加算されます。 |
+| `iceberg_update_duration_ms_total` | ミリ秒 | — | Iceberg UPDATE タスクの累積実行時間。 |
+| `iceberg_update_rows` | 行 | — | Iceberg UPDATE が影響を与えた行の総数（生成されるファイル数に関係なく、1 行は 1 回のみカウントされます）。 |
+| `iceberg_update_bytes` | バイト | `file_type`（`data`、`position_delete`） | Iceberg UPDATE が書き込んだ総バイト数。新規データファイルと position delete ファイルを別々に集計します。 |
+| `iceberg_update_files` | 件数 | `file_type`（`data`、`position_delete`） | Iceberg UPDATE が書き込んだファイル総数。新規データファイルと position delete ファイルを別々に集計します。 |
+
 ## TRUNCATE
 
 Iceberg テーブルからすべてのデータを迅速に削除するには、TRUNCATE TABLE ステートメントを使用できます。

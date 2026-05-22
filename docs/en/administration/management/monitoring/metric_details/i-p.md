@@ -97,6 +97,41 @@ For more information on how to build a monitoring service for your StarRocks clu
 - Labels: `time_travel_type` (`branch`, `tag`, `snapshot`, or `timestamp`) for the categorized series.
 - Description: Total number of Iceberg time travel queries. The unlabeled series counts each time travel query once. The labeled series count each distinct time travel type used by the query. `snapshot` means `FOR VERSION AS OF <snapshot_id>`, `branch` and `tag` mean `FOR VERSION AS OF <reference_name>`, and `timestamp` means `FOR TIMESTAMP AS OF ...`.
 
+## `iceberg_update_bytes`
+
+- Unit: Bytes
+- Type: Cumulative
+- Labels: `file_type` (`data` or `position_delete`)
+- Description: Total bytes written by Iceberg `UPDATE` tasks, split by file type. `data` is the size of new data files containing the updated rows; `position_delete` is the size of position-delete files marking the old rows.
+
+## `iceberg_update_duration_ms_total`
+
+- Unit: Millisecond
+- Type: Cumulative
+- Description: Total execution time of Iceberg `UPDATE` tasks in milliseconds. The duration of each task is added after it ends.
+
+## `iceberg_update_files`
+
+- Unit: Count
+- Type: Cumulative
+- Labels: `file_type` (`data` or `position_delete`)
+- Description: Total number of files written by Iceberg `UPDATE` tasks, split by file type. `data` counts new data files; `position_delete` counts position-delete files.
+
+## `iceberg_update_rows`
+
+- Unit: Rows
+- Type: Cumulative
+- Description: Total number of rows affected by Iceberg `UPDATE` tasks. Each updated row is counted once, not once per emitted file.
+
+## `iceberg_update_total`
+
+- Unit: Count
+- Type: Cumulative
+- Labels:
+  - `status` (`success` or `failed`)
+  - `reason` (`none`, `timeout`, `oom`, `access_denied`, `unknown`)
+- Description: Total number of `UPDATE` tasks that target Iceberg tables. The metric is incremented by 1 after each task ends, regardless of success or failure. Iceberg UPDATE uses the V2 Merge-On-Read model and atomically writes both data files and position-delete files in a single snapshot.
+
 ## `iceberg_write_bytes`
 
 - Unit: Bytes
