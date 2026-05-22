@@ -212,18 +212,6 @@ void append_cell_value(const arrow::Array& array, int64_t row, rapidjson::Value*
     case arrow::Type::INT64:
         out->SetInt64(static_cast<const arrow::Int64Array&>(array).Value(row));
         return;
-    case arrow::Type::UINT8:
-        out->SetUint(static_cast<const arrow::UInt8Array&>(array).Value(row));
-        return;
-    case arrow::Type::UINT16:
-        out->SetUint(static_cast<const arrow::UInt16Array&>(array).Value(row));
-        return;
-    case arrow::Type::UINT32:
-        out->SetUint(static_cast<const arrow::UInt32Array&>(array).Value(row));
-        return;
-    case arrow::Type::UINT64:
-        out->SetUint64(static_cast<const arrow::UInt64Array&>(array).Value(row));
-        return;
     case arrow::Type::FLOAT:
         out->SetDouble(static_cast<const arrow::FloatArray&>(array).Value(row));
         return;
@@ -236,26 +224,13 @@ void append_cell_value(const arrow::Array& array, int64_t row, rapidjson::Value*
         out->SetString(view.data(), static_cast<rapidjson::SizeType>(view.size()), *alloc);
         return;
     }
-    case arrow::Type::BINARY: {
-        const auto& a = static_cast<const arrow::BinaryArray&>(array);
-        auto view = a.GetView(row);
-        // Binary data may not be valid UTF-8; emit as a JSON string of raw bytes.
-        // Consumers needing structured access should add explicit casts on top.
-        out->SetString(view.data(), static_cast<rapidjson::SizeType>(view.size()), *alloc);
-        return;
-    }
-    case arrow::Type::LARGE_STRING: {
-        const auto& a = static_cast<const arrow::LargeStringArray&>(array);
-        auto view = a.GetView(row);
-        out->SetString(view.data(), static_cast<rapidjson::SizeType>(view.size()), *alloc);
-        return;
-    }
-    case arrow::Type::LARGE_BINARY: {
-        const auto& a = static_cast<const arrow::LargeBinaryArray&>(array);
-        auto view = a.GetView(row);
-        out->SetString(view.data(), static_cast<rapidjson::SizeType>(view.size()), *alloc);
-        return;
-    }
+    // Arrow's UINT*, BINARY, LARGE_STRING, LARGE_BINARY variants are not
+    // produced by parquet readers over StarRocks-written data (StarRocks
+    // exposes only signed integer types, and VARCHAR/CHAR round-trip through
+    // arrow's StringType, never LargeStringType). On the off-chance an
+    // upstream parquet was authored elsewhere with one of those arrow types,
+    // the default branch below renders the cell via `Array::ToString()` so
+    // the diagnostic envelope is still produced.
     default: {
         // Fallback: render via arrow's stringifier and embed as a JSON string.
         // Covers decimal/timestamp/date/list/struct/map/union and friends in a
