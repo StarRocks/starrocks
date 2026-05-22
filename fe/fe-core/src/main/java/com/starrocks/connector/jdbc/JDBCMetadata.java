@@ -62,7 +62,7 @@ public class JDBCMetadata implements ConnectorMetadata {
 
     private JDBCMetaCache<String, Database> dbCache;
     private JDBCMetaCache<JDBCTableName, List<String>> partitionNamesCache;
-    private JDBCMetaCache<JDBCTableName, Integer> tableIdCache;
+    private JDBCMetaCache<JDBCTableName, Long> tableIdCache;
     private JDBCMetaCache<JDBCTableName, Table> tableInstanceCache;
     private JDBCMetaCache<JDBCTableName, List<Partition>> partitionInfoCache;
 
@@ -337,8 +337,8 @@ public class JDBCMetadata implements ConnectorMetadata {
                             return null;
                         }
 
-                        Integer tableId = tableIdCache.getPersistentCache(jdbcTable,
-                                j -> ConnectorTableId.CONNECTOR_ID_GENERATOR.getNextId().asInt());
+                        Long tableId = tableIdCache.getPersistentCache(jdbcTable,
+                                j -> ConnectorTableId.CONNECTOR_ID_GENERATOR.getNextId().asLong());
                         Table table = schemaResolver.getTable(tableId, tblName, fullSchema,
                                 partitionColumns, dbName, catalogName, properties);
                         if (table != null) {
@@ -382,7 +382,7 @@ public class JDBCMetadata implements ConnectorMetadata {
                     throw new StarRocksConnectorException("pass-through query returned no columns");
                 }
 
-                int tableId = ConnectorTableId.CONNECTOR_ID_GENERATOR.getNextId().asInt();
+                long tableId = ConnectorTableId.CONNECTOR_ID_GENERATOR.getNextId().asLong();
                 JDBCTable queryTable = new JDBCTable(tableId, "_query_" + tableId, fullSchema, dbName, catalogName,
                         properties);
                 queryTable.setPassThroughQuery(normalizedQuery);

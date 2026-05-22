@@ -139,7 +139,7 @@ public class IcebergGlueCatalog implements IcebergCatalog {
     @Override
     public Database getDB(ConnectContext context, String dbName) {
         Map<String, String> dbMeta = delegate.loadNamespaceMetadata(Namespace.of(dbName));
-        return new Database(CONNECTOR_ID_GENERATOR.getNextId().asInt(), dbName, dbMeta.getOrDefault(LOCATION_PROPERTY, ""));
+        return new Database(CONNECTOR_ID_GENERATOR.getNextId().asLong(), dbName, dbMeta.getOrDefault(LOCATION_PROPERTY, ""));
     }
 
     @Override

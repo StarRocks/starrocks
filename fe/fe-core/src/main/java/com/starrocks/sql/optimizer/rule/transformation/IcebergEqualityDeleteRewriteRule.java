@@ -165,7 +165,7 @@ public class IcebergEqualityDeleteRewriteRule extends TransformationRule {
                     .toList();
             List<Column> deleteColumns = columnNames.stream().map(icebergTable::getColumn).collect(Collectors.toList());
             IcebergTable equalityDeleteTable = new IcebergTable(
-                    ConnectorTableId.CONNECTOR_ID_GENERATOR.getNextId().asInt(), equalityDeleteTableName,
+                    ConnectorTableId.CONNECTOR_ID_GENERATOR.getNextId().asLong(), equalityDeleteTableName,
                     icebergTable.getCatalogName(), icebergTable.getResourceName(), icebergTable.getCatalogDBName(),
                     icebergTable.getCatalogTableName(), EQUALITY_DELETE_TABLE_COMMENT, deleteColumns,
                     icebergTable.getNativeTable(), ImmutableMap.of());
@@ -299,7 +299,7 @@ public class IcebergEqualityDeleteRewriteRule extends TransformationRule {
         IcebergTable noDeleteTable = (IcebergTable) scanOperator.getTable();
         String tableName = noDeleteTable.getName() + "_" + "with_delete_file";
         IcebergTable withDeleteIcebergTable = new IcebergTable(
-                ConnectorTableId.CONNECTOR_ID_GENERATOR.getNextId().asInt(), tableName,
+                ConnectorTableId.CONNECTOR_ID_GENERATOR.getNextId().asLong(), tableName,
                 noDeleteTable.getCatalogName(), noDeleteTable.getResourceName(), noDeleteTable.getCatalogDBName(),
                 noDeleteTable.getCatalogTableName(), "iceberg_table_with_delete", noDeleteTable.getFullSchema(),
                 noDeleteTable.getNativeTable(), ImmutableMap.of());
