@@ -47,6 +47,7 @@
 #include "runtime/current_thread.h"
 #include "runtime/global_dict/fragment_dict_state.h"
 #include "runtime/global_dict/parser.h"
+#include "runtime/runtime_state.h"
 #include "runtime/service_contexts.h"
 #include "storage/chunk_helper.h"
 #include "storage/column_predicate_rewriter.h"
@@ -1283,6 +1284,8 @@ Status LakeDataSourceProvider::init(ObjectPool* pool, RuntimeState* state) {
         _tablet_manager = lake_tablet_manager(state);
     }
     RETURN_IF(_tablet_manager == nullptr, Status::InternalError("lake tablet manager is not initialized"));
+    _runtime_state = state;
+    _enable_lake_prepared_physical_split_scan = state->enable_lake_prepared_physical_split_scan();
     if (_t_lake_scan_node.__isset.bucket_exprs) {
         const auto& bucket_exprs = _t_lake_scan_node.bucket_exprs;
         _partition_exprs.resize(bucket_exprs.size());
@@ -1302,7 +1305,6 @@ Status LakeDataSourceProvider::init(ObjectPool* pool, RuntimeState* state) {
         // repeat calls, so re-opening after an inline close would leave function state stale.
         RETURN_IF_ERROR(ExprExecutor::prepare(_partition_conjunct_ctxs, state));
         RETURN_IF_ERROR(ExprExecutor::open(_partition_conjunct_ctxs, state));
-        _runtime_state = state;
     }
     return Status::OK();
 }

@@ -284,6 +284,8 @@ public:
 
     bool could_split_physically() const { return _could_split_physically; }
 
+    bool enable_lake_prepared_physical_split_scan() const { return _enable_lake_prepared_physical_split_scan; }
+
     int64_t get_splitted_scan_rows() const { return splitted_scan_rows; }
 
 protected:
@@ -295,6 +297,7 @@ protected:
 
     bool _could_split = false;
     bool _could_split_physically = false;
+    bool _enable_lake_prepared_physical_split_scan = false;
     int64_t splitted_scan_rows = 0;
 
 private:

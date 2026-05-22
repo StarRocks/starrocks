@@ -581,6 +581,11 @@ public:
                _query_options.enable_collect_table_level_scan_stats;
     }
 
+    bool enable_lake_prepared_physical_split_scan() const {
+        return _query_options.__isset.enable_lake_prepared_physical_split_scan &&
+               _query_options.enable_lake_prepared_physical_split_scan;
+    }
+
     bool enable_wait_dependent_event() const {
         return _query_options.__isset.enable_wait_dependent_event && _query_options.enable_wait_dependent_event;
     }

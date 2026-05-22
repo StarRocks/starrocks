@@ -411,6 +411,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String ENABLE_LAKE_TABLET_INTERNAL_PARALLEL = "enable_lake_tablet_internal_parallel";
 
+    public static final String ENABLE_LAKE_PREPARED_PHYSICAL_SPLIT_SCAN =
+            "enable_lake_prepared_physical_split_scan";
+
     public static final String TABLET_INTERNAL_PARALLEL_MODE = "tablet_internal_parallel_mode";
     public static final String ENABLE_SHARED_SCAN = "enable_shared_scan";
     public static final String PIPELINE_DOP = "pipeline_dop";
@@ -1307,6 +1310,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = ENABLE_LAKE_TABLET_INTERNAL_PARALLEL)
     private boolean enableLakeTabletInternalParallel = true;
+
+    @VariableMgr.VarAttr(name = ENABLE_LAKE_PREPARED_PHYSICAL_SPLIT_SCAN, flag = VariableMgr.INVISIBLE)
+    private boolean enableLakePreparedPhysicalSplitScan = false;
 
     // The strategy mode of TabletInternalParallel, which is effective only when enableTabletInternalParallel is true.
     // The optional values are "auto" and "force_split".
@@ -4658,6 +4664,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return enableTabletInternalParallel || (RunMode.isSharedDataMode() && enableLakeTabletInternalParallel);
     }
 
+    public boolean isEnableLakePreparedPhysicalSplitScan() {
+        return enableLakePreparedPhysicalSplitScan;
+    }
+
     public boolean isEnableResourceGroup() {
         return true;
     }
@@ -6467,6 +6477,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         } else {
             tResult.setEnable_tablet_internal_parallel(enableTabletInternalParallel);
         }
+        tResult.setEnable_lake_prepared_physical_split_scan(enableLakePreparedPhysicalSplitScan);
 
         tResult.setTablet_internal_parallel_mode(
                 TTabletInternalParallelMode.valueOf(tabletInternalParallelMode.toUpperCase()));
