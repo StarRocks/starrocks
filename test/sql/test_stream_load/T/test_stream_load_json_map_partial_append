@@ -14,3 +14,8 @@ shell: curl --location-trusted -u root: -X PUT -H "format: json" -H "strip_outer
 sync;
 
 select id, m from db_${uuid0}.t1 order by id;
+
+shell: curl --location-trusted -u root: -X PUT -H "format: json" -H "strip_outer_array: true" -T ${root_path}/sql/test_stream_load/data/json_map_numeric_overflow.json ${url}/api/db_${uuid0}/t1/_stream_load
+sync;
+
+select id, m from db_${uuid0}.t1 order by id;

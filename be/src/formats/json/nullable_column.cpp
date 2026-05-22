@@ -76,6 +76,9 @@ static Status add_nullable_numeric_column(Column* column, const TypeDescriptor& 
         null_column->append(0);
         return Status::OK();
     } catch (simdjson::simdjson_error& e) {
+        if (is_simdjson_critical_error(e.error())) {
+            throw;
+        }
         auto err_msg = strings::Substitute("Failed to parse value as number, column=$0, error=$1", name,
                                            simdjson::error_message(e.error()));
         return Status::DataQualityError(err_msg);
@@ -344,6 +347,9 @@ static Status add_nullable_array_column(Column* column, const TypeDescriptor& ty
             return Status::InvalidArgument(err_msg);
         }
     } catch (simdjson::simdjson_error& e) {
+        if (is_simdjson_critical_error(e.error())) {
+            throw;
+        }
         auto err_msg = strings::Substitute("Failed to parse value as array, column=$0, error=$1", name,
                                            simdjson::error_message(e.error()));
         return Status::DataQualityError(err_msg);
