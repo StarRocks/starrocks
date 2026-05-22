@@ -121,11 +121,27 @@ public abstract class StorageVolumeMgr implements Writable, GsonPostProcessable 
     public String createStorageVolume(String name, String svType, List<String> locations, Map<String, String> params,
             Optional<Boolean> enabled, String comment)
             throws DdlException, AlreadyExistsException {
-        // Perform stateless validation and the potentially slow network access check BEFORE acquiring
-        // the write lock so that a slow or unreachable endpoint does not block concurrent SV operations.
+        // Stateless validation up front. validateParams/validateLocations only inspect their arguments
+        // and the static PARAM_NAMES set, so they don't need a lock.
         validateParams(svType, params);
         validateLocations(svType, locations);
+
+        // Step 1: cheap existence pre-check under a read lock. This preserves
+        // `CREATE STORAGE VOLUME IF NOT EXISTS` semantics — DDLStmtExecutor only suppresses
+        // AlreadyExistsException, so we must throw it before any remote I/O. It also avoids
+        // wasted access probes for duplicate-create requests.
+        try (LockCloseable lock = new LockCloseable(rwLock.readLock())) {
+            if (exists(name)) {
+                throw new AlreadyExistsException(String.format("Storage volume '%s' already exists", name));
+            }
+        }
+
+        // Step 2: run the (potentially slow) access check OUTSIDE any lock so a slow or
+        // unreachable endpoint does not block concurrent SV operations.
         checkStorageVolumeAccessIfNeeded(name, svType, locations, params);
+
+        // Step 3: re-acquire the write lock, re-check existence in case of a concurrent create,
+        // then persist.
         try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
             if (exists(name)) {
                 throw new AlreadyExistsException(String.format("Storage volume '%s' already exists", name));

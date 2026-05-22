@@ -979,6 +979,45 @@ public class SharedDataStorageVolumeMgrTest {
     }
 
     @Test
+    public void testCreateStorageVolumeSkipsAccessCheckWhenAlreadyExists()
+            throws DdlException, AlreadyExistsException {
+        String svName = "test";
+        StorageVolumeMgr svm = new SharedDataStorageVolumeMgr();
+        List<String> locations = Arrays.asList("s3://abc");
+        Map<String, String> storageParams = new HashMap<>();
+        storageParams.put(AWS_S3_REGION, "region");
+        storageParams.put(AWS_S3_ENDPOINT, "endpoint");
+        storageParams.put(AWS_S3_USE_AWS_SDK_DEFAULT_BEHAVIOR, "true");
+
+        AtomicInteger checkCallCount = new AtomicInteger(0);
+
+        new MockUp<RunMode>() {
+            @Mock
+            public boolean isSharedDataMode() {
+                return true;
+            }
+        };
+
+        new MockUp<StorageVolumeAccessChecker>() {
+            @Mock
+            public void check(String name, String svType, List<String> checkedLocations, Map<String, String> params) {
+                checkCallCount.incrementAndGet();
+            }
+        };
+
+        // First create succeeds and invokes the access check exactly once.
+        svm.createStorageVolume(svName, "S3", locations, storageParams, Optional.empty(), "");
+        Assertions.assertEquals(1, checkCallCount.get());
+
+        // Re-creating the same name must throw AlreadyExistsException without invoking the
+        // access check again — this preserves `CREATE STORAGE VOLUME IF NOT EXISTS` semantics
+        // (DDLStmtExecutor suppresses AlreadyExistsException, but would propagate a DdlException).
+        Assertions.assertThrows(AlreadyExistsException.class,
+                () -> svm.createStorageVolume(svName, "S3", locations, storageParams, Optional.empty(), ""));
+        Assertions.assertEquals(1, checkCallCount.get());
+    }
+
+    @Test
     public void testUpdateStorageVolumeAccessCheckFailureInSharedDataMode() throws DdlException, AlreadyExistsException {
         String svName = "test";
         StorageVolumeMgr svm = new SharedDataStorageVolumeMgr();
