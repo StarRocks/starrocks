@@ -654,7 +654,7 @@ When `schema` is set, `FILES()` reads only the declared columns with the declare
 
 ##### Supported types
 
-All StarRocks data types are supported inside `schema`, including the complex types `ARRAY`, `MAP`, and `STRUCT`. For `STRUCT`, you may declare only a subset of subfields; undeclared subfields are ignored during projection.
+All StarRocks scalar and complex types (`ARRAY`, `MAP`, `STRUCT`) are supported inside `schema`, except StarRocks-only aggregate types (`HLL`, `BITMAP`, `PERCENTILE`), which have no representation in Parquet/ORC/Avro/CSV and are rejected at any depth (top level or inside `ARRAY` / `MAP` value / `STRUCT` field). For `STRUCT`, you may declare only a subset of subfields; undeclared subfields are ignored during projection.
 
 Example of a partial nested declaration:
 

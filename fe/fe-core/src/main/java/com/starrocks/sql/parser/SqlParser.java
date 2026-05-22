@@ -25,14 +25,22 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.GlobalVariable;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.analyzer.TypeDefAnalyzer;
 import com.starrocks.sql.ast.ImportColumnsStmt;
 import com.starrocks.sql.ast.OriginStatement;
 import com.starrocks.sql.ast.PrepareStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.TypeDef;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.common.UnsupportedException;
+import com.starrocks.type.ArrayType;
+import com.starrocks.type.MapType;
+import com.starrocks.type.ScalarType;
+import com.starrocks.type.StructField;
+import com.starrocks.type.StructType;
 import com.starrocks.type.Type;
 import io.trino.sql.parser.StatementSplitter;
 import org.antlr.v4.runtime.CharStreams;
@@ -282,10 +290,48 @@ public class SqlParser {
                         "duplicate column in 'schema': " + name,
                         createPos(colCtx.identifier()));
             }
-            Type type = TypeParser.getType(colCtx.type());
+            Type type;
+            try {
+                type = TypeParser.getType(colCtx.type());
+                // Mirror ColumnDefAnalyzer: bare CHAR/VARCHAR (no explicit length) defaults to length 1.
+                if (type.isScalarType()) {
+                    ScalarType st = (ScalarType) type;
+                    if (st.getPrimitiveType().isStringType() && st.getLength() <= 0) {
+                        st.setLength(1);
+                    }
+                }
+                TypeDefAnalyzer.analyze(new TypeDef(type, createPos(colCtx.type())));
+            } catch (SemanticException | IllegalArgumentException e) {
+                throw new ParsingException(
+                        String.format("invalid type for column '%s' in 'schema': %s", name, e.getMessage()),
+                        createPos(colCtx.type()));
+            }
+            rejectMetricTypes(type, name, createPos(colCtx.type()));
             cols.add(new Column(name, type, /*isNullable=*/ true));
         }
         return cols;
+    }
+
+    private static void rejectMetricTypes(Type type, String columnName, NodePosition pos) {
+        if (type.isHllType() || type.isBitmapType() || type.isPercentile()) {
+            throw new ParsingException(
+                    String.format(
+                            "type %s is not supported in 'schema' for column '%s': "
+                                    + "HLL/BITMAP/PERCENTILE have no representation in Parquet/ORC/Avro/CSV",
+                            type.toSql(), columnName),
+                    pos);
+        }
+        if (type instanceof ArrayType) {
+            rejectMetricTypes(((ArrayType) type).getItemType(), columnName, pos);
+        } else if (type instanceof MapType) {
+            MapType mt = (MapType) type;
+            rejectMetricTypes(mt.getKeyType(), columnName, pos);
+            rejectMetricTypes(mt.getValueType(), columnName, pos);
+        } else if (type instanceof StructType) {
+            for (StructField f : ((StructType) type).getFields()) {
+                rejectMetricTypes(f.getType(), columnName, pos);
+            }
+        }
     }
 
     private static Pair<ParserRuleContext, com.starrocks.sql.parser.StarRocksParser> invokeParser(

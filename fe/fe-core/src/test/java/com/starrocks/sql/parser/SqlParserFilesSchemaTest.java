@@ -12,6 +12,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.type.ArrayType;
 import com.starrocks.type.MapType;
 import com.starrocks.type.PrimitiveType;
+import com.starrocks.type.ScalarType;
 import com.starrocks.type.StructType;
 import org.junit.jupiter.api.Test;
 
@@ -132,5 +133,45 @@ public class SqlParserFilesSchemaTest {
                 () -> SqlParser.parseFilesSchema("a INT, A BIGINT"));
         assertTrue(e.getMessage().contains("duplicate column in 'schema'"),
                 "message should call out duplicate, got: " + e.getMessage());
+    }
+
+    @Test
+    public void testBareVarcharDefaultsToLengthOne() {
+        // Mirrors ColumnDefAnalyzer behavior: bare VARCHAR / CHAR get len=1 silently.
+        List<Column> cols = SqlParser.parseFilesSchema("a VARCHAR, b CHAR");
+        ScalarType varchar = (ScalarType) cols.get(0).getType();
+        assertEquals(PrimitiveType.VARCHAR, varchar.getPrimitiveType());
+        assertEquals(1, varchar.getLength());
+        ScalarType ch = (ScalarType) cols.get(1).getType();
+        assertEquals(PrimitiveType.CHAR, ch.getPrimitiveType());
+        assertEquals(1, ch.getLength());
+    }
+
+    @Test
+    public void testRejectsInvalidTypes() {
+        // schema -> optional substring the message must contain (null = no extra check)
+        String[][] cases = new String[][] {
+                {"c VARCHAR(100000000)", null},             // length above MAX_VARCHAR_LENGTH
+                {"c DECIMAL(80, 5)", null},                 // precision above DECIMAL256 max (76)
+                {"c DECIMAL(10, 11)", null},                // scale > precision
+                {"c HLL", "HLL"},                           // metric type at top level
+                {"c BITMAP", "BITMAP"},
+                {"c PERCENTILE", "PERCENTILE"},
+                {"c ARRAY<HLL>", null},                     // metric type nested in ARRAY
+                {"c STRUCT<a INT, b BITMAP>", null},        // metric type nested in STRUCT field
+                {"c MAP<INT, PERCENTILE>", null},           // metric type nested in MAP value
+        };
+        for (String[] tc : cases) {
+            String schema = tc[0];
+            String expectedSubstring = tc[1];
+            ParsingException e = assertThrows(ParsingException.class,
+                    () -> SqlParser.parseFilesSchema(schema),
+                    "expected ParsingException for schema: " + schema);
+            if (expectedSubstring != null) {
+                assertTrue(e.getMessage().contains(expectedSubstring),
+                        "message for [" + schema + "] should contain '" + expectedSubstring
+                                + "', got: " + e.getMessage());
+            }
+        }
     }
 }

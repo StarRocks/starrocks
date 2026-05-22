@@ -654,7 +654,7 @@ StarRocks 目前支持使用简单身份验证访问 HDFS，使用基于 IAM 用
 
 ##### 支持的类型
 
-`schema` 内部支持所有 StarRocks 数据类型，包括复杂类型 `ARRAY`、`MAP` 和 `STRUCT`。对于 `STRUCT`，您可以只声明部分子字段；未声明的子字段在投影时会被忽略。
+`schema` 内部支持所有 StarRocks 标量类型与复杂类型（`ARRAY`、`MAP`、`STRUCT`），但**不**支持 StarRocks 专有的聚合类型（`HLL`、`BITMAP`、`PERCENTILE`）—— 这些类型在 Parquet/ORC/Avro/CSV 中没有对应表示，无论出现在顶层还是嵌套于 `ARRAY` / `MAP` value / `STRUCT` 子字段中都会被拒绝。对于 `STRUCT`，您可以只声明部分子字段；未声明的子字段在投影时会被忽略。
 
 部分嵌套声明示例：
 
