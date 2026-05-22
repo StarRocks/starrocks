@@ -45,7 +45,7 @@ public class AnalyzeFunctionTest {
     public void testFunctionWithoutDb() {
         StarRocksAssert starRocksAssert = AnalyzeTestUtil.getStarRocksAssert();
         starRocksAssert.withoutUseDatabase();
-        analyzeFail("select query_id()", "No matching function with signature: query_id()");
+        analyzeFail("select query_idx()", "No matching function with signature: query_idx()");
         starRocksAssert.useDatabase(AnalyzeTestUtil.getDbName());
     }
 
