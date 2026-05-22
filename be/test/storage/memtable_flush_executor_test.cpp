@@ -21,6 +21,7 @@
 #include <random>
 
 #include "base/testutil/assert.h"
+#include "column/chunk_factory.h"
 #include "common/config_exec_fwd.h"
 #include "common/config_ingest_fwd.h"
 #include "fs/fs_util.h"
@@ -240,7 +241,7 @@ public:
         rs_opts.stats = &stats;
         auto itr = rowset->new_iterator(*read_schema, rs_opts);
         ASSERT_TRUE(itr.ok()) << itr.status().to_string();
-        ChunkPtr chunk = ChunkHelper::new_chunk(*read_schema, 4096);
+        ChunkPtr chunk = ChunkFactory::new_chunk(*read_schema, 4096);
         size_t pkey_read = 0;
         while (true) {
             Status st = (*itr)->get_next(chunk.get());

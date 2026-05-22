@@ -22,6 +22,7 @@
 #include "base/testutil/id_generator.h"
 #include "base/utility/defer_op.h"
 #include "column/chunk.h"
+#include "column/chunk_factory.h"
 #include "column/datum_tuple.h"
 #include "column/fixed_length_column.h"
 #include "column/schema.h"
@@ -131,7 +132,7 @@ protected:
         auto reader = std::make_shared<TabletReader>(_tablet_mgr.get(), metadata, *_schema);
         CHECK_OK(reader->prepare());
         CHECK_OK(reader->open(TabletReaderParams()));
-        auto chunk = ChunkHelper::new_chunk(*_schema, 128);
+        auto chunk = ChunkFactory::new_chunk(*_schema, 128);
         int64_t ret = 0;
         while (true) {
             auto st = reader->get_next(chunk.get());
@@ -150,7 +151,7 @@ protected:
         auto reader = std::make_shared<TabletReader>(_tablet_mgr.get(), metadata, *_schema);
         CHECK_OK(reader->prepare());
         CHECK_OK(reader->open(TabletReaderParams()));
-        auto chunk = ChunkHelper::new_chunk(*_schema, 128);
+        auto chunk = ChunkFactory::new_chunk(*_schema, 128);
 
         while (true) {
             auto st = reader->get_next(chunk.get());
@@ -1902,7 +1903,7 @@ TEST_P(LakePrimaryKeyCompactionTest, test_replace_batch_rows_correctness) {
             auto reader = std::make_shared<TabletReader>(_tablet_mgr.get(), md, *tablet_schema_shared);
             CHECK_OK(reader->prepare());
             CHECK_OK(reader->open(TabletReaderParams()));
-            auto chunk = ChunkHelper::new_chunk(*tablet_schema_shared, 128);
+            auto chunk = ChunkFactory::new_chunk(*tablet_schema_shared, 128);
             int64_t total = 0;
             while (true) {
                 auto st = reader->get_next(chunk.get());

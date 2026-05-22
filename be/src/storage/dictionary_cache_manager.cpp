@@ -14,6 +14,7 @@
 
 #include "storage/dictionary_cache_manager.h"
 
+#include "column/chunk_factory.h"
 #include "exec/tablet_info.h"
 
 namespace starrocks {
@@ -86,8 +87,8 @@ Status DictionaryCacheManager::refresh(const PProcessDictionaryCacheRequest* req
     SchemaPtr key_schema = std::make_shared<Schema>(dictionary_schema.get(), key_col_ids);
     SchemaPtr value_schema = std::make_shared<Schema>(dictionary_schema.get(), value_col_ids);
 
-    ChunkPtr key_chunk = ChunkHelper::new_chunk(*key_schema.get(), chunk->num_rows());
-    ChunkPtr value_chunk = ChunkHelper::new_chunk(*value_schema.get(), chunk->num_rows());
+    ChunkPtr key_chunk = ChunkFactory::new_chunk(*key_schema.get(), chunk->num_rows());
+    ChunkPtr value_chunk = ChunkFactory::new_chunk(*value_schema.get(), chunk->num_rows());
 
     for (size_t i = 0; i < key_slot_ids.size(); ++i) {
         const auto& key_slot_id = key_slot_ids[i];

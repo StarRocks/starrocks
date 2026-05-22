@@ -21,6 +21,7 @@
 #include <utility>
 
 #include "base/testutil/assert.h"
+#include "column/chunk_factory.h"
 #include "common/thread/threadpool.h"
 #include "storage/chunk_helper.h"
 #include "storage/rowset/rowset_factory.h"
@@ -124,7 +125,7 @@ public:
         auto schema = ChunkHelper::convert_schema(tablet->tablet_schema());
         for (size_t i = 0; i < segments.size(); i++) {
             auto& segment = segments[i];
-            auto chunk = ChunkHelper::new_chunk(schema, segment.size());
+            auto chunk = ChunkFactory::new_chunk(schema, segment.size());
             auto cols = chunk->mutable_columns();
             for (auto& row : segment) {
                 CHECK(cols.size() == row.size());

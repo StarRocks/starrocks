@@ -18,6 +18,7 @@
 
 #include <memory>
 
+#include "column/chunk_factory.h"
 #include "common/config_exec_fwd.h"
 #include "common/config_storage_fwd.h"
 #include "exprs/expr_factory.h"
@@ -185,8 +186,8 @@ Status ConvertedSchemaChange::init() {
     _new_tablet_schema = _new_tablet.get_schema();
     _new_schema = ChunkHelper::convert_schema(_new_tablet_schema);
 
-    _base_chunk = ChunkHelper::new_chunk(_base_schema, config::vector_chunk_size);
-    _new_chunk = ChunkHelper::new_chunk(_new_schema, config::vector_chunk_size);
+    _base_chunk = ChunkFactory::new_chunk(_base_schema, config::vector_chunk_size);
+    _new_chunk = ChunkFactory::new_chunk(_new_schema, config::vector_chunk_size);
 
     _char_field_indexes = ChunkHelper::get_char_field_indexes(_new_schema);
     _mem_pool = std::make_unique<MemPool>();

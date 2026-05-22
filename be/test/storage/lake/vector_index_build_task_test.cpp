@@ -19,6 +19,7 @@
 #include "base/testutil/assert.h"
 #include "column/array_column.h"
 #include "column/chunk.h"
+#include "column/chunk_factory.h"
 #include "column/fixed_length_column.h"
 #include "column/nullable_column.h"
 #include "fs/fs_util.h"
@@ -121,7 +122,7 @@ protected:
 
         // Build chunk with schema attached (required by SegmentWriter)
         auto schema = ChunkHelper::convert_schema(tablet_schema);
-        auto chunk = ChunkHelper::new_chunk(schema, num_rows);
+        auto chunk = ChunkFactory::new_chunk(schema, num_rows);
 
         for (int i = 0; i < num_rows; ++i) {
             // pk column

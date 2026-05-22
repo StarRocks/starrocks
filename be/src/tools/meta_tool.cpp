@@ -48,6 +48,7 @@
 #include "base/coding.h"
 #include "base/hash/crc32c.h"
 #include "base/path/path_util.h"
+#include "column/chunk_factory.h"
 #include "column/datum_convert.h"
 #include "common/config_exec_fwd.h"
 #include "common/config_storage_fwd.h"
@@ -1327,7 +1328,7 @@ Status SegmentDump::calc_checksum() {
 
     int64_t checksum = 0;
 
-    auto chunk = ChunkHelper::new_chunk(schema, config::vector_chunk_size);
+    auto chunk = ChunkFactory::new_chunk(schema, config::vector_chunk_size);
     st = seg_iter->get_next(chunk.get());
     while (st.ok()) {
         size_t size = chunk->num_rows();
@@ -1410,7 +1411,7 @@ Status SegmentDump::dump_segment_data() {
 
     // iter chunk
     size_t row = 0;
-    auto chunk = ChunkHelper::new_chunk(*schema, 4096);
+    auto chunk = ChunkFactory::new_chunk(*schema, 4096);
     do {
         st = seg_iter->get_next(chunk.get());
         if (!st.ok()) {
@@ -1461,7 +1462,7 @@ Status SegmentDump::dump_column_size() {
             auto seg_iter = std::move(seg_res.value());
 
             // iter chunk
-            auto chunk = ChunkHelper::new_chunk(*schema, 4096);
+            auto chunk = ChunkFactory::new_chunk(*schema, 4096);
             do {
                 st = seg_iter->get_next(chunk.get());
                 if (!st.ok()) {

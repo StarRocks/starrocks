@@ -22,6 +22,7 @@
 
 #include "base/testutil/parallel_test.h"
 #include "column/binary_column.h"
+#include "column/chunk_factory.h"
 #include "column/fixed_length_column.h"
 #include "column/schema.h"
 #include "fs/fs_util.h"
@@ -77,7 +78,7 @@ void test_integral_pk() {
 
     constexpr int kSegmentSize = 20;
 
-    auto chunk = ChunkHelper::new_chunk(*schema, kSegmentSize);
+    auto chunk = ChunkFactory::new_chunk(*schema, kSegmentSize);
 
     auto* pk_col = down_cast<FixedLengthColumn<DatumType>*>(chunk->get_column_raw_ptr_by_index(0));
     pk_col->resize(kSegmentSize);
@@ -218,7 +219,7 @@ void test_binary_pk(int key_size) {
 
     constexpr int kSegmentSize = 20;
 
-    auto chunk = ChunkHelper::new_chunk(*schema, kSegmentSize);
+    auto chunk = ChunkFactory::new_chunk(*schema, kSegmentSize);
     size_t pk_value = 0;
 
     auto* pk_col = down_cast<BinaryColumn*>(chunk->get_column_raw_ptr_by_index(0));
@@ -366,7 +367,7 @@ PARALLEL_TEST(PrimaryIndexTest, test_composite_key) {
 
     constexpr int kSegmentSize = 100;
 
-    auto chunk = ChunkHelper::new_chunk(*schema, kSegmentSize);
+    auto chunk = ChunkFactory::new_chunk(*schema, kSegmentSize);
 
     auto pk_col0 = down_cast<FixedLengthColumn<int8_t>*>(chunk->get_column_raw_ptr_by_index(0));
     auto pk_col1 = down_cast<FixedLengthColumn<int16_t>*>(chunk->get_column_raw_ptr_by_index(1));

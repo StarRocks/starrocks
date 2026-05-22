@@ -25,6 +25,7 @@
 #include "base/string/string_parser.hpp"
 #include "base/testutil/sync_point.h"
 #include "base/utility/defer_op.h"
+#include "column/chunk_factory.h"
 #include "common/config.h"
 #include "common/system/master_info.h"
 #include "common/thread/threadpool.h"
@@ -486,7 +487,7 @@ void TabletWarmupManager::do_warmup_tablet(const std::shared_ptr<WarmupContext>&
 
     // WARMUP-LEVEL3: Segments Data
     // iterate the reader until EOF
-    auto read_chunk_ptr = ChunkHelper::new_chunk(schema, 4096);
+    auto read_chunk_ptr = ChunkFactory::new_chunk(schema, 4096);
     do {
         auto st = reader->get_next(read_chunk_ptr.get());
         read_chunk_ptr->reset();

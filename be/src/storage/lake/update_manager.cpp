@@ -20,6 +20,7 @@
 #include "base/testutil/sync_point.h"
 #include "base/utility/defer_op.h"
 #include "base/utility/pretty_printer.h"
+#include "column/chunk_factory.h"
 #include "common/config_compaction_fwd.h"
 #include "common/config_lake_fwd.h"
 #include "common/config_primary_key_fwd.h"
@@ -627,7 +628,7 @@ Status UpdateManager::_read_chunk_for_upsert(const TxnLogPB_OpWrite& op_write, c
                                              const std::vector<uint32_t>& insert_rowids,
                                              const std::vector<uint32_t>& update_cids, ChunkPtr* out_chunk) {
     auto full_schema = ChunkHelper::convert_schema(tschema);
-    auto full_chunk = ChunkHelper::new_chunk(full_schema, insert_rowids.size());
+    auto full_chunk = ChunkFactory::new_chunk(full_schema, insert_rowids.size());
 
     {
         FileInfo info;
@@ -1036,12 +1037,12 @@ Status UpdateManager::_process_single_chunk_update_with_condition(
         RowsetUpdateState::plan_read_by_rssid(old_rowids, &num_default, &old_rowids_by_rssid, &idxes);
         MutableColumns old_columns(1);
         auto old_unordered_column =
-                ChunkHelper::column_from_field_type(tablet_column.type(), tablet_column.is_nullable());
+                ChunkFactory::column_from_field_type(tablet_column.type(), tablet_column.is_nullable());
         old_columns[0] = old_unordered_column->clone_empty();
         // Batch read condition values from all old row locations
         RETURN_IF_ERROR(get_column_values(params, read_column_ids, num_default > 0, old_rowids_by_rssid, &old_columns));
         // Reorder values to match the order of PKs in current chunk (idxes provides mapping)
-        auto old_column = ChunkHelper::column_from_field_type(tablet_column.type(), tablet_column.is_nullable());
+        auto old_column = ChunkFactory::column_from_field_type(tablet_column.type(), tablet_column.is_nullable());
         old_column->append_selective(*old_columns[0], idxes.data(), 0, idxes.size());
 
         // STEP 2: Read condition column values from new rows (from SST files)
@@ -1056,7 +1057,7 @@ Status UpdateManager::_process_single_chunk_update_with_condition(
         // Read condition values from SST file for new rows
         // LIMITATION: Only single condition column is supported (not composite conditions)
         MutableColumns new_columns(1);
-        auto new_column = ChunkHelper::column_from_field_type(tablet_column.type(), tablet_column.is_nullable());
+        auto new_column = ChunkFactory::column_from_field_type(tablet_column.type(), tablet_column.is_nullable());
         new_columns[0] = new_column->clone_empty();
         RETURN_IF_ERROR(get_column_values(params, read_column_ids, false, new_rowids_by_rssid, &new_columns));
 
@@ -1229,11 +1230,11 @@ static Status process_single_chunk_update_with_condition_no_sst(
     std::vector<uint32_t> idxes;
     RowsetUpdateState::plan_read_by_rssid(old_rowids, &num_default, &old_rowids_by_rssid, &idxes);
     MutableColumns old_columns(1);
-    auto old_unordered_column = ChunkHelper::column_from_field_type(tablet_column.type(), tablet_column.is_nullable());
+    auto old_unordered_column = ChunkFactory::column_from_field_type(tablet_column.type(), tablet_column.is_nullable());
     old_columns[0] = old_unordered_column->clone_empty();
     RETURN_IF_ERROR(
             mgr->get_column_values(params, read_column_ids, num_default > 0, old_rowids_by_rssid, &old_columns));
-    auto old_column = ChunkHelper::column_from_field_type(tablet_column.type(), tablet_column.is_nullable());
+    auto old_column = ChunkFactory::column_from_field_type(tablet_column.type(), tablet_column.is_nullable());
     old_column->append_selective(*old_columns[0], idxes.data(), 0, idxes.size());
 
     // Read new-row condition values from the freshly-ingested segment; rowid in this segment
@@ -1247,7 +1248,7 @@ static Status process_single_chunk_update_with_condition_no_sst(
     new_rowids_by_rssid[rowset_id + upsert_idx] = std::move(rowids);
     // only support condition update on single column
     MutableColumns new_columns(1);
-    auto new_column = ChunkHelper::column_from_field_type(tablet_column.type(), tablet_column.is_nullable());
+    auto new_column = ChunkFactory::column_from_field_type(tablet_column.type(), tablet_column.is_nullable());
     new_columns[0] = new_column->clone_empty();
     RETURN_IF_ERROR(mgr->get_column_values(params, read_column_ids, false, new_rowids_by_rssid, &new_columns));
 

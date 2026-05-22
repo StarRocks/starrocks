@@ -23,6 +23,7 @@
 #include <memory>
 #include <vector>
 
+#include "column/chunk_factory.h"
 #include "common/runtime_profile.h"
 #include "exprs/function_context.h"
 #include "exprs/like_predicate.h"
@@ -166,7 +167,7 @@ Status BuiltinInvertedIndexIterator::_wildcard_query(const Slice* search_query, 
             } else if (!st.ok()) {
                 return st;
             } else {
-                auto column = ChunkHelper::column_from_field_type(TYPE_VARCHAR, false);
+                auto column = ChunkFactory::column_from_field_type(TYPE_VARCHAR, false);
                 size_t read_num = 1;
                 RETURN_IF_ERROR(_bitmap_itr->next_batch_dictionary(&read_num, column.get()));
                 Slice s = down_cast<BinaryColumn*>(column.get())->immutable_data()[0];

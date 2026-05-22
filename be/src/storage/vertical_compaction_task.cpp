@@ -18,6 +18,7 @@
 
 #include "base/debug/trace.h"
 #include "base/time/time.h"
+#include "column/chunk_factory.h"
 #include "column/schema.h"
 #include "common/config_compaction_fwd.h"
 #include "common/config_exec_fwd.h"
@@ -195,7 +196,7 @@ StatusOr<size_t> VerticalCompactionTask::_compact_data(bool is_key, int32_t chun
                                                        std::vector<RowSourceMask>* source_masks) {
     DCHECK(reader);
     size_t output_rows = 0;
-    auto chunk = ChunkHelper::new_chunk(schema, chunk_size);
+    auto chunk = ChunkFactory::new_chunk(schema, chunk_size);
     auto char_field_indexes = ChunkHelper::get_char_field_indexes(schema);
 
     Status status = Status::OK();

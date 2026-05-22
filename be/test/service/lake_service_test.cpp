@@ -35,6 +35,7 @@
 #include "base/utility/defer_op.h"
 #include "column/array_column.h"
 #include "column/chunk.h"
+#include "column/chunk_factory.h"
 #include "column/fixed_length_column.h"
 #include "column/nullable_column.h"
 #include "common/config_lake_fwd.h"
@@ -5195,7 +5196,7 @@ protected:
         RETURN_IF_ERROR(writer->init());
 
         auto schema = ChunkHelper::convert_schema(tablet_schema);
-        auto chunk = ChunkHelper::new_chunk(schema, num_rows);
+        auto chunk = ChunkFactory::new_chunk(schema, num_rows);
         for (int i = 0; i < num_rows; ++i) {
             chunk->get_column_raw_ptr_by_index(0)->append_datum(Datum(static_cast<int32_t>(i)));
             DatumArray arr;
