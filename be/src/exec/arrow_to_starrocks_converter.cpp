@@ -939,6 +939,16 @@ constexpr int32_t convert_idx(ArrowTypeId at, LogicalType lt, bool is_nullable, 
 #define STRICT_ARROW_CONV_ENTRY_R(a, ...) \
     DEF_BINARY_RELATION_ENTRY_SEP_COMMA_R(STRICT_ARROW_CONV_ENTRY_CTOR, a, ##__VA_ARGS__)
 
+// Fallback "raw type" picker used by build_arrow_column_convert_plan when the user's
+// target LogicalType has no direct converter in global_optimized_arrow_conv_table.
+// The chosen raw LT becomes the Phase-1 destination; a SQL CAST then bridges raw -> user LT.
+//
+// Note: this is an unordered_map keyed by ArrowTypeId, so each Arrow type maps to exactly
+// ONE LogicalType (initializer-list duplicates keep the first insertion). All nested Arrow
+// types (LIST/LARGE_LIST/FIXED_SIZE_LIST/MAP/STRUCT) intentionally fall back to TYPE_JSON
+// here because JSON has the widest set of outgoing SQL casts. Strong-typed targets
+// (ARRAY/MAP/STRUCT) are handled in their own switch cases in build_arrow_column_convert_plan
+// and never read this table.
 static const std::unordered_map<ArrowTypeId, LogicalType> global_strict_arrow_conv_table{
         STRICT_ARROW_CONV_ENTRY_R(TYPE_BOOLEAN, ArrowTypeId::BOOL),
         STRICT_ARROW_CONV_ENTRY_R(TYPE_TINYINT, ArrowTypeId::INT8, ArrowTypeId::UINT8),
@@ -953,11 +963,19 @@ static const std::unordered_map<ArrowTypeId, LogicalType> global_strict_arrow_co
                                   ArrowTypeId::LARGE_BINARY, ArrowTypeId::FIXED_SIZE_BINARY),
         STRICT_ARROW_CONV_ENTRY_R(TYPE_DATE, ArrowTypeId::DATE32),
         STRICT_ARROW_CONV_ENTRY_R(TYPE_DATETIME, ArrowTypeId::DATE64, ArrowTypeId::TIMESTAMP),
+<<<<<<< HEAD:be/src/exec/arrow_to_starrocks_converter.cpp
         STRICT_ARROW_CONV_ENTRY_R(TYPE_DECIMAL128, ArrowTypeId::DECIMAL),
         STRICT_ARROW_CONV_ENTRY_R(TYPE_JSON, ArrowTypeId::STRUCT, ArrowTypeId::MAP, ArrowTypeId::LIST),
         STRICT_ARROW_CONV_ENTRY_R(TYPE_ARRAY, ArrowTypeId::LIST, ArrowTypeId::LARGE_LIST, ArrowTypeId::FIXED_SIZE_LIST),
         STRICT_ARROW_CONV_ENTRY_R(TYPE_MAP, ArrowTypeId::MAP),
         STRICT_ARROW_CONV_ENTRY_R(TYPE_STRUCT, ArrowTypeId::STRUCT),
+=======
+        STRICT_ARROW_CONV_ENTRY_R(TYPE_DECIMAL128, ArrowTypeId::DECIMAL, ArrowTypeId::DECIMAL32,
+                                  ArrowTypeId::DECIMAL64),
+        STRICT_ARROW_CONV_ENTRY_R(TYPE_DECIMAL256, ArrowTypeId::DECIMAL256),
+        STRICT_ARROW_CONV_ENTRY_R(TYPE_JSON, ArrowTypeId::STRUCT, ArrowTypeId::MAP, ArrowTypeId::LIST,
+                                  ArrowTypeId::LARGE_LIST, ArrowTypeId::FIXED_SIZE_LIST),
+>>>>>>> 63c203fe5f ([BugFix] Fix the bug where LargeList/FixedSizeList cannot be converted to JsonColumn during broker load (#73718)):be/src/column/arrow/arrow_to_starrocks_converter.cpp
 };
 
 static const std::unordered_map<int32_t, ConvertFunc> global_optimized_arrow_conv_table{
