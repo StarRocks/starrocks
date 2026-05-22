@@ -839,6 +839,15 @@ This topic introduces the following types of FE configurations:
 - Description: The length of the backlog queue held by the MySQL server in the FE node.
 - Introduced in: -
 
+### `mysql_send_packet_timeout_ms`
+
+- Default: 60000
+- Type: Long
+- Unit: Milliseconds
+- Is mutable: Yes
+- Description: Per-packet write timeout for the MySQL protocol channel. Bounds how long the FE worker can wait for a slow client's TCP recv buffer to drain when sending result rows. Without this bound the worker can block in `Selector.select()` indefinitely and the query becomes unkillable via `KILL QUERY`. Set to `0` to disable (legacy unbounded wait).
+- Introduced in: v4.1
+
 ### `mysql_server_version`
 
 - Default: 8.0.33

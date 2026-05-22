@@ -1005,6 +1005,15 @@ public class Config extends ConfigBase {
     public static int max_mysql_service_task_threads_num = 4096;
 
     /**
+     * Per-packet write timeout for MysqlChannel result delivery. Bounds how long the FE
+     * worker can wait for a slow client's TCP recv buffer to drain; without this the
+     * worker can sit in {@code Selector.select()} indefinitely and the query becomes
+     * unkillable by {@code KILL QUERY}. Set to 0 for the legacy unbounded wait.
+     */
+    @ConfField(mutable = true)
+    public static long mysql_send_packet_timeout_ms = 60_000L;
+
+    /**
      * modifies the version string returned by following situations:
      * select version();
      * handshake packet version.
