@@ -2366,6 +2366,23 @@ public class SchemaChangeHandler extends AlterHandler {
                 LOG.info("updated table: {} lake_compaction_max_parallel from {} to {}",
                         olapTable.getName(), oldMaxParallel, maxParallel);
                 return null;
+            } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_LIGHT_WEIGHT_TABLET_CREATION)) {
+                // light_weight_tablet_creation is a pure FE property: it gates whether FE
+                // dispatches CreateReplicaTask in CREATE TABLE / ADD PARTITION / schema change /
+                // rollup paths. No CN-side state to flip. Use properties.get() (not
+                // analyzeBooleanProp) so the key remains in the map for alterTableProperties
+                // to dispatch on.
+                boolean newValue = Boolean.parseBoolean(
+                        properties.get(PropertyAnalyzer.PROPERTIES_LIGHT_WEIGHT_TABLET_CREATION));
+                if (newValue == olapTable.isLightWeightTabletCreation()) {
+                    LOG.info("table: {} light_weight_tablet_creation is {}, nothing need to do",
+                            olapTable.getName(), newValue);
+                    return null;
+                }
+                GlobalStateMgr.getCurrentState().getLocalMetastore().alterTableProperties(db, olapTable, properties);
+                LOG.info("updated table: {} light_weight_tablet_creation to {}",
+                        olapTable.getName(), newValue);
+                return null;
             } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_CLOUD_NATIVE_FAST_SCHEMA_EVOLUTION_V2)) {
                 return processAlterCloudNativeFastSchemaEvolutionV2Property(db, olapTable, properties).orElse(null);
             } else {
