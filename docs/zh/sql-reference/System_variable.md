@@ -201,7 +201,7 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 ### avro_use_jni_reader
 
 * **作用域**: Session
-* **描述**: 控制 StarRocks 在扫描 Hive 等外部 Catalog 中的 Avro 数据时，是否使用基于 JNI 的 Avro Reader。启用后（`true`），FE 会在 Avro scan range 上设置该会话变量，BE 会优先选择 `HdfsAvroScanner`，而不是原生 Avro 扫描路径。当前该变量主要用于兼容性兜底。该变量默认关闭，因此默认会使用原生 Avro Reader。
+* **描述**: 控制 StarRocks 在扫描 Hive 等外部 Catalog 中的 Avro 数据时，是否使用基于 JNI 的 Avro Reader。启用后（`true`），StarRocks 会使用 JNI Reader；关闭后（`false`），StarRocks 会使用原生 Avro Reader。当前该变量主要用于兼容性兜底。该变量默认关闭，因此默认会使用原生 Avro Reader。
 
   当前说明：
   - 原生 Avro Reader 与 JNI Reader 在 `CHAR(n)` 语义上已经对齐。相关对齐见 [#73579](https://github.com/StarRocks/starrocks/pull/73579)，因此当前 native 与 JNI 行为在这一点上保持一致。
