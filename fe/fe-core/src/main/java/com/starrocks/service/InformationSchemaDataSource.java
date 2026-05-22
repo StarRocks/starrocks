@@ -241,6 +241,19 @@ public class InformationSchemaDataSource {
 
         AuthDbRequestResult result = getAuthDbRequestResult(request.getAuth_info());
 
+        // WHERE table_schema='...' predicate is already pushed down via auth_info.pattern
+        // (set by the BE schema scanner from _param->db) and applied in getAuthDbRequestResult,
+        // so result.authorizedDbs is pre-filtered. Only the table_name predicate needs handling here.
+        PatternMatcher tableMatcher = null;
+        if (request.isSetTable_name()) {
+            try {
+                tableMatcher = PatternMatcher.createMysqlPattern(request.getTable_name(),
+                        CaseSensibility.TABLE.getCaseSensibility());
+            } catch (SemanticException e) {
+                throw new TException("Pattern is in bad format: " + request.getTable_name());
+            }
+        }
+
         for (String dbName : result.authorizedDbs) {
             Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
             if (db != null) {
@@ -249,6 +262,10 @@ public class InformationSchemaDataSource {
                 try {
                     List<Table> allTables = GlobalStateMgr.getCurrentState().getLocalMetastore().getTables(db.getId());
                     for (Table table : allTables) {
+                        if (tableMatcher != null && !tableMatcher.match(table.getName())) {
+                            continue;
+                        }
+
                         try {
                             ConnectContext context = result.buildConnectContext();
                             Authorizer.checkAnyActionOnTableLikeObject(context, dbName, table);
