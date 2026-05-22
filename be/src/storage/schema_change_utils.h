@@ -132,7 +132,7 @@ struct SchemaChangeParams {
 
     TAlterJobType::type alter_job_type;
 
-    // materialzied view parameters
+    // materialized view parameters
     DescriptorTbl* desc_tbl = nullptr;
     std::unique_ptr<TExpr> where_expr;
     std::vector<std::string> base_table_column_names;
