@@ -201,20 +201,12 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 ### avro_use_jni_reader
 
 * **作用域**: Session
-<<<<<<< Updated upstream
-* **描述**: 控制 StarRocks 在扫描 Hive 等外部 Catalog 中的 Avro 数据时，是否使用基于 JNI 的 Avro Reader。启用后（`true`），FE 会在 Avro scan range 上设置该会话变量，BE 会优先选择 `HdfsAvroScanner`，而不是原生 Avro 扫描路径。当前该变量主要用于兼容性兜底。该变量默认开启，因此默认会使用 JNI Reader。
-=======
 * **描述**: 控制 StarRocks 在扫描 Hive 等外部 Catalog 中的 Avro 数据时，是否使用基于 JNI 的 Avro Reader。启用后（`true`），FE 会在 Avro scan range 上设置该会话变量，BE 会优先选择 `HdfsAvroScanner`，而不是原生 Avro 扫描路径。当前该变量主要用于兼容性兜底。该变量默认关闭，因此默认会使用原生 Avro Reader。
->>>>>>> Stashed changes
 
   当前说明：
   - 原生 Avro Reader 与 JNI Reader 在 `CHAR(n)` 语义上已经对齐。相关对齐见 [#73579](https://github.com/StarRocks/starrocks/pull/73579)，因此当前 native 与 JNI 行为在这一点上保持一致。
-  - 原生 Avro Reader 目前仅支持 `null`、`deflate` 和 `snappy` 这几种 codec，不支持 `bzip2` 等其他 codec。如果遇到原生 Reader 不支持的 codec，建议回退到 JNI Reader。
-<<<<<<< Updated upstream
-* **默认值**: `true`
-=======
+  - 原生 Avro Reader 目前仅支持 `null`、`deflate` 和 `snappy` 这几种 codec，不支持 `bzip2` 等其他 codec。如果需要处理原生 Reader 不支持的 codec，请手动启用 JNI Reader。
 * **默认值**: `false`
->>>>>>> Stashed changes
 * **数据类型**: boolean
 * **引入版本**: v4.1.1
 
