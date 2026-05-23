@@ -74,19 +74,22 @@ public:
     virtual double get_compression_factor(FunctionContext* ctx) const = 0;
 
     void merge(FunctionContext* ctx, const Column* column, AggDataPtr __restrict state, size_t row_num) const override {
-        double compression = get_compression_factor(ctx);
-        // Lazy initialization of compression factor on first merge
-        if (UNLIKELY(!data(state).compression_initialized)) {
-            data(state).reinit_with_compression(compression);
-        }
-
         const auto* binary_column = down_cast<const BinaryColumn*>(column);
         Slice src = binary_column->get_slice(row_num);
         double quantile;
         memcpy(&quantile, src.data, sizeof(double));
 
-        PercentileApproxState src_percentile(compression);
+        PercentileApproxState src_percentile;
         src_percentile.percentile->deserialize((char*)src.data + sizeof(double));
+
+        // Lazy initialization of compression on first merge. Compression travels
+        // inside the serialized digest, so adopt it from the incoming state: at
+        // the merge phase SplitAggregateRule drops non-const args (e.g. a weight
+        // column), so ctx arity no longer locates the compression slot. clamp
+        // maps a garbage/empty digest value back to the default.
+        if (UNLIKELY(!data(state).compression_initialized)) {
+            data(state).reinit_with_compression(clamp_compression_factor(src_percentile.percentile->compression()));
+        }
 
         int64_t prev_memory = data(state).percentile->mem_usage();
         data(state).percentile->merge(src_percentile.percentile.get());
@@ -353,12 +356,6 @@ public:
 
     // Override merge method, deserialize using new format: [count(4 bytes), q1...qn(8*n bytes), TDigest_data]
     void merge(FunctionContext* ctx, const Column* column, AggDataPtr __restrict state, size_t row_num) const override {
-        double compression = get_compression_factor(ctx);
-        // Lazy initialization of compression factor on first merge
-        if (UNLIKELY(!data(state).compression_initialized)) {
-            data(state).reinit_with_compression(compression);
-        }
-
         const auto* binary_column = down_cast<const BinaryColumn*>(column);
         Slice src = binary_column->get_slice(row_num);
 
@@ -373,8 +370,15 @@ public:
         }
 
         // Deserialize TDigest (skip quantiles array, only need TDigest for merging)
-        PercentileApproxState src_percentile(compression);
+        PercentileApproxState src_percentile;
         src_percentile.percentile->deserialize((char*)src.data + sizeof(uint32_t) + count * sizeof(double));
+
+        // Lazy initialization of compression on first merge: adopt it from the
+        // incoming serialized digest (ctx arity is unreliable at merge because
+        // SplitAggregateRule drops non-const args); clamp guards garbage input.
+        if (UNLIKELY(!data(state).compression_initialized)) {
+            data(state).reinit_with_compression(clamp_compression_factor(src_percentile.percentile->compression()));
+        }
 
         // Merge into current state
         int64_t prev_memory = data(state).percentile->mem_usage();
@@ -512,12 +516,6 @@ public:
 
     // Override merge method, deserialize using new format: [count(4 bytes), q1...qn(8*n bytes), TDigest_data]
     void merge(FunctionContext* ctx, const Column* column, AggDataPtr __restrict state, size_t row_num) const override {
-        double compression = get_compression_factor(ctx);
-        // Lazy initialization of compression factor on first merge
-        if (UNLIKELY(!data(state).compression_initialized)) {
-            data(state).reinit_with_compression(compression);
-        }
-
         const auto* binary_column = down_cast<const BinaryColumn*>(column);
         Slice src = binary_column->get_slice(row_num);
 
@@ -532,8 +530,15 @@ public:
         }
 
         // Deserialize TDigest (skip quantiles array, only need TDigest for merging)
-        PercentileApproxState src_percentile(compression);
+        PercentileApproxState src_percentile;
         src_percentile.percentile->deserialize((char*)src.data + sizeof(uint32_t) + count * sizeof(double));
+
+        // Lazy initialization of compression on first merge: adopt it from the
+        // incoming serialized digest (ctx arity is unreliable at merge because
+        // SplitAggregateRule drops non-const args); clamp guards garbage input.
+        if (UNLIKELY(!data(state).compression_initialized)) {
+            data(state).reinit_with_compression(clamp_compression_factor(src_percentile.percentile->compression()));
+        }
 
         // Merge into current state
         int64_t prev_memory = data(state).percentile->mem_usage();
