@@ -398,6 +398,12 @@ struct TQueryOptions {
   // hardcoded "stream-load-pipe" filename. Optional and unused for
   // non-routine-load query paths.
   218: optional string routine_load_source_info;
+
+  // When true, percentile_approx* aggregation uses the compact intermediate
+  // serialization format for transient exchange/spill state. Global-only on FE
+  // and enabled only after a full cluster upgrade; see
+  // SessionVariable.ENABLE_PERCENTILE_COMPACT_INTERMEDIATE.
+  219: optional bool enable_percentile_compact_intermediate = false;
 }
 
 // A scan range plus the parameters needed to execute that scan.
