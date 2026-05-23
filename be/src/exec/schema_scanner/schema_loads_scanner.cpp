@@ -60,11 +60,12 @@ bool _extract_literal_datetime_value(Expr* expr, const cctz::time_zone& session_
     result.str_value = ts.to_string(true);
     int year, month, day, hour, minute, second, usec;
     ts.to_timestamp(&year, &month, &day, &hour, &minute, &second, &usec);
-    // Second precision; see literal_to_epoch_ms for the contract and DST
-    // handling. To enable ms support, also propagate `usec` into the result.
-    (void)usec;
+    // See literal_to_epoch_ms for the DST contract; the sub-second part of
+    // the literal is carried through to FE so the prefilter matches BE's
+    // ms-precision materialized column.
     result.epoch_ms = SchemaLoadsScanner::literal_to_epoch_ms(
-            session_tz, cctz::civil_second(year, month, day, hour, minute, second), is_lower_bound);
+                             session_tz, cctz::civil_second(year, month, day, hour, minute, second), is_lower_bound) +
+                      usec / 1000;
 
     return true;
 }
@@ -203,8 +204,8 @@ int64_t SchemaLoadsScanner::literal_to_epoch_ms(const cctz::time_zone& session_t
     // session_tz, so this prefilter must be no-false-negative against the
     // post-filter. Picking min/max(pre, post) widens for both DST cases.
     //
-    // Returns second-aligned ms. To enable ms support, also propagate `usec`
-    // from _extract_literal_datetime_value.
+    // Returns second-aligned ms; the caller adds the sub-second remainder
+    // from the literal.
     const auto lookup = session_tz.lookup(cs);
     const auto tp = is_lower_bound ? std::min(lookup.pre, lookup.post) : std::max(lookup.pre, lookup.post);
     return tp.time_since_epoch().count() * 1000;
@@ -221,10 +222,7 @@ bool SchemaLoadsScanner::_fill_datetime_column_from_ms(Column* column, bool is_s
         return true;
     }
     DateTimeValue t;
-    // Second precision: the column filler at schema_column_filler.h strips
-    // microseconds regardless. To enable ms support, use the (s, us, tz)
-    // overload here AND pass microsecond() through in the column filler.
-    t.from_unixtime(epoch_ms / 1000, _runtime_state->timezone_obj());
+    t.from_unixtime(epoch_ms / 1000, (epoch_ms % 1000) * 1000, _runtime_state->timezone_obj());
     fill_column_with_slot<TYPE_DATETIME>(column, (void*)&t);
     return true;
 }

@@ -35,9 +35,9 @@ public:
     Status get_next(ChunkPtr* chunk, bool* eos) override;
 
     // Convert a session-zone DATETIME literal (extracted from a predicate) to
-    // the UTC epoch ms FE compares against. Returns a second-aligned value
-    // (information_schema.loads is second-precision today); for DST-ambiguous
-    // civil times the result widens the bound via min/max of
+    // the UTC epoch ms FE compares against. Returns a second-aligned value;
+    // the caller adds the sub-second remainder from the literal. For
+    // DST-ambiguous civil times the result widens the bound via min/max of
     // cctz::civil_lookup.pre/post so the FE prefilter never drops a row that
     // BE's post-filter would have kept. Public so the anonymous-namespace
     // predicate-extraction helper and the unit test can call it.

@@ -156,12 +156,11 @@ TEST_F(SchemaLoadsScannerTest, ms_field_materializes_in_session_zone) {
     }
 }
 
-// information_schema.loads is a second-precision view (the legacy "YYYY-MM-DD
-// HH:MM:SS" wire format never carried fractional seconds, and the column
-// filler at schema_column_filler.h drops microseconds when building a
-// TimestampValue). Pin that the materialized column truncates to whole
-// seconds regardless of any ms remainder in the wire payload.
-TEST_F(SchemaLoadsScannerTest, ms_field_is_truncated_to_second_precision) {
+// information_schema.loads now carries sub-second precision: the column filler
+// preserves microseconds and the materialization path passes them through via
+// from_unixtime(s, us, tz). Pin that the rendered column retains the ms
+// remainder from the wire payload.
+TEST_F(SchemaLoadsScannerTest, ms_field_preserves_sub_second_remainder) {
     SchemaLoadsScanner scanner;
     init_scanner(scanner, "UTC");
 
@@ -177,9 +176,8 @@ TEST_F(SchemaLoadsScannerTest, ms_field_is_truncated_to_second_precision) {
     EXPECT_OK(scanner.get_next(&chunk, &eos));
 
     auto ts = read_datetime(chunk, CREATE_TIME);
-    // Wall-clock rendered at second precision; microsecond field is zero.
     EXPECT_EQ("2026-05-15 06:45:08", ts.to_string(/*ignore_microsecond=*/true));
-    EXPECT_EQ(std::string::npos, ts.to_string(/*ignore_microsecond=*/false).find("789"))
+    EXPECT_NE(std::string::npos, ts.to_string(/*ignore_microsecond=*/false).find("789"))
             << "rendered: " << ts.to_string(false);
 }
 
