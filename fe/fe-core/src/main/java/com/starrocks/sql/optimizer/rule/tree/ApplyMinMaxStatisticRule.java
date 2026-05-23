@@ -20,6 +20,8 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.Pair;
+import com.starrocks.common.tvr.TvrTableSnapshot;
+import com.starrocks.common.tvr.TvrVersionRange;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.Utils;
@@ -135,6 +137,14 @@ public class ApplyMinMaxStatisticRule implements TreeRewriteRule {
             final Map<Integer, ColumnDict> globalDicts =
                     iceberg.getGlobalDicts().stream().collect(Collectors.toMap(p -> p.first, p -> p.second));
 
+            // Snapshot for IcebergColumnMinMaxMgr lookups. Take it from the scan's own
+            // TvrVersionRange — analyzer already pinned it — so the cache key matches the
+            // exact snapshot BE will read. Null/empty/non-single-snapshot ranges (e.g.
+            // TvrTableDelta) skip the numeric/date fallback below.
+            TvrVersionRange tvr = iceberg.getTvrVersionRange();
+            Long snapshotId = (tvr instanceof TvrTableSnapshot snap && !snap.isEmpty())
+                    ? snap.getSnapshotId() : null;
+
             if (iceberg.getProjection() != null) {
                 for (var entry : iceberg.getProjection().getColumnRefMap().entrySet()) {
                     if (groupByRefSets.contains(entry.getKey()) &&
@@ -164,7 +174,24 @@ public class ApplyMinMaxStatisticRule implements TreeRewriteRule {
                     final ColumnDict columnDict = globalDicts.get(column.getId());
                     final ConstantOperator max = ConstantOperator.createVarchar("" + columnDict.getDictSize());
                     infos.put(column.getId(), new Pair<>(min, max));
+                    continue;
                 }
+                if (snapshotId == null) {
+                    continue;
+                }
+                Column c = table.getColumn(column.getName());
+                if (c == null) {
+                    continue;
+                }
+                Optional<IMinMaxStatsMgr.ColumnMinMax> minMax = IMinMaxStatsMgr.icebergInstance()
+                        .getStats(new ColumnIdentifier(table.getUUID(), c.getColumnId()),
+                                new StatsVersion(-1, snapshotId));
+                if (minMax.isEmpty()) {
+                    continue;
+                }
+                final ConstantOperator min = ConstantOperator.createVarchar(minMax.get().minValue());
+                final ConstantOperator max = ConstantOperator.createVarchar(minMax.get().maxValue());
+                infos.put(column.getId(), new Pair<>(min, max));
             }
         }
 

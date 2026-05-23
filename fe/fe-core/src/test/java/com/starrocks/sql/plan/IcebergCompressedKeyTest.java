@@ -16,8 +16,11 @@ package com.starrocks.sql.plan;
 
 import com.google.common.collect.ImmutableMap;
 import com.starrocks.common.FeConstants;
+import com.starrocks.sql.optimizer.base.ColumnIdentifier;
 import com.starrocks.sql.optimizer.statistics.ColumnDict;
+import com.starrocks.sql.optimizer.statistics.IMinMaxStatsMgr;
 import com.starrocks.sql.optimizer.statistics.IRelaxDictManager;
+import com.starrocks.sql.optimizer.statistics.StatsVersion;
 import mockit.Expectations;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
@@ -77,5 +80,22 @@ public class IcebergCompressedKeyTest extends ConnectorPlanTestBase {
         String plan = getVerboseExplain(sql);
         assertContains(plan, "group by min-max stats:");
         assertContains(plan, "- 0:2");
+    }
+
+    @Test
+    public void testIcebergNumericGroupByFromMinMaxMgr() throws Exception {
+        IMinMaxStatsMgr mgr = IMinMaxStatsMgr.icebergInstance();
+        new Expectations(mgr) {
+            {
+                mgr.getStats((ColumnIdentifier) any, (StatsVersion) any);
+                result = Optional.of(new IMinMaxStatsMgr.ColumnMinMax("0", "100"));
+                minTimes = 0;
+            }
+        };
+
+        String sql = "select count(*) from iceberg0.unpartitioned_db.t0 group by id";
+        String plan = getVerboseExplain(sql);
+        assertContains(plan, "group by min-max stats:");
+        assertContains(plan, "- 0:100");
     }
 }
