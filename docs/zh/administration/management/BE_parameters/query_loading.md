@@ -607,6 +607,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 描述：启用 `enable_string_prefix_zonemap` 时用于字符串 Zonemap 最小值/最大值的前缀长度。
 - 引入版本：-
 
+### jvm_call_thread_pool_size
+
+- 默认值：1
+- 类型：Int
+- 单位：Threads
+- 是否动态：否
+- 描述：设置 JVM 调用 PriorityThreadPool 的大小，用于必须在 pthread 上执行的内部 JNI 工作，例如 JNI 全局引用清理。该线程池独立于 `udf_thread_pool_size`，避免通用 JVM 清理任务与 Java UDF 执行竞争。
+- 引入版本：-
+
 ### udf_thread_pool_size
 
 - 默认值：1

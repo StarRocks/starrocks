@@ -142,4 +142,4 @@ if(STARROCKS_JIT_ENABLE)
 endif()
 
 ADD_BE_LIB(Exprs ${EXPR_FILES})
-target_link_libraries(Exprs PUBLIC ExprCore)
+target_link_libraries(Exprs PUBLIC ExprCore RuntimeEnv)

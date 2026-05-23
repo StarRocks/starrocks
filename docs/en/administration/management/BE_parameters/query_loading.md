@@ -610,6 +610,15 @@ This topic introduces the following types of BE configurations:
 - Description: Prefix length used for string ZoneMap min/max when `enable_string_prefix_zonemap` is enabled.
 - Introduced in: -
 
+### jvm_call_thread_pool_size
+
+- Default: 1
+- Type: Int
+- Unit: Threads
+- Is mutable: No
+- Description: Sets the size of the JVM call PriorityThreadPool used for internal JNI work that must run on pthreads, such as JNI global reference cleanup. This pool is separate from `udf_thread_pool_size` so generic JVM cleanup does not compete with Java UDF execution.
+- Introduced in: -
+
 ### udf_thread_pool_size
 
 - Default: 1

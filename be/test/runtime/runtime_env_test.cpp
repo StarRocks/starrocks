@@ -15,49 +15,12 @@
 #include <gtest/gtest.h>
 
 #include "base/metrics.h"
-#include "common/config_exec_env_fwd.h"
-#include "common/config_lake_fwd.h"
-#include "common/config_primary_key_fwd.h"
-#include "common/config_vector_index_fwd.h"
 #include "common/system/cpu_info.h"
 #include "common/thread/threadpool.h"
 #include "runtime/env/global_env.h"
+#include "runtime/runtime_env_test_util.h"
 
 namespace starrocks {
-namespace {
-
-void set_small_thread_pool_configs() {
-    config::scanner_thread_pool_thread_num = 1;
-    config::scanner_thread_pool_queue_size = 8;
-    config::streaming_load_thread_pool_num_min = 0;
-    config::streaming_load_thread_pool_idle_time_ms = 10;
-    config::udf_thread_pool_size = 1;
-    config::automatic_partition_thread_pool_thread_num = 1;
-    config::pipeline_prepare_thread_pool_thread_num = 1;
-    config::pipeline_prepare_thread_pool_queue_size = 8;
-    config::pipeline_sink_io_thread_pool_thread_num = 1;
-    config::pipeline_sink_io_thread_pool_queue_size = 8;
-    config::internal_service_query_rpc_thread_num = 1;
-    config::internal_service_datacache_rpc_thread_num = 1;
-    config::dictionary_cache_refresh_threadpool_size = 1;
-    config::pipeline_exec_thread_pool_thread_num = 2;
-    config::load_segment_thread_pool_num_max = 1;
-    config::load_segment_thread_pool_queue_size = 8;
-    config::put_combined_txn_log_thread_pool_num_max = 1;
-
-    config::transaction_publish_version_worker_count = 1;
-    config::pk_index_parallel_execution_threadpool_max_threads = 1;
-    config::pk_index_parallel_execution_threadpool_size = 8;
-    config::pk_index_memtable_flush_threadpool_max_threads = 1;
-    config::pk_index_memtable_flush_threadpool_size = 8;
-    config::lake_partial_update_thread_pool_max_threads = 1;
-    config::lake_partial_update_thread_pool_queue_size = 8;
-    config::lake_metadata_fetch_thread_count = 1;
-    config::vector_index_build_max_cpu_ratio = 1.0;
-    config::config_vector_index_build_concurrency = 1;
-}
-
-} // namespace
 
 TEST(GlobalEnvTest, CalcQueryMemLimit) {
     ASSERT_EQ(GlobalEnv::calc_max_query_memory(-1, 80), -1);
@@ -73,7 +36,7 @@ TEST(GlobalEnvTest, GetInstanceReturnsStableSingleton) {
 
 TEST(GlobalEnvTest, OwnsExecutionThreadPools) {
     CpuInfo::init();
-    set_small_thread_pool_configs();
+    runtime_env_test::set_small_thread_pool_configs();
 
     auto* env = GlobalEnv::GetInstance();
     env->destroy_thread_pools();
@@ -87,6 +50,7 @@ TEST(GlobalEnvTest, OwnsExecutionThreadPools) {
     ASSERT_NE(env->load_rowset_thread_pool(), nullptr);
     ASSERT_NE(env->load_segment_thread_pool(), nullptr);
     ASSERT_NE(env->put_combined_txn_log_thread_pool(), nullptr);
+    ASSERT_NE(env->jvm_call_pool(), nullptr);
     ASSERT_NE(env->pipeline_prepare_pool(), nullptr);
     ASSERT_NE(env->pipeline_sink_io_pool(), nullptr);
     ASSERT_NE(env->query_rpc_pool(), nullptr);
@@ -100,12 +64,13 @@ TEST(GlobalEnvTest, OwnsExecutionThreadPools) {
     env->shutdown_thread_pools();
     env->destroy_thread_pools();
     ASSERT_EQ(env->thread_pool(), nullptr);
+    ASSERT_EQ(env->jvm_call_pool(), nullptr);
     ASSERT_EQ(env->load_rpc_pool(), nullptr);
 }
 
 TEST(GlobalEnvTest, OwnsLakeThreadPools) {
     CpuInfo::init();
-    set_small_thread_pool_configs();
+    runtime_env_test::set_small_thread_pool_configs();
 
     auto* env = GlobalEnv::GetInstance();
     env->destroy_thread_pools();
