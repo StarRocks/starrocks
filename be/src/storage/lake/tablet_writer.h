@@ -22,13 +22,10 @@
 #include "gen_cpp/data.pb.h"
 #include "gen_cpp/lake_types.pb.h"
 #include "runtime/global_dict/types_fwd_decl.h"
+#include "storage/index/secondary_sorted/collector.h"
 #include "storage/lake/location_provider.h"
 #include "storage/rowset/segment_file_info.h"
 #include "storage/tablet_schema.h"
-
-namespace starrocks::secondary_sorted {
-class SecondaryIndexCollector;
-} // namespace starrocks::secondary_sorted
 
 namespace starrocks {
 class Chunk;
