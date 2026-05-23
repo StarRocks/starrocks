@@ -45,7 +45,6 @@
 #include "runtime/runtime_metrics.h"
 #include "runtime/tablets_channel.h"
 #include "serde/protobuf_serde.h"
-#include "storage/index/secondary_sorted/index_registry.h"
 #include "storage/lake/async_delta_writer.h"
 #include "storage/lake/delta_writer.h"
 #include "storage/lake/delta_writer_finish_mode.h"
@@ -917,22 +916,10 @@ Status LakeTabletsChannel::_create_delta_writers(const PTabletWriterOpenRequest&
         // 1:1 correspondence between 'segments' and 'bundle_file_offsets'. The NonPrimaryKeyTxnLogApplier
         // merges bundle_file_offsets from multiple TxnLogs when creating the combined rowset during publish.
         if (_is_data_file_bundle_enabled(params)) {
-            // Secondary-index PoC: when this tablet has any registered
-            // secondary index, force per-segment files (skip the bundle)
-            // so that segment.close() on a non-bundle WritableFile actually
-            // flushes to OSS. The build_hook reads segments back to extract
-            // index column values, and segments held in a bundle context
-            // are not yet visible on the object store. The bundle file is
-            // uploaded only after the last writer in its partition closes.
-            const bool has_sidx =
-                    !starrocks::secondary_sorted::SecondaryIndexRegistry::get_for_tablet(tablet.tablet_id()).empty();
-            if (!has_sidx) {
-                if (_bundle_wfile_ctx_by_partition.count(tablet.partition_id()) == 0) {
-                    _bundle_wfile_ctx_by_partition[tablet.partition_id()] =
-                            std::make_unique<BundleWritableFileContext>();
-                }
-                bundle_writable_file_context = _bundle_wfile_ctx_by_partition[tablet.partition_id()].get();
+            if (_bundle_wfile_ctx_by_partition.count(tablet.partition_id()) == 0) {
+                _bundle_wfile_ctx_by_partition[tablet.partition_id()] = std::make_unique<BundleWritableFileContext>();
             }
+            bundle_writable_file_context = _bundle_wfile_ctx_by_partition[tablet.partition_id()].get();
         }
         if (_delta_writers.count(tablet.tablet_id()) != 0) {
             // already created for the tablet, usually in incremental open case
