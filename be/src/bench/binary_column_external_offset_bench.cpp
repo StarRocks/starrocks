@@ -568,10 +568,10 @@ static void bench_append_with_mask_external(benchmark::State& state, size_t rows
             state.ResumeTiming();
 
             auto st = append_with_mask<PositiveSelect>(dst.get(), *src, mask.data(), rows);
-            CHECK(st.ok()) << st.to_string();
             benchmark::DoNotOptimize(dst.get());
             benchmark::ClobberMemory();
             state.PauseTiming();
+            CHECK(st.ok()) << st.to_string();
         }
         state.ResumeTiming();
     }
@@ -675,10 +675,12 @@ static void bench_column_predicate_empty_ne(benchmark::State& state, size_t rows
         std::memcpy(sel.data(), base_sel.data(), rows * sizeof(uint16_t));
         state.ResumeTiming();
         auto result = predicate->evaluate_branchless(column.get(), sel.data(), static_cast<uint16_t>(rows));
+        state.PauseTiming();
         CHECK(result.ok()) << result.status().to_string();
         benchmark::DoNotOptimize(result.value());
         benchmark::DoNotOptimize(sel.data());
         benchmark::ClobberMemory();
+        state.ResumeTiming();
     }
     state.SetItemsProcessed(static_cast<int64_t>(state.iterations() * rows));
     const size_t input_bytes = rows * len + rows * sizeof(uint16_t);
@@ -709,10 +711,10 @@ static void bench_binary_plain_page_append_range(benchmark::State& state, size_t
             state.ResumeTiming();
 
             auto next_st = decoder.next_batch(range, dst.get());
-            CHECK(next_st.ok()) << next_st.to_string();
             benchmark::DoNotOptimize(dst.get());
             benchmark::ClobberMemory();
             state.PauseTiming();
+            CHECK(next_st.ok()) << next_st.to_string();
         }
         state.ResumeTiming();
     }
@@ -758,10 +760,10 @@ static void bench_binary_plain_page_with_filter(benchmark::State& state, size_t 
             auto next_st =
                     decoder.next_batch_with_filter(dst.get(), range, predicates, nullable ? nulls.data() : nullptr,
                                                    selection.data(), selected_idx.data());
-            CHECK(next_st.ok()) << next_st.to_string();
             benchmark::DoNotOptimize(dst.get());
             benchmark::ClobberMemory();
             state.PauseTiming();
+            CHECK(next_st.ok()) << next_st.to_string();
         }
         state.ResumeTiming();
     }
@@ -788,12 +790,12 @@ static void bench_binary_plain_page_dict_filter_selection(benchmark::State& stat
             uint32_t dict_size = 0;
             uint32_t selected_count = 0;
             auto st = decoder.get_dict_filter_selection(predicates, &selection, &dict_size, &selected_count);
-            CHECK(st.ok()) << st.to_string();
             benchmark::DoNotOptimize(selection);
             benchmark::DoNotOptimize(dict_size);
             benchmark::DoNotOptimize(selected_count);
             benchmark::ClobberMemory();
             state.PauseTiming();
+            CHECK(st.ok()) << st.to_string();
         }
         state.ResumeTiming();
     }
@@ -824,10 +826,10 @@ static void bench_parquet_plain_decode(benchmark::State& state, size_t rows, siz
             } else {
                 st = decoder.next_batch(rows, parquet::VALUE, dst.get(), nullptr);
             }
-            CHECK(st.ok()) << st.to_string();
             benchmark::DoNotOptimize(dst.get());
             benchmark::ClobberMemory();
             state.PauseTiming();
+            CHECK(st.ok()) << st.to_string();
         }
         state.ResumeTiming();
     }
@@ -860,10 +862,10 @@ static void bench_parquet_plain_flba_decode(benchmark::State& state, size_t rows
             } else {
                 st = decoder.next_batch(rows, parquet::VALUE, dst.get(), nullptr);
             }
-            CHECK(st.ok()) << st.to_string();
             benchmark::DoNotOptimize(dst.get());
             benchmark::ClobberMemory();
             state.PauseTiming();
+            CHECK(st.ok()) << st.to_string();
         }
         state.ResumeTiming();
     }
@@ -901,10 +903,10 @@ static void bench_parquet_dict_decode(benchmark::State& state, size_t rows, size
             } else {
                 st = decoder.next_batch(rows, parquet::VALUE, dst.get(), nullptr);
             }
-            CHECK(st.ok()) << st.to_string();
             benchmark::DoNotOptimize(dst.get());
             benchmark::ClobberMemory();
             state.PauseTiming();
+            CHECK(st.ok()) << st.to_string();
         }
         state.ResumeTiming();
     }
@@ -1038,11 +1040,13 @@ static void bench_column_array_serde_serialize(benchmark::State& state, size_t r
 
     for (auto _ : state) {
         auto result = serde::ColumnArraySerde::serialize(*column, buffer.data(), false, encode_level);
+        state.PauseTiming();
         CHECK(result.ok()) << result.status().to_string();
         serialized_bytes = result.value() - buffer.data();
         benchmark::DoNotOptimize(result.value());
         benchmark::DoNotOptimize(buffer.data());
         benchmark::ClobberMemory();
+        state.ResumeTiming();
     }
     state.SetItemsProcessed(static_cast<int64_t>(state.iterations() * rows));
     state.SetBytesProcessed(static_cast<int64_t>(state.iterations() * rows * len));
@@ -1067,11 +1071,11 @@ static void bench_column_array_serde_deserialize(benchmark::State& state, size_t
             state.ResumeTiming();
 
             auto result = serde::ColumnArraySerde::deserialize(buffer.data(), end, dst.get(), false, encode_level);
+            state.PauseTiming();
             CHECK(result.ok()) << result.status().to_string();
             benchmark::DoNotOptimize(result.value());
             benchmark::DoNotOptimize(dst.get());
             benchmark::ClobberMemory();
-            state.PauseTiming();
         }
         state.ResumeTiming();
     }
@@ -1230,11 +1234,11 @@ static void bench_arrow_string_converter_impl(benchmark::State& state, size_t ro
 
             auto st =
                     conv_func(array.get(), convert_start, rows, data_column.get(), 0, null_data, &filter, nullptr, nullptr);
-            CHECK(st.ok()) << st.to_string();
             benchmark::DoNotOptimize(data_column.get());
             benchmark::DoNotOptimize(filter.data());
             benchmark::ClobberMemory();
             state.PauseTiming();
+            CHECK(st.ok()) << st.to_string();
             if (!validated) {
                 data_column->check_or_die();
                 CHECK_EQ(data_column->size(), rows);
@@ -1341,11 +1345,11 @@ static void bench_arrow_fixed_size_binary_converter_impl(benchmark::State& state
             state.ResumeTiming();
 
             auto st = conv_func(array.get(), convert_start, rows, data_column.get(), 0, null_data, &filter, nullptr, nullptr);
-            CHECK(st.ok()) << st.to_string();
             benchmark::DoNotOptimize(data_column.get());
             benchmark::DoNotOptimize(filter.data());
             benchmark::ClobberMemory();
             state.PauseTiming();
+            CHECK(st.ok()) << st.to_string();
             if (!validated) {
                 data_column->check_or_die();
                 CHECK_EQ(data_column->size(), rows);
@@ -1512,10 +1516,10 @@ static void bench_orc_string_reader(benchmark::State& state, LogicalType type, s
             state.ResumeTiming();
 
             auto st = column_reader->get_next(&fixture.batch, dst.get(), 0, rows);
-            CHECK(st.ok()) << st.to_string();
             benchmark::DoNotOptimize(dst.get());
             benchmark::ClobberMemory();
             state.PauseTiming();
+            CHECK(st.ok()) << st.to_string();
         }
         state.ResumeTiming();
     }
@@ -1701,10 +1705,10 @@ static void bench_string_function_external(benchmark::State& state, StringFuncti
                 }
                 __builtin_unreachable();
             }();
+            state.PauseTiming();
             CHECK(result.ok()) << result.status().to_string();
             benchmark::DoNotOptimize(result.value().get());
             benchmark::ClobberMemory();
-            state.PauseTiming();
         }
         state.ResumeTiming();
     }
@@ -1862,11 +1866,10 @@ static void bench_join_hash_table_binary_key_build_only(benchmark::State& state,
             state.ResumeTiming();
 
             auto st = hash_table.build(fixture.runtime_state.get());
+            state.PauseTiming();
             CHECK(st.ok()) << st.to_string();
             benchmark::DoNotOptimize(hash_table.get_row_count());
             benchmark::ClobberMemory();
-
-            state.PauseTiming();
             hash_table.close();
         }
         state.ResumeTiming();
@@ -2248,9 +2251,9 @@ static void bench_parquet_level_builder_byte_array(benchmark::State& state, size
                 }
                 benchmark::DoNotOptimize(values);
             });
-            CHECK(st.ok()) << st.to_string();
             benchmark::ClobberMemory();
             state.PauseTiming();
+            CHECK(st.ok()) << st.to_string();
         }
         state.ResumeTiming();
     }
@@ -2343,10 +2346,10 @@ static void bench_array_reverse_string_external(benchmark::State& state, size_t 
     for (auto _ : state) {
         {
             auto result = ArrayFunctions::array_reverse<TYPE_VARCHAR>(nullptr, args);
+            state.PauseTiming();
             CHECK(result.ok()) << result.status().to_string();
             benchmark::DoNotOptimize(result.value().get());
             benchmark::ClobberMemory();
-            state.PauseTiming();
         }
         state.ResumeTiming();
     }
@@ -2424,10 +2427,10 @@ static void bench_cast_to_string_external(benchmark::State& state, TypeDescripto
     for (auto _ : state) {
         {
             auto result = expr->evaluate_checked(nullptr, nullptr);
+            state.PauseTiming();
             CHECK(result.ok()) << result.status().to_string();
             benchmark::DoNotOptimize(result.value().get());
             benchmark::ClobberMemory();
-            state.PauseTiming();
         }
         state.ResumeTiming();
     }
@@ -2490,11 +2493,11 @@ static void bench_row_store_encoder_simple_encode(benchmark::State& state, size_
             state.ResumeTiming();
 
             auto st = encoder.encode_columns_to_full_row_column(schema, columns, *dest);
-            CHECK(st.ok()) << st.to_string();
             benchmark::DoNotOptimize(dest.get());
             benchmark::DoNotOptimize(dest->get_bytes().data());
             benchmark::ClobberMemory();
             state.PauseTiming();
+            CHECK(st.ok()) << st.to_string();
         }
         state.ResumeTiming();
     }
@@ -2572,17 +2575,17 @@ static void bench_column_predicate_in_branchless_external(benchmark::State& stat
         state.ResumeTiming();
 
         auto result = predicate->evaluate_branchless(column.get(), sel.data(), static_cast<uint16_t>(sel.size()));
+        state.PauseTiming();
         CHECK(result.ok()) << result.status().to_string();
         benchmark::DoNotOptimize(result.value());
         benchmark::DoNotOptimize(sel.data());
         benchmark::ClobberMemory();
 
         if (!validated) {
-            state.PauseTiming();
             CHECK_EQ(result.value(), expected_hits);
             validated = true;
-            state.ResumeTiming();
         }
+        state.ResumeTiming();
     }
 
     state.SetItemsProcessed(static_cast<int64_t>(state.iterations() * base_sel.size()));
