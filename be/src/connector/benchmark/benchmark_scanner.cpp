@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "exec/benchmark_scanner.h"
+#include "connector/benchmark/benchmark_scanner.h"
 
 #include <arrow/record_batch.h>
 
@@ -28,7 +28,7 @@
 #include "exprs/column_ref.h"
 #include "runtime/runtime_state.h"
 
-namespace starrocks {
+namespace starrocks::connector {
 
 BenchmarkScanner::BenchmarkScanner(BenchmarkScannerParam param, const TupleDescriptor* tuple_desc)
         : _param(std::move(param)), _slot_descs(tuple_desc->slots()) {}
@@ -180,4 +180,4 @@ Status BenchmarkScanner::_next_batch(bool* eos) {
     return Status::OK();
 }
 
-} // namespace starrocks
+} // namespace starrocks::connector

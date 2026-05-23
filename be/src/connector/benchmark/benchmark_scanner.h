@@ -36,6 +36,8 @@ namespace starrocks {
 class Expr;
 class RuntimeState;
 
+namespace connector {
+
 struct BenchmarkScannerParam {
     std::string db_name;
     std::string table_name;
@@ -73,4 +75,5 @@ private:
     bool _scanner_eof = false;
 };
 
+} // namespace connector
 } // namespace starrocks

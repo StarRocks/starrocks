@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "connector/benchmark_connector.h"
+#include "connector/benchmark/benchmark_connector.h"
 
 #include <algorithm>
 

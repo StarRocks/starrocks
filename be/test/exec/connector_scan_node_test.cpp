@@ -404,6 +404,21 @@ TEST_F(ConnectorScanNodeTest, test_stream_load_thread_pool) {
     ASSERT_TRUE(scan_node->use_stream_load_thread_pool());
 }
 
+TEST_F(ConnectorScanNodeTest, missing_connector_returns_unknown_error) {
+    std::shared_ptr<RuntimeState> runtime_state = create_runtime_state();
+    std::vector<TypeDescriptor> types;
+    types.emplace_back(TYPE_INT);
+    auto* descs = create_table_desc(runtime_state.get(), types);
+
+    auto tnode = create_tplan_node_hive();
+    tnode->connector_scan_node.connector_name = "__missing_connector__";
+    auto scan_node = std::make_shared<starrocks::ConnectorScanNode>(runtime_state->obj_pool(), *tnode, *descs);
+
+    auto status = scan_node->init(*tnode, runtime_state.get());
+    ASSERT_TRUE(status.is_unknown()) << status;
+    ASSERT_NE(status.message().find("Unknown connector: __missing_connector__"), std::string::npos);
+}
+
 // When FE sets catalog_type explicitly, use it.
 TEST_F(ConnectorScanNodeTest, test_catalog_type_with_explicit_value) {
     std::shared_ptr<RuntimeState> runtime_state = create_runtime_state();

@@ -36,18 +36,16 @@ SPEC.loader.exec_module(MODULE)
 class RenderBeAgentsTest(unittest.TestCase):
     def test_rendered_section_contains_manifest_content(self) -> None:
         rendered = MODULE.render_module_boundaries_section(
-            {
-                "modules": [
-                    {
-                        "id": "columncore",
-                        "doc_label": "ColumnCore",
-                        "owned_targets": ["ColumnCore"],
-                        "allowed_include_prefixes": ["column/", "types/", "common/"],
-                        "allowed_test_targets": ["column_test"],
-                        "remediation": "Move code down or add an interface.",
-                    }
-                ]
-            }
+            [
+                {
+                    "id": "columncore",
+                    "doc_label": "ColumnCore",
+                    "owned_targets": ["ColumnCore"],
+                    "allowed_include_prefixes": ["column/", "types/", "common/"],
+                    "allowed_test_targets": ["column_test"],
+                    "remediation": "Move code down or add an interface.",
+                }
+            ]
         )
 
         self.assertIn("## Module Harness", rendered)
@@ -109,7 +107,53 @@ class RenderBeAgentsTest(unittest.TestCase):
             )
 
             with self.assertRaises(MODULE.GeneratedSectionMismatchError):
-                MODULE.check_agents_file(agents_path, manifest_path)
+                manifest = json.loads(manifest_path.read_text())
+                MODULE.check_agents_file(agents_path, manifest_path, manifest["modules"])
+
+    def test_agents_paths_include_nested_agents_files(self) -> None:
+        manifest = {
+            "modules": [
+                {
+                    "id": "base",
+                    "agents_path": "be/AGENTS.md",
+                },
+                {
+                    "id": "connectorbenchmark",
+                    "agents_path": "be/src/connector/benchmark/AGENTS.md",
+                },
+                {
+                    "id": "common",
+                },
+            ]
+        }
+
+        self.assertEqual(
+            MODULE._agents_paths(manifest, MODULE.DEFAULT_AGENTS),
+            [
+                "be/AGENTS.md",
+                "be/src/connector/benchmark/AGENTS.md",
+            ],
+        )
+        self.assertEqual(MODULE._agents_paths(manifest, "custom/AGENTS.md"), ["custom/AGENTS.md"])
+
+    def test_modules_for_agents_path_uses_default_path(self) -> None:
+        manifest = {
+            "modules": [
+                {
+                    "id": "base",
+                },
+                {
+                    "id": "connectorbenchmark",
+                    "agents_path": "be/src/connector/benchmark/AGENTS.md",
+                },
+            ]
+        }
+
+        default_modules = MODULE._modules_for_agents_path(manifest, MODULE.DEFAULT_AGENTS)
+        nested_modules = MODULE._modules_for_agents_path(manifest, "be/src/connector/benchmark/AGENTS.md")
+
+        self.assertEqual([module["id"] for module in default_modules], ["base"])
+        self.assertEqual([module["id"] for module in nested_modules], ["connectorbenchmark"])
 
 
 if __name__ == "__main__":

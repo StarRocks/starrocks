@@ -14,8 +14,8 @@
 
 #pragma once
 
+#include "connector/benchmark/benchmark_scanner.h"
 #include "connector/connector.h"
-#include "exec/benchmark_scanner.h"
 
 namespace starrocks::connector {
 

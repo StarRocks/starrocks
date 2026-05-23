@@ -126,3 +126,4 @@ ADD_BE_LIB(Runtime
     )
 
 target_link_libraries(Runtime PUBLIC RuntimeCore ExecPrimitive ExecSinkCore ExecSortingCore Platform)
+target_link_libraries(Runtime PRIVATE ConnectorBuiltinRegistry)
