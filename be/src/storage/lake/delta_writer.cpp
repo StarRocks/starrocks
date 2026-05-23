@@ -39,6 +39,7 @@
 #include "storage/chunk_helper.h"
 #include "storage/delta_writer.h"
 #include "storage/index/secondary_sorted/build_hook.h"
+#include "storage/index/secondary_sorted/collector.h"
 #include "storage/index/secondary_sorted/index_registry.h"
 #include "storage/lake/filenames.h"
 #include "storage/lake/meta_file.h"
@@ -407,6 +408,20 @@ Status DeltaWriterImpl::build_schema_and_writer() {
             _tablet_writer = std::make_unique<HorizontalGeneralTabletWriter>(
                     _tablet_manager, _tablet_id, _write_schema, _txn_id, false, nullptr, _bundle_writable_file_context,
                     _global_dicts);
+        }
+        // Inject a secondary-index collector if any index is registered for
+        // this tablet. The collector siphons index-column values directly out
+        // of each write chunk, avoiding the bundle-uploader race that the
+        // old read-back hook hit.
+        if (config::enable_secondary_index_write && _tablet_schema->keys_type() == KeysType::PRIMARY_KEYS) {
+            auto defs = secondary_sorted::SecondaryIndexRegistry::get_for_tablet(_tablet_id);
+            if (!defs.empty()) {
+                ASSIGN_OR_RETURN(auto collector, secondary_sorted::SecondaryIndexCollector::create(
+                                                          _tablet_id, _txn_id, defs, _tablet_schema));
+                if (collector != nullptr) {
+                    _tablet_writer->set_secondary_index_collector(std::move(collector));
+                }
+            }
         }
         RETURN_IF_ERROR(_tablet_writer->open());
         if (should_enable_load_spill()) {
@@ -934,17 +949,14 @@ StatusOr<TxnLogPtr> DeltaWriterImpl::finish_with_txnlog(DeltaWriterFinishMode mo
             }
         }
 
-        if (!_tablet_writer->segments().empty()) {
-            std::vector<SecondaryIndexFilePB> sidx_pbs;
-            const std::string root = _tablet_manager->tablet_root_location(_tablet_id);
-            ASSIGN_OR_RETURN(auto sidx_fs, FileSystemFactory::CreateSharedFromString(root));
-            RETURN_IF_ERROR(secondary_sorted::maybe_build_secondary_indexes(_tablet_id, _txn_id, _tablet_schema,
-                                                                            _tablet_writer->segments(), sidx_fs,
-                                                                            _tablet_manager, &sidx_pbs));
-            for (auto& pb : sidx_pbs) {
-                *(op_write->mutable_rowset()->add_secondary_indexes()) = std::move(pb);
-            }
+        // The TabletWriter has already finalized its secondary-index
+        // collector inside _tablet_writer->finish() above and stashed the
+        // resulting PB entries; pick them up and attach to the rowset
+        // metadata so they commit atomically with the data segments.
+        for (auto& pb : _tablet_writer->mutable_secondary_index_files()) {
+            *(op_write->mutable_rowset()->add_secondary_indexes()) = std::move(pb);
         }
+        _tablet_writer->mutable_secondary_index_files().clear();
     }
 
     auto prepare_txn_log_ts = watch.elapsed_time();

@@ -295,6 +295,7 @@ set(STORAGE_FILES
     index/inverted/clucene/clucene_inverted_reader.cpp
     index/inverted/clucene/match_operator.cpp
     index/secondary_sorted/build_hook.cpp
+    index/secondary_sorted/collector.cpp
     index/secondary_sorted/index_registry.cpp
     index/secondary_sorted/predicate_remap.cpp
     index/secondary_sorted/secondary_index_writer.cpp

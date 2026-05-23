@@ -26,6 +26,10 @@
 #include "storage/rowset/segment_file_info.h"
 #include "storage/tablet_schema.h"
 
+namespace starrocks::secondary_sorted {
+class SecondaryIndexCollector;
+} // namespace starrocks::secondary_sorted
+
 namespace starrocks {
 class Chunk;
 class Column;
@@ -180,6 +184,18 @@ public:
 
     const FileInfo& lcrm_file() const { return _lcrm_file; }
 
+    // Inject a per-tablet secondary-index collector. Ownership transferred to
+    // the writer. Subclasses route every write() chunk + segment rotation
+    // event into the collector and call collector->finalize() in finish().
+    void set_secondary_index_collector(std::unique_ptr<secondary_sorted::SecondaryIndexCollector> c) {
+        _sidx_collector = std::move(c);
+    }
+    secondary_sorted::SecondaryIndexCollector* secondary_index_collector() const { return _sidx_collector.get(); }
+    // After finish(), holds one PB per index produced. Caller (DeltaWriter
+    // or compaction task) attaches them to the rowset metadata.
+    const std::vector<SecondaryIndexFilePB>& secondary_index_files() const { return _sidx_files; }
+    std::vector<SecondaryIndexFilePB>& mutable_secondary_index_files() { return _sidx_files; }
+
 protected:
     TabletManager* _tablet_mgr;
     int64_t _tablet_id;
@@ -201,6 +217,8 @@ protected:
     std::shared_ptr<FileSystem> _fs;
     std::shared_ptr<LocationProvider> _location_provider;
     OlapWriterStatistics _stats;
+    std::unique_ptr<secondary_sorted::SecondaryIndexCollector> _sidx_collector;
+    std::vector<SecondaryIndexFilePB> _sidx_files;
 
     bool _is_compaction = false;
     DictColumnsValidMap _global_dict_columns_valid_info;
