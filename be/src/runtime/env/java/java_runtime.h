@@ -47,6 +47,7 @@ public:
     jobjectArray create_object_array(int size);
     jobjectArray create_object_array(jobject fill, int size);
     jobjectArray create_object_array(jobject* elements, int size);
+    jobjectArray create_object_2d_array(jobject* elements, int size);
 
     jclass object_class() const { return _object_class; }
     jclass object_array_class() const { return _object_array_class; }

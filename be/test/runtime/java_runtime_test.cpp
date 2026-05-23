@@ -102,11 +102,41 @@ TEST_F(JavaRuntimeTest, ArrayToString) {
     jobjectArray array = runtime().create_object_array(elements, 2);
     ASSERT_NE(array, nullptr);
 
+    jclass object_array_class = env()->FindClass("[Ljava/lang/Object;");
+    ASSERT_NE(object_array_class, nullptr);
+    jobject array_class = env()->GetObjectClass(array);
+    ASSERT_TRUE(env()->IsSameObject(object_array_class, array_class));
+
     ASSERT_EQ("[alpha, beta]", runtime().array_to_string(array));
 
+    env()->DeleteLocalRef(array_class);
+    env()->DeleteLocalRef(object_array_class);
     env()->DeleteLocalRef(array);
     env()->DeleteLocalRef(beta);
     env()->DeleteLocalRef(alpha);
+}
+
+TEST_F(JavaRuntimeTest, CreateObject2DArray) {
+    jobjectArray row0 = runtime().create_object_array(1);
+    ASSERT_NE(row0, nullptr);
+    jobjectArray row1 = runtime().create_object_array(1);
+    ASSERT_NE(row1, nullptr);
+    jobject elements[] = {row0, row1};
+
+    jobjectArray array = runtime().create_object_2d_array(elements, 2);
+    ASSERT_NE(array, nullptr);
+    ASSERT_EQ(2, env()->GetArrayLength(array));
+
+    jclass object_2d_array_class = env()->FindClass("[[Ljava/lang/Object;");
+    ASSERT_NE(object_2d_array_class, nullptr);
+    jobject array_class = env()->GetObjectClass(array);
+    ASSERT_TRUE(env()->IsSameObject(object_2d_array_class, array_class));
+
+    env()->DeleteLocalRef(array_class);
+    env()->DeleteLocalRef(object_2d_array_class);
+    env()->DeleteLocalRef(array);
+    env()->DeleteLocalRef(row1);
+    env()->DeleteLocalRef(row0);
 }
 
 TEST_F(JavaRuntimeTest, DumpExceptionString) {

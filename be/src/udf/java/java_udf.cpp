@@ -429,7 +429,7 @@ void JVMFunctionHelper::batch_update(FunctionContext* ctx, jobject udaf, jobject
     auto* udaf_ctx = get_java_udaf_context(ctx);
     DCHECK(udaf_ctx != nullptr);
     DCHECK(udaf_ctx->states != nullptr);
-    jobjectArray input_arr = JavaRuntime::getInstance().create_object_array(input, cols);
+    jobjectArray input_arr = JavaRuntime::getInstance().create_object_2d_array(input, cols);
     LOCAL_REF_GUARD(input_arr);
     _env->CallStaticVoidMethod(_udf_helper_class, _batch_update, udaf, update, udaf_ctx->states->handle(), states,
                                input_arr);
@@ -438,7 +438,7 @@ void JVMFunctionHelper::batch_update(FunctionContext* ctx, jobject udaf, jobject
 
 void JVMFunctionHelper::batch_update_state(FunctionContext* ctx, jobject udaf, jobject update, jobject* input,
                                            int cols) {
-    jobjectArray input_arr = JavaRuntime::getInstance().create_object_array(input, cols);
+    jobjectArray input_arr = JavaRuntime::getInstance().create_object_2d_array(input, cols);
     LOCAL_REF_GUARD(input_arr);
     _env->CallStaticVoidMethod(_udf_helper_class, _batch_update_state, udaf, update, input_arr);
     CHECK_UDF_CALL_EXCEPTION(_env, ctx);
@@ -449,7 +449,7 @@ void JVMFunctionHelper::batch_update_if_not_null(FunctionContext* ctx, jobject u
     auto* udaf_ctx = get_java_udaf_context(ctx);
     DCHECK(udaf_ctx != nullptr);
     DCHECK(udaf_ctx->states != nullptr);
-    jobjectArray input_arr = JavaRuntime::getInstance().create_object_array(input, cols);
+    jobjectArray input_arr = JavaRuntime::getInstance().create_object_2d_array(input, cols);
     LOCAL_REF_GUARD(input_arr);
     _env->CallStaticVoidMethod(_udf_helper_class, _batch_update_if_not_null, udaf, update, udaf_ctx->states->handle(),
                                states, input_arr);
@@ -462,7 +462,7 @@ StatusOr<jobject> JVMFunctionHelper::batch_call(BatchEvaluateStub* stub, jobject
 
 jobject JVMFunctionHelper::batch_call(FunctionContext* ctx, jobject caller, jobject method, jobject* input, int cols,
                                       int rows) {
-    jobjectArray input_arr = JavaRuntime::getInstance().create_object_array(input, cols);
+    jobjectArray input_arr = JavaRuntime::getInstance().create_object_2d_array(input, cols);
     LOCAL_REF_GUARD(input_arr);
     auto res = _env->CallStaticObjectMethod(_udf_helper_class, _batch_call, caller, method, rows, input_arr);
     CHECK_UDF_CALL_EXCEPTION(_env, ctx);

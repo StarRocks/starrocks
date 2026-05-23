@@ -225,6 +225,22 @@ jobjectArray JavaRuntime::create_object_array(jobject* elements, int size) {
     return res;
 }
 
+jobjectArray JavaRuntime::create_object_2d_array(jobject* elements, int size) {
+    auto* env = getEnv();
+    auto res = env->NewObjectArray(size, _object_array_class, nullptr);
+    if (_check_exception("create_object_2d_array: NewObjectArray failed")) {
+        return nullptr;
+    }
+    for (int i = 0; i < size; ++i) {
+        env->SetObjectArrayElement(res, i, elements[i]);
+        if (_check_exception("create_object_2d_array: SetObjectArrayElement failed")) {
+            env->DeleteLocalRef(res);
+            return nullptr;
+        }
+    }
+    return res;
+}
+
 std::string JavaRuntime::to_jni_class_name(const std::string& name) {
     std::string res = name;
     for (auto& c : res) {
