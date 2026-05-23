@@ -284,6 +284,8 @@ CONF_mInt32(scanner_thread_pool_thread_num, "48");
 // Number of olap/external scanner thread pool size.
 CONF_Int32(scanner_thread_pool_queue_size, "102400");
 CONF_Int32(udf_thread_pool_size, "1");
+// Number of threads for internal JVM calls that must run on pthreads.
+CONF_Int32(jvm_call_thread_pool_size, "1");
 // Port on which to run StarRocks test backend.
 CONF_Int32(port, "20001");
 // Default thrift client connect timeout(in seconds).

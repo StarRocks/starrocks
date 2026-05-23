@@ -272,6 +272,7 @@
         "transaction_publish_version_worker_count",
         "try_release_resource_before_core_dump",
         "udf_thread_pool_size",
+        "jvm_call_thread_pool_size",
         "update_memory_limit_percent"
       ]
     },

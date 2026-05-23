@@ -39,6 +39,9 @@ CONF_Int32(scanner_thread_pool_queue_size, "102400");
 
 CONF_Int32(udf_thread_pool_size, "1");
 
+// Number of threads for internal JVM calls that must run on pthreads.
+CONF_Int32(jvm_call_thread_pool_size, "1");
+
 // The threadpool max thread num for pk index get in shared-data mode.
 CONF_mInt32(pk_index_parallel_execution_threadpool_max_threads, "0");
 

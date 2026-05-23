@@ -95,6 +95,7 @@ public:
     ThreadPool* load_segment_thread_pool() const { return _thread_pools.load_segment_thread_pool(); }
     ThreadPool* put_combined_txn_log_thread_pool() const { return _thread_pools.put_combined_txn_log_thread_pool(); }
     PriorityThreadPool* udf_call_pool() const { return _thread_pools.udf_call_pool(); }
+    PriorityThreadPool* jvm_call_pool() const { return _thread_pools.jvm_call_pool(); }
     PriorityThreadPool* pipeline_prepare_pool() const { return _thread_pools.pipeline_prepare_pool(); }
     PriorityThreadPool* pipeline_sink_io_pool() const { return _thread_pools.pipeline_sink_io_pool(); }
     PriorityThreadPool* query_rpc_pool() const { return _thread_pools.query_rpc_pool(); }

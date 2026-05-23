@@ -776,52 +776,6 @@ DirectByteBuffer::~DirectByteBuffer() {
     }
 }
 
-JavaGlobalRef::~JavaGlobalRef() {
-    clear();
-}
-
-void JavaGlobalRef::clear() {
-    if (_handle) {
-        auto ret = call_hdfs_scan_function_in_pthread([this]() {
-            JVMFunctionHelper::getInstance().getEnv()->DeleteGlobalRef(_handle);
-            _handle = nullptr;
-            return Status::OK();
-        });
-        (void)ret->get_future().get();
-    }
-}
-
-StatusOr<JavaGlobalRef> JVMClass::newInstance() const {
-    JNIEnv* env = getJNIEnv();
-    // get default constructor
-    jmethodID constructor = env->GetMethodID((jclass)_clazz.handle(), "<init>", "()V");
-    if (constructor == nullptr) {
-        if (env->ExceptionCheck()) {
-            env->ExceptionClear();
-        }
-        return Status::InternalError("couldn't found default constructor for Java Object");
-    }
-    auto local_ref = env->NewObject((jclass)_clazz.handle(), constructor);
-    RETURN_ERROR_IF_JNI_EXCEPTION(env);
-    LOCAL_REF_GUARD(local_ref);
-    return env->NewGlobalRef(local_ref);
-}
-
-StatusOr<jobject> JVMClass::newLocalInstance() const {
-    JNIEnv* env = getJNIEnv();
-    // get default constructor
-    jmethodID constructor = env->GetMethodID((jclass)_clazz.handle(), "<init>", "()V");
-    if (constructor == nullptr) {
-        if (env->ExceptionCheck()) {
-            env->ExceptionClear();
-        }
-        return Status::InternalError("couldn't found default constructor for Java Object");
-    }
-    auto res = env->NewObject((jclass)_clazz.handle(), constructor);
-    RETURN_ERROR_IF_JNI_EXCEPTION(env);
-    return res;
-}
-
 UDAFStateList::UDAFStateList(JavaGlobalRef&& handle, JavaGlobalRef&& get, JavaGlobalRef&& batch_get,
                              JavaGlobalRef&& add, JavaGlobalRef&& remove, JavaGlobalRef&& clear)
         : _handle(std::move(handle)),

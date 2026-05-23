@@ -569,4 +569,4 @@ ADD_BE_LIB(Exec
     $<TARGET_OBJECTS:pipeline_extensions_exec_objs>
 )
 
-target_link_libraries(Exec PUBLIC ExecPrimitive ExecSinkCore SpillCore ExecSchemaScannerCore ExecSchemaScanners ExecSortingCore ExecJoinCore)
+target_link_libraries(Exec PUBLIC ExecPrimitive ExecSinkCore SpillCore ExecSchemaScannerCore ExecSchemaScanners ExecSortingCore ExecJoinCore RuntimeEnv)
