@@ -189,6 +189,8 @@ private:
     // that placeholder column from the data file.
     bool _can_use_any_column = false;
     bool _use_count_opt = false;
+    // Hint for parquet dict-page shortcut. Propagated to HdfsScannerParams.
+    bool _dict_page_shortcut_hint = false;
     const HiveTableDescriptor* _hive_table = nullptr;
 
     bool _has_scan_range_indicate_const_column = false;

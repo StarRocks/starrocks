@@ -618,6 +618,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_READ_ICEBERG_PUFFIN_NDV = "enable_read_iceberg_puffin_ndv";
 
     public static final String ENABLE_ICEBERG_COLUMN_STATISTICS = "enable_iceberg_column_statistics";
+
+    public static final String ENABLE_ICEBERG_DICT_PAGE_SHORTCUT = "enable_iceberg_dict_page_shortcut";
     public static final String ENABLE_READ_ICEBERG_EQUALITY_DELETE_WITH_PARTITION_EVOLUTION =
             "enable_read_iceberg_equality_delete_with_partition_evolution";
     public static final String ENABLE_DELTA_LAKE_COLUMN_STATISTICS = "enable_delta_lake_column_statistics";
@@ -3208,6 +3210,13 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = ENABLE_ICEBERG_COLUMN_STATISTICS)
     private boolean enableIcebergColumnStatistics = false;
 
+    // Iceberg parquet only: SELECT DISTINCT col / GROUP BY col may short-circuit by
+    // emitting the column-chunk dictionary page instead of decoding data pages. BE
+    // applies per-RG safety gates (writer=parquet-mr, fully dict-encoded, null_count
+    // set, no delete files). Off by default.
+    @VarAttr(name = ENABLE_ICEBERG_DICT_PAGE_SHORTCUT)
+    private boolean enableIcebergDictPageShortcut = false;
+
     @VarAttr(name = ENABLE_READ_ICEBERG_EQUALITY_DELETE_WITH_PARTITION_EVOLUTION)
     private boolean enableReadIcebergEqDeleteWithPartitionEvolution = false;
 
@@ -4868,6 +4877,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setUseLowCardinalityOptimizeOnLake(boolean useLowCardinalityOptimizeOnLake) {
         this.useLowCardinalityOptimizeOnLake = useLowCardinalityOptimizeOnLake;
+    }
+
+    public boolean isEnableIcebergDictPageShortcut() {
+        return enableIcebergDictPageShortcut;
+    }
+
+    public void setEnableIcebergDictPageShortcut(boolean v) {
+        this.enableIcebergDictPageShortcut = v;
     }
 
     public boolean isEnableRewriteGroupingsetsToUnionAll() {

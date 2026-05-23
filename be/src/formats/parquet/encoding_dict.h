@@ -204,6 +204,20 @@ public:
         return Status::OK();
     }
 
+    // Emit the entire dictionary as raw values into `column`. Output length equals the
+    // dictionary size; the destination column must be the physical primitive column
+    // (after ColumnHelper::get_data_column) — null bookkeeping is the caller's job.
+    Status get_dict_values(Column* column) override {
+        auto* data_column = down_cast<FixedLengthColumn<T>*>(column);
+        size_t cur_size = data_column->size();
+        data_column->resize_uninitialized(cur_size + _dict.size());
+        T* __restrict dst = data_column->get_data().data() + cur_size;
+        if (!_dict.empty()) {
+            std::memcpy(dst, _dict.data(), _dict.size() * sizeof(T));
+        }
+        return Status::OK();
+    }
+
     Status _do_next_batch_with_nulls(size_t count, const NullInfos& null_infos, ColumnContentType content_type,
                                      Column* dst, const FilterData* filter) override {
         DCHECK(dst->is_nullable());

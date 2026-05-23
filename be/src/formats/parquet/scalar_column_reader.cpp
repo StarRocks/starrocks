@@ -544,6 +544,52 @@ Status ScalarColumnReader::_read_range_impl(const Range<uint64_t>& range, const 
     }
 }
 
+Status ScalarColumnReader::materialize_dictionary_values(ColumnPtr& dst) {
+    DCHECK(dst != nullptr);
+    DCHECK(_converter != nullptr) << "prepare() must be called before materialize_dictionary_values";
+
+    // For converted types (e.g. parquet INT96 -> TIMESTAMP, raw 16-byte UUID -> string)
+    // decode into the physical intermediate column first, then convert into dst.  This
+    // mirrors _dict_decode but skips the dict-code stream entirely; we only need the
+    // dictionary page itself.
+    if (_converter->need_convert) {
+        if (_tmp_intermediate_column == nullptr) {
+            _tmp_intermediate_column = _converter->create_src_column();
+        }
+        _tmp_intermediate_column->as_mutable_raw_ptr()->reset_column();
+        Column* physical = ColumnHelper::get_data_column(_tmp_intermediate_column->as_mutable_raw_ptr());
+        size_t before = physical->size();
+        RETURN_IF_ERROR(_reader->get_dict_values(physical));
+        // Keep the nullable wrapper's null array in sync with the data array — converters
+        // dereference both with the same length and crash/corrupt otherwise. Dict values
+        // are never null by construction.
+        if (_tmp_intermediate_column->is_nullable()) {
+            auto* nullable = down_cast<NullableColumn*>(_tmp_intermediate_column->as_mutable_raw_ptr());
+            size_t appended = physical->size() - before;
+            nullable->null_column_raw_ptr()->append_default(appended);
+        }
+        {
+            SCOPED_RAW_TIMER(&_opts.stats->column_convert_ns);
+            RETURN_IF_ERROR(_converter->convert(_tmp_intermediate_column.get(), dst->as_mutable_raw_ptr()));
+        }
+        _tmp_intermediate_column->as_mutable_raw_ptr()->reset_column();
+        return Status::OK();
+    }
+
+    // No conversion required — write directly into dst's data column.  Append zero
+    // nulls if dst is nullable; the caller appends an extra NULL row separately if
+    // the column statistics say null_count > 0.
+    Column* data_column = ColumnHelper::get_data_column(dst->as_mutable_raw_ptr());
+    size_t before = data_column->size();
+    RETURN_IF_ERROR(_reader->get_dict_values(data_column));
+    if (dst->is_nullable()) {
+        auto* nullable = down_cast<NullableColumn*>(dst->as_mutable_raw_ptr());
+        size_t appended = data_column->size() - before;
+        nullable->null_column_raw_ptr()->append_default(appended);
+    }
+    return Status::OK();
+}
+
 Status ScalarColumnReader::_dict_decode(ColumnPtr& dst, ColumnPtr& src) {
     Column* dict_values = ColumnHelper::get_data_column(dst->as_mutable_raw_ptr());
     dict_values->reserve(src->size());

@@ -337,6 +337,9 @@ public class IcebergScanNode extends ScanNode {
 
         if (detailLevel == TExplainLevel.VERBOSE) {
             HdfsScanNode.appendDataCacheOptionsInExplain(output, prefix, dataCacheOptions);
+            if (getScanOptimizeOption().getDictPageShortcutHint()) {
+                output.append(prefix).append("dict-page shortcut: hint=true\n");
+            }
             // for global dict
             output.append(explainColumnDict(prefix));
             output.append(explainColumnAccessPath(prefix));

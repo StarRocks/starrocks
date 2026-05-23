@@ -19,6 +19,10 @@ public class ScanOptimizeOption {
     private boolean canUseMinMaxOpt;
     private boolean usePartitionColumnValueOnly;
     private boolean canUseCountOpt;
+    // Hint for BE parquet reader: try to emit a row-group's dict-page values as the
+    // result instead of decoding data pages. BE applies per-RG safety gates and may
+    // decline the hint.
+    private boolean dictPageShortcutHint;
 
     public void setCanUseAnyColumn(boolean v) {
         canUseAnyColumn = v;
@@ -52,12 +56,21 @@ public class ScanOptimizeOption {
         return canUseCountOpt;
     }
 
+    public void setDictPageShortcutHint(boolean v) {
+        this.dictPageShortcutHint = v;
+    }
+
+    public boolean getDictPageShortcutHint() {
+        return dictPageShortcutHint;
+    }
+
     public ScanOptimizeOption copy() {
         ScanOptimizeOption opt = new ScanOptimizeOption();
         opt.canUseAnyColumn = this.canUseAnyColumn;
         opt.canUseMinMaxOpt = this.canUseMinMaxOpt;
         opt.usePartitionColumnValueOnly = this.usePartitionColumnValueOnly;
         opt.canUseCountOpt = this.canUseCountOpt;
+        opt.dictPageShortcutHint = this.dictPageShortcutHint;
         return opt;
     }
 }

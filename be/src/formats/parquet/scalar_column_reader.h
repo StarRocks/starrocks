@@ -205,6 +205,14 @@ public:
     void collect_column_io_range(std::vector<SharedBufferedInputStream::IORange>* ranges, int64_t* end_offset,
                                  ColumnIOTypeFlags types, bool active) override;
 
+    // Loads the column-chunk dictionary page and materialises its values into `dst`,
+    // applying the column converter the same way the normal data-page decode path does.
+    // Output length equals the dictionary size.
+    //
+    // Caller must guarantee column_all_pages_dict_encoded() is true; this method does
+    // not re-check.
+    Status materialize_dictionary_values(ColumnPtr& dst);
+
 private:
     template <bool LAZY_DICT_DECODE, bool LAZY_CONVERT>
     Status _read_range_impl(const Range<uint64_t>& range, const Filter* filter, ColumnContentType content_type,
