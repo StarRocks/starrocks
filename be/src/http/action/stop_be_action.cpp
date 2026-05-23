@@ -18,7 +18,9 @@
 #include <string>
 
 #include "base/utility/defer_op.h"
+#include "common/config_http_fwd.h"
 #include "common/process_exit.h"
+#include "http/action/fe_auth_checker.h"
 #include "http/http_channel.h"
 #include "http/http_request.h"
 #include "http/http_status.h"
@@ -28,6 +30,12 @@
 #endif
 
 namespace starrocks {
+
+namespace {
+// Privilege required on SYSTEM to invoke /api/_stop_be. Must match a
+// PrivilegeType enum name on the FE side. NODE is what ALTER SYSTEM uses.
+constexpr const char* kRequiredSystemPrivilege = "NODE";
+} // namespace
 
 std::string StopBeAction::construct_response_message(const std::string& msg) {
     std::stringstream ss;
@@ -41,6 +49,26 @@ std::string StopBeAction::construct_response_message(const std::string& msg) {
 
 void StopBeAction::handle(HttpRequest* req) {
     LOG(INFO) << "Accept one stop_be request " << req->debug_string();
+
+    if (!config::enable_stop_be_action) {
+        LOG(WARNING) << "Reject stop_be request because config::enable_stop_be_action is false";
+        HttpChannel::send_reply(req, HttpStatus::FORBIDDEN,
+                                construct_response_message("stop_be action is disabled by config"));
+        return;
+    }
+
+    if (config::enable_stop_be_action_fe_auth) {
+        if (Status auth_status = FeAuthChecker::check(req, kRequiredSystemPrivilege); !auth_status.ok()) {
+            LOG(WARNING) << "Reject stop_be request: " << auth_status;
+            if (auth_status.is_not_authorized()) {
+                HttpChannel::send_basic_challenge(req, "stop_be");
+            } else {
+                HttpChannel::send_reply(req, HttpStatus::INTERNAL_SERVER_ERROR,
+                                        construct_response_message(std::string(auth_status.message())));
+            }
+            return;
+        }
+    }
 
     DeferOp defer([&]() {
 #ifdef USE_STAROS
