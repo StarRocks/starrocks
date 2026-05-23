@@ -40,14 +40,18 @@
 
 namespace starrocks {
 
+class GlobalEnv;
+
 class ChecksumAction : public HttpHandler {
 public:
-    ChecksumAction() = default;
+    explicit ChecksumAction(const GlobalEnv& global_env) : _global_env(global_env) {}
     ~ChecksumAction() override = default;
 
     void handle(HttpRequest* req) override;
 
 private:
+    const GlobalEnv& _global_env;
+
     int64_t _do_checksum(int64_t tablet_id, int64_t version);
 };
 

@@ -133,7 +133,7 @@ int init_test_env(int argc, char** argv) {
     auto* exec_env = ExecEnv::GetInstance();
     st = connector::bootstrap_builtin_connectors();
     CHECK(st.ok()) << st;
-    st = exec_env->init(paths, process_metrics_registry);
+    st = exec_env->init(paths, process_metrics_registry, global_env);
     CHECK(st.ok()) << st;
 
     int r = RUN_ALL_TESTS();
