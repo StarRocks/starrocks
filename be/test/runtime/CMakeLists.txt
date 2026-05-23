@@ -68,6 +68,8 @@ set(RUNTIME_ENV_TEST_LINK_LIBS
     Base
     Gutil
     StarRocksGen
+    hdfs
+    jvm
     ${STARROCKS_DEPENDENCIES}
     ${STARROCKS_STATIC_LINK_LIBS}
     ${WL_LINK_DYNAMIC} ${STARROCKS_SYSTEM_LINK_LIBS} ${WRAP_LINKER_FLAGS}
@@ -77,7 +79,13 @@ set(RUNTIME_ENV_TEST_LINK_LIBS
     ${WL_END_GROUP}
 )
 
-add_executable(runtime_env_test ${BE_TEST_MACOS_LINK_STUBS} runtime_env_test.cpp)
+set(RUNTIME_ENV_TEST_FILES
+    ${BE_TEST_MACOS_LINK_STUBS}
+    runtime_env_test.cpp
+    java_env_test.cpp
+)
+
+add_executable(runtime_env_test ${RUNTIME_ENV_TEST_FILES})
 target_link_libraries(runtime_env_test ${RUNTIME_ENV_TEST_LINK_LIBS} gtest_main)
 set_target_properties(runtime_env_test PROPERTIES COMPILE_FLAGS "-fno-access-control")
 

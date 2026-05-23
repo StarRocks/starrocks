@@ -17,7 +17,7 @@
 #include "base/metrics.h"
 #include "common/status.h"
 #include "jni.h"
-#include "udf/java/java_udf.h"
+#include "runtime/env/java/java_env.h"
 
 namespace starrocks {
 

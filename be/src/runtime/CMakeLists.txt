@@ -67,6 +67,7 @@ target_link_libraries(RuntimeCore PRIVATE
 set(RUNTIME_ENV_FILES
     env/global_env.cpp
     env/global_thread_pools.cpp
+    env/java/java_env.cpp
 )
 
 ADD_BE_LIB(RuntimeEnv

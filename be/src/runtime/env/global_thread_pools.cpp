@@ -60,6 +60,8 @@ Status GlobalThreadPools::init_execution_thread_pools(MetricRegistry* metrics) {
 
     _udf_call_pool =
             std::make_unique<PriorityThreadPool>("udf", config::udf_thread_pool_size, config::udf_thread_pool_size);
+    _jvm_call_pool = std::make_unique<PriorityThreadPool>(
+            "jvm", std::max<int32_t>(1, config::jvm_call_thread_pool_size), std::numeric_limits<uint32_t>::max());
 
     int automatic_partition_thread_num = config::automatic_partition_thread_pool_thread_num;
     int automatic_partition_queue_size = automatic_partition_thread_num * 10;
@@ -264,6 +266,7 @@ void GlobalThreadPools::shutdown() {
     if (_thread_pool) _thread_pool->shutdown();
     if (_dictionary_cache_pool) _dictionary_cache_pool->shutdown();
     if (_udf_call_pool) _udf_call_pool->shutdown();
+    if (_jvm_call_pool) _jvm_call_pool->shutdown();
     if (_pipeline_prepare_pool) _pipeline_prepare_pool->shutdown();
     if (_streaming_load_thread_pool) _streaming_load_thread_pool->shutdown();
     if (_load_segment_thread_pool) _load_segment_thread_pool->shutdown();
@@ -273,6 +276,7 @@ void GlobalThreadPools::shutdown() {
 
 void GlobalThreadPools::destroy() {
     _udf_call_pool.reset();
+    _jvm_call_pool.reset();
     _pipeline_prepare_pool.reset();
     _pipeline_sink_io_pool.reset();
     _query_rpc_pool.reset();
