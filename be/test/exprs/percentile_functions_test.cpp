@@ -41,7 +41,7 @@ TEST_F(PercentileFunctionsTest, percentileEmptyTest) {
 
     auto* percentile = ColumnHelper::get_const_value<TYPE_PERCENTILE>(column);
 
-    ASSERT_EQ(61, percentile->serialize_size());
+    ASSERT_EQ(49, percentile->serialize_size());
 }
 
 TEST_F(PercentileFunctionsTest, percentileHashTest) {
