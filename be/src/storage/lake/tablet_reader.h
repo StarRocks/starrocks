@@ -14,7 +14,10 @@
 
 #pragma once
 
+#include <unordered_map>
+
 #include "exec/pipeline/scan/scan_morsel.h"
+#include "roaring/roaring.hh"
 #include "runtime/mem_pool.h"
 #include "storage/chunk_iterator.h"
 #include "storage/delete_predicates.h"
@@ -151,6 +154,12 @@ private:
     bool _need_split = false;
     bool _could_split_physically = false;
     std::vector<pipeline::ScanSplitContextPtr> _split_tasks;
+
+    // Per-rowset secondary-index lookup results, owned for the lifetime of
+    // the TabletReader so SegmentIterator's `presupplied_rowid_filter`
+    // pointers stay valid across the entire scan (not just within
+    // get_segment_iterators()).
+    std::unordered_map<uint32_t /*rowset_id*/, std::unordered_map<uint32_t, roaring::Roaring>> _sidx_per_rowset;
 };
 
 } // namespace lake

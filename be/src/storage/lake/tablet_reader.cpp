@@ -400,7 +400,12 @@ Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std
     // index file in their metadata and pre-compute a per-segment Roaring
     // bitmap of candidate row ids. The bitmap is threaded into Rowset::read()
     // via the `presupplied_rowid_filter_per_segment` field on RowsetReadOptions.
-    std::unordered_map<uint32_t /*rowset_id*/, std::unordered_map<uint32_t, roaring::Roaring>> sidx_per_rowset;
+    //
+    // Live on the TabletReader instance so SegmentIterator's pointer into the
+    // Roaring stays valid across the entire scan -- a local would dangle the
+    // moment get_segment_iterators() returns.
+    auto& sidx_per_rowset = _sidx_per_rowset;
+    sidx_per_rowset.clear();
     // BE-config-only gate for now: the FE-side session variable that would
     // set TabletReaderParams::use_secondary_index is not wired yet. Once a
     // SELECT references columns that any registered index covers, the lookup
