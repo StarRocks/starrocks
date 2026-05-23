@@ -22,6 +22,7 @@ namespace starrocks {
 
 TEST(ExecEnvTest, refresh_service_contexts_keeps_context_views_in_sync) {
     ExecEnv env;
+    auto* global_env = GlobalEnv::GetInstance();
 
     EXPECT_EQ(env.runtime_services().lookup_dispatcher_mgr, nullptr);
     EXPECT_EQ(env.runtime_services().cache_mgr, nullptr);
@@ -39,11 +40,11 @@ TEST(ExecEnvTest, refresh_service_contexts_keeps_context_views_in_sync) {
 
     env._refresh_service_contexts();
 
-    EXPECT_EQ(env.execution_services().thread_pool, GlobalEnv::GetInstance()->thread_pool());
+    EXPECT_EQ(env.execution_services().thread_pool, global_env->thread_pool());
     EXPECT_EQ(env.execution_services().workgroup_manager, nullptr);
     EXPECT_EQ(env.execution_services().driver_limiter, env._driver_limiter);
     EXPECT_EQ(env.execution_services().pipeline_timer, env._pipeline_timer);
-    EXPECT_EQ(env.execution_services().max_executor_threads, GlobalEnv::GetInstance()->max_executor_threads());
+    EXPECT_EQ(env.execution_services().max_executor_threads, global_env->max_executor_threads());
 
     EXPECT_EQ(env.rpc_services().backend_client_cache, env._backend_client_cache);
     EXPECT_EQ(env.rpc_services().broker_mgr, env._broker_mgr);

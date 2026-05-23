@@ -71,6 +71,7 @@ namespace starrocks {
 
 StorageEngine* init_storage_engine(GlobalEnv* global_env, std::vector<StorePath> paths, bool as_cn,
                                    TableMetricsManager* table_metrics_mgr) {
+    DCHECK(global_env != nullptr);
     // Init and open storage engine.
     EngineOptions options;
     options.store_paths = std::move(paths);
@@ -142,7 +143,7 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
 
     auto* exec_env = ExecEnv::GetInstance();
     EXIT_IF_ERROR(connector::bootstrap_builtin_connectors());
-    EXIT_IF_ERROR(exec_env->init(paths, process_metrics_registry, as_cn));
+    EXIT_IF_ERROR(exec_env->init(paths, process_metrics_registry, global_env, as_cn));
     LOG(INFO) << process_name << " start step " << start_step++ << ": exec env init successfully";
 
 #if !defined(__APPLE__) && defined(WITH_STARCACHE)
@@ -265,11 +266,11 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
 
     // Start HTTP server
 #ifndef __APPLE__
-    auto http_server = std::make_unique<HttpServiceBE>(cache_env, exec_env, process_metrics_registry,
+    auto http_server = std::make_unique<HttpServiceBE>(cache_env, exec_env, *global_env, process_metrics_registry,
                                                        config::be_http_port, config::be_http_num_workers);
 #else
     // On macOS, pass nullptr for cache_env
-    auto http_server = std::make_unique<HttpServiceBE>(nullptr, exec_env, process_metrics_registry,
+    auto http_server = std::make_unique<HttpServiceBE>(nullptr, exec_env, *global_env, process_metrics_registry,
                                                        config::be_http_port, config::be_http_num_workers);
 #endif
     if (auto status = http_server->start(); !status.ok()) {

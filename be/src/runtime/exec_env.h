@@ -125,7 +125,7 @@ class ExecEnv {
 public:
     // Initial exec environment. must call this to init all
     Status init(const std::vector<StorePath>& store_paths, ProcessMetricsRegistry* process_metrics_registry,
-                bool as_cn = false);
+                GlobalEnv* global_env, bool as_cn = false);
     void stop();
     void destroy();
     void wait_for_finish();
@@ -159,26 +159,24 @@ public:
     template <typename T>
     ClientCache<T>* get_client_cache();
 
-    PriorityThreadPool* thread_pool() { return GlobalEnv::GetInstance()->thread_pool(); }
-    ThreadPool* streaming_load_thread_pool() { return GlobalEnv::GetInstance()->streaming_load_thread_pool(); }
-    ThreadPool* load_rowset_thread_pool() { return GlobalEnv::GetInstance()->load_rowset_thread_pool(); }
-    ThreadPool* load_segment_thread_pool() { return GlobalEnv::GetInstance()->load_segment_thread_pool(); }
-    ThreadPool* put_combined_txn_log_thread_pool() {
-        return GlobalEnv::GetInstance()->put_combined_txn_log_thread_pool();
-    }
+    PriorityThreadPool* thread_pool() { return _global_env->thread_pool(); }
+    ThreadPool* streaming_load_thread_pool() { return _global_env->streaming_load_thread_pool(); }
+    ThreadPool* load_rowset_thread_pool() { return _global_env->load_rowset_thread_pool(); }
+    ThreadPool* load_segment_thread_pool() { return _global_env->load_segment_thread_pool(); }
+    ThreadPool* put_combined_txn_log_thread_pool() { return _global_env->put_combined_txn_log_thread_pool(); }
 
     pipeline::DriverExecutor* wg_driver_executor();
     workgroup::ScanExecutor* scan_executor();
     workgroup::ScanExecutor* connector_scan_executor();
     workgroup::WorkGroupManager* workgroup_manager() { return _workgroup_manager.get(); }
 
-    PriorityThreadPool* udf_call_pool() { return GlobalEnv::GetInstance()->udf_call_pool(); }
-    PriorityThreadPool* pipeline_prepare_pool() { return GlobalEnv::GetInstance()->pipeline_prepare_pool(); }
-    PriorityThreadPool* pipeline_sink_io_pool() { return GlobalEnv::GetInstance()->pipeline_sink_io_pool(); }
-    PriorityThreadPool* query_rpc_pool() { return GlobalEnv::GetInstance()->query_rpc_pool(); }
-    PriorityThreadPool* datacache_rpc_pool() { return GlobalEnv::GetInstance()->datacache_rpc_pool(); }
-    ThreadPool* load_rpc_pool() { return GlobalEnv::GetInstance()->load_rpc_pool(); }
-    ThreadPool* dictionary_cache_pool() { return GlobalEnv::GetInstance()->dictionary_cache_pool(); }
+    PriorityThreadPool* udf_call_pool() { return _global_env->udf_call_pool(); }
+    PriorityThreadPool* pipeline_prepare_pool() { return _global_env->pipeline_prepare_pool(); }
+    PriorityThreadPool* pipeline_sink_io_pool() { return _global_env->pipeline_sink_io_pool(); }
+    PriorityThreadPool* query_rpc_pool() { return _global_env->query_rpc_pool(); }
+    PriorityThreadPool* datacache_rpc_pool() { return _global_env->datacache_rpc_pool(); }
+    ThreadPool* load_rpc_pool() { return _global_env->load_rpc_pool(); }
+    ThreadPool* dictionary_cache_pool() { return _global_env->dictionary_cache_pool(); }
     FragmentMgr* fragment_mgr() { return _fragment_mgr; }
     BaseLoadPathMgr* load_path_mgr() { return _load_path_mgr; }
     RejectedRecordSyncDaemon* rejected_record_sync_daemon() { return _rejected_record_sync_daemon; }
@@ -206,10 +204,10 @@ public:
 
     connector::ConnectorSinkSpillExecutor* connector_sink_spill_executor() { return _connector_sink_spill_executor; }
 
-    ThreadPool* automatic_partition_pool() { return GlobalEnv::GetInstance()->automatic_partition_pool(); }
+    ThreadPool* automatic_partition_pool() { return _global_env->automatic_partition_pool(); }
 
     RuntimeFilterWorker* runtime_filter_worker() { return _runtime_filter_worker; }
-    MemTracker* query_pool_mem_tracker() { return GlobalEnv::GetInstance()->query_pool_mem_tracker(); }
+    MemTracker* query_pool_mem_tracker() { return _global_env->query_pool_mem_tracker(); }
 
     RuntimeFilterCache* runtime_filter_cache() { return _runtime_filter_cache; }
 
@@ -220,7 +218,7 @@ public:
     pipeline::DriverLimiter* driver_limiter() { return _driver_limiter; }
     pipeline::PipelineTimer* pipeline_timer() const { return _pipeline_timer; }
 
-    int64_t max_executor_threads() const { return GlobalEnv::GetInstance()->max_executor_threads(); }
+    int64_t max_executor_threads() const { return _global_env->max_executor_threads(); }
 
     uint32_t calc_pipeline_dop(int32_t pipeline_dop) const;
 
@@ -244,29 +242,19 @@ public:
 
     ThreadPool* delete_file_thread_pool();
 
-    ThreadPool* put_aggregate_metadata_thread_pool() {
-        return GlobalEnv::GetInstance()->put_aggregate_metadata_thread_pool();
-    }
+    ThreadPool* put_aggregate_metadata_thread_pool() { return _global_env->put_aggregate_metadata_thread_pool(); }
 
-    ThreadPool* lake_metadata_fetch_thread_pool() {
-        return GlobalEnv::GetInstance()->lake_metadata_fetch_thread_pool();
-    }
+    ThreadPool* lake_metadata_fetch_thread_pool() { return _global_env->lake_metadata_fetch_thread_pool(); }
 
-    ThreadPool* lake_vector_index_build_thread_pool() {
-        return GlobalEnv::GetInstance()->lake_vector_index_build_thread_pool();
-    }
+    ThreadPool* lake_vector_index_build_thread_pool() { return _global_env->lake_vector_index_build_thread_pool(); }
 
     lake::LakePersistentIndexParallelCompactMgr* parallel_compact_mgr() { return _parallel_compact_mgr.get(); }
 
-    ThreadPool* pk_index_execution_thread_pool() { return GlobalEnv::GetInstance()->pk_index_execution_thread_pool(); }
+    ThreadPool* pk_index_execution_thread_pool() { return _global_env->pk_index_execution_thread_pool(); }
 
-    ThreadPool* pk_index_memtable_flush_thread_pool() {
-        return GlobalEnv::GetInstance()->pk_index_memtable_flush_thread_pool();
-    }
+    ThreadPool* pk_index_memtable_flush_thread_pool() { return _global_env->pk_index_memtable_flush_thread_pool(); }
 
-    ThreadPool* lake_partial_update_thread_pool() {
-        return GlobalEnv::GetInstance()->lake_partial_update_thread_pool();
-    }
+    ThreadPool* lake_partial_update_thread_pool() { return _global_env->lake_partial_update_thread_pool(); }
 
     void try_release_resource_before_core_dump();
 
@@ -277,6 +265,7 @@ private:
     void _wait_for_fragments_finish();
     size_t _get_running_fragments_count() const;
 
+    GlobalEnv* _global_env = nullptr;
     std::vector<StorePath> _store_paths;
     // Leave protected so that subclasses can override
     ExternalScanContextMgr* _external_scan_context_mgr = nullptr;

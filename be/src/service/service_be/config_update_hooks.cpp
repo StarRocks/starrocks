@@ -70,8 +70,9 @@
 
 namespace starrocks {
 
-void register_config_update_hooks(ExecEnv* exec_env) {
+void register_config_update_hooks(ExecEnv* exec_env, const GlobalEnv& global_env) {
     auto* registry = ConfigUpdateRegistry::instance();
+    const auto* global_env_ptr = &global_env;
 
     registry->register_callback("scanner_thread_pool_thread_num", [=]() -> Status {
         LOG(INFO) << "set scanner_thread_pool_thread_num:" << config::scanner_thread_pool_thread_num;
@@ -115,8 +116,8 @@ void register_config_update_hooks(ExecEnv* exec_env) {
         }
 
         size_t mem_size = 0;
-        Status st = DataCacheUtils::parse_conf_datacache_mem_size(
-                config::datacache_mem_size, GlobalEnv::GetInstance()->process_mem_limit(), &mem_size);
+        Status st = DataCacheUtils::parse_conf_datacache_mem_size(config::datacache_mem_size,
+                                                                  global_env_ptr->process_mem_limit(), &mem_size);
         if (!st.ok()) {
             LOG(WARNING) << "Failed to update datacache mem size";
             return st;

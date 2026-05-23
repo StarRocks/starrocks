@@ -51,6 +51,7 @@
 #include "http/action/profile_utils.h"
 #include "http/web_page_handler.h"
 #include "jemalloc/jemalloc.h"
+#include "runtime/env/global_env.h"
 #include "runtime/exec_env.h"
 #include "runtime/mem_tracker.h"
 #include "storage/storage_engine.h"
@@ -115,8 +116,8 @@ void print_mem_str(std::stringstream* output, const MemTracker::SimpleItem& item
     }
 }
 
-void MemTrackerWebPageHandler::handle(MemTracker* mem_tracker, const WebPageHandler::ArgumentMap& args,
-                                      std::stringstream* output) {
+void MemTrackerWebPageHandler::handle(const GlobalEnv& global_env, MemTracker* mem_tracker,
+                                      const WebPageHandler::ArgumentMap& args, std::stringstream* output) {
     (*output) << "<h1>Memory Usage Detail</h1>\n";
     (*output) << "<table data-toggle='table' "
                  "       data-page-size='25' "
@@ -147,7 +148,7 @@ void MemTrackerWebPageHandler::handle(MemTracker* mem_tracker, const WebPageHand
     MemTracker* start_mem_tracker;
     iter = args.find("type");
     if (iter != args.end()) {
-        auto item = GlobalEnv::GetInstance()->get_mem_tracker_by_type(MemTracker::label_to_type(iter->second));
+        auto item = global_env.get_mem_tracker_by_type(MemTracker::label_to_type(iter->second));
         if (item != nullptr) {
             start_mem_tracker = item.get();
         } else {
@@ -163,26 +164,26 @@ void MemTrackerWebPageHandler::handle(MemTracker* mem_tracker, const WebPageHand
 
     if (start_mem_tracker != nullptr) {
         MemTracker::SimpleItem* root = start_mem_tracker->get_snapshot(&obj_pool, upper_level);
-        if (start_mem_tracker == GlobalEnv::GetInstance()->process_mem_tracker()) {
+        if (start_mem_tracker == global_env.process_mem_tracker()) {
             // Metadata memory statistics use the old memory framework,
             // not in RootMemTrackerTree, so it needs to be added here
-            MemTracker* meta_mem_tracker = GlobalEnv::GetInstance()->metadata_mem_tracker();
+            MemTracker* meta_mem_tracker = global_env.metadata_mem_tracker();
             auto* meta_item = meta_mem_tracker->get_snapshot(&obj_pool, upper_level);
             meta_item->parent = root;
 
             // Update memory statistics use the old memory framework,
             // not in RootMemTrackerTree, so it needs to be added here
-            MemTracker* update_mem_tracker = GlobalEnv::GetInstance()->update_mem_tracker();
+            MemTracker* update_mem_tracker = global_env.update_mem_tracker();
             auto* update_item = update_mem_tracker->get_snapshot(&obj_pool, upper_level);
             update_item->parent = root;
 
             // passthrough memory tracker not in RootMemTrackerTree
-            MemTracker* passthrough_mem_tracker = GlobalEnv::GetInstance()->passthrough_mem_tracker();
+            MemTracker* passthrough_mem_tracker = global_env.passthrough_mem_tracker();
             auto* passthrough_item = passthrough_mem_tracker->get_snapshot(&obj_pool, upper_level);
             passthrough_item->parent = root;
 
             // Brpc iobuf memory statistics use the old memory framework,
-            MemTracker* brpc_iobuf_mem_tracker = GlobalEnv::GetInstance()->brpc_iobuf_mem_tracker();
+            MemTracker* brpc_iobuf_mem_tracker = global_env.brpc_iobuf_mem_tracker();
             auto* brpc_iobuf_item = brpc_iobuf_mem_tracker->get_snapshot(&obj_pool, upper_level);
             brpc_iobuf_item->parent = root;
 
@@ -323,7 +324,9 @@ void proc_profile_handler(const WebPageHandler::ArgumentMap& args, std::stringst
     (*output) << "</table>";
 }
 
-void add_default_path_handlers(WebPageHandler* web_page_handler, MemTracker* process_mem_tracker) {
+void add_default_path_handlers(WebPageHandler* web_page_handler, const GlobalEnv& global_env) {
+    const auto* global_env_ptr = &global_env;
+    auto* process_mem_tracker = global_env.process_mem_tracker();
     // TODO(yingchun): logs_handler is not implemented yet, so not show it on navigate bar
     web_page_handler->register_page("/logs", "Logs", logs_handler, false /* is_on_nav_bar */);
     web_page_handler->register_page("/varz", "Configs", config_handler, true /* is_on_nav_bar */);
@@ -336,8 +339,9 @@ void add_default_path_handlers(WebPageHandler* web_page_handler, MemTracker* pro
             true /* is_on_nav_bar */);
     web_page_handler->register_page(
             "/mem_tracker", "MemTracker",
-            [process_mem_tracker](auto&& PH1, auto&& PH2) {
-                return MemTrackerWebPageHandler::handle(process_mem_tracker, std::forward<decltype(PH1)>(PH1),
+            [global_env_ptr, process_mem_tracker](auto&& PH1, auto&& PH2) {
+                return MemTrackerWebPageHandler::handle(*global_env_ptr, process_mem_tracker,
+                                                        std::forward<decltype(PH1)>(PH1),
                                                         std::forward<decltype(PH2)>(PH2));
             },
             true);

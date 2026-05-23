@@ -144,13 +144,14 @@ ExecEnv* ExecEnv::GetInstance() {
     return &s_exec_env;
 }
 
-ExecEnv::ExecEnv() {
+ExecEnv::ExecEnv() : _global_env(GlobalEnv::GetInstance()) {
     _refresh_service_contexts();
 }
 ExecEnv::~ExecEnv() = default;
 
 void ExecEnv::_refresh_service_contexts() {
-    auto* global_env = GlobalEnv::GetInstance();
+    auto* global_env = _global_env;
+    DCHECK(global_env != nullptr);
     _execution_services.thread_pool = global_env->thread_pool();
     _execution_services.streaming_load_thread_pool = global_env->streaming_load_thread_pool();
     _execution_services.load_rowset_thread_pool = global_env->load_rowset_thread_pool();
@@ -226,8 +227,10 @@ void ExecEnv::_refresh_service_contexts() {
 }
 
 Status ExecEnv::init(const std::vector<StorePath>& store_paths, ProcessMetricsRegistry* process_metrics_registry,
-                     bool as_cn) {
+                     GlobalEnv* global_env, bool as_cn) {
     DCHECK(process_metrics_registry != nullptr);
+    DCHECK(global_env != nullptr);
+    _global_env = global_env;
     RETURN_IF_ERROR(connector::install_builtin_connectors(connector::ConnectorRegistry::default_instance()));
     _process_metrics_registry = process_metrics_registry;
     _metrics = process_metrics_registry->root_registry();
@@ -244,7 +247,6 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, ProcessMetricsRe
     // query_context_mgr keeps slotted map with 64 slot to reduce contention
     _query_context_mgr = new pipeline::QueryContextManager(6);
     RETURN_IF_ERROR(_query_context_mgr->init(_metrics));
-    auto* global_env = GlobalEnv::GetInstance();
     RETURN_IF_ERROR(global_env->init_execution_thread_pools(_metrics));
     _fragment_mgr = new FragmentMgr(this);
 
@@ -373,8 +375,7 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, ProcessMetricsRe
 
 #if defined(USE_STAROS) && !defined(BE_TEST) && !defined(BUILD_FORMAT_LIB)
     _lake_location_provider = std::make_shared<lake::StarletLocationProvider>();
-    _lake_update_manager =
-            new lake::UpdateManager(_lake_location_provider, GlobalEnv::GetInstance()->update_mem_tracker());
+    _lake_update_manager = new lake::UpdateManager(_lake_location_provider, global_env->update_mem_tracker());
     _lake_tablet_manager =
             new lake::TabletManager(_lake_location_provider, _lake_update_manager, config::lake_metadata_cache_limit);
     _lake_replication_txn_manager = new lake::ReplicationTxnManager(_lake_tablet_manager);
@@ -393,8 +394,7 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, ProcessMetricsRe
 
 #elif defined(BE_TEST)
     _lake_location_provider = std::make_shared<lake::FixedLocationProvider>(_store_paths.front().path);
-    _lake_update_manager =
-            new lake::UpdateManager(_lake_location_provider, GlobalEnv::GetInstance()->update_mem_tracker());
+    _lake_update_manager = new lake::UpdateManager(_lake_location_provider, global_env->update_mem_tracker());
     _lake_tablet_manager =
             new lake::TabletManager(_lake_location_provider, _lake_update_manager, config::lake_metadata_cache_limit);
     _lake_replication_txn_manager = new lake::ReplicationTxnManager(_lake_tablet_manager);
@@ -412,7 +412,7 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, ProcessMetricsRe
     _broker_mgr->init();
     RETURN_IF_ERROR(_small_file_mgr->init());
 
-    RETURN_IF_ERROR(_load_channel_mgr->init(GlobalEnv::GetInstance()->load_mem_tracker()));
+    RETURN_IF_ERROR(_load_channel_mgr->init(global_env->load_mem_tracker()));
 
     _heartbeat_flags = new HeartbeatFlags();
     auto capacity = std::max<size_t>(config::query_cache_capacity, 4L * 1024 * 1024);
@@ -462,7 +462,8 @@ void ExecEnv::stop() {
     int64_t total_start = MonotonicMillis();
     int64_t start;
     std::vector<std::pair<std::string, int64_t>> component_times;
-    auto* global_env = GlobalEnv::GetInstance();
+    auto* global_env = _global_env;
+    DCHECK(global_env != nullptr);
 
     if (_load_channel_mgr) {
         start = MonotonicMillis();
@@ -726,7 +727,8 @@ void ExecEnv::destroy() {
     SAFE_DELETE(_cache_mgr);
     SAFE_DELETE(_diagnose_daemon);
     _parallel_compact_mgr.reset();
-    GlobalEnv::GetInstance()->destroy_thread_pools();
+    DCHECK(_global_env != nullptr);
+    _global_env->destroy_thread_pools();
     _metrics = nullptr;
 }
 
@@ -794,7 +796,8 @@ ThreadPool* ExecEnv::delete_file_thread_pool() {
 void ExecEnv::try_release_resource_before_core_dump() {
     std::set<std::string> modules;
     bool release_all = false;
-    auto* global_env = GlobalEnv::GetInstance();
+    auto* global_env = _global_env;
+    DCHECK(global_env != nullptr);
     if (config::try_release_resource_before_core_dump.value() == "*") {
         release_all = true;
     } else {

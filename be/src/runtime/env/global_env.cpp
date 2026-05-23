@@ -236,7 +236,7 @@ std::vector<std::shared_ptr<MemTracker>> GlobalEnv::mem_trackers() const {
     return mem_trackers;
 }
 
-std::shared_ptr<MemTracker> GlobalEnv::get_mem_tracker_by_type(MemTrackerType type) {
+std::shared_ptr<MemTracker> GlobalEnv::get_mem_tracker_by_type(MemTrackerType type) const {
     auto iter = _mem_tracker_map.find(type);
     if (iter != _mem_tracker_map.end()) {
         return iter->second;

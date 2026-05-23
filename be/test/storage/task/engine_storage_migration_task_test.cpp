@@ -800,7 +800,7 @@ int main(int argc, char** argv) {
         return -1;
     }
     auto* exec_env = starrocks::ExecEnv::GetInstance();
-    (void)exec_env->init(paths, process_metrics_registry);
+    (void)exec_env->init(paths, process_metrics_registry, global_env);
     int r = RUN_ALL_TESTS();
 
     sleep(10);
