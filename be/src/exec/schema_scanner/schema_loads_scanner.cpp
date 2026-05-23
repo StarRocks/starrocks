@@ -64,7 +64,7 @@ bool _extract_literal_datetime_value(Expr* expr, const cctz::time_zone& session_
     // the literal is carried through to FE so the prefilter matches BE's
     // ms-precision materialized column.
     result.epoch_ms = SchemaLoadsScanner::literal_to_epoch_ms(
-                             session_tz, cctz::civil_second(year, month, day, hour, minute, second), is_lower_bound) +
+                              session_tz, cctz::civil_second(year, month, day, hour, minute, second), is_lower_bound) +
                       usec / 1000;
 
     return true;
