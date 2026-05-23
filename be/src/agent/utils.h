@@ -35,10 +35,10 @@
 #pragma once
 
 #include "agent/status.h"
+#include "common/util/thrift_client_cache.h"
 #include "gen_cpp/FrontendService.h"
 #include "gen_cpp/FrontendService_types.h"
 #include "gen_cpp/HeartbeatService_types.h"
-#include "runtime/client_cache.h"
 
 namespace starrocks {
 

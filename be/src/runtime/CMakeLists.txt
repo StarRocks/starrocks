@@ -18,7 +18,6 @@ set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/runtime")
 set(EXECUTABLE_OUTPUT_PATH "${BUILD_DIR}/src/runtime")
 
 set(RUNTIME_CORE_FILES
-    client_cache.cpp
     current_thread.cpp
     chunk_helper.cpp
     descriptors.cpp

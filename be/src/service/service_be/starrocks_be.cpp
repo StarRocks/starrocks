@@ -50,6 +50,7 @@
 #include "cache/datacache_metrics.h"
 #include "common/system/mem_info.h"
 #include "common/util/thrift_server.h"
+#include "platform/platform_env.h"
 #include "runtime/thrift_rpc_helper.h"
 #include "staros_integration/staros_worker_runtime.h"
 #include "storage/storage_engine.h"
@@ -117,6 +118,10 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
     EXIT_IF_ERROR(global_env->init(process_metrics_registry->root_registry()));
     LOG(INFO) << process_name << " start step " << start_step++ << ": global env init successfully";
 
+    auto* platform_env = PlatformEnv::GetInstance();
+    EXIT_IF_ERROR(platform_env->init(process_metrics_registry->root_registry()));
+    LOG(INFO) << process_name << " start step " << start_step++ << ": platform env init successfully";
+
     // cache env should be initialized before init_storage_engine,
     // because apply task is triggered in init_storage_engine and needs cache env.
 #ifndef __APPLE__
@@ -181,8 +186,8 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
     // set up thrift client before providing any service to the external
     // because these services may use thrift client, for example, stream
     // load will send thrift rpc to FE after http server is started
-    ThriftRpcHelper::setup(
-            {exec_env->client_cache(), exec_env->frontend_client_cache(), exec_env->broker_client_cache()});
+    ThriftRpcHelper::setup(platform_env->backend_client_cache(), platform_env->frontend_client_cache(),
+                           platform_env->broker_client_cache());
 
     // Start thrift server
     int thrift_port = config::be_port;
@@ -376,6 +381,9 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
 
     exec_env->destroy();
     LOG(INFO) << process_name << " exit step " << exit_step++ << ": exec env destroy successfully";
+
+    platform_env->destroy();
+    LOG(INFO) << process_name << " exit step " << exit_step++ << ": platform env destroy successfully";
 
     delete storage_engine;
 
