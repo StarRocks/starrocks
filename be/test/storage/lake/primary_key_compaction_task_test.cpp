@@ -1428,6 +1428,224 @@ TEST_P(LakePrimaryKeyCompactionTest, test_min_level_score_skips_sparse_mid_tier)
     }
 }
 
+// PR-1' v2 coverage:
+//   - delete_ratio folded into bcr (no more binary has_deletes collapse)
+//   - real_benefit_segs uses (input_segs - output_segs), not raw input_segs
+//   - io_mb uses raw bytes, not read_bytes (which subtracts delete_bytes)
+//   - size_overflow_ratio override uses max_rowset_bytes from picked level
+//     (not the stale compact_level after pick_max_level merges levels)
+TEST_P(LakePrimaryKeyCompactionTest, test_pr1prime_v2_gate_overrides) {
+    const bool old_strategy = config::enable_pk_size_tiered_compaction_strategy;
+    const double old_mls = config::lake_pk_compaction_min_level_score;
+    const double old_bcr = config::lake_pk_compaction_min_benefit_cost_ratio;
+    const double old_em = config::lake_pk_compaction_emergency_score;
+    const double old_size_overflow = config::lake_pk_compaction_size_overflow_ratio;
+    const double old_delvec_w = config::lake_pk_compaction_delvec_benefit_weight;
+    const int64_t old_min_segs = config::lake_pk_compaction_min_input_segments;
+    config::enable_pk_size_tiered_compaction_strategy = true;
+    config::lake_pk_compaction_min_input_segments = 2;
+    DeferOp restore([&] {
+        config::enable_pk_size_tiered_compaction_strategy = old_strategy;
+        config::lake_pk_compaction_min_level_score = old_mls;
+        config::lake_pk_compaction_min_benefit_cost_ratio = old_bcr;
+        config::lake_pk_compaction_emergency_score = old_em;
+        config::lake_pk_compaction_size_overflow_ratio = old_size_overflow;
+        config::lake_pk_compaction_delvec_benefit_weight = old_delvec_w;
+        config::lake_pk_compaction_min_input_segments = old_min_segs;
+    });
+
+    auto build_metadata = [&](const std::vector<std::pair<int64_t, int64_t>>& specs) {
+        auto md = std::make_shared<TabletMetadataPB>();
+        md->set_id(_tablet_metadata->id());
+        md->set_version(1);
+        std::vector<RowsetMetadataPB> rowset_metas;
+        build_rowsets_with_dels(specs, &rowset_metas);
+        for (auto& rm : rowset_metas) {
+            *md->add_rowsets() = rm;
+        }
+        return md;
+    };
+
+    // ===== Case 1: Low delete_ratio (5%) — gate should still skip =====
+    // 8 mid-tier rowsets, each 500MB, 100 dels per 1000 rows → delete_ratio = 0.10.
+    // wait — let me make it 5%: 50 dels / 1000 rows = 5% delete_ratio per rowset.
+    // benefit_score = real_benefit_segs (7) + 0.05 * 8 * 12 = 7 + 4.8 = 11.8
+    // io_mb = 4096
+    // bcr = 11.8 / 4096 ≈ 0.00288 < 0.005 default threshold → bcr should NOT fire
+    {
+        config::lake_pk_compaction_min_level_score = 2.0;
+        config::lake_pk_compaction_min_benefit_cost_ratio = 0.005;
+        config::lake_pk_compaction_size_overflow_ratio = 2.0;
+        config::lake_pk_compaction_delvec_benefit_weight = 12.0;
+        config::lake_pk_compaction_emergency_score = 50.0;
+
+        auto md = build_metadata({{500LL * 1024 * 1024, 50},
+                                  {500LL * 1024 * 1024, 50},
+                                  {500LL * 1024 * 1024, 50},
+                                  {500LL * 1024 * 1024, 50},
+                                  {500LL * 1024 * 1024, 50},
+                                  {500LL * 1024 * 1024, 50},
+                                  {500LL * 1024 * 1024, 50},
+                                  {500LL * 1024 * 1024, 50}});
+        PrimaryCompactionPolicy policy(_tablet_mgr.get(), md, /*force_base_compaction=*/false);
+        std::vector<bool> has_dels;
+        ASSIGN_OR_ABORT(auto picked, policy.pick_rowset_indexes(md, &has_dels));
+        EXPECT_EQ(picked.size(), 0)
+                << "low delete_ratio (5%) sparse mid-tier should still skip — bcr override must not fire";
+    }
+
+    // ===== Case 2: High delete_ratio (20%) — bcr should fire and ALLOW compaction =====
+    // 8 mid-tier rowsets at 500MB, 200 dels per 1000 rows → delete_ratio = 0.20.
+    // benefit_score = 7 + 0.20 * 8 * 12 = 7 + 19.2 = 26.2
+    // bcr = 26.2 / 4096 ≈ 0.0064 > 0.005 → bcr fires
+    {
+        config::lake_pk_compaction_min_level_score = 2.0;
+        config::lake_pk_compaction_min_benefit_cost_ratio = 0.005;
+        config::lake_pk_compaction_size_overflow_ratio = 2.0;
+        config::lake_pk_compaction_delvec_benefit_weight = 12.0;
+        config::lake_pk_compaction_emergency_score = 50.0;
+
+        auto md = build_metadata({{500LL * 1024 * 1024, 200},
+                                  {500LL * 1024 * 1024, 200},
+                                  {500LL * 1024 * 1024, 200},
+                                  {500LL * 1024 * 1024, 200},
+                                  {500LL * 1024 * 1024, 200},
+                                  {500LL * 1024 * 1024, 200},
+                                  {500LL * 1024 * 1024, 200},
+                                  {500LL * 1024 * 1024, 200}});
+        PrimaryCompactionPolicy policy(_tablet_mgr.get(), md, /*force_base_compaction=*/false);
+        std::vector<bool> has_dels;
+        ASSIGN_OR_ABORT(auto picked, policy.pick_rowset_indexes(md, &has_dels));
+        EXPECT_GE(picked.size(), 1)
+                << "high delete_ratio (20%) should let bcr fire and allow compaction";
+    }
+
+    // ===== Case 3: 1 single delete in 1 rowset out of 8 (binary-style collapse case) =====
+    // delete_ratio = 1 / (8 * 1000) = 0.000125 (tiny)
+    // benefit_score = 7 + 0.000125 * 8 * 12 = 7.012, bcr = 0.00171 < 0.005 → skip
+    // (PR-1' v1 would have force-compacted on this; v2 correctly skips.)
+    {
+        config::lake_pk_compaction_min_level_score = 2.0;
+        config::lake_pk_compaction_min_benefit_cost_ratio = 0.005;
+        config::lake_pk_compaction_size_overflow_ratio = 2.0;
+        config::lake_pk_compaction_delvec_benefit_weight = 12.0;
+        config::lake_pk_compaction_emergency_score = 50.0;
+
+        auto md = build_metadata({{500LL * 1024 * 1024, 0},
+                                  {500LL * 1024 * 1024, 0},
+                                  {500LL * 1024 * 1024, 0},
+                                  {500LL * 1024 * 1024, 0},
+                                  {500LL * 1024 * 1024, 0},
+                                  {500LL * 1024 * 1024, 0},
+                                  {500LL * 1024 * 1024, 0},
+                                  {500LL * 1024 * 1024, 1 /* single delete */}});
+        PrimaryCompactionPolicy policy(_tablet_mgr.get(), md, /*force_base_compaction=*/false);
+        std::vector<bool> has_dels;
+        ASSIGN_OR_ABORT(auto picked, policy.pick_rowset_indexes(md, &has_dels));
+        EXPECT_EQ(picked.size(), 0)
+                << "single delete in one of 8 rowsets has negligible delete_ratio, gate must still skip "
+                << "(this case is the v1 design hole that v2 fixes)";
+    }
+
+    // ===== Case 4: size_overflow fires when accumulation crosses threshold =====
+    // 20 mid-tier rowsets at 500MB each, 10GB total, no deletes.
+    // size_overflow basis = max_rowset_bytes = 500MB → next_level_target = 500MB * 5 = 2.5GB
+    // overflow_ratio = 10000MB / 2500MB = 4.0 ≥ alpha=2.0 → fires
+    {
+        config::lake_pk_compaction_min_level_score = 2.0;
+        config::lake_pk_compaction_min_benefit_cost_ratio = 0.005;
+        config::lake_pk_compaction_size_overflow_ratio = 2.0;
+        config::lake_pk_compaction_delvec_benefit_weight = 12.0;
+        config::lake_pk_compaction_emergency_score = 50.0;
+
+        std::vector<std::pair<int64_t, int64_t>> specs(20, {500LL * 1024 * 1024, 0});
+        auto md = build_metadata(specs);
+        PrimaryCompactionPolicy policy(_tablet_mgr.get(), md, /*force_base_compaction=*/false);
+        std::vector<bool> has_dels;
+        ASSIGN_OR_ABORT(auto picked, policy.pick_rowset_indexes(md, &has_dels));
+        EXPECT_GE(picked.size(), 1)
+                << "20 x 500MB accumulation should trigger size_overflow (alpha=2.0, total=10GB > 5GB threshold)";
+    }
+
+    // ===== Case 5: size_overflow does NOT fire below threshold =====
+    // 8 mid-tier rowsets at 500MB, 4GB total. size_overflow = 4000 / 2500 = 1.6 < 2.0 → skip
+    {
+        config::lake_pk_compaction_min_level_score = 2.0;
+        config::lake_pk_compaction_min_benefit_cost_ratio = 0.005;
+        config::lake_pk_compaction_size_overflow_ratio = 2.0;
+        config::lake_pk_compaction_delvec_benefit_weight = 12.0;
+        config::lake_pk_compaction_emergency_score = 50.0;
+
+        std::vector<std::pair<int64_t, int64_t>> specs(8, {500LL * 1024 * 1024, 0});
+        auto md = build_metadata(specs);
+        PrimaryCompactionPolicy policy(_tablet_mgr.get(), md, /*force_base_compaction=*/false);
+        std::vector<bool> has_dels;
+        ASSIGN_OR_ABORT(auto picked, policy.pick_rowset_indexes(md, &has_dels));
+        EXPECT_EQ(picked.size(), 0)
+                << "8 x 500MB = 4GB stays below alpha=2.0 size_overflow threshold (5GB), gate must skip";
+    }
+
+    // ===== Case 6: size_overflow uses max_rowset_bytes (NOT stale compact_level after merge) =====
+    // This is the bug-fix regression: pick_max_level merges single-rowset top with second
+    // level, but compact_level retains the original top's level_size. Using compact_level
+    // directly would give size_overflow = total / (small_top_size * 5) ≫ alpha, falsely
+    // triggering the override and re-introducing the pathology our gate is meant to prevent.
+    //
+    // Recipe: large base 5GB + sparse mid-tier 8 x 500MB. pick_max_level's "top has 1 rowset,
+    // not multi-segment overlapped" branch merges the 5GB level into the 500MB level.
+    // After merge, compact_level == 5GB but max_rowset_bytes (correctly used) == 5GB also.
+    // To force the bug-prone path we want a scenario where the original top level_size is
+    // small relative to the merged contents: this requires the smaller (L0-like) level to
+    // win on score but get merged with the larger mid-tier level.
+    //
+    // Score = io_count * 1MB / read_bytes ≈ 1 / size_MB. Smaller rowset → higher score.
+    // A single 20MB rowset has score 0.05; 8 x 500MB has score 8 * 1/500 = 0.016.
+    // Top = 20MB level (1 rowset, single segment) → merged with 500MB level.
+    {
+        config::lake_pk_compaction_min_level_score = 2.0;
+        config::lake_pk_compaction_min_benefit_cost_ratio = 0.005;
+        config::lake_pk_compaction_size_overflow_ratio = 2.0;
+        config::lake_pk_compaction_delvec_benefit_weight = 12.0;
+        config::lake_pk_compaction_emergency_score = 50.0;
+
+        // 1 x 20MB (the L0-like rowset, will be picked top + merged) + 8 x 500MB mid-tier.
+        // Total = 4020MB. Using max_rowset_bytes (500MB): overflow = 4020 / 2500 = 1.61 < 2.0
+        //   → gate correctly skips.
+        // Using stale compact_level (20MB): overflow = 4020 / 100 = 40 ≫ 2.0
+        //   → gate would falsely fire and re-create the pathology.
+        std::vector<std::pair<int64_t, int64_t>> specs;
+        specs.push_back({20LL * 1024 * 1024, 0});
+        for (int i = 0; i < 8; i++) {
+            specs.push_back({500LL * 1024 * 1024, 0});
+        }
+        auto md = build_metadata(specs);
+        PrimaryCompactionPolicy policy(_tablet_mgr.get(), md, /*force_base_compaction=*/false);
+        std::vector<bool> has_dels;
+        ASSIGN_OR_ABORT(auto picked, policy.pick_rowset_indexes(md, &has_dels));
+        EXPECT_EQ(picked.size(), 0)
+                << "size_overflow must use max_rowset_bytes (500MB), not stale compact_level (20MB) "
+                << "after pick_max_level merge — total 4GB is below the 5GB threshold and gate should skip";
+    }
+
+    // ===== Case 7: All v2 overrides at 0 (legacy ba3328b behavior) =====
+    // With every override disabled, gate skips for low-score clean levels just like ba3328b.
+    {
+        config::lake_pk_compaction_min_level_score = 2.0;
+        config::lake_pk_compaction_min_benefit_cost_ratio = 0.0;
+        config::lake_pk_compaction_size_overflow_ratio = 0.0;
+        config::lake_pk_compaction_delvec_benefit_weight = 0.0;
+        config::lake_pk_compaction_emergency_score = 0.0;
+
+        std::vector<std::pair<int64_t, int64_t>> specs(8, {500LL * 1024 * 1024, 0});
+        auto md = build_metadata(specs);
+        PrimaryCompactionPolicy policy(_tablet_mgr.get(), md, /*force_base_compaction=*/false);
+        std::vector<bool> has_dels;
+        ASSIGN_OR_ABORT(auto picked, policy.pick_rowset_indexes(md, &has_dels));
+        EXPECT_EQ(picked.size(), 0)
+                << "with all overrides disabled, gate should skip low-score clean level";
+    }
+}
+
 TEST_P(LakePrimaryKeyCompactionTest, test_rows_mapper) {
     // Prepare data for writing
     Chunk chunks[3];
