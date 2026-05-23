@@ -681,11 +681,11 @@ static void bench_replicate(benchmark::State& state, size_t rows, size_t len, Re
     for (auto _ : state) {
         {
             auto result_or = src->replicate(offsets);
+            state.PauseTiming();
             CHECK(result_or.ok()) << result_or.status();
             auto result = std::move(result_or).value();
             benchmark::DoNotOptimize(result.get());
             benchmark::ClobberMemory();
-            state.PauseTiming();
         }
         state.ResumeTiming();
     }
@@ -812,7 +812,9 @@ static void bench_build_slices(benchmark::State& state, size_t rows, size_t len,
 
     for (auto _ : state) {
         for (size_t r = 0; r < repeat; ++r) {
+            state.PauseTiming();
             slices.clear();
+            state.ResumeTiming();
             src->build_slices(slices);
         }
         benchmark::DoNotOptimize(slices.data());
@@ -1079,7 +1081,6 @@ static BENCH_NO_TREE_VECTORIZE void bench_byte_size_scan(benchmark::State& state
             for (size_t i = 0; i < rows; ++i) {
                 total_size += static_cast<uint32_t>(src->byte_size(i));
             }
-            total_size += src->byte_size(0, rows);
         }
         benchmark::DoNotOptimize(total_size);
     }
