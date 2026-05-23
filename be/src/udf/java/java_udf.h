@@ -23,6 +23,7 @@
 #include "exprs/function_context.h"
 #include "jni.h"
 #include "runtime/env/java/java_env.h"
+#include "runtime/env/java/java_runtime.h"
 #include "types/logical_type.h"
 #include "udf/java/type_traits.h"
 
@@ -65,23 +66,8 @@ struct MapMeta {
 class JVMFunctionHelper {
 public:
     static JVMFunctionHelper& getInstance();
-    static std::pair<JNIEnv*, JVMFunctionHelper&> getInstanceWithEnv();
     JVMFunctionHelper(const JVMFunctionHelper&) = delete;
-    // get env
-    JNIEnv* getEnv() { return _env; }
-    // Arrays.toString()
-    std::string array_to_string(jobject object);
-    // Object::toString()
     bool equals(jobject obj1, jobject obj2);
-    std::string to_string(jobject obj);
-    std::string to_cxx_string(jstring str);
-    std::string dumpExceptionString(jthrowable throwable);
-    jmethodID getToStringMethod(jclass clazz);
-    StatusOr<jstring> to_jstring(const std::string& str);
-    jmethodID getMethod(jclass clazz, const std::string& method, const std::string& sig);
-    jmethodID getStaticMethod(jclass clazz, const std::string& method, const std::string& sig);
-    // create a object array
-    jobject create_array(int sz);
     // convert column data to Java Object Array
     jobject create_boxed_array(int type, int num_rows, bool nullable, DirectByteBuffer* buffs, int sz);
     // Convert a DECIMAL column to a BigDecimal[] Java array. `type` is the LogicalType
@@ -139,7 +125,6 @@ public:
         return res;
     }
     // create object array with the same elements
-    jobject create_object_array(jobject o, int num_rows);
     jobject batch_create_bytebuf(unsigned char* ptr, const uint32_t* offset, int begin, int end);
 
     // batch update single
@@ -237,22 +222,14 @@ public:
     // as a java.time.LocalDateTime.
     jobject newLocalDateTime(int64_t packed_timestamp);
     int64_t valLocalDateTime(jobject obj);
-    // replace '.' as '/'
-    // eg: java.lang.Integer -> java/lang/Integer
-    static std::string to_jni_class_name(const std::string& name);
-
     // reset Buffer set read/write position to zero
     void clear(DirectByteBuffer* buffer, FunctionContext* ctx);
-
-    jclass object_class() { return _object_class; }
 
     JVMClass& function_state_clazz();
 
 private:
     JVMFunctionHelper() { _init(); };
     void _init();
-    // pack input array to java object array
-    jobjectArray _build_object_array(jclass clazz, jobject* arr, int sz);
 
     Status _check_exception_status();
 
@@ -267,11 +244,7 @@ private:
     DEFINE_JAVA_PRIM_TYPE(float);
     DEFINE_JAVA_PRIM_TYPE(double);
 
-    jclass _object_class;
-    jclass _object_array_class;
     jclass _string_class;
-    jclass _jarrays_class;
-    jclass _exception_util_class;
     jclass _big_decimal_class;
     jclass _local_date_class;
     jclass _local_datetime_class;
@@ -322,12 +295,12 @@ private:
 
 // local object reference guard.
 // The objects inside are automatically call DeleteLocalRef in the life object.
-#define LOCAL_REF_GUARD(lref)                                                \
-    DeferOp VARNAME_LINENUM(guard)([&lref]() {                               \
-        if (lref) {                                                          \
-            JVMFunctionHelper::getInstance().getEnv()->DeleteLocalRef(lref); \
-            lref = nullptr;                                                  \
-        }                                                                    \
+#define LOCAL_REF_GUARD(lref)                                          \
+    DeferOp VARNAME_LINENUM(guard)([&lref]() {                         \
+        if (lref) {                                                    \
+            JavaRuntime::getInstance().getEnv()->DeleteLocalRef(lref); \
+            lref = nullptr;                                            \
+        }                                                              \
     })
 
 #define LOCAL_REF_GUARD_ENV(env, lref)              \
@@ -339,32 +312,32 @@ private:
     })
 
 // check JNI Exception and set error in FunctionContext
-#define CHECK_UDF_CALL_EXCEPTION(env, ctx)                                         \
-    if (auto e = env->ExceptionOccurred()) {                                       \
-        LOCAL_REF_GUARD(e);                                                        \
-        std::string msg = JVMFunctionHelper::getInstance().dumpExceptionString(e); \
-        LOG(WARNING) << "Exception: " << msg;                                      \
-        ctx->set_error(msg.c_str());                                               \
-        env->ExceptionClear();                                                     \
+#define CHECK_UDF_CALL_EXCEPTION(env, ctx)                                     \
+    if (auto e = env->ExceptionOccurred()) {                                   \
+        LOCAL_REF_GUARD(e);                                                    \
+        std::string msg = JavaRuntime::getInstance().dump_exception_string(e); \
+        LOG(WARNING) << "Exception: " << msg;                                  \
+        ctx->set_error(msg.c_str());                                           \
+        env->ExceptionClear();                                                 \
     }
 
-#define RETURN_ERROR_IF_JNI_EXCEPTION_WITH_PREFIX(env, prefix)                     \
-    if (auto e = env->ExceptionOccurred()) {                                       \
-        LOCAL_REF_GUARD(e);                                                        \
-        std::string err = JVMFunctionHelper::getInstance().dumpExceptionString(e); \
-        env->ExceptionClear();                                                     \
-        return Status::InternalError(fmt::format("{}, {}", prefix, err));          \
+#define RETURN_ERROR_IF_JNI_EXCEPTION_WITH_PREFIX(env, prefix)                 \
+    if (auto e = env->ExceptionOccurred()) {                                   \
+        LOCAL_REF_GUARD(e);                                                    \
+        std::string err = JavaRuntime::getInstance().dump_exception_string(e); \
+        env->ExceptionClear();                                                 \
+        return Status::InternalError(fmt::format("{}, {}", prefix, err));      \
     }
 
 #define RETURN_ERROR_IF_JNI_EXCEPTION(env) RETURN_ERROR_IF_JNI_EXCEPTION_WITH_PREFIX(env, "JNI Exception")
 
-#define RETURN_IF_JNI_EXCEPTION(env, errmsg, ret)                                                                   \
-    if (jthrowable jthr = env->ExceptionOccurred()) {                                                               \
-        LOCAL_REF_GUARD(jthr);                                                                                      \
-        std::string msg = fmt::format("{},{}", errmsg, JVMFunctionHelper::getInstance().dumpExceptionString(jthr)); \
-        LOG(WARNING) << msg;                                                                                        \
-        env->ExceptionClear();                                                                                      \
-        return ret;                                                                                                 \
+#define RETURN_IF_JNI_EXCEPTION(env, errmsg, ret)                                                               \
+    if (jthrowable jthr = env->ExceptionOccurred()) {                                                           \
+        LOCAL_REF_GUARD(jthr);                                                                                  \
+        std::string msg = fmt::format("{},{}", errmsg, JavaRuntime::getInstance().dump_exception_string(jthr)); \
+        LOG(WARNING) << msg;                                                                                    \
+        env->ExceptionClear();                                                                                  \
+        return ret;                                                                                             \
     }
 
 // Used for UDAF serialization and deserialization,
@@ -688,8 +661,5 @@ JavaUDAFUniqueContext* get_java_udaf_context(FunctionContext* ctx);
 void attach_java_udaf_context(FunctionContext* ctx, std::unique_ptr<JavaUDAFUniqueContext> udaf_ctx);
 void clear_java_udaf_states(FunctionContext* ctx);
 void destroy_java_udaf_context(FunctionContext* ctx);
-
-// Check whether java runtime can work
-Status detect_java_runtime();
 
 } // namespace starrocks

@@ -277,8 +277,7 @@ DEFINE_CAST_TO_JVALUE(TYPE_DATETIME, helper.newLocalDateTime(data_value.timestam
 
 void release_jvalue(bool is_box, jvalue val) {
     if (is_box && val.l) {
-        auto& helper = JVMFunctionHelper::getInstance();
-        helper.getEnv()->DeleteLocalRef(val.l);
+        JavaRuntime::getInstance().getEnv()->DeleteLocalRef(val.l);
     }
 }
 
@@ -377,7 +376,7 @@ StatusOr<jvalue> cast_to_jvalue(const TypeDescriptor& type_desc, bool is_boxed, 
         JavaListStub list_stub(object);
         jobject elem_desc = get_type_desc_child(helper, type_desc_obj, 0);
         DeferOp drop_elem_desc([&]() {
-            if (elem_desc) helper.getEnv()->DeleteLocalRef(elem_desc);
+            if (elem_desc) JavaRuntime::getInstance().getEnv()->DeleteLocalRef(elem_desc);
         });
         for (size_t i = offset; i < offset + size; ++i) {
             ASSIGN_OR_RETURN(auto e, cast_to_jvalue(type_desc.children[0], true, spec_col->elements_column().get(), i,
@@ -404,11 +403,11 @@ StatusOr<jvalue> cast_to_jvalue(const TypeDescriptor& type_desc, bool is_boxed, 
 
         jobject key_desc = get_type_desc_child(helper, type_desc_obj, 0);
         DeferOp drop_key_desc([&]() {
-            if (key_desc) helper.getEnv()->DeleteLocalRef(key_desc);
+            if (key_desc) JavaRuntime::getInstance().getEnv()->DeleteLocalRef(key_desc);
         });
         jobject val_desc = get_type_desc_child(helper, type_desc_obj, 1);
         DeferOp drop_val_desc([&]() {
-            if (val_desc) helper.getEnv()->DeleteLocalRef(val_desc);
+            if (val_desc) JavaRuntime::getInstance().getEnv()->DeleteLocalRef(val_desc);
         });
         for (size_t i = offset; i < offset + size; ++i) {
             ASSIGN_OR_RETURN(auto key,
@@ -436,7 +435,7 @@ StatusOr<jvalue> cast_to_jvalue(const TypeDescriptor& type_desc, bool is_boxed, 
         if (record_class == nullptr) {
             return Status::InternalError("STRUCT cast_to_jvalue: missing formal record class on UdfTypeDesc");
         }
-        DeferOp drop_record_class([&]() { helper.getEnv()->DeleteLocalRef(record_class); });
+        DeferOp drop_record_class([&]() { JavaRuntime::getInstance().getEnv()->DeleteLocalRef(record_class); });
 
         if (!col->is_struct()) {
             return Status::InternalError("expected StructColumn for STRUCT slot");
@@ -452,7 +451,7 @@ StatusOr<jvalue> cast_to_jvalue(const TypeDescriptor& type_desc, bool is_boxed, 
         // bringing up a parallel single-row record-construction path: it takes
         // per-field Object[1] arrays and a null bitmap and returns Object[1] holding
         // the constructed record (or null when row 0 is null).
-        JNIEnv* env = helper.getEnv();
+        JNIEnv* env = JavaRuntime::getInstance().getEnv();
         jclass object_clazz = env->FindClass("java/lang/Object");
         DeferOp drop_object_clazz([&]() { env->DeleteLocalRef(object_clazz); });
         jobjectArray field_arrays = env->NewObjectArray(num_fields, object_clazz, nullptr);
@@ -508,10 +507,9 @@ static Status handle_decimal_overflow(JNIEnv* env, const TypeDescriptor& td, Col
         return Status::OK();
     }
     if (error_if_overflow) {
-        auto& helper = JVMFunctionHelper::getInstance();
         std::string msg;
         if (jthrowable jthr = env->ExceptionOccurred(); jthr != nullptr) {
-            msg = helper.dumpExceptionString(jthr);
+            msg = JavaRuntime::getInstance().dump_exception_string(jthr);
             env->DeleteLocalRef(jthr);
         }
         env->ExceptionClear();
@@ -578,7 +576,7 @@ Status assign_jvalue(const TypeDescriptor& type_desc, bool is_box, Column* col, 
         // DECIMAL32/64: ask Java for the unscaled value as a long. If the helper raised
         // an ArithmeticException (precision overflow or value > long range), translate it
         // — `unscaled` and the data column slot must not be touched in that branch.
-        auto* env = helper.getEnv();
+        auto* env = JavaRuntime::getInstance().getEnv();
         jlong unscaled = helper.unscaled_long(val.l, type_desc.precision, type_desc.scale);
         if (env->ExceptionCheck()) {
             return handle_decimal_overflow(env, type_desc, col, row_num, error_if_overflow);
@@ -598,7 +596,7 @@ Status assign_jvalue(const TypeDescriptor& type_desc, bool is_box, Column* col, 
         // the int128/int256 cell at row_num. Same overflow short-circuit as the narrow path
         // — `bytes` is null when the helper threw, so we must not fall through to
         // GetByteArrayRegion.
-        auto* env = helper.getEnv();
+        auto* env = JavaRuntime::getInstance().getEnv();
         const int byte_width = (type_desc.type == TYPE_DECIMAL128) ? 16 : 32;
         jbyteArray bytes = helper.unscaled_le_bytes(val.l, type_desc.precision, type_desc.scale, byte_width);
         if (env->ExceptionCheck()) {
@@ -682,8 +680,8 @@ Status append_jvalue(const TypeDescriptor& type_desc, bool is_box, Column* col, 
         case TYPE_DECIMAL64:
         case TYPE_DECIMAL128:
         case TYPE_DECIMAL256: {
-            RETURN_IF_ERROR(
-                    append_decimal_string_to_column(type_desc, helper.to_string(val.l), col, error_if_overflow));
+            RETURN_IF_ERROR(append_decimal_string_to_column(type_desc, JavaRuntime::getInstance().to_string(val.l), col,
+                                                            error_if_overflow));
             break;
         }
         case TYPE_ARRAY: {
@@ -696,7 +694,7 @@ Status append_jvalue(const TypeDescriptor& type_desc, bool is_box, Column* col, 
             auto* array_column = down_cast<ArrayColumn*>(data_column);
             jobject elem_desc = get_type_desc_child(helper, type_desc_obj, 0);
             DeferOp drop_elem_desc([&]() {
-                if (elem_desc) helper.getEnv()->DeleteLocalRef(elem_desc);
+                if (elem_desc) JavaRuntime::getInstance().getEnv()->DeleteLocalRef(elem_desc);
             });
             for (size_t i = 0; i < len; ++i) {
                 ASSIGN_OR_RETURN(auto element, list_stub.get(i));
@@ -726,11 +724,11 @@ Status append_jvalue(const TypeDescriptor& type_desc, bool is_box, Column* col, 
 
             jobject key_desc = get_type_desc_child(helper, type_desc_obj, 0);
             DeferOp drop_key_desc([&]() {
-                if (key_desc) helper.getEnv()->DeleteLocalRef(key_desc);
+                if (key_desc) JavaRuntime::getInstance().getEnv()->DeleteLocalRef(key_desc);
             });
             jobject val_desc = get_type_desc_child(helper, type_desc_obj, 1);
             DeferOp drop_val_desc([&]() {
-                if (val_desc) helper.getEnv()->DeleteLocalRef(val_desc);
+                if (val_desc) JavaRuntime::getInstance().getEnv()->DeleteLocalRef(val_desc);
             });
             for (size_t i = 0; i < len; ++i) {
                 ASSIGN_OR_RETURN(auto key_element, key_list_stub.get(i));
@@ -769,7 +767,7 @@ Status append_jvalue(const TypeDescriptor& type_desc, bool is_box, Column* col, 
             // Look up record component accessors via reflection on Class<?>.
             // The record instance's runtime class is the formal record type the FE
             // analyzer bound to this STRUCT slot; getRecordComponents lives on Class.
-            JNIEnv* env = helper.getEnv();
+            JNIEnv* env = JavaRuntime::getInstance().getEnv();
             jclass record_class = env->GetObjectClass(val.l);
             DeferOp drop_record_class([&]() { env->DeleteLocalRef(record_class); });
             jclass class_clazz = env->FindClass("java/lang/Class");
@@ -835,19 +833,19 @@ Status check_type_matched(const TypeDescriptor& type_desc, jobject val, jobject 
         return Status::OK();
     }
     auto& helper = JVMFunctionHelper::getInstance();
-    auto* env = helper.getEnv();
+    auto* env = JavaRuntime::getInstance().getEnv();
 
     switch (type_desc.type) {
-#define INSTANCE_OF_TYPE(NAME, TYPE)                                                            \
-    case NAME: {                                                                                \
-        if (!env->IsInstanceOf(val, helper.TYPE##_class())) {                                   \
-            auto clazz = env->GetObjectClass(val);                                              \
-            LOCAL_REF_GUARD(clazz);                                                             \
-            return Status::InternalError(fmt::format("Type not matched, expect {}, but got {}", \
-                                                     helper.to_string(helper.TYPE##_class()),   \
-                                                     helper.to_string(clazz)));                 \
-        }                                                                                       \
-        break;                                                                                  \
+#define INSTANCE_OF_TYPE(NAME, TYPE)                                                                              \
+    case NAME: {                                                                                                  \
+        if (!env->IsInstanceOf(val, helper.TYPE##_class())) {                                                     \
+            auto clazz = env->GetObjectClass(val);                                                                \
+            LOCAL_REF_GUARD(clazz);                                                                               \
+            return Status::InternalError(fmt::format("Type not matched, expect {}, but got {}",                   \
+                                                     JavaRuntime::getInstance().to_string(helper.TYPE##_class()), \
+                                                     JavaRuntime::getInstance().to_string(clazz)));               \
+        }                                                                                                         \
+        break;                                                                                                    \
     }
         INSTANCE_OF_TYPE(TYPE_BOOLEAN, uint8_t)
         INSTANCE_OF_TYPE(TYPE_TINYINT, int8_t)
@@ -860,8 +858,8 @@ Status check_type_matched(const TypeDescriptor& type_desc, jobject val, jobject 
         if (!env->IsInstanceOf(val, helper.string_clazz())) {
             auto clazz = env->GetObjectClass(val);
             LOCAL_REF_GUARD(clazz);
-            return Status::InternalError(
-                    fmt::format("Type not matched, expect string, but got {}", helper.to_string(clazz)));
+            return Status::InternalError(fmt::format("Type not matched, expect string, but got {}",
+                                                     JavaRuntime::getInstance().to_string(clazz)));
         }
         break;
     }
@@ -872,8 +870,8 @@ Status check_type_matched(const TypeDescriptor& type_desc, jobject val, jobject 
         if (!env->IsInstanceOf(val, helper.big_decimal_class())) {
             auto clazz = env->GetObjectClass(val);
             LOCAL_REF_GUARD(clazz);
-            return Status::InternalError(
-                    fmt::format("Type not matched, expect java.math.BigDecimal, but got {}", helper.to_string(clazz)));
+            return Status::InternalError(fmt::format("Type not matched, expect java.math.BigDecimal, but got {}",
+                                                     JavaRuntime::getInstance().to_string(clazz)));
         }
         break;
     }
@@ -881,8 +879,8 @@ Status check_type_matched(const TypeDescriptor& type_desc, jobject val, jobject 
         if (!env->IsInstanceOf(val, helper.local_date_class())) {
             auto clazz = env->GetObjectClass(val);
             LOCAL_REF_GUARD(clazz);
-            return Status::InternalError(
-                    fmt::format("Type not matched, expect java.time.LocalDate, but got {}", helper.to_string(clazz)));
+            return Status::InternalError(fmt::format("Type not matched, expect java.time.LocalDate, but got {}",
+                                                     JavaRuntime::getInstance().to_string(clazz)));
         }
         break;
     }
@@ -891,7 +889,7 @@ Status check_type_matched(const TypeDescriptor& type_desc, jobject val, jobject 
             auto clazz = env->GetObjectClass(val);
             LOCAL_REF_GUARD(clazz);
             return Status::InternalError(fmt::format("Type not matched, expect java.time.LocalDateTime, but got {}",
-                                                     helper.to_string(clazz)));
+                                                     JavaRuntime::getInstance().to_string(clazz)));
         }
         break;
     }
@@ -899,8 +897,8 @@ Status check_type_matched(const TypeDescriptor& type_desc, jobject val, jobject 
         if (!env->IsInstanceOf(val, helper.list_meta().list_class->clazz())) {
             auto clazz = env->GetObjectClass(val);
             LOCAL_REF_GUARD(clazz);
-            return Status::InternalError(
-                    fmt::format("Type not matched, expect List, but got {}", helper.to_string(clazz)));
+            return Status::InternalError(fmt::format("Type not matched, expect List, but got {}",
+                                                     JavaRuntime::getInstance().to_string(clazz)));
         }
         break;
     }
@@ -908,8 +906,8 @@ Status check_type_matched(const TypeDescriptor& type_desc, jobject val, jobject 
         if (!env->IsInstanceOf(val, helper.map_meta().map_class->clazz())) {
             auto clazz = env->GetObjectClass(val);
             LOCAL_REF_GUARD(clazz);
-            return Status::InternalError(
-                    fmt::format("Type not matched, expect Map, but got {}", helper.to_string(clazz)));
+            return Status::InternalError(fmt::format("Type not matched, expect Map, but got {}",
+                                                     JavaRuntime::getInstance().to_string(clazz)));
         }
         break;
     }
@@ -929,7 +927,8 @@ Status check_type_matched(const TypeDescriptor& type_desc, jobject val, jobject 
             auto clazz = env->GetObjectClass(val);
             LOCAL_REF_GUARD(clazz);
             return Status::InternalError(fmt::format("Type not matched, expect record {}, but got {}",
-                                                     helper.to_string(record_class), helper.to_string(clazz)));
+                                                     JavaRuntime::getInstance().to_string(record_class),
+                                                     JavaRuntime::getInstance().to_string(clazz)));
         }
         break;
     }
@@ -947,8 +946,7 @@ Status check_type_matched(const TypeDescriptor& type_desc, jobject val, jobject 
     }
 
 jobject JavaDataTypeConverter::convert_to_states(FunctionContext* ctx, uint8_t** data, size_t offset, int num_rows) {
-    auto& helper = JVMFunctionHelper::getInstance();
-    auto* env = helper.getEnv();
+    auto* env = JavaRuntime::getInstance().getEnv();
     int inputs[num_rows];
     jintArray arr = env->NewIntArray(num_rows);
     RETURN_NULL_WITH_REPORT_ERROR(arr == nullptr, ctx, "OOM may happened in Java Heap");
@@ -961,8 +959,7 @@ jobject JavaDataTypeConverter::convert_to_states(FunctionContext* ctx, uint8_t**
 
 jobject JavaDataTypeConverter::convert_to_states_with_filter(FunctionContext* ctx, uint8_t** data, size_t offset,
                                                              const uint8_t* filter, int num_rows) {
-    auto& helper = JVMFunctionHelper::getInstance();
-    auto* env = helper.getEnv();
+    auto* env = JavaRuntime::getInstance().getEnv();
     int inputs[num_rows];
     jintArray arr = env->NewIntArray(num_rows);
     RETURN_NULL_WITH_REPORT_ERROR(arr == nullptr, ctx, "OOM may happened in Java Heap");
@@ -1189,7 +1186,7 @@ static jobject get_type_desc_child(JVMFunctionHelper& helper, jobject type_desc,
     if (type_desc == nullptr) {
         return nullptr;
     }
-    JNIEnv* env = helper.getEnv();
+    JNIEnv* env = JavaRuntime::getInstance().getEnv();
     jobjectArray children = (jobjectArray)env->GetObjectField(type_desc, helper.udf_type_desc_children_field());
     if (children == nullptr) {
         return nullptr;
@@ -1202,7 +1199,7 @@ static jclass get_type_desc_record_class(JVMFunctionHelper& helper, jobject type
     if (type_desc == nullptr) {
         return nullptr;
     }
-    JNIEnv* env = helper.getEnv();
+    JNIEnv* env = JavaRuntime::getInstance().getEnv();
     return reinterpret_cast<jclass>(env->GetObjectField(type_desc, helper.udf_type_desc_record_class_field()));
 }
 
@@ -1262,7 +1259,7 @@ static StatusOr<jobject> box_column(JVMFunctionHelper& helper, const TypeDescrip
 
 static StatusOr<jobject> build_list_boxed_array(JVMFunctionHelper& helper, const TypeDescriptor& type_desc,
                                                 const Column* column, jobject type_desc_obj, int num_rows) {
-    JNIEnv* env = helper.getEnv();
+    JNIEnv* env = JavaRuntime::getInstance().getEnv();
     JniLocalFrame frame(env, BOXING_FRAME_HEADROOM);
     if (!frame.ok()) {
         return Status::InternalError("failed to push JNI local frame for ARRAY boxing");
@@ -1300,7 +1297,7 @@ static StatusOr<jobject> build_list_boxed_array(JVMFunctionHelper& helper, const
 
 static StatusOr<jobject> build_map_boxed_array(JVMFunctionHelper& helper, const TypeDescriptor& type_desc,
                                                const Column* column, jobject type_desc_obj, int num_rows) {
-    JNIEnv* env = helper.getEnv();
+    JNIEnv* env = JavaRuntime::getInstance().getEnv();
     JniLocalFrame frame(env, BOXING_FRAME_HEADROOM);
     if (!frame.ok()) {
         return Status::InternalError("failed to push JNI local frame for MAP boxing");
@@ -1343,7 +1340,7 @@ static StatusOr<jobject> build_map_boxed_array(JVMFunctionHelper& helper, const 
 
 static StatusOr<jobject> build_struct_boxed_array(JVMFunctionHelper& helper, const TypeDescriptor& type_desc,
                                                   const Column* column, jobject type_desc_obj, int num_rows) {
-    JNIEnv* env = helper.getEnv();
+    JNIEnv* env = JavaRuntime::getInstance().getEnv();
     // Capacity sized for the per-level fixed locals plus one in-flight sub_result;
     // sub_results are explicitly DeleteLocalRef'd inside the per-field loop so the
     // frame footprint stays bounded regardless of field count.
@@ -1596,7 +1593,7 @@ Status JavaDataTypeConverter::convert_to_boxed_array(FunctionContext* ctx, const
                                                      int num_rows, std::vector<jobject>* res,
                                                      const std::vector<jobject>* arg_type_descs) {
     auto& helper = JVMFunctionHelper::getInstance();
-    JNIEnv* env = helper.getEnv();
+    JNIEnv* env = JavaRuntime::getInstance().getEnv();
     for (int i = 0; i < num_cols; ++i) {
         jobject arg = nullptr;
         const TypeDescriptor& arg_type = *ctx->get_arg_type(i);
@@ -1605,12 +1602,12 @@ Status JavaDataTypeConverter::convert_to_boxed_array(FunctionContext* ctx, const
                                         : nullptr;
         if (columns[i]->only_null() ||
             (columns[i]->is_nullable() && down_cast<const NullableColumn*>(columns[i])->null_count() == num_rows)) {
-            arg = helper.create_array(num_rows);
+            arg = JavaRuntime::getInstance().create_object_array(num_rows);
         } else if (columns[i]->is_constant()) {
             auto* data_column = down_cast<const ConstColumn*>(columns[i])->data_column_raw_ptr();
             data_column->as_mutable_raw_ptr()->resize(1);
             ASSIGN_OR_RETURN(jvalue jval, cast_to_jvalue(arg_type, true, data_column, 0, type_desc_obj));
-            arg = helper.create_object_array(jval.l, num_rows);
+            arg = JavaRuntime::getInstance().create_object_array(jval.l, num_rows);
             env->DeleteLocalRef(jval.l);
         } else {
             ASSIGN_OR_RETURN(arg, box_column(helper, arg_type, columns[i], type_desc_obj, num_rows));

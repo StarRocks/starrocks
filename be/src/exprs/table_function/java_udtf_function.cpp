@@ -121,7 +121,7 @@ Status JavaUDTFState::open() {
     // per-row element type, so pass `unwrap_return_array_layer=true` to drop the array
     // layer off the reflective formal type before pairing it with `_ret_type`.
     {
-        JNIEnv* env = JVMFunctionHelper::getInstance().getEnv();
+        JNIEnv* env = JavaRuntime::getInstance().getEnv();
         ASSIGN_OR_RETURN(_process_type_descs,
                          build_method_udf_type_descs(env, _process->method.handle(), _arg_type_descs, _ret_type,
                                                      /*state_offset=*/0, /*unwrap_return_array_layer=*/true));
@@ -175,8 +175,7 @@ std::pair<Columns, UInt32Column::Ptr> JavaUDTFFunction::process(RuntimeState* ru
     const Columns& cols = state->get_columns();
     auto* stateUDTF = down_cast<JavaUDTFState*>(state);
 
-    auto& helper = JVMFunctionHelper::getInstance();
-    JNIEnv* env = helper.getEnv();
+    JNIEnv* env = JavaRuntime::getInstance().getEnv();
 
     jmethodID methodID = env->GetMethodID(stateUDTF->get_udtf_clazz(), stateUDTF->method_process()->name.c_str(),
                                           stateUDTF->method_process()->signature.c_str());
@@ -227,10 +226,11 @@ std::pair<Columns, UInt32Column::Ptr> JavaUDTFFunction::process(RuntimeState* ru
 
         rets[i] = env->CallObjectMethodA(stateUDTF->handle(), methodID, call_stack.data());
 
-        if (auto jthr = helper.getEnv()->ExceptionOccurred(); jthr != nullptr) {
-            std::string err = fmt::format("execute UDF Function meet Exception:{}", helper.dumpExceptionString(jthr));
+        if (auto jthr = JavaRuntime::getInstance().getEnv()->ExceptionOccurred(); jthr != nullptr) {
+            std::string err = fmt::format("execute UDF Function meet Exception:{}",
+                                          JavaRuntime::getInstance().dump_exception_string(jthr));
             LOG(WARNING) << err;
-            helper.getEnv()->ExceptionClear();
+            JavaRuntime::getInstance().getEnv()->ExceptionClear();
             state->set_status(Status::InternalError(err));
             return std::make_pair(Columns{}, nullptr);
         }
@@ -269,10 +269,11 @@ std::pair<Columns, UInt32Column::Ptr> JavaUDTFFunction::process(RuntimeState* ru
     res.emplace_back(std::move(col));
 
     // TODO: add error msg to Function State
-    if (auto jthr = helper.getEnv()->ExceptionOccurred(); jthr != nullptr) {
-        std::string err = fmt::format("execute UDF Function meet Exception:{}", helper.dumpExceptionString(jthr));
+    if (auto jthr = JavaRuntime::getInstance().getEnv()->ExceptionOccurred(); jthr != nullptr) {
+        std::string err = fmt::format("execute UDF Function meet Exception:{}",
+                                      JavaRuntime::getInstance().dump_exception_string(jthr));
         LOG(WARNING) << err;
-        helper.getEnv()->ExceptionClear();
+        JavaRuntime::getInstance().getEnv()->ExceptionClear();
     }
 
     return std::make_pair(std::move(res), std::move(offsets_col));

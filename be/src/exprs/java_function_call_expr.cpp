@@ -50,7 +50,7 @@ struct UDFFunctionCallHelper {
 
     StatusOr<ColumnPtr> call(FunctionContext* ctx, Columns& columns, size_t size) {
         auto& helper = JVMFunctionHelper::getInstance();
-        JNIEnv* env = helper.getEnv();
+        JNIEnv* env = JavaRuntime::getInstance().getEnv();
         int num_cols = ctx->get_num_args();
         std::vector<const Column*> input_cols;
 
@@ -216,8 +216,7 @@ StatusOr<std::shared_ptr<JavaUDFContext>> JavaFunctionCallExpr::_build_udf_func_
     // UdfTypeDesc tree is the single source of type info shared with both the input
     // boxing path (via JNI field accessors) and the unified Java writeResult helper.
     {
-        auto& helper = JVMFunctionHelper::getInstance();
-        JNIEnv* env = helper.getEnv();
+        JNIEnv* env = JavaRuntime::getInstance().getEnv();
         std::vector<TypeDescriptor> sql_arg_types;
         sql_arg_types.reserve(_children.size());
         for (const auto& child : _children) {

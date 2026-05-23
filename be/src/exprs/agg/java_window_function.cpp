@@ -78,7 +78,7 @@ static Status build_window_unique_context(std::shared_ptr<JavaUDAFSharedContext>
     ASSIGN_OR_RETURN(udaf_ctx->handle, udaf_ctx->ctx->udaf_class.newInstance());
 
     // Create a new FunctionStates instance; clone method refs from the shared context.
-    JNIEnv* env = JVMFunctionHelper::getInstance().getEnv();
+    JNIEnv* env = JavaRuntime::getInstance().getEnv();
     auto& state_clazz = JVMFunctionHelper::getInstance().function_state_clazz();
     ASSIGN_OR_RETURN(auto instance, state_clazz.newInstance());
     udaf_ctx->states = std::make_unique<UDAFStateList>(

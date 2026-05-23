@@ -99,7 +99,7 @@ static StatusOr<std::shared_ptr<JavaUDAFSharedContext>> build_udaf_shared_contex
     // for input boxing, writeResult for output drain); slots without STRUCT are stored
     // as null-handle entries and the existing fast paths run unchanged.
     {
-        JNIEnv* env = JVMFunctionHelper::getInstance().getEnv();
+        JNIEnv* env = JavaRuntime::getInstance().getEnv();
         // UDAF `update(State, sql_args...)` — SQL args start at parameter index 1. The
         // method itself returns void, so suppress the helper's return-type pass by
         // passing a default-constructed (TYPE_UNKNOWN) sql_return_type — otherwise the
@@ -129,7 +129,7 @@ static Status build_udaf_unique_context(std::shared_ptr<JavaUDAFSharedContext> u
     ASSIGN_OR_RETURN(agg_ctx->handle, agg_ctx->ctx->udaf_class.newInstance());
 
     // Create a per-aggregator AggBatchCallStub with the shared stub class/method cloned as new global refs
-    JNIEnv* env = JVMFunctionHelper::getInstance().getEnv();
+    JNIEnv* env = JavaRuntime::getInstance().getEnv();
     JVMClass stub_clazz(env->NewGlobalRef(agg_ctx->ctx->update_stub_clazz.clazz()));
     jobject stub_method = env->NewGlobalRef(agg_ctx->ctx->update_stub_method.handle());
     agg_ctx->update_batch_call_stub = std::make_unique<AggBatchCallStub>(

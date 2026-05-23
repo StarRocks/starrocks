@@ -298,7 +298,7 @@ TEST_F(JavaUDFTest, get_result_from_boxed_array_with_function_context) {
 // jfieldIDs the BE input boxer relies on.
 TEST_F(JavaUDFTest, new_udf_type_desc_scalar_leaf) {
     auto& helper = JVMFunctionHelper::getInstance();
-    JNIEnv* env = helper.getEnv();
+    JNIEnv* env = JavaRuntime::getInstance().getEnv();
 
     ASSIGN_OR_ASSERT_FAIL(jobject desc,
                           helper.new_udf_type_desc(/*logicalType=*/TYPE_INT, /*children=*/nullptr,
@@ -321,7 +321,7 @@ TEST_F(JavaUDFTest, new_udf_type_desc_scalar_leaf) {
 // the cached field IDs.
 TEST_F(JavaUDFTest, new_udf_type_desc_decimal_and_struct) {
     auto& helper = JVMFunctionHelper::getInstance();
-    JNIEnv* env = helper.getEnv();
+    JNIEnv* env = JavaRuntime::getInstance().getEnv();
 
     // DECIMAL64(18,4)
     {

@@ -29,6 +29,7 @@
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
 #include "exprs/expr_executor.h"
+#include "runtime/env/java/java_runtime.h"
 #include "runtime/runtime_state.h"
 #include "types/logical_type.h"
 #include "types/type_descriptor.h"
@@ -38,7 +39,7 @@ namespace starrocks {
 
 #define CHECK_JAVA_EXCEPTION(env, error_message)                                        \
     if (jthrowable thr = env->ExceptionOccurred(); thr) {                               \
-        std::string err = JVMFunctionHelper::getInstance().dumpExceptionString(thr);    \
+        std::string err = JavaRuntime::getInstance().dump_exception_string(thr);        \
         env->ExceptionClear();                                                          \
         env->DeleteLocalRef(thr);                                                       \
         return Status::InternalError(fmt::format("{}, error: {}", error_message, err)); \
@@ -83,8 +84,7 @@ Status JDBCScanner::close(RuntimeState* state) {
 
 Status JDBCScanner::_init_jdbc_bridge() {
     // 1. construct JDBCBridge
-    auto& h = JVMFunctionHelper::getInstance();
-    auto* env = h.getEnv();
+    auto* env = JavaRuntime::getInstance().getEnv();
 
     auto jdbc_bridge_cls = env->FindClass(JDBC_BRIDGE_CLASS_NAME);
     DCHECK(jdbc_bridge_cls != nullptr);
@@ -107,7 +107,7 @@ Status JDBCScanner::_init_jdbc_bridge() {
 
 Status JDBCScanner::_init_jdbc_scan_context(RuntimeState* state) {
     // scan
-    auto* env = JVMFunctionHelper::getInstance().getEnv();
+    auto* env = JavaRuntime::getInstance().getEnv();
 
     jclass scan_context_cls = env->FindClass(JDBC_SCAN_CONTEXT_CLASS_NAME);
     DCHECK(scan_context_cls != nullptr);
@@ -190,7 +190,7 @@ Status JDBCScanner::_init_jdbc_scan_context(RuntimeState* state) {
 }
 
 Status JDBCScanner::_init_jdbc_scanner() {
-    auto* env = JVMFunctionHelper::getInstance().getEnv();
+    auto* env = JavaRuntime::getInstance().getEnv();
 
     jmethodID get_scanner =
             env->GetMethodID(_jdbc_bridge_cls->clazz(), "getScanner",
@@ -242,7 +242,7 @@ StatusOr<LogicalType> JDBCScanner::_precheck_data_type(const std::string& java_c
 }
 
 Status JDBCScanner::_init_column_class_name(RuntimeState* state) {
-    auto* env = JVMFunctionHelper::getInstance().getEnv();
+    auto* env = JavaRuntime::getInstance().getEnv();
 
     jmethodID get_result_column_class_names =
             env->GetMethodID(_jdbc_scanner_cls->clazz(), "getResultColumnClassNames", "()Ljava/util/List;");
@@ -252,7 +252,6 @@ Status JDBCScanner::_init_column_class_name(RuntimeState* state) {
     CHECK_JAVA_EXCEPTION(env, "get JDBC result column class name failed")
     LOCAL_REF_GUARD_ENV(env, column_class_names);
 
-    auto& helper = JVMFunctionHelper::getInstance();
     JavaListStub list_stub(column_class_names);
     ASSIGN_OR_RETURN(int len, list_stub.size());
 
@@ -260,7 +259,7 @@ Status JDBCScanner::_init_column_class_name(RuntimeState* state) {
     for (int i = 0; i < len; i++) {
         ASSIGN_OR_RETURN(jobject jelement, list_stub.get(i));
         LOCAL_REF_GUARD_ENV(env, jelement);
-        std::string class_name = helper.to_string((jstring)(jelement));
+        std::string class_name = JavaRuntime::getInstance().to_string((jstring)(jelement));
         ASSIGN_OR_RETURN(auto ret_type, _precheck_data_type(class_name, _slot_descs[i]));
         _column_class_names.emplace_back(class_name);
         _result_column_types.emplace_back(ret_type);
@@ -292,7 +291,7 @@ Status JDBCScanner::_init_column_class_name(RuntimeState* state) {
 }
 
 Status JDBCScanner::_init_jdbc_util() {
-    auto* env = JVMFunctionHelper::getInstance().getEnv();
+    auto* env = JavaRuntime::getInstance().getEnv();
 
     // init JDBCUtil method
     auto jdbc_util_cls = env->FindClass(JDBC_UTIL_CLASS_NAME);
@@ -310,7 +309,7 @@ Status JDBCScanner::_init_jdbc_util() {
 }
 
 Status JDBCScanner::_has_next(bool* result) {
-    auto* env = JVMFunctionHelper::getInstance().getEnv();
+    auto* env = JavaRuntime::getInstance().getEnv();
     jboolean ret = env->CallBooleanMethod(_jdbc_scanner.handle(), _scanner_has_next);
     CHECK_JAVA_EXCEPTION(env, "call JDBCScanner hasNext failed")
     *result = ret;
@@ -318,7 +317,7 @@ Status JDBCScanner::_has_next(bool* result) {
 }
 
 Status JDBCScanner::_get_next_chunk(jobject* chunk, size_t* num_rows) {
-    auto* env = JVMFunctionHelper::getInstance().getEnv();
+    auto* env = JavaRuntime::getInstance().getEnv();
     SCOPED_TIMER(_profile.io_timer);
     COUNTER_UPDATE(_profile.io_counter, 1);
     *chunk = env->CallObjectMethod(_jdbc_scanner.handle(), _scanner_get_next_chunk);
@@ -329,7 +328,7 @@ Status JDBCScanner::_get_next_chunk(jobject* chunk, size_t* num_rows) {
 }
 
 Status JDBCScanner::_close_jdbc_scanner() {
-    auto* env = JVMFunctionHelper::getInstance().getEnv();
+    auto* env = JavaRuntime::getInstance().getEnv();
     if (_jdbc_scanner.handle() == nullptr) {
         return Status::OK();
     }
@@ -350,7 +349,7 @@ Status JDBCScanner::_fill_chunk(jobject jchunk, size_t num_rows, ChunkPtr* chunk
     // get result from JNI
     {
         auto& helper = JVMFunctionHelper::getInstance();
-        auto* env = helper.getEnv();
+        auto* env = JavaRuntime::getInstance().getEnv();
         JavaListStub list_stub(jchunk);
         COUNTER_UPDATE(_profile.rows_read_counter, num_rows);
         (*chunk)->reset();

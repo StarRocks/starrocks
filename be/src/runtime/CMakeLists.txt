@@ -68,6 +68,7 @@ set(RUNTIME_ENV_FILES
     env/global_env.cpp
     env/global_thread_pools.cpp
     env/java/java_env.cpp
+    env/java/java_runtime.cpp
 )
 
 ADD_BE_LIB(RuntimeEnv

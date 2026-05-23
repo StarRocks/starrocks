@@ -100,11 +100,10 @@ TEST_F(DataConverterTest, cast_to_jval) {
         offsets_data.emplace_back(20);
         std::string target;
         auto arr_col = ArrayColumn::create(std::move(nullable), std::move(offsets));
-        auto& instance = JVMFunctionHelper::getInstance();
         for (size_t i = 0; i < 3; ++i) {
             ASSIGN_OR_ASSERT_FAIL(jvalue v, cast_to_jvalue(tdesc, true, arr_col.get(), i));
             jobject obj = v.l;
-            target = target + instance.to_string(obj);
+            target = target + JavaRuntime::getInstance().to_string(obj);
             LOCAL_REF_GUARD(obj);
         }
         ASSERT_EQ(target, "[0, 1][2, 3, 4, 5, 6, 7, 8, 9][10, 11, 12, 13, 14, 15, 16, 17, 18, 19]");
@@ -181,8 +180,7 @@ TEST_F(DataConverterTest, cast_to_jval) {
         ASSIGN_OR_ASSERT_FAIL(jvalue val, cast_to_jvalue(tdesc, true, map_column.get(), 0));
         jobject obj = val.l;
         LOCAL_REF_GUARD(obj);
-        auto& instance = JVMFunctionHelper::getInstance();
-        std::string result = instance.to_string(obj);
+        std::string result = JavaRuntime::getInstance().to_string(obj);
         ASSERT_EQ("{0=20, 1=19}", result);
     }
 }
@@ -301,7 +299,6 @@ TEST_F(DataConverterTest, decimal_roundtrip) {
 // BigDecimal values that exceed the target DECIMAL(p,s) range are either rejected (REPORT_ERROR
 // = default) or silently nulled out (OUTPUT_NULL), matching built-in decimal cast semantics.
 TEST_F(DataConverterTest, append_jvalue_decimal_overflow) {
-    auto& helper = JVMFunctionHelper::getInstance();
     TypeDescriptor tdesc = TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL64, 5, 2); // max 999.99
 
     // Build a BigDecimal with a value that fits in BigDecimal but not in DECIMAL64(5,2).
@@ -369,8 +366,7 @@ TEST_F(DataConverterTest, assign_jvalue_decimal_null) {
 // it from the JVM, leaving the destination cell untouched. With OUTPUT_NULL the
 // row is nulled and Status is OK.
 TEST_F(DataConverterTest, assign_jvalue_decimal_overflow) {
-    auto& helper = JVMFunctionHelper::getInstance();
-    auto* env = helper.getEnv();
+    auto* env = JavaRuntime::getInstance().getEnv();
     auto narrow_tdesc = TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL64, 5, 2); // narrow target
     auto wide_tdesc = TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL128, 38, 0);
 
@@ -422,7 +418,7 @@ TEST_F(DataConverterTest, assign_jvalue_decimal_overflow) {
 // is exercised.
 TEST_F(DataConverterTest, check_type_matched_decimal) {
     auto& helper = JVMFunctionHelper::getInstance();
-    auto* env = helper.getEnv();
+    auto* env = JavaRuntime::getInstance().getEnv();
 
     // BigDecimal -> DECIMAL is OK (also tests the four LogicalType variants).
     auto src = build_decimal_col<TYPE_DECIMAL64, int64_t>(18, 4, "1234.5678");
@@ -450,8 +446,7 @@ TEST_F(DataConverterTest, check_type_matched_decimal) {
 // convert_to_boxed_array on a DECIMAL column drives `build_decimal_boxed_array`,
 // which is the batched UDF input path for native DECIMAL columns.
 TEST_F(DataConverterTest, convert_to_boxed_array_decimal) {
-    auto& helper = JVMFunctionHelper::getInstance();
-    auto* env = helper.getEnv();
+    auto* env = JavaRuntime::getInstance().getEnv();
 
     auto run = [&](LogicalType type, int precision, int scale, const ColumnPtr& col) {
         auto tdesc = TypeDescriptor::create_decimalv3_type(type, precision, scale);
@@ -475,7 +470,7 @@ TEST_F(DataConverterTest, convert_to_boxed_array_decimal) {
     run(TYPE_DECIMAL256, 76, 10,
         build_decimal_col<TYPE_DECIMAL256, int256_t>(76, 10, "1234567890123456789012345678901234567890.1234567890"));
 
-    // all-null shortcut path: every row null hits the create_array branch instead of
+    // all-null shortcut path: every row null hits the JavaRuntime object-array branch instead of
     // the decimal helper. Keep this case to exercise the early-return.
     {
         auto tdesc = TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL64, 18, 4);
@@ -697,8 +692,7 @@ TEST_F(DataConverterTest, check_type_matched_date_datetime) {
 // using the JNIPrimTypeId<DateValue> / JNIPrimTypeId<TimestampValue> id, which
 // must be registered against createBoxedLocalDate{,Time}Array in _method_map.
 TEST_F(DataConverterTest, convert_to_boxed_array_date_datetime) {
-    auto& helper = JVMFunctionHelper::getInstance();
-    auto* env = helper.getEnv();
+    auto* env = JavaRuntime::getInstance().getEnv();
 
     auto run = [&](LogicalType type, const ColumnPtr& col) {
         TypeDescriptor td(type);
@@ -734,8 +728,7 @@ TEST_F(DataConverterTest, convert_to_boxed_array_date_datetime) {
 // build_decimal_boxed_array fast path) because is_decimalv3_field_type(TYPE_ARRAY)
 // is false; the elements then hit the int32/int64/int128/int256 branches.
 TEST_F(DataConverterTest, convert_to_boxed_array_array_of_decimal) {
-    auto& helper = JVMFunctionHelper::getInstance();
-    auto* env = helper.getEnv();
+    auto* env = JavaRuntime::getInstance().getEnv();
 
     auto run = [&](LogicalType type, int precision, int scale) {
         TypeDescriptor element = TypeDescriptor::create_decimalv3_type(type, precision, scale);
@@ -768,7 +761,7 @@ TEST_F(DataConverterTest, convert_to_boxed_array_array_of_decimal) {
 // across the type spectrum used by the UDF analyzer.
 TEST_F(DataConverterTest, build_udf_type_desc_scalar_leaves) {
     auto& helper = JVMFunctionHelper::getInstance();
-    JNIEnv* env = helper.getEnv();
+    JNIEnv* env = JavaRuntime::getInstance().getEnv();
 
     auto check_leaf = [&](const TypeDescriptor& td) {
         ASSIGN_OR_ASSERT_FAIL(jobject desc, build_udf_type_desc(env, td, /*formal_type=*/nullptr));
@@ -801,8 +794,7 @@ TEST_F(DataConverterTest, build_udf_type_desc_scalar_leaves) {
 // JavaArrayConverter for ARRAY<scalar> / scalar slots — STRUCT-bearing routing
 // is gated on the per-slot UdfTypeDesc being non-null.
 TEST_F(DataConverterTest, convert_to_boxed_array_with_null_descs) {
-    auto& helper = JVMFunctionHelper::getInstance();
-    auto* env = helper.getEnv();
+    auto* env = JavaRuntime::getInstance().getEnv();
 
     // ARRAY<INT> column with one populated row.
     TypeDescriptor td = TypeDescriptor::create_array_type(TypeDescriptor(TYPE_INT));
@@ -824,8 +816,7 @@ TEST_F(DataConverterTest, convert_to_boxed_array_with_null_descs) {
 // broadcast across num_rows via create_object_array. Drive a const INT to
 // cover the non-STRUCT constant branch alongside the STRUCT-aware routing.
 TEST_F(DataConverterTest, convert_to_boxed_array_constant_short_circuit) {
-    auto& helper = JVMFunctionHelper::getInstance();
-    auto* env = helper.getEnv();
+    auto* env = JavaRuntime::getInstance().getEnv();
 
     TypeDescriptor td(TYPE_INT);
     auto inner = ColumnHelper::create_column(td, false);
@@ -843,11 +834,10 @@ TEST_F(DataConverterTest, convert_to_boxed_array_constant_short_circuit) {
 
 // only-null column shortcut: convert_to_boxed_array bypasses both the STRUCT
 // path and the per-type Java helper, returning a plain Object[num_rows] of
-// nulls via JVMFunctionHelper::create_array. Exercise the early-return so the
+// nulls via JavaRuntime::create_object_array. Exercise the early-return so the
 // branch is not stranded uncovered.
 TEST_F(DataConverterTest, convert_to_boxed_array_all_null_short_circuit) {
-    auto& helper = JVMFunctionHelper::getInstance();
-    auto* env = helper.getEnv();
+    auto* env = JavaRuntime::getInstance().getEnv();
 
     TypeDescriptor td(TYPE_BIGINT);
     auto col = ColumnHelper::create_column(td, true);
@@ -908,7 +898,7 @@ TypeDescriptor make_test_struct_typedesc() {
 // the right shape.
 TEST_F(DataConverterTest, build_udf_type_desc_struct_via_reflected_method) {
     auto& helper = JVMFunctionHelper::getInstance();
-    JNIEnv* env = helper.getEnv();
+    JNIEnv* env = JavaRuntime::getInstance().getEnv();
 
     jobject formal = reflected_return_generic_type(env, "structReturn", "()Lcom/starrocks/udf/UdfTestStructRecord;");
     ASSERT_NE(formal, nullptr);
@@ -951,7 +941,7 @@ TEST_F(DataConverterTest, build_udf_type_desc_struct_via_reflected_method) {
 // child carries the formal record class.
 TEST_F(DataConverterTest, build_udf_type_desc_array_of_struct) {
     auto& helper = JVMFunctionHelper::getInstance();
-    JNIEnv* env = helper.getEnv();
+    JNIEnv* env = JavaRuntime::getInstance().getEnv();
 
     jobject formal = reflected_return_generic_type(env, "arrayOfStruct", "()Ljava/util/List;");
     ASSERT_NE(formal, nullptr);
@@ -987,7 +977,7 @@ TEST_F(DataConverterTest, build_udf_type_desc_array_of_struct) {
 // type arguments" recursion.
 TEST_F(DataConverterTest, build_udf_type_desc_map_of_struct) {
     auto& helper = JVMFunctionHelper::getInstance();
-    JNIEnv* env = helper.getEnv();
+    JNIEnv* env = JavaRuntime::getInstance().getEnv();
 
     jobject formal = reflected_return_generic_type(env, "mapOfStruct", "()Ljava/util/Map;");
     ASSERT_NE(formal, nullptr);
@@ -1027,7 +1017,7 @@ TEST_F(DataConverterTest, build_udf_type_desc_map_of_struct) {
 // keep threading the formal record class through children[0].children[0].
 TEST_F(DataConverterTest, build_udf_type_desc_array_of_array_of_struct) {
     auto& helper = JVMFunctionHelper::getInstance();
-    JNIEnv* env = helper.getEnv();
+    JNIEnv* env = JavaRuntime::getInstance().getEnv();
 
     jobject formal = reflected_return_generic_type(env, "arrayOfArrayOfStruct", "()Ljava/util/List;");
     ASSERT_NE(formal, nullptr);
@@ -1062,8 +1052,7 @@ TEST_F(DataConverterTest, build_udf_type_desc_array_of_array_of_struct) {
 // in spots where it expects them. Hand a primitive-array formal at a STRUCT
 // slot to make sure type_to_raw_class's negative path returns Status::Internal.
 TEST_F(DataConverterTest, build_udf_type_desc_struct_rejects_non_class_formal) {
-    auto& helper = JVMFunctionHelper::getInstance();
-    JNIEnv* env = helper.getEnv();
+    JNIEnv* env = JavaRuntime::getInstance().getEnv();
 
     // null formal at a STRUCT slot → "formal Java type is null".
     TypeDescriptor td = make_test_struct_typedesc();
@@ -1078,7 +1067,7 @@ TEST_F(DataConverterTest, build_udf_type_desc_struct_rejects_non_class_formal) {
 // JNI bridge.
 TEST_F(DataConverterTest, convert_to_boxed_array_struct_input) {
     auto& helper = JVMFunctionHelper::getInstance();
-    auto* env = helper.getEnv();
+    auto* env = JavaRuntime::getInstance().getEnv();
 
     // Construct UdfTypeDesc for STRUCT<key INT, value VARCHAR> with
     // UdfTestStructRecord as recordClass.
@@ -1154,8 +1143,7 @@ jint read_logical_type(JVMFunctionHelper& helper, JNIEnv* env, jobject desc) {
 // the signature: returns one null-handle entry per SQL arg and a null-handle ret.
 // Skips the JNI walk over Method.getGenericParameterTypes entirely.
 TEST_F(DataConverterTest, build_method_udf_type_descs_no_struct_short_circuit) {
-    auto& helper = JVMFunctionHelper::getInstance();
-    auto* env = helper.getEnv();
+    auto* env = JavaRuntime::getInstance().getEnv();
 
     // Any method handle works since we early-return before reading it.
     jobject method = reflected_test_support_method(
@@ -1183,7 +1171,7 @@ TEST_F(DataConverterTest, build_method_udf_type_descs_no_struct_short_circuit) {
 // to avoid walking update.getGenericReturnType() which is `void`).
 TEST_F(DataConverterTest, build_method_udf_type_descs_udaf_state_offset) {
     auto& helper = JVMFunctionHelper::getInstance();
-    auto* env = helper.getEnv();
+    auto* env = JavaRuntime::getInstance().getEnv();
 
     // void udafUpdateWithStruct(State state, UdfTestStructRecord record)
     jobject method = reflected_test_support_method(
@@ -1218,7 +1206,7 @@ TEST_F(DataConverterTest, build_method_udf_type_descs_udaf_state_offset) {
 // desc carries logicalType=ARRAY with an element child carrying the record class.
 TEST_F(DataConverterTest, build_method_udf_type_descs_udaf_finalize_array_of_struct) {
     auto& helper = JVMFunctionHelper::getInstance();
-    auto* env = helper.getEnv();
+    auto* env = JavaRuntime::getInstance().getEnv();
 
     jobject method = reflected_test_support_method(env, "udafFinalizeArrayOfStruct",
                                                    "(Lcom/starrocks/udf/UdfTestSupport$State;)Ljava/util/List;");
@@ -1253,7 +1241,7 @@ TEST_F(DataConverterTest, build_method_udf_type_descs_udaf_finalize_array_of_str
 // the array class (Class<Record[]>).
 TEST_F(DataConverterTest, build_method_udf_type_descs_udtf_unwrap_return_array) {
     auto& helper = JVMFunctionHelper::getInstance();
-    auto* env = helper.getEnv();
+    auto* env = JavaRuntime::getInstance().getEnv();
 
     // UdfTestStructRecord[] udtfProcessReturnsRecordArray(UdfTestStructRecord)
     jobject method = reflected_test_support_method(
@@ -1291,8 +1279,7 @@ TEST_F(DataConverterTest, build_method_udf_type_descs_udtf_unwrap_return_array) 
 // InternalError. Drives the helper with unwrap=false on the same UDTF-shaped
 // method to confirm the path is wired.
 TEST_F(DataConverterTest, build_method_udf_type_descs_struct_return_without_unwrap_fails) {
-    auto& helper = JVMFunctionHelper::getInstance();
-    auto* env = helper.getEnv();
+    auto* env = JavaRuntime::getInstance().getEnv();
 
     jobject method = reflected_test_support_method(
             env, "udtfProcessReturnsRecordArray",
@@ -1313,7 +1300,7 @@ TEST_F(DataConverterTest, build_method_udf_type_descs_struct_return_without_unwr
 // non-null record instance whose components match the column row.
 TEST_F(DataConverterTest, cast_to_jvalue_struct_per_row) {
     auto& helper = JVMFunctionHelper::getInstance();
-    auto* env = helper.getEnv();
+    auto* env = JavaRuntime::getInstance().getEnv();
 
     // Build the per-arg UdfTypeDesc from a method shape — same path UDTF uses.
     jobject method = reflected_test_support_method(
@@ -1370,8 +1357,7 @@ TEST_F(DataConverterTest, cast_to_jvalue_struct_requires_type_desc) {
 // round-trips it through append_jvalue and verifies the resulting column's
 // shape and values.
 TEST_F(DataConverterTest, append_jvalue_struct_per_row_roundtrip) {
-    auto& helper = JVMFunctionHelper::getInstance();
-    auto* env = helper.getEnv();
+    auto* env = JavaRuntime::getInstance().getEnv();
 
     jobject method = reflected_test_support_method(
             env, "udtfProcessReturnsRecordArray",
@@ -1400,8 +1386,7 @@ TEST_F(DataConverterTest, append_jvalue_struct_per_row_roundtrip) {
 // check_type_matched STRUCT path: UDTF result-row validator. Accepts the
 // declared record class and rejects an unrelated runtime class.
 TEST_F(DataConverterTest, check_type_matched_struct) {
-    auto& helper = JVMFunctionHelper::getInstance();
-    auto* env = helper.getEnv();
+    auto* env = JavaRuntime::getInstance().getEnv();
 
     jobject method = reflected_test_support_method(
             env, "udtfProcessReturnsRecordArray",

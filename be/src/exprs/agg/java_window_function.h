@@ -52,8 +52,7 @@ public:
         }
 
         std::vector<jobject> args;
-        auto& helper = JVMFunctionHelper::getInstance();
-        JNIEnv* env = helper.getEnv();
+        JNIEnv* env = JavaRuntime::getInstance().getEnv();
         DeferOp defer = DeferOp([&]() {
             // clean up arrays
             for (auto& arg : args) {
@@ -78,12 +77,11 @@ public:
 
     void get_values(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* dst, size_t start,
                     size_t end) const override {
-        auto& helper = JVMFunctionHelper::getInstance();
         auto* udaf_ctx = get_java_udaf_context(ctx);
         DCHECK(udaf_ctx != nullptr);
         jvalue val = udaf_ctx->_func->finalize(this->data(state).handle);
         // insert values to column
-        JNIEnv* env = helper.getEnv();
+        JNIEnv* env = JavaRuntime::getInstance().getEnv();
         const auto& return_type = ctx->get_return_type();
         const bool error_if_overflow = ctx->error_if_overflow();
         int sz = end - start;

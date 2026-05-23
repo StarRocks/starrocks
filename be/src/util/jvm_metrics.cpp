@@ -20,15 +20,16 @@
 #include "common/status.h"
 #include "common/statusor.h"
 #include "jni.h"
+#include "runtime/env/java/java_runtime.h"
 #include "udf/java/java_udf.h"
 
-#define CHECK_JNI_EXCEPTION(env, message)                                                          \
-    if (jthrowable thr = env->ExceptionOccurred(); thr) {                                          \
-        std::string jni_error_message = JVMFunctionHelper::getInstance().dumpExceptionString(thr); \
-        env->ExceptionDescribe();                                                                  \
-        env->ExceptionClear();                                                                     \
-        env->DeleteLocalRef(thr);                                                                  \
-        return Status::InternalError(fmt::format("{}, error: {}", message, jni_error_message));    \
+#define CHECK_JNI_EXCEPTION(env, message)                                                       \
+    if (jthrowable thr = env->ExceptionOccurred(); thr) {                                       \
+        std::string jni_error_message = JavaRuntime::getInstance().dump_exception_string(thr);  \
+        env->ExceptionDescribe();                                                               \
+        env->ExceptionClear();                                                                  \
+        env->DeleteLocalRef(thr);                                                               \
+        return Status::InternalError(fmt::format("{}, error: {}", message, jni_error_message)); \
     }
 
 namespace starrocks {
@@ -43,12 +44,12 @@ JVMMetrics* JVMMetrics::instance() {
 Status JVMMetrics::init() {
     RETURN_IF_ERROR(detect_java_runtime());
 
-    // check JNIEnv before calling JVMFunctionHelper::getInstance() to avoid crash
+    // check JNIEnv before calling JavaRuntime::getInstance() to avoid crash
     if (getJNIEnv() == nullptr) {
         return Status::InternalError("get JNIEnv failed");
     }
 
-    JNIEnv* env = JVMFunctionHelper::getInstance().getEnv();
+    JNIEnv* env = JavaRuntime::getInstance().getEnv();
 
     jclass management_factory_cls = env->FindClass("java/lang/management/ManagementFactory");
     CHECK_JNI_EXCEPTION(env, "find class ManagementFactory failed")
@@ -186,7 +187,7 @@ Status JVMMetrics::update() {
 }
 
 StatusOr<MemoryUsage> JVMMetrics::get_heap_memory_usage() {
-    JNIEnv* env = JVMFunctionHelper::getInstance().getEnv();
+    JNIEnv* env = JavaRuntime::getInstance().getEnv();
 
     jobject memory_usage = env->CallObjectMethod(_memory_mxbean_obj.handle(), _get_heap_memory_usage);
     CHECK_JNI_EXCEPTION(env, "get heap memory usage failed")
@@ -202,7 +203,7 @@ StatusOr<MemoryUsage> JVMMetrics::get_heap_memory_usage() {
 }
 
 StatusOr<MemoryUsage> JVMMetrics::get_non_heap_memory_usage() {
-    JNIEnv* env = JVMFunctionHelper::getInstance().getEnv();
+    JNIEnv* env = JavaRuntime::getInstance().getEnv();
 
     jobject memory_usage = env->CallObjectMethod(_memory_mxbean_obj.handle(), _get_non_heap_memory_usage);
     CHECK_JNI_EXCEPTION(env, "get non heap memory usage failed")
@@ -218,7 +219,7 @@ StatusOr<MemoryUsage> JVMMetrics::get_non_heap_memory_usage() {
 }
 
 StatusOr<std::vector<MemoryPool>> JVMMetrics::get_memory_pools() {
-    JNIEnv* env = JVMFunctionHelper::getInstance().getEnv();
+    JNIEnv* env = JavaRuntime::getInstance().getEnv();
 
     jobject memory_pools = env->CallStaticObjectMethod(_management_factory_cls->clazz(), _get_memory_pool_mxbeans);
     CHECK_JNI_EXCEPTION(env, "get memory pool mxbeans failed")
@@ -236,7 +237,7 @@ StatusOr<std::vector<MemoryPool>> JVMMetrics::get_memory_pools() {
         jstring name = (jstring)env->CallObjectMethod(memory_pool, _get_name);
         CHECK_JNI_EXCEPTION(env, "get memory pool name failed")
         LOCAL_REF_GUARD_ENV(env, name);
-        std::string name_str = JVMFunctionHelper::getInstance().to_cxx_string(name);
+        std::string name_str = JavaRuntime::getInstance().to_cxx_string(name);
 
         jobject usage = env->CallObjectMethod(memory_pool, _get_usage);
         CHECK_JNI_EXCEPTION(env, "get memory pool usage failed")

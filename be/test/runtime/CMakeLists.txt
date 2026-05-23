@@ -83,6 +83,7 @@ set(RUNTIME_ENV_TEST_FILES
     ${BE_TEST_MACOS_LINK_STUBS}
     runtime_env_test.cpp
     java_env_test.cpp
+    java_runtime_test.cpp
 )
 
 add_executable(runtime_env_test ${RUNTIME_ENV_TEST_FILES})
