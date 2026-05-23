@@ -90,6 +90,7 @@ set(EXEC_FILES
         ./exec/analytor_test.cpp
         ./exec/analytor_test.cpp
         ./exec/arrow_converter_test.cpp
+        ./exec/arrow_to_json_converter_test.cpp
         ./exec/cache_select_scanner_test.cpp
         ./exec/chunks_sorter_heap_sort_test.cpp
         ./exec/chunks_sorter_test.cpp
