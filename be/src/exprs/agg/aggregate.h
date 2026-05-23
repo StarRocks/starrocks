@@ -91,6 +91,17 @@ public:
     // @param[out] to: maybe nullable
     virtual void serialize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const = 0;
 
+    // Serialize for the transient exchange/spill path: the state is shipped over
+    // the network (or spilled) and consumed within the same query, never
+    // persisted. Defaults to the persisted, self-contained serialize_to_column,
+    // so a function that does not override it stays correct for agg_state and
+    // storage; a function may override it to emit a more compact wire form that
+    // is only safe for transient state.
+    virtual void serialize_to_exchange_column(FunctionContext* ctx, ConstAggDataPtr __restrict state,
+                                              Column* to) const {
+        serialize_to_column(ctx, state, to);
+    }
+
     // batch serialize aggregate state to reduce virtual function call
     virtual void batch_serialize(FunctionContext* ctx, size_t chunk_size, const Buffer<AggDataPtr>& agg_states,
                                  size_t state_offsets, Column* to) const = 0;
@@ -105,6 +116,13 @@ public:
     // For streaming aggregation, we directly convert column data to serialize format
     virtual void convert_to_serialize_format(FunctionContext* ctx, const Columns& src, size_t chunk_size,
                                              MutableColumnPtr& dst) const = 0;
+
+    // convert_to_serialize_format for the transient exchange/spill path; see
+    // serialize_to_exchange_column for the persisted-safe default contract.
+    virtual void convert_to_exchange_format(FunctionContext* ctx, const Columns& src, size_t chunk_size,
+                                            MutableColumnPtr& dst) const {
+        convert_to_serialize_format(ctx, src, chunk_size, dst);
+    }
 
     // Insert current aggregation state into dst column from start to end
     // For aggregation window functions
