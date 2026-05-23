@@ -46,8 +46,8 @@ StatusOr<std::unique_ptr<SecondaryIndexCollector>> SecondaryIndexCollector::crea
     if (defs.empty() || source_schema == nullptr) {
         return std::unique_ptr<SecondaryIndexCollector>{};
     }
-    auto collector = std::unique_ptr<SecondaryIndexCollector>(
-            new SecondaryIndexCollector(tablet_id, txn_id, source_schema));
+    auto collector =
+            std::unique_ptr<SecondaryIndexCollector>(new SecondaryIndexCollector(tablet_id, txn_id, source_schema));
 
     for (const auto& def : defs) {
         PerIndexState st;
@@ -57,9 +57,8 @@ StatusOr<std::unique_ptr<SecondaryIndexCollector>> SecondaryIndexCollector::crea
         for (const auto& name : def.index_col_names) {
             size_t idx = source_schema->field_index(name);
             if (idx == static_cast<size_t>(-1)) {
-                return Status::NotFound(
-                        fmt::format("secondary index column '{}' not found in tablet schema (index '{}')", name,
-                                     def.index_name));
+                return Status::NotFound(fmt::format(
+                        "secondary index column '{}' not found in tablet schema (index '{}')", name, def.index_name));
             }
             st.source_col_ids.push_back(static_cast<uint32_t>(idx));
         }
@@ -82,7 +81,7 @@ Status SecondaryIndexCollector::add_chunk(const Chunk& chunk, uint32_t seg_id, u
 }
 
 Status SecondaryIndexCollector::_add_chunk_to_index(PerIndexState& st, const Chunk& chunk, uint32_t seg_id,
-                                                   uint32_t base_rowid) {
+                                                    uint32_t base_rowid) {
     const size_t n = chunk.num_rows();
 
     // First time we see real data: clone empty columns from the source chunk
@@ -110,8 +109,8 @@ Status SecondaryIndexCollector::_add_chunk_to_index(PerIndexState& st, const Chu
     return Status::OK();
 }
 
-StatusOr<std::vector<SecondaryIndexFilePB>> SecondaryIndexCollector::finalize(
-        std::shared_ptr<FileSystem> fs, lake::TabletManager* tablet_mgr) {
+StatusOr<std::vector<SecondaryIndexFilePB>> SecondaryIndexCollector::finalize(std::shared_ptr<FileSystem> fs,
+                                                                              lake::TabletManager* tablet_mgr) {
     std::vector<SecondaryIndexFilePB> out;
     if (tablet_mgr == nullptr) {
         return Status::InvalidArgument("SecondaryIndexCollector::finalize: missing tablet_mgr");
@@ -133,8 +132,8 @@ StatusOr<std::vector<SecondaryIndexFilePB>> SecondaryIndexCollector::finalize(
 }
 
 StatusOr<SecondaryIndexFilePB> SecondaryIndexCollector::_write_one_index(PerIndexState& st,
-                                                                       std::shared_ptr<FileSystem> fs,
-                                                                       lake::TabletManager* tablet_mgr) {
+                                                                         std::shared_ptr<FileSystem> fs,
+                                                                         lake::TabletManager* tablet_mgr) {
     if (st.idx_cols.empty()) {
         // Nothing was ever written through this collector (empty rowset).
         SecondaryIndexFilePB pb;
@@ -201,8 +200,8 @@ StatusOr<SecondaryIndexFilePB> SecondaryIndexCollector::_write_one_index(PerInde
     pb.set_file_size(static_cast<int64_t>(segment_size));
     for (auto& n : st.col_names) pb.add_index_col_names(n);
 
-    LOG(INFO) << "secondary_index_collector: built '" << st.name << "' for tablet=" << _tablet_id
-              << " txn=" << _txn_id << " rows=" << total << " size=" << segment_size;
+    LOG(INFO) << "secondary_index_collector: built '" << st.name << "' for tablet=" << _tablet_id << " txn=" << _txn_id
+              << " rows=" << total << " size=" << segment_size;
     return pb;
 }
 

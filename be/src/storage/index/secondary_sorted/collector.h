@@ -58,9 +58,9 @@ namespace starrocks::secondary_sorted {
 //     caller (DeltaWriter / compaction task) to attach to the new rowset.
 class SecondaryIndexCollector {
 public:
-    static StatusOr<std::unique_ptr<SecondaryIndexCollector>> create(
-            int64_t tablet_id, int64_t txn_id, const std::vector<SecondaryIndexDef>& defs,
-            const TabletSchemaCSPtr& source_schema);
+    static StatusOr<std::unique_ptr<SecondaryIndexCollector>> create(int64_t tablet_id, int64_t txn_id,
+                                                                     const std::vector<SecondaryIndexDef>& defs,
+                                                                     const TabletSchemaCSPtr& source_schema);
 
     // Empty collector: behaves as a no-op everywhere. Caller can skip the
     // add_chunk/finalize calls but checking empty() is cheaper.
@@ -72,7 +72,7 @@ public:
     // produced output. Caller is responsible for attaching the entries to
     // the rowset metadata.
     StatusOr<std::vector<SecondaryIndexFilePB>> finalize(std::shared_ptr<FileSystem> fs,
-                                                        lake::TabletManager* tablet_mgr);
+                                                         lake::TabletManager* tablet_mgr);
 
 private:
     struct PerIndexState {

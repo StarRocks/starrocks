@@ -417,7 +417,7 @@ Status DeltaWriterImpl::build_schema_and_writer() {
             auto defs = secondary_sorted::SecondaryIndexRegistry::get_for_tablet(_tablet_id);
             if (!defs.empty()) {
                 ASSIGN_OR_RETURN(auto collector, secondary_sorted::SecondaryIndexCollector::create(
-                                                          _tablet_id, _txn_id, defs, _tablet_schema));
+                                                         _tablet_id, _txn_id, defs, _tablet_schema));
                 if (collector != nullptr) {
                     _tablet_writer->set_secondary_index_collector(std::move(collector));
                 }

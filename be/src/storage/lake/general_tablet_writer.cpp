@@ -25,13 +25,13 @@
 #include "common/config_compaction_fwd.h"
 #include "common/config_rowset_fwd.h"
 #include "common/config_vector_index_fwd.h"
-#include "storage/index/secondary_sorted/collector.h"
 #include "common/thread/threadpool.h"
 #include "fs/bundle_file.h"
 #include "fs/fs_util.h"
 #include "fs/key_cache.h"
 #include "runtime/current_thread.h"
 #include "serde/column_array_serde.h"
+#include "storage/index/secondary_sorted/collector.h"
 #include "storage/lake/filenames.h"
 #include "storage/lake/location_provider.h"
 #include "storage/lake/tablet_manager.h"
@@ -211,8 +211,7 @@ Status HorizontalGeneralTabletWriter::finish(SegmentPB* segment) {
     // be referenced from the rowset PB immediately.
     if (_sidx_collector && !_sidx_collector->empty()) {
         ASSIGN_OR_RETURN(auto pbs, _sidx_collector->finalize(_fs, _tablet_mgr));
-        _sidx_files.insert(_sidx_files.end(), std::make_move_iterator(pbs.begin()),
-                            std::make_move_iterator(pbs.end()));
+        _sidx_files.insert(_sidx_files.end(), std::make_move_iterator(pbs.begin()), std::make_move_iterator(pbs.end()));
     }
     _finished = true;
     return Status::OK();
