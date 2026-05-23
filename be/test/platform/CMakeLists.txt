@@ -15,6 +15,7 @@
 set(PLATFORM_TEST_FILES
     ../base/cxa_throw_wrap.cpp
     download_util_test.cpp
+    platform_metrics_test.cpp
 )
 
 set(PLATFORM_TEST_LINK_LIBS

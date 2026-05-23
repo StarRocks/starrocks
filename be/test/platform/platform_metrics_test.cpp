@@ -12,27 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// This file is based on code available under the Apache license here:
-//   https://github.com/apache/incubator-doris/blob/master/be/test/util/system_metrics_test.cpp
-
-// Licensed to the Apache Software Foundation (ASF) under one
-// or more contributor license agreements.  See the NOTICE file
-// distributed with this work for additional information
-// regarding copyright ownership.  The ASF licenses this file
-// to you under the Apache License, Version 2.0 (the
-// "License"); you may not use this file except in compliance
-// with the License.  You may obtain a copy of the License at
-//
-//   http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing,
-// software distributed under the License is distributed on an
-// "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
-// KIND, either express or implied.  See the License for the
-// specific language governing permissions and limitations
-// under the License.
-
-#include "util/system_metrics.h"
+#include "platform/platform_metrics.h"
 
 #include <gtest/gtest.h>
 #include <libgen.h>
@@ -45,10 +25,10 @@
 
 namespace starrocks {
 
-class SystemMetricsTest : public testing::Test {
+class PlatformMetricsTest : public testing::Test {
 public:
-    SystemMetricsTest() = default;
-    ~SystemMetricsTest() override = default;
+    PlatformMetricsTest() = default;
+    ~PlatformMetricsTest() override = default;
 };
 
 class TestMetricsVisitor : public MetricsVisitor {
@@ -101,7 +81,7 @@ extern const char* k_ut_net_dev_path;
 extern const char* k_ut_fd_path;
 extern const char* k_ut_net_snmp_path;
 
-TEST_F(SystemMetricsTest, normal) {
+TEST_F(PlatformMetricsTest, normal) {
     const std::string dir_path = "./be/test/util";
 
     std::string stat_path(dir_path);
@@ -127,7 +107,7 @@ TEST_F(SystemMetricsTest, normal) {
         disk_devices.emplace("sda");
         std::vector<std::string> network_interfaces;
         network_interfaces.emplace_back("xgbe0");
-        SystemMetrics metrics;
+        PlatformMetrics metrics;
         metrics.install(&registry, disk_devices, network_interfaces);
         metrics.update();
 
@@ -233,7 +213,7 @@ TEST_F(SystemMetricsTest, normal) {
     }
 }
 
-TEST_F(SystemMetricsTest, no_proc_file) {
+TEST_F(PlatformMetricsTest, no_proc_file) {
     const std::string dir_path = "./be/test/util";
 
     std::string stat_path(dir_path);
@@ -255,7 +235,7 @@ TEST_F(SystemMetricsTest, no_proc_file) {
         disk_devices.emplace("sda");
         std::vector<std::string> network_interfaces;
         network_interfaces.emplace_back("xgbe0");
-        SystemMetrics metrics;
+        PlatformMetrics metrics;
         metrics.install(&registry, disk_devices, network_interfaces);
 
         TestMetricsVisitor visitor;
@@ -277,7 +257,7 @@ TEST_F(SystemMetricsTest, no_proc_file) {
     }
 }
 
-TEST_F(SystemMetricsTest, concurrent_update) {
+TEST_F(PlatformMetricsTest, concurrent_update) {
     const std::string dir_path = "./be/test/util";
     std::string stat_path(dir_path);
     stat_path += "/test_data/stat_normal";
@@ -301,7 +281,7 @@ TEST_F(SystemMetricsTest, concurrent_update) {
     std::vector<std::string> network_interfaces;
     network_interfaces.emplace_back("xgbe0");
 
-    SystemMetrics metrics;
+    PlatformMetrics metrics;
     metrics.install(&registry, disk_devices, network_interfaces);
 
     // Metrics should be zero before any update.
@@ -313,7 +293,7 @@ TEST_F(SystemMetricsTest, concurrent_update) {
     // hold _update_mutex so that update() fails to acquire it and returns immediately.
     {
         std::lock_guard hold(metrics._update_mutex);
-        metrics.update(); // try_lock fails → early return
+        metrics.update(); // try_lock fails, early return
     }
 
     // Metrics should still be zero because update() returned early.
