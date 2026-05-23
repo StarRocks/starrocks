@@ -981,19 +981,9 @@ static const std::unordered_map<ArrowTypeId, LogicalType> global_strict_arrow_co
                                   ArrowTypeId::LARGE_BINARY, ArrowTypeId::FIXED_SIZE_BINARY),
         STRICT_ARROW_CONV_ENTRY_R(TYPE_DATE, ArrowTypeId::DATE32),
         STRICT_ARROW_CONV_ENTRY_R(TYPE_DATETIME, ArrowTypeId::DATE64, ArrowTypeId::TIMESTAMP),
-<<<<<<< HEAD:be/src/exec/arrow_to_starrocks_converter.cpp
         STRICT_ARROW_CONV_ENTRY_R(TYPE_DECIMAL128, ArrowTypeId::DECIMAL),
-        STRICT_ARROW_CONV_ENTRY_R(TYPE_JSON, ArrowTypeId::STRUCT, ArrowTypeId::MAP, ArrowTypeId::LIST),
-        STRICT_ARROW_CONV_ENTRY_R(TYPE_ARRAY, ArrowTypeId::LIST, ArrowTypeId::LARGE_LIST, ArrowTypeId::FIXED_SIZE_LIST),
-        STRICT_ARROW_CONV_ENTRY_R(TYPE_MAP, ArrowTypeId::MAP),
-        STRICT_ARROW_CONV_ENTRY_R(TYPE_STRUCT, ArrowTypeId::STRUCT),
-=======
-        STRICT_ARROW_CONV_ENTRY_R(TYPE_DECIMAL128, ArrowTypeId::DECIMAL, ArrowTypeId::DECIMAL32,
-                                  ArrowTypeId::DECIMAL64),
-        STRICT_ARROW_CONV_ENTRY_R(TYPE_DECIMAL256, ArrowTypeId::DECIMAL256),
         STRICT_ARROW_CONV_ENTRY_R(TYPE_JSON, ArrowTypeId::STRUCT, ArrowTypeId::MAP, ArrowTypeId::LIST,
                                   ArrowTypeId::LARGE_LIST, ArrowTypeId::FIXED_SIZE_LIST),
->>>>>>> 63c203fe5f ([BugFix] Fix the bug where LargeList/FixedSizeList cannot be converted to JsonColumn during broker load (#73718)):be/src/column/arrow/arrow_to_starrocks_converter.cpp
 };
 
 static const std::unordered_map<int32_t, ConvertFunc> global_optimized_arrow_conv_table{
