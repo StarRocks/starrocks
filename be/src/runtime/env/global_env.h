@@ -42,42 +42,42 @@ public:
 
     static bool is_init();
 
-    MemTracker* process_mem_tracker() { return _process_mem_tracker.get(); }
-    MemTracker* query_pool_mem_tracker() { return _query_pool_mem_tracker.get(); }
-    std::shared_ptr<MemTracker> query_pool_mem_tracker_shared() { return _query_pool_mem_tracker; }
-    MemTracker* connector_scan_pool_mem_tracker() { return _connector_scan_pool_mem_tracker.get(); }
-    MemTracker* load_mem_tracker() { return _load_mem_tracker.get(); }
-    MemTracker* metadata_mem_tracker() { return _metadata_mem_tracker.get(); }
-    MemTracker* tablet_metadata_mem_tracker() { return _tablet_metadata_mem_tracker.get(); }
-    MemTracker* rowset_metadata_mem_tracker() { return _rowset_metadata_mem_tracker.get(); }
-    MemTracker* segment_metadata_mem_tracker() { return _segment_metadata_mem_tracker.get(); }
-    MemTracker* column_metadata_mem_tracker() { return _column_metadata_mem_tracker.get(); }
-    MemTracker* tablet_schema_mem_tracker() { return _tablet_schema_mem_tracker.get(); }
-    MemTracker* column_zonemap_index_mem_tracker() { return _column_zonemap_index_mem_tracker.get(); }
-    MemTracker* ordinal_index_mem_tracker() { return _ordinal_index_mem_tracker.get(); }
-    MemTracker* bitmap_index_mem_tracker() { return _bitmap_index_mem_tracker.get(); }
-    MemTracker* bloom_filter_index_mem_tracker() { return _bloom_filter_index_mem_tracker.get(); }
-    MemTracker* builtin_inverted_index_mem_tracker() { return _builtin_inverted_index_mem_tracker.get(); }
-    MemTracker* segment_zonemap_mem_tracker() { return _segment_zonemap_mem_tracker.get(); }
-    MemTracker* short_key_index_mem_tracker() { return _short_key_index_mem_tracker.get(); }
-    MemTracker* compaction_mem_tracker() { return _compaction_mem_tracker.get(); }
-    MemTracker* schema_change_mem_tracker() { return _schema_change_mem_tracker.get(); }
+    MemTracker* process_mem_tracker() const { return _process_mem_tracker.get(); }
+    MemTracker* query_pool_mem_tracker() const { return _query_pool_mem_tracker.get(); }
+    std::shared_ptr<MemTracker> query_pool_mem_tracker_shared() const { return _query_pool_mem_tracker; }
+    MemTracker* connector_scan_pool_mem_tracker() const { return _connector_scan_pool_mem_tracker.get(); }
+    MemTracker* load_mem_tracker() const { return _load_mem_tracker.get(); }
+    MemTracker* metadata_mem_tracker() const { return _metadata_mem_tracker.get(); }
+    MemTracker* tablet_metadata_mem_tracker() const { return _tablet_metadata_mem_tracker.get(); }
+    MemTracker* rowset_metadata_mem_tracker() const { return _rowset_metadata_mem_tracker.get(); }
+    MemTracker* segment_metadata_mem_tracker() const { return _segment_metadata_mem_tracker.get(); }
+    MemTracker* column_metadata_mem_tracker() const { return _column_metadata_mem_tracker.get(); }
+    MemTracker* tablet_schema_mem_tracker() const { return _tablet_schema_mem_tracker.get(); }
+    MemTracker* column_zonemap_index_mem_tracker() const { return _column_zonemap_index_mem_tracker.get(); }
+    MemTracker* ordinal_index_mem_tracker() const { return _ordinal_index_mem_tracker.get(); }
+    MemTracker* bitmap_index_mem_tracker() const { return _bitmap_index_mem_tracker.get(); }
+    MemTracker* bloom_filter_index_mem_tracker() const { return _bloom_filter_index_mem_tracker.get(); }
+    MemTracker* builtin_inverted_index_mem_tracker() const { return _builtin_inverted_index_mem_tracker.get(); }
+    MemTracker* segment_zonemap_mem_tracker() const { return _segment_zonemap_mem_tracker.get(); }
+    MemTracker* short_key_index_mem_tracker() const { return _short_key_index_mem_tracker.get(); }
+    MemTracker* compaction_mem_tracker() const { return _compaction_mem_tracker.get(); }
+    MemTracker* schema_change_mem_tracker() const { return _schema_change_mem_tracker.get(); }
     // The value of `page_cache_mem_tracker` is manually counted and is attached to the process_mem_tracker tree.
     // It is not based on the `ThreadLocalMemTracker`.
     // Therefore, when counting the memory, the `MemTracker::set` interface can be used,
     // while the consume/release interfaces cannot be used.
     // Otherwise, it will cause problems in the memory statistics of the process.
-    MemTracker* page_cache_mem_tracker() { return _page_cache_mem_tracker.get(); }
-    MemTracker* jit_cache_mem_tracker() { return _jit_cache_mem_tracker.get(); }
-    MemTracker* update_mem_tracker() { return _update_mem_tracker.get(); }
-    MemTracker* passthrough_mem_tracker() { return _passthrough_mem_tracker.get(); }
-    MemTracker* brpc_iobuf_mem_tracker() { return _brpc_iobuf_mem_tracker.get(); }
-    MemTracker* clone_mem_tracker() { return _clone_mem_tracker.get(); }
-    MemTracker* consistency_mem_tracker() { return _consistency_mem_tracker.get(); }
-    MemTracker* replication_mem_tracker() { return _replication_mem_tracker.get(); }
-    MemTracker* datacache_mem_tracker() { return _datacache_mem_tracker.get(); }
-    MemTracker* jemalloc_metadata_traker() { return _jemalloc_metadata_tracker.get(); }
-    std::shared_ptr<MemTracker> get_mem_tracker_by_type(MemTrackerType type);
+    MemTracker* page_cache_mem_tracker() const { return _page_cache_mem_tracker.get(); }
+    MemTracker* jit_cache_mem_tracker() const { return _jit_cache_mem_tracker.get(); }
+    MemTracker* update_mem_tracker() const { return _update_mem_tracker.get(); }
+    MemTracker* passthrough_mem_tracker() const { return _passthrough_mem_tracker.get(); }
+    MemTracker* brpc_iobuf_mem_tracker() const { return _brpc_iobuf_mem_tracker.get(); }
+    MemTracker* clone_mem_tracker() const { return _clone_mem_tracker.get(); }
+    MemTracker* consistency_mem_tracker() const { return _consistency_mem_tracker.get(); }
+    MemTracker* replication_mem_tracker() const { return _replication_mem_tracker.get(); }
+    MemTracker* datacache_mem_tracker() const { return _datacache_mem_tracker.get(); }
+    MemTracker* jemalloc_metadata_traker() const { return _jemalloc_metadata_tracker.get(); }
+    std::shared_ptr<MemTracker> get_mem_tracker_by_type(MemTrackerType type) const;
     std::vector<std::shared_ptr<MemTracker>> mem_trackers() const;
 
     static int64_t calc_max_query_memory(int64_t process_mem_limit, int64_t percent);
@@ -89,25 +89,31 @@ public:
     void shutdown_thread_pools() { _thread_pools.shutdown(); }
     void destroy_thread_pools() { _thread_pools.destroy(); }
 
-    PriorityThreadPool* thread_pool() { return _thread_pools.thread_pool(); }
-    ThreadPool* streaming_load_thread_pool() { return _thread_pools.streaming_load_thread_pool(); }
-    ThreadPool* load_rowset_thread_pool() { return _thread_pools.load_rowset_thread_pool(); }
-    ThreadPool* load_segment_thread_pool() { return _thread_pools.load_segment_thread_pool(); }
-    ThreadPool* put_combined_txn_log_thread_pool() { return _thread_pools.put_combined_txn_log_thread_pool(); }
-    PriorityThreadPool* udf_call_pool() { return _thread_pools.udf_call_pool(); }
-    PriorityThreadPool* pipeline_prepare_pool() { return _thread_pools.pipeline_prepare_pool(); }
-    PriorityThreadPool* pipeline_sink_io_pool() { return _thread_pools.pipeline_sink_io_pool(); }
-    PriorityThreadPool* query_rpc_pool() { return _thread_pools.query_rpc_pool(); }
-    PriorityThreadPool* datacache_rpc_pool() { return _thread_pools.datacache_rpc_pool(); }
-    ThreadPool* load_rpc_pool() { return _thread_pools.load_rpc_pool(); }
-    ThreadPool* dictionary_cache_pool() { return _thread_pools.dictionary_cache_pool(); }
-    ThreadPool* automatic_partition_pool() { return _thread_pools.automatic_partition_pool(); }
-    ThreadPool* put_aggregate_metadata_thread_pool() { return _thread_pools.put_aggregate_metadata_thread_pool(); }
-    ThreadPool* lake_metadata_fetch_thread_pool() { return _thread_pools.lake_metadata_fetch_thread_pool(); }
-    ThreadPool* lake_vector_index_build_thread_pool() { return _thread_pools.lake_vector_index_build_thread_pool(); }
-    ThreadPool* pk_index_execution_thread_pool() { return _thread_pools.pk_index_execution_thread_pool(); }
-    ThreadPool* pk_index_memtable_flush_thread_pool() { return _thread_pools.pk_index_memtable_flush_thread_pool(); }
-    ThreadPool* lake_partial_update_thread_pool() { return _thread_pools.lake_partial_update_thread_pool(); }
+    PriorityThreadPool* thread_pool() const { return _thread_pools.thread_pool(); }
+    ThreadPool* streaming_load_thread_pool() const { return _thread_pools.streaming_load_thread_pool(); }
+    ThreadPool* load_rowset_thread_pool() const { return _thread_pools.load_rowset_thread_pool(); }
+    ThreadPool* load_segment_thread_pool() const { return _thread_pools.load_segment_thread_pool(); }
+    ThreadPool* put_combined_txn_log_thread_pool() const { return _thread_pools.put_combined_txn_log_thread_pool(); }
+    PriorityThreadPool* udf_call_pool() const { return _thread_pools.udf_call_pool(); }
+    PriorityThreadPool* pipeline_prepare_pool() const { return _thread_pools.pipeline_prepare_pool(); }
+    PriorityThreadPool* pipeline_sink_io_pool() const { return _thread_pools.pipeline_sink_io_pool(); }
+    PriorityThreadPool* query_rpc_pool() const { return _thread_pools.query_rpc_pool(); }
+    PriorityThreadPool* datacache_rpc_pool() const { return _thread_pools.datacache_rpc_pool(); }
+    ThreadPool* load_rpc_pool() const { return _thread_pools.load_rpc_pool(); }
+    ThreadPool* dictionary_cache_pool() const { return _thread_pools.dictionary_cache_pool(); }
+    ThreadPool* automatic_partition_pool() const { return _thread_pools.automatic_partition_pool(); }
+    ThreadPool* put_aggregate_metadata_thread_pool() const {
+        return _thread_pools.put_aggregate_metadata_thread_pool();
+    }
+    ThreadPool* lake_metadata_fetch_thread_pool() const { return _thread_pools.lake_metadata_fetch_thread_pool(); }
+    ThreadPool* lake_vector_index_build_thread_pool() const {
+        return _thread_pools.lake_vector_index_build_thread_pool();
+    }
+    ThreadPool* pk_index_execution_thread_pool() const { return _thread_pools.pk_index_execution_thread_pool(); }
+    ThreadPool* pk_index_memtable_flush_thread_pool() const {
+        return _thread_pools.pk_index_memtable_flush_thread_pool();
+    }
+    ThreadPool* lake_partial_update_thread_pool() const { return _thread_pools.lake_partial_update_thread_pool(); }
     int64_t max_executor_threads() const { return _thread_pools.max_executor_threads(); }
 
 private:

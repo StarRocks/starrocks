@@ -39,27 +39,27 @@ public:
     void shutdown();
     void destroy();
 
-    PriorityThreadPool* thread_pool() { return _thread_pool.get(); }
-    ThreadPool* streaming_load_thread_pool() { return _streaming_load_thread_pool.get(); }
-    ThreadPool* load_rowset_thread_pool() { return _load_rowset_thread_pool.get(); }
-    ThreadPool* load_segment_thread_pool() { return _load_segment_thread_pool.get(); }
-    ThreadPool* put_combined_txn_log_thread_pool() { return _put_combined_txn_log_thread_pool.get(); }
+    PriorityThreadPool* thread_pool() const { return _thread_pool.get(); }
+    ThreadPool* streaming_load_thread_pool() const { return _streaming_load_thread_pool.get(); }
+    ThreadPool* load_rowset_thread_pool() const { return _load_rowset_thread_pool.get(); }
+    ThreadPool* load_segment_thread_pool() const { return _load_segment_thread_pool.get(); }
+    ThreadPool* put_combined_txn_log_thread_pool() const { return _put_combined_txn_log_thread_pool.get(); }
 
-    PriorityThreadPool* udf_call_pool() { return _udf_call_pool.get(); }
-    PriorityThreadPool* pipeline_prepare_pool() { return _pipeline_prepare_pool.get(); }
-    PriorityThreadPool* pipeline_sink_io_pool() { return _pipeline_sink_io_pool.get(); }
-    PriorityThreadPool* query_rpc_pool() { return _query_rpc_pool.get(); }
-    PriorityThreadPool* datacache_rpc_pool() { return _datacache_rpc_pool.get(); }
-    ThreadPool* load_rpc_pool() { return _load_rpc_pool.get(); }
-    ThreadPool* dictionary_cache_pool() { return _dictionary_cache_pool.get(); }
-    ThreadPool* automatic_partition_pool() { return _automatic_partition_pool.get(); }
+    PriorityThreadPool* udf_call_pool() const { return _udf_call_pool.get(); }
+    PriorityThreadPool* pipeline_prepare_pool() const { return _pipeline_prepare_pool.get(); }
+    PriorityThreadPool* pipeline_sink_io_pool() const { return _pipeline_sink_io_pool.get(); }
+    PriorityThreadPool* query_rpc_pool() const { return _query_rpc_pool.get(); }
+    PriorityThreadPool* datacache_rpc_pool() const { return _datacache_rpc_pool.get(); }
+    ThreadPool* load_rpc_pool() const { return _load_rpc_pool.get(); }
+    ThreadPool* dictionary_cache_pool() const { return _dictionary_cache_pool.get(); }
+    ThreadPool* automatic_partition_pool() const { return _automatic_partition_pool.get(); }
 
-    ThreadPool* put_aggregate_metadata_thread_pool() { return _put_aggregate_metadata_thread_pool.get(); }
-    ThreadPool* lake_metadata_fetch_thread_pool() { return _lake_metadata_fetch_thread_pool.get(); }
-    ThreadPool* lake_vector_index_build_thread_pool() { return _lake_vector_index_build_thread_pool.get(); }
-    ThreadPool* pk_index_execution_thread_pool() { return _pk_index_execution_thread_pool.get(); }
-    ThreadPool* pk_index_memtable_flush_thread_pool() { return _pk_index_memtable_flush_thread_pool.get(); }
-    ThreadPool* lake_partial_update_thread_pool() { return _lake_partial_update_thread_pool.get(); }
+    ThreadPool* put_aggregate_metadata_thread_pool() const { return _put_aggregate_metadata_thread_pool.get(); }
+    ThreadPool* lake_metadata_fetch_thread_pool() const { return _lake_metadata_fetch_thread_pool.get(); }
+    ThreadPool* lake_vector_index_build_thread_pool() const { return _lake_vector_index_build_thread_pool.get(); }
+    ThreadPool* pk_index_execution_thread_pool() const { return _pk_index_execution_thread_pool.get(); }
+    ThreadPool* pk_index_memtable_flush_thread_pool() const { return _pk_index_memtable_flush_thread_pool.get(); }
+    ThreadPool* lake_partial_update_thread_pool() const { return _lake_partial_update_thread_pool.get(); }
 
     int64_t max_executor_threads() const { return _max_executor_threads; }
 

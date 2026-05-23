@@ -43,7 +43,7 @@ public:
 
     void SetUp() override {
         ConfigUpdateRegistry::instance()->TEST_reset();
-        register_config_update_hooks(ExecEnv::GetInstance());
+        register_config_update_hooks(ExecEnv::GetInstance(), *GlobalEnv::GetInstance());
         ConfigUpdateRegistry::instance()->set_ready();
     }
     void TearDown() override { ConfigUpdateRegistry::instance()->TEST_reset(); }
