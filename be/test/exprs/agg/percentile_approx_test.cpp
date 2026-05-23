@@ -247,21 +247,24 @@ TEST_F(PercentileApproxAggTest, non_finite_compression_falls_back_to_default) {
 // Compact intermediate format (enable_percentile_compact_intermediate).
 // ---------------------------------------------------------------------------
 
-// scalar percentile_approx: convert_to_serialize_format -> merge -> finalize
-// must produce the same quantile under the compact format as under legacy,
-// and the per-row record must shrink to the 9-byte RAW form.
+// scalar percentile_approx: convert_to_exchange_format -> merge -> finalize must
+// produce the same quantile under the compact format as under legacy, and the
+// per-row record must shrink to the 9-byte RAW form. The merge phase recovers
+// the quantile from the const args [value, quantile, compression].
 TEST_F(PercentileApproxAggTest, scalar_compact_roundtrip_matches_legacy) {
     const AggregateFunction* func =
             get_aggregate_function("percentile_approx", TYPE_DOUBLE, TYPE_DOUBLE, /*is_nullable=*/false);
     ASSERT_NE(func, nullptr);
 
     std::vector<TypeDescriptor> arg_types{TypeDescriptor::from_logical_type(TYPE_DOUBLE),
+                                          TypeDescriptor::from_logical_type(TYPE_DOUBLE),
                                           TypeDescriptor::from_logical_type(TYPE_DOUBLE)};
     auto return_type = TypeDescriptor::from_logical_type(TYPE_DOUBLE);
     auto quantile_const = ColumnHelper::create_const_column<TYPE_DOUBLE>(0.5, 1);
+    auto compression_const = ColumnHelper::create_const_column<TYPE_DOUBLE>(2048, 1);
 
     auto run = [&](bool compact, double* median, size_t* row_size) {
-        Columns const_columns{ColumnHelper::create_const_column<TYPE_DOUBLE>(0, 1), quantile_const};
+        Columns const_columns{ColumnHelper::create_const_column<TYPE_DOUBLE>(0, 1), quantile_const, compression_const};
         auto ctx = make_ctx(arg_types, return_type, const_columns);
         TQueryOptions opts;
         opts.__set_enable_percentile_compact_intermediate(compact);
@@ -273,10 +276,10 @@ TEST_F(PercentileApproxAggTest, scalar_compact_roundtrip_matches_legacy) {
             values->append(v);
         }
         size_t n = values->size();
-        Columns src{ColumnPtr(std::move(values)), quantile_const};
+        Columns src{ColumnPtr(std::move(values)), quantile_const, compression_const};
 
         MutableColumnPtr inter = BinaryColumn::create();
-        func->convert_to_serialize_format(ctx.get(), src, n, inter);
+        func->convert_to_exchange_format(ctx.get(), src, n, inter);
         ASSERT_EQ(n, inter->size());
         *row_size = down_cast<BinaryColumn*>(inter.get())->get_slice(0).size;
 
@@ -300,25 +303,26 @@ TEST_F(PercentileApproxAggTest, scalar_compact_roundtrip_matches_legacy) {
     run(true, &compact_median, &compact_size);
 
     EXPECT_DOUBLE_EQ(legacy_median, compact_median);
-    EXPECT_EQ(17U, compact_size);         // [tag:1][quantile:8][mean:4][weight:4]
+    EXPECT_EQ(9U, compact_size);          // [tag:1][mean:4][weight:4]
     EXPECT_GT(legacy_size, compact_size); // legacy carries the full TDigest blob
 }
 
-// weighted percentile_approx_weighted under the compact format: a negative
-// weight is written into the RAW record verbatim but dropped at merge, so the
-// result matches the unweighted set without the bad row.
+// weighted percentile_approx_weighted under the compact exchange format: a
+// non-positive weight is written into the RAW record verbatim but dropped at
+// merge, so the result matches the set without the bad row.
 TEST_F(PercentileApproxAggTest, weighted_compact_drops_non_positive_weight) {
     const AggregateFunction* func =
             get_aggregate_function("percentile_approx_weighted", TYPE_DOUBLE, TYPE_DOUBLE, /*is_nullable=*/false);
     ASSERT_NE(func, nullptr);
 
-    std::vector<TypeDescriptor> arg_types{TypeDescriptor::from_logical_type(TYPE_DOUBLE),
-                                          TypeDescriptor::from_logical_type(TYPE_BIGINT),
-                                          TypeDescriptor::from_logical_type(TYPE_DOUBLE)};
+    std::vector<TypeDescriptor> arg_types{
+            TypeDescriptor::from_logical_type(TYPE_DOUBLE), TypeDescriptor::from_logical_type(TYPE_BIGINT),
+            TypeDescriptor::from_logical_type(TYPE_DOUBLE), TypeDescriptor::from_logical_type(TYPE_DOUBLE)};
     auto return_type = TypeDescriptor::from_logical_type(TYPE_DOUBLE);
     auto quantile_const = ColumnHelper::create_const_column<TYPE_DOUBLE>(0.5, 1);
+    auto compression_const = ColumnHelper::create_const_column<TYPE_DOUBLE>(2048, 1);
     Columns const_columns{ColumnHelper::create_const_column<TYPE_DOUBLE>(0, 1),
-                          ColumnHelper::create_const_column<TYPE_BIGINT>(0, 1), quantile_const};
+                          ColumnHelper::create_const_column<TYPE_BIGINT>(0, 1), quantile_const, compression_const};
     auto ctx = make_ctx(arg_types, return_type, const_columns);
     TQueryOptions opts;
     opts.__set_enable_percentile_compact_intermediate(true);
@@ -334,12 +338,12 @@ TEST_F(PercentileApproxAggTest, weighted_compact_drops_non_positive_weight) {
     values->append(100.0);
     weights->append(-10);
     size_t n = values->size();
-    Columns src{ColumnPtr(std::move(values)), ColumnPtr(std::move(weights)), quantile_const};
+    Columns src{ColumnPtr(std::move(values)), ColumnPtr(std::move(weights)), quantile_const, compression_const};
 
     MutableColumnPtr inter = BinaryColumn::create();
-    func->convert_to_serialize_format(ctx.get(), src, n, inter);
+    func->convert_to_exchange_format(ctx.get(), src, n, inter);
     ASSERT_EQ(n, inter->size());
-    EXPECT_EQ(17U, down_cast<BinaryColumn*>(inter.get())->get_slice(0).size);
+    EXPECT_EQ(9U, down_cast<BinaryColumn*>(inter.get())->get_slice(0).size);
 
     ManagedState state(ctx.get(), func);
     for (size_t i = 0; i < inter->size(); ++i) {
@@ -354,42 +358,44 @@ TEST_F(PercentileApproxAggTest, weighted_compact_drops_non_positive_weight) {
     EXPECT_DOUBLE_EQ(20.0, result->get_data()[0]);
 }
 
-// A single merge state must accept both a RAW record (from pass-through
-// convert_to_serialize_format) and a DIGEST record (from serialize_to_column),
-// interleaved, under the compact format.
-TEST_F(PercentileApproxAggTest, mixed_raw_and_digest_merge) {
+// One merge state accepts both a compact RAW record (exchange) and a legacy
+// self-contained record (storage), interleaved.
+TEST_F(PercentileApproxAggTest, mixed_raw_and_legacy_merge) {
     const AggregateFunction* func =
             get_aggregate_function("percentile_approx", TYPE_DOUBLE, TYPE_DOUBLE, /*is_nullable=*/false);
     ASSERT_NE(func, nullptr);
 
     std::vector<TypeDescriptor> arg_types{TypeDescriptor::from_logical_type(TYPE_DOUBLE),
+                                          TypeDescriptor::from_logical_type(TYPE_DOUBLE),
                                           TypeDescriptor::from_logical_type(TYPE_DOUBLE)};
     auto return_type = TypeDescriptor::from_logical_type(TYPE_DOUBLE);
     auto quantile_const = ColumnHelper::create_const_column<TYPE_DOUBLE>(0.5, 1);
-    Columns const_columns{ColumnHelper::create_const_column<TYPE_DOUBLE>(0, 1), quantile_const};
+    auto compression_const = ColumnHelper::create_const_column<TYPE_DOUBLE>(2048, 1);
+    Columns const_columns{ColumnHelper::create_const_column<TYPE_DOUBLE>(0, 1), quantile_const, compression_const};
     auto ctx = make_ctx(arg_types, return_type, const_columns);
     TQueryOptions opts;
     opts.__set_enable_percentile_compact_intermediate(true);
     RuntimeState rs(TUniqueId(), opts, TQueryGlobals(), nullptr);
     ctx->set_runtime_state(&rs);
 
-    // RAW records for {10,20,30} via convert_to_serialize_format.
+    // compact RAW records for {10,20,30} via the exchange path.
     auto raw_values = DoubleColumn::create();
     for (double v : {10.0, 20.0, 30.0}) {
         raw_values->append(v);
     }
-    Columns raw_src{ColumnPtr(std::move(raw_values)), quantile_const};
+    Columns raw_src{ColumnPtr(std::move(raw_values)), quantile_const, compression_const};
     MutableColumnPtr raw_inter = BinaryColumn::create();
-    func->convert_to_serialize_format(ctx.get(), raw_src, 3, raw_inter);
+    func->convert_to_exchange_format(ctx.get(), raw_src, 3, raw_inter);
+    ASSERT_EQ(9U, down_cast<BinaryColumn*>(raw_inter.get())->get_slice(0).size);
 
-    // A DIGEST record aggregating {40,50,60} via update + serialize_to_column.
+    // A legacy self-contained record aggregating {40,50,60} via update + serialize.
     ManagedState src_state(ctx.get(), func);
     {
         auto vals = DoubleColumn::create();
         for (double v : {40.0, 50.0, 60.0}) {
             vals->append(v);
         }
-        std::vector<const Column*> raw{vals.get(), quantile_const.get()};
+        std::vector<const Column*> raw{vals.get(), quantile_const.get(), compression_const.get()};
         for (size_t i = 0; i < vals->size(); ++i) {
             func->update(ctx.get(), raw.data(), src_state.state(), i);
         }
@@ -443,13 +449,13 @@ TEST_F(PercentileApproxAggTest, compact_merge_rejects_truncated_record) {
     EXPECT_TRUE(ctx->has_error());
 }
 
-// agg_state round-trip across a flag flip: percentile_approx_state writes RAW
-// intermediate values while the compact flag is ON (StateFunction::execute calls
-// the nested convert_to_serialize_format), and a later percentile_approx_merge
-// reads them with the flag OFF. The RAW record is self-contained, so the quantile
-// must come from the record (0.5), not the reader's context -- verified by giving
-// the reader a deliberately different quantile constant (0.99).
-TEST_F(PercentileApproxAggTest, agg_state_raw_written_on_read_off) {
+// The storage path (convert_to_serialize_format, used by the agg_state
+// combinators for persisted values) must stay self-contained legacy regardless
+// of the flag, so a value written with the flag ON is read correctly after it is
+// turned OFF, and never as a compact RAW record. The reader is given a different
+// quantile const (0.99) to prove the quantile comes from the persisted record
+// (0.5), not from context.
+TEST_F(PercentileApproxAggTest, storage_path_stays_legacy_under_flag) {
     const AggregateFunction* func =
             get_aggregate_function("percentile_approx", TYPE_DOUBLE, TYPE_DOUBLE, /*is_nullable=*/false);
     ASSERT_NE(func, nullptr);
@@ -458,7 +464,7 @@ TEST_F(PercentileApproxAggTest, agg_state_raw_written_on_read_off) {
                                           TypeDescriptor::from_logical_type(TYPE_DOUBLE)};
     auto return_type = TypeDescriptor::from_logical_type(TYPE_DOUBLE);
 
-    // Writer: flag ON, quantile 0.5 (as percentile_approx_state would convert).
+    // Writer: flag ON, quantile 0.5. The storage path must ignore the flag.
     auto write_quantile = ColumnHelper::create_const_column<TYPE_DOUBLE>(0.5, 1);
     Columns write_const{ColumnHelper::create_const_column<TYPE_DOUBLE>(0, 1), write_quantile};
     auto write_ctx = make_ctx(arg_types, return_type, write_const);
@@ -475,11 +481,13 @@ TEST_F(PercentileApproxAggTest, agg_state_raw_written_on_read_off) {
     Columns src{ColumnPtr(std::move(values)), write_quantile};
     MutableColumnPtr inter = BinaryColumn::create();
     func->convert_to_serialize_format(write_ctx.get(), src, n, inter);
-    ASSERT_EQ(17U, down_cast<BinaryColumn*>(inter.get())->get_slice(0).size); // self-contained RAW
+    // Storage stays self-contained legacy (quantile prefix + TDigest blob), never
+    // the 9-byte RAW form, even with the flag on.
+    EXPECT_GT(down_cast<BinaryColumn*>(inter.get())->get_slice(0).size, 9U);
 
-    // Reader: flag OFF, with a DIFFERENT quantile constant (0.99). RAW reading is
-    // flag-independent, and the quantile is taken from the record (0.5), so the
-    // reader's 0.99 must be ignored.
+    // Reader: flag OFF, with a DIFFERENT quantile constant (0.99). The legacy
+    // record is self-contained, so the embedded quantile (0.5) is used and the
+    // reader's 0.99 is ignored.
     auto read_quantile = ColumnHelper::create_const_column<TYPE_DOUBLE>(0.99, 1);
     Columns read_const{ColumnHelper::create_const_column<TYPE_DOUBLE>(0, 1), read_quantile};
     auto read_ctx = make_ctx(arg_types, return_type, read_const);

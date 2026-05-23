@@ -15,11 +15,11 @@
 // Benchmarks the percentile_approx pass-through (streaming) serialization path:
 // legacy (a full TDigest blob per row) vs the compact RAW format
 // (enable_percentile_compact_intermediate). Two axes:
-//   - convert: convert_to_serialize_format only (serialize-side CPU);
+//   - convert: convert_to_exchange_format only (serialize-side CPU);
 //   - roundtrip: convert + merge every record into a fresh state (the cost a
 //     split aggregation pays in the pass-through + merge phases).
 // rows_per_s lets the two be compared directly; bytes_per_chunk shows the wire
-// size (~77 B/row legacy vs 17 B/row compact).
+// size (~77 B/row legacy vs 9 B/row compact).
 //
 // Build & run:
 //   cmake -DWITH_BENCH=ON -DCMAKE_BUILD_TYPE=Release -S be -B be/build_Release
@@ -58,12 +58,16 @@ static ColumnPtr make_values(size_t n) {
 }
 
 static std::unique_ptr<FunctionContext> make_ctx(RuntimeState* rs) {
+    // Mimic the merge-phase const args [value, quantile, compression]: the compact
+    // merge path recovers the quantile from the second const arg from the right.
     std::vector<TypeDescriptor> arg_types{TypeDescriptor::from_logical_type(TYPE_DOUBLE),
+                                          TypeDescriptor::from_logical_type(TYPE_DOUBLE),
                                           TypeDescriptor::from_logical_type(TYPE_DOUBLE)};
     auto ret = TypeDescriptor::from_logical_type(TYPE_DOUBLE);
     std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context(std::move(arg_types), ret));
     Columns const_columns{ColumnHelper::create_const_column<TYPE_DOUBLE>(0, 1),
-                          ColumnHelper::create_const_column<TYPE_DOUBLE>(0.5, 1)};
+                          ColumnHelper::create_const_column<TYPE_DOUBLE>(0.5, 1),
+                          ColumnHelper::create_const_column<TYPE_DOUBLE>(2048, 1)};
     ctx->set_constant_columns(std::move(const_columns));
     ctx->set_runtime_state(rs);
     return ctx;
@@ -80,12 +84,12 @@ static void run_convert(benchmark::State& state, bool compact) {
     RuntimeState rs(TUniqueId(), opts, TQueryGlobals(), nullptr);
     auto ctx = make_ctx(&rs);
     auto quantile = ColumnHelper::create_const_column<TYPE_DOUBLE>(0.5, 1);
-    Columns src{make_values(n), quantile};
+    Columns src{make_values(n), quantile, ColumnHelper::create_const_column<TYPE_DOUBLE>(2048, 1)};
 
     size_t bytes = 0;
     for (auto _ : state) {
         MutableColumnPtr out = BinaryColumn::create();
-        fn->convert_to_serialize_format(ctx.get(), src, n, out);
+        fn->convert_to_exchange_format(ctx.get(), src, n, out);
         bytes = down_cast<BinaryColumn*>(out.get())->get_bytes().size();
         benchmark::DoNotOptimize(out);
     }
@@ -106,11 +110,11 @@ static void run_roundtrip(benchmark::State& state, bool compact) {
     RuntimeState rs(TUniqueId(), opts, TQueryGlobals(), nullptr);
     auto ctx = make_ctx(&rs);
     auto quantile = ColumnHelper::create_const_column<TYPE_DOUBLE>(0.5, 1);
-    Columns src{make_values(n), quantile};
+    Columns src{make_values(n), quantile, ColumnHelper::create_const_column<TYPE_DOUBLE>(2048, 1)};
 
     for (auto _ : state) {
         MutableColumnPtr out = BinaryColumn::create();
-        fn->convert_to_serialize_format(ctx.get(), src, n, out);
+        fn->convert_to_exchange_format(ctx.get(), src, n, out);
 
         MemPool pool;
         AggDataPtr agg_state = pool.allocate_aligned(fn->size(), fn->alignof_size());
