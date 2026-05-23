@@ -140,6 +140,21 @@ protected:
         return nullptr;
     }
 
+    // The compression const arg, recovered in the RAW merge path. RAW exchange
+    // records carry no compression and a raw (mean, weight) point cannot supply
+    // one; FE injects compression as the last argument, so at the merge phase it
+    // is the rightmost forwarded constant (compact is a new-only format, so there
+    // is no legacy 3-arg form to disambiguate).
+    static ColumnPtr compression_const_from_ctx(FunctionContext* ctx) {
+        for (int i = ctx->get_num_args() - 1; i >= 0; --i) {
+            auto col = ctx->get_constant_column(i);
+            if (col != nullptr) {
+                return col; // rightmost const = compression
+            }
+        }
+        return nullptr;
+    }
+
 public:
     virtual double get_compression_factor(FunctionContext* ctx) const = 0;
 
@@ -150,19 +165,18 @@ public:
 
         if (is_raw_record(src)) {
             // [RECORD_RAW][mean:f32][weight:f32]: one transient pass-through
-            // sample. The quantile is not embedded; recover it from ctx -- only
-            // exchange records are RAW, and the merge phase always carries the
-            // const quantile there.
-            // A RAW sample carries no compression, so when this state was never
-            // updated (pure merge) fall back to the ctx compression to size the
-            // digest; clamp guards a missing/garbage arity.
-            if (UNLIKELY(!data(state).compression_initialized)) {
-                data(state).reinit_with_compression(get_compression_factor(ctx));
-            }
+            // sample. Neither quantile nor compression is embedded; recover both
+            // from ctx -- only exchange records are RAW, and the merge phase
+            // always carries the const quantile (second from right) and
+            // compression (rightmost).
             float mean;
             float weight;
             memcpy(&mean, src.data + 1, sizeof(float));
             memcpy(&weight, src.data + 1 + sizeof(float), sizeof(float));
+            if (UNLIKELY(!data(state).compression_initialized)) {
+                data(state).reinit_with_compression(clamp_compression_factor(
+                        ColumnHelper::get_const_value<TYPE_DOUBLE>(compression_const_from_ctx(ctx))));
+            }
             // TDigest::add rejects non-finite mean and weight <= 0.
             data(state).percentile->add(mean, weight);
             if (data(state).targetQuantiles.empty()) {
@@ -183,10 +197,8 @@ public:
                 ctx->set_error("percentile_approx: malformed intermediate record", false);
                 return;
             }
-            // Adopt compression from the incoming serialized digest (canon): at
-            // the merge phase ctx arity is unreliable (SplitAggregateRule drops
-            // non-const args), so the digest is the source of truth. clamp maps a
-            // garbage/empty digest value back to the default.
+            // Compression travels inside the serialized digest; adopt it instead
+            // of re-deriving from ctx (arity is unreliable at the merge phase).
             if (UNLIKELY(!data(state).compression_initialized)) {
                 data(state).reinit_with_compression(clamp_compression_factor(src_percentile.percentile->compression()));
             }
@@ -565,6 +577,10 @@ public:
             float weight;
             memcpy(&mean, src.data + 1, sizeof(float));
             memcpy(&weight, src.data + 1 + sizeof(float), sizeof(float));
+            if (UNLIKELY(!data(state).compression_initialized)) {
+                data(state).reinit_with_compression(clamp_compression_factor(
+                        ColumnHelper::get_const_value<TYPE_DOUBLE>(compression_const_from_ctx(ctx))));
+            }
             data(state).percentile->add(mean, weight);
             if (UNLIKELY(data(state).targetQuantiles.empty())) {
                 assign_target_quantiles_from_const_array(data(state), quantile_const_from_ctx(ctx).get());
@@ -588,17 +604,14 @@ public:
             data(state).targetQuantiles.resize(count);
             memcpy(data(state).targetQuantiles.data(), (char*)src.data + sizeof(uint32_t), count * sizeof(double));
         }
-
         // Deserialize the TDigest (skip the quantiles array) with a bounded read.
         PercentileApproxState src_percentile;
         if (UNLIKELY(!src_percentile.percentile->deserialize(src.data + header, src.size - header))) {
             ctx->set_error("percentile_approx: malformed intermediate record", false);
             return;
         }
-
-        // Adopt compression from the incoming serialized digest (canon): at the
-        // merge phase ctx arity is unreliable (SplitAggregateRule drops non-const
-        // args), so the digest is the source of truth. clamp guards garbage input.
+        // Compression travels inside the serialized digest; adopt it instead of
+        // re-deriving from ctx (arity is unreliable at the merge phase).
         if (UNLIKELY(!data(state).compression_initialized)) {
             data(state).reinit_with_compression(clamp_compression_factor(src_percentile.percentile->compression()));
         }
@@ -746,6 +759,10 @@ public:
             float weight;
             memcpy(&mean, src.data + 1, sizeof(float));
             memcpy(&weight, src.data + 1 + sizeof(float), sizeof(float));
+            if (UNLIKELY(!data(state).compression_initialized)) {
+                data(state).reinit_with_compression(clamp_compression_factor(
+                        ColumnHelper::get_const_value<TYPE_DOUBLE>(compression_const_from_ctx(ctx))));
+            }
             data(state).percentile->add(mean, weight);
             if (UNLIKELY(data(state).targetQuantiles.empty())) {
                 assign_target_quantiles_from_const_array(data(state), quantile_const_from_ctx(ctx).get());
@@ -769,17 +786,14 @@ public:
             data(state).targetQuantiles.resize(count);
             memcpy(data(state).targetQuantiles.data(), (char*)src.data + sizeof(uint32_t), count * sizeof(double));
         }
-
         // Deserialize the TDigest (skip the quantiles array) with a bounded read.
         PercentileApproxState src_percentile;
         if (UNLIKELY(!src_percentile.percentile->deserialize(src.data + header, src.size - header))) {
             ctx->set_error("percentile_approx: malformed intermediate record", false);
             return;
         }
-
-        // Adopt compression from the incoming serialized digest (canon): at the
-        // merge phase ctx arity is unreliable (SplitAggregateRule drops non-const
-        // args), so the digest is the source of truth. clamp guards garbage input.
+        // Compression travels inside the serialized digest; adopt it instead of
+        // re-deriving from ctx (arity is unreliable at the merge phase).
         if (UNLIKELY(!data(state).compression_initialized)) {
             data(state).reinit_with_compression(clamp_compression_factor(src_percentile.percentile->compression()));
         }
