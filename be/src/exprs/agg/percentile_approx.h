@@ -158,12 +158,14 @@ public:
         // argument 1
         DCHECK(columns[1]->is_constant());
         DCHECK(!columns[1]->is_null(0));
+        // Capture before the first-update targetQuantiles push_back so that
+        // allocation is charged too (matches the merge path).
+        int64_t prev_memory = data(state).mem_usage();
         // first update
         if (UNLIKELY(data(state).targetQuantiles.empty())) {
             data(state).targetQuantiles.push_back(columns[1]->get(0).get_double());
         }
         double column_value = data_column->immutable_data()[row_num];
-        int64_t prev_memory = data(state).mem_usage();
         data(state).percentile->add(implicit_cast<float>(column_value));
         ctx->add_mem_usage(data(state).mem_usage() - prev_memory);
     }
@@ -242,12 +244,14 @@ public:
         // argument 2
         DCHECK(columns[2]->is_constant());
         DCHECK(!columns[2]->is_null(0));
+        // Capture before the first-update targetQuantiles push_back so that
+        // allocation is charged too (matches the merge path).
+        int64_t prev_memory = data(state).mem_usage();
         if (UNLIKELY(data(state).targetQuantiles.empty())) {
             data(state).targetQuantiles.push_back(columns[2]->get(0).get_double());
         }
 
         double column_value = data_column->immutable_data()[row_num];
-        int64_t prev_memory = data(state).mem_usage();
         // add value with weight. Reject w <= 0: a negative weight pushes
         // _processed_weight negative and yields NaN from weightedAverageSorted().
         // TDigest::add() also rejects non-positive weights as a second guard.

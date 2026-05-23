@@ -62,7 +62,10 @@ public:
     // Heap footprint of the PercentileValue (capacity-based, so process()
     // shrinking _unprocessed.size() does not flip the delta negative in
     // FunctionContext::add_mem_usage).
-    uint64_t mem_usage() const { return sizeof(PercentileValue) + _tdigest.byte_size_in_memory(); }
+    // byte_size_in_memory() already counts sizeof(TDigest), and since _tdigest is
+    // an inline member it is also part of sizeof(PercentileValue); subtract it
+    // once so the TDigest object is not counted twice.
+    uint64_t mem_usage() const { return sizeof(PercentileValue) + _tdigest.byte_size_in_memory() - sizeof(TDigest); }
 
     size_t serialize(uint8_t* writer) const {
         // Must not mutate _tdigest here: callers size their buffer from
