@@ -45,9 +45,11 @@ namespace {
 constexpr size_t kAppendChunkSize = 4096;
 
 // Build the path basename for a secondary index file.
-// Format: sidx_<txn>_<index_name>.idx
-std::string make_index_filename(int64_t txn_id, const std::string& index_name) {
-    return fmt::format("sidx_{}_{}.idx", txn_id, index_name);
+// Format: sidx_<tablet>_<txn>_<index_name>.idx -- include tablet_id so
+// multiple tablets in the same partition don't clobber each other in the
+// shared db/<table>/<partition>/data/ directory.
+std::string make_index_filename(int64_t tablet_id, int64_t txn_id, const std::string& index_name) {
+    return fmt::format("sidx_{}_{}_{}.idx", tablet_id, txn_id, index_name);
 }
 
 // Resolve the absolute file path inside the Lake fileset's data directory.
@@ -211,7 +213,7 @@ StatusOr<SecondaryIndexFilePB> SecondaryIndexWriter::build(const BuildInput& inp
     }
 
     // Allocate the output WritableFile in the Lake fileset.
-    const std::string basename = make_index_filename(input.txn_id, input.index_name);
+    const std::string basename = make_index_filename(input.tablet_id, input.txn_id, input.index_name);
     const std::string full_path = make_index_file_path(input.tablet_mgr, input.tablet_id, basename);
     WritableFileOptions wopts;
     ASSIGN_OR_RETURN(auto wfile, input.fs->new_writable_file(wopts, full_path));

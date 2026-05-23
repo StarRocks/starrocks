@@ -34,8 +34,11 @@ namespace {
 
 constexpr size_t kAppendChunkSize = 4096;
 
-std::string make_index_filename(int64_t txn_id, const std::string& index_name) {
-    return fmt::format("sidx_{}_{}.idx", txn_id, index_name);
+std::string make_index_filename(int64_t tablet_id, int64_t txn_id, const std::string& index_name) {
+    // Include tablet_id: different tablets in the same partition share an
+    // OSS directory (db<id>/<table>/<partition>/data/) and would otherwise
+    // race to write the same basename when they share a load txn_id.
+    return fmt::format("sidx_{}_{}_{}.idx", tablet_id, txn_id, index_name);
 }
 
 } // namespace
@@ -170,7 +173,7 @@ StatusOr<SecondaryIndexFilePB> SecondaryIndexCollector::_write_one_index(PerInde
         indexes[i] = perm[i].index_in_chunk;
     }
 
-    const std::string basename = make_index_filename(_txn_id, st.name);
+    const std::string basename = make_index_filename(_tablet_id, _txn_id, st.name);
     const std::string full_path = tablet_mgr->segment_location(_tablet_id, basename);
     WritableFileOptions wopts;
     ASSIGN_OR_RETURN(auto wfile, fs->new_writable_file(wopts, full_path));
