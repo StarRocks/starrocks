@@ -779,8 +779,7 @@ public class FunctionAnalyzer {
         Preconditions.checkState(expanded != null,
                 "no compression-aware overload registered for "
                         + current.getFunctionName().getFunction());
-        IntLiteral defaultC = new IntLiteral(PercentileCompression.DEFAULT);
-        defaultC.setPos(fn.getPos());
+        IntLiteral defaultC = new IntLiteral(PercentileCompression.DEFAULT, fn.getPos());
         fn.addChild(defaultC);
         fn.setFn(expanded);
     }
@@ -826,8 +825,7 @@ public class FunctionAnalyzer {
             isInvalid = c < PercentileCompression.MIN || c > PercentileCompression.MAX;
         }
         long finalC = isInvalid ? PercentileCompression.DEFAULT : c;
-        IntLiteral clamped = new IntLiteral(finalC);
-        clamped.setPos(arg.getPos());
+        IntLiteral clamped = new IntLiteral(finalC, arg.getPos());
         fn.setChild(argIdx, clamped);
     }
 
