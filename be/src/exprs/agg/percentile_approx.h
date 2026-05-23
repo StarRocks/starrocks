@@ -158,12 +158,14 @@ public:
         // argument 1
         DCHECK(columns[1]->is_constant());
         DCHECK(!columns[1]->is_null(0));
+        // Capture before the first-update targetQuantiles push_back so that
+        // allocation is charged too (matches the merge path).
+        int64_t prev_memory = data(state).mem_usage();
         // first update
         if (UNLIKELY(data(state).targetQuantiles.empty())) {
             data(state).targetQuantiles.push_back(columns[1]->get(0).get_double());
         }
         double column_value = data_column->immutable_data()[row_num];
-        int64_t prev_memory = data(state).mem_usage();
         data(state).percentile->add(implicit_cast<float>(column_value));
         ctx->add_mem_usage(data(state).mem_usage() - prev_memory);
     }
@@ -242,12 +244,14 @@ public:
         // argument 2
         DCHECK(columns[2]->is_constant());
         DCHECK(!columns[2]->is_null(0));
+        // Capture before the first-update targetQuantiles push_back so that
+        // allocation is charged too (matches the merge path).
+        int64_t prev_memory = data(state).mem_usage();
         if (UNLIKELY(data(state).targetQuantiles.empty())) {
             data(state).targetQuantiles.push_back(columns[2]->get(0).get_double());
         }
 
         double column_value = data_column->immutable_data()[row_num];
-        int64_t prev_memory = data(state).mem_usage();
         // add value with weight. Reject w <= 0: a negative weight pushes
         // _processed_weight negative and yields NaN from weightedAverageSorted().
         // TDigest::add() also rejects non-positive weights as a second guard.
@@ -329,6 +333,9 @@ public:
     void update(FunctionContext* ctx, const Column** columns, AggDataPtr state, size_t row_num) const override {
         // argument 1: array column wrapped in ConstColumn, no need to check is_null
         DCHECK(columns[1]->is_constant());
+        // Capture before the lazy-init reinit + targetQuantiles.assign so the
+        // quantile-vector allocation is charged too (matches the scalar path).
+        int64_t prev_memory = data(state).mem_usage();
         // Lazy initialization of compression factor on first update
         if (UNLIKELY(!data(state).compression_initialized)) {
             double compression = get_compression_factor(ctx);
@@ -350,7 +357,6 @@ public:
         const auto* data_column = down_cast<const DoubleColumn*>(columns[0]);
 
         double column_value = data_column->immutable_data()[row_num];
-        int64_t prev_memory = data(state).mem_usage();
         data(state).percentile->add(implicit_cast<float>(column_value));
         ctx->add_mem_usage(data(state).mem_usage() - prev_memory);
     }
@@ -358,6 +364,9 @@ public:
     // Override merge method, deserialize using new format: [count(4 bytes), q1...qn(8*n bytes), TDigest_data]
     void merge(FunctionContext* ctx, const Column* column, AggDataPtr __restrict state, size_t row_num) const override {
         double compression = get_compression_factor(ctx);
+        // Capture before the lazy-init reinit + first-merge targetQuantiles.resize
+        // so both allocations are charged (matches the scalar/update paths).
+        int64_t prev_memory = data(state).mem_usage();
         // Lazy initialization of compression factor on first merge
         if (UNLIKELY(!data(state).compression_initialized)) {
             data(state).reinit_with_compression(compression);
@@ -382,7 +391,6 @@ public:
 
         // Merge into current state. See base class merge() for the singleton
         // fast-path rationale.
-        int64_t prev_memory = data(state).mem_usage();
         float singleton_mean;
         float singleton_weight;
         if (src_percentile.percentile->try_extract_singleton(&singleton_mean, &singleton_weight)) {
@@ -489,6 +497,9 @@ public:
     void update(FunctionContext* ctx, const Column** columns, AggDataPtr state, size_t row_num) const override {
         // argument 2: array column wrapped in ConstColumn, no need to check is_null
         DCHECK(columns[2]->is_constant());
+        // Capture before the lazy-init reinit + targetQuantiles.assign so the
+        // quantile-vector allocation is charged too (matches the scalar path).
+        int64_t prev_memory = data(state).mem_usage();
         // Lazy initialization of compression factor on first update
         if (UNLIKELY(!data(state).compression_initialized)) {
             double compression = get_compression_factor(ctx);
@@ -513,7 +524,6 @@ public:
         int64_t weight = columns[1]->get(real_row_num).get_int64();
 
         double column_value = data_column->immutable_data()[row_num];
-        int64_t prev_memory = data(state).mem_usage();
         // add value with weight. Reject w <= 0: a negative weight pushes
         // _processed_weight negative and yields NaN from weightedAverageSorted().
         // TDigest::add() also rejects non-positive weights as a second guard.
@@ -526,6 +536,9 @@ public:
     // Override merge method, deserialize using new format: [count(4 bytes), q1...qn(8*n bytes), TDigest_data]
     void merge(FunctionContext* ctx, const Column* column, AggDataPtr __restrict state, size_t row_num) const override {
         double compression = get_compression_factor(ctx);
+        // Capture before the lazy-init reinit + first-merge targetQuantiles.resize
+        // so both allocations are charged (matches the scalar/update paths).
+        int64_t prev_memory = data(state).mem_usage();
         // Lazy initialization of compression factor on first merge
         if (UNLIKELY(!data(state).compression_initialized)) {
             data(state).reinit_with_compression(compression);
@@ -550,7 +563,6 @@ public:
 
         // Merge into current state. See base class merge() for the singleton
         // fast-path rationale.
-        int64_t prev_memory = data(state).mem_usage();
         float singleton_mean;
         float singleton_weight;
         if (src_percentile.percentile->try_extract_singleton(&singleton_mean, &singleton_weight)) {
