@@ -640,6 +640,18 @@ public class MockIcebergMetadata implements ConnectorMetadata {
         return TvrTableSnapshot.of(TvrVersion.of(1L));
     }
 
+    // ConnectorMetadata's default returns TvrTableSnapshot.empty(), which leaves the planned scan
+    // pinned to the MIN snapshot (0 partitions, no data) -- low-cardinality dict collection and the
+    // group-by min/max rule both then no-op. Mirror getCurrentTvrSnapshot so the scan sees a real
+    // snapshot, as production's IcebergMetadata.getTableVersionRange does.
+    @Override
+    public TvrVersionRange getTableVersionRange(
+            String dbName, com.starrocks.catalog.Table table,
+            java.util.Optional<com.starrocks.connector.ConnectorTableVersion> startVersion,
+            java.util.Optional<com.starrocks.connector.ConnectorTableVersion> endVersion) {
+        return getCurrentTvrSnapshot(dbName, table);
+    }
+
     public List<TvrTableDeltaTrait> listTableDeltaTraits(String dbName, com.starrocks.catalog.Table table,
                                                          TvrTableSnapshot fromSnapshotExclusive,
                                                          TvrTableSnapshot toSnapshotInclusive) {

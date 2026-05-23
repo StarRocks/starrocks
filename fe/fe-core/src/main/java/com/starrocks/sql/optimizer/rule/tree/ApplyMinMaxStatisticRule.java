@@ -17,6 +17,7 @@ package com.starrocks.sql.optimizer.rule.tree;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.Pair;
 import com.starrocks.qe.ConnectContext;
@@ -26,7 +27,9 @@ import com.starrocks.sql.optimizer.base.ColumnIdentifier;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashAggregateOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalIcebergScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScanOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalScanOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.DictMappingOperator;
@@ -112,6 +115,54 @@ public class ApplyMinMaxStatisticRule implements TreeRewriteRule {
                     }
                     final ConstantOperator min = ConstantOperator.createVarchar(minMax.get().minValue());
                     final ConstantOperator max = ConstantOperator.createVarchar(minMax.get().maxValue());
+                    infos.put(column.getId(), new Pair<>(min, max));
+                }
+            }
+        }
+
+        // Iceberg scans — dict-only branch. After low-cardinality rewrite the varchar
+        // group-by becomes TYPE_INT with codes in [1, dictSize]; the runtime contract is
+        // enforced by GlobalDictNotMatch retry on the BE side. globalDicts is only
+        // populated for parquet scans (gated in DecodeCollector.visitPhysicalIcebergScan),
+        // so non-parquet falls through naturally via the containsKey check below.
+        List<PhysicalScanOperator> icebergScans = Lists.newArrayList();
+        Utils.extractOperator(root, icebergScans,
+                op -> OperatorType.PHYSICAL_ICEBERG_SCAN.equals(op.getOpType()));
+        for (PhysicalScanOperator scan : icebergScans) {
+            PhysicalIcebergScanOperator iceberg = (PhysicalIcebergScanOperator) scan;
+            IcebergTable table = (IcebergTable) iceberg.getTable();
+
+            final Map<Integer, ColumnDict> globalDicts =
+                    iceberg.getGlobalDicts().stream().collect(Collectors.toMap(p -> p.first, p -> p.second));
+
+            if (iceberg.getProjection() != null) {
+                for (var entry : iceberg.getProjection().getColumnRefMap().entrySet()) {
+                    if (groupByRefSets.contains(entry.getKey()) &&
+                            entry.getValue() instanceof DictMappingOperator mappingOperator) {
+                        ColumnRefOperator column = mappingOperator.getDictColumn();
+                        if (!column.getType().isNumericType() && !column.getType().isDate()) {
+                            continue;
+                        }
+                        if (globalDicts.containsKey(column.getId())) {
+                            final ConstantOperator min = ConstantOperator.createVarchar("0");
+                            final ColumnDict columnDict = globalDicts.get(column.getId());
+                            final ConstantOperator max = ConstantOperator.createVarchar("" + columnDict.getDictSize());
+                            infos.put(entry.getKey().getId(), new Pair<>(min, max));
+                        }
+                    }
+                }
+            }
+            for (ColumnRefOperator column : iceberg.getColRefToColumnMetaMap().keySet()) {
+                if (!groupByRefSets.contains(column.getId())) {
+                    continue;
+                }
+                if (!column.getType().isNumericType() && !column.getType().isDate()) {
+                    continue;
+                }
+                if (globalDicts.containsKey(column.getId())) {
+                    final ConstantOperator min = ConstantOperator.createVarchar("0");
+                    final ColumnDict columnDict = globalDicts.get(column.getId());
+                    final ConstantOperator max = ConstantOperator.createVarchar("" + columnDict.getDictSize());
                     infos.put(column.getId(), new Pair<>(min, max));
                 }
             }
