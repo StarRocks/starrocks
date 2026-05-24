@@ -46,6 +46,7 @@
 #include "http/http_headers.h"
 #include "http/http_request.h"
 #include "http/http_response.h"
+#include "platform/thrift_rpc_helper.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
 #include "runtime/fragment_mgr.h"
@@ -56,7 +57,6 @@
 #include "runtime/stream_load/stream_load_executor.h"
 #include "runtime/stream_load/stream_load_pipe.h"
 #include "runtime/stream_load/transaction_mgr.h"
-#include "runtime/thrift_rpc_helper.h"
 #include "util/byte_buffer.h"
 #include "util/json_util.h"
 

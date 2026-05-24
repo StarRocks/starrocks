@@ -31,6 +31,7 @@
 #include "exec/pipeline/scan/glm_manager.h"
 #include "exec/spill/query_spill_manager.h"
 #include "exec/workgroup/work_group.h"
+#include "platform/thrift_rpc_helper.h"
 #include "runtime/current_thread.h"
 #include "runtime/data_stream_mgr.h"
 #include "runtime/exec_env.h"
@@ -38,7 +39,6 @@
 #include "runtime/runtime_filter_cache.h"
 #include "runtime/runtime_state.h"
 #include "runtime/runtime_state_helper.h"
-#include "runtime/thrift_rpc_helper.h"
 
 namespace starrocks::pipeline {
 

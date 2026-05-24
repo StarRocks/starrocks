@@ -21,7 +21,7 @@
 #include "gen_cpp/FrontendService_types.h"
 #include "http/http_auth.h"
 #include "http/http_request.h"
-#include "runtime/thrift_rpc_helper.h"
+#include "platform/thrift_rpc_helper.h"
 
 namespace starrocks {
 
