@@ -1362,17 +1362,25 @@ CONF_mDouble(lake_pk_compaction_min_benefit_cost_ratio, "0.0");
 // hot partitions with many small rowsets don't get permanently stuck. Set to 0 to
 // disable the override (gate always applies). Default 0 keeps legacy behavior.
 CONF_mDouble(lake_pk_compaction_emergency_score, "0.0");
-// PR-1' v2: equivalent segment-saved value of cleaning up a level with 100% delete_ratio,
-// folded into the bcr numerator. With w=12, a 20% level-wide delete_ratio adds ~20% to bcr
-// benefit on a sparse mid-tier; making delete-pressured but otherwise-clean levels cross
-// the bcr threshold without a separate binary has_deletes flag. Default 0 disables the
-// delete contribution (bcr falls back to segment-only benefit, equals ba3328b behavior).
+// PR-1' v2: weight that converts a level's delete pressure into segment-equivalent
+// benefit units, folded into the bcr numerator:
+//   benefit_score = real_benefit_segs + delete_ratio * input_segs * delvec_benefit_weight
+// Intuition: one rowset that is 100% deleted is "worth w segments saved" from the
+// reader's perspective (i.e., cleaning it has the same benefit as eliminating w
+// hypothetical segments). For a sparse mid-tier with 8 input rowsets at 20% level-wide
+// delete_ratio, w=12 contributes 0.20 * 8 * 12 = 19.2 segment-equivalents on top of
+// the segment-count benefit (typically ~7), driving bcr well above the typical
+// 0.005 threshold and allowing compaction. Tune up (e.g., 20) to be more aggressive
+// against delete accumulation; tune down (e.g., 4) to favor WA. Default 0 disables
+// the delete contribution (bcr falls back to segment-only benefit, equals ba3328b).
 CONF_mDouble(lake_pk_compaction_delvec_benefit_weight, "0.0");
 // PR-1' v2: size accumulation upper-bound. When the picked level's total bytes exceed
-// alpha * level_size * size_tiered_level_multiple, force compaction regardless of mls/bcr.
-// alpha=2 caps long-tail accumulation at 2x the natural size-tiered promotion target,
-// preventing unbounded mid-tier growth while preserving v9 -72% WA benefit. Default 0
-// disables the override (no size cap, equals ba3328b behavior).
+// alpha * max_rowset_bytes * size_tiered_level_multiple (i.e., alpha * next-tier-target),
+// force compaction regardless of mls/bcr. alpha=2 caps long-tail accumulation at 2x the
+// natural size-tiered promotion target, preventing unbounded mid-tier growth while
+// preserving v9 -72% WA benefit. Note: uses max_rowset_bytes from the actual picked
+// rowsets (not pick_level_ptr->compact_level, which can be stale after pick_max_level
+// merges levels). Default 0 disables the override (no size cap, equals ba3328b).
 CONF_mDouble(lake_pk_compaction_size_overflow_ratio, "0.0");
 // Enable cleanup of orphan delvec entries during compaction.
 // Orphan delvecs are leaked metadata entries from a historical bug that reference
