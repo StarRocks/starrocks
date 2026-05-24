@@ -40,7 +40,6 @@
 
 #include "agent/agent_server.h"
 #include "base/time/time.h"
-#include "common/brpc/brpc_stub_cache.h"
 #include "common/config_exec_env_fwd.h"
 #include "common/config_lake_fwd.h"
 #include "common/logging.h"
@@ -173,7 +172,7 @@ void ExecEnv::_refresh_service_contexts() {
     _rpc_services.frontend_client_cache = platform_env->frontend_client_cache();
     _rpc_services.broker_client_cache = platform_env->broker_client_cache();
     _rpc_services.broker_mgr = _broker_mgr;
-    _rpc_services.brpc_stub_cache = _brpc_stub_cache;
+    _rpc_services.brpc_stub_cache = platform_env->brpc_stub_cache();
 
     _lake_services.lake_tablet_manager = _lake_tablet_manager;
     _lake_services.lake_update_manager = _lake_update_manager;
@@ -232,7 +231,7 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, ProcessMetricsRe
     _global_env = global_env;
     auto* platform_env = PlatformEnv::GetInstance();
     if (platform_env->backend_client_cache() == nullptr || platform_env->frontend_client_cache() == nullptr ||
-        platform_env->broker_client_cache() == nullptr) {
+        platform_env->broker_client_cache() == nullptr || platform_env->brpc_stub_cache() == nullptr) {
         return Status::InternalError("PlatformEnv is not initialized");
     }
     RETURN_IF_ERROR(connector::install_builtin_connectors(connector::ConnectorRegistry::default_instance()));
@@ -267,10 +266,6 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, ProcessMetricsRe
 
     _pipeline_timer = new pipeline::PipelineTimer();
     RETURN_IF_ERROR(_pipeline_timer->start());
-    HttpBrpcStubCache::initialize(_pipeline_timer);
-#ifndef __APPLE__
-    LakeServiceBrpcStubCache::initialize(_pipeline_timer);
-#endif
 
     const int num_io_threads = config::pipeline_scan_thread_pool_thread_num <= 0
                                        ? CpuInfo::num_cores()
@@ -310,7 +305,6 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, ProcessMetricsRe
     _broker_mgr = new BrokerMgr(_metrics);
 
     _load_stream_mgr = new LoadStreamMgr(_metrics);
-    _brpc_stub_cache = new BrpcStubCache(_pipeline_timer, _metrics);
     _stream_load_executor = new StreamLoadExecutor(this);
     _stream_context_mgr = new StreamContextMgr();
     _transaction_mgr = new TransactionMgr(this);
@@ -687,7 +681,6 @@ void ExecEnv::destroy() {
     }
     SAFE_DELETE(_rejected_record_sync_daemon);
     SAFE_DELETE(_load_path_mgr);
-    SAFE_DELETE(_brpc_stub_cache);
     SAFE_DELETE(_stream_mgr);
     SAFE_DELETE(_query_context_mgr);
     _workgroup_manager->destroy();
@@ -701,14 +694,6 @@ void ExecEnv::destroy() {
     // _query_pool_mem_tracker.
     SAFE_DELETE(_runtime_filter_cache);
     SAFE_DELETE(_driver_limiter);
-    if (HttpBrpcStubCache::getInstance() != nullptr) {
-        HttpBrpcStubCache::getInstance()->shutdown();
-    }
-#ifndef __APPLE__
-    if (LakeServiceBrpcStubCache::getInstance() != nullptr) {
-        LakeServiceBrpcStubCache::getInstance()->shutdown();
-    }
-#endif
     SAFE_DELETE(_pipeline_timer);
     ThriftRpcHelper::clear();
     SAFE_DELETE(_result_queue_mgr);

@@ -21,7 +21,13 @@
 
 namespace starrocks {
 
+class BrpcStubCache;
+class BthreadTimer;
+class HttpBrpcStubCache;
 class MetricRegistry;
+#ifndef __APPLE__
+class LakeServiceBrpcStubCache;
+#endif
 
 class PlatformEnv {
 public:
@@ -42,11 +48,18 @@ public:
     BackendServiceClientCache* backend_client_cache() const { return _backend_client_cache.get(); }
     FrontendServiceClientCache* frontend_client_cache() const { return _frontend_client_cache.get(); }
     BrokerServiceClientCache* broker_client_cache() const { return _broker_client_cache.get(); }
+    BrpcStubCache* brpc_stub_cache() const { return _brpc_stub_cache.get(); }
+    HttpBrpcStubCache* http_brpc_stub_cache() const;
+#ifndef __APPLE__
+    LakeServiceBrpcStubCache* lake_service_brpc_stub_cache() const;
+#endif
 
 private:
     std::unique_ptr<BackendServiceClientCache> _backend_client_cache;
     std::unique_ptr<FrontendServiceClientCache> _frontend_client_cache;
     std::unique_ptr<BrokerServiceClientCache> _broker_client_cache;
+    std::unique_ptr<BthreadTimer> _rpc_timer;
+    std::unique_ptr<BrpcStubCache> _brpc_stub_cache;
 };
 
 } // namespace starrocks
