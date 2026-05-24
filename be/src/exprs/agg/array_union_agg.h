@@ -98,6 +98,9 @@ struct ArrayUnionAggAggregateState {
         return &data_column;
     }
 
+    // Off-pool heap charged into the operator's agg-state memory so it shows in Aggregator::memory_usage().
+    int64_t mem_usage() const { return data_column.memory_usage(); }
+
     ColumnType data_column; // Aggregated elements for array_agg
     size_t null_count = 0;
     MyHashSet set;
@@ -112,6 +115,7 @@ public:
 
     void update_state(FunctionContext* ctx, const ArrayColumn* input_column, AggDataPtr __restrict state,
                       size_t row_num) const {
+        int64_t prev_memory = this->data(state).mem_usage();
         // Array element is nullable, so we need to extract the data from nullable column first
         auto offset_size = input_column->get_element_offset_size(row_num);
         auto& array_element = down_cast<const NullableColumn&>(input_column->elements());
@@ -130,6 +134,7 @@ public:
         }
 
         this->data(state).append_null(element_null_count);
+        ctx->add_mem_usage(this->data(state).mem_usage() - prev_memory);
     }
 
     void update(FunctionContext* ctx, const Column** columns, AggDataPtr __restrict state,

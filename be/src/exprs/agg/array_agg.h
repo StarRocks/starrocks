@@ -96,6 +96,9 @@ struct ArrayAggAggregateState {
         set.clear();
     }
 
+    // Off-pool heap charged into the operator's agg-state memory so it shows in Aggregator::memory_usage().
+    int64_t mem_usage() const { return data_column.memory_usage(); }
+
     ColumnType data_column; // Aggregated elements for array_agg
     size_t null_count = 0;
     MyHashSet set;
@@ -180,6 +183,9 @@ struct ArrayAggAggregateState<PT, is_distinct, MyHashSet, StringOrBinaryGuard<PT
         set.clear();
     }
 
+    // Off-pool heap charged into the operator's agg-state memory so it shows in Aggregator::memory_usage().
+    int64_t mem_usage() const { return data_column.memory_usage(); }
+
     ColumnType data_column; // Aggregated elements for array_agg
     size_t null_count = 0;
     MyHashSet set;
@@ -230,7 +236,9 @@ public:
     void update(FunctionContext* ctx, const Column** columns, AggDataPtr __restrict state,
                 size_t row_num) const override {
         // TODO: update is random access, so we could not pre-reserve memory for State, which is the bottleneck
+        int64_t prev_memory = this->data(state).mem_usage();
         this->data(state).update(ctx->mem_pool(), *columns[0], row_num, 1);
+        ctx->add_mem_usage(this->data(state).mem_usage() - prev_memory);
     }
 
     void process_null(FunctionContext* ctx, AggDataPtr __restrict state) const override {
@@ -247,9 +255,11 @@ public:
         size_t element_null_count = array_element.null_count(offset_size.first, offset_size.second);
         DCHECK_LE(element_null_count, offset_size.second);
 
+        int64_t prev_memory = this->data(state).mem_usage();
         this->data(state).update(ctx->mem_pool(), *element_data_column, offset_size.first,
                                  offset_size.second - element_null_count);
         this->data(state).append_null(element_null_count);
+        ctx->add_mem_usage(this->data(state).mem_usage() - prev_memory);
     }
 
     void serialize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {
@@ -285,7 +295,9 @@ public:
     }
 
     void reset(FunctionContext* ctx, const Columns& args, AggDataPtr __restrict state) const override {
+        int64_t prev_memory = this->data(state).mem_usage();
         this->data(state).reset();
+        ctx->add_mem_usage(this->data(state).mem_usage() - prev_memory);
     }
 
     void get_values(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* dst, size_t start,

@@ -39,6 +39,15 @@ struct GroupConcatAggregateState {
     std::string intermediate_string{};
     // is initial
     bool initial{};
+
+    // Off-pool heap charged into the operator's agg-state memory so it shows in
+    // Aggregator::memory_usage(). Ignore the small-string-optimization inline buffer (it lives in
+    // the state struct, counted in the mem pool); only a heap-allocated buffer is off-pool.
+    int64_t mem_usage() const {
+        static const size_t sso_capacity = std::string().capacity();
+        const size_t cap = intermediate_string.capacity();
+        return cap > sso_capacity ? static_cast<int64_t>(cap) : 0;
+    }
 };
 
 template <LogicalType LT, typename T = RunTimeCppType<LT>, LogicalType ResultLT = GroupConcatResultLT<LT>,
@@ -51,13 +60,16 @@ public:
     using ResultColumnType = InputColumnType;
 
     void reset(FunctionContext* ctx, const Columns& args, AggDataPtr state) const override {
+        int64_t prev_memory = this->data(state).mem_usage();
         this->data(state).intermediate_string = {};
         this->data(state).initial = false;
+        ctx->add_mem_usage(this->data(state).mem_usage() - prev_memory);
     }
 
     void update(FunctionContext* ctx, const Column** columns, AggDataPtr __restrict state,
                 size_t row_num) const override {
         DCHECK(columns[0]->is_binary() || columns[0]->is_large_binary());
+        int64_t prev_memory = this->data(state).mem_usage();
         if (ctx->get_num_args() > 1) {
             if (!ctx->is_notnull_constant_column(1)) {
                 const auto val = GetContainer<LT>::get_data(columns[0], row_num);
@@ -112,11 +124,15 @@ public:
                 result.append(", ").append(val.get_data(), val.get_size());
             }
         }
+        ctx->add_mem_usage(this->data(state).mem_usage() - prev_memory);
     }
 
     void update_batch_single_state(FunctionContext* ctx, size_t chunk_size, const Column** columns,
                                    AggDataPtr __restrict state) const override {
         auto val_bytes = GetContainer<TYPE_VARCHAR>::get_data(columns[0]).immutable_bytes_size();
+        // Account the up-front reserve here; the per-row update() below only sees the
+        // post-reserve capacity, so it would otherwise miss this whole buffer.
+        int64_t prev_memory = this->data(state).mem_usage();
         if (ctx->get_num_args() > 1) {
             if (!ctx->is_notnull_constant_column(1)) {
                 auto sep_bytes = GetContainer<TYPE_VARCHAR>::get_data(columns[1]).immutable_bytes_size();
@@ -129,6 +145,7 @@ public:
         } else {
             this->data(state).intermediate_string.reserve(val_bytes + 2 * chunk_size);
         }
+        ctx->add_mem_usage(this->data(state).mem_usage() - prev_memory);
 
         for (size_t i = 0; i < chunk_size; ++i) {
             update(ctx, columns, state, i);
@@ -144,6 +161,7 @@ public:
     }
 
     void merge(FunctionContext* ctx, const Column* column, AggDataPtr __restrict state, size_t row_num) const override {
+        int64_t prev_memory = this->data(state).mem_usage();
         Slice slice = column->get(row_num).get_slice();
         char* data = slice.data;
         uint32_t size_value = *reinterpret_cast<uint32_t*>(data);
@@ -157,6 +175,7 @@ public:
 
             this->data(state).intermediate_string.append(data, size_value - sizeof(uint32_t));
         }
+        ctx->add_mem_usage(this->data(state).mem_usage() - prev_memory);
     }
 
     void serialize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {
