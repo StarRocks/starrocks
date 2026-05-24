@@ -178,7 +178,15 @@ public:
     // against OOM from corrupted or truncated input.
     static constexpr size_t kMaxCentroidsDeserialize = 1 << 17;
 
-    uint64_t serialize_size() const;
+    // Inlined: called per row on the convert/serialize path; the body is a few
+    // size() reads, so the cross-TU call overhead dominated the actual work.
+    uint64_t serialize_size() const {
+        // Three centroid-array sizes are written as uint32_t in serialize(); the
+        // header is sized to match exactly so the trailing bytes of the buffer do
+        // not leak uninitialized memory to disk.
+        return sizeof(Value) * 5 + sizeof(Index) * 2 + sizeof(uint32_t) * 3 + _processed.size() * sizeof(Centroid) +
+               _unprocessed.size() * sizeof(Centroid) + _cumulative.size() * sizeof(Weight);
+    }
     size_t serialize(uint8_t* writer) const;
     // Bounded variant. Returns false and resets the digest to an empty state
     // if the blob is truncated or declares an oversized centroid array.
@@ -192,8 +200,25 @@ public:
     // (which only reports the logical byte length of a serialized blob);
     // used for FunctionContext::add_mem_usage so the counter does not flip
     // negative when process() empties _unprocessed without releasing
-    // capacity.
-    uint64_t byte_size_in_memory() const;
+    // capacity. Inlined: invoked twice per merge() (prev/post delta); out of
+    // line the call overhead dominated, and inlining lets the caller fold the
+    // constant terms that cancel in the prev/post subtraction.
+    uint64_t byte_size_in_memory() const {
+        return sizeof(TDigest) + _processed.capacity() * sizeof(Centroid) + _unprocessed.capacity() * sizeof(Centroid) +
+               _cumulative.capacity() * sizeof(Weight);
+    }
+
+    // Capacity hint for the merge/update hot path: when the caller is about to
+    // add() up to n single centroids in a batch, reserving _unprocessed up front
+    // turns ~log2(n) geometric reallocations into one. Capacity-only -- it
+    // changes neither the centroid sequence nor when process() fires (isDirty()
+    // keys off size(), not capacity()). Bounded by _max_unprocessed because add()
+    // flushes the buffer via process() once it reaches that ceiling, so a larger
+    // hint would only over-allocate.
+    void reserve_unprocessed(size_t n) {
+        const size_t cap = n < static_cast<size_t>(_max_unprocessed) ? n : static_cast<size_t>(_max_unprocessed);
+        _unprocessed.reserve(cap);
+    }
 
 private:
     Value _compression;

@@ -39,6 +39,10 @@ public:
 
     void merge(const PercentileValue* other) { _tdigest.merge(&other->_tdigest); }
 
+    // Forwarded capacity hint for batched single-state merge/update: see
+    // TDigest::reserve_unprocessed. Capacity-only, never affects the result.
+    void reserve(size_t n) { _tdigest.reserve_unprocessed(n); }
+
     // Fast-path probe for the very common shape produced by
     // PercentileApproxAggregateFunction::convert_to_serialize_format in
     // PASS_THROUGH / streaming: one unprocessed centroid, no processed.

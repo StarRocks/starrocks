@@ -159,10 +159,19 @@ public:
     virtual double get_compression_factor(FunctionContext* ctx) const = 0;
 
     void merge(FunctionContext* ctx, const Column* column, AggDataPtr __restrict state, size_t row_num) const override {
+        int64_t prev_memory = data(state).mem_usage();
+        merge_record(ctx, column, state, row_num);
+        ctx->add_mem_usage(data(state).mem_usage() - prev_memory);
+    }
+
+    // Merge one intermediate record into the state WITHOUT memory accounting.
+    // merge() (per row) and PercentileApproxAggregateFunction::merge_batch_single_state()
+    // (once per chunk) both wrap this with the add_mem_usage delta. Sharing the
+    // exact body is what makes the per-row and batched paths build byte-identical
+    // digest state.
+    void merge_record(FunctionContext* ctx, const Column* column, AggDataPtr __restrict state, size_t row_num) const {
         const auto* binary_column = down_cast<const BinaryColumn*>(column);
         Slice src = binary_column->get_slice(row_num);
-        int64_t prev_memory = data(state).mem_usage();
-
         if (is_raw_record(src)) {
             // [RECORD_RAW][mean:f32][weight:f32]: one transient pass-through
             // sample. Neither quantile nor compression is embedded; recover both
@@ -207,7 +216,6 @@ public:
                 data(state).targetQuantiles.push_back(quantile);
             }
         }
-        ctx->add_mem_usage(data(state).mem_usage() - prev_memory);
     }
 
 protected:
@@ -363,6 +371,56 @@ public:
             result->get_offset()[i + 1] = old_size + (i + 1) * RAW_RECORD_SIZE;
         }
     }
+    // Batched single-state merge: account the chunk's heap delta once (the per-row
+    // deltas telescope to m_final - m_0) and reserve _unprocessed up front instead
+    // of growing it geometrically per record. Shares merge_record() with the base
+    // merge(), so the digest it builds is byte-identical to the per-row path. This
+    // only fires for single-state aggregation (no GROUP BY) and the streaming
+    // pass-through; GROUP BY goes through merge_batch(), where each row targets a
+    // different state and neither the accounting nor the reserve can be hoisted.
+    void merge_batch_single_state(FunctionContext* ctx, AggDataPtr __restrict state, const Column* input, size_t start,
+                                  size_t size) const override {
+        const Column* column = ColumnHelper::get_data_column(input);
+        int64_t prev_memory = data(state).mem_usage();
+        data(state).percentile->reserve(size);
+
+        const auto* binary_column = down_cast<const BinaryColumn*>(column);
+        const auto& offsets = binary_column->get_offset();
+        // RAW-stride fast path. A compact exchange chunk is homogeneously RAW, so
+        // every record is exactly RAW_RECORD_SIZE bytes; a legacy record is always
+        // far larger. Equal total length plus a RAW tag on the first record thus
+        // identifies an all-RAW range, and we stride the byte buffer directly --
+        // skipping the per-row get_slice() and is_raw_record() branch that
+        // merge_record() pays. The (mean, weight) sequence is identical to
+        // merge_record()'s RAW branch, so the digest stays byte-identical. Mixed or
+        // legacy ranges fall back to the shared per-record path.
+        if (size > 0 && offsets[start + size] - offsets[start] == static_cast<uint64_t>(size) * RAW_RECORD_SIZE &&
+            static_cast<uint8_t>(binary_column->raw_bytes()[offsets[start]]) == RECORD_RAW) {
+            if (UNLIKELY(!data(state).compression_initialized)) {
+                data(state).reinit_with_compression(clamp_compression_factor(
+                        ColumnHelper::get_const_value<TYPE_DOUBLE>(compression_const_from_ctx(ctx))));
+            }
+            const uint8_t* p = binary_column->raw_bytes() + offsets[start];
+            for (size_t i = 0; i < size; ++i, p += RAW_RECORD_SIZE) {
+                float mean;
+                float weight;
+                memcpy(&mean, p + 1, sizeof(float));
+                memcpy(&weight, p + 1 + sizeof(float), sizeof(float));
+                // TDigest::add rejects non-finite mean and weight <= 0.
+                data(state).percentile->add(mean, weight);
+            }
+            if (data(state).targetQuantiles.empty()) {
+                data(state).targetQuantiles.push_back(
+                        ColumnHelper::get_const_value<TYPE_DOUBLE>(quantile_const_from_ctx(ctx)));
+            }
+        } else {
+            for (size_t i = start; i < start + size; ++i) {
+                merge_record(ctx, column, state, i);
+            }
+        }
+        ctx->add_mem_usage(data(state).mem_usage() - prev_memory);
+    }
+
     std::string get_name() const override { return "percentile_approx"; }
 };
 
@@ -535,6 +593,17 @@ public:
 // Returns ARRAY<DOUBLE>, using new serialization format
 class PercentileApproxArrayAggregateFunction final : public PercentileApproxAggregateFunction {
 public:
+    // The scalar single-state fast path inherited from
+    // PercentileApproxAggregateFunction assumes the scalar RAW/legacy record; the
+    // array variants use a [count][q1..qn][blob] format, so fall back to the
+    // default per-row loop, which dispatches to this class's merge().
+    void merge_batch_single_state(FunctionContext* ctx, AggDataPtr __restrict state, const Column* input, size_t start,
+                                  size_t size) const override {
+        AggregateFunctionBatchHelper<PercentileApproxState,
+                                     PercentileApproxAggregateFunctionBase>::merge_batch_single_state(ctx, state, input,
+                                                                                                      start, size);
+    }
+
     void update(FunctionContext* ctx, const Column** columns, AggDataPtr state, size_t row_num) const override {
         // argument 1: array column wrapped in ConstColumn, no need to check is_null
         DCHECK(columns[1]->is_constant());

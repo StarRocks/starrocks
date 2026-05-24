@@ -417,19 +417,6 @@ void TDigest::add(std::vector<Centroid>::const_iterator iter, std::vector<Centro
     }
 }
 
-uint64_t TDigest::serialize_size() const {
-    // Three centroid-array sizes are written as uint32_t in serialize(); the
-    // header is sized to match exactly so the trailing bytes of the buffer do
-    // not leak uninitialized memory to disk.
-    return sizeof(Value) * 5 + sizeof(Index) * 2 + sizeof(uint32_t) * 3 + _processed.size() * sizeof(Centroid) +
-           _unprocessed.size() * sizeof(Centroid) + _cumulative.size() * sizeof(Weight);
-}
-
-uint64_t TDigest::byte_size_in_memory() const {
-    return sizeof(TDigest) + _processed.capacity() * sizeof(Centroid) + _unprocessed.capacity() * sizeof(Centroid) +
-           _cumulative.capacity() * sizeof(Weight);
-}
-
 size_t TDigest::serialize(uint8_t* writer) const {
     memcpy(writer, &_compression, sizeof(Value));
     writer += sizeof(Value);
