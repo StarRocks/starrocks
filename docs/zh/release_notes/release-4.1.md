@@ -163,6 +163,7 @@ displayed_sidebar: docs
   - 支持 CSV 文件导出多种压缩格式（GZIP/SNAPPY/ZSTD/LZ4/DEFLATE/ZLIB/BZIP2）。[#68054](https://github.com/StarRocks/starrocks/pull/68054)
   - 支持 `STRUCT_CAST_BY_NAME` SQL 模式用于基于名称的结构体字段匹配。[#69845](https://github.com/StarRocks/starrocks/pull/69845)
   - 支持 `ANALYZE PROFILE` 中的 `last_query_id()`，以便轻松进行查询配置文件分析。[#64557](https://github.com/StarRocks/starrocks/pull/64557)
+  - 支持 `--` 注释不再触发 EOF 解析错误，包括仅注释输入以及 SQL 语句末尾的行尾注释。
 
 ### 管理与可观测性
 

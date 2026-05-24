@@ -163,6 +163,7 @@ Release Date: April 13, 2026
   - Supports multiple compression formats (GZIP/SNAPPY/ZSTD/LZ4/DEFLATE/ZLIB/BZIP2) for CSV file exports. [#68054](https://github.com/StarRocks/starrocks/pull/68054)
   - Supports `STRUCT_CAST_BY_NAME` SQL mode for name-based struct field matching. [#69845](https://github.com/StarRocks/starrocks/pull/69845)
   - Supports `last_query_id()` in `ANALYZE PROFILE` for easy query profile analysis. [#64557](https://github.com/StarRocks/starrocks/pull/64557)
+  - Supports `--` comments without EOF parse errors, including comment-only input and end-of-line comments in SQL statements.
 
 ### Management & Observability
 
