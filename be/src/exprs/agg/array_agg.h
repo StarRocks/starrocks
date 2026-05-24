@@ -390,6 +390,17 @@ struct ArrayAggAggregateStateV2 {
 
     void reset(FunctionContext* ctx) { data_columns.clear(); }
 
+    // Off-pool heap charged into the operator's agg-state memory so it shows in Aggregator::memory_usage().
+    int64_t mem_usage() const {
+        int64_t usage = 0;
+        for (const auto& col : data_columns) {
+            if (col != nullptr) {
+                usage += col->memory_usage();
+            }
+        }
+        return usage;
+    }
+
     // using pointer rather than vector to avoid variadic size
     // array_agg(a order by b, c, d), the a,b,c,d are put into data_columns in order.
     mutable MutableColumns data_columns;
@@ -425,6 +436,9 @@ public:
 
     void update(FunctionContext* ctx, const Column** columns, AggDataPtr __restrict state,
                 size_t row_num) const override {
+        int64_t prev_memory = this->data(state).mem_usage();
+        // DeferOp so the delta is reported on every early-return path below.
+        auto defer = DeferOp([&]() { ctx->add_mem_usage(this->data(state).mem_usage() - prev_memory); });
         for (auto i = 0; i < ctx->get_num_args(); ++i) {
             if (UNLIKELY(columns[i]->size() <= row_num)) {
                 ctx->set_error(std::string(get_name() + "'s update row number overflow").c_str(), false);
@@ -448,6 +462,7 @@ public:
 
     // struct and array elements aren't be null, as they consist from several columns
     void merge(FunctionContext* ctx, const Column* column, AggDataPtr __restrict state, size_t row_num) const override {
+        int64_t prev_memory = this->data(state).mem_usage();
         const auto input_columns = down_cast<const StructColumn*>(ColumnHelper::get_data_column(column))->fields();
         for (auto i = 0; i < input_columns.size(); ++i) {
             auto array_column = down_cast<const ArrayColumn*>(ColumnHelper::get_data_column(input_columns[i].get()));
@@ -455,6 +470,7 @@ public:
             this->data(state).update(array_column->elements(), i, offsets[row_num],
                                      offsets[row_num + 1] - offsets[row_num]);
         }
+        ctx->add_mem_usage(this->data(state).mem_usage() - prev_memory);
     }
 
     // serialize each state->column to a [nullable] array in a [nullable] struct
@@ -637,7 +653,9 @@ public:
     }
 
     void reset(FunctionContext* ctx, const Columns& args, AggDataPtr __restrict state) const override {
+        int64_t prev_memory = this->data(state).mem_usage();
         this->data(state).reset(ctx);
+        ctx->add_mem_usage(this->data(state).mem_usage() - prev_memory);
     }
 
     void get_values(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* dst, size_t start,
