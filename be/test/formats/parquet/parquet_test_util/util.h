@@ -18,6 +18,7 @@
 
 #include <filesystem>
 
+#include "cache/scan/shared_buffered_input_stream.h"
 #include "column/column_helper.h"
 #include "column/fixed_length_column.h"
 #include "common/config_exec_fwd.h"
@@ -30,7 +31,6 @@
 #include "formats/parquet/metadata.h"
 #include "formats/parquet/page_reader.h"
 #include "fs/fs.h"
-#include "io/shared_buffered_input_stream.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/mem_tracker.h"
 

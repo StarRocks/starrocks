@@ -76,7 +76,7 @@ namespace {
 // Note: this only handles *exact* duplicates (identical offset and size).  True byte-range
 // overlaps are not expected because the parquet format guarantees that column chunks for
 // different columns occupy non-overlapping byte ranges within the file.
-void deduplicate_io_ranges(std::vector<io::SharedBufferedInputStream::IORange>* ranges) {
+void deduplicate_io_ranges(std::vector<SharedBufferedInputStream::IORange>* ranges) {
     if (ranges == nullptr || ranges->size() <= 1) {
         return;
     }
@@ -486,7 +486,7 @@ Status GroupReader::prepare() {
     // 2. collect io ranges of every row group reader.
     // 3. set io ranges to the stream.
     if (config::parquet_coalesce_read_enable && _param.sb_stream != nullptr) {
-        std::vector<io::SharedBufferedInputStream::IORange> ranges;
+        std::vector<SharedBufferedInputStream::IORange> ranges;
         int64_t end_offset = 0;
         collect_io_ranges(&ranges, &end_offset, ColumnIOType::PAGES);
         int32_t counter = _param.lazy_column_coalesce_counter->load(std::memory_order_relaxed);
@@ -1598,7 +1598,7 @@ ChunkPtr GroupReader::_create_read_chunk(const std::vector<SlotId>& slot_ids, bo
     return chunk;
 }
 
-void GroupReader::collect_io_ranges(std::vector<io::SharedBufferedInputStream::IORange>* ranges, int64_t* end_offset,
+void GroupReader::collect_io_ranges(std::vector<SharedBufferedInputStream::IORange>* ranges, int64_t* end_offset,
                                     ColumnIOTypeFlags types) {
     int64_t end = 0;
     // collect io of active column

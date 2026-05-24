@@ -34,10 +34,10 @@
 
 #pragma once
 
+#include "cache/scan/shared_buffered_input_stream.h"
 #include "column_reader.h"
 #include "common/runtime_profile.h"
 #include "common/status.h"
-#include "io/shared_buffered_input_stream.h"
 #include "storage/olap_common.h"
 #include "storage/options.h"
 #include "storage/predicate_tree/predicate_tree_fwd.h"
@@ -114,19 +114,19 @@ public:
     }
 
     Status convert_sparse_range_to_io_range(const SparseRange<>& range) {
-        if (auto sharedBufferStream = dynamic_cast<io::SharedBufferedInputStream*>(_opts.read_file);
+        if (auto sharedBufferStream = dynamic_cast<SharedBufferedInputStream*>(_opts.read_file);
             sharedBufferStream == nullptr) {
             return Status::OK();
         }
 
-        std::vector<io::SharedBufferedInputStream::IORange> result;
+        std::vector<SharedBufferedInputStream::IORange> result;
         ASSIGN_OR_RETURN(auto vec, get_io_range_vec(range, nullptr));
         for (auto e : vec) {
-            io::SharedBufferedInputStream::IORange io_range(e.first, e.second);
+            SharedBufferedInputStream::IORange io_range(e.first, e.second);
             result.emplace_back(io_range);
         }
 
-        return dynamic_cast<io::SharedBufferedInputStream*>(_opts.read_file)->set_io_ranges(result);
+        return dynamic_cast<SharedBufferedInputStream*>(_opts.read_file)->set_io_ranges(result);
     }
 
     virtual ordinal_t get_current_ordinal() const = 0;

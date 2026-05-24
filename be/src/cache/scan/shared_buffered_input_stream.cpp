@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "io/shared_buffered_input_stream.h"
+#include "cache/scan/shared_buffered_input_stream.h"
 
 #include <gutil/strings/substitute.h>
 
@@ -21,10 +21,10 @@
 #include "gutil/strings/fastmem.h"
 #include "runtime/current_thread.h"
 
-namespace starrocks::io {
+namespace starrocks {
 
-SharedBufferedInputStream::SharedBufferedInputStream(std::shared_ptr<SeekableInputStream> stream, std::string filename,
-                                                     size_t file_size)
+SharedBufferedInputStream::SharedBufferedInputStream(std::shared_ptr<io::SeekableInputStream> stream,
+                                                     std::string filename, size_t file_size)
         : _stream(std::move(stream)), _filename(std::move(filename)), _file_size(file_size) {}
 
 void SharedBufferedInputStream::SharedBuffer::align(int64_t align_size, int64_t file_size) {
@@ -306,8 +306,8 @@ int64_t SharedBufferedInputStream::current_range_ref_sum() const {
 }
 
 // Out-of-line so gcov can attribute coverage to a concrete `.cpp` line.
-IoStatsSnapshot SharedBufferedInputStream::get_io_stats_snapshot() const {
+io::IoStatsSnapshot SharedBufferedInputStream::get_io_stats_snapshot() const {
     return _stream->get_io_stats_snapshot();
 }
 
-} // namespace starrocks::io
+} // namespace starrocks

@@ -319,4 +319,4 @@ ADD_BE_LIB(Storage
     ${STORAGE_FILES}
 )
 
-target_link_libraries(Storage PUBLIC ExecPrimitive Serde Platform)
+target_link_libraries(Storage PUBLIC ExecPrimitive Serde Platform Cache)

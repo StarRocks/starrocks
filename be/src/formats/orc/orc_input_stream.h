@@ -16,8 +16,8 @@
 
 #include <orc/OrcFile.hh>
 
+#include "cache/scan/shared_buffered_input_stream.h"
 #include "exec/hdfs_scanner/hdfs_scanner.h"
-#include "io/shared_buffered_input_stream.h"
 namespace starrocks {
 
 class RandomAccessFile;
@@ -30,7 +30,7 @@ public:
     };
 
     // |file| must outlive ORCHdfsFileStream
-    ORCHdfsFileStream(RandomAccessFile* file, uint64_t length, io::SharedBufferedInputStream* sb_stream);
+    ORCHdfsFileStream(RandomAccessFile* file, uint64_t length, SharedBufferedInputStream* sb_stream);
 
     ~ORCHdfsFileStream() override = default;
 
@@ -68,14 +68,14 @@ public:
     bool isAlreadyCollectedInSharedBuffer(const int64_t offset, const int64_t length) const override;
     void releaseToOffset(const int64_t offset) override;
     void setIORanges(std::vector<IORange>& io_ranges) override;
-    Status setIORanges(const std::vector<io::SharedBufferedInputStream::IORange>& io_ranges,
+    Status setIORanges(const std::vector<SharedBufferedInputStream::IORange>& io_ranges,
                        const bool coalesce_active_lazy_column = true);
     std::atomic<int32_t>* get_lazy_column_coalesce_counter() override;
 
 private:
     RandomAccessFile* _file;
     uint64_t _length;
-    io::SharedBufferedInputStream* _sb_stream;
+    SharedBufferedInputStream* _sb_stream;
     std::atomic<int32_t>* _lazy_column_coalesce_counter = nullptr;
     HdfsScanStats* _app_stats = nullptr;
 };

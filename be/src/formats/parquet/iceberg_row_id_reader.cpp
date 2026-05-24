@@ -45,7 +45,7 @@ void IcebergRowLineageReader::set_need_parse_levels(bool need_parse_levels) {
     }
 }
 
-void IcebergRowLineageReader::collect_column_io_range(std::vector<io::SharedBufferedInputStream::IORange>* ranges,
+void IcebergRowLineageReader::collect_column_io_range(std::vector<SharedBufferedInputStream::IORange>* ranges,
                                                       int64_t* end_offset, ColumnIOTypeFlags types, bool active) {
     if (_delegate != nullptr) {
         _delegate->collect_column_io_range(ranges, end_offset, types, active);
