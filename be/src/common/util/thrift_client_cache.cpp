@@ -32,7 +32,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "runtime/client_cache.h"
+#include "common/util/thrift_client_cache.h"
 
 #include <thrift/protocol/TBinaryProtocol.h>
 

@@ -67,16 +67,14 @@
 #include "exec/workgroup/scan_task_queue.h"
 #include "exec/workgroup/work_group.h"
 #include "fs/fs_s3.h"
-#include "gen_cpp/BackendService.h"
-#include "gen_cpp/TFileBrokerService.h"
 #include "gutil/strings/join.h"
 #include "gutil/strings/split.h"
 #include "gutil/strings/strip.h"
 #include "gutil/strings/substitute.h"
+#include "platform/platform_env.h"
 #include "runtime/base_load_path_mgr.h"
 #include "runtime/batch_write/batch_write_mgr.h"
 #include "runtime/broker_mgr.h"
-#include "runtime/client_cache.h"
 #include "runtime/data_stream_mgr.h"
 #include "runtime/diagnose_daemon.h"
 #include "runtime/dummy_load_path_mgr.h"
@@ -170,9 +168,10 @@ void ExecEnv::_refresh_service_contexts() {
     _execution_services.pipeline_timer = _pipeline_timer;
     _execution_services.max_executor_threads = global_env->max_executor_threads();
 
-    _rpc_services.backend_client_cache = _backend_client_cache;
-    _rpc_services.frontend_client_cache = _frontend_client_cache;
-    _rpc_services.broker_client_cache = _broker_client_cache;
+    auto* platform_env = PlatformEnv::GetInstance();
+    _rpc_services.backend_client_cache = platform_env->backend_client_cache();
+    _rpc_services.frontend_client_cache = platform_env->frontend_client_cache();
+    _rpc_services.broker_client_cache = platform_env->broker_client_cache();
     _rpc_services.broker_mgr = _broker_mgr;
     _rpc_services.brpc_stub_cache = _brpc_stub_cache;
 
@@ -231,6 +230,11 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, ProcessMetricsRe
     DCHECK(process_metrics_registry != nullptr);
     DCHECK(global_env != nullptr);
     _global_env = global_env;
+    auto* platform_env = PlatformEnv::GetInstance();
+    if (platform_env->backend_client_cache() == nullptr || platform_env->frontend_client_cache() == nullptr ||
+        platform_env->broker_client_cache() == nullptr) {
+        return Status::InternalError("PlatformEnv is not initialized");
+    }
     RETURN_IF_ERROR(connector::install_builtin_connectors(connector::ConnectorRegistry::default_instance()));
     _process_metrics_registry = process_metrics_registry;
     _metrics = process_metrics_registry->root_registry();
@@ -241,9 +245,6 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, ProcessMetricsRe
     _lookup_dispatcher_mgr = new LookUpDispatcherMgr();
     _result_mgr = new ResultBufferMgr(_metrics);
     _result_queue_mgr = new ResultQueueMgr(_metrics);
-    _backend_client_cache = new BackendServiceClientCache(config::max_client_cache_size_per_host);
-    _frontend_client_cache = new FrontendServiceClientCache(config::max_client_cache_size_per_host);
-    _broker_client_cache = new BrokerServiceClientCache(config::max_client_cache_size_per_host);
     // query_context_mgr keeps slotted map with 64 slot to reduce contention
     _query_context_mgr = new pipeline::QueryContextManager(6);
     RETURN_IF_ERROR(_query_context_mgr->init(_metrics));
@@ -344,9 +345,6 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, ProcessMetricsRe
         return (pool == nullptr) ? 0U : pool->queue_size();
     });
 
-    _backend_client_cache->init_metrics(_metrics, "backend");
-    _frontend_client_cache->init_metrics(_metrics, "frontend");
-    _broker_client_cache->init_metrics(_metrics, "broker");
     RETURN_IF_ERROR(_result_mgr->init());
 
     // it means acting as compute node while store_path is empty. some threads are not needed for that case.
@@ -713,9 +711,6 @@ void ExecEnv::destroy() {
 #endif
     SAFE_DELETE(_pipeline_timer);
     ThriftRpcHelper::clear();
-    SAFE_DELETE(_broker_client_cache);
-    SAFE_DELETE(_frontend_client_cache);
-    SAFE_DELETE(_backend_client_cache);
     SAFE_DELETE(_result_queue_mgr);
     SAFE_DELETE(_result_mgr);
     SAFE_DELETE(_lookup_dispatcher_mgr);

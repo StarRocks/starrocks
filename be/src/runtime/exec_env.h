@@ -86,11 +86,6 @@ class RuntimeFilterCache;
 class ProfileReportWorker;
 class GlobalSpillManager;
 
-class BackendServiceClient;
-class FrontendServiceClient;
-class TFileBrokerServiceClient;
-template <class T>
-class ClientCache;
 class HeartbeatFlags;
 class DiagnoseDaemon;
 
@@ -151,13 +146,6 @@ public:
     LookUpDispatcherMgr* lookup_dispatcher_mgr() { return _lookup_dispatcher_mgr; }
     ResultBufferMgr* result_mgr() { return _result_mgr; }
     ResultQueueMgr* result_queue_mgr() { return _result_queue_mgr; }
-    ClientCache<BackendServiceClient>* client_cache() { return _backend_client_cache; }
-    ClientCache<FrontendServiceClient>* frontend_client_cache() { return _frontend_client_cache; }
-    ClientCache<TFileBrokerServiceClient>* broker_client_cache() { return _broker_client_cache; }
-
-    // using template to simplify client cache management
-    template <typename T>
-    ClientCache<T>* get_client_cache();
 
     PriorityThreadPool* thread_pool() { return _global_env->thread_pool(); }
     ThreadPool* streaming_load_thread_pool() { return _global_env->streaming_load_thread_pool(); }
@@ -275,10 +263,6 @@ private:
     DataStreamMgr* _stream_mgr = nullptr;
     ResultBufferMgr* _result_mgr = nullptr;
     ResultQueueMgr* _result_queue_mgr = nullptr;
-    ClientCache<BackendServiceClient>* _backend_client_cache = nullptr;
-    ClientCache<FrontendServiceClient>* _frontend_client_cache = nullptr;
-    ClientCache<TFileBrokerServiceClient>* _broker_client_cache = nullptr;
-
     FragmentMgr* _fragment_mgr = nullptr;
     pipeline::QueryContextManager* _query_context_mgr = nullptr;
     std::unique_ptr<workgroup::WorkGroupManager> _workgroup_manager;
@@ -330,18 +314,5 @@ private:
     QueryExecutionServices _query_execution_services;
     AdminServices _admin_services;
 };
-
-template <>
-inline ClientCache<BackendServiceClient>* ExecEnv::get_client_cache<BackendServiceClient>() {
-    return _backend_client_cache;
-}
-template <>
-inline ClientCache<FrontendServiceClient>* ExecEnv::get_client_cache<FrontendServiceClient>() {
-    return _frontend_client_cache;
-}
-template <>
-inline ClientCache<TFileBrokerServiceClient>* ExecEnv::get_client_cache<TFileBrokerServiceClient>() {
-    return _broker_client_cache;
-}
 
 } // namespace starrocks

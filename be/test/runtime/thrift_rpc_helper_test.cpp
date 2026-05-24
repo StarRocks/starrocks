@@ -18,10 +18,10 @@
 
 #include "base/network/network_util.h"
 #include "base/testutil/assert.h"
+#include "common/util/thrift_client_cache.h"
 #include "gen_cpp/BackendService.h"
 #include "gen_cpp/FrontendService.h"
 #include "gen_cpp/TFileBrokerService.h"
-#include "runtime/client_cache.h"
 
 namespace starrocks {
 
@@ -31,20 +31,9 @@ protected:
     void TearDown() override { ThriftRpcHelper::clear(); }
 };
 
-TEST_F(ThriftRpcHelperTest, client_caches_get_typed_cache) {
-    BackendServiceClientCache backend_cache;
-    FrontendServiceClientCache frontend_cache;
-    BrokerServiceClientCache broker_cache;
-    ThriftRpcClientCaches caches{&backend_cache, &frontend_cache, &broker_cache};
-
-    EXPECT_EQ(&backend_cache, caches.get<BackendServiceClient>());
-    EXPECT_EQ(&frontend_cache, caches.get<FrontendServiceClient>());
-    EXPECT_EQ(&broker_cache, caches.get<TFileBrokerServiceClient>());
-}
-
 TEST_F(ThriftRpcHelperTest, rpc_after_clear_returns_setup_error) {
     FrontendServiceClientCache frontend_cache;
-    ThriftRpcHelper::setup({nullptr, &frontend_cache, nullptr});
+    ThriftRpcHelper::setup(nullptr, &frontend_cache, nullptr);
     ThriftRpcHelper::clear();
 
     auto st = ThriftRpcHelper::rpc<FrontendServiceClient>(
