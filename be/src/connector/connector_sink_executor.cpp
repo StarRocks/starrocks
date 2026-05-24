@@ -20,9 +20,9 @@
 #include "common/status.h"
 #include "common/system/cpu_info.h"
 #include "connector/partition_chunk_writer.h"
+#include "platform/store_path.h"
 #include "runtime/current_thread.h"
 #include "storage/load_chunk_spiller.h"
-#include "storage/options.h"
 
 namespace starrocks::connector {
 

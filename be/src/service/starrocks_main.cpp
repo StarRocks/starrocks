@@ -70,6 +70,7 @@
 #include "exec/pipeline/query_context.h"
 #include "formats/orc/lzo_decompressor_registration.h"
 #include "fs/fs_provider_bootstrap.h"
+#include "platform/store_path.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
 #include "runtime/heartbeat_flags.h"
@@ -77,7 +78,6 @@
 #include "runtime/memory/roaring_hook.h"
 #include "service/daemon.h"
 #include "service/service.h"
-#include "storage/options.h"
 #include "storage/storage_engine.h"
 #include "util/logging.h"
 

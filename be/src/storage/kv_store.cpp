@@ -43,6 +43,7 @@
 #include "common/runtime_profile.h"
 #include "common/statusor.h"
 #include "gutil/strings/substitute.h"
+#include "platform/store_path.h"
 #include "rocksdb/convenience.h"
 #include "rocksdb/db.h"
 #include "rocksdb/options.h"
@@ -51,10 +52,8 @@
 #include "runtime/exec_env.h"
 #include "runtime/mem_tracker.h"
 #include "storage/olap_define.h"
-#include "storage/options.h"
 #include "storage/rocksdb_status_adapter.h"
 #include "storage/storage_metrics.h"
-#include "storage/store_path.h"
 
 using rocksdb::DB;
 using rocksdb::DBOptions;

@@ -31,10 +31,10 @@
 #include "common/system/master_info.h"
 #include "gen_cpp/HeartbeatService_types.h"
 #include "http/http_common.h"
+#include "platform/store_path.h"
 #include "runtime/batch_write/batch_write_mgr.h"
 #include "runtime/exec_env.h"
 #include "runtime/stream_load/stream_load_context.h"
-#include "storage/store_path.h"
 #include "util/byte_buffer.h"
 
 namespace starrocks {

@@ -17,6 +17,7 @@ set(PLATFORM_TEST_FILES
     download_util_test.cpp
     platform_env_test.cpp
     platform_metrics_test.cpp
+    store_path_test.cpp
 )
 
 set(PLATFORM_TEST_LINK_LIBS

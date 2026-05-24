@@ -32,10 +32,11 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "storage/options.h"
+#include "platform/store_path.h"
 
 #include <gtest/gtest.h>
 
+#include <cstdlib>
 #include <filesystem>
 #include <string>
 
@@ -50,16 +51,16 @@ static void tear_down() {
     [[maybe_unused]] auto res = system("rm -rf ./test_run");
 }
 
-class OptionsTest : public testing::Test {
+class StorePathTest : public testing::Test {
 public:
-    OptionsTest() = default;
-    ~OptionsTest() override = default;
+    StorePathTest() = default;
+    ~StorePathTest() override = default;
 
     static void SetUpTestSuite() { set_up(); }
     static void TearDownTestSuite() { tear_down(); }
 };
 
-TEST_F(OptionsTest, parse_root_path) {
+TEST_F(StorePathTest, parse_root_path) {
     std::string path_prefix = std::filesystem::absolute("./test_run").string();
     std::string path1 = path_prefix + "/data";
     std::string path2 = path_prefix + "/data.ssd";
@@ -102,7 +103,7 @@ TEST_F(OptionsTest, parse_root_path) {
     }
 }
 
-TEST_F(OptionsTest, parse_conf_store_paths) {
+TEST_F(StorePathTest, parse_conf_store_paths) {
     std::string root_path = "./relative_path_failed";
     std::vector<StorePath> paths;
     {

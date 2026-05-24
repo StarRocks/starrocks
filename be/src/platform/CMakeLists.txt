@@ -21,6 +21,7 @@ set(PLATFORM_FILES
   download_util.cpp
   platform_env.cpp
   platform_metrics.cpp
+  store_path.cpp
   udf_downloader.cpp
 )
 

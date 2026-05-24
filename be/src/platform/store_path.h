@@ -14,8 +14,27 @@
 
 #pragma once
 
+#include <string>
+#include <string_view>
+#include <utility>
+#include <vector>
+
+#include "common/status.h"
+#include "gen_cpp/Types_types.h"
+
 namespace starrocks {
 
-struct StorePath;
+struct StorePath {
+    StorePath() = default;
+    explicit StorePath(std::string path_) : path(std::move(path_)) {}
+    std::string path;
+    TStorageMedium::type storage_medium{TStorageMedium::HDD};
+};
+
+// Parse a single root path of storage_root_path.
+Status parse_root_path(const std::string& root_path, StorePath* path);
+
+Status parse_conf_store_paths(const std::string& config_path, std::vector<StorePath>* path,
+                              std::string_view configvar_name = "config::storage_root_path");
 
 } // namespace starrocks

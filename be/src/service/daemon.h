@@ -38,7 +38,7 @@
 #include <vector>
 
 #include "gutil/macros.h"
-#include "storage/store_path.h"
+#include "platform/store_path.h"
 
 namespace starrocks {
 

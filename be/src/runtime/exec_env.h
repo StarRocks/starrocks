@@ -47,12 +47,12 @@
 #include "runtime/env/global_env.h"
 #include "runtime/mem_tracker_fwd.h"
 #include "runtime/service_contexts.h"
-#include "storage/options_fwd.h"
 // NOTE: Be careful about adding includes here. This file is included by many files.
 // Unnecessary includes will cause compilation very slow.
 // So please consider use forward declaration as much as possible.
 
 namespace starrocks {
+struct StorePath;
 class AgentServer;
 class BrokerMgr;
 class DataStreamMgr;

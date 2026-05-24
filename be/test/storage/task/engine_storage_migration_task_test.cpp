@@ -36,6 +36,7 @@
 #include "fs/fs_util.h"
 #include "fs/key_cache.h"
 #include "platform/platform_env.h"
+#include "platform/store_path.h"
 #include "runtime/chunk_helper.h"
 #include "runtime/current_thread.h"
 #include "runtime/descriptor_helper.h"

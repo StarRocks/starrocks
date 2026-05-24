@@ -58,6 +58,7 @@ ADD_BE_LIB(Connector
 )
 
 target_link_libraries(Connector PUBLIC ConnectorPrimitive)
+target_link_libraries(Connector PRIVATE Platform)
 
 if (WITH_CONNECTOR_ELASTICSEARCH)
     ADD_BE_LIB(ConnectorElasticsearch

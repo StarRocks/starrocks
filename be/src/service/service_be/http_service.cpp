@@ -72,11 +72,11 @@
 #include "http/ev_http_server.h"
 #include "http/http_method.h"
 #include "http/web_page_handler.h"
+#include "platform/store_path.h"
 #include "runtime/base_load_path_mgr.h"
 #include "runtime/env/global_env.h"
 #include "runtime/exec_env.h"
 #include "service/service_be/config_update_hooks.h"
-#include "storage/store_path.h"
 
 namespace starrocks {
 
