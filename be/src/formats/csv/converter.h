@@ -25,7 +25,7 @@
 #include "base/container/raw_container.h"
 #include "base/string/slice.h"
 #include "common/status.h"
-#include "io/formatted_output_stream.h"
+#include "formats/io/formatted_output_stream.h"
 #include "types/date_value.h"
 #include "types/decimalv2_value.h"
 #include "types/time_types.h"
@@ -87,10 +87,10 @@ public:
 
     virtual ~Converter() = default;
 
-    virtual Status write_string(io::FormattedOutputStream* buff, const Column& column, size_t row_num,
+    virtual Status write_string(formats::FormattedOutputStream* buff, const Column& column, size_t row_num,
                                 const Options& options) const = 0;
 
-    virtual Status write_quoted_string(io::FormattedOutputStream* buff, const Column& column, size_t row_num,
+    virtual Status write_quoted_string(formats::FormattedOutputStream* buff, const Column& column, size_t row_num,
                                        const Options& options) const = 0;
 
     virtual bool read_string_for_adaptive_null_column(Column* column, Slice s, const Options& options) const {

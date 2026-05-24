@@ -16,8 +16,8 @@
 
 #include "formats/csv/converter.h"
 #include "formats/file_writer.h"
+#include "formats/io/formatted_output_stream.h"
 #include "gen_cpp/Types_types.h"
-#include "io/formatted_output_stream.h"
 
 namespace starrocks {
 class ColumnEvaluator;
@@ -54,7 +54,7 @@ struct CSVWriterOptions : FileWriterOptions {
 // TODO(letian-jiang): support escaping
 class CSVFileWriter final : public FileWriter {
 public:
-    CSVFileWriter(std::string location, std::shared_ptr<io::FormattedOutputStream> output_stream,
+    CSVFileWriter(std::string location, std::shared_ptr<FormattedOutputStream> output_stream,
                   std::vector<std::string> column_names, std::vector<TypeDescriptor> types,
                   std::vector<std::unique_ptr<ColumnEvaluator>>&& column_evaluators,
                   std::shared_ptr<CSVWriterOptions> writer_options, std::function<void()> rollback_action);
@@ -75,7 +75,7 @@ public:
 
 private:
     const std::string _location;
-    std::shared_ptr<io::FormattedOutputStream> _output_stream;
+    std::shared_ptr<FormattedOutputStream> _output_stream;
     const std::vector<std::string> _column_names;
     const std::vector<TypeDescriptor> _types;
     std::vector<std::unique_ptr<ColumnEvaluator>> _column_evaluators;

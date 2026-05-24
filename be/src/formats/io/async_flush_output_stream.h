@@ -14,8 +14,13 @@
 
 #pragma once
 
+#include <atomic>
 #include <cstdint>
+#include <deque>
+#include <functional>
 #include <future>
+#include <memory>
+#include <mutex>
 #include <queue>
 #include <string>
 #include <vector>
@@ -29,7 +34,7 @@ class PriorityThreadPool;
 class RuntimeState;
 } // namespace starrocks
 
-namespace starrocks::io {
+namespace starrocks::formats {
 
 // NOT thread-safe
 class AsyncFlushOutputStream {
@@ -94,4 +99,4 @@ private:
     Status _io_status;
 };
 
-} // namespace starrocks::io
+} // namespace starrocks::formats

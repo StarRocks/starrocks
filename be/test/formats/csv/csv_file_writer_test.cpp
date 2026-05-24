@@ -31,9 +31,9 @@
 #include "common/object_pool.h"
 #include "common/thread/priority_thread_pool.hpp"
 #include "formats/column_evaluator.h"
+#include "formats/io/formatted_output_stream_file.h"
 #include "fs/fs_memory.h"
 #include "io/compression_test_utils.h"
-#include "io/formatted_output_stream_file.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
@@ -73,7 +73,7 @@ TEST_F(CSVFileWriterTest, TestWriteIntergers) {
     auto maybe_output_file = _fs.new_writable_file(_file_path);
     EXPECT_OK(maybe_output_file.status());
     auto output_file = std::move(maybe_output_file.value());
-    auto output_stream = std::make_unique<io::FormattedOutputStreamFile>(std::move(output_file), 1024);
+    auto output_stream = std::make_unique<formats::FormattedOutputStreamFile>(std::move(output_file), 1024);
     auto column_evaluators = ColumnSlotIdEvaluator::from_types(type_descs);
     auto writer_options = std::make_shared<formats::CSVWriterOptions>();
     auto writer =
@@ -129,7 +129,7 @@ TEST_F(CSVFileWriterTest, TestWriteBoolean) {
     auto maybe_output_file = _fs.new_writable_file(_file_path);
     EXPECT_OK(maybe_output_file.status());
     auto output_file = std::move(maybe_output_file.value());
-    auto output_stream = std::make_unique<io::FormattedOutputStreamFile>(std::move(output_file), 1024);
+    auto output_stream = std::make_unique<formats::FormattedOutputStreamFile>(std::move(output_file), 1024);
     auto column_evaluators = ColumnSlotIdEvaluator::from_types(type_descs);
     auto writer_options = std::make_shared<formats::CSVWriterOptions>();
     auto writer =
@@ -169,7 +169,7 @@ TEST_F(CSVFileWriterTest, TestWriteFloat) {
     auto maybe_output_file = _fs.new_writable_file(_file_path);
     EXPECT_OK(maybe_output_file.status());
     auto output_file = std::move(maybe_output_file.value());
-    auto output_stream = std::make_unique<io::FormattedOutputStreamFile>(std::move(output_file), 1024);
+    auto output_stream = std::make_unique<formats::FormattedOutputStreamFile>(std::move(output_file), 1024);
     auto column_evaluators = ColumnSlotIdEvaluator::from_types(type_descs);
     auto writer_options = std::make_shared<formats::CSVWriterOptions>();
     auto writer =
@@ -210,7 +210,7 @@ TEST_F(CSVFileWriterTest, TestWriteDouble) {
     auto maybe_output_file = _fs.new_writable_file(_file_path);
     EXPECT_OK(maybe_output_file.status());
     auto output_file = std::move(maybe_output_file.value());
-    auto output_stream = std::make_unique<io::FormattedOutputStreamFile>(std::move(output_file), 1024);
+    auto output_stream = std::make_unique<formats::FormattedOutputStreamFile>(std::move(output_file), 1024);
     auto column_evaluators = ColumnSlotIdEvaluator::from_types(type_descs);
     auto writer_options = std::make_shared<formats::CSVWriterOptions>();
     auto writer =
@@ -251,7 +251,7 @@ TEST_F(CSVFileWriterTest, TestWriteDate) {
     auto maybe_output_file = _fs.new_writable_file(_file_path);
     EXPECT_OK(maybe_output_file.status());
     auto output_file = std::move(maybe_output_file.value());
-    auto output_stream = std::make_unique<io::FormattedOutputStreamFile>(std::move(output_file), 1024);
+    auto output_stream = std::make_unique<formats::FormattedOutputStreamFile>(std::move(output_file), 1024);
     auto column_evaluators = ColumnSlotIdEvaluator::from_types(type_descs);
     auto writer_options = std::make_shared<formats::CSVWriterOptions>();
     auto writer =
@@ -301,7 +301,7 @@ TEST_F(CSVFileWriterTest, TestWriteDatetime) {
     auto maybe_output_file = _fs.new_writable_file(_file_path);
     EXPECT_OK(maybe_output_file.status());
     auto output_file = std::move(maybe_output_file.value());
-    auto output_stream = std::make_unique<io::FormattedOutputStreamFile>(std::move(output_file), 1024);
+    auto output_stream = std::make_unique<formats::FormattedOutputStreamFile>(std::move(output_file), 1024);
     auto column_evaluators = ColumnSlotIdEvaluator::from_types(type_descs);
     auto writer_options = std::make_shared<formats::CSVWriterOptions>();
     auto writer =
@@ -350,7 +350,7 @@ TEST_F(CSVFileWriterTest, TestWriteVarchar) {
     auto maybe_output_file = _fs.new_writable_file(_file_path);
     EXPECT_OK(maybe_output_file.status());
     auto output_file = std::move(maybe_output_file.value());
-    auto output_stream = std::make_unique<io::FormattedOutputStreamFile>(std::move(output_file), 1024);
+    auto output_stream = std::make_unique<formats::FormattedOutputStreamFile>(std::move(output_file), 1024);
     auto column_evaluators = ColumnSlotIdEvaluator::from_types(type_descs);
     auto writer_options = std::make_shared<formats::CSVWriterOptions>();
     auto writer =
@@ -399,7 +399,7 @@ TEST_F(CSVFileWriterTest, TestWriteArrayInt) {
     auto maybe_output_file = _fs.new_writable_file(_file_path);
     EXPECT_OK(maybe_output_file.status());
     auto output_file = std::move(maybe_output_file.value());
-    auto output_stream = std::make_unique<io::FormattedOutputStreamFile>(std::move(output_file), 1024);
+    auto output_stream = std::make_unique<formats::FormattedOutputStreamFile>(std::move(output_file), 1024);
     auto column_evaluators = ColumnSlotIdEvaluator::from_types(type_descs);
     auto writer_options = std::make_shared<formats::CSVWriterOptions>();
     auto writer =
@@ -465,7 +465,7 @@ TEST_F(CSVFileWriterTest, TestWriteArrayBigInt) {
     auto maybe_output_file = _fs.new_writable_file(_file_path);
     EXPECT_OK(maybe_output_file.status());
     auto output_file = std::move(maybe_output_file.value());
-    auto output_stream = std::make_unique<io::FormattedOutputStreamFile>(std::move(output_file), 1024);
+    auto output_stream = std::make_unique<formats::FormattedOutputStreamFile>(std::move(output_file), 1024);
     auto column_evaluators = ColumnSlotIdEvaluator::from_types(type_descs);
     auto writer_options = std::make_shared<formats::CSVWriterOptions>();
     auto writer =
@@ -522,7 +522,7 @@ TEST_F(CSVFileWriterTest, TestWriteArrayWithNull) {
     auto maybe_output_file = _fs.new_writable_file(_file_path);
     EXPECT_OK(maybe_output_file.status());
     auto output_file = std::move(maybe_output_file.value());
-    auto output_stream = std::make_unique<io::FormattedOutputStreamFile>(std::move(output_file), 1024);
+    auto output_stream = std::make_unique<formats::FormattedOutputStreamFile>(std::move(output_file), 1024);
     auto column_evaluators = ColumnSlotIdEvaluator::from_types(type_descs);
     auto writer_options = std::make_shared<formats::CSVWriterOptions>();
     auto writer =
@@ -584,7 +584,7 @@ TEST_F(CSVFileWriterTest, TestWriteHiveArray) {
     auto maybe_output_file = _fs.new_writable_file(_file_path);
     EXPECT_OK(maybe_output_file.status());
     auto output_file = std::move(maybe_output_file.value());
-    auto output_stream = std::make_unique<io::FormattedOutputStreamFile>(std::move(output_file), 1024);
+    auto output_stream = std::make_unique<formats::FormattedOutputStreamFile>(std::move(output_file), 1024);
     auto column_evaluators = ColumnSlotIdEvaluator::from_types(type_descs);
     auto writer_options = std::make_shared<formats::CSVWriterOptions>();
     writer_options->is_hive = true;
@@ -654,7 +654,7 @@ TEST_F(CSVFileWriterTest, TestWriteMap) {
     auto maybe_output_file = _fs.new_writable_file(_file_path);
     EXPECT_OK(maybe_output_file.status());
     auto output_file = std::move(maybe_output_file.value());
-    auto output_stream = std::make_unique<io::FormattedOutputStreamFile>(std::move(output_file), 1024);
+    auto output_stream = std::make_unique<formats::FormattedOutputStreamFile>(std::move(output_file), 1024);
     auto column_evaluators = ColumnSlotIdEvaluator::from_types(type_descs);
     auto writer_options = std::make_shared<formats::CSVWriterOptions>();
     auto writer =
@@ -677,7 +677,7 @@ TEST_F(CSVFileWriterTest, TestWriteNestedArray) {
     auto maybe_output_file = _fs.new_writable_file(_file_path);
     EXPECT_OK(maybe_output_file.status());
     auto output_file = std::move(maybe_output_file.value());
-    auto output_stream = std::make_unique<io::FormattedOutputStreamFile>(std::move(output_file), 1024);
+    auto output_stream = std::make_unique<formats::FormattedOutputStreamFile>(std::move(output_file), 1024);
     auto column_evaluators = ColumnSlotIdEvaluator::from_types(type_descs);
     auto writer_options = std::make_shared<formats::CSVWriterOptions>();
     auto writer =
@@ -740,13 +740,13 @@ TEST_F(CSVFileWriterTest, TestUnknownCompression) {
 
     auto column_names = _make_type_names(type_descs);
     auto output_file = _fs.new_writable_file(_file_path).value();
-    auto async_stream = std::make_unique<io::AsyncFlushOutputStream>(std::move(output_file), nullptr, nullptr);
+    auto async_stream = std::make_unique<formats::AsyncFlushOutputStream>(std::move(output_file), nullptr, nullptr);
 
     // UNKNOWN_COMPRESSION should fail when creating CompressedOutputStream
     // We expect this to return an error status
-    auto base_stream = std::make_shared<io::AsyncFormattedOutputStreamFile>(async_stream.get(), 1024);
+    auto base_stream = std::make_shared<formats::AsyncFormattedOutputStreamFile>(async_stream.get(), 1024);
     auto result =
-            io::CompressedFormattedOutputStream::create(base_stream, CompressionTypePB::UNKNOWN_COMPRESSION, 1024);
+            formats::CompressedFormattedOutputStream::create(base_stream, CompressionTypePB::UNKNOWN_COMPRESSION, 1024);
     ASSERT_FALSE(result.ok());
 }
 
@@ -798,7 +798,7 @@ TEST_F(CSVFileWriterTest, TestWriteWithHeader) {
     auto maybe_output_file = _fs.new_writable_file(_file_path);
     EXPECT_OK(maybe_output_file.status());
     auto output_file = std::move(maybe_output_file.value());
-    auto output_stream = std::make_unique<io::FormattedOutputStreamFile>(std::move(output_file), 1024);
+    auto output_stream = std::make_unique<formats::FormattedOutputStreamFile>(std::move(output_file), 1024);
     auto column_evaluators = ColumnSlotIdEvaluator::from_types(type_descs);
     auto writer_options = std::make_shared<formats::CSVWriterOptions>();
     writer_options->include_header = true;
@@ -844,7 +844,7 @@ TEST_F(CSVFileWriterTest, TestWriteHeaderOnly) {
     auto maybe_output_file = _fs.new_writable_file(_file_path);
     EXPECT_OK(maybe_output_file.status());
     auto output_file = std::move(maybe_output_file.value());
-    auto output_stream = std::make_unique<io::FormattedOutputStreamFile>(std::move(output_file), 1024);
+    auto output_stream = std::make_unique<formats::FormattedOutputStreamFile>(std::move(output_file), 1024);
     auto column_evaluators = ColumnSlotIdEvaluator::from_types(type_descs);
     auto writer_options = std::make_shared<formats::CSVWriterOptions>();
     writer_options->include_header = true;
@@ -875,7 +875,7 @@ TEST_F(CSVFileWriterTest, TestWriteHeaderWithSpecialChars) {
     auto maybe_output_file = _fs.new_writable_file(_file_path);
     EXPECT_OK(maybe_output_file.status());
     auto output_file = std::move(maybe_output_file.value());
-    auto output_stream = std::make_unique<io::FormattedOutputStreamFile>(std::move(output_file), 1024);
+    auto output_stream = std::make_unique<formats::FormattedOutputStreamFile>(std::move(output_file), 1024);
     auto column_evaluators = ColumnSlotIdEvaluator::from_types(type_descs);
     auto writer_options = std::make_shared<formats::CSVWriterOptions>();
     writer_options->include_header = true;
@@ -904,7 +904,7 @@ TEST_F(CSVFileWriterTest, TestWriteHeaderWithCustomDelimiter) {
     auto maybe_output_file = _fs.new_writable_file(_file_path);
     EXPECT_OK(maybe_output_file.status());
     auto output_file = std::move(maybe_output_file.value());
-    auto output_stream = std::make_unique<io::FormattedOutputStreamFile>(std::move(output_file), 1024);
+    auto output_stream = std::make_unique<formats::FormattedOutputStreamFile>(std::move(output_file), 1024);
     auto column_evaluators = ColumnSlotIdEvaluator::from_types(type_descs);
     auto writer_options = std::make_shared<formats::CSVWriterOptions>();
     writer_options->include_header = true;
@@ -935,7 +935,7 @@ TEST_F(CSVFileWriterTest, TestWriteHeaderEscapeCustomDelimiter) {
     auto maybe_output_file = _fs.new_writable_file(_file_path);
     EXPECT_OK(maybe_output_file.status());
     auto output_file = std::move(maybe_output_file.value());
-    auto output_stream = std::make_unique<io::FormattedOutputStreamFile>(std::move(output_file), 1024);
+    auto output_stream = std::make_unique<formats::FormattedOutputStreamFile>(std::move(output_file), 1024);
     auto column_evaluators = ColumnSlotIdEvaluator::from_types(type_descs);
     auto writer_options = std::make_shared<formats::CSVWriterOptions>();
     writer_options->include_header = true;
@@ -962,7 +962,7 @@ TEST_F(CSVFileWriterTest, TestWriteWithoutHeader) {
     auto maybe_output_file = _fs.new_writable_file(_file_path);
     EXPECT_OK(maybe_output_file.status());
     auto output_file = std::move(maybe_output_file.value());
-    auto output_stream = std::make_unique<io::FormattedOutputStreamFile>(std::move(output_file), 1024);
+    auto output_stream = std::make_unique<formats::FormattedOutputStreamFile>(std::move(output_file), 1024);
     auto column_evaluators = ColumnSlotIdEvaluator::from_types(type_descs);
     auto writer_options = std::make_shared<formats::CSVWriterOptions>();
     writer_options->include_header = false; // explicitly false
@@ -1004,10 +1004,11 @@ TEST_F(CSVFileWriterTest, TestWriteIntegersWithGzipCompression) {
     auto maybe_output_file = _fs.new_writable_file(_file_path);
     EXPECT_OK(maybe_output_file.status());
     auto output_file = std::move(maybe_output_file.value());
-    auto async_stream = std::make_unique<io::AsyncFlushOutputStream>(std::move(output_file), nullptr, _runtime_state);
-    auto base_stream = std::make_shared<io::AsyncFormattedOutputStreamFile>(async_stream.get(), 1024 * 1024);
+    auto async_stream =
+            std::make_unique<formats::AsyncFlushOutputStream>(std::move(output_file), nullptr, _runtime_state);
+    auto base_stream = std::make_shared<formats::AsyncFormattedOutputStreamFile>(async_stream.get(), 1024 * 1024);
     auto csv_output_stream_result =
-            io::CompressedFormattedOutputStream::create(base_stream, CompressionTypePB::GZIP, 1024 * 1024);
+            formats::CompressedFormattedOutputStream::create(base_stream, CompressionTypePB::GZIP, 1024 * 1024);
     ASSERT_OK(csv_output_stream_result.status());
     auto csv_output_stream = std::move(csv_output_stream_result.value());
     auto column_evaluators = ColumnSlotIdEvaluator::from_types(type_descs);
@@ -1070,10 +1071,11 @@ TEST_F(CSVFileWriterTest, TestWriteVarcharWithGzipCompression) {
     auto maybe_output_file = _fs.new_writable_file(_file_path);
     EXPECT_OK(maybe_output_file.status());
     auto output_file = std::move(maybe_output_file.value());
-    auto async_stream = std::make_unique<io::AsyncFlushOutputStream>(std::move(output_file), nullptr, _runtime_state);
-    auto base_stream = std::make_shared<io::AsyncFormattedOutputStreamFile>(async_stream.get(), 1024 * 1024);
+    auto async_stream =
+            std::make_unique<formats::AsyncFlushOutputStream>(std::move(output_file), nullptr, _runtime_state);
+    auto base_stream = std::make_shared<formats::AsyncFormattedOutputStreamFile>(async_stream.get(), 1024 * 1024);
     auto csv_output_stream_result =
-            io::CompressedFormattedOutputStream::create(base_stream, CompressionTypePB::GZIP, 1024 * 1024);
+            formats::CompressedFormattedOutputStream::create(base_stream, CompressionTypePB::GZIP, 1024 * 1024);
     ASSERT_OK(csv_output_stream_result.status());
     auto csv_output_stream = std::move(csv_output_stream_result.value());
     auto column_evaluators = ColumnSlotIdEvaluator::from_types(type_descs);
@@ -1122,10 +1124,11 @@ TEST_F(CSVFileWriterTest, TestWriteLargeDataWithGzipCompression) {
     auto maybe_output_file = _fs.new_writable_file(_file_path);
     EXPECT_OK(maybe_output_file.status());
     auto output_file = std::move(maybe_output_file.value());
-    auto async_stream = std::make_unique<io::AsyncFlushOutputStream>(std::move(output_file), nullptr, _runtime_state);
-    auto base_stream = std::make_shared<io::AsyncFormattedOutputStreamFile>(async_stream.get(), 1024 * 1024);
+    auto async_stream =
+            std::make_unique<formats::AsyncFlushOutputStream>(std::move(output_file), nullptr, _runtime_state);
+    auto base_stream = std::make_shared<formats::AsyncFormattedOutputStreamFile>(async_stream.get(), 1024 * 1024);
     auto csv_output_stream_result =
-            io::CompressedFormattedOutputStream::create(base_stream, CompressionTypePB::GZIP, 1024 * 1024);
+            formats::CompressedFormattedOutputStream::create(base_stream, CompressionTypePB::GZIP, 1024 * 1024);
     ASSERT_OK(csv_output_stream_result.status());
     auto csv_output_stream = std::move(csv_output_stream_result.value());
     auto column_evaluators = ColumnSlotIdEvaluator::from_types(type_descs);
@@ -1199,10 +1202,10 @@ TEST_F(CSVFileWriterTest, TestCompressionRatio) {
         EXPECT_OK(maybe_output_file.status());
         auto output_file = std::move(maybe_output_file.value());
         auto async_stream =
-                std::make_unique<io::AsyncFlushOutputStream>(std::move(output_file), nullptr, _runtime_state);
-        auto base_stream = std::make_shared<io::AsyncFormattedOutputStreamFile>(async_stream.get(), 1024 * 1024);
+                std::make_unique<formats::AsyncFlushOutputStream>(std::move(output_file), nullptr, _runtime_state);
+        auto base_stream = std::make_shared<formats::AsyncFormattedOutputStreamFile>(async_stream.get(), 1024 * 1024);
         auto csv_output_stream_result =
-                io::CompressedFormattedOutputStream::create(base_stream, CompressionTypePB::GZIP, 1024 * 1024);
+                formats::CompressedFormattedOutputStream::create(base_stream, CompressionTypePB::GZIP, 1024 * 1024);
         ASSERT_OK(csv_output_stream_result.status());
         auto csv_output_stream = std::move(csv_output_stream_result.value());
         auto column_evaluators = ColumnSlotIdEvaluator::from_types(type_descs);
@@ -1337,7 +1340,7 @@ TEST_F(CSVFileWriterTest, TestEncloseEscapeRFC4180) {
     };
     std::vector<std::string> column_names = {"id", "name", "val"};
     auto output_file = std::move(_fs.new_writable_file(_file_path).value());
-    auto output_stream = std::make_unique<io::FormattedOutputStreamFile>(std::move(output_file), 1024);
+    auto output_stream = std::make_unique<formats::FormattedOutputStreamFile>(std::move(output_file), 1024);
     auto column_evaluators = ColumnSlotIdEvaluator::from_types(type_descs);
 
     auto writer_options = std::make_shared<formats::CSVWriterOptions>();
@@ -1384,7 +1387,7 @@ TEST_F(CSVFileWriterTest, TestEncloseEscapeBackslash) {
     };
     std::vector<std::string> column_names = {"id", "name", "val"};
     auto output_file = std::move(_fs.new_writable_file(_file_path).value());
-    auto output_stream = std::make_unique<io::FormattedOutputStreamFile>(std::move(output_file), 1024);
+    auto output_stream = std::make_unique<formats::FormattedOutputStreamFile>(std::move(output_file), 1024);
     auto column_evaluators = ColumnSlotIdEvaluator::from_types(type_descs);
 
     auto writer_options = std::make_shared<formats::CSVWriterOptions>();
@@ -1427,7 +1430,7 @@ TEST_F(CSVFileWriterTest, TestEncloseWithoutEscape) {
     std::vector<TypeDescriptor> type_descs{TypeDescriptor::from_logical_type(TYPE_VARCHAR)};
     std::vector<std::string> column_names = {"name"};
     auto output_file = std::move(_fs.new_writable_file(_file_path).value());
-    auto output_stream = std::make_unique<io::FormattedOutputStreamFile>(std::move(output_file), 1024);
+    auto output_stream = std::make_unique<formats::FormattedOutputStreamFile>(std::move(output_file), 1024);
     auto column_evaluators = ColumnSlotIdEvaluator::from_types(type_descs);
 
     auto writer_options = std::make_shared<formats::CSVWriterOptions>();
@@ -1467,7 +1470,7 @@ TEST_F(CSVFileWriterTest, TestEncloseWithHeader) {
     // Column name with enclose char inside
     std::vector<std::string> column_names = {"id", "my\"col"};
     auto output_file = std::move(_fs.new_writable_file(_file_path).value());
-    auto output_stream = std::make_unique<io::FormattedOutputStreamFile>(std::move(output_file), 1024);
+    auto output_stream = std::make_unique<formats::FormattedOutputStreamFile>(std::move(output_file), 1024);
     auto column_evaluators = ColumnSlotIdEvaluator::from_types(type_descs);
 
     auto writer_options = std::make_shared<formats::CSVWriterOptions>();
@@ -1510,7 +1513,7 @@ TEST_F(CSVFileWriterTest, TestEncloseDisabled) {
     };
     std::vector<std::string> column_names = {"id", "name"};
     auto output_file = std::move(_fs.new_writable_file(_file_path).value());
-    auto output_stream = std::make_unique<io::FormattedOutputStreamFile>(std::move(output_file), 1024);
+    auto output_stream = std::make_unique<formats::FormattedOutputStreamFile>(std::move(output_file), 1024);
     auto column_evaluators = ColumnSlotIdEvaluator::from_types(type_descs);
 
     auto writer_options = std::make_shared<formats::CSVWriterOptions>();
@@ -1555,7 +1558,7 @@ TEST_F(CSVFileWriterTest, TestEncloseConstNullableColumn) {
     };
     std::vector<std::string> column_names = {"id", "const_col"};
     auto output_file = std::move(_fs.new_writable_file(_file_path).value());
-    auto output_stream = std::make_unique<io::FormattedOutputStreamFile>(std::move(output_file), 1024);
+    auto output_stream = std::make_unique<formats::FormattedOutputStreamFile>(std::move(output_file), 1024);
     auto column_evaluators = ColumnSlotIdEvaluator::from_types(type_descs);
 
     auto writer_options = std::make_shared<formats::CSVWriterOptions>();
@@ -1609,7 +1612,7 @@ TEST_F(CSVFileWriterTest, TestConstColumnWithoutEnclose) {
     };
     std::vector<std::string> column_names = {"id", "const_str"};
     auto output_file = std::move(_fs.new_writable_file(_file_path).value());
-    auto output_stream = std::make_unique<io::FormattedOutputStreamFile>(std::move(output_file), 1024);
+    auto output_stream = std::make_unique<formats::FormattedOutputStreamFile>(std::move(output_file), 1024);
     auto column_evaluators = ColumnSlotIdEvaluator::from_types(type_descs);
 
     auto writer_options = std::make_shared<formats::CSVWriterOptions>();
@@ -1656,7 +1659,7 @@ TEST_F(CSVFileWriterTest, TestEncloseConstStringColumn) {
     };
     std::vector<std::string> column_names = {"id", "const_str"};
     auto output_file = std::move(_fs.new_writable_file(_file_path).value());
-    auto output_stream = std::make_unique<io::FormattedOutputStreamFile>(std::move(output_file), 1024);
+    auto output_stream = std::make_unique<formats::FormattedOutputStreamFile>(std::move(output_file), 1024);
     auto column_evaluators = ColumnSlotIdEvaluator::from_types(type_descs);
 
     auto writer_options = std::make_shared<formats::CSVWriterOptions>();
@@ -1725,10 +1728,11 @@ TEST_F(CSVFileWriterTest, TestCompressionWithCustomDelimiters) {
     auto maybe_output_file = _fs.new_writable_file(_file_path);
     EXPECT_OK(maybe_output_file.status());
     auto output_file = std::move(maybe_output_file.value());
-    auto async_stream = std::make_unique<io::AsyncFlushOutputStream>(std::move(output_file), nullptr, _runtime_state);
-    auto base_stream = std::make_shared<io::AsyncFormattedOutputStreamFile>(async_stream.get(), 1024 * 1024);
+    auto async_stream =
+            std::make_unique<formats::AsyncFlushOutputStream>(std::move(output_file), nullptr, _runtime_state);
+    auto base_stream = std::make_shared<formats::AsyncFormattedOutputStreamFile>(async_stream.get(), 1024 * 1024);
     auto csv_output_stream_result =
-            io::CompressedFormattedOutputStream::create(base_stream, CompressionTypePB::GZIP, 1024 * 1024);
+            formats::CompressedFormattedOutputStream::create(base_stream, CompressionTypePB::GZIP, 1024 * 1024);
     ASSERT_OK(csv_output_stream_result.status());
     auto csv_output_stream = std::move(csv_output_stream_result.value());
     auto column_evaluators = ColumnSlotIdEvaluator::from_types(type_descs);

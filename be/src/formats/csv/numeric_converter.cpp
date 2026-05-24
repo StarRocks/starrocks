@@ -20,7 +20,7 @@
 namespace starrocks::csv {
 
 template <typename T>
-Status NumericConverter<T>::write_string(io::FormattedOutputStream* os, const Column& column, size_t row_num,
+Status NumericConverter<T>::write_string(formats::FormattedOutputStream* os, const Column& column, size_t row_num,
                                          const Options& options) const {
     auto numeric_column = down_cast<const FixedLengthColumn<DataType>*>(&column);
     const auto idata = numeric_column->immutable_data();
@@ -32,8 +32,8 @@ Status NumericConverter<T>::write_string(io::FormattedOutputStream* os, const Co
 }
 
 template <typename T>
-Status NumericConverter<T>::write_quoted_string(io::FormattedOutputStream* os, const Column& column, size_t row_num,
-                                                const Options& options) const {
+Status NumericConverter<T>::write_quoted_string(formats::FormattedOutputStream* os, const Column& column,
+                                                size_t row_num, const Options& options) const {
     return write_string(os, column, row_num, options);
 }
 

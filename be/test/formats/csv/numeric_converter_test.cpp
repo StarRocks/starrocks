@@ -16,7 +16,7 @@
 
 #include "column/column_helper.h"
 #include "formats/csv/converter.h"
-#include "io/formatted_output_stream_string.h"
+#include "formats/io/formatted_output_stream_string.h"
 #include "types/type_descriptor.h"
 
 namespace starrocks::csv {
@@ -182,7 +182,7 @@ TEST_F(NumericConverterTest, test_write_string) {
     col->append_datum((int16_t)11);
     col->append_datum((int16_t)32767);
 
-    io::FormattedOutputStreamString buff(64);
+    formats::FormattedOutputStreamString buff(64);
 
     /// write_string
 

@@ -30,7 +30,7 @@ set(EXEC_FILES
         ./connector_sink/iceberg_chunk_sink_test.cpp
         ./connector_sink/file_chunk_sink_test.cpp
         ./connector_sink/partition_chunk_writer_test.cpp
-        ./connector_sink/async_flush_output_stream_test.cpp
+        ./connector_sink/async_flush_stream_poller_test.cpp
         ./connector_sink/iceberg_table_sink_test.cpp
         ./connector_sink/iceberg_delete_sink_test.cpp
         ./connector_sink/iceberg_row_delta_sink_test.cpp
@@ -263,7 +263,6 @@ set(EXEC_FILES
         ./http/transaction_stream_load_test.cpp
         ./http/action/proc_profile_e2e_test.cpp
         ./io/compressed_input_stream_test.cpp
-        ./io/formatted_output_stream_file_test.cpp
         ./io/s3_output_stream_test.cpp
         ./io/s3_input_stream_test.cpp
         ./io/shared_buffered_input_stream_test.cpp
@@ -372,6 +371,7 @@ add_subdirectory(column)
 add_subdirectory(types)
 add_subdirectory(exec)
 add_subdirectory(connector)
+add_subdirectory(formats)
 add_subdirectory(runtime)
 add_subdirectory(exprs)
 add_subdirectory(io)

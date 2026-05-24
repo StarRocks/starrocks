@@ -16,15 +16,17 @@
 
 #include <limits>
 #include <memory>
+#include <utility>
 
 #include "base/compression/stream_compressor.h"
 #include "base/container/raw_container.h"
+#include "common/statusor.h"
+#include "formats/io/async_flush_output_stream.h"
+#include "formats/io/formatted_output_stream.h"
 #include "fs/fs.h"
 #include "gen_cpp/segment.pb.h"
-#include "io/async_flush_output_stream.h"
-#include "io/formatted_output_stream.h"
 
-namespace starrocks::io {
+namespace starrocks::formats {
 
 class FormattedOutputStreamFile final : public FormattedOutputStream {
 public:
@@ -47,7 +49,7 @@ private:
 
 class AsyncFormattedOutputStreamFile final : public FormattedOutputStream {
 public:
-    AsyncFormattedOutputStreamFile(io::AsyncFlushOutputStream* stream, size_t buff_size)
+    AsyncFormattedOutputStreamFile(AsyncFlushOutputStream* stream, size_t buff_size)
             : FormattedOutputStream(buff_size), _stream(stream) {}
 
     Status finalize() override {
@@ -64,7 +66,7 @@ protected:
     }
 
 private:
-    io::AsyncFlushOutputStream* _stream;
+    AsyncFlushOutputStream* _stream;
 };
 
 // CompressedFormattedOutputStream is an abstract base class for compressed output streams.
@@ -158,4 +160,4 @@ private:
     raw::RawVector<uint8_t> _block_buffer;
 };
 
-} // namespace starrocks::io
+} // namespace starrocks::formats

@@ -12,23 +12,23 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#pragma once
+
+#include <deque>
 #include <future>
-#include <queue>
 
 #include "common/status.h"
+#include "formats/io/async_flush_output_stream.h"
 #include "formats/utils.h"
-#include "io/async_flush_output_stream.h"
-
-#pragma once
 
 namespace starrocks::connector {
 
-/// own a FIFO queue of `io::AsyncFlushOutputStream`
+/// own a FIFO queue of `formats::AsyncFlushOutputStream`
 /// client periodically poll the state of async io operations via `poll()`
-/// each `io::AsyncFlushOutputStream` will be destroyed once its async status is ready and fetched
+/// each `formats::AsyncFlushOutputStream` will be destroyed once its async status is ready and fetched
 class AsyncFlushStreamPoller {
 public:
-    using Stream = io::AsyncFlushOutputStream;
+    using Stream = formats::AsyncFlushOutputStream;
 
     AsyncFlushStreamPoller() = default;
 

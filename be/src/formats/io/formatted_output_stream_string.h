@@ -14,9 +14,11 @@
 
 #pragma once
 
-#include "io/formatted_output_stream.h"
+#include <string>
 
-namespace starrocks::io {
+#include "formats/io/formatted_output_stream.h"
+
+namespace starrocks::formats {
 
 class FormattedOutputStreamString final : public FormattedOutputStream {
 public:
@@ -34,4 +36,4 @@ private:
     std::string _str;
 };
 
-} // namespace starrocks::io
+} // namespace starrocks::formats

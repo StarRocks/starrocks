@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "io/formatted_output_stream_file.h"
+#include "formats/io/formatted_output_stream_file.h"
 
 #include <gtest/gtest.h>
 
@@ -21,29 +21,24 @@
 
 #include "base/testutil/assert.h"
 #include "common/object_pool.h"
-#include "compression_test_utils.h"
-#include "exec/pipeline/fragment_context.h"
+#include "formats/io/async_flush_output_stream.h"
 #include "fs/fs_memory.h"
-#include "io/async_flush_output_stream.h"
-#include "runtime/exec_env.h"
+#include "io/compression_test_utils.h"
+#include "runtime/runtime_state.h"
 
-namespace starrocks::io {
+namespace starrocks::formats {
 
 class FormattedOutputStreamFileTest : public testing::Test {
 public:
     void SetUp() override {
-        _fragment_context = std::make_shared<pipeline::FragmentContext>();
-        _fragment_context->set_runtime_state(std::make_shared<RuntimeState>());
-        _runtime_state = _fragment_context->runtime_state();
-        auto* exec_env = ExecEnv::GetInstance();
-        _runtime_state->set_exec_env(exec_env);
-        _runtime_state->set_query_execution_services(&exec_env->query_execution_services());
+        _runtime_state = _pool.add(new RuntimeState(TQueryGlobals()));
+        _runtime_state->init_instance_mem_tracker();
     }
 
     void TearDown() override {}
 
 protected:
-    std::shared_ptr<pipeline::FragmentContext> _fragment_context;
+    ObjectPool _pool;
     RuntimeState* _runtime_state;
     MemoryFileSystem _fs;
 };
@@ -689,4 +684,4 @@ TEST_F(FormattedOutputStreamFileTest, TestAllCompressionTypesLargeData) {
     }
 }
 
-} // namespace starrocks::io
+} // namespace starrocks::formats

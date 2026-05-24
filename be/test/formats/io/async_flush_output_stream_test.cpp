@@ -12,36 +12,28 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "io/async_flush_output_stream.h"
+#include "formats/io/async_flush_output_stream.h"
 
 #include <gtest/gtest-param-test.h>
 #include <gtest/gtest.h>
 
-#include <thread>
-
 #include "base/testutil/assert.h"
-#include "base/utility/defer_op.h"
+#include "common/object_pool.h"
 #include "common/thread/priority_thread_pool.hpp"
-#include "connector/async_flush_stream_poller.h"
-#include "exec/pipeline/fragment_context.h"
 #include "formats/utils.h"
 #include "fs/fs_memory.h"
-#include "runtime/exec_env.h"
+#include "runtime/runtime_state.h"
 
-namespace starrocks::connector {
+namespace starrocks::formats {
 namespace {
 
-using Stream = io::AsyncFlushOutputStream;
+using Stream = AsyncFlushOutputStream;
 
 class AsyncFlushOutputStreamTest : public ::testing::Test {
 protected:
     void SetUp() override {
-        _fragment_context = std::make_shared<pipeline::FragmentContext>();
-        _fragment_context->set_runtime_state(std::make_shared<RuntimeState>());
-        _runtime_state = _fragment_context->runtime_state();
-        auto* exec_env = ExecEnv::GetInstance();
-        _runtime_state->set_exec_env(exec_env);
-        _runtime_state->set_query_execution_services(&exec_env->query_execution_services());
+        _runtime_state = _pool.add(new RuntimeState(TQueryGlobals()));
+        _runtime_state->init_instance_mem_tracker();
         _io_executor = _pool.add(new PriorityThreadPool("test", 1, 100));
         _file = _fs.new_writable_file("/test.out").value();
     }
@@ -49,7 +41,6 @@ protected:
     void TearDown() override {}
 
     ObjectPool _pool;
-    std::shared_ptr<pipeline::FragmentContext> _fragment_context;
     RuntimeState* _runtime_state;
     PriorityThreadPool* _io_executor;
     MemoryFileSystem _fs;
@@ -94,39 +85,5 @@ TEST_F(AsyncFlushOutputStreamTest, test_append_repeated) {
     EXPECT_EQ(stream.tell(), N * M);
 }
 
-TEST_F(AsyncFlushOutputStreamTest, test_poller) {
-    auto stream = std::make_unique<Stream>(std::move(_file), _io_executor, _runtime_state);
-    auto ptr = stream.get();
-    AsyncFlushStreamPoller poller;
-    poller.enqueue(std::move(stream));
-    EXPECT_EQ(poller.releasable_memory(), 0);
-    {
-        auto [s, done] = poller.poll();
-        EXPECT_OK(s);
-        EXPECT_FALSE(done);
-    }
-
-    {
-        const int N = 1000'000;
-        const int M = 100;
-        std::vector<uint8> data(N, 'a');
-        for (int i = 0; i < M; i++) {
-            EXPECT_OK(ptr->write(data.data(), data.size()));
-        }
-        EXPECT_OK(ptr->close());
-    }
-
-    {
-        using namespace std::chrono_literals;
-        while (true) {
-            auto [s, done] = poller.poll();
-            if (done) {
-                break;
-            }
-            std::this_thread::sleep_for(10ms);
-        }
-    }
-}
-
 } // namespace
-} // namespace starrocks::connector
+} // namespace starrocks::formats
