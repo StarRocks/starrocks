@@ -14,11 +14,15 @@
 
 // Benchmarks the percentile_approx pass-through (streaming) serialization path:
 // legacy (a full TDigest blob per row) vs the compact RAW format
-// (enable_percentile_compact_intermediate). Two axes:
+// (enable_percentile_compact_intermediate). Axes:
 //   - convert: convert_to_exchange_format only (serialize-side CPU);
-//   - roundtrip: convert + merge every record into a fresh state (the cost a
-//     split aggregation pays in the pass-through + merge phases).
-// rows_per_s lets the two be compared directly; bytes_per_chunk shows the wire
+//   - roundtrip: convert + per-row merge() into a fresh state;
+//   - roundtrip_batch: convert + one merge_batch_single_state() call (the
+//     no-GROUP-BY / streaming path optimized by the percentile override:
+//     accounting once per chunk + reserve);
+//   - groupby: convert + merge_batch() scattering records across N states (the
+//     GROUP BY merge phase, which stays per-row).
+// rows_per_s lets them be compared directly; bytes_per_chunk shows the wire
 // size (~77 B/row legacy vs 9 B/row compact).
 //
 // Build & run:
@@ -29,6 +33,7 @@
 #include <benchmark/benchmark.h>
 
 #include <random>
+#include <vector>
 
 #include "column/binary_column.h"
 #include "column/column_helper.h"
@@ -130,6 +135,81 @@ static void run_roundtrip(benchmark::State& state, bool compact) {
     tls_agg_state_allocator = nullptr;
 }
 
+// Like run_roundtrip, but merges the whole chunk through the single-state batch
+// entry (merge_batch_single_state) -- what a no-GROUP-BY / streaming pass-through
+// aggregator calls. This is the path the percentile merge_batch_single_state
+// override optimizes (accounting once per chunk + reserve).
+static void run_roundtrip_batch(benchmark::State& state, bool compact) {
+    CountingAllocatorWithHook allocator;
+    tls_agg_state_allocator = &allocator;
+    const size_t n = state.range(0);
+    const AggregateFunction* fn = percentile_fn();
+
+    TQueryOptions opts;
+    opts.__set_enable_percentile_compact_intermediate(compact);
+    RuntimeState rs(TUniqueId(), opts, TQueryGlobals(), nullptr);
+    auto ctx = make_ctx(&rs);
+    auto quantile = ColumnHelper::create_const_column<TYPE_DOUBLE>(0.5, 1);
+    Columns src{make_values(n), quantile, ColumnHelper::create_const_column<TYPE_DOUBLE>(2048, 1)};
+
+    for (auto _ : state) {
+        MutableColumnPtr out = BinaryColumn::create();
+        fn->convert_to_exchange_format(ctx.get(), src, n, out);
+
+        MemPool pool;
+        AggDataPtr agg_state = pool.allocate_aligned(fn->size(), fn->alignof_size());
+        fn->create(ctx.get(), agg_state);
+        fn->merge_batch_single_state(ctx.get(), agg_state, out.get(), 0, out->size());
+        fn->destroy(ctx.get(), agg_state);
+        benchmark::DoNotOptimize(out);
+    }
+    state.counters["rows_per_s"] =
+            benchmark::Counter(static_cast<double>(n) * state.iterations(), benchmark::Counter::kIsRate);
+    tls_agg_state_allocator = nullptr;
+}
+
+// GROUP BY merge phase: scatter the n records across `groups` states via
+// merge_batch (a different state per row). This path stays per-row regardless of
+// the override, so it only reflects the byte_size_in_memory inlining win.
+static void run_groupby(benchmark::State& state, bool compact) {
+    CountingAllocatorWithHook allocator;
+    tls_agg_state_allocator = &allocator;
+    const size_t n = state.range(0);
+    const size_t groups = state.range(1);
+    const AggregateFunction* fn = percentile_fn();
+
+    TQueryOptions opts;
+    opts.__set_enable_percentile_compact_intermediate(compact);
+    RuntimeState rs(TUniqueId(), opts, TQueryGlobals(), nullptr);
+    auto ctx = make_ctx(&rs);
+    auto quantile = ColumnHelper::create_const_column<TYPE_DOUBLE>(0.5, 1);
+    Columns src{make_values(n), quantile, ColumnHelper::create_const_column<TYPE_DOUBLE>(2048, 1)};
+
+    for (auto _ : state) {
+        MutableColumnPtr out = BinaryColumn::create();
+        fn->convert_to_exchange_format(ctx.get(), src, n, out);
+
+        MemPool pool;
+        std::vector<AggDataPtr> group_states(groups);
+        for (size_t g = 0; g < groups; ++g) {
+            group_states[g] = pool.allocate_aligned(fn->size(), fn->alignof_size());
+            fn->create(ctx.get(), group_states[g]);
+        }
+        std::vector<AggDataPtr> states(n);
+        for (size_t i = 0; i < n; ++i) {
+            states[i] = group_states[i % groups];
+        }
+        fn->merge_batch(ctx.get(), n, 0, out.get(), states.data());
+        for (size_t g = 0; g < groups; ++g) {
+            fn->destroy(ctx.get(), group_states[g]);
+        }
+        benchmark::DoNotOptimize(out);
+    }
+    state.counters["rows_per_s"] =
+            benchmark::Counter(static_cast<double>(n) * state.iterations(), benchmark::Counter::kIsRate);
+    tls_agg_state_allocator = nullptr;
+}
+
 static void BM_PercentileConvert_Legacy(benchmark::State& state) {
     run_convert(state, /*compact=*/false);
 }
@@ -147,6 +227,25 @@ BENCHMARK(BM_PercentileConvert_Legacy)->Arg(1024)->Arg(4096);
 BENCHMARK(BM_PercentileConvert_Compact)->Arg(1024)->Arg(4096);
 BENCHMARK(BM_PercentileRoundtrip_Legacy)->Arg(1024)->Arg(4096);
 BENCHMARK(BM_PercentileRoundtrip_Compact)->Arg(1024)->Arg(4096);
+
+static void BM_PercentileRoundtripBatch_Legacy(benchmark::State& state) {
+    run_roundtrip_batch(state, /*compact=*/false);
+}
+static void BM_PercentileRoundtripBatch_Compact(benchmark::State& state) {
+    run_roundtrip_batch(state, /*compact=*/true);
+}
+static void BM_PercentileGroupBy_Legacy(benchmark::State& state) {
+    run_groupby(state, /*compact=*/false);
+}
+static void BM_PercentileGroupBy_Compact(benchmark::State& state) {
+    run_groupby(state, /*compact=*/true);
+}
+
+BENCHMARK(BM_PercentileRoundtripBatch_Legacy)->Arg(1024)->Arg(4096);
+BENCHMARK(BM_PercentileRoundtripBatch_Compact)->Arg(1024)->Arg(4096);
+// Args: {rows, groups}. 64 rows/group and 8 rows/group at 4096 rows.
+BENCHMARK(BM_PercentileGroupBy_Legacy)->Args({4096, 64})->Args({4096, 512});
+BENCHMARK(BM_PercentileGroupBy_Compact)->Args({4096, 64})->Args({4096, 512});
 
 } // namespace starrocks
 
