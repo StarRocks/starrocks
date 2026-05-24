@@ -152,7 +152,7 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
     LOG(INFO) << process_name << " start step " << start_step++ << ": exec env init successfully";
 
 #if !defined(__APPLE__) && defined(WITH_STARCACHE)
-    cache_env->attach_peer_cache_stub_cache(exec_env->brpc_stub_cache());
+    cache_env->attach_peer_cache_stub_cache(platform_env->brpc_stub_cache());
     LOG(INFO) << process_name << " start step " << start_step++ << ": peer cache BRPC stub cache attached successfully";
 #endif
 

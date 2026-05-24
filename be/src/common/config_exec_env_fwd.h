@@ -31,6 +31,9 @@ CONF_String(mem_limit, "90%");
 // The count of thread to publish version per transaction
 CONF_mInt32(transaction_publish_version_worker_count, "0");
 
+// The count of thread to cluster snapshot
+CONF_mInt32(cluster_snapshot_threads, "0");
+
 // Number of olap/external scanner thread pool size.
 CONF_mInt32(scanner_thread_pool_thread_num, "48");
 

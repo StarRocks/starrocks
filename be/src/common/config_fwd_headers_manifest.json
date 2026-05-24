@@ -216,6 +216,7 @@
         "compaction_memory_limit_per_worker",
         "consistency_max_memory_limit",
         "consistency_max_memory_limit_percent",
+        "cluster_snapshot_threads",
         "dictionary_cache_refresh_threadpool_size",
         "enable_resource_group_bind_cpus",
         "enable_resource_group_cpu_borrowing",
