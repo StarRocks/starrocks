@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "io/core/fd_output_stream.h"
+#include "io/fd_output_stream.h"
 
 #include <fcntl.h>
 #include <sys/types.h>
@@ -21,8 +21,8 @@
 #include "base/concurrency/stopwatch.hpp"
 #include "common/logging.h"
 #include "gutil/macros.h"
-#include "io/core/io_error.h"
-#include "io/core/io_profiler.h"
+#include "io/io_error.h"
+#include "io/io_profiler.h"
 
 namespace starrocks::io {
 

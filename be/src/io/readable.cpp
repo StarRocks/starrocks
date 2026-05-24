@@ -12,18 +12,20 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "io/io_error.h"
-
-#include <gtest/gtest.h>
-
-#include <cerrno>
+#include "io/readable.h"
 
 namespace starrocks::io {
 
-TEST(IOErrorTest, ErrorTypeMapping) {
-    EXPECT_TRUE(io_error("read", ENOENT).is_not_found());
-    EXPECT_TRUE(io_error("create", EEXIST).is_already_exist());
-    EXPECT_TRUE(io_error("read", EIO).is_io_error());
+Status Readable::read_fully(void* data, int64_t count) {
+    int64_t nread = 0;
+    while (nread < count) {
+        ASSIGN_OR_RETURN(auto n, read(static_cast<uint8_t*>(data) + nread, count - nread));
+        nread += n;
+        if (n == 0) {
+            return Status::IOError("can not read fully");
+        }
+    }
+    return Status::OK();
 }
 
 } // namespace starrocks::io

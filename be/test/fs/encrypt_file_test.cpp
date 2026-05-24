@@ -16,7 +16,7 @@
 
 #include <gtest/gtest.h>
 
-#include "io/core/array_input_stream.h"
+#include "io/array_input_stream.h"
 
 namespace starrocks {
 

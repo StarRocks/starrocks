@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "io/core/io_profiler.h"
+#include "io/io_profiler.h"
 
 #include <fcntl.h>
 #include <gtest/gtest.h>
@@ -20,9 +20,9 @@
 
 #include "base/metrics.h"
 #include "base/testutil/assert.h"
-#include "io/core/fd_input_stream.h"
-#include "io/core/fd_output_stream.h"
-#include "io/core/io_profiler_metrics.h"
+#include "io/fd_input_stream.h"
+#include "io/fd_output_stream.h"
+#include "io/io_profiler_metrics.h"
 
 namespace starrocks {
 

@@ -14,7 +14,7 @@
 
 #pragma once
 
-#include "io/core/input_stream.h"
+#include "io/input_stream.h"
 
 namespace starrocks::io {
 
