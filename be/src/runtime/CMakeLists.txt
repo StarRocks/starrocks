@@ -90,7 +90,6 @@ set(RUNTIME_FILES
     sender_queue.cpp
     descriptors_ext.cpp
     exec_env.cpp
-    user_function_cache.cpp
     jdbc_driver_manager.cpp
     plan_fragment_executor.cpp
     result_buffer_mgr.cpp
