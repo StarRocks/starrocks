@@ -25,9 +25,9 @@
 #include "exprs/expr_executor.h"
 #include "exprs/expr_factory.h"
 #include "formats/csv/converter.h"
+#include "formats/io/formatted_output_stream.h"
 #include "fs/fs_broker.h"
 #include "fs/fs_factory.h"
-#include "io/formatted_output_stream.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks::pipeline {

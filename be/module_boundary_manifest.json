@@ -352,6 +352,18 @@
       "remediation": "Keep RuntimeCore restricted to core runtime infrastructure; move service/storage/stream-load/integration code into Runtime."
     },
     {
+      "id": "formatsio",
+      "doc_label": "FormatsIO",
+      "summary": "Format-oriented output stream primitives above RuntimeCore, FSCore, and Types.",
+      "owned_targets": ["FormatsIO"],
+      "owned_globs": ["be/src/formats/io/**"],
+      "allowed_include_prefixes": ["formats/io/", "runtime/", "fs/", "types/", "common/", "base/", "gutil/", "gen_cpp/"],
+      "allowed_target_deps": ["RuntimeCore", "FSCore", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
+      "allowed_test_targets": ["formats_io_test"],
+      "allowed_test_link_deps": ["FormatsIO", "RuntimeCore", "FSCore", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
+      "remediation": "Keep FormatsIO limited to reusable format output stream primitives; move connector orchestration and higher execution policy upward."
+    },
+    {
       "id": "runtimeenv",
       "doc_label": "RuntimeEnv",
       "summary": "Process-scoped runtime environment resources below full Runtime and above RuntimeCore.",

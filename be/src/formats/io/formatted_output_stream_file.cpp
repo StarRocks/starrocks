@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "io/formatted_output_stream_file.h"
+#include "formats/io/formatted_output_stream_file.h"
 
 #include <algorithm>
 #include <cstring>
@@ -21,7 +21,7 @@
 #include "base/compression/compression_headers.h"
 #include "fmt/format.h"
 
-namespace starrocks::io {
+namespace starrocks::formats {
 
 static bool is_block_compression(CompressionTypePB compression_type) {
     return compression_type == CompressionTypePB::SNAPPY || compression_type == CompressionTypePB::LZ4;
@@ -262,4 +262,4 @@ std::size_t BlockCompressedFormattedOutputStream::size() {
     return _compressed_bytes_written + pending_estimate;
 }
 
-} // namespace starrocks::io
+} // namespace starrocks::formats

@@ -98,7 +98,7 @@ public:
 
     std::shared_ptr<formats::FileWriter> file_writer() { return _file_writer; }
 
-    std::shared_ptr<io::AsyncFlushOutputStream> out_stream() { return _out_stream; }
+    std::shared_ptr<formats::AsyncFlushOutputStream> out_stream() { return _out_stream; }
 
     void set_io_poller(AsyncFlushStreamPoller* io_poller) { _io_poller = io_poller; }
 
@@ -125,7 +125,7 @@ protected:
     // Therefore, we must ensure _file_writer is destroyed first, followed by _out_stream.
     // Failing to do so will result in a use-after-free error for _out_stream.
     // TODO: Refactor the file writer and output stream to make them more robust and user-friendly.
-    std::shared_ptr<io::AsyncFlushOutputStream> _out_stream;
+    std::shared_ptr<formats::AsyncFlushOutputStream> _out_stream;
     std::shared_ptr<formats::FileWriter> _file_writer;
     CommitFunc _commit_callback;
     std::string _commit_extra_data;

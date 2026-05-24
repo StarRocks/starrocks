@@ -16,13 +16,20 @@
 
 #include <ryu/ryu.h>
 
+#include <algorithm>
+#include <cstring>
+#include <limits>
+#include <type_traits>
+
+#include "base/string/slice.h"
 #include "base/utility/mysql_global.h"
+#include "common/status.h"
 #include "fmt/compile.h"
 #include "types/date_value.h"
 #include "types/decimalv2_value.h"
 #include "types/timestamp_value.h"
 
-namespace starrocks::io {
+namespace starrocks::formats {
 
 class FormattedOutputStream {
 public:
@@ -142,4 +149,4 @@ private:
     char* _end;
 };
 
-} // namespace starrocks::io
+} // namespace starrocks::formats

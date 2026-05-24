@@ -570,4 +570,4 @@ ADD_BE_LIB(Exec
 )
 
 target_link_libraries(Exec PUBLIC ExecPrimitive ExecSinkCore SpillCore ExecSchemaScannerCore ExecSchemaScanners ExecSortingCore ExecJoinCore RuntimeEnv)
-target_link_libraries(Exec PRIVATE Platform)
+target_link_libraries(Exec PRIVATE FormatsIO Platform)
