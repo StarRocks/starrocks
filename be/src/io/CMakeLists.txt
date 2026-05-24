@@ -35,9 +35,7 @@ ADD_BE_LIB(IO
         cache_input_stream.cpp
         cache_select_input_stream.hpp
         shared_buffered_input_stream.cpp
-        async_flush_output_stream.cpp
         direct_s3_output_stream.cpp
-        formatted_output_stream_file.cpp
 )
 
 target_link_libraries(IO PUBLIC IOCore)

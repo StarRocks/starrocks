@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "io/async_flush_output_stream.h"
+#include "formats/io/async_flush_output_stream.h"
 
 #include "base/failpoint/fail_point.h"
 #include "common/thread/priority_thread_pool.hpp"
@@ -20,7 +20,7 @@
 #include "runtime/current_thread.h"
 #include "runtime/runtime_state.h"
 
-namespace starrocks::io {
+namespace starrocks::formats {
 
 DEFINE_FAIL_POINT(async_flush_output_stream_sleep);
 
@@ -188,4 +188,4 @@ void AsyncFlushOutputStream::enqueue_tasks_and_maybe_submit_task(std::vector<Tas
         _io_status.update(Status::ResourceBusy("fail to submit io task"));
     }
 }
-} // namespace starrocks::io
+} // namespace starrocks::formats

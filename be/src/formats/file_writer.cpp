@@ -18,7 +18,7 @@
 
 #include <utility>
 
-#include "io/async_flush_output_stream.h"
+#include "formats/io/async_flush_output_stream.h"
 
 namespace starrocks::formats {
 
