@@ -328,6 +328,18 @@ public class PaimonMetadata implements ConnectorMetadata {
         }
         List<DataField> fields = paimonNativeTable.rowType().getFields();
         List<Column> fullSchema = ColumnTypeConverter.fromPaimonSchemas(fields);
+
+        if (isRowTrackingEnabled(paimonNativeTable)) {
+            Column rowIdCol = new Column(PaimonTable.PAIMON_ROW_ID,
+                    com.starrocks.type.IntegerType.BIGINT, true);
+            rowIdCol.setIsHidden(true);
+            Column seqNumCol = new Column(PaimonTable.PAIMON_SEQUENCE_NUMBER,
+                    com.starrocks.type.IntegerType.BIGINT, true);
+            seqNumCol.setIsHidden(true);
+            fullSchema.add(rowIdCol);
+            fullSchema.add(seqNumCol);
+        }
+
         String comment = "";
         if (paimonNativeTable.comment().isPresent()) {
             comment = paimonNativeTable.comment().get();
@@ -336,6 +348,11 @@ public class PaimonMetadata implements ConnectorMetadata {
         table.setComment(comment);
         tables.put(identifier, table);
         return table;
+    }
+
+    private static boolean isRowTrackingEnabled(org.apache.paimon.table.Table table) {
+        String value = table.options().get("row-tracking.enabled");
+        return "true".equalsIgnoreCase(value);
     }
 
     public Table getView(String dbName, String viewName) {
@@ -633,7 +650,9 @@ public class PaimonMetadata implements ConnectorMetadata {
         if (!paimonSplits.containsKey(filter)) {
             ReadBuilder readBuilder = paimonNativeTable.newReadBuilder();
             int[] projected =
-                    params.getFieldNames().stream().mapToInt(name -> (paimonTable.getFieldNames().indexOf(name))).toArray();
+                    params.getFieldNames().stream()
+                            .filter(name -> !PaimonTable.isPaimonMetaColumn(name))
+                            .mapToInt(name -> (paimonTable.getFieldNames().indexOf(name))).toArray();
             List<Predicate> predicates = extractPredicates(paimonTable, params.getPredicate());
             boolean pruneManifestsByLimit = params.getLimit() != -1 && params.getLimit() < Integer.MAX_VALUE
                     && onlyHasPartitionPredicate(table, params.getPredicate());

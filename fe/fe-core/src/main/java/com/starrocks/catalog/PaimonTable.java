@@ -31,11 +31,23 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 import static com.starrocks.connector.ConnectorTableId.CONNECTOR_ID_GENERATOR;
 
 public class PaimonTable extends Table {
+    // Paimon row lineage metadata column names.
+    public static final String PAIMON_ROW_ID = "_ROW_ID";
+    public static final String PAIMON_SEQUENCE_NUMBER = "_SEQUENCE_NUMBER";
+    public static final Set<String> PAIMON_META_COLUMN_NAMES = Set.of(
+            PAIMON_ROW_ID, PAIMON_SEQUENCE_NUMBER
+    );
+
+    public static boolean isPaimonMetaColumn(String columnName) {
+        return PAIMON_META_COLUMN_NAMES.contains(columnName.toUpperCase());
+    }
+
     private String catalogName;
     private String databaseName;
     private String tableName;

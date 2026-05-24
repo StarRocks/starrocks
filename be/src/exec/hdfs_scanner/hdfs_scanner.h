@@ -548,6 +548,11 @@ public:
     // See: https://iceberg.apache.org/spec/#reserved-field-ids
     static constexpr int32_t ICEBERG_ROW_ID_COLUMN_ID = 2147483540;
     static constexpr int32_t ICEBERG_LAST_UPDATED_SEQUENCE_NUMBER_COLUMN_ID = 2147483539;
+
+    static constexpr const char* PAIMON_ROW_ID = "_ROW_ID";
+    static constexpr const char* PAIMON_SEQUENCE_NUMBER = "_SEQUENCE_NUMBER";
+    static constexpr int32_t PAIMON_ROW_ID_COLUMN_ID = 2147483642;
+    static constexpr int32_t PAIMON_SEQUENCE_NUMBER_COLUMN_ID = 2147483646;
 };
 
 } // namespace starrocks
