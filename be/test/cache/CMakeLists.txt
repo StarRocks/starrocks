@@ -44,7 +44,7 @@ set(CACHE_TEST_LINK_LIBS
 list(APPEND CACHE_TEST_LINK_LIBS
     RuntimeCore
     FSCore
-    IOCore
+    IO
     Common
     Base
     Gutil

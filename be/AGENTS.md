@@ -105,8 +105,8 @@ Core shared infrastructure above Base/Gutil and generated code only. Higher-leve
 ### Cache (`cache`)
 Cache implementation module for DataCache facade, cache engines, scan read-buffer/cache stream wrappers, monitors, metrics, utilities, StarCache integration, and peer-cache RPC reads without service/bootstrap or ExecEnv singleton coupling.
 - Targets: `Cache`
-- Allowed internal include prefixes: `cache/`, `common/brpc/`, `runtime/current_thread.h`, `runtime/mem_tracker.h`, `fs/`, `io/core/`, `common/`, `base/`, `gutil/`, `gen_cpp/`
-- Allowed target deps: `RuntimeCore`, `FSCore`, `IOCore`, `Common`, `Base`, `Gutil`, `StarRocksGen`
+- Allowed internal include prefixes: `cache/`, `common/brpc/`, `runtime/current_thread.h`, `runtime/mem_tracker.h`, `fs/`, `io/`, `common/`, `base/`, `gutil/`, `gen_cpp/`
+- Allowed target deps: `RuntimeCore`, `FSCore`, `IO`, `Common`, `Base`, `Gutil`, `StarRocksGen`
 - Core tests: `cache_test`
 - Remediation: Keep Cache self-contained within cache engines, scan read-buffer/cache stream wrappers, monitors, metrics, utilities, and injected peer-cache BRPC stubs; keep service startup, storage code, HTTP/admin code, and ExecEnv singleton access outside cache.
 
@@ -118,27 +118,27 @@ Reusable HTTP transport and request primitives above Common without BE admin or 
 - Core tests: `http_core_test`
 - Remediation: Keep HttpCore limited to reusable HTTP transport and request primitives; move BE-specific pages, actions, auth helpers, and client/download helpers upward.
 
-### IOCore (`iocore`)
-Minimal IO foundation used by upper IO/FS layers.
-- Targets: `IOCore`
-- Allowed internal include prefixes: `io/core/`, `common/`, `base/`, `gutil/`, `gen_cpp/`
+### IO (`io`)
+Minimal IO foundation used by FS and upper layers.
+- Targets: `IO`
+- Allowed internal include prefixes: `io/`, `common/`, `base/`, `gutil/`, `gen_cpp/`
 - Allowed target deps: `Common`, `Base`, `Gutil`
 - Core tests: `io_test`
-- Remediation: Keep IOCore free of higher IO/FS/runtime/storage code; lift the dependency into IO or FileSystem instead.
+- Remediation: Keep IO free of higher FS/runtime/storage/exec/service code; move the dependency upward or add a lower-level interface.
 
 ### FSCore (`fscore`)
-Minimal filesystem core on top of IOCore.
+Minimal filesystem core on top of IO.
 - Targets: `FSCore`
-- Allowed internal include prefixes: `fs/`, `io/core/`, `common/`, `base/`, `gutil/`, `gen_cpp/`
-- Allowed target deps: `IOCore`, `Common`, `Base`, `Gutil`
+- Allowed internal include prefixes: `fs/`, `io/`, `common/`, `base/`, `gutil/`, `gen_cpp/`
+- Allowed target deps: `IO`, `Common`, `Base`, `Gutil`
 - Core tests: `fs_core_test`
-- Remediation: Keep FSCore limited to IOCore plus core FS abstractions; move backend-specific behavior into FileSystem.
+- Remediation: Keep FSCore limited to IO plus core FS abstractions; move backend-specific behavior into FileSystem.
 
 ### Platform (`platform`)
 Shared BE platform utilities above IO/FS/Common and below Runtime/Exec/Storage/Service.
 - Targets: `Platform`
-- Allowed internal include prefixes: `platform/`, `http/`, `fs/`, `io/core/`, `common/`, `base/`, `gutil/`, `gen_cpp/`
-- Allowed target deps: `HttpCore`, `FSCore`, `IOCore`, `Common`, `Base`, `Gutil`, `StarRocksGen`
+- Allowed internal include prefixes: `platform/`, `http/`, `fs/`, `io/`, `common/`, `base/`, `gutil/`, `gen_cpp/`
+- Allowed target deps: `HttpCore`, `FSCore`, `IO`, `Common`, `Base`, `Gutil`, `StarRocksGen`
 - Core tests: `platform_test`
 - Remediation: Keep Platform limited to reusable host, filesystem-adjacent, download, temp-file, environment, retry, and platform-level helpers; move runtime, exec, storage, and service integration upward.
 
@@ -146,7 +146,7 @@ Shared BE platform utilities above IO/FS/Common and below Runtime/Exec/Storage/S
 Core spill block, directory, query-local spill, and spill memory-resource primitives without pipeline/runtime-service coupling.
 - Targets: `SpillCore`
 - Allowed internal include prefixes: `exec/spill/`, `fs/`, `io/`, `common/`, `base/`, `gutil/`, `gen_cpp/`
-- Allowed target deps: `RuntimeCore`, `FSCore`, `IOCore`, `Common`, `Base`, `Gutil`, `StarRocksGen`
+- Allowed target deps: `RuntimeCore`, `FSCore`, `IO`, `Common`, `Base`, `Gutil`, `StarRocksGen`
 - Core tests: `spill_core_test`
 - Remediation: Keep SpillCore limited to reusable spill block, directory, query-local spill, and spill memory-resource infrastructure; move pipeline ownership and runtime-service integration upward.
 

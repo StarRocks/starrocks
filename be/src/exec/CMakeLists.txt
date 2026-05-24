@@ -66,7 +66,7 @@ ADD_BE_LIB(SpillCore
     ${SPILL_CORE_FILES}
 )
 
-target_link_libraries(SpillCore PUBLIC RuntimeCore FSCore IOCore Common Base Gutil StarRocksGen)
+target_link_libraries(SpillCore PUBLIC RuntimeCore FSCore IO Common Base Gutil StarRocksGen)
 
 set(EXEC_SCHEMA_SCANNER_CORE_FILES
     schema_scanner.cpp

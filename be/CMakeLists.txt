@@ -549,7 +549,6 @@ set(STARROCKS_LINK_LIBS
     FileSystem
     Formats
     FormatsIO
-    IO
     Storage
     Rowset
     Runtime
@@ -569,7 +568,7 @@ set(STARROCKS_LINK_LIBS
     $<TARGET_FILE:ColumnCore>
     $<TARGET_FILE:Types>
     $<TARGET_FILE:FSCore>
-    $<TARGET_FILE:IOCore>
+    $<TARGET_FILE:IO>
     StarOSIntegration
     Geo
     $<TARGET_FILE:Common>

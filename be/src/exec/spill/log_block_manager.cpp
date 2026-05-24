@@ -34,7 +34,7 @@
 #include "fmt/format.h"
 #include "fs/fs.h"
 #include "gutil/casts.h"
-#include "io/core/input_stream.h"
+#include "io/input_stream.h"
 
 namespace starrocks::spill {
 class LogBlockContainer {

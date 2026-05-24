@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "io/core/io_profiler.h"
+#include "io/io_profiler.h"
 
 #include <algorithm>
 #include <cstdint>
@@ -22,7 +22,7 @@
 #include <unordered_map>
 
 #include "fmt/format.h"
-#include "io/core/io_profiler_metrics.h"
+#include "io/io_profiler_metrics.h"
 
 namespace starrocks {
 

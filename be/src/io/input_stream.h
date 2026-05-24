@@ -18,7 +18,7 @@
 #include <string_view>
 
 #include "common/ownership.h"
-#include "io/core/readable.h"
+#include "io/readable.h"
 
 namespace starrocks::io {
 

@@ -342,7 +342,7 @@ class CheckBeModuleBoundariesTest(unittest.TestCase):
                 repo_root=repo,
             )
 
-            self.assertEqual({"columncore", "iocore"}, selected)
+            self.assertEqual({"columncore", "io"}, selected)
 
     def test_changed_paths_include_test_target_definition_cmakelists(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -358,7 +358,7 @@ class CheckBeModuleBoundariesTest(unittest.TestCase):
                 repo_root=repo,
             )
 
-            self.assertEqual({"columncore", "iocore"}, selected)
+            self.assertEqual({"columncore", "io"}, selected)
 
     def test_changed_paths_include_cross_module_test_target_definition_cmakelists(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -430,9 +430,9 @@ class CheckBeModuleBoundariesTest(unittest.TestCase):
                             "remediation": "Move code down or add an interface instead of pulling runtime into ColumnCore.",
                         },
                         {
-                            "id": "iocore",
-                            "doc_label": "IOCore",
-                            "owned_targets": ["IOCore"],
+                            "id": "io",
+                            "doc_label": "IO",
+                            "owned_targets": ["IO"],
                             "allowed_include_prefixes": [
                                 "io/",
                                 "common/",
@@ -442,7 +442,7 @@ class CheckBeModuleBoundariesTest(unittest.TestCase):
                             "allowed_target_deps": ["Common", "Base", "Gutil"],
                             "allowed_test_targets": [],
                             "allowed_test_link_deps": [],
-                            "remediation": "Move code into IOCore or add an interface instead of pulling unrelated dependencies into IO.",
+                            "remediation": "Move code into IO or add an interface instead of pulling unrelated dependencies into IO.",
                         },
                         {
                             "id": "runtimecore",
@@ -480,7 +480,7 @@ class CheckBeModuleBoundariesTest(unittest.TestCase):
         (repo / "be" / "src" / "io" / "CMakeLists.txt").write_text(
             textwrap.dedent(
                 """\
-                ADD_BE_LIB(IOCore
+                ADD_BE_LIB(IO
                     io.cpp
                 )
                 """

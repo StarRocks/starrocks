@@ -30,4 +30,4 @@ ADD_BE_LIB(Platform
     ${PLATFORM_FILES}
 )
 
-target_link_libraries(Platform PUBLIC HttpCore FSCore IOCore Common Base Gutil StarRocksGen)
+target_link_libraries(Platform PUBLIC HttpCore FSCore IO Common Base Gutil StarRocksGen)

@@ -26,7 +26,7 @@
 #include "fs/fs_factory.h"
 #include "fs/key_cache.h"
 #include "gen_cpp/types.pb.h"
-#include "io/core/input_stream.h"
+#include "io/input_stream.h"
 #include "storage/lake/lake_delvec_loader.h"
 #include "storage/lake/utils.h"
 #include "storage/sstable/table_builder.h"

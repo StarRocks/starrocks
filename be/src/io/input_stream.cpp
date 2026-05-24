@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "io/core/input_stream.h"
+#include "io/input_stream.h"
 
 namespace starrocks::io {
 
