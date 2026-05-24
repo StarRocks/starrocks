@@ -31,11 +31,17 @@ public:
             : percentile(new PercentileValue(compression)), compression_initialized(true) {}
     ~PercentileApproxState() = default;
 
-    // Reinitialize the PercentileValue with a new compression factor
+    // Reinitialize the PercentileValue with a new compression factor.
     // This is used when the state is already constructed (e.g., as part of NullableAggregateFunctionState)
-    // but we need to apply a different compression factor from FunctionContext
+    // but we need to apply a different compression factor from FunctionContext.
+    // Resets the existing digest in place rather than allocating a fresh
+    // PercentileValue: create() already allocated one at the default compression,
+    // and the first update/merge of every group lands here before any value is
+    // added, so reallocating would waste one heap alloc/free per group on the
+    // high-cardinality path. set_compression yields the identical
+    // empty-at-compression state without the churn.
     void reinit_with_compression(double compression) {
-        percentile = std::make_unique<PercentileValue>(compression);
+        percentile->set_compression(compression);
         compression_initialized = true;
     }
 
