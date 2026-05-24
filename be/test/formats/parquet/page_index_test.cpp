@@ -18,6 +18,7 @@
 #include <random>
 #include <vector>
 
+#include "cache/scan/shared_buffered_input_stream.h"
 #include "column/column_helper.h"
 #include "common/config_exec_fwd.h"
 #include "exec/hdfs_scanner/hdfs_scanner.h"
@@ -27,7 +28,6 @@
 #include "formats/parquet/parquet_test_util/util.h"
 #include "formats/parquet/parquet_ut_base.h"
 #include "fs/fs.h"
-#include "io/shared_buffered_input_stream.h"
 #include "runtime/exec_env.h"
 #include "runtime/global_dict/fragment_dict_state.h"
 #include "runtime/runtime_state.h"
@@ -398,7 +398,7 @@ TEST_F(PageIndexTest, TestCollectIORangeWithPageIndex) {
 
         // two row groups, but one is filtered.
         EXPECT_EQ(file_reader->_row_group_readers.size(), 1);
-        std::vector<io::SharedBufferedInputStream::IORange> ranges;
+        std::vector<SharedBufferedInputStream::IORange> ranges;
         int64_t end_offset = 0;
 
         file_reader->_row_group_readers[0]->collect_io_ranges(&ranges, &end_offset, ColumnIOType::PAGE_INDEX);
@@ -494,8 +494,8 @@ TEST_F(PageIndexTest, TestTwoColumnIntersectPageIndex) {
         }
         ParquetUTBase::setup_conjuncts_manager(all_conjuncts, nullptr, tuple_desc, _runtime_state, ctx);
 
-        auto shared_buffer = std::make_shared<io::SharedBufferedInputStream>(
-                file->stream(), small_page_file, std::filesystem::file_size(small_page_file));
+        auto shared_buffer = std::make_shared<SharedBufferedInputStream>(file->stream(), small_page_file,
+                                                                         std::filesystem::file_size(small_page_file));
         auto file_reader = std::make_shared<FileReader>(config::vector_chunk_size, file.get(),
                                                         std::filesystem::file_size(small_page_file), DataCacheOptions(),
                                                         shared_buffer.get());
@@ -505,7 +505,7 @@ TEST_F(PageIndexTest, TestTwoColumnIntersectPageIndex) {
 
         // two row groups.
         EXPECT_EQ(file_reader->_row_group_readers.size(), 2);
-        std::vector<io::SharedBufferedInputStream::IORange> ranges;
+        std::vector<SharedBufferedInputStream::IORange> ranges;
         int64_t end_offset = 0;
 
         for (auto& r : file_reader->_row_group_readers) {
@@ -581,8 +581,8 @@ TEST_F(PageIndexTest, TestPageIndexNoPageFiltered) {
     std::vector<TExpr> t_conjuncts_slot1{t_conjuncts[1]};
     ParquetUTBase::create_conjunct_ctxs(&_pool, _runtime_state, &t_conjuncts_slot1, &ctx->conjunct_ctxs_by_slot[1]);
 
-    auto shared_buffer = std::make_shared<io::SharedBufferedInputStream>(file->stream(), small_page_file,
-                                                                         std::filesystem::file_size(small_page_file));
+    auto shared_buffer = std::make_shared<SharedBufferedInputStream>(file->stream(), small_page_file,
+                                                                     std::filesystem::file_size(small_page_file));
     auto file_reader = std::make_shared<FileReader>(config::vector_chunk_size, file.get(),
                                                     std::filesystem::file_size(small_page_file), DataCacheOptions(),
                                                     shared_buffer.get());
@@ -592,7 +592,7 @@ TEST_F(PageIndexTest, TestPageIndexNoPageFiltered) {
 
     // two row groups.
     EXPECT_EQ(file_reader->_row_group_readers.size(), 2);
-    std::vector<io::SharedBufferedInputStream::IORange> ranges;
+    std::vector<SharedBufferedInputStream::IORange> ranges;
     int64_t end_offset = 0;
 
     for (auto& r : file_reader->_row_group_readers) {
@@ -686,8 +686,8 @@ TEST_F(PageIndexTest, TestEmptyNullCountsInColumnIndex) {
     }
     ParquetUTBase::setup_conjuncts_manager(all_conjuncts, nullptr, tuple_desc, _runtime_state, ctx);
 
-    auto shared_buffer = std::make_shared<io::SharedBufferedInputStream>(file->stream(), file_path,
-                                                                         std::filesystem::file_size(file_path));
+    auto shared_buffer = std::make_shared<SharedBufferedInputStream>(file->stream(), file_path,
+                                                                     std::filesystem::file_size(file_path));
     auto file_reader =
             std::make_shared<FileReader>(config::vector_chunk_size, file.get(), std::filesystem::file_size(file_path),
                                          DataCacheOptions(), shared_buffer.get());

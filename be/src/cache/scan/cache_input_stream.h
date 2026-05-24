@@ -16,14 +16,16 @@
 
 #include <memory>
 #include <string>
+#include <unordered_map>
+#include <unordered_set>
 
 #include "cache/disk_cache/block_cache.h"
 #include "cache/disk_cache/io_buffer.h"
-#include "io/shared_buffered_input_stream.h"
+#include "cache/scan/shared_buffered_input_stream.h"
 
-namespace starrocks::io {
+namespace starrocks {
 
-class CacheInputStream : public SeekableInputStreamWrapper {
+class CacheInputStream : public io::SeekableInputStreamWrapper {
 public:
     struct Stats {
         int64_t read_block_cache_ns = 0;
@@ -143,4 +145,4 @@ private:
     std::unordered_set<int64_t> _already_populated_blocks{};
 };
 
-} // namespace starrocks::io
+} // namespace starrocks

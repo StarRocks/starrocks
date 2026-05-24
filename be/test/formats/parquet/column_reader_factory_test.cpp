@@ -339,7 +339,7 @@ TEST(ColumnReaderFactoryTest, VariantShreddedCollectIoRangeAndSelectOffsetIndex)
     ASSERT_TRUE(st.ok()) << st.status().to_string();
     ASSERT_NE(st.value(), nullptr);
 
-    std::vector<io::SharedBufferedInputStream::IORange> ranges;
+    std::vector<SharedBufferedInputStream::IORange> ranges;
     int64_t end_offset = 0;
     st.value()->collect_column_io_range(&ranges, &end_offset, ColumnIOType::PAGES, true);
     // metadata/value plus shredded typed/fallback readers should contribute extra ranges.
@@ -361,7 +361,7 @@ TEST(ColumnReaderFactoryTest, VariantShreddedAllNullFallbackSkipsIoRange) {
             return size_t{0};
         }
 
-        std::vector<io::SharedBufferedInputStream::IORange> ranges;
+        std::vector<SharedBufferedInputStream::IORange> ranges;
         int64_t end_offset = 0;
         st.value()->collect_column_io_range(&ranges, &end_offset, ColumnIOType::PAGES, true);
         return ranges.size();
@@ -411,7 +411,7 @@ TEST(ColumnReaderFactoryTest, VariantShreddedTypedLeafSkipsTopLevelBinaryIoRange
     auto st = ColumnReaderFactory::create_variant_column_reader(opts, &variant, hints);
     ASSERT_TRUE(st.ok()) << st.status().to_string();
 
-    std::vector<io::SharedBufferedInputStream::IORange> ranges;
+    std::vector<SharedBufferedInputStream::IORange> ranges;
     int64_t end_offset = 0;
     st.value()->collect_column_io_range(&ranges, &end_offset, ColumnIOType::PAGES, true);
 
@@ -538,7 +538,7 @@ public:
     Status read_range(const Range<uint64_t>&, const Filter*, ColumnPtr&) override { return Status::OK(); }
     void get_levels(level_t**, level_t**, size_t*) override {}
     void set_need_parse_levels(bool) override {}
-    void collect_column_io_range(std::vector<io::SharedBufferedInputStream::IORange>*, int64_t*, ColumnIOTypeFlags,
+    void collect_column_io_range(std::vector<SharedBufferedInputStream::IORange>*, int64_t*, ColumnIOTypeFlags,
                                  bool) override {}
     void select_offset_index(const SparseRange<uint64_t>&, const uint64_t) override {}
 };

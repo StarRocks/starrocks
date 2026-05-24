@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "io/cache_input_stream.h"
+#include "cache/scan/cache_input_stream.h"
 
 #include <fmt/format.h>
 
@@ -25,7 +25,7 @@
 #include "gutil/strings/fastmem.h"
 #include "gutil/strings/split.h"
 
-namespace starrocks::io {
+namespace starrocks {
 
 // We use the `SharedBufferedInputStream` in `CacheInputStream` directly, because the we depend some functions of
 // `SharedBufferedInputStream`.
@@ -34,7 +34,7 @@ namespace starrocks::io {
 // act as the old `DefaultInputStream`.
 CacheInputStream::CacheInputStream(const std::shared_ptr<SharedBufferedInputStream>& stream,
                                    const std::string& filename, size_t size, int64_t modification_time)
-        : SeekableInputStreamWrapper(stream.get(), kDontTakeOwnership),
+        : io::SeekableInputStreamWrapper(stream.get(), kDontTakeOwnership),
           _filename(filename),
           _sb_stream(stream),
 
@@ -552,4 +552,4 @@ bool CacheInputStream::_can_try_peer_cache() {
     return _peer_port > 0 && !_peer_host.empty();
 }
 
-} // namespace starrocks::io
+} // namespace starrocks

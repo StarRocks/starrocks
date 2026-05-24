@@ -103,12 +103,12 @@ Core shared infrastructure above Base/Gutil and generated code only. Higher-leve
 - Remediation: Move the dependency upward or add a lower-level abstraction; Common may only depend on Base, Gutil, and generated code.
 
 ### Cache (`cache`)
-Cache implementation module for DataCache facade, cache engines, monitors, metrics, utilities, StarCache integration, and peer-cache RPC reads without service/bootstrap or ExecEnv singleton coupling.
+Cache implementation module for DataCache facade, cache engines, scan read-buffer/cache stream wrappers, monitors, metrics, utilities, StarCache integration, and peer-cache RPC reads without service/bootstrap or ExecEnv singleton coupling.
 - Targets: `Cache`
-- Allowed internal include prefixes: `cache/`, `common/brpc/`, `runtime/current_thread.h`, `runtime/mem_tracker.h`, `fs/`, `common/`, `base/`, `gutil/`, `gen_cpp/`
-- Allowed target deps: `RuntimeCore`, `FSCore`, `Common`, `Base`, `Gutil`, `StarRocksGen`
+- Allowed internal include prefixes: `cache/`, `common/brpc/`, `runtime/current_thread.h`, `runtime/mem_tracker.h`, `fs/`, `io/core/`, `common/`, `base/`, `gutil/`, `gen_cpp/`
+- Allowed target deps: `RuntimeCore`, `FSCore`, `IOCore`, `Common`, `Base`, `Gutil`, `StarRocksGen`
 - Core tests: `cache_test`
-- Remediation: Keep Cache self-contained within cache engines, monitors, metrics, utilities, and injected peer-cache BRPC stubs; keep service startup, storage code, HTTP/admin code, and ExecEnv singleton access outside cache.
+- Remediation: Keep Cache self-contained within cache engines, scan read-buffer/cache stream wrappers, monitors, metrics, utilities, and injected peer-cache BRPC stubs; keep service startup, storage code, HTTP/admin code, and ExecEnv singleton access outside cache.
 
 ### HttpCore (`httpcore`)
 Reusable HTTP transport and request primitives above Common without BE admin or page-handler code.

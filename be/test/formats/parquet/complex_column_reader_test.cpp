@@ -624,7 +624,7 @@ TEST(VariantShreddedPruningTest, CollectIORangeSkipsUnrequestedSiblings) {
     ParquetField root_field;
     ASSIGN_OR_ABORT(auto reader, make_shredded_variant_reader_with_commit_operation_hint(rg, opts, root_field));
 
-    std::vector<io::SharedBufferedInputStream::IORange> ranges;
+    std::vector<SharedBufferedInputStream::IORange> ranges;
     int64_t end_offset = 0;
     reader->collect_column_io_range(&ranges, &end_offset, ColumnIOType::PAGES, true);
 
@@ -799,7 +799,7 @@ TEST(VariantZoneMapTest, VariantVirtualZoneMapReaderNoOpApis) {
     zm_reader.get_levels(&def_levels, &rep_levels, &num_levels);
     zm_reader.set_need_parse_levels(true);
 
-    std::vector<io::SharedBufferedInputStream::IORange> ranges;
+    std::vector<SharedBufferedInputStream::IORange> ranges;
     int64_t end_offset = 77;
     zm_reader.collect_column_io_range(&ranges, &end_offset, ColumnIOType::PAGES, true);
     EXPECT_TRUE(ranges.empty());

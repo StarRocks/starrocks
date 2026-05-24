@@ -14,10 +14,10 @@
 
 #pragma once
 
+#include "cache/scan/cache_input_stream.h"
 #include "common/runtime_profile.h"
-#include "io/cache_input_stream.h"
 
-namespace starrocks::io {
+namespace starrocks {
 
 class CacheSelectInputStream final : public CacheInputStream {
 public:
@@ -89,4 +89,4 @@ protected:
     }
 };
 
-} // namespace starrocks::io
+} // namespace starrocks

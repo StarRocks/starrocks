@@ -113,6 +113,6 @@ ADD_BE_LIB(Formats
         file_writer.cpp
         )
 
-target_link_libraries(Formats PUBLIC FormatsIO)
+target_link_libraries(Formats PUBLIC FormatsIO Cache)
 
 add_subdirectory(orc/apache-orc)

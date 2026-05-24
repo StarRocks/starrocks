@@ -950,7 +950,7 @@ static Status _read_shredded_field_node(const Range<uint64_t>& range, const Filt
 }
 
 static void _collect_shredded_field_io_range(const ShreddedFieldNode& node,
-                                             std::vector<io::SharedBufferedInputStream::IORange>* ranges,
+                                             std::vector<SharedBufferedInputStream::IORange>* ranges,
                                              int64_t* end_offset, ColumnIOTypeFlags types, bool active,
                                              const std::vector<VariantPath>* requested_paths) {
     if (!_should_read_shredded_field_node(node, requested_paths)) {
@@ -1873,7 +1873,7 @@ void VariantColumnReader::set_need_parse_levels(bool need_parse_levels) {
     }
 }
 
-void VariantColumnReader::collect_column_io_range(std::vector<io::SharedBufferedInputStream::IORange>* ranges,
+void VariantColumnReader::collect_column_io_range(std::vector<SharedBufferedInputStream::IORange>* ranges,
                                                   int64_t* end_offset, ColumnIOTypeFlags types, bool active) {
     const TopLevelSkipFlags skip_flags = _compute_top_level_skip_flags();
 

@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "io/cache_input_stream.h"
+#include "cache/scan/cache_input_stream.h"
 
 #include <gtest/gtest.h>
 
@@ -22,9 +22,25 @@
 #include "cache/disk_cache/test_cache_utils.h"
 #include "common/config_cache_fwd.h"
 #include "fs/fs_util.h"
+#include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
 
-namespace starrocks::io {
+namespace starrocks {
+
+namespace {
+
+bool g_cache_input_stream_test_env_initialized = false;
+MemTracker* g_cache_input_stream_test_mem_tracker = nullptr;
+
+bool cache_input_stream_test_env_initialized() {
+    return g_cache_input_stream_test_env_initialized;
+}
+
+MemTracker* cache_input_stream_test_mem_tracker() {
+    return g_cache_input_stream_test_mem_tracker;
+}
+
+} // namespace
 
 class MockSeekableInputStream : public io::SeekableInputStream {
 public:
@@ -73,6 +89,7 @@ public:
     }
 
     void SetUp() override {
+        SetUpCurrentThreadMemTracker();
         _saved_enable_auto_adjust = config::enable_datacache_disk_auto_adjust;
         config::enable_datacache_disk_auto_adjust = false;
 
@@ -80,7 +97,25 @@ public:
         auto block_cache = TestCacheUtils::create_cache(options);
         DataCache::GetInstance()->set_block_cache(block_cache);
     }
-    void TearDown() override { config::enable_datacache_disk_auto_adjust = _saved_enable_auto_adjust; }
+    void TearDown() override {
+        config::enable_datacache_disk_auto_adjust = _saved_enable_auto_adjust;
+        TearDownCurrentThreadMemTracker();
+    }
+
+    void SetUpCurrentThreadMemTracker() {
+        g_cache_input_stream_test_env_initialized = true;
+        g_cache_input_stream_test_mem_tracker = &_mem_tracker;
+        CurrentThread::set_mem_tracker_source(cache_input_stream_test_env_initialized,
+                                              cache_input_stream_test_mem_tracker);
+        tls_mem_tracker = nullptr;
+    }
+
+    void TearDownCurrentThreadMemTracker() {
+        tls_thread_status.set_mem_tracker(nullptr);
+        CurrentThread::set_mem_tracker_source(nullptr, nullptr);
+        g_cache_input_stream_test_env_initialized = false;
+        g_cache_input_stream_test_mem_tracker = nullptr;
+    }
 
     static void read_stream_data(io::SeekableInputStream* stream, int64_t offset, int64_t size, char* data) {
         ASSERT_OK(stream->seek(offset));
@@ -109,6 +144,7 @@ public:
 
 private:
     bool _saved_enable_auto_adjust = false;
+    MemTracker _mem_tracker;
 };
 
 const int64_t CacheInputStreamTest::block_size = 256 * 1024;
@@ -122,9 +158,8 @@ TEST_F(CacheInputStreamTest, test_aligned_read) {
 
     const std::string file_name = "test_file1";
     std::shared_ptr<io::SeekableInputStream> stream(new MockSeekableInputStream(data, data_size));
-    std::shared_ptr<io::SharedBufferedInputStream> sb_stream(
-            new io::SharedBufferedInputStream(stream, file_name, data_size));
-    io::CacheInputStream cache_stream(sb_stream, file_name, data_size, 1000000);
+    std::shared_ptr<SharedBufferedInputStream> sb_stream(new SharedBufferedInputStream(stream, file_name, data_size));
+    CacheInputStream cache_stream(sb_stream, file_name, data_size, 1000000);
     cache_stream.set_enable_populate_cache(true);
     auto& stats = cache_stream.stats();
 
@@ -155,9 +190,8 @@ TEST_F(CacheInputStreamTest, test_random_read) {
 
     const std::string file_name = "test_file2";
     std::shared_ptr<io::SeekableInputStream> stream(new MockSeekableInputStream(data, data_size));
-    std::shared_ptr<io::SharedBufferedInputStream> sb_stream(
-            new io::SharedBufferedInputStream(stream, file_name, data_size));
-    io::CacheInputStream cache_stream(sb_stream, file_name, data_size, 1000000);
+    std::shared_ptr<SharedBufferedInputStream> sb_stream(new SharedBufferedInputStream(stream, file_name, data_size));
+    CacheInputStream cache_stream(sb_stream, file_name, data_size, 1000000);
     cache_stream.set_enable_populate_cache(true);
     auto& stats = cache_stream.stats();
 
@@ -194,9 +228,8 @@ TEST_F(CacheInputStreamTest, test_file_overwrite) {
 
     const std::string file_name = "test_file3";
     std::shared_ptr<io::SeekableInputStream> stream(new MockSeekableInputStream(data, data_size));
-    std::shared_ptr<io::SharedBufferedInputStream> sb_stream(
-            new io::SharedBufferedInputStream(stream, file_name, data_size));
-    io::CacheInputStream cache_stream(sb_stream, file_name, data_size, 1000000);
+    std::shared_ptr<SharedBufferedInputStream> sb_stream(new SharedBufferedInputStream(stream, file_name, data_size));
+    CacheInputStream cache_stream(sb_stream, file_name, data_size, 1000000);
     cache_stream.set_enable_populate_cache(true);
     auto& stats = cache_stream.stats();
 
@@ -218,7 +251,7 @@ TEST_F(CacheInputStreamTest, test_file_overwrite) {
     ASSERT_EQ(stats.read_block_cache_count, block_count);
 
     // With different modification time, the old cache cannot be used
-    io::CacheInputStream cache_stream2(sb_stream, file_name, data_size, 2000000);
+    CacheInputStream cache_stream2(sb_stream, file_name, data_size, 2000000);
     cache_stream2.set_enable_populate_cache(true);
     auto& stats2 = cache_stream2.stats();
     for (int i = 0; i < block_count; ++i) {
@@ -238,9 +271,8 @@ TEST_F(CacheInputStreamTest, test_read_from_io_buffer) {
 
     const std::string file_name = "test_file3";
     std::shared_ptr<io::SeekableInputStream> stream(new MockSeekableInputStream(data, data_size));
-    std::shared_ptr<io::SharedBufferedInputStream> sb_stream(
-            new io::SharedBufferedInputStream(stream, file_name, data_size));
-    io::CacheInputStream cache_stream(sb_stream, file_name, data_size, 1000);
+    std::shared_ptr<SharedBufferedInputStream> sb_stream(new SharedBufferedInputStream(stream, file_name, data_size));
+    CacheInputStream cache_stream(sb_stream, file_name, data_size, 1000);
     cache_stream.set_enable_populate_cache(true);
     cache_stream.set_enable_block_buffer(true);
     auto& stats = cache_stream.stats();
@@ -270,9 +302,8 @@ TEST_F(CacheInputStreamTest, test_read_zero_copy) {
 
     const std::string file_name = "test_file3";
     std::shared_ptr<io::SeekableInputStream> stream(new MockSeekableInputStream(data, data_size));
-    std::shared_ptr<io::SharedBufferedInputStream> sb_stream(
-            new io::SharedBufferedInputStream(stream, file_name, data_size));
-    io::CacheInputStream cache_stream(sb_stream, file_name, data_size, 1000);
+    std::shared_ptr<SharedBufferedInputStream> sb_stream(new SharedBufferedInputStream(stream, file_name, data_size));
+    CacheInputStream cache_stream(sb_stream, file_name, data_size, 1000);
     cache_stream.set_enable_populate_cache(true);
     cache_stream.set_enable_block_buffer(false);
 
@@ -292,9 +323,8 @@ TEST_F(CacheInputStreamTest, test_read_with_zero_range) {
 
     const std::string file_name = "test_file4";
     std::shared_ptr<io::SeekableInputStream> stream(new MockSeekableInputStream(data, data_size));
-    std::shared_ptr<io::SharedBufferedInputStream> sb_stream(
-            new io::SharedBufferedInputStream(stream, file_name, data_size));
-    io::CacheInputStream cache_stream(sb_stream, file_name, data_size, 1000);
+    std::shared_ptr<SharedBufferedInputStream> sb_stream(new SharedBufferedInputStream(stream, file_name, data_size));
+    CacheInputStream cache_stream(sb_stream, file_name, data_size, 1000);
     cache_stream.set_enable_populate_cache(true);
     cache_stream.set_enable_block_buffer(true);
     auto& stats = cache_stream.stats();
@@ -329,9 +359,8 @@ TEST_F(CacheInputStreamTest, test_read_with_adaptor) {
 
     const std::string file_name = "test_file5";
     std::shared_ptr<io::SeekableInputStream> stream(new MockSeekableInputStream(data, data_size));
-    std::shared_ptr<io::SharedBufferedInputStream> sb_stream(
-            new io::SharedBufferedInputStream(stream, file_name, data_size));
-    io::CacheInputStream cache_stream(sb_stream, file_name, data_size, 1000000);
+    std::shared_ptr<SharedBufferedInputStream> sb_stream(new SharedBufferedInputStream(stream, file_name, data_size));
+    CacheInputStream cache_stream(sb_stream, file_name, data_size, 1000000);
     cache_stream.set_enable_populate_cache(true);
     cache_stream.set_enable_cache_io_adaptor(true);
     auto& stats = cache_stream.stats();
@@ -392,9 +421,8 @@ TEST_F(CacheInputStreamTest, test_read_with_shared_buffer) {
 
     const std::string file_name = "test_file6";
     std::shared_ptr<io::SeekableInputStream> stream(new MockSeekableInputStream(data, data_size));
-    std::shared_ptr<io::SharedBufferedInputStream> sb_stream(
-            new io::SharedBufferedInputStream(stream, file_name, data_size));
-    io::CacheInputStream cache_stream(sb_stream, file_name, data_size, 1000000);
+    std::shared_ptr<SharedBufferedInputStream> sb_stream(new SharedBufferedInputStream(stream, file_name, data_size));
+    CacheInputStream cache_stream(sb_stream, file_name, data_size, 1000000);
     cache_stream.set_enable_populate_cache(true);
     cache_stream.set_enable_block_buffer(true);
 
@@ -434,9 +462,8 @@ TEST_F(CacheInputStreamTest, test_peek) {
 
     const std::string file_name = "test_file6";
     std::shared_ptr<io::SeekableInputStream> stream(new MockSeekableInputStream(data, data_size));
-    std::shared_ptr<io::SharedBufferedInputStream> sb_stream(
-            new io::SharedBufferedInputStream(stream, file_name, data_size));
-    io::CacheInputStream cache_stream(sb_stream, file_name, data_size, 1000000);
+    std::shared_ptr<SharedBufferedInputStream> sb_stream(new SharedBufferedInputStream(stream, file_name, data_size));
+    CacheInputStream cache_stream(sb_stream, file_name, data_size, 1000000);
     cache_stream.set_enable_populate_cache(true);
     cache_stream.set_enable_block_buffer(true);
     cache_stream.set_enable_async_populate_mode(true);
@@ -473,9 +500,8 @@ TEST_F(CacheInputStreamTest, test_try_peer_cache) {
 
     const std::string file_name = "test_try_peer_cache";
     std::shared_ptr<io::SeekableInputStream> stream(new MockSeekableInputStream(data, data_size));
-    std::shared_ptr<io::SharedBufferedInputStream> sb_stream(
-            new io::SharedBufferedInputStream(stream, file_name, data_size));
-    io::CacheInputStream cache_stream(sb_stream, file_name, data_size, 1000000);
+    std::shared_ptr<SharedBufferedInputStream> sb_stream(new SharedBufferedInputStream(stream, file_name, data_size));
+    CacheInputStream cache_stream(sb_stream, file_name, data_size, 1000000);
     cache_stream.set_enable_populate_cache(true);
 
     cache_stream.set_peer_cache_node("1.1.1.1:1");
@@ -503,4 +529,4 @@ TEST_F(CacheInputStreamTest, test_try_peer_cache) {
     ASSERT_EQ(stats.read_block_cache_count, block_count);
 }
 
-} // namespace starrocks::io
+} // namespace starrocks

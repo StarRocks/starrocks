@@ -30,7 +30,7 @@ public:
 
     void set_need_parse_levels(bool need_parse_levels) override;
 
-    void collect_column_io_range(std::vector<io::SharedBufferedInputStream::IORange>* ranges, int64_t* end_offset,
+    void collect_column_io_range(std::vector<SharedBufferedInputStream::IORange>* ranges, int64_t* end_offset,
                                  ColumnIOTypeFlags types, bool active) override;
 
     void select_offset_index(const SparseRange<uint64_t>& range, const uint64_t rg_first_row) override;

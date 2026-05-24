@@ -49,7 +49,7 @@ public:
 
     void get_levels(level_t** def_levels, level_t** rep_levels, size_t* num_levels) override {}
     void set_need_parse_levels(bool need_parse_levels) override {}
-    void collect_column_io_range(std::vector<io::SharedBufferedInputStream::IORange>* ranges, int64_t* end_offset,
+    void collect_column_io_range(std::vector<SharedBufferedInputStream::IORange>* ranges, int64_t* end_offset,
                                  ColumnIOTypeFlags types, bool active) override {}
     void select_offset_index(const SparseRange<uint64_t>& range, const uint64_t rg_first_row) override {}
 };
@@ -79,7 +79,7 @@ public:
 
     void get_levels(level_t** def_levels, level_t** rep_levels, size_t* num_levels) override {}
     void set_need_parse_levels(bool need_parse_levels) override {}
-    void collect_column_io_range(std::vector<io::SharedBufferedInputStream::IORange>* ranges, int64_t* end_offset,
+    void collect_column_io_range(std::vector<SharedBufferedInputStream::IORange>* ranges, int64_t* end_offset,
                                  ColumnIOTypeFlags types, bool active) override {}
     void select_offset_index(const SparseRange<uint64_t>& range, const uint64_t rg_first_row) override {}
 };
@@ -174,7 +174,7 @@ TEST_F(IcebergRowIdReaderTest, TestNoOpMethods) {
     reader.get_levels(&def_levels, &rep_levels, &num_levels);
     reader.set_need_parse_levels(true);
 
-    std::vector<io::SharedBufferedInputStream::IORange> ranges;
+    std::vector<SharedBufferedInputStream::IORange> ranges;
     int64_t end_offset = 0;
     reader.collect_column_io_range(&ranges, &end_offset, ColumnIOType::PAGES, true);
     ASSERT_TRUE(ranges.empty());

@@ -18,6 +18,8 @@
 #include <boost/algorithm/string.hpp>
 
 #include "cache/cache_options.h"
+#include "cache/scan/cache_input_stream.h"
+#include "cache/scan/shared_buffered_input_stream.h"
 #include "column/column_access_path.h"
 #include "common/runtime_profile.h"
 #include "connector/deletion_vector/deletion_bitmap.h"
@@ -28,8 +30,6 @@
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
 #include "fs/fs.h"
-#include "io/cache_input_stream.h"
-#include "io/shared_buffered_input_stream.h"
 #include "runtime/descriptors.h"
 #include "runtime/runtime_state_fwd.h"
 
@@ -510,8 +510,8 @@ public:
     bool has_split_tasks() const { return _scanner_ctx.has_split_tasks; }
 
     static StatusOr<std::unique_ptr<RandomAccessFile>> create_random_access_file(
-            std::shared_ptr<io::SharedBufferedInputStream>& shared_buffered_input_stream,
-            std::shared_ptr<io::CacheInputStream>& cache_input_stream, const OpenFileOptions& options);
+            std::shared_ptr<SharedBufferedInputStream>& shared_buffered_input_stream,
+            std::shared_ptr<CacheInputStream>& cache_input_stream, const OpenFileOptions& options);
 
 protected:
     Status open_random_access_file();
@@ -536,8 +536,8 @@ protected:
     std::unique_ptr<RandomAccessFile> _file;
     // by default it's no compression.
     CompressionTypePB _compression_type = CompressionTypePB::NO_COMPRESSION;
-    std::shared_ptr<io::CacheInputStream> _cache_input_stream = nullptr;
-    std::shared_ptr<io::SharedBufferedInputStream> _shared_buffered_input_stream = nullptr;
+    std::shared_ptr<CacheInputStream> _cache_input_stream = nullptr;
+    std::shared_ptr<SharedBufferedInputStream> _shared_buffered_input_stream = nullptr;
     int64_t _total_running_time = 0;
 
 public:

@@ -30,6 +30,9 @@ set(CACHE_FILES
   datacache_runtime_compat.cpp
   datacache_metrics.cpp
   datacache_utils.cpp
+  scan/shared_buffered_input_stream.cpp
+  scan/cache_input_stream.cpp
+  scan/cache_select_input_stream.hpp
 )
 
 if (${WITH_STARCACHE} STREQUAL "ON")
@@ -44,5 +47,5 @@ ADD_BE_LIB(Cache
 )
 
 target_link_libraries(Cache
-    PUBLIC RuntimeCore FSCore Common Base Gutil StarRocksGen
+    PUBLIC RuntimeCore FSCore IOCore Common Base Gutil StarRocksGen
 )

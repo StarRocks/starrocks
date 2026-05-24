@@ -23,6 +23,7 @@
 #include <vector>
 
 #include "cache/datacache.h"
+#include "cache/scan/shared_buffered_input_stream.h"
 #include "column/vectorized_fwd.h"
 #include "common/compiler_util.h"
 #include "common/config_scan_io_fwd.h"
@@ -36,12 +37,11 @@
 #include "gen_cpp/parquet_types.h"
 #include "gutil/casts.h"
 #include "gutil/strings/substitute.h"
-#include "io/shared_buffered_input_stream.h"
 
 namespace starrocks::parquet {
 
 FileReader::FileReader(int chunk_size, RandomAccessFile* file, size_t file_size,
-                       const DataCacheOptions& datacache_options, io::SharedBufferedInputStream* sb_stream,
+                       const DataCacheOptions& datacache_options, SharedBufferedInputStream* sb_stream,
                        SkipRowsContextPtr skip_rows_context)
         : _chunk_size(chunk_size),
           _file(file),
@@ -102,7 +102,7 @@ const FileMetaData* FileReader::get_file_metadata() {
     return _file_metadata.get();
 }
 
-Status FileReader::collect_scan_io_ranges(std::vector<io::SharedBufferedInputStream::IORange>* io_ranges) {
+Status FileReader::collect_scan_io_ranges(std::vector<SharedBufferedInputStream::IORange>* io_ranges) {
     int64_t dummy_offset = 0;
     for (auto& r : _row_group_readers) {
         r->collect_io_ranges(io_ranges, &dummy_offset, ColumnIOType::PAGE_INDEX);
@@ -233,7 +233,7 @@ bool FileReader::_select_row_group(const tparquet::RowGroup& row_group) {
 Status FileReader::_collect_row_group_io(std::shared_ptr<GroupReader>& group_reader) {
     // collect io ranges.
     if (config::parquet_coalesce_read_enable && _sb_stream != nullptr) { //should move to scanner_ctx
-        std::vector<io::SharedBufferedInputStream::IORange> ranges;
+        std::vector<SharedBufferedInputStream::IORange> ranges;
         int64_t end_offset = 0;
         ColumnIOTypeFlags flags = 0;
         if (_scanner_ctx->parquet_page_index_enable) {
