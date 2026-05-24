@@ -32,23 +32,25 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "storage/options.h"
+#include "platform/store_path.h"
 
 #include <algorithm>
-#include <filesystem>
+#include <cctype>
+#include <string>
+#include <vector>
 
 #include "base/path/path_util.h"
 #include "common/config_storage_fwd.h"
 #include "common/logging.h"
-#include "common/status.h"
+#include "fmt/format.h"
 #include "fs/fs.h"
 #include "gutil/strings/split.h"
+#include "gutil/strings/strip.h"
 #include "gutil/strings/substitute.h"
 
 namespace starrocks {
 
 using std::string;
-using std::vector;
 
 // capacity config is deprecated
 static std::string CAPACITY_UC = "CAPACITY";

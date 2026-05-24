@@ -502,7 +502,6 @@ SET(DW_TEST_FILES
     ./storage/non_retryable_load_errors_test.cpp
     ./storage/olap_meta_reader_test.cpp
     ./storage/olap_runtime_range_pruner_test.cpp
-    ./storage/options_test.cpp
     ./storage/persistent_index_consistency_test.cpp
     ./storage/persistent_index_load_executor_test.cpp
     ./storage/persistent_index_snapshot_load_test.cpp

@@ -38,7 +38,6 @@ set(STORAGE_FILES
     olap_common.cpp
     olap_define.cpp
     olap_server.cpp
-    options.cpp
     persistent_index.cpp
     primary_index.cpp
     primary_key_encoder.cpp
@@ -320,4 +319,4 @@ ADD_BE_LIB(Storage
     ${STORAGE_FILES}
 )
 
-target_link_libraries(Storage PUBLIC ExecPrimitive Serde)
+target_link_libraries(Storage PUBLIC ExecPrimitive Serde Platform)
