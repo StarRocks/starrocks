@@ -96,8 +96,20 @@ struct ArrayAggAggregateState {
         set.clear();
     }
 
-    // Off-pool heap charged into the operator's agg-state memory so it shows in Aggregator::memory_usage().
-    int64_t mem_usage() const { return data_column.memory_usage(); }
+    // Off-pool heap charged into the operator's agg-state memory so it shows in
+    // Aggregator::memory_usage(): the value column, plus (distinct mode) the dedup hash set,
+    // approximated from its slot count (phmap exposes no exact byte count). For string keys the
+    // key bytes live in the operator mem pool (counted there); only the set's slots/control
+    // bytes are added here, so there is no double counting. Distinct mode materializes the set
+    // into the value column lazily at output (get_data_column); that transient copy is not charged
+    // here -- only the build-time set drives sizing, and the query MemTracker still sees it.
+    int64_t mem_usage() const {
+        int64_t usage = data_column.memory_usage();
+        if constexpr (is_distinct) {
+            usage += static_cast<int64_t>(set.capacity()) * (sizeof(typename MyHashSet::value_type) + 1);
+        }
+        return usage;
+    }
 
     ColumnType data_column; // Aggregated elements for array_agg
     size_t null_count = 0;
@@ -183,8 +195,20 @@ struct ArrayAggAggregateState<PT, is_distinct, MyHashSet, StringOrBinaryGuard<PT
         set.clear();
     }
 
-    // Off-pool heap charged into the operator's agg-state memory so it shows in Aggregator::memory_usage().
-    int64_t mem_usage() const { return data_column.memory_usage(); }
+    // Off-pool heap charged into the operator's agg-state memory so it shows in
+    // Aggregator::memory_usage(): the value column, plus (distinct mode) the dedup hash set,
+    // approximated from its slot count (phmap exposes no exact byte count). For string keys the
+    // key bytes live in the operator mem pool (counted there); only the set's slots/control
+    // bytes are added here, so there is no double counting. Distinct mode materializes the set
+    // into the value column lazily at output (get_data_column); that transient copy is not charged
+    // here -- only the build-time set drives sizing, and the query MemTracker still sees it.
+    int64_t mem_usage() const {
+        int64_t usage = data_column.memory_usage();
+        if constexpr (is_distinct) {
+            usage += static_cast<int64_t>(set.capacity()) * (sizeof(typename MyHashSet::value_type) + 1);
+        }
+        return usage;
+    }
 
     ColumnType data_column; // Aggregated elements for array_agg
     size_t null_count = 0;
