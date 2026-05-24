@@ -731,13 +731,16 @@ void ExecEnv::destroy() {
     _parallel_compact_mgr.reset();
     DCHECK(_global_env != nullptr);
     _global_env->destroy_thread_pools();
+    _query_execution_services.process_metrics = nullptr;
+    _table_metrics_mgr = nullptr;
+    _process_metrics_registry = nullptr;
+}
+
+void ExecEnv::destroy_vector_index_cache() {
 #ifdef WITH_TENANN
     tenann::SetGlobalIndexCache(nullptr);
 #endif
     _vector_index_cache.reset();
-    _query_execution_services.process_metrics = nullptr;
-    _table_metrics_mgr = nullptr;
-    _process_metrics_registry = nullptr;
 }
 
 void ExecEnv::_wait_for_fragments_finish() {

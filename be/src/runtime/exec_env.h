@@ -122,6 +122,12 @@ public:
                 GlobalEnv* global_env, bool as_cn = false);
     void stop();
     void destroy();
+    // Tears down the SR-owned VectorIndexCache. Kept out of destroy() so the
+    // call site can be placed before GlobalEnv::stop() — the entry deleters
+    // need vector_index_mem_tracker alive to account for the release.
+    // ~VectorIndexCache itself handles the IVF-PQ self-cascade safely; see
+    // the destructor for the FUTEX_WAIT_PRIVATE deadlock the cascade triggers.
+    void destroy_vector_index_cache();
     void wait_for_finish();
 
     /// Returns the first created exec env instance. In a normal starrocks, this is

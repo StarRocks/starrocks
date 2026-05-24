@@ -27,12 +27,9 @@
 
 #include "base/string/slice.h"
 #include "base/testutil/assert.h"
-#include "common/config_update_registry.h"
 #include "common/status.h"
 #include "fs/fs_memory.h"
-#include "runtime/env/global_env.h"
 #include "runtime/mem_tracker.h"
-#include "service/service_be/config_update_hooks.h"
 #include "storage/index/vector/empty_index_reader.h"
 #include "storage/index/vector/tenann/tenann_index_utils.h"
 #include "storage/index/vector/tenann_index_reader.h"
@@ -52,6 +49,17 @@ tenann::IndexRef make_dummy_ref(size_t bytes = kDummyBytes) {
     return std::make_shared<tenann::Index>(
             buf, tenann::IndexType::kFaissIvfPqOneInvertedList, [](void* v) { std::free(v); },
             /*explicit_bytes=*/bytes);
+}
+
+// Minimal IndexMeta that survives apply_index_reader_cache_options(): default
+// construction leaves index_type unset and tenann throws "index type not set
+// in index meta" the moment init_searcher reads it, escaping as an unknown
+// exception before the loader's catch arm ever runs.
+tenann::IndexMeta make_minimal_meta() {
+    tenann::IndexMeta meta;
+    meta.SetIndexFamily(tenann::IndexFamily::kVectorIndex);
+    meta.SetIndexType(tenann::IndexType::kFaissHnsw);
+    return meta;
 }
 } // namespace
 
@@ -268,6 +276,48 @@ TEST_F(VectorIndexCacheTest, MemTracker_CrossThread_EvictReleasesCorrectly) {
     EXPECT_LE(tracker_->consumption(), base + 512);
 }
 
+// Repros the shutdown deadlock pattern: a top-level IVF-PQ entry holds a
+// tenann::IndexRef whose underlying Index, when destructed, releases another
+// IndexCacheHandle pointing back into the same cache. `~DynamicCache` runs the
+// IndexRef destructor while holding `_cache._lock` — without the fix the
+// inner release recursively tries to take `_cache._lock` and FUTEX_WAITs
+// forever. We assert that destruction (and a shrink-to-zero eviction) both
+// complete; a deadlock would hang the test instead of failing it.
+TEST_F(VectorIndexCacheTest, ShutdownAndShrink_WithSelfReferentialEntry_NoDeadlock) {
+    auto c = std::make_unique<VectorIndexCache>(/*capacity=*/64 * 1024, tracker_.get());
+
+    // Seed an "inner" entry plus a pinning handle that the outer ref will
+    // hold and release on destruction — the BlockCacheInvertedLists pattern.
+    tenann::IndexCacheHandle inner;
+    c->Insert(tenann::CacheKey("/inner.vi"), make_dummy_ref(1024), &inner);
+
+    // Outer Index whose deleter consumes the inner handle. Moving the handle
+    // into the deleter lambda is the same shape as faiss owning a
+    // BlockCacheInvertedLists that owns std::vector<IndexCacheHandle>.
+    struct OuterPayload {
+        tenann::IndexCacheHandle pinned;
+        std::vector<char> bytes;
+    };
+    auto* payload = new OuterPayload{std::move(inner), std::vector<char>(2048)};
+    auto outer_ref = std::make_shared<tenann::Index>(
+            payload, tenann::IndexType::kFaissIvfPq,
+            [](void* p) { delete static_cast<OuterPayload*>(p); },
+            /*explicit_bytes=*/2048);
+
+    tenann::IndexCacheHandle outer;
+    c->Insert(tenann::CacheKey("/outer.vi"), outer_ref, &outer);
+    outer_ref.reset();
+    outer = tenann::IndexCacheHandle{};
+
+    // Runtime safety: shrinking to zero forces eviction of the outer entry,
+    // which must not deadlock when the chained release runs.
+    c->SetCapacity(0);
+
+    // Shutdown safety: destructing the cache must drain the remaining inner
+    // entry without re-locking _cache._lock.
+    c.reset();
+}
+
 // === Sibling helpers under storage/index/vector ===
 
 TEST(TenannErrorToStatusTest, NotFoundVariantsMapToNotFound) {
@@ -331,7 +381,7 @@ TEST(TenANNReaderTest, InitSearcher_FileNotFoundViaFs_PropagatesNotFound) {
 
     MemoryFileSystem fs;
     TenANNReader r;
-    tenann::IndexMeta meta;
+    auto meta = make_minimal_meta();
     auto st = r.init_searcher(meta, "/no/such/index.vi", &fs);
     EXPECT_TRUE(st.is_not_found()) << st.to_string();
 
@@ -355,7 +405,7 @@ TEST(TenANNReaderTest, InitSearcher_MalformedFile_ReturnsNonOk) {
     ASSERT_OK(fs.append_file("/tmp/garbage.vi", Slice("not a real index", 16)));
 
     TenANNReader r;
-    tenann::IndexMeta meta;
+    auto meta = make_minimal_meta();
     auto st = r.init_searcher(meta, "/tmp/garbage.vi", &fs);
     EXPECT_FALSE(st.ok()) << "loader should surface tenann::Error / std::exception, not crash";
 
@@ -367,24 +417,6 @@ TEST(VectorIndexCacheEntryTest, StreamingOperatorPrintsTag) {
     std::ostringstream os;
     os << e;
     EXPECT_EQ("VectorIndexCacheEntry", os.str());
-}
-
-// register_config_update_hooks(nullptr) is well-defined: callback registration
-// does not dereference exec_env. When /api/update_config?vector_index_cache_limit=...
-// fires, the callback short-circuits on the null exec_env and returns
-// InternalError, which update_config then rolls back. Operators see the failure
-// rather than crashing the BE.
-TEST(ConfigUpdateHooksTest, VectorIndexCacheLimit_NullExecEnv_ReturnsInternalError) {
-    auto* registry = ConfigUpdateRegistry::instance();
-    registry->TEST_reset();
-    register_config_update_hooks(/*exec_env=*/nullptr, *GlobalEnv::GetInstance());
-    registry->set_ready();
-
-    auto st = registry->update_config("vector_index_cache_limit", "1G");
-    EXPECT_FALSE(st.ok()) << st.to_string();
-    EXPECT_TRUE(st.is_internal_error()) << st.to_string();
-
-    registry->TEST_reset();
 }
 
 } // namespace starrocks

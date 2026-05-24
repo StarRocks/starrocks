@@ -163,4 +163,20 @@ TEST_F(ConfigUpdateHooksTest, test_update_lake_metadata_fetch_thread_count) {
     ASSERT_EQ(1, thread_pool->max_threads());
 }
 
+#ifndef __APPLE__
+// Re-registers the hooks with a null exec_env to verify the
+// `vector_index_cache_limit` callback short-circuits to InternalError instead
+// of dereferencing exec_env. The override of SetUp's registration is OK because
+// TearDown's TEST_reset() restores a clean registry for the next test.
+TEST_F(ConfigUpdateHooksTest, vector_index_cache_limit_null_exec_env_returns_internal_error) {
+    ConfigUpdateRegistry::instance()->TEST_reset();
+    register_config_update_hooks(/*exec_env=*/nullptr, *GlobalEnv::GetInstance());
+    ConfigUpdateRegistry::instance()->set_ready();
+
+    auto st = ConfigUpdateRegistry::instance()->update_config("vector_index_cache_limit", "1G");
+    EXPECT_FALSE(st.ok()) << st.to_string();
+    EXPECT_TRUE(st.is_internal_error()) << st.to_string();
+}
+#endif
+
 } // namespace starrocks

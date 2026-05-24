@@ -25,6 +25,42 @@ VectorIndexCache::VectorIndexCache(size_t capacity, MemTracker* tracker) : _cach
     _cache.set_mem_tracker(tracker);
 }
 
+// IVF-PQ block-cache entries (and any future entry whose value chain re-enters
+// this cache) make naive teardown unsafe. The chain on shutdown is:
+//
+//   top-level IVF-PQ entry
+//     -> tenann::IndexRef
+//        -> faiss::IndexIVFPQ
+//           -> BlockCacheInvertedLists      (owned by faiss::IndexIVFPQ)
+//              -> std::vector<IndexCacheHandle>
+//                 -> shared_ptr<void> releaser_
+//                    -> [cache](void*){cache->release(inner_entry);}
+//
+// `~DynamicCache` holds `_cache._lock` for the entire iteration and runs
+// `delete iobj` in-place. That cascade unwinds straight into the inner-entry
+// releaser, which calls `_cache.release` and tries to re-acquire the same
+// lock. std::mutex isn't recursive, so the main thread parks on
+// FUTEX_WAIT_PRIVATE value=2 forever — the symptom CI's Restart BE step
+// reports as "BE exit and gen gcov timeout".
+//
+// Fix: drain every entry's IndexRef BEFORE the base destructor takes the
+// lock. `get_all_entries` only holds `_cache._lock` while copying out the
+// list and bumping refs, so the per-entry `set_ref(nullptr)` here — which
+// is what actually triggers the BlockCacheInvertedLists destructor and the
+// inner releaser callbacks — runs with `_cache._lock` free. By the time
+// ~DynamicCache walks the list under the lock, every value()._ref is null
+// and `delete iobj` is a no-op cascade.
+VectorIndexCache::~VectorIndexCache() {
+    auto entries = _cache.get_all_entries();
+    for (auto* entry : entries) {
+        auto g = entry->value().guard();
+        entry->value().set_ref(nullptr);
+    }
+    for (auto* entry : entries) {
+        _cache.release(entry);
+    }
+}
+
 bool VectorIndexCache::Lookup(const tenann::CacheKey& key, tenann::IndexCacheHandle* handle) {
     // Intentionally does not bump _lookup_count / _hit_count. Lookup is used by
     // VectorIndexReaderFactory as an opportunistic probe to skip the OSS HEAD

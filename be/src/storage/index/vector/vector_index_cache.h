@@ -65,7 +65,7 @@ public:
     using Entry = Cache::Entry;
 
     VectorIndexCache(size_t capacity, MemTracker* tracker);
-    ~VectorIndexCache() override = default;
+    ~VectorIndexCache() override;
 
     VectorIndexCache(const VectorIndexCache&) = delete;
     VectorIndexCache& operator=(const VectorIndexCache&) = delete;
