@@ -441,7 +441,6 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, ProcessMetricsRe
     }
 #endif
 
-    RETURN_IF_ERROR(PythonEnvManager::getInstance().init(config::python_envs));
     PythonEnvManager::getInstance().start_background_cleanup_thread();
 
     _refresh_service_contexts();
