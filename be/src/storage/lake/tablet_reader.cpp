@@ -25,11 +25,12 @@
 #include "common/config_lake_fwd.h"
 #include "common/config_scan_io_fwd.h"
 #include "common/status.h"
+#include "common/thread/threadpool.h"
 #include "exec/pipeline/scan/morsel.h"
 #include "exec/pipeline/scan/scan_morsel.h"
 #include "exec/pipeline/scan/split_scan_morsel.h"
 #include "gutil/stl_util.h"
-#include "runtime/exec_env.h"
+#include "runtime/env/global_env.h"
 #include "runtime/runtime_state.h"
 #include "storage/aggregate_iterator.h"
 #include "storage/chunk_helper.h"
@@ -419,7 +420,7 @@ Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std
             });
 
             auto packaged_func = [task]() { (*task)(); };
-            if (auto st = ExecEnv::GetInstance()->load_rowset_thread_pool()->submit_func(std::move(packaged_func));
+            if (auto st = GlobalEnv::GetInstance()->load_rowset_thread_pool()->submit_func(std::move(packaged_func));
                 !st.ok()) {
                 // try load rowset serially if sumbit_func failed
                 LOG(WARNING) << "sumbit_func failed: " << st.code_as_string()

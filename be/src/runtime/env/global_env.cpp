@@ -31,6 +31,12 @@
 
 namespace starrocks {
 
+GlobalEnv::GlobalEnv() = default;
+
+GlobalEnv::~GlobalEnv() {
+    _is_init = false;
+}
+
 int64_t GlobalEnv::process_mem_limit() const {
     return _process_mem_tracker->limit();
 }
@@ -117,6 +123,21 @@ Status GlobalEnv::init(MetricRegistry* metrics) {
     CurrentThread::set_mem_tracker_source(&GlobalEnv::is_init, process_mem_tracker_provider);
     _is_init = true;
     return Status::OK();
+}
+
+void GlobalEnv::stop() {
+    _thread_pools.shutdown();
+    _thread_pools.destroy();
+    _is_init = false;
+    _reset_tracker();
+}
+
+Status GlobalEnv::init_execution_thread_pools(MetricRegistry* metrics) {
+    return _thread_pools.init_execution_thread_pools(metrics);
+}
+
+Status GlobalEnv::init_lake_thread_pools(MetricRegistry* metrics) {
+    return _thread_pools.init_lake_thread_pools(metrics);
 }
 
 Status GlobalEnv::_init_mem_tracker(MetricRegistry* metrics) {

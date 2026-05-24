@@ -29,7 +29,7 @@
 #include "fs/key_cache.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/current_thread.h"
-#include "runtime/exec_env.h"
+#include "runtime/env/global_env.h"
 #include "serde/column_array_serde.h"
 #include "storage/chunk_helper.h"
 #include "storage/delta_column_group.h"
@@ -433,7 +433,7 @@ Status ColumnModePartialUpdateHandler::execute(const RowsetUpdateStateParams& pa
         // Create thread pool token for segment-level parallelism
         std::unique_ptr<ThreadPoolToken> token;
         if (config::enable_pk_index_parallel_execution) {
-            token = ExecEnv::GetInstance()->lake_partial_update_thread_pool()->new_token(
+            token = GlobalEnv::GetInstance()->lake_partial_update_thread_pool()->new_token(
                     ThreadPool::ExecutionMode::CONCURRENT);
         }
 

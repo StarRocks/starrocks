@@ -20,6 +20,7 @@
 #include <vector>
 
 #include "common/status.h"
+#include "runtime/env/global_thread_pools.h"
 #include "runtime/mem_tracker_fwd.h"
 
 namespace starrocks {
@@ -33,14 +34,11 @@ public:
         return &s_global_env;
     }
 
-    GlobalEnv() = default;
-    ~GlobalEnv() { _is_init = false; }
+    GlobalEnv();
+    ~GlobalEnv();
 
     Status init(MetricRegistry* metrics);
-    void stop() {
-        _is_init = false;
-        _reset_tracker();
-    }
+    void stop();
 
     static bool is_init();
 
@@ -85,6 +83,32 @@ public:
     static int64_t calc_max_query_memory(int64_t process_mem_limit, int64_t percent);
 
     int64_t process_mem_limit() const;
+
+    Status init_execution_thread_pools(MetricRegistry* metrics);
+    Status init_lake_thread_pools(MetricRegistry* metrics);
+    void shutdown_thread_pools() { _thread_pools.shutdown(); }
+    void destroy_thread_pools() { _thread_pools.destroy(); }
+
+    PriorityThreadPool* thread_pool() { return _thread_pools.thread_pool(); }
+    ThreadPool* streaming_load_thread_pool() { return _thread_pools.streaming_load_thread_pool(); }
+    ThreadPool* load_rowset_thread_pool() { return _thread_pools.load_rowset_thread_pool(); }
+    ThreadPool* load_segment_thread_pool() { return _thread_pools.load_segment_thread_pool(); }
+    ThreadPool* put_combined_txn_log_thread_pool() { return _thread_pools.put_combined_txn_log_thread_pool(); }
+    PriorityThreadPool* udf_call_pool() { return _thread_pools.udf_call_pool(); }
+    PriorityThreadPool* pipeline_prepare_pool() { return _thread_pools.pipeline_prepare_pool(); }
+    PriorityThreadPool* pipeline_sink_io_pool() { return _thread_pools.pipeline_sink_io_pool(); }
+    PriorityThreadPool* query_rpc_pool() { return _thread_pools.query_rpc_pool(); }
+    PriorityThreadPool* datacache_rpc_pool() { return _thread_pools.datacache_rpc_pool(); }
+    ThreadPool* load_rpc_pool() { return _thread_pools.load_rpc_pool(); }
+    ThreadPool* dictionary_cache_pool() { return _thread_pools.dictionary_cache_pool(); }
+    ThreadPool* automatic_partition_pool() { return _thread_pools.automatic_partition_pool(); }
+    ThreadPool* put_aggregate_metadata_thread_pool() { return _thread_pools.put_aggregate_metadata_thread_pool(); }
+    ThreadPool* lake_metadata_fetch_thread_pool() { return _thread_pools.lake_metadata_fetch_thread_pool(); }
+    ThreadPool* lake_vector_index_build_thread_pool() { return _thread_pools.lake_vector_index_build_thread_pool(); }
+    ThreadPool* pk_index_execution_thread_pool() { return _thread_pools.pk_index_execution_thread_pool(); }
+    ThreadPool* pk_index_memtable_flush_thread_pool() { return _thread_pools.pk_index_memtable_flush_thread_pool(); }
+    ThreadPool* lake_partial_update_thread_pool() { return _thread_pools.lake_partial_update_thread_pool(); }
+    int64_t max_executor_threads() const { return _thread_pools.max_executor_threads(); }
 
 private:
     static bool _is_init;
@@ -153,6 +177,8 @@ private:
 
     // The memory used for datacache
     std::shared_ptr<MemTracker> _datacache_mem_tracker;
+
+    GlobalThreadPools _thread_pools;
 
     std::map<MemTrackerType, std::shared_ptr<MemTracker>> _mem_tracker_map;
 };
