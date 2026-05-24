@@ -41,6 +41,7 @@
 namespace starrocks {
 
 class AgentServer;
+class MetricRegistry;
 class ThriftServer;
 
 // This class just forward rpc requests to actual handlers, used
@@ -51,7 +52,7 @@ public:
 
     ~BackendService() override;
 
-    static std::unique_ptr<ThriftServer> create(ExecEnv* exec_env, int port);
+    static std::unique_ptr<ThriftServer> create(ExecEnv* exec_env, MetricRegistry* metrics, int port);
 
     void submit_tasks(TAgentResult& return_value, const std::vector<TAgentTaskRequest>& tasks) override;
 

@@ -46,6 +46,7 @@ class TFileBrokerServiceClient;
 class ThreadPool;
 class TransactionMgr;
 class FrontendServiceClient;
+class MetricRegistry;
 template <class T>
 class ClientCache;
 
@@ -156,6 +157,7 @@ struct QueryExecutionServices {
     const RpcServices* rpc = nullptr;
     const LakeServices* lake = nullptr;
     const RuntimeServices* runtime = nullptr;
+    MetricRegistry* process_metrics = nullptr;
 };
 
 struct AdminServices {

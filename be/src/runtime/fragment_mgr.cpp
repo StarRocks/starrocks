@@ -353,10 +353,11 @@ void FragmentExecState::coordinator_callback(const Status& status, RuntimeProfil
     }
 }
 
-FragmentMgr::FragmentMgr(ExecEnv* exec_env) : _exec_env(exec_env), _cancel_thread([this] { cancel_worker(); }) {
+FragmentMgr::FragmentMgr(ExecEnv* exec_env, MetricRegistry* metrics)
+        : _exec_env(exec_env), _cancel_thread([this] { cancel_worker(); }) {
     Thread::set_thread_name(_cancel_thread, "frag_mgr_cancel");
-    if (_exec_env->metrics() != nullptr) {
-        REGISTER_GAUGE_RUNTIME_METRIC(_exec_env->metrics(), plan_fragment_count, [this]() {
+    if (metrics != nullptr) {
+        REGISTER_GAUGE_RUNTIME_METRIC(metrics, plan_fragment_count, [this]() {
             std::lock_guard<std::mutex> lock(_lock);
             return _fragment_map.size();
         });
