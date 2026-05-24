@@ -29,7 +29,7 @@ set(SPILL_CORE_TEST_LINK_LIBS
     SpillCore
     RuntimeCore
     FSCore
-    IOCore
+    IO
     Common
     Base
     Gutil

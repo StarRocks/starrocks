@@ -34,8 +34,8 @@
 #include "fs/bundle_file.h"
 #include "fs/fs.h"
 #include "fs/fs_util.h"
-#include "io/core/input_stream.h"
-#include "io/core/seekable_input_stream.h"
+#include "io/input_stream.h"
+#include "io/seekable_input_stream.h"
 #include "storage/lake/fixed_location_provider.h"
 #include "storage/lake/join_path.h"
 #include "storage/lake/location_provider.h"
@@ -1281,8 +1281,8 @@ public:
 // `get_io_stats_snapshot()` straight through to the wrapped stream — they are
 // 1-line forwarders and easy to break silently. This test wraps a sentinel-
 // emitting stream in each of:
-//   - io::InputStreamWrapper         (be/src/io/core/input_stream.h)
-//   - io::SeekableInputStreamWrapper (be/src/io/core/seekable_input_stream.h)
+//   - io::InputStreamWrapper         (be/src/io/input_stream.h)
+//   - io::SeekableInputStreamWrapper (be/src/io/seekable_input_stream.h)
 //   - SharedBufferedInputStream  (be/src/cache/scan/shared_buffered_input_stream.h)
 //   - BundleSeekableInputStream      (be/src/fs/bundle_file.h)
 // and asserts the sentinel byte count survives the forward. CompressedInputStream

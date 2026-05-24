@@ -48,7 +48,7 @@
         "runtime/current_thread.h",
         "runtime/mem_tracker.h",
         "fs/",
-        "io/core/",
+        "io/",
         "common/",
         "base/",
         "gutil/",
@@ -67,13 +67,13 @@
       "forbidden_includes": [
         "runtime/exec_env.h"
       ],
-      "allowed_target_deps": ["RuntimeCore", "FSCore", "IOCore", "Common", "Base", "Gutil", "StarRocksGen"],
+      "allowed_target_deps": ["RuntimeCore", "FSCore", "IO", "Common", "Base", "Gutil", "StarRocksGen"],
       "allowed_test_targets": ["cache_test"],
       "allowed_test_link_deps": [
         "Cache",
         "RuntimeCore",
         "FSCore",
-        "IOCore",
+        "IO",
         "Common",
         "Base",
         "Gutil",
@@ -117,22 +117,22 @@
       "remediation": "Keep HttpCore limited to reusable HTTP transport and request primitives; move BE-specific pages, actions, auth helpers, and client/download helpers upward."
     },
     {
-      "id": "iocore",
-      "doc_label": "IOCore",
-      "summary": "Minimal IO foundation used by upper IO/FS layers.",
-      "owned_targets": ["IOCore"],
-      "owned_globs": ["be/src/io/core/**"],
-      "allowed_include_prefixes": ["io/core/", "common/", "base/", "gutil/", "gen_cpp/"],
-      "forbidden_include_prefixes": ["io/"],
+      "id": "io",
+      "doc_label": "IO",
+      "summary": "Minimal IO foundation used by FS and upper layers.",
+      "owned_targets": ["IO"],
+      "owned_roots": ["be/src/io"],
+      "allowed_include_prefixes": ["io/", "common/", "base/", "gutil/", "gen_cpp/"],
+      "forbidden_include_prefixes": [],
       "allowed_target_deps": ["Common", "Base", "Gutil"],
       "allowed_test_targets": ["io_test"],
-      "allowed_test_link_deps": ["IOCore", "Common", "Base", "Gutil", "StarRocksGen"],
-      "remediation": "Keep IOCore free of higher IO/FS/runtime/storage code; lift the dependency into IO or FileSystem instead."
+      "allowed_test_link_deps": ["IO", "Common", "Base", "Gutil", "StarRocksGen"],
+      "remediation": "Keep IO free of higher FS/runtime/storage/exec/service code; move the dependency upward or add a lower-level interface."
     },
     {
       "id": "fscore",
       "doc_label": "FSCore",
-      "summary": "Minimal filesystem core on top of IOCore.",
+      "summary": "Minimal filesystem core on top of IO.",
       "owned_targets": ["FSCore"],
       "owned_globs": [
         "be/src/fs/fs.*",
@@ -147,7 +147,7 @@
         "be/src/fs/fs_scheme.*",
         "be/src/fs/fs_util.*"
       ],
-      "allowed_include_prefixes": ["fs/", "io/core/", "common/", "base/", "gutil/", "gen_cpp/"],
+      "allowed_include_prefixes": ["fs/", "io/", "common/", "base/", "gutil/", "gen_cpp/"],
       "forbidden_include_prefixes": ["fs/azure/", "fs/credential/", "fs/hdfs/", "fs/s3/"],
       "forbidden_includes": [
         "fs/fs_broker.h",
@@ -157,10 +157,10 @@
         "fs/key_cache.h",
         "fs/output_stream_adapter.h"
       ],
-      "allowed_target_deps": ["IOCore", "Common", "Base", "Gutil"],
+      "allowed_target_deps": ["IO", "Common", "Base", "Gutil"],
       "allowed_test_targets": ["fs_core_test"],
-      "allowed_test_link_deps": ["FSCore", "IOCore", "Common", "Base", "Gutil", "StarRocksGen"],
-      "remediation": "Keep FSCore limited to IOCore plus core FS abstractions; move backend-specific behavior into FileSystem."
+      "allowed_test_link_deps": ["FSCore", "IO", "Common", "Base", "Gutil", "StarRocksGen"],
+      "remediation": "Keep FSCore limited to IO plus core FS abstractions; move backend-specific behavior into FileSystem."
     },
     {
       "id": "platform",
@@ -168,8 +168,8 @@
       "summary": "Shared BE platform utilities above IO/FS/Common and below Runtime/Exec/Storage/Service.",
       "owned_targets": ["Platform"],
       "owned_roots": ["be/src/platform"],
-      "allowed_include_prefixes": ["platform/", "http/", "fs/", "io/core/", "common/", "base/", "gutil/", "gen_cpp/"],
-      "allowed_target_deps": ["HttpCore", "FSCore", "IOCore", "Common", "Base", "Gutil", "StarRocksGen"],
+      "allowed_include_prefixes": ["platform/", "http/", "fs/", "io/", "common/", "base/", "gutil/", "gen_cpp/"],
+      "allowed_target_deps": ["HttpCore", "FSCore", "IO", "Common", "Base", "Gutil", "StarRocksGen"],
       "allowed_test_targets": ["platform_test"],
       "allowed_test_link_deps": ["Platform"],
       "remediation": "Keep Platform limited to reusable host, filesystem-adjacent, download, temp-file, environment, retry, and platform-level helpers; move runtime, exec, storage, and service integration upward."
@@ -207,9 +207,9 @@
         "runtime/exec_env.h",
         "exec/sort_exec_exprs.h"
       ],
-      "allowed_target_deps": ["RuntimeCore", "FSCore", "IOCore", "Common", "Base", "Gutil", "StarRocksGen"],
+      "allowed_target_deps": ["RuntimeCore", "FSCore", "IO", "Common", "Base", "Gutil", "StarRocksGen"],
       "allowed_test_targets": ["spill_core_test"],
-      "allowed_test_link_deps": ["SpillCore", "RuntimeCore", "FSCore", "IOCore", "Common", "Base", "Gutil", "StarRocksGen"],
+      "allowed_test_link_deps": ["SpillCore", "RuntimeCore", "FSCore", "IO", "Common", "Base", "Gutil", "StarRocksGen"],
       "remediation": "Keep SpillCore limited to reusable spill block, directory, query-local spill, and spill memory-resource infrastructure; move pipeline ownership and runtime-service integration upward."
     },
     {

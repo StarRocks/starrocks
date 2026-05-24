@@ -40,7 +40,7 @@
 #include "fs/fs_util.h"
 #include "fs/key_cache.h"
 #include "http/http_metrics.h"
-#include "io/core/io_profiler_metrics.h"
+#include "io/io_profiler_metrics.h"
 #include "platform/platform_metrics.h"
 #include "runtime/runtime_metrics.h"
 #include "runtime/stream_load/stream_load_metrics.h"

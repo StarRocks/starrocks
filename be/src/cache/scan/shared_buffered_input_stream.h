@@ -23,7 +23,7 @@
 #include <vector>
 
 #include "common/status.h"
-#include "io/core/seekable_input_stream.h"
+#include "io/seekable_input_stream.h"
 
 namespace starrocks {
 

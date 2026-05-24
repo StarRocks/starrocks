@@ -35,7 +35,7 @@ ADD_BE_LIB(FSCore
     ${CORE_FILES}
 )
 
-target_link_libraries(FSCore PUBLIC IOCore)
+target_link_libraries(FSCore PUBLIC IO)
 
 set(EXEC_FILES
     fs_provider_bootstrap.cpp

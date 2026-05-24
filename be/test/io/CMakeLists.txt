@@ -23,7 +23,7 @@ set(IO_TEST_FILES
 )
 
 set(IO_TEST_LINK_LIBS
-    IOCore
+    IO
     Common
     Base
     Gutil

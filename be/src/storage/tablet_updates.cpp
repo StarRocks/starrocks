@@ -41,7 +41,7 @@
 #include "gutil/stl_util.h"
 #include "gutil/strings/join.h"
 #include "gutil/strings/substitute.h"
-#include "io/core/io_profiler.h"
+#include "io/io_profiler.h"
 #include "rocksdb/write_batch.h"
 #include "row_store_encoder.h"
 #include "rowset_merger.h"

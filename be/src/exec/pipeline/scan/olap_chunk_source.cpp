@@ -47,7 +47,7 @@
 #include "gen_cpp/RuntimeProfile_types.h"
 #include "gutil/casts.h"
 #include "gutil/map_util.h"
-#include "io/core/io_profiler.h"
+#include "io/io_profiler.h"
 #include "runtime/chunk_helper.h"
 #include "runtime/current_thread.h"
 #include "runtime/descriptors.h"

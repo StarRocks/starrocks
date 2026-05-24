@@ -12,12 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "io/core/io_profiler_metrics.h"
+#include "io/io_profiler_metrics.h"
 
 #include <string>
 
 #include "base/metrics.h"
-#include "io/core/io_profiler.h"
+#include "io/io_profiler.h"
 
 namespace starrocks {
 

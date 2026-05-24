@@ -22,7 +22,7 @@ set(FS_CORE_TEST_FILES
 
 set(FS_CORE_TEST_LINK_LIBS
     FSCore
-    IOCore
+    IO
     Common
     Base
     Gutil

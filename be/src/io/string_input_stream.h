@@ -12,20 +12,24 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "io/core/readable.h"
+#pragma once
+
+#include <string>
+
+#include "io/array_input_stream.h"
 
 namespace starrocks::io {
 
-Status Readable::read_fully(void* data, int64_t count) {
-    int64_t nread = 0;
-    while (nread < count) {
-        ASSIGN_OR_RETURN(auto n, read(static_cast<uint8_t*>(data) + nread, count - nread));
-        nread += n;
-        if (n == 0) {
-            return Status::IOError("can not read fully");
-        }
-    }
-    return Status::OK();
-}
+class StringInputStream : public io::SeekableInputStreamWrapper {
+public:
+    StringInputStream(std::string contents)
+            : io::SeekableInputStreamWrapper(&_stream, kDontTakeOwnership),
+              _contents(std::move(contents)),
+              _stream(_contents.data(), _contents.size()) {}
+
+private:
+    std::string _contents;
+    ArrayInputStream _stream;
+};
 
 } // namespace starrocks::io
