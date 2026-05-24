@@ -266,7 +266,7 @@ int main(int argc, char** argv) {
     }
 
     // Add logger for thrift internal.
-    apache::thrift::GlobalOutput.setOutputFunction(starrocks::thrift_output);
+    apache::thrift::TOutput::instance().setOutputFunction(starrocks::thrift_output);
 
     // cn need to support all ops for cloudnative table, so just start_be
     starrocks::start_be(paths, as_cn);
