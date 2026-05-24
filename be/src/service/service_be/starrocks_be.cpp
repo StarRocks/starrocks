@@ -195,7 +195,7 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
         thrift_port = config::thrift_port;
         LOG(WARNING) << "'thrift_port' is deprecated, please update be.conf to use 'be_port' instead!";
     }
-    auto thrift_server = BackendService::create(exec_env, thrift_port);
+    auto thrift_server = BackendService::create(exec_env, process_metrics_registry->root_registry(), thrift_port);
 
     if (auto status = thrift_server->start(); !status.ok()) {
         LOG(ERROR) << "Fail to start BackendService thrift server on port " << thrift_port << ": " << status;
@@ -300,7 +300,7 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
 
     // Start heartbeat server
     std::unique_ptr<ThriftServer> heartbeat_server;
-    if (auto ret = create_heartbeat_server(exec_env, config::heartbeat_service_port,
+    if (auto ret = create_heartbeat_server(process_metrics_registry->root_registry(), config::heartbeat_service_port,
                                            config::heartbeat_service_thread_count);
         !ret.ok()) {
         LOG(ERROR) << process_name << " heartbeat server did not start correctly, exiting: " << ret.status().message();

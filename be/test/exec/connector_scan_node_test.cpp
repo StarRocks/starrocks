@@ -20,6 +20,7 @@
 #include "column/datum_tuple.h"
 #include "common/config_exec_fwd.h"
 #include "common/config_metrics_fwd.h"
+#include "common/metrics/process_metrics_registry.h"
 #include "exec/exec_factory.h"
 #include "exec/pipeline/scan/morsel.h"
 #include "exec/pipeline/scan/olap_morsel_queue.h"
@@ -41,7 +42,7 @@ public:
 
         _mem_tracker = std::make_shared<MemTracker>(-1, "connector scan");
         _exec_env = ExecEnv::GetInstance();
-        _exec_env->metrics()->set_collect_hook_enabled(true);
+        _exec_env->process_metrics_registry()->root_registry()->set_collect_hook_enabled(true);
     }
     void TearDown() override {}
 

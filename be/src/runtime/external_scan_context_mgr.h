@@ -49,6 +49,8 @@
 
 namespace starrocks {
 
+class MetricRegistry;
+
 struct ScanContext {
 public:
     TUniqueId query_id;
@@ -64,7 +66,7 @@ public:
 
 class ExternalScanContextMgr {
 public:
-    ExternalScanContextMgr(ExecEnv* exec_env);
+    ExternalScanContextMgr(ExecEnv* exec_env, MetricRegistry* metrics);
 
     ~ExternalScanContextMgr();
 
