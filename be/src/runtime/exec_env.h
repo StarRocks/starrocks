@@ -67,7 +67,6 @@ class LookUpDispatcherMgr;
 class StreamContextMgr;
 class TransactionMgr;
 class BatchWriteMgr;
-class MetricRegistry;
 class ProcessMetricsRegistry;
 class StorageEngine;
 class TableMetricsManager;
@@ -138,7 +137,6 @@ public:
 
     std::string token() const;
     ExternalScanContextMgr* external_scan_context_mgr() { return _external_scan_context_mgr; }
-    MetricRegistry* metrics() const { return _metrics; }
     ProcessMetricsRegistry* process_metrics_registry() const { return _process_metrics_registry; }
     TableMetricsManager* table_metrics_mgr() const { return _table_metrics_mgr; }
     DataStreamMgr* stream_mgr() { return _stream_mgr; }
@@ -256,7 +254,6 @@ private:
     // Leave protected so that subclasses can override
     ExternalScanContextMgr* _external_scan_context_mgr = nullptr;
     ProcessMetricsRegistry* _process_metrics_registry = nullptr;
-    MetricRegistry* _metrics = nullptr;
     TableMetricsManager* _table_metrics_mgr = nullptr;
     DataStreamMgr* _stream_mgr = nullptr;
     ResultBufferMgr* _result_mgr = nullptr;

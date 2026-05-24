@@ -53,14 +53,13 @@ BackendService::BackendService(ExecEnv* exec_env)
 
 BackendService::~BackendService() = default;
 
-std::unique_ptr<ThriftServer> BackendService::create(ExecEnv* exec_env, int port) {
+std::unique_ptr<ThriftServer> BackendService::create(ExecEnv* exec_env, MetricRegistry* metrics, int port) {
     auto handler = std::make_shared<BackendService>(exec_env);
     auto processor = std::make_shared<BackendServiceProcessor>(handler);
 
     LOG(INFO) << "StarRocksInternalService has started listening port on " << port;
     // TODO: May be rename be_service_threads to thrift_service_threads ?
-    return std::make_unique<ThriftServer>("BackendService", processor, port, exec_env->metrics(),
-                                          config::be_service_threads);
+    return std::make_unique<ThriftServer>("BackendService", processor, port, metrics, config::be_service_threads);
 }
 
 void BackendService::get_tablet_stat(TTabletStatResult& result) {

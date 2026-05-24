@@ -216,6 +216,8 @@ void ExecEnv::_refresh_service_contexts() {
     _query_execution_services.rpc = &_rpc_services;
     _query_execution_services.lake = &_lake_services;
     _query_execution_services.runtime = &_runtime_services;
+    _query_execution_services.process_metrics =
+            _process_metrics_registry == nullptr ? nullptr : _process_metrics_registry->root_registry();
 
     _admin_services.execution = &_execution_services;
     _admin_services.rpc = &_rpc_services;
@@ -236,19 +238,19 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, ProcessMetricsRe
     }
     RETURN_IF_ERROR(connector::install_builtin_connectors(connector::ConnectorRegistry::default_instance()));
     _process_metrics_registry = process_metrics_registry;
-    _metrics = process_metrics_registry->root_registry();
+    auto* process_metrics = process_metrics_registry->root_registry();
     _table_metrics_mgr = process_metrics_registry->table_metrics_mgr();
     _store_paths = store_paths;
-    _external_scan_context_mgr = new ExternalScanContextMgr(this);
-    _stream_mgr = new DataStreamMgr(_metrics);
+    _external_scan_context_mgr = new ExternalScanContextMgr(this, process_metrics);
+    _stream_mgr = new DataStreamMgr(process_metrics);
     _lookup_dispatcher_mgr = new LookUpDispatcherMgr();
-    _result_mgr = new ResultBufferMgr(_metrics);
-    _result_queue_mgr = new ResultQueueMgr(_metrics);
+    _result_mgr = new ResultBufferMgr(process_metrics);
+    _result_queue_mgr = new ResultQueueMgr(process_metrics);
     // query_context_mgr keeps slotted map with 64 slot to reduce contention
     _query_context_mgr = new pipeline::QueryContextManager(6);
-    RETURN_IF_ERROR(_query_context_mgr->init(_metrics));
-    RETURN_IF_ERROR(global_env->init_execution_thread_pools(_metrics));
-    _fragment_mgr = new FragmentMgr(this);
+    RETURN_IF_ERROR(_query_context_mgr->init(process_metrics));
+    RETURN_IF_ERROR(global_env->init_execution_thread_pools(process_metrics));
+    _fragment_mgr = new FragmentMgr(this, process_metrics);
 
     // register the metrics to monitor the task queue len
     pipeline::PipelineExecutorMetrics::instance()->register_pipe_prepare_pool_queue_len_hook([] {
@@ -292,7 +294,8 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, ProcessMetricsRe
             CpuInfo::num_cores(), max_executor_threads, num_io_threads, connector_num_io_threads,
             CpuInfo::get_core_ids(), enable_bind_cpus, config::enable_resource_group_cpu_borrowing,
             pipeline::PipelineExecutorMetrics::instance());
-    _workgroup_manager = std::make_unique<workgroup::WorkGroupManager>(std::move(executors_manager_opts), _metrics);
+    _workgroup_manager =
+            std::make_unique<workgroup::WorkGroupManager>(std::move(executors_manager_opts), process_metrics);
     RETURN_IF_ERROR(_workgroup_manager->start());
     workgroup::DefaultWorkGroupInitialization default_workgroup_init(_workgroup_manager.get(), max_executor_threads);
 
@@ -302,9 +305,9 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, ProcessMetricsRe
         _load_path_mgr = new LoadPathMgr(this);
     }
 
-    _broker_mgr = new BrokerMgr(_metrics);
+    _broker_mgr = new BrokerMgr(process_metrics);
 
-    _load_stream_mgr = new LoadStreamMgr(_metrics);
+    _load_stream_mgr = new LoadStreamMgr(process_metrics);
     _stream_load_executor = new StreamLoadExecutor(this);
     _stream_context_mgr = new StreamContextMgr();
     _transaction_mgr = new TransactionMgr(this);
@@ -319,17 +322,17 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, ProcessMetricsRe
     auto batch_write_executor =
             std::make_unique<bthreads::ThreadPoolExecutor>(batch_write_thread_pool.release(), kTakesOwnership);
     _batch_write_mgr = new BatchWriteMgr(std::move(batch_write_executor));
-    RETURN_IF_ERROR(_batch_write_mgr->init(_metrics));
+    RETURN_IF_ERROR(_batch_write_mgr->init(process_metrics));
 
 #ifndef __APPLE__
     _routine_load_task_executor = new RoutineLoadTaskExecutor(this);
-    RETURN_IF_ERROR(_routine_load_task_executor->init(_metrics));
+    RETURN_IF_ERROR(_routine_load_task_executor->init(process_metrics));
 #endif
 
     _connector_sink_spill_executor = new connector::ConnectorSinkSpillExecutor();
     RETURN_IF_ERROR(_connector_sink_spill_executor->init());
 
-    _small_file_mgr = new SmallFileMgr(config::small_file_dir, _metrics);
+    _small_file_mgr = new SmallFileMgr(config::small_file_dir, process_metrics);
     _runtime_filter_worker = new RuntimeFilterWorker(&_runtime_services, &_rpc_services);
     _runtime_filter_cache = new RuntimeFilterCache(8);
     RETURN_IF_ERROR(_runtime_filter_cache->init());
@@ -394,9 +397,9 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, ProcessMetricsRe
     RETURN_IF_ERROR_WITH_WARN(_parallel_compact_mgr->init(), "init ParallelCompactMgr failed");
 #endif
 
-    RETURN_IF_ERROR(global_env->init_lake_thread_pools(_metrics));
+    RETURN_IF_ERROR(global_env->init_lake_thread_pools(process_metrics));
 
-    _load_channel_mgr = new LoadChannelMgr(_lake_tablet_manager, _metrics, _table_metrics_mgr);
+    _load_channel_mgr = new LoadChannelMgr(_lake_tablet_manager, process_metrics, _table_metrics_mgr);
 
     _agent_server = new AgentServer(this, false);
     RETURN_IF_ERROR(_agent_server->init());
@@ -417,7 +420,7 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, ProcessMetricsRe
     // spill internals. The callback captures a raw pointer because the
     // DirManager lives for the lifetime of ExecEnv.
     if (auto* spill_metrics = SpillMetrics::instance(); spill_metrics->local_disk_bytes_used() != nullptr) {
-        _metrics->register_hook("spill_disk_bytes_used", [dir_mgr = _spill_dir_mgr.get(), spill_metrics]() {
+        process_metrics->register_hook("spill_disk_bytes_used", [dir_mgr = _spill_dir_mgr.get(), spill_metrics]() {
             int64_t local_bytes = 0;
             for (auto& dir : dir_mgr->dirs()) {
                 local_bytes += dir->get_current_size();
@@ -709,7 +712,9 @@ void ExecEnv::destroy() {
     _parallel_compact_mgr.reset();
     DCHECK(_global_env != nullptr);
     _global_env->destroy_thread_pools();
-    _metrics = nullptr;
+    _query_execution_services.process_metrics = nullptr;
+    _table_metrics_mgr = nullptr;
+    _process_metrics_registry = nullptr;
 }
 
 void ExecEnv::_wait_for_fragments_finish() {
