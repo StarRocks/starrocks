@@ -45,7 +45,7 @@ public:
         _element_reader->set_need_parse_levels(need_parse_levels);
     }
 
-    void collect_column_io_range(std::vector<io::SharedBufferedInputStream::IORange>* ranges, int64_t* end_offset,
+    void collect_column_io_range(std::vector<SharedBufferedInputStream::IORange>* ranges, int64_t* end_offset,
                                  ColumnIOTypeFlags types, bool active) override {
         _element_reader->collect_column_io_range(ranges, end_offset, types, active);
     }
@@ -106,7 +106,7 @@ public:
         }
     }
 
-    void collect_column_io_range(std::vector<io::SharedBufferedInputStream::IORange>* ranges, int64_t* end_offset,
+    void collect_column_io_range(std::vector<SharedBufferedInputStream::IORange>* ranges, int64_t* end_offset,
                                  ColumnIOTypeFlags types, bool active) override {
         if (_key_reader != nullptr) {
             _key_reader->collect_column_io_range(ranges, end_offset, types, active);
@@ -204,7 +204,7 @@ public:
 
     Status fill_dst_column(ColumnPtr& dst, ColumnPtr& src) override;
 
-    void collect_column_io_range(std::vector<io::SharedBufferedInputStream::IORange>* ranges, int64_t* end_offset,
+    void collect_column_io_range(std::vector<SharedBufferedInputStream::IORange>* ranges, int64_t* end_offset,
                                  ColumnIOTypeFlags types, bool active) override {
         for (const auto& pair : _child_readers) {
             if (pair.second != nullptr) {
@@ -378,7 +378,7 @@ public:
 
     void set_need_parse_levels(bool need_parse_levels) override;
 
-    void collect_column_io_range(std::vector<io::SharedBufferedInputStream::IORange>* ranges, int64_t* end_offset,
+    void collect_column_io_range(std::vector<SharedBufferedInputStream::IORange>* ranges, int64_t* end_offset,
                                  ColumnIOTypeFlags types, bool active) override;
 
     void select_offset_index(const SparseRange<uint64_t>& range, const uint64_t rg_first_row) override;
@@ -456,7 +456,7 @@ public:
     void set_need_parse_levels(bool) override {}
 
     // No IO ranges — this reader has no Parquet pages of its own.
-    void collect_column_io_range(std::vector<io::SharedBufferedInputStream::IORange>*, int64_t*, ColumnIOTypeFlags,
+    void collect_column_io_range(std::vector<SharedBufferedInputStream::IORange>*, int64_t*, ColumnIOTypeFlags,
                                  bool) override {}
 
     void select_offset_index(const SparseRange<uint64_t>&, const uint64_t) override {}
@@ -527,7 +527,7 @@ public:
 
     Status fill_dst_column(ColumnPtr& dst, ColumnPtr& src) override { return _reader->fill_dst_column(dst, src); }
 
-    void collect_column_io_range(std::vector<io::SharedBufferedInputStream::IORange>* ranges, int64_t* end_offset,
+    void collect_column_io_range(std::vector<SharedBufferedInputStream::IORange>* ranges, int64_t* end_offset,
                                  ColumnIOTypeFlags types, bool active) override {
         _reader->collect_column_io_range(ranges, end_offset, types, active);
     }

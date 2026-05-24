@@ -39,7 +39,7 @@
     {
       "id": "cache",
       "doc_label": "Cache",
-      "summary": "Cache implementation module for DataCache facade, cache engines, monitors, metrics, utilities, StarCache integration, and peer-cache RPC reads without service/bootstrap or ExecEnv singleton coupling.",
+      "summary": "Cache implementation module for DataCache facade, cache engines, scan read-buffer/cache stream wrappers, monitors, metrics, utilities, StarCache integration, and peer-cache RPC reads without service/bootstrap or ExecEnv singleton coupling.",
       "owned_targets": ["Cache"],
       "owned_roots": ["be/src/cache"],
       "allowed_include_prefixes": [
@@ -48,6 +48,7 @@
         "runtime/current_thread.h",
         "runtime/mem_tracker.h",
         "fs/",
+        "io/core/",
         "common/",
         "base/",
         "gutil/",
@@ -66,18 +67,19 @@
       "forbidden_includes": [
         "runtime/exec_env.h"
       ],
-      "allowed_target_deps": ["RuntimeCore", "FSCore", "Common", "Base", "Gutil", "StarRocksGen"],
+      "allowed_target_deps": ["RuntimeCore", "FSCore", "IOCore", "Common", "Base", "Gutil", "StarRocksGen"],
       "allowed_test_targets": ["cache_test"],
       "allowed_test_link_deps": [
         "Cache",
         "RuntimeCore",
         "FSCore",
+        "IOCore",
         "Common",
         "Base",
         "Gutil",
         "StarRocksGen"
       ],
-      "remediation": "Keep Cache self-contained within cache engines, monitors, metrics, utilities, and injected peer-cache BRPC stubs; keep service startup, storage code, HTTP/admin code, and ExecEnv singleton access outside cache."
+      "remediation": "Keep Cache self-contained within cache engines, scan read-buffer/cache stream wrappers, monitors, metrics, utilities, and injected peer-cache BRPC stubs; keep service startup, storage code, HTTP/admin code, and ExecEnv singleton access outside cache."
     },
     {
       "id": "httpcore",

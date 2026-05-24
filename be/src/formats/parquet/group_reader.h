@@ -25,6 +25,7 @@
 #include <unordered_set>
 #include <vector>
 
+#include "cache/scan/shared_buffered_input_stream.h"
 #include "column/column_access_path.h"
 #include "column/variant_path_parser.h"
 #include "column/vectorized_fwd.h"
@@ -39,7 +40,6 @@
 #include "formats/parquet/metadata.h"
 #include "formats/parquet/utils.h"
 #include "gen_cpp/parquet_types.h"
-#include "io/shared_buffered_input_stream.h"
 #include "runtime/descriptors.h"
 #include "storage/range.h"
 
@@ -89,7 +89,7 @@ struct GroupReaderParam {
 
     HdfsScanStats* stats = nullptr;
 
-    io::SharedBufferedInputStream* sb_stream = nullptr;
+    SharedBufferedInputStream* sb_stream = nullptr;
 
     int chunk_size = 0;
 
@@ -145,7 +145,7 @@ public:
     uint64_t get_row_group_first_row() const { return _row_group_first_row; }
     const tparquet::RowGroup* get_row_group_metadata() const;
     Status get_next(ChunkPtr* chunk, size_t* row_count);
-    void collect_io_ranges(std::vector<io::SharedBufferedInputStream::IORange>* ranges, int64_t* end_offset,
+    void collect_io_ranges(std::vector<SharedBufferedInputStream::IORange>* ranges, int64_t* end_offset,
                            ColumnIOTypeFlags types = ColumnIOType::PAGES);
 
     SparseRange<uint64_t> get_range() const { return _range; }

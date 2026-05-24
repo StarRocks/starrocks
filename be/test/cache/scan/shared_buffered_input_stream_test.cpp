@@ -12,31 +12,33 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "io/shared_buffered_input_stream.h"
+#include "cache/scan/shared_buffered_input_stream.h"
 
 #include <gtest/gtest.h>
 
 #include "base/testutil/assert.h"
 #include "base/testutil/parallel_test.h"
-#include "io_test_base.h"
+#include "base/utility/defer_op.h"
+#include "common/config_scan_io_fwd.h"
+#include "io/io_test_base.h"
 
-namespace starrocks::io {
+namespace starrocks {
 
 class SharedBufferedInputStreamTest : public ::testing::Test {};
 
 PARALLEL_TEST(SharedBufferedInputStreamTest, test_release) {
     size_t len = 1 * 1024 * 1024; // 1MB
-    const std::string rand_string = random_string(len);
-    auto in = std::make_shared<TestInputStream>(rand_string, len);
-    auto sb_stream = std::make_shared<io::SharedBufferedInputStream>(in, "test", len);
+    const std::string rand_string = io::random_string(len);
+    auto in = std::make_shared<io::TestInputStream>(rand_string, len);
+    auto sb_stream = std::make_shared<SharedBufferedInputStream>(in, "test", len);
     sb_stream->set_align_size(256 * 1024); // 1024
-    std::vector<io::SharedBufferedInputStream::IORange> ranges;
+    std::vector<SharedBufferedInputStream::IORange> ranges;
     // make two ranges one is active and another is lazy to avoid merging together.
     // 150k -> 520k
-    auto r_active = io::SharedBufferedInputStream::IORange(150 * 1024, 370 * 1024, true);
+    auto r_active = SharedBufferedInputStream::IORange(150 * 1024, 370 * 1024, true);
     ranges.push_back(r_active);
     // 550k -> 650k
-    auto r_lazy = io::SharedBufferedInputStream::IORange(550 * 1024, 100 * 1024, false);
+    auto r_lazy = SharedBufferedInputStream::IORange(550 * 1024, 100 * 1024, false);
     ranges.push_back(r_lazy);
     auto st = sb_stream->set_io_ranges(ranges, false);
     ASSERT_OK(st);
@@ -49,12 +51,17 @@ PARALLEL_TEST(SharedBufferedInputStreamTest, test_release) {
 }
 
 TEST_F(SharedBufferedInputStreamTest, test_orc) {
+    const bool saved_io_coalesce_adaptive_lazy_active = config::io_coalesce_adaptive_lazy_active;
+    config::io_coalesce_adaptive_lazy_active = true;
+    DeferOp restore_config(
+            [&]() { config::io_coalesce_adaptive_lazy_active = saved_io_coalesce_adaptive_lazy_active; });
+
     size_t len = 100 * 1024 * 1024; // 1MB
-    const std::string rand_string = random_string(len);
-    auto in = std::make_shared<TestInputStream>(rand_string, len);
-    auto sb_stream = std::make_shared<io::SharedBufferedInputStream>(in, "test", len);
+    const std::string rand_string = io::random_string(len);
+    auto in = std::make_shared<io::TestInputStream>(rand_string, len);
+    auto sb_stream = std::make_shared<SharedBufferedInputStream>(in, "test", len);
     sb_stream->set_align_size(256 * 1024); // 256kb
-    std::vector<io::SharedBufferedInputStream::IORange> ranges;
+    std::vector<SharedBufferedInputStream::IORange> ranges;
 
     {
         // put lazy
@@ -179,4 +186,4 @@ TEST_F(SharedBufferedInputStreamTest, test_orc) {
             sb.value()->debug_string());
 }
 
-} // namespace starrocks::io
+} // namespace starrocks

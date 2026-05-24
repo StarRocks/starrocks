@@ -25,6 +25,7 @@
 #include "base/format.h"
 #include "base/simd/simd.h"
 #include "base/utility/defer_op.h"
+#include "cache/scan/shared_buffered_input_stream.h"
 #include "column/array_column.h"
 #include "column/chunk.h"
 #include "column/chunk_factory.h"
@@ -42,7 +43,6 @@
 #include "glog/logging.h"
 #include "gutil/casts.h"
 #include "gutil/stl_util.h"
-#include "io/shared_buffered_input_stream.h"
 #include "runtime/chunk_helper.h"
 #include "segment_options.h"
 #include "storage/chunk_helper.h"
@@ -1406,8 +1406,8 @@ Status SegmentIterator::_init_column_iterator_by_cid(const ColumnId cid, const C
             _segment->lake_tablet_manager() != nullptr) {
             ASSIGN_OR_RETURN(auto file_size, rfile->get_size());
             auto shared_buffered_input_stream =
-                    std::make_unique<io::SharedBufferedInputStream>(rfile->stream(), _segment->file_name(), file_size);
-            auto options = io::SharedBufferedInputStream::CoalesceOptions{
+                    std::make_unique<SharedBufferedInputStream>(rfile->stream(), _segment->file_name(), file_size);
+            auto options = SharedBufferedInputStream::CoalesceOptions{
                     .max_dist_size = config::io_coalesce_read_max_distance_size,
                     .max_buffer_size = config::io_coalesce_read_max_buffer_size};
             shared_buffered_input_stream->set_coalesce_options(options);

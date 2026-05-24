@@ -16,14 +16,18 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <map>
 #include <memory>
+#include <string>
+#include <string_view>
+#include <vector>
 
 #include "common/status.h"
 #include "io/core/seekable_input_stream.h"
 
-namespace starrocks::io {
+namespace starrocks {
 
-class SharedBufferedInputStream : public SeekableInputStream {
+class SharedBufferedInputStream : public io::SeekableInputStream {
 public:
     struct IORange {
         IORange(const int64_t offset, const int64_t size, const bool is_active = true)
@@ -52,7 +56,7 @@ public:
     };
     using SharedBufferPtr = std::shared_ptr<SharedBuffer>;
 
-    SharedBufferedInputStream(std::shared_ptr<SeekableInputStream> stream, std::string filename, size_t file_size);
+    SharedBufferedInputStream(std::shared_ptr<io::SeekableInputStream> stream, std::string filename, size_t file_size);
     ~SharedBufferedInputStream() override = default;
 
     Status seek(int64_t position) override {
@@ -73,11 +77,11 @@ public:
     // will use it directely instead of finding it repeatedly.
     Status get_bytes(const uint8_t** buffer, size_t offset, size_t count, SharedBufferPtr shared_buffer);
 
-    StatusOr<std::unique_ptr<NumericStatistics>> get_numeric_statistics() override {
+    StatusOr<std::unique_ptr<io::NumericStatistics>> get_numeric_statistics() override {
         return _stream->get_numeric_statistics();
     }
 
-    IoStatsSnapshot get_io_stats_snapshot() const override;
+    io::IoStatsSnapshot get_io_stats_snapshot() const override;
 
     Status set_io_ranges(const std::vector<IORange>& ranges, bool coalesce_lazy_column = true);
     void release_to_offset(int64_t offset);
@@ -107,7 +111,7 @@ private:
     void _merge_small_ranges(const std::vector<IORange>& ranges);
     Status _set_io_ranges_all_columns(const std::vector<IORange>& ranges);
     Status _set_io_ranges_active_and_lazy_columns(const std::vector<IORange>& ranges);
-    const std::shared_ptr<SeekableInputStream> _stream;
+    const std::shared_ptr<io::SeekableInputStream> _stream;
     const std::string _filename;
     std::map<int64_t, SharedBufferPtr> _map;
     CoalesceOptions _options;
@@ -124,4 +128,4 @@ private:
     int64_t _estimated_mem_usage = 0;
 };
 
-} // namespace starrocks::io
+} // namespace starrocks

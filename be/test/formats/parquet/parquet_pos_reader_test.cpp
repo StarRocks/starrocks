@@ -228,7 +228,7 @@ TEST_F(ParquetPosReaderTest, TestCollectColumnIoRange) {
     ParquetPosReader reader;
 
     // Call collect_column_io_range (should not crash)
-    std::vector<io::SharedBufferedInputStream::IORange> ranges;
+    std::vector<SharedBufferedInputStream::IORange> ranges;
     int64_t end_offset = 0;
     reader.collect_column_io_range(&ranges, &end_offset, ColumnIOType::PAGES, true);
     reader.collect_column_io_range(nullptr, nullptr, ColumnIOType::PAGES, false);
