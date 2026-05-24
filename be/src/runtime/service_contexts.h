@@ -114,6 +114,7 @@ struct LakeServices {
     lake::ReplicationTxnManager* lake_replication_txn_manager = nullptr;
     ThreadPool* put_aggregate_metadata_thread_pool = nullptr;
     ThreadPool* lake_metadata_fetch_thread_pool = nullptr;
+    ThreadPool* lake_vector_index_build_thread_pool = nullptr;
     lake::LakePersistentIndexParallelCompactMgr* parallel_compact_mgr = nullptr;
     ThreadPool* pk_index_execution_thread_pool = nullptr;
     ThreadPool* pk_index_memtable_flush_thread_pool = nullptr;

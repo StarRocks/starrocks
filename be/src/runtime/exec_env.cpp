@@ -178,6 +178,7 @@ void ExecEnv::_refresh_service_contexts() {
     _lake_services.lake_replication_txn_manager = _lake_replication_txn_manager;
     _lake_services.put_aggregate_metadata_thread_pool = global_env->put_aggregate_metadata_thread_pool();
     _lake_services.lake_metadata_fetch_thread_pool = global_env->lake_metadata_fetch_thread_pool();
+    _lake_services.lake_vector_index_build_thread_pool = global_env->lake_vector_index_build_thread_pool();
     _lake_services.parallel_compact_mgr = _parallel_compact_mgr.get();
     _lake_services.pk_index_execution_thread_pool = global_env->pk_index_execution_thread_pool();
     _lake_services.pk_index_memtable_flush_thread_pool = global_env->pk_index_memtable_flush_thread_pool();
@@ -252,8 +253,8 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, ProcessMetricsRe
     _fragment_mgr = new FragmentMgr(this, process_metrics);
 
     // register the metrics to monitor the task queue len
-    pipeline::PipelineExecutorMetrics::instance()->register_pipe_prepare_pool_queue_len_hook([] {
-        auto pool = ExecEnv::GetInstance()->pipeline_prepare_pool();
+    pipeline::PipelineExecutorMetrics::instance()->register_pipe_prepare_pool_queue_len_hook([global_env] {
+        auto pool = global_env->pipeline_prepare_pool();
         return (pool == nullptr) ? 0U : pool->get_queue_size();
     });
 

@@ -122,7 +122,7 @@ void PInternalServiceImplBase<T>::transmit_chunk(google::protobuf::RpcController
                                                  const PTransmitChunkParams* request, PTransmitChunkResult* response,
                                                  google::protobuf::Closure* done) {
     auto task = [=]() { this->_transmit_chunk(cntl_base, request, response, done); };
-    if (!_exec_env->query_rpc_pool()->try_offer(std::move(task))) {
+    if (!_exec_env->execution_services().query_rpc_pool->try_offer(std::move(task))) {
         ClosureGuard closure_guard(done);
         Status::ServiceUnavailable("submit transmit_chunk task failed").to_protobuf(response->mutable_status());
     }
@@ -243,7 +243,7 @@ void PInternalServiceImplBase<T>::transmit_chunk_via_http(google::protobuf::RpcC
         }
         this->_transmit_chunk(cntl_base, params.get(), response, done);
     };
-    if (!_exec_env->query_rpc_pool()->try_offer(std::move(task))) {
+    if (!_exec_env->execution_services().query_rpc_pool->try_offer(std::move(task))) {
         ClosureGuard closure_guard(done);
         Status::ServiceUnavailable("submit transmit_chunk_via_http task failed")
                 .to_protobuf(response->mutable_status());
@@ -256,7 +256,7 @@ void PInternalServiceImplBase<T>::transmit_runtime_filter(google::protobuf::RpcC
                                                           PTransmitRuntimeFilterResult* response,
                                                           google::protobuf::Closure* done) {
     auto task = [=]() { this->_transmit_runtime_filter(cntl_base, request, response, done); };
-    if (!_exec_env->query_rpc_pool()->try_offer(std::move(task))) {
+    if (!_exec_env->execution_services().query_rpc_pool->try_offer(std::move(task))) {
         ClosureGuard closure_guard(done);
         Status::ServiceUnavailable("submit transmit_runtime_filter task failed")
                 .to_protobuf(response->mutable_status());
@@ -291,7 +291,7 @@ void PInternalServiceImplBase<T>::exec_plan_fragment(google::protobuf::RpcContro
                                                      PExecPlanFragmentResult* response,
                                                      google::protobuf::Closure* done) {
     auto task = [=]() { this->_exec_plan_fragment(cntl_base, request, response, done); };
-    if (!_exec_env->query_rpc_pool()->try_offer(std::move(task))) {
+    if (!_exec_env->execution_services().query_rpc_pool->try_offer(std::move(task))) {
         ClosureGuard closure_guard(done);
         Status::ServiceUnavailable("submit exec_plan_fragment task failed").to_protobuf(response->mutable_status());
     }
@@ -323,7 +323,7 @@ void PInternalServiceImplBase<T>::exec_batch_plan_fragments(google::protobuf::Rp
                                                             PExecBatchPlanFragmentsResult* response,
                                                             google::protobuf::Closure* done) {
     auto task = [=]() { this->_exec_batch_plan_fragments(cntl_base, request, response, done); };
-    if (!_exec_env->pipeline_prepare_pool()->try_offer(std::move(task))) {
+    if (!_exec_env->execution_services().pipeline_prepare_pool->try_offer(std::move(task))) {
         ClosureGuard closure_guard(done);
         Status::ServiceUnavailable("submit exec_batch_plan_fragments failed").to_protobuf(response->mutable_status());
     }
@@ -400,7 +400,7 @@ void PInternalServiceImplBase<T>::_exec_batch_plan_fragments(google::protobuf::R
     bool submitted = true;
     for (int i = 0; i < unique_requests.size(); ++i) {
         PromiseStatusSharedPtr ms = std::make_shared<PromiseStatus>();
-        submitted = _exec_env->pipeline_prepare_pool()->try_offer(
+        submitted = _exec_env->execution_services().pipeline_prepare_pool->try_offer(
                 [ms, i, fragment_executors, t_batch_requests, exec_env = _exec_env] {
                     auto& unique_requests = t_batch_requests->unique_param_per_instance;
                     auto& req = unique_requests[i];
@@ -668,7 +668,7 @@ void PInternalServiceImplBase<T>::cancel_plan_fragment(google::protobuf::RpcCont
                                                        PCancelPlanFragmentResult* result,
                                                        google::protobuf::Closure* done) {
     auto task = [=]() { this->_cancel_plan_fragment(cntl_base, request, result, done); };
-    if (!_exec_env->query_rpc_pool()->try_offer(std::move(task))) {
+    if (!_exec_env->execution_services().query_rpc_pool->try_offer(std::move(task))) {
         ClosureGuard closure_guard(done);
         Status::ServiceUnavailable("submit cancel_plan_fragment task failed").to_protobuf(result->mutable_status());
     }
@@ -757,7 +757,7 @@ void PInternalServiceImplBase<T>::fetch_data(google::protobuf::RpcController* cn
                                              const PFetchDataRequest* request, PFetchDataResult* result,
                                              google::protobuf::Closure* done) {
     auto task = [=]() { this->_fetch_data(cntl_base, request, result, done); };
-    if (!_exec_env->query_rpc_pool()->try_offer(std::move(task))) {
+    if (!_exec_env->execution_services().query_rpc_pool->try_offer(std::move(task))) {
         ClosureGuard closure_guard(done);
         Status::ServiceUnavailable("submit fetch_data task failed").to_protobuf(result->mutable_status());
     }
@@ -777,7 +777,7 @@ void PInternalServiceImplBase<T>::fetch_datacache(google::protobuf::RpcControlle
                                                   const PFetchDataCacheRequest* request,
                                                   PFetchDataCacheResponse* response, google::protobuf::Closure* done) {
     auto task = [=]() { this->_fetch_datacache(cntl_base, request, response, done); };
-    if (!_exec_env->datacache_rpc_pool()->try_offer(std::move(task))) {
+    if (!_exec_env->execution_services().datacache_rpc_pool->try_offer(std::move(task))) {
         ClosureGuard closure_guard(done);
         Status::ServiceUnavailable("submit fetch_data task failed").to_protobuf(response->mutable_status());
     }
@@ -880,10 +880,10 @@ void PInternalServiceImplBase<T>::get_info(google::protobuf::RpcController* cont
         this->_get_info_impl(request, response, done, timeout_ms);
     };
 
-    auto st = _exec_env->load_rpc_pool()->submit_func(std::move(task));
+    auto st = _exec_env->execution_services().load_rpc_pool->submit_func(std::move(task));
     if (!st.ok()) {
         LOG(WARNING) << "get kafka info: " << st << " ,timeout: " << timeout_ms
-                     << ", thread pool size: " << _exec_env->load_rpc_pool()->num_threads();
+                     << ", thread pool size: " << _exec_env->execution_services().load_rpc_pool->num_threads();
         ClosureGuard closure_guard(done);
         Status::ServiceUnavailable(
                 fmt::format("too busy to get kafka info, please check the kafka broker status, timeout ms: {}",
@@ -980,10 +980,10 @@ void PInternalServiceImplBase<T>::get_pulsar_info(google::protobuf::RpcControlle
         this->_get_pulsar_info_impl(request, response, done, timeout_ms);
     };
 
-    auto st = _exec_env->load_rpc_pool()->submit_func(std::move(task));
+    auto st = _exec_env->execution_services().load_rpc_pool->submit_func(std::move(task));
     if (!st.ok()) {
         LOG(WARNING) << "get pulsar info: " << st << " ,timeout: " << timeout_ms
-                     << ", thread pool size: " << _exec_env->load_rpc_pool()->num_threads();
+                     << ", thread pool size: " << _exec_env->execution_services().load_rpc_pool->num_threads();
         ClosureGuard closure_guard(done);
         Status::ServiceUnavailable(fmt::format("too busy to get pulsar info, please check the pulsar status, "
                                                "timeout ms: {}",
@@ -1060,10 +1060,10 @@ void PInternalServiceImplBase<T>::get_file_schema(google::protobuf::RpcControlle
                                                   google::protobuf::Closure* done) {
     auto task = [=]() { this->_get_file_schema(controller, request, response, done); };
 
-    auto st = _exec_env->load_rpc_pool()->submit_func(std::move(task));
+    auto st = _exec_env->execution_services().load_rpc_pool->submit_func(std::move(task));
     if (!st.ok()) {
         LOG(WARNING) << "get file schema: " << st
-                     << ", thread pool size: " << _exec_env->load_rpc_pool()->num_threads();
+                     << ", thread pool size: " << _exec_env->execution_services().load_rpc_pool->num_threads();
         ClosureGuard closure_guard(done);
         Status::ServiceUnavailable("too busy to get file schema").to_protobuf(response->mutable_status());
     }
