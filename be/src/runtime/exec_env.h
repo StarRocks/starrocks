@@ -144,24 +144,11 @@ public:
     ResultBufferMgr* result_mgr() { return _result_mgr; }
     ResultQueueMgr* result_queue_mgr() { return _result_queue_mgr; }
 
-    PriorityThreadPool* thread_pool() { return _global_env->thread_pool(); }
-    ThreadPool* streaming_load_thread_pool() { return _global_env->streaming_load_thread_pool(); }
-    ThreadPool* load_rowset_thread_pool() { return _global_env->load_rowset_thread_pool(); }
-    ThreadPool* load_segment_thread_pool() { return _global_env->load_segment_thread_pool(); }
-    ThreadPool* put_combined_txn_log_thread_pool() { return _global_env->put_combined_txn_log_thread_pool(); }
-
     pipeline::DriverExecutor* wg_driver_executor();
     workgroup::ScanExecutor* scan_executor();
     workgroup::ScanExecutor* connector_scan_executor();
     workgroup::WorkGroupManager* workgroup_manager() { return _workgroup_manager.get(); }
 
-    PriorityThreadPool* udf_call_pool() { return _global_env->udf_call_pool(); }
-    PriorityThreadPool* pipeline_prepare_pool() { return _global_env->pipeline_prepare_pool(); }
-    PriorityThreadPool* pipeline_sink_io_pool() { return _global_env->pipeline_sink_io_pool(); }
-    PriorityThreadPool* query_rpc_pool() { return _global_env->query_rpc_pool(); }
-    PriorityThreadPool* datacache_rpc_pool() { return _global_env->datacache_rpc_pool(); }
-    ThreadPool* load_rpc_pool() { return _global_env->load_rpc_pool(); }
-    ThreadPool* dictionary_cache_pool() { return _global_env->dictionary_cache_pool(); }
     FragmentMgr* fragment_mgr() { return _fragment_mgr; }
     BaseLoadPathMgr* load_path_mgr() { return _load_path_mgr; }
     RejectedRecordSyncDaemon* rejected_record_sync_daemon() { return _rejected_record_sync_daemon; }
@@ -187,8 +174,6 @@ public:
     const AdminServices& admin_services() const { return _admin_services; }
 
     connector::ConnectorSinkSpillExecutor* connector_sink_spill_executor() { return _connector_sink_spill_executor; }
-
-    ThreadPool* automatic_partition_pool() { return _global_env->automatic_partition_pool(); }
 
     RuntimeFilterWorker* runtime_filter_worker() { return _runtime_filter_worker; }
     MemTracker* query_pool_mem_tracker() { return _global_env->query_pool_mem_tracker(); }
@@ -226,19 +211,7 @@ public:
 
     ThreadPool* delete_file_thread_pool();
 
-    ThreadPool* put_aggregate_metadata_thread_pool() { return _global_env->put_aggregate_metadata_thread_pool(); }
-
-    ThreadPool* lake_metadata_fetch_thread_pool() { return _global_env->lake_metadata_fetch_thread_pool(); }
-
-    ThreadPool* lake_vector_index_build_thread_pool() { return _global_env->lake_vector_index_build_thread_pool(); }
-
     lake::LakePersistentIndexParallelCompactMgr* parallel_compact_mgr() { return _parallel_compact_mgr.get(); }
-
-    ThreadPool* pk_index_execution_thread_pool() { return _global_env->pk_index_execution_thread_pool(); }
-
-    ThreadPool* pk_index_memtable_flush_thread_pool() { return _global_env->pk_index_memtable_flush_thread_pool(); }
-
-    ThreadPool* lake_partial_update_thread_pool() { return _global_env->lake_partial_update_thread_pool(); }
 
     void try_release_resource_before_core_dump();
 

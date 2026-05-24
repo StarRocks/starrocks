@@ -59,6 +59,8 @@ TEST(ExecEnvTest, refresh_service_contexts_keeps_context_views_in_sync) {
     EXPECT_EQ(env.rpc_services().brpc_stub_cache, platform_env->brpc_stub_cache());
 
     EXPECT_EQ(env.lake_services().lake_tablet_manager, env._lake_tablet_manager);
+    EXPECT_EQ(env.lake_services().lake_vector_index_build_thread_pool,
+              global_env->lake_vector_index_build_thread_pool());
 
     EXPECT_EQ(env.runtime_services().fragment_mgr, env._fragment_mgr);
     EXPECT_EQ(env.runtime_services().query_context_mgr, env._query_context_mgr);
