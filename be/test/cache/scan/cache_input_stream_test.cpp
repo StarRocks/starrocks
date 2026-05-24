@@ -22,9 +22,25 @@
 #include "cache/disk_cache/test_cache_utils.h"
 #include "common/config_cache_fwd.h"
 #include "fs/fs_util.h"
+#include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
 
 namespace starrocks {
+
+namespace {
+
+bool g_cache_input_stream_test_env_initialized = false;
+MemTracker* g_cache_input_stream_test_mem_tracker = nullptr;
+
+bool cache_input_stream_test_env_initialized() {
+    return g_cache_input_stream_test_env_initialized;
+}
+
+MemTracker* cache_input_stream_test_mem_tracker() {
+    return g_cache_input_stream_test_mem_tracker;
+}
+
+} // namespace
 
 class MockSeekableInputStream : public io::SeekableInputStream {
 public:
@@ -73,6 +89,7 @@ public:
     }
 
     void SetUp() override {
+        SetUpCurrentThreadMemTracker();
         _saved_enable_auto_adjust = config::enable_datacache_disk_auto_adjust;
         config::enable_datacache_disk_auto_adjust = false;
 
@@ -80,7 +97,25 @@ public:
         auto block_cache = TestCacheUtils::create_cache(options);
         DataCache::GetInstance()->set_block_cache(block_cache);
     }
-    void TearDown() override { config::enable_datacache_disk_auto_adjust = _saved_enable_auto_adjust; }
+    void TearDown() override {
+        config::enable_datacache_disk_auto_adjust = _saved_enable_auto_adjust;
+        TearDownCurrentThreadMemTracker();
+    }
+
+    void SetUpCurrentThreadMemTracker() {
+        g_cache_input_stream_test_env_initialized = true;
+        g_cache_input_stream_test_mem_tracker = &_mem_tracker;
+        CurrentThread::set_mem_tracker_source(cache_input_stream_test_env_initialized,
+                                              cache_input_stream_test_mem_tracker);
+        tls_mem_tracker = nullptr;
+    }
+
+    void TearDownCurrentThreadMemTracker() {
+        tls_thread_status.set_mem_tracker(nullptr);
+        CurrentThread::set_mem_tracker_source(nullptr, nullptr);
+        g_cache_input_stream_test_env_initialized = false;
+        g_cache_input_stream_test_mem_tracker = nullptr;
+    }
 
     static void read_stream_data(io::SeekableInputStream* stream, int64_t offset, int64_t size, char* data) {
         ASSERT_OK(stream->seek(offset));
@@ -109,6 +144,7 @@ public:
 
 private:
     bool _saved_enable_auto_adjust = false;
+    MemTracker _mem_tracker;
 };
 
 const int64_t CacheInputStreamTest::block_size = 256 * 1024;
