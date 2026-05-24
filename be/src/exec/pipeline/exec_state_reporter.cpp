@@ -25,11 +25,11 @@
 #include "common/config_rpc_client_fwd.h"
 #include "common/system/backend_options.h"
 #include "common/system/master_info.h"
+#include "common/util/thrift_client_cache.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/pipeline_metrics.h"
 #include "exec/pipeline/query_context.h"
 #include "gen_cpp/FrontendService.h"
-#include "runtime/client_cache.h"
 #include "runtime/runtime_state_helper.h"
 #include "runtime/thrift_rpc_helper.h"
 

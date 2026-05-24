@@ -31,6 +31,7 @@
 #include "exec/pipeline/query_context.h"
 #include "fs/fs_provider_bootstrap.h"
 #include "gtest/gtest.h"
+#include "platform/platform_env.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
 #include "runtime/mem_tracker.h"
@@ -93,6 +94,9 @@ int init_test_env(int argc, char** argv) {
     config::disable_storage_page_cache = true;
     auto st = global_env->init(process_metrics_registry->root_registry());
     CHECK(st.ok()) << st;
+    auto* platform_env = PlatformEnv::GetInstance();
+    st = platform_env->init(process_metrics_registry->root_registry());
+    CHECK(st.ok()) << st;
 
     auto compaction_mem_tracker = std::make_unique<MemTracker>();
     auto update_mem_tracker = std::make_unique<MemTracker>();
@@ -154,6 +158,7 @@ int init_test_env(int argc, char** argv) {
 #endif
     delete engine;
     exec_env->destroy();
+    platform_env->destroy();
     cache_env->destroy();
     global_env->stop();
 

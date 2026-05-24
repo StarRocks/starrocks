@@ -35,6 +35,7 @@
 #include "exec/pipeline/query_context.h"
 #include "fs/fs_util.h"
 #include "fs/key_cache.h"
+#include "platform/platform_env.h"
 #include "runtime/chunk_helper.h"
 #include "runtime/current_thread.h"
 #include "runtime/descriptor_helper.h"
@@ -785,6 +786,8 @@ int main(int argc, char** argv) {
     // Metric singletons keep registry back-pointers, so the process registry must outlive shutdown.
     static auto* process_metrics_registry = new starrocks::ProcessMetricsRegistry("starrocks_be");
     (void)global_env->init(process_metrics_registry->root_registry());
+    auto* platform_env = starrocks::PlatformEnv::GetInstance();
+    (void)platform_env->init(process_metrics_registry->root_registry());
     starrocks::StorageEngine* engine = nullptr;
     starrocks::EngineOptions options;
     options.store_paths = paths;
@@ -820,6 +823,7 @@ int main(int argc, char** argv) {
     }
 #endif
     exec_env->destroy();
+    platform_env->destroy();
     global_env->stop();
 
     return r;

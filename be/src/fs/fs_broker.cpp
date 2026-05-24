@@ -22,11 +22,11 @@
 #include <thread>
 
 #include "common/config_rpc_client_fwd.h"
+#include "common/util/thrift_client_cache.h"
 #include "fs/fs.h"
 #include "gen_cpp/FileBrokerService_types.h"
 #include "gen_cpp/TFileBrokerService.h"
 #include "runtime/broker_mgr.h"
-#include "runtime/client_cache.h"
 #include "runtime/exec_env.h"
 #include "runtime/thrift_rpc_helper.h"
 
@@ -53,10 +53,6 @@ const std::string& get_client_id(const TNetworkAddress& broker_addr) {
     return ExecEnv::GetInstance()->broker_mgr()->get_client_id(broker_addr);
 }
 #endif
-
-inline BrokerServiceClientCache* client_cache() {
-    return ExecEnv::GetInstance()->broker_client_cache();
-}
 
 static Status to_status(const TBrokerOperationStatus& st, const TNetworkAddress& broker) {
     switch (st.statusCode) {

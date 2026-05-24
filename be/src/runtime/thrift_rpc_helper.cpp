@@ -47,14 +47,37 @@
 
 namespace starrocks {
 
-ThriftRpcClientCaches ThriftRpcHelper::_s_client_caches;
+BackendServiceClientCache* ThriftRpcHelper::_s_backend_client_cache = nullptr;
+FrontendServiceClientCache* ThriftRpcHelper::_s_frontend_client_cache = nullptr;
+BrokerServiceClientCache* ThriftRpcHelper::_s_broker_client_cache = nullptr;
 
-void ThriftRpcHelper::setup(const ThriftRpcClientCaches& client_caches) {
-    _s_client_caches = client_caches;
+void ThriftRpcHelper::setup(BackendServiceClientCache* backend_client_cache,
+                            FrontendServiceClientCache* frontend_client_cache,
+                            BrokerServiceClientCache* broker_client_cache) {
+    _s_backend_client_cache = backend_client_cache;
+    _s_frontend_client_cache = frontend_client_cache;
+    _s_broker_client_cache = broker_client_cache;
 }
 
 void ThriftRpcHelper::clear() {
-    _s_client_caches = {};
+    _s_backend_client_cache = nullptr;
+    _s_frontend_client_cache = nullptr;
+    _s_broker_client_cache = nullptr;
+}
+
+template <>
+BackendServiceClientCache* ThriftRpcHelper::client_cache<BackendServiceClient>() {
+    return _s_backend_client_cache;
+}
+
+template <>
+FrontendServiceClientCache* ThriftRpcHelper::client_cache<FrontendServiceClient>() {
+    return _s_frontend_client_cache;
+}
+
+template <>
+BrokerServiceClientCache* ThriftRpcHelper::client_cache<TFileBrokerServiceClient>() {
+    return _s_broker_client_cache;
 }
 
 template <typename T>
@@ -92,14 +115,14 @@ Status ThriftRpcHelper::rpc_impl(const std::function<void(ClientConnection<T>&)>
 template <typename T>
 Status ThriftRpcHelper::rpc(const std::string& ip, const int32_t port,
                             const std::function<void(ClientConnection<T>&)>& callback) {
-    return rpc(_s_client_caches.get<T>(), ip, port, callback, config::thrift_rpc_timeout_ms);
+    return rpc(client_cache<T>(), ip, port, callback, config::thrift_rpc_timeout_ms);
 }
 
 template <typename T>
 Status ThriftRpcHelper::rpc(const std::string& ip, const int32_t port,
                             const std::function<void(ClientConnection<T>&)>& callback, int timeout_ms,
                             int retry_times) {
-    return rpc(_s_client_caches.get<T>(), ip, port, callback, timeout_ms, retry_times);
+    return rpc(client_cache<T>(), ip, port, callback, timeout_ms, retry_times);
 }
 
 template <typename T>

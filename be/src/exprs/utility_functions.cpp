@@ -15,8 +15,8 @@
 #include "exprs/utility_functions.h"
 
 #include "column/column_visitor_adapter.h"
+#include "common/util/thrift_client_cache.h"
 #include "gen_cpp/FrontendService_types.h"
-#include "runtime/client_cache.h"
 
 #ifdef __SSE4_2__
 #include <emmintrin.h>

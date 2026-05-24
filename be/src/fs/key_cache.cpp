@@ -30,11 +30,11 @@
 #include "base/utility/defer_op.h"
 #include "common/config.h"
 #include "common/system/master_info.h"
+#include "common/util/thrift_client_cache.h"
 #include "fs/encrypt_file.h"
 #include "gen_cpp/FrontendService.h"
 #include "gen_cpp/Types_types.h"
 #include "gutil/casts.h"
-#include "runtime/client_cache.h"
 #include "runtime/thrift_rpc_helper.h"
 
 namespace starrocks {

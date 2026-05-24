@@ -21,41 +21,18 @@
 #include <string>
 
 #include "common/status.h"
+#include "common/util/thrift_client_cache.h"
 #include "gen_cpp/Types_types.h"
-#include "runtime/client_cache.h"
 
 namespace starrocks {
-
-struct ThriftRpcClientCaches {
-    BackendServiceClientCache* backend = nullptr;
-    FrontendServiceClientCache* frontend = nullptr;
-    BrokerServiceClientCache* broker = nullptr;
-
-    template <typename T>
-    ClientCache<T>* get() const;
-};
-
-template <>
-inline ClientCache<BackendServiceClient>* ThriftRpcClientCaches::get<BackendServiceClient>() const {
-    return backend;
-}
-
-template <>
-inline ClientCache<FrontendServiceClient>* ThriftRpcClientCaches::get<FrontendServiceClient>() const {
-    return frontend;
-}
-
-template <>
-inline ClientCache<TFileBrokerServiceClient>* ThriftRpcClientCaches::get<TFileBrokerServiceClient>() const {
-    return broker;
-}
 
 // this class is a helper for jni call. easy for unit test
 class ThriftRpcHelper {
 public:
     template <class T>
     using ConnectionCallBack = std::function<void(ClientConnection<T>&)>;
-    static void setup(const ThriftRpcClientCaches& client_caches);
+    static void setup(BackendServiceClientCache* backend_client_cache,
+                      FrontendServiceClientCache* frontend_client_cache, BrokerServiceClientCache* broker_client_cache);
     static void clear();
 
     // for default timeout
@@ -92,7 +69,12 @@ public:
                            const TNetworkAddress& address) noexcept;
 
 private:
-    static ThriftRpcClientCaches _s_client_caches;
+    template <typename T>
+    static ClientCache<T>* client_cache();
+
+    static BackendServiceClientCache* _s_backend_client_cache;
+    static FrontendServiceClientCache* _s_frontend_client_cache;
+    static BrokerServiceClientCache* _s_broker_client_cache;
 };
 
 } // namespace starrocks

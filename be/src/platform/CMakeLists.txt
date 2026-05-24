@@ -19,6 +19,7 @@ set(EXECUTABLE_OUTPUT_PATH "${BUILD_DIR}/src/platform")
 
 set(PLATFORM_FILES
   download_util.cpp
+  platform_env.cpp
   platform_metrics.cpp
   udf_downloader.cpp
 )
