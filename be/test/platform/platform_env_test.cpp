@@ -19,6 +19,7 @@
 #include "base/metrics.h"
 #include "base/testutil/assert.h"
 #include "common/brpc/brpc_stub_cache.h"
+#include "platform/thrift_rpc_helper.h"
 
 namespace starrocks {
 
@@ -33,6 +34,9 @@ TEST(PlatformEnvTest, OwnsRpcTransportCacheAccessors) {
     ASSERT_NE(env->frontend_client_cache(), nullptr);
     ASSERT_NE(env->broker_client_cache(), nullptr);
     ASSERT_NE(env->brpc_stub_cache(), nullptr);
+    EXPECT_EQ(ThriftRpcHelper::_s_backend_client_cache, env->backend_client_cache());
+    EXPECT_EQ(ThriftRpcHelper::_s_frontend_client_cache, env->frontend_client_cache());
+    EXPECT_EQ(ThriftRpcHelper::_s_broker_client_cache, env->broker_client_cache());
     ASSERT_NE(env->http_brpc_stub_cache(), nullptr);
 #ifndef __APPLE__
     ASSERT_NE(env->lake_service_brpc_stub_cache(), nullptr);
@@ -43,6 +47,9 @@ TEST(PlatformEnvTest, OwnsRpcTransportCacheAccessors) {
     EXPECT_EQ(env->frontend_client_cache(), nullptr);
     EXPECT_EQ(env->broker_client_cache(), nullptr);
     EXPECT_EQ(env->brpc_stub_cache(), nullptr);
+    EXPECT_EQ(ThriftRpcHelper::_s_backend_client_cache, nullptr);
+    EXPECT_EQ(ThriftRpcHelper::_s_frontend_client_cache, nullptr);
+    EXPECT_EQ(ThriftRpcHelper::_s_broker_client_cache, nullptr);
 
     TNetworkAddress address;
     address.hostname = "127.0.0.1";

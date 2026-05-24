@@ -35,13 +35,13 @@
 #include "exprs/expr_context.h"
 #include "gutil/strings/fastmem.h"
 #include "gutil/strings/join.h"
+#include "platform/thrift_rpc_helper.h"
 #include "runtime/current_thread.h"
 #include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
 #include "runtime/global_dict/fragment_dict_state.h"
 #include "runtime/load_fail_point.h"
 #include "runtime/runtime_state.h"
-#include "runtime/thrift_rpc_helper.h"
 #include "serde/protobuf_serde.h"
 
 namespace starrocks {

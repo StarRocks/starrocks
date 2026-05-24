@@ -43,9 +43,9 @@
 #include "common/util/thrift_client_cache.h"
 #include "gen_cpp/FileBrokerService_types.h"
 #include "gen_cpp/TFileBrokerService.h"
+#include "platform/thrift_rpc_helper.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_metrics.h"
-#include "runtime/thrift_rpc_helper.h"
 
 namespace starrocks {
 

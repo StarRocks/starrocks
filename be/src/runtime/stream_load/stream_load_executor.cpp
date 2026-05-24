@@ -48,13 +48,13 @@
 #include "common/system/master_info.h"
 #include "common/util/thrift_client_cache.h"
 #include "gen_cpp/FrontendService.h"
+#include "platform/thrift_rpc_helper.h"
 #include "runtime/exec_env.h"
 #include "runtime/fragment_mgr.h"
 #include "runtime/message_body_sink.h"
 #include "runtime/plan_fragment_executor.h"
 #include "runtime/stream_load/stream_load_context.h"
 #include "runtime/stream_load/stream_load_metrics.h"
-#include "runtime/thrift_rpc_helper.h"
 #include "storage/non_retryable_load_errors.h"
 
 namespace starrocks {

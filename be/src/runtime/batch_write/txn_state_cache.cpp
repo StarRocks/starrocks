@@ -25,8 +25,8 @@
 #include "common/thread/thread.h"
 #include "common/util/thrift_client_cache.h"
 #include "gen_cpp/FrontendService.h"
+#include "platform/thrift_rpc_helper.h"
 #include "runtime/batch_write/batch_write_util.h"
-#include "runtime/thrift_rpc_helper.h"
 
 namespace starrocks {
 
