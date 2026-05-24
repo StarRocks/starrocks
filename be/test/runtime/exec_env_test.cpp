@@ -29,8 +29,8 @@ TEST(ExecEnvTest, refresh_service_contexts_keeps_context_views_in_sync) {
     auto* platform_env = PlatformEnv::GetInstance();
     platform_env->destroy();
 
-    MetricRegistry metrics("exec_env_test");
-    ASSERT_OK(platform_env->init(&metrics));
+    static auto* metrics = new MetricRegistry("exec_env_test");
+    ASSERT_OK(platform_env->init(metrics));
 
     EXPECT_EQ(env.runtime_services().lookup_dispatcher_mgr, nullptr);
     EXPECT_EQ(env.runtime_services().cache_mgr, nullptr);
@@ -38,7 +38,6 @@ TEST(ExecEnvTest, refresh_service_contexts_keeps_context_views_in_sync) {
     env._driver_limiter = reinterpret_cast<pipeline::DriverLimiter*>(0x2);
     env._pipeline_timer = reinterpret_cast<pipeline::PipelineTimer*>(0x3);
     env._broker_mgr = reinterpret_cast<BrokerMgr*>(0x5);
-    env._brpc_stub_cache = reinterpret_cast<BrpcStubCache*>(0x6);
     env._lake_tablet_manager = reinterpret_cast<lake::TabletManager*>(0x7);
     env._fragment_mgr = reinterpret_cast<FragmentMgr*>(0x8);
     env._query_context_mgr = reinterpret_cast<pipeline::QueryContextManager*>(0x9);
@@ -57,7 +56,7 @@ TEST(ExecEnvTest, refresh_service_contexts_keeps_context_views_in_sync) {
     EXPECT_EQ(env.rpc_services().frontend_client_cache, platform_env->frontend_client_cache());
     EXPECT_EQ(env.rpc_services().broker_client_cache, platform_env->broker_client_cache());
     EXPECT_EQ(env.rpc_services().broker_mgr, env._broker_mgr);
-    EXPECT_EQ(env.rpc_services().brpc_stub_cache, env._brpc_stub_cache);
+    EXPECT_EQ(env.rpc_services().brpc_stub_cache, platform_env->brpc_stub_cache());
 
     EXPECT_EQ(env.lake_services().lake_tablet_manager, env._lake_tablet_manager);
 
@@ -77,8 +76,6 @@ TEST(ExecEnvTest, refresh_service_contexts_keeps_context_views_in_sync) {
     EXPECT_EQ(env.admin_services().lake, &env.lake_services());
     EXPECT_EQ(env.admin_services().runtime, &env.runtime_services());
     EXPECT_EQ(env.admin_services().agent, &env.agent_services());
-
-    platform_env->destroy();
 }
 
 } // namespace starrocks

@@ -18,10 +18,11 @@
 
 #include "base/metrics.h"
 #include "base/testutil/assert.h"
+#include "common/brpc/brpc_stub_cache.h"
 
 namespace starrocks {
 
-TEST(PlatformEnvTest, OwnsThriftClientCacheAccessors) {
+TEST(PlatformEnvTest, OwnsRpcTransportCacheAccessors) {
     auto* env = PlatformEnv::GetInstance();
     env->destroy();
 
@@ -31,11 +32,29 @@ TEST(PlatformEnvTest, OwnsThriftClientCacheAccessors) {
     ASSERT_NE(env->backend_client_cache(), nullptr);
     ASSERT_NE(env->frontend_client_cache(), nullptr);
     ASSERT_NE(env->broker_client_cache(), nullptr);
+    ASSERT_NE(env->brpc_stub_cache(), nullptr);
+    ASSERT_NE(env->http_brpc_stub_cache(), nullptr);
+#ifndef __APPLE__
+    ASSERT_NE(env->lake_service_brpc_stub_cache(), nullptr);
+#endif
 
     env->destroy();
     EXPECT_EQ(env->backend_client_cache(), nullptr);
     EXPECT_EQ(env->frontend_client_cache(), nullptr);
     EXPECT_EQ(env->broker_client_cache(), nullptr);
+    EXPECT_EQ(env->brpc_stub_cache(), nullptr);
+
+    TNetworkAddress address;
+    address.hostname = "127.0.0.1";
+    address.port = 123;
+    auto http_stub = env->http_brpc_stub_cache()->get_http_stub(address);
+    ASSERT_FALSE(http_stub.ok());
+    EXPECT_TRUE(http_stub.status().is_service_unavailable());
+#ifndef __APPLE__
+    auto lake_stub = env->lake_service_brpc_stub_cache()->get_stub(address.hostname, address.port);
+    ASSERT_FALSE(lake_stub.ok());
+    EXPECT_TRUE(lake_stub.status().is_service_unavailable());
+#endif
 }
 
 } // namespace starrocks
