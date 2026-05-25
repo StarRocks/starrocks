@@ -1,0 +1,37 @@
+-- name: test_files_schema_validation
+
+create database db_${uuid0};
+use db_${uuid0};
+
+-- Mutual exclusion with auto_detect_sample_files
+select * from files(
+    "path" = "fake://bucket/dir/",
+    "format" = "parquet",
+    "schema" = "a INT",
+    "auto_detect_sample_files" = "2");
+
+-- DESC FILES rejection
+desc files(
+    "path" = "fake://bucket/dir/",
+    "format" = "parquet",
+    "schema" = "a INT");
+
+-- UNLOAD rejection: INSERT INTO FILES(...) with schema
+insert into files(
+    "path" = "fake://bucket/dir/",
+    "format" = "parquet",
+    "schema" = "a INT",
+    "compression" = "uncompressed")
+select 1 as a;
+
+-- LIST FILES with schema -> silently ignored, lists files
+shell: ossutil64 cp --force ./sql/test_files/parquet_format/basic_type.parquet oss://${oss_bucket}/test_files/parquet_format/${uuid0}/ | grep -Pv "(average|elapsed)"
+select count(*) from files(
+    "path" = "oss://${oss_bucket}/test_files/parquet_format/${uuid0}/*",
+    "list_files_only" = "true",
+    "schema" = "a INT",
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
+    "aws.s3.endpoint" = "${oss_endpoint}");
+
+shell: ossutil64 rm -rf oss://${oss_bucket}/test_files/parquet_format/${uuid0}/ > /dev/null
