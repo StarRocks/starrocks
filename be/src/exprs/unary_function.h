@@ -182,7 +182,7 @@ public:
             auto col = ColumnHelper::as_raw_column<NullableColumn>(v1);
 
             if (v1->size() == ColumnHelper::count_nulls(v1)) {
-                auto data = RunTimeColumnType<ResultType>::create();
+                auto data = RunTimeColumnType<ResultType>::create(std::forward<Args>(args)...);
                 data->resize(v1->size());
                 auto nul = NullColumn::create();
                 nul->append(*col->null_column(), 0, col->null_column()->size());
