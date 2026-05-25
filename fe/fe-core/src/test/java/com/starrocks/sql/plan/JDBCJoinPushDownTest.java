@@ -548,4 +548,101 @@ public class JDBCJoinPushDownTest extends ConnectorPlanTestBase {
         Assertions.assertEquals("c42", JDBCJoinPushDownSQLBuilder.outputColumnAlias(42));
         Assertions.assertEquals("c100", JDBCJoinPushDownSQLBuilder.outputColumnAlias(100));
     }
+
+    // -----------------------------------------------------------------------
+    // PushDownJoinToJDBCRule: derived-table atoms (multi-stage pushdown)
+    // -----------------------------------------------------------------------
+
+    @Test
+    public void testBuilderDerivedAtomNoLimit() throws Exception {
+        // A derived-table atom — built by an earlier pushdown round — joined with a base atom.
+        // No limit, no predicate on the derived scan → SQL builder takes the early-return path
+        // and inlines as "(<inner>) t<alias>", peeling off the inner sr_merged via getPushDownQuery().
+        JDBCTable primary = getMockedJDBCTable(MockedJDBCMetadata.MOCKED_PARTITIONED_TABLE_NAME0);
+        JDBCTable derived = new JDBCTable(primary);
+        String innerSql = "SELECT t0.`a` AS c5 FROM `tbl0` t0 INNER JOIN `tbl1` t1 ON (t0.`a` = t1.`a`)";
+        derived.setPushDownQuery(innerSql);
+
+        // The derived scan exports c5 (matching the inner "AS c5") as its single output col.
+        ColumnRefOperator c5Ref = new ColumnRefOperator(5, VarcharType.VARCHAR, "c5", true);
+        Map<ColumnRefOperator, Column> derivedColumns = new LinkedHashMap<>();
+        derivedColumns.put(c5Ref, new Column("c5", VarcharType.VARCHAR));
+        LogicalJDBCScanOperator derivedScan = newJDBCScan(derived, -1, null, derivedColumns);
+
+        JDBCTable base = getMockedJDBCTable(MockedJDBCMetadata.MOCKED_PARTITIONED_TABLE_NAME2);
+        ColumnRefOperator t1a = new ColumnRefOperator(20, VarcharType.VARCHAR, "a", true);
+        Map<ColumnRefOperator, Column> baseColumns = new LinkedHashMap<>();
+        baseColumns.put(t1a, base.getColumn("a"));
+        LogicalJDBCScanOperator baseScan = newJDBCScan(base, -1, null, baseColumns);
+
+        Map<ColumnRefOperator, String> qualifiedNames = new HashMap<>();
+        qualifiedNames.put(c5Ref, "t0.`c5`");
+        qualifiedNames.put(t1a, "t1.`a`");
+        JDBCJoinPushDownSQLBuilder sqlBuilder = new JDBCJoinPushDownSQLBuilder("`",
+                List.of(new JDBCJoinPushDownSQLBuilder.TableEntry(derived, "t0", derivedScan),
+                        new JDBCJoinPushDownSQLBuilder.TableEntry(base, "t1", baseScan)),
+                qualifiedNames);
+
+        String sql = sqlBuilder.build(List.of(c5Ref, t1a),
+                List.of(new BinaryPredicateOperator(BinaryType.EQ, c5Ref, t1a)),
+                List.of());
+
+        Assertions.assertEquals("SELECT t0.`c5` AS c5, t1.`a` AS c20 "
+                + "FROM (" + innerSql + ") t0 "
+                + "INNER JOIN `tbl2` t1 ON (t0.`c5` = t1.`a`)", sql);
+    }
+
+    @Test
+    public void testBuilderDerivedAtomWithLimit() throws Exception {
+        // Same derived atom, but the scan has a LIMIT (the MERGE_LIMIT_RULES pass after JDBC
+        // pushdown can push an upstream Limit onto a derived scan). The early-return path no
+        // longer applies; SQL builder falls into the shared wrapping path, which produces
+        // "(SELECT cols FROM (<inner>) sr_merged LIMIT n) t<alias>". Note that the original
+        // sr_merged alias on the derived survives here because the wrapping path uses
+        // getCatalogTableName() as quotedTable — and the outer SELECT picks a different alias,
+        // so the two don't collide.
+        JDBCTable primary = getMockedJDBCTable(MockedJDBCMetadata.MOCKED_PARTITIONED_TABLE_NAME0);
+        JDBCTable derived = new JDBCTable(primary);
+        String innerSql = "SELECT t0.`a` AS c5 FROM `tbl0` t0 INNER JOIN `tbl1` t1 ON (t0.`a` = t1.`a`)";
+        derived.setPushDownQuery(innerSql);
+
+        ColumnRefOperator c5Ref = new ColumnRefOperator(5, VarcharType.VARCHAR, "c5", true);
+        Map<ColumnRefOperator, Column> derivedColumns = new LinkedHashMap<>();
+        derivedColumns.put(c5Ref, new Column("c5", VarcharType.VARCHAR));
+        LogicalJDBCScanOperator derivedScan = newJDBCScan(derived, 10, null, derivedColumns);
+
+        JDBCTable base = getMockedJDBCTable(MockedJDBCMetadata.MOCKED_PARTITIONED_TABLE_NAME2);
+        ColumnRefOperator t1a = new ColumnRefOperator(20, VarcharType.VARCHAR, "a", true);
+        Map<ColumnRefOperator, Column> baseColumns = new LinkedHashMap<>();
+        baseColumns.put(t1a, base.getColumn("a"));
+        LogicalJDBCScanOperator baseScan = newJDBCScan(base, -1, null, baseColumns);
+
+        Map<ColumnRefOperator, String> qualifiedNames = new HashMap<>();
+        qualifiedNames.put(c5Ref, "t0.`c5`");
+        qualifiedNames.put(t1a, "t1.`a`");
+        JDBCJoinPushDownSQLBuilder sqlBuilder = new JDBCJoinPushDownSQLBuilder("`",
+                List.of(new JDBCJoinPushDownSQLBuilder.TableEntry(derived, "t0", derivedScan),
+                        new JDBCJoinPushDownSQLBuilder.TableEntry(base, "t1", baseScan)),
+                qualifiedNames);
+
+        String sql = sqlBuilder.build(List.of(c5Ref, t1a),
+                List.of(new BinaryPredicateOperator(BinaryType.EQ, c5Ref, t1a)),
+                List.of());
+
+        Assertions.assertEquals("SELECT t0.`c5` AS c5, t1.`a` AS c20 "
+                + "FROM (SELECT `c5` FROM (" + innerSql + ") sr_merged LIMIT 10) t0 "
+                + "INNER JOIN `tbl2` t1 ON (t0.`c5` = t1.`a`)", sql);
+    }
+
+    @Test
+    public void testQueryTableAtomBypassesMerging() throws Exception {
+        // One side of the JOIN is a JDBC native_query (queryTable). Step 3 filter excludes any
+        // group containing a queryTable atom, so the rule must not merge — plan stays as local
+        // HASH JOIN with two separate JDBC scans, neither wrapped in sr_merged.
+        String sql = "select t1.a, q.a from jdbc0.partitioned_db0.tbl0 t1 "
+                + "join table(jdbc0.native_query('select a from remote_table')) q on t1.a = q.a";
+        String plan = getFragmentPlan(sql);
+        assertNotContains(plan, "sr_merged");
+        assertContains(plan, "HASH JOIN");
+    }
 }

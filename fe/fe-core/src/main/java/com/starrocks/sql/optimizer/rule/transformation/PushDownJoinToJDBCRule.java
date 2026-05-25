@@ -116,14 +116,18 @@ public class PushDownJoinToJDBCRule extends TransformationRule {
 
         // Step 3: Identify all groups eligible for merging. A group is eligible when:
         //           - it contains >= 2 JDBC atoms, AND
-        //           - no atom has a projection. Scans with projections are handled by the
-        //             standalone projection-pushdown rule; mixing the two concerns here only
-        //             complicated buildMergedScan with little payoff.
+        //           - no atom has a projection (scans with projections are handled by the
+        //             standalone projection-pushdown rule), AND
+        //           - no atom is a query-table function (table(jdbc.native_query(...))).
+        //             Query-table's inner SQL is user-supplied and may contain arbitrary
+        //             structure (ORDER BY / UNION / aggregates), so inlining it as an atom
+        //             into a new merged SQL has unsafe semantics; bypass it entirely.
         //         Other groups contribute their atoms individually to the rebuilt join tree.
         List<List<AtomEntry>> mergeableGroups = new ArrayList<>();
         for (List<AtomEntry> group : jdbcGroups.values()) {
             boolean eligible = group.size() >= 2
-                    && group.stream().noneMatch(e -> e.scanOp.getProjection() != null);
+                    && group.stream().noneMatch(e -> e.scanOp.getProjection() != null)
+                    && group.stream().noneMatch(e -> e.table.isQueryTable());
             if (eligible) {
                 mergeableGroups.add(group);
             }

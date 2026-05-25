@@ -185,9 +185,17 @@ public class JDBCJoinPushDownSQLBuilder {
      * when the scan has a LIMIT and/or a predicate (filter and limit are applied inside the subquery).
      */
     private String buildTableExpression(TableEntry entry) {
-        String quotedTable = JDBCScanNode.wrapWithIdentifier(entry.table.getCatalogTableName(), identifierQuote);
+        Preconditions.checkState(!entry.table.isQueryTable(), "queryTable cannot be pushed down");
+        String tableRef = entry.table.isDerivedTable()
+                ? entry.table.getCatalogTableName()
+                : JDBCScanNode.wrapWithIdentifier(entry.table.getCatalogTableName(), identifierQuote);
         if (!entry.hasLimit() && !entry.hasPredicate()) {
-            return quotedTable + " " + entry.alias;
+            if (entry.table.isDerivedTable()) {
+                // Direct "tableRef + alias" would produce "(<inner>) sr_merged t0" — double alias.
+                // Peel off the inner sr_merged via getPushDownQuery() and apply our own alias.
+                return "(" + entry.table.getPushDownQuery() + ") " + entry.alias;
+            }
+            return tableRef + " " + entry.alias;
         }
         // PruneScanColumnRule guarantees the scan's colRefToColumnMetaMap is non-empty
         // (it adds the smallest column back when no column is required, e.g. COUNT(*))
@@ -199,7 +207,7 @@ public class JDBCJoinPushDownSQLBuilder {
         sb.append(entry.columnRefMap.keySet().stream()
                 .map(rawNames::get)
                 .collect(Collectors.joining(", ")));
-        sb.append(" FROM ").append(quotedTable);
+        sb.append(" FROM ").append(tableRef);
         if (!entry.perTablePredicates.isEmpty()) {
             sb.append(" WHERE ");
             sb.append(entry.perTablePredicates.stream()

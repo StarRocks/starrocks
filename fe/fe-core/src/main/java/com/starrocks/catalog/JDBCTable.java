@@ -44,6 +44,7 @@ public class JDBCTable extends Table {
     public static final String PARTITION_NULL_VALUE = "null";
 
     public static final String JDBC_TABLENAME = "jdbc_tablename";
+    private static final String DERIVED_TABLE_ALIAS = "sr_merged";
 
     @SerializedName(value = "tn")
     private String jdbcTable;
@@ -208,8 +209,19 @@ public class JDBCTable extends Table {
     // Wraps the given query as a derived-table expression and marks the table as such.
     // The query is assumed to be a valid SELECT produced by the optimizer
     public void setPushDownQuery(String query) {
-        jdbcTable = "(" + query + ") sr_merged";
+        jdbcTable = "(" + query + ") " + DERIVED_TABLE_ALIAS;
         derivedTable = true;
+    }
+
+    // Recovers the unwrapped inner SQL set by setPushDownQuery. Used by JDBCJoinPushDownSQLBuilder
+    // when re-embedding a derived-table atom into a new merged scan — we strip the inner
+    // sr_merged alias so the outer scan can give it its own alias without producing
+    // "(<inner>) sr_merged t0" double-alias garbage.
+    public String getPushDownQuery() {
+        if (!derivedTable) {
+            return null;
+        }
+        return jdbcTable.substring(1, jdbcTable.length() - 2 - DERIVED_TABLE_ALIAS.length());
     }
 
     public static String normalizePassThroughQuery(String query) {
