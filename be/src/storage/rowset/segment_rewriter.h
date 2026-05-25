@@ -35,7 +35,8 @@ public:
     static Status rewrite_auto_increment(const std::string& src_path, const std::string& dest_path,
                                          const TabletSchemaCSPtr& tschema,
                                          AutoIncrementPartialUpdateState& auto_increment_partial_update_state,
-                                         std::vector<uint32_t>& column_ids, MutableColumns* columns);
+                                         std::vector<uint32_t>& column_ids, MutableColumns* columns,
+                                         SegmentFileMark segment_file_mark = {});
     static Status rewrite_auto_increment_lake(
             const FileInfo& src, FileInfo* dest, const TabletSchemaCSPtr& tschema,
             starrocks::lake::AutoIncrementPartialUpdateState& auto_increment_partial_update_state,

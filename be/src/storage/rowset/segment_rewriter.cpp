@@ -95,7 +95,8 @@ Status SegmentRewriter::rewrite_partial_update(const FileInfo& src, FileInfo* de
 Status SegmentRewriter::rewrite_auto_increment(const std::string& src_path, const std::string& dest_path,
                                                const TabletSchemaCSPtr& tschema,
                                                AutoIncrementPartialUpdateState& auto_increment_partial_update_state,
-                                               std::vector<uint32_t>& column_ids, MutableColumns* columns) {
+                                               std::vector<uint32_t>& column_ids, MutableColumns* columns,
+                                               SegmentFileMark segment_file_mark) {
     if (column_ids.size() == 0) {
         DCHECK_EQ(columns, nullptr);
     }
@@ -167,6 +168,7 @@ Status SegmentRewriter::rewrite_auto_increment(const std::string& src_path, cons
     }
 
     SegmentWriterOptions opts;
+    opts.segment_file_mark = std::move(segment_file_mark);
     SegmentWriter writer(std::move(wfile), segment_id, tschema, opts);
     RETURN_IF_ERROR(writer.init(full_column_ids, true));
 
