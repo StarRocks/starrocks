@@ -95,9 +95,42 @@ public class PriorityLeaderTaskExecutor {
     }
 
     public void close() {
+        close(0L);
+    }
+
+    /**
+     * Coordinated stop for leader demotion. Uses shutdown() (not shutdownNow()) so in-flight
+     * priority tasks are not interrupted mid-flight; if {@code awaitMillis > 0}, blocks up to
+     * that budget waiting for both internal pools to actually terminate. This is required on
+     * the leader demotion drain path so a re-elected leader does not race the old leader's
+     * still-running tasks.
+     *
+     * @param awaitMillis maximum time to wait for both pools to drain, in milliseconds. Zero
+     *                    or negative means do not wait (legacy behaviour). The budget is
+     *                    split across the two internal pools.
+     */
+    public void close(long awaitMillis) {
         scheduledThreadPool.shutdown();
         executor.shutdown();
-        runningTasks.clear();
+        if (awaitMillis > 0L) {
+            long deadline = System.currentTimeMillis() + awaitMillis;
+            try {
+                long remaining = Math.max(1L, deadline - System.currentTimeMillis());
+                if (!scheduledThreadPool.awaitTermination(remaining, TimeUnit.MILLISECONDS)) {
+                    LOG.warn("PriorityLeaderTaskExecutor scheduledThreadPool did not terminate within drain timeout");
+                }
+                remaining = Math.max(1L, deadline - System.currentTimeMillis());
+                if (!executor.awaitTermination(remaining, TimeUnit.MILLISECONDS)) {
+                    LOG.warn("PriorityLeaderTaskExecutor executor did not terminate within drain timeout");
+                }
+            } catch (InterruptedException ie) {
+                Thread.currentThread().interrupt();
+                LOG.warn("Interrupted while waiting for PriorityLeaderTaskExecutor to terminate");
+            }
+        }
+        synchronized (runningTasks) {
+            runningTasks.clear();
+        }
     }
 
     public int getTaskNum() {

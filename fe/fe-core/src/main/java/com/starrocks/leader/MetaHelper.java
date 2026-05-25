@@ -77,6 +77,26 @@ public class MetaHelper {
         return CHECKPOINT_LIMIT_BYTES;
     }
 
+    /**
+     * Best-effort cancel for any blocking HTTP operation currently issued by MetaHelper on
+     * behalf of leader-only daemons (e.g. CheckpointController push/download). Today this is
+     * a no-op: {@link #httpGet} and {@link #downloadImageFile} use bare {@link HttpURLConnection},
+     * which honors neither {@link Thread#interrupt()} nor any other external cancel signal for
+     * socket reads. The only way a stuck call exits is its own connect/read timeout, which
+     * may be up to an hour for push and {@code MetaService.DOWNLOAD_TIMEOUT_SECOND} for
+     * download.
+     *
+     * TODO(cancel-infra): wire this up to actively disconnect the active {@link HttpURLConnection}
+     * (or switch to a cancellable HTTP client) so leader-demotion {@code onStopped()} can
+     * break out of these calls within the {@code leader_demotion_drain_timeout_sec} budget.
+     * This is tracked alongside the planned {@code Locker.lockInterruptibly} cleanup, since
+     * both block the same goal of making demotion drain deterministic for non-interruptible
+     * blocking operations.
+     */
+    public static void cancelInFlight() {
+        // intentionally empty - see TODO(cancel-infra) above
+    }
+
     // rename the .PART_SUFFIX file to filename
     public static File complete(String filename, File dir) throws IOException {
         File file = new File(dir, filename + MetaHelper.PART_SUFFIX);
