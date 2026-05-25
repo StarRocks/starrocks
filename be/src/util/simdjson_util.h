@@ -113,4 +113,33 @@ inline simdjson::simdjson_result<std::string_view> value_get_string_safe(simdjso
     return SimdjsonParser::unescape(value->get_raw_json_string(), output_pos);
 }
 
+/**
+ * Classifies a simdjson error code as "critical" (the JSON text itself is structurally
+ * broken) vs. value-level (the JSON is syntactically valid but the value doesn't fit the
+ * target shape -- e.g. wrong type, number out of range).
+ *
+ * Why this matters: when a critical error fires deep inside a partial drill, simdjson's
+ * tape cursor is left at an undefined depth and any further use of the same parser is
+ * unsafe. Callers must NOT apply `invalid_as_null` fallback for critical errors -- the
+ * whole row should be rejected so the upstream row-level cleanup (`row.raw_json()` in
+ * JsonReader) can run and the parser can advance to the next row. Value-level errors
+ * remain safe to convert into a NULL column entry.
+ */
+inline bool is_simdjson_critical_error(simdjson::error_code code) noexcept {
+    switch (code) {
+    case simdjson::MEMALLOC:
+    case simdjson::TAPE_ERROR:
+    case simdjson::DEPTH_ERROR:
+    case simdjson::INCOMPLETE_ARRAY_OR_OBJECT:
+    case simdjson::UTF8_ERROR:
+    case simdjson::UNESCAPED_CHARS:
+    case simdjson::UNCLOSED_STRING:
+    case simdjson::STRING_ERROR:
+    case simdjson::OUT_OF_ORDER_ITERATION:
+        return true;
+    default:
+        return false;
+    }
+}
+
 } // namespace starrocks
