@@ -127,7 +127,7 @@ public class BigQuerySchemaResolverTest {
         Assertions.assertTrue(r.convertColumnType(Types.BIGINT, "INT64", 19, 0).isBigint());
         Assertions.assertTrue(r.convertColumnType(Types.INTEGER, "INT32", 10, 0).isInt());
         Assertions.assertTrue(r.convertColumnType(Types.SMALLINT, "INT16", 5, 0).isSmallint());
-        Assertions.assertTrue(r.convertColumnType(Types.TINYINT, "INT8", 3, 0).isTinyInt());
+        Assertions.assertTrue(r.convertColumnType(Types.TINYINT, "INT8", 3, 0).isTinyint());
     }
 
     @Test
