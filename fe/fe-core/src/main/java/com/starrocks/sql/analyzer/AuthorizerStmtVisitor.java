@@ -2545,7 +2545,9 @@ public class AuthorizerStmtVisitor implements AstVisitorExtendInterface<Void, Co
         if (!statement.containsExternalCatalog()) {
             List<TableRef> tableRefs = statement.getTableRefs();
             List<FunctionRef> functionRefs = statement.getFnRefs();
-            if (tableRefs.isEmpty() && functionRefs.isEmpty()) {
+            if (tableRefs.isEmpty() && functionRefs.isEmpty()
+                    && !statement.allTable() && !statement.allMV()
+                    && !statement.allView() && !statement.allFunction()) {
                 String dBName = statement.getDbName();
                 throw new SemanticException("Database: %s is empty", dBName);
             }

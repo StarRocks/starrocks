@@ -2512,6 +2512,25 @@ public class PrivilegeCheckerTest extends StarRocksTestBase {
     }
 
     @Test
+    public void testBackupAllFunctionStmt() throws Exception {
+        mockRepository();
+        ctxToRoot();
+        grantOrRevoke("grant repository on system to test");
+        ctxToTestUser();
+        for (String sql : new String[] {
+                "BACKUP SNAPSHOT db1.backup_name1 TO example_repo ON (ALL FUNCTIONS) PROPERTIES ('type' = 'full');",
+                "BACKUP SNAPSHOT db1.backup_name1 TO example_repo ON (ALL FUNCTION) PROPERTIES ('type' = 'full');",
+                "BACKUP DATABASE db1 SNAPSHOT backup_name1 TO example_repo ON (ALL FUNCTIONS) " +
+                        "PROPERTIES ('type' = 'full');"}) {
+            StatementBase statement = UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
+            Authorizer.check(statement, starRocksAssert.getCtx());
+        }
+        ctxToRoot();
+        grantOrRevoke("revoke repository on system from test");
+        ctxToTestUser();
+    }
+
+    @Test
     public void testShowBackupStmtInShowExecutor() throws Exception {
 
         mockAddBackupJob("db1");
