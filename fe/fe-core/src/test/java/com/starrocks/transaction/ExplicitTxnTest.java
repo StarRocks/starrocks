@@ -558,8 +558,6 @@ public class ExplicitTxnTest {
         Assertions.assertNull(globalTransactionMgr.getExplicitTxnState(transactionId));
         Assertions.assertEquals("database 0 is not found", context.getState().getErrorMessage());
     }
-<<<<<<< HEAD
-=======
 
     @Test
     public void testCommitTimeoutPassedInMilliseconds() {
@@ -776,5 +774,4 @@ public class ExplicitTxnTest {
         globalTransactionMgr.clearExplicitTxnState(context.getTxnId());
         context.setTxnId(0);
     }
->>>>>>> 15bbb50a09 ([BugFix] Convert explicit-txn COMMIT timeout from seconds to milliseconds (#73549))
 }
