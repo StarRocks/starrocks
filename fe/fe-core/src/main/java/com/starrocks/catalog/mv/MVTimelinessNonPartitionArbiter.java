@@ -68,11 +68,12 @@ public final class MVTimelinessNonPartitionArbiter extends MVTimelinessArbiter {
             }
 
             // once mv's base table has updated, refresh the materialized view totally.
-            // once mv's base table has updated, refresh the materialized view totally.
             MvBaseTableUpdateInfo mvBaseTableUpdateInfo = getMvBaseTableUpdateInfo(mv, table, true, isQueryRewrite);
-            // TODO: fixme if mvBaseTableUpdateInfo is null, should return full refresh?
-            if (mvBaseTableUpdateInfo != null &&
-                    CollectionUtils.isNotEmpty(mvBaseTableUpdateInfo.getToRefreshPartitionNames())) {
+            if (mvBaseTableUpdateInfo == null) {
+                logMVPrepare(mv, "Non-partitioned base table update info is unknown, need refresh totally.");
+                return new MvUpdateInfo(MvUpdateInfo.MvToRefreshType.FULL);
+            }
+            if (CollectionUtils.isNotEmpty(mvBaseTableUpdateInfo.getToRefreshPartitionNames())) {
                 logMVPrepare(mv, "Non-partitioned base table has updated, need refresh totally.");
                 return new MvUpdateInfo(MvUpdateInfo.MvToRefreshType.FULL);
             }

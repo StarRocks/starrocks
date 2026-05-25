@@ -81,6 +81,9 @@ public final class MVTimelinessRangePartitionArbiter extends MVTimelinessArbiter
         // collect & update mv's to refresh partitions based on base table's partition changes
         Map<Table, Set<String>> baseChangedPartitionNames = collectBaseTableUpdatePartitionNames(refBaseTableAndColumns,
                 mvTimelinessInfo);
+        if (baseChangedPartitionNames == null) {
+            return new MvUpdateInfo(MvUpdateInfo.MvToRefreshType.FULL);
+        }
 
         // collect all ref base table's partition range map
         Map<Table, Map<String, Range<PartitionKey>>> basePartitionNameToRangeMap =
@@ -180,7 +183,9 @@ public final class MVTimelinessRangePartitionArbiter extends MVTimelinessArbiter
             mvUpdateInfo.addMvToRefreshPartitionNames(mvPartitionName);
         }
         addEmptyPartitionsToRefresh(mvUpdateInfo);
-        collectBaseTableUpdatePartitionNamesInLoose(mvUpdateInfo);
+        if (!collectBaseTableUpdatePartitionNamesInLoose(mvUpdateInfo)) {
+            return new MvUpdateInfo(MvUpdateInfo.MvToRefreshType.FULL);
+        }
         collectMVToBaseTablePartitionNames(rBTPartitionMap, rangePartitionDiff, mvUpdateInfo);
         return mvUpdateInfo;
     }

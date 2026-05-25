@@ -70,6 +70,9 @@ public final class MVTimelinessListPartitionArbiter extends MVTimelinessArbiter 
         MvUpdateInfo mvTimelinessInfo = new MvUpdateInfo(MvUpdateInfo.MvToRefreshType.PARTIAL);
         Map<Table, Set<String>> baseChangedPartitionNames = collectBaseTableUpdatePartitionNames(refBaseTableAndColumns,
                 mvTimelinessInfo);
+        if (baseChangedPartitionNames == null) {
+            return new MvUpdateInfo(MvUpdateInfo.MvToRefreshType.FULL);
+        }
         Map<Table, Map<String, PListCell>> refBaseTablePartitionMap = Maps.newHashMap();
         Map<String, PListCell> allBasePartitionItems = Maps.newHashMap();
         Map<Table, List<Integer>> tableRefIdxes = Maps.newHashMap();
@@ -164,7 +167,9 @@ public final class MVTimelinessListPartitionArbiter extends MVTimelinessArbiter 
             mvUpdateInfo.getMvToRefreshPartitionNames().add(mvPartitionName);
         }
         addEmptyPartitionsToRefresh(mvUpdateInfo);
-        collectBaseTableUpdatePartitionNamesInLoose(mvUpdateInfo);
+        if (!collectBaseTableUpdatePartitionNamesInLoose(mvUpdateInfo)) {
+            return new MvUpdateInfo(MvUpdateInfo.MvToRefreshType.FULL);
+        }
         collectMVToBaseTablePartitionNames(refBaseTablePartitionMap, listPartitionDiff, tableRefIdxes, mvUpdateInfo);
         return mvUpdateInfo;
     }
