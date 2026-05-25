@@ -51,26 +51,52 @@ import java.util.concurrent.TimeUnit;
 public class LeaderTaskExecutor {
     private static final Logger LOG = LogManager.getLogger(LeaderTaskExecutor.class);
 
-    private ThreadPoolExecutor executor;
+    // Not final: close() shuts down both pools and start() rebuilds them so a singleton
+    // executor instance can survive a leader demote / re-elect cycle.
+    // Package-private so same-package tests can swap in a stuck pool to exercise the
+    // restart guard without reflection.
+    ThreadPoolExecutor executor;
     private Map<Long, Future<?>> runningTasks;
     public ScheduledThreadPoolExecutor scheduledThreadPool;
 
+    // Saved for rebuild on restart - see start().
+    private final String name;
+    private final int threadNum;
+    private final int queueSize;
+    private final boolean needRegisterMetric;
+
     public LeaderTaskExecutor(String name, int threadNum, boolean needRegisterMetric) {
-        executor = ThreadPoolManager
-                .newDaemonFixedThreadPool(threadNum, threadNum * 2, name + "_pool", needRegisterMetric);
-        runningTasks = Maps.newHashMap();
-        scheduledThreadPool =
-                ThreadPoolManager.newDaemonScheduledThreadPool(1, name + "_scheduler_thread_pool", needRegisterMetric);
+        this(name, threadNum, threadNum * 2, needRegisterMetric);
     }
 
     public LeaderTaskExecutor(String name, int threadNum, int queueSize, boolean needRegisterMetric) {
-        executor = ThreadPoolManager.newDaemonFixedThreadPool(threadNum, queueSize, name + "_pool", needRegisterMetric);
+        this.name = name;
+        this.threadNum = threadNum;
+        this.queueSize = queueSize;
+        this.needRegisterMetric = needRegisterMetric;
         runningTasks = Maps.newHashMap();
+        buildPools();
+    }
+
+    private void buildPools() {
+        executor = ThreadPoolManager.newDaemonFixedThreadPool(threadNum, queueSize, name + "_pool", needRegisterMetric);
         scheduledThreadPool =
                 ThreadPoolManager.newDaemonScheduledThreadPool(1, name + "_scheduler_thread_pool", needRegisterMetric);
     }
 
-    public void start() {
+    public synchronized void start() {
+        // Refuse to overlap with a previous worker that did not drain in close(): if the pool
+        // is shutdown but not yet terminated, in-flight submissions from the previous leader
+        // session are still running. Mirrors the BatchWriteMgr / AlterHandler restart guard.
+        if (executor.isShutdown() && !executor.isTerminated()) {
+            throw new IllegalStateException(
+                    "LeaderTaskExecutor " + name + " executor has not terminated; refuse to restart");
+        }
+        // Rebuild the pools if a previous demotion shut them down so subsequent submissions
+        // do not raise RejectedExecutionException on the new leader session.
+        if (executor.isShutdown()) {
+            buildPools();
+        }
         scheduledThreadPool.scheduleAtFixedRate(new TaskChecker(), 0L, 1000L, TimeUnit.MILLISECONDS);
     }
 

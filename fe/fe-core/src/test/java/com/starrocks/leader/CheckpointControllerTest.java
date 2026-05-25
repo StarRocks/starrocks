@@ -15,7 +15,6 @@
 package com.starrocks.leader;
 
 import com.starrocks.common.Config;
-import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.NodeMgr;
@@ -29,8 +28,6 @@ import org.mockito.MockedStatic;
 import org.mockito.Mockito;
 
 import java.util.List;
-import java.util.Map;
-import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -119,17 +116,15 @@ public class CheckpointControllerTest {
         // the new image and (b) inherit stale worker-selection bias. Per-round volatile
         // fields (workerNodeName / journalId / result / clusterSnapshotInfo) are naturally
         // overwritten by the next createImage() call, so onStopped does not touch them.
-        Set<String> nodesToPushImage = Deencapsulation.getField(controller, "nodesToPushImage");
-        Map<String, Long> lastFailedTime = Deencapsulation.getField(controller, "lastFailedTime");
-        nodesToPushImage.add("follower1");
-        nodesToPushImage.add("follower2");
+        controller.nodesToPushImage.add("follower1");
+        controller.nodesToPushImage.add("follower2");
         controller.setLastFailedTime("follower1", System.currentTimeMillis());
 
-        Deencapsulation.invoke(controller, "onStopped");
+        controller.onStopped();
 
-        Assertions.assertTrue(nodesToPushImage.isEmpty(),
+        Assertions.assertTrue(controller.nodesToPushImage.isEmpty(),
                 "nodesToPushImage must be cleared on demotion");
-        Assertions.assertTrue(lastFailedTime.isEmpty(),
+        Assertions.assertTrue(controller.lastFailedTime.isEmpty(),
                 "lastFailedTime must be cleared on demotion");
     }
 
