@@ -250,6 +250,15 @@ public class QueryAnalyzer {
             throw new SemanticException(
                     "CHANGES hint cannot combine with _META_ / _CACHE_STATS_ / _BOOKMARK_");
         }
+        // CHANGES does not honor table-scope hints; rejecting prevents queries from
+        // silently scanning a broader range than the user asked for.
+        // TODO: honor PARTITION / TABLET / REPLICA hints on CHANGES scans.
+        if (tableRelation.getPartitionNames() != null
+                || !tableRelation.getTabletIds().isEmpty()
+                || !tableRelation.getReplicaIds().isEmpty()) {
+            throw new SemanticException(
+                    "CHANGES hint cannot combine with PARTITION / TABLET / REPLICA hints");
+        }
         BookmarkRange range = tableRelation.getBookmarkRange().get();
         if (range.base() > range.head()) {
             throw new SemanticException(

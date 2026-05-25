@@ -66,6 +66,14 @@ public class ChangesSyntaxTest extends BookmarkTestBase {
                         + "DUPLICATE KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1 "
                         + "PROPERTIES ('replication_num' = '1');");
 
+        // Partitioned variant for table-scope-hint conflict tests; PARTITION(p1)
+        // only reaches validateChangesHint when the partition resolves.
+        createTableStatic(
+                "CREATE TABLE dup_partitioned (k int, v int) DUPLICATE KEY(k) "
+                        + "PARTITION BY RANGE(k) (PARTITION p1 VALUES [('-2147483648'), ('10'))) "
+                        + "DISTRIBUTED BY HASH(k) BUCKETS 1 "
+                        + "PROPERTIES ('replication_num' = '1');");
+
         createTableStatic(
                 "CREATE TABLE pk_t (k int, v int) "
                         + "PRIMARY KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1 "
@@ -197,6 +205,26 @@ public class ChangesSyntaxTest extends BookmarkTestBase {
                 () -> UtFrameUtils.parseStmtWithNewParser(sql, connectContext));
         assertTrue(ex.getMessage().contains("CHANGES hint cannot combine with"),
                 "actual: " + ex.getMessage());
+    }
+
+    @Test
+    public void testHintConflictsWithTableScopeHints() {
+        // PARTITION / TABLET / REPLICA each restrict the OLAP scan range, but the
+        // CHANGES branch ignores them; reject the combination instead of silently
+        // scanning beyond the requested scope.
+        String[] queries = {
+                "SELECT * FROM dup_partitioned PARTITION(p1) [_CHANGES_1_2_]",
+                "SELECT * FROM dup_t TABLET(123) [_CHANGES_1_2_]",
+                "SELECT * FROM dup_t REPLICA(456) [_CHANGES_1_2_]",
+        };
+        for (String sql : queries) {
+            AnalysisException ex = assertThrows(AnalysisException.class,
+                    () -> UtFrameUtils.parseStmtWithNewParser(sql, connectContext),
+                    "expected reject for: " + sql);
+            assertTrue(ex.getMessage().contains(
+                            "CHANGES hint cannot combine with PARTITION / TABLET / REPLICA hints"),
+                    "actual: " + ex.getMessage() + " for: " + sql);
+        }
     }
 
     @Test
