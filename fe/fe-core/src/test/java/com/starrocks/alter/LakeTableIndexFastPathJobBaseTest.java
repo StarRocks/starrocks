@@ -23,6 +23,8 @@ import com.starrocks.catalog.Tablet;
 import com.starrocks.lake.Utils;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.WALApplier;
+import com.starrocks.qe.SessionVariable;
+import com.starrocks.qe.VariableMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
 import com.starrocks.server.MetadataMgr;
@@ -133,6 +135,13 @@ public class LakeTableIndexFastPathJobBaseTest {
         when(wh.getName()).thenReturn("wh1");
         when(wm.getWarehouseAllowNull(anyLong())).thenReturn(wh);
         when(gsm.getWarehouseMgr()).thenReturn(wm);
+        // TimeUtils.longToTimeString (called from getInfo) consults
+        // GlobalStateMgr.getVariableMgr().getDefaultSessionVariable() for
+        // the session timezone. The mock returns null by default; wire a
+        // VariableMgr stub returning the static DEFAULT_SESSION_VARIABLE.
+        VariableMgr vm = mock(VariableMgr.class);
+        when(vm.getDefaultSessionVariable()).thenReturn(SessionVariable.DEFAULT_SESSION_VARIABLE);
+        when(gsm.getVariableMgr()).thenReturn(vm);
 
         try (MockedStatic<GlobalStateMgr> gsmStatic = Mockito.mockStatic(GlobalStateMgr.class);
                 MockedStatic<RunMode> rmStatic = Mockito.mockStatic(RunMode.class)) {
@@ -166,6 +175,12 @@ public class LakeTableIndexFastPathJobBaseTest {
         WarehouseManager wm = mock(WarehouseManager.class);
         when(wm.getWarehouseAllowNull(anyLong())).thenReturn(null);
         when(gsm.getWarehouseMgr()).thenReturn(wm);
+        // Same VariableMgr wiring as testGetInfoSharedDataMode: getInfo
+        // formats createTimeMs / finishedTimeMs via TimeUtils which needs a
+        // SessionVariable for the timezone.
+        VariableMgr vm = mock(VariableMgr.class);
+        when(vm.getDefaultSessionVariable()).thenReturn(SessionVariable.DEFAULT_SESSION_VARIABLE);
+        when(gsm.getVariableMgr()).thenReturn(vm);
         try (MockedStatic<GlobalStateMgr> gsmStatic = Mockito.mockStatic(GlobalStateMgr.class);
                 MockedStatic<RunMode> rmStatic = Mockito.mockStatic(RunMode.class)) {
             gsmStatic.when(GlobalStateMgr::getCurrentState).thenReturn(gsm);
