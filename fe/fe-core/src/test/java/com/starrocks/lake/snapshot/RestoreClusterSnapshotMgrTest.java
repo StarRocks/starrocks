@@ -25,6 +25,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.NodeMgr;
 import com.starrocks.server.RunMode;
+import com.starrocks.server.StorageVolumeAccessChecker;
 import com.starrocks.storagevolume.StorageVolume;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.utframe.StarRocksAssert;
@@ -202,6 +203,13 @@ public class RestoreClusterSnapshotMgrTest {
             @Mock
             public long getImageJournalId() {
                 return 10L;
+            }
+        };
+        // Stub the storage volume accessibility check so the test does not depend on
+        // reachability of, or global state of, an externally-owned S3 bucket.
+        new MockUp<StorageVolumeAccessChecker>() {
+            @Mock
+            public void check(String svName, String svType, List<String> locations, Map<String, String> params) {
             }
         };
 
