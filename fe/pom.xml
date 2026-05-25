@@ -452,7 +452,7 @@ under the License.
             <dependency>
                 <groupId>org.apache.thrift</groupId>
                 <artifactId>libthrift</artifactId>
-                <version>0.20.0</version>
+                <version>0.23.0</version>
                 <exclusions>
                     <exclusion>
                         <groupId>org.apache.tomcat.embed</groupId>
