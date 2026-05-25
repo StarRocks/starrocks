@@ -3241,8 +3241,13 @@ public class SchemaChangeHandler extends AlterHandler {
             }
             long jobId = GlobalStateMgr.getCurrentState().getNextId();
             long timeoutMs = TimeUnit.SECONDS.toMillis(Config.alter_table_timeout_second);
+            // 4-list canonical constructor: ids, names, infos, bfColumns.
+            // Plain bloom-filter drop has no per-column Index object, so the
+            // names list stays empty; applyCatalogMutation falls through to
+            // the dropBfColumns path which keys on column-id, not index-id.
             LakeTableDropIndexJob job = new LakeTableDropIndexJob(jobId, db.getId(), olapTable.getId(),
-                    olapTable.getName(), timeoutMs, new ArrayList<>(), drops, dropBfColumnNames);
+                    olapTable.getName(), timeoutMs, new ArrayList<>(), new ArrayList<>(), drops,
+                    dropBfColumnNames);
             job.setComputeResource(WarehouseManager.DEFAULT_RESOURCE);
             olapTable.setState(OlapTable.OlapTableState.SCHEMA_CHANGE);
             stateSet = true;
