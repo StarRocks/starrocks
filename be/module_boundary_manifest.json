@@ -371,12 +371,12 @@
       "summary": "Process-scoped runtime environment resources below full Runtime and above RuntimeCore.",
       "owned_targets": ["RuntimeEnv"],
       "owned_roots": ["be/src/runtime/env"],
-      "allowed_include_prefixes": ["runtime/env/", "runtime/", "types/", "common/", "base/", "gutil/", "gen_cpp/"],
+      "allowed_include_prefixes": ["runtime/env/", "runtime/", "platform/", "types/", "common/", "base/", "gutil/", "gen_cpp/"],
       "forbidden_include_prefixes": ["exec/", "storage/", "service/", "connector/", "udf/"],
       "forbidden_includes": ["runtime/exec_env.h"],
-      "allowed_target_deps": ["RuntimeCore", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
+      "allowed_target_deps": ["Platform", "RuntimeCore", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
       "allowed_test_targets": ["runtime_env_test"],
-      "allowed_test_link_deps": ["RuntimeEnv", "RuntimeCore", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
+      "allowed_test_link_deps": ["RuntimeEnv", "Platform", "RuntimeCore", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
       "remediation": "Keep RuntimeEnv limited to process-scoped runtime environment resources; move query execution, storage, service, connector, and UDF integration upward."
     },
     {
