@@ -207,6 +207,19 @@ ORDER BY id;
 7	5	4
 -- !result
 SELECT id, k,
+       SUM(v) OVER (ORDER BY k ASC NULLS LAST RANGE BETWEEN 1 PRECEDING AND 2 PRECEDING) AS w
+FROM test_range_offset_window
+ORDER BY id;
+-- result:
+1	None	30
+2	None	30
+3	1	None
+4	2	None
+5	2	None
+6	3	None
+7	5	None
+-- !result
+SELECT id, k,
        SUM(v) OVER (ORDER BY k ASC NULLS LAST RANGE BETWEEN 1 FOLLOWING AND 2 FOLLOWING) AS w
 FROM test_range_offset_window
 ORDER BY id;

@@ -106,6 +106,12 @@ SELECT id, k,
 FROM test_range_offset_window
 ORDER BY id;
 
+-- INT key, finite PRECEDING lower bound after upper bound; produces empty SUM frames.
+SELECT id, k,
+       SUM(v) OVER (ORDER BY k ASC NULLS LAST RANGE BETWEEN 1 PRECEDING AND 2 PRECEDING) AS w
+FROM test_range_offset_window
+ORDER BY id;
+
 -- INT key, finite FOLLOWING to finite FOLLOWING; produces empty SUM frames.
 SELECT id, k,
        SUM(v) OVER (ORDER BY k ASC NULLS LAST RANGE BETWEEN 1 FOLLOWING AND 2 FOLLOWING) AS w

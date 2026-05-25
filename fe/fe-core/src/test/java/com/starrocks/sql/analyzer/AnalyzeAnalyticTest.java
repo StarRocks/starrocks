@@ -71,8 +71,8 @@ public class AnalyzeAnalyticTest {    // use a unique dir so that it won't be co
         analyzeFail("select sum(v1) " +
                         "over(partition by v2 order by v3 range between -1 preceding and current row) from t0",
                 "must be a constant non-negative number");
-        analyzeFail("select sum(tc) " +
-                        "over(order by ti range between interval 1 day preceding and interval 2 day preceding) from tall",
+        analyzeFail("select sum(v1) " +
+                        "over(partition by v2 order by v3 rows between 1 preceding and 2 preceding) from t0",
                 "Offset boundaries are in the wrong order");
 
         analyzeFail("select sum(v1) over(partition by v2 order by v3 range unbounded following) from t0",
@@ -94,8 +94,14 @@ public class AnalyzeAnalyticTest {    // use a unique dir so that it won't be co
                 "over(partition by v2 order by v3 range between 1 preceding and 2 following) from t0");
         analyzeSuccess("select sum(v1) " +
                 "over(partition by v2 order by v3 range between 0 preceding and current row) from t0");
+        analyzeSuccess("select sum(v1) " +
+                "over(partition by v2 order by v3 range between 1 preceding and 2 preceding) from t0");
         analyzeSuccess("select sum(tc) " +
                 "over(order by ti range between interval 1 day preceding and current row) from tall");
+        analyzeSuccess("select sum(tc) " +
+                "over(order by ti range between interval 1 day preceding and interval 2 day preceding) from tall");
+        analyzeSuccess("select sum(tc) " +
+                "over(order by ti range between interval 1 day preceding and interval 2 month preceding) from tall");
         analyzeSuccess("select sum(tc) " +
                 "over(order by th desc range between interval 3 month preceding and current row) from tall");
         analyzeSuccess("select sum(v1) over(partition by v2 order by v3 range unbounded preceding) from t0");
