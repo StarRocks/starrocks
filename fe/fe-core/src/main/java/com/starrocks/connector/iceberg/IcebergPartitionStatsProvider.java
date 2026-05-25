@@ -30,6 +30,7 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.concurrent.TimeUnit;
 
 
 // Fast path for IcebergCatalog.getPartitions: when a PartitionStatisticsFile is reachable from the
@@ -88,7 +89,11 @@ public final class IcebergPartitionStatsProvider {
                 return Optional.empty();
             }
 
-            long modifiedTime = stats.lastUpdatedAt() != null ? stats.lastUpdatedAt() : -1L;
+            // PartitionStats.lastUpdatedAt() is epoch millis, but Partition.getModifiedTimeUnit() is
+            // MICROSECONDS and the PartitionsTable scan path surfaces last_updated_at in micros. Convert
+            // so both paths stay bit-equivalent.
+            long modifiedTime =
+                    stats.lastUpdatedAt() != null ? TimeUnit.MILLISECONDS.toMicros(stats.lastUpdatedAt()) : -1L;
             long version = fingerprint(
                     stats.dataRecordCount(),
                     stats.dataFileCount(),
