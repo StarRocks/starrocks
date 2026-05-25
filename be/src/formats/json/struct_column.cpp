@@ -15,6 +15,11 @@
 #include "formats/json/struct_column.h"
 
 #include "column/struct_column.h"
+<<<<<<< HEAD
+=======
+#include "common/simdjson_util.h"
+#include "common/statusor.h"
+>>>>>>> a609e20401 ([BugFix] Fix Json load nested types partial-append (#73715))
 #include "formats/json/nullable_column.h"
 #include "gutil/strings/substitute.h"
 
@@ -53,6 +58,9 @@ Status add_struct_column(Column* column, const TypeDescriptor& type_desc, const 
         }
         return Status::OK();
     } catch (simdjson::simdjson_error& e) {
+        if (is_simdjson_critical_error(e.error())) {
+            throw;
+        }
         auto err_msg = strings::Substitute("Failed to parse value as object, column=$0, error=$1", name,
                                            simdjson::error_message(e.error()));
         return Status::DataQualityError(err_msg);
