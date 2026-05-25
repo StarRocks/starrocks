@@ -26,6 +26,7 @@ import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.ScheduledThreadPoolExecutor;
 
 public class PriorityLeaderTaskExecutorTest {
     private static final Logger LOG = LoggerFactory.getLogger(PriorityLeaderTaskExecutorTest.class);
@@ -107,6 +108,25 @@ public class PriorityLeaderTaskExecutorTest {
         executor.setPoolSize(THREAD_NUM);
         Assertions.assertEquals(THREAD_NUM, executor.getCorePoolSize());
         Assertions.assertEquals(THREAD_NUM, priorityExecutor.getMaximumPoolSize());
+    }
+
+    @Test
+    public void testCloseWithTimeoutAwaitsTermination() throws Exception {
+        // close(awaitMillis) must block until BOTH pools have actually terminated, so a
+        // re-elected leader does not race a still-alive worker from the previous session.
+        PriorityLeaderTaskExecutor target =
+                new PriorityLeaderTaskExecutor("priority_task_executor_close_test", 1, 100, false);
+        target.start();
+        PriorityThreadPoolExecutor inner = Deencapsulation.getField(target, "executor");
+        ScheduledThreadPoolExecutor sched = Deencapsulation.getField(target, "scheduledThreadPool");
+
+        target.close(5000L);
+
+        Assertions.assertTrue(inner.isShutdown(), "executor must be shutdown");
+        Assertions.assertTrue(inner.isTerminated(), "executor must be terminated after close(awaitMillis)");
+        Assertions.assertTrue(sched.isShutdown(), "scheduledThreadPool must be shutdown");
+        Assertions.assertTrue(sched.isTerminated(),
+                "scheduledThreadPool must be terminated after close(awaitMillis)");
     }
 
     private class TestLeaderTask extends PriorityLeaderTask {
