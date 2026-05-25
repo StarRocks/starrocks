@@ -228,6 +228,17 @@ public class ChangesSyntaxTest extends BookmarkTestBase {
     }
 
     @Test
+    public void testHintConflictsWithSample() {
+        // SAMPLE thins the OLAP scan, but the CHANGES branch ignores it; reject
+        // the combination instead of silently scanning beyond the requested rate.
+        String sql = "SELECT * FROM dup_t SAMPLE('percent'='10') [_CHANGES_1_2_]";
+        AnalysisException ex = assertThrows(AnalysisException.class,
+                () -> UtFrameUtils.parseStmtWithNewParser(sql, connectContext));
+        assertTrue(ex.getMessage().contains("CHANGES hint cannot combine with SAMPLE"),
+                "actual: " + ex.getMessage());
+    }
+
+    @Test
     public void testDefaultMetadataNamesWhenNoConflict() throws Exception {
         // dup_t has no column shadowing the default names; both descriptors
         // should resolve to the defaults.

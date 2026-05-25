@@ -259,6 +259,12 @@ public class QueryAnalyzer {
             throw new SemanticException(
                     "CHANGES hint cannot combine with PARTITION / TABLET / REPLICA hints");
         }
+        // CHANGES does not honor SAMPLE; rejecting prevents queries from
+        // silently scanning the full range without the requested sampling.
+        if (tableRelation.getSampleClause() != null) {
+            throw new SemanticException(
+                    "CHANGES hint cannot combine with SAMPLE");
+        }
         BookmarkRange range = tableRelation.getBookmarkRange().get();
         if (range.base() > range.head()) {
             throw new SemanticException(
