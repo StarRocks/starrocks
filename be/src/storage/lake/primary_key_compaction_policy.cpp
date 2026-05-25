@@ -274,11 +274,10 @@ StatusOr<std::vector<int64_t>> PrimaryCompactionPolicy::pick_rowset_indexes(
             // Use max_rowset_bytes from the actual picked level (which may have been
             // merged across multiple size-tiered levels by pick_max_level), not the
             // pick_level_ptr->compact_level field which can be stale post-merge.
-            const int64_t next_level_target = max_rowset_bytes *
-                                              static_cast<int64_t>(config::size_tiered_level_multiple);
+            const int64_t next_level_target =
+                    max_rowset_bytes * static_cast<int64_t>(config::size_tiered_level_multiple);
             if (next_level_target > 0) {
-                size_overflow = static_cast<double>(total_input_bytes) /
-                                static_cast<double>(next_level_target);
+                size_overflow = static_cast<double>(total_input_bytes) / static_cast<double>(next_level_target);
             }
             if (config::lake_pk_compaction_size_overflow_ratio > 0.0 &&
                 size_overflow >= config::lake_pk_compaction_size_overflow_ratio) {
@@ -297,14 +296,12 @@ StatusOr<std::vector<int64_t>> PrimaryCompactionPolicy::pick_rowset_indexes(
             const int64_t max_rowset_size_bytes = config::lake_compaction_max_rowset_size;
             int64_t output_segs = 1;
             if (max_rowset_size_bytes > 0) {
-                output_segs = std::max<int64_t>(
-                        1, (total_input_bytes + max_rowset_size_bytes - 1) / max_rowset_size_bytes);
+                output_segs =
+                        std::max<int64_t>(1, (total_input_bytes + max_rowset_size_bytes - 1) / max_rowset_size_bytes);
             }
-            const double real_benefit_segs =
-                    std::max(0.0, static_cast<double>(input_segs - output_segs));
-            const double benefit_score = real_benefit_segs +
-                                         delete_ratio * static_cast<double>(input_segs) *
-                                                 config::lake_pk_compaction_delvec_benefit_weight;
+            const double real_benefit_segs = std::max(0.0, static_cast<double>(input_segs - output_segs));
+            const double benefit_score = real_benefit_segs + delete_ratio * static_cast<double>(input_segs) *
+                                                                     config::lake_pk_compaction_delvec_benefit_weight;
             benefit_cost_ratio = benefit_score / std::max(estimated_io_mb, 1.0);
             if (config::lake_pk_compaction_min_benefit_cost_ratio > 0.0 &&
                 benefit_cost_ratio >= config::lake_pk_compaction_min_benefit_cost_ratio) {
@@ -329,12 +326,10 @@ StatusOr<std::vector<int64_t>> PrimaryCompactionPolicy::pick_rowset_indexes(
                     "lake PK compaction skipped: tablet=$0 level_score=$1 < mls=$2 "
                     "delete_ratio=$3 size_overflow=$4 (alpha=$5) "
                     "bcr=$6 (min_bcr=$7) tablet_pressure=$8 (em=$9) — sparse mid-tier",
-                    tablet_metadata->id(), pick_level_ptr->score,
-                    config::lake_pk_compaction_min_level_score,
-                    delete_ratio, size_overflow,
-                    config::lake_pk_compaction_size_overflow_ratio,
-                    benefit_cost_ratio, config::lake_pk_compaction_min_benefit_cost_ratio,
-                    tablet_read_pressure, config::lake_pk_compaction_emergency_score);
+                    tablet_metadata->id(), pick_level_ptr->score, config::lake_pk_compaction_min_level_score,
+                    delete_ratio, size_overflow, config::lake_pk_compaction_size_overflow_ratio, benefit_cost_ratio,
+                    config::lake_pk_compaction_min_benefit_cost_ratio, tablet_read_pressure,
+                    config::lake_pk_compaction_emergency_score);
             return rowset_indexes; // empty -> no compaction this round
         }
     }

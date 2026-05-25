@@ -1516,8 +1516,7 @@ TEST_P(LakePrimaryKeyCompactionTest, test_pr1prime_v2_gate_overrides) {
         PrimaryCompactionPolicy policy(_tablet_mgr.get(), md, /*force_base_compaction=*/false);
         std::vector<bool> has_dels;
         ASSIGN_OR_ABORT(auto picked, policy.pick_rowset_indexes(md, &has_dels));
-        EXPECT_GE(picked.size(), 1)
-                << "high delete_ratio (20%) should let bcr fire and allow compaction";
+        EXPECT_GE(picked.size(), 1) << "high delete_ratio (20%) should let bcr fire and allow compaction";
     }
 
     // ===== Case 3: 1 single delete in 1 rowset out of 8 (binary-style collapse case) =====
@@ -1641,29 +1640,27 @@ TEST_P(LakePrimaryKeyCompactionTest, test_pr1prime_v2_gate_overrides) {
         PrimaryCompactionPolicy policy(_tablet_mgr.get(), md, /*force_base_compaction=*/false);
         std::vector<bool> has_dels;
         ASSIGN_OR_ABORT(auto picked, policy.pick_rowset_indexes(md, &has_dels));
-        EXPECT_EQ(picked.size(), 0)
-                << "with all overrides disabled, gate should skip low-score clean level";
+        EXPECT_EQ(picked.size(), 0) << "with all overrides disabled, gate should skip low-score clean level";
     }
 
     // Corner-case helper: build metadata with explicit num_rows per rowset so we can
     // exercise the divide-by-zero guard and the >100% delete_ratio path.
-    auto build_metadata_with_rows = [&](const std::vector<std::tuple<int64_t /*bytes*/,
-                                                                     int64_t /*dels*/,
-                                                                     int64_t /*rows*/>>& specs) {
-        auto md = std::make_shared<TabletMetadataPB>();
-        md->set_id(_tablet_metadata->id());
-        md->set_version(1);
-        uint32_t id = 0;
-        for (const auto& spec : specs) {
-            auto* rm = md->add_rowsets();
-            rm->set_id(id++);
-            rm->set_overlapped(false);
-            rm->set_data_size(std::get<0>(spec));
-            rm->set_num_dels(std::get<1>(spec));
-            rm->set_num_rows(std::get<2>(spec));
-        }
-        return md;
-    };
+    auto build_metadata_with_rows =
+            [&](const std::vector<std::tuple<int64_t /*bytes*/, int64_t /*dels*/, int64_t /*rows*/>>& specs) {
+                auto md = std::make_shared<TabletMetadataPB>();
+                md->set_id(_tablet_metadata->id());
+                md->set_version(1);
+                uint32_t id = 0;
+                for (const auto& spec : specs) {
+                    auto* rm = md->add_rowsets();
+                    rm->set_id(id++);
+                    rm->set_overlapped(false);
+                    rm->set_data_size(std::get<0>(spec));
+                    rm->set_num_dels(std::get<1>(spec));
+                    rm->set_num_rows(std::get<2>(spec));
+                }
+                return md;
+            };
 
     // ===== Case 8: empty rowsets (num_rows=0) — guard against div-by-zero =====
     // delete_ratio guard: if total_rows == 0, treat as 0.0 (no delete pressure).
@@ -1689,9 +1686,8 @@ TEST_P(LakePrimaryKeyCompactionTest, test_pr1prime_v2_gate_overrides) {
         // (delete_ratio collapses to 0.0 since total_rows == 0).
         ASSIGN_OR_ABORT(auto picked, policy.pick_rowset_indexes(md, &has_dels));
         // 4GB total, max_rowset=500MB, size_overflow=4000/2500=1.6 < 2.0 → skip
-        EXPECT_EQ(picked.size(), 0)
-                << "zero-row rowsets must not poison delete_ratio (div-by-zero) — "
-                << "gate should still reach the skip decision via size_overflow";
+        EXPECT_EQ(picked.size(), 0) << "zero-row rowsets must not poison delete_ratio (div-by-zero) — "
+                                    << "gate should still reach the skip decision via size_overflow";
     }
 
     // ===== Case 9: size_overflow at exact threshold (== alpha) — boundary check =====
@@ -1710,8 +1706,7 @@ TEST_P(LakePrimaryKeyCompactionTest, test_pr1prime_v2_gate_overrides) {
         PrimaryCompactionPolicy policy(_tablet_mgr.get(), md, /*force_base_compaction=*/false);
         std::vector<bool> has_dels;
         ASSIGN_OR_ABORT(auto picked, policy.pick_rowset_indexes(md, &has_dels));
-        EXPECT_GE(picked.size(), 1)
-                << "size_overflow exactly at alpha=2.0 must trigger (using >= comparison)";
+        EXPECT_GE(picked.size(), 1) << "size_overflow exactly at alpha=2.0 must trigger (using >= comparison)";
     }
 
     // ===== Case 10: num_dels >= num_rows (effective delete_ratio capped semantics) =====
@@ -1737,9 +1732,8 @@ TEST_P(LakePrimaryKeyCompactionTest, test_pr1prime_v2_gate_overrides) {
         PrimaryCompactionPolicy policy(_tablet_mgr.get(), md, /*force_base_compaction=*/false);
         std::vector<bool> has_dels;
         ASSIGN_OR_ABORT(auto picked, policy.pick_rowset_indexes(md, &has_dels));
-        EXPECT_GE(picked.size(), 1)
-                << "delete_ratio > 1.0 (pathological accounting) must not crash and should "
-                << "produce a finite bcr that fires the override";
+        EXPECT_GE(picked.size(), 1) << "delete_ratio > 1.0 (pathological accounting) must not crash and should "
+                                    << "produce a finite bcr that fires the override";
     }
 }
 
