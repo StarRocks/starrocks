@@ -51,7 +51,7 @@ TEST_F(AddMapColumnTest, test_bad_json) {
     auto doc = parser.iterate(json);
     simdjson::ondemand::value val = doc.get_value();
 
-    EXPECT_STATUS(Status::DataQualityError(""), add_map_column(column.get(), type_desc, "root_key", &val));
+    ASSERT_THROW(auto st = add_map_column(column.get(), type_desc, "root_key", &val), simdjson::simdjson_error);
 }
 
 } // namespace starrocks
