@@ -121,6 +121,7 @@ set(EXEC_SORTING_CORE_FILES
     sorting/merge.cpp
     sorting/merge_cascade.cpp
     sorting/merge_column.cpp
+    sorting/merge_path.cpp
     sorting/sort_column.cpp
     sorting/sort_cursor.cpp
     sorting/sort_permute.cpp
@@ -491,7 +492,6 @@ set(EXEC_NON_PIPELINE_FILES
     jdbc/type_checker.cpp
     jdbc/type_checker_manager.cpp
     jdbc/type_checker_xml_loader.cpp
-    sorting/merge_path.cpp
     connector_scan_node.cpp
     workgroup/work_group.cpp
     workgroup/mem_tracker_manager.cpp
