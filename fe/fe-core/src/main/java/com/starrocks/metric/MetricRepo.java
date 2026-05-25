@@ -532,6 +532,15 @@ public final class MetricRepo {
         };
         STARROCKS_METRIC_REGISTER.addMetric(maxJournalId);
 
+        GaugeMetric<Long> replayedJournalId = (GaugeMetric<Long>) new GaugeMetric<Long>(
+                "replayed_journal_id", MetricUnit.NOUNIT, "replayed journal id of this frontend") {
+            @Override
+            public Long getValue() {
+                return GlobalStateMgr.getCurrentState().getReplayedJournalId();
+            }
+        };
+        STARROCKS_METRIC_REGISTER.addMetric(replayedJournalId);
+
         GAUGE_SPM_BASELINE_COUNT = new LeaderAwareGaugeMetricLong(
                 SPM_BASELINE_COUNT_METRIC_NAME,
                 MetricUnit.NOUNIT,

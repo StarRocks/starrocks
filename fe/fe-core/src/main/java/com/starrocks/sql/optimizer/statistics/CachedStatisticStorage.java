@@ -308,6 +308,11 @@ public class CachedStatisticStorage implements StatisticStorage, MemoryTrackable
     }
 
     @Override
+    public void expireAllConnectorTableColumnStatistics() {
+        connectorTableCachedStatistics.synchronous().invalidateAll();
+    }
+
+    @Override
     public void refreshConnectorTableColumnStatistics(Table table, List<String> columns, boolean isSync) {
         Preconditions.checkState(table != null);
         if (!StatisticUtils.checkStatisticTableStateNormal()) {
@@ -634,6 +639,11 @@ public class CachedStatisticStorage implements StatisticStorage, MemoryTrackable
             allKeys.add(key);
         }
         connectorHistogramCache.synchronous().invalidateAll(allKeys);
+    }
+
+    @Override
+    public void expireAllConnectorHistogramStatistics() {
+        connectorHistogramCache.synchronous().invalidateAll();
     }
 
     private List<ColumnStatistic> getDefaultColumnStatisticList(List<String> columns) {

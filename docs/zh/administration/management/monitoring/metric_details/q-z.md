@@ -526,6 +526,12 @@ description: "Alphabetical q - z"
 - 类型：瞬时
 - 描述：没有检查点的编辑日志数量。`100000`范围内的值被认为是合理的。
 
+## `starrocks_fe_replayed_journal_id`
+
+- 单位：计数
+- 类型：瞬时
+- 描述：此 FE 节点已 replay 的最新 Journal ID。
+
 ## `starrocks_fe_publish_version_daemon_loop_total`
 
 - 单位：计数

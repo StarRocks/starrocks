@@ -985,14 +985,10 @@ public class EditLog {
                 case OperationType.OP_ADD_EXTERNAL_BASIC_STATS_META: {
                     ExternalBasicStatsMeta basicStatsMeta = (ExternalBasicStatsMeta) journal.data();
                     globalStateMgr.getAnalyzeMgr().replayAddExternalBasicStatsMeta(basicStatsMeta);
-                    // The follower replays the stats meta log, indicating that the master has re-completed
-                    // statistic, and the follower's should refresh cache here.
-                    // We don't need to refresh statistics when checkpointing
                     if (!GlobalStateMgr.isCheckpointThread()) {
-                        globalStateMgr.getAnalyzeMgr().refreshConnectorTableBasicStatisticsCache(
-                                basicStatsMeta.getCatalogName(),
-                                basicStatsMeta.getDbName(), basicStatsMeta.getTableName(),
-                                basicStatsMeta.getColumns(), true);
+                        // Do not resolve external table metadata during replay. Connector metadata calls may block
+                        // on HMS/HDFS. The journal updates stats metadata synchronously; caches reload lazily.
+                        globalStateMgr.getStatisticStorage().expireAllConnectorTableColumnStatistics();
                     }
                     break;
                 }
@@ -1000,24 +996,17 @@ public class EditLog {
                     ExternalBasicStatsMeta basicStatsMeta = (ExternalBasicStatsMeta) journal.data();
                     globalStateMgr.getAnalyzeMgr().replayRemoveExternalBasicStatsMeta(basicStatsMeta);
                     if (!GlobalStateMgr.isCheckpointThread()) {
-                        globalStateMgr.getAnalyzeMgr().expireConnectorTableAndColumnStatistics(
-                                basicStatsMeta.getCatalogName(),
-                                basicStatsMeta.getDbName(), basicStatsMeta.getTableName(),
-                                basicStatsMeta.getColumns());
+                        globalStateMgr.getStatisticStorage().expireAllConnectorTableColumnStatistics();
                     }
                     break;
                 }
                 case OperationType.OP_ADD_EXTERNAL_HISTOGRAM_STATS_META: {
                     ExternalHistogramStatsMeta histogramStatsMeta = (ExternalHistogramStatsMeta) journal.data();
                     globalStateMgr.getAnalyzeMgr().replayAddExternalHistogramStatsMeta(histogramStatsMeta);
-                    // The follower replays the stats meta log, indicating that the master has re-completed
-                    // statistic, and the follower's should expire cache here.
-                    // We don't need to refresh statistics when checkpointing
                     if (!GlobalStateMgr.isCheckpointThread()) {
-                        globalStateMgr.getAnalyzeMgr().refreshConnectorTableHistogramStatisticsCache(
-                                histogramStatsMeta.getCatalogName(), histogramStatsMeta.getDbName(),
-                                histogramStatsMeta.getTableName(),
-                                Lists.newArrayList(histogramStatsMeta.getColumn()), true);
+                        // Do not resolve external table metadata during replay. Connector metadata calls may block
+                        // on HMS/HDFS. The journal updates stats metadata synchronously; caches reload lazily.
+                        globalStateMgr.getStatisticStorage().expireAllConnectorHistogramStatistics();
                     }
                     break;
                 }
@@ -1025,10 +1014,7 @@ public class EditLog {
                     ExternalHistogramStatsMeta histogramStatsMeta = (ExternalHistogramStatsMeta) journal.data();
                     globalStateMgr.getAnalyzeMgr().replayRemoveExternalHistogramStatsMeta(histogramStatsMeta);
                     if (!GlobalStateMgr.isCheckpointThread()) {
-                        globalStateMgr.getAnalyzeMgr().expireConnectorTableHistogramStatisticsCache(
-                                histogramStatsMeta.getCatalogName(), histogramStatsMeta.getDbName(),
-                                histogramStatsMeta.getTableName(),
-                                Lists.newArrayList(histogramStatsMeta.getColumn()));
+                        globalStateMgr.getStatisticStorage().expireAllConnectorHistogramStatistics();
                     }
                     break;
                 }

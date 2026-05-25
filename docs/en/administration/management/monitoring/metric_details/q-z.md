@@ -526,6 +526,12 @@ For more information on how to build a monitoring service for your StarRocks clu
 - Type: Instantaneous
 - Description: The number of Edit Logs without a checkpoint. A value within `100000` is considered reasonable..
 
+## `starrocks_fe_replayed_journal_id`
+
+- Unit: Count
+- Type: Instantaneous
+- Description: The latest journal ID replayed by this FE node.
+
 ## `starrocks_fe_publish_version_daemon_loop_total`
 
 - Unit: Count

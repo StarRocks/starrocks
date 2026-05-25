@@ -95,7 +95,14 @@ public class MetricRepoTest extends PlanTestBase {
         Assertions.assertTrue(output.contains("result=\"hit\""));
         Assertions.assertTrue(output.contains("result=\"captured\""));
     }
-  
+
+    @Test
+    public void testReplayedJournalIdMetric() {
+        List<Metric> metrics = MetricRepo.getMetricsByName("replayed_journal_id");
+        Assertions.assertEquals(1, metrics.size());
+        Assertions.assertEquals(GlobalStateMgr.getCurrentState().getReplayedJournalId(), metrics.get(0).getValue());
+    }
+
     public void testPlanAdvisorMetricsExposure() {
         MetricRepo.COUNTER_PLAN_ADVISOR_GUIDE_GENERATED_TOTAL.getMetric("join").increase(1L);
         MetricRepo.COUNTER_PLAN_ADVISOR_GUIDE_APPLIED_TOTAL.getMetric("agg").increase(2L);
