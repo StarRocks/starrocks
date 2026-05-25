@@ -153,16 +153,16 @@ Status parse_anchor(const JsonValue& json, Anchor* out) {
     // malformed source_info can never be silently truncated.
     auto double_to_int64 = [](double d, const char* key, int64_t* dst) -> Status {
         if (!std::isfinite(d)) {
-            return Status::InvalidArgument(strings::Substitute(
-                    "parquet_read_rows: source_info field '$0' must be a finite number", key));
+            return Status::InvalidArgument(
+                    strings::Substitute("parquet_read_rows: source_info field '$0' must be a finite number", key));
         }
         // INT64_MAX/MIN as double can't be represented exactly. Compare against
         // the nearest representable doubles to be safe.
         constexpr double kMaxInt64 = 9.2233720368547748e18;  // < INT64_MAX exact
         constexpr double kMinInt64 = -9.2233720368547758e18; // > INT64_MIN exact
         if (d > kMaxInt64 || d < kMinInt64) {
-            return Status::InvalidArgument(strings::Substitute(
-                    "parquet_read_rows: source_info field '$0' is outside int64 range", key));
+            return Status::InvalidArgument(
+                    strings::Substitute("parquet_read_rows: source_info field '$0' is outside int64 range", key));
         }
         if (d != std::trunc(d)) {
             return Status::InvalidArgument(strings::Substitute(
