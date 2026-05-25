@@ -212,7 +212,7 @@ subprojects {
             implementation("org.apache.spark:spark-core_2.12:${project.ext["spark.version"]}")
             implementation("org.apache.spark:spark-launcher_2.12:${project.ext["spark.version"]}")
             implementation("org.apache.spark:spark-sql_2.12:${project.ext["spark.version"]}")
-            implementation("org.apache.thrift:libthrift:0.20.0")
+            implementation("org.apache.thrift:libthrift:0.23.0")
             implementation("org.apache.velocity:velocity-engine-core:2.4.1")
             implementation("org.bouncycastle:bcpkix-jdk18on:${project.ext["bouncycastle.version"]}")
             implementation("org.bouncycastle:bcprov-jdk18on:${project.ext["bouncycastle.version"]}")
