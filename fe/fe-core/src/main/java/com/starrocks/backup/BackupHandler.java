@@ -517,24 +517,22 @@ public class BackupHandler extends FrontendDaemon implements Writable, MemoryTra
                 stmt.getTimeoutMs(), globalStateMgr, repository.getId());
         List<Function> allFunctions = Lists.newArrayList();
 
-        if (!stmt.containsExternalCatalog()) {
-            if (!stmt.withOnClause() || stmt.allFunction()) {
-                for (Map.Entry<String, List<Function>> entry : db.getNameToFunction().entrySet()) {
-                    List<Function> fns = entry.getValue();
-                    allFunctions.addAll(fns);
-                }
-            } else {
-                for (FunctionRef fnRef : stmt.getFnRefs()) {
-                    String functionName = fnRef.getFunctionName();
+        if (!stmt.containsExternalCatalog() && (!stmt.withOnClause() || stmt.allFunction())) {
+            for (Map.Entry<String, List<Function>> entry : db.getNameToFunction().entrySet()) {
+                List<Function> fns = entry.getValue();
+                allFunctions.addAll(fns);
+            }
+        } else if (!stmt.containsExternalCatalog()) {
+            for (FunctionRef fnRef : stmt.getFnRefs()) {
+                String functionName = fnRef.getFunctionName();
 
-                    List<Function> functionList = db.getFunctionsByName(functionName);
-                    if (functionList.isEmpty()) {
-                        ErrorReport.reportDdlException(ErrorCode.ERR_COMMON_ERROR,
-                                "Invalid backup function(s), function name: " + functionName);
-                    }
-
-                    allFunctions.addAll(functionList);
+                List<Function> functionList = db.getFunctionsByName(functionName);
+                if (functionList.isEmpty()) {
+                    ErrorReport.reportDdlException(ErrorCode.ERR_COMMON_ERROR,
+                            "Invalid backup function(s), function name: " + functionName);
                 }
+
+                allFunctions.addAll(functionList);
             }
         }
         backupJob.setBackupFunctions(allFunctions);
