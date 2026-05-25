@@ -21,6 +21,7 @@
 #include <utility>
 
 #include "exec/pipeline/scan/scan_morsel.h"
+#include "storage/lake/types_fwd.h"
 
 namespace starrocks {
 
@@ -28,13 +29,6 @@ struct RowidRangeOption;
 using RowidRangeOptionPtr = std::shared_ptr<RowidRangeOption>;
 struct ShortKeyRangesOption;
 using ShortKeyRangesOptionPtr = std::shared_ptr<ShortKeyRangesOption>;
-
-namespace lake {
-struct PreparedSegmentReadState;
-using PreparedSegmentReadStatePtr = std::shared_ptr<PreparedSegmentReadState>;
-struct PreparedTabletReadState;
-using PreparedTabletReadStatePtr = std::shared_ptr<PreparedTabletReadState>;
-} // namespace lake
 
 namespace pipeline {
 
@@ -48,9 +42,9 @@ struct LakeSplitContext : public ScanSplitContext {
     std::shared_ptr<SplitMorselQueue> split_morsel_queue = nullptr;
 
     // Optional metadata for Lake prepared physical split children.
-    // Valid only for physical split morsels with rowid_range != nullptr.
-    lake::PreparedTabletReadStatePtr prepared_read_state = nullptr;
-    lake::PreparedSegmentReadStatePtr prepared_segment_state = nullptr;
+    // prepared_segment_read_state and indices are set only when the rowid range maps to one segment.
+    lake::PreparedTabletReadStatePtr prepared_tablet_read_state = nullptr;
+    lake::PreparedSegmentReadStatePtr prepared_segment_read_state = nullptr;
     size_t rowset_index = 0;
     size_t segment_index = 0;
 };

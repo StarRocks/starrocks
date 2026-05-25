@@ -38,6 +38,7 @@ class TabletMetadataPB;
 
 namespace lake {
 
+struct PreparedTabletReadState;
 class Rowset;
 class TabletManager;
 
@@ -109,6 +110,9 @@ private:
     using PredicateList = std::vector<const ColumnPredicate*>;
     using PredicateMap = std::unordered_map<ColumnId, PredicateList>;
 
+    Status build_prepared_tablet_read_state(const TabletReaderParams& params, PreparedTabletReadState* state);
+    Status build_prepared_physical_split_tasks(const TabletReaderParams& params,
+                                               const PreparedTabletReadStatePtr& prepared_tablet_read_state);
     Status get_segment_iterators(const TabletReaderParams& params, std::vector<ChunkIteratorPtr>* iters);
 
     Status init_predicates(const TabletReaderParams& read_params);

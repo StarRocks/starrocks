@@ -14,7 +14,10 @@
 
 #include "storage/lake/tablet_reader.h"
 
+#include <algorithm>
+#include <atomic>
 #include <future>
+#include <limits>
 #include <utility>
 
 #include "base/testutil/sync_point.h"
@@ -60,6 +63,35 @@ using Datum = starrocks::Datum;
 using Field = starrocks::Field;
 using PredicateParser = starrocks::PredicateParser;
 using ZonemapPredicatesRewriter = starrocks::ZonemapPredicatesRewriter;
+
+static Status prepare_segment_full_scan_range(const SegmentPtr& segment,
+                                              const PreparedSegmentReadStatePtr& prepared_segment_read_state) {
+    if (segment == nullptr || prepared_segment_read_state == nullptr) {
+        return Status::InvalidArgument("invalid prepared segment read state");
+    }
+
+    auto lifecycle = static_cast<PreparedSegmentReadState::Lifecycle>(
+            prepared_segment_read_state->lifecycle.load(std::memory_order_acquire));
+    if (lifecycle == PreparedSegmentReadState::Lifecycle::PREPARED) {
+        return Status::OK();
+    }
+    if (lifecycle == PreparedSegmentReadState::Lifecycle::FAILED) {
+        return prepared_segment_read_state->prepare_status;
+    }
+
+    uint32_t expected = static_cast<uint32_t>(PreparedSegmentReadState::Lifecycle::UNPREPARED);
+    if (prepared_segment_read_state->lifecycle.compare_exchange_strong(
+                expected, static_cast<uint32_t>(PreparedSegmentReadState::Lifecycle::PREPARING),
+                std::memory_order_acq_rel, std::memory_order_acquire)) {
+        prepared_segment_read_state->prepared_pruned_scan_range =
+                std::make_shared<SparseRange<>>(Range<>(0, segment->num_rows()));
+        prepared_segment_read_state->prepared_pruned_scan_range_includes_page_filters = false;
+        prepared_segment_read_state->prepare_status = Status::OK();
+        prepared_segment_read_state->lifecycle.store(static_cast<uint32_t>(PreparedSegmentReadState::Lifecycle::PREPARED),
+                                                     std::memory_order_release);
+    }
+    return Status::OK();
+}
 
 TabletReader::TabletReader(TabletManager* tablet_mgr, std::shared_ptr<const TabletMetadataPB> metadata, Schema schema)
         : ChunkIterator(std::move(schema)), _tablet_mgr(tablet_mgr), _tablet_metadata(std::move(metadata)) {}
@@ -164,6 +196,18 @@ Status TabletReader::open(const TabletReaderParams& read_params) {
             // otherwise, iterator will return empty.
             _need_split = false;
             return init_collector(read_params);
+        }
+
+        if (_could_split_physically && read_params.runtime_state != nullptr &&
+            read_params.runtime_state->enable_lake_prepared_physical_split_scan()) {
+            auto prepared_tablet_read_state = std::make_shared<PreparedTabletReadState>();
+            RETURN_IF_ERROR(build_prepared_tablet_read_state(read_params, prepared_tablet_read_state.get()));
+            RETURN_IF_ERROR(build_prepared_physical_split_tasks(read_params, prepared_tablet_read_state));
+            if (_split_tasks.empty()) {
+                _need_split = false;
+                return init_collector(read_params);
+            }
+            return Status::OK();
         }
 
         pipeline::Morsels morsels;
@@ -329,6 +373,106 @@ Status TabletReader::do_get_next(Chunk* chunk, std::vector<RowSourceMask>* sourc
                                  std::vector<uint64_t>* rssid_rowids) {
     DCHECK(_is_vertical_merge);
     RETURN_IF_ERROR(_collect_iter->get_next(chunk, source_masks, rssid_rowids));
+    return Status::OK();
+}
+
+Status TabletReader::build_prepared_tablet_read_state(const TabletReaderParams& params, PreparedTabletReadState* state) {
+    if (state == nullptr) {
+        return Status::InvalidArgument("prepared tablet read state is null");
+    }
+    if (!state->rowsets.empty()) {
+        return Status::OK();
+    }
+    if (!_rowsets_inited) {
+        _rowsets = Rowset::get_rowsets(_tablet_mgr, _tablet_metadata);
+        _rowsets_inited = true;
+    }
+
+    std::vector<RowsetPtr> rowsets = _rowsets;
+    std::vector<std::vector<SegmentPtr>> rowset_segments;
+    std::vector<std::vector<PreparedSegmentReadStatePtr>> rowset_prepared_states;
+    rowset_segments.reserve(rowsets.size());
+    rowset_prepared_states.reserve(rowsets.size());
+    for (const auto& rowset : rowsets) {
+        ASSIGN_OR_RETURN(auto segments, rowset->segments(params.lake_io_opts));
+        std::vector<PreparedSegmentReadStatePtr> prepared_states;
+        prepared_states.reserve(segments.size());
+        for (size_t i = 0; i < segments.size(); ++i) {
+            prepared_states.emplace_back(std::make_shared<PreparedSegmentReadState>());
+        }
+        rowset_segments.emplace_back(std::move(segments));
+        rowset_prepared_states.emplace_back(std::move(prepared_states));
+    }
+
+    state->rowsets = std::move(rowsets);
+    state->rowset_segments = std::move(rowset_segments);
+    state->rowset_prepared_states = std::move(rowset_prepared_states);
+    return Status::OK();
+}
+
+Status TabletReader::build_prepared_physical_split_tasks(
+        const TabletReaderParams& params, const PreparedTabletReadStatePtr& prepared_tablet_read_state) {
+    if (prepared_tablet_read_state == nullptr) {
+        return Status::InvalidArgument("prepared tablet read state is null");
+    }
+    if (prepared_tablet_read_state->rowsets.size() != prepared_tablet_read_state->rowset_segments.size() ||
+        prepared_tablet_read_state->rowsets.size() != prepared_tablet_read_state->rowset_prepared_states.size()) {
+        return Status::InvalidArgument("prepared tablet read state has inconsistent rowset state");
+    }
+
+    _split_tasks.clear();
+    const rowid_t rows_per_split =
+            params.splitted_scan_rows > 0
+                    ? static_cast<rowid_t>(
+                              std::min<int64_t>(params.splitted_scan_rows, std::numeric_limits<rowid_t>::max()))
+                    : std::numeric_limits<rowid_t>::max();
+    for (size_t rowset_idx = 0; rowset_idx < prepared_tablet_read_state->rowsets.size(); ++rowset_idx) {
+        const auto& rowset = prepared_tablet_read_state->rowsets[rowset_idx];
+        if (rowset == nullptr) {
+            continue;
+        }
+        const auto& segments = prepared_tablet_read_state->rowset_segments[rowset_idx];
+        const auto& segment_states = prepared_tablet_read_state->rowset_prepared_states[rowset_idx];
+        if (segments.size() != segment_states.size()) {
+            return Status::InvalidArgument("prepared tablet read state has inconsistent segment state");
+        }
+
+        for (size_t segment_idx = 0; segment_idx < segments.size(); ++segment_idx) {
+            const auto& segment = segments[segment_idx];
+            if (segment == nullptr || segment->num_rows() == 0) {
+                continue;
+            }
+            const auto& segment_state = segment_states[segment_idx];
+            RETURN_IF_ERROR(prepare_segment_full_scan_range(segment, segment_state));
+            const auto& prepared_scan_range = segment_state->prepared_pruned_scan_range;
+            if (prepared_scan_range == nullptr || prepared_scan_range->span_size() == 0) {
+                continue;
+            }
+
+            auto range_iter = prepared_scan_range->new_iterator();
+            bool is_first_split_of_segment = true;
+            while (range_iter.has_more()) {
+                SparseRange<> split_range;
+                range_iter.next_range(rows_per_split, &split_range);
+                if (split_range.span_size() == 0) {
+                    break;
+                }
+
+                auto rowid_range = std::make_shared<RowidRangeOption>();
+                rowid_range->add(rowset.get(), segment.get(), std::make_shared<SparseRange<>>(std::move(split_range)),
+                                 is_first_split_of_segment);
+                is_first_split_of_segment = false;
+
+                auto ctx = std::make_unique<pipeline::LakeSplitContext>();
+                ctx->rowid_range = std::move(rowid_range);
+                ctx->prepared_tablet_read_state = prepared_tablet_read_state;
+                ctx->prepared_segment_read_state = segment_state;
+                ctx->rowset_index = rowset_idx;
+                ctx->segment_index = segment_idx;
+                _split_tasks.emplace_back(std::move(ctx));
+            }
+        }
+    }
     return Status::OK();
 }
 
