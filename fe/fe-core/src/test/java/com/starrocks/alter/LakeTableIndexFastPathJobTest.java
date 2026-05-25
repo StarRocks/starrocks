@@ -316,6 +316,34 @@ public class LakeTableIndexFastPathJobTest {
     }
 
     @Test
+    public void testDropIndexJob_ApplyCatalogMutation_RemovesByNameWhenIdsAreMinusOne() {
+        // Regression: BITMAP / NGRAMBF / BLOOM_FILTER all share indexId = -1
+        // (only GIN/VECTOR get a real id). Matching purely by id wipes out
+        // every same-class index on the table. Verify name-based matching
+        // removes only the named target.
+        TDropIndexInfo info = new TDropIndexInfo();
+        info.setIndex_id(-1L);
+        info.setIndex_type(TIndexType.BITMAP);
+        info.setCol_unique_id(7);
+
+        LakeTableDropIndexJob job = new LakeTableDropIndexJob(1L, 2L, 3L, "t", 60_000L,
+                Collections.singletonList(-1L),
+                Collections.singletonList("A_bm"),
+                Collections.singletonList(info));
+
+        OlapTable table = mock(OlapTable.class);
+        List<Index> existing = new ArrayList<>();
+        existing.add(new Index(-1L, "A_bm", Collections.singletonList(ColumnId.create("v1")),
+                IndexDef.IndexType.BITMAP, "", new java.util.HashMap<>()));
+        existing.add(new Index(-1L, "B_ng", Collections.singletonList(ColumnId.create("v2")),
+                IndexDef.IndexType.NGRAMBF, "", new java.util.HashMap<>()));
+        when(table.getIndexes()).thenReturn(existing);
+        job.applyCatalogMutation(table);
+        assertEquals(1, existing.size());
+        assertEquals("B_ng", existing.get(0).getIndexName());
+    }
+
+    @Test
     public void testDropIndexJob_ApplyCatalogMutation_DropsBfColumnsPartial() {
         // Drop one of two bf columns → setBloomFilterInfo with the remaining set.
         LakeTableDropIndexJob job = new LakeTableDropIndexJob(1L, 2L, 3L, "t", 60_000L,

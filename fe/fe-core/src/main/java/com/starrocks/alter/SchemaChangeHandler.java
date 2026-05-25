@@ -3095,6 +3095,7 @@ public class SchemaChangeHandler extends AlterHandler {
         boolean stateSet = false;
         try {
             List<Long> dropIds = new ArrayList<>();
+            List<String> dropNames = new ArrayList<>();
             List<com.starrocks.thrift.TDropIndexInfo> drops = new ArrayList<>();
             for (AlterClause clause : alterClauses) {
                 DropIndexClause d = (DropIndexClause) clause;
@@ -3112,6 +3113,7 @@ public class SchemaChangeHandler extends AlterHandler {
                     return null;
                 }
                 dropIds.add(target.getIndexId());
+                dropNames.add(target.getIndexName());
                 // Emit one TDropIndexInfo per (index_id, col_unique_id,
                 // index_type). Multi-column indexes produce multiple
                 // tombstones so BE's IDG tombstone projection matches per
@@ -3133,7 +3135,7 @@ public class SchemaChangeHandler extends AlterHandler {
             long jobId = GlobalStateMgr.getCurrentState().getNextId();
             long timeoutMs = TimeUnit.SECONDS.toMillis(Config.alter_table_timeout_second);
             LakeTableDropIndexJob job = new LakeTableDropIndexJob(jobId, db.getId(), olapTable.getId(),
-                    olapTable.getName(), timeoutMs, dropIds, drops);
+                    olapTable.getName(), timeoutMs, dropIds, dropNames, drops);
             job.setComputeResource(WarehouseManager.DEFAULT_RESOURCE);
             olapTable.setState(OlapTable.OlapTableState.SCHEMA_CHANGE);
             stateSet = true;

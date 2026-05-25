@@ -40,9 +40,29 @@ import java.util.TreeSet;
  */
 public class LakeTableDropIndexJob extends LakeTableIndexFastPathJobBase {
 
-    /** Catalog-side index ids to remove (for replay idempotency). */
+    /**
+     * Catalog-side index ids to remove (for replay idempotency).
+     *
+     * <p>Important: for BITMAP / NGRAMBF / BLOOM_FILTER, {@code Index.indexId}
+     * stays {@code -1} (only GIN/VECTOR get a real id via
+     * {@code incAndGetMaxIndexId} — see
+     * {@code SchemaChangeHandler.processAddIndex}). Matching purely by id
+     * is therefore lossy when the table has multiple BITMAP / NGRAMBF
+     * indexes: a single DROP would Set-contains-(-1) match all of them.
+     * applyCatalogMutation matches by NAME first; this list is used only
+     * when {@code IndexType.isCompatibleIndex} indexes (id &gt;= 0) are
+     * involved.
+     */
     @SerializedName(value = "dropIndexIds")
     private List<Long> dropIndexIds = new ArrayList<>();
+
+    /**
+     * Catalog-side index names to remove. Required because the indexId
+     * shortcut is not unique across non-isCompatibleIndex types
+     * (BITMAP / NGRAMBF / BLOOM_FILTER all share indexId=-1).
+     */
+    @SerializedName(value = "dropIndexNames")
+    private List<String> dropIndexNames = new ArrayList<>();
 
     /** Thrift payload for BE: (index_id, col_unique_id, index_type) triples. */
     @SerializedName(value = "dropInfos")
@@ -64,15 +84,38 @@ public class LakeTableDropIndexJob extends LakeTableIndexFastPathJobBase {
     }
 
     public LakeTableDropIndexJob(long jobId, long dbId, long tableId, String tableName, long timeoutMs,
-                                 List<Long> dropIndexIds, List<TDropIndexInfo> dropInfos) {
-        this(jobId, dbId, tableId, tableName, timeoutMs, dropIndexIds, dropInfos, new ArrayList<>());
+                                 List<Long> dropIndexIds, List<String> dropIndexNames,
+                                 List<TDropIndexInfo> dropInfos) {
+        this(jobId, dbId, tableId, tableName, timeoutMs, dropIndexIds, dropIndexNames, dropInfos, new ArrayList<>());
     }
 
+    /**
+     * Backward-compat overload used by existing unit tests that constructed the
+     * job without a names list. Production callers must use the constructor
+     * with {@code dropIndexNames} populated — otherwise BITMAP / NGRAMBF /
+     * BLOOM_FILTER drops will not remove any catalog Index (their id is -1
+     * and applyCatalogMutation falls back to name matching).
+     */
+    public LakeTableDropIndexJob(long jobId, long dbId, long tableId, String tableName, long timeoutMs,
+                                 List<Long> dropIndexIds, List<TDropIndexInfo> dropInfos) {
+        this(jobId, dbId, tableId, tableName, timeoutMs, dropIndexIds, new ArrayList<>(), dropInfos, new ArrayList<>());
+    }
+
+    /**
+     * Backward-compat overload with bf columns but no names list.
+     */
     public LakeTableDropIndexJob(long jobId, long dbId, long tableId, String tableName, long timeoutMs,
                                  List<Long> dropIndexIds, List<TDropIndexInfo> dropInfos,
                                  List<String> dropBfColumns) {
+        this(jobId, dbId, tableId, tableName, timeoutMs, dropIndexIds, new ArrayList<>(), dropInfos, dropBfColumns);
+    }
+
+    public LakeTableDropIndexJob(long jobId, long dbId, long tableId, String tableName, long timeoutMs,
+                                 List<Long> dropIndexIds, List<String> dropIndexNames,
+                                 List<TDropIndexInfo> dropInfos, List<String> dropBfColumns) {
         super(jobId, JobType.SCHEMA_CHANGE, dbId, tableId, tableName, timeoutMs);
         this.dropIndexIds = new ArrayList<>(dropIndexIds);
+        this.dropIndexNames = new ArrayList<>(dropIndexNames);
         this.dropInfos = new ArrayList<>(dropInfos);
         this.dropBfColumns = new ArrayList<>(dropBfColumns);
     }
@@ -80,6 +123,7 @@ public class LakeTableDropIndexJob extends LakeTableIndexFastPathJobBase {
     protected LakeTableDropIndexJob(LakeTableDropIndexJob other) {
         super(other);
         this.dropIndexIds = other.dropIndexIds == null ? null : new ArrayList<>(other.dropIndexIds);
+        this.dropIndexNames = other.dropIndexNames == null ? null : new ArrayList<>(other.dropIndexNames);
         this.dropInfos = other.dropInfos == null ? null : new ArrayList<>(other.dropInfos);
         this.dropBfColumns = other.dropBfColumns == null ? null : new ArrayList<>(other.dropBfColumns);
     }
@@ -96,12 +140,33 @@ public class LakeTableDropIndexJob extends LakeTableIndexFastPathJobBase {
         // longer emits ngrambf blobs for the column. The table-level
         // bloom_filter_columns property stays out of band and is managed
         // separately via ALTER TABLE ... SET PROPERTIES.
+        //
+        // Match by NAME — not by indexId — because BITMAP / NGRAMBF /
+        // BLOOM_FILTER all share indexId = -1 (only GIN/VECTOR get a real
+        // id, see SchemaChangeHandler.processAddIndex). A previous
+        // implementation matched by id, which silently removed every
+        // non-isCompatibleIndex index from the table on a single DROP.
+        // Fall back to id for GIN/VECTOR (id >= 0).
         List<Index> existing = table.getIndexes();
-        Set<Long> idSet = new HashSet<>(dropIndexIds);
+        Set<String> nameSet = new HashSet<>();
+        for (String n : dropIndexNames) {
+            if (n != null) {
+                nameSet.add(n.toLowerCase());
+            }
+        }
+        Set<Long> idSet = new HashSet<>();
+        for (Long id : dropIndexIds) {
+            if (id != null && id >= 0) {
+                idSet.add(id);
+            }
+        }
         Iterator<Index> it = existing.iterator();
         while (it.hasNext()) {
             Index ix = it.next();
-            if (idSet.contains(ix.getIndexId())) {
+            String name = ix.getIndexName();
+            boolean matchByName = name != null && nameSet.contains(name.toLowerCase());
+            boolean matchById = ix.getIndexId() >= 0 && idSet.contains(ix.getIndexId());
+            if (matchByName || matchById) {
                 it.remove();
             }
         }
