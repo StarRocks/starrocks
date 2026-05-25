@@ -18,6 +18,7 @@
 
 #include <algorithm>
 
+#include "column/chunk_factory.h"
 #include "column/nullable_column.h"
 #include "exec/connector_scan_node.h"
 #include "exec/pipeline/fragment_context.h"
@@ -327,7 +328,7 @@ void ChangesDataSource::_scan_metadata_for_changes_rowsets(const TabletMetadataP
 Status ChangesDataSource::_read_next_chunk(ChunkPtr* chunk) {
     DCHECK(_chunk_iter != nullptr);
     while (true) {
-        auto data_chunk = ChunkHelper::new_chunk(_read_schema, _runtime_state->chunk_size());
+        auto data_chunk = ChunkFactory::new_chunk(_read_schema, _runtime_state->chunk_size());
         Status st = _chunk_iter->get_next(data_chunk.get());
         if (st.is_end_of_file()) {
             return Status::EndOfFile("end of changes data");
