@@ -701,12 +701,14 @@
         "be/src/exec/sorting/merge.*",
         "be/src/exec/sorting/merge_cascade.cpp",
         "be/src/exec/sorting/merge_column.cpp",
-        "be/src/exec/sorting/merge_path.*",
         "be/src/exec/sorting/sort_column.cpp",
         "be/src/exec/sorting/sort_cursor.*",
         "be/src/exec/sorting/sort_helper.h",
         "be/src/exec/sorting/sort_permute.*",
         "be/src/exec/sorting/sorting.h"
+      ],
+      "excluded_globs": [
+        "be/src/exec/sorting/merge_path.*"
       ],
       "allowed_include_prefixes": ["exec/sorting/", "exprs/", "column/", "types/", "common/", "base/", "gutil/", "gen_cpp/"],
       "forbidden_include_prefixes": ["exec/pipeline/", "exec/spill/", "exec/workgroup/", "runtime/", "storage/", "connector/", "service/", "http/"],
