@@ -529,6 +529,9 @@ Status LakeDataSource::init_tablet_reader(RuntimeState* runtime_state) {
             // physical
             _params.rowid_range_option = split_context->rowid_range;
             _params.prepared_tablet_read_state = split_context->prepared_tablet_read_state;
+            _params.prepared_segment_read_state = split_context->prepared_segment_read_state;
+            _params.prepared_rowset_index = split_context->rowset_index;
+            _params.prepared_segment_index = split_context->segment_index;
         } else {
             // logical
             _params.short_key_ranges_option = split_context->short_key_range;
@@ -1015,6 +1018,19 @@ void LakeDataSource::init_counter(RuntimeState* state) {
     _total_columns_data_page_count =
             ADD_CHILD_COUNTER(_runtime_profile, "TotalColumnsDataPageCount", TUnit::UNIT, segment_read_name);
 
+    const std::string prepared_split_name = "LakePreparedSplit";
+    ADD_COUNTER(_runtime_profile, prepared_split_name, TUnit::NONE);
+    _lake_prepared_rowsets_counter =
+            ADD_CHILD_COUNTER(_runtime_profile, "PreparedRowsets", TUnit::UNIT, prepared_split_name);
+    _lake_prepared_segments_counter =
+            ADD_CHILD_COUNTER(_runtime_profile, "PreparedSegments", TUnit::UNIT, prepared_split_name);
+    _lake_prepared_pruned_rows_counter =
+            ADD_CHILD_COUNTER(_runtime_profile, "PreparedPrunedRows", TUnit::UNIT, prepared_split_name);
+    _lake_prepared_pruned_ranges_counter =
+            ADD_CHILD_COUNTER(_runtime_profile, "PreparedPrunedRanges", TUnit::UNIT, prepared_split_name);
+    _lake_prepared_split_tasks_counter =
+            ADD_CHILD_COUNTER(_runtime_profile, "PreparedSplitTasks", TUnit::UNIT, prepared_split_name);
+
     // IO statistics
     // IOTime
     _io_timer = ADD_TIMER(_runtime_profile, "IOTime");
@@ -1118,6 +1134,11 @@ void LakeDataSource::update_counter(RuntimeState* state) {
     COUNTER_UPDATE(_bi_filtered_counter, _reader->stats().rows_bitmap_index_filtered);
     COUNTER_UPDATE(_bi_filter_timer, _reader->stats().bitmap_index_filter_timer);
     COUNTER_UPDATE(_block_seek_counter, _reader->stats().block_seek_num);
+    COUNTER_UPDATE(_lake_prepared_rowsets_counter, _reader->stats().lake_prepared_rowsets);
+    COUNTER_UPDATE(_lake_prepared_segments_counter, _reader->stats().lake_prepared_segments);
+    COUNTER_UPDATE(_lake_prepared_pruned_rows_counter, _reader->stats().lake_prepared_pruned_rows);
+    COUNTER_UPDATE(_lake_prepared_pruned_ranges_counter, _reader->stats().lake_prepared_pruned_ranges);
+    COUNTER_UPDATE(_lake_prepared_split_tasks_counter, _reader->stats().lake_prepared_split_tasks);
 
     COUNTER_UPDATE(_gin_filtered_timer, _reader->stats().gin_index_filter_ns);
     COUNTER_UPDATE(_gin_filtered_counter, _reader->stats().rows_gin_filtered);

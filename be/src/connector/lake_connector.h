@@ -206,6 +206,11 @@ private:
     RuntimeProfile::Counter* _segments_read_count = nullptr;
     RuntimeProfile::Counter* _total_columns_data_page_count = nullptr;
     RuntimeProfile::Counter* _read_pk_index_timer = nullptr;
+    RuntimeProfile::Counter* _lake_prepared_rowsets_counter = nullptr;
+    RuntimeProfile::Counter* _lake_prepared_segments_counter = nullptr;
+    RuntimeProfile::Counter* _lake_prepared_pruned_rows_counter = nullptr;
+    RuntimeProfile::Counter* _lake_prepared_pruned_ranges_counter = nullptr;
+    RuntimeProfile::Counter* _lake_prepared_split_tasks_counter = nullptr;
 
     // Page count
     RuntimeProfile::Counter* _pages_count_memory_counter = nullptr;

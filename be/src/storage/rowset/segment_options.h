@@ -27,6 +27,7 @@
 #include "storage/options.h"
 #include "storage/primitive/disjunctive_predicates.h"
 #include "storage/primitive/predicate_tree/predicate_tree.hpp"
+#include "storage/primitive/range.h"
 #include "storage/runtime_filter_predicate.h"
 #include "storage/seek_range.h"
 
@@ -48,6 +49,13 @@ struct VectorSearchOption;
 
 using ShortKeyRangeOptionPtr = std::shared_ptr<ShortKeyRangeOption>;
 using VectorSearchOptionPtr = std::shared_ptr<VectorSearchOption>;
+
+struct SegmentReadStateCache {
+    SparseRangePtr scan_range = nullptr;
+    bool scan_range_includes_page_filters = false;
+    const std::vector<std::optional<Range<rowid_t>>>* seek_range_rowid_ranges = nullptr;
+    const std::optional<Range<rowid_t>>* tablet_rowid_range = nullptr;
+};
 
 class SegmentReadOptions {
 public:
@@ -101,6 +109,7 @@ public:
     /// A segment may be divided into multiple split to scan concurrently.
     bool is_first_split_of_segment = true;
     SparseRangePtr rowid_range_option = nullptr;
+    SegmentReadStateCache read_state_cache;
     std::vector<ShortKeyRangeOptionPtr> short_key_ranges;
 
     RuntimeScanRangePruner runtime_range_pruner;

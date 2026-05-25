@@ -14,6 +14,8 @@
 
 #pragma once
 
+#include <cstddef>
+#include <limits>
 #include <memory>
 #include <string>
 #include <unordered_map>
@@ -35,6 +37,7 @@ class RuntimeProfile;
 class RuntimeState;
 
 namespace lake {
+struct PreparedSegmentReadState;
 struct PreparedTabletReadState;
 } // namespace lake
 
@@ -94,6 +97,9 @@ struct TabletReaderParams {
     RowidRangeOptionPtr rowid_range_option = nullptr;
     ShortKeyRangesOptionPtr short_key_ranges_option = nullptr;
     std::shared_ptr<lake::PreparedTabletReadState> prepared_tablet_read_state = nullptr;
+    std::shared_ptr<lake::PreparedSegmentReadState> prepared_segment_read_state = nullptr;
+    size_t prepared_rowset_index = std::numeric_limits<size_t>::max();
+    size_t prepared_segment_index = std::numeric_limits<size_t>::max();
 
     bool sorted_by_keys_per_tablet = false;
     RuntimeScanRangePruner runtime_range_pruner;
