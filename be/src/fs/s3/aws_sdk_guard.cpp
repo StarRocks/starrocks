@@ -16,8 +16,8 @@
 #include "fs/s3/aws_sdk_guard.h"
 
 #include <aws/core/utils/logging/LogLevel.h>
-#include <boost/algorithm/string.hpp>
 
+#include <boost/algorithm/string.hpp>
 #include <iostream>
 #include <memory>
 
