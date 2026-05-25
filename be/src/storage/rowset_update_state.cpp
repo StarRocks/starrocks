@@ -795,17 +795,18 @@ Status RowsetUpdateState::apply(Tablet* tablet, const TabletSchemaCSPtr& tablet_
     SegmentFileMark segment_file_mark{rowset->rowset_path(), rowset->rowset_id().to_string()};
     if (txn_meta.has_auto_increment_partial_update_column_id() &&
         !_auto_increment_partial_update_states[segment_id].skip_rewrite) {
+        MutableColumns* partial_update_columns =
+                _partial_update_states.size() != 0 ? &_partial_update_states[segment_id].write_columns : nullptr;
         RETURN_IF_ERROR(SegmentRewriter::rewrite_auto_increment(
                 src_path, dest_path, _tablet_schema, _auto_increment_partial_update_states[segment_id], read_column_ids,
-                _partial_update_states.size() != 0 ? &_partial_update_states[segment_id].write_columns : nullptr,
-                segment_file_mark));
+                partial_update_columns, segment_file_mark));
     } else if (_partial_update_states.size() != 0) {
         FooterPointerPB partial_rowset_footer = txn_meta.partial_rowset_footers(segment_id);
         FileInfo src{.path = src_path};
         FileInfo dest{.path = dest_path};
-        RETURN_IF_ERROR(SegmentRewriter::rewrite_partial_update(
-                src, &dest, _tablet_schema, read_column_ids, _partial_update_states[segment_id].write_columns,
-                segment_id, partial_rowset_footer, segment_file_mark));
+        RETURN_IF_ERROR(SegmentRewriter::rewrite_partial_update(src, &dest, _tablet_schema, read_column_ids,
+                                                                _partial_update_states[segment_id].write_columns,
+                                                                segment_id, partial_rowset_footer, segment_file_mark));
     }
     int64_t t_rewrite_end = MonotonicMillis();
 
