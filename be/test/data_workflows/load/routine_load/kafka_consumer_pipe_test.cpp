@@ -62,7 +62,7 @@ TEST_F(KafkaConsumerPipeTest, append_read) {
     char row_delimiter = '\n';
     st = k_pipe.append_with_row_delimiter(msg1.c_str(), msg1.length(), row_delimiter);
     ASSERT_TRUE(st.ok());
-    st = k_pipe.append_with_row_delimiter(msg2.c_str(), msg2.length(), row_delimiter, 1, 2);
+    st = k_pipe.append_with_row_delimiter(msg2.c_str(), msg2.length(), row_delimiter);
     ASSERT_TRUE(st.ok());
     st = k_pipe.finish();
     ASSERT_TRUE(st.ok());
@@ -92,7 +92,14 @@ TEST_F(KafkaConsumerPipeTest, append_read_json) {
     char row_delimiter = '\n';
     st = k_pipe.append_json(msg1.c_str(), msg1.length(), row_delimiter);
     ASSERT_TRUE(st.ok());
-    st = k_pipe.append_json(msg2.c_str(), msg2.length(), row_delimiter, 1, 2);
+    StreamMessageMeta src_meta(ByteBufferMetaType::KAFKA);
+    src_meta.set_topic("t");
+    src_meta.set_partition(1);
+    src_meta.set_offset(2);
+    src_meta.set_timestamp(99);
+    src_meta.set_key("kk");
+    src_meta.add_header("h1", "v1");
+    st = k_pipe.append_json(msg2.c_str(), msg2.length(), row_delimiter, &src_meta);
     ASSERT_TRUE(st.ok());
     st = k_pipe.finish();
     ASSERT_TRUE(st.ok());
@@ -107,9 +114,16 @@ TEST_F(KafkaConsumerPipeTest, append_read_json) {
     auto buf2 = buf_st2.value();
     ByteBufferMeta* meta = buf2->meta();
     ASSERT_EQ(ByteBufferMetaType::KAFKA, meta->type());
-    KafkaByteBufferMeta* kafka_meta = static_cast<KafkaByteBufferMeta*>(meta);
+    StreamMessageMeta* kafka_meta = static_cast<StreamMessageMeta*>(meta);
+    ASSERT_EQ("t", kafka_meta->topic());
     ASSERT_EQ(1, kafka_meta->partition());
     ASSERT_EQ(2, kafka_meta->offset());
+    ASSERT_EQ(99, kafka_meta->timestamp());
+    ASSERT_TRUE(kafka_meta->has_key());
+    ASSERT_EQ("kk", kafka_meta->key());
+    ASSERT_EQ(1, kafka_meta->headers().size());
+    ASSERT_EQ("h1", kafka_meta->headers()[0].first);
+    ASSERT_EQ("v1", kafka_meta->headers()[0].second);
 }
 
 } // namespace starrocks

@@ -43,8 +43,10 @@ import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.KafkaUtil;
 import com.starrocks.common.util.UUIDUtil;
+import com.starrocks.load.Load;
 import com.starrocks.load.streamload.StreamLoadTask;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.ImportColumnDesc;
 import com.starrocks.thrift.TExecPlanFragmentParams;
 import com.starrocks.thrift.TFileFormatType;
 import com.starrocks.thrift.TKafkaLoadInfo;
@@ -58,6 +60,7 @@ import org.apache.logging.log4j.Logger;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 import static com.starrocks.common.ErrorCode.ERR_ROUTINE_LOAD_OFFSET_INVALID;
@@ -192,6 +195,15 @@ public class KafkaTaskInfo extends RoutineLoadTaskInfo {
         if ((routineLoadJob).getConfluentSchemaRegistryUrl() != null) {
             tKafkaLoadInfo.setConfluent_schema_registry_url((routineLoadJob).getConfluentSchemaRegistryUrl());
         }
+        // Attach per-message source metadata only when the COLUMNS clause references a metadata column;
+        // otherwise the BE leaves the buffer metadata-free and reads every field from the payload.
+        // key/headers are gated more narrowly.
+        List<ImportColumnDesc> columnDescs = routineLoadJob.getColumnDescs();
+        Set<Load.StreamMetaKind> metaKinds = Load.collectStreamMetaKinds(columnDescs);
+        tKafkaLoadInfo.setNeed_source_metadata(!metaKinds.isEmpty());
+        tKafkaLoadInfo.setNeed_message_key(metaKinds.contains(Load.StreamMetaKind.KEY));
+        tKafkaLoadInfo.setNeed_message_headers(
+                metaKinds.contains(Load.StreamMetaKind.HEADER) || metaKinds.contains(Load.StreamMetaKind.HEADERS));
         tRoutineLoadTask.setKafka_load_info(tKafkaLoadInfo);
         tRoutineLoadTask.setType(TLoadSourceType.KAFKA);
         tRoutineLoadTask.setParams(plan(routineLoadJob));

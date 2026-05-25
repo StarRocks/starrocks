@@ -30,6 +30,7 @@
 #include "compute_env/load/stream_load_pipe.h"
 #include "compute_env/load_path/load_path_state_helper.h"
 #include "exec/file_scanner/json_scanner.h"
+#include "exec/file_scanner/stream_source_meta.h"
 #include "exprs/cast_expr.h"
 #include "exprs/column_ref.h"
 #include "formats/avro/nullable_column.h"
@@ -160,6 +161,8 @@ Status AvroScanner::open() {
     }
     ++_counter->num_files_read;
 
+    _meta_cols = build_stream_source_meta_columns(_scan_range.params.stream_source_meta_columns);
+    int column_index = 0;
     for (size_t i = 0; i < _src_slot_descriptors.size(); ++i) {
         const auto& desc = _src_slot_descriptors[i];
         if (desc == nullptr) {
@@ -169,6 +172,13 @@ Status AvroScanner::open() {
         // Remember the intermediate avro type per slot so the no-jsonpath path can dispatch
         // _construct_column on the source column's type rather than the destination type.
         _slot_id_to_avro_type.emplace(desc->id(), _avro_types[i]);
+        // A hidden metadata slot is filled from the message meta, not the payload. The by-name null-fill
+        // path iterates chunk columns, so key its descriptor by chunk column index (the append order in
+        // _create_src_chunk, which skips null slots just like this loop).
+        if (auto m = _meta_cols.find(desc->id()); m != _meta_cols.end()) {
+            _meta_col_by_index.emplace(column_index, m->second);
+        }
+        column_index++;
     }
     _init_data_idx_to_slot_once = false;
     return Status::OK();
@@ -205,20 +215,32 @@ void AvroScanner::_report_error(const std::string& line, const std::string& err_
     LoadPathStateHelper::append_error_msg_to_file(_state, line, err_msg);
 }
 
-Status AvroScanner::_construct_row(const avro_value_t& avro_value, Chunk* chunk) {
+Status AvroScanner::_construct_row(const avro_value_t& avro_value, Chunk* chunk, const StreamMessageMeta* meta) {
     size_t slot_size = _src_slot_descriptors.size();
     size_t jsonpath_size = _json_paths.size();
+    // Hidden metadata columns carry no jsonpath, so they are transparent to the positional
+    // slot->jsonpath mapping: a jsonpath maps to the i-th non-metadata slot. This keeps payload columns
+    // aligned even when a metadata column sits before jsonpath-backed columns.
+    size_t meta_count = 0;
     for (size_t i = 0; i < slot_size; i++) {
         if (_src_slot_descriptors[i] == nullptr) {
             continue;
         }
         auto column = down_cast<NullableColumn*>(chunk->get_column_raw_ptr_by_slot_id(_src_slot_descriptors[i]->id()));
-        if (UNLIKELY(i >= jsonpath_size)) {
+        // Hidden source-metadata slots are filled from the message meta (by slot id), not the payload,
+        // before the jsonpath extraction below.
+        if (auto it = _meta_cols.find(_src_slot_descriptors[i]->id()); UNLIKELY(it != _meta_cols.end())) {
+            RETURN_IF_ERROR(fill_stream_source_meta_column(it->second.kind, it->second.key, meta, column));
+            meta_count++;
+            continue;
+        }
+        size_t jp = i - meta_count;
+        if (UNLIKELY(jp >= jsonpath_size)) {
             column->append_nulls(1);
             continue;
         }
         avro_value_t output_value;
-        auto st = _extract_field(avro_value, _json_paths[i], &output_value);
+        auto st = _extract_field(avro_value, _json_paths[jp], &output_value);
         if (LIKELY(st.ok())) {
             // Dispatch on the intermediate avro type (which matches the source column created in
             // _create_src_chunk), not the destination type. Otherwise a complex column whose
@@ -241,6 +263,9 @@ Status AvroScanner::_parse_avro(Chunk* chunk, const std::shared_ptr<SequentialFi
     DCHECK_EQ(0, chunk->num_rows());
     for (size_t num_rows = chunk->num_rows(); num_rows < capacity; /**/) {
         avro_value_t avro_value;
+        // Routine-load source-metadata for this message (null for non-routine-load); read from the pipe
+        // buffer below, or injected by the test in BE_TEST.
+        const StreamMessageMeta* meta = nullptr;
 #ifdef BE_TEST
         // In general, we want to test component injection schemastr.
         avro_schema_error_t error;
@@ -273,6 +298,7 @@ Status AvroScanner::_parse_avro(Chunk* chunk, const std::shared_ptr<SequentialFi
             return Status::InternalError(err_msg);
         }
         free(avro_as_json);
+        meta = _test_meta;
 #else
         const uint8_t* data{};
         size_t length = 0;
@@ -284,6 +310,7 @@ Status AvroScanner::_parse_avro(Chunk* chunk, const std::shared_ptr<SequentialFi
         }
         data = reinterpret_cast<uint8_t*>(_parser_buf->ptr);
         length = _parser_buf->remaining();
+        meta = stream_source_meta_of(_parser_buf);
         serdes_schema_t* schema;
         serdes_err_t err =
                 serdes_deserialize_avro(_serdes, &avro_value, &schema, data, length, _err_buf, sizeof(_err_buf));
@@ -299,7 +326,7 @@ Status AvroScanner::_parse_avro(Chunk* chunk, const std::shared_ptr<SequentialFi
         size_t chunk_row_num = chunk->num_rows();
         Status st = Status::OK();
         if (!_json_paths.empty()) {
-            st = _construct_row(avro_value, chunk);
+            st = _construct_row(avro_value, chunk, meta);
         } else {
             if (!_init_data_idx_to_slot_once) {
                 size_t element_count;
@@ -320,7 +347,7 @@ Status AvroScanner::_parse_avro(Chunk* chunk, const std::shared_ptr<SequentialFi
 
                 _init_data_idx_to_slot_once = true;
             }
-            st = _construct_row_without_jsonpath(avro_value, chunk);
+            st = _construct_row_without_jsonpath(avro_value, chunk, meta);
         }
         if (!st.ok()) {
             if (_counter->num_rows_filtered++ < MAX_ERROR_LINES_IN_FILE) {
@@ -338,7 +365,8 @@ Status AvroScanner::_parse_avro(Chunk* chunk, const std::shared_ptr<SequentialFi
     return Status::OK();
 }
 
-Status AvroScanner::_construct_row_without_jsonpath(const avro_value_t& avro_value, Chunk* chunk) {
+Status AvroScanner::_construct_row_without_jsonpath(const avro_value_t& avro_value, Chunk* chunk,
+                                                    const StreamMessageMeta* meta) {
     _found_columns.assign(chunk->num_columns(), false);
     size_t element_count = _data_idx_to_fieldname.size();
     avro_value_t element_value;
@@ -386,7 +414,13 @@ Status AvroScanner::_construct_row_without_jsonpath(const avro_value_t& avro_val
     for (int i = 0; i < _found_columns.size(); i++) {
         if (UNLIKELY(!_found_columns[i])) {
             auto* column = chunk->get_column_raw_ptr_by_index(i);
-            column->append_nulls(1);
+            // A hidden metadata slot is never a payload field, so it always lands here; fill it from the
+            // message meta (NULL when the buffer carries none) instead of a plain null.
+            if (auto it = _meta_col_by_index.find(i); it != _meta_col_by_index.end()) {
+                RETURN_IF_ERROR(fill_stream_source_meta_column(it->second.kind, it->second.key, meta, column));
+            } else {
+                column->append_nulls(1);
+            }
         }
     }
     return Status::OK();

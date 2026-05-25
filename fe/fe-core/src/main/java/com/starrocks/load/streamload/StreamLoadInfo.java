@@ -90,6 +90,9 @@ public class StreamLoadInfo {
     private int loadParallelRequestNum = 0;
     private boolean enableReplicatedStorage = false;
     private String confluentSchemaRegistryUrl;
+    // "KAFKA"/"PULSAR" for routine load, null otherwise. Enables (and scopes) the source-metadata
+    // functions in the COLUMNS clause; null means a metadata function is rejected as unknown.
+    private String routineLoadSourceType;
     private long logRejectedRecordNum = 0;
     private TPartialUpdateMode partialUpdateMode = TPartialUpdateMode.ROW_MODE;
     private ComputeResource computeResource = WarehouseManager.DEFAULT_RESOURCE;
@@ -123,6 +126,10 @@ public class StreamLoadInfo {
 
     public void setConfluentSchemaRegistryUrl(String confluentSchemaRegistryUrl) {
         this.confluentSchemaRegistryUrl = confluentSchemaRegistryUrl;
+    }
+
+    public String getRoutineLoadSourceType() {
+        return routineLoadSourceType;
     }
 
     public TUniqueId getId() {
@@ -477,6 +484,7 @@ public class StreamLoadInfo {
         enclose = routineLoadJob.getEnclose();
         escape = routineLoadJob.getEscape();
         computeResource = routineLoadJob.getComputeResource();
+        routineLoadSourceType = routineLoadJob.getDataSourceTypeName();
     }
 
     // used for stream load

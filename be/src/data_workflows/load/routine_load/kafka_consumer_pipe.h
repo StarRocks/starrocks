@@ -54,39 +54,30 @@ public:
 
     ~KafkaConsumerPipe() override = default;
 
+    // CSV path: one buffer may hold many rows separated by row_delimiter. No source metadata is
+    // carried here (a CSV message can expand to N rows, so message-level meta is ambiguous).
     Status append_with_row_delimiter(const char* data, size_t size, char row_delimiter) {
-        return append_with_row_delimiter(data, size, row_delimiter, -1, -1);
-    }
-
-    Status append_with_row_delimiter(const char* data, size_t size, char row_delimiter, int32_t partition,
-                                     int64_t offset) {
-        // TODO support to add partition and offset to buffer meta
         Status st = append(data, size);
         if (!st.ok()) {
             return st;
         }
-
         // append the row delimiter
         st = append(&row_delimiter, 1);
         return st;
     }
 
-    Status append_json(const char* data, size_t size, char row_delimiter) {
-        return append_json(data, size, row_delimiter, -1, -1);
-    }
-
-    Status append_json(const char* data, size_t size, char row_delimiter, int32_t partition, int64_t offset) {
-        bool need_meta = partition >= 0 && offset >= 0;
+    // JSON/Avro path: exactly one message per buffer (no row delimiter) so the scanner can decode each
+    // message individually. When `meta` is non-null it is copied onto the buffer; the scanner reads it
+    // to fill metadata columns and to stamp source context into error logs. Its source type
+    // (KAFKA/PULSAR) selects the buffer meta type. row_delimiter is unused on this path.
+    Status append_json(const char* data, size_t size, char /*row_delimiter*/, const StreamMessageMeta* meta = nullptr) {
+        ByteBufferMetaType meta_type = (meta != nullptr) ? meta->type() : ByteBufferMetaType::NONE;
         // For efficiency reasons, simdjson requires a string with a few bytes (simdjson::SIMDJSON_PADDING) at the end.
-        ASSIGN_OR_RETURN(auto buf, ByteBuffer::allocate_with_tracker(
-                                           size, simdjson::SIMDJSON_PADDING,
-                                           need_meta ? ByteBufferMetaType::KAFKA : ByteBufferMetaType::NONE));
+        ASSIGN_OR_RETURN(auto buf, ByteBuffer::allocate_with_tracker(size, simdjson::SIMDJSON_PADDING, meta_type));
         buf->put_bytes(data, size);
         buf->flip_to_read();
-        if (need_meta) {
-            KafkaByteBufferMeta* meta = static_cast<KafkaByteBufferMeta*>(buf->meta());
-            meta->set_partition(partition);
-            meta->set_offset(offset);
+        if (meta != nullptr) {
+            RETURN_IF_ERROR(buf->meta()->copy_from(const_cast<StreamMessageMeta*>(meta)));
         }
         return append(std::move(buf));
     }
