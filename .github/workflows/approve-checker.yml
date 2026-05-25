@@ -98,26 +98,38 @@ jobs:
           fi
 
           # Rule 2: all changed files match test pattern
+          # Fail-closed: if the metadata query errors out, do NOT apply skip —
+          # a transient API failure must not bypass the GLOBAL REVIEW gate.
           if [ "$skip" = "false" ]; then
-            files=$(gh pr diff "$PR" -R "$REPO" --name-only 2>/dev/null || true)
-            total=$(echo "$files" | grep -cv '^$' || true)
-            non_test=$(echo "$files" | grep -v '^$' | grep -cvE "$TEST_PATTERN" || true)
-            if [ "$total" -gt 0 ] && [ "$non_test" -eq 0 ]; then
-              skip=true
-              reason="all $total changed files are tests"
+            files=$(gh pr diff "$PR" -R "$REPO" --name-only 2>/dev/null)
+            query_status=$?
+            if [ "$query_status" -ne 0 ]; then
+              echo "WARN: 'gh pr diff' failed (exit=$query_status); not applying test-only rule"
+            else
+              total=$(echo "$files" | grep -cv '^$' || true)
+              non_test=$(echo "$files" | grep -v '^$' | grep -cvE "$TEST_PATTERN" || true)
+              if [ "$total" -gt 0 ] && [ "$non_test" -eq 0 ]; then
+                skip=true
+                reason="all $total changed files are tests"
+              fi
             fi
           fi
 
           # Rule 3: [BugFix] with non-test add+del < threshold
           # NOTE: jq's regex needs \\. for a literal dot (the pattern must match TEST_PATTERN above).
+          # Fail-closed: if the metadata query errors out or returns empty, do NOT apply skip —
+          # otherwise a transient gh API failure would silently bypass the GLOBAL REVIEW gate.
           if [ "$skip" = "false" ] && echo "$TITLE" | grep -qE '^\[BugFix\]'; then
             non_test_lines=$(gh pr view "$PR" -R "$REPO" --json files --jq '
               [.files[]
                | select(.path | test("(Test\\.(java|kt)$|_test\\.(cpp|cc|h)$|/test/|^test/|^fe-test/|^regression-test/|/__test__/)") | not)
                | (.additions + .deletions)]
               | add // 0
-            ' 2>/dev/null || echo 0)
-            if [ "${non_test_lines:-0}" -lt "$BUGFIX_LINE_THRESHOLD" ]; then
+            ' 2>/dev/null)
+            query_status=$?
+            if [ "$query_status" -ne 0 ] || [ -z "$non_test_lines" ]; then
+              echo "WARN: 'gh pr view --json files' failed (exit=$query_status, output='$non_test_lines'); not applying [BugFix] rule"
+            elif [ "$non_test_lines" -lt "$BUGFIX_LINE_THRESHOLD" ]; then
               skip=true
               reason="[BugFix] non-test lines=$non_test_lines < $BUGFIX_LINE_THRESHOLD"
             fi
