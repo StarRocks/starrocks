@@ -569,6 +569,38 @@ void set_json_fast_path_disabled_for_test(FunctionContext* ctx, bool disabled) {
 // Fused simdjson fast path for get_json_*(VARCHAR, VARCHAR).
 // =====================================================================================
 
+// Resolve one object field by UNESCAPED key, mirroring `.get()` semantics:
+// returns false on success (and assigns the field value to `out`), true on miss/error.
+//
+// simdjson's find_field_unordered compares the raw, still-escaped key token byte for
+// byte (raw_json_string::unsafe_is_equal -> memcmp), so a document key that carries a JSON
+// unicode/backslash escape never matches the already-unescaped path segment. The legacy
+// parse_json->VPack route compares unescaped keys, so we iterate the object and compare the unescaped key to stay
+// byte-identical. field_unescaped_key_safe returns the raw token view for the common
+// escape-free key (no copy) and only unescapes into `key_buf` when the key contains a
+// backslash, so escape-free payloads keep the fast path's cost.
+template <typename Container>
+static bool fused_resolve_field(Container&& container, std::string_view seg, faststring* key_buf,
+                                simdjson::ondemand::value& out) {
+    simdjson::ondemand::object obj;
+    if (container.get_object().get(obj)) {
+        return true; // not an object / parse error -> miss
+    }
+    for (auto field : obj) {
+        if (field.error()) {
+            return true;
+        }
+        auto key = field_unescaped_key_safe(field, key_buf);
+        if (key.error()) {
+            return true;
+        }
+        if (key.value() == seg) {
+            return field.value().get(out); // false == success
+        }
+    }
+    return true; // key absent
+}
+
 template <LogicalType ResultType>
 JsonFunctions::ExtractResult JsonFunctions::_fused_extract_one(const Slice& raw, const NativeJsonState* fs,
                                                                JsonGetThreadState* ts, ColumnBuilder<ResultType>& out) {
@@ -616,7 +648,7 @@ JsonFunctions::ExtractResult JsonFunctions::_fused_extract_one(const Slice& raw,
     } else {
         const auto& m0 = fs->fast_moves[0];
         if (m0.kind == JsonMoveStep::Kind::Field) {
-            if (doc.find_field_unordered(m0.field).get(cur)) {
+            if (fused_resolve_field(doc, m0.field, &ts->key_scratch, cur)) {
                 out.append_null();
                 return ExtractResult::Handled;
             }
@@ -630,7 +662,7 @@ JsonFunctions::ExtractResult JsonFunctions::_fused_extract_one(const Slice& raw,
         for (size_t i = 1; i < fs->fast_moves.size(); ++i) {
             const auto& m = fs->fast_moves[i];
             if (m.kind == JsonMoveStep::Kind::Field) {
-                if (cur.find_field_unordered(m.field).get(cur)) {
+                if (fused_resolve_field(cur, m.field, &ts->key_scratch, cur)) {
                     out.append_null();
                     return ExtractResult::Handled;
                 }
