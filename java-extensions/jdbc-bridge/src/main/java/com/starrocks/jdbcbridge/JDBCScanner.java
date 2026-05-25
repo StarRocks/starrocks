@@ -66,10 +66,12 @@ public class JDBCScanner {
     private List<String> resultColumnClassNames;
     private List<Boolean> postgresTimeWithTimezoneColumns;
     private List<Boolean> postgresTimestampWithTimezoneColumns;
+    private List<Boolean> bigQueryTimestampColumns;
     private List<Object[]> resultChunk;
     private int resultNumRows = 0;
     private final boolean isOracleDriver;
     private final boolean isPostgresDriver;
+    private final boolean isBigQueryDriver;
     private final ZoneId queryTimeZone;
     private ZoneId oracleSessionTimeZone;
     ClassLoader classLoader;
@@ -79,6 +81,8 @@ public class JDBCScanner {
         this.scanContext = scanContext;
         this.isOracleDriver = scanContext.getDriverClassName().toLowerCase(Locale.ROOT).contains("oracle");
         this.isPostgresDriver = scanContext.getDriverClassName().toLowerCase(Locale.ROOT).contains("postgresql");
+        String driverClassLower = scanContext.getDriverClassName().toLowerCase(Locale.ROOT);
+        this.isBigQueryDriver = driverClassLower.contains("bigquery") || driverClassLower.contains("googlebigquery");
         this.queryTimeZone = resolveQueryTimeZone(scanContext.getQueryTimeZone());
     }
 
@@ -129,6 +133,7 @@ public class JDBCScanner {
         resultColumnClassNames = new ArrayList<>(resultSetMetaData.getColumnCount());
         postgresTimeWithTimezoneColumns = new ArrayList<>(resultSetMetaData.getColumnCount());
         postgresTimestampWithTimezoneColumns = new ArrayList<>(resultSetMetaData.getColumnCount());
+        bigQueryTimestampColumns = new ArrayList<>(resultSetMetaData.getColumnCount());
         resultChunk = new ArrayList<>(resultSetMetaData.getColumnCount());
         for (int i = 1; i <= resultSetMetaData.getColumnCount(); i++) {
             String typeName = resultSetMetaData.getColumnTypeName(i);
@@ -137,6 +142,8 @@ public class JDBCScanner {
             boolean isPostgresTimestampWithTimezone = isPostgresTimestampWithTimezoneTypeName(typeName);
             postgresTimeWithTimezoneColumns.add(isPostgresTimeWithTimezone);
             postgresTimestampWithTimezoneColumns.add(isPostgresTimestampWithTimezone);
+            // BigQuery TIMESTAMP is UTC epoch; DATETIME is civil time — no conversion needed for DATETIME.
+            bigQueryTimestampColumns.add(isBigQueryDriver && "TIMESTAMP".equalsIgnoreCase(typeName));
             // Keep the original className for type checking (getResultColumnClassNames),
             // but use the appropriate array type for data storage.
             resultColumnClassNames.add(className);
@@ -237,6 +244,14 @@ public class JDBCScanner {
                 && postgresTimeWithTimezoneColumns.get(columnIndex);
     }
 
+    private boolean shouldConvertBigQueryTimestampColumn(int columnIndex) {
+        if (!isBigQueryDriver || queryTimeZone == null || bigQueryTimestampColumns == null) {
+            return false;
+        }
+        return columnIndex >= 0 && columnIndex < bigQueryTimestampColumns.size()
+                && bigQueryTimestampColumns.get(columnIndex);
+    }
+
     private static final Map<String, Class> ENGINE_SPECIFIC_CLASS_MAPPING = new HashMap<String, Class>() {{
             put("com.clickhouse.data.value.UnsignedByte", Short.class);
             put("com.clickhouse.data.value.UnsignedShort", Integer.class);
@@ -296,6 +311,11 @@ public class JDBCScanner {
                     if (shouldConvertPostgresTimestampWithTimezoneColumn(i)) {
                         Timestamp timestampValue =
                                 resultObject instanceof Timestamp ? (Timestamp) resultObject : resultSet.getTimestamp(i + 1);
+                        dataColumn[resultNumRows] = convertPostgresTimestampWithTimezoneValue(timestampValue);
+                    } else if (shouldConvertBigQueryTimestampColumn(i)) {
+                        Timestamp timestampValue =
+                                resultObject instanceof Timestamp ? (Timestamp) resultObject : resultSet.getTimestamp(i + 1);
+                        // BigQuery TIMESTAMP is UTC; reuse the same UTC→queryTZ adjustment.
                         dataColumn[resultNumRows] = convertPostgresTimestampWithTimezoneValue(timestampValue);
                     } else {
                         dataColumn[resultNumRows] = resultObject;
@@ -362,7 +382,8 @@ public class JDBCScanner {
             .toFormatter();
 
     private ZoneId resolveQueryTimeZone(String queryTimeZoneValue) {
-        if ((!isOracleDriver && !isPostgresDriver) || queryTimeZoneValue == null || queryTimeZoneValue.isEmpty()) {
+        if ((!isOracleDriver && !isPostgresDriver && !isBigQueryDriver)
+                || queryTimeZoneValue == null || queryTimeZoneValue.isEmpty()) {
             return null;
         }
         try {
