@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "exec/pipeline/schedule/observer.h"
+#include "compute_env/pipeline/observer.h"
 
 #include <unistd.h>
 
