@@ -85,7 +85,7 @@ public class AnalyticWindowBoundary implements ParseNode {
 
     // Analyzed RANGE offset boundary expression, i.e. ORDER BY key +/- offset.
     // Only set for RANGE PRECEDING/FOLLOWING after window standardization.
-    private Expr analyzedRangeBoundaryExpr;
+    private final Expr analyzedRangeBoundaryExpr;
 
     // The offset value. Set during analysis after evaluating expr_. Integral valued
     // for ROWS windows.
@@ -103,10 +103,6 @@ public class AnalyticWindowBoundary implements ParseNode {
         return analyzedRangeBoundaryExpr;
     }
 
-    public void setAnalyzedRangeBoundaryExpr(Expr analyzedRangeBoundaryExpr) {
-        this.analyzedRangeBoundaryExpr = analyzedRangeBoundaryExpr;
-    }
-
     public AnalyticWindowBoundary(BoundaryType boundaryType, Expr e) {
         this(boundaryType, e, null);
     }
@@ -117,6 +113,11 @@ public class AnalyticWindowBoundary implements ParseNode {
     }
 
     public AnalyticWindowBoundary(BoundaryType boundaryType, Expr e, BigDecimal offsetValue, NodePosition pos) {
+        this(boundaryType, e, offsetValue, pos, null);
+    }
+
+    private AnalyticWindowBoundary(BoundaryType boundaryType, Expr e, BigDecimal offsetValue, NodePosition pos,
+                                   Expr analyzedRangeBoundaryExpr) {
         Preconditions.checkState(
                 (boundaryType.isOffset() && e != null)
                         || (!boundaryType.isOffset() && e == null));
@@ -124,6 +125,12 @@ public class AnalyticWindowBoundary implements ParseNode {
         this.boundaryType = boundaryType;
         this.expr = e;
         this.offsetValue = offsetValue;
+        this.analyzedRangeBoundaryExpr = analyzedRangeBoundaryExpr;
+    }
+
+    public AnalyticWindowBoundary withAnalyzedRangeBoundaryExpr(Expr analyzedRangeBoundaryExpr) {
+        return new AnalyticWindowBoundary(boundaryType, expr != null ? expr.clone() : null, offsetValue, pos,
+                analyzedRangeBoundaryExpr != null ? analyzedRangeBoundaryExpr.clone() : null);
     }
 
     @Override
@@ -157,22 +164,17 @@ public class AnalyticWindowBoundary implements ParseNode {
     }
 
     public AnalyticWindowBoundary converse() {
-        AnalyticWindowBoundary result = new AnalyticWindowBoundary(boundaryType.converse(),
-                (expr != null) ? expr.clone() : null);
-        result.offsetValue = offsetValue;
         // Window reversal flips both ORDER BY direction and PRECEDING/FOLLOWING, so the analyzed
         // RANGE boundary value remains equivalent. For example, ASC PRECEDING and DESC FOLLOWING
         // both use order_key - offset.
-        result.analyzedRangeBoundaryExpr = analyzedRangeBoundaryExpr != null ? analyzedRangeBoundaryExpr.clone() : null;
-        return result;
+        return new AnalyticWindowBoundary(boundaryType.converse(), expr != null ? expr.clone() : null, offsetValue,
+                pos, analyzedRangeBoundaryExpr != null ? analyzedRangeBoundaryExpr.clone() : null);
     }
 
     @Override
     public AnalyticWindowBoundary clone() {
-        AnalyticWindowBoundary result =
-                new AnalyticWindowBoundary(boundaryType, expr != null ? expr.clone() : null, offsetValue);
-        result.analyzedRangeBoundaryExpr = analyzedRangeBoundaryExpr != null ? analyzedRangeBoundaryExpr.clone() : null;
-        return result;
+        return new AnalyticWindowBoundary(boundaryType, expr != null ? expr.clone() : null, offsetValue,
+                pos, analyzedRangeBoundaryExpr != null ? analyzedRangeBoundaryExpr.clone() : null);
     }
 
     public void setOffsetValue(BigDecimal offsetValue) {

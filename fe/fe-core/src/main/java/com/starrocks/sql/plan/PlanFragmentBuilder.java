@@ -3526,8 +3526,7 @@ public class PlanFragmentBuilder {
 
             AnalyticWindow analyticWindow = node.getAnalyticWindow();
             if (needBindRangeBoundaryExprsToPhysicalOrderBy(analyticWindow)) {
-                analyticWindow = analyticWindow.clone();
-                bindRangeBoundaryExprsToPhysicalOrderBy(analyticWindow, orderByElements);
+                analyticWindow = bindRangeBoundaryExprsToPhysicalOrderBy(analyticWindow, orderByElements);
             }
 
             AnalyticEvalNode analyticEvalNode = new AnalyticEvalNode(
@@ -3573,17 +3572,21 @@ public class PlanFragmentBuilder {
                     analyticWindow.getRightBoundary().getBoundaryType().isOffset();
         }
 
-        private void bindRangeBoundaryExprsToPhysicalOrderBy(AnalyticWindow analyticWindow,
-                                                             List<OrderByElement> orderByElements) {
+        private AnalyticWindow bindRangeBoundaryExprsToPhysicalOrderBy(AnalyticWindow analyticWindow,
+                                                                       List<OrderByElement> orderByElements) {
             Preconditions.checkState(!orderByElements.isEmpty(), "Range window frame requires order by columns");
             Expr orderByExpr = orderByElements.get(0).getExpr();
-            bindRangeBoundaryExprToPhysicalOrderBy(analyticWindow.getLeftBoundary(), orderByExpr);
-            bindRangeBoundaryExprToPhysicalOrderBy(analyticWindow.getRightBoundary(), orderByExpr);
+            AnalyticWindowBoundary leftBoundary =
+                    bindRangeBoundaryExprToPhysicalOrderBy(analyticWindow.getLeftBoundary(), orderByExpr);
+            AnalyticWindowBoundary rightBoundary =
+                    bindRangeBoundaryExprToPhysicalOrderBy(analyticWindow.getRightBoundary(), orderByExpr);
+            return new AnalyticWindow(analyticWindow.getType(), leftBoundary, rightBoundary, analyticWindow.getPos());
         }
 
-        private void bindRangeBoundaryExprToPhysicalOrderBy(AnalyticWindowBoundary boundary, Expr orderByExpr) {
+        private AnalyticWindowBoundary bindRangeBoundaryExprToPhysicalOrderBy(AnalyticWindowBoundary boundary,
+                                                                              Expr orderByExpr) {
             if (boundary == null || !boundary.getBoundaryType().isOffset()) {
-                return;
+                return boundary;
             }
             Expr analyzedRangeBoundaryExpr = Preconditions.checkNotNull(boundary.getAnalyzedRangeBoundaryExpr(),
                     "Analyzed RANGE boundary expression is required for RANGE offset window");
@@ -3597,7 +3600,7 @@ public class PlanFragmentBuilder {
             // `CAST(d AS DATETIME) - INTERVAL 1 DAY` and the optimizer projects `CAST(d AS DATETIME)` as
             // slot $10, then the final boundary expression should be `$10 - INTERVAL 1 DAY`.
             bindRangeBoundaryOrderKey(physicalRangeBoundaryExpr, orderByExpr);
-            boundary.setAnalyzedRangeBoundaryExpr(physicalRangeBoundaryExpr);
+            return boundary.withAnalyzedRangeBoundaryExpr(physicalRangeBoundaryExpr);
         }
 
         private void bindRangeBoundaryOrderKey(Expr rangeBoundaryExpr, Expr orderByExpr) {

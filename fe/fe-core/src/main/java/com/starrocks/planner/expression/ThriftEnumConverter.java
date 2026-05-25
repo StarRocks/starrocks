@@ -22,7 +22,6 @@ import com.starrocks.sql.ast.SetType;
 import com.starrocks.sql.ast.expression.AnalyticWindow;
 import com.starrocks.sql.ast.expression.AnalyticWindowBoundary;
 import com.starrocks.sql.ast.expression.CompoundPredicate;
-import com.starrocks.thrift.TAnalyticWindow;
 import com.starrocks.thrift.TAnalyticWindowBoundary;
 import com.starrocks.thrift.TAnalyticWindowBoundaryType;
 import com.starrocks.thrift.TAnalyticWindowType;
@@ -98,21 +97,6 @@ public final class ThriftEnumConverter {
             default:
                 throw new IllegalStateException("Unsupported compound predicate operator: " + operator);
         }
-    }
-
-    public static TAnalyticWindow analyticWindowToThrift(AnalyticWindow window) {
-        Preconditions.checkNotNull(window, "Analytic window should not be null when converting to thrift");
-        TAnalyticWindow result = new TAnalyticWindow(analyticWindowTypeToThrift(window.getType()));
-        AnalyticWindowBoundary leftBoundary = window.getLeftBoundary();
-        if (leftBoundary.getBoundaryType() != AnalyticWindowBoundary.BoundaryType.UNBOUNDED_PRECEDING) {
-            result.setWindow_start(analyticWindowBoundaryToThrift(leftBoundary, window.getType()));
-        }
-        AnalyticWindowBoundary rightBoundary = window.getRightBoundary();
-        Preconditions.checkNotNull(rightBoundary, "Right boundary must be set before converting to thrift");
-        if (rightBoundary.getBoundaryType() != AnalyticWindowBoundary.BoundaryType.UNBOUNDED_FOLLOWING) {
-            result.setWindow_end(analyticWindowBoundaryToThrift(rightBoundary, window.getType()));
-        }
-        return result;
     }
 
     public static TKeysType keysTypeToThrift(KeysType keysType) {
