@@ -257,6 +257,9 @@ public class FunctionSet {
     public static final String SPACE = "space";
     public static final String PARSE_URL = "parse_url";
     public static final String TRIM = "trim";
+    public static final String TRIM_STRING = "trim_string";
+    public static final String LTRIM_STRING = "ltrim_string";
+    public static final String RTRIM_STRING = "rtrim_string";
     public static final String UPPER = "upper";
     public static final String INITCAP = "initcap";
     public static final String SUBSTRING_INDEX = "substring_index";
