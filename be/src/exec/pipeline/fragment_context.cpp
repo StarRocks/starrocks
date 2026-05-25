@@ -37,6 +37,7 @@
 #include "exec/pipeline/schedule/timeout_tasks.h"
 #include "exec/workgroup/pipeline_executor_set.h"
 #include "exec/workgroup/work_group.h"
+#include "platform/thrift_rpc_helper.h"
 #include "runtime/batch_write/batch_write_mgr.h"
 #include "runtime/data_stream_mgr.h"
 #include "runtime/exec_env.h"
@@ -45,7 +46,6 @@
 #include "runtime/runtime_state_helper.h"
 #include "runtime/stream_load/stream_load_context.h"
 #include "runtime/stream_load/transaction_mgr.h"
-#include "runtime/thrift_rpc_helper.h"
 
 namespace starrocks::pipeline {
 

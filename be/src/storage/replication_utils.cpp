@@ -35,8 +35,8 @@
 #include "gutil/strings/stringpiece.h"
 #include "gutil/strings/substitute.h"
 #include "http/http_client.h"
+#include "platform/thrift_rpc_helper.h"
 #include "runtime/exec_env.h"
-#include "runtime/thrift_rpc_helper.h"
 
 namespace starrocks {
 

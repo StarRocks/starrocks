@@ -22,6 +22,7 @@ set(PLATFORM_FILES
   platform_env.cpp
   platform_metrics.cpp
   store_path.cpp
+  thrift_rpc_helper.cpp
   udf_downloader.cpp
 )
 

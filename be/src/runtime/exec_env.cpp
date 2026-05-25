@@ -97,7 +97,6 @@
 #include "runtime/stream_load/load_stream_mgr.h"
 #include "runtime/stream_load/stream_load_executor.h"
 #include "runtime/stream_load/transaction_mgr.h"
-#include "runtime/thrift_rpc_helper.h"
 #include "storage/lake/fixed_location_provider.h"
 #include "storage/lake/lake_persistent_index_parallel_compact_mgr.h"
 #include "storage/lake/remote_starlet_location_provider.h"
@@ -721,7 +720,6 @@ void ExecEnv::destroy() {
     SAFE_DELETE(_runtime_filter_cache);
     SAFE_DELETE(_driver_limiter);
     SAFE_DELETE(_pipeline_timer);
-    ThriftRpcHelper::clear();
     SAFE_DELETE(_result_queue_mgr);
     SAFE_DELETE(_result_mgr);
     SAFE_DELETE(_lookup_dispatcher_mgr);

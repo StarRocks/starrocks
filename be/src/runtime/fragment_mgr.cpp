@@ -62,6 +62,7 @@
 #include "gen_cpp/HeartbeatService.h"
 #include "gen_cpp/QueryPlanExtra_types.h"
 #include "gutil/strings/substitute.h"
+#include "platform/thrift_rpc_helper.h"
 #include "runtime/current_thread.h"
 #include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
@@ -72,7 +73,6 @@
 #include "runtime/runtime_filter_worker.h"
 #include "runtime/runtime_metrics.h"
 #include "runtime/runtime_state_helper.h"
-#include "runtime/thrift_rpc_helper.h"
 #include "types/datetime_value.h"
 
 namespace starrocks {

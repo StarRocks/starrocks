@@ -33,7 +33,7 @@
 #include "common/util/thrift_client_cache.h"
 #include "gen_cpp/FrontendService.h"
 #include "gen_cpp/lake_types.pb.h"
-#include "runtime/thrift_rpc_helper.h"
+#include "platform/thrift_rpc_helper.h"
 #include "storage/lake/tablet.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/metadata_util.h"

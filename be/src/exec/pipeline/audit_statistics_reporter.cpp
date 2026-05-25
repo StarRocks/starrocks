@@ -21,7 +21,7 @@
 #include "common/util/thrift_client_cache.h"
 #include "gen_cpp/FrontendService.h"
 #include "gen_cpp/FrontendService_types.h"
-#include "runtime/thrift_rpc_helper.h"
+#include "platform/thrift_rpc_helper.h"
 
 namespace starrocks::pipeline {
 

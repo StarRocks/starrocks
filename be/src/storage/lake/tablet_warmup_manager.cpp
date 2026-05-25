@@ -31,7 +31,7 @@
 #include "common/thread/threadpool.h"
 #include "common/util/thrift_client_cache.h"
 #include "gen_cpp/FrontendService.h"
-#include "runtime/thrift_rpc_helper.h"
+#include "platform/thrift_rpc_helper.h"
 #include "staros_integration/staros_status.h"
 #include "staros_integration/staros_worker.h"
 #include "staros_integration/staros_worker_runtime.h"

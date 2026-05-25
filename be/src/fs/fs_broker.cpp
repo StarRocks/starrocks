@@ -26,9 +26,9 @@
 #include "fs/fs.h"
 #include "gen_cpp/FileBrokerService_types.h"
 #include "gen_cpp/TFileBrokerService.h"
+#include "platform/thrift_rpc_helper.h"
 #include "runtime/broker_mgr.h"
 #include "runtime/exec_env.h"
-#include "runtime/thrift_rpc_helper.h"
 
 using namespace fmt::literals;
 

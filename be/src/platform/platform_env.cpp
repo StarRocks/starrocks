@@ -20,6 +20,7 @@
 #include "gen_cpp/BackendService.h"
 #include "gen_cpp/FrontendService.h"
 #include "gen_cpp/TFileBrokerService.h"
+#include "platform/thrift_rpc_helper.h"
 
 namespace starrocks {
 
@@ -29,12 +30,6 @@ PlatformEnv::~PlatformEnv() = default;
 
 Status PlatformEnv::init(MetricRegistry* metrics) {
     if (_backend_client_cache != nullptr) {
-        if (_rpc_timer != nullptr) {
-            HttpBrpcStubCache::initialize(_rpc_timer.get());
-#ifndef __APPLE__
-            LakeServiceBrpcStubCache::initialize(_rpc_timer.get());
-#endif
-        }
         return Status::OK();
     }
 
@@ -53,6 +48,7 @@ Status PlatformEnv::init(MetricRegistry* metrics) {
     _backend_client_cache->init_metrics(metrics, "backend");
     _frontend_client_cache->init_metrics(metrics, "frontend");
     _broker_client_cache->init_metrics(metrics, "broker");
+    ThriftRpcHelper::setup(_backend_client_cache.get(), _frontend_client_cache.get(), _broker_client_cache.get());
 
     HttpBrpcStubCache::initialize(_rpc_timer.get());
 #ifndef __APPLE__
@@ -63,6 +59,7 @@ Status PlatformEnv::init(MetricRegistry* metrics) {
 }
 
 void PlatformEnv::destroy() {
+    ThriftRpcHelper::clear();
 #ifndef __APPLE__
     if (LakeServiceBrpcStubCache::getInstance() != nullptr) {
         LakeServiceBrpcStubCache::getInstance()->shutdown();
