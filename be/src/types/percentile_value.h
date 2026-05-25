@@ -85,7 +85,11 @@ public:
     // percentile_approx null predicate to return SQL NULL instead of a
     // silent NaN when the digest is empty (e.g. weighted variant with all
     // w <= 0, or input values rejected as non-finite by TDigest::add).
-    bool is_empty() const { return _tdigest.totalWeight() == 0; }
+    // Test the centroid vectors directly rather than TDigest::totalWeight(),
+    // which narrows the accumulated float weight to long (UB once a weighted
+    // sum exceeds the long range). A digest holds a centroid iff some w > 0
+    // was added, so emptiness == both vectors empty.
+    bool is_empty() const { return _tdigest.processed().empty() && _tdigest.unprocessed().empty(); }
 
 private:
     enum PercentileDataType { TDIGEST = 0 };
