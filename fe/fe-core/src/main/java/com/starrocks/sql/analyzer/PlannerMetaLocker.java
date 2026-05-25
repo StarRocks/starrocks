@@ -19,6 +19,7 @@ import com.google.common.collect.Maps;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableName;
+import com.starrocks.catalog.View;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
@@ -32,6 +33,7 @@ import com.starrocks.sql.ast.AlterViewStmt;
 import com.starrocks.sql.ast.AstTraverser;
 import com.starrocks.sql.ast.DeleteStmt;
 import com.starrocks.sql.ast.InsertStmt;
+import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.TableRef;
 import com.starrocks.sql.ast.TableRelation;
@@ -251,6 +253,11 @@ public class PlannerMetaLocker implements AutoCloseable {
         public Void visitTable(TableRelation node, Void context) {
             Pair<Database, Table> dbAndTable = resolveTable(session, node.getName());
             put(dbAndTable);
+            if (dbAndTable != null && dbAndTable.second instanceof View) {
+                View view = (View) dbAndTable.second;
+                QueryStatement viewBody = view.getQueryStatement();
+                visit(viewBody, context);
+            }
             return null;
         }
 
