@@ -27,7 +27,7 @@
 #include "common/config_starlet_fwd.h"
 #include "common/config_storage_fwd.h"
 #include "common/thread/threadpool.h"
-#include "runtime/exec_env.h"
+#include "platform/platform_env.h"
 #include "runtime/mem_tracker.h"
 #include "runtime/thrift_rpc_helper.h"
 #include "staros_integration/staros_worker.h"
@@ -90,9 +90,9 @@ public:
         FileSystem::Default()->delete_dir_recursive(_test_dir);
         _update_starlet_cache_config.reset();
         // reset the env setup
-        auto* exec_env = ExecEnv::GetInstance();
-        ThriftRpcHelper::setup(
-                {exec_env->client_cache(), exec_env->frontend_client_cache(), exec_env->broker_client_cache()});
+        auto* platform_env = PlatformEnv::GetInstance();
+        ThriftRpcHelper::setup(platform_env->backend_client_cache(), platform_env->frontend_client_cache(),
+                               platform_env->broker_client_cache());
     }
 
     StarOSWorker::ShardInfo generateShardInfo(int64_t tablet_id, bool enable_warmup, int64_t partition_id = -1) {
