@@ -70,6 +70,12 @@ public:
 
     static StatusOr<std::shared_ptr<SecondaryIndexReader>> open(const OpenInput& input);
 
+    // Like open(), but consults a process-wide LRU cache keyed by
+    // (tablet_id, file_name). Subsequent queries against the same .idx file
+    // skip the OSS GET + footer parse + column reader init -- ~100 ms saved
+    // on a 355 MB index file at the 100 M-row/1-tablet scale.
+    static StatusOr<std::shared_ptr<SecondaryIndexReader>> open_cached(const OpenInput& input);
+
     // Lookup: scan the index file applying the predicates from
     // |source_pred_tree| that touch index columns. The reader internally
     // remaps each predicate's column id from the source tablet schema's

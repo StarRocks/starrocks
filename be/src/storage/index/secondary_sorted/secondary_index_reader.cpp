@@ -14,12 +14,16 @@
 
 #include "storage/index/secondary_sorted/secondary_index_reader.h"
 
+#include <list>
+#include <mutex>
+
 #include "column/chunk.h"
 #include "column/fixed_length_column.h"
 #include "column/schema.h"
 #include "common/config.h"
 #include "common/logging.h"
 #include "common/object_pool.h"
+#include "fmt/format.h"
 #include "fs/fs.h"
 #include "runtime/chunk_helper.h"
 #include "storage/chunk_helper.h"
@@ -40,6 +44,53 @@ namespace {
 
 constexpr size_t kReadChunkSize = 4096;
 
+// Process-wide LRU cache of opened SecondaryIndexReader instances keyed
+// by (tablet_id, file_name). A 100 M-row/1-tablet `.idx` file is 355 MB
+// on OSS; re-downloading footer + column-reader init + zone-map index
+// for every query costs ~100 ms. Caching the reader collapses that to
+// a hash lookup on subsequent queries.
+class ReaderCache {
+public:
+    static ReaderCache& instance() {
+        static ReaderCache c;
+        return c;
+    }
+
+    std::shared_ptr<SecondaryIndexReader> get(const std::string& key) {
+        std::lock_guard<std::mutex> l(_mu);
+        auto it = _index.find(key);
+        if (it == _index.end()) return nullptr;
+        // Move to front of LRU list.
+        _entries.splice(_entries.begin(), _entries, it->second);
+        return it->second->second;
+    }
+
+    void put(const std::string& key, std::shared_ptr<SecondaryIndexReader> reader) {
+        std::lock_guard<std::mutex> l(_mu);
+        if (auto it = _index.find(key); it != _index.end()) {
+            // Already inserted concurrently; refresh position and keep first.
+            _entries.splice(_entries.begin(), _entries, it->second);
+            return;
+        }
+        _entries.emplace_front(key, std::move(reader));
+        _index[key] = _entries.begin();
+        const size_t cap = static_cast<size_t>(std::max<int64_t>(1, config::secondary_index_reader_cache_capacity));
+        while (_entries.size() > cap) {
+            _index.erase(_entries.back().first);
+            _entries.pop_back();
+        }
+    }
+
+private:
+    std::mutex _mu;
+    std::list<std::pair<std::string, std::shared_ptr<SecondaryIndexReader>>> _entries;
+    std::unordered_map<std::string, decltype(_entries)::iterator> _index;
+};
+
+std::string make_cache_key(int64_t tablet_id, const std::string& file_name) {
+    return fmt::format("{}|{}", tablet_id, file_name);
+}
+
 } // namespace
 
 SecondaryIndexReader::SecondaryIndexReader(std::shared_ptr<FileSystem> fs, lake::TabletManager* tablet_mgr,
@@ -58,6 +109,21 @@ StatusOr<std::shared_ptr<SecondaryIndexReader>> SecondaryIndexReader::open(const
     auto reader = std::shared_ptr<SecondaryIndexReader>(
             new SecondaryIndexReader(input.fs, input.tablet_mgr, input.tablet_id, input.file_pb, input.source_schema));
     RETURN_IF_ERROR(reader->_init());
+    return reader;
+}
+
+StatusOr<std::shared_ptr<SecondaryIndexReader>> SecondaryIndexReader::open_cached(const OpenInput& input) {
+    if (input.file_pb.file_name().empty()) {
+        // No filename to key on -- fall through to a non-cached open which
+        // will surface a clearer error from _init().
+        return open(input);
+    }
+    const std::string key = make_cache_key(input.tablet_id, input.file_pb.file_name());
+    if (auto hit = ReaderCache::instance().get(key); hit != nullptr) {
+        return hit;
+    }
+    ASSIGN_OR_RETURN(auto reader, open(input));
+    ReaderCache::instance().put(key, reader);
     return reader;
 }
 

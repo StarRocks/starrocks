@@ -472,6 +472,11 @@ CONF_mInt64(secondary_index_build_mem_limit_mb, "512");
 // Multiple indexes for the same tablet allowed by repeating the tablet_id
 // prefix.
 CONF_mString(secondary_index_defs, "");
+// Max number of opened SecondaryIndexReader instances kept in the process-
+// wide LRU cache. Each entry retains an opened Segment (footer + column
+// readers + zone-map index) for a single .idx file. Default 256 covers
+// 256 distinct (tablet, index) pairs at <~100 MB resident metadata.
+CONF_mInt64(secondary_index_reader_cache_capacity, "256");
 // Compaction threadpool max thread num for cloud native pk index compact in shared-data mode.
 CONF_mInt32(pk_index_parallel_compaction_threadpool_max_threads, "0");
 // The queue size for pk index parallel compaction threadpool in shared-data mode.

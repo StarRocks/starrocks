@@ -457,7 +457,7 @@ Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std
                 open_in.tablet_id = rowset->tablet_id();
                 open_in.file_pb = file_pb;
                 open_in.source_schema = _tablet_schema;
-                ASSIGN_OR_RETURN(auto reader, secondary_sorted::SecondaryIndexReader::open(open_in));
+                ASSIGN_OR_RETURN(auto reader, secondary_sorted::SecondaryIndexReader::open_cached(open_in));
                 ASSIGN_OR_RETURN(auto per_seg, reader->lookup(params.pred_tree, &_obj_pool));
 
                 if (first_index) {

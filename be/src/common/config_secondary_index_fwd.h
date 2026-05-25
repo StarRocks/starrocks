@@ -33,5 +33,10 @@ CONF_mInt64(secondary_index_build_mem_limit_mb, "512");
 // Per-BE index registry while the FE-side DDL is not yet wired. Format:
 //   "tablet_id:index_name:col1,col2;tablet_id:index_name:col"
 CONF_mString(secondary_index_defs, "");
+// Max number of opened SecondaryIndexReader instances kept in the process-
+// wide LRU cache. Each entry retains an opened Segment (footer + column
+// readers + zone-map index) for a single .idx file. Default 256 covers
+// 256 distinct (tablet, index) pairs at <~100 MB resident metadata.
+CONF_mInt64(secondary_index_reader_cache_capacity, "256");
 
 } // namespace starrocks::config
