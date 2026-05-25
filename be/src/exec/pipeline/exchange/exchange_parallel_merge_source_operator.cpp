@@ -15,7 +15,6 @@
 #include "exec/pipeline/exchange/exchange_parallel_merge_source_operator.h"
 
 #include "common/config_exec_flow_fwd.h"
-#include "exec/pipeline/schedule/observer.h"
 #include "exec/sort_exec_exprs.h"
 #include "runtime/data_stream_mgr.h"
 #include "runtime/data_stream_recvr.h"
@@ -34,9 +33,7 @@ Status ExchangeParallelMergeSourceOperator::prepare(RuntimeState* state) {
     _merger->bind_profile(_driver_sequence, _unique_metrics.get());
     _stream_recvr->attach_observer(state, observer());
     _stream_recvr->attach_query_ctx(state->query_ctx());
-    if (state->enable_event_scheduler()) {
-        _merger->add_source_ready_callback([observer = observer()] { observer->source_trigger(); });
-    }
+    _merger->attach_observer(state, observer());
     return Status::OK();
 }
 
