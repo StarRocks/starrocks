@@ -688,9 +688,7 @@ StarRocks 目前支持使用简单身份验证访问 HDFS，使用基于 IAM 用
 - **`list_files_only = true`**：当 `list_files_only` 为 `true` 时，`schema` 会被**静默忽略**（此时仅返回文件元数据）。
 - **`DESC FILES(..., "schema" = ...)`**：被显式拒绝。请使用不带 `schema` 的 `DESC FILES(...)` 来查看推断出的文件 Schema。
 - **`INSERT INTO FILES(..., "schema" = ...)`（卸载）**：被显式拒绝。`schema` 仅是读路径参数。
-- **INSERT 下推交互**：
-  - 当设置了 `schema` 时，FE 配置 `files_enable_insert_push_down_column_type`（别名 `files_enable_insert_push_down_schema`）会被**静默跳过**，因为用户声明的类型已经确定了列类型。
-  - 将 `schema` 与 INSERT 属性 `enable_push_down_schema = true` 组合使用是验证错误。
+- **INSERT 下推交互**：当设置了 `schema` 时，FE 配置 `files_enable_insert_push_down_schema` 会被**静默跳过**，因为用户声明的类型已经确定了列类型。
 
 ##### 示例
 

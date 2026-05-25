@@ -688,9 +688,7 @@ Example (invalid):
 - **`list_files_only = true`**: `schema` is silently ignored when `list_files_only` is `true` (only file metadata is returned).
 - **`DESC FILES(..., "schema" = ...)`**: Explicitly rejected. Use `DESC FILES(...)` without `schema` to inspect the inferred file schema.
 - **`INSERT INTO FILES(..., "schema" = ...)` (unload)**: Explicitly rejected. `schema` is a read-path parameter only.
-- **INSERT push-down interactions**:
-  - The FE configuration `files_enable_insert_push_down_column_type` (alias `files_enable_insert_push_down_schema`) is **silently skipped** when `schema` is set, because the user-declared types already determine column types.
-  - Combining `schema` with the INSERT property `enable_push_down_schema = true` is a validation error.
+- **INSERT push-down interactions**: The FE configuration `files_enable_insert_push_down_schema` is **silently skipped** when `schema` is set, because the user-declared types already determine column types.
 
 ##### Examples
 
