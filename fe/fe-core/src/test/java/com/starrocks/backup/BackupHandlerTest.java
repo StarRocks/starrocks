@@ -345,6 +345,13 @@ public class BackupHandlerTest {
             e1.printStackTrace();
             Assertions.fail();
         }
+        // cancel the external-catalog backup so it does not block dropRepository at the end of the test
+        try {
+            handler.cancel(new CancelBackupStmt(null, false, true));
+        } catch (DdlException e1) {
+            e1.printStackTrace();
+            Assertions.fail();
+        }
 
         // process restore
         List<TableRef> tblRefs2 = Lists.newArrayList();
