@@ -1682,12 +1682,9 @@ public class GlobalStateMgr {
     }
 
     /**
-     * Symmetric counterpart to {@link #startLeaderOnlyDaemonThreads()}. Stops the leader-only
-     * daemons that have been migrated to {@link com.starrocks.common.util.LeaderDaemon}, in reverse
-     * start order, so leader-session state is released promptly during demotion and the FE
-     * singletons become reusable when this node is re-elected.
-     *
-     * TODO: migrate the remaining {@code Daemon}-based leader tasks and add them here.
+     * Symmetric counterpart to {@link #startLeaderOnlyDaemonThreads()}. Stops every leader-only
+     * daemon in reverse start order so leader-session state is released promptly during
+     * demotion and the FE singletons become reusable when this node is re-elected.
      */
     void stopLeaderOnlyDaemonThreads() {
         long timeoutMs = Math.max(1000L, Config.leader_demotion_drain_timeout_sec * 1000L);
@@ -1746,6 +1743,8 @@ public class GlobalStateMgr {
         stopOne("loadsHistorySyncer", () -> loadsHistorySyncer.stopGracefully(timeoutMs));
         stopOne("loadTimeoutChecker", () -> loadTimeoutChecker.stopGracefully(timeoutMs));
         stopOne("loadJobScheduler", () -> loadJobScheduler.stopGracefully(timeoutMs));
+        stopOne("loadingLoadTaskScheduler", () -> loadingLoadTaskScheduler.close(timeoutMs));
+        stopOne("pendingLoadTaskScheduler", () -> pendingLoadTaskScheduler.close(timeoutMs));
         if (!RunMode.isSharedDataMode()) {
             stopOne("colocateTableBalancer",
                     () -> ColocateTableBalancer.getInstance().stopGracefully(timeoutMs));
@@ -1754,6 +1753,11 @@ public class GlobalStateMgr {
         }
         stopOne("heartbeatMgr", () -> heartbeatMgr.stopGracefully(timeoutMs));
         stopOne("keyRotationDaemon", () -> keyRotationDaemon.stopGracefully(timeoutMs));
+        stopOne("checkpointController", () -> checkpointController.stopGracefully(timeoutMs));
+        if (RunMode.isSharedDataMode()) {
+            stopOne("starMgrCheckpointController",
+                    () -> StarMgrServer.getCurrentState().stopCheckpointController(timeoutMs));
+        }
     }
 
     private void stopOne(String name, Runnable action) {
