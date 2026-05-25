@@ -514,6 +514,7 @@ Status LakeDataSource::init_tablet_reader(RuntimeState* runtime_state) {
         if (_provider->could_split_physically()) {
             // physical
             _params.rowid_range_option = split_context->rowid_range;
+            _params.prepared_tablet_read_state = split_context->prepared_tablet_read_state;
         } else {
             // logical
             _params.short_key_ranges_option = split_context->short_key_range;

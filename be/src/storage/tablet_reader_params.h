@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include <memory>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -32,6 +33,10 @@ namespace starrocks {
 
 class RuntimeProfile;
 class RuntimeState;
+
+namespace lake {
+struct PreparedTabletReadState;
+} // namespace lake
 
 class ColumnPredicate;
 struct RowidRangeOption;
@@ -88,6 +93,7 @@ struct TabletReaderParams {
 
     RowidRangeOptionPtr rowid_range_option = nullptr;
     ShortKeyRangesOptionPtr short_key_ranges_option = nullptr;
+    std::shared_ptr<lake::PreparedTabletReadState> prepared_tablet_read_state = nullptr;
 
     bool sorted_by_keys_per_tablet = false;
     RuntimeScanRangePruner runtime_range_pruner;

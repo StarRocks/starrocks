@@ -34,6 +34,9 @@ struct LakeIOOptions;
 
 ChunkIteratorPtr new_segment_iterator(const std::shared_ptr<Segment>& segment, const Schema& schema,
                                       const SegmentReadOptions& options);
+StatusOr<SparseRange<>> new_segment_iterator_for_prepare_pruning(const std::shared_ptr<Segment>& segment,
+                                                                 const Schema& schema,
+                                                                 const SegmentReadOptions& options);
 
 // Resolve a key-space SeekRange to the corresponding rowid range within |segment|.
 // Wraps the lookup machinery of SegmentIterator so callers outside the

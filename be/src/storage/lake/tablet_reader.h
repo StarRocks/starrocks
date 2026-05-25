@@ -35,6 +35,7 @@ class SeekTuple;
 class Segment;
 class TabletSchema;
 class TabletMetadataPB;
+class RowsetReadOptions;
 
 namespace lake {
 
@@ -114,6 +115,7 @@ private:
     Status build_prepared_physical_split_tasks(const TabletReaderParams& params,
                                                const PreparedTabletReadStatePtr& prepared_tablet_read_state);
     Status get_segment_iterators(const TabletReaderParams& params, std::vector<ChunkIteratorPtr>* iters);
+    Status init_rowset_read_options(const TabletReaderParams& params, RowsetReadOptions* options);
 
     Status init_predicates(const TabletReaderParams& read_params);
     Status init_delete_predicates(const TabletReaderParams& read_params, DeletePredicates* dels);
