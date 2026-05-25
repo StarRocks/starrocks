@@ -176,6 +176,7 @@ statement
 
     // UDF Statement
     | showFunctionsStatement
+    | showCreateFunctionStatement
     | dropFunctionStatement
     | createFunctionStatement
 
@@ -1794,6 +1795,10 @@ classifier
 
 showFunctionsStatement
     : SHOW FULL? (BUILTIN|GLOBAL)? FUNCTIONS ((FROM | IN) db=qualifiedName)? (LIKE pattern=string)? showPredicateClauses
+    ;
+
+showCreateFunctionStatement
+    : SHOW CREATE GLOBAL? FUNCTION qualifiedName '(' typeList ')'
     ;
 
 dropFunctionStatement

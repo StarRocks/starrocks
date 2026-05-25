@@ -59,11 +59,9 @@ public class SqlFunction extends Function {
 
     @Override
     public String toSql(boolean ifNotExists) {
-        StringBuilder sb = new StringBuilder("CREATE FUNCTION ");
-        if (ifNotExists) {
-            sb.append("IF NOT EXISTS ");
-        }
-        sb.append(dbName()).append(".").append(getFunctionName().getFunction()).append("(");
+        StringBuilder sb = new StringBuilder();
+        appendCreateHeader(sb, "", ifNotExists);
+        sb.append(getFunctionName().getFunction()).append("(");
 
         for (int i = 0; i < getArgs().length; i++) {
             if (i != 0) {

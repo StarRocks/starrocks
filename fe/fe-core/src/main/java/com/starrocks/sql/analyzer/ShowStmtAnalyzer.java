@@ -51,6 +51,7 @@ import com.starrocks.sql.ast.ShowAnalyzeStatusStmt;
 import com.starrocks.sql.ast.ShowBasicStatsMetaStmt;
 import com.starrocks.sql.ast.ShowColumnStmt;
 import com.starrocks.sql.ast.ShowCreateExternalCatalogStmt;
+import com.starrocks.sql.ast.ShowCreateFunctionStmt;
 import com.starrocks.sql.ast.ShowCreateRoutineLoadStmt;
 import com.starrocks.sql.ast.ShowCreateTableStmt;
 import com.starrocks.sql.ast.ShowDataDistributionStmt;
@@ -185,6 +186,16 @@ public class ShowStmtAnalyzer {
             if (node.getExpr() != null) {
                 ErrorReport.reportSemanticException(ERR_UNSUPPORTED_SQL_PATTERN);
             }
+            return null;
+        }
+
+        @Override
+        public Void visitShowCreateFunctionStatement(ShowCreateFunctionStmt node, ConnectContext context) {
+            String defaultDb = node.isGlobalFunction()
+                    ? FunctionRefAnalyzer.GLOBAL_UDF_DB
+                    : context.getDatabase();
+            FunctionRefAnalyzer.analyzeFunctionRef(node.getFunctionRef(), defaultDb);
+            FunctionRefAnalyzer.analyzeArgsDef(node.getArgsDef());
             return null;
         }
 
