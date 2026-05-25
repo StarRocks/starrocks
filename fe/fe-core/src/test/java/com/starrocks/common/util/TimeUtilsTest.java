@@ -301,6 +301,34 @@ public class TimeUtilsTest {
     }
 
     @Test
+    public void testTimeStringToLongHonorsSessionTimeZone() {
+        new MockUp<TimeUtils>() {
+            @Mock
+            public TimeZone getTimeZone() {
+                return TimeZone.getTimeZone(ZoneOffset.UTC);
+            }
+        };
+        // "2015-03-12 02:00:00" interpreted as UTC -> 1426125600000L
+        Assertions.assertEquals(1426125600000L, TimeUtils.timeStringToLong("2015-03-12 02:00:00"));
+    }
+
+    @Test
+    public void testTimeStringToLongInStorageZoneParsesAsShanghai() {
+        // Parses a legacy wall-clock string as fixed +08:00, independent of any
+        // mocked session timezone. This is the only remaining use case after
+        // BackendStatus stopped round-tripping through a wall-clock string.
+        new MockUp<TimeUtils>() {
+            @Mock
+            public TimeZone getTimeZone() {
+                return TimeZone.getTimeZone(ZoneOffset.UTC);
+            }
+        };
+        // "2015-03-12 10:00:00" interpreted as +08:00 -> 1426125600000L
+        Assertions.assertEquals(1426125600000L,
+                TimeUtils.timeStringToLongInStorageZone("2015-03-12 10:00:00"));
+    }
+
+    @Test
     public void testGetCurrentFormatTimeUsesFixedShanghaiTimeZone() {
         // Pin Instant.now() so the assertion is deterministic; do not rely on wall-clock
         // tolerance windows. Setting the JVM default to UTC simultaneously guards
