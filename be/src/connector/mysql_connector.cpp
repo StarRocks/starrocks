@@ -238,6 +238,7 @@ Status MySQLDataSource::get_next(RuntimeState* state, ChunkPtr* chunk) {
         RETURN_IF_CANCELLED(state);
 
         if (row_num >= state->chunk_size()) {
+            _bytes_read += (*chunk)->bytes_usage();
             return Status::OK();
         }
 
@@ -247,13 +248,13 @@ Status MySQLDataSource::get_next(RuntimeState* state, ChunkPtr* chunk) {
         RETURN_IF_ERROR(_mysql_scanner->get_next_row(&data, &length, &mysql_eos));
         if (mysql_eos) {
             _is_finished = true;
+            _bytes_read += (*chunk)->bytes_usage();
             return Status::OK();
         }
 
         ++row_num;
         RETURN_IF_ERROR(fill_chunk(chunk, data, length));
         ++_rows_read;
-        _bytes_read += (*chunk)->bytes_usage();
     }
 }
 
