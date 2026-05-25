@@ -162,9 +162,12 @@ import com.starrocks.qe.QueryStatisticsInfo;
 import com.starrocks.qe.scheduler.Coordinator;
 import com.starrocks.qe.scheduler.slot.LogicalSlot;
 import com.starrocks.qe.scheduler.warehouse.WarehouseQueryQueueMetrics;
+import com.starrocks.rpc.ThriftConnectionPool;
+import com.starrocks.rpc.ThriftRPCRequestExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
 import com.starrocks.server.MetadataMgr;
+import com.starrocks.server.NodeMgr;
 import com.starrocks.server.TemporaryTableMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.service.arrow.flight.sql.ArrowFlightSqlConnectContext;
@@ -794,19 +797,56 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     @Override
     public TGetProfileResponse getQueryProfile(TGetProfileRequest params) throws TException {
         LOG.debug("get query profile request: {}", params);
-        List<String> queryIds = params.query_id;
+        boolean isRequestAllFrontend = params == null || !params.isSetIs_request_all_frontend()
+                || params.isIs_request_all_frontend();
+        List<String> queryIds = params == null ? null : params.getQuery_id();
         TGetProfileResponse result = new TGetProfileResponse();
         if (queryIds != null) {
             for (String queryId : queryIds) {
                 String profile = ProfileManager.getInstance().getProfile(queryId);
-                if (profile != null && !profile.isEmpty()) {
-                    result.addToQuery_result(profile);
-                } else {
-                    result.addToQuery_result("");
+                if ((profile == null || profile.isEmpty()) && isRequestAllFrontend) {
+                    profile = getProfileFromOtherFEs(queryId);
                 }
+                result.addToQuery_result(Strings.nullToEmpty(profile));
             }
         }
         return result;
+    }
+
+    private String getProfileFromOtherFEs(String queryId) {
+        NodeMgr nodeMgr = GlobalStateMgr.getCurrentState().getNodeMgr();
+        List<Frontend> frontends = nodeMgr.getOtherFrontends()
+                .stream()
+                .filter(Frontend::isAlive)
+                .collect(Collectors.toList());
+
+        for (Frontend frontend : frontends) {
+
+            try {
+                TGetProfileRequest request = new TGetProfileRequest();
+                List<String> queryIds = Lists.newArrayList(queryId);
+                request.setQuery_id(queryIds);
+                request.setIs_request_all_frontend(false);
+
+                TNetworkAddress thriftAddress = new TNetworkAddress(frontend.getHost(), frontend.getRpcPort());
+                TGetProfileResponse response = ThriftRPCRequestExecutor.call(
+                        ThriftConnectionPool.frontendPool,
+                        thriftAddress,
+                        client -> client.getQueryProfile(request));
+
+                if (response.isSetQuery_result() && !response.getQuery_result().isEmpty()) {
+                    String profile = response.getQuery_result().get(0);
+                    if (profile != null && !profile.isEmpty()) {
+                        LOG.debug("Found profile for query {} on remote FE {}", queryId, frontend.getHost());
+                        return profile;
+                    }
+                }
+            } catch (TException e) {
+                LOG.warn("Failed to get profile for query {} from FE {}", queryId, frontend.getHost(), e);
+            }
+        }
+
+        return null;
     }
 
     @Override

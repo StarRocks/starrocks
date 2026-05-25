@@ -1978,6 +1978,10 @@ struct TGetGrantsToRolesOrUserResponse {
 
 struct TGetProfileRequest {
     1: optional list<string> query_id
+    // Optional field that controls whether query profiles are retrieved from all Frontends
+    // if true or unset, profiles are collected from all alive FEs
+    // if false, only the local FE (the one that received the query) is queried.
+    2: optional bool is_request_all_frontend
 }
 
 struct TGetProfileResponse {
