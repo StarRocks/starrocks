@@ -892,7 +892,7 @@ TEST_F(ParquetReadRowsTableFunctionTest, OverflowRowInFileRejected) {
     vpack::Builder b;
     b.openObject();
     b.add("file", vpack::Value("/tmp/x.parquet"));
-    b.add("row_in_file", vpack::Value(1e20));  // > INT64_MAX
+    b.add("row_in_file", vpack::Value(1e20)); // > INT64_MAX
     b.add("file_size", vpack::Value(1));
     b.add("file_mtime_ms", vpack::Value(1));
     b.close();
