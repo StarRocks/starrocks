@@ -95,19 +95,17 @@ public class LakeTableDropIndexJob extends LakeTableIndexFastPathJobBase {
      * with {@code dropIndexNames} populated — otherwise BITMAP / NGRAMBF /
      * BLOOM_FILTER drops will not remove any catalog Index (their id is -1
      * and applyCatalogMutation falls back to name matching).
+     *
+     * <p>Note: there is no 3-list backward-compat overload (no-names with
+     * dropBfColumns) — Java erases {@code List<TDropIndexInfo>} and
+     * {@code List<String>} to the same {@code List}, which would clash with
+     * the new 3-list canonical constructor. Tests that previously used the
+     * old 3-list shape must pass an explicit empty names list using the
+     * 4-list canonical constructor.
      */
     public LakeTableDropIndexJob(long jobId, long dbId, long tableId, String tableName, long timeoutMs,
                                  List<Long> dropIndexIds, List<TDropIndexInfo> dropInfos) {
         this(jobId, dbId, tableId, tableName, timeoutMs, dropIndexIds, new ArrayList<>(), dropInfos, new ArrayList<>());
-    }
-
-    /**
-     * Backward-compat overload with bf columns but no names list.
-     */
-    public LakeTableDropIndexJob(long jobId, long dbId, long tableId, String tableName, long timeoutMs,
-                                 List<Long> dropIndexIds, List<TDropIndexInfo> dropInfos,
-                                 List<String> dropBfColumns) {
-        this(jobId, dbId, tableId, tableName, timeoutMs, dropIndexIds, new ArrayList<>(), dropInfos, dropBfColumns);
     }
 
     public LakeTableDropIndexJob(long jobId, long dbId, long tableId, String tableName, long timeoutMs,

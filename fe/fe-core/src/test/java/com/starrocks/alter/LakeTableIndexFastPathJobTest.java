@@ -347,7 +347,7 @@ public class LakeTableIndexFastPathJobTest {
     public void testDropIndexJob_ApplyCatalogMutation_DropsBfColumnsPartial() {
         // Drop one of two bf columns → setBloomFilterInfo with the remaining set.
         LakeTableDropIndexJob job = new LakeTableDropIndexJob(1L, 2L, 3L, "t", 60_000L,
-                new ArrayList<>(), new ArrayList<>(),
+                new ArrayList<Long>(), new ArrayList<String>(), new ArrayList<TDropIndexInfo>(),
                 List.of("c1"));
 
         OlapTable table = mock(OlapTable.class);
@@ -374,7 +374,7 @@ public class LakeTableIndexFastPathJobTest {
     public void testDropIndexJob_ApplyCatalogMutation_DropsLastBfColumnClearsFpp() {
         // Last column drop → setBloomFilterInfo(null, 0).
         LakeTableDropIndexJob job = new LakeTableDropIndexJob(1L, 2L, 3L, "t", 60_000L,
-                new ArrayList<>(), new ArrayList<>(),
+                new ArrayList<Long>(), new ArrayList<String>(), new ArrayList<TDropIndexInfo>(),
                 List.of("only"));
 
         OlapTable table = mock(OlapTable.class);
@@ -404,7 +404,7 @@ public class LakeTableIndexFastPathJobTest {
         // A renamed/dropped column referenced in dropBfColumns should be
         // skipped silently rather than NPE.
         LakeTableDropIndexJob job = new LakeTableDropIndexJob(1L, 2L, 3L, "t", 60_000L,
-                new ArrayList<>(), new ArrayList<>(),
+                new ArrayList<Long>(), new ArrayList<String>(), new ArrayList<TDropIndexInfo>(),
                 List.of("ghost"));
 
         OlapTable table = mock(OlapTable.class);
@@ -442,7 +442,7 @@ public class LakeTableIndexFastPathJobTest {
     @Test
     public void testDropIndexJob_CopyForPersist_PreservesDropBfColumns() {
         LakeTableDropIndexJob job = new LakeTableDropIndexJob(1L, 2L, 3L, "t", 60_000L,
-                new ArrayList<>(), new ArrayList<>(),
+                new ArrayList<Long>(), new ArrayList<String>(), new ArrayList<TDropIndexInfo>(),
                 List.of("c1"));
         LakeTableDropIndexJob copy = (LakeTableDropIndexJob) job.copyForPersist();
         assertEquals(1, copy.getDropBfColumns().size());
@@ -471,8 +471,8 @@ public class LakeTableIndexFastPathJobTest {
         info.setIndex_type(TIndexType.BITMAP);
         info.setCol_unique_id(0);
         LakeTableDropIndexJob job = new LakeTableDropIndexJob(1L, 2L, 3L, "t", 60_000L,
-                Collections.singletonList(1L), Collections.singletonList(info),
-                List.of("c1"));
+                Collections.singletonList(1L), Collections.singletonList("idx_name"),
+                Collections.singletonList(info), List.of("c1"));
         assertEquals(1, job.getDropIndexIds().size());
         assertEquals(1, job.getDropInfos().size());
         assertEquals(1, job.getDropBfColumns().size());
