@@ -1464,6 +1464,20 @@ bool could_apply_bitcompress_opt(
         *max_size = accumulated;
         return true;
     }
+    // Single-INT keys with a value range <= 16 bits get a dedicated direct-array map
+    // (uint8/uint16, keyed on value - min) downstream. That path optimizes even when the
+    // null flag bumps the packed width into int32's storage class -- e.g. a nullable INT
+    // spanning [0, 65535] is 17 packed bits, so the level check above sees 32 -> 32 and
+    // bails, yet the value range alone (16 bits) fits uint16. Gate that case on value bits
+    // only; the routing in _try_to_apply_compressed_key_opt re-subtracts the null flag to
+    // pick the uint8/uint16 bucket.
+    if (group_by_types.size() == 1 && group_by_types[0].result_type.type == TYPE_INT) {
+        const size_t null_bits = group_by_types[0].is_nullable ? 1 : 0;
+        if (accumulated - null_bits <= 16) {
+            *max_size = accumulated;
+            return true;
+        }
+    }
     return false;
 }
 
@@ -1580,7 +1594,50 @@ typename HashVariantType::Type Aggregator::_try_to_apply_compressed_key_opt(type
         if (could_apply_bitcompress_opt(_group_by_types, _ranges, bases, used_bits, &new_max_bit_size,
                                         &has_null_column)) {
             if (_group_by_types.size() > 0) {
-                if (new_max_bit_size <= 8) {
+                // Single-INT GROUP BY with FE-supplied range that fits in
+                // 16 bits: skip the slice_cx4 path (phmap<SliceKey4> with
+                // per-row bitcompress_serialize) and route to a 65 536-cell
+                // direct-array map keyed by (value - min) -> uint16.
+                // int32_range_uint{8,16} only exist in AggHashMapVariant
+                // (GROUP BY); DISTINCT-only Sets fall through to slice_cx*.
+                // if-constexpr keeps the Set template instantiation
+                // compilable.
+                bool routed_int32_range = false;
+                if constexpr (std::is_same_v<HashVariantType, AggHashMapVariant>) {
+                    const bool single_int_col = group_by_keys == 1 && _group_by_types[0].result_type.type == TYPE_INT;
+                    // could_apply_bitcompress_opt folds a 1-bit null flag
+                    // into new_max_bit_size, so for nullable keys with a
+                    // value range that already saturates uintN the sum is
+                    // N+1 and would miss the uintN bucket. Compare against
+                    // the value-bits-only width so a nullable INT with
+                    // [0, 65535] still reaches the uint16 direct map.
+                    const bool is_nullable = _group_by_types[0].is_nullable;
+                    const size_t value_bits = new_max_bit_size - (is_nullable ? 1 : 0);
+                    if (single_int_col && value_bits > 8 && value_bits <= 16) {
+                        if (is_nullable) {
+                            type = _aggr_phase == AggrPhase1 ? HashVariantType::Type::phase1_null_int32_range_uint16
+                                                             : HashVariantType::Type::phase2_null_int32_range_uint16;
+                        } else {
+                            type = _aggr_phase == AggrPhase1 ? HashVariantType::Type::phase1_int32_range_uint16
+                                                             : HashVariantType::Type::phase2_int32_range_uint16;
+                        }
+                        routed_int32_range = true;
+                    } else if (single_int_col && value_bits <= 8) {
+                        // ≤8-bit range with INT column -> 256-cell
+                        // direct-array, skipping the slice_cx1 phmap detour.
+                        if (is_nullable) {
+                            type = _aggr_phase == AggrPhase1 ? HashVariantType::Type::phase1_null_int32_range_uint8
+                                                             : HashVariantType::Type::phase2_null_int32_range_uint8;
+                        } else {
+                            type = _aggr_phase == AggrPhase1 ? HashVariantType::Type::phase1_int32_range_uint8
+                                                             : HashVariantType::Type::phase2_int32_range_uint8;
+                        }
+                        routed_int32_range = true;
+                    }
+                }
+                if (routed_int32_range) {
+                    // already routed
+                } else if (new_max_bit_size <= 8) {
                     type = _aggr_phase == AggrPhase1 ? HashVariantType::Type::phase1_slice_cx1
                                                      : HashVariantType::Type::phase2_slice_cx1;
                 } else if (new_max_bit_size <= 4 * 8) {
@@ -1613,6 +1670,12 @@ void Aggregator::_build_hash_variant(HashVariantType& hash_variant, typename Has
             variant->offsets = std::move(context.offsets);
             variant->used_bits = std::move(context.used_bits);
             variant->bases = std::move(context.bases);
+        } else if constexpr (is_compressible_int_key<std::decay_t<decltype(*variant)>>) {
+            // The compressible-int wrapper only needs the min offset from
+            // bases[0] (single-column gate); offsets / used_bits are
+            // slice-shape state it does not consume.
+            DCHECK(!context.bases.empty());
+            variant->set_min(std::any_cast<int32_t>(context.bases[0]));
         }
     });
 }

@@ -329,4 +329,177 @@ TEST_F(AggHashMapKeyNotFoundsTest, TestAllocateAndComputeNonFounds_FixedSize16Sl
     TestAggHashMapKeyWithIntType<TestAggHashMapKey>(true);
 }
 
+// Direct-array INT GROUP BY wrappers (P1.C): default min_value=0, so the
+// existing Int32TestData/{1,2,3,4,5} values fit both uint8 and uint16
+// cells unchanged. Reuses the shared not-founds harness so each variant
+// exercises the same four build paths the framework already covers.
+TEST_F(AggHashMapKeyNotFoundsTest, TestAllocateAndComputeNonFounds_CompressibleInt32_Uint8) {
+    using TestAggHashMapKey = AggHashMapWithOneCompressibleInt32Key<RangeUInt8AggHashMap<PhmapSeed1>>;
+    TestAggHashMapKeyWithIntType<TestAggHashMapKey>(false);
+}
+
+TEST_F(AggHashMapKeyNotFoundsTest, TestAllocateAndComputeNonFounds_NullCompressibleInt32_Uint8) {
+    using TestAggHashMapKey = AggHashMapWithOneNullableCompressibleInt32Key<RangeUInt8AggHashMap<PhmapSeed1>>;
+    TestAggHashMapKeyWithIntType<TestAggHashMapKey>(true);
+}
+
+TEST_F(AggHashMapKeyNotFoundsTest, TestAllocateAndComputeNonFounds_CompressibleInt32_Uint16) {
+    using TestAggHashMapKey = AggHashMapWithOneCompressibleInt32Key<RangeUInt16AggHashMap<PhmapSeed1>>;
+    TestAggHashMapKeyWithIntType<TestAggHashMapKey>(false);
+}
+
+TEST_F(AggHashMapKeyNotFoundsTest, TestAllocateAndComputeNonFounds_NullCompressibleInt32_Uint16) {
+    using TestAggHashMapKey = AggHashMapWithOneNullableCompressibleInt32Key<RangeUInt16AggHashMap<PhmapSeed1>>;
+    TestAggHashMapKeyWithIntType<TestAggHashMapKey>(true);
+}
+
+// ============================================================================
+// Round-trip + min_value handling for the compressible-int wrapper.
+// ============================================================================
+// Drives build_hash_map -> insert_keys_to_columns and asserts that the
+// stored uint8/uint16 keys correctly restore to (key + min_value) in the
+// output Int32Column. Two min_value setups: zero (canonical case) and
+// INT32_MIN (overflow-safe path: unsigned narrowing must not wrap).
+class CompressibleInt32KeyRoundTripTest : public ::testing::Test {
+protected:
+    template <typename KeyT>
+    void run(int32_t min_value, const std::vector<int32_t>& input) {
+        using HashMap = std::conditional_t<std::is_same_v<KeyT, uint8_t>, RangeUInt8AggHashMap<PhmapSeed1>,
+                                           RangeUInt16AggHashMap<PhmapSeed1>>;
+        using KeyImpl = AggHashMapWithOneCompressibleInt32Key<HashMap>;
+
+        RuntimeProfile profile("CompressibleInt32KeyRoundTripTest");
+        AggStatistics statis(&profile);
+        const int chunk_size = static_cast<int>(input.size());
+        KeyImpl key(chunk_size, &statis);
+        key.set_min(min_value);
+
+        // Build a single-column Int32 input chunk.
+        MutableColumns key_columns_mut;
+        key_columns_mut.emplace_back(ColumnHelper::create_column(TypeDescriptor(LogicalType::TYPE_INT), false));
+        for (int32_t v : input) {
+            key_columns_mut.back()->append_datum(Datum(v));
+        }
+        Columns key_columns = ColumnHelper::to_columns(std::move(key_columns_mut));
+
+        MemPool pool;
+        Buffer<AggDataPtr> agg_states(chunk_size);
+        auto allocate_func = [&pool](auto&) { return pool.allocate(16); };
+        key.build_hash_map(chunk_size, key_columns, &pool, allocate_func, &agg_states);
+
+        // Collect distinct keys in insertion order, then run them back
+        // through insert_keys_to_columns and check restored values match
+        // the input set. ResultVector uses ColumnAllocator (not the
+        // std default), so use the wrapper's own alias. The fixed-map
+        // iterator exposes only operator->, so iterate explicitly
+        // instead of using a structured-binding range-for.
+        typename KeyImpl::ResultVector resv;
+        std::set<int32_t> expected_distinct(input.begin(), input.end());
+        for (auto it = key.hash_map.begin(); it != key.hash_map.end(); ++it) {
+            resv.emplace_back(it->first);
+        }
+        ASSERT_EQ(resv.size(), expected_distinct.size());
+
+        MutableColumns res_columns;
+        res_columns.emplace_back(ColumnHelper::create_column(TypeDescriptor(LogicalType::TYPE_INT), false));
+        key.insert_keys_to_columns(resv, res_columns, resv.size());
+
+        auto& restored = down_cast<Int32Column*>(res_columns[0].get())->get_data();
+        std::set<int32_t> restored_set(restored.begin(), restored.end());
+        ASSERT_EQ(restored_set, expected_distinct) << "min_value=" << min_value << ", input_size=" << input.size();
+    }
+};
+
+TEST_F(CompressibleInt32KeyRoundTripTest, Uint8_MinZero) {
+    run<uint8_t>(0, {0, 1, 2, 1, 255, 100, 255});
+}
+
+TEST_F(CompressibleInt32KeyRoundTripTest, Uint8_MinPositive) {
+    run<uint8_t>(1000, {1000, 1001, 1002, 1000, 1255, 1100});
+}
+
+// INT32_MIN edge: (val - min) must use unsigned arithmetic so that
+// INT32_MIN - INT32_MIN = 0 in uint8, not signed overflow.
+TEST_F(CompressibleInt32KeyRoundTripTest, Uint8_MinInt32) {
+    run<uint8_t>(INT32_MIN, {INT32_MIN, INT32_MIN + 1, INT32_MIN + 2, INT32_MIN + 255});
+}
+
+TEST_F(CompressibleInt32KeyRoundTripTest, Uint16_MinZero) {
+    std::vector<int32_t> vals;
+    for (int32_t v : {0, 1, 100, 1000, 65535, 30000, 1000}) {
+        vals.push_back(v);
+    }
+    run<uint16_t>(0, vals);
+}
+
+TEST_F(CompressibleInt32KeyRoundTripTest, Uint16_MinNegative) {
+    run<uint16_t>(-32768, {-32768, -32767, 0, 32767, -32768});
+}
+
+TEST_F(CompressibleInt32KeyRoundTripTest, Uint16_MinInt32) {
+    run<uint16_t>(INT32_MIN, {INT32_MIN, INT32_MIN + 1, INT32_MIN + 65535, INT32_MIN + 32768});
+}
+
+// Nullable path: only_null short-circuit + has_null mixed input.
+class NullCompressibleInt32KeyTest : public ::testing::Test {};
+
+TEST_F(NullCompressibleInt32KeyTest, OnlyNullShortCircuit) {
+    using KeyImpl = AggHashMapWithOneNullableCompressibleInt32Key<RangeUInt8AggHashMap<PhmapSeed1>>;
+    RuntimeProfile profile("NullCompressibleInt32KeyTest");
+    AggStatistics statis(&profile);
+    const int chunk_size = 4;
+    KeyImpl key(chunk_size, &statis);
+    key.set_min(0);
+
+    // Construct an only_null nullable Int32 column.
+    auto col = ColumnHelper::create_column(TypeDescriptor(LogicalType::TYPE_INT), true);
+    col->append_nulls(chunk_size);
+    Columns key_columns;
+    key_columns.emplace_back(std::move(col));
+
+    MemPool pool;
+    Buffer<AggDataPtr> agg_states(chunk_size);
+    auto allocate_func = [&pool](auto&&...) { return pool.allocate(16); };
+    key.build_hash_map(chunk_size, key_columns, &pool, allocate_func, &agg_states);
+
+    // All four rows must resolve to the single null_key_data slot.
+    ASSERT_NE(agg_states[0], nullptr);
+    for (int i = 1; i < chunk_size; ++i) {
+        ASSERT_EQ(agg_states[i], agg_states[0]);
+    }
+    ASSERT_EQ(key.hash_map.size(), 0);
+}
+
+TEST_F(NullCompressibleInt32KeyTest, MixedNullAndValues) {
+    using KeyImpl = AggHashMapWithOneNullableCompressibleInt32Key<RangeUInt8AggHashMap<PhmapSeed1>>;
+    RuntimeProfile profile("NullCompressibleInt32KeyTest");
+    AggStatistics statis(&profile);
+    const int chunk_size = 6;
+    KeyImpl key(chunk_size, &statis);
+    key.set_min(0);
+
+    auto col = ColumnHelper::create_column(TypeDescriptor(LogicalType::TYPE_INT), true);
+    col->append_datum(Datum(int32_t{1}));
+    col->append_nulls(1);
+    col->append_datum(Datum(int32_t{1}));
+    col->append_datum(Datum(int32_t{2}));
+    col->append_nulls(1);
+    col->append_datum(Datum(int32_t{2}));
+    Columns key_columns;
+    key_columns.emplace_back(std::move(col));
+
+    MemPool pool;
+    Buffer<AggDataPtr> agg_states(chunk_size);
+    auto allocate_func = [&pool](auto&&...) { return pool.allocate(16); };
+    key.build_hash_map(chunk_size, key_columns, &pool, allocate_func, &agg_states);
+
+    // Distinct non-null keys (1, 2) -> 2 cells; nulls share null_key_data.
+    ASSERT_EQ(key.hash_map.size(), 2);
+    ASSERT_EQ(agg_states[0], agg_states[2]); // both rows with value 1
+    ASSERT_EQ(agg_states[3], agg_states[5]); // both rows with value 2
+    ASSERT_EQ(agg_states[1], agg_states[4]); // both null rows
+    ASSERT_NE(agg_states[0], agg_states[3]); // value 1 != value 2
+    ASSERT_NE(agg_states[0], agg_states[1]); // value 1 != null
+}
+
 } // namespace starrocks

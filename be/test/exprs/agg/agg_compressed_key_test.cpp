@@ -113,5 +113,58 @@ TEST(AggCompressedKey, could_bound) {
         EXPECT_EQ(max_size, 15);
         ASSERT_EQ(res, true);
     }
+    // nullable single INT whose value range fills a full 16 bits ([0, 65535]).
+    // The null flag pushes the packed width to 17 bits (int32 storage class), so the
+    // level-reduction check alone would reject it -- but the single-INT direct-array
+    // map keys on value - min and carries the null flag separately, so 16 value bits
+    // still qualify for uint16. Regression guard for that boundary.
+    {
+        ObjectPool pool;
+
+        std::vector<ColumnType> groupby;
+        std::vector<std::any> bases;
+        std::vector<int> used_bytes;
+        size_t max_size;
+        bool has_null;
+
+        bases.resize(1);
+        used_bytes.resize(1);
+
+        auto type1 = TypeDescriptor(TYPE_INT);
+        groupby.emplace_back(ColumnType{type1, true});
+        std::vector<std::optional<std::pair<VectorizedLiteral*, VectorizedLiteral*>>> ranges;
+        auto* min = pool.add(new VectorizedLiteral(ColumnHelper::create_const_column<TYPE_INT>(0, 1), type1));
+        auto* max = pool.add(new VectorizedLiteral(ColumnHelper::create_const_column<TYPE_INT>(65535, 1), type1));
+        ranges.emplace_back(std::make_pair(min, max));
+
+        bool res = could_apply_bitcompress_opt(groupby, ranges, bases, used_bytes, &max_size, &has_null);
+        EXPECT_EQ(max_size, 17); // 16 value bits + 1 null bit
+        ASSERT_EQ(res, true);
+    }
+    // nullable single INT one bit past uint16 ([0, 100000] -> 17 value bits). Neither the
+    // direct-array map (no uint17) nor the slice path (int32 -> int32, no level reduction)
+    // helps, so the opt must stay disabled. Guards the value-bits boundary against over-reach.
+    {
+        ObjectPool pool;
+
+        std::vector<ColumnType> groupby;
+        std::vector<std::any> bases;
+        std::vector<int> used_bytes;
+        size_t max_size;
+        bool has_null;
+
+        bases.resize(1);
+        used_bytes.resize(1);
+
+        auto type1 = TypeDescriptor(TYPE_INT);
+        groupby.emplace_back(ColumnType{type1, true});
+        std::vector<std::optional<std::pair<VectorizedLiteral*, VectorizedLiteral*>>> ranges;
+        auto* min = pool.add(new VectorizedLiteral(ColumnHelper::create_const_column<TYPE_INT>(0, 1), type1));
+        auto* max = pool.add(new VectorizedLiteral(ColumnHelper::create_const_column<TYPE_INT>(100000, 1), type1));
+        ranges.emplace_back(std::make_pair(min, max));
+
+        bool res = could_apply_bitcompress_opt(groupby, ranges, bases, used_bytes, &max_size, &has_null);
+        ASSERT_EQ(res, false);
+    }
 }
 } // namespace starrocks
