@@ -104,6 +104,11 @@ public:
     // w <= 0, or input values rejected as non-finite by TDigest::add).
     bool is_empty() const { return _tdigest.totalWeight() == 0; }
 
+    // Compression the underlying digest was built with. Forwarded so the merge
+    // path can adopt the compression carried inside a deserialized intermediate
+    // blob instead of re-deriving it from the function context.
+    double compression() const { return _tdigest.compression(); }
+
 private:
     enum PercentileDataType { TDIGEST = 0 };
     TDigest _tdigest;
