@@ -601,7 +601,8 @@ Status RowsetUpdateState::rewrite_segment(uint32_t segment_id, int64_t txn_id, c
         FileInfo file_info{.path = params.tablet->segment_location(dest_path)};
         RETURN_IF_ERROR(SegmentRewriter::rewrite_partial_update(
                 src, &file_info, params.tablet_schema, unmodified_column_ids,
-                _partial_update_states[segment_id].write_columns, segment_id, partial_rowset_footer));
+                _partial_update_states[segment_id].write_columns, segment_id, partial_rowset_footer,
+                {root_path, std::to_string(rowset_meta.id())}));
         file_info.path = dest_path;
         (*replace_segments)[segment_id] = file_info;
     } else {

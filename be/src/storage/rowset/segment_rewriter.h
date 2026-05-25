@@ -9,6 +9,7 @@
 #include "common/statusor.h"
 #include "gen_cpp/olap_file.pb.h"
 #include "storage/lake/rowset_update_state.h"
+#include "storage/rowset/segment_writer.h"
 #include "storage/rowset_update_state.h"
 
 namespace starrocks {
@@ -29,7 +30,8 @@ public:
     static Status rewrite_partial_update(const FileInfo& src, FileInfo* dest,
                                          const std::shared_ptr<const TabletSchema>& tschema,
                                          std::vector<uint32_t>& column_ids, MutableColumns& columns,
-                                         uint32_t segment_id, const FooterPointerPB& partial_rowset_footer);
+                                         uint32_t segment_id, const FooterPointerPB& partial_rowset_footer,
+                                         SegmentFileMark segment_file_mark = {});
     static Status rewrite_auto_increment(const std::string& src_path, const std::string& dest_path,
                                          const TabletSchemaCSPtr& tschema,
                                          AutoIncrementPartialUpdateState& auto_increment_partial_update_state,

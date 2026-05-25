@@ -801,9 +801,9 @@ Status RowsetUpdateState::apply(Tablet* tablet, const TabletSchemaCSPtr& tablet_
         FooterPointerPB partial_rowset_footer = txn_meta.partial_rowset_footers(segment_id);
         FileInfo src{.path = src_path};
         FileInfo dest{.path = dest_path};
-        RETURN_IF_ERROR(SegmentRewriter::rewrite_partial_update(src, &dest, _tablet_schema, read_column_ids,
-                                                                _partial_update_states[segment_id].write_columns,
-                                                                segment_id, partial_rowset_footer));
+        RETURN_IF_ERROR(SegmentRewriter::rewrite_partial_update(
+                src, &dest, _tablet_schema, read_column_ids, _partial_update_states[segment_id].write_columns,
+                segment_id, partial_rowset_footer, {rowset->rowset_path(), rowset->rowset_id().to_string()}));
     }
     int64_t t_rewrite_end = MonotonicMillis();
 
