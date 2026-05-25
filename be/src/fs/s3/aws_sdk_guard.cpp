@@ -21,6 +21,7 @@
 #include <iostream>
 #include <memory>
 
+#include "common/config_object_storage_fwd.h"
 #include "common/configbase.h"
 #include "fs/s3/poco_http_client_factory.h"
 
