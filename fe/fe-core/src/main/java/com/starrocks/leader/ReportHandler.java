@@ -75,7 +75,6 @@ import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.LeaderDaemon;
 import com.starrocks.common.util.NetUtils;
-import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.datacache.DataCacheMetrics;
@@ -564,7 +563,7 @@ public class ReportHandler extends LeaderDaemon implements MemoryTrackable {
         Backend reportBackend = currentSystemInfo.getBackend(backendId);
         if (reportBackend != null) {
             BackendStatus backendStatus = reportBackend.getBackendStatus();
-            backendStatus.lastSuccessReportTabletsTime = TimeUtils.longToTimeString(start);
+            backendStatus.lastSuccessReportTabletsTimeMs = start;
         }
 
         long cost = System.currentTimeMillis() - start;
@@ -1471,8 +1470,8 @@ public class ReportHandler extends LeaderDaemon implements MemoryTrackable {
         long maxLastSuccessReportTabletsTime = -1L;
 
         for (Backend be : backends) {
-            long lastSuccessReportTabletsTime = TimeUtils.timeStringToLong(be.getBackendStatus().lastSuccessReportTabletsTime);
-            maxLastSuccessReportTabletsTime = Math.max(maxLastSuccessReportTabletsTime, lastSuccessReportTabletsTime);
+            maxLastSuccessReportTabletsTime = Math.max(
+                    maxLastSuccessReportTabletsTime, be.getBackendStatus().lastSuccessReportTabletsTimeMs);
         }
 
         Locker locker = new Locker();
