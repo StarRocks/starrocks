@@ -47,7 +47,6 @@
 #include "storage/tablet_index.h"
 #include "storage/tablet_schema.h"
 #include "storage/types.h"
-#include "util/bloom_filter.h"
 
 namespace starrocks::lake {
 
