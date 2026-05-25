@@ -36,13 +36,9 @@
 
 #include <shared_mutex>
 
-<<<<<<< HEAD
-=======
-#include "base/concurrency/spinlock.h"
-#include "base/phmap/phmap.h"
->>>>>>> 2c3168bb21 ([Enhancement] fix too heavy SpinLock, replace with lock-free parallel map (#73796))
 #include "gen_cpp/FrontendService.h"
 #include "gen_cpp/data.pb.h"
+#include "util/phmap/phmap.h"
 #include "util/spinlock.h"
 
 namespace starrocks {
