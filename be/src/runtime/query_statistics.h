@@ -34,10 +34,11 @@
 
 #pragma once
 
-#include <mutex>
+#include <shared_mutex>
 
 #include "gen_cpp/FrontendService.h"
 #include "gen_cpp/data.pb.h"
+#include "util/phmap/phmap.h"
 #include "util/spinlock.h"
 
 namespace starrocks {
@@ -135,8 +136,9 @@ public:
     void aggregate(QueryStatistics* statistics);
 
 private:
-    std::map<int, QueryStatistics*> _query_statistics;
-    SpinLock _lock;
+    phmap::parallel_flat_hash_map<int, QueryStatistics*, phmap::Hash<int>, phmap::EqualTo<int>,
+                                  phmap::Allocator<phmap::Pair<const int, QueryStatistics*>>, 4, std::shared_mutex>
+            _query_statistics;
 };
 
 } // namespace starrocks
