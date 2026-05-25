@@ -448,8 +448,19 @@ int64_t TabletManager::get_average_row_size_from_latest_metadata(int64_t tablet_
     return total_rows == 0 ? 0 : total_size / total_rows;
 }
 
+DEFINE_FAIL_POINT(lake_publish_put_tablet_metadata_fail);
+
 Status TabletManager::put_tablet_metadata(const TabletMetadataPtr& metadata, const std::string& metadata_location) {
     TEST_ERROR_POINT("TabletManager::put_tablet_metadata");
+    // Runtime-toggleable failpoint (Release-safe, unlike TEST_ERROR_POINT) used
+    // by ADMIN SKIP COMMITTED TRANSACTION integration tests to pin alter / load
+    // txns in publish-stuck COMMITTED state: enabling this on a BE keeps the
+    // publish RPC failing so FE's PublishVersionDaemon retries forever, which
+    // is the exact production scenario the SKIP escape hatch is designed for.
+    // Enable on test cluster via: ADMIN ENABLE FAILPOINT
+    //   'lake_publish_put_tablet_metadata_fail' ON BACKEND "<host:port>";
+    FAIL_POINT_TRIGGER_RETURN(lake_publish_put_tablet_metadata_fail,
+                              Status::InternalError("inject lake_publish_put_tablet_metadata_fail"));
     // write metadata file
     auto t0 = butil::gettimeofday_us();
 

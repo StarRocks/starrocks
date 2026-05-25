@@ -37,9 +37,12 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.AlterTableStmt;
+import com.starrocks.sql.ast.CancelAlterTableStmt;
 import com.starrocks.sql.ast.CreateDbStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
+import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AlterReplicaTask;
@@ -431,6 +434,65 @@ public class LakeTableSchemaChangeJobTest {
         db.dropTable(table.getName());
         schemaChangeJob.cancel("table does not exist anymore");
         Assertions.assertEquals(AlterJobV2.JobState.CANCELLED, schemaChangeJob.getJobState());
+    }
+
+    @Test
+    public void testForceCancelAtFinishedRewriting() throws Exception {
+        // Phase 2: CANCEL ALTER TABLE ... FORCE must bypass the FINISHED_REWRITING
+        // guard so operators can unblock heavy lake schema-change jobs whose
+        // publish RPC is permanently stuck. removeShadowIndex() inside the
+        // existing persistStateChange callback handles the shadow-tablet cleanup.
+        LakeTableSchemaChangeJob schemaChangeJob = alterTableAddColumn();
+        new MockUp<LakeTableSchemaChangeJob>() {
+            @Mock
+            public void sendAgentTask(AgentBatchTask batchTask) {
+                batchTask.getAllTasks().forEach(t -> t.setFinished(true));
+            }
+        };
+
+        schemaChangeJob.runPendingJob();
+        schemaChangeJob.runWaitingTxnJob();
+        schemaChangeJob.runRunningJob();
+        Assertions.assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, schemaChangeJob.getJobState());
+
+        Partition partition = table.getPartitions().stream().findFirst().orElse(null);
+        Assertions.assertNotNull(partition);
+        Assertions.assertEquals(1, partition.getDefaultPhysicalPartition()
+                .getLatestMaterializedIndices(MaterializedIndex.IndexExtState.SHADOW).size());
+
+        // Non-force cancel is a no-op in FINISHED_REWRITING (existing behavior).
+        Assertions.assertFalse(schemaChangeJob.cancel("non-force-cancel"));
+        Assertions.assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, schemaChangeJob.getJobState());
+        Assertions.assertFalse(schemaChangeJob.isForceSkippedAtCommitted());
+
+        // Force cancel must succeed and clean up the shadow index.
+        Assertions.assertTrue(schemaChangeJob.cancel("force-cancel-from-stuck-publish", /*force=*/ true));
+        Assertions.assertEquals(AlterJobV2.JobState.CANCELLED, schemaChangeJob.getJobState());
+        Assertions.assertTrue(schemaChangeJob.isForceSkippedAtCommitted(),
+                "forceSkippedAtCommitted must record the force-cancel for audit");
+        Assertions.assertEquals(OlapTable.OlapTableState.NORMAL, table.getState());
+        Assertions.assertEquals(0, partition.getDefaultPhysicalPartition()
+                .getLatestMaterializedIndices(MaterializedIndex.IndexExtState.SHADOW).size(),
+                "shadow tablets must be cleaned up by removeShadowIndex on force-cancel");
+    }
+
+    @Test
+    public void testParseCancelAlterTableForce() {
+        // The new FORCE keyword on CANCEL ALTER TABLE must surface as
+        // CancelAlterTableStmt.isForce() = true so the handler can route to
+        // cancel(force=true). Without FORCE, isForce() stays false (backward
+        // compatible with existing call sites).
+        StatementBase withForce = SqlParser.parseSingleStatement(
+                "CANCEL ALTER TABLE COLUMN FROM mydb.t1 (12345) FORCE",
+                connectContext.getSessionVariable().getSqlMode());
+        Assertions.assertTrue(withForce instanceof CancelAlterTableStmt);
+        Assertions.assertTrue(((CancelAlterTableStmt) withForce).isForce());
+
+        StatementBase noForce = SqlParser.parseSingleStatement(
+                "CANCEL ALTER TABLE COLUMN FROM mydb.t1 (12345)",
+                connectContext.getSessionVariable().getSqlMode());
+        Assertions.assertTrue(noForce instanceof CancelAlterTableStmt);
+        Assertions.assertFalse(((CancelAlterTableStmt) noForce).isForce());
     }
 
     @Test

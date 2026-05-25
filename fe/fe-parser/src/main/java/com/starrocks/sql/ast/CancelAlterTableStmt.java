@@ -55,23 +55,40 @@ public class CancelAlterTableStmt extends CancelStmt {
 
     private final List<Long> alterJobIdList;
 
+    // When true, the cancel must succeed even if the alter job has entered
+    // FINISHED_REWRITING (its publish step is permanently stuck waiting on a
+    // BE that cannot make progress). Used to unblock pathological lake
+    // schema-change / alter-meta jobs whose publish RPC keeps failing.
+    // SQL: CANCEL ALTER TABLE ... FROM db.tbl (jobId) FORCE
+    private final boolean force;
+
     public CancelAlterTableStmt(AlterType alterType, TableRef tableRef) {
         this(alterType, tableRef, null);
     }
 
     public CancelAlterTableStmt(AlterType alterType, TableRef tableRef, List<Long> alterJobIdList) {
-        this(alterType, tableRef, alterJobIdList, NodePosition.ZERO);
+        this(alterType, tableRef, alterJobIdList, false, NodePosition.ZERO);
     }
 
     public CancelAlterTableStmt(AlterType alterType, TableRef tableRef, List<Long> alterJobIdList, NodePosition pos) {
+        this(alterType, tableRef, alterJobIdList, false, pos);
+    }
+
+    public CancelAlterTableStmt(AlterType alterType, TableRef tableRef, List<Long> alterJobIdList,
+                                boolean force, NodePosition pos) {
         super(pos);
         this.alterType = alterType;
         this.tableRef = tableRef;
         this.alterJobIdList = alterJobIdList;
+        this.force = force;
     }
 
     public List<Long> getAlterJobIdList() {
         return alterJobIdList;
+    }
+
+    public boolean isForce() {
+        return force;
     }
 
     @Override

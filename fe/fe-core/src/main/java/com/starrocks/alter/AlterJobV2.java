@@ -122,6 +122,17 @@ public abstract class AlterJobV2 implements Writable {
     @SerializedName(value = "computeResource")
     protected ComputeResource computeResource = WarehouseManager.DEFAULT_RESOURCE;
 
+    // Set to true when the job was force-cancelled by CANCEL ALTER TABLE ...
+    // FORCE while sitting in FINISHED_REWRITING with a publish-stuck commit.
+    // Persisted for post-mortem audit; pure marker, does not affect the
+    // cancel path itself.
+    @SerializedName(value = "forceSkippedAtCommitted")
+    protected boolean forceSkippedAtCommitted = false;
+
+    public boolean isForceSkippedAtCommitted() {
+        return forceSkippedAtCommitted;
+    }
+
     protected Span span;
 
     protected Future<Boolean> publishVersionFuture = null;
@@ -344,6 +355,27 @@ public abstract class AlterJobV2 implements Writable {
     }
 
     /**
+     * Force-cancel entry point used by ADMIN SKIP COMMITTED TRANSACTION
+     * (phase 2). When {@code force=true}, subclasses that normally refuse
+     * to cancel in FINISHED_REWRITING (lake alter jobs whose publish is
+     * stuck) MUST bypass that guard and cancel anyway — that is the whole
+     * point of the operator-only escape hatch.
+     *
+     * <p>For {@code force=false} this is a strict superset of {@link #cancel(String)}
+     * so existing callers behave unchanged.
+     */
+    public boolean cancel(String errMsg, boolean force) {
+        synchronized (this) {
+            boolean cancelled = cancelImpl(errMsg, force);
+            if (cancelled && force) {
+                forceSkippedAtCommitted = true;
+            }
+            cancelHook(cancelled);
+            return cancelled;
+        }
+    }
+
+    /**
      * should be called before executing the job.
      * return false if table is not stable.
      */
@@ -398,6 +430,16 @@ public abstract class AlterJobV2 implements Writable {
     protected abstract void runFinishedRewritingJob() throws AlterCancelException;
 
     protected abstract boolean cancelImpl(String errMsg);
+
+    /**
+     * Force-aware cancel hook. Subclasses with a FINISHED_REWRITING guard
+     * (lake alter jobs) override this to honor {@code force=true} and bypass
+     * the guard. Default behaviour matches the original {@link #cancelImpl(String)},
+     * so subclasses that don't need the escape hatch don't need any change.
+     */
+    protected boolean cancelImpl(String errMsg, boolean force) {
+        return cancelImpl(errMsg);
+    }
 
     protected abstract void getInfo(List<List<Comparable>> infos);
 

@@ -1841,7 +1841,8 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
             alterJobIdList = context.INTEGER_VALUE()
                     .stream().map(ParseTree::getText).map(Long::parseLong).collect(toList());
         }
-        return new CancelAlterTableStmt(alterType, tableRef, alterJobIdList, createPos(context));
+        boolean force = context.FORCE() != null;
+        return new CancelAlterTableStmt(alterType, tableRef, alterJobIdList, force, createPos(context));
     }
 
     @Override

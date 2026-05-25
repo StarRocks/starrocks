@@ -487,12 +487,17 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
         return batchTask;
     }
 
-    protected long getWatershedTxnId() {
+    public long getWatershedTxnId() {
         return watershedTxnId;
     }
 
     @Override
     protected boolean cancelImpl(String errMsg) {
+        return cancelImpl(errMsg, false);
+    }
+
+    @Override
+    protected boolean cancelImpl(String errMsg, boolean force) {
         if (jobState == JobState.CANCELLED || jobState == JobState.FINISHED) {
             return false;
         }
@@ -504,8 +509,14 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
                 Locker locker = new Locker();
                 locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.WRITE);
                 try {
-                    // Cancel a job of state `FINISHED_REWRITING` only when the database or table has been dropped.
-                    if (jobState == JobState.FINISHED_REWRITING) {
+                    // Cancel a job of state `FINISHED_REWRITING` only when the database
+                    // or table has been dropped, OR when an operator explicitly opts in
+                    // via ADMIN SKIP COMMITTED TRANSACTION (force=true). The escape hatch
+                    // is needed to unblock alter jobs whose publish is permanently stuck.
+                    // For lake AlterMeta this is always safe: the job has no shadow tablets
+                    // to clean up, no rowsets to roll back; the catalog change simply does
+                    // not take effect.
+                    if (jobState == JobState.FINISHED_REWRITING && !force) {
                         return false;
                     } else {
                         updateErrorInfo(errMsg);
