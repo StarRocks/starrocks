@@ -15,7 +15,7 @@ A JDBC catalog is a kind of external catalog that enables you to query data from
 
 Also, you can directly transform and load data from JDBC data sources by using [INSERT INTO](../../sql-reference/sql-statements/loading_unloading/INSERT.md) based on JDBC catalogs.
 
-JDBC catalogs support MySQL and PostgreSQL from v3.0 onwards, Oracle and SQLServer since v3.2.9 and v3.3.1, and ClickHouse (Experimental) since v3.3.0.
+JDBC catalogs support MySQL and PostgreSQL from v3.0 onwards, Oracle and SQLServer since v3.2.9 and v3.3.1, ClickHouse (Experimental) since v3.3.0, and BigQuery (Experimental) since v4.1.
 
 ## Prerequisites
 
@@ -56,8 +56,8 @@ The properties of the JDBC Catalog. `PROPERTIES` must include the following para
 | password          | The password that is used to connect to the target database. |
 | jdbc_uri          | The URI that the JDBC driver uses to connect to the target database. For MySQL, the URI is in the `"jdbc:mysql://ip:port"` format. For PostgreSQL, the URI is in the `"jdbc:postgresql://ip:port/db_name"` format. For more information: [PostgreSQL](https://jdbc.postgresql.org/documentation/head/connect.html). |
 | driver_url        | The download URL of the JDBC driver JAR package. An HTTP URL or file URL is supported, for example, `https://repo1.maven.org/maven2/org/postgresql/postgresql/42.3.3/postgresql-42.3.3.jar` and `file:///home/disk1/postgresql-42.3.3.jar`.<br />**NOTE**<br />You can also put the JDBC driver to any same path on the FE and BE or CN nodes and set `driver_url` to that path, which must be in the `file:///<path>/to/the/driver` format. |
-| driver_class      | The class name of the JDBC driver. The JDBC driver class names of common database engines are as follows:<ul><li>MySQL: `com.mysql.jdbc.Driver` (MySQL v5.x and earlier) and `com.mysql.cj.jdbc.Driver` (MySQL v6.x and later)</li><li>PostgreSQL: `org.postgresql.Driver`</li><li>Oracle: `oracle.jdbc.driver.OracleDriver`</li></ul> |
-| schema_resolver   | (Optional) Explicitly specifies the schema resolver to use. Valid values: `postgresql`, `mysql`, `oracle`, `sqlserver`, `clickhouse`. Use this parameter when working with non-standard JDBC drivers that cannot be auto-detected by driver class name. If not specified, StarRocks will auto-detect the appropriate resolver based on the `driver_class` parameter. |
+| driver_class      | The class name of the JDBC driver. The JDBC driver class names of common database engines are as follows:<ul><li>MySQL: `com.mysql.jdbc.Driver` (MySQL v5.x and earlier) and `com.mysql.cj.jdbc.Driver` (MySQL v6.x and later)</li><li>PostgreSQL: `org.postgresql.Driver`</li><li>Oracle: `oracle.jdbc.driver.OracleDriver`</li><li>BigQuery: `com.simba.googlebigquery.jdbc.Driver` or `com.simba.googlebigquery.jdbc42.Driver`</li></ul> |
+| schema_resolver   | (Optional) Explicitly specifies the schema resolver to use. Valid values: `postgresql`, `mysql`, `oracle`, `sqlserver`, `clickhouse`, `bigquery`. Use this parameter when working with non-standard JDBC drivers that cannot be auto-detected by driver class name. If not specified, StarRocks will auto-detect the appropriate resolver based on the `driver_class` parameter. |
 
 #### Optional Oracle properties
 
@@ -68,6 +68,21 @@ When `driver_class` is set to Oracle, you can configure the following optional p
 | oracle.number.default-scale    | 6           | Set it when Oracle `NUMBER` metadata does not provide explicit precision and scale. Valid range: `0` to `38`. |
 | oracle.temporal.to-datetime    | false       | Controls Oracle `DATE`, `TIMESTAMP`, and `TIMESTAMP WITH LOCAL TIME ZONE` mapping. If it is set to `true`, these data types are mapped to StarRocks' `DATETIME` type; otherwise, `DATE` remains `DATE`, and `TIMESTAMP` / `TIMESTAMP WITH LOCAL TIME ZONE` are mapped to `VARCHAR(64)`. |
 | oracle.timestamptz.to-datetime | false       | Controls Oracle `TIMESTAMP WITH TIME ZONE` mapping. If it is set to `true`, it is mapped to StarRocks' `DATETIME` type; otherwise, it is mapped to `VARCHAR(64)`. |
+
+#### BigQuery notes
+
+BigQuery uses OAuth-based authentication instead of username/password. Authentication parameters are passed directly in the `jdbc_uri` string. The `user` and `password` properties are not used but must be present in the DDL (set them to empty strings).
+
+The Simba BigQuery JDBC driver is not available on Maven Central. Download it from [Google Cloud](https://cloud.google.com/bigquery/docs/reference/odbc-jdbc-drivers) and host it at a URL accessible to your FE and BE/CN nodes, then set `driver_url` to that URL.
+
+Common `jdbc_uri` authentication modes:
+
+| OAuthType | Auth method | Additional parameters |
+| :-------- | :---------- | :-------------------- |
+| `0` | Service account key file | `OAuthServiceAcctEmail`, `OAuthPvtKeyPath` |
+| `3` | Application Default Credentials | None |
+
+Example URI: `jdbc:bigquery://https://www.googleapis.com/bigquery/v2:443;ProjectId=my-project;OAuthType=3`
 
 > **NOTE**
 >
@@ -157,6 +172,28 @@ PROPERTIES
     "driver_url"="file:///path/to/custom-postgresql-driver.jar",
     "driver_class"="com.custom.PostgresDriver",
     "schema_resolver"="postgresql"
+);
+-- BigQuery (Application Default Credentials)
+CREATE EXTERNAL CATALOG jdbc_bigquery
+PROPERTIES
+(
+    "type"="jdbc",
+    "user"="",
+    "password"="",
+    "jdbc_uri"="jdbc:bigquery://https://www.googleapis.com/bigquery/v2:443;ProjectId=my-gcp-project;OAuthType=3",
+    "driver_url"="file:///path/to/GoogleBigQueryJDBC42.jar",
+    "driver_class"="com.simba.googlebigquery.jdbc42.Driver"
+);
+-- BigQuery (service account key file)
+CREATE EXTERNAL CATALOG jdbc_bigquery_sa
+PROPERTIES
+(
+    "type"="jdbc",
+    "user"="",
+    "password"="",
+    "jdbc_uri"="jdbc:bigquery://https://www.googleapis.com/bigquery/v2:443;ProjectId=my-gcp-project;OAuthType=0;OAuthServiceAcctEmail=sa@my-gcp-project.iam.gserviceaccount.com;OAuthPvtKeyPath=/path/to/key.json",
+    "driver_url"="file:///path/to/GoogleBigQueryJDBC42.jar",
+    "driver_class"="com.simba.googlebigquery.jdbc42.Driver"
 );
 ```
 

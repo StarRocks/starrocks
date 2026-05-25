@@ -377,6 +377,7 @@ Currently, only Iceberg views created through StarRocks are supported. Starting 
 | ClickHouse   | v3.3+                |
 | Oracle       | v3.2.9+              |
 | SQL Server   | v3.2.9+              |
+| BigQuery     | v4.1+ (Experimental) |
 
 ### MySQL
 
@@ -440,6 +441,31 @@ Supported from v3.2.9 onwards.
 ### SQL Server
 
 Supported from v3.2.9 onwards.
+
+### BigQuery
+
+Supported from v4.1 onwards (Experimental). Requires the Simba BigQuery JDBC driver.
+
+#### Data type correspondance
+
+| BigQuery    | StarRocks           | Notes |
+| :---------- | :------------------ | :---- |
+| BOOL        | BOOLEAN             | Simba driver may report as `BIT` or `BOOLEAN` |
+| INT64       | BIGINT              | |
+| FLOAT64     | DOUBLE              | |
+| NUMERIC     | DECIMAL(p, s)       | Precision ≤ 38 |
+| BIGNUMERIC  | VARCHAR             | Precision > 38; cannot fit in DECIMAL(38, x) |
+| STRING      | VARCHAR             | |
+| BYTES       | VARBINARY           | |
+| DATE        | DATE                | |
+| TIME        | TIME                | |
+| DATETIME    | DATETIME            | Civil time, no timezone conversion |
+| TIMESTAMP   | DATETIME            | UTC epoch; converted to session query timezone |
+| JSON        | JSON                | |
+| STRUCT      | VARCHAR             | Serialised string representation |
+| ARRAY       | VARCHAR             | Serialised string representation |
+| GEOGRAPHY   | VARCHAR             | |
+| INTERVAL    | VARCHAR             | |
 
 ## Elasticsearch Catalog
 
