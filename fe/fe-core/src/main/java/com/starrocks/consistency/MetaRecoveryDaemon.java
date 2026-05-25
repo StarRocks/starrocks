@@ -26,12 +26,7 @@ import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.common.proc.BaseProcResult;
-<<<<<<< HEAD
 import com.starrocks.common.util.FrontendDaemon;
-import com.starrocks.common.util.TimeUtils;
-=======
-import com.starrocks.common.util.LeaderDaemon;
->>>>>>> 31cebbd57c ([Enhancement] Store BackendStatus.lastSuccessReportTabletsTime as epoch ms and tidy TimeUtils (#73726))
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.persist.PartitionVersionRecoveryInfo;
