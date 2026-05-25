@@ -31,7 +31,7 @@
 #include "exec/pipeline/scan/morsel.h"
 #include "exec/pipeline/scan/scan_operator.h"
 #include "exec/pipeline/schedule/common.h"
-#include "exec/pipeline/schedule/observer.h"
+#include "exec/pipeline/schedule/pipeline_driver_observer.h"
 #include "exec/pipeline/source_operator.h"
 #include "exec/runtime_filter/runtime_filter_probe.h"
 #include "exec/workgroup/work_group_fwd.h"
@@ -568,7 +568,7 @@ protected:
     std::string _build_readable_string(bool use_raw_name) const;
 
     RuntimeState* _runtime_state = nullptr;
-    PipelineObserver _observer;
+    PipelineDriverObserver _observer;
     // Keep this before _operators so driver teardown destroys operators first, then their managers.
     std::vector<std::unique_ptr<spill::OperatorMemoryResourceManager>> _operator_mem_resource_managers;
     Operators _operators;

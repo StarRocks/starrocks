@@ -12,15 +12,16 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "exec/pipeline/schedule/observer.h"
+#include "exec/pipeline/schedule/pipeline_driver_observer.h"
 
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/pipeline_driver.h"
 #include "exec/pipeline/schedule/common.h"
 #include "exec/pipeline/schedule/event_scheduler.h"
-#include "runtime/runtime_state.h"
+#include "exec/pipeline/schedule/utils.h"
 
 namespace starrocks::pipeline {
+
 static void on_update(PipelineDriver* driver) {
     auto sink = driver->sink_operator();
     auto source = driver->source_operator();
@@ -43,7 +44,16 @@ static void on_source_update(PipelineDriver* driver) {
     }
 }
 
-void PipelineObserver::_do_update(int event) {
+void PipelineDriverObserver::_update() {
+    int event = 0;
+    AtomicRequestControler(_pending_event_cnt, [&]() {
+        RACE_DETECT(detect_do_update);
+        event |= _fetch_event();
+        _do_update(event);
+    });
+}
+
+void PipelineDriverObserver::_do_update(int event) {
     auto driver = _driver;
     auto token = driver->acquire_schedule_token();
     auto sink = driver->sink_operator();
@@ -82,34 +92,13 @@ void PipelineObserver::_do_update(int event) {
     }
 }
 
-std::string Observable::to_string() const {
-    std::string str;
-    for (auto* observer : _observers) {
-        str += observer->driver()->to_readable_string() + "\n";
-    }
-    return str;
+void PipelineDriverObserver::runtime_filter_timeout_trigger() {
+    _driver->set_all_global_rf_timeout();
+    source_trigger();
 }
 
-void Observable::add_observer(RuntimeState* state, PipelineObserver* observer) {
-    if (state->enable_event_scheduler()) {
-        DCHECK(observer != nullptr);
-        _observers.push_back(observer);
-    }
-}
-
-void PipeObservable::attach_sink_observer(RuntimeState* state, pipeline::PipelineObserver* observer) {
-    _sink_observable.add_observer(state, observer);
-}
-
-void PipeObservable::attach_source_observer(RuntimeState* state, pipeline::PipelineObserver* observer) {
-    _source_observable.add_observer(state, observer);
-}
-
-void Observable::notify_runtime_filter_timeout() {
-    for (auto* observer : _observers) {
-        observer->driver()->set_all_global_rf_timeout();
-        observer->source_trigger();
-    }
+std::string PipelineDriverObserver::debug_string() const {
+    return _driver->to_readable_string();
 }
 
 } // namespace starrocks::pipeline
