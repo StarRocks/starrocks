@@ -43,6 +43,9 @@ StatusOr<SparseRange<>> new_segment_iterator_for_prepare_pruning(const std::shar
 // iterator scan path can convert a TabletRangePB-derived SeekRange into a
 // contiguous [lower, upper) rowid window.
 // Returns std::nullopt when the range is empty on this segment.
+StatusOr<std::vector<std::optional<Range<rowid_t>>>> segment_seek_ranges_to_rowid_ranges(
+        const std::shared_ptr<Segment>& segment, const std::vector<SeekRange>& ranges,
+        const LakeIOOptions& lake_io_opts);
 StatusOr<std::optional<Range<rowid_t>>> segment_seek_range_to_rowid_range(const std::shared_ptr<Segment>& segment,
                                                                           const SeekRange& range,
                                                                           const LakeIOOptions& lake_io_opts);

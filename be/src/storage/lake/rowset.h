@@ -56,8 +56,11 @@ struct PreparedSegmentReadState {
     std::atomic<uint32_t> lifecycle{static_cast<uint32_t>(Lifecycle::UNPREPARED)};
     Status prepare_status;
 
-    SparseRangePtr prepared_pruned_scan_range;
-    bool prepared_pruned_scan_range_includes_page_filters = false;
+    SparseRangePtr pruned_scan_range;
+    bool pruned_scan_range_includes_page_filters = false;
+
+    std::vector<std::optional<Range<rowid_t>>> seek_range_rowid_ranges;
+    std::optional<Range<rowid_t>> tablet_rowid_range;
 };
 
 struct PreparedTabletReadState {
@@ -104,6 +107,9 @@ public:
     StatusOr<std::vector<ChunkIteratorPtr>> read(const Schema& schema, const RowsetReadOptions& options);
     StatusOr<std::vector<ChunkIteratorPtr>> read(const Schema& schema, const RowsetReadOptions& options,
                                                  const std::vector<SegmentPtr>& prepared_segments);
+    StatusOr<std::vector<ChunkIteratorPtr>> read_prepared_segment(
+            const Schema& schema, const RowsetReadOptions& options, const std::vector<SegmentPtr>& prepared_segments,
+            size_t segment_idx, const PreparedSegmentReadStatePtr& prepared_segment_state);
     StatusOr<std::optional<SeekRange>> get_seek_range() const;
     Status init_segment_read_options(const RowsetReadOptions& options, const LakeIOOptions& lake_io_opts,
                                      const DisjunctivePredicates& delete_predicates, OlapReaderStatistics* stats,
@@ -214,8 +220,14 @@ public:
     int64_t end_version() const override { return 0; }
 
 private:
+    struct ReadContext {
+        const std::vector<SegmentPtr>* prepared_segments = nullptr;
+        std::optional<size_t> target_segment_idx = std::nullopt;
+        const PreparedSegmentReadState* prepared_segment_state = nullptr;
+    };
+
     StatusOr<std::vector<ChunkIteratorPtr>> do_read(const Schema& schema, const RowsetReadOptions& options,
-                                                    const std::vector<SegmentPtr>* prepared_segments);
+                                                    const ReadContext& context);
 
     TabletManager* _tablet_mgr;
     int64_t _tablet_id;

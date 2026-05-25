@@ -55,6 +55,15 @@
 
 namespace starrocks::lake {
 
+static SegmentReadStateCache make_segment_read_state_cache(const PreparedSegmentReadState& state) {
+    SegmentReadStateCache cache;
+    cache.scan_range = state.pruned_scan_range;
+    cache.scan_range_includes_page_filters = state.pruned_scan_range_includes_page_filters;
+    cache.seek_range_rowid_ranges = &state.seek_range_rowid_ranges;
+    cache.tablet_rowid_range = &state.tablet_rowid_range;
+    return cache;
+}
+
 Rowset::Rowset(TabletManager* tablet_mgr, int64_t tablet_id, const RowsetMetadataPB* metadata, int index,
                TabletSchemaPtr tablet_schema)
         : _tablet_mgr(tablet_mgr),
@@ -243,12 +252,21 @@ Status Rowset::add_partial_compaction_segments_info(TxnLogPB_OpCompaction* op_co
 }
 
 StatusOr<std::vector<ChunkIteratorPtr>> Rowset::read(const Schema& schema, const RowsetReadOptions& options) {
-    return do_read(schema, options, nullptr);
+    return do_read(schema, options, ReadContext{});
 }
 
 StatusOr<std::vector<ChunkIteratorPtr>> Rowset::read(const Schema& schema, const RowsetReadOptions& options,
                                                      const std::vector<SegmentPtr>& prepared_segments) {
-    return do_read(schema, options, &prepared_segments);
+    return do_read(schema, options, ReadContext{.prepared_segments = &prepared_segments});
+}
+
+StatusOr<std::vector<ChunkIteratorPtr>> Rowset::read_prepared_segment(
+        const Schema& schema, const RowsetReadOptions& options, const std::vector<SegmentPtr>& prepared_segments,
+        size_t segment_idx, const PreparedSegmentReadStatePtr& prepared_segment_state) {
+    return do_read(schema, options,
+                   ReadContext{.prepared_segments = &prepared_segments,
+                               .target_segment_idx = segment_idx,
+                               .prepared_segment_state = prepared_segment_state.get()});
 }
 
 Status Rowset::init_segment_read_options(const RowsetReadOptions& options, const LakeIOOptions& lake_io_opts,
@@ -340,7 +358,11 @@ Schema Rowset::build_segment_schema(const Schema& schema, const RowsetReadOption
 }
 
 StatusOr<std::vector<ChunkIteratorPtr>> Rowset::do_read(const Schema& schema, const RowsetReadOptions& options,
-                                                        const std::vector<SegmentPtr>* prepared_segments) {
+                                                        const ReadContext& context) {
+    if (context.target_segment_idx.has_value() && *context.target_segment_idx >= static_cast<size_t>(num_segments())) {
+        return Status::InvalidArgument("target segment index exceeds rowset segment count");
+    }
+
     const auto delete_predicates = options.delete_predicates != nullptr
                                            ? options.delete_predicates->get_predicates(_index)
                                            : DisjunctivePredicates{};
@@ -361,6 +383,9 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::do_read(const Schema& schema, co
     std::unordered_set<int> skip_segment_idxs;
     if (use_metadata_filter) {
         for (int i = 0; i < metadata().segment_metas_size() && i < num_segments(); i++) {
+            if (context.target_segment_idx.has_value() && static_cast<size_t>(i) != *context.target_segment_idx) {
+                continue;
+            }
             const auto& segment_meta = metadata().segment_metas(i);
             if (!SegmentMetadataFilter::may_contain(segment_meta, options.pred_tree_for_zone_map,
                                                     *options.tablet_schema)) {
@@ -378,15 +403,9 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::do_read(const Schema& schema, co
 
     std::vector<SegmentPtr> segments;
     const std::unordered_set<int>* skip_ptr = skip_segment_idxs.empty() ? nullptr : &skip_segment_idxs;
-    if (prepared_segments != nullptr) {
-        if (prepared_segments->size() != static_cast<size_t>(num_segments())) {
+    if (context.prepared_segments != nullptr) {
+        if (context.prepared_segments->size() != static_cast<size_t>(num_segments())) {
             return Status::InvalidArgument("prepared segment count does not match rowset segment count");
-        }
-        segments = *prepared_segments;
-        for (int idx : skip_segment_idxs) {
-            if (idx >= 0 && static_cast<size_t>(idx) < segments.size()) {
-                segments[idx] = nullptr;
-            }
         }
     } else {
         RETURN_IF_ERROR(load_segments(&segments, seg_options, nullptr, skip_ptr));
@@ -394,11 +413,23 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::do_read(const Schema& schema, co
 
     // Update segments_read_count after filtering
     if (options.stats) {
-        options.stats->segments_read_count += num_segments() - skip_segment_idxs.size();
+        if (context.target_segment_idx.has_value()) {
+            options.stats->segments_read_count +=
+                    skip_segment_idxs.contains(static_cast<int>(*context.target_segment_idx)) ? 0 : 1;
+        } else {
+            options.stats->segments_read_count += num_segments() - skip_segment_idxs.size();
+        }
     }
 
-    for (int i = 0; i < segments.size(); i++) {
-        auto& seg_ptr = segments[i];
+    const size_t segment_begin = context.target_segment_idx.value_or(0);
+    const size_t segment_count =
+            context.prepared_segments != nullptr ? context.prepared_segments->size() : segments.size();
+    const size_t segment_end = context.target_segment_idx.has_value() ? *context.target_segment_idx + 1 : segment_count;
+    for (size_t i = segment_begin; i < segment_end; i++) {
+        if (skip_segment_idxs.contains(static_cast<int>(i))) {
+            continue;
+        }
+        auto& seg_ptr = context.prepared_segments != nullptr ? (*context.prepared_segments)[i] : segments[i];
         // Skip segments that were filtered by metadata filter (nullptr placeholders)
         if (seg_ptr == nullptr) {
             continue;
@@ -417,6 +448,9 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::do_read(const Schema& schema, co
             }
             seg_options.rowid_range_option = std::move(rowid_range);
             seg_options.is_first_split_of_segment = is_first_split_of_segment;
+            if (context.prepared_segment_state != nullptr) {
+                seg_options.read_state_cache = make_segment_read_state_cache(*context.prepared_segment_state);
+            }
         } else if (options.short_key_ranges_option != nullptr) { // logical split.
             seg_options.is_first_split_of_segment = options.short_key_ranges_option->is_first_split_of_tablet;
         } else {
