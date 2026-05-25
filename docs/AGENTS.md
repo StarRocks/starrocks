@@ -4,7 +4,7 @@
 
 ## Overview
 
-StarRocks documentation is built using Docusaurus and hosted at https://docs.starrocks.io/. Documentation is available in both English and Chinese.
+StarRocks documentation is built using Docusaurus and hosted at https://docs.starrocks.io/. Documentation is available in English, Chinese, and Japanese.
 
 Read [`handbook/index.md`](../handbook/index.md) first for repo-wide routing, then use the docs domain map in [`handbook/domains/docs-and-translation.md`](../handbook/domains/docs-and-translation.md) for handbook-vs-public-docs boundaries.
 
@@ -24,6 +24,7 @@ docs/
 │   ├── reference/         # Reference docs (SQL, config)
 │   ├── sql-reference/     # SQL reference
 │   └── using_starrocks/   # User guides
+├── ja/                    # Japanese documentation (mirrors en/)
 ├── zh/                    # Chinese documentation (mirrors en/)
 ├── docusaurus/            # Docusaurus build config
 │   ├── docusaurus.config.js
@@ -106,7 +107,7 @@ Place images in `_assets/` and reference:
 
 1. Create doc in appropriate directory
 2. Add to sidebar in `docusaurus/sidebars.js`
-3. Add both English and Chinese versions
+3. Add English and Chinese versions; add Japanese version when applicable
 
 ### For Bug Fixes
 
@@ -116,9 +117,10 @@ Place images in `_assets/` and reference:
 
 ### Translation
 
-When updating English docs, update Chinese docs too (or vice versa):
-- `docs/en/path/to/file.md`
-- `docs/zh/path/to/file.md`
+When updating English docs, update Chinese docs too (or vice versa). Update Japanese docs when a corresponding `docs/ja/` page exists or when explicitly requested:
+- `docs/en/path/to/file.md` (required)
+- `docs/zh/path/to/file.md` (required)
+- `docs/ja/path/to/file.md` (when applicable)
 
 ## Sidebar Configuration
 
@@ -146,11 +148,12 @@ module.exports = {
 1. Create `docs/en/category/new-page.md`
 2. Add to `sidebars.js`
 3. Create Chinese version `docs/zh/category/new-page.md`
+4. Create Japanese version `docs/ja/category/new-page.md` (when applicable)
 
 ### Update Existing Page
 
 1. Edit the markdown file
-2. Update both language versions if needed
+2. Update all language versions if needed
 3. Verify links still work
 
 ### Add Code Example
