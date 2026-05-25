@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "runtime/sorted_chunks_merger.h"
+#include "compute_env/sorting/sorted_chunks_merger.h"
 
 #include <gtest/gtest.h>
 

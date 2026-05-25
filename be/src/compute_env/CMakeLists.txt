@@ -15,6 +15,7 @@
 set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/compute_env")
 
 set(COMPUTE_ENV_SORTING_FILES
+    sorting/chunk_cursor.cpp
     sorting/compare_column.cpp
     sorting/merge.cpp
     sorting/merge_cascade.cpp
@@ -23,6 +24,7 @@ set(COMPUTE_ENV_SORTING_FILES
     sorting/sort_column.cpp
     sorting/sort_cursor.cpp
     sorting/sort_permute.cpp
+    sorting/sorted_chunks_merger.cpp
 )
 
 ADD_BE_LIB(ComputeEnv
