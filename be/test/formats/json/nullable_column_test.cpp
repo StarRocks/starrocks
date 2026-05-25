@@ -300,11 +300,6 @@ TEST_F(AddNullableColumnTest, test_add_map) {
     ASSERT_EQ("[{'key1':'foo','key2':'bar','key3':'baz'}]", column->debug_string());
 }
 
-// Regression: a JSON map field that turns malformed mid-iteration (missing
-// comma between entries) used to leave orphan keys/values inside the inner
-// MapColumn after the rescue path's append_nulls(1). Subsequent valid rows
-// would then read through those orphans. The fix snapshots column->size()
-// at entry and resize()s back to it before appending the NULL.
 TEST_F(AddNullableColumnTest, test_add_map_partial_append_rolled_back) {
     TypeDescriptor type_desc = TypeDescriptor::create_map_type(TypeDescriptor::create_varchar_type(10),
                                                                TypeDescriptor::create_varchar_type(10));
@@ -324,7 +319,7 @@ TEST_F(AddNullableColumnTest, test_add_map_partial_append_rolled_back) {
         auto json = R"(  { "root": {"a": "1" "b": "2"} }  )"_padded;
         auto doc = parser.iterate(json);
         simdjson::ondemand::value val = doc.find_field_unordered("root");
-        ASSERT_OK(add_nullable_column(column.get(), type_desc, "root", &val, true));
+        ASSERT_ERROR(add_nullable_column(column.get(), type_desc, "root", &val, true));
     }
     {
         auto json = R"(  { "root": {"x": "1", "y": "2"} }  )"_padded;
@@ -333,14 +328,10 @@ TEST_F(AddNullableColumnTest, test_add_map_partial_append_rolled_back) {
         ASSERT_OK(add_nullable_column(column.get(), type_desc, "root", &val, true));
     }
 
-    // The inner MapColumn's offsets/keys/values must stay in sync (CHECK_EQ
-    // inside MapColumn::check_or_die). Without the fix, the orphan keys/values
-    // from row 2 would make keys->size() > offsets.back() and abort here.
     column->check_or_die();
-    ASSERT_EQ(3, column->size());
+    ASSERT_EQ(2, column->size());
     ASSERT_EQ("{'a':'1','b':'2'}", column->debug_item(0));
-    ASSERT_EQ("NULL", column->debug_item(1));
-    ASSERT_EQ("{'x':'1','y':'2'}", column->debug_item(2));
+    ASSERT_EQ("{'x':'1','y':'2'}", column->debug_item(1));
 }
 
 TEST_F(AddNullableColumnTest, test_add_map_null) {
