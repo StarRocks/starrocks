@@ -23,6 +23,7 @@
 #include "base/brpc/brpc.h"
 #include "base/concurrency/countdown_latch.h"
 #include "base/debug/trace.h"
+#include "base/failpoint/fail_point.h"
 #include "base/testutil/sync_point.h"
 #include "base/time/time.h"
 #include "base/utility/defer_op.h"
@@ -219,12 +220,16 @@ LakeServiceImpl::LakeServiceImpl(ExecEnv* env, lake::TabletManager* tablet_mgr) 
 
 LakeServiceImpl::~LakeServiceImpl() = default;
 
+DEFINE_FAIL_POINT(lake_publish_version_rpc_fail);
+
 void LakeServiceImpl::publish_version(::google::protobuf::RpcController* controller,
                                       const ::starrocks::PublishVersionRequest* request,
                                       ::starrocks::PublishVersionResponse* response,
                                       ::google::protobuf::Closure* done) {
     brpc::ClosureGuard guard(done);
     auto cntl = static_cast<brpc::Controller*>(controller);
+    FAIL_POINT_TRIGGER_RETURN(lake_publish_version_rpc_fail,
+                              cntl->SetFailed("inject lake_publish_version_rpc_fail"));
     // Server-side BRPC queue time: latency from RPC arrival on this server to handler entry.
     // Used to attribute the FE-measured publish_rpc cost vs BE handler cost gap.
     // cntl can be nullptr in unit tests, so guard the access.
