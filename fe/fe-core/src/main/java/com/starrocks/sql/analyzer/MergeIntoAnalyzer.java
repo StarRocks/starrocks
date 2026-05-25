@@ -160,6 +160,10 @@ public class MergeIntoAnalyzer {
                                 throw new SemanticException("table '%s' does not have column '%s'",
                                         tableName.getTbl(), colName);
                             }
+                            if (col.isHidden()) {
+                                throw new SemanticException(
+                                        "Inserting into metadata column '%s' is not allowed", colName);
+                            }
                             if (!seen.add(colName)) {
                                 ErrorReport.reportSemanticException(
                                         ErrorCode.ERR_DUP_FIELDNAME, colName);

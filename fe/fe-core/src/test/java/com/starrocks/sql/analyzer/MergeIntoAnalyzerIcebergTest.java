@@ -106,6 +106,25 @@ public class MergeIntoAnalyzerIcebergTest {
     }
 
     @Test
+    public void testMergeIntoInsertHiddenColumn() {
+        // INSERT (_file, id, data, date) VALUES (...) — listing the hidden _file
+        // metadata column must be rejected, mirroring the UPDATE-side check above.
+        // Without this validation getNotMatchedColumnValue silently drops the value
+        // because dataColumns filters out hidden columns.
+        String sql = "MERGE INTO iceberg0.unpartitioned_db.t0_v2 AS t " +
+                "USING (SELECT 1 AS id, 'p' AS f, 'd' AS data, '2024-01-01' AS date) AS s " +
+                "ON t.id = s.id " +
+                "WHEN NOT MATCHED THEN INSERT (_file, id, data, date) " +
+                "VALUES (s.f, s.id, s.data, s.date)";
+        MergeIntoStmt stmt = parseMerge(sql);
+
+        SemanticException exception = assertThrows(SemanticException.class,
+                () -> MergeIntoAnalyzer.analyze(stmt, connectContext));
+        assertTrue(exception.getMessage().contains("metadata column") || exception.getMessage().contains("_file"),
+                "Error should mention metadata column or _file: " + exception.getMessage());
+    }
+
+    @Test
     public void testMergeIntoInsertColumnCountMismatch() {
         // INSERT (id, data) VALUES (1) — 2 columns but 1 value
         String sql = "MERGE INTO iceberg0.unpartitioned_db.t0_v2 AS t " +
@@ -328,6 +347,22 @@ public class MergeIntoAnalyzerIcebergTest {
         assertNotNull(colNames);
         assertEquals(5, colNames.size());
         assertNotNull(stmt.getRoutingExpr());
+    }
+
+    @Test
+    public void testMergeSourceMergeLevelAlias() {
+        // Parenthesizing a non-subquery relation forces ANTLR to route the trailing
+        // identifier to the mergeIntoStatement-level sourceAlias slot rather than the
+        // relation's own alias slot. The AstBuilder must apply that alias back onto
+        // the source relation so that "s.*" in ON/WHEN resolves during QueryAnalyzer.
+        String sql = "MERGE INTO iceberg0.unpartitioned_db.t0_v2 AS t " +
+                "USING (iceberg0.unpartitioned_db.t0_v2) AS s " +
+                "ON t.id = s.id " +
+                "WHEN MATCHED THEN UPDATE SET data = s.data";
+        MergeIntoStmt stmt = parseMerge(sql);
+
+        assertDoesNotThrow(() -> MergeIntoAnalyzer.analyze(stmt, connectContext));
+        assertNotNull(stmt.getQueryStatement());
     }
 
     @Test
