@@ -550,6 +550,8 @@ set(STARROCKS_LINK_LIBS
     FileSystem
     Formats
     FormatsIO
+    Service
+    ServiceBE
     Storage
     Rowset
     Runtime
