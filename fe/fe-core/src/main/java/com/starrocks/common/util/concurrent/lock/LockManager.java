@@ -36,8 +36,15 @@ public class LockManager {
     // Gate for stack-trace capture in slow-lock logs. Thread.getStackTrace involves a JVM
     // safepoint operation that is expensive when slow-lock events fire frequently in large
     // clusters. The capture is rate-limited at the event level (all-or-nothing per event)
-    // by Config.slow_lock_stack_print_interval_ms; the warn log itself still fires every event.
+    // by Config.slow_lock_stack_print_interval_ms; the warn log itself still fires every event
+    // unless the outer event-level gate (LAST_EVENT_LOG_MS / slow_lock_log_every_ms) suppresses
+    // it first.
     private static final AtomicLong LAST_STACK_PRINT_MS = new AtomicLong(0L);
+
+    // Outer event-level gate for the whole slow-lock warn (JSON build + LOG.warn). GLOBAL scope
+    // across rids so a hot rid cannot drown out signal from other rids. Controlled by
+    // Config.slow_lock_log_every_ms; <= 0 disables the gate and emits every event.
+    private static final AtomicLong LAST_EVENT_LOG_MS = new AtomicLong(0L);
 
     private final int lockTablesSize;
     private final Object[] lockTableMutexes;
@@ -396,6 +403,19 @@ public class LockManager {
     private static final int DEFAULT_STACK_RESERVE_LEVELS = 20;
 
     private void logSlowLockTrace(long rid) {
+        // Outer event-level gate: skip the lock-table snapshot, JSON build, and warn entirely
+        // when we are still inside the slow_lock_log_every_ms window. Uses a monotonic clock so
+        // wall-clock adjustments cannot stretch or short-circuit the interval.
+        long eventInterval = Config.slow_lock_log_every_ms;
+        if (eventInterval > 0) {
+            long monoNowMs = TimeUnit.NANOSECONDS.toMillis(System.nanoTime());
+            long lastEvent = LAST_EVENT_LOG_MS.get();
+            if (monoNowMs - lastEvent < eventInterval
+                    || !LAST_EVENT_LOG_MS.compareAndSet(lastEvent, monoNowMs)) {
+                return;
+            }
+        }
+
         long nowMs = System.currentTimeMillis();
         int lockTableIdx = getLockTableIndex(rid);
         List<LockHolder> owners;

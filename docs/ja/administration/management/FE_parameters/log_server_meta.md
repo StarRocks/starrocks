@@ -479,7 +479,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - タイプ：Long
 - 単位：Milliseconds
 - 変更可能：Yes
-- 説明：同じ SlowLockLogStats インスタンスに対して別の「低速ロック」警告を発行するまでに待機する最小間隔 (ミリ秒)。LockUtils は、ロック待機が `slow_lock_threshold_ms` を超えた後にこの値をチェックし、最後のログに記録された低速ロックイベントから `slow_lock_log_every_ms` ミリ秒が経過するまで追加の警告を抑制します。長期的な競合中にログのボリュームを減らすには値を大きくし、より頻繁な診断を得るには値を小さくします。変更は、その後のチェックに対して実行時に有効になります。
+- 説明：同一の発信元から連続する「低速ロック」警告の間の最小間隔（ミリ秒）。スコープは警告を発するロック層によって異なります：`LockManager.logSlowLockTrace` では**グローバル**（すべての rid に対する一つの静的ゲート）、`QueryableReentrantReadWriteLock.lockDetectingSlowLock` では**per-instance**（各ロックオブジェクト——例えば各 `RoutineLoadJob`——が独自のゲートを持つ）、レガシー `LockUtils` 経路では**per-Database**（各 `Database` の `SlowLockLogStats`）。どの層でもこの間隔が経過するまでは warn 出力と内部の高コストなスナップショット/スタックキャプチャがまとめてスキップされます。`0`（または負の値）に設定するとゲートが無効になり、すべてのイベントで警告が出力されます。長期的な競合中にログ量を減らすには値を大きく、診断頻度を上げるには小さく設定します。
 - 導入時期：v3.2.0
 
 ### `slow_lock_print_stack`
@@ -488,7 +488,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - タイプ：Boolean
 - 単位：-
 - 変更可能：Yes
-- 説明：LockManager が `logSlowLockTrace` によって出力される低速ロック警告の JSON ペイロードに、所有スレッドの完全なスタックトレースを含めることを許可するかどうか ("stack" 配列は `LogUtil.getStackTraceToJsonArray` を使用して `start=0` および `max=Short.MAX_VALUE` で設定されます)。この設定は、ロック取得が `slow_lock_threshold_ms` で設定されたしきい値を超えたときに表示されるロック所有者に関する追加のスタック情報のみを制御します。この機能を有効にすると、ロックを保持している正確なスレッドスタックを提供することでデバッグに役立ちます。無効にすると、高並行環境でスタックトレースをキャプチャしてシリアル化することによるログのボリュームと CPU/メモリのオーバーヘッドが減少します。有効時、キャプチャの頻度はさらに `slow_lock_stack_print_interval_ms` によってレート制限されます。
+- 説明：低速ロック警告で所有スレッド／現在スレッドのスタックトレースをキャプチャするかどうかのマスタースイッチ。`LockManager.logSlowLockTrace`（所有者ごとの `"stack"` フィールド）と `QueryableReentrantReadWriteLock.getLockInfoToJson`（レガシー db ロック経路および `RoutineLoadJob` の per-job ロックで使われる、所有者／最古 reader／現在スレッドの `"stack"` フィールド）の両方に適用されます。有効にするとロックを保持する正確なスレッドスタックを提供してデバッグに役立ち、無効にすると高並列環境におけるスタックトレースのキャプチャとシリアライズによるログ量・CPU／メモリオーバーヘッドを削減できます。有効時、キャプチャ頻度はさらに `slow_lock_stack_print_interval_ms` によってレート制限されます。
 - 導入時期：v3.3.16, v3.4.5, v3.5.1
 
 ### `slow_lock_stack_print_interval_ms`
@@ -497,7 +497,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - タイプ：Long
 - 単位：Milliseconds
 - 変更可能：Yes
-- 説明：LockManager の低速ロックログイベント間における所有者スタックトレースキャプチャの最小間隔。`slow_lock_print_stack` が `true` の場合にのみ適用されます。スイッチはオンだが前回のキャプチャからこの間隔が経過していない場合、各所有者の `"stack"` フィールドは `"throttled"` マーカーに置き換えられ、warn ログの残り (rid、owners、waiters、queryId、タイミング情報) は通常どおり出力されます。`0` (または負の値) に設定するとレート制限が無効になり、すべての低速ロックイベントでスタックをキャプチャする以前の動作に戻ります。`Thread.getStackTrace` は JVM safepoint を発動し、低速ロックイベントが頻発する大規模クラスタではコストが大きくなります — このゲートは診断ログ自体を抑制せずにそのコストを抑えます。
+- 説明：低速ロックログイベント間でのスタックトレースキャプチャの最小間隔。`slow_lock_print_stack` が `true` の場合のみ適用されます。スコープは層によって異なります：`LockManager.logSlowLockTrace` では**グローバル**（すべての rid に対する一つの静的ゲート）、`QueryableReentrantReadWriteLock.getLockInfoToJson` では**per-instance**（各ロックオブジェクトが独自のゲートを持つ）。スイッチはオンだが前回のキャプチャからこの間隔が経過していない場合、`"stack"` フィールドは LockManager 経路では `"throttled"` マーカーに置き換えられ、QueryableReentrantReadWriteLock 経路では省略されます。warn ログの残り（rid、owners、waiters、queryId、タイミング情報など）は外側のイベントゲート（`slow_lock_log_every_ms`）が許可する限り通常どおり出力されます。`0`（または負の値）に設定するとレート制限が無効になり、すべての低速ロックイベントでスタックをキャプチャする以前の動作に戻ります。`Thread.getStackTrace` は JVM safepoint を発動し、低速ロックイベントが頻発する大規模クラスタではコストが大きくなります — このゲートは診断ログ自体を抑制せずにそのコストを抑えます。
 - 導入時期：v4.1
 
 ### `slow_lock_max_waiter_count_to_log`
@@ -506,7 +506,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - タイプ：Int
 - 単位：-
 - 変更可能：Yes
-- 説明：単一の LockManager 低速ロックログイベントでシリアライズされる waiter エントリの最大数。実際の waiter 数がこの上限を超えると、最初の N 個の waiter のみが個別に列挙され、残りは `"waiter"` 配列の末尾に追加される単一のトレーラ `{"omitted": "remain M waiters omitted"}` で集約されます。極度の競合シナリオで Gson シリアライゼーションコストとログ行サイズを抑制しつつ、waiter 総数の診断情報を保持します。`0`（または負の値）に設定すると上限を無効化し、すべての waiter をシリアライズします。
+- 説明：単一の低速ロックログイベントでシリアライズされる waiter エントリの最大数。`LockManager.logSlowLockTrace`（`"waiter"` 配列）と `QueryableReentrantReadWriteLock.getLockInfoToJson`（レガシー db ロック経路および `RoutineLoadJob` の per-job ロックで使われる `"queuedReaders"` / `"queuedWriters"` 配列）の両方に適用されます。実際の waiter 数がこの上限を超えると、最初の N 個の waiter のみが個別に列挙され、残りは配列の末尾に追加される単一のトレーラ `{"omitted": "remain M waiters omitted"}` で集約されます。極度の競合シナリオで Gson シリアライゼーションコストとログ行サイズを抑制しつつ、waiter 総数の診断情報を保持します。`0`（または負の値）に設定すると上限を無効化し、すべての waiter をシリアライズします。
 - 導入時期：v4.1
 
 ### `slow_lock_threshold_ms`

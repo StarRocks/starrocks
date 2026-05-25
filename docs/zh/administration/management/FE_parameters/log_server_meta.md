@@ -487,7 +487,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: Long
 - 单位: 毫秒
 - 是否可变: Yes
-- 描述: 在为同一 SlowLockLogStats 实例发出另一个“慢锁”警告之前，等待的最短间隔（以毫秒为单位）。LockUtils 在锁等待超过 `slow_lock_threshold_ms` 后检查此值，并会抑制额外的警告，直到自上次记录慢锁事件以来已过去 `slow_lock_log_every_ms` 毫秒。使用更大的值可在长时间争用期间减少日志量，或使用更小的值以获得更频繁的诊断。更改在运行时对后续检查生效。
+- 描述: 同一发射源连续两次"慢锁"告警之间的最小时间间隔（毫秒）。节流作用域随发射所在的锁层不同而不同：在 `LockManager.logSlowLockTrace` 中是**全局**（一个 static 门控覆盖所有 rid）；在 `QueryableReentrantReadWriteLock.lockDetectingSlowLock` 中是**per-instance**（每个锁对象——例如每个 `RoutineLoadJob`——各有一份门控）；在老 `LockUtils` 路径中是**per-Database**（每个 `Database` 的 `SlowLockLogStats`）。任一层在间隔未到时会同时跳过 warn 输出和内部昂贵的快照/抓栈；设置为 `0`（或负数）可禁用门控，每次事件都打。值越大日志越稀，值越小诊断越密。
 - 引入版本: v3.2.0
 
 ### `slow_lock_print_stack`
@@ -496,7 +496,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: Boolean
 - 单位: -
 - 是否可变: Yes
-- 描述: 是否允许 LockManager 在 `logSlowLockTrace` 发出的慢锁警告的 JSON 负载中包含拥有线程的完整堆栈跟踪（"stack" 数组通过 `LogUtil.getStackTraceToJsonArray` 填充，`start=0` 且 `max=Short.MAX_VALUE`）。此配置仅控制当锁获取超过由 `slow_lock_threshold_ms` 配置的阈值时显示的锁所有者的额外堆栈信息。启用此功能通过提供持有锁的精确线程堆栈来帮助调试；禁用它可减少日志量和在高并发环境中捕获和序列化堆栈跟踪导致的 CPU/内存开销。开启后，捕获频率还会受到 `slow_lock_stack_print_interval_ms` 的限速控制。
+- 描述: 控制慢锁告警 JSON 中是否抓取 owner / 当前线程的堆栈跟踪的总开关。同时作用于 `LockManager.logSlowLockTrace`（owner 的 `"stack"` 字段）和 `QueryableReentrantReadWriteLock.getLockInfoToJson`（老 db 锁路径与 `RoutineLoadJob` per-job 锁所用,涵盖 owner / 最早 reader / 当前线程的 `"stack"` 字段）。启用此功能通过提供持有锁的精确线程堆栈来帮助调试；禁用它可减少日志量和在高并发环境中捕获和序列化堆栈跟踪导致的 CPU/内存开销。开启后,抓取频率还会受到 `slow_lock_stack_print_interval_ms` 的限速控制。
 - 引入版本: v3.3.16, v3.4.5, v3.5.1
 
 ### `slow_lock_stack_print_interval_ms`
@@ -505,7 +505,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: Long
 - 单位: 毫秒
 - 是否可变: Yes
-- 描述: 跨 LockManager 慢锁日志事件之间 owner 堆栈抓取的最小时间间隔。仅在 `slow_lock_print_stack` 为 `true` 时生效。当开关打开但距上次抓取的时间未达到该间隔时，每个 owner 的 `"stack"` 字段将被替换为标记 `"throttled"`，warn 日志的其余部分（rid、owners、waiters、queryId、时间统计等）仍正常输出。设置为 `0`（或负数）可禁用限速，恢复每次慢锁事件都抓取堆栈的旧行为。`Thread.getStackTrace` 会触发 JVM safepoint，在慢锁事件频繁的大集群中开销显著——该参数在不影响诊断日志输出的前提下限制这部分开销。
+- 描述: 跨慢锁日志事件之间堆栈抓取的最小时间间隔。仅在 `slow_lock_print_stack` 为 `true` 时生效。节流作用域随层不同:在 `LockManager.logSlowLockTrace` 中是**全局**(一个 static 门控覆盖所有 rid);在 `QueryableReentrantReadWriteLock.getLockInfoToJson` 中是**per-instance**(每个锁对象各有一份门控)。当开关打开但距上次抓取未达到该间隔时,`"stack"` 字段在 LockManager 路径会被替换为标记 `"throttled"`,在 QueryableReentrantReadWriteLock 路径会被省略;warn 日志的其余部分(rid、owners、waiters、queryId、时间统计等)如果外层事件门 (`slow_lock_log_every_ms`) 允许的话仍正常输出。设置为 `0`(或负数)可禁用限速,恢复每次慢锁事件都抓取堆栈的旧行为。`Thread.getStackTrace` 会触发 JVM safepoint,在慢锁事件频繁的大集群中开销显著——该参数在不影响诊断日志输出的前提下限制这部分开销。
 - 引入版本: v4.1
 
 ### `slow_lock_max_waiter_count_to_log`
@@ -514,7 +514,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: Int
 - 单位: -
 - 是否可变: Yes
-- 描述: 单条 LockManager 慢锁日志事件中序列化的 waiter 条目数上限。当实际 waiter 数超过该上限时，前 N 个 waiter 被逐条列出，剩余部分由附加在 `"waiter"` 数组末尾的单条 trailer `{"omitted": "remain M waiters omitted"}` 汇总。用于在极端竞争场景下控制 Gson 序列化开销和日志行长度，同时保留 waiter 总数的诊断信息。设置为 `0`（或负数）可禁用该上限，序列化所有 waiter。
+- 描述: 单条慢锁日志事件中序列化的 waiter 条目数上限。同时作用于 `LockManager.logSlowLockTrace`(`"waiter"` 数组)和 `QueryableReentrantReadWriteLock.getLockInfoToJson`(老 db 锁路径与 `RoutineLoadJob` per-job 锁所用的 `"queuedReaders"` / `"queuedWriters"` 数组)。当实际 waiter 数超过该上限时,前 N 个 waiter 被逐条列出,剩余部分由附加在数组末尾的单条 trailer `{"omitted": "remain M waiters omitted"}` 汇总。用于在极端竞争场景下控制 Gson 序列化开销和日志行长度,同时保留 waiter 总数的诊断信息。设置为 `0`(或负数)可禁用该上限,序列化所有 waiter。
 - 引入版本: v4.1
 
 ### `slow_lock_threshold_ms`

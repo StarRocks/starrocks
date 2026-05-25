@@ -489,7 +489,7 @@ This topic introduces the following types of FE configurations:
 - Type: Long
 - Unit: Milliseconds
 - Is mutable: Yes
-- Description: Minimum interval (in ms) to wait before emitting another "slow lock" warning for the same SlowLockLogStats instance. LockUtils checks this value after a lock wait exceeds `slow_lock_threshold_ms` and will suppress additional warnings until `slow_lock_log_every_ms` milliseconds have passed since the last logged slow-lock event. Use a larger value to reduce log volume during prolonged contention or a smaller value to get more frequent diagnostics. Changes take effect at runtime for subsequent checks.
+- Description: Minimum interval (in ms) between two consecutive "slow lock" warnings from the same emit source. The throttle scope depends on which lock layer emits the warning: **GLOBAL** in `LockManager.logSlowLockTrace` (one static gate across all rids), **per-instance** in `QueryableReentrantReadWriteLock.lockDetectingSlowLock` (each lock object — e.g. each `RoutineLoadJob` — has its own gate), and **per-Database** in the legacy `LockUtils` path (each `Database`'s `SlowLockLogStats`). In every layer the warn is suppressed (along with the expensive snapshot/stack capture inside it) until this interval has elapsed since the last emit; set to `0` (or negative) to disable the gate and emit every event. Use a larger value to reduce log volume during prolonged contention or a smaller value to get more frequent diagnostics.
 - Introduced in: v3.2.0
 
 ### `slow_lock_print_stack`
@@ -498,7 +498,7 @@ This topic introduces the following types of FE configurations:
 - Type: Boolean
 - Unit: -
 - Is mutable: Yes
-- Description: Whether to allow LockManager to include the owning thread's full stack trace in the JSON payload of slow-lock warnings emitted by `logSlowLockTrace` (the "stack" array is populated via `LogUtil.getStackTraceToJsonArray` with `start=0` and `max=Short.MAX_VALUE`). This configuration controls only the extra stack information for lock owners shown when a lock acquisition exceeds the threshold configured by `slow_lock_threshold_ms`. Enabling this feature helps debugging by giving precise thread stacks that hold the lock; disabling it reduces log volume and CPU/memory overhead caused by capturing and serializing stack traces in high concurrency environments. When enabled, the capture frequency is additionally rate-limited by `slow_lock_stack_print_interval_ms`.
+- Description: Master switch for capturing owner / current-thread stack traces inside slow-lock warnings. Applies to both `LockManager.logSlowLockTrace` (per-owner `"stack"` field) and `QueryableReentrantReadWriteLock.getLockInfoToJson` (owner / oldest-reader / current-thread `"stack"` field used by the legacy db-lock path and `RoutineLoadJob`'s per-job lock). Enabling this feature helps debugging by giving precise thread stacks that hold the lock; disabling it reduces log volume and CPU/memory overhead caused by capturing and serializing stack traces in high concurrency environments. When enabled, the capture frequency is additionally rate-limited by `slow_lock_stack_print_interval_ms`.
 - Introduced in: v3.3.16, v3.4.5, v3.5.1
 
 ### `slow_lock_stack_print_interval_ms`
@@ -507,7 +507,7 @@ This topic introduces the following types of FE configurations:
 - Type: Long
 - Unit: Milliseconds
 - Is mutable: Yes
-- Description: Minimum interval between owner stack-trace captures across LockManager slow-lock log events. Only applies when `slow_lock_print_stack` is `true`. When the switch is on but the interval has not elapsed since the last capture, the per-owner `"stack"` field is replaced with the marker `"throttled"` and the rest of the warn log (rid, owners, waiters, queryIds, timings) is still emitted. Set to `0` (or negative) to disable rate limiting and restore the prior behavior of capturing stacks on every slow-lock event. `Thread.getStackTrace` triggers a JVM safepoint that becomes expensive in large clusters where slow-lock events are frequent — this gate caps that cost without suppressing the diagnostic log itself.
+- Description: Minimum interval between stack-trace captures across slow-lock log events. Only applies when `slow_lock_print_stack` is `true`. The throttle scope depends on the layer: **GLOBAL** in `LockManager.logSlowLockTrace` (one static gate across all rids) and **per-instance** in `QueryableReentrantReadWriteLock.getLockInfoToJson` (each lock object has its own gate). When the switch is on but the interval has not elapsed since the last capture, the `"stack"` field is replaced with the marker `"throttled"` (LockManager path) or omitted (QueryableReentrantReadWriteLock path), and the rest of the warn log (rid, owners, waiters, queryIds, timings) is still emitted if the outer event gate (`slow_lock_log_every_ms`) lets it through. Set to `0` (or negative) to disable rate limiting and restore the prior behavior of capturing stacks on every slow-lock event. `Thread.getStackTrace` triggers a JVM safepoint that becomes expensive in large clusters where slow-lock events are frequent — this gate caps that cost without suppressing the diagnostic log itself.
 - Introduced in: v4.1
 
 ### `slow_lock_max_waiter_count_to_log`
@@ -516,7 +516,7 @@ This topic introduces the following types of FE configurations:
 - Type: Int
 - Unit: -
 - Is mutable: Yes
-- Description: Maximum number of waiter entries serialized into a single LockManager slow-lock log event. When the actual waiter count exceeds this cap, the first N waiters are listed individually and the remainder is summarized as a single trailer entry `{"omitted": "remain M waiters omitted"}` appended to the `"waiter"` array. Bounds Gson serialization cost and log-line size under extreme contention without losing the count diagnostic. Set to `0` (or negative) to disable the cap and serialize every waiter.
+- Description: Maximum number of waiter entries serialized into a single slow-lock log event. Applies to both `LockManager.logSlowLockTrace` (the `"waiter"` array) and `QueryableReentrantReadWriteLock.getLockInfoToJson` (the `"queuedReaders"` / `"queuedWriters"` arrays consumed by the legacy db-lock path and `RoutineLoadJob`'s per-job lock). When the actual waiter count exceeds this cap, the first N waiters are listed individually and the remainder is summarized as a single trailer entry `{"omitted": "remain M waiters omitted"}` appended to the array. Bounds Gson serialization cost and log-line size under extreme contention without losing the count diagnostic. Set to `0` (or negative) to disable the cap and serialize every waiter.
 - Introduced in: v4.1
 
 ### `slow_lock_threshold_ms`
