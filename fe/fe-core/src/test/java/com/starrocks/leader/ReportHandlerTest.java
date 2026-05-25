@@ -30,7 +30,6 @@ import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
-import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
@@ -413,7 +412,7 @@ public class ReportHandlerTest {
         final SystemInfoService currentSystemInfo = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
         Backend reportBackend = currentSystemInfo.getBackend(10001);
         BackendStatus backendStatus = reportBackend.getBackendStatus();
-        backendStatus.lastSuccessReportTabletsTime = TimeUtils.longToTimeString(Long.MAX_VALUE);
+        backendStatus.lastSuccessReportTabletsTimeMs = Long.MAX_VALUE;
 
         ReportHandler.handleMigration(tabletMetaMigrationMap, 10001);
 
