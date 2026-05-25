@@ -337,17 +337,89 @@ public class BigQuerySchemaResolverTest {
     }
 
     @Test
-    public void testGetPartitions() {
-        BigQuerySchemaResolver resolver = new BigQuerySchemaResolver();
-        List<Partition> partitions = resolver.getPartitions(null,
-                new Table(1L, "orders", Table.TableType.JDBC, Lists.newArrayList()));
-        Assertions.assertEquals(1, partitions.size());
-        Assertions.assertEquals("orders", partitions.get(0).getPartitionName());
+    public void testGetDb() throws SQLException {
+        new Expectations() {
+            {
+                dataSource.getConnection();
+                result = connection;
+                minTimes = 0;
+
+                connection.getMetaData().getSchemas();
+                result = dbResult;
+                minTimes = 0;
+            }
+        };
+        try {
+            JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "bq_catalog", dataSource);
+            // my_dataset exists in dbResult
+            com.starrocks.catalog.Database db = jdbcMetadata.getDb(new ConnectContext(), "my_dataset");
+            Assertions.assertEquals("my_dataset", db.getOriginName());
+            // non-existent dataset returns null
+            com.starrocks.catalog.Database missing = jdbcMetadata.getDb(new ConnectContext(), "no_such_dataset");
+            Assertions.assertNull(missing);
+        } catch (Exception e) {
+            Assertions.fail(e.getMessage());
+        }
+    }
+
+    @Test
+    public void testInformationSchemaFilteredFromDatasetList() throws SQLException {
+        MockResultSet resultWithInternalSchemas = new MockResultSet("catalog");
+        resultWithInternalSchemas.addColumn("TABLE_SCHEM",
+                Arrays.asList("my_dataset", "INFORMATION_SCHEMA", "information_schema", "another_dataset"));
+
+        new Expectations() {
+            {
+                dataSource.getConnection();
+                result = connection;
+                minTimes = 0;
+
+                connection.getMetaData().getSchemas();
+                result = resultWithInternalSchemas;
+                minTimes = 0;
+            }
+        };
+        try {
+            JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "bq_catalog", dataSource);
+            List<String> result = jdbcMetadata.listDbNames(new ConnectContext());
+            Assertions.assertFalse(result.contains("INFORMATION_SCHEMA"));
+            Assertions.assertFalse(result.contains("information_schema"));
+            Assertions.assertTrue(result.contains("my_dataset"));
+            Assertions.assertTrue(result.contains("another_dataset"));
+        } catch (Exception e) {
+            Assertions.fail(e.getMessage());
+        }
+    }
+
+    @Test
+    public void testSimbaDriverClassAutoDetection() throws SQLException {
+        // com.simba.googlebigquery.jdbc.Driver contains "googlebigquery" → auto-detects BigQuery
+        Map<String, String> simbaProps = new HashMap<>(properties);
+        simbaProps.put(JDBCResource.DRIVER_CLASS, "com.simba.googlebigquery.jdbc.Driver");
+        try {
+            JDBCMetadata jdbcMetadata = new JDBCMetadata(simbaProps, "bq_catalog", dataSource);
+            Assertions.assertNotNull(jdbcMetadata);
+        } catch (Exception e) {
+            Assertions.fail(e.getMessage());
+        }
+    }
+
+    @Test
+    public void testSimba42DriverClassAutoDetection() throws SQLException {
+        // com.simba.googlebigquery.jdbc42.Driver contains "bigquery" → auto-detects BigQuery
+        Map<String, String> simba42Props = new HashMap<>(properties);
+        simba42Props.put(JDBCResource.DRIVER_CLASS, "com.simba.googlebigquery.jdbc42.Driver");
+        try {
+            JDBCMetadata jdbcMetadata = new JDBCMetadata(simba42Props, "bq_catalog", dataSource);
+            Assertions.assertNotNull(jdbcMetadata);
+        } catch (Exception e) {
+            Assertions.fail(e.getMessage());
+        }
     }
 
     @Test
     public void testSchemaResolverPropertyBigquery() {
-        // schema_resolver=bigquery property should instantiate BigQuerySchemaResolver
+        // Explicit schema_resolver=bigquery property overrides driver-class auto-detection.
         Map<String, String> props = new HashMap<>(properties);
         props.put(JDBCResource.SCHEMA_RESOLVER, "bigquery");
         try {
@@ -356,5 +428,14 @@ public class BigQuerySchemaResolverTest {
         } catch (Exception e) {
             Assertions.fail(e.getMessage());
         }
+    }
+
+    @Test
+    public void testGetPartitions() {
+        BigQuerySchemaResolver resolver = new BigQuerySchemaResolver();
+        List<Partition> partitions = resolver.getPartitions(null,
+                new Table(1L, "orders", Table.TableType.JDBC, Lists.newArrayList()));
+        Assertions.assertEquals(1, partitions.size());
+        Assertions.assertEquals("orders", partitions.get(0).getPartitionName());
     }
 }
