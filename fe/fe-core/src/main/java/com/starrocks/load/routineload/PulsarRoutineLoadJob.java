@@ -54,7 +54,6 @@ import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TransactionStatus;
-import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -364,7 +363,7 @@ public class PulsarRoutineLoadJob extends RoutineLoadJob {
         Exception fetchError = null;
         try {
             newPartitions = PulsarUtil.getAllPulsarPartitions(snapshot.serviceUrl, snapshot.topic,
-                    snapshot.subscription, snapshotConvertedCustomProperties(), snapshot.computeResource);
+                    snapshot.subscription, snapshotConvertedCustomProperties(), snapshot.warehouseId);
         } catch (Exception e) {
             fetchError = e;
         }
@@ -383,7 +382,7 @@ public class PulsarRoutineLoadJob extends RoutineLoadJob {
                 // User pinned the partition list at CREATE time; no broker RPC needed.
                 return FetchSnapshot.customOnly(dataSourceConfigVersion);
             }
-            return FetchSnapshot.fetch(serviceUrl, topic, subscription, computeResource, dataSourceConfigVersion);
+            return FetchSnapshot.fetch(serviceUrl, topic, subscription, warehouseId, dataSourceConfigVersion);
         }
         if (this.state == JobState.PAUSED) {
             // PAUSED jobs do not need partition info, but may be eligible for auto-resume.
@@ -408,24 +407,6 @@ public class PulsarRoutineLoadJob extends RoutineLoadJob {
             }
             if (customPulsarPartitions != null && !customPulsarPartitions.isEmpty()) {
                 currentPulsarPartitions = customPulsarPartitions;
-<<<<<<< HEAD
-                return false;
-            } else {
-                List<String> newCurrentPulsarPartition;
-                try {
-                    newCurrentPulsarPartition = getAllPulsarPartitions();
-                } catch (Exception e) {
-                    String msg = "Job failed to fetch all current partition with error [" + e.getMessage() + "]";
-                    LOG.warn(new LogBuilder(LogKey.ROUTINE_LOAD_JOB, id)
-                            .add("error_msg", msg)
-                            .build(), e);
-                    if (this.state == JobState.NEED_SCHEDULE) {
-                        unprotectUpdateState(JobState.PAUSED,
-                                new ErrorReason(InternalErrorCode.PARTITIONS_ERR, msg),
-                                false /* not replay */);
-                    }
-                    return false;
-=======
             }
         } finally {
             writeUnlock();
@@ -451,7 +432,7 @@ public class PulsarRoutineLoadJob extends RoutineLoadJob {
                     .add("msg", "Job need to be rescheduled")
                     .build());
             unprotectUpdateProgress();
-            unprotectUpdateState(JobState.NEED_SCHEDULE, null);
+            unprotectUpdateState(JobState.NEED_SCHEDULE, null, false);
         } finally {
             writeUnlock();
         }
@@ -479,8 +460,7 @@ public class PulsarRoutineLoadJob extends RoutineLoadJob {
                 // otherwise-healthy pipeline. The next scheduler tick will retry.
                 if (this.state == JobState.NEED_SCHEDULE) {
                     unprotectUpdateState(JobState.PAUSED,
-                            new ErrorReason(InternalErrorCode.PARTITIONS_ERR, msg));
->>>>>>> 89eefdb0a2 ([BugFix] Move routine-load broker RPC out of the per-job writeLock (#73591))
+                            new ErrorReason(InternalErrorCode.PARTITIONS_ERR, msg), false);
                 }
                 return;
             }
@@ -507,7 +487,7 @@ public class PulsarRoutineLoadJob extends RoutineLoadJob {
                         .add("msg", "Job need to be rescheduled")
                         .build());
                 unprotectUpdateProgress();
-                unprotectUpdateState(JobState.NEED_SCHEDULE, null);
+                unprotectUpdateState(JobState.NEED_SCHEDULE, null, false);
             }
         } finally {
             writeUnlock();
@@ -530,30 +510,30 @@ public class PulsarRoutineLoadJob extends RoutineLoadJob {
         final String serviceUrl;
         final String topic;
         final String subscription;
-        final ComputeResource computeResource;
+        final long warehouseId;
         final long configVersion;
 
         private FetchSnapshot(FetchSnapshotKind kind, String serviceUrl, String topic, String subscription,
-                              ComputeResource computeResource, long configVersion) {
+                              long warehouseId, long configVersion) {
             this.kind = kind;
             this.serviceUrl = serviceUrl;
             this.topic = topic;
             this.subscription = subscription;
-            this.computeResource = computeResource;
+            this.warehouseId = warehouseId;
             this.configVersion = configVersion;
         }
 
         static FetchSnapshot fetch(String serviceUrl, String topic, String subscription,
-                                   ComputeResource cr, long ver) {
-            return new FetchSnapshot(FetchSnapshotKind.FETCH, serviceUrl, topic, subscription, cr, ver);
+                                   long warehouseId, long ver) {
+            return new FetchSnapshot(FetchSnapshotKind.FETCH, serviceUrl, topic, subscription, warehouseId, ver);
         }
 
         static FetchSnapshot customOnly(long ver) {
-            return new FetchSnapshot(FetchSnapshotKind.CUSTOM_ONLY, null, null, null, null, ver);
+            return new FetchSnapshot(FetchSnapshotKind.CUSTOM_ONLY, null, null, null, 0L, ver);
         }
 
         static FetchSnapshot pausedAutoSchedule() {
-            return new FetchSnapshot(FetchSnapshotKind.PAUSED_AUTO_SCHEDULE, null, null, null, null, 0L);
+            return new FetchSnapshot(FetchSnapshotKind.PAUSED_AUTO_SCHEDULE, null, null, null, 0L, 0L);
         }
     }
 
@@ -585,17 +565,10 @@ public class PulsarRoutineLoadJob extends RoutineLoadJob {
         return gson.toJson(summary);
     }
 
-<<<<<<< HEAD
-    private List<String> getAllPulsarPartitions() throws StarRocksException {
-        // Get custom properties like tokens
-        convertCustomProperties(false);
-        return PulsarUtil.getAllPulsarPartitions(serviceUrl, topic,
-                subscription, ImmutableMap.copyOf(convertedCustomProperties), warehouseId);
-=======
     public List<String> getAllPulsarPartitions() throws StarRocksException {
         // Get custom properties like tokens.
         return PulsarUtil.getAllPulsarPartitions(serviceUrl, topic,
-                subscription, snapshotConvertedCustomProperties(), computeResource);
+                subscription, snapshotConvertedCustomProperties(), warehouseId);
     }
 
     // Snapshot `convertedCustomProperties` for use in an unlocked RPC call. Holds the intrinsic
@@ -609,7 +582,6 @@ public class PulsarRoutineLoadJob extends RoutineLoadJob {
             convertCustomProperties(false);
             return ImmutableMap.copyOf(convertedCustomProperties);
         }
->>>>>>> 89eefdb0a2 ([BugFix] Move routine-load broker RPC out of the per-job writeLock (#73591))
     }
 
     public static PulsarRoutineLoadJob fromCreateStmt(CreateRoutineLoadStmt stmt) throws StarRocksException {

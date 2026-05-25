@@ -1981,26 +1981,14 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
             }
             if (dataSourceProperties != null) {
                 modifyDataSourceProperties(dataSourceProperties);
+                // Invalidate any in-flight partition-fetch snapshot.
+                ++dataSourceConfigVersion;
             }
-<<<<<<< HEAD
             if (!isReplay) {
                 AlterRoutineLoadJobOperationLog log = new AlterRoutineLoadJobOperationLog(id,
                         jobProperties, dataSourceProperties, originStatement);
                 GlobalStateMgr.getCurrentState().getEditLog().logAlterRoutineLoadJob(log);
             }
-=======
-            // Invalidate any in-flight partition-fetch snapshot.
-            ++dataSourceConfigVersion;
-        }
-    }
-
-    public void replayModifyJob(RoutineLoadDesc routineLoadDesc,
-                                Map<String, String> jobProperties,
-                                RoutineLoadDataSourceProperties dataSourceProperties) {
-        writeLock();
-        try {
-            applyModifyJob(routineLoadDesc, jobProperties, dataSourceProperties);
->>>>>>> 89eefdb0a2 ([BugFix] Move routine-load broker RPC out of the per-job writeLock (#73591))
         } finally {
             writeUnlock();
         }

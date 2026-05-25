@@ -76,7 +76,6 @@ import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TransactionStatus;
-import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.commons.lang.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -458,7 +457,7 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
         Exception fetchError = null;
         try {
             newPartitions = KafkaUtil.getAllKafkaPartitions(snapshot.brokerList, snapshot.topic,
-                    snapshotConvertedCustomProperties(), snapshot.computeResource);
+                    snapshotConvertedCustomProperties(), snapshot.warehouseId);
         } catch (Exception e) {
             fetchError = e;
         }
@@ -477,7 +476,7 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
                 // User pinned the partition list at CREATE time; no broker RPC needed.
                 return FetchSnapshot.customOnly(dataSourceConfigVersion);
             }
-            return FetchSnapshot.fetch(brokerList, topic, computeResource, dataSourceConfigVersion);
+            return FetchSnapshot.fetch(brokerList, topic, warehouseId, dataSourceConfigVersion);
         }
         if (this.state == JobState.PAUSED) {
             // PAUSED jobs do not need partition info, but may be eligible for auto-resume.
@@ -502,24 +501,6 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
             }
             if (customKafkaPartitions != null && !customKafkaPartitions.isEmpty()) {
                 currentKafkaPartitions = customKafkaPartitions;
-<<<<<<< HEAD
-                return false;
-            } else {
-                List<Integer> newCurrentKafkaPartition;
-                try {
-                    newCurrentKafkaPartition = getAllKafkaPartitions();
-                } catch (Exception e) {
-                    String msg = "Job failed to fetch all current partition with error [" + e.getMessage() + "]";
-                    LOG.warn(new LogBuilder(LogKey.ROUTINE_LOAD_JOB, id)
-                            .add("error_msg", msg)
-                            .build(), e);
-                    if (this.state == JobState.NEED_SCHEDULE) {
-                        unprotectUpdateState(JobState.PAUSED,
-                                new ErrorReason(InternalErrorCode.PARTITIONS_ERR, msg),
-                                false /* not replay */);
-                    }
-                    return false;
-=======
             }
         } finally {
             writeUnlock();
@@ -545,7 +526,7 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
                     .add("msg", "Job need to be rescheduled")
                     .build());
             unprotectUpdateProgress();
-            unprotectUpdateState(JobState.NEED_SCHEDULE, null);
+            unprotectUpdateState(JobState.NEED_SCHEDULE, null, false);
         } finally {
             writeUnlock();
         }
@@ -573,8 +554,7 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
                 // otherwise-healthy pipeline. The next scheduler tick will retry.
                 if (this.state == JobState.NEED_SCHEDULE) {
                     unprotectUpdateState(JobState.PAUSED,
-                            new ErrorReason(InternalErrorCode.PARTITIONS_ERR, msg));
->>>>>>> 89eefdb0a2 ([BugFix] Move routine-load broker RPC out of the per-job writeLock (#73591))
+                            new ErrorReason(InternalErrorCode.PARTITIONS_ERR, msg), false);
                 }
                 return;
             }
@@ -613,7 +593,7 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
                         .add("msg", "Job need to be rescheduled")
                         .build());
                 unprotectUpdateProgress();
-                unprotectUpdateState(JobState.NEED_SCHEDULE, null);
+                unprotectUpdateState(JobState.NEED_SCHEDULE, null, false);
             }
         } finally {
             writeUnlock();
@@ -635,28 +615,28 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
         final FetchSnapshotKind kind;
         final String brokerList;
         final String topic;
-        final ComputeResource computeResource;
+        final long warehouseId;
         final long configVersion;
 
         private FetchSnapshot(FetchSnapshotKind kind, String brokerList, String topic,
-                              ComputeResource computeResource, long configVersion) {
+                              long warehouseId, long configVersion) {
             this.kind = kind;
             this.brokerList = brokerList;
             this.topic = topic;
-            this.computeResource = computeResource;
+            this.warehouseId = warehouseId;
             this.configVersion = configVersion;
         }
 
-        static FetchSnapshot fetch(String brokerList, String topic, ComputeResource cr, long ver) {
-            return new FetchSnapshot(FetchSnapshotKind.FETCH, brokerList, topic, cr, ver);
+        static FetchSnapshot fetch(String brokerList, String topic, long warehouseId, long ver) {
+            return new FetchSnapshot(FetchSnapshotKind.FETCH, brokerList, topic, warehouseId, ver);
         }
 
         static FetchSnapshot customOnly(long ver) {
-            return new FetchSnapshot(FetchSnapshotKind.CUSTOM_ONLY, null, null, null, ver);
+            return new FetchSnapshot(FetchSnapshotKind.CUSTOM_ONLY, null, null, 0L, ver);
         }
 
         static FetchSnapshot pausedAutoSchedule() {
-            return new FetchSnapshot(FetchSnapshotKind.PAUSED_AUTO_SCHEDULE, null, null, null, 0L);
+            return new FetchSnapshot(FetchSnapshotKind.PAUSED_AUTO_SCHEDULE, null, null, 0L, 0L);
         }
     }
 
@@ -680,10 +660,7 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
 
     private List<Integer> getAllKafkaPartitions() throws StarRocksException {
         return KafkaUtil.getAllKafkaPartitions(brokerList, topic,
-<<<<<<< HEAD
-                ImmutableMap.copyOf(convertedCustomProperties), warehouseId);
-=======
-                snapshotConvertedCustomProperties(), computeResource);
+                snapshotConvertedCustomProperties(), warehouseId);
     }
 
     // Snapshot `convertedCustomProperties` for use in an unlocked RPC call. Holds the intrinsic
@@ -697,7 +674,6 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
             convertCustomProperties(false);
             return ImmutableMap.copyOf(convertedCustomProperties);
         }
->>>>>>> 89eefdb0a2 ([BugFix] Move routine-load broker RPC out of the per-job writeLock (#73591))
     }
 
     public static KafkaRoutineLoadJob fromCreateStmt(CreateRoutineLoadStmt stmt) throws StarRocksException {
