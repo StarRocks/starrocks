@@ -106,6 +106,11 @@ StatusOr<PerSegmentRowidBitmap> SecondaryIndexReader::lookup(const PredicateTree
     // When obj_pool is null (e.g. tests) we fall back to an empty tree.
     if (obj_pool != nullptr && !source_pred_tree.empty()) {
         read_opts.pred_tree = build_remapped_predicate_tree(source_pred_tree, _source_index_col_ids, obj_pool);
+        // Share the same remapped tree with SegmentZoneMapPruner so an .idx
+        // segment whose min/max doesn't cover the predicate value returns
+        // EndOfFile directly from Segment::_new_iterator -- saves footer
+        // page loads and column-reader init for non-overlapping parts.
+        read_opts.pred_tree_for_zone_map = read_opts.pred_tree;
     }
 
     ASSIGN_OR_RETURN(auto iter, _segment->new_iterator(read_schema, read_opts));
