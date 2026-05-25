@@ -17,6 +17,7 @@ set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/compute_env")
 ADD_BE_LIB(ComputeEnv
     compute_env.cpp
     pipeline/driver_limiter.cpp
+    pipeline/observer.cpp
 )
 
 target_link_libraries(ComputeEnv PUBLIC

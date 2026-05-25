@@ -20,11 +20,11 @@
 
 #include "base/phmap/phmap_fwd_decl.h"
 #include "column/column_access_path.h"
+#include "compute_env/pipeline/observer.h"
 #include "exec/olap_scan_prepare.h"
 #include "exec/pipeline/context_with_dependency.h"
 #include "exec/pipeline/operator.h"
 #include "exec/pipeline/scan/balanced_chunk_buffer.h"
-#include "exec/pipeline/schedule/observer.h"
 #include "runtime/global_dict/parser.h"
 #include "runtime/runtime_state_fwd.h"
 #include "storage/rowset/rowset.h"

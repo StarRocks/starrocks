@@ -22,7 +22,7 @@
 #include "column/vectorized_fwd.h"
 #include "common/runtime_profile.h"
 #include "common/status.h"
-#include "exec/pipeline/schedule/observer.h"
+#include "compute_env/pipeline/observer.h"
 #include "exec/sorting/merge.h"
 #include "exec/sorting/sorting.h"
 #include "gen_cpp/PlanNodes_types.h"
