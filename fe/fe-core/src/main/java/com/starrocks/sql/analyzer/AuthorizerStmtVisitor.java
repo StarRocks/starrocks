@@ -2587,6 +2587,19 @@ public class AuthorizerStmtVisitor implements AstVisitorExtendInterface<Void, Co
                     }
                 }
             });
+
+            if (statement.allFunction() && db != null) {
+                for (Function fn : db.getFunctions()) {
+                    try {
+                        Authorizer.checkFunctionAction(context, db, fn, PrivilegeType.USAGE);
+                    } catch (AccessDeniedException e) {
+                        AccessDeniedException.reportAccessDenied(
+                                InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
+                                context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                                PrivilegeType.DROP.name(), ObjectType.FUNCTION.name(), fn.getSignature());
+                    }
+                }
+            }
         } else {
             List<CatalogRef> externalCatalogs = statement.getExternalCatalogRefs();
             externalCatalogs.forEach(externalCatalog -> {
