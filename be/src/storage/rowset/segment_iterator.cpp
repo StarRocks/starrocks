@@ -4186,6 +4186,34 @@ StatusOr<SparseRange<>> new_segment_iterator_for_prepare_pruning(const std::shar
     return iter.prepared_pruned_row_ranges();
 }
 
+static bool init_seek_range_iterator_schema(const SeekRange& range, Schema* iterator_schema) {
+    if (!range.upper().empty()) {
+        *iterator_schema = range.upper().schema();
+        return true;
+    }
+    if (!range.lower().empty()) {
+        *iterator_schema = range.lower().schema();
+        return true;
+    }
+    return false;
+}
+
+template <typename ResolveFn>
+static auto with_segment_seek_range_iterator(const std::shared_ptr<Segment>& segment, const Schema& iterator_schema,
+                                             const LakeIOOptions& lake_io_opts, ResolveFn&& resolve_fn)
+        -> decltype(std::declval<ResolveFn>()(std::declval<SegmentIterator&>())) {
+    RETURN_IF_ERROR(segment->load_index(lake_io_opts));
+
+    OlapReaderStatistics local_stats;
+    ASSIGN_OR_RETURN(auto file_system, FileSystemFactory::CreateSharedFromString(segment->file_info().path));
+    SegmentReadOptions read_options;
+    read_options.lake_io_opts = lake_io_opts;
+    read_options.stats = &local_stats;
+    read_options.fs = std::move(file_system);
+    SegmentIterator iterator(segment, iterator_schema, read_options);
+    return resolve_fn(iterator);
+}
+
 StatusOr<std::vector<std::optional<Range<rowid_t>>>> segment_seek_ranges_to_rowid_ranges(
         const std::shared_ptr<Segment>& segment, const std::vector<SeekRange>& ranges,
         const LakeIOOptions& lake_io_opts) {
@@ -4201,13 +4229,7 @@ StatusOr<std::vector<std::optional<Range<rowid_t>>>> segment_seek_ranges_to_rowi
     Schema iterator_schema;
     bool need_index_lookup = false;
     for (const auto& range : ranges) {
-        if (!range.upper().empty()) {
-            iterator_schema = range.upper().schema();
-            need_index_lookup = true;
-            break;
-        }
-        if (!range.lower().empty()) {
-            iterator_schema = range.lower().schema();
+        if (init_seek_range_iterator_schema(range, &iterator_schema)) {
             need_index_lookup = true;
             break;
         }
@@ -4218,28 +4240,32 @@ StatusOr<std::vector<std::optional<Range<rowid_t>>>> segment_seek_ranges_to_rowi
         }
         return rowid_ranges;
     }
-    RETURN_IF_ERROR(segment->load_index(lake_io_opts));
-
-    OlapReaderStatistics local_stats;
-    ASSIGN_OR_RETURN(auto file_system, FileSystemFactory::CreateSharedFromString(segment->file_info().path));
-    SegmentReadOptions read_options;
-    read_options.lake_io_opts = lake_io_opts;
-    read_options.stats = &local_stats;
-    read_options.fs = std::move(file_system);
-    SegmentIterator iterator(segment, iterator_schema, read_options);
-    for (const auto& range : ranges) {
-        ASSIGN_OR_RETURN(auto rowid_range, iterator.resolve_range_to_rowid_range(range));
-        rowid_ranges.emplace_back(rowid_range);
-    }
-    return rowid_ranges;
+    return with_segment_seek_range_iterator(
+            segment, iterator_schema, lake_io_opts,
+            [&](SegmentIterator& iterator) -> StatusOr<std::vector<std::optional<Range<rowid_t>>>> {
+                for (const auto& range : ranges) {
+                    ASSIGN_OR_RETURN(auto rowid_range, iterator.resolve_range_to_rowid_range(range));
+                    rowid_ranges.emplace_back(rowid_range);
+                }
+                return rowid_ranges;
+            });
 }
 
 StatusOr<std::optional<Range<rowid_t>>> segment_seek_range_to_rowid_range(const std::shared_ptr<Segment>& segment,
                                                                           const SeekRange& range,
                                                                           const LakeIOOptions& lake_io_opts) {
-    ASSIGN_OR_RETURN(auto rowid_ranges, segment_seek_ranges_to_rowid_ranges(segment, {range}, lake_io_opts));
-    DCHECK_EQ(rowid_ranges.size(), 1);
-    return rowid_ranges[0];
+    if (segment == nullptr) {
+        return Status::InvalidArgument("segment is null");
+    }
+
+    Schema iterator_schema;
+    if (!init_seek_range_iterator_schema(range, &iterator_schema)) {
+        return std::optional<Range<rowid_t>>{Range<rowid_t>{0, segment->num_rows()}};
+    }
+    return with_segment_seek_range_iterator(segment, iterator_schema, lake_io_opts,
+                                            [&](SegmentIterator& iterator) -> StatusOr<std::optional<Range<rowid_t>>> {
+                                                return iterator.resolve_range_to_rowid_range(range);
+                                            });
 }
 
 } // namespace starrocks

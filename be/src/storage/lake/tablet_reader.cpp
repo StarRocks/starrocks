@@ -597,8 +597,8 @@ Status TabletReader::build_prepared_physical_split_tasks(const TabletReaderParam
                                                                         schema(), rowset_read_options, lake_io_opts,
                                                                         shared_segment_range, &prepare_stats));
             if (segment_state->pruned_scan_range != nullptr) {
-                _stats.lake_prepared_pruned_rows += segment_state->pruned_scan_range->span_size();
-                _stats.lake_prepared_pruned_ranges += segment_state->pruned_scan_range->size();
+                _stats.lake_prepared_scan_rows += segment_state->pruned_scan_range->span_size();
+                _stats.lake_prepared_scan_ranges += segment_state->pruned_scan_range->size();
             }
             const auto old_num_tasks = _split_tasks.size();
             append_prepared_segment_split_tasks(rowset, segment, prepared_tablet_read_state, segment_state, rowset_idx,

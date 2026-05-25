@@ -46,6 +46,9 @@ class TabletManager;
 class TabletWriter;
 
 struct PreparedSegmentReadState {
+    // Prepared by the root scan before child split tasks are published. The
+    // lifecycle still records failures explicitly so children can fail fast if
+    // the prepare phase did not finish successfully.
     enum class Lifecycle : uint32_t {
         UNPREPARED = 0,
         PREPARING = 1,
@@ -59,6 +62,8 @@ struct PreparedSegmentReadState {
     SparseRangePtr pruned_scan_range;
     bool pruned_scan_range_includes_page_filters = false;
 
+    // Rowid equivalents of RowsetReadOptions::ranges and Rowset::tablet_range.
+    // Children reuse them to avoid repeating short-key index lookups.
     std::vector<std::optional<Range<rowid_t>>> seek_range_rowid_ranges;
     std::optional<Range<rowid_t>> tablet_rowid_range;
 };
