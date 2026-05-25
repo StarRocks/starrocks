@@ -28,12 +28,23 @@ namespace starrocks {
 //                     parquet_read_rows(r.source_info) p
 //     WHERE r.format = 'parquet';
 //
-// `source_info` must carry `file`, `row_in_file`, `file_size`, and `file_mtime_ms`.
-// The BE re-opens the file via FileSystem, fail-closed checks the recorded size
-// and modification time against the current file, then reads only the row group
-// containing the anchor, projects out the target row, and emits it as a JSON
-// object keyed by Parquet column names. Anchors whose file_size or mtime no
-// longer match fail the whole query.
+// `source_info` must carry `file` and `row_in_file`. `file_size` and
+// `file_mtime_ms` are optional anchors:
+//   * When present, BE compares them against the live file and **fails the
+//     whole query** on a mismatch (Status::Corruption). This is the strict
+//     fail-closed path.
+//   * When absent, the corresponding check is skipped — the rejected-records
+//     writer omits `file_size` / `file_mtime_ms` whenever the upstream
+//     scanner did not know them (see arrow_to_starrocks_converter.cpp).
+//   * If `file_size` is present but the underlying filesystem cannot report
+//     a size (S3 / OSS / Starlet), BE falls back to using the anchor's value
+//     and skips that single check.
+//   * If `file_mtime_ms` is present but the filesystem cannot report mtime
+//     (S3 / OSS / Starlet), BE silently skips the mtime check (size check
+//     above already catches the most common drift).
+// After validation, BE re-opens the file via FileSystem, reads only the row
+// group containing the anchor, projects out the target row, and emits it as
+// a JSON object keyed by Parquet column names.
 class ParquetReadRows final : public TableFunction {
 public:
     Status init(const TFunction& fn, TableFunctionState** state) const override;

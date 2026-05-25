@@ -14,8 +14,10 @@
 
 #include <gtest/gtest.h>
 #include <sys/stat.h>
+#include <velocypack/Builder.h>
 #include <velocypack/Iterator.h>
 #include <velocypack/Slice.h>
+#include <velocypack/Value.h>
 
 #include <cstdio>
 #include <filesystem>
@@ -836,6 +838,76 @@ TEST_F(ParquetReadRowsTableFunctionTest, RehydrateDecimalCell) {
     auto amount = obj.get("amount");
     ASSERT_TRUE(amount.isString());
     EXPECT_GT(amount.copyString().size(), 0u);
+
+    ASSERT_OK(_tvf.close(_runtime_state.get(), state));
+}
+
+// ---------- row_in_file is a non-integral double — must reject ----------
+TEST_F(ParquetReadRowsTableFunctionTest, FractionalRowInFileRejected) {
+    auto input = _make_source_info_column(
+            {R"({"file":"/tmp/x.parquet","row_in_file":12.9,"file_size":1,"file_mtime_ms":1})"});
+
+    TableFunctionState* state = nullptr;
+    TFunction fn;
+    ASSERT_OK(_tvf.init(fn, &state));
+    state->set_params({input});
+
+    _tvf.process(_runtime_state.get(), state);
+    EXPECT_FALSE(state->status().ok());
+    EXPECT_NE(std::string::npos, state->status().to_string().find("must be an integer"));
+
+    ASSERT_OK(_tvf.close(_runtime_state.get(), state));
+}
+
+// ---------- row_in_file is NaN / infinity — must reject ----------
+TEST_F(ParquetReadRowsTableFunctionTest, NonFiniteRowInFileRejected) {
+    // JSON has no native NaN/Infinity literal but vpack accepts "Inf"/"NaN"
+    // in some configs; build a slice manually via the velocypack API to be
+    // sure we exercise the !isfinite branch.
+    vpack::Builder b;
+    b.openObject();
+    b.add("file", vpack::Value("/tmp/x.parquet"));
+    b.add("row_in_file", vpack::Value(std::numeric_limits<double>::infinity()));
+    b.add("file_size", vpack::Value(1));
+    b.add("file_mtime_ms", vpack::Value(1));
+    b.close();
+    JsonValue jv(b.slice());
+    auto col = JsonColumn::create();
+    col->append(std::move(jv));
+
+    TableFunctionState* state = nullptr;
+    TFunction fn;
+    ASSERT_OK(_tvf.init(fn, &state));
+    state->set_params({col});
+
+    _tvf.process(_runtime_state.get(), state);
+    EXPECT_FALSE(state->status().ok());
+    EXPECT_NE(std::string::npos, state->status().to_string().find("must be a finite number"));
+
+    ASSERT_OK(_tvf.close(_runtime_state.get(), state));
+}
+
+// ---------- row_in_file is a huge double outside int64 range — must reject ----------
+TEST_F(ParquetReadRowsTableFunctionTest, OverflowRowInFileRejected) {
+    vpack::Builder b;
+    b.openObject();
+    b.add("file", vpack::Value("/tmp/x.parquet"));
+    b.add("row_in_file", vpack::Value(1e20));  // > INT64_MAX
+    b.add("file_size", vpack::Value(1));
+    b.add("file_mtime_ms", vpack::Value(1));
+    b.close();
+    JsonValue jv(b.slice());
+    auto col = JsonColumn::create();
+    col->append(std::move(jv));
+
+    TableFunctionState* state = nullptr;
+    TFunction fn;
+    ASSERT_OK(_tvf.init(fn, &state));
+    state->set_params({col});
+
+    _tvf.process(_runtime_state.get(), state);
+    EXPECT_FALSE(state->status().ok());
+    EXPECT_NE(std::string::npos, state->status().to_string().find("outside int64 range"));
 
     ASSERT_OK(_tvf.close(_runtime_state.get(), state));
 }
