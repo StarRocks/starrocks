@@ -25,6 +25,7 @@
 #include <utility>
 #include <vector>
 
+#include "base/failpoint/fail_point.h"
 #include "column/column.h"
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
@@ -45,6 +46,8 @@
 #include "velocypack/vpack.h"
 
 namespace starrocks {
+
+DEFINE_FAIL_POINT(flat_json_write_column_fail);
 
 FlatJsonColumnWriter::FlatJsonColumnWriter(const ColumnWriterOptions& opts, TypeInfoPtr type_info, WritableFile* wfile,
                                            std::unique_ptr<ScalarColumnWriter> json_writer)
@@ -137,7 +140,10 @@ Status FlatJsonColumnWriter::_flat_column(Columns& json_datas) {
         }
         RETURN_IF_ERROR(_write_flat_column());
         _flat_columns.clear();
-        col->resize_uninitialized(0); // release after write
+    }
+    // fallback when all flat columns written
+    for (auto& col : json_datas) {
+        col->resize_uninitialized(0);
     }
     return Status::OK();
 }
@@ -228,6 +234,11 @@ Status FlatJsonColumnWriter::_write_flat_column() {
     DCHECK(!_flat_columns.empty());
     DCHECK_EQ(_flat_columns.size(), _flat_writers.size());
 
+    // Inject failure between _init_flat_writers() and the per-column append loop.
+    // Exercises the FlatJsonColumnWriter::finish() fallback path that still iterates
+    // _flat_writers[i]->finish() even when no sub-writer has received any append().
+    FAIL_POINT_TRIGGER_RETURN_ERROR(flat_json_write_column_fail);
+
     // IMPORTANT: Final integrity check before writing to prevent  inconsistency
     for (const auto& flat_col : _flat_columns) {
         flat_col->check_or_die();
@@ -265,6 +276,26 @@ Status FlatJsonColumnWriter::finish() {
         for (auto& col : _json_datas) {
             RETURN_IF_ERROR(_json_writer->append(*col));
         }
+        // _flat_column() may have run partway: _init_flat_writers() can have
+        // created sub-writers and stamped is_flat=true plus per-sub-column
+        // children into _json_meta before _write_flat_column() failed. The
+        // column data now belongs entirely to _json_writer, so undo the flat
+        // metadata and drop the half-populated sub-writers. The invariant
+        // checked downstream by get_next_rowid()/write_data()/write_*_index()
+        // is _flat_writers.empty() iff !_is_flat, and a stale is_flat=true
+        // would also mislead the reader into looking for flat sub-columns
+        // that do not exist on disk.
+        _flat_writers.clear();
+        _flat_paths.clear();
+        _flat_types.clear();
+        _flat_columns.clear();
+        _subcolumn_dict_valid.clear();
+        _has_remain = false;
+        _remain_filter.reset();
+        _json_meta->clear_children_columns();
+        _json_meta->mutable_json_meta()->set_is_flat(false);
+        _json_meta->mutable_json_meta()->set_has_remain(false);
+        _json_meta->mutable_json_meta()->clear_remain_filter();
     }
     _json_datas.clear(); // release after write
 
