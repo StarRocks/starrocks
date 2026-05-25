@@ -272,7 +272,8 @@ public class StreamLoadScanNode extends LoadScanNode {
         Load.initColumns(dstTable, streamLoadInfo.getColumnExprDescs(), null /* no hadoop function */,
                 exprsByName, descriptorTable, paramCreateContext.tupleDescriptor, slotDescByName,
                 paramCreateContext.params, true, useVectorizedLoad, Lists.newArrayList(),
-                streamLoadInfo.getFormatType() == TFileFormatType.FORMAT_JSON, streamLoadInfo.isPartialUpdate());
+                streamLoadInfo.getFormatType() == TFileFormatType.FORMAT_JSON, streamLoadInfo.isPartialUpdate(),
+                streamLoadInfo.getRoutineLoadSourceType());
     }
 
     @Override

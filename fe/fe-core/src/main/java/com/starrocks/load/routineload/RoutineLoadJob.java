@@ -1886,6 +1886,15 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
                           Map<String, String> jobProperties,
                           RoutineLoadDataSourceProperties dataSourceProperties,
                           OriginStatementInfo originStatement) throws DdlException {
+        // ALTER can replace the COLUMNS clause, so re-check that any metadata functions apply to this
+        // job's source (e.g. reject kafka_offset() on a Pulsar job). CREATE is validated in
+        // CreateRoutineLoadAnalyzer; this covers the ALTER path.
+        List<ImportColumnDesc> metaColumnDescs =
+                (routineLoadDesc != null && routineLoadDesc.getColumnsInfo() != null)
+                        ? routineLoadDesc.getColumnsInfo().getColumns()
+                        : null;
+        Load.validateStreamMetaFunctions(metaColumnDescs, getDataSourceTypeName(), getFormat(),
+                getUseNativeAvroReader());
         if (jobProperties != null) {
             checkCommonJobProperties(jobProperties);
         }

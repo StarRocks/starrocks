@@ -19,6 +19,7 @@
 
 #include "column/nullable_column.h"
 #include "exec/file_scanner/file_scanner.h"
+#include "exec/file_scanner/stream_source_meta.h"
 #include "exprs/json_functions.h"
 #include "fs/fs.h"
 #include "runtime/stream_load/load_stream_mgr.h"
@@ -156,6 +157,12 @@ private:
     std::vector<uint8_t> _parsed_columns;
     // record the "__op" column's index
     int _op_col_index{-1};
+    // Hidden source-metadata columns, filled from the message's ByteBuffer meta (by slot id) rather than
+    // the JSON payload. _meta_col_by_slot_id keys by source slot id (used in the jsonpath path, which
+    // iterates _slot_descs); _meta_col_by_index keys by chunk column index -- the running slot order used
+    // for _op_col_index -- for the object-order null-fill path. Both empty for non-routine-load.
+    StreamSourceMetaColumns _meta_col_by_slot_id;
+    std::unordered_map<int, TRoutineLoadMetaColumn> _meta_col_by_index;
 
     ByteBufferPtr _file_stream_buffer;
 

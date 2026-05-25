@@ -491,6 +491,83 @@ The native reader (`avro.use_native_reader = true`) also interprets Avro logical
 - Currently, StarRocks does not support schema evolution.
 - Each Kafka message must only contain a single Avro data record.
 
+### Access source message metadata
+
+When loading JSON- or Avro-format data, you can populate destination columns from a message's Kafka/Pulsar metadata — topic, partition, offset, timestamp, key, and headers — instead of from the message payload. You reference the metadata with source-specific functions in the `COLUMNS` clause; each call is mapped to a destination column.
+
+This is useful for auditing (which topic/partition/offset a row came from), event-time processing (using the message timestamp), and routing on a header value.
+
+#### Functions
+
+Kafka jobs use the `kafka_*` functions; Pulsar jobs use the `pulsar_*` functions.
+
+| Function | Return type | Description |
+| --- | --- | --- |
+| `kafka_topic()` | VARCHAR | Topic name. |
+| `kafka_partition()` | INT | Partition number. |
+| `kafka_offset()` | BIGINT | Message offset within the partition. |
+| `kafka_timestamp_ms()` | BIGINT | Record timestamp in milliseconds since epoch. `NULL` when the broker reports no timestamp. |
+| `kafka_key()` | VARCHAR | Message key as raw bytes. `NULL` when the message has no key. |
+| `kafka_header('name')` | VARCHAR | Value of the header `name`. When the header appears more than once, the last value wins. `NULL` when the header is absent. |
+| `kafka_headers()` | MAP\<VARCHAR, VARCHAR> | All headers as a map. On duplicate keys, the last value wins. |
+| `pulsar_topic()` | VARCHAR | The logical topic the job consumes (a partitioned topic's `-partition-N` suffix is not included). |
+| `pulsar_partition()` | INT | Partition index, parsed from the per-message topic name. `NULL` for a non-partitioned topic. |
+| `pulsar_message_id()` | VARCHAR | Message ID. |
+| `pulsar_publish_time_ms()` | BIGINT | Publish time in milliseconds since epoch. |
+| `pulsar_event_time_ms()` | BIGINT | Event time in milliseconds since epoch. `NULL` when the producer did not set it. |
+| `pulsar_key()` | VARCHAR | Partition key. `NULL` when the message has no key. |
+| `pulsar_property('name')` | VARCHAR | Value of the property `name`. `NULL` when the property is absent. |
+| `pulsar_properties()` | MAP\<VARCHAR, VARCHAR> | All properties as a map. |
+
+#### Usage notes
+
+- These functions are available for `format = json` (Kafka and Pulsar) and `format = avro` (Kafka only; Pulsar Routine Load does not support Avro). They are not supported for CSV, where one message can expand into many rows and per-message metadata would be ambiguous.
+- For Avro, the native reader is required: set `"avro.use_native_reader" = "true"` (see [Load Avro-format data](#load-avro-format-data)).
+- The functions can only be used in the `COLUMNS` clause. A payload field with the same name as a metadata field is never shadowed — the metadata value is taken from the message, and the payload field is read independently.
+- `kafka_header('name')` and `pulsar_property('name')` take a single string-literal key.
+
+#### Example
+
+Load the order payload field `order_id` together with the source topic, partition, offset, the message timestamp converted to a `DATETIME`, and a `trace-id` header:
+
+```SQL
+CREATE TABLE example_db.orders_with_meta (
+    order_id      BIGINT,
+    src_topic     VARCHAR(256),
+    src_partition INT,
+    src_offset    BIGINT,
+    msg_time      DATETIME,
+    trace_id      VARCHAR(128)
+)
+ENGINE = OLAP
+DUPLICATE KEY(order_id)
+DISTRIBUTED BY HASH(order_id);
+
+CREATE ROUTINE LOAD example_db.orders_with_meta_job ON orders_with_meta
+COLUMNS
+(
+    order_id,
+    src_topic     = kafka_topic(),
+    src_partition = kafka_partition(),
+    src_offset    = kafka_offset(),
+    msg_time      = from_unixtime(kafka_timestamp_ms() / 1000),
+    trace_id      = kafka_header('trace-id')
+)
+PROPERTIES
+(
+    "format" = "json",
+    "jsonpaths" = "[\"$.order_id\"]"
+)
+FROM KAFKA
+(
+    "kafka_broker_list" = "<kafka_broker1_ip>:<kafka_broker1_port>,...",
+    "kafka_topic" = "topic_orders",
+    "property.kafka_default_offsets" = "OFFSET_BEGINNING"
+);
+```
+
+A metadata function may be nested inside an expression (as with `from_unixtime(kafka_timestamp_ms() / 1000)` above); only payload columns are listed in `jsonpaths`.
+
 ## Check a load job and task
 
 ### Check a load job

@@ -19,11 +19,13 @@
 #include "exec/file_scanner/avro_datum_path.h"
 #include "exec/file_scanner/confluent_avro_decoder.h"
 #include "exec/file_scanner/file_scanner.h"
+#include "exec/file_scanner/stream_source_meta.h"
 #include "formats/avro/cpp/column_reader.h"
 
 namespace starrocks {
 
 class SequentialFile;
+class StreamMessageMeta;
 
 // Routine-load (Kafka) Avro scanner on the avrocpp stack. Reads one Confluent-framed message per pipe
 // buffer, decodes it to an avro::GenericDatum, and fills columns through the avrocpp column readers
@@ -44,9 +46,10 @@ private:
     Status create_column_readers();
     Status create_src_chunk(ChunkPtr* chunk);
     // Decodes one message and appends one row; per-field "not found" becomes null, while decode and
-    // structural failures return an error and fail the task.
-    Status parse_one_message(const uint8_t* data, size_t size, Chunk* chunk);
-    Status fill_row(const avro::GenericDatum& datum, Chunk* chunk);
+    // structural failures return an error and fail the task. `meta` carries the message's source
+    // metadata for the hidden metadata columns described by _meta_cols (may be null).
+    Status parse_one_message(const uint8_t* data, size_t size, Chunk* chunk, const StreamMessageMeta* meta);
+    Status fill_row(const avro::GenericDatum& datum, Chunk* chunk, const StreamMessageMeta* meta);
     void materialize_src_chunk_adaptive_nullable_column(ChunkPtr& chunk);
 
     const TBrokerScanRange& _scan_range;
@@ -58,6 +61,8 @@ private:
     // create_column_readers() so the non-jsonpath fill_row() does not rebuild a std::string per cell.
     std::vector<std::string> _field_names;
     std::vector<std::vector<SimpleJsonPath>> _json_paths;
+    // Hidden source-metadata slots (source slot id -> descriptor), built from the scan-range params.
+    StreamSourceMetaColumns _meta_cols;
     std::shared_ptr<SequentialFile> _file;
     // Reused across messages; the GenericDatum from the previous message is overwritten on each decode.
     avro::GenericDatum _datum;

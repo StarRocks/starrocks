@@ -27,6 +27,7 @@
 #include "column/nullable_column.h"
 #include "common/runtime_profile.h"
 #include "exec/file_scanner/json_scanner.h" // JsonScanner::parse_json_paths
+#include "exec/file_scanner/stream_source_meta.h"
 #include "fs/fs.h"
 #include "gutil/casts.h"
 #include "runtime/runtime_state.h"
@@ -69,6 +70,8 @@ Status AvroStreamScanner::open() {
         RETURN_IF_ERROR(JsonScanner::parse_json_paths(jsonpaths, &_json_paths));
     }
 
+    _meta_cols = build_stream_source_meta_columns(_scan_range.params.stream_source_meta_columns);
+
     RETURN_IF_ERROR(create_column_readers());
     RETURN_IF_ERROR(create_sequential_file(range_desc, _scan_range.broker_addresses[0], _scan_range.params, &_file));
     ++_counter->num_files_read;
@@ -106,7 +109,7 @@ Status AvroStreamScanner::create_src_chunk(ChunkPtr* chunk) {
     return Status::OK();
 }
 
-Status AvroStreamScanner::fill_row(const avro::GenericDatum& datum, Chunk* chunk) {
+Status AvroStreamScanner::fill_row(const avro::GenericDatum& datum, Chunk* chunk, const StreamMessageMeta* meta) {
     const bool use_jsonpath = !_json_paths.empty();
 
     const avro::GenericRecord* record = nullptr;
@@ -121,6 +124,10 @@ Status AvroStreamScanner::fill_row(const avro::GenericDatum& datum, Chunk* chunk
         record = &d->value<avro::GenericRecord>();
     }
 
+    // Hidden metadata columns carry no jsonpath, so they are transparent to the positional
+    // slot->jsonpath mapping: a jsonpath maps to the i-th non-metadata slot. This keeps payload columns
+    // aligned even when a metadata column sits before jsonpath-backed columns.
+    size_t meta_count = 0;
     for (size_t i = 0; i < _src_slot_descriptors.size(); ++i) {
         auto* slot_desc = _src_slot_descriptors[i];
         if (slot_desc == nullptr) {
@@ -128,12 +135,21 @@ Status AvroStreamScanner::fill_row(const avro::GenericDatum& datum, Chunk* chunk
         }
         auto* column = down_cast<AdaptiveNullableColumn*>(chunk->get_column_raw_ptr_by_slot_id(slot_desc->id()));
 
+        // Hidden source-metadata slots are filled from the message meta (by slot id), not the payload,
+        // before the jsonpath/by-name extraction below.
+        if (auto it = _meta_cols.find(slot_desc->id()); it != _meta_cols.end()) {
+            RETURN_IF_ERROR(fill_stream_source_meta_column(it->second.kind, it->second.key, meta, column));
+            meta_count++;
+            continue;
+        }
+
         if (use_jsonpath) {
-            if (i >= _json_paths.size()) {
+            size_t jp = i - meta_count;
+            if (jp >= _json_paths.size()) {
                 column->append_nulls(1);
                 continue;
             }
-            auto extracted = avro_extract_field(datum, _json_paths[i]);
+            auto extracted = avro_extract_field(datum, _json_paths[jp]);
             if (extracted.status().is_not_found()) {
                 column->append_nulls(1);
                 continue;
@@ -154,26 +170,30 @@ Status AvroStreamScanner::fill_row(const avro::GenericDatum& datum, Chunk* chunk
     return Status::OK();
 }
 
-Status AvroStreamScanner::parse_one_message(const uint8_t* data, size_t size, Chunk* chunk) {
+Status AvroStreamScanner::parse_one_message(const uint8_t* data, size_t size, Chunk* chunk,
+                                            const StreamMessageMeta* meta) {
     const size_t rows_before = chunk->num_rows();
+    auto meta_ctx = [meta]() -> std::string {
+        return meta != nullptr ? fmt::format("[meta: {}]", meta->to_string()) : "";
+    };
 
     Status st = _decoder->decode(data, size, &_datum);
     if (!st.ok()) {
         _counter->num_rows_filtered++;
-        RuntimeStateHelper::append_error_msg_to_file(_state, "", st.to_string());
+        RuntimeStateHelper::append_error_msg_to_file(_state, meta_ctx(), st.to_string());
         return st;
     }
 
     // decode() converts avrocpp exceptions to Status itself; the readers below it do not, and a datum
     // shape the guards don't anticipate must cost one filtered row, never the BE.
     try {
-        st = fill_row(_datum, chunk);
+        st = fill_row(_datum, chunk, meta);
     } catch (const avro::Exception& e) {
         st = Status::DataQualityError(fmt::format("avro read failed: {}", e.what()));
     }
     if (!st.ok()) {
         if (_counter->num_rows_filtered++ < MAX_ERROR_LINES_IN_FILE) {
-            RuntimeStateHelper::append_error_msg_to_file(_state, "", st.to_string());
+            RuntimeStateHelper::append_error_msg_to_file(_state, meta_ctx(), st.to_string());
         }
         chunk->set_num_rows(rows_before);
         return st;
@@ -210,8 +230,8 @@ StatusOr<ChunkPtr> AvroStreamScanner::get_next() {
         }
         // Confluent framing requires one message per buffer; StreamLoadPipe::read() returns the whole
         // buffer that KafkaConsumerPipe::append_json enqueued, so each buffer is exactly one message.
-        RETURN_IF_ERROR(
-                parse_one_message(reinterpret_cast<const uint8_t*>(buf->ptr), buf->remaining(), src_chunk.get()));
+        RETURN_IF_ERROR(parse_one_message(reinterpret_cast<const uint8_t*>(buf->ptr), buf->remaining(), src_chunk.get(),
+                                          stream_source_meta_of(buf)));
     }
 
     // A non-timeout/non-EOF read error (cancel/abort/internal) is fatal regardless of how many rows

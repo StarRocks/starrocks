@@ -94,6 +94,9 @@ public class StreamLoadInfo {
     // enable_routine_load_native_avro_reader default) and carried to the BE, which falls back to the
     // legacy avro scanner when it is unset.
     private Boolean useNativeAvroReader;
+    // "KAFKA"/"PULSAR" for routine load, null otherwise. Enables (and scopes) the source-metadata
+    // functions in the COLUMNS clause; null means a metadata function is rejected as unknown.
+    private String routineLoadSourceType;
     private long logRejectedRecordNum = 0;
     private TPartialUpdateMode partialUpdateMode = TPartialUpdateMode.ROW_MODE;
     private ComputeResource computeResource = WarehouseManager.DEFAULT_RESOURCE;
@@ -131,6 +134,10 @@ public class StreamLoadInfo {
 
     public Boolean getUseNativeAvroReader() {
         return useNativeAvroReader;
+    }
+
+    public String getRoutineLoadSourceType() {
+        return routineLoadSourceType;
     }
 
     public TUniqueId getId() {
@@ -486,6 +493,7 @@ public class StreamLoadInfo {
         enclose = routineLoadJob.getEnclose();
         escape = routineLoadJob.getEscape();
         computeResource = routineLoadJob.getComputeResource();
+        routineLoadSourceType = routineLoadJob.getDataSourceTypeName();
     }
 
     // used for stream load
