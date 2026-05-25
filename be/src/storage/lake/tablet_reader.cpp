@@ -444,8 +444,7 @@ Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std
                 bool any_applicable = false;
                 for (const auto& col_name : file_pb.index_col_names()) {
                     const size_t src_idx = _tablet_schema->field_index(col_name);
-                    if (src_idx != static_cast<size_t>(-1) &&
-                        queried_col_ids.count(static_cast<ColumnId>(src_idx))) {
+                    if (src_idx != static_cast<size_t>(-1) && queried_col_ids.count(static_cast<ColumnId>(src_idx))) {
                         any_applicable = true;
                         break;
                     }
