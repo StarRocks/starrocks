@@ -33,6 +33,12 @@
 #include "storage/rowset/base_rowset.h"
 #include "storage/seek_range.h"
 
+namespace starrocks {
+class DisjunctivePredicates;
+class RowsetReadOptions;
+class SegmentReadOptions;
+} // namespace starrocks
+
 namespace starrocks::lake {
 
 class MetaFileBuilder;
@@ -96,6 +102,16 @@ public:
     DISALLOW_COPY_AND_MOVE(Rowset);
 
     StatusOr<std::vector<ChunkIteratorPtr>> read(const Schema& schema, const RowsetReadOptions& options);
+    StatusOr<std::vector<ChunkIteratorPtr>> read(const Schema& schema, const RowsetReadOptions& options,
+                                                 const std::vector<SegmentPtr>& prepared_segments);
+    StatusOr<std::optional<SeekRange>> get_seek_range() const;
+    Status init_segment_read_options(const RowsetReadOptions& options, const LakeIOOptions& lake_io_opts,
+                                     const DisjunctivePredicates& delete_predicates, OlapReaderStatistics* stats,
+                                     SegmentReadOptions* segment_options) const;
+    Status set_segment_tablet_range(size_t segment_idx, const std::optional<SeekRange>& shared_segment_range,
+                                    SegmentReadOptions* segment_options) const;
+    Schema build_segment_schema(const Schema& schema, const RowsetReadOptions& options,
+                                const DisjunctivePredicates& delete_predicates) const;
 
     StatusOr<size_t> get_read_iterator_num();
 
@@ -198,7 +214,8 @@ public:
     int64_t end_version() const override { return 0; }
 
 private:
-    StatusOr<std::optional<SeekRange>> get_seek_range() const;
+    StatusOr<std::vector<ChunkIteratorPtr>> do_read(const Schema& schema, const RowsetReadOptions& options,
+                                                    const std::vector<SegmentPtr>* prepared_segments);
 
     TabletManager* _tablet_mgr;
     int64_t _tablet_id;
