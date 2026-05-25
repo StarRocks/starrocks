@@ -197,9 +197,10 @@ public class Config extends ConfigBase {
     public static boolean slow_lock_print_stack = true;
 
     /**
-     * Minimum interval in milliseconds between stack-trace captures inside a slow-lock log event.
-     * Only applies when {@link #slow_lock_print_stack} is true. Setting this to 0 disables the
-     * rate limit (the original behavior, every slow-lock event captures stacks).
+     * Minimum interval in milliseconds between slow-lock stack-trace captures across log events.
+     * Within a single event the decision is all-or-nothing for every owner. Only applies when
+     * {@link #slow_lock_print_stack} is true. Setting this to 0 disables the rate limit (the
+     * original behavior, every slow-lock event captures stacks).
      *
      * Capturing thread stacks invokes JVM safepoint operations that are expensive in large
      * clusters where slow-lock events fire frequently. This gate caps how often the costly

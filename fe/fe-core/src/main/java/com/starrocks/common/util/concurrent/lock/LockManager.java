@@ -27,6 +27,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 
 public class LockManager {
@@ -411,15 +412,19 @@ public class LockManager {
         // fires every event; only the expensive Thread.getStackTrace path is throttled. When
         // the switch is on but rate-limited, mark stacks "throttled" so operators can tell the
         // capture was suppressed rather than the switch being off.
+        // The throttle gate uses a monotonic clock so NTP/wall-clock adjustments cannot stretch
+        // or short-circuit the interval; nowMs (System.currentTimeMillis) is kept for the
+        // user-facing timestamps below.
         boolean stackEnabled = Config.slow_lock_print_stack;
         boolean captureStack = false;
         if (stackEnabled) {
             if (Config.slow_lock_stack_print_interval_ms <= 0) {
                 captureStack = true;
             } else {
+                long monoNowMs = TimeUnit.NANOSECONDS.toMillis(System.nanoTime());
                 long last = LAST_STACK_PRINT_MS.get();
-                if (nowMs - last >= Config.slow_lock_stack_print_interval_ms
-                        && LAST_STACK_PRINT_MS.compareAndSet(last, nowMs)) {
+                if (monoNowMs - last >= Config.slow_lock_stack_print_interval_ms
+                        && LAST_STACK_PRINT_MS.compareAndSet(last, monoNowMs)) {
                     captureStack = true;
                 }
             }

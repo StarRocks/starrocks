@@ -497,7 +497,8 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - タイプ：Long
 - 単位：Milliseconds
 - 変更可能：Yes
-- 説明：LockManager の低速ロックログイベント内で所有者スタックトレースをキャプチャする最小間隔。`slow_lock_print_stack` が `true` の場合にのみ適用されます。スイッチはオンだが前回のキャプチャからこの間隔が経過していない場合、各所有者の `"stack"` フィールドは `"throttled"` マーカーに置き換えられ、warn ログの残り (rid、owners、waiters、queryId、タイミング情報) は通常どおり出力されます。`0` (または負の値) に設定するとレート制限が無効になり、すべての低速ロックイベントでスタックをキャプチャする以前の動作に戻ります。`Thread.getStackTrace` は JVM safepoint を発動し、低速ロックイベントが頻発する大規模クラスタではコストが大きくなります — このゲートは診断ログ自体を抑制せずにそのコストを抑えます。
+- 説明：LockManager の低速ロックログイベント間における所有者スタックトレースキャプチャの最小間隔。`slow_lock_print_stack` が `true` の場合にのみ適用されます。スイッチはオンだが前回のキャプチャからこの間隔が経過していない場合、各所有者の `"stack"` フィールドは `"throttled"` マーカーに置き換えられ、warn ログの残り (rid、owners、waiters、queryId、タイミング情報) は通常どおり出力されます。`0` (または負の値) に設定するとレート制限が無効になり、すべての低速ロックイベントでスタックをキャプチャする以前の動作に戻ります。`Thread.getStackTrace` は JVM safepoint を発動し、低速ロックイベントが頻発する大規模クラスタではコストが大きくなります — このゲートは診断ログ自体を抑制せずにそのコストを抑えます。
+- 導入時期：v4.1
 
 ### `slow_lock_max_waiter_count_to_log`
 
@@ -506,6 +507,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 単位：-
 - 変更可能：Yes
 - 説明：単一の LockManager 低速ロックログイベントでシリアライズされる waiter エントリの最大数。実際の waiter 数がこの上限を超えると、最初の N 個の waiter のみが個別に列挙され、残りは `"waiter"` 配列の末尾に追加される単一のトレーラ `{"omitted": "remain M waiters omitted"}` で集約されます。極度の競合シナリオで Gson シリアライゼーションコストとログ行サイズを抑制しつつ、waiter 総数の診断情報を保持します。`0`（または負の値）に設定すると上限を無効化し、すべての waiter をシリアライズします。
+- 導入時期：v4.1
 
 ### `slow_lock_threshold_ms`
 

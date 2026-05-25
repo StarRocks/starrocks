@@ -507,7 +507,8 @@ This topic introduces the following types of FE configurations:
 - Type: Long
 - Unit: Milliseconds
 - Is mutable: Yes
-- Description: Minimum interval between owner stack-trace captures inside LockManager slow-lock log events. Only applies when `slow_lock_print_stack` is `true`. When the switch is on but the interval has not elapsed since the last capture, the per-owner `"stack"` field is replaced with the marker `"throttled"` and the rest of the warn log (rid, owners, waiters, queryIds, timings) is still emitted. Set to `0` (or negative) to disable rate limiting and restore the prior behavior of capturing stacks on every slow-lock event. `Thread.getStackTrace` triggers a JVM safepoint that becomes expensive in large clusters where slow-lock events are frequent — this gate caps that cost without suppressing the diagnostic log itself.
+- Description: Minimum interval between owner stack-trace captures across LockManager slow-lock log events. Only applies when `slow_lock_print_stack` is `true`. When the switch is on but the interval has not elapsed since the last capture, the per-owner `"stack"` field is replaced with the marker `"throttled"` and the rest of the warn log (rid, owners, waiters, queryIds, timings) is still emitted. Set to `0` (or negative) to disable rate limiting and restore the prior behavior of capturing stacks on every slow-lock event. `Thread.getStackTrace` triggers a JVM safepoint that becomes expensive in large clusters where slow-lock events are frequent — this gate caps that cost without suppressing the diagnostic log itself.
+- Introduced in: v4.1
 
 ### `slow_lock_max_waiter_count_to_log`
 
@@ -516,6 +517,7 @@ This topic introduces the following types of FE configurations:
 - Unit: -
 - Is mutable: Yes
 - Description: Maximum number of waiter entries serialized into a single LockManager slow-lock log event. When the actual waiter count exceeds this cap, the first N waiters are listed individually and the remainder is summarized as a single trailer entry `{"omitted": "remain M waiters omitted"}` appended to the `"waiter"` array. Bounds Gson serialization cost and log-line size under extreme contention without losing the count diagnostic. Set to `0` (or negative) to disable the cap and serialize every waiter.
+- Introduced in: v4.1
 
 ### `slow_lock_threshold_ms`
 
