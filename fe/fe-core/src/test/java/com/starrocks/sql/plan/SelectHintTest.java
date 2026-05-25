@@ -99,7 +99,7 @@ public class SelectHintTest extends PlanTestBase {
 
         sql = "select /*+ set_user_variable(@a = 1, @b = 10) */ percentile_approx(v1, @a) from t0";
         plan = getFragmentPlan(sql);
-        assertContains(plan, "percentile_approx(CAST(1: v1 AS DOUBLE), 1.0)");
+        assertContains(plan, "percentile_approx(CAST(1: v1 AS DOUBLE), 1.0, 10000.0)");
 
         Exception exception = Assertions.assertThrows(SemanticException.class, () -> {
             String invalidSql = "select /*+ set_user_variable(@a = 1, @b = 1000000) */ APPROX_TOP_K(v1, @a), " +

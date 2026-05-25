@@ -2517,12 +2517,12 @@ public class AggregateTest extends PlanTestBase {
         // For compatibility
         String sql = "select percentile_approx(1, cast(0.4 as DOUBLE));";
         String plan = getCostExplain(sql);
-        assertContains(plan, "percentile_approx[(1.0, 0.4); args: DOUBLE,DOUBLE");
+        assertContains(plan, "percentile_approx[(1.0, 0.4, 10000.0); args: DOUBLE,DOUBLE,DOUBLE");
 
         sql = "with cc as (select 1 as a) select percentile_approx(1, cc.a) from cc;";
         plan = getFragmentPlan(sql);
         assertContains(plan, "2:AGGREGATE (update finalize)\n" +
-                "  |  output: percentile_approx(1.0, 1.0)\n" +
+                "  |  output: percentile_approx(1.0, 1.0, 10000.0)\n" +
                 "  |  group by: ");
         Exception exception = Assertions.assertThrows(StarRocksPlannerException.class, () -> {
             String testSql = "with cc as (select 1 as a, v1 from t0) select percentile_approx(1, cc.a, cc.v1) from cc;";
