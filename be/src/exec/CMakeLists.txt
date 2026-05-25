@@ -39,7 +39,17 @@ ADD_BE_LIB(ExecPrimitive
     ${EXEC_PRIMITIVE_FILES}
 )
 
-target_link_libraries(ExecPrimitive PUBLIC ExprCore RuntimeCore)
+target_link_libraries(ExecPrimitive PUBLIC
+    ExprCore
+    RuntimeCore
+    ChunkCore
+    ColumnCore
+    Types
+    Common
+    Base
+    Gutil
+    StarRocksGen
+)
 
 set(EXEC_SINK_CORE_FILES
     data_sink.cpp
