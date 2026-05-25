@@ -406,24 +406,6 @@ public class PulsarRoutineLoadJob extends RoutineLoadJob {
             }
             if (customPulsarPartitions != null && !customPulsarPartitions.isEmpty()) {
                 currentPulsarPartitions = customPulsarPartitions;
-<<<<<<< HEAD
-                return false;
-            } else {
-                List<String> newCurrentPulsarPartition;
-                try {
-                    newCurrentPulsarPartition = getAllPulsarPartitions();
-                } catch (Exception e) {
-                    String msg = "Job failed to fetch all current partition with error [" + e.getMessage() + "]";
-                    LOG.warn(new LogBuilder(LogKey.ROUTINE_LOAD_JOB, id)
-                            .add("error_msg", msg)
-                            .build(), e);
-                    if (this.state == JobState.NEED_SCHEDULE) {
-                        unprotectUpdateState(JobState.PAUSED,
-                                new ErrorReason(InternalErrorCode.PARTITIONS_ERR, msg),
-                                false /* not replay */);
-                    }
-                    return false;
-=======
             }
         } finally {
             writeUnlock();
@@ -449,7 +431,7 @@ public class PulsarRoutineLoadJob extends RoutineLoadJob {
                     .add("msg", "Job need to be rescheduled")
                     .build());
             unprotectUpdateProgress();
-            unprotectUpdateState(JobState.NEED_SCHEDULE, null);
+            unprotectUpdateState(JobState.NEED_SCHEDULE, null, false /* not replay */);
         } finally {
             writeUnlock();
         }
@@ -477,8 +459,8 @@ public class PulsarRoutineLoadJob extends RoutineLoadJob {
                 // otherwise-healthy pipeline. The next scheduler tick will retry.
                 if (this.state == JobState.NEED_SCHEDULE) {
                     unprotectUpdateState(JobState.PAUSED,
-                            new ErrorReason(InternalErrorCode.PARTITIONS_ERR, msg));
->>>>>>> 89eefdb0a2 ([BugFix] Move routine-load broker RPC out of the per-job writeLock (#73591))
+                            new ErrorReason(InternalErrorCode.PARTITIONS_ERR, msg),
+                            false /* not replay */);
                 }
                 return;
             }
@@ -505,7 +487,7 @@ public class PulsarRoutineLoadJob extends RoutineLoadJob {
                         .add("msg", "Job need to be rescheduled")
                         .build());
                 unprotectUpdateProgress();
-                unprotectUpdateState(JobState.NEED_SCHEDULE, null);
+                unprotectUpdateState(JobState.NEED_SCHEDULE, null, false /* not replay */);
             }
         } finally {
             writeUnlock();

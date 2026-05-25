@@ -40,6 +40,7 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.InternalErrorCode;
 import com.starrocks.common.StarRocksException;
@@ -490,15 +491,25 @@ public class RoutineLoadJobTest {
     }
 
     @Test
-<<<<<<< HEAD
-    public void testUpdateNumOfDataErrorRowMoreThanMax(@Mocked GlobalStateMgr globalStateMgr) {
-=======
     public void testUpdateKafkaPartitionsContainsAllShrink(@Injectable KafkaProgress kafkaProgress) throws StarRocksException {
         long dbId = 12L;
         Database database = new Database(dbId, "testDb");
         OlapTable table = new OlapTable(22L, "test", null, null, null, null);
         database.registerTableUnlocked(table);
         GlobalStateMgr.getCurrentState().getLocalMetastore().replayCreateDb(database);
+
+        new MockUp<EditLog>() {
+            @Mock
+            public void logOpRoutineLoadJob(RoutineLoadOperation routineLoadOperation) {
+            }
+        };
+
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public EditLog getEditLog() {
+                return new EditLog(null);
+            }
+        };
 
         new MockUp<KafkaUtil>() {
             @Mock
@@ -529,6 +540,19 @@ public class RoutineLoadJobTest {
         database.registerTableUnlocked(table);
         GlobalStateMgr.getCurrentState().getLocalMetastore().replayCreateDb(database);
 
+        new MockUp<EditLog>() {
+            @Mock
+            public void logOpRoutineLoadJob(RoutineLoadOperation routineLoadOperation) {
+            }
+        };
+
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public EditLog getEditLog() {
+                return new EditLog(null);
+            }
+        };
+
         new MockUp<KafkaUtil>() {
             @Mock
             public List<Integer> getAllKafkaPartitions(String brokerList, String topic,
@@ -556,6 +580,19 @@ public class RoutineLoadJobTest {
         OlapTable table = new OlapTable(22L, "test", null, null, null, null);
         database.registerTableUnlocked(table);
         GlobalStateMgr.getCurrentState().getLocalMetastore().replayCreateDb(database);
+
+        new MockUp<EditLog>() {
+            @Mock
+            public void logOpRoutineLoadJob(RoutineLoadOperation routineLoadOperation) {
+            }
+        };
+
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public EditLog getEditLog() {
+                return new EditLog(null);
+            }
+        };
 
         new MockUp<ScheduleRule>() {
             @Mock
@@ -642,6 +679,19 @@ public class RoutineLoadJobTest {
         database.registerTableUnlocked(table);
         GlobalStateMgr.getCurrentState().getLocalMetastore().replayCreateDb(database);
 
+        new MockUp<EditLog>() {
+            @Mock
+            public void logOpRoutineLoadJob(RoutineLoadOperation routineLoadOperation) {
+            }
+        };
+
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public EditLog getEditLog() {
+                return new EditLog(null);
+            }
+        };
+
         new MockUp<PulsarUtil>() {
             @Mock
             public List<String> getAllPulsarPartitions(String serviceUrl, String topic, String subscription,
@@ -669,6 +719,19 @@ public class RoutineLoadJobTest {
         OlapTable table = new OlapTable(22L, "test", null, null, null, null);
         database.registerTableUnlocked(table);
         GlobalStateMgr.getCurrentState().getLocalMetastore().replayCreateDb(database);
+
+        new MockUp<EditLog>() {
+            @Mock
+            public void logOpRoutineLoadJob(RoutineLoadOperation routineLoadOperation) {
+            }
+        };
+
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public EditLog getEditLog() {
+                return new EditLog(null);
+            }
+        };
 
         new MockUp<PulsarUtil>() {
             @Mock
@@ -698,6 +761,19 @@ public class RoutineLoadJobTest {
         OlapTable table = new OlapTable(22L, "test", null, null, null, null);
         database.registerTableUnlocked(table);
         GlobalStateMgr.getCurrentState().getLocalMetastore().replayCreateDb(database);
+
+        new MockUp<EditLog>() {
+            @Mock
+            public void logOpRoutineLoadJob(RoutineLoadOperation routineLoadOperation) {
+            }
+        };
+
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public EditLog getEditLog() {
+                return new EditLog(null);
+            }
+        };
 
         new MockUp<ScheduleRule>() {
             @Mock
@@ -813,6 +889,19 @@ public class RoutineLoadJobTest {
         database.registerTableUnlocked(table);
         GlobalStateMgr.getCurrentState().getLocalMetastore().replayCreateDb(database);
 
+        new MockUp<EditLog>() {
+            @Mock
+            public void logOpRoutineLoadJob(RoutineLoadOperation routineLoadOperation) {
+            }
+        };
+
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public EditLog getEditLog() {
+                return new EditLog(null);
+            }
+        };
+
         new MockUp<PulsarUtil>() {
             @Mock
             public List<String> getAllPulsarPartitions(String serviceUrl, String topic, String subscription,
@@ -835,8 +924,7 @@ public class RoutineLoadJobTest {
     }
 
     @Test
-    public void testUpdateNumOfDataErrorRowMoreThanMax() {
->>>>>>> 89eefdb0a2 ([BugFix] Move routine-load broker RPC out of the per-job writeLock (#73591))
+    public void testUpdateNumOfDataErrorRowMoreThanMax(@Mocked GlobalStateMgr globalStateMgr) {
         RoutineLoadJob routineLoadJob = new KafkaRoutineLoadJob();
         Deencapsulation.setField(routineLoadJob, "maxErrorNum", 0);
         Deencapsulation.setField(routineLoadJob, "maxBatchRows", 0);
