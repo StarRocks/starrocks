@@ -14,6 +14,7 @@
 
 #include "storage/primary_index.h"
 
+#include <limits>
 #include <memory>
 #include <mutex>
 
@@ -1490,25 +1491,42 @@ Status PrimaryIndex::upsert(uint32_t rssid, uint32_t rowid_start, const Column& 
     }
 }
 
-Status PrimaryIndex::upsert(uint32_t rssid, const std::vector<uint32_t>& rowids, const Column& pks, IOStat* stat,
-                            ParallelPublishContext* ctx) {
+Status PrimaryIndex::upsert(uint32_t rssid, uint32_t physical_rowid_offset, const std::vector<uint32_t>& indices,
+                            const Column& pks, IOStat* stat, ParallelPublishContext* ctx) {
     DCHECK(_status.ok() && (_pkey_to_rssid_rowid || _persistent_index));
-    if (_persistent_index != nullptr) {
-        auto scope = IOProfiler::scope(IOProfiler::TAG_PKINDEX, _tablet_id);
-        const uint32_t n = pks.size();
-        DCHECK_EQ(rowids.size(), n);
-        DCHECK(ctx != nullptr && !ctx->slots.empty());
-        auto slot = ctx->slots.back().get();
-        slot->values.reserve(n);
-        slot->old_values.resize(n, NullIndexValue);
-        const Slice* vkeys = build_persistent_keys(pks, _key_size, 0, n, &slot->keys);
-        RETURN_IF_ERROR(_build_persistent_values(rssid, rowids, 0, n, &slot->values));
-        RETURN_IF_ERROR(_persistent_index->upsert(n, vkeys, reinterpret_cast<IndexValue*>(slot->values.data()),
-                                                  reinterpret_cast<IndexValue*>(slot->old_values.data()), stat, ctx));
-        return Status::OK();
-    } else {
-        return Status::NotSupported("rowids upsert with thread pool is not supported in memory primary index");
+    if (_persistent_index == nullptr) {
+        return Status::NotSupported("sparse upsert with thread pool is not supported in memory primary index");
     }
+    auto scope = IOProfiler::scope(IOProfiler::TAG_PKINDEX, _tablet_id);
+    const uint32_t num_rows = pks.size();
+    if (indices.size() != num_rows) {
+        return Status::InvalidArgument(strings::Substitute("PrimaryIndex::upsert: indices/pks size mismatch: $0 vs $1",
+                                                           indices.size(), num_rows));
+    }
+    // Reject overflow: each absolute rowid (= physical_rowid_offset + indices[k]) must fit in uint32_t.
+    const uint32_t max_offset = std::numeric_limits<uint32_t>::max() - physical_rowid_offset;
+    for (uint32_t k = 0; k < num_rows; ++k) {
+        if (indices[k] > max_offset) {
+            return Status::InvalidArgument(strings::Substitute(
+                    "PrimaryIndex::upsert: physical rowid overflow at index $0 (base=$1 + offset=$2 > uint32_t max)", k,
+                    physical_rowid_offset, indices[k]));
+        }
+    }
+    DCHECK(ctx != nullptr && !ctx->slots.empty());
+    auto* slot = ctx->slots.back().get();
+    slot->values.reserve(num_rows);
+    slot->old_values.resize(num_rows, NullIndexValue);
+    const Slice* encoded_pk_keys = build_persistent_keys(pks, _key_size, 0, num_rows, &slot->keys);
+    // Combined (rssid, physical_rowid_offset) baseline; per-row value = baseline + indices[k].
+    const uint64_t rssid_rowid_baseline =
+            (static_cast<uint64_t>(rssid) << 32) | static_cast<uint64_t>(physical_rowid_offset);
+    for (uint32_t k = 0; k < num_rows; ++k) {
+        slot->values.emplace_back(rssid_rowid_baseline + indices[k]);
+    }
+    RETURN_IF_ERROR(_persistent_index->upsert(num_rows, encoded_pk_keys,
+                                              reinterpret_cast<IndexValue*>(slot->values.data()),
+                                              reinterpret_cast<IndexValue*>(slot->old_values.data()), stat, ctx));
+    return Status::OK();
 }
 
 Status PrimaryIndex::_replace_persistent_index_by_indexes(uint32_t rssid, uint32_t rowid_start,

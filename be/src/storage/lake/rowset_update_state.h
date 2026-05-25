@@ -15,6 +15,7 @@
 #pragma once
 
 #include <atomic>
+#include <optional>
 #include <string>
 #include <unordered_map>
 
@@ -28,6 +29,33 @@
 namespace starrocks::lake {
 
 class RssidFileInfoContainer;
+
+// One chunk emitted by SegmentPKIterator::current(). Carries two views of
+// chunk[0]'s position, addressing different downstream consumers:
+//
+//   * physical_rowid_offset — chunk[0]'s position in the SOURCE SEGMENT FILE.
+//     chunk[i]'s physical rowid = physical_rowid_offset + i.
+//     Used by PK-index upserts, delete-bitmap writers, and any consumer that
+//     reads the full segment via Segment::open + fetch_values_by_rowid.
+//     For shared (post-split) segments this skips the iterator's range_start.
+//
+//   * logical_rowid_offset — chunk[0]'s position in the ITERATOR'S EMIT
+//     SEQUENCE (= sum of rows emitted before this chunk).
+//     Used by consumers that read the range-filtered chunk via the same
+//     iterator (e.g. ColumnModePartialUpdateHandler::_update_source_chunk_by_upt
+//     uses logical positions to index into iterator-emitted chunks via
+//     append_selective) and as an index into per-segment flat result arrays
+//     sized by total-rows-emitted.
+//
+// For non-shared segments the two are equal; for shared segments they
+// differ by the iterator's range_start. Both fields are by-value so the
+// ref is async-capture safe — lambdas that outlive iter.next() can rely on
+// both offsets without holding the iterator.
+struct SegmentPKChunkRef {
+    ChunkPtr chunk;
+    uint32_t physical_rowid_offset = 0;
+    size_t logical_rowid_offset = 0;
+};
 
 struct PartialUpdateState {
     std::vector<uint64_t> src_rss_rowids;
@@ -97,8 +125,10 @@ public:
     bool done();
     Status status();
     void close();
-    // <Current pk column chunk, begin rowid>
-    std::pair<ChunkPtr, size_t> current();
+    // Returns the most-recently-loaded chunk plus both views of its position
+    // in the source segment (see SegmentPKChunkRef doc). The returned chunk
+    // is moved out — done() will report empty until the next _load().
+    SegmentPKChunkRef current();
 
     // Return the memory usage of this encode pk column.
     // If _lazy_load is true, return 0, because memory allocation is lazy.
@@ -111,6 +141,14 @@ public:
 
 private:
     Status _load();
+
+    // Validates that `rowid_buffer` continues the iterator's physical rowid
+    // run (or installs the base on the first non-empty emit). Updates
+    // `_segment_physical_rowid_offset` and `expected_next_rowid`. Returns
+    // Status::InternalError on any contiguity violation — release-safe
+    // because downstream `base + i` arithmetic depends on contiguity for
+    // correctness, not just for performance.
+    Status _validate_rowid_continuity(const std::vector<uint32_t>& rowid_buffer, uint32_t& expected_next_rowid);
 
     // Iterator of this segment file.
     ChunkIteratorPtr _iter;
@@ -136,6 +174,11 @@ private:
     ChunkUniquePtr _pk_column_chunk;
     // For no lazy load, we can load whole pk column and encode at once.
     MutableColumnPtr _standalone_pk_column;
+    // First physical rowid emitted by the underlying iterator for this segment.
+    // Set once on the first non-empty emit and never reset across subsequent
+    // _load() / next() calls. std::optional disambiguates "not yet set" from
+    // the legitimate value 0 (non-shared segment iterating from physical row 0).
+    std::optional<uint32_t> _segment_physical_rowid_offset;
     // The encoding type of primary key.
     PrimaryKeyEncodingType _encoding_type = PrimaryKeyEncodingType::PK_ENCODING_TYPE_NONE;
 };

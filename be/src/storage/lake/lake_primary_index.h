@@ -112,9 +112,18 @@ public:
     // cross-segment parallelism. Each rss_rowids[i] = (rssid << 32 | rowid) for the
     // i-th primary key, or NullIndexValue if the key doesn't exist.
     // Used by column mode partial update to build the update-row-to-source-row mapping.
+    //
+    // If `physical_rowid_offset_per_segment` is non-null, also captures the segment
+    // iterator's range_start (= first emitted physical rowid) for each segment so
+    // callers can compute physical positions of any logical row offset after the
+    // iterators are released:
+    //   physical_rowid = base_per_segment[seg] + logical_offset_in_segment.
+    // For non-shared segments the base is 0; for shared (post-split) segments it
+    // skips the range_start.
     Status batch_parallel_get_rss_rowids(ThreadPoolToken* token,
                                          std::vector<std::unique_ptr<SegmentPKIterator>>& pk_iters,
-                                         std::vector<std::vector<uint64_t>>* rss_rowids_per_segment);
+                                         std::vector<std::vector<uint64_t>>* rss_rowids_per_segment,
+                                         std::vector<uint32_t>* physical_rowid_offset_per_segment = nullptr);
 
     // This function will be called when parallel upsert happens.
     // The process flow of parallel upsert is:

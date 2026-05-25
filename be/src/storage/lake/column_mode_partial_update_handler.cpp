@@ -109,14 +109,20 @@ Status ColumnModePartialUpdateHandler::_load_update_state(const RowsetUpdateStat
 
     // Parallel query PK index: each segment's PKs are loaded chunk-by-chunk (lazy)
     // and each chunk is queried against the index in parallel via thread pool.
+    // Also capture each update segment iterator's range_start so we can later
+    // translate logical iteration offsets back to physical positions when
+    // reading individual rows (e.g. via fetch_values_by_rowid).
     std::vector<std::vector<uint64_t>> rss_rowids_per_segment;
+    std::vector<uint32_t> physical_rowid_offset_per_segment;
     RETURN_IF_ERROR(params.tablet->update_mgr()->batch_get_rss_rowids_from_pkindex(
-            params.tablet->id(), _base_version, pk_iters, &rss_rowids_per_segment, false /*need_lock*/));
+            params.tablet->id(), _base_version, pk_iters, &rss_rowids_per_segment, false /*need_lock*/,
+            &physical_rowid_offset_per_segment));
 
     // Build rss_rowid_to_update_rowid mapping for each update segment
     _partial_update_states.resize(num_segments);
     for (uint32_t i = 0; i < num_segments; i++) {
         _partial_update_states[i].src_rss_rowids = std::move(rss_rowids_per_segment[i]);
+        _partial_update_states[i].upt_segment_physical_rowid_offset = physical_rowid_offset_per_segment[i];
         _partial_update_states[i].build_rss_rowid_to_update_rowid();
         _partial_update_states[i].inited = true;
     }
@@ -392,6 +398,9 @@ Status ColumnModePartialUpdateHandler::execute(const RowsetUpdateStateParams& pa
         TRACE_COUNTER_INCREMENT("pcu_insert_rows", _partial_update_states[upt_id].insert_rowids.size());
 
         if (insert_rowids_by_segment != nullptr) {
+            // insert_rowids are already physical positions in the update segment file
+            // (build_rss_rowid_to_update_rowid applied upt_segment_physical_rowid_offset),
+            // exactly what the downstream fetch_values_by_rowid reads expect.
             (*insert_rowids_by_segment)[upt_id] = std::move(_partial_update_states[upt_id].insert_rowids);
         }
     }

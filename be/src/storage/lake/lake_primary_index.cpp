@@ -438,7 +438,7 @@ Status LakePrimaryIndex::parallel_get(ThreadPoolToken* token, SegmentPKIterator*
             Status st = Status::OK();
 
             // Encode primary keys for this segment
-            auto pk_column_st = segment_pk_iterator->encoded_pk_column(current.first.get());
+            auto pk_column_st = segment_pk_iterator->encoded_pk_column(current.chunk.get());
             DCHECK(context_ptr->slots.size() > 0);
 
             if (pk_column_st.ok()) {
@@ -493,9 +493,13 @@ Status LakePrimaryIndex::parallel_get(ThreadPoolToken* token, SegmentPKIterator*
 // cross-segment parallelism.
 Status LakePrimaryIndex::batch_parallel_get_rss_rowids(ThreadPoolToken* token,
                                                        std::vector<SegmentPKIteratorPtr>& pk_iters,
-                                                       std::vector<std::vector<uint64_t>>* rss_rowids_per_segment) {
+                                                       std::vector<std::vector<uint64_t>>* rss_rowids_per_segment,
+                                                       std::vector<uint32_t>* physical_rowid_offset_per_segment) {
     const uint32_t num_segments = pk_iters.size();
     rss_rowids_per_segment->resize(num_segments);
+    if (physical_rowid_offset_per_segment != nullptr) {
+        physical_rowid_offset_per_segment->assign(num_segments, 0);
+    }
 
     struct RssRowidSlot {
         size_t begin_rowid = 0;
@@ -508,21 +512,24 @@ Status LakePrimaryIndex::batch_parallel_get_rss_rowids(ThreadPoolToken* token,
     std::vector<std::vector<std::unique_ptr<RssRowidSlot>>> per_segment_slots(num_segments);
 
     // Iterate all segments' chunks on the main thread and submit them all to the shared pool.
+    // For the optional physical_rowid_offset_per_segment output: on each segment's first
+    // chunk, capture its physical_rowid_offset (= segment-wide range start, since the first
+    // chunk's logical_rowid_offset is 0). Empty-iter segments keep the default 0.
     for (uint32_t seg_idx = 0; seg_idx < num_segments; seg_idx++) {
         auto* pk_iter = pk_iters[seg_idx].get();
         for (; !pk_iter->done(); pk_iter->next()) {
             auto current = pk_iter->current();
-            size_t num_rows = current.first->num_rows();
-            size_t begin_rowid = current.second;
-
+            if (physical_rowid_offset_per_segment != nullptr && per_segment_slots[seg_idx].empty()) {
+                (*physical_rowid_offset_per_segment)[seg_idx] = current.physical_rowid_offset;
+            }
             auto slot = std::make_unique<RssRowidSlot>();
-            slot->begin_rowid = begin_rowid;
-            slot->count = num_rows;
+            slot->begin_rowid = current.logical_rowid_offset;
+            slot->count = current.chunk->num_rows();
             per_segment_slots[seg_idx].push_back(std::move(slot));
             auto* slot_ptr = per_segment_slots[seg_idx].back().get();
 
             auto func = [this, slot_ptr, current = std::move(current), pk_iter, &mutex, &status]() {
-                auto pk_column_st = pk_iter->encoded_pk_column(current.first.get());
+                auto pk_column_st = pk_iter->encoded_pk_column(current.chunk.get());
                 Status st;
                 if (pk_column_st.ok()) {
                     slot_ptr->values.resize(slot_ptr->count, NullIndexValue);
@@ -556,7 +563,8 @@ Status LakePrimaryIndex::batch_parallel_get_rss_rowids(ThreadPoolToken* token,
         RETURN_IF_ERROR(pk_iters[seg_idx]->status());
     }
 
-    // Merge per-chunk results into per-segment output vectors
+    // Merge per-chunk results into per-segment output vectors. Per-segment
+    // bases were captured above on the first chunk emit.
     for (uint32_t seg_idx = 0; seg_idx < num_segments; seg_idx++) {
         auto& slots = per_segment_slots[seg_idx];
         size_t total = 0;
@@ -604,7 +612,8 @@ Status LakePrimaryIndex::parallel_upsert(ThreadPoolToken* token, uint32_t rssid,
     // Setup context shared across all parallel tasks
     ParallelPublishContext context{.token = token, .mutex = &mutex, .deletes = new_deletes, .status = &status};
 
-    // Process each segment in the iterator
+    // Process each segment in the iterator. Each chunk's absolute physical
+    // rowid is current.physical_rowid_offset + i_in_chunk (see SegmentPKChunkRef).
     for (; !segment_pk_iterator->done(); segment_pk_iterator->next()) {
         auto current = segment_pk_iterator->current();
         if (token) {
@@ -615,14 +624,14 @@ Status LakePrimaryIndex::parallel_upsert(ThreadPoolToken* token, uint32_t rssid,
             // We can't return error directly, because we need to wait all previous tasks finish.
             // Instead, we accumulate errors in context->status for later checking.
             Status st = Status::OK();
-            auto pk_column_st = segment_pk_iterator->encoded_pk_column(current.first.get());
+            auto pk_column_st = segment_pk_iterator->encoded_pk_column(current.chunk.get());
             if (pk_column_st.ok()) {
                 // Store pk_column in this task's slot to avoid data races
                 slot->pk_column = std::move(pk_column_st.value());
 
                 // Submit upsert task to thread pool. Pass nullptr for deletes since we collect
                 // them in the context (not used for upsert, only for parallel_get)
-                st = upsert(rssid, current.second, *slot->pk_column, nullptr /* stat */, &context);
+                st = upsert(rssid, current.physical_rowid_offset, *slot->pk_column, nullptr /* stat */, &context);
                 TRACE_COUNTER_INCREMENT("parallel_upsert_cnt", 1);
             } else {
                 st = pk_column_st.status();
@@ -635,8 +644,8 @@ Status LakePrimaryIndex::parallel_upsert(ThreadPoolToken* token, uint32_t rssid,
             }
         } else {
             // Serial mode: Execute inline with direct error propagation
-            ASSIGN_OR_RETURN(MutableColumnPtr pk_column, segment_pk_iterator->encoded_pk_column(current.first.get()));
-            RETURN_IF_ERROR(upsert(rssid, current.second, *pk_column, context.deletes));
+            ASSIGN_OR_RETURN(MutableColumnPtr pk_column, segment_pk_iterator->encoded_pk_column(current.chunk.get()));
+            RETURN_IF_ERROR(upsert(rssid, current.physical_rowid_offset, *pk_column, context.deletes));
         }
     }
     // Synchronize parallel execution if enabled

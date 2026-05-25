@@ -36,27 +36,74 @@
 
 namespace starrocks::lake {
 
+Status SegmentPKIterator::_validate_rowid_continuity(const std::vector<uint32_t>& rowid_buffer,
+                                                     uint32_t& expected_next_rowid) {
+    if (rowid_buffer.empty()) {
+        return Status::OK();
+    }
+    // Install the segment-wide base on the very first non-empty emit. The
+    // optional disambiguates "base not yet observed" from the legitimate
+    // base value 0 (non-shared segment iterating from physical row 0).
+    if (!_segment_physical_rowid_offset.has_value()) {
+        _segment_physical_rowid_offset = rowid_buffer.front();
+        expected_next_rowid = *_segment_physical_rowid_offset;
+    }
+    // Cross-emit continuity: each emit must continue exactly where the
+    // previous one ended.
+    if (rowid_buffer.front() != expected_next_rowid) {
+        return Status::InternalError(
+                strings::Substitute("SegmentPKIterator: cross-emit non-contiguous rowids; "
+                                    "expected $0, got $1 (delvec/predicate iterator unsupported on this path)",
+                                    expected_next_rowid, rowid_buffer.front()));
+    }
+    // Intra-emit continuity. A single get_next() returning e.g. {5, 7, 9}
+    // (which could come from a future iterator applying delete bitmap or
+    // row predicates) would silently produce wrong physical rowids under
+    // `base + i` arithmetic downstream.
+    for (size_t i = 1; i < rowid_buffer.size(); ++i) {
+        if (rowid_buffer[i] != rowid_buffer[0] + i) {
+            return Status::InternalError(strings::Substitute(
+                    "SegmentPKIterator: intra-emit non-contiguous rowids at index $0; expected $1, got $2", i,
+                    rowid_buffer[0] + i, rowid_buffer[i]));
+        }
+    }
+    expected_next_rowid = rowid_buffer.back() + 1;
+    return Status::OK();
+}
+
 Status SegmentPKIterator::_load() {
     TRY_CATCH_BAD_ALLOC(_pk_column_chunk = ChunkHelper::new_chunk(_pkey_schema, 4096));
     auto chunk_container = _pk_column_chunk->clone_empty();
+    std::vector<uint32_t> rowid_buffer;
+    // Seed for cross-emit continuity. On lazy-load re-entry the base is set and we resume
+    // where the previous _load() ended; on the first emit the base is unset and the
+    // validator installs it from rowid_buffer.front().
+    uint32_t expected_next_rowid = _segment_physical_rowid_offset.value_or(0) + static_cast<uint32_t>(_current_rows);
     if (_iter != nullptr) {
         while (true) {
             chunk_container->reset();
-            auto st = Status::OK();
+            rowid_buffer.clear();
+            Status st;
             {
                 TRACE_COUNTER_SCOPE_LATENCY_US("segment_get_next_us");
-                st = _iter->get_next(chunk_container.get());
+                st = _iter->get_next(chunk_container.get(), &rowid_buffer);
             }
             if (st.is_end_of_file()) {
                 break;
-            } else if (!st.ok()) {
+            }
+            if (!st.ok()) {
                 return st;
-            } else {
-                TRY_CATCH_BAD_ALLOC(_pk_column_chunk->append(*chunk_container));
-                if (_lazy_load && (_pk_column_chunk->memory_usage() >= config::pk_column_lazy_load_threshold_bytes ||
-                                   _pk_column_chunk->num_rows() >= config::pk_index_parallel_execution_min_rows)) {
-                    break;
-                }
+            }
+            if (rowid_buffer.size() != chunk_container->num_rows()) {
+                return Status::InternalError(
+                        strings::Substitute("SegmentPKIterator: get_next rowids/rows mismatch: $0 vs $1",
+                                            rowid_buffer.size(), chunk_container->num_rows()));
+            }
+            RETURN_IF_ERROR(_validate_rowid_continuity(rowid_buffer, expected_next_rowid));
+            TRY_CATCH_BAD_ALLOC(_pk_column_chunk->append(*chunk_container));
+            if (_lazy_load && (_pk_column_chunk->memory_usage() >= config::pk_column_lazy_load_threshold_bytes ||
+                               _pk_column_chunk->num_rows() >= config::pk_index_parallel_execution_min_rows)) {
+                break;
             }
         }
     }
@@ -117,8 +164,13 @@ void SegmentPKIterator::next() {
     }
 }
 
-std::pair<ChunkPtr, size_t> SegmentPKIterator::current() {
-    return std::pair<ChunkPtr, size_t>(std::move(_pk_column_chunk), _begin_rowid_offsets[_current_pk_column_idx]);
+SegmentPKChunkRef SegmentPKIterator::current() {
+    SegmentPKChunkRef ref;
+    ref.logical_rowid_offset = _begin_rowid_offsets[_current_pk_column_idx];
+    ref.physical_rowid_offset =
+            _segment_physical_rowid_offset.value_or(0) + static_cast<uint32_t>(ref.logical_rowid_offset);
+    ref.chunk = std::move(_pk_column_chunk);
+    return ref;
 }
 
 StatusOr<MutableColumnPtr> SegmentPKIterator::encoded_pk_column(const Chunk* chunk) {

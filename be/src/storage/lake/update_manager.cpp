@@ -1003,12 +1003,11 @@ Status UpdateManager::_do_update(uint32_t rowset_id, int32_t upsert_idx, const S
 // row-by-row comparison, while parallel execution scales with CPU cores.
 Status UpdateManager::_process_single_chunk_update_with_condition(
         const RowsetUpdateStateParams& params, uint32_t rowset_id, int32_t upsert_idx,
-        SegmentPKIterator* segment_pk_iterator, ParallelPublishContext* context,
-        const std::pair<ChunkPtr, size_t>& current, const TabletColumn& tablet_column,
-        const std::vector<uint32_t>& read_column_ids, LakePrimaryIndex& index) {
+        SegmentPKIterator* segment_pk_iterator, ParallelPublishContext* context, const SegmentPKChunkRef& current,
+        const TabletColumn& tablet_column, const std::vector<uint32_t>& read_column_ids, LakePrimaryIndex& index) {
     TRACE_COUNTER_INCREMENT("process_condition_update_count", 1);
     // Extract primary key column from current chunk for index lookup
-    ASSIGN_OR_RETURN(auto pk_column, segment_pk_iterator->encoded_pk_column(current.first.get()));
+    ASSIGN_OR_RETURN(auto pk_column, segment_pk_iterator->encoded_pk_column(current.chunk.get()));
     std::vector<uint64_t> old_rowids(pk_column->size());
     RETURN_IF_ERROR(index.get(*pk_column, &old_rowids));
     // Fast path: If no existing rows found for any PK, all new rows win by default
@@ -1031,12 +1030,12 @@ Status UpdateManager::_process_single_chunk_update_with_condition(
         auto old_column = ChunkHelper::column_from_field_type(tablet_column.type(), tablet_column.is_nullable());
         old_column->append_selective(*old_columns[0], idxes.data(), 0, idxes.size());
 
-        // STEP 2: Read condition column values from new rows (from SST files)
+        // STEP 2: Read condition column values from new rows (from SST files).
+        // Absolute physical rowid = current.physical_rowid_offset + chunk-local offset.
         std::map<uint32_t, std::vector<uint32_t>> new_rowids_by_rssid;
         std::vector<uint32_t> rowids;
         for (int j = 0; j < pk_column->size(); ++j) {
-            // Build absolute rowids: current.second is the base offset for this chunk
-            rowids.push_back(j + current.second);
+            rowids.push_back(current.physical_rowid_offset + static_cast<uint32_t>(j));
         }
         new_rowids_by_rssid[rowset_id + upsert_idx] = rowids;
         // Read condition values from SST file for new rows
@@ -1061,7 +1060,8 @@ Status UpdateManager::_process_single_chunk_update_with_condition(
                     // Old value wins (old > new): Delete the new row from current SST file
                     // CRITICAL: Must lock before modifying shared delete map
                     std::lock_guard<std::mutex> lock(*context->mutex);
-                    (*context->deletes)[rowset_id + upsert_idx].push_back(j + current.second);
+                    (*context->deletes)[rowset_id + upsert_idx].push_back(current.physical_rowid_offset +
+                                                                          static_cast<uint32_t>(j));
                 } else {
                     // New value wins (old <= new): Delete the old row from its original segment
                     // ROWID ENCODING: old_rowid = (rssid << 32) | row_offset
@@ -1173,8 +1173,9 @@ namespace {
 // so the serial merge can upsert winners without re-encoding the chunk.
 struct ChunkCondMergeResult {
     MutableColumnPtr pk_column;
-    // Absolute row offset of this chunk within the segment (== SegmentPKIterator::current().second).
-    size_t chunk_offset = 0;
+    // Snapshot of SegmentPKIterator::current().physical_rowid_offset for this chunk.
+    // Each chunk-local index `k` maps to absolute physical rowid base + k.
+    uint32_t chunk_physical_rowid_offset = 0;
     // Half-open intervals [begin, end) in chunk-local coordinates identifying new rows
     // that won their condition comparison and must be upserted into the index.
     // Any replaced old rowids are collected by index.upsert into new_deletes.
@@ -1192,11 +1193,10 @@ struct ChunkCondMergeResult {
 // and the caller can apply index.upsert serially.
 static Status process_single_chunk_update_with_condition_no_sst(
         UpdateManager* mgr, const RowsetUpdateStateParams& params, uint32_t rowset_id, int32_t upsert_idx,
-        SegmentPKIterator* segment_pk_iterator, const std::pair<ChunkPtr, size_t>& current,
-        const TabletColumn& tablet_column, const std::vector<uint32_t>& read_column_ids, LakePrimaryIndex& index,
-        ChunkCondMergeResult* result) {
+        SegmentPKIterator* segment_pk_iterator, const SegmentPKChunkRef& current, const TabletColumn& tablet_column,
+        const std::vector<uint32_t>& read_column_ids, LakePrimaryIndex& index, ChunkCondMergeResult* result) {
     TRACE_COUNTER_INCREMENT("process_condition_update_count", 1);
-    ASSIGN_OR_RETURN(result->pk_column, segment_pk_iterator->encoded_pk_column(current.first.get()));
+    ASSIGN_OR_RETURN(result->pk_column, segment_pk_iterator->encoded_pk_column(current.chunk.get()));
     const auto chunk_size = result->pk_column->size();
     if (chunk_size == 0) {
         return Status::OK();
@@ -1222,13 +1222,13 @@ static Status process_single_chunk_update_with_condition_no_sst(
     auto old_column = ChunkHelper::column_from_field_type(tablet_column.type(), tablet_column.is_nullable());
     old_column->append_selective(*old_columns[0], idxes.data(), 0, idxes.size());
 
-    // Read new-row condition values from the freshly-ingested segment; rowid in this segment
-    // equals chunk_offset + local_idx.
+    // Read new-row condition values from the freshly-ingested segment; rowid in
+    // this segment is current.physical_rowid_offset + chunk-local offset.
     std::map<uint32_t, std::vector<uint32_t>> new_rowids_by_rssid;
     std::vector<uint32_t> rowids;
     rowids.reserve(chunk_size);
     for (size_t j = 0; j < chunk_size; ++j) {
-        rowids.push_back(static_cast<uint32_t>(j + current.second));
+        rowids.push_back(current.physical_rowid_offset + static_cast<uint32_t>(j));
     }
     new_rowids_by_rssid[rowset_id + upsert_idx] = std::move(rowids);
     // only support condition update on single column
@@ -1306,7 +1306,7 @@ Status UpdateManager::_do_update_with_condition(const RowsetUpdateStateParams& p
         auto current = upsert->current();
         chunk_results.emplace_back(std::make_unique<ChunkCondMergeResult>());
         auto* result = chunk_results.back().get();
-        result->chunk_offset = current.second;
+        result->chunk_physical_rowid_offset = current.physical_rowid_offset;
 
         auto compare_func = [&, result, current]() {
             auto st = process_single_chunk_update_with_condition_no_sst(this, params, rowset_id, upsert_idx,
@@ -1339,12 +1339,11 @@ Status UpdateManager::_do_update_with_condition(const RowsetUpdateStateParams& p
 
     // PHASE 2: apply index.upsert for each chunk's winners.
     //
-    // For cloud-native persistent index, every chunk's winning rows are compacted into a single
-    // contiguous PK column and submitted via the parallel-publish overload
-    // `index.upsert(rssid, rowids, pks, stat, ctx)`. The active-memtable write happens
-    // synchronously here (the memtable is not thread-safe), while the SST / inactive-memtable
-    // lookup of replaced old values is offloaded to ctx->token. Replaced old rowids are appended
-    // to `new_deletes` by the lookup tasks under `upsert_mutex`.
+    // Cloud-native persistent index: compact each chunk's winning rows into a single PK column
+    // and submit via the sparse parallel-publish overload (see PrimaryIndex::upsert doc). The
+    // active-memtable write happens synchronously here (memtable not thread-safe); SST /
+    // inactive-memtable lookup of replaced old values is offloaded to ctx->token and appended
+    // to `new_deletes` under `upsert_mutex`.
     //
     // WHY compact-per-chunk instead of one task per winner range:
     //   build_persistent_keys() materializes one Slice per row of the *whole* chunk PK column
@@ -1354,8 +1353,8 @@ Status UpdateManager::_do_update_with_condition(const RowsetUpdateStateParams& p
     //   can blow up memory for large publishes. Compacting bounds each slot's per-row buffers
     //   to the actual winner count.
     //
-    // For local persistent index (non-cloud-native), the parallel-publish overload is not
-    // supported, so we fall back to the serial sliced upsert keyed by chunk_offset.
+    // Local persistent index (non-cloud-native): sparse overload is not supported, so fall back
+    // to the serial sliced upsert keyed by chunk_physical_rowid_offset.
     const uint32_t rssid = rowset_id + upsert_idx;
     const bool use_parallel_upsert = (token != nullptr) && use_cloud_native_pk_index(*params.metadata);
     if (use_parallel_upsert) {
@@ -1377,17 +1376,13 @@ Status UpdateManager::_do_update_with_condition(const RowsetUpdateStateParams& p
             if (total_winners == 0) {
                 continue;
             }
-            // Compact winner indices and absolute rowids; build a winner-only PK column so the
-            // submitted lookup task only sees `total_winners` keys.
+            // Compact winner indices into a winner-only PK column so the submitted
+            // lookup task only sees `total_winners` keys.
             std::vector<uint32_t> winner_local_indices;
             winner_local_indices.reserve(total_winners);
-            std::vector<uint32_t> winner_rowids;
-            winner_rowids.reserve(total_winners);
-            const auto chunk_offset = static_cast<uint32_t>(result->chunk_offset);
             for (const auto& range : result->winner_ranges) {
                 for (uint32_t i = range.first; i < range.second; ++i) {
                     winner_local_indices.push_back(i);
-                    winner_rowids.push_back(chunk_offset + i);
                 }
             }
             auto winner_pk_column = result->pk_column->clone_empty();
@@ -1398,7 +1393,8 @@ Status UpdateManager::_do_update_with_condition(const RowsetUpdateStateParams& p
             upsert_ctx.extend_slots();
             auto* slot = upsert_ctx.slots.back().get();
             slot->pk_column = std::move(winner_pk_column);
-            auto st = index.upsert(rssid, winner_rowids, *slot->pk_column, /*stat=*/nullptr, &upsert_ctx);
+            auto st = index.upsert(rssid, result->chunk_physical_rowid_offset, winner_local_indices, *slot->pk_column,
+                                   /*stat=*/nullptr, &upsert_ctx);
             if (!st.ok()) {
                 std::lock_guard<std::mutex> lock(upsert_mutex);
                 upsert_status.update(st);
@@ -1412,12 +1408,11 @@ Status UpdateManager::_do_update_with_condition(const RowsetUpdateStateParams& p
         // Persist the active-memtable batch built up by the parallel upserts.
         RETURN_IF_ERROR(index.flush_memtable());
     } else {
-        // Serial fallback: rowid_start=chunk_offset so the index records rowids matching the
-        // segment file layout for each contiguous winner range.
+        // Serial fallback: rowid_start = chunk_physical_rowid_offset for each winner range.
         for (const auto& result : chunk_results) {
             DCHECK(result->pk_column != nullptr);
             for (const auto& range : result->winner_ranges) {
-                RETURN_IF_ERROR(index.upsert(rssid, static_cast<uint32_t>(result->chunk_offset), *result->pk_column,
+                RETURN_IF_ERROR(index.upsert(rssid, result->chunk_physical_rowid_offset, *result->pk_column,
                                              range.first, range.second, new_deletes));
             }
         }
@@ -1433,7 +1428,7 @@ Status UpdateManager::_do_update_with_condition(const RowsetUpdateStateParams& p
         auto& seg_deletes = (*new_deletes)[rssid];
         seg_deletes.reserve(seg_deletes.size() + result->new_loser_local_ids.size());
         for (uint32_t local : result->new_loser_local_ids) {
-            seg_deletes.push_back(static_cast<uint32_t>(result->chunk_offset) + local);
+            seg_deletes.push_back(result->chunk_physical_rowid_offset + local);
         }
     }
     return Status::OK();
@@ -1494,7 +1489,8 @@ Status UpdateManager::get_rowids_from_pkindex(int64_t tablet_id, int64_t base_ve
 Status UpdateManager::batch_get_rss_rowids_from_pkindex(int64_t tablet_id, int64_t base_version,
                                                         std::vector<SegmentPKIteratorPtr>& pk_iters,
                                                         std::vector<std::vector<uint64_t>>* rss_rowids_per_segment,
-                                                        bool need_lock) {
+                                                        bool need_lock,
+                                                        std::vector<uint32_t>* physical_rowid_offset_per_segment) {
     rss_rowids_per_segment->resize(pk_iters.size());
     Status st;
     st.update(_handle_index_op(tablet_id, base_version, need_lock, [&](LakePrimaryIndex& index) {
@@ -1505,7 +1501,8 @@ Status UpdateManager::batch_get_rss_rowids_from_pkindex(int64_t tablet_id, int64
                     ThreadPool::ExecutionMode::CONCURRENT);
         }
         TRACE_COUNTER_SCOPE_LATENCY_US("pcu_prepare_partial_update_states_us");
-        st.update(index.batch_parallel_get_rss_rowids(token.get(), pk_iters, rss_rowids_per_segment));
+        st.update(index.batch_parallel_get_rss_rowids(token.get(), pk_iters, rss_rowids_per_segment,
+                                                      physical_rowid_offset_per_segment));
     }));
     return st;
 }
