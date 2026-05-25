@@ -142,5 +142,5 @@ ADD_BE_LIB(Runtime
     ${RUNTIME_FILES}
     )
 
-target_link_libraries(Runtime PUBLIC RuntimeEnv RuntimeCore ExecPrimitive ExecSinkCore ExecSortingCore Platform)
+target_link_libraries(Runtime PUBLIC RuntimeEnv RuntimeCore ComputeEnv ExecPrimitive ExecSinkCore ExecSortingCore Platform)
 target_link_libraries(Runtime PRIVATE ConnectorBuiltinRegistry)

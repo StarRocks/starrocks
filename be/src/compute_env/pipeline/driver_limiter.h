@@ -18,7 +18,6 @@
 #include <memory>
 
 #include "common/statusor.h"
-#include "gutil/strings/substitute.h"
 
 namespace starrocks::pipeline {
 

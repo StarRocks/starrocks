@@ -12,7 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "exec/pipeline/driver_limiter.h"
+#include "compute_env/pipeline/driver_limiter.h"
+
+#include "gutil/strings/substitute.h"
 
 namespace starrocks::pipeline {
 
