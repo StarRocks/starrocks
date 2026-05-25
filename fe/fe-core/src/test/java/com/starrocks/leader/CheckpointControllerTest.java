@@ -15,18 +15,22 @@
 package com.starrocks.leader;
 
 import com.starrocks.common.Config;
+import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.NodeMgr;
 import com.starrocks.system.Frontend;
 import com.starrocks.utframe.MockJournal;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.MockedStatic;
 import org.mockito.Mockito;
 
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -106,6 +110,27 @@ public class CheckpointControllerTest {
         int idx2 = workers.indexOf(follower2);
         assertTrue(idx1 < idx2);
         Config.checkpoint_only_on_leader = oldValue;
+    }
+
+    @Test
+    public void testOnStoppedClearsLeaderSessionBookkeeping() {
+        // onStopped must drop the previous leader's pending-push set and last-failed-worker
+        // map so a re-elected leader does not (a) try to push to nodes that already have
+        // the new image and (b) inherit stale worker-selection bias. Per-round volatile
+        // fields (workerNodeName / journalId / result / clusterSnapshotInfo) are naturally
+        // overwritten by the next createImage() call, so onStopped does not touch them.
+        Set<String> nodesToPushImage = Deencapsulation.getField(controller, "nodesToPushImage");
+        Map<String, Long> lastFailedTime = Deencapsulation.getField(controller, "lastFailedTime");
+        nodesToPushImage.add("follower1");
+        nodesToPushImage.add("follower2");
+        controller.setLastFailedTime("follower1", System.currentTimeMillis());
+
+        Deencapsulation.invoke(controller, "onStopped");
+
+        Assertions.assertTrue(nodesToPushImage.isEmpty(),
+                "nodesToPushImage must be cleared on demotion");
+        Assertions.assertTrue(lastFailedTime.isEmpty(),
+                "lastFailedTime must be cleared on demotion");
     }
 
     @Test

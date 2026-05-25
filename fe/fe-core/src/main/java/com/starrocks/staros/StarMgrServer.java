@@ -229,6 +229,20 @@ public class StarMgrServer {
         checkpointController.start();
     }
 
+    /**
+     * Symmetric counterpart to {@link #startCheckpointController()}. Stops the StarMgr-side
+     * CheckpointController so its daemon thread exits and leader-session bookkeeping is
+     * cleared during leader demotion drain. The field is left as-is because
+     * {@link #startCheckpointController()} unconditionally replaces it with a fresh
+     * instance on re-election; the old one becomes garbage once stopGracefully returns.
+     */
+    public void stopCheckpointController(long timeoutMs) {
+        CheckpointController controller = checkpointController;
+        if (controller != null) {
+            controller.stopGracefully(timeoutMs);
+        }
+    }
+
     private void becomeFollower() {
         getStarMgr().becomeFollower();
     }

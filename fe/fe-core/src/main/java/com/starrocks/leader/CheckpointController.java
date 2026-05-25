@@ -39,7 +39,7 @@ import com.google.common.collect.Lists;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
-import com.starrocks.common.util.FrontendDaemon;
+import com.starrocks.common.util.LeaderDaemon;
 import com.starrocks.common.util.NetUtils;
 import com.starrocks.http.meta.MetaService;
 import com.starrocks.journal.CheckpointException;
@@ -82,7 +82,7 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
 /**
  * CheckpointController daemon is running on master node. handle the checkpoint work for starrocks.
  */
-public class CheckpointController extends FrontendDaemon {
+public class CheckpointController extends LeaderDaemon {
     public static final Logger LOG = LogManager.getLogger(CheckpointController.class);
     private static final int PUT_TIMEOUT_SECOND = 3600;
     private static final int CONNECT_TIMEOUT_SECOND = 1;
@@ -123,13 +123,40 @@ public class CheckpointController extends FrontendDaemon {
     }
 
     @Override
-    protected void runAfterCatalogReady() {
+    protected void runAfterLeaseValid() {
         RW_LOCK.readLock().lock();
         try {
             runCheckpointController();
         } finally {
             RW_LOCK.readLock().unlock();
         }
+    }
+
+    /**
+     * Coordinated stop for leader demotion. All three checkpoint phases (createImage,
+     * pushImage, deleteOldJournals) are idempotent at the system level - worker FE
+     * keeps writing the image regardless of this leader's lifecycle, and the next
+     * leader will re-orchestrate pushImage / deleteOldJournals from scratch. So we
+     * only have to release leader-session bookkeeping and ask MetaHelper to break
+     * out of any in-flight HTTP, then let the daemon thread exit.
+     *
+     * Today {@link MetaHelper#cancelInFlight()} is a no-op (see TODO there), so a
+     * push/download stuck in HttpURLConnection.read will block this drain up to its
+     * own connect/read timeout (up to 3600s per node for push). The bookkeeping
+     * fields below are still cleared so the next leader does not inherit stale
+     * "pending push" / "last-failed-worker" state.
+     */
+    @Override
+    protected void onStopped() {
+        MetaHelper.cancelInFlight();
+        // Leader-session bookkeeping: nodesToPushImage tracks pending pushes from the
+        // last createImage round; lastFailedTime drives worker-selection ordering for
+        // the next round. Both must reset so a re-elected leader does not inherit
+        // stale targets. workerNodeName / workerSelectedTime / journalId / result /
+        // clusterSnapshotInfo are per-round volatile fields naturally overwritten by
+        // the next createImage() call - no need to clear here.
+        nodesToPushImage.clear();
+        lastFailedTime.clear();
     }
 
     protected void runCheckpointController() {
