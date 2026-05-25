@@ -208,6 +208,15 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static long slow_lock_stack_print_interval_ms = 30000L;
 
+    /**
+     * Maximum number of waiter entries serialized into a single LockManager slow-lock log event.
+     * Beyond this cap, the remaining waiters are summarized with a single "remain N waiters
+     * omitted" trailer instead of being listed individually, to bound Gson serialization and
+     * log-line size under extreme contention. Set to 0 or negative to disable the cap.
+     */
+    @ConfField(mutable = true)
+    public static int slow_lock_max_waiter_count_to_log = 30;
+
     @ConfField
     public static String custom_config_dir = "/conf";
 

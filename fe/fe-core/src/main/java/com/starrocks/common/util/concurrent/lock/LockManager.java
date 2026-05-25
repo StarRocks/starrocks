@@ -457,8 +457,15 @@ public class LockManager {
         ownerInfo.add("owners", ownerArray);
 
         //waiter
+        // Cap the per-event waiter list to bound Gson serialization and log-line cost under
+        // extreme contention; remaining waiters are summarized as a single trailer entry.
+        int waiterCap = Config.slow_lock_max_waiter_count_to_log;
         JsonArray waiterArray = new JsonArray();
+        int waiterIdx = 0;
         for (LockHolder waiter : waiters) {
+            if (waiterCap > 0 && waiterIdx >= waiterCap) {
+                break;
+            }
             Locker locker = waiter.getLocker();
 
             JsonObject readerInfo = new JsonObject();
@@ -470,6 +477,12 @@ public class LockManager {
                 readerInfo.addProperty("queryId", locker.getQueryId().toString());
             }
             waiterArray.add(readerInfo);
+            waiterIdx++;
+        }
+        if (waiterCap > 0 && waiters.size() > waiterCap) {
+            JsonObject omitted = new JsonObject();
+            omitted.addProperty("omitted", "remain " + (waiters.size() - waiterCap) + " waiters omitted");
+            waiterArray.add(omitted);
         }
         ownerInfo.add("waiter", waiterArray);
 

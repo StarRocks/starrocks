@@ -507,6 +507,14 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 是否可变: Yes
 - 描述: LockManager 慢锁日志事件中 owner 堆栈抓取的最小时间间隔。仅在 `slow_lock_print_stack` 为 `true` 时生效。当开关打开但距上次抓取的时间未达到该间隔时，每个 owner 的 `"stack"` 字段将被替换为标记 `"throttled"`，warn 日志的其余部分（rid、owners、waiters、queryId、时间统计等）仍正常输出。设置为 `0`（或负数）可禁用限速，恢复每次慢锁事件都抓取堆栈的旧行为。`Thread.getStackTrace` 会触发 JVM safepoint，在慢锁事件频繁的大集群中开销显著——该参数在不影响诊断日志输出的前提下限制这部分开销。
 
+### `slow_lock_max_waiter_count_to_log`
+
+- 默认值: 30
+- 类型: Int
+- 单位: -
+- 是否可变: Yes
+- 描述: 单条 LockManager 慢锁日志事件中序列化的 waiter 条目数上限。当实际 waiter 数超过该上限时，前 N 个 waiter 被逐条列出，剩余部分由附加在 `"waiter"` 数组末尾的单条 trailer `{"omitted": "remain M waiters omitted"}` 汇总。用于在极端竞争场景下控制 Gson 序列化开销和日志行长度，同时保留 waiter 总数的诊断信息。设置为 `0`（或负数）可禁用该上限，序列化所有 waiter。
+
 ### `slow_lock_threshold_ms`
 
 - 默认值: 3000L
