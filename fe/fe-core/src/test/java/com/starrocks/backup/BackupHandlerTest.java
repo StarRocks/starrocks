@@ -332,6 +332,20 @@ public class BackupHandlerTest {
             Assertions.fail();
         }
 
+        // process BACKUP ALL EXTERNAL CATALOGS - regression: must not NPE when db is null
+        Set<AbstractBackupStmt.BackupObjectType> externalAllMarker = Sets.newHashSet();
+        externalAllMarker.add(AbstractBackupStmt.BackupObjectType.EXTERNAL_CATALOG);
+        BackupStmt backupAllCatalogsStmt = new BackupStmt(
+                new LabelName(null, "label_ext_catalog"), "repo",
+                Lists.newArrayList(), Lists.newArrayList(), null,
+                externalAllMarker, false, "", null, NodePosition.ZERO);
+        try {
+            handler.process(new ConnectContext(), backupAllCatalogsStmt);
+        } catch (DdlException e1) {
+            e1.printStackTrace();
+            Assertions.fail();
+        }
+
         // process restore
         List<TableRef> tblRefs2 = Lists.newArrayList();
         tblRefs2.add(
