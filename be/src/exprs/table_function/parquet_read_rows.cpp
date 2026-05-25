@@ -29,7 +29,9 @@
 #include <velocypack/Iterator.h>
 #include <velocypack/Slice.h>
 
+#include <cmath>
 #include <cstring>
+#include <limits>
 #include <memory>
 #include <string>
 #include <utility>
@@ -146,6 +148,30 @@ Status parse_anchor(const JsonValue& json, Anchor* out) {
         return Status::OK();
     };
 
+    // Safely convert a JSON double value to int64. Rejects NaN, infinities,
+    // values outside int64 range, and non-integral doubles (e.g. 12.9) so a
+    // malformed source_info can never be silently truncated.
+    auto double_to_int64 = [](double d, const char* key, int64_t* dst) -> Status {
+        if (!std::isfinite(d)) {
+            return Status::InvalidArgument(strings::Substitute(
+                    "parquet_read_rows: source_info field '$0' must be a finite number", key));
+        }
+        // INT64_MAX/MIN as double can't be represented exactly. Compare against
+        // the nearest representable doubles to be safe.
+        constexpr double kMaxInt64 = 9.2233720368547748e18;  // < INT64_MAX exact
+        constexpr double kMinInt64 = -9.2233720368547758e18; // > INT64_MIN exact
+        if (d > kMaxInt64 || d < kMinInt64) {
+            return Status::InvalidArgument(strings::Substitute(
+                    "parquet_read_rows: source_info field '$0' is outside int64 range", key));
+        }
+        if (d != std::trunc(d)) {
+            return Status::InvalidArgument(strings::Substitute(
+                    "parquet_read_rows: source_info field '$0' must be an integer (no fractional part)", key));
+        }
+        *dst = static_cast<int64_t>(d);
+        return Status::OK();
+    };
+
     auto get_required_int = [&](const char* key, int64_t* dst) -> Status {
         vpack::Slice v = slice.get(key);
         if (v.isNone() || v.isNull()) {
@@ -154,13 +180,13 @@ Status parse_anchor(const JsonValue& json, Anchor* out) {
         }
         if (v.isInteger()) {
             *dst = v.getInt();
-        } else if (v.isDouble()) {
-            *dst = static_cast<int64_t>(v.getDouble());
-        } else {
-            return Status::InvalidArgument(
-                    strings::Substitute("parquet_read_rows: source_info field '$0' must be a number", key));
+            return Status::OK();
         }
-        return Status::OK();
+        if (v.isDouble()) {
+            return double_to_int64(v.getDouble(), key, dst);
+        }
+        return Status::InvalidArgument(
+                strings::Substitute("parquet_read_rows: source_info field '$0' must be a number", key));
     };
 
     auto get_optional_int = [&](const char* key, int64_t* dst) -> Status {
@@ -173,8 +199,7 @@ Status parse_anchor(const JsonValue& json, Anchor* out) {
             return Status::OK();
         }
         if (v.isDouble()) {
-            *dst = static_cast<int64_t>(v.getDouble());
-            return Status::OK();
+            return double_to_int64(v.getDouble(), key, dst);
         }
         return Status::InvalidArgument(
                 strings::Substitute("parquet_read_rows: source_info field '$0' must be a number when present", key));
