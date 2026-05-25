@@ -14,23 +14,19 @@
 
 #include "storage/lake/segment_task_runner.h"
 
-#include <algorithm>
 #include <utility>
 
 #include "common/thread/threadpool.h"
 
 namespace starrocks::lake {
 
-SegmentTaskRunner::SegmentTaskRunner(ThreadPool* pool, int max_concurrency)
-        : _max_concurrency(std::max(1, max_concurrency)) {
+SegmentTaskRunner::SegmentTaskRunner(ThreadPool* pool, int /*max_concurrency*/) {
+    // The `max_concurrency` parameter is informational — at runtime the
+    // outer pool is already sized to
+    //   alter_tablet_worker_count * lake_schema_change_per_tablet_parallelism
+    // so a single job naturally observes at most that many concurrent
+    // slots without any per-token cap inside the runner.
     if (pool != nullptr) {
-        // CONCURRENT mode: tasks run in parallel up to the pool's max_threads.
-        // The per-job concurrency cap is enforced by the caller (it submits
-        // up to _max_concurrency tasks at a time, or relies on the pool's
-        // global capacity). We do not introduce a per-token concurrency
-        // counter here because the pool is already sized to
-        //   alter_tablet_worker_count * lake_schema_change_per_tablet_parallelism
-        // so a single job will naturally see at most _max_concurrency slots.
         _token = pool->new_token(ThreadPool::ExecutionMode::CONCURRENT);
     }
 }

@@ -67,7 +67,6 @@ public:
 private:
     void record_error(const Status& s);
 
-    int _max_concurrency;
     std::unique_ptr<ThreadPoolToken> _token;
     std::atomic<bool> _failed{false};
     std::mutex _err_mtx;

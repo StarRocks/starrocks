@@ -342,7 +342,11 @@ public class AlterReplicaTask extends AgentTask implements Runnable {
 
     /**
      * Enable the ADD INDEX fast path on this task. Used by
-     * LakeTableAddIndexJob. No-op if `indexes` is null.
+     * LakeTableAddIndexJob. Callers must pass a non-empty list; this method
+     * unconditionally flips `onlyAddIndex = true` so a null/empty list would
+     * send the fast-path flag with no payload — currently safe because BE
+     * iterates the empty list as a no-op, but the call sites guarantee
+     * non-empty by construction.
      */
     public void setOnlyAddIndex(List<com.starrocks.thrift.TOlapTableIndex> indexes) {
         this.onlyAddIndex = true;
@@ -351,7 +355,8 @@ public class AlterReplicaTask extends AgentTask implements Runnable {
 
     /**
      * Enable the DROP INDEX fast path on this task. Used by
-     * LakeTableDropIndexJob.
+     * LakeTableDropIndexJob. Same null-handling contract as
+     * {@link #setOnlyAddIndex(List)}.
      */
     public void setOnlyDropIndex(List<com.starrocks.thrift.TDropIndexInfo> drops) {
         this.onlyDropIndex = true;
