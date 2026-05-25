@@ -26,7 +26,11 @@ Status DownloadUtil::download(const std::string& url, const std::string& target_
     auto tmp_file = fmt::format("{}_{}", target_file, ThreadLocalUUIDGenerator::next_uuid_string());
     udf_downloader downloader;
     FSOptions options(&cloud_configuration);
-    RETURN_IF_ERROR(downloader.do_download(tmp_file, url, expected_checksum, options));
+    auto st = downloader.do_download(tmp_file, url, expected_checksum, options);
+    if (!st.ok()) {
+        (void)remove(tmp_file.c_str());
+        return st;
+    }
     // rename temporary file to target file
     auto ret = rename(tmp_file.c_str(), target_file.c_str());
     if (ret != 0) {

@@ -143,3 +143,4 @@ endif()
 
 ADD_BE_LIB(Exprs ${EXPR_FILES})
 target_link_libraries(Exprs PUBLIC ExprCore RuntimeEnv)
+target_link_libraries(Exprs PRIVATE Platform)
