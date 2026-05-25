@@ -437,19 +437,19 @@ Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std
             bool first_index = true;
             for (int i = 0; i < meta.secondary_indexes_size(); ++i) {
                 const auto& file_pb = meta.secondary_indexes(i);
-                // Predicate-applicability gate: at least one of this index's
-                // columns must appear in the query's predicate tree, otherwise
-                // the remapped tree is empty and lookup() degenerates into a
-                // full scan of the .idx file (a 50–100x query regression).
-                bool any_applicable = false;
-                for (const auto& col_name : file_pb.index_col_names()) {
-                    const size_t src_idx = _tablet_schema->field_index(col_name);
-                    if (src_idx != static_cast<size_t>(-1) && queried_col_ids.count(static_cast<ColumnId>(src_idx))) {
-                        any_applicable = true;
-                        break;
-                    }
+                // Predicate-applicability gate: a sorted secondary index can
+                // only narrow the scan when the query's predicate covers the
+                // LEADING (prefix) column. Predicates on non-leading columns
+                // still match per-page bloom/zone-map inside the .idx but
+                // would force a whole-file scan to build the candidate set --
+                // not what we want here, so skip the index entirely.
+                if (file_pb.index_col_names_size() == 0) continue;
+                const std::string& prefix_col = file_pb.index_col_names(0);
+                const size_t prefix_src_idx = _tablet_schema->field_index(prefix_col);
+                if (prefix_src_idx == static_cast<size_t>(-1) ||
+                    !queried_col_ids.count(static_cast<ColumnId>(prefix_src_idx))) {
+                    continue;
                 }
-                if (!any_applicable) continue;
 
                 secondary_sorted::SecondaryIndexReader::OpenInput open_in;
                 open_in.fs = sidx_fs;
