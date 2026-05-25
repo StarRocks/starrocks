@@ -114,7 +114,7 @@ public class BackendAction extends WebBaseAction {
             row.add(String.valueOf(backend.getBrpcPort()));
             row.add(backend.getBackendState().toString());
             row.add(TimeUtils.longToTimeString(backend.getLastStartTime()));
-            row.add(String.valueOf(backend.getBackendStatus().lastSuccessReportTabletsTime));
+            row.add(backend.getBackendStatus().getLastSuccessReportTabletsTimeStr());
             row.add(backend.getVersion());
 
             backendRows.add(row);
