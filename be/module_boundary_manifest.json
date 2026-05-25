@@ -345,7 +345,6 @@
         "runtime/sorted_chunks_merger.h",
         "runtime/table_function_table_sink.h",
         "runtime/tablets_channel.h",
-        "runtime/user_function_cache.h",
         "runtime/variable_result_writer.h"
       ],
       "allowed_target_deps": ["Platform", "ChunkCore", "ColumnCore", "Types", "Common", "Base", "Gutil", "StarRocksGen"],

@@ -32,6 +32,7 @@ ADD_BE_LIB(Service
         ${EXEC_FILES}
 )
 
+target_link_libraries(Service PRIVATE Platform)
 target_link_libraries(ServiceBE PUBLIC Service)
 target_link_libraries(ServiceBE PRIVATE ConnectorBootstrap)
 

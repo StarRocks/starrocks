@@ -22,7 +22,7 @@
 #include "common/statusor.h"
 #include "fmt/core.h"
 #include "jni.h"
-#include "runtime/user_function_cache.h"
+#include "platform/user_function_cache.h"
 
 namespace starrocks {
 

@@ -17,7 +17,7 @@
 #include <any>
 #include <vector>
 
-#include "runtime/user_function_cache.h"
+#include "platform/user_function_cache.h"
 
 namespace starrocks {
 

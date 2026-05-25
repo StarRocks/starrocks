@@ -33,7 +33,6 @@
 #include "exprs/expr_context.h"
 #include "exprs/function_helper.h"
 #include "exprs/lambda_function.h"
-#include "runtime/user_function_cache.h"
 #include "storage/chunk_helper.h"
 
 namespace starrocks {

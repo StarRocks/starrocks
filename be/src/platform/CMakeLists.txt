@@ -25,6 +25,7 @@ set(PLATFORM_FILES
   store_path.cpp
   thrift_rpc_helper.cpp
   udf_downloader.cpp
+  user_function_cache.cpp
 )
 
 ADD_BE_LIB(Platform

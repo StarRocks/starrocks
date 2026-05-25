@@ -32,7 +32,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "runtime/user_function_cache.h"
+#include "platform/user_function_cache.h"
 
 #include <any>
 #include <atomic>

@@ -17,8 +17,10 @@
 #include <gtest/gtest.h>
 
 #include <filesystem>
+#include <vector>
 
 #include "base/testutil/assert.h"
+#include "common/config_object_storage_fwd.h"
 #include "fmt/format.h"
 #include "fs/fs_util.h"
 
@@ -30,6 +32,9 @@ public:
     ~DownloadUtilTest() override = default;
 
     void SetUp() override {
+        _s3_compatible_fs_list = config::s3_compatible_fs_list;
+        config::s3_compatible_fs_list.emplace_back("");
+
         _test_dir = fmt::format("{}/{}", std::filesystem::current_path().string(), kTestDirectory);
         CHECK_OK(fs::remove_all(_test_dir));
         CHECK_OK(fs::create_directories(_test_dir));
@@ -46,7 +51,10 @@ public:
         _source_md5 = fs::md5sum(_source_file).value();
     }
 
-    void TearDown() override { ASSERT_OK(fs::remove_all(_test_dir)); }
+    void TearDown() override {
+        config::s3_compatible_fs_list = _s3_compatible_fs_list;
+        ASSERT_OK(fs::remove_all(_test_dir));
+    }
 
 private:
     constexpr static const char* const kTestDirectory = "test_download_util";
@@ -55,11 +63,12 @@ private:
     std::string _source_file;
     std::string _source_md5;
     std::string _dest_file;
+    std::vector<std::string> _s3_compatible_fs_list;
 };
 
 TEST_F(DownloadUtilTest, test_normal) {
     ASSERT_FALSE(fs::path_exist(_dest_file));
-    auto url = fmt::format("file://{}", _source_file);
+    const auto& url = _source_file;
     ASSERT_OK(DownloadUtil::download(url, _dest_file, _source_md5, TCloudConfiguration{}));
     ASSERT_TRUE(fs::path_exist(_dest_file));
     ASSERT_EQ(_source_md5, fs::md5sum(_dest_file).value());
@@ -72,7 +81,7 @@ TEST_F(DownloadUtilTest, test_normal) {
 
 TEST_F(DownloadUtilTest, test_wrong_md5) {
     ASSERT_FALSE(fs::path_exist(_dest_file));
-    auto url = fmt::format("file://{}", _source_file);
+    const auto& url = _source_file;
     ASSERT_ERROR(DownloadUtil::download(url, _dest_file, "xxxxxx", TCloudConfiguration{}));
     ASSERT_FALSE(fs::path_exist(_dest_file));
 
