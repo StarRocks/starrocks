@@ -49,6 +49,13 @@ public class ExternalTableTest extends PlanTestBase {
                 "\"resource\"=\"jdbc_test\",\n" +
                 "\"table\"=\"test_table\"\n" +
                 ");");
+        starRocksAssert.withTable("create external table test.jdbc_agg_t2\n" +
+                "(department_id int, lock_status int)\n" +
+                "ENGINE=jdbc\n" +
+                "PROPERTIES (\n" +
+                "\"resource\"=\"jdbc_test\",\n" +
+                "\"table\"=\"t2\"\n" +
+                ");");
         starRocksAssert.withResource("create external resource \"jdbc_pg\"\n" +
                         "PROPERTIES (\n" +
                         "\"type\"=\"jdbc\",\n" +
@@ -225,16 +232,61 @@ public class ExternalTableTest extends PlanTestBase {
 
     @Test
     public void testJDBCTableAggregation() throws Exception {
+        connectContext.getSessionVariable().setEnableJdbcAggPushDown(false);
         String sql = "select b, sum(a) from test.jdbc_test group by b";
         String plan = getFragmentPlan(sql);
-        Assertions.assertTrue(plan.contains(
-                "  1:AGGREGATE (update finalize)\n" +
-                        "  |  output: sum(a)\n" +
-                        "  |  group by: b\n" +
-                        "  |  \n" +
-                        "  0:SCAN JDBC\n" +
-                        "     TABLE: `test_table`\n" +
-                        "     QUERY: SELECT `a`, `b` FROM `test_table`"));
+        Assertions.assertTrue(plan.contains("AGGREGATE"), plan);
+        Assertions.assertFalse(plan.contains("jdbc_agg_"), plan);
+
+        connectContext.getSessionVariable().setEnableJdbcAggPushDown(true);
+        try {
+            plan = getFragmentPlan(sql);
+            Assertions.assertTrue(plan.contains(
+                    "  0:SCAN JDBC\n" +
+                            "     TABLE: (SELECT `b` AS `b`, sum(`a`) AS `jdbc_agg_"), plan);
+            Assertions.assertFalse(plan.contains("AGGREGATE"), plan);
+
+            sql = "select count(a) from test.jdbc_test where a > 10";
+            plan = getFragmentPlan(sql);
+            Assertions.assertTrue(plan.contains(
+                    "  0:SCAN JDBC\n" +
+                            "     TABLE: (SELECT count(`a`) AS `jdbc_agg_"), plan);
+            Assertions.assertTrue(plan.contains("FROM `test_table` WHERE (`a` > 10)) sr_merged"), plan);
+            Assertions.assertFalse(plan.contains("AGGREGATE"), plan);
+
+            sql = "select b, count(distinct a) from test.jdbc_test group by b";
+            plan = getFragmentPlan(sql);
+            Assertions.assertTrue(plan.contains(
+                    "  0:SCAN JDBC\n" +
+                            "     TABLE: (SELECT `b` AS `b`, count(DISTINCT `a`) AS `jdbc_agg_"), plan);
+            Assertions.assertFalse(plan.contains("AGGREGATE"), plan);
+
+            sql = "select b, sum(a) from test.jdbc_test group by b having sum(a) > 10";
+            plan = getFragmentPlan(sql);
+            Assertions.assertTrue(plan.contains("AGGREGATE"), plan);
+            Assertions.assertTrue(plan.contains("TABLE: `test_table`"), plan);
+            Assertions.assertFalse(plan.contains("jdbc_agg_"), plan);
+
+            sql = "select count(b), a + 1 from test.jdbc_test group by a";
+            plan = getFragmentPlan(sql);
+            Assertions.assertTrue(plan.contains(
+                    "  0:SCAN JDBC\n" +
+                            "     TABLE: (SELECT `a` AS `a`, count(`b`) AS `jdbc_agg_"), plan);
+            Assertions.assertTrue(plan.contains(" + 1"), plan);
+            Assertions.assertFalse(plan.contains("AGGREGATE"), plan);
+
+            sql = "select count(department_id), lock_status + 1 from test.jdbc_agg_t2 group by lock_status";
+            plan = getFragmentPlan(sql);
+            Assertions.assertTrue(plan.contains(
+                    "  0:SCAN JDBC\n" +
+                            "     TABLE: (SELECT `lock_status` AS `lock_status`, " +
+                            "count(`department_id`) AS `jdbc_agg_"), plan);
+            Assertions.assertTrue(plan.contains("FROM `t2` GROUP BY `lock_status`) sr_merged"), plan);
+            Assertions.assertTrue(plan.contains(" + 1"), plan);
+            Assertions.assertFalse(plan.contains("AGGREGATE"), plan);
+        } finally {
+            connectContext.getSessionVariable().setEnableJdbcAggPushDown(false);
+        }
     }
 
     @Test
@@ -245,6 +297,21 @@ public class ExternalTableTest extends PlanTestBase {
                 "     TABLE: \"test_table\"\n" +
                 "     QUERY: SELECT \"a\", \"b\", \"c\" FROM \"test_table\" WHERE (\"a\" > 10) AND (\"b\" < 'abc') LIMIT 10\n" +
                 "     limit: 10"), plan);
+    }
+
+    @Test
+    public void testPostgreSQLJDBCTableAggregation() throws Exception {
+        connectContext.getSessionVariable().setEnableJdbcAggPushDown(true);
+        try {
+            String sql = "select b, max(a) from test.jdbc_pg_test group by b";
+            String plan = getFragmentPlan(sql);
+            Assertions.assertTrue(plan.contains(
+                    "  0:SCAN JDBC\n" +
+                            "     TABLE: (SELECT \"b\" AS \"b\", max(\"a\") AS \"jdbc_agg_"), plan);
+            Assertions.assertFalse(plan.contains("AGGREGATE"), plan);
+        } finally {
+            connectContext.getSessionVariable().setEnableJdbcAggPushDown(false);
+        }
     }
 
     @Test

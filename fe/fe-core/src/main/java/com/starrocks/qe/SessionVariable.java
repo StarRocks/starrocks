@@ -997,6 +997,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_PUSHDOWN_OR_PREDICATE = "enable_pushdown_or_predicate";
     public static final String ENABLE_SHOW_PREDICATE_TREE_IN_PROFILE = "enable_show_predicate_tree_in_profile";
     public static final String ENABLE_JDBC_JOIN_PUSH_DOWN = "enable_jdbc_join_push_down";
+    public static final String ENABLE_JDBC_AGG_PUSH_DOWN = "enable_jdbc_agg_push_down";
     public static final String MAX_PUSHDOWN_OR_PREDICATES = "max_pushdown_or_predicates";
 
     public static final String SELECT_RATIO_THRESHOLD = "select_ratio_threshold";
@@ -3097,6 +3098,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = ENABLE_JDBC_JOIN_PUSH_DOWN, flag = VariableMgr.INVISIBLE)
     private boolean enableJdbcJoinPushDown = false;
+
+    @VarAttr(name = ENABLE_JDBC_AGG_PUSH_DOWN, flag = VariableMgr.INVISIBLE)
+    private boolean enableJdbcAggPushDown = false;
 
     @VarAttr(name = MAX_PUSHDOWN_OR_PREDICATES, flag = VariableMgr.INVISIBLE)
     private int maxPushdownOrPredicates = 32;
@@ -5717,6 +5721,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setEnableJdbcJoinPushDown(boolean enableJdbcJoinPushDown) {
         this.enableJdbcJoinPushDown = enableJdbcJoinPushDown;
+    }
+
+    public boolean isEnableJdbcAggPushDown() {
+        return enableJdbcAggPushDown;
+    }
+
+    public void setEnableJdbcAggPushDown(boolean enableJdbcAggPushDown) {
+        this.enableJdbcAggPushDown = enableJdbcAggPushDown;
     }
 
     public TPredicateTreeParams getPredicateTreeParams() {

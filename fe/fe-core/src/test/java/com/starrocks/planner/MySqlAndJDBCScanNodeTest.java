@@ -377,6 +377,41 @@ public class MySqlAndJDBCScanNodeTest {
     }
 
     @Test
+    public void testOracleAggregatePushDownQueryUsesSafeAliasAndTemporalRewrite() throws DdlException {
+        Column datetimeColumn = new Column("ts_col", VarcharType.VARCHAR);
+        SlotDescriptor datetimeSlot = createSlotDescriptor(1, datetimeColumn);
+        Map<String, Integer> originalJdbcTypes = new HashMap<>();
+        originalJdbcTypes.put("ts_col", Types.TIMESTAMP);
+
+        Map<String, String> properties = Maps.newHashMap();
+        properties.put("user", "oracle");
+        properties.put("password", "123456");
+        properties.put("jdbc_uri", "jdbc:oracle:thin:@localhost:1521:orcl");
+        properties.put("driver_url", "driver_url");
+        properties.put("checksum", "checksum");
+        properties.put("driver_class", "oracle.jdbc.driver.OracleDriver");
+        JDBCTable oracleTable = new JDBCTable(1, "orders",
+                Collections.singletonList(datetimeColumn), properties);
+        oracleTable.setOriginalJdbcColumnTypes(originalJdbcTypes);
+
+        String pushDownQuery = JDBCScanNode.buildAggregatePushDownQuery(oracleTable,
+                Lists.newArrayList(new SlotRef("ts_col", datetimeSlot)),
+                Lists.newArrayList("jdbc_agg_1"),
+                Lists.newArrayList(new BinaryPredicate(BinaryType.GE,
+                        new SlotRef("ts_col", datetimeSlot), StringLiteral.create("2026-03-12 09:30:15"))),
+                Lists.newArrayList(new SlotRef("ts_col", datetimeSlot)),
+                Lists.newArrayList(new BinaryPredicate(BinaryType.LE,
+                        new SlotRef("ts_col", datetimeSlot), StringLiteral.create("2026-03-13 09:30:15"))));
+
+        Assertions.assertTrue(pushDownQuery.contains("ts_col AS jdbc_agg_1"), pushDownQuery);
+        Assertions.assertFalse(pushDownQuery.contains("__jdbc_agg_"), pushDownQuery);
+        Assertions.assertTrue(pushDownQuery.contains("WHERE (ts_col >= timestamp '2026-03-12 09:30:15')"),
+                pushDownQuery);
+        Assertions.assertTrue(pushDownQuery.contains("HAVING (ts_col <= timestamp '2026-03-13 09:30:15')"),
+                pushDownQuery);
+    }
+
+    @Test
     public void testFiltersInSqlServerJDBCScanNode() throws DdlException {
         Map<String, String> properties = Maps.newHashMap();
         properties.put("user", "sa");

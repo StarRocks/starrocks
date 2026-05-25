@@ -59,7 +59,7 @@ public class JDBCScanNode extends ScanNode {
     private final List<String> filters = new ArrayList<>();
     // The table expression used in the FROM clause.
     // For a base-table scan, this is the quoted remote table name (e.g., `tbl0`).
-    // For a pushed-down multi-table JOIN, this is a wrapped subquery
+    // For a pushed-down optimizer subquery, this is a wrapped subquery
     // (e.g., "(SELECT ... FROM t0 JOIN t1 ON ...) sr_merged") whose wrapping is set on a
     // per-query JDBCTable via JDBCTable.setPushDownQuery (table.isDerivedTable() == true).
     // For a JDBC query-table function (pass-through query), this is also a wrapped
@@ -173,6 +173,48 @@ public class JDBCScanNode extends ScanNode {
     }
 
     private String getJDBCQueryStr() {
+        return buildJDBCQueryStr(columns, tableName, filters, Lists.newArrayList(),
+                Lists.newArrayList(), limit);
+    }
+
+    public static String buildAggregatePushDownQuery(JDBCTable table, List<Expr> selectExprs,
+                                                     List<String> selectAliases, List<Expr> predicates,
+                                                     List<Expr> groupByExprs) {
+        return buildAggregatePushDownQuery(table, selectExprs, selectAliases, predicates, groupByExprs,
+                Lists.newArrayList());
+    }
+
+    public static String buildAggregatePushDownQuery(JDBCTable table, List<Expr> selectExprs,
+                                                     List<String> selectAliases, List<Expr> predicates,
+                                                     List<Expr> groupByExprs, List<Expr> havingExprs) {
+        return buildPushDownQuery(table, selectExprs, selectAliases, predicates, groupByExprs, havingExprs);
+    }
+
+    private static String buildPushDownQuery(JDBCTable table, List<Expr> selectExprs,
+                                             List<String> selectAliases, List<Expr> predicates,
+                                             List<Expr> groupByExprs, List<Expr> havingExprs) {
+        String identifier = getIdentifierSymbol(table.getJdbcUri());
+        String tableName = (table.isQueryTable() || table.isDerivedTable()) ?
+                table.getCatalogTableName() : wrapWithIdentifier(table.getCatalogTableName(), identifier);
+        List<String> selectItems = toJdbcSelectItems(selectExprs, selectAliases, identifier);
+        List<String> filters = toJdbcSql(rewriteJdbcPredicateExprs(table, predicates), identifier);
+        List<String> groupByColumns = toJdbcSql(groupByExprs, identifier);
+        List<String> havingPredicates = toJdbcSql(rewriteJdbcPredicateExprs(table, havingExprs), identifier);
+        return buildJDBCQueryStr(selectItems, tableName, filters, groupByColumns, havingPredicates);
+    }
+
+    private static String buildJDBCQueryStr(List<String> columns, String tableName, List<String> filters,
+                                            List<String> groupByColumns) {
+        return buildJDBCQueryStr(columns, tableName, filters, groupByColumns, Lists.newArrayList());
+    }
+
+    private static String buildJDBCQueryStr(List<String> columns, String tableName, List<String> filters,
+                                            List<String> groupByColumns, List<String> havingPredicates) {
+        return buildJDBCQueryStr(columns, tableName, filters, groupByColumns, havingPredicates, -1);
+    }
+
+    private static String buildJDBCQueryStr(List<String> columns, String tableName, List<String> filters,
+                                            List<String> groupByColumns, List<String> havingPredicates, long limit) {
         StringBuilder sql = new StringBuilder("SELECT ");
         sql.append(Joiner.on(", ").join(columns));
         sql.append(" FROM ").append(tableName);
@@ -182,11 +224,65 @@ public class JDBCScanNode extends ScanNode {
             sql.append(Joiner.on(") AND (").join(filters));
             sql.append(")");
         }
-
+        if (!groupByColumns.isEmpty()) {
+            sql.append(" GROUP BY ");
+            sql.append(Joiner.on(", ").join(groupByColumns));
+        }
+        if (!havingPredicates.isEmpty()) {
+            sql.append(" HAVING (");
+            sql.append(Joiner.on(") AND (").join(havingPredicates));
+            sql.append(")");
+        }
         if (limit > 0) {
             sql.append(" LIMIT ").append(limit);
         }
         return sql.toString();
+    }
+
+    private static List<String> toJdbcSelectItems(List<Expr> exprs, List<String> aliases, String identifier) {
+        List<String> sqls = Lists.newArrayList();
+        for (int i = 0; i < exprs.size(); i++) {
+            String sql = toJdbcSql(exprs.get(i), identifier);
+            if (aliases != null && i < aliases.size() && aliases.get(i) != null) {
+                sql += " AS " + wrapColumnWithIdentifier(aliases.get(i), identifier);
+            }
+            sqls.add(sql);
+        }
+        return sqls;
+    }
+
+    private static List<String> toJdbcSql(List<Expr> exprs, String identifier) {
+        List<String> sqls = Lists.newArrayList();
+        for (Expr expr : exprs) {
+            sqls.add(toJdbcSql(expr, identifier));
+        }
+        return sqls;
+    }
+
+    private static String toJdbcSql(Expr expr, String identifier) {
+        return AstToStringBuilder.toString(rewriteSlotRefsWithIdentifier(expr, identifier));
+    }
+
+    private static Expr rewriteSlotRefsWithIdentifier(Expr expr, String identifier) {
+        List<SlotRef> slotRefs = Lists.newArrayList();
+        ExprUtils.collectList(Lists.newArrayList(expr), SlotRef.class, slotRefs);
+        ExprSubstitutionMap sMap = new ExprSubstitutionMap();
+        for (SlotRef slotRef : slotRefs) {
+            SlotRef tmpRef = (SlotRef) slotRef.clone();
+            tmpRef.setTblName(null);
+            String label = tmpRef.getLabel() == null ? tmpRef.getColumnName() : tmpRef.getLabel();
+            tmpRef.setLabel(wrapColumnWithIdentifier(label, identifier));
+            sMap.put(slotRef, tmpRef);
+        }
+        return ExprUtils.cloneList(Lists.newArrayList(expr), sMap).get(0);
+    }
+
+    private static String wrapColumnWithIdentifier(String name, String identifier) {
+        if (name == null || identifier.isEmpty() ||
+                (name.startsWith(identifier) && name.endsWith(identifier))) {
+            return name;
+        }
+        return identifier + name + identifier;
     }
 
     private void createJDBCTableColumns() {
@@ -196,12 +292,7 @@ public class JDBCScanNode extends ScanNode {
                 continue;
             }
             String colName = slot.getColumn().getName();
-            if (objectIdentifier.isEmpty() || (
-                    colName.startsWith(objectIdentifier) && colName.endsWith(objectIdentifier))) {
-                columns.add(colName);
-            } else {
-                columns.add(objectIdentifier + colName + objectIdentifier);
-            }
+            columns.add(wrapColumnWithIdentifier(colName, objectIdentifier));
         }
         // this happens when count(*)
         if (columns.isEmpty()) {
@@ -236,7 +327,10 @@ public class JDBCScanNode extends ScanNode {
     }
 
     private boolean isOracleJdbcUri() {
-        String jdbcUri = getJdbcUri();
+        return isOracleJdbcUri(getJdbcUri());
+    }
+
+    private static boolean isOracleJdbcUri(String jdbcUri) {
         return jdbcUri != null && jdbcUri.toLowerCase(Locale.ROOT).startsWith("jdbc:oracle");
     }
 
@@ -272,6 +366,10 @@ public class JDBCScanNode extends ScanNode {
     }
 
     private Map<String, PrimitiveType> collectOracleTemporalColumns() {
+        return collectOracleTemporalColumns(table);
+    }
+
+    private static Map<String, PrimitiveType> collectOracleTemporalColumns(JDBCTable table) {
         Map<String, PrimitiveType> temporalColumns = new HashMap<>();
 
         // Prefer original JDBC types from the cached column schema (covers TIMESTAMP -> VARCHAR mapping)
@@ -288,7 +386,26 @@ public class JDBCScanNode extends ScanNode {
         return temporalColumns;
     }
 
-    private Expr rewriteOracleTemporalPredicateExpr(Expr expr, Map<String, PrimitiveType> temporalColumns) {
+    private static List<Expr> rewriteJdbcPredicateExprs(JDBCTable table, List<Expr> exprs) {
+        if (exprs.isEmpty()) {
+            return exprs;
+        }
+        List<Expr> rewrittenExprs = Lists.newArrayList();
+        Map<String, PrimitiveType> oracleTemporalColumns = Collections.emptyMap();
+        if (isOracleJdbcUri(table.getJdbcUri())) {
+            oracleTemporalColumns = collectOracleTemporalColumns(table);
+        }
+        for (Expr expr : ExprUtils.cloneList(exprs)) {
+            expr = ExprUtils.replaceLargeStringLiteral(expr);
+            if (!oracleTemporalColumns.isEmpty()) {
+                expr = rewriteOracleTemporalPredicateExpr(expr, oracleTemporalColumns);
+            }
+            rewrittenExprs.add(expr);
+        }
+        return rewrittenExprs;
+    }
+
+    private static Expr rewriteOracleTemporalPredicateExpr(Expr expr, Map<String, PrimitiveType> temporalColumns) {
         for (int i = 0; i < expr.getChildren().size(); i++) {
             expr.setChild(i, rewriteOracleTemporalPredicateExpr(expr.getChild(i), temporalColumns));
         }
@@ -418,7 +535,8 @@ public class JDBCScanNode extends ScanNode {
         for (SlotRef slotRef : slotRefs) {
             SlotRef tmpRef = (SlotRef) slotRef.clone();
             tmpRef.setTblName(null);
-            tmpRef.setLabel(identifier + tmpRef.getLabel() + identifier);
+            String label = tmpRef.getLabel() == null ? tmpRef.getColumnName() : tmpRef.getLabel();
+            tmpRef.setLabel(wrapColumnWithIdentifier(label, identifier));
             sMap.put(slotRef, tmpRef);
         }
 

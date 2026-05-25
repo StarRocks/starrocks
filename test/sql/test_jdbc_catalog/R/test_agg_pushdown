@@ -1,0 +1,201 @@
+-- name: test_jdbc_catalog_agg_pushdown
+shell: mysql -h${external_mysql_ip} -u${external_mysql_user} -p${external_mysql_password} -P${external_mysql_port} -e 'drop database if exists db_agg_pushdown; create database db_agg_pushdown;'
+-- result:
+0
+
+-- !result
+shell: mysql -h${external_mysql_ip} -u${external_mysql_user} -p${external_mysql_password} -P${external_mysql_port} -e 'use db_agg_pushdown; CREATE TABLE orders (order_id int not null, region varchar(20), customer_id int not null, amount int not null, status varchar(20));'
+-- result:
+0
+
+-- !result
+shell: mysql -h${external_mysql_ip} -u${external_mysql_user} -p${external_mysql_password} -P${external_mysql_port} -e 'use db_agg_pushdown; INSERT INTO orders VALUES (1,"east",1,10,"open"),(2,"east",2,20,"paid"),(3,"west",1,30,"paid"),(4,"west",3,40,"paid"),(5,"south",4,15,"open"),(6,"north",5,5,"open");'
+-- result:
+0
+
+-- !result
+shell: mysql -h${external_mysql_ip} -u${external_mysql_user} -p${external_mysql_password} -P${external_mysql_port} -e 'use db_agg_pushdown; CREATE TABLE t2 (id int not null, lock_status int not null, project_id int not null);'
+-- result:
+0
+
+-- !result
+shell: mysql -h${external_mysql_ip} -u${external_mysql_user} -p${external_mysql_password} -P${external_mysql_port} -e 'use db_agg_pushdown; INSERT INTO t2 VALUES (1,0,3),(2,0,4),(3,0,8),(4,1,5),(5,1,7),(6,2,1);'
+-- result:
+0
+
+-- !result
+set catalog default_catalog;
+-- result:
+-- !result
+create external catalog jdbc_agg_pushdown_${uuid0}
+properties
+(
+    "type"="jdbc",
+    "user"="${external_mysql_user}",
+    "password"="${external_mysql_password}",
+    "jdbc_uri"="jdbc:mysql://${external_mysql_ip}:${external_mysql_port}",
+    "driver_url"="${jdbc_url}",
+    "driver_class"="com.mysql.cj.jdbc.Driver"
+);
+-- result:
+-- !result
+set catalog jdbc_agg_pushdown_${uuid0};
+-- result:
+-- !result
+use db_agg_pushdown;
+-- result:
+-- !result
+explain select region, count(*), count(distinct customer_id), max(amount)
+from orders
+where amount >= 10
+group by region
+having max(amount) >= 20
+order by region;
+-- result:
+PLAN FRAGMENT 0
+ OUTPUT EXPRS:2: region | 6: count | 7: count | 8: max
+  PARTITION: UNPARTITIONED
+
+  RESULT SINK
+
+  3:MERGING-EXCHANGE
+
+PLAN FRAGMENT 1
+ OUTPUT EXPRS:
+  PARTITION: UNPARTITIONED
+
+  STREAM DATA SINK
+    EXCHANGE ID: 03
+    UNPARTITIONED
+
+  2:SORT
+  |  order by: <slot 2> 2: region ASC
+  |  offset: 0
+  |  
+  1:AGGREGATE (update finalize)
+  |  output: count(*), multi_distinct_count(customer_id), max(amount)
+  |  group by: region
+  |  having: 8: max >= 20
+  |  
+  0:SCAN JDBC
+     TABLE: `db_agg_pushdown`.`orders`
+     QUERY: SELECT `region`, `customer_id`, `amount` FROM `db_agg_pushdown`.`orders` WHERE (`amount` >= 10)
+-- !result
+set enable_jdbc_agg_push_down=true;
+-- result:
+-- !result
+explain select region, count(*), count(distinct customer_id), max(amount)
+from orders
+where amount >= 10
+group by region
+having max(amount) >= 20
+order by region;
+-- result:
+PLAN FRAGMENT 0
+ OUTPUT EXPRS:2: region | 6: count | 7: count | 8: max
+  PARTITION: UNPARTITIONED
+
+  RESULT SINK
+
+  3:MERGING-EXCHANGE
+
+PLAN FRAGMENT 1
+ OUTPUT EXPRS:
+  PARTITION: UNPARTITIONED
+
+  STREAM DATA SINK
+    EXCHANGE ID: 03
+    UNPARTITIONED
+
+  2:SORT
+  |  order by: <slot 2> 2: region ASC
+  |  offset: 0
+  |  
+  1:AGGREGATE (update finalize)
+  |  output: count(*), multi_distinct_count(customer_id), max(amount)
+  |  group by: region
+  |  having: 8: max >= 20
+  |  
+  0:SCAN JDBC
+     TABLE: `db_agg_pushdown`.`orders`
+     QUERY: SELECT `region`, `customer_id`, `amount` FROM `db_agg_pushdown`.`orders` WHERE (`amount` >= 10)
+-- !result
+select region, count(*), count(distinct customer_id), max(amount)
+from orders
+where amount >= 10
+group by region
+having max(amount) >= 20
+order by region;
+-- result:
+east	2	2	20
+west	2	2	40
+-- !result
+explain select count(*), max(amount)
+from orders
+where status = 'paid';
+-- result:
+PLAN FRAGMENT 0
+ OUTPUT EXPRS:6: count | 7: max
+  PARTITION: UNPARTITIONED
+
+  RESULT SINK
+
+  2:AGGREGATE (update finalize)
+  |  output: count(*), max(4: amount)
+  |  group by: 
+  |  
+  1:Project
+  |  <slot 4> : amount
+  |  
+  0:SCAN JDBC
+     TABLE: `db_agg_pushdown`.`orders`
+     QUERY: SELECT `amount`, `status` FROM `db_agg_pushdown`.`orders` WHERE (`status` = 'paid')
+-- !result
+explain select count(*)
+from t2
+where id > 1
+group by lock_status
+having sum(project_id) > 10;
+-- result:
+PLAN FRAGMENT 0
+ OUTPUT EXPRS:4: count
+  PARTITION: UNPARTITIONED
+
+  RESULT SINK
+
+  3:Project
+  |  <slot 4> : 4: count
+  |  
+  2:AGGREGATE (update finalize)
+  |  output: count(*), sum(3: project_id)
+  |  group by: 2: lock_status
+  |  having: 5: sum > 10
+  |  
+  1:Project
+  |  <slot 2> : lock_status
+  |  <slot 3> : project_id
+  |  
+  0:SCAN JDBC
+     TABLE: `db_agg_pushdown`.`t2`
+     QUERY: SELECT `id`, `lock_status`, `project_id` FROM `db_agg_pushdown`.`t2` WHERE (`id` > 1)
+-- !result
+select count(*), max(amount)
+from orders
+where status = 'paid';
+-- result:
+3	40
+-- !result
+set enable_jdbc_agg_push_down=false;
+-- result:
+-- !result
+set catalog default_catalog;
+-- result:
+-- !result
+drop catalog jdbc_agg_pushdown_${uuid0};
+-- result:
+-- !result
+shell: mysql -h${external_mysql_ip} -u${external_mysql_user} -p${external_mysql_password} -P${external_mysql_port} -e 'drop database db_agg_pushdown;'
+-- result:
+0
+
+-- !result

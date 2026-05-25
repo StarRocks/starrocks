@@ -51,9 +51,9 @@ public class JDBCTable extends Table {
     private String resourceName;
     @SerializedName(value = "qt")
     private boolean queryTable;
-    // True when this table is a derived-table wrapper synthesized for JDBC join pushdown
+    // True when this table is a derived-table wrapper synthesized for JDBC optimizer pushdown
     // (jdbcTable holds "(SELECT ... ) sr_merged"). In-memory only: such tables are built
-    // per-query by PushDownJoinToJDBCRule.buildMergedScan and never enter the catalog or
+    // per-query by optimizer pushdown rules and never enter the catalog or
     // edit log, so no @SerializedName is needed.
     private boolean derivedTable;
 

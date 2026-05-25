@@ -1,0 +1,66 @@
+-- name: test_jdbc_catalog_agg_pushdown
+-- prepare external MySQL table
+shell: mysql -h${external_mysql_ip} -u${external_mysql_user} -p${external_mysql_password} -P${external_mysql_port} -e 'drop database if exists db_agg_pushdown; create database db_agg_pushdown;'
+shell: mysql -h${external_mysql_ip} -u${external_mysql_user} -p${external_mysql_password} -P${external_mysql_port} -e 'use db_agg_pushdown; CREATE TABLE orders (order_id int not null, region varchar(20), customer_id int not null, amount int not null, status varchar(20));'
+shell: mysql -h${external_mysql_ip} -u${external_mysql_user} -p${external_mysql_password} -P${external_mysql_port} -e 'use db_agg_pushdown; INSERT INTO orders VALUES (1,"east",1,10,"open"),(2,"east",2,20,"paid"),(3,"west",1,30,"paid"),(4,"west",3,40,"paid"),(5,"south",4,15,"open"),(6,"north",5,5,"open");'
+shell: mysql -h${external_mysql_ip} -u${external_mysql_user} -p${external_mysql_password} -P${external_mysql_port} -e 'use db_agg_pushdown; CREATE TABLE t2 (id int not null, lock_status int not null, project_id int not null);'
+shell: mysql -h${external_mysql_ip} -u${external_mysql_user} -p${external_mysql_password} -P${external_mysql_port} -e 'use db_agg_pushdown; INSERT INTO t2 VALUES (1,0,3),(2,0,4),(3,0,8),(4,1,5),(5,1,7),(6,2,1);'
+
+-- create catalog
+set catalog default_catalog;
+create external catalog jdbc_agg_pushdown_${uuid0}
+properties
+(
+    "type"="jdbc",
+    "user"="${external_mysql_user}",
+    "password"="${external_mysql_password}",
+    "jdbc_uri"="jdbc:mysql://${external_mysql_ip}:${external_mysql_port}",
+    "driver_url"="${jdbc_url}",
+    "driver_class"="com.mysql.cj.jdbc.Driver"
+);
+
+set catalog jdbc_agg_pushdown_${uuid0};
+use db_agg_pushdown;
+
+explain select region, count(*), count(distinct customer_id), max(amount)
+from orders
+where amount >= 10
+group by region
+having max(amount) >= 20
+order by region;
+
+set enable_jdbc_agg_push_down=true;
+
+explain select region, count(*), count(distinct customer_id), max(amount)
+from orders
+where amount >= 10
+group by region
+having max(amount) >= 20
+order by region;
+
+select region, count(*), count(distinct customer_id), max(amount)
+from orders
+where amount >= 10
+group by region
+having max(amount) >= 20
+order by region;
+
+explain select count(*), max(amount)
+from orders
+where status = 'paid';
+
+explain select count(*)
+from t2
+where id > 1
+group by lock_status
+having sum(project_id) > 10;
+
+select count(*), max(amount)
+from orders
+where status = 'paid';
+
+-- cleanup
+set enable_jdbc_agg_push_down=false;
+set catalog default_catalog;
+drop catalog jdbc_agg_pushdown_${uuid0};
+shell: mysql -h${external_mysql_ip} -u${external_mysql_user} -p${external_mysql_password} -P${external_mysql_port} -e 'drop database db_agg_pushdown;'
