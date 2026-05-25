@@ -55,6 +55,7 @@ struct JsonGetThreadState {
     simdjson::ondemand::parser parser; // reused across all rows in this driver
     faststring padded_scratch;         // input copy + SIMDJSON_PADDING zero tail
     faststring unescape_scratch;       // backs value_get_string_safe outputs
+    faststring key_scratch;            // backs field_unescaped_key_safe during object descent
     vpack::Builder leaf_builder;       // .clear()-ed before each leaf conversion
 };
 
