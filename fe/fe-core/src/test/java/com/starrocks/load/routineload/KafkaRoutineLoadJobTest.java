@@ -584,6 +584,22 @@ public class KafkaRoutineLoadJobTest {
     }
 
     @Test
+    public void testJobPropertiesToSqlWithNativeAvroReader() {
+        RoutineLoadJob job = new KafkaRoutineLoadJob(1L, "routine_load", 1L, 1L, "127.0.0.1:9020", "topic1");
+        // Non-avro job: the property is not emitted at all.
+        Assertions.assertFalse(job.jobPropertiesToSql().contains(CreateRoutineLoadStmt.AVRO_USE_NATIVE_READER));
+        // Avro job with the field unset (persisted by an older FE): an explicit "false", so replaying
+        // the DDL keeps the legacy reader regardless of the current FE-wide default.
+        Map<String, String> jobProperties = Deencapsulation.getField(job, "jobProperties");
+        jobProperties.put(CreateRoutineLoadStmt.FORMAT, "avro");
+        Assertions.assertTrue(job.jobPropertiesToSql()
+                .contains("\"" + CreateRoutineLoadStmt.AVRO_USE_NATIVE_READER + "\"=\"false\""));
+        Deencapsulation.setField(job, "useNativeAvroReader", true);
+        Assertions.assertTrue(job.jobPropertiesToSql()
+                .contains("\"" + CreateRoutineLoadStmt.AVRO_USE_NATIVE_READER + "\"=\"true\""));
+    }
+
+    @Test
     public void testGetStatistic() {
         RoutineLoadJob job = new KafkaRoutineLoadJob(1L, "routine_load", 1L, 1L, "127.0.0.1:9020", "topic1");
         Deencapsulation.setField(job, "receivedBytes", 10);

@@ -2110,6 +2110,14 @@ public class Config extends ConfigBase {
     public static long routine_load_pulsar_timeout_second = 12;
 
     /**
+     * Default for avro routine load jobs that do not set the `avro.use_native_reader` property:
+     * when true, use the avrocpp-based scanner (STRUCT/MAP support); when false, the legacy reader.
+     * Resolved on the FE so all BE nodes of a job use the same scanner.
+     */
+    @ConfField(mutable = true)
+    public static boolean enable_routine_load_native_avro_reader = false;
+
+    /**
      * it can't auto-resume routine load job as long as one of the backends is down
      */
     @ConfField(mutable = true)

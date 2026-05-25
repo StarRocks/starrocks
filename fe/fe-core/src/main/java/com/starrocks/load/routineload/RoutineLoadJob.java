@@ -243,6 +243,10 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
     protected long maxBatchSizeBytes = Config.max_routine_load_batch_size;
 
     private String confluentSchemaRegistryUrl;
+    // Resolved at job creation for Avro jobs (never null for them); null means a non-Avro job
+    // or a job persisted before this field existed.
+    @SerializedName("nar")
+    private Boolean useNativeAvroReader;
 
     protected int currentTaskConcurrentNum;
     @SerializedName("p")
@@ -444,6 +448,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
                 jobProperties.put(CreateRoutineLoadStmt.JSONPATHS, "");
             }
             this.confluentSchemaRegistryUrl = stmt.getConfluentSchemaRegistryUrl();
+            this.useNativeAvroReader = stmt.getUseNativeAvroReader();
         } else {
             throw new StarRocksException("Invalid format type.");
         }
@@ -500,6 +505,10 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
 
     public void setConfluentSchemaRegistryUrl(String confluentSchemaRegistryUrl) {
         this.confluentSchemaRegistryUrl = confluentSchemaRegistryUrl;
+    }
+
+    public Boolean getUseNativeAvroReader() {
+        return useNativeAvroReader;
     }
 
     @Override
@@ -1796,6 +1805,14 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
 
         sb.append("\"").append(CreateRoutineLoadStmt.JSONROOT).append("\"=\"");
         sb.append(getJsonRoot()).append("\",\n");
+
+        // For an Avro job persisted before this field existed (null), emit "false" rather than nothing:
+        // such a job runs the legacy reader, and replaying the shown DDL must keep doing so even if the
+        // FE-wide default config has been flipped to the native reader since.
+        if ("avro".equalsIgnoreCase(getFormat())) {
+            sb.append("\"").append(CreateRoutineLoadStmt.AVRO_USE_NATIVE_READER).append("\"=\"");
+            sb.append(useNativeAvroReader != null ? useNativeAvroReader : Boolean.FALSE).append("\",\n");
+        }
 
         if (!Strings.isNullOrEmpty(getEnvelope())) {
             sb.append("\"").append(CreateRoutineLoadStmt.ENVELOPE).append("\"=\"");
