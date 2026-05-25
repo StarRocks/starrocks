@@ -253,9 +253,9 @@ public class LoadsSystemTable {
             // Prefer the new UTC epoch-ms fields when the BE sets them - those are
             // already comparable to LoadJob.finishTimestamp (System.currentTimeMillis).
             // Fall back to parsing the legacy wall-clock string fields only when an
-            // older BE hasn't been upgraded yet; that path keeps the historical
-            // (buggy on non-Asia/Shanghai sessions) semantics rather than introducing
-            // a third interpretation.
+            // older BE hasn't been upgraded yet; parse those in the fixed cluster
+            // storage zone (+08:00) to match how the legacy BE produced them,
+            // regardless of the current session time_zone.
             filter.loadStartTimeFrom = pickTime(
                     request.isSetLoad_start_time_from_ms() ? request.getLoad_start_time_from_ms() : null,
                     request.isSetLoad_start_time_from() ? request.getLoad_start_time_from() : null);
@@ -285,7 +285,7 @@ public class LoadsSystemTable {
             if (legacyStringField == null) {
                 return null;
             }
-            long ts = TimeUtils.timeStringToLong(legacyStringField);
+            long ts = TimeUtils.timeStringToLongInStorageZone(legacyStringField);
             return ts >= 0 ? ts : null;
         }
     }
