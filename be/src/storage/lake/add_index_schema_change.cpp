@@ -20,9 +20,11 @@
 #include "column/binary_column.h"
 #include "column/chunk.h"
 #include "column/column.h"
+#include "column/column_helper.h"
 #include "column/nullable_column.h"
 #include "column/raw_data_visitor.h"
 #include "column/schema.h"
+#include "common/bloom_filter.h"
 #include "common/config_agent_fwd.h"
 #include "common/config_rowset_fwd.h"
 #include "common/status.h"
@@ -47,6 +49,7 @@
 #include "storage/tablet_index.h"
 #include "storage/tablet_schema.h"
 #include "storage/types.h"
+#include "types/type_descriptor.h"
 
 namespace starrocks::lake {
 
@@ -394,7 +397,7 @@ Status AddIndexSchemaChange::build_bitmap_for_column(Segment* segment, const Tab
     // accumulates the bitmap in memory. No footer-based page index is
     // referenced while building: the bitmap is built purely from the raw
     // values.
-    auto col = ChunkHelper::column_from_field_type(column.type(), column.is_nullable());
+    auto col = ColumnHelper::create_column(TypeDescriptor(column.type()), column.is_nullable());
     constexpr size_t kBatch = 4096;
     const size_t type_size = type_info->size();
     while (true) {
@@ -503,7 +506,7 @@ Status AddIndexSchemaChange::build_bloom_for_column(Segment* segment, const Tabl
     RETURN_IF_ERROR(col_iter->init(col_iter_opts));
     RETURN_IF_ERROR(col_iter->seek_to_first());
 
-    auto col = ChunkHelper::column_from_field_type(column.type(), column.is_nullable());
+    auto col = ColumnHelper::create_column(TypeDescriptor(column.type()), column.is_nullable());
     constexpr size_t kBatch = 4096;
     const size_t type_size = type_info->size();
     while (true) {
