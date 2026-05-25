@@ -381,7 +381,7 @@
     {
       "id": "computeenv",
       "doc_label": "ComputeEnv",
-      "summary": "Shared compute-side BE environment boundary below full Exec/Storage and above RuntimeEnv.",
+      "summary": "Shared compute-side BE environment boundary for process-scoped compute resources and pipeline controls below full Exec/Storage and above RuntimeEnv.",
       "owned_targets": ["ComputeEnv"],
       "owned_roots": ["be/src/compute_env"],
       "allowed_include_prefixes": [
@@ -413,7 +413,7 @@
       "allowed_target_deps": ["ExecPrimitive", "RuntimeEnv", "RuntimeCore", "Platform", "Common", "Base", "Gutil", "StarRocksGen"],
       "allowed_test_targets": ["compute_env_test"],
       "allowed_test_link_deps": ["ComputeEnv"],
-      "remediation": "Keep ComputeEnv limited to shared compute-side service contracts and stable execution primitives; move concrete Exec, Storage, Service, Connector, and Agent integration upward."
+      "remediation": "Keep ComputeEnv limited to process-scoped compute resources, shared compute-side service contracts, and stable execution primitives; move concrete Exec, Storage, Service, Connector, and Agent integration upward."
     },
     {
       "id": "exprcore",

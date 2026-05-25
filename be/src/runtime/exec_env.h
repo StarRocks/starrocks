@@ -55,6 +55,7 @@ namespace starrocks {
 struct StorePath;
 class AgentServer;
 class BrokerMgr;
+class ComputeEnv;
 class DataStreamMgr;
 class EvHttpServer;
 class ExternalScanContextMgr;
@@ -91,7 +92,6 @@ namespace pipeline {
 class DriverExecutor;
 class QueryContextManager;
 class DriverLimiter;
-class PipelineTimer;
 } // namespace pipeline
 
 namespace lake {
@@ -184,8 +184,7 @@ public:
 
     pipeline::QueryContextManager* query_context_mgr() { return _query_context_mgr; }
 
-    pipeline::DriverLimiter* driver_limiter() { return _driver_limiter; }
-    pipeline::PipelineTimer* pipeline_timer() const { return _pipeline_timer; }
+    ComputeEnv* compute_env() const { return _compute_env.get(); }
 
     int64_t max_executor_threads() const { return _global_env->max_executor_threads(); }
 
@@ -234,8 +233,7 @@ private:
     FragmentMgr* _fragment_mgr = nullptr;
     pipeline::QueryContextManager* _query_context_mgr = nullptr;
     std::unique_ptr<workgroup::WorkGroupManager> _workgroup_manager;
-    pipeline::DriverLimiter* _driver_limiter = nullptr;
-    pipeline::PipelineTimer* _pipeline_timer = nullptr;
+    std::unique_ptr<ComputeEnv> _compute_env;
 
     BaseLoadPathMgr* _load_path_mgr = nullptr;
     RejectedRecordSyncDaemon* _rejected_record_sync_daemon = nullptr;

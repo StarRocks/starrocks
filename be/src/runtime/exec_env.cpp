@@ -49,14 +49,14 @@
 #include "common/system/master_info.h"
 #include "common/thread/priority_thread_pool.hpp"
 #include "common/thread/threadpool.h"
+#include "compute_env/compute_env.h"
+#include "compute_env/pipeline/driver_limiter.h"
 #include "connector/builtin_connector_registry.h"
 #include "connector/connector_registry.h"
 #include "connector/connector_sink_executor.h"
-#include "exec/pipeline/driver_limiter.h"
 #include "exec/pipeline/pipeline_driver_executor.h"
 #include "exec/pipeline/pipeline_metrics.h"
 #include "exec/pipeline/query_context.h"
-#include "exec/pipeline/schedule/pipeline_timer.h"
 #include "exec/query_cache/cache_manager.h"
 #include "exec/spill/dir_manager.h"
 #include "exec/spill/global_spill_manager.h"
@@ -140,7 +140,7 @@ ExecEnv* ExecEnv::GetInstance() {
     return &s_exec_env;
 }
 
-ExecEnv::ExecEnv() : _global_env(GlobalEnv::GetInstance()) {
+ExecEnv::ExecEnv() : _global_env(GlobalEnv::GetInstance()), _compute_env(std::make_unique<ComputeEnv>()) {
     _refresh_service_contexts();
 }
 ExecEnv::~ExecEnv() = default;
@@ -162,8 +162,8 @@ void ExecEnv::_refresh_service_contexts() {
     _execution_services.dictionary_cache_pool = global_env->dictionary_cache_pool();
     _execution_services.automatic_partition_pool = global_env->automatic_partition_pool();
     _execution_services.workgroup_manager = _workgroup_manager.get();
-    _execution_services.driver_limiter = _driver_limiter;
-    _execution_services.pipeline_timer = _pipeline_timer;
+    _execution_services.driver_limiter = _compute_env == nullptr ? nullptr : _compute_env->driver_limiter();
+    _execution_services.pipeline_timer = _compute_env == nullptr ? nullptr : _compute_env->pipeline_timer();
     _execution_services.max_executor_threads = global_env->max_executor_threads();
 
     auto* platform_env = PlatformEnv::GetInstance();
@@ -259,15 +259,15 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, ProcessMetricsRe
     });
 
     const int64_t max_executor_threads = global_env->max_executor_threads();
-    _driver_limiter =
-            new pipeline::DriverLimiter(max_executor_threads * config::pipeline_max_num_drivers_per_exec_thread);
+    ComputeEnvOptions compute_env_options;
+    compute_env_options.max_num_pipeline_drivers =
+            max_executor_threads * config::pipeline_max_num_drivers_per_exec_thread;
+    RETURN_IF_ERROR(_compute_env->init(compute_env_options));
     pipeline::PipelineExecutorMetrics::instance()->register_pipe_drivers_hook([] {
-        auto* driver_limiter = ExecEnv::GetInstance()->driver_limiter();
+        auto* compute_env = ExecEnv::GetInstance()->compute_env();
+        auto* driver_limiter = compute_env == nullptr ? nullptr : compute_env->driver_limiter();
         return (driver_limiter == nullptr) ? 0 : driver_limiter->num_total_drivers();
     });
-
-    _pipeline_timer = new pipeline::PipelineTimer();
-    RETURN_IF_ERROR(_pipeline_timer->start());
 
     const int num_io_threads = config::pipeline_scan_thread_pool_thread_num <= 0
                                        ? CpuInfo::num_cores()
@@ -585,6 +585,12 @@ void ExecEnv::stop() {
         component_times.emplace_back("workgroup_manager", MonotonicMillis() - start);
     }
 
+    if (_compute_env) {
+        start = MonotonicMillis();
+        _compute_env->stop();
+        component_times.emplace_back("compute_env", MonotonicMillis() - start);
+    }
+
     if (global_env->thread_pool()) {
         start = MonotonicMillis();
         global_env->thread_pool()->shutdown();
@@ -695,8 +701,9 @@ void ExecEnv::destroy() {
     // WorkGroupManager should release MemTracker of WorkGroups belongs to itself before deallocate
     // _query_pool_mem_tracker.
     SAFE_DELETE(_runtime_filter_cache);
-    SAFE_DELETE(_driver_limiter);
-    SAFE_DELETE(_pipeline_timer);
+    if (_compute_env) {
+        _compute_env->destroy();
+    }
     SAFE_DELETE(_result_queue_mgr);
     SAFE_DELETE(_result_mgr);
     SAFE_DELETE(_lookup_dispatcher_mgr);
