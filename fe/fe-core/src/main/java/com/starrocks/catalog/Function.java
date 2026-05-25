@@ -45,6 +45,7 @@ import com.google.gson.JsonParser;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.Pair;
 import com.starrocks.common.io.Writable;
+import com.starrocks.common.util.PrintableMap;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.sql.ast.CreateFunctionStmt;
 import com.starrocks.sql.ast.HdfsURI;
@@ -796,6 +797,47 @@ public class Function implements Writable {
     // Child classes must override this function.
     public String toSql(boolean ifNotExists) {
         return "";
+    }
+
+    protected void appendCreateHeader(StringBuilder sb, String functionTypeKeyword, boolean ifNotExists) {
+        boolean isGlobal = getFunctionName().isGlobalFunction();
+        sb.append("CREATE ");
+        if (isGlobal) {
+            sb.append("GLOBAL ");
+        }
+        if (functionTypeKeyword != null && !functionTypeKeyword.isEmpty()) {
+            sb.append(functionTypeKeyword).append(" ");
+        }
+        sb.append("FUNCTION ");
+        if (ifNotExists) {
+            sb.append("IF NOT EXISTS ");
+        }
+        if (!isGlobal) {
+            sb.append(dbName()).append(".");
+        }
+    }
+
+    protected static void appendPropertiesBlock(StringBuilder sb, Map<String, String> props) {
+        if (props == null || props.isEmpty()) {
+            return;
+        }
+        sb.append("PROPERTIES (\n")
+                .append(new PrintableMap<>(props, "=", true, true, true))
+                .append("\n)\n");
+    }
+
+    protected static String binaryTypeToPropertyValue(TFunctionBinaryType type) {
+        if (type == null) {
+            return null;
+        }
+        switch (type) {
+            case SRJAR:
+                return CreateFunctionStmt.TYPE_STARROCKS_JAR;
+            case PYTHON:
+                return CreateFunctionStmt.TYPE_STARROCKS_PYTHON;
+            default:
+                return null;
+        }
     }
 
     public static Function getFunction(List<Function> fns, Function desc, CompareMode mode) {

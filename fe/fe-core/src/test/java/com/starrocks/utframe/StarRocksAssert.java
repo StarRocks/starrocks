@@ -40,6 +40,7 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.alter.AlterJobV2;
+import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Function;
@@ -53,7 +54,9 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.ScalarFunction;
+import com.starrocks.catalog.SqlFunction;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.TableFunction;
 import com.starrocks.catalog.TableName;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.common.AlreadyExistsException;
@@ -88,6 +91,8 @@ import com.starrocks.schema.MSchema;
 import com.starrocks.schema.MTable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Analyzer;
+import com.starrocks.sql.analyzer.AstToSQLBuilder;
+import com.starrocks.sql.analyzer.ExpressionAnalyzer;
 import com.starrocks.sql.analyzer.FunctionRefAnalyzer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.analyzer.TypeDefAnalyzer;
@@ -116,6 +121,7 @@ import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.sql.ast.DropTemporaryTableStmt;
 import com.starrocks.sql.ast.FunctionArgsDef;
 import com.starrocks.sql.ast.FunctionRef;
+import com.starrocks.sql.ast.HdfsURI;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.LoadStmt;
 import com.starrocks.sql.ast.ModifyTablePropertiesClause;
@@ -127,6 +133,7 @@ import com.starrocks.sql.ast.ShowStmt;
 import com.starrocks.sql.ast.ShowTabletStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.TableRef;
+import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.TypeDef;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.rule.mv.MVUtils;
@@ -136,6 +143,8 @@ import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.system.BackendResourceStat;
 import com.starrocks.thrift.TFunctionBinaryType;
+import com.starrocks.type.Type;
+import com.starrocks.type.TypeFactory;
 import mockit.Mock;
 import mockit.MockUp;
 import org.apache.commons.lang.StringUtils;
@@ -354,19 +363,105 @@ public class StarRocksAssert {
         String defaultDb = functionRef.isGlobalFunction() ? FunctionRefAnalyzer.GLOBAL_UDF_DB : ctx.getDatabase();
         FunctionRefAnalyzer.analyzeFunctionRef(functionRef, defaultDb);
         FunctionArgsDef argsDef = createFunctionStmt.getArgsDef();
-        TypeDef returnType = createFunctionStmt.getReturnType();
-        // check argument
         FunctionRefAnalyzer.analyzeArgsDef(argsDef);
-        TypeDefAnalyzer.analyze(returnType);
         FunctionName functionName = FunctionRefAnalyzer.resolveFunctionName(functionRef, defaultDb);
 
-        Function function = ScalarFunction.createUdf(
-                functionName, argsDef.getArgTypes(),
-                returnType.getType(), argsDef.isVariadic(), TFunctionBinaryType.SRJAR,
-                "", "", "", "", !"shared".equalsIgnoreCase(""), null);
+        Function function;
+        if (createFunctionStmt.isBuildFunctionMode()) {
+            function = mockSqlFunction(createFunctionStmt, functionName, argsDef, ctx);
+        } else {
+            TypeDef returnType = createFunctionStmt.getReturnType();
+            TypeDefAnalyzer.analyze(returnType);
+            Map<String, String> props = createFunctionStmt.getProperties();
+            TFunctionBinaryType binaryType = detectBinaryType(props);
+            if (createFunctionStmt.isAggregate()) {
+                function = mockAggregateFunction(functionName, argsDef, returnType, props, binaryType);
+            } else if (createFunctionStmt.isTable()) {
+                function = mockTableFunction(functionName, argsDef, returnType, props, binaryType);
+            } else {
+                function = mockScalarFunction(createFunctionStmt, functionName, argsDef, returnType, props, binaryType);
+            }
+        }
 
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(ctx.getDatabase());
-        db.addFunction(function, true, false);
+        if (functionRef.isGlobalFunction()) {
+            GlobalStateMgr.getCurrentState().getGlobalFunctionMgr().replayAddFunction(function);
+        } else {
+            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(ctx.getDatabase());
+            db.addFunction(function, true, false);
+        }
+    }
+
+    private static TFunctionBinaryType detectBinaryType(Map<String, String> props) {
+        return CreateFunctionStmt.TYPE_STARROCKS_PYTHON.equalsIgnoreCase(props.get(CreateFunctionStmt.TYPE_KEY))
+                ? TFunctionBinaryType.PYTHON
+                : TFunctionBinaryType.SRJAR;
+    }
+
+    private static SqlFunction mockSqlFunction(CreateFunctionStmt stmt, FunctionName functionName,
+                                               FunctionArgsDef argsDef, ConnectContext ctx) {
+        Expr expr = stmt.getExpr();
+        Map<String, Type> argsMap = new HashMap<>();
+        for (int i = 0; i < argsDef.getArgNames().size(); i++) {
+            argsMap.put(argsDef.getArgNames().get(i), argsDef.getArgTypes()[i]);
+        }
+        ExpressionAnalyzer.analyzeExpressionResolveSlot(expr, ctx, slotRef -> {
+            Type t = argsMap.get(slotRef.getColName());
+            if (t == null) {
+                throw new SemanticException("Cannot find argument " + slotRef.getColName() + " in function args");
+            }
+            slotRef.setType(t);
+        });
+        String sqlBody = AstToSQLBuilder.toSQLWithCredential(expr);
+        return new SqlFunction(functionName, argsDef.getArgTypes(), expr.getType(),
+                argsDef.getArgNames().toArray(new String[0]), sqlBody);
+    }
+
+    private static AggregateFunction mockAggregateFunction(FunctionName functionName, FunctionArgsDef argsDef,
+                                                           TypeDef returnType, Map<String, String> props,
+                                                           TFunctionBinaryType binaryType) {
+        AggregateFunction agg = new AggregateFunction(
+                functionName,
+                Arrays.asList(argsDef.getArgTypes()),
+                returnType.getType(),
+                TypeFactory.createVarcharType(TypeFactory.getOlapMaxVarcharLength()),
+                argsDef.isVariadic(),
+                "true".equalsIgnoreCase(props.get(CreateFunctionStmt.IS_ANALYTIC_NAME)));
+        agg.setBinaryType(binaryType);
+        agg.setLocation(new HdfsURI(props.getOrDefault(CreateFunctionStmt.FILE_KEY, "")));
+        agg.setIsolationType(!"shared".equalsIgnoreCase(props.getOrDefault(CreateFunctionStmt.ISOLATION_KEY, "")));
+        return agg;
+    }
+
+    private static TableFunction mockTableFunction(FunctionName functionName, FunctionArgsDef argsDef,
+                                                   TypeDef returnType, Map<String, String> props,
+                                                   TFunctionBinaryType binaryType) {
+        TableFunction tbl = new TableFunction(
+                functionName,
+                Lists.newArrayList(functionName.getFunction()),
+                Arrays.asList(argsDef.getArgTypes()),
+                Lists.newArrayList(returnType.getType()),
+                argsDef.isVariadic());
+        tbl.setBinaryType(binaryType);
+        tbl.setLocation(new HdfsURI(props.getOrDefault(CreateFunctionStmt.FILE_KEY, "")));
+        tbl.setSymbolName(props.getOrDefault(CreateFunctionStmt.SYMBOL_KEY, ""));
+        return tbl;
+    }
+
+    private static ScalarFunction mockScalarFunction(CreateFunctionStmt stmt, FunctionName functionName,
+                                                     FunctionArgsDef argsDef, TypeDef returnType,
+                                                     Map<String, String> props, TFunctionBinaryType binaryType) {
+        boolean isolated = !"shared".equalsIgnoreCase(props.getOrDefault(CreateFunctionStmt.ISOLATION_KEY, ""));
+        ScalarFunction sfn = ScalarFunction.createUdf(
+                functionName, argsDef.getArgTypes(),
+                returnType.getType(), argsDef.isVariadic(), binaryType,
+                props.getOrDefault(CreateFunctionStmt.FILE_KEY, ""),
+                props.getOrDefault(CreateFunctionStmt.SYMBOL_KEY, ""),
+                "", "", isolated, null);
+        sfn.setInputType(props.get(CreateFunctionStmt.INPUT_TYPE));
+        if (stmt.getContent() != null) {
+            sfn.setContent(stmt.getContent());
+        }
+        return sfn;
     }
 
     public static void utCreateTableWithRetry(CreateTableStmt createTableStmt, ConnectContext ctx) throws Exception {

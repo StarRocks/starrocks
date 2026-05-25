@@ -16,6 +16,8 @@ package com.starrocks.catalog;
 
 import com.google.common.collect.Lists;
 import com.starrocks.sql.analyzer.ColumnDefAnalyzer;
+import com.starrocks.sql.ast.HdfsURI;
+import com.starrocks.thrift.TFunctionBinaryType;
 import com.starrocks.type.AggStateDesc;
 import com.starrocks.type.FloatType;
 import com.starrocks.type.IntegerType;
@@ -67,5 +69,73 @@ public class AggStateDescTest {
 
         AggStateDesc cloned3 = aggStateDesc3.clone();
         Assertions.assertEquals(aggStateDesc3, cloned3);
+    }
+
+    @Test
+    public void testToSqlEmitsCreateAggregateFunctionHeader() {
+        AggregateFunction fn = new AggregateFunction(
+                new FunctionName("test_db", "my_sum"),
+                Lists.<Type>newArrayList(IntegerType.INT),
+                IntegerType.BIGINT, null, false);
+        fn.setBinaryType(TFunctionBinaryType.SRJAR);
+        String sql = fn.toSql(false);
+        Assertions.assertTrue(sql.startsWith("CREATE AGGREGATE FUNCTION test_db.my_sum"), sql);
+        Assertions.assertTrue(sql.contains("RETURNS"), sql);
+        Assertions.assertFalse(sql.contains("IF NOT EXISTS"), sql);
+    }
+
+    @Test
+    public void testToSqlEmitsIfNotExistsWhenRequested() {
+        AggregateFunction fn = new AggregateFunction(
+                new FunctionName("test_db", "my_sum"),
+                Lists.<Type>newArrayList(IntegerType.INT),
+                IntegerType.BIGINT, null, false);
+        fn.setBinaryType(TFunctionBinaryType.SRJAR);
+        Assertions.assertTrue(fn.toSql(true).contains("CREATE AGGREGATE FUNCTION IF NOT EXISTS"));
+    }
+
+    @Test
+    public void testToSqlEmitsTypeFileSymbolProperties() {
+        AggregateFunction fn = new AggregateFunction(
+                new FunctionName("test_db", "my_sum"),
+                Lists.<Type>newArrayList(IntegerType.INT),
+                IntegerType.BIGINT, null, false);
+        fn.setBinaryType(TFunctionBinaryType.SRJAR);
+        fn.setLocation(new HdfsURI("file:///tmp/udf.jar"));
+        String sql = fn.toSql(false);
+        Assertions.assertTrue(sql.contains("\"type\" = \"StarrocksJar\""), sql);
+        Assertions.assertTrue(sql.contains("\"file\" = \"file:///tmp/udf.jar\""), sql);
+    }
+
+    @Test
+    public void testToSqlEmitsAnalyticPropertyForUDWF() {
+        // isAnalyticFn=true marks this as a window function — surfaced as "analytic" = "true".
+        AggregateFunction fn = new AggregateFunction(
+                new FunctionName("test_db", "my_window"),
+                Lists.<Type>newArrayList(IntegerType.INT),
+                IntegerType.BIGINT, null, false, true);
+        fn.setBinaryType(TFunctionBinaryType.SRJAR);
+        Assertions.assertTrue(fn.toSql(false).contains("\"analytic\" = \"true\""));
+    }
+
+    @Test
+    public void testToSqlIsolationOnlyEmittedWhenShared() {
+        // Default isolation is isolated; key omitted unless explicitly set to shared.
+        AggregateFunction isolated = new AggregateFunction(
+                new FunctionName("test_db", "my_sum"),
+                Lists.<Type>newArrayList(IntegerType.INT),
+                IntegerType.BIGINT, null, false);
+        isolated.setBinaryType(TFunctionBinaryType.SRJAR);
+        Assertions.assertFalse(isolated.toSql(false).contains("\"isolation\""),
+                "isolation key should be omitted when default (isolated)");
+
+        AggregateFunction shared = new AggregateFunction(
+                new FunctionName("test_db", "my_sum"),
+                Lists.<Type>newArrayList(IntegerType.INT),
+                IntegerType.BIGINT, null, false);
+        shared.setBinaryType(TFunctionBinaryType.SRJAR);
+        shared.setIsolationType(false);
+        Assertions.assertTrue(shared.toSql(false).contains("\"isolation\" = \"shared\""),
+                "isolation key should be emitted as 'shared' when isolationType is false");
     }
 }
