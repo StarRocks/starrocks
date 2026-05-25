@@ -349,19 +349,19 @@ public class JDBCScannerTest {
     public void testBigQueryDriverDetected() {
         // Both known BigQuery driver class names must set isBigQueryDriver
         JDBCScanner simba = createScanner("com.simba.googlebigquery.jdbc.Driver", "UTC", 1);
-        Assertions.assertTrue(getFieldUnchecked(simba, "isBigQueryDriver"));
+        Assertions.assertTrue((Boolean) getFieldUnchecked(simba, "isBigQueryDriver"));
 
         JDBCScanner simba42 = createScanner("com.simba.googlebigquery.jdbc42.Driver", "UTC", 1);
-        Assertions.assertTrue(getFieldUnchecked(simba42, "isBigQueryDriver"));
+        Assertions.assertTrue((Boolean) getFieldUnchecked(simba42, "isBigQueryDriver"));
     }
 
     @Test
     public void testBigQueryDriverNotDetectedForOtherDrivers() {
         JDBCScanner pg = createScanner("org.postgresql.Driver", "Asia/Shanghai", 1);
-        Assertions.assertFalse(getFieldUnchecked(pg, "isBigQueryDriver"));
+        Assertions.assertFalse((Boolean) getFieldUnchecked(pg, "isBigQueryDriver"));
 
         JDBCScanner mysql = createScanner("com.mysql.jdbc.Driver", "Asia/Shanghai", 1);
-        Assertions.assertFalse(getFieldUnchecked(mysql, "isBigQueryDriver"));
+        Assertions.assertFalse((Boolean) getFieldUnchecked(mysql, "isBigQueryDriver"));
     }
 
     @Test
