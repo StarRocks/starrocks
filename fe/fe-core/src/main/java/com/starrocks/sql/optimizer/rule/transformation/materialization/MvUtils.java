@@ -962,6 +962,17 @@ public class MvUtils {
         return columnRefMap;
     }
 
+    /**
+     * optExpression is SPG expression
+     */
+    public static Set<String> collectSPGScanColumnNames(OptExpression optExpression) {
+        // optExpression is SPG expression, so there is only one scanOperator
+        LogicalScanOperator queryScanOperator = getScanOperator(optExpression).get(0);
+        return queryScanOperator.getColRefToColumnMetaMap().values().stream()
+                .map(Column::getName)
+                .collect(Collectors.toSet());
+    }
+
     public static Set<ColumnRefOperator> collectScanColumn(OptExpression optExpression) {
         return collectScanColumn(optExpression, Predicates.alwaysTrue());
     }
@@ -1513,12 +1524,14 @@ public class MvUtils {
             if (scan.getPredicate() != null) {
                 Table table = scan.getTable();
                 Map<ColumnRefOperator, Column> refToCol = scan.getColRefToColumnMetaMap();
-                scan.getPredicate().getUsedColumns().getStream().forEach(colId ->
-                        refToCol.forEach((ref, col) -> {
-                            if (ref.getId() == colId) {
-                                predicateColumnsByTable.computeIfAbsent(table, t -> new HashSet<>()).add(col.getName());
-                            }
-                        }));
+                ColumnRefSet usedColumns = scan.getPredicate().getUsedColumns();
+                Set<String> tablePredicateColumns =
+                        predicateColumnsByTable.computeIfAbsent(table, t -> new HashSet<>());
+                refToCol.forEach((ref, col) -> {
+                    if (usedColumns.contains(ref.getId())) {
+                        tablePredicateColumns.add(col.getName());
+                    }
+                });
             }
             return;
         }

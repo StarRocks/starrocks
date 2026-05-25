@@ -331,10 +331,11 @@ public class AggregateJoinPushDownRuleMVPruneTest {
     }
 
     /**
-     * MV predicate = {lo_linenumber}, query predicate = null → MV is over-filtered → valid.
+     * MV predicate = {lo_linenumber}, query predicate = null → valid.
+     * Please check <a href="https://docs.starrocks.io/docs/using_starrocks/async_mv/use_cases/query_rewrite_with_materialized_views/#predicate-union-rewrite">Union rewrite</a>
      */
     @Test
-    public void testInvalidMv_MvHasPredicate_QueryHasNone() {
+    public void testValidMv_MvHasPredicate_QueryHasNone() {
         MaterializationContext ctx = mockMvContext(
                 Set.of("lo_orderdate", "lo_linenumber"),
                 Set.of("lo_linenumber"), // mvPredicateCols
@@ -372,7 +373,7 @@ public class AggregateJoinPushDownRuleMVPruneTest {
      * query predicate = {lo_linenumber} only → query doesn't cover all MV predicate columns → valid.
      */
     @Test
-    public void testInvalidMv_MvPredicateNotCoveredByQuery() {
+    public void testValidMv_MvPredicateNotCoveredByQuery() {
         MaterializationContext ctx = mockMvContext(
                 Set.of("lo_orderdate", "lo_linenumber", "lo_custkey"),
                 Set.of("lo_linenumber", "lo_custkey"),

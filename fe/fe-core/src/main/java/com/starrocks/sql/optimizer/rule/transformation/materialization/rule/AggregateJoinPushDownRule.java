@@ -31,7 +31,6 @@ import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
-import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.rule.RuleType;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.AggregatedMaterializedViewPushDownRewriter;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.IMaterializedViewRewriter;
@@ -41,7 +40,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.stream.Collectors;
 
 import static com.starrocks.sql.optimizer.OptimizerTraceUtil.logMVRewrite;
 import static com.starrocks.sql.optimizer.operator.OpRuleBit.OP_MV_AGG_PUSH_DOWN_REWRITE;
@@ -86,7 +84,6 @@ public class AggregateJoinPushDownRule extends BaseMaterializedViewRewriteRule {
     }
 
     // Identity-keyed cache: one entry per distinct queryExpression object.
-    // Max size is read once at startup from Config.mv_aggregate_join_push_down_query_cache_max_size.
     private final Cache<OptExpression, QueryColumnCache> queryColumnCache = CacheBuilder.newBuilder()
             .maximumSize(Config.mv_aggregate_join_push_down_query_column_cache_max_size)
             .weakKeys()
@@ -166,10 +163,7 @@ public class AggregateJoinPushDownRule extends BaseMaterializedViewRewriteRule {
         // override equals() by catalog/db/tableIdentifier match correctly across plan rebuilds,
         // where CONNECTOR_ID_GENERATOR may assign different numeric ids to the same logical table.
         Table mvBaseTable = mvContext.getBaseTables().get(0);
-        Set<ColumnRefOperator> mvUsedColRefs = MvUtils.collectScanColumn(mvContext.getMvExpression());
-        Set<String> mvUsedColNames = mvUsedColRefs.stream()
-                .map(ColumnRefOperator::getName)
-                .collect(Collectors.toSet());
+        Set<String> mvUsedColNames = MvUtils.collectSPGScanColumnNames(mvContext.getMvExpression());
         boolean baseTableFoundInMv = false;
         boolean checkStage1 = false;
         for (LogicalScanOperator scanOperator : scanOperators) {

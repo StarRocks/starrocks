@@ -379,14 +379,8 @@ public class MaterializationContext {
             }
 
             // 1. check mv contains all columns needed in query
-            Set<ColumnRefOperator> queryUsedColRefs = MvUtils.collectScanColumn(queryExpression);
-            Set<ColumnRefOperator> mvUsedColRefs = MvUtils.collectScanColumn(mvExpression);
-            Set<String> mvUsedColNames = mvUsedColRefs.stream()
-                    .map(ColumnRefOperator::getName)
-                    .collect(Collectors.toSet());
-            Set<String> queryUsedColNames = queryUsedColRefs.stream()
-                    .map(ColumnRefOperator::getName)
-                    .collect(Collectors.toSet());
+            Set<String> queryUsedColNames = MvUtils.collectSPGScanColumnNames(queryExpression);
+            Set<String> mvUsedColNames = MvUtils.collectSPGScanColumnNames(mvExpression);
             if (!mvUsedColNames.containsAll(queryUsedColNames)) {
                 logMVRewrite(this, "mv pruned: not contain all columns used in scan");
                 return false;
