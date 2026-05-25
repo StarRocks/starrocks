@@ -1163,12 +1163,24 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
 
     @Override
     protected boolean cancelImpl(String errMsg) {
+        return cancelImpl(errMsg, false);
+    }
+
+    @Override
+    protected boolean cancelImpl(String errMsg, boolean force) {
         if (jobState == JobState.CANCELLED || jobState == JobState.FINISHED) {
             return false;
         }
 
-        // Cancel a job of state `FINISHED_REWRITING` only when the database or table has been dropped.
-        if (jobState == JobState.FINISHED_REWRITING && tableExists()) {
+        // Cancel a job of state `FINISHED_REWRITING` only when the database or
+        // table has been dropped, OR when an operator explicitly opts in via
+        // ADMIN SKIP COMMITTED TRANSACTION (force=true). The escape hatch is
+        // needed to unblock a heavy schema change whose publish RPC is
+        // permanently stuck. removeShadowIndex() inside persistStateChange
+        // below already drops the shadow tablets, which is what unblocks the
+        // publish_log_version path (FE stops scheduling vtxn copies once the
+        // shadow index is gone).
+        if (jobState == JobState.FINISHED_REWRITING && tableExists() && !force) {
             return false;
         }
 

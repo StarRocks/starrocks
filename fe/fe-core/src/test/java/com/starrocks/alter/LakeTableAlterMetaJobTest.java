@@ -132,6 +132,30 @@ public class LakeTableAlterMetaJobTest {
     }
 
     @Test
+    public void testForceCancelAtFinishedRewriting() throws Exception {
+        // Phase 2: CANCEL ALTER TABLE ... FORCE must bypass the FINISHED_REWRITING
+        // guard. Lake AlterMeta has no shadow tablets to clean up — pure state
+        // transition + persisted edit log.
+        Assertions.assertEquals(AlterJobV2.JobState.PENDING, job.getJobState());
+        job.runPendingJob();
+        job.runRunningJob();
+        Assertions.assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, job.getJobState());
+
+        // Non-force cancel is a no-op in FINISHED_REWRITING (existing behavior).
+        Assertions.assertFalse(job.cancel("non-force-cancel"));
+        Assertions.assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, job.getJobState());
+        Assertions.assertFalse(job.isForceSkippedAtCommitted());
+
+        // Force cancel succeeds; catalog reverts so the alter property does NOT
+        // take effect (operator opted-in to discard the half-applied change).
+        Assertions.assertTrue(job.cancel("force-cancel-from-stuck-publish", /*force=*/ true));
+        Assertions.assertEquals(AlterJobV2.JobState.CANCELLED, job.getJobState());
+        Assertions.assertTrue(job.isForceSkippedAtCommitted(),
+                "forceSkippedAtCommitted must record the force-cancel for audit");
+        Assertions.assertEquals(OlapTable.OlapTableState.NORMAL, table.getState());
+    }
+
+    @Test
     public void testJobStateEnableFileBundling() throws Exception {
         LakeTable table1 = createTable(connectContext,
                     "CREATE TABLE t1(c0 INT) PRIMARY KEY(c0) DISTRIBUTED BY HASH(c0) BUCKETS 1 " +
