@@ -32,7 +32,7 @@ You can use the cloud-managed Kubernetes service, such as an [Amazon Elastic Kub
 
 - Create a GKE cluster
 
-  Before you start to create a GKE cluster, make sure that you complete all the [prerequisites](https://cloud.google.com/kubernetes-engine/docs/deploy-app-cluster#before-you-begin). Then follow the instructions provided in [Create a GKE cluster](https://cloud.google.com/kubernetes-engine/docs/deploy-app-cluster#create_cluster) to create a GKE cluster.
+  Before you start to create a GKE cluster, make sure that you complete all the [prerequisites](https://docs.cloud.google.com/kubernetes-engine/docs/deploy-app-cluster#before-you-begin). Then follow the instructions provided in [Create a GKE cluster](https://docs.cloud.google.com/kubernetes-engine/docs/deploy-app-cluster#create_cluster) to create a GKE cluster.
 
 - Create a self-managed Kubernetes cluster
 
@@ -247,7 +247,7 @@ Run the command `kubectl -n starrocks edit src starrockscluster-sample` to confi
 If the automatic scaling policy for the CN cluster is configured, delete the `replicas` field from the `starRocksCnSpec` in the StarRocks cluster configuration file.
 :::
 
-Kubernetes also supports using `behavior` to customize scaling behaviors according to business scenarios, helping you achieve rapid or slow scaling or disable scaling. For more information about automatic scaling policies, see [Horizontal Pod Scaling](https://kubernetes.io/docs/tasks/run-application/horizontal-pod-autoscale/).
+Kubernetes also supports using `behavior` to customize scaling behaviors according to business scenarios, helping you achieve rapid or slow scaling or disable scaling. For more information about automatic scaling policies, see [Horizontal Pod Scaling](https://kubernetes.io/docs/concepts/workloads/autoscaling/horizontal-pod-autoscale/).
 
 The following is a [template](https://github.com/StarRocks/starrocks-kubernetes-operator/blob/main/examples/starrocks/deploy_a_starrocks_cluster_with_cn.yaml) provided by StarRocks to help you configure automatic scaling policies:
 
@@ -264,7 +264,7 @@ The following is a [template](https://github.com/StarRocks/starrocks-kubernetes-
       maxReplicas: 10 # The maximum number of CNs is set to 10.
       minReplicas: 1 # The minimum number of CNs is set to 1.
       # operator creates an HPA resource based on the following field.
-      # see https://kubernetes.io/docs/tasks/run-application/horizontal-pod-autoscale/ for more information.
+      # see https://kubernetes.io/docs/concepts/workloads/autoscaling/horizontal-pod-autoscale/ for more information.
       hpaPolicy:
         metrics: # Resource metrics
           - type: Resource

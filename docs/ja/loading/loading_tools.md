@@ -23,7 +23,7 @@ DataX はオフラインデータ同期のためのツールで、Alibaba によ
 
 ## [CloudCanal](../integrations/loading_tools/CloudCanal.md)
 
-CloudCanal Community Edition は、[ClouGence Co., Ltd](https://www.cloudcanalx.com/) によって公開された無料のデータ移行および同期プラットフォームで、スキーマ移行、フルデータ移行、検証、修正、リアルタイム増分同期を統合しています。CloudCanal のビジュアルインターフェースで直接 StarRocks をデータソースとして追加し、ソースデータベース（例：MySQL、Oracle、PostgreSQL）から StarRocks へのデータを自動的に移行または同期するタスクを作成できます。
+CloudCanal Community Edition は、[ClouGence Co., Ltd](https://www.bladepipe.com/) によって公開された無料のデータ移行および同期プラットフォームで、スキーマ移行、フルデータ移行、検証、修正、リアルタイム増分同期を統合しています。CloudCanal のビジュアルインターフェースで直接 StarRocks をデータソースとして追加し、ソースデータベース（例：MySQL、Oracle、PostgreSQL）から StarRocks へのデータを自動的に移行または同期するタスクを作成できます。
 
 ## [Kettle connector](https://github.com/StarRocks/starrocks-connector-for-kettle)
 
