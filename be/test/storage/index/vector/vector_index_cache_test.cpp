@@ -83,6 +83,38 @@ TEST_F(VectorIndexCacheTest, Lookup_Miss_ReturnsFalse) {
     EXPECT_FALSE(h.valid());
 }
 
+// Lookup must report miss for entries that exist but have not been populated
+// with an IndexRef yet — covers the `!entry->value().has_ref()` branch that a
+// concurrent GetOrCreate would otherwise expose to racing Lookups. Inserting
+// a nullptr IndexRef is the deterministic way to reach the same state from a
+// single thread.
+TEST_F(VectorIndexCacheTest, Lookup_EntryWithoutRef_ReportsMiss) {
+    tenann::IndexCacheHandle h_ins;
+    cache_->Insert(tenann::CacheKey("/loading.vi"), /*ref=*/nullptr, &h_ins);
+
+    tenann::IndexCacheHandle h_lkp;
+    EXPECT_FALSE(cache_->Lookup(tenann::CacheKey("/loading.vi"), &h_lkp));
+    EXPECT_FALSE(h_lkp.valid());
+}
+
+// Loud assertion on the small inline accessors (SetCapacity / capacity /
+// memory_usage / lookup_count / hit_count). Existing tests touch them
+// transitively but gcov tracking on inline header methods is unreliable —
+// asserting each one directly here makes the coverage explicit.
+TEST_F(VectorIndexCacheTest, Accessors_ReflectInsertAndCapacity) {
+    EXPECT_EQ(cache_->capacity(), 16u * 1024);
+    EXPECT_EQ(cache_->memory_usage(), 0u);
+    EXPECT_EQ(cache_->lookup_count(), 0u);
+    EXPECT_EQ(cache_->hit_count(), 0u);
+
+    tenann::IndexCacheHandle h;
+    cache_->Insert(tenann::CacheKey("/a.vi"), make_dummy_ref(2048), &h);
+    EXPECT_EQ(cache_->memory_usage(), 2048u);
+
+    cache_->SetCapacity(8 * 1024);
+    EXPECT_EQ(cache_->capacity(), 8u * 1024);
+}
+
 TEST_F(VectorIndexCacheTest, Insert_ThenLookup_ReturnsSameRef) {
     auto ref = make_dummy_ref();
     tenann::IndexCacheHandle h_ins;
@@ -300,8 +332,7 @@ TEST_F(VectorIndexCacheTest, ShutdownAndShrink_WithSelfReferentialEntry_NoDeadlo
     };
     auto* payload = new OuterPayload{std::move(inner), std::vector<char>(2048)};
     auto outer_ref = std::make_shared<tenann::Index>(
-            payload, tenann::IndexType::kFaissIvfPq,
-            [](void* p) { delete static_cast<OuterPayload*>(p); },
+            payload, tenann::IndexType::kFaissIvfPq, [](void* p) { delete static_cast<OuterPayload*>(p); },
             /*explicit_bytes=*/2048);
 
     tenann::IndexCacheHandle outer;

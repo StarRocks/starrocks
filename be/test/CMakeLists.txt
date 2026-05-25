@@ -385,6 +385,14 @@ if (APPLE)
     set(TEST_EXTRA_SOURCES ${CMAKE_SOURCE_DIR}/test/base/macos_link_stubs.cpp)
 endif ()
 
+# Tests that link against ServiceBE / Cache. Append before add_library so the
+# object library actually picks them up (CMake evaluates EXEC_FILES by value
+# at add_library call time).
+if ("${WITH_STARCACHE}" STREQUAL "ON")
+    list(APPEND EXEC_FILES ./http/datacache_action_test.cpp)
+    list(APPEND EXEC_FILES ./http/action/update_config_action_test.cpp)
+endif ()
+
 add_library(starrocks_test_objs OBJECT ${EXEC_FILES})
 target_link_libraries(starrocks_test_objs PRIVATE StarRocksPCH)
 if (NOT STARROCKS_JIT_ENABLE)
@@ -582,11 +590,6 @@ SET(DW_TEST_FILES
     ./storage/lake/table_schema_service_test.cpp
     ./storage/lake/fast_schema_evolution_v2_test.cpp
 )
-
-if ("${WITH_STARCACHE}" STREQUAL "ON")
-    list(APPEND EXEC_FILES ./http/datacache_action_test.cpp)
-    list(APPEND EXEC_FILES ./http/action/update_config_action_test.cpp)
-endif ()
 
 if ("${USE_STAROS}" STREQUAL "ON")
     list(APPEND DW_TEST_FILES ./fs/fs_starlet_test.cpp)

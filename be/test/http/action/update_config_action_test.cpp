@@ -18,12 +18,14 @@
 #include "base/testutil/assert.h"
 #include "base/testutil/scoped_updater.h"
 #include "base/testutil/sync_point.h"
+#include "base/utility/defer_op.h"
 #include "cache/datacache.h"
 #include "cache/disk_cache/starcache_engine.h"
 #include "cache/disk_cache/test_cache_utils.h"
 #include "common/config_cache_fwd.h"
 #include "common/config_lake_fwd.h"
 #include "common/config_update_registry.h"
+#include "common/config_vector_index_fwd.h"
 #include "common/system/cpu_info.h"
 #include "common/util/bthreads/executor.h"
 #include "fs/fs_util.h"
@@ -31,6 +33,7 @@
 #include "runtime/env/global_env.h"
 #include "runtime/exec_env.h"
 #include "service/service_be/config_update_hooks.h"
+#include "storage/index/vector/vector_index_cache.h"
 #include "storage/persistent_index_load_executor.h"
 #include "storage/storage_engine.h"
 #include "storage/update_manager.h"
@@ -176,6 +179,32 @@ TEST_F(ConfigUpdateHooksTest, vector_index_cache_limit_null_exec_env_returns_int
     auto st = ConfigUpdateRegistry::instance()->update_config("vector_index_cache_limit", "1G");
     EXPECT_FALSE(st.ok()) << st.to_string();
     EXPECT_TRUE(st.is_internal_error()) << st.to_string();
+}
+
+// Happy path: covers parse_mem_spec + SetCapacity + LOG body (lines 102-109
+// of config_update_hooks.cpp). Test fixture's SetUp already registered hooks
+// against the real ExecEnv whose init() builds a VectorIndexCache, so the
+// callback follows the normal "resolve to bytes -> resize cache" path.
+TEST_F(ConfigUpdateHooksTest, vector_index_cache_limit_happy_path_resizes_cache) {
+    auto* cache = ExecEnv::GetInstance()->vector_index_cache();
+    ASSERT_NE(cache, nullptr) << "test_main must initialize ExecEnv with vector_index_cache";
+    const std::string saved = config::vector_index_cache_limit;
+
+    // Absolute bytes.
+    ASSERT_OK(ConfigUpdateRegistry::instance()->update_config("vector_index_cache_limit", "4294967296"));
+    EXPECT_EQ(cache->capacity(), 4294967296u);
+
+    // Unit-suffixed.
+    ASSERT_OK(ConfigUpdateRegistry::instance()->update_config("vector_index_cache_limit", "512M"));
+    EXPECT_EQ(cache->capacity(), 512u * 1024 * 1024);
+
+    // Percentage of process_mem_limit — exact value depends on test env, just
+    // sanity-check it parses and resizes to something positive.
+    ASSERT_OK(ConfigUpdateRegistry::instance()->update_config("vector_index_cache_limit", "10%"));
+    EXPECT_GT(cache->capacity(), 0u);
+
+    // Restore for downstream tests/files.
+    ASSERT_OK(ConfigUpdateRegistry::instance()->update_config("vector_index_cache_limit", saved));
 }
 #endif
 
