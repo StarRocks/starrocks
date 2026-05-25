@@ -12,9 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "exec/sorting/merge.h"
+#include "compute_env/sorting/merge.h"
 
-#include "exec/sorting/sort_permute.h"
+#include "compute_env/sorting/sort_permute.h"
 #include "exprs/expr_context.h"
 
 namespace starrocks {

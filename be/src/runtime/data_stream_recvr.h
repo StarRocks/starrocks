@@ -42,8 +42,8 @@
 #include "common/runtime_profile.h"
 #include "common/status.h"
 #include "compute_env/pipeline/observer.h"
+#include "compute_env/sorting/merge_path.h"
 #include "exec/pipeline/pipeline_fwd.h"
-#include "exec/sorting/merge_path.h"
 #include "gen_cpp/Types_types.h" // for TUniqueId
 #include "runtime/descriptors.h"
 #include "runtime/local_pass_through_buffer.h"
