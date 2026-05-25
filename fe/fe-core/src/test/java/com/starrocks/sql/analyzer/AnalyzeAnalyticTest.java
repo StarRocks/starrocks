@@ -68,6 +68,12 @@ public class AnalyzeAnalyticTest {    // use a unique dir so that it won't be co
         analyzeFail("select sum(v1) " +
                         "over(order by v3 range between interval 1 day preceding and current row) from t0",
                 "must be a constant non-negative number");
+        analyzeFail("select sum(tc) " +
+                        "over(order by ti range between interval 1.5 day preceding and current row) from tall",
+                "Invalid interval literal");
+        analyzeFail("select sum(tc) " +
+                        "over(order by ti range between interval 2147483648 day preceding and current row) from tall",
+                "Invalid interval literal");
         analyzeFail("select sum(v1) " +
                         "over(partition by v2 order by v3 range between -1 preceding and current row) from t0",
                 "must be a constant non-negative number");

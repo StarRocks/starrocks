@@ -321,9 +321,8 @@ public class AnalyticAnalyzer {
 
     private static void checkRangeIntervalOffset(IntervalLiteral intervalLiteral) {
         Expr value = intervalLiteral.getValue();
-        if (!value.isConstant() || !value.getType().isNumericType()) {
-            throw new SemanticException("For RANGE window, the value of an INTERVAL PRECEDING/FOLLOWING offset "
-                    + "must be a constant non-negative number: " + ExprToSql.toSql(intervalLiteral), value.getPos());
+        if (!value.isConstant() || !value.getType().isFixedPointType()) {
+            throw new SemanticException("Invalid interval literal: " + ExprToSql.toSql(intervalLiteral), value.getPos());
         }
         double val;
         try {
@@ -332,9 +331,10 @@ public class AnalyticAnalyzer {
             throw new SemanticException("Couldn't evaluate PRECEDING/FOLLOWING expression: " + exc.getMessage(),
                     value.getPos());
         }
-        if (Double.isNaN(val) || val < 0) {
-            throw new SemanticException("For RANGE window, the value of an INTERVAL PRECEDING/FOLLOWING offset "
-                    + "must be a constant non-negative number: " + ExprToSql.toSql(intervalLiteral), value.getPos());
+        if (Double.isNaN(val) || Double.isInfinite(val) || val < 0 ||
+                val > Integer.MAX_VALUE) {
+            throw new SemanticException("Invalid interval literal: " + ExprToSql.toSql(intervalLiteral),
+                    value.getPos());
         }
 
         String unit = intervalLiteral.getUnitIdentifier().getDescription().toUpperCase();
