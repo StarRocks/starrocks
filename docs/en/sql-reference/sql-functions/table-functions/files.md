@@ -629,6 +629,105 @@ From v3.2 onwards, StarRocks can extract the value of a key/value pair from the 
 
 Suppose the data file **file1** is stored under a path in the format of `/geo/country=US/city=LA/`. You can specify the `columns_from_path` parameter as `"columns_from_path" = "country, city"` to extract the geographic information in the file path as the value of columns that are returned. For further instructions, see Example 4.
 
+#### `schema`
+
+From v4.0 onwards, `FILES()` supports an explicit `schema` parameter that lets you declare exactly which columns to read and their StarRocks types, bypassing BE-side schema inference.
+
+```SQL
+"schema" = "col_name TYPE[, col_name TYPE ...]"
+```
+
+When `schema` is set, `FILES()` reads only the declared columns with the declared types. Automatic schema detection (sampling-based inference) is skipped, which makes query behavior predictable when the underlying files evolve differently across batches.
+
+##### Supported types
+
+All StarRocks scalar and complex types (`ARRAY`, `MAP`, `STRUCT`) are supported inside `schema`, except StarRocks-only aggregate types (`HLL`, `BITMAP`, `PERCENTILE`), which have no representation in Parquet/ORC/Avro/CSV and are rejected at any depth (top level or inside `ARRAY` / `MAP` value / `STRUCT` field). For `STRUCT`, you may declare only a subset of subfields; undeclared subfields are ignored during projection.
+
+Example of a partial nested declaration:
+
+```SQL
+"schema" = "request_data STRUCT<device_data STRUCT<platform VARCHAR(64)>, now BIGINT>"
+```
+
+##### Forbidden tokens inside the schema string
+
+The following tokens are rejected and produce a validation error:
+
+- `NULL` / `NOT NULL`
+- `DEFAULT`
+- `COMMENT`
+- `KEY` (and related key-type descriptors)
+- `AUTO_INCREMENT`
+- Charset specifiers (for example `CHARACTER SET`)
+- Aggregation descriptors (for example `SUM`, `REPLACE`)
+- Generated-column clauses (`AS (...)`)
+
+Example (invalid):
+
+```SQL
+"schema" = "id BIGINT NOT NULL, dt DATE DEFAULT '2026-01-01'"
+```
+
+##### Column matching semantics per format
+
+- **Parquet / ORC / Avro**: schema columns are matched against file columns **by name**, and matching is **case-sensitive**. For example, `UserId` in `schema` does not match `userid` in the file.
+- **CSV**: schema columns are matched **by position**. The names in `schema` act only as aliases for the ordinal columns in the CSV file. The first schema item maps to the first CSV column, the second to the second, and so on.
+
+##### Mutual exclusions
+
+`schema` cannot be combined with any of the auto-detection parameters. Using any of the following together with `schema` is a validation error:
+
+- `auto_detect_sample_files`
+- `auto_detect_sample_rows`
+- `auto_detect_types`
+
+##### Interactions with other properties and statements
+
+- **`fill_mismatch_column_with`**: Declared columns that are missing from some files follow the existing `fill_mismatch_column_with` behavior — `none` fails the query, `null` fills `NULL` for the missing column.
+- **`columns_from_path`**: Path-extracted columns are appended **after** the `schema` columns. If a `columns_from_path` name collides with a name in `schema`, the query fails with a validation error.
+- **`list_files_only = true`**: `schema` is silently ignored when `list_files_only` is `true` (only file metadata is returned).
+- **`DESC FILES(..., "schema" = ...)`**: Explicitly rejected. Use `DESC FILES(...)` without `schema` to inspect the inferred file schema.
+- **`INSERT INTO FILES(..., "schema" = ...)` (unload)**: Explicitly rejected. `schema` is a read-path parameter only.
+- **INSERT push-down interactions**:
+  - The FE configuration `files_enable_insert_push_down_column_type` (alias `files_enable_insert_push_down_schema`) is **silently skipped** when `schema` is set, because the user-declared types already determine column types.
+  - Combining `schema` with the INSERT property `enable_push_down_schema = true` is a validation error.
+
+##### Examples
+
+Parquet matched by name:
+
+```sql
+SELECT user_id, event_time
+FROM FILES(
+  "path" = "s3://bucket/path/*.parquet",
+  "format" = "parquet",
+  "schema" = "user_id BIGINT, event_time DATETIME"
+);
+```
+
+CSV matched by position (the names `a` and `b` are aliases for the first and second CSV columns):
+
+```sql
+SELECT *
+FROM FILES(
+  "path" = "s3://bucket/path/*.csv",
+  "format" = "csv",
+  "csv.column_separator" = ",",
+  "schema" = "a BIGINT, b VARCHAR(64)"
+);
+```
+
+Partial nested declaration (only two subfields of `request_data` are projected):
+
+```sql
+SELECT request_data.device_data.platform, request_data.now
+FROM FILES(
+  "path" = "s3://bucket/path/*.parquet",
+  "format" = "parquet",
+  "schema" = "request_data STRUCT<device_data STRUCT<platform VARCHAR(64)>, now BIGINT>"
+);
+```
+
 #### `list_files_only`
 
 From v3.4.0 onwards, `FILES()` supports only list the files when reading them.

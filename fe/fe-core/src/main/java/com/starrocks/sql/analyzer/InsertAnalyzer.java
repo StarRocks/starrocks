@@ -444,6 +444,11 @@ public class InsertAnalyzer {
         }
 
         Consumer<TableFunctionTable> pushDownSchemaFunc = (fileTable) -> {
+            // Silent-skip config-level type push-down when the user declared a
+            // 'schema' on FILES() — the explicit schema already fixes column types.
+            if (fileTable.hasExplicitSchema()) {
+                return;
+            }
             Locker locker = new Locker(session.getQueryId());
             locker.lockTableWithIntensiveDbLock(database.getId(), targetTable.getId(), LockType.READ);
             try {

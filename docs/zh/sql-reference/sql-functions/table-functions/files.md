@@ -629,6 +629,105 @@ StarRocks 目前支持使用简单身份验证访问 HDFS，使用基于 IAM 用
 
 假设数据文件 **file1** 存储在格式为 `/geo/country=US/city=LA/` 的路径下。您可以将 `columns_from_path` 参数指定为 `"columns_from_path" = "country, city"`，以提取文件路径中的地理信息作为返回列的值。有关进一步说明，请参见示例 4。
 
+#### `schema`
+
+从 v4.0 开始，`FILES()` 支持显式的 `schema` 参数，允许您显式声明要读取的列及其 StarRocks 类型，跳过 BE 端的自动 Schema 推断。
+
+```SQL
+"schema" = "col_name TYPE[, col_name TYPE ...]"
+```
+
+当设置了 `schema` 时，`FILES()` 仅按声明的类型读取声明的列，自动 Schema 检测（基于采样的类型推断）将被跳过。这使得当不同批次的底层文件结构发生不同演进时，查询行为保持可预测。
+
+##### 支持的类型
+
+`schema` 内部支持所有 StarRocks 标量类型与复杂类型（`ARRAY`、`MAP`、`STRUCT`），但**不**支持 StarRocks 专有的聚合类型（`HLL`、`BITMAP`、`PERCENTILE`）—— 这些类型在 Parquet/ORC/Avro/CSV 中没有对应表示，无论出现在顶层还是嵌套于 `ARRAY` / `MAP` value / `STRUCT` 子字段中都会被拒绝。对于 `STRUCT`，您可以只声明部分子字段；未声明的子字段在投影时会被忽略。
+
+部分嵌套声明示例：
+
+```SQL
+"schema" = "request_data STRUCT<device_data STRUCT<platform VARCHAR(64)>, now BIGINT>"
+```
+
+##### Schema 字符串中禁止的 Token
+
+以下 Token 会被拒绝并触发验证错误：
+
+- `NULL` / `NOT NULL`
+- `DEFAULT`
+- `COMMENT`
+- `KEY`（以及相关的键类型描述符）
+- `AUTO_INCREMENT`
+- 字符集描述符（例如 `CHARACTER SET`）
+- 聚合描述符（例如 `SUM`、`REPLACE`）
+- 生成列子句（`AS (...)`）
+
+非法示例：
+
+```SQL
+"schema" = "id BIGINT NOT NULL, dt DATE DEFAULT '2026-01-01'"
+```
+
+##### 各格式的列匹配语义
+
+- **Parquet / ORC / Avro**：`schema` 中的列按**名称**与文件中的列匹配，且匹配**区分大小写**。例如，`schema` 中的 `UserId` 不会匹配文件中的 `userid`。
+- **CSV**：`schema` 中的列按**位置**匹配。`schema` 中的列名仅作为 CSV 文件中对应序号列的别名。`schema` 的第一项对应 CSV 的第一列，第二项对应第二列，以此类推。
+
+##### 互斥约束
+
+`schema` 不能与任何自动检测相关的参数一起使用。将以下参数与 `schema` 同时使用是验证错误：
+
+- `auto_detect_sample_files`
+- `auto_detect_sample_rows`
+- `auto_detect_types`
+
+##### 与其他属性和语句的交互
+
+- **`fill_mismatch_column_with`**：`schema` 声明的列在某些文件中缺失时，遵循现有的 `fill_mismatch_column_with` 行为 —— `none` 使查询失败，`null` 为缺失列填充 `NULL`。
+- **`columns_from_path`**：从路径中提取的列会**追加**在 `schema` 列之后。如果 `columns_from_path` 的列名与 `schema` 中的列名冲突，查询会因验证错误而失败。
+- **`list_files_only = true`**：当 `list_files_only` 为 `true` 时，`schema` 会被**静默忽略**（此时仅返回文件元数据）。
+- **`DESC FILES(..., "schema" = ...)`**：被显式拒绝。请使用不带 `schema` 的 `DESC FILES(...)` 来查看推断出的文件 Schema。
+- **`INSERT INTO FILES(..., "schema" = ...)`（卸载）**：被显式拒绝。`schema` 仅是读路径参数。
+- **INSERT 下推交互**：
+  - 当设置了 `schema` 时，FE 配置 `files_enable_insert_push_down_column_type`（别名 `files_enable_insert_push_down_schema`）会被**静默跳过**，因为用户声明的类型已经确定了列类型。
+  - 将 `schema` 与 INSERT 属性 `enable_push_down_schema = true` 组合使用是验证错误。
+
+##### 示例
+
+Parquet 按名称匹配：
+
+```sql
+SELECT user_id, event_time
+FROM FILES(
+  "path" = "s3://bucket/path/*.parquet",
+  "format" = "parquet",
+  "schema" = "user_id BIGINT, event_time DATETIME"
+);
+```
+
+CSV 按位置匹配（名称 `a` 和 `b` 作为 CSV 第一、第二列的别名）：
+
+```sql
+SELECT *
+FROM FILES(
+  "path" = "s3://bucket/path/*.csv",
+  "format" = "csv",
+  "csv.column_separator" = ",",
+  "schema" = "a BIGINT, b VARCHAR(64)"
+);
+```
+
+部分嵌套声明（仅投影 `request_data` 的两个子字段）：
+
+```sql
+SELECT request_data.device_data.platform, request_data.now
+FROM FILES(
+  "path" = "s3://bucket/path/*.parquet",
+  "format" = "parquet",
+  "schema" = "request_data STRUCT<device_data STRUCT<platform VARCHAR(64)>, now BIGINT>"
+);
+```
+
 #### `list_files_only`
 
 从 v3.4.0 开始，`FILES()` 支持在读取文件时仅列出文件。
