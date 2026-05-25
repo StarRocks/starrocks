@@ -2161,7 +2161,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_parallel_upsert_with_multiple_memtables) 
     EXPECT_TRUE(_update_mgr->mem_tracker()->consumption() > 0);
     ASSERT_EQ(chunk_size, read_rows(tablet_id, version));
     if (config::enable_pk_index_parallel_execution) {
-        ExecEnv::GetInstance()->pk_index_memtable_flush_thread_pool()->wait();
+        ExecEnv::GetInstance()->lake_services().pk_index_memtable_flush_thread_pool->wait();
     }
     // reset configs
     config::enable_pk_index_parallel_execution = old_enable_pk_index_parallel_execution;

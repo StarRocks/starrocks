@@ -28,6 +28,7 @@
 #include "common/util/bthreads/executor.h"
 #include "fs/fs_util.h"
 #include "gen_cpp/Types_types.h"
+#include "runtime/env/global_env.h"
 #include "runtime/exec_env.h"
 #include "service/service_be/config_update_hooks.h"
 #include "storage/persistent_index_load_executor.h"
@@ -43,10 +44,14 @@ public:
 
     void SetUp() override {
         ConfigUpdateRegistry::instance()->TEST_reset();
-        register_config_update_hooks(ExecEnv::GetInstance(), *GlobalEnv::GetInstance());
+        _global_env = GlobalEnv::GetInstance();
+        register_config_update_hooks(ExecEnv::GetInstance(), *_global_env);
         ConfigUpdateRegistry::instance()->set_ready();
     }
     void TearDown() override { ConfigUpdateRegistry::instance()->TEST_reset(); }
+
+protected:
+    GlobalEnv* _global_env = nullptr;
 };
 
 TEST_F(ConfigUpdateHooksTest, update_datacache_config) {
@@ -102,7 +107,7 @@ TEST_F(ConfigUpdateHooksTest, test_update_number_tablet_writer_threads) {
 TEST_F(ConfigUpdateHooksTest, test_update_transaction_publish_version_worker_count) {
     auto st = ConfigUpdateRegistry::instance()->update_config("transaction_publish_version_worker_count", "8");
     CHECK_OK(st);
-    ASSERT_EQ(8, ExecEnv::GetInstance()->put_aggregate_metadata_thread_pool()->max_threads());
+    ASSERT_EQ(8, _global_env->put_aggregate_metadata_thread_pool()->max_threads());
 }
 
 TEST_F(ConfigUpdateHooksTest, test_update_tablet_meta_info_worker_count) {
@@ -144,7 +149,7 @@ TEST_F(ConfigUpdateHooksTest, test_update_parallel_clone_task_per_path_with_miss
 }
 
 TEST_F(ConfigUpdateHooksTest, test_update_lake_metadata_fetch_thread_count) {
-    auto* thread_pool = ExecEnv::GetInstance()->lake_metadata_fetch_thread_pool();
+    auto* thread_pool = _global_env->lake_metadata_fetch_thread_pool();
     ASSERT_NE(nullptr, thread_pool);
     ASSERT_EQ(std::max(1, config::lake_metadata_fetch_thread_count), thread_pool->max_threads());
 
