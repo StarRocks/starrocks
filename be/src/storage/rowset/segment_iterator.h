@@ -41,14 +41,14 @@ StatusOr<SparseRange<>> new_segment_iterator_for_prepare_pruning(const std::shar
                                                                  const Schema& schema,
                                                                  const SegmentReadOptions& options);
 
-// Resolve a key-space SeekRange to the corresponding rowid range within |segment|.
-// Wraps the lookup machinery of SegmentIterator so callers outside the
-// iterator scan path can convert a TabletRangePB-derived SeekRange into a
-// contiguous [lower, upper) rowid window.
-// Returns std::nullopt when the range is empty on this segment.
+// Resolve key-space SeekRanges to corresponding rowid ranges within |segment|.
+// This wraps SegmentIterator's lookup machinery so callers outside the scan
+// path can precompute rowid windows and reuse them later.
+// Each result is std::nullopt when the corresponding range is empty on this segment.
 StatusOr<std::vector<std::optional<Range<rowid_t>>>> segment_seek_ranges_to_rowid_ranges(
         const std::shared_ptr<Segment>& segment, const std::vector<SeekRange>& ranges,
         const LakeIOOptions& lake_io_opts);
+// Convenience wrapper for a single SeekRange.
 StatusOr<std::optional<Range<rowid_t>>> segment_seek_range_to_rowid_range(const std::shared_ptr<Segment>& segment,
                                                                           const SeekRange& range,
                                                                           const LakeIOOptions& lake_io_opts);

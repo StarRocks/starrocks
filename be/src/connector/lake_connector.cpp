@@ -1024,10 +1024,10 @@ void LakeDataSource::init_counter(RuntimeState* state) {
             ADD_CHILD_COUNTER(_runtime_profile, "PreparedRowsets", TUnit::UNIT, prepared_split_name);
     _lake_prepared_segments_counter =
             ADD_CHILD_COUNTER(_runtime_profile, "PreparedSegments", TUnit::UNIT, prepared_split_name);
-    _lake_prepared_pruned_rows_counter =
-            ADD_CHILD_COUNTER(_runtime_profile, "PreparedPrunedRows", TUnit::UNIT, prepared_split_name);
-    _lake_prepared_pruned_ranges_counter =
-            ADD_CHILD_COUNTER(_runtime_profile, "PreparedPrunedRanges", TUnit::UNIT, prepared_split_name);
+    _lake_prepared_scan_rows_counter =
+            ADD_CHILD_COUNTER(_runtime_profile, "PreparedScanRows", TUnit::UNIT, prepared_split_name);
+    _lake_prepared_scan_ranges_counter =
+            ADD_CHILD_COUNTER(_runtime_profile, "PreparedScanRanges", TUnit::UNIT, prepared_split_name);
     _lake_prepared_split_tasks_counter =
             ADD_CHILD_COUNTER(_runtime_profile, "PreparedSplitTasks", TUnit::UNIT, prepared_split_name);
 
@@ -1136,8 +1136,8 @@ void LakeDataSource::update_counter(RuntimeState* state) {
     COUNTER_UPDATE(_block_seek_counter, _reader->stats().block_seek_num);
     COUNTER_UPDATE(_lake_prepared_rowsets_counter, _reader->stats().lake_prepared_rowsets);
     COUNTER_UPDATE(_lake_prepared_segments_counter, _reader->stats().lake_prepared_segments);
-    COUNTER_UPDATE(_lake_prepared_pruned_rows_counter, _reader->stats().lake_prepared_pruned_rows);
-    COUNTER_UPDATE(_lake_prepared_pruned_ranges_counter, _reader->stats().lake_prepared_pruned_ranges);
+    COUNTER_UPDATE(_lake_prepared_scan_rows_counter, _reader->stats().lake_prepared_scan_rows);
+    COUNTER_UPDATE(_lake_prepared_scan_ranges_counter, _reader->stats().lake_prepared_scan_ranges);
     COUNTER_UPDATE(_lake_prepared_split_tasks_counter, _reader->stats().lake_prepared_split_tasks);
 
     COUNTER_UPDATE(_gin_filtered_timer, _reader->stats().gin_index_filter_ns);
