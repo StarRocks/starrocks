@@ -20,10 +20,11 @@
 #include <mutex>
 
 #include "base/utility/defer_op.h"
+#include "column/column_helper.h"
 #include "column/fixed_length_column.h"
 #include "column/vectorized_fwd.h"
-#include "exec/pipeline/sort/sort_context.h"
-#include "runtime/runtime_state.h"
+#include "exprs/column_ref.h"
+#include "exprs/expr_context.h"
 
 namespace starrocks::merge_path {
 

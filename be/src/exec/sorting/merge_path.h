@@ -14,15 +14,16 @@
 
 #pragma once
 
+#include <functional>
 #include <mutex>
 #include <unordered_map>
 #include <utility>
+#include <vector>
 
 #include "base/utility/defer_op.h"
 #include "column/vectorized_fwd.h"
 #include "common/runtime_profile.h"
 #include "common/status.h"
-#include "exec/pipeline/schedule/observer.h"
 #include "exec/sorting/merge.h"
 #include "exec/sorting/sorting.h"
 #include "gen_cpp/PlanNodes_types.h"
@@ -163,6 +164,7 @@ class MergePathCascadeMerger;
  * @return: Return true if it has new data
  */
 using MergePathChunkProvider = std::function<bool(bool only_check_if_has_data, ChunkPtr* chunk, bool* eos)>;
+using SourceReadyCallback = std::function<void()>;
 
 namespace detail {
 
@@ -400,8 +402,10 @@ public:
 
     size_t add_original_chunk(ChunkPtr&& chunk);
     detail::Metrics& get_metrics(const int32_t parallel_idx) { return _metrics[parallel_idx]; }
-    void attach_observer(RuntimeState* state, pipeline::PipelineObserver* observer) {
-        _observable.add_observer(state, observer);
+    void add_source_ready_callback(SourceReadyCallback callback) {
+        if (callback) {
+            _source_ready_callbacks.emplace_back(std::move(callback));
+        }
     }
 
 private:
@@ -432,9 +436,15 @@ private:
     auto defer_notify_source(Notify notify) {
         return DeferOp([this, notify]() {
             if (notify()) {
-                _observable.notify_source_observers();
+                _notify_source_ready();
             }
         });
+    }
+
+    void _notify_source_ready() {
+        for (const auto& callback : _source_ready_callbacks) {
+            callback();
+        }
     }
 
 public:
@@ -509,7 +519,7 @@ private:
 
     TLateMaterializeMode::type _late_materialization_mode;
 
-    starrocks::pipeline::Observable _observable;
+    std::vector<SourceReadyCallback> _source_ready_callbacks;
 };
 
 } // namespace starrocks::merge_path
