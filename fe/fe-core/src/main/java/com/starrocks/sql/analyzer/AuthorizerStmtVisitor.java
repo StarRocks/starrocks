@@ -2552,14 +2552,15 @@ public class AuthorizerStmtVisitor implements AstVisitorExtendInterface<Void, Co
                 throw new SemanticException("Database: %s is empty", dBName);
             }
 
-            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(statement.getDbName());
+            String resolvedDbName = statement.getDbName();
+            if (resolvedDbName == null) {
+                resolvedDbName = context.getDatabase();
+            }
+            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(resolvedDbName);
+            final String dbNameForRefs = resolvedDbName;
             tableRefs.forEach(tableRef -> {
-                String dbName = statement.getDbName();
-                if (dbName == null) {
-                    dbName = context.getDatabase();
-                }
                 String tblName = tableRef.getTableName();
-                TableName tableName = new TableName(context.getCurrentCatalog(), dbName, tblName);
+                TableName tableName = new TableName(context.getCurrentCatalog(), dbNameForRefs, tblName);
 
                 try {
                     Authorizer.checkTableAction(context, tableName, PrivilegeType.EXPORT);
@@ -2570,6 +2571,10 @@ public class AuthorizerStmtVisitor implements AstVisitorExtendInterface<Void, Co
                             PrivilegeType.EXPORT.name(), ObjectType.TABLE.name(), tableName.getTbl());
                 }
             });
+
+            if (db == null && (!functionRefs.isEmpty() || statement.allFunction())) {
+                throw new SemanticException("Database: " + resolvedDbName + " does not exist");
+            }
 
             functionRefs.forEach(functionRef -> {
                 String functionName = functionRef.getFunctionName();
@@ -2583,12 +2588,12 @@ public class AuthorizerStmtVisitor implements AstVisitorExtendInterface<Void, Co
                         AccessDeniedException.reportAccessDenied(
                                 InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
                                 context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
-                                PrivilegeType.DROP.name(), ObjectType.FUNCTION.name(), fn.getSignature());
+                                PrivilegeType.USAGE.name(), ObjectType.FUNCTION.name(), fn.getSignature());
                     }
                 }
             });
 
-            if (statement.allFunction() && db != null) {
+            if (statement.allFunction()) {
                 for (Function fn : db.getFunctions()) {
                     try {
                         Authorizer.checkFunctionAction(context, db, fn, PrivilegeType.USAGE);

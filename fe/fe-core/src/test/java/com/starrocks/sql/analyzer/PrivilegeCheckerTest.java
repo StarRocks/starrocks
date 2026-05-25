@@ -2548,6 +2548,25 @@ public class PrivilegeCheckerTest extends StarRocksTestBase {
                 }
             }
 
+            // Regression: when the BACKUP statement has no db prefix, the session db must
+            // be resolved before the privilege check; otherwise auth would silently bypass.
+            String sqlSessionDb =
+                    "BACKUP SNAPSHOT backup_name1 TO example_repo ON (ALL FUNCTIONS) PROPERTIES ('type' = 'full');";
+            String previousDb = starRocksAssert.getCtx().getDatabase();
+            starRocksAssert.getCtx().setDatabase("db1");
+            try {
+                StatementBase statement = UtFrameUtils.parseStmtWithNewParser(sqlSessionDb, starRocksAssert.getCtx());
+                try {
+                    Authorizer.check(statement, starRocksAssert.getCtx());
+                    Assertions.fail("expected access denied for: " + sqlSessionDb);
+                } catch (Exception e) {
+                    logSysInfo(e.getMessage() + ", sql: " + sqlSessionDb);
+                    Assertions.assertTrue(e.getMessage().contains(expectError), e.getMessage());
+                }
+            } finally {
+                starRocksAssert.getCtx().setDatabase(previousDb);
+            }
+
             // Granting USAGE on ALL FUNCTIONS in db1 lets the check pass.
             ctxToRoot();
             grantOrRevoke("grant usage on ALL FUNCTIONS in database db1 to test");
