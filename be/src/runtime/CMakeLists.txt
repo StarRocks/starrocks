@@ -85,10 +85,7 @@ target_link_libraries(RuntimeEnv PUBLIC
 set(RUNTIME_FILES
     broker_mgr.cpp
     buffer_control_block.cpp
-    local_pass_through_buffer.cpp
     lookup_stream_mgr.cpp
-    data_stream_mgr.cpp
-    sender_queue.cpp
     descriptors_ext.cpp
     exec_env.cpp
     jdbc_driver_manager.cpp
@@ -101,7 +98,6 @@ set(RUNTIME_FILES
     load_path_mgr.cpp
     dummy_load_path_mgr.cpp
     agg_state_desc.cpp
-    data_stream_recvr.cpp
     load_channel_mgr.cpp
     load_channel.cpp
     local_tablets_channel.cpp

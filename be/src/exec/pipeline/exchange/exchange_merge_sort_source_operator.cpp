@@ -15,10 +15,11 @@
 #include "exec/pipeline/exchange/exchange_merge_sort_source_operator.h"
 
 #include "common/config_exec_flow_fwd.h"
+#include "compute_env/data_stream/data_stream_mgr.h"
+#include "compute_env/data_stream/data_stream_recvr.h"
 #include "compute_env/sorting/sorted_chunks_merger.h"
+#include "exec/pipeline/query_context.h"
 #include "exec/sort_exec_exprs.h"
-#include "runtime/data_stream_mgr.h"
-#include "runtime/data_stream_recvr.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
 #include "runtime/runtime_state_helper.h"
@@ -33,8 +34,10 @@ Status ExchangeMergeSortSourceOperator::prepare(RuntimeState* state) {
             config::exchg_node_buffer_size_bytes, true, query_statistic_recv, true, 1, true);
     _stream_recvr->bind_profile(_driver_sequence, _unique_metrics);
     _stream_recvr->attach_observer(state, this->observer());
-    _stream_recvr->attach_query_ctx(state->query_ctx());
-    return _stream_recvr->create_merger_for_pipeline(state, _sort_exec_exprs, &_is_asc_order, &_nulls_first);
+    _stream_recvr->attach_query_ctx(state->query_ctx()->get_shared_ptr());
+    return _stream_recvr->create_merger_for_pipeline(state, _sort_exec_exprs->lhs_ordering_expr_ctxs(),
+                                                     _sort_exec_exprs->is_constant_lhs_ordering(), &_is_asc_order,
+                                                     &_nulls_first);
 }
 
 void ExchangeMergeSortSourceOperator::close(RuntimeState* state) {

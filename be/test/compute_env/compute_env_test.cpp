@@ -58,6 +58,7 @@ TEST(ComputeEnvTest, DriverLimiterLifecycle) {
     ASSERT_OK(env.init(options));
     ASSERT_NE(env.driver_limiter(), nullptr);
     ASSERT_NE(env.pipeline_timer(), nullptr);
+    ASSERT_NE(env.stream_mgr(), nullptr);
 
     auto token_or = env.driver_limiter()->try_acquire(3);
     ASSERT_TRUE(token_or.ok()) << token_or.status();
@@ -75,6 +76,7 @@ TEST(ComputeEnvTest, DriverLimiterLifecycle) {
     env.destroy();
     EXPECT_EQ(env.driver_limiter(), nullptr);
     EXPECT_EQ(env.pipeline_timer(), nullptr);
+    EXPECT_EQ(env.stream_mgr(), nullptr);
 }
 
 TEST(ComputeEnvTest, ObservableNotifiesObservers) {

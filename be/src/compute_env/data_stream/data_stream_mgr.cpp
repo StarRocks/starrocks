@@ -32,16 +32,16 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "runtime/data_stream_mgr.h"
+#include "compute_env/data_stream/data_stream_mgr.h"
 
 #include <iostream>
 #include <utility>
 
 #include "common/config_exec_flow_fwd.h"
+#include "compute_env/data_stream/data_stream_recvr.h"
 #include "gen_cpp/internal_service.pb.h"
 #include "glog/logging.h"
 #include "runtime/current_thread.h"
-#include "runtime/data_stream_recvr.h"
 #include "runtime/runtime_metrics.h"
 #include "runtime/runtime_state.h"
 #include "util/time_guard.h"

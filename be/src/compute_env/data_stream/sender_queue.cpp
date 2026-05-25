@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "runtime/sender_queue.h"
+#include "compute_env/data_stream/sender_queue.h"
 
 #include <atomic>
 
@@ -21,13 +21,13 @@
 #include "base/time/time.h"
 #include "base/uid_util.h"
 #include "column/chunk.h"
+#include "common/logging.h"
 #include "common/runtime_profile.h"
+#include "compute_env/data_stream/data_stream_recvr.h"
 #include "gen_cpp/data.pb.h"
 #include "gen_cpp/internal_service.pb.h"
 #include "runtime/current_thread.h"
-#include "runtime/data_stream_recvr.h"
-#include "runtime/exec_env.h"
-#include "util/logging.h"
+#include "runtime/env/global_env.h"
 
 namespace starrocks {
 

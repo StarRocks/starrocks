@@ -53,6 +53,7 @@ TEST(ExecEnvTest, refresh_service_contexts_keeps_context_views_in_sync) {
     EXPECT_EQ(env.execution_services().driver_limiter, env.compute_env()->driver_limiter());
     EXPECT_EQ(env.execution_services().pipeline_timer, env.compute_env()->pipeline_timer());
     EXPECT_EQ(env.execution_services().max_executor_threads, global_env->max_executor_threads());
+    EXPECT_EQ(env.stream_mgr(), env.compute_env()->stream_mgr());
 
     EXPECT_EQ(env.rpc_services().backend_client_cache, platform_env->backend_client_cache());
     EXPECT_EQ(env.rpc_services().frontend_client_cache, platform_env->frontend_client_cache());
@@ -66,6 +67,7 @@ TEST(ExecEnvTest, refresh_service_contexts_keeps_context_views_in_sync) {
 
     EXPECT_EQ(env.runtime_services().fragment_mgr, env._fragment_mgr);
     EXPECT_EQ(env.runtime_services().query_context_mgr, env._query_context_mgr);
+    EXPECT_EQ(env.runtime_services().stream_mgr, env.compute_env()->stream_mgr());
 
     EXPECT_EQ(env.agent_services().agent_server, env._agent_server);
     EXPECT_EQ(env.agent_services().heartbeat_flags, env._heartbeat_flags);

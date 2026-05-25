@@ -15,9 +15,10 @@
 #include "exec/pipeline/exchange/exchange_source_operator.h"
 
 #include "common/config_exec_flow_fwd.h"
+#include "compute_env/data_stream/data_stream_mgr.h"
+#include "compute_env/data_stream/data_stream_recvr.h"
+#include "exec/pipeline/query_context.h"
 #include "glog/logging.h"
-#include "runtime/data_stream_mgr.h"
-#include "runtime/data_stream_recvr.h"
 #include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
@@ -28,7 +29,7 @@ Status ExchangeSourceOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(SourceOperator::prepare(state));
     _stream_recvr = static_cast<ExchangeSourceOperatorFactory*>(_factory)->create_stream_recvr(state);
     _stream_recvr->attach_observer(state, observer());
-    _stream_recvr->attach_query_ctx(state->query_ctx());
+    _stream_recvr->attach_query_ctx(state->query_ctx()->get_shared_ptr());
     return Status::OK();
 }
 
