@@ -400,7 +400,6 @@
         "exec/pipeline/scan/dynamic_morsel_queue.h",
         "exec/pipeline/scan/dynamic_morsel_queue_builder.h",
         "exec/pipeline/scan/ticketed_morsel_queue.h",
-        "exprs/",
         "runtime/env/",
         "runtime/",
         "platform/",
@@ -411,7 +410,7 @@
       ],
       "forbidden_include_prefixes": ["exec/", "storage/", "service/", "connector/", "agent/"],
       "forbidden_includes": ["runtime/exec_env.h"],
-      "allowed_target_deps": ["ExecPrimitive", "ExprCore", "RuntimeEnv", "RuntimeCore", "Platform", "Common", "Base", "Gutil", "StarRocksGen"],
+      "allowed_target_deps": ["ExecPrimitive", "RuntimeEnv", "RuntimeCore", "Platform", "Common", "Base", "Gutil", "StarRocksGen"],
       "allowed_test_targets": ["compute_env_test"],
       "allowed_test_link_deps": ["ComputeEnv"],
       "remediation": "Keep ComputeEnv limited to shared compute-side service contracts and stable execution primitives; move concrete Exec, Storage, Service, Connector, and Agent integration upward."

@@ -20,7 +20,6 @@ ADD_BE_LIB(ComputeEnv
 
 target_link_libraries(ComputeEnv PUBLIC
     ExecPrimitive
-    ExprCore
     RuntimeEnv
     RuntimeCore
     Platform
