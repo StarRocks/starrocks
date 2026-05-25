@@ -767,8 +767,13 @@ public class FunctionAnalyzer {
      */
     private static void injectDefaultCompression(FunctionCallExpr fn) {
         Function current = fn.getFn();
-        Preconditions.checkState(current != null,
-                "function must be resolved before injecting compression");
+        if (current == null) {
+            // The aggregate-combinator path (e.g. percentile_approx_if) re-runs this
+            // validation on a freshly-built, unresolved FunctionCallExpr whose fn is null;
+            // its mutations are discarded. Skip injection — the real call is canonicalized
+            // on its own resolved pass, and BE keeps its legacy default for the 2-arg arity.
+            return;
+        }
         Type[] currentArgs = current.getArgs();
         Type[] expandedArgs = new Type[currentArgs.length + 1];
         System.arraycopy(currentArgs, 0, expandedArgs, 0, currentArgs.length);

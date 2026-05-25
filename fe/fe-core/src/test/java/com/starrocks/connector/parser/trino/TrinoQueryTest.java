@@ -1014,10 +1014,10 @@ public class TrinoQueryTest extends TrinoTestBase {
         analyzeFail(sql);
 
         sql = "select approx_percentile(2.25, 1.79E-10)";
-        assertPlanContains(sql, "percentile_approx(2.25, 1.79E-10)");
+        assertPlanContains(sql, "percentile_approx(2.25, 1.79E-10, 10000.0)");
 
         sql = "select approx_percentile(2.25, 0.4)";
-        assertPlanContains(sql, "percentile_approx(2.25, 0.4)");
+        assertPlanContains(sql, "percentile_approx(2.25, 0.4, 10000.0)");
     }
 
     @Test

@@ -447,7 +447,7 @@ public class ConstantExpressionTest extends PlanTestBase {
                     "  |  <slot 3> : clone(2: percentile_approx)\n" +
                     "  |  \n" +
                     "  1:AGGREGATE (update finalize)\n" +
-                    "  |  output: percentile_approx(2.25, 0.0)\n" +
+                    "  |  output: percentile_approx(2.25, 0.0, 10000.0)\n" +
                     "  |  group by: ");
 
             sql = "SELECT COUNT(CASE WHEN 1 THEN 1 END), COUNT(CASE WHEN TRUE THEN 1 END), " +
