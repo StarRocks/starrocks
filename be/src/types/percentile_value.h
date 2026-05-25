@@ -28,7 +28,10 @@ public:
 
     explicit PercentileValue(const Slice& src) {
         _type = TDIGEST;
-        (void)deserialize(src.data, src.size);
+        bool ok = deserialize(src.data, src.size);
+        // A failure here leaves an empty digest; flag it in debug so a truncated
+        // or corrupt persisted slice is not silently read as an empty value.
+        DCHECK(ok) << "PercentileValue: failed to deserialize a " << src.size << "-byte slice";
     }
 
     void add(float value) { _tdigest.add(value); }
@@ -50,7 +53,11 @@ public:
         // serialized footprint (rebuilds _cumulative with M+1 weights), so
         // canonicalizing inside serialize would overflow the caller buffer.
         *(writer) = _type;
-        return _tdigest.serialize(writer + 1);
+        // Include the 1-byte type tag so the return matches serialize_size().
+        // ObjectColumn::build_slices / serialize_batch use this value as the
+        // slice length; without the +1 each percentile slice is one byte short
+        // and bounded deserialize then rejects it as truncated.
+        return 1 + _tdigest.serialize(writer + 1);
     }
     // Bounded entry point. Returns false on truncation or unrecognized type
     // tag and leaves the digest in an empty state.
