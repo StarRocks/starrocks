@@ -2528,43 +2528,50 @@ public class PrivilegeCheckerTest extends StarRocksTestBase {
         grantOrRevoke("grant repository on system to test");
         ctxToTestUser();
 
-        String[] sqls = new String[] {
-                "BACKUP SNAPSHOT db1.backup_name1 TO example_repo ON (ALL FUNCTIONS) PROPERTIES ('type' = 'full');",
-                "BACKUP SNAPSHOT db1.backup_name1 TO example_repo ON (ALL FUNCTION) PROPERTIES ('type' = 'full');",
-                "BACKUP DATABASE db1 SNAPSHOT backup_name1 TO example_repo ON (ALL FUNCTIONS) " +
-                        "PROPERTIES ('type' = 'full');"};
-
-        // Without USAGE on the function the check must fail (no more "Database is empty" misfire).
-        String expectError = "Access denied; you need (at least one of) the USAGE privilege(s) on FUNCTION";
-        for (String sql : sqls) {
-            StatementBase statement = UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
-            try {
-                Authorizer.check(statement, starRocksAssert.getCtx());
-                Assertions.fail("expected access denied for: " + sql);
-            } catch (Exception e) {
-                logSysInfo(e.getMessage() + ", sql: " + sql);
-                Assertions.assertTrue(e.getMessage().contains(expectError), e.getMessage());
-            }
-        }
-
-        // Granting USAGE on ALL FUNCTIONS in db1 lets the check pass.
-        ctxToRoot();
-        grantOrRevoke("grant usage on ALL FUNCTIONS in database db1 to test");
-        ctxToTestUser();
-        for (String sql : sqls) {
-            StatementBase statement = UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
-            Authorizer.check(statement, starRocksAssert.getCtx());
-        }
-
-        ctxToRoot();
-        grantOrRevoke("revoke usage on ALL FUNCTIONS in database db1 from test");
-        grantOrRevoke("revoke repository on system from test");
         try {
-            db1.dropFunctionForRestore(function);
-        } catch (Throwable e) {
-            // ignore
+            String[] sqls = new String[] {
+                    "BACKUP SNAPSHOT db1.backup_name1 TO example_repo ON (ALL FUNCTIONS) PROPERTIES ('type' = 'full');",
+                    "BACKUP SNAPSHOT db1.backup_name1 TO example_repo ON (ALL FUNCTION) PROPERTIES ('type' = 'full');",
+                    "BACKUP DATABASE db1 SNAPSHOT backup_name1 TO example_repo ON (ALL FUNCTIONS) " +
+                            "PROPERTIES ('type' = 'full');"};
+
+            // Without USAGE on the function the check must fail (no more "Database is empty" misfire).
+            String expectError = "Access denied; you need (at least one of) the USAGE privilege(s) on FUNCTION";
+            for (String sql : sqls) {
+                StatementBase statement = UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
+                try {
+                    Authorizer.check(statement, starRocksAssert.getCtx());
+                    Assertions.fail("expected access denied for: " + sql);
+                } catch (Exception e) {
+                    logSysInfo(e.getMessage() + ", sql: " + sql);
+                    Assertions.assertTrue(e.getMessage().contains(expectError), e.getMessage());
+                }
+            }
+
+            // Granting USAGE on ALL FUNCTIONS in db1 lets the check pass.
+            ctxToRoot();
+            grantOrRevoke("grant usage on ALL FUNCTIONS in database db1 to test");
+            ctxToTestUser();
+            try {
+                for (String sql : sqls) {
+                    StatementBase statement = UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
+                    Authorizer.check(statement, starRocksAssert.getCtx());
+                }
+            } finally {
+                ctxToRoot();
+                grantOrRevoke("revoke usage on ALL FUNCTIONS in database db1 from test");
+                ctxToTestUser();
+            }
+        } finally {
+            ctxToRoot();
+            grantOrRevoke("revoke repository on system from test");
+            try {
+                db1.dropFunctionForRestore(function);
+            } catch (Throwable e) {
+                // ignore
+            }
+            ctxToTestUser();
         }
-        ctxToTestUser();
     }
 
     @Test

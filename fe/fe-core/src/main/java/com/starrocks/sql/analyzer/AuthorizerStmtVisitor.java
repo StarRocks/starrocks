@@ -2596,7 +2596,7 @@ public class AuthorizerStmtVisitor implements AstVisitorExtendInterface<Void, Co
                         AccessDeniedException.reportAccessDenied(
                                 InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
                                 context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
-                                PrivilegeType.DROP.name(), ObjectType.FUNCTION.name(), fn.getSignature());
+                                PrivilegeType.USAGE.name(), ObjectType.FUNCTION.name(), fn.getSignature());
                     }
                 }
             }
