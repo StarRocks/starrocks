@@ -198,6 +198,14 @@ Process-scoped runtime environment resources below full Runtime and above Runtim
 - Core tests: `runtime_env_test`
 - Remediation: Keep RuntimeEnv limited to process-scoped runtime environment resources; move query execution, storage, service, connector, and UDF integration upward.
 
+### ComputeEnv (`computeenv`)
+Shared compute-side BE environment boundary below full Exec/Storage and above RuntimeEnv.
+- Targets: `ComputeEnv`
+- Allowed internal include prefixes: `compute_env/`, `exec/runtime_filter/`, `exec/query_cache/ticket_checker.h`, `exec/pipeline/pipeline_fwd.h`, `exec/pipeline/operator.h`, `exec/pipeline/primitives/`, `exec/pipeline/runtime_filter_core_types.h`, `exec/pipeline/scan/scan_morsel.h`, `exec/pipeline/scan/morsel_queue.h`, `exec/pipeline/scan/morsel_queue_builder.h`, `exec/pipeline/scan/fixed_morsel_queue.h`, `exec/pipeline/scan/fixed_morsel_queue_builder.h`, `exec/pipeline/scan/dynamic_morsel_queue.h`, `exec/pipeline/scan/dynamic_morsel_queue_builder.h`, `exec/pipeline/scan/ticketed_morsel_queue.h`, `runtime/env/`, `runtime/`, `platform/`, `common/`, `base/`, `gutil/`, `gen_cpp/`
+- Allowed target deps: `ExecPrimitive`, `RuntimeEnv`, `RuntimeCore`, `Platform`, `Common`, `Base`, `Gutil`, `StarRocksGen`
+- Core tests: `compute_env_test`
+- Remediation: Keep ComputeEnv limited to shared compute-side service contracts and stable execution primitives; move concrete Exec, Storage, Service, Connector, and Agent integration upward.
+
 ### ExprCore (`exprcore`)
 Core expression infrastructure that depends only on RuntimeCore and lower layers.
 - Targets: `ExprCore`

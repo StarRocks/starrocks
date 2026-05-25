@@ -33,6 +33,7 @@ INTERNAL_INCLUDE_PREFIXES = {
     "column",
     "common",
     "connector",
+    "compute_env",
     "exec",
     "exprs",
     "formats",
