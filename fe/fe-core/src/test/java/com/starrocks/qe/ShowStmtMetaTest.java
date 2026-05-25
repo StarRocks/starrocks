@@ -1135,7 +1135,7 @@ public class ShowStmtMetaTest {
     public void testShowTransactionStmt() {
         ShowTransactionStmt stmt = new ShowTransactionStmt("test_db", null, NodePosition.ZERO);
         ShowResultSetMetaData metaData = new ShowResultMetaFactory().getMetadata(stmt);
-        Assertions.assertEquals(16, metaData.getColumnCount());
+        Assertions.assertEquals(18, metaData.getColumnCount());
         Assertions.assertEquals("TransactionId", metaData.getColumn(0).getName());
         Assertions.assertEquals("Label", metaData.getColumn(1).getName());
         Assertions.assertEquals("Coordinator", metaData.getColumn(2).getName());
@@ -1152,6 +1152,8 @@ public class ShowStmtMetaTest {
         Assertions.assertEquals("TimeoutMs", metaData.getColumn(13).getName());
         Assertions.assertEquals("PreparedTimeoutMs", metaData.getColumn(14).getName());
         Assertions.assertEquals("ErrMsg", metaData.getColumn(15).getName());
+        Assertions.assertEquals("NoOpPublish", metaData.getColumn(16).getName());
+        Assertions.assertEquals("NoOpPublishReason", metaData.getColumn(17).getName());
     }
 
     @Test
