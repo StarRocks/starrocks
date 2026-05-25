@@ -236,8 +236,7 @@ void LakeServiceImpl::publish_version(::google::protobuf::RpcController* control
                                       ::google::protobuf::Closure* done) {
     brpc::ClosureGuard guard(done);
     auto cntl = static_cast<brpc::Controller*>(controller);
-    FAIL_POINT_TRIGGER_RETURN(lake_publish_version_rpc_fail,
-                              cntl->SetFailed("inject lake_publish_version_rpc_fail"));
+    FAIL_POINT_TRIGGER_RETURN(lake_publish_version_rpc_fail, cntl->SetFailed("inject lake_publish_version_rpc_fail"));
     // Server-side BRPC queue time: latency from RPC arrival on this server to handler entry.
     // Used to attribute the FE-measured publish_rpc cost vs BE handler cost gap.
     // cntl can be nullptr in unit tests, so guard the access.
