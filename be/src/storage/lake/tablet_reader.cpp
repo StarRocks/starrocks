@@ -15,6 +15,7 @@
 #include "storage/lake/tablet_reader.h"
 
 #include <future>
+#include <unordered_set>
 #include <utility>
 
 #include "base/testutil/sync_point.h"
@@ -411,6 +412,15 @@ Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std
     // SELECT references columns that any registered index covers, the lookup
     // automatically fires whenever the BE-level read switch is on.
     if (config::enable_secondary_index_read) {
+        // Collect the column-ids actually predicated by this query once; an
+        // index whose covered columns don't overlap this set cannot narrow
+        // the scan and would otherwise pay a full ~25MB OSS download + a
+        // full-file segment scan returning every position back.
+        std::unordered_set<ColumnId> queried_col_ids;
+        for (auto& [cid, _] : params.pred_tree.get_immediate_column_predicate_map()) {
+            queried_col_ids.insert(cid);
+        }
+
         // Resolve a Lake-aware FileSystem rooted at the tablet directory; we
         // reuse it across all index files for this query.
         const std::string root = _tablet_mgr->tablet_root_location(_tablet_metadata->id());
@@ -426,11 +436,27 @@ Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std
             std::unordered_map<uint32_t, roaring::Roaring> merged;
             bool first_index = true;
             for (int i = 0; i < meta.secondary_indexes_size(); ++i) {
+                const auto& file_pb = meta.secondary_indexes(i);
+                // Predicate-applicability gate: at least one of this index's
+                // columns must appear in the query's predicate tree, otherwise
+                // the remapped tree is empty and lookup() degenerates into a
+                // full scan of the .idx file (a 50–100x query regression).
+                bool any_applicable = false;
+                for (const auto& col_name : file_pb.index_col_names()) {
+                    const size_t src_idx = _tablet_schema->field_index(col_name);
+                    if (src_idx != static_cast<size_t>(-1) &&
+                        queried_col_ids.count(static_cast<ColumnId>(src_idx))) {
+                        any_applicable = true;
+                        break;
+                    }
+                }
+                if (!any_applicable) continue;
+
                 secondary_sorted::SecondaryIndexReader::OpenInput open_in;
                 open_in.fs = sidx_fs;
                 open_in.tablet_mgr = _tablet_mgr;
                 open_in.tablet_id = rowset->tablet_id();
-                open_in.file_pb = meta.secondary_indexes(i);
+                open_in.file_pb = file_pb;
                 open_in.source_schema = _tablet_schema;
                 ASSIGN_OR_RETURN(auto reader, secondary_sorted::SecondaryIndexReader::open(open_in));
                 ASSIGN_OR_RETURN(auto per_seg, reader->lookup(params.pred_tree, &_obj_pool));
