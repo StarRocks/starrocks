@@ -27,6 +27,8 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.JoinOperator;
+import com.starrocks.sql.common.ErrorType;
+import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.base.CTEProperty;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.DistributionCol;
@@ -362,6 +364,23 @@ public class OutputPropertyDeriver extends PropertyDeriverBase<PhysicalPropertyS
                     leftOnPredicateColumns, rightOnPredicateColumns);
         }
 
+        // Defense in depth: mixed (Range, Hash) reaching the deriver means the
+        // upstream Guarantor's range→hash normalization did not run.  Fail loud
+        // — the deriver cannot install exchange enforcers itself, and silently
+        // returning a derived property risks downstream misclassification of
+        // the join mode.
+        boolean leftIsRange = leftRawSpec instanceof RangeDistributionSpec;
+        boolean rightIsRange = rightRawSpec instanceof RangeDistributionSpec;
+        boolean leftIsHash = leftRawSpec instanceof HashDistributionSpec;
+        boolean rightIsHash = rightRawSpec instanceof HashDistributionSpec;
+        if ((leftIsRange && rightIsHash) || (leftIsHash && rightIsRange)) {
+            throw new StarRocksPlannerException(
+                    "Mixed range-distribution / hash-distribution JOIN reached output-property "
+                            + "derivation; the upstream Guarantor was expected to normalize the "
+                            + "range side to hash. left=" + leftRawSpec + ", right=" + rightRawSpec,
+                    ErrorType.INTERNAL_ERROR);
+        }
+
         DistributionProperty leftChildDistributionProperty = leftChildOutputProperty.getDistributionProperty();
         DistributionProperty rightChildDistributionProperty = rightChildOutputProperty.getDistributionProperty();
         if (leftChildDistributionProperty.isShuffle() && rightChildDistributionProperty.isShuffle()) {
@@ -397,17 +416,22 @@ public class OutputPropertyDeriver extends PropertyDeriverBase<PhysicalPropertyS
                         leftOnPredicateColumns, rightOnPredicateColumns);
 
             } else {
-                LOG.error("Children output property distribution error.left child property: {}, " +
-                                "right child property: {}, join node: {}",
-                        leftChildDistributionProperty, rightChildDistributionProperty, node);
-                throw new IllegalStateException("Children output property distribution error.");
+                throw childrenDistributionError(node, leftChildDistributionProperty, rightChildDistributionProperty);
             }
         } else {
-            LOG.error("Children output property distribution error.left child property: {}, " +
-                            "right child property: {}, join node: {}",
-                    leftChildDistributionProperty, rightChildDistributionProperty, node);
-            throw new IllegalStateException("Children output property distribution error.");
+            throw childrenDistributionError(node, leftChildDistributionProperty, rightChildDistributionProperty);
         }
+    }
+
+    private static StarRocksPlannerException childrenDistributionError(PhysicalJoinOperator node,
+                                                                       DistributionProperty leftProperty,
+                                                                       DistributionProperty rightProperty) {
+        LOG.error("Children output property distribution error. left={}, right={}, join={}",
+                leftProperty, rightProperty, node);
+        return new StarRocksPlannerException(
+                "Children output property distribution error. left=" + leftProperty
+                        + ", right=" + rightProperty,
+                ErrorType.INTERNAL_ERROR);
     }
 
     private PhysicalPropertySet computeShuffleJoinOutputProperty(JoinOperator joinType,
