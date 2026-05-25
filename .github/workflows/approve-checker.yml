@@ -38,6 +38,8 @@ jobs:
       TITLE: ${{ steps.pr_info.outputs.title }}
       LABELS: ${{ steps.pr_info.outputs.labels }}
       DIFF_LINES: ${{ steps.pr_info.outputs.diff_lines }}
+      SKIP_GLOBAL_REVIEW: ${{ steps.skip_rule.outputs.skip }}
+      SKIP_GLOBAL_REVIEW_REASON: ${{ steps.skip_rule.outputs.reason }}
 
 
     steps:
@@ -71,8 +73,59 @@ jobs:
           echo "title<<EOF" >> $GITHUB_OUTPUT
           echo "${title}" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
-                    
+
           cat $GITHUB_OUTPUT
+
+      - name: Compute skip rule
+        id: skip_rule
+        env:
+          PR: ${{ steps.pr.outputs.PR_NUMBER }}
+          TITLE: ${{ steps.pr_info.outputs.title }}
+        run: |
+          set -x
+          # Skip GLOBAL REVIEW gate for small/test-only PRs to reduce noise.
+          # Adjust BUGFIX_LINE_THRESHOLD as needed (non-test add+del lines).
+          BUGFIX_LINE_THRESHOLD=30
+          TEST_PATTERN='(Test\.(java|kt)$|_test\.(cpp|cc|h)$|/test/|^test/|^fe-test/|^regression-test/|/__test__/)'
+
+          skip=false
+          reason=""
+
+          # Rule 1: [UT] / [Doc] title prefix
+          if echo "$TITLE" | grep -qE '^\[(UT|Doc)\]'; then
+            skip=true
+            reason="title prefix [UT] or [Doc]"
+          fi
+
+          # Rule 2: all changed files match test pattern
+          if [ "$skip" = "false" ]; then
+            files=$(gh pr diff "$PR" -R "$REPO" --name-only 2>/dev/null || true)
+            total=$(echo "$files" | grep -cv '^$' || true)
+            non_test=$(echo "$files" | grep -v '^$' | grep -cvE "$TEST_PATTERN" || true)
+            if [ "$total" -gt 0 ] && [ "$non_test" -eq 0 ]; then
+              skip=true
+              reason="all $total changed files are tests"
+            fi
+          fi
+
+          # Rule 3: [BugFix] with non-test add+del < threshold
+          # NOTE: jq's regex needs \\. for a literal dot (the pattern must match TEST_PATTERN above).
+          if [ "$skip" = "false" ] && echo "$TITLE" | grep -qE '^\[BugFix\]'; then
+            non_test_lines=$(gh pr view "$PR" -R "$REPO" --json files --jq '
+              [.files[]
+               | select(.path | test("(Test\\.(java|kt)$|_test\\.(cpp|cc|h)$|/test/|^test/|^fe-test/|^regression-test/|/__test__/)") | not)
+               | (.additions + .deletions)]
+              | add // 0
+            ' 2>/dev/null || echo 0)
+            if [ "${non_test_lines:-0}" -lt "$BUGFIX_LINE_THRESHOLD" ]; then
+              skip=true
+              reason="[BugFix] non-test lines=$non_test_lines < $BUGFIX_LINE_THRESHOLD"
+            fi
+          fi
+
+          echo "skip=$skip"     >> "$GITHUB_OUTPUT"
+          echo "reason=$reason" >> "$GITHUB_OUTPUT"
+          echo "=== gate result: skip=$skip, reason='$reason' ==="
 
   meta-review:
     needs: info
@@ -136,6 +189,13 @@ jobs:
 
     steps:
       - name: GLOBAL REVIEW
+        env:
+          SKIP_GLOBAL_REVIEW: ${{ needs.info.outputs.SKIP_GLOBAL_REVIEW }}
+          SKIP_GLOBAL_REVIEW_REASON: ${{ needs.info.outputs.SKIP_GLOBAL_REVIEW_REASON }}
         run: |
+          if [[ "$SKIP_GLOBAL_REVIEW" == "true" ]]; then
+            echo "::notice::GLOBAL REVIEW skipped: $SKIP_GLOBAL_REVIEW_REASON"
+            exit 0
+          fi
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull >/dev/null
           ./scripts/check-approve.sh
