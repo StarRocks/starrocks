@@ -27,6 +27,7 @@
 #include "exprs/agg/aggregate_factory.h"
 #include "exprs/agg/aggregate_state_allocator.h"
 #include "exprs/function_context.h"
+#include "runtime/mem_pool.h"
 #include "runtime/memory/counting_allocator.h"
 #include "testutil/function_utils.h"
 #include "types/logical_type.h"
@@ -181,13 +182,13 @@ TEST_F(PercentileApproxAggTest, weighted_empty_state_finalizes_to_null) {
     auto ctx = make_ctx(arg_types, return_type, const_columns);
 
     auto values = NullableColumn::create(DoubleColumn::create(), NullColumn::create());
-    auto* values_data = down_cast<DoubleColumn*>(values->data_column().get());
+    auto* values_data = down_cast<DoubleColumn*>(values->data_column()->as_mutable_raw_ptr());
     for (auto v : {10.0, 20.0, 30.0}) {
         values_data->append(v);
         values->null_column_data().push_back(0);
     }
 
-    auto weights = NullableColumn::create(weight_const->clone_shared(), NullColumn::create(values->size(), 0));
+    auto weights = NullableColumn::create(weight_const->clone(), NullColumn::create(values->size(), 0));
 
     std::vector<const Column*> raw{values.get(), weights.get(), quantile_const.get()};
 
