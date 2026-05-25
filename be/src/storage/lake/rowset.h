@@ -53,14 +53,12 @@ struct PreparedSegmentReadState {
     SparseRangePtr prepared_pruned_scan_range;
     bool prepared_pruned_scan_range_includes_page_filters = false;
 };
-using PreparedSegmentReadStatePtr = std::shared_ptr<PreparedSegmentReadState>;
 
 struct PreparedTabletReadState {
     std::vector<RowsetPtr> rowsets;
     std::vector<std::vector<SegmentPtr>> rowset_segments;
     std::vector<std::vector<PreparedSegmentReadStatePtr>> rowset_prepared_states;
 };
-using PreparedTabletReadStatePtr = std::shared_ptr<PreparedTabletReadState>;
 
 class Rowset : public BaseRowset {
 public:
