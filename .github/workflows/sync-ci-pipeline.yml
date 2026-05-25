@@ -87,9 +87,6 @@ jobs:
               - 'build.sh'
               - 'thirdparty/**'
               - 'docker/dockerfiles/dev-env/dev-env.Dockerfile'
-            thirdparty:
-              - 'thirdparty/**'
-              - 'docker/dockerfiles/dev-env/dev-env.Dockerfile'
             fe:
               - 'fe/**'
               - 'gensrc/**'
@@ -98,15 +95,35 @@ jobs:
               - 'build.sh'
               - 'test/**'
 
+      # Dedicated step for thirdparty filter: needs `predicate-quantifier: every`
+      # so negated patterns (e.g. `!thirdparty/build-thirdparty-darwin.sh`) act
+      # as exclusions. With the default `some`, a positive `thirdparty/**`
+      # match alone is sufficient and exclusions silently no-op.
+      - uses: dorny/paths-filter@v3
+        id: linux-thirdparty-filter
+        with:
+          predicate-quantifier: every
+          filters: |
+            thirdparty:
+              - 'thirdparty/**'
+              - '!thirdparty/build-thirdparty-darwin.sh'
+              - '!thirdparty/vars-darwin-aarch64.sh'
+            dev_env:
+              - 'docker/dockerfiles/dev-env/dev-env.Dockerfile'
+
       - name: CHECK INFO
         id: changes-info
         run: |
+          thirdparty=false
+          if [[ "${{ steps.linux-thirdparty-filter.outputs.thirdparty }}" == 'true' || "${{ steps.linux-thirdparty-filter.outputs.dev_env }}" == 'true' ]]; then
+            thirdparty=true
+          fi
           echo "be=${{ steps.changes.outputs.be }}" >> $GITHUB_OUTPUT
-          echo "thirdparty=${{ steps.changes.outputs.thirdparty }}" >> $GITHUB_OUTPUT
+          echo "thirdparty=${thirdparty}" >> $GITHUB_OUTPUT
           echo "fe=${{ steps.changes.outputs.fe }}" >> $GITHUB_OUTPUT
 
       - name: LABEL THIRDPARTY
-        if: steps.changes.outputs.thirdparty == 'true'
+        if: steps.changes-info.outputs.thirdparty == 'true'
         uses: actions-ecosystem/action-add-labels@v1
         with:
           github_token: ${{ secrets.PAT }}
