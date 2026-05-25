@@ -16,7 +16,7 @@
 package com.starrocks.task;
 
 import com.starrocks.common.PriorityThreadPoolExecutor;
-import com.starrocks.common.jmockit.Deencapsulation;
+import org.awaitility.Awaitility;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
@@ -27,6 +27,7 @@ import org.slf4j.LoggerFactory;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
 
 public class PriorityLeaderTaskExecutorTest {
     private static final Logger LOG = LoggerFactory.getLogger(PriorityLeaderTaskExecutorTest.class);
@@ -39,6 +40,7 @@ public class PriorityLeaderTaskExecutorTest {
 
     @BeforeEach
     public void setUp() {
+        SEQ.clear();
         executor = new PriorityLeaderTaskExecutor("priority_task_executor_test", THREAD_NUM, 100, false);
         executor.start();
     }
@@ -94,7 +96,7 @@ public class PriorityLeaderTaskExecutorTest {
 
     @Test
     public void testUpdatePoolSize() {
-        PriorityThreadPoolExecutor priorityExecutor = Deencapsulation.getField(executor, "executor");
+        PriorityThreadPoolExecutor priorityExecutor = executor.executor;
         Assertions.assertEquals(THREAD_NUM, executor.getCorePoolSize());
         Assertions.assertEquals(THREAD_NUM, priorityExecutor.getMaximumPoolSize());
 
@@ -111,14 +113,71 @@ public class PriorityLeaderTaskExecutorTest {
     }
 
     @Test
+    public void testStartAfterCloseRebuildsPoolsForReuse() {
+        // close() shuts down both pools so a singleton instance can be used by the demotion
+        // drain. A subsequent start() on the SAME instance must rebuild both pools so the next
+        // leader session does not get RejectedExecutionException when scheduling tasks.
+        PriorityLeaderTaskExecutor target =
+                new PriorityLeaderTaskExecutor("priority_task_executor_reuse_test", 1, 100, false);
+        target.start();
+        PriorityThreadPoolExecutor originalExecutor = target.executor;
+        ScheduledThreadPoolExecutor originalSched = target.scheduledThreadPool;
+
+        target.close(5000L);
+        Awaitility.await().timeout(5, TimeUnit.SECONDS).until(originalExecutor::isTerminated);
+
+        target.start();
+
+        Assertions.assertNotSame(originalExecutor, target.executor, "executor must be rebuilt on restart");
+        Assertions.assertNotSame(originalSched, target.scheduledThreadPool,
+                "scheduledThreadPool must be rebuilt on restart");
+        Assertions.assertFalse(target.executor.isShutdown());
+        Assertions.assertFalse(target.scheduledThreadPool.isShutdown());
+
+        // The rebuilt executor must accept new work; submit a no-op task and verify it does
+        // not raise RejectedExecutionException.
+        Assertions.assertTrue(target.submit(new TestLeaderTask(99L)));
+
+        target.close(5000L);
+    }
+
+    @Test
+    public void testStartRefusesToRestartBeforePoolTerminates() {
+        // Mirror of BatchWriteMgr / AlterHandler restart guard. If close() returns but the
+        // underlying executor has not yet terminated, start() must throw IllegalStateException
+        // instead of spinning up a parallel pool against the same runningTasks map.
+        PriorityLeaderTaskExecutor target =
+                new PriorityLeaderTaskExecutor("priority_task_executor_refuse_test", 1, 100, false);
+        target.start();
+        PriorityThreadPoolExecutor blockedPool = com.starrocks.common.ThreadPoolManager
+                .newDaemonFixedPriorityThreadPool(
+                        1, 100, "priority_task_executor_refuse_test_blocked_pool", false);
+        blockedPool.execute(() -> {
+            try {
+                Thread.sleep(30_000L);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+        });
+        blockedPool.shutdown();
+        target.executor = blockedPool;
+
+        try {
+            Assertions.assertThrows(IllegalStateException.class, target::start);
+        } finally {
+            blockedPool.shutdownNow();
+        }
+    }
+
+    @Test
     public void testCloseWithTimeoutAwaitsTermination() throws Exception {
         // close(awaitMillis) must block until BOTH pools have actually terminated, so a
         // re-elected leader does not race a still-alive worker from the previous session.
         PriorityLeaderTaskExecutor target =
                 new PriorityLeaderTaskExecutor("priority_task_executor_close_test", 1, 100, false);
         target.start();
-        PriorityThreadPoolExecutor inner = Deencapsulation.getField(target, "executor");
-        ScheduledThreadPoolExecutor sched = Deencapsulation.getField(target, "scheduledThreadPool");
+        PriorityThreadPoolExecutor inner = target.executor;
+        ScheduledThreadPoolExecutor sched = target.scheduledThreadPool;
 
         target.close(5000L);
 

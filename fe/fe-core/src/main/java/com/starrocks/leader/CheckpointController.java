@@ -94,8 +94,10 @@ public class CheckpointController extends LeaderDaemon {
     private final String subDir;
     private final boolean belongToGlobalStateMgr;
 
-    private final Set<String> nodesToPushImage;
-    private final Map<String, Long> lastFailedTime = new HashMap<>();
+    // Package-private so same-package tests can assert on the cleared-on-demotion contract
+    // without reflection.
+    final Set<String> nodesToPushImage;
+    final Map<String, Long> lastFailedTime = new HashMap<>();
 
     private volatile String workerNodeName;
     private volatile long workerSelectedTime;

@@ -32,19 +32,49 @@ import java.util.concurrent.TimeUnit;
 public class PriorityLeaderTaskExecutor {
     private static final Logger LOG = LogManager.getLogger(PriorityLeaderTaskExecutor.class);
 
-    private PriorityThreadPoolExecutor executor;
+    // Not final: close() shuts down both pools and start() rebuilds them so a singleton
+    // executor instance can survive a leader demote / re-elect cycle.
+    // Package-private so same-package tests can swap in a stuck pool to exercise the
+    // restart guard without reflection.
+    PriorityThreadPoolExecutor executor;
     private Map<Long, PriorityFutureTask<?>> runningTasks;
     public ScheduledThreadPoolExecutor scheduledThreadPool;
 
+    // Saved for rebuild on restart - see start().
+    private final String name;
+    private final int threadNum;
+    private final int queueSize;
+    private final boolean needRegisterMetric;
+
     public PriorityLeaderTaskExecutor(String name, int threadNum, int queueSize, boolean needRegisterMetric) {
+        this.name = name;
+        this.threadNum = threadNum;
+        this.queueSize = queueSize;
+        this.needRegisterMetric = needRegisterMetric;
+        runningTasks = Maps.newHashMap();
+        buildPools();
+    }
+
+    private void buildPools() {
         executor = ThreadPoolManager.newDaemonFixedPriorityThreadPool(threadNum, queueSize, name + "_priority_pool",
                 needRegisterMetric);
-        runningTasks = Maps.newHashMap();
         scheduledThreadPool = ThreadPoolManager.newDaemonScheduledThreadPool(1,
                 name + "_scheduler_priority_thread_pool", needRegisterMetric);
     }
 
-    public void start() {
+    public synchronized void start() {
+        // Refuse to overlap with a previous worker that did not drain in close(): if the pool
+        // is shutdown but not yet terminated, in-flight priority tasks from the previous leader
+        // session are still running. Mirrors the BatchWriteMgr / AlterHandler restart guard.
+        if (executor.isShutdown() && !executor.isTerminated()) {
+            throw new IllegalStateException(
+                    "PriorityLeaderTaskExecutor " + name + " executor has not terminated; refuse to restart");
+        }
+        // Rebuild the pools if a previous demotion shut them down so subsequent submissions
+        // do not raise RejectedExecutionException on the new leader session.
+        if (executor.isShutdown()) {
+            buildPools();
+        }
         scheduledThreadPool.scheduleAtFixedRate(new TaskChecker(), 0L, 1000L, TimeUnit.MILLISECONDS);
     }
 

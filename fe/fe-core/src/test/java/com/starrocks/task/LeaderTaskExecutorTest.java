@@ -17,12 +17,17 @@
 
 package com.starrocks.task;
 
+import org.awaitility.Awaitility;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import java.util.concurrent.ScheduledThreadPoolExecutor;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
 
 public class LeaderTaskExecutorTest {
     private static final Logger LOG = LoggerFactory.getLogger(LeaderTaskExecutorTest.class);
@@ -77,6 +82,61 @@ public class LeaderTaskExecutorTest {
         Assertions.assertEquals(size + 1, executor.getCorePoolSize());
         executor.setPoolSize(size);
         Assertions.assertEquals(size, executor.getCorePoolSize());
+    }
+
+    @Test
+    public void testStartAfterCloseRebuildsPoolsForReuse() {
+        // close() shuts down both pools so a singleton instance (pendingLoadTaskScheduler,
+        // loadingLoadTaskScheduler in GlobalStateMgr) can be used by the demotion drain. A
+        // subsequent start() on the SAME instance must rebuild both pools so the next leader
+        // session does not get RejectedExecutionException when scheduling tasks.
+        LeaderTaskExecutor target = new LeaderTaskExecutor("leader_task_executor_reuse_test", 1, 10, false);
+        target.start();
+        ThreadPoolExecutor originalExecutor = target.executor;
+        ScheduledThreadPoolExecutor originalSched = target.scheduledThreadPool;
+
+        target.close(5000L);
+        Awaitility.await().timeout(5, TimeUnit.SECONDS).until(originalExecutor::isTerminated);
+
+        target.start();
+
+        Assertions.assertNotSame(originalExecutor, target.executor, "executor must be rebuilt on restart");
+        Assertions.assertNotSame(originalSched, target.scheduledThreadPool,
+                "scheduledThreadPool must be rebuilt on restart");
+        Assertions.assertFalse(target.executor.isShutdown());
+        Assertions.assertFalse(target.scheduledThreadPool.isShutdown());
+
+        // The rebuilt scheduler must accept new work; submit a no-op task and verify it does
+        // not raise RejectedExecutionException.
+        Assertions.assertTrue(target.submit(new TestLeaderTask(99L)));
+
+        target.close(5000L);
+    }
+
+    @Test
+    public void testStartRefusesToRestartBeforePoolTerminates() {
+        // Mirror of BatchWriteMgr / AlterHandler restart guard. If close() returns but the
+        // underlying executor has not yet terminated (in-flight task ignoring interrupt),
+        // start() must throw IllegalStateException instead of spinning up a parallel pool.
+        LeaderTaskExecutor target = new LeaderTaskExecutor("leader_task_executor_refuse_test", 1, 10, false);
+        target.start();
+        ThreadPoolExecutor blockedPool = new java.util.concurrent.ThreadPoolExecutor(
+                1, 1, 0L, TimeUnit.MILLISECONDS, new java.util.concurrent.ArrayBlockingQueue<>(1));
+        blockedPool.execute(() -> {
+            try {
+                Thread.sleep(30_000L);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+        });
+        blockedPool.shutdown();
+        target.executor = blockedPool;
+
+        try {
+            Assertions.assertThrows(IllegalStateException.class, target::start);
+        } finally {
+            blockedPool.shutdownNow();
+        }
     }
 
     private class TestLeaderTask extends LeaderTask {
