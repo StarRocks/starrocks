@@ -3403,6 +3403,13 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true, comment = "the max number of threads for lake table delete txnLog when enable batch publish")
     public static int lake_publish_delete_txnlog_max_threads = 16;
 
+    @ConfField(mutable = true, comment =
+            "Whether to enable ADMIN SKIP COMMITTED TRANSACTION. When false, the admin SQL is " +
+                    "rejected with an error. Default is false to prevent accidental data loss. " +
+                    "Only enable when an operator needs to unblock a stuck-publish transaction. " +
+                    "Only supported on lake tables with file_bundling=true.")
+    public static boolean enable_admin_skip_committed_txn = false;
+
     @ConfField(mutable = false, comment = "whether allow using publish thread pool for shared-nothing")
     public static boolean shared_nothing_publish_use_thread_pool = false;
 
