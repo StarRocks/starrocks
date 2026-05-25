@@ -32,4 +32,11 @@ public class OpRuleBit {
     public static final int OP_PARTITION_PRUNED = 3;
     // Operator has been mv transparent union rewrite and needs to prune agg columns.
     public static final int OP_MV_AGG_PRUNE_COLUMNS = 4;
+<<<<<<< HEAD
+=======
+    // Operator has been push down topn below agg or not, if push down topn, no need to push down again.
+    public static final int OP_PUSH_DOWN_TOPN_AGG = 5;
+    // Window operator has been split by the window skew rewrite, no need to split again.
+    public static final int OP_SPLIT_WINDOW_SKEW = 6;
+>>>>>>> 7a4c535094 ([BugFix] Calculate statistics in SplitWindowSkewToUnionRule (#71622))
 }
