@@ -112,8 +112,8 @@ public:
     // non-string fixed-length PK column. Returns Status::OK for safe combinations and for
     // non-PK target tablets.
     static Status check_pk_encoding_compat(int64_t src_tablet_id, int64_t target_tablet_id,
-                                                            const TabletMetadata& src_tablet_meta,
-                                                            const TabletMetadata& target_tablet_meta);
+                                           const TabletMetadata& src_tablet_meta,
+                                           const TabletMetadata& target_tablet_meta);
 
     // Decide whether to use parallel copy for current tablet files.
     static bool should_use_parallel_copy(size_t file_count, const ThreadPool* thread_pool);

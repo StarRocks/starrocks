@@ -254,8 +254,7 @@ Status LakeReplicationTxnManager::replicate_lake_remote_storage(const TReplicate
     CancelableDefer clean_files([&files_to_delete]() { lake::delete_files_async(std::move(files_to_delete)); });
 
     // src_tablet_meta->has_schema() is guaranteed by the early Corruption return above.
-    RETURN_IF_ERROR(check_pk_encoding_compat(src_tablet_id, target_tablet_id, *src_tablet_meta,
-                                                              *target_tablet_meta));
+    RETURN_IF_ERROR(check_pk_encoding_compat(src_tablet_id, target_tablet_id, *src_tablet_meta, *target_tablet_meta));
 
     // PK transcoding is gated above; pass nullptr/NONE so the converter never enters the .del
     // transcode branch in this code path.
@@ -465,10 +464,9 @@ bool LakeReplicationTxnManager::should_use_parallel_copy(size_t file_count, cons
     return thread_pool->num_queued_tasks() <= num_threads * kParallelCopyMaxQueuePerThread;
 }
 
-Status LakeReplicationTxnManager::check_pk_encoding_compat(int64_t src_tablet_id,
-                                                                            int64_t target_tablet_id,
-                                                                            const TabletMetadata& src_tablet_meta,
-                                                                            const TabletMetadata& target_tablet_meta) {
+Status LakeReplicationTxnManager::check_pk_encoding_compat(int64_t src_tablet_id, int64_t target_tablet_id,
+                                                           const TabletMetadata& src_tablet_meta,
+                                                           const TabletMetadata& target_tablet_meta) {
     if (!is_primary_key(target_tablet_meta)) {
         return Status::OK();
     }
