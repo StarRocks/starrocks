@@ -134,6 +134,7 @@ statement
     | adminSetAutomatedSnapshotOnStatement
     | adminSetAutomatedSnapshotOffStatement
     | adminAlterAutomatedSnapshotIntervalStatement
+    | adminSkipCommittedTransactionStatement
 
     // Cluster Management Statement
     | alterSystemStatement
@@ -831,6 +832,10 @@ adminSetAutomatedSnapshotOffStatement
 
 adminAlterAutomatedSnapshotIntervalStatement
     : ADMIN ALTER AUTOMATED CLUSTER SNAPSHOT SET interval
+    ;
+
+adminSkipCommittedTransactionStatement
+    : ADMIN SKIP_KW COMMITTED TRANSACTION txnId=INTEGER_VALUE (REASON reason=string)?
     ;
 
 // ------------------------------------------- Cluster Management Statement ---------------------------------------------
@@ -3316,7 +3321,7 @@ nonReserved
     | REPOSITORIES | RECURSIVE
     | RESOURCE | RESOURCES | RESTORE | RESUME | RETAIN | RETENTION | RETURNS | RETRY | REVERT | ROLE | ROLES | ROLLUP | ROLLBACK | ROUTINE | ROW | RUNNING | RULE | RULES
     | SAMPLE | SCHEDULE | SCHEDULER | SECOND | SECURITY | SEPARATOR | SERIALIZABLE |SEMI | SESSION | SETS | SIGNED | SNAPSHOT | SNAPSHOTS | SPLIT | SQL | SQLBLACKLIST | START | STARROCKS
-    | STREAM | SUM | STATUS | STOP | SKIP_HEADER | SWAP
+    | STREAM | SUM | STATUS | STOP | SKIP_KW | SKIP_HEADER | SWAP
     | STORAGE| STRING | STRING_AGG | STRUCT | STATS | SUBMIT | SUSPEND | SYNC | SYSTEM | SYSTEM_TIME
     | TABLES | TABLET | TABLETS | TAG | TASK | TEMPORARY | TIMESTAMP | TIMESTAMPADD | TIMESTAMPDIFF | THAN | TIME | TIMES | TRANSACTION | TRACE | TRANSLATE
     | TRIM_SPACE

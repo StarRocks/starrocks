@@ -425,6 +425,13 @@ message TxnInfoPB {
     // is table-level metadata: every SplittingTabletInfoPB in one txn would
     // carry the same value.
     optional int32 colocate_column_count = 11;
+    // Admin-issued no-op publish flag. When true, BE bypasses txn-log loading and
+    // apply for this transaction; the publish loop still writes a new tablet
+    // metadata file (so partition visible version advances) but it carries no
+    // data contribution from this txn. Used by ADMIN ABORT COMMITTED TRANSACTION
+    // to unblock a stuck-publish transaction. Only meaningful for load/compaction
+    // txn types in the current implementation; alter is not supported yet.
+    optional bool no_op_publish = 12;
 }
 
 message SplittingTabletInfoPB {

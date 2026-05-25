@@ -79,6 +79,7 @@ import com.starrocks.sql.ast.AdminShowConfigStmt;
 import com.starrocks.sql.ast.AdminShowReplicaDistributionStmt;
 import com.starrocks.sql.ast.AdminShowReplicaStatusStmt;
 import com.starrocks.sql.ast.AdminShowTabletStatusStmt;
+import com.starrocks.sql.ast.AdminSkipCommittedTransactionStmt;
 import com.starrocks.sql.ast.AggregateType;
 import com.starrocks.sql.ast.AlterCatalogStmt;
 import com.starrocks.sql.ast.AlterClause;
@@ -3060,6 +3061,17 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
             com.starrocks.sql.parser.StarRocksParser.AdminAlterAutomatedSnapshotIntervalStatementContext context) {
         IntervalLiteral intervalLiteral = (IntervalLiteral) visit(context.interval());
         return new AdminAlterAutomatedSnapshotIntervalStmt(intervalLiteral, createPos(context));
+    }
+
+    @Override
+    public ParseNode visitAdminSkipCommittedTransactionStatement(
+            com.starrocks.sql.parser.StarRocksParser.AdminSkipCommittedTransactionStatementContext context) {
+        long txnId = Long.parseLong(context.txnId.getText());
+        String reason = "";
+        if (context.reason != null) {
+            reason = ((StringLiteral) visit(context.reason)).getValue();
+        }
+        return new AdminSkipCommittedTransactionStmt(txnId, reason, createPos(context));
     }
 
     // ------------------------------------------- Cluster Management Statement ----------------------------------------
