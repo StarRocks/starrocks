@@ -27,6 +27,7 @@
 #include "storage/chunk_helper.h"
 #include "storage/primitive/range.h"
 #include "storage/rowset/bitshuffle_page.h"
+#include "storage/rowset/common.h"
 
 namespace starrocks {
 

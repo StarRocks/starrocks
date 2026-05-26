@@ -52,6 +52,7 @@
 #include "storage/column_predicate.h"
 #include "storage/primitive/range.h"
 #include "storage/rowset/bitshuffle_page.h"
+#include "storage/rowset/common.h"
 #include "types/logical_type.h"
 
 namespace starrocks {
