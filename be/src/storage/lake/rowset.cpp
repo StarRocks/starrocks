@@ -283,6 +283,7 @@ Status Rowset::init_segment_read_options(const RowsetReadOptions& options, const
         auto root_loc = _tablet_mgr->tablet_root_location(tablet_id());
         ASSIGN_OR_RETURN(segment_options->fs, FileSystemFactory::CreateSharedFromString(root_loc));
     }
+    segment_options->lake_io_opts.fs = segment_options->fs;
     segment_options->stats = stats;
     segment_options->ranges = options.ranges;
     segment_options->pred_tree = options.pred_tree;

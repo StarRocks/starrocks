@@ -378,6 +378,14 @@ void ConnectorScanOperator::_record_reusable_chunk_source_event(ReusableChunkSou
     }
 }
 
+bool ConnectorScanOperator::_is_empty_slot_for_new_morsel(int chunk_source_index) const {
+    if (connector_type() != connector::ConnectorType::LAKE) {
+        return false;
+    }
+    std::shared_lock guard(_task_mutex);
+    return _chunk_sources[chunk_source_index] == nullptr && _reusable_chunk_sources[chunk_source_index] == nullptr;
+}
+
 ScanOperator::ReusableChunkSourceLookup ConnectorScanOperator::_take_reusable_chunk_source(RuntimeState* /*state*/,
                                                                                            int chunk_source_index,
                                                                                            Morsel& morsel) {

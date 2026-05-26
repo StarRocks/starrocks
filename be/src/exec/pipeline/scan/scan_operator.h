@@ -134,6 +134,7 @@ protected:
     enum class ReusableChunkSourceEvent { CANDIDATE, HIT, MISS, STALE_CLOSE, FAILURE };
     virtual bool _can_reuse_chunk_source_for(Morsel& morsel) const { return false; }
     virtual void _record_reusable_chunk_source_event(ReusableChunkSourceEvent /*event*/) {}
+    virtual bool _is_empty_slot_for_new_morsel(int /*chunk_source_index*/) const { return false; }
     virtual ReusableChunkSourceLookup _take_reusable_chunk_source(RuntimeState* state, int chunk_source_index,
                                                                   Morsel& morsel) {
         return {};

@@ -75,7 +75,9 @@ public:
     int64_t cpu_time_spent() const override { return _cpu_time_spent_ns; }
 
     void get_split_tasks(std::vector<pipeline::ScanSplitContextPtr>* split_tasks) override {
-        _reader->get_split_tasks(split_tasks);
+        if (_reader != nullptr) {
+            _reader->get_split_tasks(split_tasks);
+        }
     }
 
     // parse_runtime_filters is used to generate min-max predicates from runtime filters, while LakeDataSource already
