@@ -134,6 +134,7 @@ private:
     bool _rowsets_inited = false;
     std::vector<RowsetPtr> _rowsets;
     std::vector<SegmentSharedPtr> _segments;
+    std::vector<std::vector<ChunkIteratorPtr>> _reusable_rowset_iterators;
     std::shared_ptr<ChunkIterator> _collect_iter;
 
     DeletePredicates _delete_predicates;

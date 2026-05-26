@@ -337,9 +337,7 @@ struct SegmentZoneMapPruner {
     const SegmentReadOptions& read_options;
 };
 
-StatusOr<ChunkIteratorPtr> Segment::_new_iterator(const Schema& schema, const SegmentReadOptions& read_options) {
-    DCHECK(read_options.stats != nullptr);
-
+Status Segment::_prune_by_segment_zone_map(const SegmentReadOptions& read_options) {
     const auto pruned = config::enable_index_segment_level_zonemap_filter &&
                         read_options.pred_tree_for_zone_map.visit(SegmentZoneMapPruner{this, read_options});
     if (pruned) {
@@ -348,7 +346,13 @@ StatusOr<ChunkIteratorPtr> Segment::_new_iterator(const Schema& schema, const Se
         }
         return Status::EndOfFile(strings::Substitute("End of file $0, empty iterator", _segment_file_info.path));
     }
+    return Status::OK();
+}
 
+StatusOr<ChunkIteratorPtr> Segment::_new_iterator(const Schema& schema, const SegmentReadOptions& read_options) {
+    DCHECK(read_options.stats != nullptr);
+
+    RETURN_IF_ERROR(_prune_by_segment_zone_map(read_options));
     return new_segment_iterator(shared_from_this(), schema, read_options);
 }
 
@@ -357,6 +361,17 @@ StatusOr<ChunkIteratorPtr> Segment::new_iterator(const Schema& schema, const Seg
         return Status::InvalidArgument("stats is null pointer");
     }
     return _new_iterator(schema, read_options);
+}
+
+StatusOr<ChunkIteratorPtr> Segment::new_reusable_iterator(const Schema& iterator_schema, const Schema& output_schema,
+                                                          const SegmentReadOptions& read_options,
+                                                          ChunkIteratorPtr* reusable_slot) {
+    if (read_options.stats == nullptr) {
+        return Status::InvalidArgument("stats is null pointer");
+    }
+    RETURN_IF_ERROR(_prune_by_segment_zone_map(read_options));
+    return new_reusable_segment_iterator(shared_from_this(), iterator_schema, output_schema, read_options,
+                                         reusable_slot);
 }
 
 Status Segment::new_inverted_index_iterator(uint32_t ucid, InvertedIndexIterator** iter, const SegmentReadOptions& opts,

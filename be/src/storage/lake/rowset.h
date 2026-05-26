@@ -114,7 +114,8 @@ public:
                                                  const std::vector<SegmentPtr>& prepared_segments);
     StatusOr<std::vector<ChunkIteratorPtr>> read_prepared_segment(
             const Schema& schema, const RowsetReadOptions& options, const std::vector<SegmentPtr>& prepared_segments,
-            size_t segment_idx, const PreparedSegmentReadStatePtr& prepared_segment_state);
+            size_t segment_idx, const PreparedSegmentReadStatePtr& prepared_segment_state,
+            std::vector<ChunkIteratorPtr>* reusable_segment_iterators = nullptr);
     StatusOr<std::optional<SeekRange>> get_seek_range() const;
     Status init_segment_read_options(const RowsetReadOptions& options, const LakeIOOptions& lake_io_opts,
                                      const DisjunctivePredicates& delete_predicates, OlapReaderStatistics* stats,
@@ -229,6 +230,7 @@ private:
         const std::vector<SegmentPtr>* prepared_segments = nullptr;
         std::optional<size_t> target_segment_idx = std::nullopt;
         const PreparedSegmentReadState* prepared_segment_state = nullptr;
+        std::vector<ChunkIteratorPtr>* reusable_segment_iterators = nullptr;
     };
 
     StatusOr<std::vector<ChunkIteratorPtr>> do_read(const Schema& schema, const RowsetReadOptions& options,

@@ -34,6 +34,12 @@ struct LakeIOOptions;
 
 ChunkIteratorPtr new_segment_iterator(const std::shared_ptr<Segment>& segment, const Schema& schema,
                                       const SegmentReadOptions& options);
+// Returns a per-scan iterator backed by |reusable_slot|. Closing the returned
+// iterator does not close |reusable_slot|; the slot owner must close it.
+StatusOr<ChunkIteratorPtr> new_reusable_segment_iterator(const std::shared_ptr<Segment>& segment,
+                                                         const Schema& iterator_schema, const Schema& output_schema,
+                                                         const SegmentReadOptions& options,
+                                                         ChunkIteratorPtr* reusable_slot);
 StatusOr<SparseRange<>> new_segment_iterator_for_prepare_pruning(const std::shared_ptr<Segment>& segment,
                                                                  const Schema& schema,
                                                                  const SegmentReadOptions& options);

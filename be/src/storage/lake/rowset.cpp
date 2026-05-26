@@ -262,11 +262,13 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::read(const Schema& schema, const
 
 StatusOr<std::vector<ChunkIteratorPtr>> Rowset::read_prepared_segment(
         const Schema& schema, const RowsetReadOptions& options, const std::vector<SegmentPtr>& prepared_segments,
-        size_t segment_idx, const PreparedSegmentReadStatePtr& prepared_segment_state) {
+        size_t segment_idx, const PreparedSegmentReadStatePtr& prepared_segment_state,
+        std::vector<ChunkIteratorPtr>* reusable_segment_iterators) {
     return do_read(schema, options,
                    ReadContext{.prepared_segments = &prepared_segments,
                                .target_segment_idx = segment_idx,
-                               .prepared_segment_state = prepared_segment_state.get()});
+                               .prepared_segment_state = prepared_segment_state.get(),
+                               .reusable_segment_iterators = reusable_segment_iterators});
 }
 
 Status Rowset::init_segment_read_options(const RowsetReadOptions& options, const LakeIOOptions& lake_io_opts,
@@ -457,17 +459,34 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::do_read(const Schema& schema, co
             seg_options.is_first_split_of_segment = true;
         }
 
-        auto res = seg_ptr->new_iterator(segment_schema, seg_options);
-        if (res.status().is_end_of_file()) {
-            continue;
-        }
-        if (!res.ok()) {
-            return res.status();
-        }
-        if (use_projection) {
-            segment_iterators.emplace_back(new_projection_iterator(schema, std::move(res).value()));
+        if (context.reusable_segment_iterators != nullptr) {
+            if (context.reusable_segment_iterators->size() <= i) {
+                context.reusable_segment_iterators->resize(i + 1);
+            }
+            const bool reuse_segment_iter = (*context.reusable_segment_iterators)[i] != nullptr;
+            ASSIGN_OR_RETURN(auto iter, seg_ptr->new_reusable_iterator(segment_schema, schema, seg_options,
+                                                                       &(*context.reusable_segment_iterators)[i]));
+            if (options.stats != nullptr) {
+                if (reuse_segment_iter) {
+                    options.stats->lake_reusable_segment_iter_reused++;
+                } else {
+                    options.stats->lake_reusable_segment_iter_created++;
+                }
+            }
+            segment_iterators.emplace_back(std::move(iter));
         } else {
-            segment_iterators.emplace_back(std::move(res).value());
+            auto res = seg_ptr->new_iterator(segment_schema, seg_options);
+            if (res.status().is_end_of_file()) {
+                continue;
+            }
+            if (!res.ok()) {
+                return res.status();
+            }
+            if (use_projection) {
+                segment_iterators.emplace_back(new_projection_iterator(schema, std::move(res).value()));
+            } else {
+                segment_iterators.emplace_back(std::move(res).value());
+            }
         }
     }
     if (segment_iterators.size() > 1 && !is_overlapped()) {

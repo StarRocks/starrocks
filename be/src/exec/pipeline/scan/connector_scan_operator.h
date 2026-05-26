@@ -137,6 +137,7 @@ public:
 private:
     int64_t _adjust_scan_mem_limit(int64_t old_chunk_source_mem_bytes, int64_t new_chunk_source_mem_bytes);
     bool _can_reuse_chunk_source_for(Morsel& morsel) const override;
+    void _record_reusable_chunk_source_event(ReusableChunkSourceEvent event) override;
     ReusableChunkSourceLookup _take_reusable_chunk_source(RuntimeState* state, int chunk_source_index,
                                                           Morsel& morsel) override;
     void _stash_reusable_chunk_source(RuntimeState* state, int chunk_source_index,
@@ -144,6 +145,11 @@ private:
     mutable ConnectorScanOperatorAdaptiveProcessor* _adaptive_processor;
     bool _enable_adaptive_io_tasks = true;
     std::vector<ChunkSourcePtr> _reusable_chunk_sources;
+    RuntimeProfile::Counter* _chunk_source_reuse_candidate_counter = nullptr;
+    RuntimeProfile::Counter* _chunk_source_reuse_hit_counter = nullptr;
+    RuntimeProfile::Counter* _chunk_source_reuse_miss_counter = nullptr;
+    RuntimeProfile::Counter* _chunk_source_reuse_stale_close_counter = nullptr;
+    RuntimeProfile::Counter* _chunk_source_reuse_failure_counter = nullptr;
 };
 
 class ConnectorChunkSource : public ChunkSource {
