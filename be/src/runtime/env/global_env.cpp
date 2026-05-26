@@ -24,6 +24,7 @@
 #include "common/mem_chunk.h"
 #include "common/statusor.h"
 #include "common/system/mem_info.h"
+#include "platform/python/env.h"
 #include "runtime/current_thread.h"
 #include "runtime/mem_tracker.h"
 #include "runtime/memory/mem_chunk_allocator.h"
@@ -120,6 +121,7 @@ bool GlobalEnv::is_init() {
 
 Status GlobalEnv::init(MetricRegistry* metrics) {
     RETURN_IF_ERROR(_init_mem_tracker(metrics));
+    RETURN_IF_ERROR(global_python_env_registry().init(config::python_envs));
     CurrentThread::set_mem_tracker_source(&GlobalEnv::is_init, process_mem_tracker_provider);
     _is_init = true;
     return Status::OK();

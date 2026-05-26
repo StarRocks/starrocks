@@ -38,6 +38,7 @@
 #include "common/config_path_fwd.h"
 #include "common/config_udf_fwd.h"
 #include "common/util/misc.h"
+#include "platform/python/env.h"
 
 namespace starrocks {
 
@@ -79,7 +80,7 @@ std::string PyWorkerManager::unix_socket_path(pid_t pid) {
 }
 
 Status PyWorkerManager::_fork_py_worker(std::unique_ptr<PyWorker>* child_process) {
-    ASSIGN_OR_RETURN(auto py_env, PythonEnvManager::getInstance().getDefault());
+    ASSIGN_OR_RETURN(auto py_env, global_python_env_registry().getDefault());
 
     std::string python_path = py_env.get_python_path();
     int pipefd[2];

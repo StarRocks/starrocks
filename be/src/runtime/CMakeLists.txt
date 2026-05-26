@@ -73,6 +73,7 @@ ADD_BE_LIB(RuntimeEnv
 )
 
 target_link_libraries(RuntimeEnv PUBLIC
+    Platform
     RuntimeCore
     Types
     Common
