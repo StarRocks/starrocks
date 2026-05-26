@@ -14,6 +14,7 @@
 
 #include "exec/pipeline/sink/memory_scratch_sink_operator.h"
 
+#include "compute_env/result/result_queue_mgr.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/pipeline_driver_executor.h"
 #include "exec/workgroup/work_group.h"
@@ -21,7 +22,6 @@
 #include "exprs/expr_factory.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
-#include "runtime/result_queue_mgr.h"
 #include "util/arrow/row_batch.h"
 #include "util/arrow/starrocks_column_to_arrow.h"
 

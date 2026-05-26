@@ -18,12 +18,12 @@
 
 #include "column/chunk.h"
 #include "column/const_column.h"
+#include "compute_env/result/buffer_control_block.h"
 #include "exprs/cast_expr.h"
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
 #include "rapidjson/stringbuffer.h"
 #include "rapidjson/writer.h"
-#include "runtime/buffer_control_block.h"
 #include "runtime/current_thread.h"
 #include "types/logical_type.h"
 
