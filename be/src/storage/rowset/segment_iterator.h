@@ -51,7 +51,6 @@ StatusOr<std::optional<Range<rowid_t>>> segment_seek_range_to_rowid_range(const 
 // neither — without this guard, Chunk::get_column_by_id would default-insert into the cid
 // index and return _columns[0], which the brute-force kernel would then downcast to
 // ArrayColumn and corrupt memory.
-StatusOr<ColumnPtr> resolve_brute_force_vector_column(const Chunk* chunk, const Chunk* dict_chunk,
-                                                     ColumnId vec_col_id);
+StatusOr<ColumnPtr> resolve_brute_force_vector_column(const Chunk* chunk, const Chunk* dict_chunk, ColumnId vec_col_id);
 
 } // namespace starrocks

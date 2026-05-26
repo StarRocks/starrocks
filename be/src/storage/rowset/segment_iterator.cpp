@@ -2214,7 +2214,7 @@ Status SegmentIterator::do_get_next(Chunk* chunk, vector<uint64_t>* rssid_rowids
 }
 
 StatusOr<ColumnPtr> resolve_brute_force_vector_column(const Chunk* chunk, const Chunk* dict_chunk,
-                                                     ColumnId vec_col_id) {
+                                                      ColumnId vec_col_id) {
     if (chunk != nullptr && chunk->is_cid_exist(vec_col_id)) {
         return chunk->get_column_by_id(vec_col_id);
     }
