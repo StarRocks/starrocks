@@ -24,7 +24,7 @@
 #include "common/config_ingest_fwd.h"
 #include "common/config_primary_key_fwd.h"
 #include "common/logging.h"
-#include "exec/sorting/sorting.h"
+#include "compute_env/sorting/sorting.h"
 #include "gutil/strings/substitute.h"
 #include "io/io_profiler.h"
 #include "runtime/current_thread.h"

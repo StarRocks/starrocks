@@ -25,7 +25,7 @@
 #include "column/json_column.h"
 #include "column/runtime_type_traits.h"
 #include "column/vectorized_fwd.h"
-#include "exec/sorting/sorting.h"
+#include "compute_env/sorting/sorting.h"
 #include "exprs/arithmetic_operation.h"
 #include "exprs/function_context.h"
 #include "exprs/function_helper.h"

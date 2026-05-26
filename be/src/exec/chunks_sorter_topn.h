@@ -16,8 +16,8 @@
 
 #include "column/vectorized_fwd.h"
 #include "common/runtime_profile.h"
+#include "compute_env/sorting/merge.h"
 #include "exec/chunks_sorter.h"
-#include "exec/sorting/merge.h"
 #include "exprs/expr_context.h"
 
 namespace starrocks {

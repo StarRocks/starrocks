@@ -20,7 +20,7 @@
 #include "column/hash_set.h"
 #include "column/runtime_type_traits.h"
 #include "column/struct_column.h"
-#include "exec/sorting/sorting.h"
+#include "compute_env/sorting/sorting.h"
 #include "exprs/agg/aggregate.h"
 #include "exprs/function_context.h"
 #include "exprs/function_helper.h"

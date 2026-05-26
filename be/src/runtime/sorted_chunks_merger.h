@@ -18,9 +18,9 @@
 
 #include "column/chunk_slice.h"
 #include "common/runtime_profile.h"
-#include "exec/sorting/merge.h"
-#include "exec/sorting/sort_cursor.h"
-#include "exec/sorting/sorting.h"
+#include "compute_env/sorting/merge.h"
+#include "compute_env/sorting/sort_cursor.h"
+#include "compute_env/sorting/sorting.h"
 #include "runtime/chunk_cursor.h"
 
 namespace starrocks {

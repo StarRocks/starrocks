@@ -16,7 +16,7 @@
 
 #include "base/orlp/pdqsort.h"
 #include "base/phmap/phmap.h"
-#include "exec/sorting/sort_helper.h"
+#include "compute_env/sorting/sort_helper.h"
 
 namespace starrocks {
 

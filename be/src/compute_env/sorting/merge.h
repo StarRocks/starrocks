@@ -21,9 +21,9 @@
 
 #include "column/chunk.h"
 #include "column/vectorized_fwd.h"
-#include "exec/sorting/sort_cursor.h"
-#include "exec/sorting/sort_permute.h"
-#include "exec/sorting/sorting.h"
+#include "compute_env/sorting/sort_cursor.h"
+#include "compute_env/sorting/sort_permute.h"
+#include "compute_env/sorting/sorting.h"
 #include "types/datum.h"
 
 namespace starrocks {

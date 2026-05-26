@@ -20,10 +20,10 @@
 #include "column/chunk.h"
 #include "column/nullable_column.h"
 #include "column/vectorized_fwd.h"
-#include "exec/sorting/merge.h"
-#include "exec/sorting/sort_helper.h"
-#include "exec/sorting/sort_permute.h"
-#include "exec/sorting/sorting.h"
+#include "compute_env/sorting/merge.h"
+#include "compute_env/sorting/sort_helper.h"
+#include "compute_env/sorting/sort_permute.h"
+#include "compute_env/sorting/sorting.h"
 
 namespace starrocks {
 

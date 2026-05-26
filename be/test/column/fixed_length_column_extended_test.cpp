@@ -21,7 +21,7 @@
 #include "column/nullable_column.h"
 #include "column/raw_data_visitor.h"
 #include "column/vectorized_fwd.h"
-#include "exec/sorting/sorting.h"
+#include "compute_env/sorting/sorting.h"
 #include "types/date_value.h"
 
 namespace starrocks {

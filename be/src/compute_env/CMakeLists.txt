@@ -14,17 +14,33 @@
 
 set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/compute_env")
 
+set(COMPUTE_ENV_SORTING_FILES
+    sorting/compare_column.cpp
+    sorting/merge.cpp
+    sorting/merge_cascade.cpp
+    sorting/merge_column.cpp
+    sorting/merge_path.cpp
+    sorting/sort_column.cpp
+    sorting/sort_cursor.cpp
+    sorting/sort_permute.cpp
+)
+
 ADD_BE_LIB(ComputeEnv
     compute_env.cpp
     pipeline/driver_limiter.cpp
     pipeline/observer.cpp
+    ${COMPUTE_ENV_SORTING_FILES}
 )
 
 target_link_libraries(ComputeEnv PUBLIC
     ExecPrimitive
+    ExprCore
     RuntimeEnv
     RuntimeCore
     Platform
+    ChunkCore
+    ColumnCore
+    Types
     Common
     Base
     Gutil
