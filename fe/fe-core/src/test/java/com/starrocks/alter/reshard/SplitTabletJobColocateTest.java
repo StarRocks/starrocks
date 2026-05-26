@@ -24,6 +24,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PhysicalPartition;
+import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletRange;
 import com.starrocks.catalog.Tuple;
 import com.starrocks.catalog.Variant;
@@ -430,5 +431,68 @@ public class SplitTabletJobColocateTest {
         for (int i = 0; i < 5 && job.getJobState() != TabletReshardJob.JobState.FINISHED; i++) {
             job.run();
         }
+    }
+
+    /**
+     * verifyNewTabletRanges accepts every FE-supplied range whose colocate prefix is
+     * covered by some ColocateRange. The default single (-inf, +inf) ColocateRange
+     * covers everything, so any reasonable external-boundaries plan passes.
+     */
+    @Test
+    public void testForExternalBoundariesAcceptsCoveredRangeColocateInput() throws Exception {
+        PhysicalPartition physicalPartition = table.getAllPhysicalPartitions().iterator().next();
+        MaterializedIndex materializedIndex = physicalPartition.getLatestBaseIndex();
+        Tablet oldTablet = materializedIndex.getTablets().get(0);
+        long oldTabletId = oldTablet.getId();
+        oldTablet.setRange(new TabletRange());
+
+        Tuple boundaryPrefix = new Tuple(Arrays.asList(Variant.of(IntegerType.INT, "100")));
+        List<TabletRange> newTabletRanges = Arrays.asList(
+                new TabletRange(Range.lt(boundaryPrefix)),
+                new TabletRange(Range.ge(boundaryPrefix)));
+
+        // No exception expected — the default ColocateRange covers every colocate prefix.
+        TabletReshardJob job = SplitTabletJobFactory.forExternalBoundaries(
+                db, table, oldTabletId, newTabletRanges);
+        Assertions.assertNotNull(job);
+    }
+
+    /**
+     * verifyNewTabletRanges throws synchronously when an FE-supplied child range's
+     * colocate prefix has no covering ColocateRange. Models the failure mode where a
+     * BE supplies bad boundaries on a range-colocate table whose ColocateRangeMgr does
+     * not extend over the full key space.
+     */
+    @Test
+    public void testForExternalBoundariesRejectsUncoveredColocateRange() throws Exception {
+        PhysicalPartition physicalPartition = table.getAllPhysicalPartitions().iterator().next();
+        MaterializedIndex materializedIndex = physicalPartition.getLatestBaseIndex();
+        Tablet oldTablet = materializedIndex.getTablets().get(0);
+        long oldTabletId = oldTablet.getId();
+        oldTablet.setRange(new TabletRange());
+
+        // Truncate ColocateRangeMgr to (-inf, prefix50) only — anything with prefix >= 50
+        // has no covering ColocateRange.
+        ColocateTableIndex idx = GlobalStateMgr.getCurrentState().getColocateTableIndex();
+        ColocateRangeMgr rangeMgr = idx.getColocateRangeMgr();
+        long shardGroupId = rangeMgr.getColocateRanges(groupId.grpId).get(0).getShardGroupId();
+        Tuple prefix50 = new Tuple(Arrays.asList(Variant.of(IntegerType.INT, "50")));
+        rangeMgr.setColocateRanges(groupId.grpId, Arrays.asList(
+                new ColocateRange(Range.lt(prefix50), shardGroupId)));
+
+        // Middle child range has lower-bound prefix 100, which falls outside the truncated
+        // ColocateRangeMgr coverage and must be rejected.
+        Tuple prefix100 = new Tuple(Arrays.asList(Variant.of(IntegerType.INT, "100")));
+        Tuple prefix200 = new Tuple(Arrays.asList(Variant.of(IntegerType.INT, "200")));
+        List<TabletRange> newTabletRanges = Arrays.asList(
+                new TabletRange(Range.lt(prefix100)),
+                new TabletRange(Range.of(prefix100, prefix200, true, false)),
+                new TabletRange(Range.ge(prefix200)));
+
+        StarRocksException thrown = Assertions.assertThrows(StarRocksException.class,
+                () -> SplitTabletJobFactory.forExternalBoundaries(
+                        db, table, oldTabletId, newTabletRanges));
+        Assertions.assertTrue(thrown.getMessage().contains("no covering ColocateRange"),
+                "expected 'no covering ColocateRange' in message, got: " + thrown.getMessage());
     }
 }
