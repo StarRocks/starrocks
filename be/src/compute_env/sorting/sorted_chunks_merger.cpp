@@ -12,13 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "runtime/sorted_chunks_merger.h"
+#include "compute_env/sorting/sorted_chunks_merger.h"
 
 #include "column/chunk.h"
+#include "compute_env/sorting/chunk_cursor.h"
 #include "compute_env/sorting/sort_cursor.h"
 #include "compute_env/sorting/sorting.h"
-#include "exec/sort_exec_exprs.h"
-#include "runtime/chunk_cursor.h"
+#include "exprs/expr.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks {

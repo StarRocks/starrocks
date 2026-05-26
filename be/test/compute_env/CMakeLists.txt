@@ -33,6 +33,7 @@ target_link_libraries(compute_env_test ${COMPUTE_ENV_TEST_LINK_LIBS} gtest_main)
 
 set(COMPUTE_ENV_SORTING_TEST_FILES
     ${BE_TEST_MACOS_LINK_STUBS}
+    sorting/sorted_chunks_merger_test.cpp
     sorting/sorting_test.cpp
 )
 

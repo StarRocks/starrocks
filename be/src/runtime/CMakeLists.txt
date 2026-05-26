@@ -123,8 +123,6 @@ set(RUNTIME_FILES
     small_file_mgr.cpp
     result_queue_mgr.cpp
     external_scan_context_mgr.cpp
-    chunk_cursor.cpp
-    sorted_chunks_merger.cpp
     tablets_channel.cpp
     runtime_filter_worker.cpp
     runtime_filter_serde.cpp

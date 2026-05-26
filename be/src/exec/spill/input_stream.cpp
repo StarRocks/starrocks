@@ -28,12 +28,12 @@
 #include "common/config_exec_flow_fwd.h"
 #include "common/status.h"
 #include "compute_env/sorting/sort_cursor.h"
+#include "compute_env/sorting/sorted_chunks_merger.h"
 #include "exec/spill/block_manager.h"
 #include "exec/spill/serde.h"
 #include "exec/spill/spiller.h"
 #include "exec/workgroup/work_group.h"
 #include "runtime/runtime_state.h"
-#include "runtime/sorted_chunks_merger.h"
 
 namespace starrocks::spill {
 
