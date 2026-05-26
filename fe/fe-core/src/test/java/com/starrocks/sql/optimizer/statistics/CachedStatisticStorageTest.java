@@ -527,7 +527,8 @@ public class CachedStatisticStorageTest {
 
             // WHEN
             // The method should return without throwing despite the future not completing
-            Deencapsulation.invoke(storage, "waitForStatsFutureIfWaitEnabled", neverCompletingFuture);
+            Deencapsulation.invoke(storage, "waitForStatsFutureIfWaitEnabled", neverCompletingFuture,
+                    "context");
 
             // THEN
             // Future should still not be done (timeout was caught internally)
@@ -550,7 +551,8 @@ public class CachedStatisticStorageTest {
 
             // WHEN
             // Should return immediately without waiting
-            Deencapsulation.invoke(storage, "waitForStatsFutureIfWaitEnabled", neverCompletingFuture);
+            Deencapsulation.invoke(storage, "waitForStatsFutureIfWaitEnabled", neverCompletingFuture,
+                    "context");
 
             // THEN
             Assertions.assertFalse(neverCompletingFuture.isDone());
