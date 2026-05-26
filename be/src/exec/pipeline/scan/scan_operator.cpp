@@ -373,13 +373,29 @@ Status ScanOperator::_try_to_trigger_next_scan(RuntimeState* state) {
             }
         }
 
-        // now skip vector includes already started chunk source
-        // we are going to pick up `total_cnt` new chunk source to start.
+        int empty_slots[_io_tasks_per_scan_operator];
+        int normal_slots[_io_tasks_per_scan_operator];
+        int empty_count = 0;
+        int normal_count = 0;
+
+        // Prefer truly empty slots before slots holding reusable state, while
+        // preserving the existing round-robin order inside each group.
         for (int i = 0; i < _io_tasks_per_scan_operator && size < total_cnt; i++) {
             _chunk_source_idx = (_chunk_source_idx + 1) % _io_tasks_per_scan_operator;
             int idx = _chunk_source_idx;
             if (skip[idx]) continue;
-            to_sched[size++] = idx;
+            if (_is_empty_slot_for_new_morsel(idx)) {
+                empty_slots[empty_count++] = idx;
+            } else {
+                normal_slots[normal_count++] = idx;
+            }
+        }
+
+        for (int i = 0; i < empty_count && size < total_cnt; ++i) {
+            to_sched[size++] = empty_slots[i];
+        }
+        for (int i = 0; i < normal_count && size < total_cnt; ++i) {
+            to_sched[size++] = normal_slots[i];
         }
     }
 
