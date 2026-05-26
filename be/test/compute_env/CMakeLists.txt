@@ -28,8 +28,13 @@ set(COMPUTE_ENV_TEST_LINK_LIBS
     ${WL_END_GROUP}
 )
 
-add_executable(compute_env_test compute_env_test.cpp data_stream_mgr_test.cpp)
-target_link_libraries(compute_env_test ${COMPUTE_ENV_TEST_LINK_LIBS} gtest_main)
+add_executable(compute_env_test
+        buffer_control_block_test.cpp
+        compute_env_test.cpp
+        compute_env_test_main.cpp
+        data_stream_mgr_test.cpp
+        result_queue_mgr_test.cpp)
+target_link_libraries(compute_env_test ${COMPUTE_ENV_TEST_LINK_LIBS})
 
 set(COMPUTE_ENV_SORTING_TEST_FILES
     ${BE_TEST_MACOS_LINK_STUBS}

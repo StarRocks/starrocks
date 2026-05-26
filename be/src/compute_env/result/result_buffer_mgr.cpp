@@ -12,34 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// This file is based on code available under the Apache license here:
-//   https://github.com/apache/incubator-doris/blob/master/be/src/runtime/result_buffer_mgr.cpp
-
-// Licensed to the Apache Software Foundation (ASF) under one
-// or more contributor license agreements.  See the NOTICE file
-// distributed with this work for additional information
-// regarding copyright ownership.  The ASF licenses this file
-// to you under the Apache License, Version 2.0 (the
-// "License"); you may not use this file except in compliance
-// with the License.  You may obtain a copy of the License at
-//
-//   http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing,
-// software distributed under the License is distributed on an
-// "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
-// KIND, either express or implied.  See the License for the
-// specific language governing permissions and limitations
-// under the License.
-
-#include "runtime/result_buffer_mgr.h"
+#include "compute_env/result/result_buffer_mgr.h"
 
 #include <memory>
 
 #include "common/thread/thread.h"
 #include "common/util/misc.h"
+#include "compute_env/result/buffer_control_block.h"
 #include "gen_cpp/InternalService_types.h"
-#include "runtime/buffer_control_block.h"
 #include "runtime/runtime_metrics.h"
 
 namespace starrocks {
@@ -55,12 +35,25 @@ ResultBufferMgr::ResultBufferMgr(MetricRegistry* metrics) {
     }
 }
 
+ResultBufferMgr::~ResultBufferMgr() {
+    stop();
+}
+
 void ResultBufferMgr::stop() {
-    _is_stop = true;
-    _cancel_thread->join();
+    if (_is_stop.exchange(true)) {
+        return;
+    }
+    if (_cancel_thread != nullptr && _cancel_thread->joinable()) {
+        _cancel_thread->join();
+    }
+    _cancel_thread.reset();
 }
 
 Status ResultBufferMgr::init() {
+    if (_cancel_thread != nullptr) {
+        return Status::OK();
+    }
+    _is_stop.store(false);
     _cancel_thread = std::make_unique<std::thread>(
             std::bind<void>(std::mem_fn(&ResultBufferMgr::cancel_thread), this)); // NOLINT
     Thread::set_thread_name(_cancel_thread->native_handle(), "res_buf_mgr");
@@ -171,7 +164,7 @@ Status ResultBufferMgr::cancel_at_time(time_t cancel_time, const TUniqueId& quer
 void ResultBufferMgr::cancel_thread() {
     LOG(INFO) << "result buffer manager cancel thread begin.";
 
-    while (!_is_stop) {
+    while (!_is_stop.load()) {
         // get query
         std::vector<TUniqueId> query_to_cancel;
         time_t now_time = time(nullptr);
@@ -192,7 +185,7 @@ void ResultBufferMgr::cancel_thread() {
         for (auto& i : query_to_cancel) {
             (void)cancel(i);
         }
-        nap_sleep(1, [this] { return _is_stop; });
+        nap_sleep(1, [this] { return _is_stop.load(); });
     }
 
     LOG(INFO) << "result buffer manager cancel thread finish.";

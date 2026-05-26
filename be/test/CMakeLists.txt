@@ -268,7 +268,6 @@ set(EXEC_FILES
         ./io/spill_test.cpp
         ./runtime/agg_state_desc_test.cpp
         ./exec/data_sinks/arrow_result_writer_test.cpp
-        ./runtime/buffer_control_block_test.cpp
         ./runtime/descriptors_test.cpp
         ./runtime/diagnose_daemon_test.cpp
         ./runtime/external_scan_context_mgr_test.cpp
@@ -285,7 +284,6 @@ set(EXEC_FILES
         ./runtime/rejected_record_sync_daemon_test.cpp
         ./runtime/rejected_record_writer_test.cpp
         ./runtime/runtime_state_helper_test.cpp
-        ./runtime/result_queue_mgr_test.cpp
         ./runtime/batch_write/batch_write_mgr_test.cpp
         ./runtime/batch_write/batch_write_util_test.cpp
         ./runtime/batch_write/isomorphic_batch_write_test.cpp

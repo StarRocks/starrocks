@@ -22,6 +22,8 @@ namespace starrocks {
 
 class DataStreamMgr;
 class MetricRegistry;
+class ResultBufferMgr;
+class ResultQueueMgr;
 
 namespace pipeline {
 class DriverLimiter;
@@ -43,16 +45,22 @@ public:
 
     Status init(const ComputeEnvOptions& options);
     void stop();
+    Status start_result_mgr();
+    void stop_result_mgr();
     void destroy();
 
     pipeline::DriverLimiter* driver_limiter() const { return _driver_limiter.get(); }
     pipeline::PipelineTimer* pipeline_timer() const { return _pipeline_timer.get(); }
     DataStreamMgr* stream_mgr() const { return _stream_mgr.get(); }
+    ResultBufferMgr* result_mgr() const { return _result_mgr.get(); }
+    ResultQueueMgr* result_queue_mgr() const { return _result_queue_mgr.get(); }
 
 private:
     std::unique_ptr<pipeline::DriverLimiter> _driver_limiter;
     std::unique_ptr<pipeline::PipelineTimer> _pipeline_timer;
     std::unique_ptr<DataStreamMgr> _stream_mgr;
+    std::unique_ptr<ResultBufferMgr> _result_mgr;
+    std::unique_ptr<ResultQueueMgr> _result_queue_mgr;
 };
 
 } // namespace starrocks

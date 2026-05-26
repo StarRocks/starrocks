@@ -86,8 +86,6 @@
 #include "runtime/mem_tracker.h"
 #include "runtime/profile_report_worker.h"
 #include "runtime/rejected_record_sync_daemon.h"
-#include "runtime/result_buffer_mgr.h"
-#include "runtime/result_queue_mgr.h"
 #include "runtime/routine_load/routine_load_task_executor.h"
 #include "runtime/runtime_filter_cache.h"
 #include "runtime/runtime_filter_worker.h"
@@ -186,8 +184,8 @@ void ExecEnv::_refresh_service_contexts() {
     _runtime_services.external_scan_context_mgr = _external_scan_context_mgr;
     _runtime_services.stream_mgr = stream_mgr();
     _runtime_services.lookup_dispatcher_mgr = _lookup_dispatcher_mgr;
-    _runtime_services.result_mgr = _result_mgr;
-    _runtime_services.result_queue_mgr = _result_queue_mgr;
+    _runtime_services.result_mgr = result_mgr();
+    _runtime_services.result_queue_mgr = result_queue_mgr();
     _runtime_services.fragment_mgr = _fragment_mgr;
     _runtime_services.load_path_mgr = _load_path_mgr;
     _runtime_services.load_channel_mgr = _load_channel_mgr;
@@ -242,8 +240,6 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, ProcessMetricsRe
     _store_paths = store_paths;
     _external_scan_context_mgr = new ExternalScanContextMgr(this, process_metrics);
     _lookup_dispatcher_mgr = new LookUpDispatcherMgr();
-    _result_mgr = new ResultBufferMgr(process_metrics);
-    _result_queue_mgr = new ResultQueueMgr(process_metrics);
     // query_context_mgr keeps slotted map with 64 slot to reduce contention
     _query_context_mgr = new pipeline::QueryContextManager(6);
     RETURN_IF_ERROR(_query_context_mgr->init(process_metrics));
@@ -341,7 +337,7 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, ProcessMetricsRe
         return (pool == nullptr) ? 0U : pool->queue_size();
     });
 
-    RETURN_IF_ERROR(_result_mgr->init());
+    RETURN_IF_ERROR(_compute_env->start_result_mgr());
 
     // it means acting as compute node while store_path is empty. some threads are not needed for that case.
     Status status = _load_path_mgr->init();
@@ -453,6 +449,14 @@ std::string ExecEnv::token() const {
 
 DataStreamMgr* ExecEnv::stream_mgr() {
     return _compute_env == nullptr ? nullptr : _compute_env->stream_mgr();
+}
+
+ResultBufferMgr* ExecEnv::result_mgr() {
+    return _compute_env == nullptr ? nullptr : _compute_env->result_mgr();
+}
+
+ResultQueueMgr* ExecEnv::result_queue_mgr() {
+    return _compute_env == nullptr ? nullptr : _compute_env->result_queue_mgr();
 }
 
 void ExecEnv::stop() {
@@ -600,9 +604,9 @@ void ExecEnv::stop() {
         component_times.emplace_back("query_context_mgr", MonotonicMillis() - start);
     }
 
-    if (_result_mgr) {
+    if (_compute_env != nullptr && _compute_env->result_mgr() != nullptr) {
         start = MonotonicMillis();
-        _result_mgr->stop();
+        _compute_env->stop_result_mgr();
         component_times.emplace_back("result_mgr", MonotonicMillis() - start);
     }
 
@@ -696,8 +700,6 @@ void ExecEnv::destroy() {
     // WorkGroupManager should release MemTracker of WorkGroups belongs to itself before deallocate
     // _query_pool_mem_tracker.
     SAFE_DELETE(_runtime_filter_cache);
-    SAFE_DELETE(_result_queue_mgr);
-    SAFE_DELETE(_result_mgr);
     SAFE_DELETE(_lookup_dispatcher_mgr);
     SAFE_DELETE(_batch_write_mgr);
     SAFE_DELETE(_external_scan_context_mgr);

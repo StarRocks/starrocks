@@ -141,8 +141,8 @@ public:
     TableMetricsManager* table_metrics_mgr() const { return _table_metrics_mgr; }
     DataStreamMgr* stream_mgr();
     LookUpDispatcherMgr* lookup_dispatcher_mgr() { return _lookup_dispatcher_mgr; }
-    ResultBufferMgr* result_mgr() { return _result_mgr; }
-    ResultQueueMgr* result_queue_mgr() { return _result_queue_mgr; }
+    ResultBufferMgr* result_mgr();
+    ResultQueueMgr* result_queue_mgr();
 
     pipeline::DriverExecutor* wg_driver_executor();
     workgroup::ScanExecutor* scan_executor();
@@ -227,8 +227,6 @@ private:
     ExternalScanContextMgr* _external_scan_context_mgr = nullptr;
     ProcessMetricsRegistry* _process_metrics_registry = nullptr;
     TableMetricsManager* _table_metrics_mgr = nullptr;
-    ResultBufferMgr* _result_mgr = nullptr;
-    ResultQueueMgr* _result_queue_mgr = nullptr;
     FragmentMgr* _fragment_mgr = nullptr;
     pipeline::QueryContextManager* _query_context_mgr = nullptr;
     std::unique_ptr<workgroup::WorkGroupManager> _workgroup_manager;
