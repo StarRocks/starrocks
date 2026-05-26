@@ -29,6 +29,10 @@ set(COMPUTE_ENV_SORTING_FILES
 
 ADD_BE_LIB(ComputeEnv
     compute_env.cpp
+    data_stream/data_stream_mgr.cpp
+    data_stream/data_stream_recvr.cpp
+    data_stream/local_pass_through_buffer.cpp
+    data_stream/sender_queue.cpp
     pipeline/driver_limiter.cpp
     pipeline/observer.cpp
     ${COMPUTE_ENV_SORTING_FILES}
@@ -37,6 +41,7 @@ ADD_BE_LIB(ComputeEnv
 target_link_libraries(ComputeEnv PUBLIC
     ExecPrimitive
     ExprCore
+    Serde
     RuntimeEnv
     RuntimeCore
     Platform

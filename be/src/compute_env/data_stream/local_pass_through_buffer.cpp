@@ -12,12 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "runtime/local_pass_through_buffer.h"
+#include "compute_env/data_stream/local_pass_through_buffer.h"
 
 #include "column/chunk.h"
 #include "common/logging.h"
 #include "runtime/current_thread.h"
-#include "runtime/exec_env.h"
+#include "runtime/env/global_env.h"
 #include "runtime/mem_tracker.h"
 
 namespace starrocks {

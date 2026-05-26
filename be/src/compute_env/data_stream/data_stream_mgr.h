@@ -47,9 +47,9 @@
 #include "common/global_types.h"
 #include "common/runtime_profile.h"
 #include "common/status.h"
+#include "compute_env/data_stream/local_pass_through_buffer.h"
 #include "gen_cpp/Types_types.h" // for TUniqueId
 #include "runtime/descriptors_fwd.h"
-#include "runtime/local_pass_through_buffer.h"
 #include "runtime/query_statistics.h"
 
 namespace google::protobuf {

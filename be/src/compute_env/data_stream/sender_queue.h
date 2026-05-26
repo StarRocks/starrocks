@@ -20,7 +20,7 @@
 #include "base/concurrency/moodycamel/concurrentqueue.h"
 #include "base/concurrency/spinlock.h"
 #include "column/vectorized_fwd.h"
-#include "runtime/data_stream_recvr.h"
+#include "compute_env/data_stream/data_stream_recvr.h"
 #include "serde/protobuf_serde.h"
 
 namespace google::protobuf {

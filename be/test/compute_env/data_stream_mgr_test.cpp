@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "runtime/data_stream_mgr.h"
+#include "compute_env/data_stream/data_stream_mgr.h"
 
 #include <gtest/gtest.h>
 

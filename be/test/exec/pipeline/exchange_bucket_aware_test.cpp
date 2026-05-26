@@ -17,6 +17,8 @@
 #include "base/testutil/assert.h"
 #include "common/config_exec_flow_fwd.h"
 #include "common/config_network_fwd.h"
+#include "compute_env/data_stream/data_stream_mgr.h"
+#include "compute_env/data_stream/data_stream_recvr.h"
 #include "exec/pipeline/exchange/exchange_sink_operator.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exprs/expr_executor.h"
@@ -25,8 +27,6 @@
 #include "gen_cpp/InternalService_types.h"
 #include "gen_cpp/Partitions_types.h"
 #include "gen_cpp/Types_types.h"
-#include "runtime/data_stream_mgr.h"
-#include "runtime/data_stream_recvr.h"
 #include "runtime/runtime_state.h"
 #include "types/datum.h"
 

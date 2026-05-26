@@ -36,12 +36,12 @@
 
 #include "base/brpc/brpc.h"
 #include "base/uid_util.h"
+#include "compute_env/data_stream/data_stream_mgr.h"
 #include "exec/pipeline/fragment_context.h"
 #include "gen_cpp/BackendService.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/buffer_control_block.h"
 #include "runtime/closure_guard.h"
-#include "runtime/data_stream_mgr.h"
 #include "runtime/exec_env.h"
 #include "runtime/fragment_mgr.h"
 #include "runtime/load_channel_mgr.h"

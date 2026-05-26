@@ -37,6 +37,8 @@
 #include "column/chunk.h"
 #include "common/config_exec_flow_fwd.h"
 #include "common/runtime_profile.h"
+#include "compute_env/data_stream/data_stream_mgr.h"
+#include "compute_env/data_stream/data_stream_recvr.h"
 #include "exec/pipeline/chunk_accumulate_operator.h"
 #include "exec/pipeline/exchange/exchange_merge_sort_source_operator.h"
 #include "exec/pipeline/exchange/exchange_parallel_merge_source_operator.h"
@@ -45,8 +47,6 @@
 #include "exec/pipeline/limit_operator.h"
 #include "exec/pipeline/offset_operator.h"
 #include "exec/pipeline/pipeline_builder.h"
-#include "runtime/data_stream_mgr.h"
-#include "runtime/data_stream_recvr.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
 
@@ -98,7 +98,8 @@ Status ExchangeNode::open(RuntimeState* state) {
     RETURN_IF_ERROR(ExecNode::open(state));
     if (_is_merging) {
         RETURN_IF_ERROR(_sort_exec_exprs.open(state));
-        RETURN_IF_ERROR(_stream_recvr->create_merger(state, _runtime_profile.get(), &_sort_exec_exprs, &_is_asc_order,
+        RETURN_IF_ERROR(_stream_recvr->create_merger(state, _runtime_profile.get(),
+                                                     _sort_exec_exprs.lhs_ordering_expr_ctxs(), &_is_asc_order,
                                                      &_nulls_first));
     }
     return Status::OK();

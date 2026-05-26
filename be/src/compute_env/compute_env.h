@@ -20,6 +20,9 @@
 
 namespace starrocks {
 
+class DataStreamMgr;
+class MetricRegistry;
+
 namespace pipeline {
 class DriverLimiter;
 class PipelineTimer;
@@ -27,6 +30,7 @@ class PipelineTimer;
 
 struct ComputeEnvOptions {
     int max_num_pipeline_drivers = 0;
+    MetricRegistry* metrics = nullptr;
 };
 
 class ComputeEnv {
@@ -43,10 +47,12 @@ public:
 
     pipeline::DriverLimiter* driver_limiter() const { return _driver_limiter.get(); }
     pipeline::PipelineTimer* pipeline_timer() const { return _pipeline_timer.get(); }
+    DataStreamMgr* stream_mgr() const { return _stream_mgr.get(); }
 
 private:
     std::unique_ptr<pipeline::DriverLimiter> _driver_limiter;
     std::unique_ptr<pipeline::PipelineTimer> _pipeline_timer;
+    std::unique_ptr<DataStreamMgr> _stream_mgr;
 };
 
 } // namespace starrocks

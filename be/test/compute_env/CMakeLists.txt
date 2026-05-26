@@ -28,7 +28,7 @@ set(COMPUTE_ENV_TEST_LINK_LIBS
     ${WL_END_GROUP}
 )
 
-add_executable(compute_env_test compute_env_test.cpp)
+add_executable(compute_env_test compute_env_test.cpp data_stream_mgr_test.cpp)
 target_link_libraries(compute_env_test ${COMPUTE_ENV_TEST_LINK_LIBS} gtest_main)
 
 set(COMPUTE_ENV_SORTING_TEST_FILES
