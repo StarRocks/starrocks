@@ -129,10 +129,7 @@ bool UrlParser::parse_url(const Slice& url, UrlPart part, Slice* result) {
     }
 
     case HOST: {
-<<<<<<< HEAD:be/src/util/url_parser.cpp
         if (is_relative) return false;
-=======
-        if (is_relative) return ParseStatus::NOT_FOUND;
         int32_t first_slash = _s_slash_search.search(protocol_end);
         int32_t first_question = _s_question_search.search(protocol_end);
 
@@ -144,7 +141,6 @@ bool UrlParser::parse_url(const Slice& url, UrlPart part, Slice* result) {
             end_pos = first_question;
         }
         auto host_end = protocol_end.substr(0, end_pos);
->>>>>>> e065a406f4 ([BugFix] Fix extract wrong host from url (#63542)):be/src/base/string/url_parser.cpp
         // Find '@'.
         int32_t start_pos = _s_at_search.search(host_end);
 
