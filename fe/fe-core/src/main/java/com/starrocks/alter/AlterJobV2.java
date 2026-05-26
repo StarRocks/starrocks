@@ -259,6 +259,7 @@ public abstract class AlterJobV2 implements Writable {
         copy.timeoutMs = this.timeoutMs;
         copy.warehouseId = this.warehouseId;
         copy.computeResource = this.computeResource;
+        copy.forceSkippedAtCommitted = this.forceSkippedAtCommitted;
     }
 
     public static void persistStateChange(AlterJobV2 job, JobState newState) {
@@ -349,9 +350,7 @@ public abstract class AlterJobV2 implements Writable {
     }
 
     public boolean cancel(String errMsg) {
-        synchronized (this) {
-            return cancelInternal(errMsg);
-        }
+        return cancel(errMsg, false);
     }
 
     /**
@@ -361,14 +360,28 @@ public abstract class AlterJobV2 implements Writable {
      * stuck) MUST bypass that guard and cancel anyway — that is the whole
      * point of the operator-only escape hatch.
      *
-     * <p>For {@code force=false} this is a strict superset of {@link #cancel(String)}
-     * so existing callers behave unchanged.
+     * <p>{@code cancel(String)} is now an alias for {@code cancel(errMsg, false)};
+     * subclasses that need pre-monitor work (release latches, signal cancelling)
+     * should override this two-arg form so both call sites share that work.
      */
     public boolean cancel(String errMsg, boolean force) {
         synchronized (this) {
-            boolean cancelled = cancelImpl(errMsg, force);
-            if (cancelled && force) {
-                forceSkippedAtCommitted = true;
+            // Set the audit flag BEFORE cancelImpl so persistStateChange
+            // (called from inside cancelImpl) sees it via copyForPersist and
+            // logs it to the edit log. Without this, the flag would only live
+            // on the in-memory job and be lost after FE replay.
+            boolean cancelled = false;
+            try {
+                if (force) {
+                    forceSkippedAtCommitted = true;
+                }
+                cancelled = cancelImpl(errMsg, force);
+            } finally {
+                if (!cancelled && force) {
+                    // cancelImpl refused or threw; unwind the optimistic flag
+                    // so it doesn't lie about history.
+                    forceSkippedAtCommitted = false;
+                }
             }
             cancelHook(cancelled);
             return cancelled;

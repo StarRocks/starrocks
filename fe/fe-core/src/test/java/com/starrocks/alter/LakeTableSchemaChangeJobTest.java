@@ -477,6 +477,34 @@ public class LakeTableSchemaChangeJobTest {
     }
 
     @Test
+    public void testForceCancelAuditFlagPersisted() throws Exception {
+        // forceSkippedAtCommitted is the post-mortem audit marker for a FORCE
+        // cancel. It is set on the live job during cancel(force=true), but the
+        // edit log records a copyForPersist() copy. Regression guard: ensure
+        // the copy carries the flag, so an FE replay or fresh load sees the
+        // flag instead of silently dropping it to false.
+        LakeTableSchemaChangeJob schemaChangeJob = alterTableAddColumn();
+        new MockUp<LakeTableSchemaChangeJob>() {
+            @Mock
+            public void sendAgentTask(AgentBatchTask batchTask) {
+                batchTask.getAllTasks().forEach(t -> t.setFinished(true));
+            }
+        };
+        schemaChangeJob.runPendingJob();
+        schemaChangeJob.runWaitingTxnJob();
+        schemaChangeJob.runRunningJob();
+        Assertions.assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, schemaChangeJob.getJobState());
+
+        Assertions.assertTrue(schemaChangeJob.cancel("force-cancel-persist-test", /*force=*/ true));
+        Assertions.assertTrue(schemaChangeJob.isForceSkippedAtCommitted());
+
+        // The same copyForPersist() path used by EditLog.logAlterJob must carry the flag.
+        AlterJobV2 persistCopy = schemaChangeJob.copyForPersist();
+        Assertions.assertTrue(persistCopy.isForceSkippedAtCommitted(),
+                "copyForPersist must propagate forceSkippedAtCommitted so the edit log records it");
+    }
+
+    @Test
     public void testParseCancelAlterTableForce() {
         // The new FORCE keyword on CANCEL ALTER TABLE must surface as
         // CancelAlterTableStmt.isForce() = true so the handler can route to
