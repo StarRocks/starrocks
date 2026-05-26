@@ -728,20 +728,23 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
     }
 
     public String getMetaDefaultValue(List<String> extras) {
+        // Generator expressions must win over any materialized defaultValue: schema-change paths freeze
+        // ALTER-time into defaultValue so BE can backfill existing rows, but metadata callers (DESCRIBE,
+        // information_schema.columns) must still report the generator, not the frozen literal.
+        if (defaultExpr != null && isEmptyDefaultTimeFunction(defaultExpr)) {
+            if (extras != null) {
+                extras.add("DEFAULT_GENERATED");
+            }
+            return "CURRENT_TIMESTAMP";
+        }
         if (defaultValue != null) {
             return defaultValue;
-        } else if (defaultExpr != null) {
-            if (isEmptyDefaultTimeFunction(defaultExpr)) {
-                if (extras != null) {
-                    extras.add("DEFAULT_GENERATED");
-                }
-                return "CURRENT_TIMESTAMP";
-            } else {
-                if (extras != null) {
-                    extras.add("DEFAULT_GENERATED");
-                }
-                return defaultExpr.getExpr();
+        }
+        if (defaultExpr != null) {
+            if (extras != null) {
+                extras.add("DEFAULT_GENERATED");
             }
+            return defaultExpr.getExpr();
         }
         return null;
     }

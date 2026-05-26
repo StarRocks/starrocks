@@ -14,10 +14,20 @@
 
 package com.starrocks.persist;
 
+import com.google.common.collect.Lists;
+import com.starrocks.analysis.FunctionCallExpr;
+import com.starrocks.analysis.IntLiteral;
+import com.starrocks.catalog.Column;
+import com.starrocks.catalog.Type;
+import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.sql.ast.ColumnDef;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
 import java.util.Collections;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 
 public class TableAddOrDropColumnsInfoTest {
     @Test
@@ -40,6 +50,34 @@ public class TableAddOrDropColumnsInfoTest {
         Assertions.assertEquals(info, info2);
         Assertions.assertNotNull(info.toString());
 
+    }
+
+    @Test
+    public void testEditLogRoundtripPreservesCurrentTimestampPrecision() {
+        // Edit-log replay path: TableAddOrDropColumnsInfo carries the new schema as List<Column>, written
+        // via GsonUtils.GSON.toJson and read back symmetrically. A Column whose default is
+        // current_timestamp(3) must come out the other side with hasArguments still true, otherwise replay
+        // silently demotes the precision-bearing generator to current_timestamp().
+        FunctionCallExpr ctsExpr = new FunctionCallExpr("current_timestamp",
+                Lists.newArrayList(new IntLiteral(3L, Type.INT)));
+        Column tsCol = new Column("ts", Type.DATETIME, false, null, true,
+                new ColumnDef.DefaultValueDef(true, true, ctsExpr), "");
+        Assertions.assertTrue(tsCol.getDefaultExpr().hasArgs());
+
+        Map<Long, List<Column>> indexSchemaMap = new HashMap<>();
+        indexSchemaMap.put(100L, Lists.newArrayList(tsCol));
+
+        TableAddOrDropColumnsInfo info = new TableAddOrDropColumnsInfo(1, 1,
+                indexSchemaMap, Collections.emptyList(), 0, 1, Collections.emptyMap());
+
+        String json = GsonUtils.GSON.toJson(info);
+        TableAddOrDropColumnsInfo replayed = GsonUtils.GSON.fromJson(json, TableAddOrDropColumnsInfo.class);
+
+        Column replayedTs = replayed.getIndexSchemaMap().get(100L).get(0);
+        Assertions.assertNotNull(replayedTs.getDefaultExpr());
+        Assertions.assertTrue(replayedTs.getDefaultExpr().hasArgs(),
+                "edit-log replay must preserve hasArguments for current_timestamp(3)");
+        Assertions.assertEquals(Column.DefaultValueType.VARY, replayedTs.getDefaultValueType());
     }
 
 }

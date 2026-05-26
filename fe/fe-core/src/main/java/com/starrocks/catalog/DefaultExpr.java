@@ -21,17 +21,24 @@ import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.FunctionName;
 import com.starrocks.analysis.FunctionParams;
 import com.starrocks.analysis.IntLiteral;
+import com.starrocks.persist.gson.GsonPostProcessable;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.io.IOException;
 import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-public class DefaultExpr {
+public class DefaultExpr implements GsonPostProcessable {
     private static final Logger LOG = LogManager.getLogger(DefaultExpr.class);
     @SerializedName("expr")
     private String expr;
+    // StarRocks Gson skips fields without @SerializedName (see HiddenAnnotationExclusionStrategy).
+    // Without persistence this flag flipped to false after FE restart / edit-log replay, which made
+    // isEmptyDefaultTimeFunction misclassify "current_timestamp(N)" as the empty form and silently
+    // dropped its precision argument.
+    @SerializedName("hasArguments")
     private boolean hasArguments;
 
     public DefaultExpr(String expr, boolean hasArguments) {
@@ -49,6 +56,19 @@ public class DefaultExpr {
 
     public boolean hasArgs() {
         return hasArguments;
+    }
+
+    @Override
+    public void gsonPostProcess() throws IOException {
+        // Backfill hasArguments for columns persisted before the @SerializedName annotation existed:
+        // the field deserialized to the primitive default false. The argument list is observable from
+        // the expr string itself - a valid time-function default with a non-empty paren means args.
+        if (!hasArguments && expr != null) {
+            String trimmed = expr.trim();
+            if (isValidDefaultTimeFunction(trimmed) && !trimmed.endsWith("()")) {
+                hasArguments = true;
+            }
+        }
     }
 
     public static boolean isValidDefaultFunction(String expr) {

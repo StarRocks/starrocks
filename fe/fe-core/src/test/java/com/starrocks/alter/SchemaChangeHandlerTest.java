@@ -733,6 +733,46 @@ public class SchemaChangeHandlerTest extends TestWithFeService {
     }
 
     @Test
+    public void testAlterTableAddColumnDefaultCurrentTimestampPreservesGenerator() throws Exception {
+        String createTableStmt = "CREATE TABLE test.test_alter_add_now (\n" +
+                "id BIGINT NOT NULL\n" +
+                ") PRIMARY KEY(id)\n" +
+                "DISTRIBUTED BY HASH(id) BUCKETS 1\n" +
+                "PROPERTIES (\n" +
+                "    'replication_num' = '1',\n" +
+                "    'fast_schema_evolution' = 'true'\n" +
+                ");";
+        createTable(createTableStmt);
+
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        OlapTable table = (OlapTable) db.getTable("test_alter_add_now");
+        Assertions.assertNotNull(table);
+
+        String alterSql = "ALTER TABLE test.test_alter_add_now ADD COLUMN ts DATETIME DEFAULT current_timestamp";
+        AlterTableStmt alterStmt = (AlterTableStmt) parseAndAnalyzeStmt(alterSql);
+        Assertions.assertDoesNotThrow(() -> {
+            SchemaChangeHandler handler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
+            handler.process(alterStmt.getAlterClauseList(), db, table);
+        });
+        jobSize++;
+
+        Column tsCol = table.getColumn("ts");
+        Assertions.assertNotNull(tsCol);
+        Assertions.assertNotNull(tsCol.getDefaultExpr());
+        // ALTER-time string is preserved on defaultValue so BE can backfill pre-existing rows.
+        Assertions.assertNotNull(tsCol.getDefaultValue(),
+                "ALTER-time materialization must be kept for BE backfill of pre-existing rows");
+        Assertions.assertEquals(Column.DefaultValueType.CONST, tsCol.getDefaultValueType());
+
+        // Metadata callers (DESCRIBE, information_schema.columns) must surface the generator, not the
+        // frozen literal stashed in defaultValue by the schema-change backfill path.
+        List<String> extras = Lists.newArrayList();
+        Assertions.assertEquals("CURRENT_TIMESTAMP", tsCol.getMetaDefaultValue(extras));
+        Assertions.assertTrue(extras.contains("DEFAULT_GENERATED"),
+                "current_timestamp default must be reported as DEFAULT_GENERATED");
+    }
+
+    @Test
     public void testSortKeyUpdatedAfterAddKeyColumnAgg() throws Exception {
         createTable("CREATE TABLE test.sc_agg_sort_key (\n"
                 + "k0 INT,\n"
