@@ -29,6 +29,9 @@ class SlotDescriptor;
 namespace lake {
 class TabletManager;
 }
+namespace pipeline {
+struct LakeSplitContext;
+}
 } // namespace starrocks
 
 namespace starrocks::connector {
@@ -61,6 +64,10 @@ public:
     Status open(RuntimeState* state) override;
     void close(RuntimeState* state) override;
     Status get_next(RuntimeState* state, ChunkPtr* chunk) override;
+    bool has_reusable_state() const override;
+    bool can_reuse_with(pipeline::ScanMorsel& morsel) const override;
+    Status reuse(RuntimeState* state, pipeline::ScanMorsel* morsel) override;
+    void release_for_reuse(RuntimeState* state) override;
 
     int64_t raw_rows_read() const override { return _raw_rows_read; }
     int64_t num_rows_read() const override { return _num_rows_read; }
@@ -87,10 +94,13 @@ private:
     void decide_chunk_size(bool has_predicate);
     Status init_reader_params(const std::vector<OlapScanRange*>& key_ranges);
     Status init_tablet_reader(RuntimeState* state);
+    Status reopen_reader(RuntimeState* state);
+    void apply_child_split_context(const pipeline::LakeSplitContext& split_context);
     Status build_scan_range(RuntimeState* state);
     void init_counter(RuntimeState* state);
     void update_realtime_counter(Chunk* chunk);
     void update_counter(RuntimeState* state);
+    void refresh_reusable_reader_key();
 
     Status _extend_schema_by_access_paths();
     void _inherit_default_value_from_json(TabletColumn* column, const TabletColumn& root_column,
@@ -122,6 +132,11 @@ private:
     std::shared_ptr<lake::TabletReader> _reader;
     // projection iterator, doing the job of choosing |_scanner_columns| from |_reader_columns|.
     std::shared_ptr<ChunkIterator> _prj_iter;
+    bool _needs_reopen = false;
+    struct ReusableReaderKey {
+        const lake::PreparedTabletReadState* prepared_tablet_read_state = nullptr;
+    };
+    ReusableReaderKey _reusable_reader_key;
 
     std::unordered_set<uint32_t> _unused_output_column_ids;
     // For release memory.

@@ -23,6 +23,7 @@
 #include "exec/pipeline/scan/balanced_chunk_buffer.h"
 #include "exec/pipeline/scan/morsel_queue_factory.h"
 #include "exec/pipeline/scan/scan_morsel.h"
+#include "exec/pipeline/scan/split_scan_morsel.h"
 #include "exprs/expr_executor.h"
 #include "gutil/casts.h"
 #include "gutil/walltime.h"
@@ -257,7 +258,8 @@ struct ConnectorScanOperatorAdaptiveProcessor {
 
 ConnectorScanOperator::ConnectorScanOperator(OperatorFactory* factory, int32_t id, int32_t driver_sequence, int32_t dop,
                                              ScanNode* scan_node)
-        : ScanOperator(factory, id, driver_sequence, dop, scan_node) {}
+        : ScanOperator(factory, id, driver_sequence, dop, scan_node),
+          _reusable_chunk_sources(_io_tasks_per_scan_operator) {}
 
 int64_t ConnectorScanOperator::_adjust_scan_mem_limit(int64_t old_value, int64_t new_value) {
     auto* factory = down_cast<ConnectorScanOperatorFactory*>(_factory);
@@ -312,6 +314,13 @@ Status ConnectorScanOperator::do_prepare(RuntimeState* state) {
 }
 
 void ConnectorScanOperator::do_close(RuntimeState* state) {
+    for (auto& reusable_chunk_source : _reusable_chunk_sources) {
+        if (reusable_chunk_source != nullptr) {
+            reusable_chunk_source->close(state);
+            reusable_chunk_source = nullptr;
+        }
+    }
+
     // As the last closing scan operator, it will update the scan mem limit.
     auto* factory = down_cast<ConnectorScanOperatorFactory*>(_factory);
     ConnectorScanOperatorIOTasksMemLimiter* L = factory->_io_tasks_mem_limiter;
@@ -330,6 +339,59 @@ ChunkSourcePtr ConnectorScanOperator::create_chunk_source(MorselPtr morsel, int3
                                                   _enable_adaptive_io_tasks);
 }
 
+bool ConnectorScanOperator::_can_reuse_chunk_source_for(Morsel& morsel) const {
+    if (connector_type() != connector::ConnectorType::LAKE || morsel.from_version() != 0) {
+        return false;
+    }
+    const auto* split_context = dynamic_cast<const LakeSplitContext*>(morsel.get_split_context());
+    return split_context != nullptr && split_context->is_prepared_physical_child();
+}
+
+ScanOperator::ReusableChunkSourceLookup ConnectorScanOperator::_take_reusable_chunk_source(RuntimeState* /*state*/,
+                                                                                           int chunk_source_index,
+                                                                                           Morsel& morsel) {
+    ReusableChunkSourceLookup result;
+    const size_t slot_count = _reusable_chunk_sources.size();
+    for (size_t offset = 0; offset < slot_count; ++offset) {
+        const size_t probe_idx = (static_cast<size_t>(chunk_source_index) + offset) % slot_count;
+        auto& candidate = _reusable_chunk_sources[probe_idx];
+        if (candidate == nullptr) {
+            continue;
+        }
+        if (candidate->can_reuse_with(morsel)) {
+            if (probe_idx != static_cast<size_t>(chunk_source_index)) {
+                auto& stale = _reusable_chunk_sources[chunk_source_index];
+                if (stale != nullptr) {
+                    result.stale_chunk_source = std::move(stale);
+                }
+            }
+            result.reusable_chunk_source = std::move(candidate);
+            return result;
+        }
+        if (probe_idx == static_cast<size_t>(chunk_source_index)) {
+            result.stale_chunk_source = std::move(candidate);
+        }
+    }
+    return result;
+}
+
+void ConnectorScanOperator::_stash_reusable_chunk_source(RuntimeState* state, int chunk_source_index,
+                                                         ChunkSourcePtr chunk_source) {
+    if (chunk_source == nullptr) {
+        return;
+    }
+    if (connector_type() != connector::ConnectorType::LAKE) {
+        chunk_source->close(state);
+        return;
+    }
+
+    auto& slot = _reusable_chunk_sources[chunk_source_index];
+    if (slot != nullptr) {
+        slot->close(state);
+    }
+    slot = std::move(chunk_source);
+}
+
 void ConnectorScanOperator::attach_chunk_source(int32_t source_index) {
     auto* factory = down_cast<ConnectorScanOperatorFactory*>(_factory);
     factory->attach_shared_input(_driver_sequence, source_index);
@@ -346,7 +408,7 @@ bool ConnectorScanOperator::has_shared_chunk_source() const {
     return !active_inputs.empty();
 }
 
-connector::ConnectorType ConnectorScanOperator::connector_type() {
+connector::ConnectorType ConnectorScanOperator::connector_type() const {
     auto* scan_node = down_cast<ConnectorScanNode*>(_scan_node);
     return scan_node->connector_type();
 }
@@ -670,6 +732,61 @@ Status ConnectorChunkSource::prepare(RuntimeState* state) {
     _runtime_state = state;
     RETURN_IF_ERROR(_data_source->parse_runtime_filters(state));
     return Status::OK();
+}
+
+bool ConnectorChunkSource::has_reusable_state() const {
+    return _status.is_end_of_file() && !_is_split_source_morsel && _morsel != nullptr && _data_source != nullptr &&
+           _data_source->has_reusable_state();
+}
+
+bool ConnectorChunkSource::can_reuse_with(Morsel& morsel) const {
+    return _data_source != nullptr && _data_source->can_reuse_with(morsel);
+}
+
+Status ConnectorChunkSource::reuse(RuntimeState* state, MorselPtr&& morsel) {
+    if (morsel == nullptr || _data_source == nullptr) {
+        return Status::NotSupported("connector chunk source reuse is not supported");
+    }
+
+    _reset_reuse_state(state, std::move(morsel));
+    return _data_source->reuse(state, _morsel.get());
+}
+
+void ConnectorChunkSource::_reset_reuse_state(RuntimeState* state, MorselPtr&& morsel) {
+    _morsel = std::move(morsel);
+    _runtime_state = state;
+    _opened = false;
+    _closed = false;
+    _is_split_source_morsel = false;
+    _split_source_morsel_reported = false;
+    _chunk_rows_read = 0;
+    _chunk_mem_bytes = 0;
+    _mem_alloc_failed_count = 0;
+    _cpu_time_spent_ns = 0;
+    _scan_rows_num = 0;
+    _scan_bytes = 0;
+    _io_time_spent_ns = 0;
+    _status = Status::OK();
+    _reach_limit.store(false);
+    _ck_acc.reset_state();
+    unpin_chunk_token();
+}
+
+void ConnectorChunkSource::release_for_reuse(RuntimeState* state) {
+    if (_enable_adaptive_io_tasks) {
+        MemTracker* mem_tracker = state->query_ctx()->connector_scan_mem_tracker();
+        mem_tracker->release(_request_mem_tracker_bytes);
+        _request_mem_tracker_bytes = 0;
+
+        ConnectorScanOperatorIOTasksMemLimiter* limiter = _get_io_tasks_mem_limiter();
+        limiter->update_running_chunk_source_count(-1);
+    }
+
+    _data_source->release_for_reuse(state);
+    _opened = false;
+    _closed = true;
+    _status = Status::EndOfFile("");
+    unpin_chunk_token();
 }
 
 const std::string ConnectorChunkSource::get_custom_coredump_msg() const {

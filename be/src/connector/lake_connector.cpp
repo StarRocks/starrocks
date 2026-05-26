@@ -88,6 +88,10 @@ std::string LakeDataSource::name() const {
 
 Status LakeDataSource::open(RuntimeState* state) {
     _runtime_state = state;
+    if (_needs_reopen) {
+        _needs_reopen = false;
+        return reopen_reader(state);
+    }
     const TLakeScanNode& thrift_lake_scan_node = _provider->_t_lake_scan_node;
     TupleDescriptor* tuple_desc = state->desc_tbl().get_tuple_descriptor(thrift_lake_scan_node.tuple_id);
     _slots = &tuple_desc->slots();
@@ -169,10 +173,13 @@ Status LakeDataSource::open(RuntimeState* state) {
     RETURN_IF_ERROR(build_scan_range(_runtime_state));
 
     RETURN_IF_ERROR(init_tablet_reader(_runtime_state));
+    refresh_reusable_reader_key();
     return Status::OK();
 }
 
 void LakeDataSource::close(RuntimeState* state) {
+    _needs_reopen = false;
+    _reusable_reader_key = {};
     if (_reader) {
         // close reader to update statistics before update counters
         _reader->close();
@@ -185,6 +192,47 @@ void LakeDataSource::close(RuntimeState* state) {
         _reader.reset();
     }
     _predicate_free_pool.clear();
+}
+
+bool LakeDataSource::has_reusable_state() const {
+    return _reader != nullptr && _reusable_reader_key.prepared_tablet_read_state != nullptr;
+}
+
+bool LakeDataSource::can_reuse_with(pipeline::ScanMorsel& morsel) const {
+    if (_reusable_reader_key.prepared_tablet_read_state == nullptr || morsel.from_version() != 0) {
+        return false;
+    }
+    const auto* split_context = dynamic_cast<const pipeline::LakeSplitContext*>(morsel.get_split_context());
+    if (split_context == nullptr || !split_context->is_prepared_physical_child()) {
+        return false;
+    }
+
+    return split_context->prepared_tablet_read_state.get() == _reusable_reader_key.prepared_tablet_read_state;
+}
+
+Status LakeDataSource::reuse(RuntimeState* state, pipeline::ScanMorsel* morsel) {
+    if (morsel == nullptr || !can_reuse_with(*morsel)) {
+        return Status::NotSupported("lake data source reuse is not supported");
+    }
+
+    _runtime_state = state;
+    _morsel = morsel;
+    _split_context = morsel->get_split_context();
+    _needs_reopen = true;
+    return Status::OK();
+}
+
+void LakeDataSource::release_for_reuse(RuntimeState* state) {
+    _needs_reopen = false;
+    if (_reader == nullptr) {
+        return;
+    }
+    update_counter(state);
+    *_reader->mutable_stats() = OlapReaderStatistics{};
+    _num_rows_read = 0;
+    _raw_rows_read = 0;
+    _bytes_read = 0;
+    _cpu_time_spent_ns = 0;
 }
 
 Status LakeDataSource::get_next(RuntimeState* state, ChunkPtr* chunk) {
@@ -511,17 +559,7 @@ Status LakeDataSource::init_tablet_reader(RuntimeState* runtime_state) {
 
     if (_split_context != nullptr) {
         auto split_context = down_cast<const pipeline::LakeSplitContext*>(_split_context);
-        if (_provider->could_split_physically()) {
-            // physical
-            _params.rowid_range_option = split_context->rowid_range;
-            _params.prepared_tablet_read_state = split_context->prepared_tablet_read_state;
-            _params.prepared_segment_read_state = split_context->prepared_segment_read_state;
-            _params.prepared_rowset_index = split_context->rowset_index;
-            _params.prepared_segment_index = split_context->segment_index;
-        } else {
-            // logical
-            _params.short_key_ranges_option = split_context->short_key_range;
-        }
+        apply_child_split_context(*split_context);
     }
     starrocks::Schema child_schema = ChunkHelper::convert_schema(_tablet_schema, reader_columns);
     RETURN_IF_ERROR(init_column_access_paths(&child_schema));
@@ -568,6 +606,52 @@ Status LakeDataSource::init_tablet_reader(RuntimeState* runtime_state) {
     RETURN_IF_ERROR(_reader->prepare());
     RETURN_IF_ERROR(_reader->open(_params));
     return Status::OK();
+}
+
+Status LakeDataSource::reopen_reader(RuntimeState* /*state*/) {
+    if (_reader == nullptr || _prj_iter == nullptr) {
+        return Status::InternalError("lake data source cannot reuse before reader is initialized");
+    }
+    const auto* split_context = dynamic_cast<const pipeline::LakeSplitContext*>(_split_context);
+    if (split_context == nullptr || !split_context->is_prepared_physical_child()) {
+        return Status::NotSupported("lake data source reuse requires a prepared physical split");
+    }
+
+    apply_child_split_context(*split_context);
+
+    RETURN_IF_ERROR(_reader->open(_params));
+    return Status::OK();
+}
+
+void LakeDataSource::apply_child_split_context(const pipeline::LakeSplitContext& split_context) {
+    if (_provider->could_split_physically()) {
+        _params.rowid_range_option = split_context.rowid_range;
+        _params.short_key_ranges_option = nullptr;
+        _params.prepared_tablet_read_state = split_context.prepared_tablet_read_state;
+        _params.prepared_segment_read_state = split_context.prepared_segment_read_state;
+        _params.prepared_rowset_index = split_context.rowset_index;
+        _params.prepared_segment_index = split_context.segment_index;
+    } else {
+        _params.rowid_range_option = nullptr;
+        _params.short_key_ranges_option = split_context.short_key_range;
+        _params.prepared_tablet_read_state = nullptr;
+        _params.prepared_segment_read_state = nullptr;
+        _params.prepared_rowset_index = 0;
+        _params.prepared_segment_index = 0;
+    }
+}
+
+void LakeDataSource::refresh_reusable_reader_key() {
+    _reusable_reader_key = {};
+    const auto* split_context = dynamic_cast<const pipeline::LakeSplitContext*>(_split_context);
+    if (_morsel == nullptr || split_context == nullptr || !split_context->is_prepared_physical_child()) {
+        return;
+    }
+    if (_morsel->from_version() != 0) {
+        return;
+    }
+
+    _reusable_reader_key.prepared_tablet_read_state = split_context->prepared_tablet_read_state.get();
 }
 
 // Inherit default value from JSON parent column for extended subcolumn.
