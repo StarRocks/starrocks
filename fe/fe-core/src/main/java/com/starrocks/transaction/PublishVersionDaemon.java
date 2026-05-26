@@ -89,6 +89,7 @@ import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Future;
 import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 import javax.annotation.Nullable;
 import javax.validation.constraints.NotNull;
@@ -110,8 +111,10 @@ public class PublishVersionDaemon extends LeaderDaemon {
     // and modify transaction state on FE
     // for shared-nothing, task executor thread will be responsible for checking publish task
     // result and modify transaction state on FE
-    private ThreadPoolExecutor taskExecutor;
-    private ThreadPoolExecutor deleteTxnLogExecutor;
+    // Package-private so same-package tests can swap in a stuck pool to exercise the
+    // restart guard without reflection.
+    ThreadPoolExecutor taskExecutor;
+    ThreadPoolExecutor deleteTxnLogExecutor;
     // Guards ConfigRefreshDaemon listener registration. Executors are recreated on every
     // leader activation (after onStopped() nulls them), but listeners must be registered
     // only once per daemon instance — otherwise each demote/re-elect cycle leaks a listener.
@@ -254,7 +257,8 @@ public class PublishVersionDaemon extends LeaderDaemon {
         return taskExecutor;
     }
 
-    private @NotNull ThreadPoolExecutor getDeleteTxnLogExecutor() {
+    @NotNull
+    ThreadPoolExecutor getDeleteTxnLogExecutor() {
         if (deleteTxnLogExecutor == null) {
             // Create a new thread for every task if there is no idle threads available.
             // Idle threads will be cleaned after `KEEP_ALIVE_TIME` seconds, which is 60 seconds by default.
@@ -1164,17 +1168,29 @@ public class PublishVersionDaemon extends LeaderDaemon {
      * BE-side PublishVersionTask is idempotent (BE returns success when the requested
      * version is already visible), so dropping in-flight tasks is safe - the new leader
      * will resubmit publish from {@code GlobalTransactionMgr.getReadyToPublishTransactions}.
+     *
+     * shutdownNow() interrupts the publish/delete-txnlog workers, then awaitTermination
+     * blocks boundedly so a re-elected leader does not race the old pool against the
+     * publishingTransactionIds dedup set. On successful drain the executor reference is
+     * nulled so the next call to {@link #getTaskExecutor()} rebuilds a fresh pool; on
+     * timeout the reference is kept so the restart guard in {@link #start()} bails out.
      */
     @Override
     protected void onStopped() {
         ThreadPoolExecutor t = taskExecutor;
+        ThreadPoolExecutor d = deleteTxnLogExecutor;
         if (t != null) {
             t.shutdownNow();
-            taskExecutor = null;
         }
-        ThreadPoolExecutor d = deleteTxnLogExecutor;
         if (d != null) {
             d.shutdownNow();
+        }
+        long timeoutMs = Math.max(1000L, Config.leader_demotion_drain_timeout_sec * 1000L);
+        long deadline = System.currentTimeMillis() + timeoutMs;
+        if (awaitExecutorTermination("taskExecutor", t, deadline)) {
+            taskExecutor = null;
+        }
+        if (awaitExecutorTermination("deleteTxnLogExecutor", d, deadline)) {
             deleteTxnLogExecutor = null;
         }
         if (publishingTransactionIds != null) {
@@ -1183,6 +1199,43 @@ public class PublishVersionDaemon extends LeaderDaemon {
         if (publishingLakeTransactionsBatchTableId != null) {
             publishingLakeTransactionsBatchTableId.clear();
         }
+    }
+
+    private static boolean awaitExecutorTermination(String name, ThreadPoolExecutor pool, long deadlineMs) {
+        if (pool == null) {
+            return true;
+        }
+        long remainingMs = Math.max(1L, deadlineMs - System.currentTimeMillis());
+        try {
+            if (pool.awaitTermination(remainingMs, TimeUnit.MILLISECONDS)) {
+                return true;
+            }
+            LOG.warn("PublishVersionDaemon {} did not terminate within drain timeout", name);
+            return false;
+        } catch (InterruptedException ie) {
+            Thread.currentThread().interrupt();
+            LOG.warn("Interrupted while waiting for PublishVersionDaemon {} to terminate", name);
+            return false;
+        }
+    }
+
+    @Override
+    public synchronized void start() {
+        // Refuse to overlap with a previous pool that did not drain in onStopped(): a
+        // shutdown-but-not-terminated executor means publish/delete-txnlog workers from
+        // the previous leader session are still running. Mirrors the BatchWriteMgr /
+        // AlterHandler / HeartbeatMgr restart guard. The fields are nulled in onStopped()
+        // on successful drain so the getters lazily rebuild fresh pools on re-election.
+        if (taskExecutor != null && taskExecutor.isShutdown() && !taskExecutor.isTerminated()) {
+            throw new IllegalStateException(
+                    "PublishVersionDaemon taskExecutor has not terminated; refuse to restart");
+        }
+        if (deleteTxnLogExecutor != null && deleteTxnLogExecutor.isShutdown()
+                && !deleteTxnLogExecutor.isTerminated()) {
+            throw new IllegalStateException(
+                    "PublishVersionDaemon deleteTxnLogExecutor has not terminated; refuse to restart");
+        }
+        super.start();
     }
 
     // Transactions that can be published in a batch for a partition of a shadow index

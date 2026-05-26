@@ -65,9 +65,11 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-import java.lang.reflect.Field;
 import java.util.Collections;
+import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
 
 public class HeartbeatMgrTest {
 
@@ -251,19 +253,70 @@ public class HeartbeatMgrTest {
     }
 
     @Test
-    public void testOnStoppedShutsDownAndClearsExecutor() throws Exception {
+    public void testOnStoppedShutsDownAndAwaitsExecutorTermination() {
         HeartbeatMgr mgr = new HeartbeatMgr(false);
         // start() lazy-inits the executor.
         mgr.start();
-        Field execField = HeartbeatMgr.class.getDeclaredField("executor");
-        execField.setAccessible(true);
-        ExecutorService before = (ExecutorService) execField.get(mgr);
+        ExecutorService before = mgr.executor;
         Assertions.assertNotNull(before, "executor must be initialized after start()");
 
         // protected onStopped() is visible from the same package.
         mgr.onStopped();
 
         Assertions.assertTrue(before.isShutdown(), "previous executor must be shut down");
-        Assertions.assertNull(execField.get(mgr), "executor reference must be nulled for re-init on next start()");
+        Assertions.assertTrue(before.isTerminated(),
+                "previous executor must be terminated after onStopped() awaits drain");
+        // Reference is kept (not nulled) on success so the restart guard in start() can fire
+        // when termination times out; start() rebuilds on isShutdown() so reuse is safe.
+        Assertions.assertSame(before, mgr.executor,
+                "executor reference is retained after successful drain");
+        Assertions.assertNotNull(mgr.executor);
+    }
+
+    @Test
+    public void testStartRebuildsExecutorAfterOnStopped() {
+        HeartbeatMgr mgr = new HeartbeatMgr(false);
+        mgr.start();
+        ExecutorService originalExecutor = mgr.executor;
+        mgr.onStopped();
+        Assertions.assertTrue(originalExecutor.isTerminated());
+
+        mgr.start();
+        try {
+            Assertions.assertNotSame(originalExecutor, mgr.executor,
+                    "executor must be rebuilt on re-election");
+            Assertions.assertFalse(mgr.executor.isShutdown(),
+                    "rebuilt executor must accept new heartbeats");
+        } finally {
+            mgr.setStop();
+        }
+    }
+
+    @Test
+    public void testStartRefusesToRestartBeforeExecutorTerminates() {
+        // Mirror of BatchWriteMgr / AlterHandler restart guard. If a previous executor is
+        // shutdown but has not yet terminated (heartbeat RPC ignoring interrupt), start()
+        // must throw IllegalStateException rather than spinning up a fresh pool against the
+        // same backends.
+        HeartbeatMgr mgr = new HeartbeatMgr(false);
+        mgr.start();
+        ThreadPoolExecutor blockedPool = new ThreadPoolExecutor(
+                1, 1, 0L, TimeUnit.MILLISECONDS, new ArrayBlockingQueue<>(1));
+        blockedPool.execute(() -> {
+            try {
+                Thread.sleep(30_000L);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+        });
+        blockedPool.shutdown();
+        mgr.setStop();
+        mgr.executor = blockedPool;
+
+        try {
+            Assertions.assertThrows(IllegalStateException.class, mgr::start);
+        } finally {
+            blockedPool.shutdownNow();
+        }
     }
 }
