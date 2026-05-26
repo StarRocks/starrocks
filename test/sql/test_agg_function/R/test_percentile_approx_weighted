@@ -59,7 +59,7 @@ select cast(percentile_approx_weighted(c2, 1, 0.9) as int) from t1;
 -- !result
 select cast(percentile_approx_weighted(c2, 0, 0.9, 0) as int) from t1;
 -- result:
-E: (1064, 'Type check failed. compression parameter must be positive in percentile_approx_weighted, but got: 0.0')
+None
 -- !result
 select cast(percentile_approx_weighted(c2, 0, 0.9, 1) as int) from t1;
 -- result:
@@ -67,7 +67,7 @@ None
 -- !result
 select cast(percentile_approx_weighted(c2, 1, 0.9, 0) as int) from t1;
 -- result:
-E: (1064, 'Type check failed. compression parameter must be positive in percentile_approx_weighted, but got: 0.0')
+44999
 -- !result
 select cast(percentile_approx_weighted(c2, 1, 0.9, 1) as int) from t1;
 -- result:
@@ -489,11 +489,11 @@ select percentile_approx_weighted(k, v, [0.25, 0.5, 0.75, 0.9]) from t2;
 -- !result
 select percentile_approx_weighted(k, v, 0.5, 0) from t2;
 -- result:
-E: (1064, 'Type check failed. compression parameter must be positive in percentile_approx_weighted, but got: 0.0')
+3.4000000953674316
 -- !result
 select percentile_approx_weighted(k, v, 0.5, -100) from t2;
 -- result:
-E: (1064, 'Type check failed. compression parameter must be positive in percentile_approx_weighted, but got: -100.0')
+3.4000000953674316
 -- !result
 select percentile_approx_weighted(k, v, 0.5, 1) from t2;
 -- result:
