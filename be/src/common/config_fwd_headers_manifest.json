@@ -829,6 +829,7 @@
         "null_encoding",
         "enable_index_segment_level_zonemap_filter",
         "enable_index_page_level_zonemap_filter",
+        "enable_index_page_level_zonemap_filter_scan_range_pushdown",
         "enable_index_bloom_filter",
         "enable_index_bitmap_filter",
         "apply_del_vec_after_all_index_filter",
