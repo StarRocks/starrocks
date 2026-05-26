@@ -2599,6 +2599,10 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true, comment = "Synchronously load statistics (may cause query delay)")
     public static boolean enable_sync_statistics_load = false;
 
+    @ConfField(mutable = true, comment = "Timeout to synchronously wait for stats " +
+            "(when `enable_sync_statistics_load` is enabled)")
+    public static int sync_statistics_load_timeout_ms = 5000;
+
     /**
      * default bucket size of histogram statistics
      */
