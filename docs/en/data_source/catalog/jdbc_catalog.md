@@ -4,6 +4,7 @@ toc_max_heading_level: 4
 ---
 
 import Beta from '../../_assets/commonMarkdown/_beta.mdx'
+import JoinPushdown from '../../_assets/commonMarkdown/join_pushdown.mdx'
 
 # JDBC catalog
 
@@ -215,6 +216,8 @@ DROP Catalog jdbc0;
    ```SQL
    SELECT * FROM <table_name>;
    ```
+
+<JoinPushdown />
 
 ## Query JDBC data with native SQL
 
