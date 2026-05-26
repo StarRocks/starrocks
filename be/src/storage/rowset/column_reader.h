@@ -173,7 +173,7 @@ public:
                            const ::starrocks::ColumnPredicate* del_predicate,
                            std::unordered_set<uint32_t>* del_partial_filtered_pages, SparseRange<>* row_ranges,
                            const IndexReadOptions& opts, CompoundNodeType pred_relation,
-                           const Range<>* src_range = nullptr);
+                           const SparseRange<>* scan_range = nullptr);
 
     // NOTE: RAW interface should be used carefully
     // Return all page-level zonemap
@@ -264,7 +264,7 @@ private:
     template <CompoundNodeType PredRelation>
     Status _zone_map_filter(const std::vector<const ColumnPredicate*>& predicates, const ColumnPredicate* del_predicate,
                             std::unordered_set<uint32_t>* del_partial_filtered_pages, std::vector<uint32_t>* pages,
-                            const Range<>* src_range);
+                            const SparseRange<>* scan_range);
 
     Status _load_inverted_index(const std::shared_ptr<TabletIndex>& index_meta, const SegmentReadOptions& opts,
                                 const IndexReadOptions& index_opt);

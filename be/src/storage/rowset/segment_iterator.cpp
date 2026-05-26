@@ -2038,7 +2038,7 @@ struct ZoneMapFilterEvaluator {
 
             SparseRange<> cur_row_ranges;
             RETURN_IF_ERROR(column_iterators[cid]->get_row_ranges_by_zone_map(col_preds, del_pred, &cur_row_ranges,
-                                                                              Type, &src_range));
+                                                                              Type, scan_range));
             _merge_row_ranges<Type>(row_ranges, cur_row_ranges);
         }
 
@@ -2059,7 +2059,7 @@ struct ZoneMapFilterEvaluator {
 
                     SparseRange<> cur_row_ranges;
                     RETURN_IF_ERROR(column_iterators[cid]->get_row_ranges_by_zone_map({}, del_pred, &cur_row_ranges,
-                                                                                      Type, &src_range));
+                                                                                      Type, scan_range));
                     _merge_row_ranges<Type>(row_ranges, cur_row_ranges);
                 }
             }
@@ -2093,7 +2093,7 @@ struct ZoneMapFilterEvaluator {
 
     const std::map<ColumnId, ColumnOrPredicate>& del_preds;
     const std::set<ColumnId>& del_columns;
-    const Range<> src_range;
+    const SparseRange<>* scan_range = nullptr;
     bool has_apply_only_del_columns = false;
 };
 
@@ -2126,9 +2126,16 @@ Status SegmentIterator::_get_row_ranges_by_zone_map() {
     // prune data pages by zone map index.
     // -------------------------------------------------------------
 
+    SparseRange<> coarse_scan_range;
+    const SparseRange<>* zonemap_scan_range = &_scan_range;
+    if (!config::enable_index_page_level_zonemap_filter_scan_range_pushdown) {
+        coarse_scan_range.add(Range<>{_scan_range.begin(), _scan_range.end()});
+        zonemap_scan_range = &coarse_scan_range;
+    }
+
     ASSIGN_OR_RETURN(auto hit_row_ranges, _opts.pred_tree_for_zone_map.visit(ZoneMapFilterEvaluator{
                                                   _opts.pred_tree_for_zone_map, _column_iterators, _del_predicates,
-                                                  del_columns, Range<>{_scan_range.begin(), _scan_range.end()}}));
+                                                  del_columns, zonemap_scan_range}));
     if (hit_row_ranges.has_value()) {
         zm_range &= hit_row_ranges.value();
     }
