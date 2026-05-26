@@ -2755,6 +2755,7 @@ primaryExpression
     | literalExpression                                                                   #literal
     | columnReference                                                                     #columnRef
     | base = primaryExpression (DOT_IDENTIFIER | '.' fieldName = identifier )             #dereference
+    | primaryExpression DOUBLE_COLON type                                                 #typeCast
     | left = primaryExpression CONCAT right = primaryExpression                           #concat
     | operator = (MINUS_SYMBOL | PLUS_SYMBOL | BITNOT) primaryExpression                  #arithmeticUnary
     | operator = LOGICAL_NOT primaryExpression                                            #arithmeticUnary

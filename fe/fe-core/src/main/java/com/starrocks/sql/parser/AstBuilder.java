@@ -8521,6 +8521,12 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
     }
 
     @Override
+    public ParseNode visitTypeCast(com.starrocks.sql.parser.StarRocksParser.TypeCastContext context) {
+        return new CastExpr(new TypeDef(TypeParser.getType(context.type())),
+                (Expr) visit(context.primaryExpression()), createPos(context));
+    }
+
+    @Override
     public ParseNode visitInformationFunctionExpression(
             com.starrocks.sql.parser.StarRocksParser.InformationFunctionExpressionContext context) {
         return new InformationFunction(context.name.getText().toUpperCase(), createPos(context));
