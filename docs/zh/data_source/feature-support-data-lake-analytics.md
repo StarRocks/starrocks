@@ -375,6 +375,7 @@ StarRocks 从 v3.3.2 版本开始支持基于 REST 的 Iceberg 视图，并从 v
 | ClickHouse   | v3.3+    |
 | Oracle       | v3.2.9+  |
 | SQLServer    | v3.2.9+  |
+| BigQuery     | v4.2+（试验性） |
 
 ### MySQL
 
@@ -438,6 +439,31 @@ StarRocks 从 v3.3.2 版本开始支持基于 REST 的 Iceberg 视图，并从 v
 ### SQL Server
 
 自 v3.2.9 起支持。
+
+### BigQuery
+
+自 v4.2 起支持（试验性）。需要 Simba BigQuery JDBC 驱动程序。
+
+#### 数据类型对应关系
+
+| BigQuery    | StarRocks           | 说明 |
+| :---------- | :------------------ | :--- |
+| BOOL        | BOOLEAN             | Simba 驱动程序可能报告为 `BIT` 或 `BOOLEAN` |
+| INT64       | BIGINT              | |
+| FLOAT64     | DOUBLE              | |
+| NUMERIC     | DECIMAL(p, s)       | 精度 ≤ 38 |
+| BIGNUMERIC  | VARCHAR             | 精度 > 38；无法放入 DECIMAL(38, x) |
+| STRING      | VARCHAR             | |
+| BYTES       | VARBINARY           | |
+| DATE        | DATE                | |
+| TIME        | TIME                | |
+| DATETIME    | DATETIME            | 民间时间，不进行时区转换 |
+| TIMESTAMP   | DATETIME            | UTC 纪元时间；转换为会话查询时区 |
+| JSON        | JSON                | |
+| STRUCT      | VARCHAR             | 序列化字符串表示 |
+| ARRAY       | VARCHAR             | 序列化字符串表示 |
+| GEOGRAPHY   | VARCHAR             | |
+| INTERVAL    | VARCHAR             | |
 
 ## Elasticsearch Catalog
 

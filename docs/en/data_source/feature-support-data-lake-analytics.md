@@ -377,7 +377,7 @@ Currently, only Iceberg views created through StarRocks are supported. Starting 
 | ClickHouse   | v3.3+                |
 | Oracle       | v3.2.9+              |
 | SQL Server   | v3.2.9+              |
-| BigQuery     | v4.1+ (Experimental) |
+| BigQuery     | v4.2+ (Experimental) |
 
 ### MySQL
 
@@ -444,7 +444,7 @@ Supported from v3.2.9 onwards.
 
 ### BigQuery
 
-Supported from v4.1 onwards (Experimental). Requires the Simba BigQuery JDBC driver.
+Supported from v4.2 onwards (Experimental). Requires the Simba BigQuery JDBC driver.
 
 #### Data type correspondance
 

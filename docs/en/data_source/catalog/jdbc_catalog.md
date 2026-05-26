@@ -15,7 +15,7 @@ A JDBC catalog is a kind of external catalog that enables you to query data from
 
 Also, you can directly transform and load data from JDBC data sources by using [INSERT INTO](../../sql-reference/sql-statements/loading_unloading/INSERT.md) based on JDBC catalogs.
 
-JDBC catalogs support MySQL and PostgreSQL from v3.0 onwards, Oracle and SQLServer since v3.2.9 and v3.3.1, ClickHouse (Experimental) since v3.3.0, and BigQuery (Experimental) since v4.1.
+JDBC catalogs support MySQL and PostgreSQL from v3.0 onwards, Oracle and SQLServer since v3.2.9 and v3.3.1, ClickHouse (Experimental) since v3.3.0, and BigQuery (Experimental) since v4.2.
 
 ## Prerequisites
 
@@ -255,7 +255,7 @@ DROP Catalog jdbc0;
 
 ## Query JDBC data with native SQL
 
-From v4.1 onwards, StarRocks supports querying JDBC data with database-native `SELECT` statements by using the [`native_query`](../../sql-reference/sql-functions/table-functions/native_query.md) table function.
+From v4.2 onwards, StarRocks supports querying JDBC data with database-native `SELECT` statements by using the [`native_query`](../../sql-reference/sql-functions/table-functions/native_query.md) table function.
 
 `native_query` is useful when the source database must run SQL that cannot be expressed as a single external table query, such as source-side joins, pre-filtered subqueries, or vendor-specific SQL syntax. StarRocks exposes the pass-through query result as a normal relation, so you can continue to apply StarRocks-side filters, joins, aggregations, and projections.
 
