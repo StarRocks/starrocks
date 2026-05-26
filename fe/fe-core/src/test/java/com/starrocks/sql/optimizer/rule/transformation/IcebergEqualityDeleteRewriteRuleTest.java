@@ -14,7 +14,6 @@
 
 package com.starrocks.sql.optimizer.rule.transformation;
 
-import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -46,9 +45,8 @@ public class IcebergEqualityDeleteRewriteRuleTest {
         leftCols.put("id", leftId);
         leftCols.put(DATA_SEQUENCE_NUMBER, leftSeq);
 
-        IcebergEqualityDeleteRewriteRule rule = new IcebergEqualityDeleteRewriteRule();
-        ScalarOperator onPredicate = Deencapsulation.invoke(
-                rule, "buildOnPredicate", leftCols, List.of(rightId, rightSeq));
+        ScalarOperator onPredicate = IcebergEqualityDeleteScanBuilder.buildOnPredicate(
+                leftCols, List.of(rightId, rightSeq));
 
         Map<String, BinaryType> byColumn = new HashMap<>();
         collectBinaryTypes(onPredicate, byColumn);
