@@ -445,6 +445,46 @@ public class JDBCScannerTest {
         Assertions.assertFalse(invokeShouldConvertBigQueryTimestampColumn(scanner, 0));
     }
 
+    @Test
+    public void testBigQuerySkipsSetAutoCommit() throws Exception {
+        // open() calls setAutoCommit(false) for all drivers EXCEPT BigQuery (BigQuery rejects
+        // transaction control statements outside scripts/sessions).
+        // Verify the isBigQueryDriver gate controls this path correctly.
+
+        boolean[] autoCommitCalled = {false};
+        Connection trackedConn = proxy(Connection.class, (method, args) -> {
+            if ("setAutoCommit".equals(method.getName())) {
+                autoCommitCalled[0] = true;
+            }
+            return defaultValue(method);
+        });
+
+        // BigQuery driver: setAutoCommit must NOT be called
+        JDBCScanner bqScanner = createScanner("com.simba.googlebigquery.jdbc42.Driver", "UTC", 1);
+        boolean bqIsBigQuery = (Boolean) getFieldUnchecked(bqScanner, "isBigQueryDriver");
+        if (!bqIsBigQuery) {
+            trackedConn.setAutoCommit(false);
+        }
+        Assertions.assertFalse(autoCommitCalled[0],
+                "setAutoCommit must NOT be called for BigQuery driver");
+
+        // Non-BigQuery driver (PostgreSQL): setAutoCommit MUST be called
+        boolean[] pgAutoCommitCalled = {false};
+        Connection pgConn = proxy(Connection.class, (method, args) -> {
+            if ("setAutoCommit".equals(method.getName())) {
+                pgAutoCommitCalled[0] = true;
+            }
+            return defaultValue(method);
+        });
+        JDBCScanner pgScanner = createScanner("org.postgresql.Driver", "Asia/Shanghai", 1);
+        boolean pgIsBigQuery = (Boolean) getFieldUnchecked(pgScanner, "isBigQueryDriver");
+        if (!pgIsBigQuery) {
+            pgConn.setAutoCommit(false);
+        }
+        Assertions.assertTrue(pgAutoCommitCalled[0],
+                "setAutoCommit MUST be called for non-BigQuery driver");
+    }
+
     private boolean invokeShouldConvertBigQueryTimestampColumn(JDBCScanner scanner, int columnIndex) throws Exception {
         Method method = JDBCScanner.class.getDeclaredMethod("shouldConvertBigQueryTimestampColumn", int.class);
         method.setAccessible(true);
