@@ -129,7 +129,7 @@ Status SpillableAggregateBlockingSinkOperator::push_chunk(RuntimeState* state, c
 
     if (_spill_strategy == spill::SpillStrategy::NO_SPILL) {
         RETURN_IF_ERROR(AggregateBlockingSinkOperator::push_chunk(state, chunk));
-        set_revocable_mem_bytes(_aggregator->hash_map_memory_usage());
+        set_revocable_mem_bytes(_aggregator->memory_usage());
         return Status::OK();
     }
 
@@ -152,7 +152,7 @@ Status SpillableAggregateBlockingSinkOperator::reset_state(RuntimeState* state,
 
 Status SpillableAggregateBlockingSinkOperator::_try_to_spill_by_force(RuntimeState* state, const ChunkPtr& chunk) {
     RETURN_IF_ERROR(AggregateBlockingSinkOperator::push_chunk(state, chunk));
-    set_revocable_mem_bytes(_aggregator->hash_map_memory_usage());
+    set_revocable_mem_bytes(_aggregator->memory_usage());
     return _spill_all_data(state, true);
 }
 
@@ -166,7 +166,7 @@ Status SpillableAggregateBlockingSinkOperator::_try_to_spill_by_auto(RuntimeStat
     RETURN_IF_ERROR(_aggregator->evaluate_groupby_exprs(chunk.get()));
     const auto chunk_size = chunk->num_rows();
 
-    const size_t ht_mem_usage = _aggregator->hash_map_memory_usage();
+    const size_t ht_mem_usage = _aggregator->memory_usage();
     bool ht_need_expansion = _aggregator->hash_map_variant().need_expand(chunk_size);
     const size_t max_mem_usage = state->spill_mem_table_size();
 
@@ -254,13 +254,13 @@ Status SpillableAggregateBlockingSinkOperator::_try_to_spill_by_auto(RuntimeStat
     }
 
     // finally, check memory usage of streaming_chunks and hash table, decide whether to spill
-    size_t revocable_mem_bytes = _streaming_bytes + _aggregator->hash_map_memory_usage();
+    size_t revocable_mem_bytes = _streaming_bytes + _aggregator->memory_usage();
     set_revocable_mem_bytes(revocable_mem_bytes);
     if (revocable_mem_bytes > max_mem_usage) {
         // If the aggregation degree of HT_LOW_REDUCTION_CHUNK_LIMIT consecutive chunks is less than HT_LOW_REDUCTION_THRESHOLD,
         // it is meaningless to keep the hash table in memory, just spill it.
         bool should_spill_hash_table = _continuous_low_reduction_chunk_num >= HT_LOW_REDUCTION_CHUNK_LIMIT ||
-                                       _aggregator->hash_map_memory_usage() > max_mem_usage;
+                                       _aggregator->memory_usage() > max_mem_usage;
         if (should_spill_hash_table) {
             _continuous_low_reduction_chunk_num = 0;
         }
