@@ -14,7 +14,6 @@
 
 package com.starrocks.connector.iceberg;
 
-import com.google.common.base.Joiner;
 import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
@@ -62,7 +61,6 @@ import java.nio.file.Files;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
-import java.util.UUID;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.function.Function;
@@ -292,11 +290,9 @@ public class MockIcebergMetadata implements ConnectorMetadata {
                         MOCKED_V2_UNPARTITIONED_TABLE_NAME), MOCKED_V2_UNPARTITIONED_TABLE_NAME,
                 schema, spec, 2);
 
-        String tableIdentifier = Joiner.on(":").join(MOCKED_V2_UNPARTITIONED_TABLE_NAME, UUID.randomUUID());
         MockIcebergTable mockIcebergTable = new MockIcebergTable(2, MOCKED_V2_UNPARTITIONED_TABLE_NAME,
                 MOCKED_ICEBERG_CATALOG_NAME, null, MOCKED_UNPARTITIONED_DB_NAME,
-                MOCKED_V2_UNPARTITIONED_TABLE_NAME, schemas, baseTable, null,
-                tableIdentifier, "");
+                MOCKED_V2_UNPARTITIONED_TABLE_NAME, schemas, baseTable, null, "");
 
         Map<String, ColumnStatistic> columnStatisticMap;
         List<String> colNames = schemas.stream().map(Column::getName).collect(Collectors.toList());
@@ -321,11 +317,9 @@ public class MockIcebergMetadata implements ConnectorMetadata {
                         MOCKED_V2_PARTITIONED_TABLE_NAME), MOCKED_V2_PARTITIONED_TABLE_NAME,
                 partSchema, partSpec, 2);
 
-        String partTableIdentifier = Joiner.on(":").join(MOCKED_V2_PARTITIONED_TABLE_NAME, UUID.randomUUID());
         MockIcebergTable partMockIcebergTable = new MockIcebergTable(3, MOCKED_V2_PARTITIONED_TABLE_NAME,
                 MOCKED_ICEBERG_CATALOG_NAME, null, MOCKED_PARTITIONED_DB_NAME,
-                MOCKED_V2_PARTITIONED_TABLE_NAME, schemas, partBaseTable, null,
-                partTableIdentifier, "");
+                MOCKED_V2_PARTITIONED_TABLE_NAME, schemas, partBaseTable, null, "");
 
         partitionedMap.put(MOCKED_V2_PARTITIONED_TABLE_NAME,
                 new IcebergTableInfo(partMockIcebergTable, PARTITION_NAMES_0, 100, columnStatisticMap));
