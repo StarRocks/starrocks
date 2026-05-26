@@ -33,9 +33,14 @@ public:
     DEFINE_VECTORIZED_FN(sleep);
 
     /**
-     * return last query id 
+     * return last query id
      */
     DEFINE_VECTORIZED_FN(last_query_id);
+
+    /**
+     * return the current query id (uuid string in 8-4-4-4-12 form).
+     */
+    DEFINE_VECTORIZED_FN(query_id);
 
     /**
      * returns uuid.
