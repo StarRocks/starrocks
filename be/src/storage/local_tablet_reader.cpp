@@ -21,7 +21,7 @@
 #include "storage/chunk_helper.h"
 #include "storage/primary_index.h"
 #include "storage/primary_key_encoder.h"
-#include "storage/projection_iterator.h"
+#include "storage/primitive/projection_iterator.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_manager.h"
 #include "storage/tablet_reader.h"

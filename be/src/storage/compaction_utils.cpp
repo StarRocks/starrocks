@@ -15,7 +15,7 @@
 #include "storage/compaction_utils.h"
 
 #include "common/config_compaction_fwd.h"
-#include "storage/row_source_mask.h"
+#include "storage/primitive/row_source_mask.h"
 #include "storage/rowset/rowset.h"
 #include "storage/rowset/rowset_factory.h"
 #include "storage/rowset/rowset_writer.h"

@@ -18,8 +18,7 @@
 
 namespace starrocks {
 
-// A unique iterator will removes all but the *last* record from every
-// consecutive group of records with equivalent keys.
-ChunkIteratorPtr new_unique_iterator(const ChunkIteratorPtr& child);
+ChunkIteratorPtr new_empty_iterator(Schema&& schema, int chunk_size);
+ChunkIteratorPtr new_empty_iterator(const Schema& schema, int chunk_size);
 
 } // namespace starrocks

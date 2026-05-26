@@ -31,7 +31,7 @@
 #include "storage/chunk_helper.h"
 #include "storage/column_predicate_rewriter.h"
 #include "storage/predicate_parser.h"
-#include "storage/projection_iterator.h"
+#include "storage/primitive/projection_iterator.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_manager.h"
 

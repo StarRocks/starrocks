@@ -504,7 +504,6 @@ SET(DW_TEST_FILES
     ./storage/persistent_index_test.cpp
     ./storage/primary_index_test.cpp
     ./storage/primary_key_encoder_test.cpp
-    ./storage/projection_iterator_test.cpp
     ./storage/protobuf_file_test.cpp
     ./storage/publish_version_manager_test.cpp
     ./storage/publish_version_task_test.cpp

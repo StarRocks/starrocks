@@ -20,9 +20,9 @@
 
 #include "common/status.h"
 #include "gen_cpp/persistent_index.pb.h"
-#include "storage/chunk_iterator.h"
 #include "storage/olap_common.h"
 #include "storage/persistent_index.h"
+#include "storage/primitive/chunk_iterator.h"
 
 namespace starrocks {
 
