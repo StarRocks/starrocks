@@ -2189,11 +2189,10 @@ public class ReportHandler extends LeaderDaemon implements MemoryTrackable {
         TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
         for (TTablet backendTablet : backendTablets.values()) {
             for (TTabletInfo tabletInfo : backendTablet.tablet_infos) {
-                if (!tabletInfo.isSetFlat_json_config_version()) {
-                    continue;
-                }
                 long tabletId = tabletInfo.getTablet_id();
-                long beFlatJsonConfigVersion = tabletInfo.flat_json_config_version;
+                // Treat unset version as stale so orphan tablets get reconciled.
+                long beFlatJsonConfigVersion =
+                        tabletInfo.isSetFlat_json_config_version() ? tabletInfo.flat_json_config_version : 0;
                 TabletMeta tabletMeta = invertedIndex.getTabletMeta(tabletId);
                 long dbId = tabletMeta != null ? tabletMeta.getDbId() : TabletInvertedIndex.NOT_EXIST_VALUE;
                 long tableId = tabletMeta != null ? tabletMeta.getTableId() : TabletInvertedIndex.NOT_EXIST_VALUE;

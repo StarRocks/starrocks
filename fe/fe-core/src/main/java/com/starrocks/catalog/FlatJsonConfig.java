@@ -61,6 +61,10 @@ public class FlatJsonConfig implements Writable {
     }
 
     public void buildFromProperties(Map<String, String> properties) {
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_VERSION)) {
+            configVersion = Long.parseLong(properties.get(
+                    PropertyAnalyzer.PROPERTIES_FLAT_JSON_VERSION));
+        }
         if (properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_ENABLE)) {
             flatJsonEnable = Boolean.parseBoolean(properties.get(
                     PropertyAnalyzer.PROPERTIES_FLAT_JSON_ENABLE));
@@ -125,6 +129,7 @@ public class FlatJsonConfig implements Writable {
 
     public Map<String, String> toProperties() {
         Map<String, String> properties = new HashMap<>();
+        properties.put(PropertyAnalyzer.PROPERTIES_FLAT_JSON_VERSION, String.valueOf(configVersion));
         properties.put(PropertyAnalyzer.PROPERTIES_FLAT_JSON_ENABLE, String.valueOf(flatJsonEnable));
 
         // Only include other flat JSON properties if flat JSON is enabled
