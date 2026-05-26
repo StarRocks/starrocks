@@ -38,10 +38,15 @@ public class SlowLockMetricTest {
      */
     private static void resetLockManagerThrottleGates() throws Exception {
         Class<?> cls = LockManager.class;
+        // Match the production GATE_INIT_SENTINEL ("sufficiently in the past") so first-event
+        // semantics on a fresh JVM are preserved when reset between tests.
+        Field sentinelField = cls.getDeclaredField("GATE_INIT_SENTINEL");
+        sentinelField.setAccessible(true);
+        long sentinel = sentinelField.getLong(null);
         for (String name : new String[] {"LAST_EVENT_LOG_MS", "LAST_STACK_PRINT_MS"}) {
             Field f = cls.getDeclaredField(name);
             f.setAccessible(true);
-            ((AtomicLong) f.get(null)).set(0L);
+            ((AtomicLong) f.get(null)).set(sentinel);
         }
     }
 

@@ -83,6 +83,39 @@ public class QueryableReentrantReadWriteLockTest {
     }
 
     @Test
+    public void testStackGateNotConsumedByEmptySnapshots() {
+        // Regression: LockUtils.lock invokes getLockInfoToJson(null) on every db lock acquire
+        // to capture beforeLockInfo. For an uncontended lock there is no owner and no reader,
+        // so an eager shouldCaptureStack() probe at the top of getLockInfoToJson would burn the
+        // per-instance throttle window on a no-op and starve the next genuine slow-lock warning
+        // of its stack. The lazy probe must NOT consume the gate on such empty snapshots.
+        Config.slow_lock_print_stack = true;
+        Config.slow_lock_stack_print_interval_ms = 60_000L;
+
+        QueryableReentrantReadWriteLock lock = new QueryableReentrantReadWriteLock(true);
+
+        // Many empty snapshots — no owner, no reader. Must not burn the throttle quota.
+        for (int i = 0; i < 10; i++) {
+            JsonObject info = lock.getLockInfoToJson(null);
+            JsonObject holder = info.getAsJsonObject("holderInfo");
+            Assertions.assertEquals("shared", holder.get("status").getAsString());
+            Assertions.assertEquals(0, holder.getAsJsonObject("oldestReader").size(),
+                    "expected empty oldestReader on uncontended lock, got: " + holder);
+        }
+
+        // Now acquire and trigger a real snapshot. Because empty snapshots above did not consume
+        // the gate, the first stack-eligible call must capture stack.
+        lock.exclusiveLock();
+        try {
+            JsonObject info = lock.getLockInfoToJson(null);
+            Assertions.assertTrue(info.getAsJsonObject("holderInfo").has("stack"),
+                    "stack quota must not be burned by no-holder snapshots, got: " + info);
+        } finally {
+            lock.exclusiveUnlock();
+        }
+    }
+
+    @Test
     public void testStackThrottleSuppressesSecondCallWithinWindow() {
         Config.slow_lock_print_stack = true;
         Config.slow_lock_stack_print_interval_ms = 60_000L; // 1 min

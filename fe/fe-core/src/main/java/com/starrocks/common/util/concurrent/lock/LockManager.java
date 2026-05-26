@@ -33,18 +33,24 @@ import java.util.concurrent.atomic.AtomicLong;
 public class LockManager {
     private static final Logger LOG = LogManager.getLogger(LockManager.class);
 
+    // "Sufficiently in the past" sentinel so the first event always wins the gate regardless of
+    // where System.nanoTime() anchors its origin (the JLS allows arbitrary origin). The /2
+    // (instead of Long.MIN_VALUE) leaves enough headroom in (monoNowMs - INIT) to avoid
+    // signed-long overflow for any plausible JVM uptime.
+    private static final long GATE_INIT_SENTINEL = Long.MIN_VALUE / 2;
+
     // Gate for stack-trace capture in slow-lock logs. Thread.getStackTrace involves a JVM
     // safepoint operation that is expensive when slow-lock events fire frequently in large
     // clusters. The capture is rate-limited at the event level (all-or-nothing per event)
     // by Config.slow_lock_stack_print_interval_ms; the warn log itself still fires every event
     // unless the outer event-level gate (LAST_EVENT_LOG_MS / slow_lock_log_every_ms) suppresses
     // it first.
-    private static final AtomicLong LAST_STACK_PRINT_MS = new AtomicLong(0L);
+    private static final AtomicLong LAST_STACK_PRINT_MS = new AtomicLong(GATE_INIT_SENTINEL);
 
     // Outer event-level gate for the whole slow-lock warn (JSON build + LOG.warn). GLOBAL scope
     // across rids so a hot rid cannot drown out signal from other rids. Controlled by
     // Config.slow_lock_log_every_ms; <= 0 disables the gate and emits every event.
-    private static final AtomicLong LAST_EVENT_LOG_MS = new AtomicLong(0L);
+    private static final AtomicLong LAST_EVENT_LOG_MS = new AtomicLong(GATE_INIT_SENTINEL);
 
     private final int lockTablesSize;
     private final Object[] lockTableMutexes;
@@ -428,27 +434,16 @@ public class LockManager {
             waiters = lock.cloneWaiters();
         }
 
-        // Decide once per event whether owner stacks are captured. The warn log itself still
-        // fires every event; only the expensive Thread.getStackTrace path is throttled. When
-        // the switch is on but rate-limited, mark stacks "throttled" so operators can tell the
-        // capture was suppressed rather than the switch being off.
-        // The throttle gate uses a monotonic clock so NTP/wall-clock adjustments cannot stretch
-        // or short-circuit the interval; nowMs (System.currentTimeMillis) is kept for the
-        // user-facing timestamps below.
+        // Stack capture is rate-limited at the event level (all-or-nothing across owners) by
+        // Config.slow_lock_stack_print_interval_ms. The gate is probed lazily on the first
+        // iteration of the owners loop so that the quota is not consumed when owners turns out
+        // to be empty (a race when a thread woke up due to slow-wait but the lock was just
+        // released). nowMs (System.currentTimeMillis) below is kept for user-facing timestamps;
+        // the gate itself uses a monotonic clock so NTP/wall-clock adjustments cannot stretch
+        // or short-circuit the interval.
         boolean stackEnabled = Config.slow_lock_print_stack;
+        boolean gateProbed = false;
         boolean captureStack = false;
-        if (stackEnabled) {
-            if (Config.slow_lock_stack_print_interval_ms <= 0) {
-                captureStack = true;
-            } else {
-                long monoNowMs = TimeUnit.NANOSECONDS.toMillis(System.nanoTime());
-                long last = LAST_STACK_PRINT_MS.get();
-                if (monoNowMs - last >= Config.slow_lock_stack_print_interval_ms
-                        && LAST_STACK_PRINT_MS.compareAndSet(last, monoNowMs)) {
-                    captureStack = true;
-                }
-            }
-        }
 
         JsonObject ownerInfo = new JsonObject();
         ownerInfo.addProperty("rid", rid);
@@ -471,6 +466,10 @@ public class LockManager {
                 readerInfo.addProperty("queryId", locker.getQueryId().toString());
             }
             readerInfo.addProperty("waitTime", owner.getLockAcquireTimeMs() - locker.getLockRequestTimeMs());
+            if (stackEnabled && !gateProbed) {
+                captureStack = probeStackPrintGate();
+                gateProbed = true;
+            }
             if (captureStack) {
                 readerInfo.add("stack", LogUtil.getStackTraceToJsonArray(
                         locker.getLockerThread(), 0, Short.MAX_VALUE));
@@ -513,6 +512,23 @@ public class LockManager {
 
         MetricRepo.HISTO_SLOW_LOCK_HELD_TIME_MS.update(maxHeldForTimeMs);
         LOG.warn("LockManager detects slow lock : {}", ownerInfo.toString());
+    }
+
+    /**
+     * Probe (and possibly consume) the GLOBAL stack-print throttle for the current slow-lock
+     * event. Returns true when this caller wins the CAS — in which case the same captureStack
+     * decision must be propagated to every owner in the same event so the JSON snapshot is
+     * coherent (no half-captured pictures). Must be called only when there is an actual owner
+     * to dump for, otherwise the throttle window is burned on a no-op.
+     */
+    private static boolean probeStackPrintGate() {
+        long interval = Config.slow_lock_stack_print_interval_ms;
+        if (interval <= 0) {
+            return true;
+        }
+        long monoNowMs = TimeUnit.NANOSECONDS.toMillis(System.nanoTime());
+        long last = LAST_STACK_PRINT_MS.get();
+        return monoNowMs - last >= interval && LAST_STACK_PRINT_MS.compareAndSet(last, monoNowMs);
     }
 
     private Locker checkAndHandleDeadLock(Long rid, Locker locker, LockType lockType) throws DeadlockException {
