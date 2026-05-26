@@ -31,6 +31,7 @@ set(UTIL_FILES
   debug/query_trace_impl.cpp
   memory_lock.cpp
   byte_buffer.cpp
+  curl_global_guard.cpp
   hdfs_util.cpp
   jvm_metrics.cpp
   llm_cache.cpp

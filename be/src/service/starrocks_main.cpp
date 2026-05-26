@@ -39,7 +39,6 @@
 #include <sanitizer/lsan_interface.h>
 #endif
 
-#include <curl/curl.h>
 #include <gflags/gflags.h>
 #include <thrift/TOutput.h>
 
@@ -75,6 +74,7 @@
 #include "service/daemon.h"
 #include "service/service.h"
 #include "storage/storage_engine.h"
+#include "util/curl_global_guard.h"
 #include "util/logging.h"
 
 #if !defined(__clang__) && defined(__GNUC__) && !_GLIBCXX_USE_CXX11_ABI
@@ -193,8 +193,8 @@ int main(int argc, char** argv) {
     starrocks::Status::access_directory_of_inject();
 #endif
     // Initialize libcurl here to avoid concurrent initialization.
-    auto curl_ret = curl_global_init(CURL_GLOBAL_ALL);
-    if (curl_ret != 0) {
+    starrocks::CurlGlobalGuard curl_guard;
+    if (auto curl_ret = curl_guard.init(); curl_ret != 0) {
         LOG(FATAL) << "fail to initialize libcurl, curl_ret=" << curl_ret;
         exit(-1);
     }
