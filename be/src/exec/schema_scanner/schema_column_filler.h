@@ -16,9 +16,9 @@
 
 #include "column/column.h"
 #include "column/nullable_column.h"
-#include "column/runtime_type_traits.h"
+#include "column/type_traits.h"
 #include "gutil/casts.h"
-#include "types/datetime_value.h"
+#include "runtime/datetime_value.h"
 #include "types/logical_type.h"
 
 namespace starrocks {
