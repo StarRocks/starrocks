@@ -889,6 +889,64 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
         }
     }
 
+    /**
+     * No-op publish for the FORCE-cancel escape hatch. Sends a publish_version
+     * RPC with TxnInfoPB.no_op_publish=true ONLY for the partition's regular
+     * (visible, non-shadow) indices at the alter's reserved commitVersion. BE
+     * short-circuits the txn-log apply path and writes a no-op metadata file
+     * (V-1 content tagged with version V), so the partition version chain
+     * advances past the cancelled alter without including any of its changes.
+     *
+     * <p>We deliberately skip the shadow indices here: they're about to be
+     * dropped by removeShadowIndex() inside persistStateChange, so publishing
+     * them would just produce metadata files that are orphans the moment the
+     * cancel commits. The visible (regular) indices are what subsequent loads'
+     * publish chains depend on, so those are the ones whose version must
+     * advance.
+     *
+     * <p>Returns false if any RPC fails or throws; caller leaves the job at
+     * FINISHED_REWRITING so the operator can retry CANCEL ALTER ... FORCE.
+     */
+    protected boolean lakePublishVersionWithSkip(String reason) {
+        try {
+            TxnInfoPB txnInfo = new TxnInfoPB();
+            txnInfo.txnId = watershedTxnId;
+            txnInfo.combinedTxnLog = false;
+            txnInfo.txnType = TxnTypePB.TXN_NORMAL;
+            txnInfo.commitTime = System.currentTimeMillis() / 1000;
+            txnInfo.gtid = watershedGtid;
+            txnInfo.noOpPublish = true;
+            txnInfo.noOpPublishReason = reason == null ? "force cancel of schema change" : reason;
+
+            for (long physicalPartitionId : physicalPartitionIndexMap.rowKeySet()) {
+                long commitVersion = commitVersionMap.get(physicalPartitionId);
+                List<MaterializedIndex> visibleIndices;
+                try (ReadLockedDatabase db = getReadLockedDatabase(dbId)) {
+                    OlapTable table = getTableOrThrow(db, tableId);
+                    PhysicalPartition physicalPartition = table.getPhysicalPartition(physicalPartitionId);
+                    if (physicalPartition == null) {
+                        // partition gone (concurrent drop); nothing to advance, skip.
+                        continue;
+                    }
+                    visibleIndices = physicalPartition.getLatestMaterializedIndices(IndexExtState.VISIBLE);
+                }
+                List<Tablet> regularTablets = new ArrayList<>();
+                for (MaterializedIndex index : visibleIndices) {
+                    regularTablets.addAll(index.getTablets());
+                }
+                if (regularTablets.isEmpty()) {
+                    continue;
+                }
+                Utils.publishVersion(regularTablets, txnInfo, commitVersion - 1, commitVersion,
+                        computeResource, false);
+            }
+            return true;
+        } catch (Exception e) {
+            LOG.error("Fail to no-op publish for force-cancel of schema change job {}: {}", jobId, e.getMessage());
+            return false;
+        }
+    }
+
     private Set<String> collectModifiedColumnsForRelatedMVs(@NotNull OlapTable tbl) {
         if (tbl.getRelatedMaterializedViews().isEmpty()) {
             return Sets.newHashSet();
@@ -1183,6 +1241,18 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
         // shadow index is gone).
         if (jobState == JobState.FINISHED_REWRITING && tableExists() && !force) {
             return false;
+        }
+
+        // Force-cancel from FINISHED_REWRITING: advance the partition version
+        // chain past the alter's reserved commit version BEFORE cancel cleanup
+        // (which sets OlapTable.state back to NORMAL) — otherwise new loads
+        // race in while the version chain is still broken and queue up forever
+        // waiting for the cancelled alter's missing tablet_metadata_<V>.
+        // See LakeTableAlterMetaJobBase.cancelImpl for the same pattern.
+        if (force && jobState == JobState.FINISHED_REWRITING && tableExists()) {
+            if (!lakePublishVersionWithSkip(errMsg)) {
+                return false;
+            }
         }
 
         if (schemaChangeBatchTask != null) {

@@ -502,6 +502,31 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
             return false;
         }
 
+        // Force-cancel from FINISHED_REWRITING requires advancing the partition
+        // version chain past the alter's reserved commit version before the FE
+        // releases the table back to NORMAL. Otherwise the alter's txn_log sits
+        // on BE without ever being applied OR skipped, and the next load that
+        // tries to publish at base=commitVersion blocks indefinitely (verified
+        // empirically: INSERTs after a plain FORCE cancel stayed in COMMITTED
+        // forever because BE couldn't materialize tablet_metadata_<V> for the
+        // cancelled alter's V).
+        // The fix: send a publish_version RPC with TxnInfoPB.no_op_publish=true
+        // — BE short-circuits, writes V-1 content as V, and the version chain
+        // resumes. This MUST happen BEFORE the cancel cleanup runs, because
+        // cancel flips OlapTable.state back to NORMAL and at that moment new
+        // loads can race in; if the version chain isn't healthy yet, they will
+        // get stuck the same way.
+        if (force && jobState == JobState.FINISHED_REWRITING) {
+            if (!lakePublishVersionWithSkip(errMsg)) {
+                // Leave the job at FINISHED_REWRITING so the operator can retry
+                // CANCEL ALTER ... FORCE once whatever made the RPC fail is
+                // resolved (network, BE down, etc). Returning false here also
+                // makes AlterJobV2.cancel() unwind the optimistic
+                // forceSkippedAtCommitted flag.
+                return false;
+            }
+        }
+
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
         if (db != null) {
             OlapTable table = getOlapTable(db.getId(), tableId);
@@ -534,6 +559,48 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
             persistStateChange(this, JobState.CANCELLED);
         }
         return true;
+    }
+
+    /**
+     * Send a publish_version RPC with TxnInfoPB.no_op_publish=true for every
+     * affected (regular) tablet at the alter's reserved commitVersion. BE
+     * short-circuits the txn-log apply path and writes a no-op metadata file
+     * (V-1 content tagged with version V), so the partition version chain
+     * advances past the cancelled alter without including any of its changes.
+     *
+     * <p>Mirrors {@link #lakePublishVersion()} but sets noOpPublish=true and a
+     * reason string for audit. Returns false if any RPC fails or throws; in
+     * that case the caller leaves the job at FINISHED_REWRITING so the
+     * operator can retry CANCEL ALTER ... FORCE.
+     */
+    protected boolean lakePublishVersionWithSkip(String reason) {
+        try {
+            TxnInfoPB txnInfo = new TxnInfoPB();
+            txnInfo.txnId = watershedTxnId;
+            txnInfo.combinedTxnLog = false;
+            txnInfo.commitTime = System.currentTimeMillis() / 1000;
+            txnInfo.txnType = TxnTypePB.TXN_NORMAL;
+            txnInfo.gtid = watershedGtid;
+            txnInfo.noOpPublish = true;
+            txnInfo.noOpPublishReason = reason == null ? "force cancel of alter job" : reason;
+
+            for (long physicalPartitionId : physicalPartitionIndexMap.rowKeySet()) {
+                long commitVersion = commitVersionMap.get(physicalPartitionId);
+                Map<Long, MaterializedIndex> dirtyIndexMap = physicalPartitionIndexMap.row(physicalPartitionId);
+                for (MaterializedIndex index : dirtyIndexMap.values()) {
+                    // Use the per-tablet publishVersion path. The no-op publish
+                    // writes V-1 content as V on each affected tablet; the BE
+                    // short-circuit at transactions.cpp's main publish loop
+                    // handles both bundled and non-bundled tables uniformly.
+                    Utils.publishVersion(index.getTablets(), txnInfo, commitVersion - 1, commitVersion,
+                            computeResource, false);
+                }
+            }
+            return true;
+        } catch (Exception e) {
+            LOG.error("Fail to no-op publish for force-cancel of meta alter job {}: {}", jobId, e.getMessage());
+            return false;
+        }
     }
 
     private void updateErrorInfo(String errMsg) {
