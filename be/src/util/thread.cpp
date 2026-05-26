@@ -256,6 +256,7 @@ int64_t Thread::current_thread_id() {
 
 void Thread::set_thread_name(pthread_t t, const std::string& name) {
     // pthread_setname_np's length is restricted to 16 bytes, including the terminating null byte ('\0')
+<<<<<<< HEAD:be/src/util/thread.cpp
     int ret;
     if (name.length() < 16) {
         ret = pthread_setname_np(t, name.data());
@@ -264,12 +265,22 @@ void Thread::set_thread_name(pthread_t t, const std::string& name) {
         str.at(15) = '\0';
         ret = pthread_setname_np(t, str.data());
     }
+=======
+    std::string truncated = name.length() >= 16 ? name.substr(0, 15) : name;
+#ifdef __APPLE__
+    (void)t;
+    int ret = pthread_setname_np(truncated.c_str());
+#else
+    int ret = pthread_setname_np(t, truncated.c_str());
+#endif
+>>>>>>> e7f12a400f ([BugFix] Avoid set_thread_name race on data dir load threads (#73862)):be/src/common/thread/thread.cpp
     if (ret) {
-        LOG(WARNING) << "failed to set thread name: " << name;
+        LOG(WARNING) << "failed to set thread name, ret=" << ret << ", name: " << truncated;
     }
 }
 
 void Thread::set_thread_name(std::thread& t, std::string name) {
+<<<<<<< HEAD:be/src/util/thread.cpp
     // pthread_setname_np's length is restricted to 16 bytes, including the terminating null byte ('\0')
     if (name.length() >= 16) {
         name.at(15) = '\0';
@@ -278,6 +289,13 @@ void Thread::set_thread_name(std::thread& t, std::string name) {
     if (ret) {
         LOG(WARNING) << "failed to set thread name: " << name;
     }
+=======
+#ifdef __APPLE__
+    set_thread_name(pthread_t{}, name);
+#else
+    set_thread_name(t.native_handle(), name);
+#endif
+>>>>>>> e7f12a400f ([BugFix] Avoid set_thread_name race on data dir load threads (#73862)):be/src/common/thread/thread.cpp
 }
 
 int64_t Thread::wait_for_tid() const {
