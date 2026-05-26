@@ -16,6 +16,20 @@
 
 #include <gtest/gtest.h>
 
+<<<<<<< HEAD:be/test/exec/tablet_sink_index_channel_test.cpp
+=======
+#include <atomic>
+#include <thread>
+
+#include "base/testutil/assert.h"
+#include "base/testutil/sync_point.h"
+#include "base/utility/defer_op.h"
+#include "common/config_exec_fwd.h"
+#include "common/config_ingest_fwd.h"
+#include "common/util/thrift_util.h"
+#include "exec/data_sinks/tablet_sink.h"
+#include "exec/pipeline/query_context.h"
+>>>>>>> 777de828e2 ([BugFix] Fix race condition in TabletSinkSender::_send_chunk_by_node (#73820)):be/test/exec/data_sinks/tablet_sink_index_channel_test.cpp
 #include "exec/tablet_info.h"
 #include "exec/tablet_sink.h"
 #include "runtime/descriptor_helper.h"
@@ -472,6 +486,124 @@ TEST_F(TabletSinkIndexChannelTest, send_request_releases_protobuf_memory) {
     // Verify: before Swap the request had serialized chunk data, after Swap it's cleared
     EXPECT_GT(request_size_before_swap, 0);
     EXPECT_EQ(request_size_after_swap, 0);
+}
+
+// Reproduces the race condition fixed in _send_chunk_by_node where it directly
+// iterated IndexChannel::_node_channels without holding _node_channels_mutex,
+// concurrent with IndexChannel::init (incremental open) modifying the map.
+//
+// Uses SyncPoint to force the following interleaving:
+//   Thread A (_send_chunk_by_node): acquires shared lock, begins iterating _node_channels
+//   Thread B (IndexChannel::init):  tries to acquire exclusive lock — must block until A finishes
+//
+// Under TSAN, this would detect a data race if the shared lock were missing.
+TEST_F(TabletSinkIndexChannelTest, ConcurrentSendAndIncrementalInit) {
+    TQueryOptions query_options;
+    auto runtime_state = _build_runtime_state(query_options);
+    DescriptorTbl* desc_tbl = nullptr;
+    ASSERT_OK(DescriptorTbl::create(runtime_state.get(), _object_pool.get(), _desc_tbl, &desc_tbl,
+                                    config::vector_chunk_size));
+    runtime_state->set_desc_tbl(desc_tbl);
+    auto sink = std::make_unique<OlapTableSink>(_object_pool.get(), std::vector<TExpr>(), nullptr, runtime_state.get());
+    ASSERT_OK(sink->init(_data_sink, runtime_state.get()));
+    ASSERT_OK(sink->prepare(runtime_state.get()));
+
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp defer([]() {
+        SyncPoint::GetInstance()->ClearAllCallBacks();
+        SyncPoint::GetInstance()->ClearTrace();
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+
+    // Mock RPC open: immediately succeed
+    SyncPoint::GetInstance()->SetCallBack("NodeChannel::rpc::open_send", [&](void* arg) {
+        RpcOpenPair* rpc_pair = (RpcOpenPair*)arg;
+        RefCountClosure<PTabletWriterOpenResult>* closure = rpc_pair->second;
+        closure->result.mutable_status()->set_status_code(TStatusCode::OK);
+        closure->Run();
+    });
+    SyncPoint::GetInstance()->SetCallBack("NodeChannel::rpc::open_join", [&](void* arg) {});
+
+    // Mock RPC add_chunk: immediately succeed
+    SyncPoint::GetInstance()->SetCallBack("NodeChannel::rpc::add_chunk_send", [&](void* arg) {
+        RpcAddChunkTuple* rpc_tuple = (RpcAddChunkTuple*)arg;
+        ReusableClosure<PTabletWriterAddBatchResult>* closure = std::get<2>(*rpc_tuple);
+        closure->result.mutable_status()->set_status_code(TStatusCode::OK);
+        closure->Run();
+    });
+    SyncPoint::GetInstance()->SetCallBack("NodeChannel::rpc::add_chunk_join", [&](void* arg) {
+        auto* rpc_pair = (std::pair<ReusableClosure<PTabletWriterAddBatchResult>*, bool*>*)arg;
+        *rpc_pair->second = true;
+    });
+
+    ASSERT_OK(sink->open(runtime_state.get()));
+
+    // Add a new tablet location so incremental init() can find it.
+    // Tablet 100 on node 0 (an existing node, so init will reuse the NodeChannel).
+    std::vector<TTabletLocation> new_locations;
+    TTabletLocation new_loc;
+    new_loc.tablet_id = 100;
+    new_loc.node_ids.push_back(0);
+    new_locations.push_back(new_loc);
+    sink->_location->add_locations(new_locations);
+
+    auto* index_channel = sink->_channels[0].get();
+
+    // Force deterministic interleaving:
+    //   _send_chunk_by_node acquires shared lock → init::before_lock can proceed
+    //   But init blocks on exclusive lock until the send finishes.
+    SyncPoint::GetInstance()->LoadDependency({
+            {"TabletSinkSender::_send_chunk_by_node::after_lock", "IndexChannel::init::before_lock"},
+    });
+
+    std::atomic<bool> send_done{false};
+    std::atomic<bool> init_acquired_lock{false};
+
+    SyncPoint::GetInstance()->SetCallBack("IndexChannel::init::after_lock", [&](void*) {
+        init_acquired_lock.store(true);
+        // With the fix: shared lock is held during send, so exclusive lock
+        // can only be acquired after send releases it.
+        EXPECT_TRUE(send_done.load());
+    });
+
+    // Thread A: send a chunk (which calls _send_chunk_by_node, holding shared lock)
+    auto tuple_desc = runtime_state->desc_tbl().get_tuple_descriptor(_desc_tbl.tupleDescriptors[0].id);
+    ChunkUniquePtr chunk = RuntimeChunkHelper::new_chunk(*tuple_desc, 1);
+    chunk->get_column_raw_ptr_by_index(0)->append_datum(Datum(1));
+    chunk->get_column_raw_ptr_by_index(1)->append_datum(Datum(int64_t(1)));
+
+    std::thread sender([&]() {
+        auto st = sink->send_chunk(runtime_state.get(), chunk.get());
+        send_done.store(true);
+        // send_chunk may fail because the mock doesn't fully simulate the BE,
+        // but that's OK — we only care that the shared lock was held during iteration.
+    });
+
+    // Thread B: incremental init (modifies _node_channels under exclusive lock)
+    PTabletWithPartition new_tablet;
+    new_tablet.set_tablet_id(100);
+    new_tablet.set_partition_id(1);
+    auto* replica = new_tablet.add_replicas();
+    replica->set_host("10.128.8.0");
+    replica->set_port(8060);
+    replica->set_node_id(0);
+
+    std::thread initializer([&]() {
+        // This will try to acquire exclusive _node_channels_mutex.
+        // With the fix, it blocks until sender releases the shared lock.
+        auto st = index_channel->init(runtime_state.get(), {new_tablet}, true);
+        // init may fail because NodeChannel::init requires more setup,
+        // but we only care that the lock ordering is correct.
+    });
+
+    sender.join();
+    initializer.join();
+
+    // Verify the lock ordering was respected: init got the exclusive lock
+    // only after send released the shared lock.
+    EXPECT_TRUE(init_acquired_lock.load());
+
+    (void)sink->close(runtime_state.get(), Status::OK());
 }
 
 } // namespace starrocks
