@@ -121,6 +121,19 @@ public class ExplainTest extends PlanTestBase {
     }
 
     @Test
+    public void testExplainCostsMockSyntaxOnInsert() throws Exception {
+        // visitInsertStatement applies the EXPLAIN clause to the inner QueryStatement
+        // and returns an InsertStmt wrapper; the wrapper must delegate isExplain /
+        // isMockColumnNames so buildExplainString sees the MOCK flag.
+        String sql = "EXPLAIN COSTS MOCK INSERT INTO t0 SELECT v4, v5, v6 FROM t1";
+        StatementBase stmt = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+        Assertions.assertTrue(stmt.isExplain());
+        Assertions.assertEquals(StatementBase.ExplainLevel.COSTS, stmt.getExplainLevel());
+        Assertions.assertTrue(stmt.isMockColumnNames(),
+                stmt.getClass().getSimpleName() + " did not delegate isMockColumnNames");
+    }
+
+    @Test
     public void testExplainCostsMockRewriterPlan() throws Exception {
         String sql = "SELECT DISTINCT t0.v1 FROM t0 LEFT JOIN t1 ON t0.v1 = t1.v4";
         ExecPlan execPlan = getExecPlan(sql);

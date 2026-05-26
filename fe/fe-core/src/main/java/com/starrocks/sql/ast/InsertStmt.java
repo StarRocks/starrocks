@@ -252,6 +252,11 @@ public class InsertStmt extends DmlStmt {
         return queryStatement.isExplainAnalyze();
     }
 
+    @Override
+    public boolean isMockColumnNames() {
+        return queryStatement.isMockColumnNames();
+    }
+
     public String getLabel() {
         return label;
     }
