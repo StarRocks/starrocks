@@ -12,14 +12,26 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#pragma once
+#include "storage/primitive/row_source_mask.h"
 
-#include "storage/primitive/chunk_iterator.h"
+#include <gtest/gtest.h>
 
 namespace starrocks {
 
-// A unique iterator will removes all but the *last* record from every
-// consecutive group of records with equivalent keys.
-ChunkIteratorPtr new_unique_iterator(const ChunkIteratorPtr& child);
+TEST(RowSourceMaskPrimitiveTest, sourceAndAggFlagShareEncodedWord) {
+    RowSourceMask mask(7, true);
+    EXPECT_EQ(7, mask.get_source_num());
+    EXPECT_TRUE(mask.get_agg_flag());
+    EXPECT_EQ(RowSourceMask::MASK_FLAG | 7, mask.data);
+
+    mask.set_source_num(RowSourceMask::MAX_SOURCES + 3);
+    EXPECT_EQ(2, mask.get_source_num());
+    EXPECT_TRUE(mask.get_agg_flag());
+
+    mask.set_agg_flag(false);
+    EXPECT_EQ(2, mask.get_source_num());
+    EXPECT_FALSE(mask.get_agg_flag());
+    EXPECT_EQ(2, mask.data);
+}
 
 } // namespace starrocks

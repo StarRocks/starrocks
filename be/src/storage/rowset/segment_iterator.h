@@ -19,8 +19,8 @@
 #include <vector>
 
 #include "common/statusor.h"
-#include "storage/chunk_iterator.h"
 #include "storage/olap_common.h"
+#include "storage/primitive/chunk_iterator.h"
 #include "storage/primitive/range.h"
 
 namespace starrocks {

@@ -12,16 +12,20 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "storage/projection_iterator.h"
+#include "storage/primitive/projection_iterator.h"
 
 #include <gtest/gtest.h>
+
+#include <algorithm>
+#include <string>
+#include <vector>
 
 #include "column/chunk.h"
 #include "column/chunk_factory.h"
 #include "column/column.h"
 #include "common/config_exec_fwd.h"
-#include "storage/chunk_helper.h"
 #include "types/datum.h"
+#include "types/type_info.h"
 
 namespace starrocks {
 

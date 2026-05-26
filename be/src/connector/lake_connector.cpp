@@ -55,7 +55,7 @@
 #include "storage/lake/table_schema_service.h"
 #include "storage/lake/tablet.h"
 #include "storage/predicate_parser.h"
-#include "storage/projection_iterator.h"
+#include "storage/primitive/projection_iterator.h"
 #include "storage/rowset/short_key_range_option.h"
 #include "storage/runtime_range_pruner.hpp"
 #include "storage/virtual_column_utils.h"

@@ -61,7 +61,7 @@
 #include "storage/index/vector/vector_search_option.h"
 #include "storage/metadata_util.h"
 #include "storage/predicate_parser.h"
-#include "storage/projection_iterator.h"
+#include "storage/primitive/projection_iterator.h"
 #include "storage/runtime_range_pruner.hpp"
 #include "storage/storage_engine.h"
 #include "storage/virtual_column_utils.h"

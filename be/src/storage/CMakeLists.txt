@@ -20,6 +20,9 @@ set(EXECUTABLE_OUTPUT_PATH "${BUILD_DIR}/src/storage")
 add_subdirectory(rowset)
 
 ADD_BE_LIB(StoragePrimitive
+    primitive/chunk_iterator.cpp
+    primitive/empty_iterator.cpp
+    primitive/projection_iterator.cpp
     primitive/range.cpp
 )
 
@@ -147,7 +150,6 @@ set(STORAGE_FILES
     async_delta_writer.cpp
     chunk_helper.cpp
     chunk_variant_helper.cpp
-    chunk_iterator.cpp
     column_predicate_cmp.cpp
     column_in_predicate.cpp
     column_not_in_predicate.cpp
@@ -161,10 +163,8 @@ set(STORAGE_FILES
     convert_helper.cpp
     delete_predicates.cpp
     disjunctive_predicates.cpp
-    empty_iterator.cpp
     merge_iterator.cpp
     predicate_parser.cpp
-    projection_iterator.cpp
     push_handler.cpp
     row_source_mask.cpp
     row_store_encoder.cpp

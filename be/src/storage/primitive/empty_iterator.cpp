@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "storage/empty_iterator.h"
+#include "storage/primitive/empty_iterator.h"
 
 namespace starrocks {
 
