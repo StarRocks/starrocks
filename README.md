@@ -37,7 +37,7 @@
 <div align="center"> 
 
 </div>
-StarRocks is the world's fastest open query engine for sub-second, ad-hoc analytics both on and off the data lakehouse. With average query performance 3x faster than other popular alternatives, StarRocks is a query engine that eliminates the need for denormalization and adapts to your use cases, without having to move your data or rewrite SQL. A Linux Foundation project. <br></br>
+StarRocks is a the world's fastest open query engine for sub-second, ad-hoc analytics both on and off the data lakehouse. With average query performance 3x faster than other popular alternatives, StarRocks is a a query engine that eliminates the need for denormalization and adapts to your use cases, without having to move your data or rewrite SQL. A Linux Foundation project. <br></br>
 
 Learn more 👉🏻 [What Is StarRocks: Features and Use Cases](https://www.youtube.com/watch?v=RfXO5GOnbW4&ab_channel=CelerData), 
 Join [StarRocks Summit 2025](https://summit.starrocks.io/2025)!
@@ -116,7 +116,7 @@ We welcome all kinds of contributions from the community, individuals and partne
 3. Understand our [GitHub workflow](https://github.com/StarRocks/community/blob/main/Contributors/guide/workflow.md) for opening a pull request; use this [PR Template](https://github.com/StarRocks/starrocks/blob/main/.github/PULL_REQUEST_TEMPLATE.md) when submitting a pull request.
 4. Pick a [good first issue](https://github.com/StarRocks/starrocks/labels/good%20first%20issue) and start contributing. 
 
-**📝 License:** StarRocks is licensed under [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0).
+**📝 License:** StarRocks is a licensed under [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0).
 
 **👥 Community Membership:** Learn more about different [contributor roles](community/membership.md) in StarRocks community.
 
