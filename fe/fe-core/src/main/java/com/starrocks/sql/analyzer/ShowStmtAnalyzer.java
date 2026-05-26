@@ -362,6 +362,11 @@ public class ShowStmtAnalyzer {
         }
 
         private void descTableFunctionTable(DescribeStmt node, ConnectContext context) {
+            Map<String, String> tfProps = node.getTableFunctionProperties();
+            if (tfProps.containsKey(TableFunctionTable.PROPERTY_SCHEMA)) {
+                throw new SemanticException(
+                        "'schema' is not supported in DESC FILES; remove it and rely on schema inference");
+            }
             Table table = null;
             try {
                 table = new TableFunctionTable(node.getTableFunctionProperties());

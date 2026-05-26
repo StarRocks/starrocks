@@ -3472,6 +3472,14 @@ unitBoundary
     : FLOOR | CEIL
     ;
 
+filesSchema
+    : filesSchemaColumn (',' filesSchemaColumn)* EOF
+    ;
+
+filesSchemaColumn
+    : identifier type
+    ;
+
 type
     : baseType
     | decimalType
