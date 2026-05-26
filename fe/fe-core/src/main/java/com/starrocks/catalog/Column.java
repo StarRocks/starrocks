@@ -739,25 +739,8 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
         }
         if (defaultValue != null) {
             return defaultValue;
-<<<<<<< HEAD
-        } else if (defaultExpr != null) {
-            if (isEmptyDefaultTimeFunction(defaultExpr)) {
-                if (extras != null) {
-                    extras.add("DEFAULT_GENERATED");
-                }
-                return "CURRENT_TIMESTAMP";
-            } else {
-                if (extras != null) {
-                    extras.add("DEFAULT_GENERATED");
-                }
-                return defaultExpr.getExpr();
-=======
         }
         if (defaultExpr != null) {
-            if (defaultExpr.hasExprObject()) {
-                return defaultExpr.toSql();
->>>>>>> 352dd60b03 ([BugFix] Preserve current_timestamp generator on ALTER ADD COLUMN (#73455))
-            }
             if (extras != null) {
                 extras.add("DEFAULT_GENERATED");
             }

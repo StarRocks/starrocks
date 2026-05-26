@@ -36,20 +36,14 @@ package com.starrocks.catalog;
 
 import com.google.common.collect.Lists;
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.analysis.FunctionCallExpr;
+import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.sql.ast.ColumnDef;
-<<<<<<< HEAD
-=======
-import com.starrocks.sql.ast.expression.FunctionCallExpr;
-import com.starrocks.sql.ast.expression.IntLiteral;
-import com.starrocks.sql.ast.expression.StringLiteral;
-import com.starrocks.type.DateType;
-import com.starrocks.type.IntegerType;
->>>>>>> 352dd60b03 ([BugFix] Preserve current_timestamp generator on ALTER ADD COLUMN (#73455))
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
@@ -87,10 +81,10 @@ public class ColumnGsonSerializationTest {
 
     @Test
     public void testSerializeDefaultExprHasArgumentsPreserved() {
-        // current_timestamp(3) — hasArguments must survive a Gson roundtrip.
+        // current_timestamp(3) -- hasArguments must survive a Gson roundtrip.
         FunctionCallExpr ctsExpr = new FunctionCallExpr("current_timestamp",
-                Lists.newArrayList(new IntLiteral(3L, IntegerType.INT)));
-        Column tsCol = new Column("ts", DateType.DATETIME, false, null, true,
+                Lists.newArrayList(new IntLiteral(3L, Type.INT)));
+        Column tsCol = new Column("ts", Type.DATETIME, false, null, true,
                 new ColumnDef.DefaultValueDef(true, true, ctsExpr), "");
 
         Assertions.assertNotNull(tsCol.getDefaultExpr());
@@ -114,8 +108,8 @@ public class ColumnGsonSerializationTest {
         // Simulate that by stripping "hasArguments":true from the serialized form and verify that
         // gsonPostProcess recovers the flag from the expr string.
         FunctionCallExpr ctsExpr = new FunctionCallExpr("current_timestamp",
-                Lists.newArrayList(new IntLiteral(3L, IntegerType.INT)));
-        Column tsCol = new Column("ts", DateType.DATETIME, false, null, true,
+                Lists.newArrayList(new IntLiteral(3L, Type.INT)));
+        Column tsCol = new Column("ts", Type.DATETIME, false, null, true,
                 new ColumnDef.DefaultValueDef(true, true, ctsExpr), "");
         String legacyJson = GsonUtils.GSON.toJson(tsCol).replaceAll(",\"hasArguments\":(true|false)", "");
         Assertions.assertFalse(legacyJson.contains("hasArguments"),
@@ -131,7 +125,7 @@ public class ColumnGsonSerializationTest {
 
         // An empty-arg form persisted under the same legacy schema must stay empty.
         FunctionCallExpr emptyExpr = new FunctionCallExpr("current_timestamp", Lists.newArrayList());
-        Column tsEmpty = new Column("ts", DateType.DATETIME, false, null, true,
+        Column tsEmpty = new Column("ts", Type.DATETIME, false, null, true,
                 new ColumnDef.DefaultValueDef(true, false, emptyExpr), "");
         String legacyEmptyJson =
                 GsonUtils.GSON.toJson(tsEmpty).replaceAll(",\"hasArguments\":(true|false)", "");

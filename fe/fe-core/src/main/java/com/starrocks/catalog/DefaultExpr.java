@@ -21,33 +21,25 @@ import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.FunctionName;
 import com.starrocks.analysis.FunctionParams;
 import com.starrocks.analysis.IntLiteral;
+import com.starrocks.persist.gson.GsonPostProcessable;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.io.IOException;
 import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-public class DefaultExpr {
+public class DefaultExpr implements GsonPostProcessable {
     private static final Logger LOG = LogManager.getLogger(DefaultExpr.class);
     @SerializedName("expr")
     private String expr;
-<<<<<<< HEAD
-    private boolean hasArguments;
-=======
-
     // StarRocks Gson skips fields without @SerializedName (see HiddenAnnotationExclusionStrategy).
     // Without persistence this flag flipped to false after FE restart / edit-log replay, which made
     // isEmptyDefaultTimeFunction misclassify "current_timestamp(N)" as the empty form and silently
     // dropped its precision argument.
     @SerializedName("hasArguments")
     private boolean hasArguments;
-
-    @SerializedName("serializedExpr")
-    private String serializedExpr;
-
-    private Expr exprObject;
->>>>>>> 352dd60b03 ([BugFix] Preserve current_timestamp generator on ALTER ADD COLUMN (#73455))
 
     public DefaultExpr(String expr, boolean hasArguments) {
         this.expr = expr;
@@ -66,36 +58,8 @@ public class DefaultExpr {
         return hasArguments;
     }
 
-<<<<<<< HEAD
-=======
-    public boolean hasExprObject() {
-        return exprObject != null || serializedExpr != null;
-    }
-
-    public Expr getExprObject() {
-        return exprObject;
-    }
-
-    public void setExprObject(Expr exprObject) {
-        this.exprObject = exprObject;
-    }
-
-    @Override
-    public void gsonPreProcess() throws IOException {
-        if (exprObject != null) {
-            serializedExpr = ExprToSql.toSql(exprObject);
-        }
-    }
-
     @Override
     public void gsonPostProcess() throws IOException {
-        if (serializedExpr != null && !serializedExpr.isEmpty()) {
-            try {
-                exprObject = SqlParser.parseSqlToExpr(serializedExpr, SqlModeHelper.MODE_DEFAULT);
-            } catch (Exception e) {
-                LOG.warn("Failed to restore expr object from SQL: {}", serializedExpr, e);
-            }
-        }
         // Backfill hasArguments for columns persisted before the @SerializedName annotation existed:
         // the field deserialized to the primitive default false. The argument list is observable from
         // the expr string itself - a valid time-function default with a non-empty paren means args.
@@ -107,7 +71,6 @@ public class DefaultExpr {
         }
     }
 
->>>>>>> 352dd60b03 ([BugFix] Preserve current_timestamp generator on ALTER ADD COLUMN (#73455))
     public static boolean isValidDefaultFunction(String expr) {
         String[] defaultfunctions = {
             "current_timestamp\\([0-6]?\\)",
