@@ -511,4 +511,83 @@ public class CachedStatisticStorageTest {
         Assertions.assertEquals(0, columnStatistic.getAverageRowSize(), 0.001);
         Assertions.assertEquals(0, columnStatistic.getNullsFraction(), 0.001);
     }
+
+    @Test
+    public void testWaitForStatsFutureTimeout() {
+        // GIVEN
+        final var storage = new CachedStatisticStorage();
+        // Create a future that will never complete
+        final var neverCompletingFuture = new CompletableFuture<>();
+
+        boolean originalEnabled = Config.enable_sync_statistics_load;
+        int originalTimeout = Config.sync_statistics_load_timeout_ms;
+        try {
+            Config.enable_sync_statistics_load = true;
+            Config.sync_statistics_load_timeout_ms = 100; // 100ms timeout
+
+            // WHEN
+            // The method should return without throwing despite the future not completing
+            Deencapsulation.invoke(storage, "waitForStatsFutureIfWaitEnabled", neverCompletingFuture);
+
+            // THEN
+            // Future should still not be done (timeout was caught internally)
+            Assertions.assertFalse(neverCompletingFuture.isDone());
+        } finally {
+            Config.enable_sync_statistics_load = originalEnabled;
+            Config.sync_statistics_load_timeout_ms = originalTimeout;
+        }
+    }
+
+    @Test
+    public void testWaitForStatsFutureDisabled() {
+        // GIVEN
+        final var storage = new CachedStatisticStorage();
+        final var neverCompletingFuture = new CompletableFuture<>();
+
+        boolean originalEnabled = Config.enable_sync_statistics_load;
+        try {
+            Config.enable_sync_statistics_load = false;
+
+            // WHEN
+            // Should return immediately without waiting
+            Deencapsulation.invoke(storage, "waitForStatsFutureIfWaitEnabled", neverCompletingFuture);
+
+            // THEN
+            Assertions.assertFalse(neverCompletingFuture.isDone());
+        } finally {
+            Config.enable_sync_statistics_load = originalEnabled;
+        }
+    }
+
+    @Test
+    public void testGetColumnStatisticReturnsUnknownOnTimeout() {
+        // GIVEN
+        final var db = connectContext.getGlobalStateMgr().getLocalMetastore().getDb("test");
+        final var table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(db.getFullName(), "t0");
+
+        boolean originalEnabled = Config.enable_sync_statistics_load;
+        int originalTimeout = Config.sync_statistics_load_timeout_ms;
+        try {
+            Config.enable_sync_statistics_load = true;
+            Config.sync_statistics_load_timeout_ms = 100;
+
+            // Install a cache that returns a never-completing future
+            final var storage = new CachedStatisticStorage();
+            final var slowCache = Caffeine.newBuilder()
+                    .maximumSize(100)
+                    .buildAsync((key, executor) -> new CompletableFuture<>());
+            Deencapsulation.setField(storage, "columnStatistics", slowCache);
+
+            // WHEN
+            // Should return unknown after timeout, not block forever
+            ColumnStatistic result = storage.getColumnStatistic(table, "v1");
+
+            // THEN
+            Assertions.assertTrue(result.isUnknown());
+        } finally {
+            Config.enable_sync_statistics_load = originalEnabled;
+            Config.sync_statistics_load_timeout_ms = originalTimeout;
+        }
+    }
 }
