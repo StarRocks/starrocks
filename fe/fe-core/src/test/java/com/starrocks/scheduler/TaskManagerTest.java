@@ -1465,32 +1465,26 @@ public class TaskManagerTest {
         TaskManager mgr = new TaskManager();
         mgr.start();
 
-        java.util.concurrent.ScheduledExecutorService periodBefore =
-                (java.util.concurrent.ScheduledExecutorService) org.apache.commons.lang3.reflect.FieldUtils
-                        .readField(mgr, "periodScheduler", true);
-        java.util.concurrent.ScheduledExecutorService dispatchBefore =
-                (java.util.concurrent.ScheduledExecutorService) org.apache.commons.lang3.reflect.FieldUtils
-                        .readField(mgr, "dispatchScheduler", true);
+        java.util.concurrent.ScheduledExecutorService periodBefore = mgr.periodScheduler;
+        java.util.concurrent.ScheduledExecutorService dispatchBefore = mgr.dispatchScheduler;
 
-        mgr.stop();
+        mgr.stop(5000L);
         Assertions.assertTrue(periodBefore.isShutdown(), "periodScheduler must be shut down by stop()");
         Assertions.assertTrue(dispatchBefore.isShutdown(), "dispatchScheduler must be shut down by stop()");
-        java.util.Map<?, ?> futureMap = (java.util.Map<?, ?>) org.apache.commons.lang3.reflect.FieldUtils
-                .readField(mgr, "periodFutureMap", true);
-        Assertions.assertTrue(futureMap.isEmpty(), "periodFutureMap must be cleared by stop()");
+        Assertions.assertTrue(periodBefore.isTerminated(),
+                "periodScheduler must be terminated after stop(timeoutMs)");
+        Assertions.assertTrue(dispatchBefore.isTerminated(),
+                "dispatchScheduler must be terminated after stop(timeoutMs)");
+        Assertions.assertTrue(mgr.periodFutureMap.isEmpty(), "periodFutureMap must be cleared by stop()");
 
         // Second start() rebuilds both pools.
         mgr.start();
-        java.util.concurrent.ScheduledExecutorService periodAfter =
-                (java.util.concurrent.ScheduledExecutorService) org.apache.commons.lang3.reflect.FieldUtils
-                        .readField(mgr, "periodScheduler", true);
-        java.util.concurrent.ScheduledExecutorService dispatchAfter =
-                (java.util.concurrent.ScheduledExecutorService) org.apache.commons.lang3.reflect.FieldUtils
-                        .readField(mgr, "dispatchScheduler", true);
-        Assertions.assertNotSame(periodBefore, periodAfter, "periodScheduler must be rebuilt on re-election");
-        Assertions.assertNotSame(dispatchBefore, dispatchAfter, "dispatchScheduler must be rebuilt on re-election");
-        Assertions.assertFalse(periodAfter.isShutdown());
-        Assertions.assertFalse(dispatchAfter.isShutdown());
+        Assertions.assertNotSame(periodBefore, mgr.periodScheduler,
+                "periodScheduler must be rebuilt on re-election");
+        Assertions.assertNotSame(dispatchBefore, mgr.dispatchScheduler,
+                "dispatchScheduler must be rebuilt on re-election");
+        Assertions.assertFalse(mgr.periodScheduler.isShutdown());
+        Assertions.assertFalse(mgr.dispatchScheduler.isShutdown());
 
         mgr.stop();
     }
@@ -1500,6 +1494,34 @@ public class TaskManagerTest {
         // stop() guards with isStart.compareAndSet(true, false); a TaskManager that never
         // started must not throw when stop is called.
         TaskManager mgr = new TaskManager();
-        Assertions.assertDoesNotThrow(mgr::stop);
+        Assertions.assertDoesNotThrow(() -> mgr.stop());
+    }
+
+    @Test
+    public void testStartRefusesToRestartBeforeSchedulersTerminate() throws Exception {
+        // Mirror of BatchWriteMgr / AlterHandler / LeaderTaskExecutor restart guard. If
+        // stop() returns but a scheduler has not yet terminated (in-flight task ignoring
+        // interrupt), start() must throw IllegalStateException rather than launching a
+        // parallel scheduler against the same TaskRunManager / periodFutureMap.
+        TaskManager mgr = new TaskManager();
+        mgr.start();
+        java.util.concurrent.ScheduledThreadPoolExecutor blockedPool =
+                new java.util.concurrent.ScheduledThreadPoolExecutor(1);
+        blockedPool.execute(() -> {
+            try {
+                Thread.sleep(30_000L);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+        });
+        blockedPool.shutdown();
+        mgr.stop();
+        mgr.periodScheduler = blockedPool;
+
+        try {
+            Assertions.assertThrows(IllegalStateException.class, mgr::start);
+        } finally {
+            blockedPool.shutdownNow();
+        }
     }
 }
