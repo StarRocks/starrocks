@@ -47,6 +47,11 @@ struct LakeSplitContext : public ScanSplitContext {
     lake::PreparedSegmentReadStatePtr prepared_segment_read_state = nullptr;
     size_t rowset_index = 0;
     size_t segment_index = 0;
+
+    bool is_prepared_physical_child() const {
+        return rowid_range != nullptr && short_key_range == nullptr && prepared_tablet_read_state != nullptr &&
+               prepared_segment_read_state != nullptr;
+    }
 };
 
 class PhysicalSplitScanMorsel final : public ScanMorsel {
