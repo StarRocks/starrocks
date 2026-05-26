@@ -14,34 +14,15 @@
 
 #pragma once
 
-#include <cstdint>
-
 #include "exec/schema_scanner.h"
 #include "gen_cpp/FrontendService_types.h"
 
 namespace starrocks {
 
-class SchemaCollationsScanner : public SchemaScanner {
+class SchemaCollationCharacterSetApplicabilityScanner : public SchemaScanner {
 public:
-    struct CollationStruct {
-        const char* name;
-        const char* charset;
-        int64_t id;
-        const char* is_default;
-        const char* is_compile;
-        int64_t sortlen;
-        const char* pad_attribute;
-    };
-
-    // The static set of collations advertised by StarRocks, terminated by a
-    // sentinel row whose `name` is nullptr. Other system-table scanners read
-    // this same array so they stay consistent with COLLATIONS (in particular
-    // COLLATION_CHARACTER_SET_APPLICABILITY, which is defined in MySQL as a
-    // view derived from COLLATIONS).
-    static const CollationStruct* collations();
-
-    SchemaCollationsScanner();
-    ~SchemaCollationsScanner() override;
+    SchemaCollationCharacterSetApplicabilityScanner();
+    ~SchemaCollationCharacterSetApplicabilityScanner() override;
 
     Status get_next(ChunkPtr* chunk, bool* eos) override;
 
@@ -49,8 +30,7 @@ private:
     Status fill_chunk(ChunkPtr* chunk);
 
     int _index{0};
-    static SchemaScanner::ColumnDesc _s_cols_columns[];
-    static CollationStruct _s_collations[];
+    static SchemaScanner::ColumnDesc _s_cols[];
 };
 
 } // namespace starrocks
