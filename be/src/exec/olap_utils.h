@@ -40,7 +40,7 @@
 #include "common/logging.h"
 #include "gen_cpp/Exprs_types.h"
 #include "gen_cpp/Opcodes_types.h"
-#include "storage/olap_tuple.h"
+#include "storage/primitive/olap_tuple.h"
 #include "types/datetime_value.h"
 #include "types/logical_type.h"
 #include "types/logical_type_infra.h"

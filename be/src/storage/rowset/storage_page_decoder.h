@@ -19,7 +19,7 @@
 #include "base/string/slice.h"
 #include "common/status.h"
 #include "gen_cpp/segment.pb.h"
-#include "storage/rowset/common.h"
+#include "storage/primitive/rowid_types.h"
 
 namespace starrocks {
 

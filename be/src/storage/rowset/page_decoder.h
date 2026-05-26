@@ -37,7 +37,7 @@
 #include "column/nullable_column.h"
 #include "common/status.h" // for Status
 #include "gen_cpp/segment.pb.h"
-#include "storage/range.h"
+#include "storage/primitive/range.h"
 #include "storage/rowset/page_handle_fwd.h"
 
 namespace starrocks {

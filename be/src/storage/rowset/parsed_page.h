@@ -36,8 +36,8 @@
 
 #include <memory>
 
-#include "storage/range.h"
-#include "storage/rowset/common.h" // ordinal_t
+#include "storage/primitive/range.h"
+#include "storage/primitive/rowid_types.h" // ordinal_t
 #include "storage/rowset/page_decoder.h"
 #include "storage/rowset/page_handle_fwd.h"
 #include "storage/rowset/page_pointer.h"

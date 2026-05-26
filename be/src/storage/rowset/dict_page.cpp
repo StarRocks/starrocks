@@ -25,7 +25,7 @@
 #include "gutil/casts.h"
 #include "gutil/strings/substitute.h" // for Substitute
 #include "storage/chunk_helper.h"
-#include "storage/range.h"
+#include "storage/primitive/range.h"
 #include "storage/rowset/bitshuffle_page.h"
 
 namespace starrocks {

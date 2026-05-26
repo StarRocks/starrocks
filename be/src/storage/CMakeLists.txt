@@ -19,6 +19,22 @@ set(EXECUTABLE_OUTPUT_PATH "${BUILD_DIR}/src/storage")
 
 add_subdirectory(rowset)
 
+ADD_BE_LIB(StoragePrimitive
+    primitive/range.cpp
+)
+
+target_link_libraries(StoragePrimitive PUBLIC
+    ExprCore
+    RuntimeCore
+    ChunkCore
+    ColumnCore
+    Types
+    Common
+    Base
+    Gutil
+    StarRocksGen
+)
+
 set(STORAGE_FILES
     aggregate_type.cpp
     base_tablet.cpp
@@ -319,4 +335,4 @@ ADD_BE_LIB(Storage
     ${STORAGE_FILES}
 )
 
-target_link_libraries(Storage PUBLIC ExecPrimitive ComputeEnv Serde Platform Cache)
+target_link_libraries(Storage PUBLIC StoragePrimitive ExecPrimitive ComputeEnv Serde Platform Cache)

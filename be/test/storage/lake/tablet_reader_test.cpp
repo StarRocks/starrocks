@@ -38,7 +38,7 @@
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_writer.h"
 #include "storage/lake/versioned_tablet.h"
-#include "storage/rowset/common.h"
+#include "storage/primitive/rowid_types.h"
 #include "storage/rowset/rowid_range_option.h"
 #include "storage/tablet_schema.h"
 #include "test_util.h"

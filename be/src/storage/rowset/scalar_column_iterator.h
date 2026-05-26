@@ -35,7 +35,7 @@
 #pragma once
 
 #include "column/fixed_length_column.h"
-#include "storage/range.h"
+#include "storage/primitive/range.h"
 #include "storage/rowset/column_iterator.h"
 #include "storage/rowset/ordinal_page_index.h"
 #include "storage/rowset/page_handle.h"

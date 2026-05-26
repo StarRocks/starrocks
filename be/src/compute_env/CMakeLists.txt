@@ -43,6 +43,7 @@ ADD_BE_LIB(ComputeEnv
 )
 
 target_link_libraries(ComputeEnv PUBLIC
+    StoragePrimitive
     ExecPrimitive
     ExprCore
     Serde

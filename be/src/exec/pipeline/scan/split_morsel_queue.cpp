@@ -22,7 +22,7 @@
 #include "exec/pipeline/scan/split_scan_morsel.h"
 #include "storage/chunk_helper.h"
 #include "storage/lake/tablet_reader.h"
-#include "storage/range.h"
+#include "storage/primitive/range.h"
 #include "storage/rowset/rowset.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_reader.h"

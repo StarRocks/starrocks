@@ -22,7 +22,7 @@
 
 #include "common/status.h"
 #include "gen_cpp/lake_types.pb.h"
-#include "storage/olap_tuple.h"
+#include "storage/primitive/olap_tuple.h"
 
 namespace starrocks {
 struct OlapReaderStatistics;

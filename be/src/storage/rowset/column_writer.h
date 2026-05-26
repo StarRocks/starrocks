@@ -49,8 +49,8 @@
 #endif
 #include "base/bit/bitmap.h"   // for BitmapChange
 #include "base/string/slice.h" // for OwnedSlice
+#include "storage/primitive/rowid_types.h"
 #include "storage/rowset/binary_dict_page.h"
-#include "storage/rowset/common.h"
 #include "storage/rowset/page_pointer.h" // for PagePointer
 #include "storage/tablet_schema.h"       // for TabletColumn
 

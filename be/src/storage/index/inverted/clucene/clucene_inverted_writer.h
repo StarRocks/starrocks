@@ -26,7 +26,7 @@
 #include "storage/index/inverted/inverted_writer.h"
 #include "storage/key_coder.h"
 #include "storage/olap_common.h"
-#include "storage/rowset/common.h"
+#include "storage/primitive/rowid_types.h"
 #include "storage/tablet_schema.h"
 
 namespace starrocks {
