@@ -216,8 +216,8 @@ Status AppendWithMaskVisitor<PositiveSelect>::append_binary_impl(BinaryColumnBas
     using Offsets = typename BinaryColumnBase<T>::Offsets;
     Offsets::visit_storage_pair(offsets, src_offsets, [&](auto& dst_offsets_buf, const auto& src_offsets_buf) {
         uint64_t current_offset = old_bytes;
-        dst_offsets_buf[old_rows] = static_cast<typename std::decay_t<decltype(dst_offsets_buf)>::value_type>(
-                current_offset);
+        dst_offsets_buf[old_rows] =
+                static_cast<typename std::decay_t<decltype(dst_offsets_buf)>::value_type>(current_offset);
         auto* dest_offsets = dst_offsets_buf.data() + old_rows + 1;
         size_t copied = 0;
         for (size_t i = 0; i < _count; ++i) {
@@ -228,8 +228,8 @@ Status AppendWithMaskVisitor<PositiveSelect>::append_binary_impl(BinaryColumnBas
                 strings::memcpy_inlined(dest_bytes + copied, src_bytes + start, len);
                 copied += len;
                 current_offset += len;
-                *dest_offsets++ = static_cast<typename std::decay_t<decltype(dst_offsets_buf)>::value_type>(
-                        current_offset);
+                *dest_offsets++ =
+                        static_cast<typename std::decay_t<decltype(dst_offsets_buf)>::value_type>(current_offset);
             }
         }
     });

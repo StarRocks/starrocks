@@ -250,14 +250,14 @@ public:
                     auto& offsets = dst_column->get_offset();
                     offsets.resize_uninitialized(chunk_size + 1, new_size);
 
-                    Offsets::visit_storage_pair(offsets, column_value->get_offset(),
-                                                [&](auto& offsets_buf, const auto& value_offsets) {
-                        column_sep->get_offset().visit_storage([&](const auto& sep_offsets) {
-                            serialize_column_sep_values(bytes, old_size, chunk_size, offsets_buf, value_offsets,
-                                                        column_value->get_string_begin(), sep_offsets,
-                                                        column_sep->get_string_begin());
-                        });
-                    });
+                    Offsets::visit_storage_pair(
+                            offsets, column_value->get_offset(), [&](auto& offsets_buf, const auto& value_offsets) {
+                                column_sep->get_offset().visit_storage([&](const auto& sep_offsets) {
+                                    serialize_column_sep_values(bytes, old_size, chunk_size, offsets_buf, value_offsets,
+                                                                column_value->get_string_begin(), sep_offsets,
+                                                                column_sep->get_string_begin());
+                                });
+                            });
                     DCHECK_EQ(old_size, new_size);
                 }
             } else {
@@ -271,12 +271,12 @@ public:
                     auto& offsets = dst_column->get_offset();
                     offsets.resize_uninitialized(chunk_size + 1, new_size);
 
-                    Offsets::visit_storage_pair(offsets, column_value->get_offset(),
-                                                [&](auto& offsets_buf, const auto& value_offsets) {
-                        serialize_const_sep_values(bytes, old_size, chunk_size, offsets_buf, value_offsets,
-                                                   column_value->get_string_begin(), sep.get_data(),
-                                                   static_cast<uint32_t>(sep.size));
-                    });
+                    Offsets::visit_storage_pair(
+                            offsets, column_value->get_offset(), [&](auto& offsets_buf, const auto& value_offsets) {
+                                serialize_const_sep_values(bytes, old_size, chunk_size, offsets_buf, value_offsets,
+                                                           column_value->get_string_begin(), sep.get_data(),
+                                                           static_cast<uint32_t>(sep.size));
+                            });
                     DCHECK_EQ(old_size, new_size);
                 }
             }
@@ -297,11 +297,11 @@ public:
                 auto& offsets = dst_column->get_offset();
                 offsets.resize_uninitialized(chunk_size + 1, new_size);
 
-                Offsets::visit_storage_pair(offsets, column_value->get_offset(),
-                                            [&](auto& offsets_buf, const auto& value_offsets) {
-                    serialize_const_sep_values(bytes, old_size, chunk_size, offsets_buf, value_offsets,
-                                               column_value->get_string_begin(), sep, size_sep);
-                });
+                Offsets::visit_storage_pair(
+                        offsets, column_value->get_offset(), [&](auto& offsets_buf, const auto& value_offsets) {
+                            serialize_const_sep_values(bytes, old_size, chunk_size, offsets_buf, value_offsets,
+                                                       column_value->get_string_begin(), sep, size_sep);
+                        });
                 DCHECK_EQ(old_size, new_size);
             }
         }

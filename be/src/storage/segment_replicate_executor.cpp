@@ -82,7 +82,8 @@ Status append_file_to_iobuf(FileSystem* fs, const std::string& path, int64_t fil
                     fmt::format("Failed to read {} file {} at offset {} size {}", file_type, path, offset, chunk_size));
         }
         if (UNLIKELY(data->append_user_data(buf.get(), chunk_size, [](void* p) { delete[](uint8*) p; }) != 0)) {
-            return Status::InternalError(fmt::format("Failed to append {} file {} to replicate iobuf", file_type, path));
+            return Status::InternalError(
+                    fmt::format("Failed to append {} file {} to replicate iobuf", file_type, path));
         }
         buf.release();
         offset += chunk_size;
@@ -384,8 +385,8 @@ void ReplicateToken::_sync_segment(std::unique_ptr<SegmentPB> segment, bool eos)
             }
         }
         if (segment->has_delete_path()) {
-            auto st =
-                    append_file_to_iobuf(_fs.get(), segment->delete_path(), segment->delete_data_size(), "delete", &data);
+            auto st = append_file_to_iobuf(_fs.get(), segment->delete_path(), segment->delete_data_size(), "delete",
+                                           &data);
             if (!st.ok()) {
                 LOG(WARNING) << "Failed to append delete file " << segment->DebugString() << " by " << debug_string()
                              << " err " << st;
@@ -393,8 +394,8 @@ void ReplicateToken::_sync_segment(std::unique_ptr<SegmentPB> segment, bool eos)
             }
         }
         if (segment->has_update_path()) {
-            auto st =
-                    append_file_to_iobuf(_fs.get(), segment->update_path(), segment->update_data_size(), "update", &data);
+            auto st = append_file_to_iobuf(_fs.get(), segment->update_path(), segment->update_data_size(), "update",
+                                           &data);
             if (!st.ok()) {
                 LOG(WARNING) << "Failed to append update file " << segment->DebugString() << " by " << debug_string()
                              << " err " << st;

@@ -17,10 +17,10 @@
 #include <cstddef>
 #include <string>
 
+#include "base/compression/block_compression.h"
 #include "base/statusor.h"
 #include "gen_cpp/Types_types.h"
 #include "gen_cpp/types.pb.h"
-#include "base/compression/block_compression.h"
 
 namespace starrocks {
 

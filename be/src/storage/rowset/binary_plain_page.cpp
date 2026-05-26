@@ -252,8 +252,7 @@ bool BinaryPlainPageDecoder<Type>::append_range(uint32_t idx, uint32_t end, Colu
             }
 
             for (uint32_t i = end - 1; i < end; i++) {
-                const uint64_t current_offset =
-                        begin_offset + static_cast<uint64_t>(offset(i + 1) - page_data_offset);
+                const uint64_t current_offset = begin_offset + static_cast<uint64_t>(offset(i + 1) - page_data_offset);
                 *dst_offsets++ = static_cast<OffsetValue>(current_offset);
             }
         });

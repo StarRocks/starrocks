@@ -351,8 +351,8 @@ private:
         int64_t size = sizeof(SerializedValue);
         if (is_string_encoding_enabled(encode_level) && bytes.size() >= ENCODE_SIZE_LIMIT &&
             bytes.size() <= LZ4_MAX_INPUT_SIZE) {
-            size += sizeof(uint64_t) + std::max(static_cast<int64_t>(bytes.size()),
-                                                static_cast<int64_t>(LZ4_compressBound(bytes.size())));
+            size += sizeof(uint64_t) +
+                    std::max(static_cast<int64_t>(bytes.size()), static_cast<int64_t>(LZ4_compressBound(bytes.size())));
         } else {
             size += bytes.size();
         }
@@ -458,7 +458,7 @@ private:
                                                          uint64_t offset_bytes_size, int encode_level) {
         if (UNLIKELY(offset_bytes_size % sizeof(SerializedOffset) != 0)) {
             return Status::InternalError(fmt::format("invalid binary column offset bytes size {}, offset width {}",
-                                                    offset_bytes_size, sizeof(SerializedOffset)));
+                                                     offset_bytes_size, sizeof(SerializedOffset)));
         }
 
         Buffer<SerializedOffset> serialized_offsets;
@@ -466,8 +466,8 @@ private:
 
         if (is_integer_encoding_enabled(encode_level) && offset_bytes_size >= ENCODE_SIZE_LIMIT) {
             constexpr bool sorted_i32 = std::is_same_v<SerializedOffset, uint32_t>;
-            ASSIGN_OR_RETURN(buff, decode_integers<sorted_i32>(buff, end, serialized_offsets.data(),
-                                                               offset_bytes_size));
+            ASSIGN_OR_RETURN(buff,
+                             decode_integers<sorted_i32>(buff, end, serialized_offsets.data(), offset_bytes_size));
         } else {
             ASSIGN_OR_RETURN(buff, read_raw(buff, end, serialized_offsets.data(), offset_bytes_size));
         }

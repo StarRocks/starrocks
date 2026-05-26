@@ -279,8 +279,8 @@ static inline void ascii_substr(const BinaryColumn* src, Bytes* bytes, Offsets* 
         for (size_t i = 0; i < size; ++i) {
             auto s = src->get_slice(i);
             ascii_substr_per_slice<off_is_negative, allow_out_of_left_bound>(
-                    &s, off, len, binary_column_empty_op_fast<DstOffset>,
-                    binary_column_non_empty_op_fast<DstOffset>, bytes, dst_offset_data, i);
+                    &s, off, len, binary_column_empty_op_fast<DstOffset>, binary_column_non_empty_op_fast<DstOffset>,
+                    bytes, dst_offset_data, i);
         }
     });
 }

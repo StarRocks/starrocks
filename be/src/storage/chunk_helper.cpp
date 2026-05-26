@@ -352,8 +352,6 @@ bool ChunkPipelineAccumulator::is_finished() const {
     return _finalized && _out_chunk == nullptr && _in_chunk == nullptr;
 }
 
-
-
 CommonExprEvalScopeGuard::CommonExprEvalScopeGuard(const ChunkPtr& chunk,
                                                    const std::map<SlotId, ExprContext*>& common_expr_ctxs)
         : _chunk(chunk), _common_expr_ctxs(common_expr_ctxs) {}

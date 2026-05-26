@@ -240,9 +240,7 @@ public:
 
     void append_default() override { _offsets.emplace_back(_bytes.size()); }
 
-    void append_default(size_t count) override {
-        _offsets.append_empty_values(count);
-    }
+    void append_default(size_t count) override { _offsets.append_empty_values(count); }
 
     StatusOr<MutableColumnPtr> replicate(const Buffer<uint32_t>& offsets) override;
 

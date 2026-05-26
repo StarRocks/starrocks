@@ -130,9 +130,10 @@ void BinaryColumnBase<T>::append(const Column& src, size_t offset, size_t count)
 }
 
 template <typename T>
-__attribute__((noinline)) void BinaryColumnBase<T>::_append_selective_general(
-        const BinaryColumnBase<T>& src_column, const uint32_t* indexes, uint32_t size, size_t prev_num_offsets,
-        uint64_t dst_begin) {
+__attribute__((noinline)) void BinaryColumnBase<T>::_append_selective_general(const BinaryColumnBase<T>& src_column,
+                                                                              const uint32_t* indexes, uint32_t size,
+                                                                              size_t prev_num_offsets,
+                                                                              uint64_t dst_begin) {
     auto& bytes = get_bytes();
     const auto& src_offsets = src_column.get_offset();
 
@@ -365,8 +366,8 @@ void BinaryColumnBase<T>::append_value_multiple_times(const Column& src, uint32_
         for (size_t i = 0; i < size; ++i) {
             const uint32_t row_idx = index;
             const uint64_t row_size = src_offset_data[row_idx + 1] - src_offset_data[row_idx];
-            strings::memcpy_inlined(dest_bytes + _offsets[cur_row_count + i],
-                                    src_bytes + src_offset_data[row_idx], row_size);
+            strings::memcpy_inlined(dest_bytes + _offsets[cur_row_count + i], src_bytes + src_offset_data[row_idx],
+                                    row_size);
         }
     });
 
@@ -862,16 +863,17 @@ void BinaryColumnBase<T>::update_rows(const Column& src, const uint32_t* indexes
             auto& bytes = get_bytes();
             auto* dest_bytes = bytes.data();
             const uint8_t* src_bytes = src_column._data_base();
-            Offsets::visit_storage_pair(dst_offsets_ref, src_offsets_ref, [&](const auto& dst_buf,
-                                                                              const auto& src_buf) {
-                const auto* __restrict dst_offsets = dst_buf.data();
-                const auto* __restrict src_offsets = src_buf.data();
-                for (size_t i = 0; i < replace_num; ++i) {
-                    const size_t src_offset = src_offsets[i];
-                    const size_t str_size = src_offsets[i + 1] - src_offset;
-                    strings::memcpy_inlined(dest_bytes + dst_offsets[indexes[i]], src_bytes + src_offset, str_size);
-                }
-            });
+            Offsets::visit_storage_pair(dst_offsets_ref, src_offsets_ref,
+                                        [&](const auto& dst_buf, const auto& src_buf) {
+                                            const auto* __restrict dst_offsets = dst_buf.data();
+                                            const auto* __restrict src_offsets = src_buf.data();
+                                            for (size_t i = 0; i < replace_num; ++i) {
+                                                const size_t src_offset = src_offsets[i];
+                                                const size_t str_size = src_offsets[i + 1] - src_offset;
+                                                strings::memcpy_inlined(dest_bytes + dst_offsets[indexes[i]],
+                                                                        src_bytes + src_offset, str_size);
+                                            }
+                                        });
             return;
         }
     }
@@ -1012,9 +1014,9 @@ size_t BinaryColumnBase<T>::filter_range(const Filter& filter, size_t from, size
                 // set offsets, try vectorized
                 for (int i = 0; i < batch_nums; ++i) {
                     // TODO: performance, all sub one same offset ?
-                    offset_data[result_offset + i + 1] =
-                            offset_data[result_offset + i] + offset_data[start_offset + i + 1] -
-                            offset_data[start_offset + i];
+                    offset_data[result_offset + i + 1] = offset_data[result_offset + i] +
+                                                         offset_data[start_offset + i + 1] -
+                                                         offset_data[start_offset + i];
                 }
 
                 result_offset += batch_nums;
@@ -1206,15 +1208,17 @@ void BinaryColumnBase<T>::deserialize_and_append_batch(Buffer<Slice>& srcs, size
     strings::memcpy_inlined(&string_size, srcs[0].data, sizeof(uint32_t));
     get_bytes().reserve(chunk_size * string_size * 2);
     for (size_t i = 0; i < chunk_size; ++i) {
-        srcs[i].data = reinterpret_cast<char*>(const_cast<uint8_t*>(
-                deserialize_and_append(reinterpret_cast<const uint8_t*>(srcs[i].data))));
+        srcs[i].data = reinterpret_cast<char*>(
+                const_cast<uint8_t*>(deserialize_and_append(reinterpret_cast<const uint8_t*>(srcs[i].data))));
     }
 }
 
 template <typename Offset>
-__attribute__((noinline)) static void serialize_binary_batch_nullable_impl(
-        uint8_t* dst, uint32_t* __restrict sizes, size_t chunk_size, uint32_t max_one_row_size,
-        const uint8_t* __restrict null_masks, const uint8_t* __restrict base, const Offset* __restrict offsets_data) {
+__attribute__((noinline)) static void serialize_binary_batch_nullable_impl(uint8_t* dst, uint32_t* __restrict sizes,
+                                                                           size_t chunk_size, uint32_t max_one_row_size,
+                                                                           const uint8_t* __restrict null_masks,
+                                                                           const uint8_t* __restrict base,
+                                                                           const Offset* __restrict offsets_data) {
     uint8_t* row = dst;
     for (size_t i = 0; i < chunk_size; ++i) {
         const uint32_t old_size = sizes[i];
@@ -1479,9 +1483,8 @@ Status BinaryColumnBase<T>::capacity_limit_reached() const {
     // AdaptiveOffsets can promote total byte offsets to uint64_t; row count remains limited by uint32_t APIs.
     if (_offsets.size() >= Column::MAX_CAPACITY_LIMIT) {
         const char* column_name = has_large_column() ? "large binary column" : "binary column";
-        return Status::CapacityLimitExceed(strings::Substitute("Total row count of $0 exceed the limit: $1",
-                                                               column_name,
-                                                               std::to_string(Column::MAX_CAPACITY_LIMIT)));
+        return Status::CapacityLimitExceed(strings::Substitute(
+                "Total row count of $0 exceed the limit: $1", column_name, std::to_string(Column::MAX_CAPACITY_LIMIT)));
     }
     return Status::OK();
 }
