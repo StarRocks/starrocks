@@ -1144,18 +1144,19 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
     }
 
     @Override
-    public final boolean cancel(String errMsg) {
+    public final boolean cancel(String errMsg, boolean force) {
+        // Pre-monitor work: signal the running thread to stop and release the
+        // createReplicaLatch (PENDING phase). Must happen OUTSIDE the synchronized
+        // block in super.cancel() — otherwise if run() currently holds the monitor
+        // while waiting on the latch, cancel would deadlock until task timeout.
+        // Applies to both the regular cancel path and the FORCE escape hatch.
         isCancelling.set(true);
         try {
-            // If waitingCreatingReplica == false, we will assume that
-            // cancel thread will get the object lock very quickly.
             if (waitingCreatingReplica.get()) {
                 Preconditions.checkState(createReplicaLatch != null);
                 createReplicaLatch.countDownToZero(new Status(TStatusCode.OK, ""));
             }
-            synchronized (this) {
-                return cancelInternal(errMsg);
-            }
+            return super.cancel(errMsg, force);
         } finally {
             isCancelling.set(false);
         }

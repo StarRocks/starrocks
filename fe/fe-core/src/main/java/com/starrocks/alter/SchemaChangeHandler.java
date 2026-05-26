@@ -2999,9 +2999,10 @@ public class SchemaChangeHandler extends AlterHandler {
         }
 
         // alter job v2's cancel must be called outside the database lock.
-        // When `FORCE` is supplied on the SQL, route to the force-aware overload
-        // so lake alter jobs bypass the FINISHED_REWRITING guard (publish-stuck
-        // escape hatch). For non-lake / non-stuck jobs `force=true` is a no-op.
+        // When `FORCE` is supplied on the SQL, lake alter jobs bypass their
+        // FINISHED_REWRITING guard (publish-stuck escape hatch). For non-lake /
+        // non-stuck jobs `force=true` is a no-op (cancelImpl(force) defaults
+        // to delegating to the single-arg form).
         boolean force = cancelAlterTableStmt.isForce();
         if (force && !Config.enable_admin_skip_committed_txn) {
             throw new DdlException(
@@ -3010,9 +3011,7 @@ public class SchemaChangeHandler extends AlterHandler {
                             + "This is an operator-only escape hatch for publish-stuck alter jobs; "
                             + "disable it again immediately after recovery.");
         }
-        boolean cancelled = force
-                ? schemaChangeJobV2.cancel(reason, true)
-                : schemaChangeJobV2.cancel(reason);
+        boolean cancelled = schemaChangeJobV2.cancel(reason, force);
         if (!cancelled) {
             throw new DdlException("Job can not be cancelled. State: " + schemaChangeJobV2.getJobState()
                     + (force ? "" : " (consider retrying with CANCEL ALTER TABLE ... FORCE if the publish is stuck)"));
