@@ -17,6 +17,7 @@
 #include <butil/iobuf.h>
 #include <fmt/format.h>
 
+#include <algorithm>
 #include <memory>
 #include <utility>
 
@@ -39,6 +40,7 @@ namespace starrocks {
 namespace {
 // 2GB - 1KB, make sure data + request <2GB
 constexpr size_t kSegmentReplicateRpcHttpMinSize = (1ULL << 31) - (1ULL << 10);
+constexpr int64_t kSegmentReplicateReadChunkSize = 256L * 1024 * 1024;
 
 Status serialize_segment_request_to_iobuf(const PTabletWriterAddSegmentRequest& request, const butil::IOBuf& data,
                                           butil::IOBuf* iobuf) {
@@ -52,6 +54,39 @@ Status serialize_segment_request_to_iobuf(const PTabletWriterAddSegmentRequest& 
     iobuf->append(&proto_iobuf_size, sizeof(proto_iobuf_size));
     iobuf->append(proto_iobuf);
     iobuf->append(data);
+    return Status::OK();
+}
+
+Status append_file_to_iobuf(FileSystem* fs, const std::string& path, int64_t file_size, const char* file_type,
+                            butil::IOBuf* data) {
+    if (UNLIKELY(file_size < 0)) {
+        return Status::InternalError(fmt::format("{} file {} has negative size {}", file_type, path, file_size));
+    }
+    if (file_size == 0) {
+        return Status::OK();
+    }
+
+    auto res = fs->new_random_access_file(path);
+    if (!res.ok()) {
+        return res.status().clone_and_prepend(fmt::format("Failed to open {} file {}", file_type, path));
+    }
+    auto rfile = std::move(res.value());
+
+    int64_t offset = 0;
+    while (offset < file_size) {
+        const int64_t chunk_size = std::min<int64_t>(kSegmentReplicateReadChunkSize, file_size - offset);
+        auto buf = std::make_unique<uint8[]>(chunk_size);
+        auto st = rfile->read_at_fully(offset, buf.get(), chunk_size);
+        if (!st.ok()) {
+            return st.clone_and_prepend(
+                    fmt::format("Failed to read {} file {} at offset {} size {}", file_type, path, offset, chunk_size));
+        }
+        if (UNLIKELY(data->append_user_data(buf.get(), chunk_size, [](void* p) { delete[](uint8*) p; }) != 0)) {
+            return Status::InternalError(fmt::format("Failed to append {} file {} to replicate iobuf", file_type, path));
+        }
+        buf.release();
+        offset += chunk_size;
+    }
     return Status::OK();
 }
 
@@ -341,52 +376,27 @@ void ReplicateToken::_sync_segment(std::unique_ptr<SegmentPB> segment, bool eos)
     if (segment) {
         // 1.1 read segment file
         if (segment->has_path()) {
-            auto res = _fs->new_random_access_file(segment->path());
-            if (!res.ok()) {
-                LOG(WARNING) << "Failed to open segment file " << segment->DebugString() << " by " << debug_string()
-                             << " err " << res.status();
-                return set_status(res.status());
-            }
-            auto rfile = std::move(res.value());
-            auto buf = new uint8[segment->data_size()];
-            data.append_user_data(buf, segment->data_size(), [](void* buf) { delete[](uint8*) buf; });
-            auto st = rfile->read_fully(buf, segment->data_size());
+            auto st = append_file_to_iobuf(_fs.get(), segment->path(), segment->data_size(), "segment", &data);
             if (!st.ok()) {
-                LOG(WARNING) << "Failed to read segment " << segment->DebugString() << " by " << debug_string()
+                LOG(WARNING) << "Failed to append segment " << segment->DebugString() << " by " << debug_string()
                              << " err " << st;
                 return set_status(st);
             }
         }
         if (segment->has_delete_path()) {
-            auto res = _fs->new_random_access_file(segment->delete_path());
-            if (!res.ok()) {
-                LOG(WARNING) << "Failed to open delete file " << segment->DebugString() << " by " << debug_string()
-                             << " err " << res.status();
-                return set_status(res.status());
-            }
-            auto rfile = std::move(res.value());
-            auto buf = new uint8[segment->delete_data_size()];
-            data.append_user_data(buf, segment->delete_data_size(), [](void* buf) { delete[](uint8*) buf; });
-            auto st = rfile->read_fully(buf, segment->delete_data_size());
+            auto st =
+                    append_file_to_iobuf(_fs.get(), segment->delete_path(), segment->delete_data_size(), "delete", &data);
             if (!st.ok()) {
-                LOG(WARNING) << "Failed to read delete file " << segment->DebugString() << " by " << debug_string()
+                LOG(WARNING) << "Failed to append delete file " << segment->DebugString() << " by " << debug_string()
                              << " err " << st;
                 return set_status(st);
             }
         }
         if (segment->has_update_path()) {
-            auto res = _fs->new_random_access_file(segment->update_path());
-            if (!res.ok()) {
-                LOG(WARNING) << "Failed to open update file " << segment->DebugString() << " by " << debug_string()
-                             << " err " << res.status();
-                return set_status(res.status());
-            }
-            auto rfile = std::move(res.value());
-            auto buf = new uint8[segment->update_data_size()];
-            data.append_user_data(buf, segment->update_data_size(), [](void* buf) { delete[](uint8*) buf; });
-            auto st = rfile->read_fully(buf, segment->update_data_size());
+            auto st =
+                    append_file_to_iobuf(_fs.get(), segment->update_path(), segment->update_data_size(), "update", &data);
             if (!st.ok()) {
-                LOG(WARNING) << "Failed to read delete file " << segment->DebugString() << " by " << debug_string()
+                LOG(WARNING) << "Failed to append update file " << segment->DebugString() << " by " << debug_string()
                              << " err " << st;
                 return set_status(st);
             }
@@ -424,29 +434,19 @@ void ReplicateToken::_sync_segment(std::unique_ptr<SegmentPB> segment, bool eos)
                         return set_status(exists_st);
                     }
 
-                    auto res = _fs->new_random_access_file(index_path);
-
-                    if (!res.ok()) {
-                        LOG(WARNING) << "Failed to open index file " << index_path << " by " << debug_string()
-                                     << " err " << res.status();
-                        return set_status(res.status());
-                    }
-
                     auto file_size_res = _fs->get_file_size(index_path);
                     if (!file_size_res.ok()) {
-                        LOG(WARNING) << "Failed to get index file size " << index_path << " err " << res.status();
-                        return set_status(res.status());
+                        LOG(WARNING) << "Failed to get index file size " << index_path << " err "
+                                     << file_size_res.status();
+                        return set_status(file_size_res.status());
                     }
                     auto file_size = file_size_res.value();
                     mutable_indexes->at(i).set_index_file_size(file_size);
                     total_index_data_size += file_size;
 
-                    auto rfile = std::move(res.value());
-                    auto buf = new uint8[file_size];
-                    data.append_user_data(buf, file_size, [](void* buf) { delete[](uint8*) buf; });
-                    auto st = rfile->read_fully(buf, file_size);
+                    auto st = append_file_to_iobuf(_fs.get(), index_path, file_size, "index", &data);
                     if (!st.ok()) {
-                        LOG(WARNING) << "Failed to read index file " << segment->DebugString() << " by "
+                        LOG(WARNING) << "Failed to append index file " << segment->DebugString() << " by "
                                      << debug_string() << " err " << st;
                         return set_status(st);
                     }
