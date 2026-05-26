@@ -14,18 +14,21 @@
 
 #pragma once
 
+#include <atomic>
+#include <memory>
 #include <queue>
+#include <vector>
 
 #include "column/chunk_slice.h"
 #include "common/runtime_profile.h"
+#include "compute_env/sorting/chunk_cursor.h"
 #include "compute_env/sorting/merge.h"
 #include "compute_env/sorting/sort_cursor.h"
 #include "compute_env/sorting/sorting.h"
-#include "runtime/chunk_cursor.h"
 
 namespace starrocks {
 
-class SortExecExprs;
+class RuntimeState;
 
 // Merge a group of sorted Chunks to one Chunk in order.
 class SortedChunksMerger {

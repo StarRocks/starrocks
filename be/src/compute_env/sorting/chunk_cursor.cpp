@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "runtime/chunk_cursor.h"
+#include "compute_env/sorting/chunk_cursor.h"
 
 #include <utility>
 
