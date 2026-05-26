@@ -734,6 +734,63 @@ TEST_F(VectorizedCastExprTest, timestmapCastString) {
     }
 }
 
+// Exercises DEFINE_TEMPORAL_CAST_TO_STRING(TYPE_DATETIME, ...) with non-zero microseconds,
+// i.e. the 26-char branch of timestamp::to_string(_, buf, n).
+TEST_F(VectorizedCastExprTest, timestampCastStringWithMicros) {
+    expr_node.child_type = TPrimitiveType::DATETIME;
+    expr_node.type = gen_type_desc(TPrimitiveType::VARCHAR);
+    expr_node.type.types[0].scalar_type.__set_len(26);
+
+    std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(expr_node));
+
+    expr_node.type = gen_type_desc(expr_node.child_type);
+    MockVectorizedExpr<TYPE_DATETIME> col1(expr_node, 5, TimestampValue::create(2020, 2, 3, 1, 23, 45, 123456));
+
+    expr->_children.push_back(&col1);
+
+    {
+        ColumnPtr ptr = expr->evaluate(nullptr, nullptr);
+
+        ASSERT_TRUE(ptr->is_binary());
+
+        auto v = BinaryColumn::static_pointer_cast(ptr);
+        ASSERT_EQ(5, v->size());
+
+        for (int j = 0; j < v->size(); ++j) {
+            ASSERT_EQ(std::string("2020-02-03 01:23:45.123456"), v->get_slice(j));
+        }
+    }
+}
+
+// Exercises DEFINE_TEMPORAL_CAST_TO_STRING(TYPE_DATE, ...).
+TEST_F(VectorizedCastExprTest, dateCastString) {
+    expr_node.child_type = TPrimitiveType::DATE;
+    expr_node.type = gen_type_desc(TPrimitiveType::VARCHAR);
+    expr_node.type.types[0].scalar_type.__set_len(10);
+
+    std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(expr_node));
+
+    expr_node.type = gen_type_desc(expr_node.child_type);
+    MockVectorizedExpr<TYPE_DATE> col1(expr_node, 10, DateValue::create(2020, 2, 3));
+
+    expr->_children.push_back(&col1);
+
+    {
+        ColumnPtr ptr = expr->evaluate(nullptr, nullptr);
+
+        ASSERT_TRUE(ptr->is_binary());
+
+        auto v = BinaryColumn::static_pointer_cast(ptr);
+        ASSERT_EQ(10, v->size());
+
+        for (int j = 0; j < v->size(); ++j) {
+            ASSERT_EQ(std::string("2020-02-03"), v->get_slice(j));
+        }
+
+        ASSERT_EQ(nullptr, Int64Column::dynamic_pointer_cast(ptr));
+    }
+}
+
 TEST_F(VectorizedCastExprTest, stringCastInt) {
     expr_node.child_type = TPrimitiveType::VARCHAR;
     expr_node.type = gen_type_desc(TPrimitiveType::INT);
