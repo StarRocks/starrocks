@@ -32,6 +32,7 @@ import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.Index;
 import com.starrocks.catalog.ListPartitionInfo;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.OlapTableSchemaValidator;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.RangePartitionInfo;
@@ -568,6 +569,11 @@ public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void,
                 }
                 sortKeyIdxes.add(idx);
             }
+            try {
+                OlapTableSchemaValidator.checkNamedSortKeyColumns(olapTable.getColumns(), clause.getSortKeys());
+            } catch (DdlException e) {
+                throw new SemanticException(e.getMessage(), clause.getPos());
+            }
         }
         boolean hasReplace = false;
         Set<String> columnSet = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
@@ -676,6 +682,21 @@ public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void,
                 throw new SemanticException(targetKeysType.toSql() + " must use hash distribution", distributionDesc.getPos());
             }
             DistributionDescAnalyzer.analyze(distributionDesc, columnSet);
+            if (distributionDesc instanceof HashDistributionDesc) {
+                HashDistributionDesc hashDistributionDesc = (HashDistributionDesc) distributionDesc;
+                try {
+                    for (String columnName : hashDistributionDesc.getDistributionColumnNames()) {
+                        for (Column column : olapTable.getColumns()) {
+                            if (column.getName().equalsIgnoreCase(columnName)) {
+                                OlapTableSchemaValidator.checkLargeVarcharColumn(column, "hash distribution column");
+                                break;
+                            }
+                        }
+                    }
+                } catch (DdlException e) {
+                    throw new SemanticException(e.getMessage(), distributionDesc.getPos());
+                }
+            }
             clause.setDistributionDesc(distributionDesc);
 
             if (DistributionDescAnalyzer.isDifferentDistributionType(distributionDesc, olapTable.getDefaultDistributionInfo())

@@ -12,18 +12,18 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package com.starrocks.type;
+#pragma once
 
-public class StringType extends ScalarType {
-    // The default length matches Hive. The max length matches the OLAP VARCHAR limit.
-    public static final int DEFAULT_STRING_LENGTH = 65533;
-    public static final int MAX_STRING_LENGTH = 2147483638;
+#include <cstdint>
 
-    public static final ScalarType DEFAULT_STRING = new StringType(DEFAULT_STRING_LENGTH);
-    public static StringType STRING = new StringType(MAX_STRING_LENGTH);
+#include "base/string/slice.h"
 
-    public StringType(int len) {
-        super(PrimitiveType.VARCHAR);
-        setLength(len);
-    }
+namespace starrocks {
+
+static constexpr uint32_t kHugeSliceThreshold = 1024 * 1024; // 1MB
+
+inline bool is_huge_slice(const Slice& s) {
+    return s.size > kHugeSliceThreshold;
 }
+
+} // namespace starrocks

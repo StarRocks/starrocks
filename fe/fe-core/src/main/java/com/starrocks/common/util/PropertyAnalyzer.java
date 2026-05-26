@@ -1001,6 +1001,10 @@ public class PropertyAnalyzer {
                     throw new AnalysisException(String.format("Invalid bloom filter column '%s': unsupported type %s",
                             bfColumn, type));
                 }
+                if (IndexAnalyzer.isVarcharTooLargeForIndex(column)) {
+                    throw new AnalysisException(
+                            IndexAnalyzer.getLargeVarcharIndexErrorMessage(column, "Bloom filter index"));
+                }
 
                 // Only support create bloom filter on DUPLICATE/PRIMARY table or key columns of UNIQUE/AGGREGATE table.
                 if (!(column.isKey() || isPrimaryKey || column.getAggregationType() == AggregateType.NONE)) {

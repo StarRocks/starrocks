@@ -998,7 +998,7 @@ public:
             // http://compgroups.net/comp.unix.programmer/gzip-compressing-an-in-memory-string-usi/54854
             // To have a safe upper bound for "wrapper variations", we add 32 to
             // estimate
-            int upper_bound = deflateBound(&zstrm, len) + 32;
+            size_t upper_bound = static_cast<size_t>(deflateBound(&zstrm, static_cast<uLong>(len))) + 32;
             return upper_bound;
         }
     }

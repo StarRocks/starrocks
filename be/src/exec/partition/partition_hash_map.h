@@ -485,7 +485,8 @@ struct PartitionHashMapWithSerializedKey : public PartitionHashMapBase<false, fa
     PartitionHashMapWithSerializedKey(int32_t chunk_size)
             : PartitionHashMapBase(chunk_size),
               inner_mem_pool(std::make_unique<MemPool>()),
-              buffer(inner_mem_pool->allocate(max_one_row_size * chunk_size)) {}
+              buffer(inner_mem_pool->allocate(static_cast<size_t>(max_one_row_size) *
+                                              static_cast<size_t>(chunk_size))) {}
 
     template <bool EnablePassthrough, typename NewPartitionCallback, typename PartitionChunkConsumer>
     bool append_chunk(const ChunkPtr& chunk, const Columns& key_columns, MemPool* mem_pool, ObjectPool* obj_pool,
@@ -503,7 +504,8 @@ struct PartitionHashMapWithSerializedKey : public PartitionHashMapBase<false, fa
             inner_mem_pool->clear();
             // reserved extra SLICE_MEMEQUAL_OVERFLOW_PADDING bytes to prevent SIMD instructions
             // from accessing out-of-bound memory.
-            buffer = inner_mem_pool->allocate(max_one_row_size * chunk_size + SLICE_MEMEQUAL_OVERFLOW_PADDING);
+            buffer = inner_mem_pool->allocate(static_cast<size_t>(max_one_row_size) * static_cast<size_t>(chunk_size) +
+                                              SLICE_MEMEQUAL_OVERFLOW_PADDING);
         }
 
         for (const auto& key_column : key_columns) {
@@ -513,7 +515,7 @@ struct PartitionHashMapWithSerializedKey : public PartitionHashMapBase<false, fa
         append_chunk_for_one_key<EnablePassthrough>(
                 hash_map, chunk,
                 [&](uint32_t offset) {
-                    return Slice{buffer + offset * max_one_row_size, slice_sizes[offset]};
+                    return Slice{buffer + static_cast<size_t>(offset) * max_one_row_size, slice_sizes[offset]};
                 },
                 [&](const KeyType& key) {
                     uint8_t* pos = mem_pool->allocate(key.size);

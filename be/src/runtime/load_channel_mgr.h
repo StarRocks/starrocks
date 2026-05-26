@@ -120,7 +120,8 @@ public:
     void add_chunks(const PTabletWriterAddChunksRequest& request, PTabletWriterAddBatchResult* response);
 
     void add_segment(brpc::Controller* cntl, const PTabletWriterAddSegmentRequest* request,
-                     PTabletWriterAddSegmentResult* response, google::protobuf::Closure* done);
+                     PTabletWriterAddSegmentResult* response, google::protobuf::Closure* done,
+                     std::shared_ptr<const PTabletWriterAddSegmentRequest> owned_request = nullptr);
 
     void cancel(brpc::Controller* cntl, const PTabletWriterCancelRequest& request, PTabletWriterCancelResult* response,
                 google::protobuf::Closure* done);

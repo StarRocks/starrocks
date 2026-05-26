@@ -18,6 +18,7 @@
 #include <google/protobuf/service.h>
 
 #include <atomic>
+#include <memory>
 
 #include "common/compiler_util.h"
 #include "storage/delta_writer.h"
@@ -164,6 +165,7 @@ public:
     const PTabletWriterAddSegmentRequest* request;
     PTabletWriterAddSegmentResult* response;
     google::protobuf::Closure* done;
+    std::shared_ptr<const PTabletWriterAddSegmentRequest> owned_request;
 };
 
 class AsyncDeltaWriterCallback {

@@ -525,6 +525,15 @@ void PInternalServiceImplBase<T>::tablet_writer_add_segment(google::protobuf::Rp
 }
 
 template <typename T>
+void PInternalServiceImplBase<T>::tablet_writer_add_segment_via_http(google::protobuf::RpcController* controller,
+                                                                     const PHttpRequest* request,
+                                                                     PTabletWriterAddSegmentResult* response,
+                                                                     google::protobuf::Closure* done) {
+    ClosureGuard closure_guard(done);
+    response->mutable_status()->set_status_code(TStatusCode::NOT_IMPLEMENTED_ERROR);
+}
+
+template <typename T>
 void PInternalServiceImplBase<T>::tablet_writer_cancel(google::protobuf::RpcController* cntl_base,
                                                        const PTabletWriterCancelRequest* request,
                                                        PTabletWriterCancelResult* response,
@@ -1397,6 +1406,40 @@ void PInternalServiceImplBase<T>::lookup(google::protobuf::RpcController* cntl_b
         return;
     }
     auto request_ctx = std::make_shared<pipeline::RemoteLookUpRequestContext>(cntl, req, response, done);
+    st = _exec_env->lookup_dispatcher_mgr()->lookup(request_ctx);
+}
+
+template <typename T>
+void PInternalServiceImplBase<T>::lookup_via_http(google::protobuf::RpcController* cntl_base,
+                                                  const PHttpRequest* /*request*/, PLookUpResponse* response,
+                                                  google::protobuf::Closure* done) {
+    auto* cntl = static_cast<brpc::Controller*>(cntl_base);
+    auto req = std::make_shared<PLookUpRequest>();
+    pipeline::RemoteLookUpRequestContextPtr request_ctx;
+
+    Status st;
+    DeferOp defer([&]() {
+        if (!st.ok()) {
+            LOG(WARNING) << "lookup via http rpc failed, message=" << st.message();
+            // Once the lookup context exists, callback() owns response framing for
+            // both normal brpc and HTTP fallback. Parse failures before that point
+            // are invalid HTTP frames, so report them as brpc failures directly.
+            if (request_ctx != nullptr) {
+                request_ctx->callback(st);
+            } else {
+                cntl->SetFailed(std::string(st.message()));
+                done->Run();
+            }
+        }
+    });
+
+    st = pipeline::parse_lookup_request_from_http_iobuf(&cntl->request_attachment(), req.get());
+    if (!st.ok()) {
+        return;
+    }
+
+    request_ctx = std::make_shared<pipeline::RemoteLookUpRequestContext>(cntl, req.get(), response, done);
+    request_ctx->owned_request = std::move(req);
     st = _exec_env->lookup_dispatcher_mgr()->lookup(request_ctx);
 }
 

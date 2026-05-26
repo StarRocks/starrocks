@@ -48,20 +48,26 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ColumnBuilder;
 import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.ExpressionRangePartitionInfo;
+import com.starrocks.catalog.ExpressionRangePartitionInfoV2;
 import com.starrocks.catalog.FlatJsonConfig;
 import com.starrocks.catalog.Index;
+import com.starrocks.catalog.ListPartitionInfo;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndex.IndexExtState;
 import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.OlapTable.OlapTableState;
+import com.starrocks.catalog.OlapTableSchemaValidator;
 import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.SchemaChangeTypeCompatibility;
 import com.starrocks.catalog.SchemaInfo;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.TableName;
 import com.starrocks.catalog.TableProperty;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletInvertedIndex;
@@ -120,6 +126,7 @@ import com.starrocks.sql.ast.ModifyColumnCommentClause;
 import com.starrocks.sql.ast.ModifyTablePropertiesClause;
 import com.starrocks.sql.ast.OptimizeClause;
 import com.starrocks.sql.ast.ReorderColumnsClause;
+import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.task.AgentBatchTask;
@@ -1161,6 +1168,7 @@ public class SchemaChangeHandler extends AlterHandler {
         } else {
             throw new DdlException("Table type:" + olapTable.getKeysType().toSql() + " does not support sort key column");
         }
+        OlapTableSchemaValidator.checkSortKeyColumns(targetIndexSchema, sortKeyIdxes);
     }
 
     /**
@@ -1485,6 +1493,53 @@ public class SchemaChangeHandler extends AlterHandler {
         }
     }
 
+    private void checkLargeVarcharIndexes(OlapTable olapTable,
+                                          Map<Long, LinkedList<Column>> indexMetaIdToSchema,
+                                          List<Index> indexes,
+                                          Set<ColumnId> bfColumnIds) throws DdlException {
+        List<Column> baseSchema = indexMetaIdToSchema.get(olapTable.getBaseIndexMetaId());
+        Map<ColumnId, Column> finalColumnById = Maps.newHashMap();
+        for (Column column : baseSchema) {
+            finalColumnById.put(column.getColumnId(), column);
+        }
+
+        if (bfColumnIds != null) {
+            for (ColumnId columnId : bfColumnIds) {
+                Column column = finalColumnById.get(columnId);
+                if (column != null && IndexAnalyzer.isVarcharTooLargeForIndex(column)) {
+                    throw new DdlException(IndexAnalyzer.getLargeVarcharIndexErrorMessage(column, "Bloom filter index"));
+                }
+            }
+        }
+
+        for (Index index : indexes) {
+            if (index.getIndexType() == IndexType.GIN) {
+                for (ColumnId columnId : index.getColumns()) {
+                    Column column = finalColumnById.get(columnId);
+                    if (column != null &&
+                            IndexAnalyzer.isVarcharTooLargeForIndex(column) &&
+                            IndexAnalyzer.getInvertedIndexParser(index.getProperties())
+                                    .equalsIgnoreCase(IndexAnalyzer.INVERTED_INDEX_PARSER_NONE)) {
+                        throw new DdlException(IndexAnalyzer.getLargeVarcharIndexErrorMessage(
+                                column, "GIN index with parser=none"));
+                    }
+                }
+                continue;
+            }
+            if (index.getIndexType() != IndexType.BITMAP && index.getIndexType() != IndexType.NGRAMBF) {
+                continue;
+            }
+            for (ColumnId columnId : index.getColumns()) {
+                Column column = finalColumnById.get(columnId);
+                if (column != null && IndexAnalyzer.isVarcharTooLargeForIndex(column)) {
+                    throw new DdlException(
+                            IndexAnalyzer.getLargeVarcharIndexErrorMessage(column,
+                                    index.getIndexType().name() + " index"));
+                }
+            }
+        }
+    }
+
     private SchemaChangeData finalAnalyze(Database db, OlapTable olapTable,
                                           Map<Long, LinkedList<Column>> indexMetaIdToSchema,
                                           Map<String, String> propertyMap,
@@ -1619,6 +1674,8 @@ public class SchemaChangeHandler extends AlterHandler {
             }
         }
 
+        checkLargeVarcharIndexes(olapTable, indexMetaIdToSchema, indexes, bfColumnIds);
+
         IndexAnalyzer.analyseBfWithNgramBf(olapTable, newSet, bfColumnIds);
 
         // property 3: timeout
@@ -1709,6 +1766,7 @@ public class SchemaChangeHandler extends AlterHandler {
             if (!hasKey) {
                 throw new DdlException("No key column left. index[" + olapTable.getIndexNameByMetaId(alterIndexMetaId) + "]");
             }
+            OlapTableSchemaValidator.checkKeyColumns(alterSchema);
 
             // 2. check compatible
             Map<String, Column> originSchemaMap = buildSchemaMapFromList(originSchema, true,
@@ -1789,6 +1847,7 @@ public class SchemaChangeHandler extends AlterHandler {
         }
 
         if (!sortKeyIdxes.isEmpty()) {
+            OlapTableSchemaValidator.checkSortKeyColumns(alterSchema, sortKeyIdxes);
             short newShortKeyCount = GlobalStateMgr.calcShortKeyColumnCount(alterSchema,
                     indexProperties, sortKeyIdxes);
             LOG.debug("alter index[{}] short key column count: {}", alterIndexMetaId, newShortKeyCount);
@@ -1919,6 +1978,8 @@ public class SchemaChangeHandler extends AlterHandler {
             return;
         }
 
+        checkExpressionPartitionSourceColumn(olapTable, alterSchema);
+
         List<Column> partitionColumns = olapTable.getPartitionInfo().getPartitionColumns(olapTable.getIdToColumn());
         for (Column partitionCol : partitionColumns) {
             String colName = partitionCol.getName();
@@ -1927,6 +1988,9 @@ public class SchemaChangeHandler extends AlterHandler {
             // NOTE: partition column in partition info maybe changed(eg: str2date partition table), use original
             // table schema instead.
             Column refPartitionCol = olapTable.getColumn(partitionCol.getName());
+            if (col.isPresent()) {
+                OlapTableSchemaValidator.checkLargeVarcharColumn(col.get(), "partition column");
+            }
             if (col.isPresent() && !col.get().equals(refPartitionCol)) {
                 if (incrVarcharLenColNames != null && incrVarcharLenColNames.contains(normalizedColName)) {
                     continue;
@@ -1942,6 +2006,47 @@ public class SchemaChangeHandler extends AlterHandler {
                 // for now, we only allow one partition column, so no need to check order.
             }
         } // end for partitionColumns
+    }
+
+    private void checkExpressionPartitionSourceColumn(OlapTable olapTable, List<Column> alterSchema)
+            throws DdlException {
+        PartitionInfo partitionInfo = olapTable.getPartitionInfo();
+        List<Expr> partitionExprs;
+        if (partitionInfo instanceof ExpressionRangePartitionInfo) {
+            ExpressionRangePartitionInfo expressionRangePartitionInfo = (ExpressionRangePartitionInfo) partitionInfo;
+            partitionExprs = expressionRangePartitionInfo.getPartitionExprs(olapTable.getIdToColumn());
+        } else if (partitionInfo instanceof ExpressionRangePartitionInfoV2) {
+            ExpressionRangePartitionInfoV2 expressionRangePartitionInfo = (ExpressionRangePartitionInfoV2) partitionInfo;
+            partitionExprs = expressionRangePartitionInfo.getPartitionExprs(olapTable.getIdToColumn());
+        } else if (partitionInfo instanceof ListPartitionInfo) {
+            ListPartitionInfo listPartitionInfo = (ListPartitionInfo) partitionInfo;
+            partitionExprs = listPartitionInfo.getPartitionExprs(new TableName(null, olapTable.getName()),
+                    olapTable.getIdToColumn());
+        } else {
+            return;
+        }
+
+        for (Expr partitionExpr : partitionExprs) {
+            List<SlotRef> slotRefs = Lists.newArrayList();
+            partitionExpr.collect(SlotRef.class, slotRefs);
+            for (SlotRef slotRef : slotRefs) {
+                Optional<Column> column = findColumnBySlotRef(alterSchema, slotRef);
+                if (column.isPresent()) {
+                    OlapTableSchemaValidator.checkLargeVarcharColumn(column.get(), "partition column");
+                }
+            }
+        }
+    }
+
+    private Optional<Column> findColumnBySlotRef(List<Column> schema, SlotRef slotRef) {
+        ColumnId columnId = slotRef.getColumnId();
+        if (columnId != null) {
+            Optional<Column> column = schema.stream().filter(c -> columnId.equals(c.getColumnId())).findFirst();
+            if (column.isPresent()) {
+                return column;
+            }
+        }
+        return schema.stream().filter(c -> c.nameEquals(slotRef.getColumnName(), true)).findFirst();
     }
 
     private void checkDistributionColumnChange(OlapTable olapTable, List<Column> alterSchema, long alterIndexMetaId,
@@ -1960,6 +2065,9 @@ public class SchemaChangeHandler extends AlterHandler {
             String colName = distributionCol.getName();
             String normalizedColName = Column.removeNamePrefix(colName);
             Optional<Column> col = alterSchema.stream().filter(c -> c.nameEquals(colName, true)).findFirst();
+            if (col.isPresent()) {
+                OlapTableSchemaValidator.checkLargeVarcharColumn(col.get(), "hash distribution column");
+            }
             if (col.isPresent() && !col.get().equals(distributionCol)) {
                 if (incrVarcharLenColNames != null && incrVarcharLenColNames.contains(normalizedColName)) {
                     if (GlobalStateMgr.getCurrentState().getColocateTableIndex().isColocateTable(olapTable.getId())) {

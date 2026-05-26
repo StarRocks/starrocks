@@ -16,6 +16,7 @@
 
 #include <map>
 #include <memory>
+#include <type_traits>
 #include <vector>
 
 #include "base/bit/rle_encoding.h"
@@ -540,20 +541,28 @@ private:
             uint32_t lengths[read_count + 1];
             char* datas[read_count + 1];
 
+            uint64_t total_length = 0;
             for (size_t i = 0; i < read_count; ++i) {
                 datas[i] = _slices[i].data;
                 lengths[i] = _slices[i].size;
+                total_length += lengths[i];
             }
 
             // relocate offsets
             auto& offsets = binary_column->get_offset();
             size_t prev_offsets = offsets.size();
-            size_t cnt = 0;
-            raw::stl_vector_resize_uninitialized(&offsets, count + prev_offsets);
-            for (size_t i = 0; i < count; ++i) {
-                offset += is_nulls[i] ? 0 : lengths[cnt++];
-                offsets[prev_offsets + i] = offset;
-            }
+            const uint64_t final_offset = offset + total_length;
+            offsets.resize_uninitialized(count + prev_offsets, final_offset);
+            const uint32_t* lengths_ptr = lengths;
+            offsets.visit_storage([prev_offsets, count, offset, is_nulls, lengths_ptr](auto& offsets_buf) mutable {
+                using OffsetValue = typename std::decay_t<decltype(offsets_buf)>::value_type;
+                auto* __restrict dst_offsets = offsets_buf.data() + prev_offsets;
+                size_t cnt = 0;
+                for (size_t i = 0; i < count; ++i) {
+                    offset += is_nulls[i] ? 0 : lengths_ptr[cnt++];
+                    dst_offsets[i] = static_cast<OffsetValue>(offset);
+                }
+            });
 
             if (read_count == 0) {
                 return Status::OK();

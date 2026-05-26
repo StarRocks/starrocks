@@ -31,6 +31,7 @@ import com.starrocks.catalog.FlatJsonConfig;
 import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.ListPartitionInfo;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.OlapTableSchemaValidator;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionInfoBuilder;
@@ -184,6 +185,7 @@ public class OlapTableFactory implements AbstractTableFactory {
         KeysDesc keysDesc = stmt.getKeysDesc();
         Preconditions.checkNotNull(keysDesc);
         KeysType keysType = keysDesc.getKeysType();
+        OlapTableSchemaValidator.checkKeyColumns(baseSchema);
 
         // create distribution info
         DistributionDesc distributionDesc = stmt.getDistributionDesc();
@@ -213,6 +215,7 @@ public class OlapTableFactory implements AbstractTableFactory {
                 }
                 sortKeyIdxes.add(idx);
             }
+            OlapTableSchemaValidator.checkSortKeyColumns(baseSchema, sortKeyIdxes);
             shortKeyColumnCount =
                     GlobalStateMgr.calcShortKeyColumnCount(baseSchema, stmt.getProperties(), sortKeyIdxes);
         } else {

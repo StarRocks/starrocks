@@ -78,6 +78,7 @@ import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MaterializedViewRefreshType;
 import com.starrocks.catalog.MvId;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.OlapTableSchemaValidator;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionInfoBuilder;
@@ -3192,6 +3193,8 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         DistributionDesc distributionDesc = stmt.getDistributionDesc();
         Preconditions.checkNotNull(distributionDesc);
         DistributionInfo baseDistribution = DistributionInfoBuilder.build(distributionDesc, baseSchema);
+        OlapTableSchemaValidator.checkKeyColumns(baseSchema);
+        OlapTableSchemaValidator.checkNamedSortKeyColumns(baseSchema, stmt.getSortKeys());
         // create refresh scheme
         MaterializedView.MvRefreshScheme mvRefreshScheme;
         RefreshSchemeClause refreshSchemeDesc = stmt.getRefreshSchemeDesc();
@@ -3480,6 +3483,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
                         newPartitionColumns.add(mvPartitionColumn);
                     }
                 }
+                OlapTableSchemaValidator.checkLargeVarcharColumns(newPartitionColumns, "partition column");
                 return new ListPartitionInfo(PartitionType.LIST, newPartitionColumns);
             } else {
                 if (partitionByExprs.size() > 1) {

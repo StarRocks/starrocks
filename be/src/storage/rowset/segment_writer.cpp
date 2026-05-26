@@ -67,6 +67,12 @@ namespace starrocks {
 
 const char* const k_segment_magic = "D0R1";
 const uint32_t k_segment_magic_length = 4;
+// Keep this in sync with FE IndexAnalyzer.MAX_INDEXABLE_VARCHAR_LENGTH.
+static constexpr int32_t k_max_indexable_varchar_length = 1024 * 1024;
+
+static bool is_large_varchar_column(const TabletColumn& column) {
+    return column.type() == LogicalType::TYPE_VARCHAR && column.length() > k_max_indexable_varchar_length;
+}
 
 SegmentWriter::SegmentWriter(std::unique_ptr<WritableFile> wfile, uint32_t segment_id, TabletSchemaCSPtr tablet_schema,
                              SegmentWriterOptions opts)
@@ -197,6 +203,10 @@ Status SegmentWriter::init(const std::vector<uint32_t>& column_indexes, bool has
         // .vi files are produced later by the deferred build task.
         if (opts.need_vector_index && (_opts.skip_vector_index || _opts.defer_vector_index_build)) {
             opts.need_vector_index = false;
+        }
+        if (is_large_varchar_column(column)) {
+            opts.need_zone_map = false;
+            opts.zone_map_truncate_string = false;
         }
 
         RETURN_IF_ERROR(_tablet_schema->get_indexes_for_column(column.unique_id(), &opts.tablet_index));

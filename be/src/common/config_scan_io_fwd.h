@@ -151,7 +151,7 @@ CONF_mBool(enable_short_key_for_one_column_filter, "false");
 CONF_mInt32(desc_hint_split_range, "10");
 
 // the max length supported for varchar type
-CONF_mInt32(olap_string_max_length, "1048576");
+CONF_mInt32(olap_string_max_length, "2147483638");
 
 CONF_mInt64(arrow_io_coalesce_read_max_buffer_size, "8388608");
 

@@ -56,8 +56,8 @@ public class HyperStatisticSQLs {
     //| data_size      | bigint           | NO   | false | <null>  |       |
     //| ndv            | hll              | NO   | false |         |       |
     //| null_count     | bigint           | NO   | false | <null>  |       |
-    //| max            | varchar(1048576) | NO   | false | <null>  |       |
-    //| min            | varchar(1048576) | NO   | false | <null>  |       |
+    //| max            | varchar(2147483638) | NO   | false | <null>  |       |
+    //| min            | varchar(2147483638) | NO   | false | <null>  |       |
     //| update_time    | datetime         | NO   | false | <null>  |       |
     //| collection_size| bigint           | NO   | false | <null>  |       |
     public static final String BATCH_FULL_STATISTIC_TEMPLATE = "SELECT cast($version as INT)" +

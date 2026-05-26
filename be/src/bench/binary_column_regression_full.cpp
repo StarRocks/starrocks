@@ -12,18 +12,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package com.starrocks.type;
+#include "bench/binary_column_regression_bench.h"
 
-public class StringType extends ScalarType {
-    // The default length matches Hive. The max length matches the OLAP VARCHAR limit.
-    public static final int DEFAULT_STRING_LENGTH = 65533;
-    public static final int MAX_STRING_LENGTH = 2147483638;
+namespace starrocks::bench {
+namespace {
+const bool kRegistered = [] {
+    register_binary_column_regression_full();
+    return true;
+}();
+} // namespace
+} // namespace starrocks::bench
 
-    public static final ScalarType DEFAULT_STRING = new StringType(DEFAULT_STRING_LENGTH);
-    public static StringType STRING = new StringType(MAX_STRING_LENGTH);
-
-    public StringType(int len) {
-        super(PrimitiveType.VARCHAR);
-        setLength(len);
-    }
-}
+BENCHMARK_MAIN();

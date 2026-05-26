@@ -54,6 +54,7 @@ ADD_BE_LIB(ColumnCore
         variant_builder.cpp
         variant_merger.cpp
         column_hash/column_hash.cpp
+        adaptive_offsets.cpp
 )
 
 target_link_libraries(ColumnCore PRIVATE arrow)

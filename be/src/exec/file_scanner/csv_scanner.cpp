@@ -20,6 +20,7 @@
 #include "column/adaptive_nullable_column.h"
 #include "column/chunk.h"
 #include "column/column_helper.h"
+#include "common/config.h"
 #include "fs/fs.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/runtime_state.h"
@@ -355,6 +356,9 @@ Status CSVScanner::_parse_csv_v2(Chunk* chunk) {
     }
 
     csv::Converter::Options options{.invalid_field_as_null = !_strict_mode};
+    const size_t max_chunk_bytes =
+            config::max_tablet_write_chunk_bytes > 0 ? static_cast<size_t>(config::max_tablet_write_chunk_bytes) : 0;
+    size_t chunk_bytes = 0;
     for (size_t num_rows = chunk->num_rows(); num_rows < capacity; /**/) {
         status = _curr_reader->next_record(row);
         if (!status.ok() && !status.is_end_of_file()) {
@@ -454,7 +458,13 @@ Status CSVScanner::_parse_csv_v2(Chunk* chunk) {
             }
             k++;
         }
-        num_rows += !has_error;
+        if (!has_error) {
+            ++num_rows;
+            chunk_bytes += record.size;
+            if (max_chunk_bytes > 0 && chunk_bytes >= max_chunk_bytes) {
+                break;
+            }
+        }
         if (status.is_end_of_file()) {
             break;
         }
@@ -476,6 +486,9 @@ Status CSVScanner::_parse_csv(Chunk* chunk) {
     }
 
     csv::Converter::Options options{.invalid_field_as_null = !_strict_mode};
+    const size_t max_chunk_bytes =
+            config::max_tablet_write_chunk_bytes > 0 ? static_cast<size_t>(config::max_tablet_write_chunk_bytes) : 0;
+    size_t chunk_bytes = 0;
 
     for (size_t num_rows = chunk->num_rows(); num_rows < capacity; /**/) {
         status = _curr_reader->next_record(&record);
@@ -558,7 +571,13 @@ Status CSVScanner::_parse_csv(Chunk* chunk) {
             }
             k++;
         }
-        num_rows += !has_error;
+        if (!has_error) {
+            ++num_rows;
+            chunk_bytes += record.size;
+            if (max_chunk_bytes > 0 && chunk_bytes >= max_chunk_bytes) {
+                break;
+            }
+        }
     }
     fields.clear();
     return chunk->num_rows() > 0 ? Status::OK() : Status::EndOfFile("");

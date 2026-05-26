@@ -83,7 +83,7 @@ CONF_Alias(be_http_port, webserver_port);
 CONF_Int32(arrow_flight_port, "-1");
 
 // Maximum size of a single message body in all protocols.
-CONF_Int64(brpc_max_body_size, "2147483648");
+CONF_Int64(brpc_max_body_size, "2147483647");
 
 // Max unwritten bytes in each socket, if the limit is reached, Socket.Write fails with EOVERCROWDED.
 CONF_Int64(brpc_socket_max_unwritten_bytes, "1073741824");

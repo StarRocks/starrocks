@@ -34,6 +34,10 @@
 
 #include "internal_service.h"
 
+#include <memory>
+#include <type_traits>
+#include <utility>
+
 #include "base/brpc/brpc.h"
 #include "base/uid_util.h"
 #include "exec/pipeline/fragment_context.h"
@@ -140,6 +144,8 @@ static bool parse_from_iobuf(butil::IOBuf& iobuf, T* proto_obj) {
                 return false;
             }
         }
+    } else if constexpr (std::is_same<T, PTabletWriterAddSegmentRequest>::value) {
+        // Segment bytes remain in iobuf and are consumed later from request_attachment().
     }
     return true;
 }
@@ -186,6 +192,29 @@ void BackendInternalServiceImpl<T>::tablet_writer_add_segment(google::protobuf::
              << ", eos=" << request->eos();
     PInternalServiceImplBase<T>::_exec_env->load_channel_mgr()->add_segment(static_cast<brpc::Controller*>(controller),
                                                                             request, response, done);
+}
+
+template <typename T>
+void BackendInternalServiceImpl<T>::tablet_writer_add_segment_via_http(google::protobuf::RpcController* controller,
+                                                                       const PHttpRequest* /*request*/,
+                                                                       PTabletWriterAddSegmentResult* response,
+                                                                       google::protobuf::Closure* done) {
+    ClosureGuard closure_guard(done);
+    auto add_segment_req = std::make_shared<PTabletWriterAddSegmentRequest>();
+    auto* cntl = static_cast<brpc::Controller*>(controller);
+    if (!parse_from_iobuf<PTabletWriterAddSegmentRequest>(cntl->request_attachment(), add_segment_req.get())) {
+        LOG(ERROR) << "parse from iobuf failed";
+        response->mutable_status()->set_status_code(TStatusCode::INTERNAL_ERROR);
+        return;
+    }
+
+    VLOG_RPC << "tablet writer add segment via http, id=" << print_id(add_segment_req->id())
+             << ", txn_id: " << add_segment_req->txn_id() << ", index_id=" << add_segment_req->index_id()
+             << ", tablet_id=" << add_segment_req->tablet_id() << ", eos=" << add_segment_req->eos();
+    const auto* request_ptr = add_segment_req.get();
+    PInternalServiceImplBase<T>::_exec_env->load_channel_mgr()->add_segment(cntl, request_ptr, response, done,
+                                                                            std::move(add_segment_req));
+    closure_guard.release();
 }
 
 template <typename T>

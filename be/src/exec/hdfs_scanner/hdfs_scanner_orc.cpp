@@ -255,7 +255,7 @@ bool OrcRowReaderFilter::filterOnPickStringDictionary(
         size_t offset_size = dict->dictionaryOffset.size();
         size_t dict_size = offset_size - 1;
         const int64_t* offset_data = dict->dictionaryOffset.data();
-        offsets.resize(offset_size);
+        offsets.resize_uninitialized(offset_size, content_size);
 
         if (slot_desc->type().type == TYPE_CHAR) {
             // for char type, dict strings are also padded with spaces.
@@ -269,15 +269,15 @@ bool OrcRowReaderFilter::filterOnPickStringDictionary(
                 size_t old_size = offset_data[i + 1] - offset_data[i];
                 size_t new_size = remove_trailing_spaces(s, old_size);
                 bytes.insert(bytes.end(), s, s + new_size);
-                offsets[i] = total_size;
+                offsets.set(i, total_size);
                 total_size += new_size;
             }
-            offsets[dict_size] = total_size;
+            offsets.set(dict_size, total_size);
         } else {
             bytes.insert(bytes.end(), start, end);
             // type mismatch, have to use loop to assign.
             for (size_t i = 0; i < offset_size; i++) {
-                offsets[i] = offset_data[i];
+                offsets.set(i, offset_data[i]);
             }
         }
 

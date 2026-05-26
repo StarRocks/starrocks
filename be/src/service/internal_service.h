@@ -120,6 +120,10 @@ public:
                                    const PTabletWriterAddSegmentRequest* request,
                                    PTabletWriterAddSegmentResult* response, google::protobuf::Closure* done) override;
 
+    void tablet_writer_add_segment_via_http(google::protobuf::RpcController* controller, const PHttpRequest* request,
+                                            PTabletWriterAddSegmentResult* response,
+                                            google::protobuf::Closure* done) override;
+
     void tablet_writer_cancel(google::protobuf::RpcController* controller, const PTabletWriterCancelRequest* request,
                               PTabletWriterCancelResult* response, google::protobuf::Closure* done) override;
 
@@ -198,6 +202,9 @@ public:
                                   PUpdateTransactionStateResponse* response, google::protobuf::Closure* done) override;
     void lookup(google::protobuf::RpcController* controller, const PLookUpRequest* request, PLookUpResponse* response,
                 google::protobuf::Closure* done) override;
+
+    void lookup_via_http(google::protobuf::RpcController* controller, const PHttpRequest* request,
+                         PLookUpResponse* response, google::protobuf::Closure* done) override;
 
     void lookup_close(google::protobuf::RpcController* controller, const PLookUpCloseRequest* request,
                       PLookUpCloseResponse* response, google::protobuf::Closure* done) override;

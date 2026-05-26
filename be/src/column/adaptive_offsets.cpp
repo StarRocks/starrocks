@@ -12,18 +12,20 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package com.starrocks.type;
+#include "column/adaptive_offsets.h"
 
-public class StringType extends ScalarType {
-    // The default length matches Hive. The max length matches the OLAP VARCHAR limit.
-    public static final int DEFAULT_STRING_LENGTH = 65533;
-    public static final int MAX_STRING_LENGTH = 2147483638;
+namespace starrocks {
 
-    public static final ScalarType DEFAULT_STRING = new StringType(DEFAULT_STRING_LENGTH);
-    public static StringType STRING = new StringType(MAX_STRING_LENGTH);
-
-    public StringType(int len) {
-        super(PrimitiveType.VARCHAR);
-        setLength(len);
+void AdaptiveOffsets::_promote_to_large() {
+    DCHECK(!_large);
+    size_t n = _u32.size();
+    _u64.resize(n);
+    for (size_t i = 0; i < n; ++i) {
+        _u64[i] = _u32[i];
     }
+    _u32.clear();
+    _u32.shrink_to_fit();
+    _large = true;
 }
+
+} // namespace starrocks

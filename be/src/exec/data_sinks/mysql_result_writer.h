@@ -66,7 +66,7 @@ private:
     MysqlRowBuffer* _row_buffer{nullptr};
     bool _is_binary_format;
 
-    const size_t _max_row_buffer_size = 1024 * 1024 * 1024;
+    const size_t _result_batch_soft_limit_bytes = 1024 * 1024 * 1024;
 };
 
 } // namespace starrocks

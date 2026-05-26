@@ -19,6 +19,7 @@
 #include <memory>
 #include <numeric>
 #include <string>
+#include <type_traits>
 #include <vector>
 
 #include "base/utility/defer_op.h"
@@ -316,8 +317,19 @@ public:
             ctx->set_error("serialized column size is too large");
             return;
         }
+        if (offsets.is_large()) {
+            ctx->set_error("serialized column offsets are too large");
+            return;
+        }
 
-        auto buffer_array = helper.batch_create_bytebuf(serialized_bytes.data(), offsets.data(), start, start + size);
+        auto buffer_array = offsets.visit_storage([&](const auto& offsets_buf) -> jobject {
+            using OffsetValue = typename std::decay_t<decltype(offsets_buf)>::value_type;
+            if constexpr (std::is_same_v<OffsetValue, uint32_t>) {
+                return helper.batch_create_bytebuf(serialized_bytes.data(), offsets_buf.data(), start, start + size);
+            } else {
+                return nullptr;
+            }
+        });
         RETURN_IF_UNLIKELY_NULL(buffer_array, (void)0);
         LOCAL_REF_GUARD_ENV(env, buffer_array);
         // batch call merge

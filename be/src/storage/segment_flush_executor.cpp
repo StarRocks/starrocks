@@ -38,13 +38,15 @@ class SegmentFlushTask final : public Runnable {
 public:
     SegmentFlushTask(SegmentFlushToken* flush_token, DeltaWriter* writer, brpc::Controller* cntl,
                      const PTabletWriterAddSegmentRequest* request, PTabletWriterAddSegmentResult* response,
-                     google::protobuf::Closure* done)
+                     google::protobuf::Closure* done,
+                     std::shared_ptr<const PTabletWriterAddSegmentRequest> owned_request)
             : _flush_token(flush_token),
               _writer(writer),
               _cntl(cntl),
               _request(request),
               _response(response),
               _done(done),
+              _owned_request(std::move(owned_request)),
               _create_time_ns(MonotonicNanos()) {}
 
     // Destructor which will respond to the brpc if run() or release() is not called.
@@ -165,6 +167,7 @@ private:
     const PTabletWriterAddSegmentRequest* _request;
     PTabletWriterAddSegmentResult* _response;
     google::protobuf::Closure* _done;
+    std::shared_ptr<const PTabletWriterAddSegmentRequest> _owned_request;
     int64_t _create_time_ns;
     // whether run() or release() has been called
     std::atomic<bool> _run_or_released = false;
@@ -175,7 +178,8 @@ SegmentFlushToken::SegmentFlushToken(std::unique_ptr<ThreadPoolToken> flush_pool
 
 Status SegmentFlushToken::submit(DeltaWriter* writer, brpc::Controller* cntl,
                                  const PTabletWriterAddSegmentRequest* request, PTabletWriterAddSegmentResult* response,
-                                 google::protobuf::Closure* done) {
+                                 google::protobuf::Closure* done,
+                                 std::shared_ptr<const PTabletWriterAddSegmentRequest> owned_request) {
     ClosureGuard closure_guard(done);
     Status token_st = status();
     if (!token_st.ok()) {
@@ -184,7 +188,8 @@ Status SegmentFlushToken::submit(DeltaWriter* writer, brpc::Controller* cntl,
         return st;
     }
 
-    auto task = std::make_shared<SegmentFlushTask>(this, writer, cntl, request, response, done);
+    auto task =
+            std::make_shared<SegmentFlushTask>(this, writer, cntl, request, response, done, std::move(owned_request));
     auto submit_st = _flush_token->submit(task);
     if (submit_st.ok()) {
         _stat.num_pending_tasks.fetch_add(1, std::memory_order_relaxed);

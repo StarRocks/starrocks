@@ -22,6 +22,7 @@
 #include <cstring>
 #include <limits>
 #include <sstream>
+#include <type_traits>
 
 #include "base/container/raw_container.h"
 #include "base/simd/simd.h"
@@ -43,6 +44,7 @@ void BinaryPlainPageBuilder::reset() {
     _buffer.resize(_reserved_head_size);
     _next_offset = 0;
     _size_estimate = sizeof(uint32_t);
+    _single_huge_value = false;
     _finished = false;
 }
 
@@ -115,16 +117,19 @@ Status BinaryPlainPageDecoder<Type>::get_dict_filter_selection(const std::vector
             const uint32_t chunk_elems = end - begin;
 
             BinaryColumn::Offsets offsets;
-            offsets.resize(chunk_elems + 1);
-            offsets[0] = 0;
-
             const uint32_t base_abs_off = offset_uncheck(static_cast<int>(begin));
-            // Intermediate offsets: i in (begin, end)
-            for (uint32_t i = begin + 1; i < end; ++i) {
-                offsets[i - begin] = offset_uncheck(static_cast<int>(i)) - base_abs_off;
-            }
             const uint32_t chunk_bytes = offset(static_cast<int>(end)) - base_abs_off;
-            offsets[chunk_elems] = chunk_bytes;
+            offsets.resize_uninitialized(chunk_elems + 1, chunk_bytes);
+            offsets.visit_storage([&](auto& offsets_buf) {
+                using OffsetValue = typename std::decay_t<decltype(offsets_buf)>::value_type;
+                offsets_buf[0] = 0;
+                // Intermediate offsets: i in (begin, end)
+                for (uint32_t i = begin + 1; i < end; ++i) {
+                    offsets_buf[i - begin] =
+                            static_cast<OffsetValue>(offset_uncheck(static_cast<int>(i)) - base_abs_off);
+                }
+                offsets_buf[chunk_elems] = static_cast<OffsetValue>(chunk_bytes);
+            });
 
             ContainerResource container(_page_handle, &_data[base_abs_off], chunk_bytes);
             auto dict_chunk_column = BinaryColumn::create(std::move(container), std::move(offsets));
@@ -224,30 +229,34 @@ bool BinaryPlainPageDecoder<Type>::append_range(uint32_t idx, uint32_t end, Colu
         auto& offsets = down_cast<BinaryColumn*>(data_column)->get_offset();
         DCHECK_GE(offsets.size(), 1);
 
-        uint32_t begin_offset = offsets.back();
+        const uint64_t begin_offset = offsets.back();
         size_t current_offset_sz = offsets.size();
-        offsets.resize(current_offset_sz + end - idx);
-
         const uint32_t page_data_offset = offset_uncheck(idx);
-        // vectorized loop
-        for (uint32_t i = idx; i < end - 1; i++) {
+        const uint32_t append_bytes_length = offset(end) - page_data_offset;
+        const uint64_t final_offset = begin_offset + append_bytes_length;
+        offsets.resize_uninitialized(current_offset_sz + end - idx, final_offset);
+        offsets.visit_storage([&](auto& offsets_buf) {
+            using OffsetValue = typename std::decay_t<decltype(offsets_buf)>::value_type;
+            auto* dst_offsets = offsets_buf.data() + current_offset_sz;
+            // vectorized loop
+            for (uint32_t i = idx; i < end - 1; i++) {
 #if __BYTE_ORDER == __LITTLE_ENDIAN
-            auto offset = _offsets_ptr[i + 1];
+                auto offset = _offsets_ptr[i + 1];
 #else
-            // direct call offset_uncheck() will break auto-vectorized
-            // maybe we can remove this condition compile after we upgrade the toolchain
-            auto offset = offset_uncheck(i + 1);
+                // direct call offset_uncheck() will break auto-vectorized
+                // maybe we can remove this condition compile after we upgrade the toolchain
+                auto offset = offset_uncheck(i + 1);
 #endif
-            uint32_t current_offset = offset - page_data_offset + begin_offset;
-            offsets[current_offset_sz++] = current_offset;
-        }
+                const uint64_t current_offset = begin_offset + static_cast<uint64_t>(offset - page_data_offset);
+                *dst_offsets++ = static_cast<OffsetValue>(current_offset);
+            }
 
-        for (uint32_t i = end - 1; i < end; i++) {
-            uint32_t current_offset = offset(i + 1) - page_data_offset + begin_offset;
-            offsets[current_offset_sz++] = current_offset;
-        }
+            for (uint32_t i = end - 1; i < end; i++) {
+                const uint64_t current_offset = begin_offset + static_cast<uint64_t>(offset(i + 1) - page_data_offset);
+                *dst_offsets++ = static_cast<OffsetValue>(current_offset);
+            }
+        });
 
-        size_t append_bytes_length = offsets.back() - begin_offset;
         size_t old_bytes_size = bytes.size();
 
         bytes.resize(old_bytes_size + append_bytes_length);
@@ -345,7 +354,7 @@ Status BinaryPlainPageDecoder<Type>::next_range_with_filter(
 
         BinaryColumn::Offsets temp_offsets;
         temp_offsets.resize(num_rows + 1);
-        temp_offsets[0] = 0;
+        temp_offsets.set(0, 0);
 
         const uint32_t page_data_offset = offset_uncheck(idx);
         for (uint32_t i = idx; i < end - 1; i++) {
@@ -358,12 +367,12 @@ Status BinaryPlainPageDecoder<Type>::next_range_with_filter(
 #endif
 
             uint32_t current_offset = offset - page_data_offset;
-            temp_offsets[i - idx + 1] = current_offset;
+            temp_offsets.set(i - idx + 1, current_offset);
         }
 
         for (uint32_t i = end - 1; i < end; i++) {
             uint32_t current_offset = offset(i + 1) - page_data_offset;
-            temp_offsets[i - idx + 1] = current_offset;
+            temp_offsets.set(i - idx + 1, current_offset);
         }
 
         size_t data_length = temp_offsets.back();

@@ -104,6 +104,7 @@ public class PartitionInfoBuilder {
                                                         boolean isTemp) throws DdlException {
         try {
             List<Column> partitionColumns = findPartitionColumns(listPartitionDesc.getPartitionColNames(), schema);
+            OlapTableSchemaValidator.checkLargeVarcharColumns(partitionColumns, "partition column");
             Map<ColumnId, Column> idToColumn = MetaUtils.buildIdToColumn(schema);
             ListPartitionInfo listPartitionInfo = new ListPartitionInfo(PartitionType.LIST, partitionColumns);
 
@@ -139,6 +140,7 @@ public class PartitionInfoBuilder {
                                                               boolean isTemp) throws DdlException {
         // for materialized view express partition.
         if (expressionPartitionDesc.getRangePartitionDesc() == null) {
+            OlapTableSchemaValidator.checkLargeVarcharColumns(schema, "partition column");
             return new ExpressionRangePartitionInfo(
                     Collections.singletonList(ColumnIdExpr.create(schema, expressionPartitionDesc.getExpr())),
                     schema,
@@ -155,6 +157,7 @@ public class PartitionInfoBuilder {
 
         // automatic partition / partition expr only support one partition column
         Column sourcePartitionColumn = partitionColumns.get(0);
+        OlapTableSchemaValidator.checkLargeVarcharColumn(sourcePartitionColumn, "partition column");
         if (expressionPartitionDesc.getPartitionType() != null) {
             Column newTypePartitionColumn = new Column(sourcePartitionColumn);
             newTypePartitionColumn.setType(expressionPartitionDesc.getPartitionType());
@@ -227,6 +230,7 @@ public class PartitionInfoBuilder {
                             column.getName(), "invalid data type " + column.getType()));
                 }
 
+                OlapTableSchemaValidator.checkLargeVarcharColumn(column, "partition column");
                 partitionColumns.add(column);
                 find = true;
                 break;

@@ -54,7 +54,8 @@ public:
     SegmentFlushToken(std::unique_ptr<ThreadPoolToken> flush_pool_token);
 
     Status submit(DeltaWriter* writer, brpc::Controller* cntl, const PTabletWriterAddSegmentRequest* request,
-                  PTabletWriterAddSegmentResult* response, google::protobuf::Closure* done);
+                  PTabletWriterAddSegmentResult* response, google::protobuf::Closure* done,
+                  std::shared_ptr<const PTabletWriterAddSegmentRequest> owned_request = nullptr);
 
     Status status() const {
         std::lock_guard l(_status_lock);

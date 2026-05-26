@@ -689,7 +689,8 @@ struct AggHashMapWithSerializedKey : public AggHashMapWithKey<HashMap, AggHashMa
     AggHashMapWithSerializedKey(int chunk_size, Args&&... args)
             : Base(chunk_size, std::forward<Args>(args)...),
               mem_pool(std::make_unique<MemPool>()),
-              buffer(mem_pool->allocate(max_one_row_size * chunk_size + SLICE_MEMEQUAL_OVERFLOW_PADDING)),
+              buffer(mem_pool->allocate(static_cast<size_t>(max_one_row_size) * static_cast<size_t>(chunk_size) +
+                                        SLICE_MEMEQUAL_OVERFLOW_PADDING)),
               _chunk_size(chunk_size) {}
 
     AggDataPtr get_null_key_data() { return nullptr; }
@@ -762,7 +763,8 @@ struct AggHashMapWithSerializedKey : public AggHashMapWithKey<HashMap, AggHashMa
             mem_pool->clear();
             // reserved extra SLICE_MEMEQUAL_OVERFLOW_PADDING bytes to prevent SIMD instructions
             // from accessing out-of-bound memory.
-            buffer = mem_pool->allocate(max_one_row_size * _chunk_size + SLICE_MEMEQUAL_OVERFLOW_PADDING);
+            buffer = mem_pool->allocate(static_cast<size_t>(max_one_row_size) * static_cast<size_t>(_chunk_size) +
+                                        SLICE_MEMEQUAL_OVERFLOW_PADDING);
         }
 
         for (const auto& key_column : key_columns) {
