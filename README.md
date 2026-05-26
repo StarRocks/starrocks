@@ -161,3 +161,4 @@ This project is used by the following companies. Learn more about their use case
 - [Yuno](https://celerdata.com/blog/from-hours-to-seconds-how-yuno-accelerated-customer-facing-analytics-by-switching-off-snowflake-and-athena)
 - [Zepto](https://blog.zeptonow.com/data-that-delivers-real-time-insights-for-brand-success-in-quick-commerce-b8b9e994d20b)
 
+
