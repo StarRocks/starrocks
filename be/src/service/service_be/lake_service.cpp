@@ -223,11 +223,21 @@ LakeServiceImpl::~LakeServiceImpl() = default;
 // Runtime-toggleable failpoint to pin lake publish_version RPC failing.
 // Available only in builds compiled with ENABLE_FAULT_INJECTION=ON (e.g.
 // ASAN-with-FIU). In default Release builds this expands to a no-op.
+//
 // Used by integration tests to park alter / load txns at FINISHED_REWRITING
 // so the CANCEL ALTER TABLE ... FORCE escape hatch can be exercised on a
 // real cluster. Enable via brpc HTTP on each CN's brpc port (shared-data):
 //   curl -X POST -d '{"fail_point_name":"lake_publish_version_rpc_fail",
 //     "trigger_mode":{"mode":1}}' http://<cn-host>:<brpc-port>/PInternalService/update_fail_point_status
+//
+// IMPORTANT: this failpoint deliberately lets requests with at least one
+// TxnInfoPB.no_op_publish=true through. The FORCE-cancel path sends exactly
+// such a request (to advance the partition version past the cancelled
+// alter), and if the failpoint blocked it too, the test would not be able
+// to verify the cancel-then-resume-loads behaviour. This also more
+// accurately models production stuck-publish: the failure typically lives
+// in the txn-log apply path (OSS read of txn_log, broken segment, ...),
+// which no_op_publish=true bypasses entirely (transactions.cpp:320).
 DEFINE_FAIL_POINT(lake_publish_version_rpc_fail);
 
 void LakeServiceImpl::publish_version(::google::protobuf::RpcController* controller,
@@ -236,7 +246,17 @@ void LakeServiceImpl::publish_version(::google::protobuf::RpcController* control
                                       ::google::protobuf::Closure* done) {
     brpc::ClosureGuard guard(done);
     auto cntl = static_cast<brpc::Controller*>(controller);
-    FAIL_POINT_TRIGGER_RETURN(lake_publish_version_rpc_fail, cntl->SetFailed("inject lake_publish_version_rpc_fail"));
+    bool any_no_op = false;
+    for (int i = 0; i < request->txn_infos_size(); i++) {
+        if (request->txn_infos(i).no_op_publish()) {
+            any_no_op = true;
+            break;
+        }
+    }
+    if (!any_no_op) {
+        FAIL_POINT_TRIGGER_RETURN(lake_publish_version_rpc_fail,
+                                  cntl->SetFailed("inject lake_publish_version_rpc_fail"));
+    }
     // Server-side BRPC queue time: latency from RPC arrival on this server to handler entry.
     // Used to attribute the FE-measured publish_rpc cost vs BE handler cost gap.
     // cntl can be nullptr in unit tests, so guard the access.
