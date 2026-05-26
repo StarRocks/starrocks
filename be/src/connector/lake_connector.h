@@ -102,6 +102,7 @@ private:
     void update_realtime_counter(Chunk* chunk);
     void update_counter(RuntimeState* state);
     void refresh_reusable_reader_key();
+    const pipeline::LakeSplitContext* reusable_child_context(pipeline::ScanMorsel& morsel) const;
 
     Status _extend_schema_by_access_paths();
     void _inherit_default_value_from_json(TabletColumn* column, const TabletColumn& root_column,
@@ -135,7 +136,7 @@ private:
     std::shared_ptr<ChunkIterator> _prj_iter;
     bool _needs_reopen = false;
     struct ReusableReaderKey {
-        const lake::PreparedTabletReadState* prepared_tablet_read_state = nullptr;
+        lake::PreparedTabletReadStatePtr prepared_tablet_read_state;
     };
     ReusableReaderKey _reusable_reader_key;
 
@@ -226,6 +227,8 @@ private:
     RuntimeProfile::Counter* _lake_prepared_scan_rows_counter = nullptr;
     RuntimeProfile::Counter* _lake_prepared_scan_ranges_counter = nullptr;
     RuntimeProfile::Counter* _lake_prepared_split_tasks_counter = nullptr;
+    RuntimeProfile::Counter* _lake_reusable_segment_iter_created_counter = nullptr;
+    RuntimeProfile::Counter* _lake_reusable_segment_iter_reused_counter = nullptr;
 
     // Page count
     RuntimeProfile::Counter* _pages_count_memory_counter = nullptr;

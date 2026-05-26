@@ -202,15 +202,13 @@ bool LakeDataSource::has_reusable_state() const {
 }
 
 bool LakeDataSource::can_reuse_with(pipeline::ScanMorsel& morsel) const {
-    if (_reusable_reader_key.prepared_tablet_read_state == nullptr || morsel.from_version() != 0) {
-        return false;
-    }
-    const auto* split_context = dynamic_cast<const pipeline::LakeSplitContext*>(morsel.get_split_context());
-    if (split_context == nullptr || !split_context->is_prepared_physical_child()) {
+    if (_reusable_reader_key.prepared_tablet_read_state == nullptr) {
         return false;
     }
 
-    return split_context->prepared_tablet_read_state.get() == _reusable_reader_key.prepared_tablet_read_state;
+    const auto* split_context = reusable_child_context(morsel);
+    return split_context != nullptr &&
+           split_context->prepared_tablet_read_state == _reusable_reader_key.prepared_tablet_read_state;
 }
 
 Status LakeDataSource::reuse(RuntimeState* state, pipeline::ScanMorsel* morsel) {
@@ -657,15 +655,28 @@ void LakeDataSource::apply_child_split_context(const pipeline::LakeSplitContext&
 
 void LakeDataSource::refresh_reusable_reader_key() {
     _reusable_reader_key = {};
-    const auto* split_context = dynamic_cast<const pipeline::LakeSplitContext*>(_split_context);
-    if (_morsel == nullptr || split_context == nullptr || !split_context->is_prepared_physical_child()) {
-        return;
-    }
-    if (_morsel->from_version() != 0) {
+    if (_morsel == nullptr) {
         return;
     }
 
-    _reusable_reader_key.prepared_tablet_read_state = split_context->prepared_tablet_read_state.get();
+    const auto* split_context = reusable_child_context(*_morsel);
+    if (split_context == nullptr) {
+        return;
+    }
+
+    _reusable_reader_key.prepared_tablet_read_state = split_context->prepared_tablet_read_state;
+}
+
+const pipeline::LakeSplitContext* LakeDataSource::reusable_child_context(pipeline::ScanMorsel& morsel) const {
+    if (morsel.from_version() != 0) {
+        return nullptr;
+    }
+
+    const auto* split_context = dynamic_cast<const pipeline::LakeSplitContext*>(morsel.get_split_context());
+    if (split_context == nullptr || !split_context->is_prepared_physical_child()) {
+        return nullptr;
+    }
+    return split_context;
 }
 
 // Inherit default value from JSON parent column for extended subcolumn.
@@ -1114,6 +1125,10 @@ void LakeDataSource::init_counter(RuntimeState* state) {
             ADD_CHILD_COUNTER(_runtime_profile, "PreparedScanRanges", TUnit::UNIT, prepared_split_name);
     _lake_prepared_split_tasks_counter =
             ADD_CHILD_COUNTER(_runtime_profile, "PreparedSplitTasks", TUnit::UNIT, prepared_split_name);
+    _lake_reusable_segment_iter_created_counter =
+            ADD_CHILD_COUNTER(_runtime_profile, "ReusableSegmentIterCreated", TUnit::UNIT, prepared_split_name);
+    _lake_reusable_segment_iter_reused_counter =
+            ADD_CHILD_COUNTER(_runtime_profile, "ReusableSegmentIterReused", TUnit::UNIT, prepared_split_name);
 
     // IO statistics
     // IOTime
@@ -1223,6 +1238,8 @@ void LakeDataSource::update_counter(RuntimeState* state) {
     COUNTER_UPDATE(_lake_prepared_scan_rows_counter, _reader->stats().lake_prepared_scan_rows);
     COUNTER_UPDATE(_lake_prepared_scan_ranges_counter, _reader->stats().lake_prepared_scan_ranges);
     COUNTER_UPDATE(_lake_prepared_split_tasks_counter, _reader->stats().lake_prepared_split_tasks);
+    COUNTER_UPDATE(_lake_reusable_segment_iter_created_counter, _reader->stats().lake_reusable_segment_iter_created);
+    COUNTER_UPDATE(_lake_reusable_segment_iter_reused_counter, _reader->stats().lake_reusable_segment_iter_reused);
 
     COUNTER_UPDATE(_gin_filtered_timer, _reader->stats().gin_index_filter_ns);
     COUNTER_UPDATE(_gin_filtered_counter, _reader->stats().rows_gin_filtered);

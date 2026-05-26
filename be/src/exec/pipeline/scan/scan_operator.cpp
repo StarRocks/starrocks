@@ -610,22 +610,28 @@ Status ScanOperator::_pickup_morsel(RuntimeState* state, int chunk_source_index)
         {
             SCOPED_TIMER(_prepare_chunk_source_timer);
             if (_can_reuse_chunk_source_for(*morsel)) {
+                _record_reusable_chunk_source_event(ReusableChunkSourceEvent::CANDIDATE);
                 ReusableChunkSourceLookup reusable_lookup;
                 {
                     std::lock_guard guard(_task_mutex);
                     reusable_lookup = _take_reusable_chunk_source(state, chunk_source_index, *morsel);
                 }
                 if (reusable_lookup.stale_chunk_source != nullptr) {
+                    _record_reusable_chunk_source_event(ReusableChunkSourceEvent::STALE_CLOSE);
                     reusable_lookup.stale_chunk_source->close(state);
                 }
                 if (reusable_lookup.reusable_chunk_source != nullptr) {
                     auto status = reusable_lookup.reusable_chunk_source->reuse(state, std::move(morsel));
                     if (!status.ok()) {
+                        _record_reusable_chunk_source_event(ReusableChunkSourceEvent::FAILURE);
                         reusable_lookup.reusable_chunk_source->close(state);
                         static_cast<void>(set_finishing(state));
                         return status;
                     }
+                    _record_reusable_chunk_source_event(ReusableChunkSourceEvent::HIT);
                     _chunk_sources[chunk_source_index] = std::move(reusable_lookup.reusable_chunk_source);
+                } else {
+                    _record_reusable_chunk_source_event(ReusableChunkSourceEvent::MISS);
                 }
             }
             if (_chunk_sources[chunk_source_index] == nullptr) {

@@ -21,6 +21,7 @@
 #include <memory>
 #include <optional>
 #include <unordered_map>
+#include <unordered_set>
 #include <utility>
 
 #include "base/format.h"
@@ -59,6 +60,7 @@
 #include "storage/index/vector/vector_index_reader_factory.h"
 #include "storage/lake/filenames.h"
 #include "storage/lake/update_manager.h"
+#include "storage/non_closing_chunk_iterator.h"
 #include "storage/primitive/chunk_iterator.h"
 #include "storage/primitive/column_expr_predicate.h"
 #include "storage/primitive/column_or_predicate.h"
@@ -132,6 +134,7 @@ public:
     ~SegmentIterator() override = default;
 
     void close() override;
+    Status reset_for_reuse(const SegmentReadOptions& options);
 
     // Public entry point used by segment_seek_range_to_rowid_range(). The caller
     // must ensure the segment's short-key index has already been loaded; this
@@ -194,6 +197,9 @@ private:
 
         // Release all chunk resources to free memory
         void close();
+        // Clear per-scan context while keeping the embedded scan strategies bound
+        // to this ScanContext instance.
+        void reset();
         // Seek all column iterators to the specified ordinal position
         Status seek_columns(ordinal_t pos, bool predicate_col_late_materialize_read);
         // Read column data from the specified range into the chunk
@@ -351,6 +357,8 @@ private:
 
     Status _init();
     Status _init_internal();
+    Status _init_reused_scan();
+    Status _init_scan_range_and_context();
     Status _try_to_update_ranges_by_runtime_filter();
     Status _do_get_next(Chunk* result, vector<rowid_t>* rowid);
 
@@ -577,6 +585,7 @@ private:
     int _reserve_chunk_size = 0;
 
     bool _inited = false;
+    bool _one_time_setup_done = false;
 
     std::unordered_map<ColumnId, ColumnAccessPath*> _column_access_paths;
     std::unordered_map<ColumnId, ColumnAccessPath*> _predicate_column_access_paths;
@@ -597,6 +606,41 @@ void SegmentIterator::ScanContext::close() {
     _dict_chunk.reset();
     _final_chunk.reset();
     _adapt_global_dict_chunk.reset();
+}
+
+void SegmentIterator::ScanContext::reset() {
+    close();
+    stats = nullptr;
+    runtime_filters_by_column = nullptr;
+    _read_schema = Schema();
+    _dict_decode_schema = Schema();
+    _is_dict_column.clear();
+    _column_iterators.clear();
+    _subfield_columns.clear();
+    _subfield_iterators.clear();
+    _column_iterators_for_predicate_late_materialize.clear();
+    _column_id_for_predicate_late_materialize.clear();
+    _column_ids_to_column_iterators.clear();
+    _column_ids_to_index.clear();
+    _row_id_column_id = 0;
+    _next = nullptr;
+    _skip_dict_decode_indexes.clear();
+    _read_index_map.clear();
+    _has_dict_column = false;
+    _late_materialize = false;
+    _has_force_dict_encode = false;
+    _prune_cols.clear();
+    _prune_column_after_index_filter = false;
+    _enable_predicate_col_late_materialize = false;
+    _only_output_one_predicate_col_with_filter_push_down = false;
+    _support_push_down_predicate = false;
+    _predicate_order.clear();
+    _column_predicate_map.clear();
+    _is_filtered = false;
+    _predicate_selectivity_map.clear();
+    _evaluated_chunk_nums = 0;
+    _first_column_total_rows_read = 0;
+    _first_column_total_rows_passed = 0;
 }
 
 Status SegmentIterator::ScanContext::seek_columns(ordinal_t pos, bool predicate_col_late_materialize_read) {
@@ -897,6 +941,23 @@ Status SegmentIterator::_init() {
     return st;
 }
 
+Status SegmentIterator::reset_for_reuse(const SegmentReadOptions& options) {
+    _opts.rowid_range_option = options.rowid_range_option;
+    _opts.read_state_cache = options.read_state_cache;
+    _opts.is_first_split_of_segment = options.is_first_split_of_segment;
+    _opts.ranges = options.ranges;
+    _opts.runtime_range_pruner = options.runtime_range_pruner;
+    _opts.runtime_filter_preds = options.runtime_filter_preds;
+    _opts.short_key_ranges = options.short_key_ranges;
+    _opts.enable_join_runtime_filter_pushdown = options.enable_join_runtime_filter_pushdown;
+    _opts.chunk_size = options.chunk_size;
+    _chunk_size = options.chunk_size;
+    _reserve_chunk_size =
+            static_cast<int32_t>(std::min(static_cast<uint32_t>(options.chunk_size), _segment->num_rows()));
+    _inited = false;
+    return Status::OK();
+}
+
 Status SegmentIterator::_init_internal() {
     SCOPED_RAW_TIMER(&_opts.stats->segment_init_ns);
     if (_opts.is_cancelled != nullptr && _opts.is_cancelled->load(std::memory_order_acquire)) {
@@ -925,6 +986,10 @@ Status SegmentIterator::_init_internal() {
 
     StorageMetrics::instance()->segment_read_total.increment(1);
 
+    if (_one_time_setup_done) {
+        return _init_reused_scan();
+    }
+
     /// the calling order matters, do not change unless you know why.
 
     _segment->turn_on_batch_update_cache_size();
@@ -936,8 +1001,14 @@ Status SegmentIterator::_init_internal() {
     RETURN_IF_ERROR(_init_ann_reader());
     RETURN_IF_ERROR(_check_low_cardinality_optimization());
     RETURN_IF_ERROR(_init_column_iterators<true>(_schema));
-    // filter by index stage
-    // Use indexes and predicates to filter some data page
+    RETURN_IF_ERROR(_init_scan_range_and_context());
+
+    _one_time_setup_done = true;
+    return Status::OK();
+}
+
+Status SegmentIterator::_init_scan_range_and_context() {
+    // Use indexes and predicates to filter some data page.
     RETURN_IF_ERROR(_get_row_ranges_by_rowid_range());
     if (_opts.read_state_cache.scan_range != nullptr) {
         RETURN_IF_ERROR(_apply_precomputed_scan_range());
@@ -952,7 +1023,7 @@ Status SegmentIterator::_init_internal() {
         if (!apply_del_vec_after_all_index_filter) {
             RETURN_IF_ERROR(_apply_del_vector());
         }
-        // Support prefilter for now
+        // Support prefilter for now.
         RETURN_IF_ERROR(_apply_bitmap_index());
         RETURN_IF_ERROR(_get_row_ranges_by_zone_map());
         RETURN_IF_ERROR(_get_row_ranges_by_bloom_filter());
@@ -974,19 +1045,42 @@ Status SegmentIterator::_init_internal() {
     _init_column_predicates();
     RETURN_IF_ERROR(_init_context());
 
-    // reverse scan_range
-    // when desc_hint_split_range is not greater than 0, we don't split and reverse the scan_range
+    // When desc_hint_split_range is not greater than 0, we don't split and reverse the scan_range.
     if (!_opts.asc_hint && config::desc_hint_split_range > 0) {
         _scan_range.split_and_reverse(config::desc_hint_split_range, config::vector_chunk_size);
     }
-
     _range_iter = _scan_range.new_iterator();
 
     for (auto column_index : _io_coalesce_column_index) {
         RETURN_IF_ERROR(_column_iterators[column_index]->convert_sparse_range_to_io_range(_scan_range));
     }
-
     return Status::OK();
+}
+
+Status SegmentIterator::_init_reused_scan() {
+    _scan_range.clear();
+    _range_iter = SparseRangeIterator<>();
+    _non_expr_pred_tree = PredicateTree{};
+    _expr_pred_tree = PredicateTree{};
+    _runtime_filter_preds = RuntimeFilterPredicates{};
+    _column_to_runtime_filters_map.clear();
+    _context_list[0].reset();
+    _context_list[1].reset();
+    _context = nullptr;
+    _context_switch_count = 0;
+    _cur_rowid = 0;
+    if (_vector_index_ctx) {
+        _vector_index_ctx->id2distance_map.clear();
+    }
+    if (_inverted_index_ctx) {
+        _inverted_index_ctx->cleanup();
+    }
+    _bitmap_index_evaluator.close();
+
+    _segment->turn_on_batch_update_cache_size();
+    DeferOp op([&] { _segment->turn_off_batch_update_cache_size(); });
+
+    return _init_scan_range_and_context();
 }
 
 StatusOr<SparseRange<>> SegmentIterator::_get_prepared_pruned_row_ranges() {
@@ -4413,6 +4507,8 @@ void SegmentIterator::close() {
     if (_inverted_index_ctx) {
         _inverted_index_ctx->cleanup();
     }
+    _one_time_setup_done = false;
+    _inited = false;
 }
 
 // put the field that has predicated on it ahead of those without one, for handle late
@@ -4434,16 +4530,56 @@ inline Schema reorder_schema(const Schema& input, const PredicateTree& pred_tree
     return output;
 }
 
+static ChunkIteratorPtr maybe_project_iterator(const Schema& output_schema, const ChunkIteratorPtr& iter) {
+    if (iter->schema().num_fields() == output_schema.num_fields()) {
+        bool same_schema = true;
+        for (int i = 0; i < output_schema.num_fields(); ++i) {
+            if (iter->schema().field(i)->id() != output_schema.field(i)->id()) {
+                same_schema = false;
+                break;
+            }
+        }
+        if (same_schema) {
+            return iter;
+        }
+    }
+    return new_projection_iterator(output_schema, iter);
+}
+
 ChunkIteratorPtr new_segment_iterator(const std::shared_ptr<Segment>& segment, const Schema& schema,
                                       const SegmentReadOptions& options) {
     if (options.pred_tree.empty() || options.pred_tree.num_columns() >= schema.num_fields()) {
         return std::make_shared<SegmentIterator>(segment, schema, options);
-    } else {
-        // _check_low_cardinality_optimization() implementation counts on this schema reorder
-        Schema ordered_schema = reorder_schema(schema, options.pred_tree);
-        auto seg_iter = std::make_shared<SegmentIterator>(segment, ordered_schema, options);
-        return new_projection_iterator(schema, seg_iter);
     }
+
+    // _check_low_cardinality_optimization() implementation counts on this schema reorder.
+    Schema ordered_schema = reorder_schema(schema, options.pred_tree);
+    return new_projection_iterator(schema, std::make_shared<SegmentIterator>(segment, ordered_schema, options));
+}
+
+StatusOr<ChunkIteratorPtr> new_reusable_segment_iterator(const std::shared_ptr<Segment>& segment,
+                                                         const Schema& iterator_schema, const Schema& output_schema,
+                                                         const SegmentReadOptions& options,
+                                                         ChunkIteratorPtr* reusable_slot) {
+    if (reusable_slot == nullptr) {
+        return Status::InvalidArgument("reusable segment iterator slot is null");
+    }
+    if (*reusable_slot == nullptr) {
+        if (options.pred_tree.empty() || options.pred_tree.num_columns() >= iterator_schema.num_fields()) {
+            *reusable_slot = std::make_shared<SegmentIterator>(segment, iterator_schema, options);
+        } else {
+            // Keep the reusable slot bound to the same internal schema choice as new_segment_iterator().
+            Schema ordered_schema = reorder_schema(iterator_schema, options.pred_tree);
+            *reusable_slot = std::make_shared<SegmentIterator>(segment, ordered_schema, options);
+        }
+    } else {
+        auto* seg_iter = dynamic_cast<SegmentIterator*>(reusable_slot->get());
+        if (seg_iter == nullptr) {
+            return Status::NotSupported("iterator is not a reusable segment iterator");
+        }
+        RETURN_IF_ERROR(seg_iter->reset_for_reuse(options));
+    }
+    return maybe_project_iterator(output_schema, new_non_closing_chunk_iterator(*reusable_slot));
 }
 
 StatusOr<SparseRange<>> new_segment_iterator_for_prepare_pruning(const std::shared_ptr<Segment>& segment,

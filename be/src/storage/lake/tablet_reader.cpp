@@ -421,6 +421,15 @@ void TabletReader::close() {
         _collect_iter->close();
         _collect_iter.reset();
     }
+    for (auto& rowset_iters : _reusable_rowset_iterators) {
+        for (auto& iter : rowset_iters) {
+            if (iter != nullptr) {
+                iter->close();
+                iter.reset();
+            }
+        }
+    }
+    _reusable_rowset_iterators.clear();
     STLDeleteElements(&_predicate_free_list);
     _rowsets.clear();
     _obj_pool.clear();
@@ -650,9 +659,13 @@ Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std
         if (prepared_segment_states[segment_idx] != params.prepared_segment_read_state) {
             return Status::InvalidArgument("prepared target segment state does not match split context");
         }
-        ASSIGN_OR_RETURN(auto seg_iters, enhance_error_prompt(rowset->read_prepared_segment(
-                                                 schema(), rs_opts, prepared_segments, segment_idx,
-                                                 params.prepared_segment_read_state)));
+        if (_reusable_rowset_iterators.size() < _rowsets.size()) {
+            _reusable_rowset_iterators.resize(_rowsets.size());
+        }
+        ASSIGN_OR_RETURN(auto seg_iters,
+                         enhance_error_prompt(rowset->read_prepared_segment(
+                                 schema(), rs_opts, prepared_segments, segment_idx, params.prepared_segment_read_state,
+                                 &_reusable_rowset_iterators[rowset_idx])));
         iters->insert(iters->end(), seg_iters.begin(), seg_iters.end());
         return Status::OK();
     }

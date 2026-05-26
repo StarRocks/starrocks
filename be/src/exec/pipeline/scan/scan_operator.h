@@ -131,7 +131,9 @@ protected:
         ChunkSourcePtr reusable_chunk_source = nullptr;
         ChunkSourcePtr stale_chunk_source = nullptr;
     };
+    enum class ReusableChunkSourceEvent { CANDIDATE, HIT, MISS, STALE_CLOSE, FAILURE };
     virtual bool _can_reuse_chunk_source_for(Morsel& morsel) const { return false; }
+    virtual void _record_reusable_chunk_source_event(ReusableChunkSourceEvent /*event*/) {}
     virtual ReusableChunkSourceLookup _take_reusable_chunk_source(RuntimeState* state, int chunk_source_index,
                                                                   Morsel& morsel) {
         return {};

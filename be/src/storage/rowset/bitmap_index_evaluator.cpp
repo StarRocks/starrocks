@@ -414,6 +414,11 @@ void BitmapIndexEvaluator::close() {
 }
 
 Status BitmapIndexEvaluator::init(BitmapIndexIteratorSupplier&& supplier) {
+    close();
+    _closed = false;
+    _ctx = BitmapContext{};
+    _has_bitmap_index = false;
+    _bitmap_index_iterators.clear();
     _bitmap_index_iterators.resize(ChunkSchemaHelper::max_column_id(_schema) + 1, nullptr);
     ASSIGN_OR_RETURN(_has_bitmap_index,
                      _pred_tree.visit(BitmapIndexInitializer{this, supplier}, nullptr, CompoundNodeType::AND));

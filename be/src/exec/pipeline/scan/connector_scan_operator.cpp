@@ -279,6 +279,17 @@ Status ConnectorScanOperator::do_prepare(RuntimeState* state) {
     bool shared_scan = _scan_node->is_shared_scan_enabled();
     _unique_metrics->add_info_string("SharedScan", shared_scan ? "True" : "False");
     _unique_metrics->add_info_string("AdaptiveIOTasks", _enable_adaptive_io_tasks ? "True" : "False");
+    const std::string chunk_source_reuse_name = "ChunkSourceReuse";
+    ADD_COUNTER(_unique_metrics, chunk_source_reuse_name, TUnit::NONE);
+    _chunk_source_reuse_candidate_counter =
+            ADD_CHILD_COUNTER(_unique_metrics, "Candidates", TUnit::UNIT, chunk_source_reuse_name);
+    _chunk_source_reuse_hit_counter = ADD_CHILD_COUNTER(_unique_metrics, "Hits", TUnit::UNIT, chunk_source_reuse_name);
+    _chunk_source_reuse_miss_counter =
+            ADD_CHILD_COUNTER(_unique_metrics, "Misses", TUnit::UNIT, chunk_source_reuse_name);
+    _chunk_source_reuse_stale_close_counter =
+            ADD_CHILD_COUNTER(_unique_metrics, "StaleCloses", TUnit::UNIT, chunk_source_reuse_name);
+    _chunk_source_reuse_failure_counter =
+            ADD_CHILD_COUNTER(_unique_metrics, "Failures", TUnit::UNIT, chunk_source_reuse_name);
     _adaptive_processor = state->obj_pool()->add(new ConnectorScanOperatorAdaptiveProcessor());
     _adaptive_processor->op_start_time = GetCurrentTimeMicros();
     if (options.__isset.connector_io_tasks_slow_io_latency_ms) {
@@ -330,6 +341,26 @@ bool ConnectorScanOperator::_can_reuse_chunk_source_for(Morsel& morsel) const {
     }
     const auto* split_context = dynamic_cast<const LakeSplitContext*>(morsel.get_split_context());
     return split_context != nullptr && split_context->is_prepared_physical_child();
+}
+
+void ConnectorScanOperator::_record_reusable_chunk_source_event(ReusableChunkSourceEvent event) {
+    switch (event) {
+    case ReusableChunkSourceEvent::CANDIDATE:
+        COUNTER_UPDATE(_chunk_source_reuse_candidate_counter, 1);
+        break;
+    case ReusableChunkSourceEvent::HIT:
+        COUNTER_UPDATE(_chunk_source_reuse_hit_counter, 1);
+        break;
+    case ReusableChunkSourceEvent::MISS:
+        COUNTER_UPDATE(_chunk_source_reuse_miss_counter, 1);
+        break;
+    case ReusableChunkSourceEvent::STALE_CLOSE:
+        COUNTER_UPDATE(_chunk_source_reuse_stale_close_counter, 1);
+        break;
+    case ReusableChunkSourceEvent::FAILURE:
+        COUNTER_UPDATE(_chunk_source_reuse_failure_counter, 1);
+        break;
+    }
 }
 
 ScanOperator::ReusableChunkSourceLookup ConnectorScanOperator::_take_reusable_chunk_source(RuntimeState* /*state*/,
