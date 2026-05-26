@@ -644,7 +644,7 @@ Suppose the data file **file1** is stored under a path in the format of `/geo/co
 
 #### `schema`
 
-From v4.0 onwards, `FILES()` supports an explicit `schema` parameter that lets you declare exactly which columns to read and their StarRocks types, bypassing BE-side schema inference.
+From v4.1.2 onwards, `FILES()` supports an explicit `schema` parameter that lets you declare exactly which columns to read and their StarRocks types, bypassing BE-side schema inference.
 
 ```SQL
 "schema" = "col_name TYPE[, col_name TYPE ...]"
