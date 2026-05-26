@@ -76,7 +76,6 @@ import com.starrocks.sql.ast.expression.GroupingFunctionCallExpr;
 import com.starrocks.sql.ast.expression.InPredicate;
 import com.starrocks.sql.ast.expression.InformationFunction;
 import com.starrocks.sql.ast.expression.IntLiteral;
-import com.starrocks.sql.ast.expression.IntervalLiteral;
 import com.starrocks.sql.ast.expression.IsNullPredicate;
 import com.starrocks.sql.ast.expression.LambdaArgument;
 import com.starrocks.sql.ast.expression.LambdaFunctionExpr;
@@ -1643,11 +1642,11 @@ public class ExpressionAnalyzer {
             if (node.getWindow() != null) {
                 if (node.getWindow().getLeftBoundary() != null &&
                         node.getWindow().getLeftBoundary().getExpr() != null) {
-                    visitAnalyticWindowBoundaryExpr(node.getWindow().getLeftBoundary().getExpr(), context);
+                    visit(node.getWindow().getLeftBoundary().getExpr(), context);
                 }
                 if (node.getWindow().getRightBoundary() != null &&
                         node.getWindow().getRightBoundary().getExpr() != null) {
-                    visitAnalyticWindowBoundaryExpr(node.getWindow().getRightBoundary().getExpr(), context);
+                    visit(node.getWindow().getRightBoundary().getExpr(), context);
                 }
             }
             node.getPartitionExprs().forEach(e -> visit(e, context));
@@ -1657,13 +1656,6 @@ public class ExpressionAnalyzer {
             }
             verifyAnalyticExpression(node);
             return null;
-        }
-
-        private void visitAnalyticWindowBoundaryExpr(Expr expr, Scope context) {
-            visit(expr, context);
-            if (expr instanceof IntervalLiteral intervalLiteral) {
-                visit(intervalLiteral.getValue(), context);
-            }
         }
 
         @Override

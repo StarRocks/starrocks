@@ -288,9 +288,13 @@ public class WindowTransformer {
                 (orderByIsAsc && boundary.getBoundaryType() == AnalyticWindowBoundary.BoundaryType.FOLLOWING) ||
                         (!orderByIsAsc && boundary.getBoundaryType() == AnalyticWindowBoundary.BoundaryType.PRECEDING);
         ArithmeticExpr.Operator op = addOffset ? ArithmeticExpr.Operator.ADD : ArithmeticExpr.Operator.SUBTRACT;
+        // AnalyticAnalyzer has already normalized RANGE order keys: DATE keys become DATETIME, and numeric
+        // keys become the common key type. This builder only creates the boundary arithmetic expression.
         if (orderByExpr.getType().isDateType()) {
+            Preconditions.checkState(orderByExpr.getType().isDatetime(),
+                    "DATE RANGE order key should be cast to DATETIME before boundary expression construction");
             IntervalLiteral interval = (IntervalLiteral) boundary.getExpr();
-            Expr orderKey = TypeManager.addCastExpr(orderByExpr.clone(), DateType.DATETIME);
+            Expr orderKey = orderByExpr.clone();
             Expr intervalValue = TypeManager.addCastExpr(interval.getValue().clone(), IntegerType.INT);
             TimestampArithmeticExpr timestampExpr = new TimestampArithmeticExpr(
                     op, orderKey, intervalValue, interval.getUnitIdentifier().getDescription(), false);
@@ -299,7 +303,8 @@ public class WindowTransformer {
         }
 
         Type rangeKeyType = orderByExpr.getType();
-        Expr orderKey = TypeManager.addCastExpr(orderByExpr.clone(), rangeKeyType);
+        Preconditions.checkState(rangeKeyType.isNumericType(), "RANGE boundary requires a numeric order key");
+        Expr orderKey = orderByExpr.clone();
         Expr offset = TypeManager.addCastExpr(boundary.getExpr().clone(), rangeKeyType);
         ArithmeticExpr arithmeticExpr = new ArithmeticExpr(op, orderKey, offset);
         arithmeticExpr.setType(rangeKeyType);
