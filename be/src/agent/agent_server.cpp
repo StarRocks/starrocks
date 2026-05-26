@@ -637,9 +637,9 @@ void AgentServer::Impl::submit_tasks(TAgentResult& agent_result, const std::vect
             // ThreadPoolToken::wait() inside the task body would trip the self-deadlock guard.
             auto* replicate_file_pool = _thread_pool_replicate_file.get();
             submit_task_batch<ReplicateSnapshotAgentTaskRequest>(
-                    TTaskType::REPLICATE_SNAPSHOT, all_tasks, replicate_snapshot_pool,
+                    TTaskType::REPLICATE_SNAPSHOT, all_tasks, /*pool=*/replicate_snapshot_pool,
                     &TAgentTaskRequest::replicate_snapshot_req, run_replicate_snapshot_task, &ret_st, _exec_env,
-                    replicate_file_pool);
+                    /*replicate_file_pool=*/replicate_file_pool);
             break;
         }
         case TTaskType::REALTIME_PUSH:

@@ -1103,7 +1103,8 @@ void run_replicate_snapshot_task(const std::shared_ptr<ReplicateSnapshotAgentTas
 
     Status res;
     if (replicate_snapshot_req.tablet_type == TTabletType::TABLET_TYPE_LAKE) {
-        res = exec_env->lake_replication_txn_manager()->replicate_snapshot(replicate_snapshot_req, replicate_file_pool);
+        res = exec_env->lake_replication_txn_manager()->replicate_snapshot(
+                replicate_snapshot_req, /*replicate_file_thread_pool=*/replicate_file_pool);
     } else {
         res = StorageEngine::instance()->replication_txn_manager()->replicate_snapshot(replicate_snapshot_req);
     }
