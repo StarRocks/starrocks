@@ -65,7 +65,9 @@ public class FullVacuumDaemon extends LeaderDaemon implements Writable {
 
     // Not final: shutdownNow() in onStopped() interrupts in-flight full-vacuum tasks so
     // they exit promptly; start() rebuilds the pool on re-election.
-    private volatile BlockingThreadPoolExecutorService executorService = newExecutorService();
+    // Package-private so same-package tests can swap in a stuck pool to exercise the
+    // restart guard without reflection.
+    volatile BlockingThreadPoolExecutorService executorService = newExecutorService();
 
     private static BlockingThreadPoolExecutorService newExecutorService() {
         return BlockingThreadPoolExecutorService.newInstance(
@@ -80,6 +82,14 @@ public class FullVacuumDaemon extends LeaderDaemon implements Writable {
 
     @Override
     public synchronized void start() {
+        // Refuse to overlap with a previous pool that has not finished draining: isShutdown()
+        // becomes true before in-flight full-vacuum tasks actually exit, so a fast
+        // demote/re-elect can put two full-vacuum executor generations against the same
+        // metadata / object store. Mirrors the AutovacuumDaemon / BatchWriteMgr restart guard.
+        if (executorService.isShutdown() && !executorService.isTerminated()) {
+            throw new IllegalStateException(
+                    "FullVacuumDaemon executorService has not terminated; refuse to restart");
+        }
         if (executorService.isShutdown()) {
             executorService = newExecutorService();
         }
@@ -89,9 +99,21 @@ public class FullVacuumDaemon extends LeaderDaemon implements Writable {
     @Override
     protected void onStopped() {
         // Same contract as AutovacuumDaemon: shut down the pool so worker threads exit on
-        // demotion, and clear in-flight partition bookkeeping so the next leader does not
-        // skip partitions whose ids stayed in vacuumingPartitions across the boundary.
+        // demotion, clear in-flight partition bookkeeping so the next leader does not skip
+        // partitions whose ids stayed in vacuumingPartitions across the boundary, and wait
+        // boundedly for the pool to actually terminate so a subsequent start() does not race
+        // a still-alive full-vacuum worker against a freshly created pool. If termination
+        // times out, start() will refuse to rebuild.
         executorService.shutdownNow();
+        long timeoutMs = Math.max(1000L, Config.leader_demotion_drain_timeout_sec * 1000L);
+        try {
+            if (!executorService.awaitTermination(timeoutMs, TimeUnit.MILLISECONDS)) {
+                LOG.warn("FullVacuumDaemon executorService did not terminate within drain timeout");
+            }
+        } catch (InterruptedException ie) {
+            Thread.currentThread().interrupt();
+            LOG.warn("Interrupted while waiting for FullVacuumDaemon executorService to terminate");
+        }
         vacuumingPartitions.clear();
     }
 
