@@ -20,7 +20,7 @@
 #include "column/nullable_column.h"
 #include "common/sort_desc.h"
 #include "common/status.h"
-#include "exec/sorting/sort_permute.h"
+#include "compute_env/sorting/sort_permute.h"
 #include "types/datum.h"
 
 namespace starrocks {

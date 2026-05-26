@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include "compute_env/sorting/sorting.h"
+
 #include <gtest/gtest.h>
 
 #include <memory>
@@ -24,9 +26,8 @@
 #include "column/column.h"
 #include "column/column_helper.h"
 #include "common/config_exec_fwd.h"
-#include "exec/sorting/merge.h"
-#include "exec/sorting/sort_cursor.h"
-#include "exec/sorting/sorting.h"
+#include "compute_env/sorting/merge.h"
+#include "compute_env/sorting/sort_cursor.h"
 #include "exprs/column_ref.h"
 #include "exprs/expr_context.h"
 #include "exprs/expr_executor.h"

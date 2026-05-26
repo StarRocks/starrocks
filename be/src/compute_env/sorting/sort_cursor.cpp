@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "exec/sorting/sort_cursor.h"
+#include "compute_env/sorting/sort_cursor.h"
 
 #include <utility>
 

@@ -126,32 +126,6 @@ target_link_libraries(ExecSchemaScanners PUBLIC
     StarRocksGen
 )
 
-set(EXEC_SORTING_CORE_FILES
-    sorting/compare_column.cpp
-    sorting/merge.cpp
-    sorting/merge_cascade.cpp
-    sorting/merge_column.cpp
-    sorting/sort_column.cpp
-    sorting/sort_cursor.cpp
-    sorting/sort_permute.cpp
-)
-
-ADD_BE_LIB(ExecSortingCore
-    ${EXEC_SORTING_CORE_FILES}
-)
-
-target_link_libraries(ExecSortingCore PUBLIC
-    ExprCore
-    RuntimeCore
-    ChunkCore
-    ColumnCore
-    Types
-    Common
-    Base
-    Gutil
-    StarRocksGen
-)
-
 set(EXEC_JOIN_CORE_FILES
     join/join_hash_table_descriptor.cpp
     join/join_key_constructor.cpp
@@ -168,7 +142,7 @@ ADD_BE_LIB(ExecJoinCore
 )
 
 target_link_libraries(ExecJoinCore PUBLIC
-    ExecSortingCore
+    ComputeEnv
     ExprCore
     Serde
     RuntimeCore
@@ -500,7 +474,6 @@ set(EXEC_NON_PIPELINE_FILES
     jdbc/type_checker.cpp
     jdbc/type_checker_manager.cpp
     jdbc/type_checker_xml_loader.cpp
-    sorting/merge_path.cpp
     connector_scan_node.cpp
     workgroup/work_group.cpp
     workgroup/mem_tracker_manager.cpp
@@ -578,5 +551,5 @@ ADD_BE_LIB(Exec
     $<TARGET_OBJECTS:pipeline_extensions_exec_objs>
 )
 
-target_link_libraries(Exec PUBLIC ExecPrimitive ExecSinkCore SpillCore ExecSchemaScannerCore ExecSchemaScanners ExecSortingCore ExecJoinCore RuntimeEnv ComputeEnv Cache)
+target_link_libraries(Exec PUBLIC ExecPrimitive ExecSinkCore SpillCore ExecSchemaScannerCore ExecSchemaScanners ExecJoinCore RuntimeEnv ComputeEnv Cache)
 target_link_libraries(Exec PRIVATE FormatsIO Platform)

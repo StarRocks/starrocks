@@ -12,6 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+set(BE_TEST_MACOS_LINK_STUBS)
+if (APPLE)
+    list(APPEND BE_TEST_MACOS_LINK_STUBS ../base/macos_link_stubs.cpp)
+endif()
+
 set(COMPUTE_ENV_TEST_LINK_LIBS
     ComputeEnv
     ${STARROCKS_DEPENDENCIES}
@@ -25,3 +30,31 @@ set(COMPUTE_ENV_TEST_LINK_LIBS
 
 add_executable(compute_env_test compute_env_test.cpp)
 target_link_libraries(compute_env_test ${COMPUTE_ENV_TEST_LINK_LIBS} gtest_main)
+
+set(COMPUTE_ENV_SORTING_TEST_FILES
+    ${BE_TEST_MACOS_LINK_STUBS}
+    sorting/sorting_test.cpp
+)
+
+set(COMPUTE_ENV_SORTING_TEST_LINK_LIBS
+    ComputeEnv
+    ExprCore
+    RuntimeCore
+    ChunkCore
+    ColumnCore
+    Types
+    Common
+    Base
+    Gutil
+    StarRocksGen
+    ${STARROCKS_DEPENDENCIES}
+    ${STARROCKS_STATIC_LINK_LIBS}
+    ${WL_LINK_DYNAMIC} ${STARROCKS_SYSTEM_LINK_LIBS} ${WRAP_LINKER_FLAGS}
+    ${WL_START_GROUP}
+    gmock
+    gtest
+    ${WL_END_GROUP}
+)
+
+add_executable(compute_env_sorting_test ${COMPUTE_ENV_SORTING_TEST_FILES})
+target_link_libraries(compute_env_sorting_test ${COMPUTE_ENV_SORTING_TEST_LINK_LIBS} gtest_main)
