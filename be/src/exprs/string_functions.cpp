@@ -2549,8 +2549,8 @@ struct SubstrTrimFunction {
         auto& dst_bytes = dst->get_bytes();
 
         const auto num_rows = src->size();
-        raw::make_room(&dst_offsets, num_rows + 1);
-        dst_offsets[0] = 0;
+        dst_offsets.make_room(num_rows + 1, src->get_immutable_bytes().size());
+        dst_offsets.set(0, 0);
         dst_bytes.reserve(src->get_immutable_bytes().size());
 
         const char* rdata = remstr.data();
@@ -2576,7 +2576,7 @@ struct SubstrTrimFunction {
                 }
             }
             dst_bytes.insert(dst_bytes.end(), (uint8_t*)from, (uint8_t*)to);
-            dst_offsets[i + 1] = dst_bytes.size();
+            dst_offsets.set(i + 1, dst_bytes.size());
         }
         return dst;
     }
