@@ -25,31 +25,10 @@ VectorIndexCache::VectorIndexCache(size_t capacity, MemTracker* tracker) : _cach
     _cache.set_mem_tracker(tracker);
 }
 
-// IVF-PQ block-cache entries (and any future entry whose value chain re-enters
-// this cache) make naive teardown unsafe. The chain on shutdown is:
-//
-//   top-level IVF-PQ entry
-//     -> tenann::IndexRef
-//        -> faiss::IndexIVFPQ
-//           -> BlockCacheInvertedLists      (owned by faiss::IndexIVFPQ)
-//              -> std::vector<IndexCacheHandle>
-//                 -> shared_ptr<void> releaser_
-//                    -> [cache](void*){cache->release(inner_entry);}
-//
-// `~DynamicCache` holds `_cache._lock` for the entire iteration and runs
-// `delete iobj` in-place. That cascade unwinds straight into the inner-entry
-// releaser, which calls `_cache.release` and tries to re-acquire the same
-// lock. std::mutex isn't recursive, so the main thread parks on
-// FUTEX_WAIT_PRIVATE value=2 forever — the symptom CI's Restart BE step
-// reports as "BE exit and gen gcov timeout".
-//
-// Fix: drain every entry's IndexRef BEFORE the base destructor takes the
-// lock. `get_all_entries` only holds `_cache._lock` while copying out the
-// list and bumping refs, so the per-entry `set_ref(nullptr)` here — which
-// is what actually triggers the BlockCacheInvertedLists destructor and the
-// inner releaser callbacks — runs with `_cache._lock` free. By the time
-// ~DynamicCache walks the list under the lock, every value()._ref is null
-// and `delete iobj` is a no-op cascade.
+// Drain IndexRefs outside _cache._lock before ~DynamicCache acquires it.
+// IVF-PQ entries hold nested IndexCacheHandles whose deleters call back into
+// _cache.release(); freeing them under ~DynamicCache's lock self-deadlocks
+// (std::mutex isn't recursive) and stalls BE shutdown.
 VectorIndexCache::~VectorIndexCache() {
     auto entries = _cache.get_all_entries();
     for (auto* entry : entries) {
@@ -62,12 +41,8 @@ VectorIndexCache::~VectorIndexCache() {
 }
 
 bool VectorIndexCache::Lookup(const tenann::CacheKey& key, tenann::IndexCacheHandle* handle) {
-    // Intentionally does not bump _lookup_count / _hit_count. Lookup is used by
-    // VectorIndexReaderFactory as an opportunistic probe to skip the OSS HEAD
-    // round-trip on warm-cache reads; the actual cache lookup that drives load
-    // semantics happens in the GetOrCreate call inside TenANNReader::init_searcher
-    // shortly after. Counting both would double the absolute lookup_count / hit_count
-    // gauges that production dashboards/alerts compare against pre-PR baselines.
+    // Counter-silent: this is the warm-path probe in VectorIndexReaderFactory
+    // and counting it would double up with the GetOrCreate call right after.
     Entry* entry = _cache.get(key.to_string());
     if (entry == nullptr) return false;
 
@@ -75,7 +50,6 @@ bool VectorIndexCache::Lookup(const tenann::CacheKey& key, tenann::IndexCacheHan
     {
         auto g = entry->value().guard();
         if (!entry->value().has_ref()) {
-            // Entry is being populated by another caller; report miss.
             g.unlock();
             _cache.release(entry);
             return false;
@@ -98,10 +72,7 @@ void VectorIndexCache::Insert(const tenann::CacheKey& key, tenann::IndexRef ref,
 
 bool VectorIndexCache::GetOrCreate(const tenann::CacheKey& key, const IndexLoader& loader,
                                    tenann::IndexCacheHandle* handle) {
-    // Per-entry guard single-flights the cold-load path: only one caller runs
-    // loader() and pairs it with update_object_size; others wait and observe
-    // has_ref() == true. On failure, remove(entry) drops our caller ref so
-    // retries start fresh.
+    // Per-entry guard single-flights cold loads.
     _lookup_count.fetch_add(1, std::memory_order_relaxed);
     Entry* entry = _cache.get_or_create(key.to_string());
     tenann::IndexRef ref;
@@ -137,12 +108,8 @@ bool VectorIndexCache::GetOrCreate(const tenann::CacheKey& key, const IndexLoade
     return true;
 }
 
-// Deleter releases the entry ref when the handle is destroyed. The lambda
-// captures _cache as a raw pointer: callers (TenANNReader::_cache_handle,
-// etc.) must release every handle before ExecEnv::destroy() runs reset().
-// _wait_for_fragments_finish() at shutdown serves as the drain point. Same
-// contract as PrimaryIndex/StoragePageCache and the original tenann global
-// cache; see DynamicCache::~DynamicCache notes.
+// Deleter captures _cache as a raw pointer; handles MUST be released before
+// ExecEnv::destroy() — _wait_for_fragments_finish() is the drain boundary.
 tenann::IndexCacheHandle VectorIndexCache::_wrap(Entry* entry, tenann::IndexRef ref) {
     Cache* cache = &_cache;
     return tenann::IndexCacheHandle(

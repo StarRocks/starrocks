@@ -448,10 +448,10 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, ProcessMetricsRe
     // Install before any vector query runs; tear down in destroy() before
     // GlobalEnv::stop() so the entry deleter can still reach the tracker.
     const int64_t proc_mem = GlobalEnv::GetInstance()->process_mem_limit();
-    ASSIGN_OR_RETURN(int64_t vi_capacity, ParseUtil::parse_mem_spec(config::vector_index_cache_limit, proc_mem));
+    ASSIGN_OR_RETURN(int64_t vi_capacity, ParseUtil::parse_mem_spec(config::vector_query_cache_capacity, proc_mem));
     if (vi_capacity <= 0) {
-        LOG(WARNING) << "vector_index_cache_limit resolved to " << vi_capacity
-                     << " bytes (raw=" << config::vector_index_cache_limit << ", process_mem_limit=" << proc_mem
+        LOG(WARNING) << "vector_query_cache_capacity resolved to " << vi_capacity
+                     << " bytes (raw=" << config::vector_query_cache_capacity << ", process_mem_limit=" << proc_mem
                      << "); vector index cache disabled";
         vi_capacity = 0;
     }

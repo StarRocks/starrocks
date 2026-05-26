@@ -2,35 +2,35 @@
 ADMIN SET FRONTEND CONFIG("enable_experimental_vector" = "true");
 -- result:
 -- !result
-update information_schema.be_configs set value = "20%" where name = "vector_index_cache_limit";
+update information_schema.be_configs set value = "20%" where name = "vector_query_cache_capacity";
 -- result:
 -- !result
-select distinct value from information_schema.be_configs where name = "vector_index_cache_limit";
+select distinct value from information_schema.be_configs where name = "vector_query_cache_capacity";
 -- result:
 20%
 -- !result
-update information_schema.be_configs set value = "4294967296" where name = "vector_index_cache_limit";
+update information_schema.be_configs set value = "4294967296" where name = "vector_query_cache_capacity";
 -- result:
 -- !result
-select distinct value from information_schema.be_configs where name = "vector_index_cache_limit";
+select distinct value from information_schema.be_configs where name = "vector_query_cache_capacity";
 -- result:
 4294967296
 -- !result
-update information_schema.be_configs set value = "512M" where name = "vector_index_cache_limit";
+update information_schema.be_configs set value = "512M" where name = "vector_query_cache_capacity";
 -- result:
 -- !result
-select distinct value from information_schema.be_configs where name = "vector_index_cache_limit";
+select distinct value from information_schema.be_configs where name = "vector_query_cache_capacity";
 -- result:
 512M
 -- !result
-update information_schema.be_configs set value = "4G" where name = "vector_index_cache_limit";
+update information_schema.be_configs set value = "4G" where name = "vector_query_cache_capacity";
 -- result:
 -- !result
-select distinct value from information_schema.be_configs where name = "vector_index_cache_limit";
+select distinct value from information_schema.be_configs where name = "vector_query_cache_capacity";
 -- result:
 4G
 -- !result
-update information_schema.be_configs set value = "20%" where name = "vector_index_cache_limit";
+update information_schema.be_configs set value = "20%" where name = "vector_query_cache_capacity";
 -- result:
 -- !result
 CREATE TABLE t_vi_cache (
@@ -73,7 +73,7 @@ select count(*) from (
 -- result:
 3
 -- !result
-update information_schema.be_configs set value = "1M" where name = "vector_index_cache_limit";
+update information_schema.be_configs set value = "1M" where name = "vector_query_cache_capacity";
 -- result:
 -- !result
 select count(*) from (
@@ -83,7 +83,7 @@ select count(*) from (
 -- result:
 3
 -- !result
-update information_schema.be_configs set value = "20%" where name = "vector_index_cache_limit";
+update information_schema.be_configs set value = "20%" where name = "vector_query_cache_capacity";
 -- result:
 -- !result
 DROP TABLE t_vi_cache;

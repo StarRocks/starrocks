@@ -168,43 +168,39 @@ TEST_F(ConfigUpdateHooksTest, test_update_lake_metadata_fetch_thread_count) {
 
 #ifndef __APPLE__
 // Re-registers the hooks with a null exec_env to verify the
-// `vector_index_cache_limit` callback short-circuits to InternalError instead
+// `vector_query_cache_capacity` callback short-circuits to InternalError instead
 // of dereferencing exec_env. The override of SetUp's registration is OK because
 // TearDown's TEST_reset() restores a clean registry for the next test.
-TEST_F(ConfigUpdateHooksTest, vector_index_cache_limit_null_exec_env_returns_internal_error) {
+TEST_F(ConfigUpdateHooksTest, vector_query_cache_capacity_null_exec_env_returns_internal_error) {
     ConfigUpdateRegistry::instance()->TEST_reset();
     register_config_update_hooks(/*exec_env=*/nullptr, *GlobalEnv::GetInstance());
     ConfigUpdateRegistry::instance()->set_ready();
 
-    auto st = ConfigUpdateRegistry::instance()->update_config("vector_index_cache_limit", "1G");
+    auto st = ConfigUpdateRegistry::instance()->update_config("vector_query_cache_capacity", "1G");
     EXPECT_FALSE(st.ok()) << st.to_string();
     EXPECT_TRUE(st.is_internal_error()) << st.to_string();
 }
 
-// Happy path: covers parse_mem_spec + SetCapacity + LOG body (lines 102-109
-// of config_update_hooks.cpp). Test fixture's SetUp already registered hooks
-// against the real ExecEnv whose init() builds a VectorIndexCache, so the
-// callback follows the normal "resolve to bytes -> resize cache" path.
-TEST_F(ConfigUpdateHooksTest, vector_index_cache_limit_happy_path_resizes_cache) {
+TEST_F(ConfigUpdateHooksTest, vector_query_cache_capacity_happy_path_resizes_cache) {
     auto* cache = ExecEnv::GetInstance()->vector_index_cache();
     ASSERT_NE(cache, nullptr) << "test_main must initialize ExecEnv with vector_index_cache";
-    const std::string saved = config::vector_index_cache_limit;
+    const std::string saved = config::vector_query_cache_capacity;
 
     // Absolute bytes.
-    ASSERT_OK(ConfigUpdateRegistry::instance()->update_config("vector_index_cache_limit", "4294967296"));
+    ASSERT_OK(ConfigUpdateRegistry::instance()->update_config("vector_query_cache_capacity", "4294967296"));
     EXPECT_EQ(cache->capacity(), 4294967296u);
 
     // Unit-suffixed.
-    ASSERT_OK(ConfigUpdateRegistry::instance()->update_config("vector_index_cache_limit", "512M"));
+    ASSERT_OK(ConfigUpdateRegistry::instance()->update_config("vector_query_cache_capacity", "512M"));
     EXPECT_EQ(cache->capacity(), 512u * 1024 * 1024);
 
     // Percentage of process_mem_limit — exact value depends on test env, just
     // sanity-check it parses and resizes to something positive.
-    ASSERT_OK(ConfigUpdateRegistry::instance()->update_config("vector_index_cache_limit", "10%"));
+    ASSERT_OK(ConfigUpdateRegistry::instance()->update_config("vector_query_cache_capacity", "10%"));
     EXPECT_GT(cache->capacity(), 0u);
 
     // Restore for downstream tests/files.
-    ASSERT_OK(ConfigUpdateRegistry::instance()->update_config("vector_index_cache_limit", saved));
+    ASSERT_OK(ConfigUpdateRegistry::instance()->update_config("vector_query_cache_capacity", saved));
 }
 #endif
 

@@ -642,14 +642,14 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 是否动态：是
 - 描述：HNSW 向量索引自适应 `ef_search` 缩放的总开关。开启时，BE 会根据 segment 行数为每个 segment 调整有效 `ef_search`，从而在 compaction 合并大 segment 后无需手动调参即可保持召回率。设置为 `false` 时关闭自适应缩放，按用户指定的 `ef_search` 原值执行。
 - 引入版本：-
-### vector_index_cache_limit
+### vector_query_cache_capacity
 
 - 默认值：`20%`
 - 类型：String
 - 单位：字节，支持单位后缀（`K`/`M`/`G`/`T`）或 BE `mem_limit` 的百分比（`%`）
 - 是否动态：是
-- 描述：SR 端向量索引缓存的总容量，在同一个 LRU 中同时管理 HNSW 整索引条目和 IVF-PQ 每个 list 的 block 条目（当 `enable_vector_index_block_cache=true` 时）。BE 启动时和每次通过 HTTP `/api/update_config` 更新时均生效。接受绝对字节（如 `4294967296`）、带单位数值（`4G`、`512M`）或相对于 BE 进程内存限额的百分比（如 `20%`）。默认 `20%`，与 `storage_page_cache_limit` 风格一致，随 BE 内存规模自动伸缩。
-- 引入版本：v4.2.0
+- 描述：SR 端向量索引缓存的总容量，在同一个 LRU 中同时管理 HNSW 整索引条目和 IVF-PQ 每个 list 的 block 条目（当 `enable_vector_index_block_cache=true` 时）。BE 启动时和每次通过 HTTP `/api/update_config` 更新时均生效。接受绝对字节（如 `4294967296`）、带单位数值（`4G`、`512M`）或相对于 BE 进程内存限额的百分比（如 `20%`）。**v4.2.0 行为变更：** 旧版本只接受绝对字节数（默认 512MB）；升级时如不显式覆盖该配置，cache 大小将变为 BE 内存的 20%。
+- 引入版本：v3.4.0
 
 ### vector_adaptive_ef_alpha
 

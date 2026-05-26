@@ -33,15 +33,12 @@ class MemTracker;
 
 namespace starrocks {
 
-// VectorIndexCacheEntry holds the cached tenann::IndexRef. All access to _ref
-// goes through guard() — read or write. This matches PrimaryIndex /
-// StoragePageCache and keeps set_ref + update_object_size paired and
-// single-flights the cold-load path in VectorIndexCache::GetOrCreate.
+// Per-entry holder: access to _ref must be under guard() so set_ref pairs with
+// update_object_size and single-flights the cold-load path in GetOrCreate.
 class VectorIndexCacheEntry {
 public:
     std::unique_lock<std::mutex> guard() { return std::unique_lock<std::mutex>(_mu); }
 
-    // All of the below must be called while holding guard().
     bool has_ref() const { return _ref != nullptr; }
     tenann::IndexRef ref() const { return _ref; }
     void set_ref(tenann::IndexRef ref) { _ref = std::move(ref); }
@@ -56,9 +53,7 @@ inline std::ostream& operator<<(std::ostream& os, const VectorIndexCacheEntry&) 
     return os << "VectorIndexCacheEntry";
 }
 
-// SR-owned tenann::IndexCache backed by DynamicCache. MemTracker is attached
-// on construction; ExecEnv must destruct this before the tracker hierarchy
-// (see ExecEnv::destroy).
+// SR-owned tenann::IndexCache backed by DynamicCache, with MemTracker attached.
 class VectorIndexCache final : public tenann::IndexCache {
 public:
     using Cache = DynamicCache<std::string, VectorIndexCacheEntry>;
@@ -71,12 +66,9 @@ public:
     VectorIndexCache& operator=(const VectorIndexCache&) = delete;
 
     [[nodiscard]] bool Lookup(const tenann::CacheKey& key, tenann::IndexCacheHandle* handle) override;
-    // tenann::IndexCache contract; SR production paths all go through
-    // GetOrCreate. Currently only exercised by the unit tests as a direct
-    // way to populate entries (LRU / capacity / mem-tracker coverage).
+    // Required by tenann::IndexCache; SR production paths use GetOrCreate.
     void Insert(const tenann::CacheKey& key, tenann::IndexRef ref, tenann::IndexCacheHandle* handle) override;
-    // Returns false if the loader threw or returned null; callers must check
-    // the bool, not wrap in try/catch.
+    // Returns false on loader failure (exception or null IndexRef).
     [[nodiscard]] bool GetOrCreate(const tenann::CacheKey& key, const IndexLoader& loader,
                                    tenann::IndexCacheHandle* handle) override;
 
@@ -101,12 +93,8 @@ private:
 
 namespace starrocks {
 
-// Stub used in non-tenann builds (e.g. Darwin). The BE never constructs a
-// VectorIndexCache when tenann is not linked, so this stub is only here so
-// callers can hold a `VectorIndexCache*` and reference its stat accessors
-// without their own WITH_TENANN guards. All public methods return zero/no-op
-// values, matching the "no cache exists" semantics those callers handle via
-// the nullptr check on ExecEnv::vector_index_cache().
+// Stub for non-tenann builds (e.g. Darwin): never constructed, lets callers
+// reference accessors without their own WITH_TENANN guards.
 class VectorIndexCache {
 public:
     VectorIndexCache(size_t, MemTracker*) {}

@@ -1,7 +1,7 @@
 -- name: test_vector_index_cache @sequential @native
 
 -- Exercise the SR-owned VectorIndexCache integration:
---   * vector_index_cache_limit config callback (config_update_hooks.cpp happy path)
+--   * vector_query_cache_capacity config callback (config_update_hooks.cpp happy path)
 --   * BE startup VectorIndexCache construction (exec_env.cpp)
 --   * Cold-load via TenANNReader::init_searcher loader (warm-cache probe in
 --     VectorIndexReaderFactory + GetOrCreate + AttachIndexRef)
@@ -11,26 +11,26 @@
 
 ADMIN SET FRONTEND CONFIG("enable_experimental_vector" = "true");
 
--- ---- vector_index_cache_limit runtime config (config_update_hooks callback) ----
+-- ---- vector_query_cache_capacity runtime config (config_update_hooks callback) ----
 
 -- Default. parse_mem_spec accepts a bare percentage and resolves it against
 -- the BE process_mem_limit at /api/update_config time.
-update information_schema.be_configs set value = "20%" where name = "vector_index_cache_limit";
-select distinct value from information_schema.be_configs where name = "vector_index_cache_limit";
+update information_schema.be_configs set value = "20%" where name = "vector_query_cache_capacity";
+select distinct value from information_schema.be_configs where name = "vector_query_cache_capacity";
 
 -- Absolute byte count.
-update information_schema.be_configs set value = "4294967296" where name = "vector_index_cache_limit";
-select distinct value from information_schema.be_configs where name = "vector_index_cache_limit";
+update information_schema.be_configs set value = "4294967296" where name = "vector_query_cache_capacity";
+select distinct value from information_schema.be_configs where name = "vector_query_cache_capacity";
 
 -- Unit-suffixed value (parse_mem_spec accepts K/M/G/T).
-update information_schema.be_configs set value = "512M" where name = "vector_index_cache_limit";
-select distinct value from information_schema.be_configs where name = "vector_index_cache_limit";
+update information_schema.be_configs set value = "512M" where name = "vector_query_cache_capacity";
+select distinct value from information_schema.be_configs where name = "vector_query_cache_capacity";
 
-update information_schema.be_configs set value = "4G" where name = "vector_index_cache_limit";
-select distinct value from information_schema.be_configs where name = "vector_index_cache_limit";
+update information_schema.be_configs set value = "4G" where name = "vector_query_cache_capacity";
+select distinct value from information_schema.be_configs where name = "vector_query_cache_capacity";
 
 -- Restore default before exercising search-time cache lifecycle.
-update information_schema.be_configs set value = "20%" where name = "vector_index_cache_limit";
+update information_schema.be_configs set value = "20%" where name = "vector_query_cache_capacity";
 
 -- ---- HNSW search drives the cache (loader cold-load, AttachIndexRef warm) ----
 
@@ -84,14 +84,14 @@ select count(*) from (
 -- Shrink cache mid-flight: SetCapacity drops to a small value. The pinned
 -- handle from any inflight reader survives via DynamicCache's deferred
 -- release, even when the entry is evicted from the LRU map immediately.
-update information_schema.be_configs set value = "1M" where name = "vector_index_cache_limit";
+update information_schema.be_configs set value = "1M" where name = "vector_query_cache_capacity";
 select count(*) from (
     select id from t_vi_cache
     order by approx_l2_distance([5,5,5,5,5], v1) limit 3
 ) t;
 
 -- Restore + cleanup.
-update information_schema.be_configs set value = "20%" where name = "vector_index_cache_limit";
+update information_schema.be_configs set value = "20%" where name = "vector_query_cache_capacity";
 DROP TABLE t_vi_cache;
 
 ADMIN SET FRONTEND CONFIG("enable_experimental_vector" = "false");

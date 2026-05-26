@@ -95,15 +95,19 @@ void register_config_update_hooks(ExecEnv* exec_env, const GlobalEnv& global_env
         cache->set_capacity(cache_limit);
         return Status::OK();
     });
-    registry->register_callback("vector_index_cache_limit", [=]() -> Status {
+    registry->register_callback("vector_query_cache_capacity", [=]() -> Status {
         if (exec_env == nullptr || exec_env->vector_index_cache() == nullptr) {
             return Status::InternalError("Vector index cache is not initialized");
         }
         const int64_t proc_mem = GlobalEnv::GetInstance()->process_mem_limit();
-        ASSIGN_OR_RETURN(int64_t limit, ParseUtil::parse_mem_spec(config::vector_index_cache_limit, proc_mem));
+        ASSIGN_OR_RETURN(int64_t limit, ParseUtil::parse_mem_spec(config::vector_query_cache_capacity, proc_mem));
         if (limit < 0) limit = 0;
-        exec_env->vector_index_cache()->SetCapacity(static_cast<size_t>(limit));
-        LOG(INFO) << "vector_index_cache_limit updated: " << config::vector_index_cache_limit << " => " << limit
+        auto* cache = exec_env->vector_index_cache();
+        if (static_cast<size_t>(limit) == cache->capacity()) {
+            return Status::OK();
+        }
+        cache->SetCapacity(static_cast<size_t>(limit));
+        LOG(INFO) << "vector_query_cache_capacity updated: " << config::vector_query_cache_capacity << " => " << limit
                   << " bytes";
         return Status::OK();
     });

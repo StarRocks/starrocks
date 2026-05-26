@@ -1673,11 +1673,9 @@ CONF_mBool(experimental_enable_lake_capture_tablet_and_rowsets, "false");
 // ranges in [1,16], default value is 4.
 CONF_mInt32(query_cache_num_lanes_per_driver, "4");
 
-// Vector index cache capacity: HNSW whole-index + IVF-PQ per-list blocks
-// share this LRU. Accepts absolute bytes (e.g. "4294967296"), units
-// ("4G", "512M"), or a percentage of the BE process memory limit (e.g.
-// "20%"). Default 20% of process memory.
-CONF_mString(vector_index_cache_limit, "20%");
+// Vector index cache total capacity (HNSW whole-index + IVF-PQ blocks share
+// the same LRU). Accepts bytes, K/M/G/T suffix, or a % of process_mem_limit.
+CONF_mString(vector_query_cache_capacity, "20%");
 
 // Used to limit buffer size of tablet send channel.
 CONF_mInt64(send_channel_buffer_limit, "67108864");
