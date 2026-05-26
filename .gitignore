@@ -104,6 +104,8 @@ AGENTS.md
 .clangd
 .cursor/
 .codex/
+.worktrees/
+handbook/plans/local/
 
 
 !build-mac/CMakeLists.txt
