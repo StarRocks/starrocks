@@ -103,6 +103,7 @@ public class MetricRepoTest extends PlanTestBase {
         Assertions.assertEquals(GlobalStateMgr.getCurrentState().getReplayedJournalId(), metrics.get(0).getValue());
     }
 
+    @Test
     public void testPlanAdvisorMetricsExposure() {
         MetricRepo.COUNTER_PLAN_ADVISOR_GUIDE_GENERATED_TOTAL.getMetric("join").increase(1L);
         MetricRepo.COUNTER_PLAN_ADVISOR_GUIDE_APPLIED_TOTAL.getMetric("agg").increase(2L);
