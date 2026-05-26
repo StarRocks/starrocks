@@ -293,6 +293,37 @@ public class HeartbeatMgrTest {
     }
 
     @Test
+    public void testOnStoppedLogsWhenExecutorRefusesToTerminate() {
+        // When the heartbeat worker pool ignores shutdownNow's interrupt long enough to
+        // outlast the drain budget, onStopped must log a warning and return rather than
+        // blocking forever. Covers the LOG.warn branch in onStopped's awaitTermination.
+        HeartbeatMgr mgr = new HeartbeatMgr(false);
+        ThreadPoolExecutor stuck = new ThreadPoolExecutor(
+                1, 1, 0L, TimeUnit.MILLISECONDS, new ArrayBlockingQueue<>(1));
+        stuck.execute(() -> {
+            long deadline = System.currentTimeMillis() + 2000L;
+            while (System.currentTimeMillis() < deadline) {
+                try {
+                    Thread.sleep(50);
+                } catch (InterruptedException ignored) {
+                    // simulate uninterruptible heartbeat RPC
+                }
+            }
+        });
+        mgr.executor = stuck;
+        int oldTimeout = com.starrocks.common.Config.leader_demotion_drain_timeout_sec;
+        com.starrocks.common.Config.leader_demotion_drain_timeout_sec = 1;
+        try {
+            mgr.onStopped();
+            Assertions.assertNotNull(mgr.executor,
+                    "executor reference must be retained when drain timed out so restart guard fires");
+        } finally {
+            com.starrocks.common.Config.leader_demotion_drain_timeout_sec = oldTimeout;
+            stuck.shutdownNow();
+        }
+    }
+
+    @Test
     public void testStartRefusesToRestartBeforeExecutorTerminates() {
         // Mirror of BatchWriteMgr / AlterHandler restart guard. If a previous executor is
         // shutdown but has not yet terminated (heartbeat RPC ignoring interrupt), start()

@@ -1524,4 +1524,63 @@ public class TaskManagerTest {
             blockedPool.shutdownNow();
         }
     }
+
+    @Test
+    public void testStartRefusesToRestartBeforeDispatchSchedulerTerminates() throws Exception {
+        // Mirror of testStartRefusesToRestartBeforeSchedulersTerminate but for the dispatch
+        // scheduler branch. Both guards must short-circuit start() rather than spawning a
+        // second scheduler generation.
+        TaskManager mgr = new TaskManager();
+        mgr.start();
+        java.util.concurrent.ScheduledThreadPoolExecutor blockedPool =
+                new java.util.concurrent.ScheduledThreadPoolExecutor(1);
+        blockedPool.execute(() -> {
+            try {
+                Thread.sleep(30_000L);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+        });
+        blockedPool.shutdown();
+        mgr.stop();
+        // periodScheduler is set to a clean shutdown pool so the first guard does not fire;
+        // dispatchScheduler is set to the blocked pool so the second guard does.
+        mgr.dispatchScheduler = blockedPool;
+
+        try {
+            Assertions.assertThrows(IllegalStateException.class, mgr::start);
+        } finally {
+            blockedPool.shutdownNow();
+        }
+    }
+
+    @Test
+    public void testStopWithTimeoutLogsWhenSchedulerRefusesToTerminate() throws Exception {
+        // stop(timeoutMs) must call awaitTermination on both pools; when the await returns
+        // false (a worker ignored shutdownNow's interrupt) it logs a warning and proceeds
+        // rather than blocking forever. This test covers the LOG.warn branches by injecting
+        // a scheduler whose worker ignores interrupts long enough to outlast the budget.
+        TaskManager mgr = new TaskManager();
+        mgr.start();
+        // Replace periodScheduler with a pool whose single worker spins ignoring interrupt.
+        java.util.concurrent.ScheduledThreadPoolExecutor stuckSched =
+                new java.util.concurrent.ScheduledThreadPoolExecutor(1);
+        stuckSched.execute(() -> {
+            long deadline = System.currentTimeMillis() + 2000L;
+            while (System.currentTimeMillis() < deadline) {
+                try {
+                    Thread.sleep(50);
+                } catch (InterruptedException ignored) {
+                    // simulate uninterruptible work
+                }
+            }
+        });
+        mgr.periodScheduler = stuckSched;
+
+        mgr.stop(50L);
+
+        Assertions.assertTrue(stuckSched.isShutdown(), "scheduler must be shutdown by stop");
+        // worker is still running but stop() returned within budget; cleanup
+        stuckSched.shutdownNow();
+    }
 }

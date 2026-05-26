@@ -52,7 +52,9 @@ public class StarMgrServer {
     private static final Logger LOG = LogManager.getLogger(StarMgrServer.class);
 
     private static StarMgrServer CHECKPOINT = null;
-    private CheckpointController checkpointController = null;
+    // Package-private so same-package tests can inject a mock controller and verify
+    // stopCheckpointController without reflection.
+    CheckpointController checkpointController = null;
     private CheckpointWorker checkpointWorker = null;
     private boolean checkpointWorkerStarted = false;
     private static long checkpointThreadId = -1;

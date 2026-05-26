@@ -114,6 +114,31 @@ public class LeaderTaskExecutorTest {
     }
 
     @Test
+    public void testCloseWithTimeoutLogsWhenExecutorRefusesToTerminate() {
+        // close(awaitMillis) returning false from awaitTermination triggers a LOG.warn for
+        // each pool that did not drain. Submit an uninterruptible task and use a very short
+        // timeout budget to hit both LOG.warn branches.
+        LeaderTaskExecutor target =
+                new LeaderTaskExecutor("leader_task_executor_timeout_test", 1, 10, false);
+        target.start();
+        target.executor.execute(() -> {
+            long deadline = System.currentTimeMillis() + 1500L;
+            while (System.currentTimeMillis() < deadline) {
+                try {
+                    Thread.sleep(50);
+                } catch (InterruptedException ignored) {
+                    // simulate uninterruptible work
+                }
+            }
+        });
+
+        target.close(50L);
+
+        Assertions.assertTrue(target.executor.isShutdown());
+        target.executor.shutdownNow();
+    }
+
+    @Test
     public void testStartRefusesToRestartBeforePoolTerminates() {
         // Mirror of BatchWriteMgr / AlterHandler restart guard. If close() returns but the
         // underlying executor has not yet terminated (in-flight task ignoring interrupt),

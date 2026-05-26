@@ -170,6 +170,32 @@ public class PriorityLeaderTaskExecutorTest {
     }
 
     @Test
+    public void testCloseWithTimeoutLogsWhenExecutorRefusesToTerminate() {
+        // close(awaitMillis) returning false from awaitTermination triggers a LOG.warn for
+        // each pool that did not drain. Exercise both branches by submitting an
+        // uninterruptible task and using a very short timeout budget.
+        PriorityLeaderTaskExecutor target =
+                new PriorityLeaderTaskExecutor("priority_task_executor_timeout_test", 1, 100, false);
+        target.start();
+        target.executor.execute(() -> {
+            long deadline = System.currentTimeMillis() + 1500L;
+            while (System.currentTimeMillis() < deadline) {
+                try {
+                    Thread.sleep(50);
+                } catch (InterruptedException ignored) {
+                    // simulate uninterruptible work
+                }
+            }
+        });
+
+        target.close(50L);
+
+        Assertions.assertTrue(target.executor.isShutdown());
+        // worker is still running but close() returned; cleanup at the end
+        target.executor.shutdownNow();
+    }
+
+    @Test
     public void testCloseWithTimeoutAwaitsTermination() throws Exception {
         // close(awaitMillis) must block until BOTH pools have actually terminated, so a
         // re-elected leader does not race a still-alive worker from the previous session.
