@@ -226,14 +226,12 @@ public class TabletInvertedIndex implements MemoryTrackable {
                     k -> new CopyOnWriteArrayList<>());
             long backendId = replica.getBackendId();
 
-            // Restore the per-(tabletId, backendId) uniqueness invariant that the
-            // prior Map<backendId, Replica> inner container provided in branch-3.5
-            // before #66288. Replace the first existing entry in place so concurrent
-            // readers see an atomic swap (never a transient absence). Sweep any
-            // remaining duplicates left behind by historical addReplica leaks (e.g.
-            // LocalTablet.deleteRedundantReplica drops a replica from the tablet
-            // without notifying this index) so legacy state self-heals on the next
-            // add for that backend.
+            // Restore the per-(tabletId, backendId) uniqueness invariant that the prior
+            // Map<backendId, Replica> inner container provided in branch-3.5 before #66288.
+            // Replace the first existing entry in place so concurrent readers see an atomic
+            // swap (never a transient absence). FE restart / journal replay rebuilds this
+            // index through the same path, so once this fix lands no duplicates ever form
+            // and no historical sweep is needed.
             int firstIdx = -1;
             for (int i = 0; i < replicas.size(); i++) {
                 if (replicas.get(i).getBackendId() == backendId) {
@@ -243,11 +241,6 @@ public class TabletInvertedIndex implements MemoryTrackable {
             }
             if (firstIdx >= 0) {
                 replicas.set(firstIdx, replica);
-                for (int i = replicas.size() - 1; i > firstIdx; i--) {
-                    if (replicas.get(i).getBackendId() == backendId) {
-                        replicas.remove(i);
-                    }
-                }
             } else {
                 replicas.add(replica);
             }

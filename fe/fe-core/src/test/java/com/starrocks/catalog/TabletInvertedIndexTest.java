@@ -309,36 +309,4 @@ public class TabletInvertedIndexTest {
         Assertions.assertSame(r3, tabletInvertedIndex.getReplica(tabletId, 6002L));
     }
 
-    @Test
-    public void testAddReplicaSelfHealsLegacyDuplicates() {
-        // Reproduce the state that legacy LocalTablet.deleteRedundantReplica leaks
-        // could leave behind on upgrade: multiple entries for the same
-        // (tabletId, backendId). The next addReplica for that backend must drop
-        // them all and keep only the new replica.
-        long tabletId = 2002L;
-        long backendId = 7000L;
-        tabletInvertedIndex.addTablet(tabletId, tabletMeta);
-
-        Replica stale1 = new Replica(220L, backendId, 1L, 123, 0L, 0L,
-                Replica.ReplicaState.NORMAL, -1L, 1L);
-        Replica stale2 = new Replica(221L, backendId, 2L, 123, 0L, 0L,
-                Replica.ReplicaState.NORMAL, -1L, 2L);
-        Replica fresh = new Replica(222L, backendId, 3L, 123, 0L, 0L,
-                Replica.ReplicaState.NORMAL, -1L, 3L);
-
-        tabletInvertedIndex.addReplica(tabletId, stale1);
-        // Forcibly inject a duplicate via the public Map to simulate the legacy
-        // leak (the fixed addReplica would otherwise prevent this).
-        tabletInvertedIndex.getReplicaMetaTable().get(tabletId).add(stale2);
-        Assertions.assertEquals(2, tabletInvertedIndex.getReplicasByTabletId(tabletId).size(),
-                "test setup should have produced a duplicate");
-
-        tabletInvertedIndex.addReplica(tabletId, fresh);
-
-        Assertions.assertSame(fresh, tabletInvertedIndex.getReplica(tabletId, backendId));
-        List<Replica> replicas = tabletInvertedIndex.getReplicasByTabletId(tabletId);
-        Assertions.assertEquals(1, replicas.size(),
-                "duplicates should have been swept, got: " + replicas);
-        Assertions.assertSame(fresh, replicas.get(0));
-    }
 }
