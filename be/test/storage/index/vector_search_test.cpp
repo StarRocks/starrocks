@@ -971,4 +971,60 @@ TEST_F(BruteForceVectorFallbackTest, test_brute_force_with_lazy_mat_pruned_embed
     chunk_iter->close();
 }
 
+// Direct unit tests for resolve_brute_force_vector_column. The "missing in both" branch is
+// unreachable from production iteration (use_brute_force=true together with FE-pruned output
+// implies _setup_brute_force_fallback added v to _schema, so _dict_chunk holds it), so the
+// resolver's defensive InternalError is covered here instead — both to lift coverage and to
+// pin the corruption guard against future regressions in the iterator.
+namespace {
+
+ChunkPtr make_chunk_with_cid(ColumnId cid) {
+    ChunkPtr chunk = std::make_shared<Chunk>();
+    ColumnPtr col = Int32Column::create();
+    chunk->append_column(col, cid, /*is_column_id=*/true);
+    return chunk;
+}
+
+} // namespace
+
+TEST(ResolveBruteForceVectorColumnTest, prefers_output_chunk_when_present) {
+    // Both chunks carry cid=7. Production semantics: when FE keeps v eager, _build_final_chunk
+    // swaps v into the output chunk and the resolver must take that copy (not _dict_chunk's).
+    auto chunk = make_chunk_with_cid(7);
+    auto dict_chunk = make_chunk_with_cid(7);
+    ASSIGN_OR_ABORT(auto col, resolve_brute_force_vector_column(chunk.get(), dict_chunk.get(), 7));
+    EXPECT_EQ(col.get(), chunk->get_column_by_id(7).get());
+    EXPECT_NE(col.get(), dict_chunk->get_column_by_id(7).get());
+}
+
+TEST(ResolveBruteForceVectorColumnTest, falls_back_to_dict_chunk_when_pruned_from_output) {
+    // Output chunk does not carry v (FE pruned it after lazy-mat), _dict_chunk does (BE
+    // re-added v in _setup_brute_force_fallback). Resolver must take the _dict_chunk copy.
+    ChunkPtr chunk = std::make_shared<Chunk>();
+    auto dict_chunk = make_chunk_with_cid(7);
+    ASSIGN_OR_ABORT(auto col, resolve_brute_force_vector_column(chunk.get(), dict_chunk.get(), 7));
+    EXPECT_EQ(col.get(), dict_chunk->get_column_by_id(7).get());
+}
+
+TEST(ResolveBruteForceVectorColumnTest, internal_error_when_missing_in_both) {
+    // Both chunks lack the cid. Defensive branch must return InternalError rather than
+    // letting Chunk::get_column_by_id default-insert and return _columns[0].
+    ChunkPtr chunk = std::make_shared<Chunk>();
+    ChunkPtr dict_chunk = std::make_shared<Chunk>();
+    auto st = resolve_brute_force_vector_column(chunk.get(), dict_chunk.get(), 42);
+    ASSERT_FALSE(st.ok());
+    EXPECT_TRUE(st.status().is_internal_error());
+    EXPECT_NE(st.status().to_string().find("vector column 42 missing"), std::string::npos);
+    EXPECT_NE(st.status().to_string().find("late-materialization"), std::string::npos);
+}
+
+TEST(ResolveBruteForceVectorColumnTest, internal_error_when_dict_chunk_is_null) {
+    // _context->_dict_chunk is a ChunkPtr; .get() returns nullptr if it was never set up.
+    // Resolver must not dereference and must take the InternalError path.
+    ChunkPtr chunk = std::make_shared<Chunk>();
+    auto st = resolve_brute_force_vector_column(chunk.get(), /*dict_chunk=*/nullptr, 42);
+    ASSERT_FALSE(st.ok());
+    EXPECT_TRUE(st.status().is_internal_error());
+}
+
 } // namespace starrocks
