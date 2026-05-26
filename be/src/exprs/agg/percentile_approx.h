@@ -607,6 +607,9 @@ public:
     void update(FunctionContext* ctx, const Column** columns, AggDataPtr state, size_t row_num) const override {
         // argument 1: array column wrapped in ConstColumn, no need to check is_null
         DCHECK(columns[1]->is_constant());
+        // Capture before the lazy-init reinit + targetQuantiles.assign so the
+        // quantile-vector allocation is charged too (matches merge()/the scalar path).
+        int64_t prev_memory = data(state).mem_usage();
         // Lazy initialization of compression factor on first update
         if (UNLIKELY(!data(state).compression_initialized)) {
             double compression = get_compression_factor(ctx);
@@ -628,7 +631,6 @@ public:
         const auto* data_column = down_cast<const DoubleColumn*>(columns[0]);
 
         double column_value = data_column->immutable_data()[row_num];
-        int64_t prev_memory = data(state).mem_usage();
         data(state).percentile->add(implicit_cast<float>(column_value));
         ctx->add_mem_usage(data(state).mem_usage() - prev_memory);
     }
@@ -781,6 +783,9 @@ public:
     void update(FunctionContext* ctx, const Column** columns, AggDataPtr state, size_t row_num) const override {
         // argument 2: array column wrapped in ConstColumn, no need to check is_null
         DCHECK(columns[2]->is_constant());
+        // Capture before the lazy-init reinit + targetQuantiles.assign so the
+        // quantile-vector allocation is charged too (matches merge()/the scalar path).
+        int64_t prev_memory = data(state).mem_usage();
         // Lazy initialization of compression factor on first update
         if (UNLIKELY(!data(state).compression_initialized)) {
             double compression = get_compression_factor(ctx);
@@ -805,7 +810,6 @@ public:
         int64_t weight = columns[1]->get(real_row_num).get_int64();
 
         double column_value = data_column->immutable_data()[row_num];
-        int64_t prev_memory = data(state).mem_usage();
         // add value with weight. Reject w <= 0: a negative weight pushes
         // _processed_weight negative and yields NaN from weightedAverageSorted().
         // TDigest::add() also rejects non-positive weights as a second guard.
