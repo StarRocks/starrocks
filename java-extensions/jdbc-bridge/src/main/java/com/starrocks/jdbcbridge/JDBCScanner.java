@@ -119,7 +119,9 @@ public class JDBCScanner {
 
         connection = dataSource.getConnection();
         initOracleSessionTimeZoneIfNeeded();
-        connection.setAutoCommit(false);
+        if (!isBigQueryDriver) {
+            connection.setAutoCommit(false);
+        }
         statement = connection.prepareStatement(scanContext.getSql(), ResultSet.TYPE_FORWARD_ONLY,
                 ResultSet.CONCUR_READ_ONLY);
         if (scanContext.getDriverClassName().toLowerCase(Locale.ROOT).contains("mysql")) {

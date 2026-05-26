@@ -248,6 +248,9 @@ public class JDBCMetadata implements ConnectorMetadata {
                 int networkTimeoutMs = (int) Math.min(Config.jdbc_network_timeout_ms, (long) Integer.MAX_VALUE);
                 connection.setNetworkTimeout(NETWORK_TIMEOUT_EXECUTOR, networkTimeoutMs);
             }
+        } catch (java.sql.SQLFeatureNotSupportedException e) {
+            // Some drivers (e.g. BigQuery) don't implement setNetworkTimeout — ignore and continue
+            LOG.debug("JDBC driver does not support setNetworkTimeout, skipping: {}", e.getMessage());
         } catch (SQLException e) {
             connection.close();
             throw e;
