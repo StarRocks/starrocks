@@ -530,6 +530,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: DELETE 语句中 IN 谓词允许的最大元素数量。
 - 引入版本: -
 
+### `enable_non_primary_key_delete_warning`
+
+- 默认值: true
+- 类型: Boolean
+- 单位: -
+- 是否可变: Yes
+- 描述: 当设置为 `true` 时，对非主键 OLAP 表（明细表、聚合表、更新表）执行成功的 `DELETE` 后，StarRocks 会在 MySQL OK 包的 `info` 字段中返回一条提示，提醒用户 `DELETE` 会写入删除谓词、在 base compaction 完成前每次查询都需要 merge-on-read，并建议批量按分区删除时改用 `ALTER TABLE ... TRUNCATE PARTITION`。设置为 `false` 可关闭此提示。该提示不会改变 DELETE 的语义或执行流程，只是额外向客户端返回一段 info 字符串。详见 [DELETE](../../../sql-reference/sql-statements/table_bucket_part_index/DELETE.md)。
+- 引入版本: -
+
 ### `max_create_table_timeout_second`
 
 - 默认值: 600

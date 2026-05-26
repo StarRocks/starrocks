@@ -50,6 +50,24 @@ column_name1 op { value | value_list } [ AND column_name2 op { value | value_lis
 
 After you execute the DELETE statement, the query performance of your cluster may deteriorate for a period of time (before compaction is completed). The degree of deterioration varies based on the number of conditions that you specify. A larger number of conditions indicates a higher degree of deterioration.
 
+:::warning Bulk removal: prefer `TRUNCATE PARTITION` over `DELETE`
+
+On Duplicate Key, Aggregate, and Unique Key tables, `DELETE` does **not** physically remove rows. It writes a delete predicate (a "delete marker") attached to a new tablet version. Every subsequent read must scan the affected tablets, evaluate the delete predicates per row, and merge the result on the fly (merge-on-read). This cost persists until base compaction merges the delete predicates with the base data.
+
+If a partition has no new writes after `DELETE`, base compaction may not be triggered until `base_compaction_interval_seconds_since_last_operation` elapses (24 hours by default), so the merge-on-read penalty can stay active for a long time. For tables with hundreds of partitions and thousands of tablets, a simple `SELECT ... LIMIT 1` can become orders of magnitude slower or even time out.
+
+For bulk removal of entire partitions (for example, during historical-data migration), prefer:
+
+```SQL
+ALTER TABLE <table_name> TRUNCATE PARTITION (<partition_name>);
+```
+
+[`TRUNCATE PARTITION`](TRUNCATE_TABLE.md) drops the partition's data immediately by replacing its rowsets with an empty version, without producing delete markers and without waiting for compaction.
+
+Starting from this version, StarRocks returns a notice in the MySQL OK packet's `info` field when `DELETE` runs against a Duplicate / Aggregate / Unique Key table to remind you of this trade-off. The notice can be turned off by setting the FE configuration `enable_non_primary_key_delete_warning` to `false`.
+
+:::
+
 ### Examples
 
 #### Create a table and insert data

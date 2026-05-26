@@ -59,6 +59,11 @@ public class DeleteStmt extends DmlStmt {
     // The JobID is generated here for easy correlation when cancel Delete
     private long jobId = -1;
 
+    // Optional MySQL OK-packet info string attached at analyze time, surfaced to the
+    // client after DeleteMgr.process() succeeds. Used to warn about merge-on-read cost
+    // on non-Primary-Key tables and recommend TRUNCATE PARTITION for bulk removal.
+    private String okInfoMessage;
+
     public DeleteStmt(TableRef tableRef, PartitionRef partitionNames, Expr wherePredicate) {
         this(tableRef, partitionNames, null, wherePredicate, null, NodePosition.ZERO);
     }
@@ -143,6 +148,14 @@ public class DeleteStmt extends DmlStmt {
 
     public QueryStatement getQueryStatement() {
         return queryStatement;
+    }
+
+    public String getOkInfoMessage() {
+        return okInfoMessage;
+    }
+
+    public void setOkInfoMessage(String okInfoMessage) {
+        this.okInfoMessage = okInfoMessage;
     }
 
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {

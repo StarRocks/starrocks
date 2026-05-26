@@ -14,6 +14,7 @@
 
 package com.starrocks.sql.analyzer;
 
+import com.starrocks.common.Config;
 import com.starrocks.sql.ast.DeleteStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.parser.SqlParser;
@@ -93,5 +94,48 @@ public class AnalyzeDeleteTest {
         analyzeSuccess(
                 "with tp2cte as (select * from tprimary2 where v2 < 10) delete from tprimary using " +
                         "tp2cte where tprimary.pk = tp2cte.pk");
+    }
+
+    @Test
+    public void testNonPrimaryKeyDeleteEmitsOkInfo() {
+        boolean original = Config.enable_non_primary_key_delete_warning;
+        try {
+            Config.enable_non_primary_key_delete_warning = true;
+            DeleteStmt stmt = (DeleteStmt) analyzeSuccess("delete from tjson where v_int = 1");
+            String info = stmt.getOkInfoMessage();
+            Assertions.assertNotNull(info, "Duplicate Key DELETE should attach an OK info message");
+            Assertions.assertTrue(info.contains("Duplicate Key"),
+                    "info should name the keys type: " + info);
+            Assertions.assertTrue(info.contains("TRUNCATE PARTITION"),
+                    "info should recommend TRUNCATE PARTITION: " + info);
+        } finally {
+            Config.enable_non_primary_key_delete_warning = original;
+        }
+    }
+
+    @Test
+    public void testPrimaryKeyDeleteDoesNotEmitOkInfo() {
+        boolean original = Config.enable_non_primary_key_delete_warning;
+        try {
+            Config.enable_non_primary_key_delete_warning = true;
+            DeleteStmt stmt = (DeleteStmt) analyzeSuccess("delete from tprimary where pk = 1");
+            Assertions.assertNull(stmt.getOkInfoMessage(),
+                    "Primary Key DELETE should not attach an OK info message");
+        } finally {
+            Config.enable_non_primary_key_delete_warning = original;
+        }
+    }
+
+    @Test
+    public void testNonPrimaryKeyDeleteWarningCanBeDisabled() {
+        boolean original = Config.enable_non_primary_key_delete_warning;
+        try {
+            Config.enable_non_primary_key_delete_warning = false;
+            DeleteStmt stmt = (DeleteStmt) analyzeSuccess("delete from tjson where v_int = 1");
+            Assertions.assertNull(stmt.getOkInfoMessage(),
+                    "OK info should be suppressed when the FE config knob is off");
+        } finally {
+            Config.enable_non_primary_key_delete_warning = original;
+        }
     }
 }

@@ -48,6 +48,24 @@ column_name1 op { value | value_list } [ AND column_name2 op { value | value_lis
 
 执行 DELETE 语句后，可能会导致接下来一段时间内（Compaction 完成之前）的查询效率降低。影响程度取决于语句中指定的删除条件的数量。指定的条件越多，影响越大。
 
+:::warning 批量删除分区数据请优先使用 `TRUNCATE PARTITION`
+
+在明细表、聚合表、更新表上执行 `DELETE` **不会立即物理删除数据**，只会在 Tablet 上写入一个新的版本及对应的删除谓词（delete predicate / 删除标记）。在 Base Compaction 把删除谓词与基线数据合并之前，每一次读取都要扫描受影响的 Tablet，逐行评估删除谓词、实时合并结果（merge-on-read），因此这段时间内查询性能会显著下降。
+
+如果分区在 DELETE 之后没有新写入触发增量 compaction，BE 只能依赖时间阈值 `base_compaction_interval_seconds_since_last_operation`（默认 24 小时）来触发 base compaction，merge-on-read 的代价可能长时间无法消除。在分区数和 Tablet 数较多的大表上（例如几百个分区、几千个 Tablet），即使 `SELECT ... LIMIT 1` 也可能变慢甚至超时。
+
+如果是按整个分区批量清理数据（例如历史数据迁移），推荐使用：
+
+```SQL
+ALTER TABLE <table_name> TRUNCATE PARTITION (<partition_name>);
+```
+
+[`TRUNCATE PARTITION`](TRUNCATE_TABLE.md) 通过把分区的 rowset 直接替换为空版本来立即释放数据，不会产生删除标记，也无需等待 compaction。
+
+从该版本开始，对明细表、聚合表、更新表执行 `DELETE` 成功后，StarRocks 会在 MySQL OK 包的 `info` 字段中返回一条提示，提醒用户上述代价。如需关闭该提示，可将 FE 配置 `enable_non_primary_key_delete_warning` 设为 `false`。
+
+:::
+
 ### 示例
 
 #### 创建表并插入数据

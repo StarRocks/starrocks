@@ -530,6 +530,15 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Description: The maximum number of elements allowed for the IN predicate in a DELETE statement.
 - Introduced in: -
 
+### `enable_non_primary_key_delete_warning`
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: When set to `true`, a successful `DELETE` against a non-Primary-Key OLAP table (Duplicate Key, Aggregate, Unique Key) returns an informational notice in the MySQL OK packet's `info` field, reminding the user that `DELETE` writes delete predicates and incurs merge-on-read cost until base compaction runs, and recommending `ALTER TABLE ... TRUNCATE PARTITION` for bulk partition removal. Set to `false` to suppress the notice. The notice does not change DELETE semantics or affect execution; it only adds an info string visible to the client. See [DELETE](../../../sql-reference/sql-statements/table_bucket_part_index/DELETE.md) for context.
+- Introduced in: -
+
 ### `max_create_table_timeout_second`
 
 - Default: 600
