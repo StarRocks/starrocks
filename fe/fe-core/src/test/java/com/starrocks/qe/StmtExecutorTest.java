@@ -1452,4 +1452,44 @@ public class StmtExecutorTest {
         Deencapsulation.setField(executor, "catalogTypesInvolved", Sets.newHashSet("hive", "hudi"));
         Assertions.assertEquals(Sets.newHashSet("hive", "hudi"), executor.getCatalogTypesInvolved());
     }
+
+    @Test
+    public void testAttachDeleteOkInfoAppendsToExistingOk() {
+        QueryState state = new QueryState();
+        state.setOk(5L, 0, "{'label':'lbl','status':'VISIBLE','txnId':'42'}");
+        StmtExecutor.attachDeleteOkInfo(state, "DELETE on Duplicate Key table 'x' writes delete predicates");
+
+        Assertions.assertEquals(MysqlStateType.OK, state.getStateType());
+        Assertions.assertEquals(5L, state.getAffectedRows());
+        String info = state.getInfoMessage();
+        Assertions.assertTrue(info.contains("'VISIBLE'"), "should keep delete job info: " + info);
+        Assertions.assertTrue(info.contains("Duplicate Key"), "should append notice: " + info);
+    }
+
+    @Test
+    public void testAttachDeleteOkInfoUsesNoticeWhenExistingIsEmpty() {
+        QueryState state = new QueryState();
+        state.setOk(0L, 0, "");
+        StmtExecutor.attachDeleteOkInfo(state, "notice");
+        Assertions.assertEquals("notice", state.getInfoMessage());
+    }
+
+    @Test
+    public void testAttachDeleteOkInfoNoOpOnNonOkState() {
+        QueryState state = new QueryState();
+        state.setError("boom");
+        StmtExecutor.attachDeleteOkInfo(state, "notice");
+        Assertions.assertEquals(MysqlStateType.ERR, state.getStateType(),
+                "should not change a non-OK state");
+    }
+
+    @Test
+    public void testAttachDeleteOkInfoNoOpOnEmptyNotice() {
+        QueryState state = new QueryState();
+        state.setOk(0L, 0, "existing");
+        StmtExecutor.attachDeleteOkInfo(state, null);
+        Assertions.assertEquals("existing", state.getInfoMessage());
+        StmtExecutor.attachDeleteOkInfo(state, "");
+        Assertions.assertEquals("existing", state.getInfoMessage());
+    }
 }

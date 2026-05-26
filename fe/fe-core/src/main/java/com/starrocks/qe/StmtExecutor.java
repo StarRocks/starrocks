@@ -3188,10 +3188,13 @@ public class StmtExecutor {
         }
         // special handling for delete of non-primary key table, using old handler
         if (stmt instanceof DeleteStmt && ((DeleteStmt) stmt).shouldHandledByDeleteHandler()) {
+            DeleteStmt deleteStmt = (DeleteStmt) stmt;
+            String okInfo = deleteStmt.getOkInfoMessage();
             try {
-                DeleteStmt deleteStmt = (DeleteStmt) stmt;
                 context.getGlobalStateMgr().getDeleteMgr().process(deleteStmt);
-                String okInfo = deleteStmt.getOkInfoMessage();
+                // Normal-return path: process() returned without throwing (e.g., partition
+                // pruning yielded no work). Successful DELETEs that actually run a job
+                // signal completion via QueryStateException(OK) handled in the catch below.
                 if (okInfo != null && !okInfo.isEmpty()) {
                     context.getState().setOk(0, 0, okInfo);
                 } else {
@@ -3202,6 +3205,9 @@ public class StmtExecutor {
                     LOG.warn("DDL statement({}) process failed.", getRedactedOriginStmtInString(), e);
                 }
                 context.setState(e.getQueryState());
+                // DeleteMgr signals successful non-PK DELETE via QueryStateException(OK);
+                // append the non-PK notice on top of the job's existing OK info.
+                attachDeleteOkInfo(context.getState(), okInfo);
             }
             return;
         }
@@ -4033,5 +4039,22 @@ public class StmtExecutor {
             }
         }
         return ConnectContext.get().getSessionVariable().getInsertMaxFilterRatio();
+    }
+
+    // Append the non-Primary-Key DELETE notice on top of an existing OK QueryState.
+    // DeleteMgr signals successful DELETE via QueryStateException(OK, "{label,status,txnId}"),
+    // whose state replaces the executor's state in the catch block. To make the notice
+    // reach the client, we re-call setOk with the merged info string. No-op when the
+    // notice is empty or the state is not OK.
+    static void attachDeleteOkInfo(QueryState state, String okInfo) {
+        if (okInfo == null || okInfo.isEmpty()) {
+            return;
+        }
+        if (state.getStateType() != MysqlStateType.OK) {
+            return;
+        }
+        String existing = state.getInfoMessage();
+        String merged = (existing == null || existing.isEmpty()) ? okInfo : existing + "; " + okInfo;
+        state.setOk(state.getAffectedRows(), state.getWarningRows(), merged);
     }
 }
