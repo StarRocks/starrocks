@@ -99,7 +99,7 @@ The specific monitoring indicators are as follows:
 | `jvm_old_gc{type="count"}` | Full GC count.                          |
 | `jvm_old_gc{type="time"}`  | Full GC time.                           |
 
-You can also view the monitoring dashboard **FE JVM** in Grafana or Manager.
+Monitoring information for these metrics and others is at [Monitoring and alerting](../administration/management/monitoring/Monitor_and_Alert.md)
 
 Memory profile can analyze sudden heap increases. It is necessary to confirm whether it works properly after the service installation is completed.
 
@@ -117,7 +117,9 @@ proc_profile_mem_enable = true
 For versions prior to 3.3.6, you can periodically print the profile via a script. Create a new script file named `mem_profiler.sh` under the installation directory of each FE and copy the following content into the file.
 
 :::note
+
 This script has no impact on the FE process, does not affect the normal use of the service, and will automatically clean up files that have expired for 48 hours.
+
 :::
 
 ```bash
@@ -214,7 +216,7 @@ During the long-term operation of the FE, the in-heap memory usage may abnormall
 
 ### Process of On-site Investigation
 
-Log in to the FE monitoring section corresponding to Grafana or Manager.
+Open your monitoring tool: [Monitoring and alerting](../administration/management/monitoring/Monitor_and_Alert.md)
 
 **Step 1: Check the following monitoring**
 
@@ -330,10 +332,12 @@ ps aux | grep FE
 **Step 2: Use jmap**
 
 :::warning[Precautions]
+
 - `jmap -dump` will pause the FE process for a short period of time. Use with caution when high online stability is required, and it is recommended to notify in advance.
 - `jmap -histo` generally has no impact on the process; GC triggering may take dozens of milliseconds.
 - Frequent use of `-dump` to export heap files is not recommended, as it incurs significant overhead.
 - `histo` is sufficient for preliminary judgment of large objects and does not necessarily require a dump.
+
 :::
 
 **`jmap -histo:live` (Use with caution in production environments)**
@@ -436,25 +440,7 @@ ADMIN SET FRONTEND CONFIG ("proc_profile_collect_interval_s" = "300");
 
 ## Emergency Recovery
 
-**1. Restart the service**
-
-After stopping the service via Manager, click Start again.
-
-If the Manager page is inaccessible, or clicking Restart has no response, log in to the machine where the FE service is located and restart it using the `agentctl.sh` script:
-
-```bash
-./agentctl.sh
-
-# Example output:
-# agent-service                                        RUNNING   pid 1657, uptime 0:45:21
-# fe-202507111704-81ea3677000043bc867368c9bd8628ec     RUNNING   pid 1659, uptime 0:45:21
-
-supervisor> restart fe-202507111704-81ea3677000043bc867368c9bd8628ec
-# fe-202507111704-81ea3677000043bc867368c9bd8628ec: stopped
-# fe-202507111704-81ea3677000043bc867368c9bd8628ec: started
-
-supervisor> status
-```
+**1. Stop the FE service**
 
 **2. Adjust the heap memory configuration to a larger value and restart**
 
