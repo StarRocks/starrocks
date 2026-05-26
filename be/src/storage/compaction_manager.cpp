@@ -72,7 +72,7 @@ void CompactionManager::schedule() {
     DCHECK(st.ok());
 
     _dispatch_update_candidate_thread = std::thread([this] { _dispatch_worker(); });
-    Thread::set_thread_name(_dispatch_update_candidate_thread, "dispatch_candidate");
+    Thread::set_thread_name(_dispatch_update_candidate_thread, "disp_upd_cand");
 
     st = ThreadPoolBuilder("compact_pool")
                  .set_min_threads(1)

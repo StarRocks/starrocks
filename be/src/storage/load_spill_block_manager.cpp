@@ -49,13 +49,13 @@ static int calc_max_merge_blocks_thread() {
 }
 
 Status LoadSpillBlockMergeExecutor::init() {
-    RETURN_IF_ERROR(ThreadPoolBuilder("load_spill_block_merge")
+    RETURN_IF_ERROR(ThreadPoolBuilder("ld_spill_merge")
                             .set_min_threads(1)
                             .set_max_threads(calc_max_merge_blocks_thread())
                             .set_max_queue_size(40960 /*a random chosen number that should big enough*/)
                             .set_idle_timeout(MonoDelta::FromMilliseconds(/*5 minutes=*/5 * 60 * 1000))
                             .build(&_merge_pool));
-    RETURN_IF_ERROR(ThreadPoolBuilder("tablet_internal_parallel_merge")
+    RETURN_IF_ERROR(ThreadPoolBuilder("tablet_par_mrg")
                             .set_min_threads(1)
                             .set_max_threads(calc_max_merge_blocks_thread())
                             .set_max_queue_size(40960 /*a random chosen number that should big enough*/)

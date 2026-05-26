@@ -50,7 +50,7 @@ public:
     void SetUp() override {
         _publish_version_manager = starrocks::StorageEngine::instance()->publish_version_manager();
         _finish_publish_version_thread = std::thread([this] { _finish_publish_version_thread_callback(nullptr); });
-        Thread::set_thread_name(_finish_publish_version_thread, "finish_publish_version");
+        Thread::set_thread_name(_finish_publish_version_thread, "finish_pub_ver");
     }
 
     void TearDown() override {

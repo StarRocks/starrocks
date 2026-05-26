@@ -109,7 +109,7 @@ TEST_F(UniqueRowsetIdGeneratorTest, GenerateIdBenchmark) {
     UniqueId backend_uid = UniqueId::gen_uid();
     UniqueRowsetIdGenerator id_generator(backend_uid);
     std::unique_ptr<ThreadPool> pool;
-    Status s = ThreadPoolBuilder("GenerateIdBenchmark")
+    Status s = ThreadPoolBuilder("GenIdBenchmark")
                        .set_min_threads(kNumThreads)
                        .set_max_threads(kNumThreads)
                        .build(&pool);
