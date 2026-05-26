@@ -1250,7 +1250,8 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
         // race in while the version chain is still broken and queue up forever
         // waiting for the cancelled alter's missing tablet_metadata_<V>.
         // See LakeTableAlterMetaJobBase.cancelImpl for the same pattern.
-        if (force && jobState == JobState.FINISHED_REWRITING && tableExists()) {
+        boolean advanceVersionForForce = force && jobState == JobState.FINISHED_REWRITING && tableExists();
+        if (advanceVersionForForce) {
             if (!lakePublishVersionWithSkip(errMsg)) {
                 return false;
             }
@@ -1267,6 +1268,25 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
             try (WriteLockedDatabase db = getWriteLockedDatabase(dbId)) {
                 OlapTable table = (db != null) ? db.getTable(tableId) : null;
                 if (table != null) {
+                    if (advanceVersionForForce) {
+                        // We just no-op published tablet_metadata at commitVersion
+                        // on BE. FE-side partition.VisibleVersion must follow so
+                        // subsequent loads' publish base matches the BE state.
+                        // Mirrors the version bump inside removeShadowIndex's
+                        // normal FINISHED transition, but applied to the regular
+                        // (visible) partitions only — the shadow tablets that
+                        // removeShadowIndex drops below were never visible
+                        // anyway.
+                        for (PhysicalPartition physicalPartition : table.getPhysicalPartitions()) {
+                            Long commitVersion = commitVersionMap.get(physicalPartition.getId());
+                            if (commitVersion == null) {
+                                continue;
+                            }
+                            if (physicalPartition.getVisibleVersion() == commitVersion - 1) {
+                                physicalPartition.setVisibleVersion(commitVersion, finishedTimeMs);
+                            }
+                        }
+                    }
                     removeShadowIndex(table);
                 }
             }
