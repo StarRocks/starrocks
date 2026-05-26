@@ -908,6 +908,8 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
      * FINISHED_REWRITING so the operator can retry CANCEL ALTER ... FORCE.
      */
     protected boolean lakePublishVersionWithSkip(String reason) {
+        LOG.info("force-cancel no-op publish: schema change job {} watershedTxnId {} reason \"{}\"",
+                jobId, watershedTxnId, reason);
         try {
             TxnInfoPB txnInfo = new TxnInfoPB();
             txnInfo.txnId = watershedTxnId;
@@ -916,7 +918,6 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
             txnInfo.commitTime = System.currentTimeMillis() / 1000;
             txnInfo.gtid = watershedGtid;
             txnInfo.noOpPublish = true;
-            txnInfo.noOpPublishReason = reason == null ? "force cancel of schema change" : reason;
 
             for (long physicalPartitionId : physicalPartitionIndexMap.rowKeySet()) {
                 long commitVersion = commitVersionMap.get(physicalPartitionId);
