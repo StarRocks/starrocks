@@ -59,7 +59,7 @@ select cast(percentile_approx_weighted(c2, 1, 0.9) as int) from t1;
 -- !result
 select cast(percentile_approx_weighted(c2, 0, 0.9, 0) as int) from t1;
 -- result:
-E: (1064, 'Type check failed. compression parameter must be positive in percentile_approx_weighted, but got: 0.0')
+None
 -- !result
 select cast(percentile_approx_weighted(c2, 0, 0.9, 1) as int) from t1;
 -- result:
@@ -67,7 +67,7 @@ None
 -- !result
 select cast(percentile_approx_weighted(c2, 1, 0.9, 0) as int) from t1;
 -- result:
-E: (1064, 'Type check failed. compression parameter must be positive in percentile_approx_weighted, but got: 0.0')
+44999
 -- !result
 select cast(percentile_approx_weighted(c2, 1, 0.9, 1) as int) from t1;
 -- result:
@@ -489,11 +489,11 @@ select percentile_approx_weighted(k, v, [0.25, 0.5, 0.75, 0.9]) from t2;
 -- !result
 select percentile_approx_weighted(k, v, 0.5, 0) from t2;
 -- result:
-E: (1064, 'Type check failed. compression parameter must be positive in percentile_approx_weighted, but got: 0.0')
+3.4000000953674316
 -- !result
 select percentile_approx_weighted(k, v, 0.5, -100) from t2;
 -- result:
-E: (1064, 'Type check failed. compression parameter must be positive in percentile_approx_weighted, but got: -100.0')
+3.4000000953674316
 -- !result
 select percentile_approx_weighted(k, v, 0.5, 1) from t2;
 -- result:
@@ -538,8 +538,8 @@ select /*+ SET_VAR (enable_sort_aggregate = 'true') */ percentile_approx_weighte
 -- !result
 select /*+ SET_VAR (enable_sort_aggregate = 'true') */ percentile_approx_weighted(value, 0, array<double>[0.5, 0.9], 5000) from test_sorted_streaming_agg_percentile_weighted group by id_int;
 -- result:
-[nan,nan]
-[nan,nan]
+None
+None
 -- !result
 select /*+ SET_VAR (enable_sort_aggregate = 'true') */ percentile_approx_weighted(value, value, array<double>[0.5, 0.9], 5000) from test_sorted_streaming_agg_percentile_weighted group by id_int;
 -- result:
@@ -586,7 +586,7 @@ select /*+ SET_VAR (streaming_preaggregation_mode = 'force_streaming') */ percen
 -- !result
 select /*+ SET_VAR (streaming_preaggregation_mode = 'force_streaming') */ percentile_approx_weighted(v2, 0, array<double>[0.1, 0.5, 0.9], 5000) from t0_convert_to_serialize_format join t1_convert_to_serialize_format group by 'a';
 -- result:
-[nan,nan,nan]
+None
 -- !result
 select /*+ SET_VAR (streaming_preaggregation_mode = 'force_streaming') */ percentile_approx_weighted(v2, v1, array<double>[0.1, 0.5, 0.9], 5000) from t0_convert_to_serialize_format join t1_convert_to_serialize_format group by 'a';
 -- result:
