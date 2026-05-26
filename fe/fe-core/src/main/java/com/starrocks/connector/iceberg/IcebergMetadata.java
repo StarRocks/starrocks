@@ -1211,7 +1211,8 @@ public class IcebergMetadata implements ConnectorMetadata {
                     dbName, tableName, params, tableFullMORParams.getMORId(), param.getMORParams());
 
             if (!remoteFileInfoSources.containsKey(remoteFileInfoSourceKey)) {
-                IcebergRemoteSourceTrigger trigger = new IcebergRemoteSourceTrigger(baseSource, tableFullMORParams);
+                IcebergRemoteSourceTrigger trigger = new IcebergRemoteSourceTrigger(baseSource, tableFullMORParams,
+                        icebergTable.getNativeTable().specs());
                 // The tableFullMORParams we recorded are mainly used here. Scheduling of multiple
                 // split scan nodes from one table scan node is one by one. And in the IcebergRemoteSourceTrigger,
                 // multiple queues need to be filled according to different iceberg mor params when executing iceberg planing.

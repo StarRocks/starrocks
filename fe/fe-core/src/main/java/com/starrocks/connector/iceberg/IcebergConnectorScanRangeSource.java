@@ -44,6 +44,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.expression.LiteralExpr;
 import com.starrocks.sql.ast.expression.LiteralExprFactory;
 import com.starrocks.sql.ast.expression.NullLiteral;
+import com.starrocks.sql.ast.expression.VarBinaryLiteral;
 import com.starrocks.thrift.TExpr;
 import com.starrocks.thrift.TExprMinMaxValue;
 import com.starrocks.thrift.THdfsPartition;
@@ -65,13 +66,19 @@ import org.apache.iceberg.FileScanTask;
 import org.apache.iceberg.PartitionField;
 import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.StructLike;
+import org.apache.iceberg.types.Conversions;
+import org.apache.iceberg.types.Type;
 import org.apache.iceberg.types.Types;
 import org.apache.iceberg.util.ContentFileUtil;
 import org.apache.iceberg.util.StructLikeWrapper;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.io.ByteArrayOutputStream;
+import java.io.DataOutputStream;
+import java.io.IOException;
 import java.net.URLDecoder;
+import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
@@ -91,6 +98,7 @@ import java.util.stream.Collectors;
 import static com.starrocks.catalog.IcebergTable.DATA_SEQUENCE_NUMBER;
 import static com.starrocks.catalog.IcebergTable.FILE_PATH;
 import static com.starrocks.catalog.IcebergTable.LAST_UPDATED_SEQUENCE_NUMBER;
+import static com.starrocks.catalog.IcebergTable.PARTITION_ID;
 import static com.starrocks.catalog.IcebergTable.ROW_ID;
 import static com.starrocks.catalog.IcebergTable.SPEC_ID;
 import static com.starrocks.common.profile.Tracers.Module.EXTERNAL;
@@ -324,8 +332,17 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
 
     private List<TScanRangeLocations> buildDeleteFileScanRanges(FileScanTask task, Long partitionId) throws AnalysisException {
         List<TScanRangeLocations> res = new ArrayList<>();
+        Map<Integer, PartitionSpec> specs = table.getNativeTable().specs();
         for (DeleteFile file : task.deletes()) {
             if (file.content() != FileContent.EQUALITY_DELETES) {
+                continue;
+            }
+
+            // A queued data task can carry eq-delete files of other equality-id sets or the other
+            // partition scope; emit only those this leg owns. The equality-id check also matters under
+            // null-safe equals: a wrong-schema delete file would read NULLs and NULL <=> NULL would
+            // over-delete.
+            if (!morParams.matchesEqDeleteFile(file, specs)) {
                 continue;
             }
 
@@ -408,6 +425,9 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
             } else if (name.equalsIgnoreCase(SPEC_ID)) {
                 value = LiteralExprFactory.create(String.valueOf(file.specId()), IntegerType.INT);
                 setExtendedColumns(slot, extendedColumns, value);
+            } else if (name.equalsIgnoreCase(PARTITION_ID)) {
+                value = new VarBinaryLiteral(buildPartitionId(file));
+                setExtendedColumns(slot, extendedColumns, value);
             } else if (name.equalsIgnoreCase(FILE_PATH)) {
                 value = LiteralExprFactory.create(file.location(), StringType.STRING);
                 setExtendedColumns(slot, extendedColumns, value);
@@ -435,6 +455,38 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
         }
 
         return hdfsScanRange;
+    }
+
+    // Canonical, position-independent identity of (specId, partition) for $partition_id: specId, then per
+    // partition field a null marker and, if non-null, a length-prefixed Iceberg-canonical value encoding.
+    // Length prefixes keep the concatenation injective; field values use the partition-result type from
+    // spec.partitionType() (for day/bucket/truncate that differs from the source column type). Two files
+    // produce the same bytes iff Iceberg would place them in the same (specId, partition).
+    private byte[] buildPartitionId(ContentFile<?> file) {
+        PartitionSpec spec = table.getNativeTable().specs().get(file.specId());
+        StructLike partition = file.partition();
+        List<Types.NestedField> fields = spec.partitionType().fields();
+        ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+        try (DataOutputStream out = new DataOutputStream(bytes)) {
+            out.writeInt(file.specId());
+            for (int i = 0; i < fields.size(); i++) {
+                Type type = fields.get(i).type();
+                Object value = partition.get(i, type.typeId().javaClass());
+                if (value == null) {
+                    out.writeByte(0);
+                } else {
+                    out.writeByte(1);
+                    ByteBuffer buffer = Conversions.toByteBuffer(type, value).duplicate();
+                    byte[] valueBytes = new byte[buffer.remaining()];
+                    buffer.get(valueBytes);
+                    out.writeInt(valueBytes.length);
+                    out.write(valueBytes);
+                }
+            }
+        } catch (IOException e) {
+            throw new StarRocksConnectorException("failed to serialize iceberg partition id", e);
+        }
+        return bytes.toByteArray();
     }
 
     private void setExtendedColumns(SlotDescriptor slot, Map<Integer, TExpr> extendedColumns, LiteralExpr value) {

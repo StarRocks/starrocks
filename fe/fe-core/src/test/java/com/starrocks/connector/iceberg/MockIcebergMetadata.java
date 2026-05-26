@@ -51,19 +51,30 @@ import com.starrocks.type.VariantType;
 import org.apache.commons.collections4.map.CaseInsensitiveMap;
 import org.apache.iceberg.DataFile;
 import org.apache.iceberg.DataFiles;
+import org.apache.iceberg.DeleteFile;
+import org.apache.iceberg.FileContent;
+import org.apache.iceberg.FileFormat;
+import org.apache.iceberg.FileMetadata;
+import org.apache.iceberg.ManifestFile;
+import org.apache.iceberg.ManifestFiles;
+import org.apache.iceberg.ManifestReader;
 import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.Schema;
+import org.apache.iceberg.Snapshot;
 import org.apache.iceberg.Table;
 import org.apache.iceberg.TableMetadata;
 import org.apache.iceberg.types.Types;
 
 import java.io.File;
 import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.util.Arrays;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.function.Function;
@@ -80,6 +91,17 @@ public class MockIcebergMetadata implements ConnectorMetadata {
     public static final String MOCKED_UNPARTITIONED_DB_NAME = "unpartitioned_db";
     public static final String MOCKED_PARTITIONED_DB_NAME = "partitioned_db";
     public static final String MOCKED_PARTITIONED_TRANSFORMS_DB_NAME = "partitioned_transforms_db";
+    // V2 tables that carry committed equality-delete files, used by the equality-delete
+    // partition-scoping rewrite tests.
+    public static final String MOCKED_EQ_DELETE_DB_NAME = "eq_delete_db";
+
+    // equality deletes written only under an unpartitioned spec -> GLOBAL scope only.
+    public static final String MOCKED_EQ_DELETE_GLOBAL_TABLE_NAME = "eq_delete_global";
+    // equality deletes written only under a partitioned spec -> PARTITIONED scope only.
+    public static final String MOCKED_EQ_DELETE_PARTITIONED_TABLE_NAME = "eq_delete_partitioned";
+    // equality deletes under an unpartitioned spec AND (after spec evolution) a partitioned spec
+    // for the same equality-id set -> both GLOBAL and PARTITIONED scopes present.
+    public static final String MOCKED_EQ_DELETE_MIXED_TABLE_NAME = "eq_delete_mixed";
 
     public static final String MOCKED_UNPARTITIONED_TABLE_NAME0 = "t0";
     public static final String MOCKED_UNPARTITIONED_V2_TABLE_NAME = "t0_v2";
@@ -155,6 +177,7 @@ public class MockIcebergMetadata implements ConnectorMetadata {
             mockUnknownTypeTable();
             mockPartitionedTable();
             mockPartitionTransforms();
+            mockEqualityDeleteTables();
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
@@ -311,6 +334,153 @@ public class MockIcebergMetadata implements ConnectorMetadata {
             icebergTableInfoMap.put(tblName, new IcebergTableInfo(icebergTable, partitionNames,
                     100, columnStatisticMap));
         }
+    }
+
+    // Registers three V2 tables that actually carry committed equality-delete files so the
+    // IcebergEqualityDeleteRewriteRule can be exercised end-to-end:
+    //   - eq_delete_global:      delete files only under an unpartitioned spec -> GLOBAL scope.
+    //   - eq_delete_partitioned: delete files only under a partitioned spec   -> PARTITIONED scope.
+    //   - eq_delete_mixed:       delete files under both specs (after spec evolution) for the same
+    //                            equality-id set -> GLOBAL + PARTITIONED scopes.
+    // The equality key is column "id" (field id 1), deliberately NOT the partition column "p"
+    // (field id 3), so partition scoping actually matters.
+    public static void mockEqualityDeleteTables() throws IOException {
+        MOCK_TABLE_MAP.putIfAbsent(MOCKED_EQ_DELETE_DB_NAME, new CaseInsensitiveMap<>());
+        Map<String, IcebergTableInfo> icebergTableInfoMap = MOCK_TABLE_MAP.get(MOCKED_EQ_DELETE_DB_NAME);
+
+        // iceberg schema: id (1), data (2), p (3)
+        Schema schema = new Schema(
+                required(1, "id", Types.IntegerType.get()),
+                required(2, "data", Types.StringType.get()),
+                required(3, "p", Types.StringType.get()));
+        List<Column> srColumns = ImmutableList.of(
+                new Column("id", IntegerType.INT, true),
+                new Column("data", StringType.STRING, true),
+                new Column("p", StringType.STRING, true));
+        List<Column> fullSchemas = addMetaColumns(srColumns);
+        // equality field id for the "id" column.
+        int equalityFieldId = 1;
+
+        // A. GLOBAL-only: unpartitioned spec, one data file + one global equality-delete file.
+        {
+            String name = MOCKED_EQ_DELETE_GLOBAL_TABLE_NAME;
+            PartitionSpec unpartitionedSpec = PartitionSpec.builderFor(schema).build();
+            TestTables.TestTable baseTable = TestTables.create(
+                    new File(getStarRocksHome() + "/" + MOCKED_EQ_DELETE_DB_NAME + "/" + name),
+                    name, schema, unpartitionedSpec, 2);
+
+            DataFile dataFile = DataFiles.builder(unpartitionedSpec)
+                    .withPath("/path/to/" + name + "-data.parquet")
+                    .withFileSizeInBytes(10)
+                    .withRecordCount(2)
+                    .build();
+            DeleteFile eqDeleteFile = FileMetadata.deleteFileBuilder(unpartitionedSpec)
+                    .ofEqualityDeletes(equalityFieldId)
+                    .withPath("/path/to/" + name + "-eqdel.orc")
+                    .withFormat(FileFormat.ORC)
+                    .withFileSizeInBytes(10)
+                    .withRecordCount(1)
+                    .build();
+            baseTable.newAppend().appendFile(dataFile).commit();
+            baseTable.newRowDelta().addDeletes(eqDeleteFile).commit();
+
+            registerEqDeleteTable(icebergTableInfoMap, name, fullSchemas, baseTable);
+        }
+
+        // B. PARTITIONED-only: identity("p") spec, one data file + one partitioned equality-delete file.
+        {
+            String name = MOCKED_EQ_DELETE_PARTITIONED_TABLE_NAME;
+            PartitionSpec partitionedSpec = PartitionSpec.builderFor(schema).identity("p").build();
+            TestTables.TestTable baseTable = TestTables.create(
+                    new File(getStarRocksHome() + "/" + MOCKED_EQ_DELETE_DB_NAME + "/" + name),
+                    name, schema, partitionedSpec, 2);
+
+            DataFile dataFile = DataFiles.builder(partitionedSpec)
+                    .withPath("/path/to/" + name + "-data.parquet")
+                    .withFileSizeInBytes(10)
+                    .withPartitionPath("p=a")
+                    .withRecordCount(2)
+                    .build();
+            DeleteFile eqDeleteFile = FileMetadata.deleteFileBuilder(partitionedSpec)
+                    .ofEqualityDeletes(equalityFieldId)
+                    .withPath("/path/to/" + name + "-eqdel.orc")
+                    .withFormat(FileFormat.ORC)
+                    .withFileSizeInBytes(10)
+                    .withPartitionPath("p=a")
+                    .withRecordCount(1)
+                    .build();
+            baseTable.newAppend().appendFile(dataFile).commit();
+            baseTable.newRowDelta().addDeletes(eqDeleteFile).commit();
+
+            registerEqDeleteTable(icebergTableInfoMap, name, fullSchemas, baseTable);
+        }
+
+        // C. MIXED + spec evolution: start unpartitioned, commit a global equality-delete, then evolve
+        // the spec to identity("p") and commit a partitioned equality-delete for the same equality-id.
+        {
+            String name = MOCKED_EQ_DELETE_MIXED_TABLE_NAME;
+            PartitionSpec unpartitionedSpec = PartitionSpec.builderFor(schema).build();
+            TestTables.TestTable baseTable = TestTables.create(
+                    new File(getStarRocksHome() + "/" + MOCKED_EQ_DELETE_DB_NAME + "/" + name),
+                    name, schema, unpartitionedSpec, 2);
+
+            DataFile globalDataFile = DataFiles.builder(unpartitionedSpec)
+                    .withPath("/path/to/" + name + "-data-global.parquet")
+                    .withFileSizeInBytes(10)
+                    .withRecordCount(2)
+                    .build();
+            DeleteFile globalEqDeleteFile = FileMetadata.deleteFileBuilder(unpartitionedSpec)
+                    .ofEqualityDeletes(equalityFieldId)
+                    .withPath("/path/to/" + name + "-eqdel-global.orc")
+                    .withFormat(FileFormat.ORC)
+                    .withFileSizeInBytes(10)
+                    .withRecordCount(1)
+                    .build();
+            baseTable.newAppend().appendFile(globalDataFile).commit();
+            baseTable.newRowDelta().addDeletes(globalEqDeleteFile).commit();
+
+            // Evolve the spec: now identity("p") becomes a new spec with a non-zero specId.
+            baseTable.updateSpec().addField("p").commit();
+            PartitionSpec partitionedSpec = baseTable.specs().values().stream()
+                    .filter(s -> !s.isUnpartitioned())
+                    .findFirst()
+                    .orElseThrow(() -> new IllegalStateException("expected a partitioned spec after evolution"));
+
+            DataFile partitionedDataFile = DataFiles.builder(partitionedSpec)
+                    .withPath("/path/to/" + name + "-data-part.parquet")
+                    .withFileSizeInBytes(10)
+                    .withPartitionPath("p=a")
+                    .withRecordCount(2)
+                    .build();
+            DeleteFile partitionedEqDeleteFile = FileMetadata.deleteFileBuilder(partitionedSpec)
+                    .ofEqualityDeletes(equalityFieldId)
+                    .withPath("/path/to/" + name + "-eqdel-part.orc")
+                    .withFormat(FileFormat.ORC)
+                    .withFileSizeInBytes(10)
+                    .withPartitionPath("p=a")
+                    .withRecordCount(1)
+                    .build();
+            baseTable.newAppend().appendFile(partitionedDataFile).commit();
+            baseTable.newRowDelta().addDeletes(partitionedEqDeleteFile).commit();
+
+            registerEqDeleteTable(icebergTableInfoMap, name, fullSchemas, baseTable);
+        }
+    }
+
+    private static void registerEqDeleteTable(Map<String, IcebergTableInfo> icebergTableInfoMap,
+                                              String name,
+                                              List<Column> fullSchemas,
+                                              TestTables.TestTable baseTable) {
+        MockIcebergTable mockIcebergTable = new MockIcebergTable(name.hashCode(), name,
+                MOCKED_ICEBERG_CATALOG_NAME, null, MOCKED_EQ_DELETE_DB_NAME,
+                name, fullSchemas, baseTable, null, "");
+
+        List<String> colNames = fullSchemas.stream().map(Column::getName).collect(Collectors.toList());
+        Map<String, ColumnStatistic> columnStatisticMap = colNames.stream().collect(Collectors.toMap(
+                Function.identity(), col -> ColumnStatistic.unknown()));
+
+        icebergTableInfoMap.put(name,
+                new IcebergTableInfo(mockIcebergTable, Lists.newArrayList(), 100, columnStatisticMap));
     }
 
     private static List<Column> getPartitionedTableSchema(String tblName) {
@@ -612,6 +782,33 @@ public class MockIcebergMetadata implements ConnectorMetadata {
         }
     }
 
+    // Mirrors IcebergMetadata#getDeleteFiles for the mock by reading the requested delete-file content
+    // straight from the native table's delete manifests. Returns empty for tables without delete
+    // manifests, so existing mock tables and other tests are unaffected.
+    @Override
+    public Set<DeleteFile> getDeleteFiles(IcebergTable icebergTable, Long snapshotId,
+                                          ScalarOperator predicate, FileContent content) {
+        Table table = icebergTable.getNativeTable();
+        Snapshot snapshot = (snapshotId != null) ? table.snapshot(snapshotId) : table.currentSnapshot();
+        Set<DeleteFile> result = new HashSet<>();
+        if (snapshot == null) {
+            return result;
+        }
+        for (ManifestFile manifestFile : snapshot.deleteManifests(table.io())) {
+            try (ManifestReader<DeleteFile> reader =
+                         ManifestFiles.readDeleteManifest(manifestFile, table.io(), table.specs())) {
+                for (DeleteFile deleteFile : reader) {
+                    if (deleteFile.content() == content) {
+                        result.add(deleteFile.copy());
+                    }
+                }
+            } catch (IOException e) {
+                throw new UncheckedIOException(e);
+            }
+        }
+        return result;
+    }
+
     @Override
     public List<String> listPartitionNames(String dbName, String tableName, ConnectorMetadataRequestContext requestContext) {
         readLock();
@@ -649,12 +846,19 @@ public class MockIcebergMetadata implements ConnectorMetadata {
     // no bounds -> current snapshot; any bound -> TvrTableDelta so time-travel/delta tests keep the
     // correct TVR shape. Only VERSION pointers are resolvable here; TEMPORAL would need a snapshot
     // history that the mock does not carry.
+    // The equality-delete mock DB is special: its rewrite reads the scan's TVR end snapshot id and
+    // looks it up on the native table, so it needs the real currentSnapshot() id rather than the
+    // synthetic V1 of getCurrentTvrSnapshot.
     @Override
     public TvrVersionRange getTableVersionRange(
             String dbName, com.starrocks.catalog.Table table,
             Optional<ConnectorTableVersion> startVersion,
             Optional<ConnectorTableVersion> endVersion) {
         if (startVersion.isEmpty() && endVersion.isEmpty()) {
+            if (MOCKED_EQ_DELETE_DB_NAME.equals(dbName)) {
+                Snapshot snapshot = ((IcebergTable) table).getNativeTable().currentSnapshot();
+                return TvrTableSnapshot.of(Optional.ofNullable(snapshot).map(Snapshot::snapshotId));
+            }
             return getCurrentTvrSnapshot(dbName, table);
         }
         Optional<Long> start = startVersion.map(MockIcebergMetadata::snapshotIdFromVersion);
