@@ -66,23 +66,6 @@ struct TAuthenticateParams {
     5: optional list<string> table_names;
 }
 
-// Lightweight password + privilege check used by BE admin HTTP endpoints
-// (e.g. /api/_stop_be). The BE forwards the HTTP Basic Auth credentials it
-// received, plus the system-level privilege the endpoint requires; FE
-// validates the password and the privilege and returns a TStatus.
-struct TCheckAuthRequest {
-    1: optional string user
-    2: optional string passwd
-    3: optional string host
-    // Name of a PrivilegeType enum value (e.g. "NODE", "OPERATE", "ADMIN")
-    // that must be granted on the SYSTEM object.
-    4: optional string required_system_privilege
-}
-
-struct TCheckAuthResponse {
-    1: optional Status.TStatus status
-}
-
 struct TColumnDesc {
   1: required string columnName
   2: required Types.TPrimitiveType columnType
@@ -2549,8 +2532,4 @@ service FrontendService {
     TBatchGetTableSchemaResponse getTableSchema(1: TBatchGetTableSchemaRequest request)
 
     TBatchGetTabletMetadataResponse getTabletMetadata(1: optional TBatchGetTabletMetadataRequest request)
-
-    // Validate user/password and a system-level privilege for BE admin HTTP
-    // endpoints. The BE forwards the HTTP Basic Auth credentials it received.
-    TCheckAuthResponse checkAuth(1: optional TCheckAuthRequest request)
 }
