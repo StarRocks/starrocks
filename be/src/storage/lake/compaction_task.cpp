@@ -14,6 +14,8 @@
 
 #include "storage/lake/compaction_task.h"
 
+#include <bvar/bvar.h>
+
 #include "common/config_compaction_fwd.h"
 #include "common/config_primary_key_fwd.h"
 #include "gen_cpp/lake_types.pb.h"
@@ -22,8 +24,17 @@
 #include "storage/lake/tablet_reshard_helper.h"
 #include "storage/lake/tablet_writer.h"
 #include "storage/lake/update_manager.h"
+#include "storage/storage_metrics.h"
 
 namespace starrocks::lake {
+
+// Distribution of output segment file sizes (bytes) produced by lake compaction. Exposed via
+// the BE metrics endpoint as gauge series (count, percentiles, max) under this name.
+static bvar::LatencyRecorder g_lake_compaction_output_segment_size_bytes("lake_compaction_output_segment_size_bytes");
+
+int64_t lake_compaction_output_segment_size_recorded_count() {
+    return g_lake_compaction_output_segment_size_bytes.count();
+}
 
 CompactionTask::CompactionTask(VersionedTablet tablet, std::vector<std::shared_ptr<Rowset>> input_rowsets,
                                CompactionTaskContext* context, std::shared_ptr<const TabletSchema> tablet_schema)
@@ -112,6 +123,24 @@ Status CompactionTask::fill_compaction_segment_info(TxnLogPB_OpCompaction* op_co
     // from inputs, so it must never alias an input's uid even if one is ever
     // copied in. Matches tablet_parallel_compaction_manager's merged output.
     tablet_reshard_helper::set_rowset_uid(op_compaction->mutable_output_rowset());
+
+    // Observability: record output segment sizes and count the object-storage PUT calls this
+    // compaction issued. Each newly written file (segment, sst, .lcrm) maps to one PUT here;
+    // the txn log PUT is counted at the put_txn_log call site in the concrete tasks. These are
+    // the files the writer actually produced, so this is correct for both the full-compaction
+    // and partial-compaction branches above.
+    int64_t put_count = 0;
+    for (const auto& file : writer->segments()) {
+        if (file.size.has_value()) {
+            g_lake_compaction_output_segment_size_bytes << file.size.value();
+        }
+        ++put_count;
+    }
+    put_count += static_cast<int64_t>(writer->ssts().size());
+    if (is_lcrm(writer->lcrm_file().path)) {
+        ++put_count;
+    }
+    StorageMetrics::instance()->lake_compaction_s3_put_count.increment(put_count);
     return Status::OK();
 }
 

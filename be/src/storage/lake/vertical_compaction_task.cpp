@@ -37,6 +37,7 @@
 #include "storage/lake/update_manager.h"
 #include "storage/rowset/column_reader.h"
 #include "storage/storage_engine.h"
+#include "storage/storage_metrics.h"
 #include "storage/tablet_reader_params.h"
 
 namespace starrocks::lake {
@@ -115,6 +116,10 @@ Status VerticalCompactionTask::execute(CancelFunc cancel_func, ThreadPool* flush
         _context->txn_log = txn_log;
     } else {
         RETURN_IF_ERROR(_tablet.tablet_manager()->put_txn_log(txn_log));
+        // The txn log write is one object-storage PUT; segment/sst/lcrm PUTs are counted in
+        // fill_compaction_segment_info(). When skip_write_txnlog is set the write is deferred to
+        // the caller, so it is not counted here.
+        StorageMetrics::instance()->lake_compaction_s3_put_count.increment(1);
     }
     if (_tablet_schema->keys_type() == KeysType::PRIMARY_KEYS) {
         // preload primary key table's compaction state
