@@ -19,7 +19,7 @@ ARG prebuild_maven=false
 # value: true | false
 # default: false
 ARG predownload_thirdparty=false
-ARG thirdparty_url=https://cdn-thirdparty.starrocks.com/starrocks-thirdparty-main-20250731.tar
+ARG thirdparty_url=https://cdn-thirdparty.starrocks.com/starrocks-thirdparty-main-20260526.tar
 ARG commit_id
 # check thirdparty/starlet-artifacts-version.sh, to get the right tag
 ARG starlet_tag=v4.2-rc1

@@ -14,8 +14,8 @@
 
 if (ENABLE_MULTI_DYNAMIC_LIBS)
     add_library(LLVM SHARED IMPORTED)
-    set_target_properties(LLVM PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/llvm/lib/libLLVM-16.so)
-    install(FILES ${THIRDPARTY_DIR}/llvm/lib/libLLVM-16.so DESTINATION ${OUTPUT_DIR}/lib)
+    set_target_properties(LLVM PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/llvm/lib/libLLVM-18.so)
+    install(FILES ${THIRDPARTY_DIR}/llvm/lib/libLLVM-18.so DESTINATION ${OUTPUT_DIR}/lib)
     set (LLVM_LIBRARIES LLVM)
 else()
     set (LLVM_LIBRARIES
@@ -65,6 +65,14 @@ else()
         LLVMSelectionDAG
         LLVMMCParser
         LLVMSupport
+        # LLVM 18 OrcJIT pulls in COFFVCRuntimeBootstrapper which references
+        # llvm::findVCToolChain* defined in LLVMWindowsDriver. The COFF code
+        # is unreachable on Linux but the symbols must still resolve at link.
+        LLVMWindowsDriver
+        # LLVM 18 split these out of LLVMCodeGen / LLVMipo / pass plugins:
+        LLVMCodeGenTypes
+        LLVMFrontendOffloading
+        LLVMHipStdPar
     )
 
     if ("${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "x86" OR "${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "x86_64")

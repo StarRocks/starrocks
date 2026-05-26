@@ -30,18 +30,16 @@
 #include <llvm/IR/PassManager.h>
 #include <llvm/IR/Verifier.h>
 #include <llvm/Linker/Linker.h>
-#include <llvm/MC/SubtargetFeature.h>
 #include <llvm/MC/TargetRegistry.h>
 #include <llvm/Passes/PassBuilder.h>
 #include <llvm/Passes/PassPlugin.h>
 #include <llvm/Support/Error.h>
-#include <llvm/Support/Host.h>
 #include <llvm/Support/MemoryBuffer.h>
 #include <llvm/Support/TargetSelect.h>
 #include <llvm/Support/raw_ostream.h>
+#include <llvm/TargetParser/Host.h>
 #include <llvm/Transforms/IPO.h>
 #include <llvm/Transforms/IPO/GlobalOpt.h>
-#include <llvm/Transforms/IPO/PassManagerBuilder.h>
 #include <llvm/Transforms/InstCombine/InstCombine.h>
 #include <llvm/Transforms/Scalar.h>
 #include <llvm/Transforms/Scalar/GVN.h>
@@ -50,7 +48,6 @@
 #include <llvm/Transforms/Utils.h>
 #include <llvm/Transforms/Utils/Cloning.h>
 #include <llvm/Transforms/Utils/Mem2Reg.h>
-#include <llvm/Transforms/Vectorize.h>
 #include <llvm/Transforms/Vectorize/LoopVectorize.h>
 #include <llvm/Transforms/Vectorize/SLPVectorizer.h>
 
@@ -79,9 +76,9 @@ static inline Status generate_scalar_function_ir(ExprContext* context, llvm::Mod
     /// Create function type.
     auto* size_type = b.getInt64Ty();
     // Same with JITColumn.
-    auto* data_type = llvm::StructType::get(b.getInt8PtrTy(), b.getInt8PtrTy());
+    auto* data_type = llvm::StructType::get(b.getPtrTy(), b.getPtrTy());
     // Same with JITScalarFunction.
-    auto* func_type = llvm::FunctionType::get(b.getVoidTy(), {size_type, data_type->getPointerTo()}, false);
+    auto* func_type = llvm::FunctionType::get(b.getVoidTy(), {size_type, b.getPtrTy()}, false);
 
     /// Create function in module.
     // Pseudo code: void "expr->jit_expr_name"(int64_t rows_count, JITColumn* columns);
@@ -156,15 +153,14 @@ StatusOr<T> as_JIT_result(llvm::Expected<T>& expected, const std::string& error_
 
 StatusOr<llvm::orc::JITTargetMachineBuilder> make_target_machine_builder() {
     llvm::orc::JITTargetMachineBuilder jtmb((llvm::Triple(llvm::sys::getDefaultTargetTriple())));
-    auto const opt_level = llvm::CodeGenOpt::Aggressive; // or llvm::CodeGenOpt::None;
+    auto const opt_level = llvm::CodeGenOptLevel::Aggressive; // or llvm::CodeGenOptLevel::None;
     jtmb.setCodeGenOptLevel(opt_level);
     return jtmb;
 }
 
 void add_absolute_symbol(llvm::orc::LLJIT& lljit, const std::string& name, void* function_ptr) {
     llvm::orc::MangleAndInterner mangle(lljit.getExecutionSession(), lljit.getDataLayout());
-    llvm::JITEvaluatedSymbol symbol(reinterpret_cast<llvm::JITTargetAddress>(function_ptr),
-                                    llvm::JITSymbolFlags::Exported);
+    llvm::orc::ExecutorSymbolDef symbol(llvm::orc::ExecutorAddr::fromPtr(function_ptr), llvm::JITSymbolFlags::Exported);
     auto error = lljit.getMainJITDylib().define(llvm::orc::absoluteSymbols({{mangle(name), symbol}}));
     llvm::cantFail(std::move(error));
 }
@@ -233,29 +229,6 @@ Status use_JIT_link(llvm::orc::LLJITBuilder& jit_builder, llvm::jitlink::JITLink
         return std::make_unique<llvm::orc::ObjectLinkingLayer>(ES, memory_manager);
     });
     return Status::OK();
-}
-
-StatusOr<std::unique_ptr<llvm::orc::LLJIT>> build_JIT(llvm::orc::JITTargetMachineBuilder jtmb,
-                                                      JITObjectCache& object_cache,
-                                                      llvm::jitlink::JITLinkMemoryManager& memory_manager) {
-    llvm::orc::LLJITBuilder jit_builder;
-    RETURN_IF_ERROR(use_JIT_link(jit_builder, memory_manager));
-    jit_builder.setJITTargetMachineBuilder(std::move(jtmb));
-    jit_builder.setCompileFunctionCreator(
-            [&object_cache](llvm::orc::JITTargetMachineBuilder JTMB)
-                    -> llvm::Expected<std::unique_ptr<llvm::orc::IRCompileLayer::IRCompiler>> {
-                auto target_machine = JTMB.createTargetMachine();
-                if (!target_machine) {
-                    return target_machine.takeError();
-                }
-                // after compilation, the object code will be stored into the given object cache
-                return std::make_unique<llvm::orc::TMOwningSimpleCompiler>(std::move(*target_machine), &object_cache);
-            });
-
-    auto maybe_jit = jit_builder.create();
-    ASSIGN_OR_RETURN(auto jit, as_JIT_result(maybe_jit, "Could not create LLJIT instance: "));
-    add_process_symbol(*jit);
-    return std::move(jit);
 }
 
 static inline void optimize_module(llvm::Module& module, llvm::TargetIRAnalysis target_analysis) {
@@ -350,6 +323,29 @@ public:
 private:
     ShardedLRUCache _cache;
 };
+
+StatusOr<std::unique_ptr<llvm::orc::LLJIT>> build_JIT(llvm::orc::JITTargetMachineBuilder jtmb,
+                                                      JITObjectCache& object_cache,
+                                                      llvm::jitlink::JITLinkMemoryManager& memory_manager) {
+    llvm::orc::LLJITBuilder jit_builder;
+    RETURN_IF_ERROR(use_JIT_link(jit_builder, memory_manager));
+    jit_builder.setJITTargetMachineBuilder(std::move(jtmb));
+    jit_builder.setCompileFunctionCreator(
+            [&object_cache](llvm::orc::JITTargetMachineBuilder JTMB)
+                    -> llvm::Expected<std::unique_ptr<llvm::orc::IRCompileLayer::IRCompiler>> {
+                auto target_machine = JTMB.createTargetMachine();
+                if (!target_machine) {
+                    return target_machine.takeError();
+                }
+                // after compilation, the object code will be stored into the given object cache
+                return std::make_unique<llvm::orc::TMOwningSimpleCompiler>(std::move(*target_machine), &object_cache);
+            });
+
+    auto maybe_jit = jit_builder.create();
+    ASSIGN_OR_RETURN(auto jit, as_JIT_result(maybe_jit, "Could not create LLJIT instance: "));
+    add_process_symbol(*jit);
+    return std::move(jit);
+}
 
 size_t JITCallable::getSize() {
     return _mem_mgr->getSize();
