@@ -107,6 +107,7 @@ CMakeLists.txt
 .clangd
 .cursor/
 .codex/
+.codex
 .worktrees/
 handbook/plans/local/
 

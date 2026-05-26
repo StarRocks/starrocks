@@ -120,6 +120,10 @@ public abstract class BulkLoadJob extends LoadJob {
             sessionVariables.put(SessionVariable.SQL_MODE, Long.toString(var.getSqlMode()));
             sessionVariables.put(SessionVariable.LOAD_TRANSMISSION_COMPRESSION_TYPE,
                     var.getloadTransmissionCompressionType());
+            // Persist the per-session Sample-Based Tablet Pre-Split opt-out so a load submitted
+            // with `SET enable_tablet_pre_split = false` still honors that intent after FE failover.
+            sessionVariables.put(SessionVariable.ENABLE_TABLET_PRE_SPLIT,
+                    Boolean.toString(var.isEnableTabletPreSplit()));
             sessionVariables.put(CURRENT_QUALIFIED_USER_KEY, ConnectContext.get().getQualifiedUser());
             sessionVariables.put(CURRENT_USER_IDENT_KEY, ConnectContext.get().getCurrentUserIdentity().toString());
         } else {

@@ -43,6 +43,7 @@ import com.google.common.collect.Sets;
 import com.google.common.primitives.Ints;
 import com.google.gson.Gson;
 import com.starrocks.alter.AlterJobException;
+import com.starrocks.alter.reshard.presplit.InsertFromFilesPreSplitHook;
 import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.authorization.ObjectType;
 import com.starrocks.authorization.PrivilegeException;
@@ -850,6 +851,8 @@ public class StmtExecutor {
                         }
                     }
                 } else {
+                    // Sample-Based Tablet Pre-Split runs pre-plan; see InsertFromFilesPreSplitHook for rationale.
+                    InsertFromFilesPreSplitHook.maybeRunPreSplit(parsedStmt, context);
                     execPlan = StatementPlanner.plan(parsedStmt, context);
                     if (parsedStmt instanceof QueryStatement && context.shouldDumpQuery()) {
                         context.getDumpInfo().setExplainInfo(execPlan.getExplainString(TExplainLevel.COSTS));

@@ -910,6 +910,12 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 * 默认值：true
 * 引入版本：v2.3
 
+### enable_tablet_pre_split
+
+* 描述：基于采样的 Tablet 预分裂（Sample-Based Tablet Pre-Split）的会话级开关。默认 `true`，因此主开关由 FE 配置 `enable_tablet_pre_split_for_*` 控制。对于不希望被预分裂干扰的会话，可将其设为 `false`。预分裂需同时满足对应 FE 配置和该会话变量都为 `true`。
+* 默认值：true
+* 引入版本：v4.1.0
+
 ### enable_topn_runtime_filter
 
 * 描述: 是否启用 TopN Runtime Filter。如果启用此功能，对于 ORDER BY LIMIT 查询，将动态构建一个 Runtime Filter 并将其下推到 Scan 阶段进行过滤。
