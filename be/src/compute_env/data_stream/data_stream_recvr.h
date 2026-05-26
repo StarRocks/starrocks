@@ -41,12 +41,12 @@
 #include "common/object_pool.h"
 #include "common/runtime_profile.h"
 #include "common/status.h"
+#include "compute_env/data_stream/local_pass_through_buffer.h"
 #include "compute_env/pipeline/observer.h"
 #include "compute_env/sorting/merge_path.h"
 #include "exec/pipeline/pipeline_fwd.h"
 #include "gen_cpp/Types_types.h" // for TUniqueId
 #include "runtime/descriptors.h"
-#include "runtime/local_pass_through_buffer.h"
 #include "runtime/query_statistics.h"
 
 namespace google::protobuf {
@@ -60,10 +60,10 @@ class CascadeChunkMerger;
 class ChunkMerger;
 
 class DataStreamMgr;
+class ExprContext;
 class MemTracker;
 class RuntimeProfile;
 class PTransmitChunkParams;
-class SortExecExprs;
 
 // Single receiver of an m:n data stream.
 // DataStreamRecvr maintains one or more queues of row batches received by a
@@ -103,9 +103,11 @@ public:
     // Create a SortedRunMerger instance to merge rows from multiple sender according to the
     // specified row comparator. Fetches the first batches from the individual sender
     // queues. The exprs used in less_than must have already been prepared and opened.
-    Status create_merger(RuntimeState* state, RuntimeProfile* profile, const SortExecExprs* exprs,
-                         const std::vector<bool>* is_asc, const std::vector<bool>* is_null_first);
-    Status create_merger_for_pipeline(RuntimeState* state, const SortExecExprs* exprs, const std::vector<bool>* is_asc,
+    Status create_merger(RuntimeState* state, RuntimeProfile* profile,
+                         const std::vector<ExprContext*>& ordering_expr_ctxs, const std::vector<bool>* is_asc,
+                         const std::vector<bool>* is_null_first);
+    Status create_merger_for_pipeline(RuntimeState* state, const std::vector<ExprContext*>& ordering_expr_ctxs,
+                                      bool is_constant_ordering, const std::vector<bool>* is_asc,
                                       const std::vector<bool>* is_null_first);
 
     std::vector<merge_path::MergePathChunkProvider> create_merge_path_chunk_providers();
@@ -135,7 +137,7 @@ public:
 
     bool get_encode_level() const { return _encode_level; }
 
-    void attach_query_ctx(pipeline::QueryContext* query_ctx);
+    void attach_query_ctx(const pipeline::QueryContextPtr& query_ctx);
     void attach_observer(RuntimeState* state, pipeline::PipelineObserver* observer) {
         _observable.add_observer(state, observer);
     }

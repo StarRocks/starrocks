@@ -32,7 +32,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "runtime/data_stream_recvr.h"
+#include "compute_env/data_stream/data_stream_recvr.h"
 
 #include <condition_variable>
 #include <deque>
@@ -44,24 +44,23 @@
 #include "base/time/time.h"
 #include "base/utility/defer_op.h"
 #include "column/chunk.h"
+#include "common/logging.h"
 #include "common/runtime_profile.h"
 #include "common/util/debug_util.h"
+#include "compute_env/data_stream/data_stream_mgr.h"
+#include "compute_env/data_stream/sender_queue.h"
 #include "compute_env/sorting/sort_cursor.h"
 #include "compute_env/sorting/sorted_chunks_merger.h"
-#include "exec/pipeline/query_context.h"
-#include "exec/sort_exec_exprs.h"
 #include "gen_cpp/data.pb.h"
 #include "gen_cpp/internal_service.pb.h"
 #include "runtime/current_thread.h"
-#include "runtime/data_stream_mgr.h"
-#include "runtime/exec_env.h"
+#include "runtime/env/global_env.h"
 #include "runtime/runtime_state.h"
-#include "runtime/sender_queue.h"
-#include "util/logging.h"
 
 namespace starrocks {
 
-Status DataStreamRecvr::create_merger(RuntimeState* state, RuntimeProfile* profile, const SortExecExprs* exprs,
+Status DataStreamRecvr::create_merger(RuntimeState* state, RuntimeProfile* profile,
+                                      const std::vector<ExprContext*>& ordering_expr_ctxs,
                                       const std::vector<bool>* is_asc, const std::vector<bool>* is_null_first) {
     DCHECK(_is_merging);
     _chunks_merger = std::make_unique<SortedChunksMerger>(state, _keep_order);
@@ -85,17 +84,18 @@ Status DataStreamRecvr::create_merger(RuntimeState* state, RuntimeProfile* profi
     }
 
     RETURN_IF_ERROR(_chunks_merger->init(chunk_suppliers, chunk_probe_suppliers, chunk_has_suppliers,
-                                         &(exprs->lhs_ordering_expr_ctxs()), is_asc, is_null_first));
+                                         &ordering_expr_ctxs, is_asc, is_null_first));
     _chunks_merger->set_profile(profile);
     return Status::OK();
 }
 
-Status DataStreamRecvr::create_merger_for_pipeline(RuntimeState* state, const SortExecExprs* exprs,
-                                                   const std::vector<bool>* is_asc,
+Status DataStreamRecvr::create_merger_for_pipeline(RuntimeState* state,
+                                                   const std::vector<ExprContext*>& ordering_expr_ctxs,
+                                                   bool is_constant_ordering, const std::vector<bool>* is_asc,
                                                    const std::vector<bool>* is_null_first) {
     DCHECK(_is_merging);
     _chunks_merger = nullptr;
-    if (exprs->is_constant_lhs_ordering()) {
+    if (is_constant_ordering) {
         _cascade_merger = std::make_unique<ConstChunkMerger>(state);
     } else {
         _cascade_merger = std::make_unique<CascadeChunkMerger>(state);
@@ -121,7 +121,7 @@ Status DataStreamRecvr::create_merger_for_pipeline(RuntimeState* state, const So
         };
         providers.push_back(std::move(provider));
     }
-    RETURN_IF_ERROR(_cascade_merger->init(providers, &(exprs->lhs_ordering_expr_ctxs()), is_asc, is_null_first));
+    RETURN_IF_ERROR(_cascade_merger->init(providers, &ordering_expr_ctxs, is_asc, is_null_first));
     return Status::OK();
 }
 
@@ -214,9 +214,9 @@ void DataStreamRecvr::bind_profile(int32_t driver_sequence, const std::shared_pt
             "PeakBufferMemoryBytes", TUnit::BYTES, RuntimeProfile::Counter::create_strategy(TUnit::BYTES));
 }
 
-void DataStreamRecvr::attach_query_ctx(pipeline::QueryContext* query_ctx) {
+void DataStreamRecvr::attach_query_ctx(const pipeline::QueryContextPtr& query_ctx) {
     if (_query_ctx.use_count() == 0) {
-        _query_ctx = query_ctx->get_shared_ptr();
+        _query_ctx = query_ctx;
     }
 }
 
