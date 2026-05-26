@@ -519,11 +519,8 @@ TEST(LakeReplicationTaskRunnerTest, test_should_use_parallel_copy_can_disable_by
     config::lake_replication_parallel_copy_min_file_count = 0;
 
     std::unique_ptr<ThreadPool> pool;
-    ASSERT_OK(ThreadPoolBuilder("lake_par_dis")
-                      .set_min_threads(1)
-                      .set_max_threads(1)
-                      .set_max_queue_size(8)
-                      .build(&pool));
+    ASSERT_OK(
+            ThreadPoolBuilder("lake_par_dis").set_min_threads(1).set_max_threads(1).set_max_queue_size(8).build(&pool));
 
     EXPECT_FALSE(LakeReplicationTxnManager::should_use_parallel_copy(100, pool.get()));
     pool->shutdown();
