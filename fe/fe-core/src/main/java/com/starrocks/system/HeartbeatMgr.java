@@ -78,6 +78,7 @@ import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 
 /**
@@ -89,7 +90,9 @@ public class HeartbeatMgr extends LeaderDaemon {
     private static final AtomicReference<TMasterInfo> MASTER_INFO = new AtomicReference<>();
 
     private final boolean needRegisterMetric;
-    private volatile ExecutorService executor;
+    // Package-private so same-package tests can swap in a stuck pool to exercise the
+    // restart guard without reflection.
+    volatile ExecutorService executor;
 
     public HeartbeatMgr(boolean needRegisterMetric) {
         super("heartbeat-mgr", Config.heartbeat_timeout_second * 1000L);
@@ -98,6 +101,14 @@ public class HeartbeatMgr extends LeaderDaemon {
 
     @Override
     public synchronized void start() {
+        // Refuse to overlap with a previous pool that has not finished draining: isShutdown()
+        // becomes true before in-flight heartbeat RPCs actually return, so a fast
+        // demote/re-elect can put two heartbeat-sender generations against the same backends.
+        // Mirrors the BatchWriteMgr / AlterHandler restart guard.
+        if (executor != null && executor.isShutdown() && !executor.isTerminated()) {
+            throw new IllegalStateException(
+                    "HeartbeatMgr executor has not terminated; refuse to restart");
+        }
         if (executor == null || executor.isShutdown()) {
             executor = ThreadPoolManager.newDaemonFixedThreadPool(Config.heartbeat_mgr_threads_num,
                     Config.heartbeat_mgr_blocking_queue_size, "heartbeat-mgr-pool", needRegisterMetric);
@@ -107,10 +118,23 @@ public class HeartbeatMgr extends LeaderDaemon {
 
     @Override
     protected synchronized void onStopped() {
+        // shutdownNow() interrupts in-flight heartbeat RPCs, then await termination boundedly
+        // so a subsequent start() does not race a still-alive sender against a freshly created
+        // pool. The executor reference is kept on timeout so the restart guard in start()
+        // fires; on successful drain start() will see isShutdown() and rebuild.
         ExecutorService e = executor;
-        if (e != null) {
-            e.shutdownNow();
-            executor = null;
+        if (e == null) {
+            return;
+        }
+        e.shutdownNow();
+        long timeoutMs = Math.max(1000L, Config.leader_demotion_drain_timeout_sec * 1000L);
+        try {
+            if (!e.awaitTermination(timeoutMs, TimeUnit.MILLISECONDS)) {
+                LOG.warn("HeartbeatMgr executor did not terminate within drain timeout");
+            }
+        } catch (InterruptedException ie) {
+            Thread.currentThread().interrupt();
+            LOG.warn("Interrupted while waiting for HeartbeatMgr executor to terminate");
         }
     }
 
