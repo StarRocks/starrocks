@@ -545,7 +545,21 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
                         return false;
                     } else {
                         updateErrorInfo(errMsg);
+                        // When force-cancelling out of FINISHED_REWRITING, we just
+                        // wrote no-op metadata at commitVersion on BE. FE's
+                        // partition.VisibleVersion must be advanced to match —
+                        // otherwise the next load's publish will compute base from
+                        // the stale FE-visible version (= commitVersion-1) and
+                        // BE will still try to apply the cancelled alter's
+                        // txn_log when materializing the load's new version. The
+                        // updateVisibleVersion() call mirrors what the normal
+                        // FINISHED_REWRITING → FINISHED transition does, just
+                        // moved into the cancel callback.
+                        boolean advanceVersionForForce = (jobState == JobState.FINISHED_REWRITING) && force;
                         persistStateChange(this, JobState.CANCELLED, () -> {
+                            if (advanceVersionForForce) {
+                                updateVisibleVersion(table);
+                            }
                             table.setState(OlapTable.OlapTableState.NORMAL);
                         });
                     }
