@@ -680,12 +680,14 @@ void ExecEnv::destroy() {
     }
     SAFE_DELETE(_rejected_record_sync_daemon);
     SAFE_DELETE(_load_path_mgr);
-    if (_compute_env) {
-        _compute_env->destroy();
-    }
     SAFE_DELETE(_query_context_mgr);
     _workgroup_manager->destroy();
     _workgroup_manager.reset();
+    // Query/workgroup teardown can release FragmentContext state that still uses
+    // ComputeEnv-owned timers and pass-through stream buffers.
+    if (_compute_env) {
+        _compute_env->destroy();
+    }
 
     if (_lake_tablet_manager != nullptr) {
         _lake_tablet_manager->prune_metacache();
