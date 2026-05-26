@@ -1885,9 +1885,10 @@ public class WindowTest extends PlanTestBase {
         List<AnalyticEvalNode> analyticNodes = new ArrayList<>();
         execPlan.getTopFragment().getPlanRoot().collect(AnalyticEvalNode.class, analyticNodes);
         Assertions.assertFalse(analyticNodes.isEmpty());
-        Assertions.assertEquals(analyticNodes.get(0).getAnalyticFnCalls().size(), 2);
-        Assertions.assertTrue(analyticNodes.get(0).getAnalyticFnCalls().get(0).getIgnoreNulls());
-        Assertions.assertFalse(analyticNodes.get(0).getAnalyticFnCalls().get(1).getIgnoreNulls());
+        // The default ORDER BY window is RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW.
+        // Normal first_value can be rewritten to ROWS, but first_value IGNORE NULLS must keep RANGE
+        // because peer rows can change the first non-null value. They therefore should not merge.
+        Assertions.assertEquals(1, analyticNodes.get(0).getAnalyticFnCalls().size());
     }
 
     @Test
