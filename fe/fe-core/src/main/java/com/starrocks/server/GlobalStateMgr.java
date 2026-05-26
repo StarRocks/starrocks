@@ -1717,7 +1717,7 @@ public class GlobalStateMgr {
         if (taskCleaner != null) {
             stopOne("taskCleaner", () -> taskCleaner.stopGracefully(timeoutMs));
         }
-        stopOne("taskManager", () -> taskManager.stop());
+        stopOne("taskManager", () -> taskManager.stop(timeoutMs));
         stopOne("statisticAutoCollector", () -> statisticAutoCollector.stopGracefully(timeoutMs));
         stopOne("statisticsMetaManager", () -> statisticsMetaManager.stopGracefully(timeoutMs));
         stopOne("updateDbUsedDataQuotaDaemon", () -> updateDbUsedDataQuotaDaemon.stopGracefully(timeoutMs));

@@ -91,7 +91,9 @@ public class TaskManager implements MemoryTrackable {
     private final Map<Long, Task> idToTaskMap;
     // taskName -> Task, include Manual Task, Periodical Task
     private final Map<String, Task> nameToTaskMap;
-    private final Map<Long, ScheduledFuture<?>> periodFutureMap;
+    // Package-private so same-package tests can assert the cleared-on-stop contract without
+    // reflection.
+    final Map<Long, ScheduledFuture<?>> periodFutureMap;
 
     // include PENDING/RUNNING taskRun;
     private final TaskRunManager taskRunManager;
@@ -102,7 +104,8 @@ public class TaskManager implements MemoryTrackable {
     //
     // Not final: rebuilt by start() if a previous stop() shut it down so this manager is
     // reusable across leader demotion / re-election cycles.
-    private volatile ScheduledExecutorService periodScheduler = Executors.newScheduledThreadPool(1);
+    // Package-private so same-package tests can assert / swap pool state without reflection.
+    volatile ScheduledExecutorService periodScheduler = Executors.newScheduledThreadPool(1);
 
     // The dispatchTaskScheduler is responsible for periodically checking whether the running TaskRun is completed
     // and updating the status. It is also responsible for placing pending TaskRun in the running TaskRun queue.
@@ -110,7 +113,8 @@ public class TaskManager implements MemoryTrackable {
     // This scheduler can use notify/wait to optimize later.
     //
     // Not final: same rebuild-on-restart contract as periodScheduler.
-    private volatile ScheduledExecutorService dispatchScheduler = Executors.newScheduledThreadPool(1);
+    // Package-private for same reasons as periodScheduler above.
+    volatile ScheduledExecutorService dispatchScheduler = Executors.newScheduledThreadPool(1);
     // Use to concurrency control
     private final QueryableReentrantLock taskLock;
 
@@ -126,6 +130,21 @@ public class TaskManager implements MemoryTrackable {
 
     public void start() {
         if (isStart.compareAndSet(false, true)) {
+            // Refuse to overlap with previous schedulers that did not drain in stop():
+            // shutdownNow() does not wait for in-flight TaskRun checks to exit, so a fast
+            // demote/re-elect can put two scheduler generations against the same TaskRunManager
+            // and periodFutureMap. Mirrors the BatchWriteMgr / AlterHandler / LeaderTaskExecutor
+            // restart guard.
+            if (periodScheduler.isShutdown() && !periodScheduler.isTerminated()) {
+                isStart.set(false);
+                throw new IllegalStateException(
+                        "TaskManager periodScheduler has not terminated; refuse to restart");
+            }
+            if (dispatchScheduler.isShutdown() && !dispatchScheduler.isTerminated()) {
+                isStart.set(false);
+                throw new IllegalStateException(
+                        "TaskManager dispatchScheduler has not terminated; refuse to restart");
+            }
             // Rebuild both schedulers if a previous stop() shut them down. periodScheduler also
             // needs a fresh pool so the futures kept by periodFutureMap (which we cleared in
             // stop()) cannot reference cancelled futures from the previous leader session.
@@ -158,15 +177,33 @@ public class TaskManager implements MemoryTrackable {
     }
 
     /**
+     * Non-blocking equivalent of {@link #stop(long)}: shuts down both schedulers without
+     * waiting for in-flight TaskRun checks to actually exit. Prefer {@link #stop(long)} on
+     * the leader demotion drain path so a re-elected leader does not race the old
+     * scheduler generation.
+     */
+    public void stop() {
+        stop(0L);
+    }
+
+    /**
      * Coordinated stop for leader demotion. TaskManager owns two ScheduledExecutorService
      * instances and is not a LeaderDaemon (its dispatch loop runs inside the executor with
      * an embedded leader check), so it cannot follow the standard {@code stopGracefully}
-     * contract; this method is the equivalent. After it returns the manager is in a state
-     * where the next {@link #start()} rebuilds both pools and re-registers periodic tasks.
+     * contract; this method is the equivalent.
+     *
      * shutdownNow() interrupts in-flight TaskRun checks so they exit promptly even if blocked
-     * in metadata locks.
+     * in metadata locks. When {@code timeoutMs > 0}, this method also blocks up to that budget
+     * waiting for both pools to actually terminate so a subsequent {@link #start()} does not
+     * spin up a fresh scheduler against the same TaskRunManager / periodFutureMap as the still-
+     * running old generation. If termination times out, the next {@link #start()} will refuse
+     * to restart (IllegalStateException) rather than overlap pools.
+     *
+     * @param timeoutMs maximum time to wait for both schedulers to drain, in milliseconds. Zero
+     *                  or negative means do not wait (legacy behaviour). The budget is split
+     *                  across the two pools.
      */
-    public void stop() {
+    public void stop(long timeoutMs) {
         if (!isStart.compareAndSet(true, false)) {
             return;
         }
@@ -182,6 +219,22 @@ public class TaskManager implements MemoryTrackable {
         periodFutureMap.clear();
         periodScheduler.shutdownNow();
         dispatchScheduler.shutdownNow();
+        if (timeoutMs > 0L) {
+            long deadline = System.currentTimeMillis() + timeoutMs;
+            try {
+                long remaining = Math.max(1L, deadline - System.currentTimeMillis());
+                if (!periodScheduler.awaitTermination(remaining, TimeUnit.MILLISECONDS)) {
+                    LOG.warn("TaskManager periodScheduler did not terminate within drain timeout");
+                }
+                remaining = Math.max(1L, deadline - System.currentTimeMillis());
+                if (!dispatchScheduler.awaitTermination(remaining, TimeUnit.MILLISECONDS)) {
+                    LOG.warn("TaskManager dispatchScheduler did not terminate within drain timeout");
+                }
+            } catch (InterruptedException ie) {
+                Thread.currentThread().interrupt();
+                LOG.warn("Interrupted while waiting for TaskManager schedulers to terminate");
+            }
+        }
     }
 
     private void registerPeriodicalTask() {
