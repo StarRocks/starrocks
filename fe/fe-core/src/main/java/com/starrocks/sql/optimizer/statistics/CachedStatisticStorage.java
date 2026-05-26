@@ -22,11 +22,11 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
+import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.connector.statistics.ConnectorColumnStatsCacheLoader;
 import com.starrocks.connector.statistics.ConnectorHistogramColumnStatsCacheLoader;
 import com.starrocks.connector.statistics.ConnectorTableColumnKey;
@@ -51,16 +51,15 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
-import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
-
 
 public class CachedStatisticStorage implements StatisticStorage, MemoryTrackable {
     private static final Logger LOG = LogManager.getLogger(CachedStatisticStorage.class);
 
-    private final Executor statsCacheRefresherExecutor = Executors.newFixedThreadPool(Config.statistic_cache_thread_pool_size,
-            new ThreadFactoryBuilder().setDaemon(true).setNameFormat("stats-cache-refresher-%d").build());
+    private final Executor statsCacheRefresherExecutor =
+            ThreadPoolManager.newDaemonFixedThreadPoolWithUnboundedQueue(Config.statistic_cache_thread_pool_size,
+                    "stats-cache-refresher", true);
 
     AsyncLoadingCache<TableStatsCacheKey, Optional<Long>> tableStatsCache =
             createAsyncLoadingCache(new TableStatsCacheLoader());
@@ -348,7 +347,7 @@ public class CachedStatisticStorage implements StatisticStorage, MemoryTrackable
         }
         try {
             CompletableFuture<Optional<ColumnStatistic>> result =
-                        columnStatistics.get(new ColumnStatsCacheKey(table.getId(), column));
+                    columnStatistics.get(new ColumnStatsCacheKey(table.getId(), column));
             if (Config.enable_sync_statistics_load) {
                 result.get();
             }
@@ -622,7 +621,6 @@ public class CachedStatisticStorage implements StatisticStorage, MemoryTrackable
         histogramCache.synchronous().invalidateAll(allKeys);
     }
 
-
     @Override
     public void expireConnectorHistogramStatistics(Table table, List<String> columns) {
         if (table == null || columns == null) {
@@ -677,7 +675,7 @@ public class CachedStatisticStorage implements StatisticStorage, MemoryTrackable
     }
 
     @Override
-    public void refreshMultiColumnStatistics(Long tableId,  boolean isSync) {
+    public void refreshMultiColumnStatistics(Long tableId, boolean isSync) {
         try {
             if (StatisticUtils.statisticTableBlackListCheck(tableId) ||
                     !StatisticUtils.checkStatisticTableStateNormal()) {
@@ -736,12 +734,12 @@ public class CachedStatisticStorage implements StatisticStorage, MemoryTrackable
                 .expireAfterWrite(Config.statistic_update_interval_sec * 2, TimeUnit.SECONDS)
                 .maximumSize(Config.statistic_cache_columns)
                 .executor(statsCacheRefresherExecutor);
-        
+
         // Only enable refreshAfterWrite if the config is enabled
         if (Config.enable_statistic_cache_refresh_after_write) {
             cacheBuilder.refreshAfterWrite(Config.statistic_update_interval_sec, TimeUnit.SECONDS);
         }
-        
+
         return cacheBuilder.buildAsync(cacheLoader);
     }
 }
