@@ -33,6 +33,7 @@
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_reader.h"
 #include "storage/lake/vertical_compaction_task.h"
+#include "storage/storage_metrics.h"
 #include "storage/tablet_schema.h"
 #include "test_util.h"
 #include "testutil/init_test_env.h"
@@ -227,6 +228,62 @@ TEST_P(LakeDuplicateKeyCompactionTest, test_skip_write_txnlog) {
     EXPECT_EQ(100, task_context->progress.value());
     EXPECT_TRUE(task_context->skip_write_txnlog);
     EXPECT_TRUE(task_context->txn_log != nullptr);
+}
+
+TEST_P(LakeDuplicateKeyCompactionTest, test_compaction_metrics) {
+    // Prepare data for writing
+    auto chunk0 = generate_data(kChunkSize);
+    auto indexes = std::vector<uint32_t>(kChunkSize);
+    for (int i = 0; i < kChunkSize; i++) {
+        indexes[i] = i;
+    }
+
+    auto version = 1;
+    auto tablet_id = _tablet_metadata->id();
+    for (int i = 0; i < 3; i++) {
+        auto txn_id = next_id();
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .set_profile(&_dummy_runtime_profile)
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+        // Publish version
+        ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
+        version++;
+    }
+    ASSERT_EQ(kChunkSize * 3, read(version));
+
+    // Snapshot the metrics before compaction. The metrics are process-global and shared across
+    // tests, so assert on the before/after delta rather than absolute values.
+    const int64_t put_count_before = StorageMetrics::instance()->lake_compaction_s3_put_count.value();
+    const int64_t size_recorded_before = lake_compaction_output_segment_size_recorded_count();
+
+    auto txn_id = next_id();
+    auto task_context = std::make_unique<CompactionTaskContext>(txn_id, tablet_id, version, false, false, nullptr);
+    ASSIGN_OR_ABORT(auto task, _tablet_mgr->compact(task_context.get()));
+    check_task(task);
+    ASSERT_OK(task->execute(CompactionTask::kNoCancelFn));
+    ASSERT_OK(publish_single_version(_tablet_metadata->id(), version + 1, txn_id).status());
+    version++;
+
+    ASSIGN_OR_ABORT(auto new_tablet_metadata, _tablet_mgr->get_tablet_metadata(tablet_id, version));
+    ASSERT_EQ(1, new_tablet_metadata->rowsets_size());
+    const int64_t output_segments = new_tablet_metadata->rowsets(0).segments_size();
+    ASSERT_GT(output_segments, 0);
+
+    // The size distribution recorder observed exactly one sample per output segment.
+    EXPECT_EQ(output_segments, lake_compaction_output_segment_size_recorded_count() - size_recorded_before);
+    // One PUT per output segment plus one for the txn log write (this is a duplicate-key,
+    // non-PK compaction, so there are no sst or .lcrm files).
+    EXPECT_EQ(output_segments + 1, StorageMetrics::instance()->lake_compaction_s3_put_count.value() - put_count_before);
 }
 
 INSTANTIATE_TEST_SUITE_P(LakeDuplicateKeyCompactionTest, LakeDuplicateKeyCompactionTest,

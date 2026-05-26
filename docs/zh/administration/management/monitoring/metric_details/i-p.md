@@ -235,6 +235,18 @@ description: "Alphabetical i - p"
 - 单位：字节
 - 描述：JIT 编译函数缓存使用的内存。
 
+## `lake_compaction_output_segment_size_bytes`
+
+- 单位：字节
+- 类型：分布（以 gauge 序列暴露：`_count`、`_latency_50/90/99`、`_max_latency`）
+- 描述：存算分离（lake）压缩任务生成的输出 Segment 文件大小分布。可通过百分位数发现产生大量小文件、增加对象存储 API 成本的低效压缩。注意：该指标基于 bvar `LatencyRecorder` 实现，因此其百分位序列名称带有 `_latency` 后缀，尽管单位为字节。
+
+## `lake_compaction_s3_put_count`
+
+- 单位：个
+- 类型：累积
+- 描述：存算分离（lake）压缩任务发起的对象存储 PUT 请求数。按每次文件关闭计为一次 PUT —— 包括输出 Segment、sst、`.lcrm` 以及事务日志。这是一个近似值：大文件的分段上传（multipart upload）会产生多次实际 PUT，且发布阶段的 tablet 元数据写入不计入此处（发生在压缩任务之外）。
+
 ## `lake_vacuum_del_file_batch_size_minute`
 
 - 单位：文件数（每批次）
