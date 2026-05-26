@@ -98,6 +98,7 @@ set(EXEC_FILES
         ./exec/schema_loads_scanner_test.cpp
         ./exec/schema_materialized_views_scanner_test.cpp
         ./exec/schema_task_runs_scanner_test.cpp
+        ./exec/schema_scanner/exec_schema_scanners_test.cpp
         ./exec/schema_scanner/schema_be_tablet_write_log_scanner_test.cpp
         ./exec/schema_scanner/schema_scanner_test.cpp
         ./exec/schema_scanner/schema_fe_metrics_scanner_test.cpp
