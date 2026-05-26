@@ -62,6 +62,8 @@ ALTER TABLE <table_name> TRUNCATE PARTITION (<partition_name>);
 
 [`TRUNCATE PARTITION`](TRUNCATE_TABLE.md) 通过把分区的 rowset 直接替换为空版本来立即释放数据，不会产生删除标记，也无需等待 compaction。
 
+如果业务场景需要**频繁** DELETE（而不是一次性批量清理），建议直接把表建成**主键表（Primary Key 表）**。主键表通过 delete vector / merge-on-write 实现行级删除，不会引入明细表、聚合表、更新表那样的 merge-on-read 代价。
+
 从该版本开始，对明细表、聚合表、更新表执行 `DELETE` 成功后，StarRocks 会在 MySQL OK 包的 `info` 字段中返回一条提示，提醒用户上述代价。如需关闭该提示，可将 FE 配置 `enable_non_primary_key_delete_warning` 设为 `false`。
 
 :::

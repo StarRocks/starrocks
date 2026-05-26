@@ -108,6 +108,8 @@ public class AnalyzeDeleteTest {
                     "info should name the keys type: " + info);
             Assertions.assertTrue(info.contains("TRUNCATE PARTITION"),
                     "info should recommend TRUNCATE PARTITION: " + info);
+            Assertions.assertTrue(info.contains("Primary Key"),
+                    "info should recommend Primary Key table for frequent deletes: " + info);
         } finally {
             Config.enable_non_primary_key_delete_warning = original;
         }

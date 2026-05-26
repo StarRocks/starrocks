@@ -64,6 +64,8 @@ ALTER TABLE <table_name> TRUNCATE PARTITION (<partition_name>);
 
 [`TRUNCATE PARTITION`](TRUNCATE_TABLE.md) drops the partition's data immediately by replacing its rowsets with an empty version, without producing delete markers and without waiting for compaction.
 
+If your workload issues `DELETE` **frequently** (rather than as a one-off bulk cleanup), consider modeling the table as a **Primary Key table** instead. Primary Key tables support row-level deletes with delete-vector / merge-on-write semantics and do not incur the per-read merge-on-read penalty of Duplicate / Aggregate / Unique Key tables.
+
 Starting from this version, StarRocks returns a notice in the MySQL OK packet's `info` field when `DELETE` runs against a Duplicate / Aggregate / Unique Key table to remind you of this trade-off. The notice can be turned off by setting the FE configuration `enable_non_primary_key_delete_warning` to `false`.
 
 :::

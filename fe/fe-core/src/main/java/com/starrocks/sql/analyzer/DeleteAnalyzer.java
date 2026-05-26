@@ -176,6 +176,8 @@ public class DeleteAnalyzer {
                 + "rows remain physically present and every read pays a merge-on-read cost until base "
                 + "compaction runs. For bulk removal of whole partitions, prefer "
                 + "ALTER TABLE ... TRUNCATE PARTITION, which drops data immediately. "
+                + "If your workload issues DELETE frequently, consider switching to a Primary Key table, "
+                + "which supports row-level deletes without merge-on-read. "
                 + "(Disable this notice with FE config enable_non_primary_key_delete_warning=false.)";
     }
 
