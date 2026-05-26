@@ -1,0 +1,45 @@
+## Join プッシュダウン
+
+v4.2 以降、同一の JDBC カタログに属する複数テーブルに対する結合（INNER JOIN および CROSS JOIN）を、外部データベース側へプッシュダウンできるようになりました。これにより、ソースデータベースは自身のインデックスやオプティマイザを用いて結合処理を実行し、結合結果のみをシステムへ返します。
+
+### Join プッシュダウンの有効化
+
+Join プッシュダウンはデフォルトで無効です。セッション変数 enable_jdbc_join_push_down を true に設定して有効化します。
+
+```SQL
+SET enable_jdbc_join_push_down = true;
+```
+
+### 動作の仕組み
+
+この最適化ルールが適用されると、オプティマイザは複数の JDBC スキャンにまたがるローカル結合を、リモートデータベースに対して JOIN を含む単一の SQL を発行する 1 つの JDBC スキャンに書き換えます。
+
+例えば、同一の JDBC カタログ内にある 2 つの MySQL テーブルに対する以下のクエリを考えます。
+
+```SQL
+SELECT o.order_id, c.region, o.amount
+FROM jdbc0.db.orders o
+JOIN jdbc0.db.customers c ON o.customer_id = c.customer_id
+WHERE o.amount >= 20 AND c.region IN ('east', 'west');
+```
+
+プッシュダウンを使用しない場合、システムは 2 回のスキャンを実行し、その結果をローカルで結合します。一方、enable_jdbc_join_push_down = true の場合、結合を含むサブツリー全体がリモートデータベースへプッシュダウンされます。ローカルの実行計画には 1 つの JDBC スキャンノードのみが残り、プッシュダウンされる SQL は次のようになります。
+
+```SQL
+SELECT `c1`, `c2`, `c3` FROM (
+    SELECT t0.`order_id` AS c1, t1.`region` AS c2, t0.`amount` AS c3
+    FROM (SELECT `order_id`, `customer_id`, `amount` FROM `db`.`orders` WHERE `amount` >= 20) t0
+    INNER JOIN (SELECT `region`, `customer_id` FROM `db`.`customers` WHERE `region` IN ('east', 'west')) t1
+      ON t0.`customer_id` = t1.`customer_id`
+) sr_merged;
+```
+
+クエリに対して EXPLAIN を実行することで、結合がプッシュダウンされているかを確認できます。
+
+### 適用範囲と制限事項
+
+- **結合タイプ**: INNER JOIN および CROSS JOIN のみがプッシュダウン対象です。外部結合、セミ結合、アンチ結合はローカル実行にフォールバックします。
+- **同一カタログ**: マージ対象となるすべてのテーブルは、同一の JDBC カタログ（同一の JDBC URI、認証情報、ドライバ）に属している必要があります。異なる JDBC カタログ間の結合や、JDBC テーブルとネイティブテーブルを混在させた結合はローカルで実行されます。
+- **テーブル間述語が必須**: グループ内の 2 テーブルを結合する述語が少なくとも 1 つ存在する場合にのみプッシュダウンされます。純粋な直積（デカルト積）をリモートに送信することを避けるため、この条件を満たさない場合は適用されません。
+- **述語プッシュダウンは全体適用**: グループに属するすべての述語は、リモートの SQL 方言に完全に変換可能である必要があります。1 つでもプッシュダウンできない述語（例：StarRocks 固有の関数）がある場合、グループ全体がローカル結合にフォールバックします。
+- **統計情報**: マージされた JDBC スキャンは、単一テーブルの JDBC スキャンと同じデフォルト統計情報を再利用します。下流のオペレータからは、結合結果はデフォルトサイズの単一テーブルとして扱われ、基となるテーブルに基づくカーディナリティ推定は行われません。

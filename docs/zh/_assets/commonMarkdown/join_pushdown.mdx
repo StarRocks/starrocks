@@ -1,0 +1,45 @@
+## Join 下推
+
+自 v4.2 起，当参与 Join 的表都来自同一个 JDBC Catalog 时，系统可以将多表 Join（`INNER JOIN` 与 `CROSS JOIN`）下推到外部数据库执行。下推后由源数据库利用自身的索引和优化器完成 Join，仅将 Join 结果返回给系统。
+
+### 启用 Join 下推
+
+Join 下推默认关闭。将 Session 变量 `enable_jdbc_join_push_down` 设置为 `true` 启用该特性：
+
+```SQL
+SET enable_jdbc_join_push_down = true;
+```
+
+### 工作原理
+
+规则触发后，优化器会将多个 JDBC Scan 节点之上的本地 Join 改写为单个 JDBC Scan 节点，由该节点向远端数据库发起一条包含 JOIN 的 SQL 查询。
+
+例如，对同一个 JDBC Catalog 下两张 MySQL 表执行如下查询：
+
+```SQL
+SELECT o.order_id, c.region, o.amount
+FROM jdbc0.db.orders o
+JOIN jdbc0.db.customers c ON o.customer_id = c.customer_id
+WHERE o.amount >= 20 AND c.region IN ('east', 'west');
+```
+
+未开启下推时，系统会分别扫描两张表后在本地完成 Join。开启 `enable_jdbc_join_push_down = true` 后，整个 Join 子树会被整体下推到远端数据库，本地执行计划中只剩一个 JDBC Scan 节点，下推的 SQL 类似：
+
+```SQL
+SELECT `c1`, `c2`, `c3` FROM (
+    SELECT t0.`order_id` AS c1, t1.`region` AS c2, t0.`amount` AS c3
+    FROM (SELECT `order_id`, `customer_id`, `amount` FROM `db`.`orders` WHERE `amount` >= 20) t0
+    INNER JOIN (SELECT `region`, `customer_id` FROM `db`.`customers` WHERE `region` IN ('east', 'west')) t1
+      ON t0.`customer_id` = t1.`customer_id`
+) sr_merged;
+```
+
+可使用 `EXPLAIN` 查看 Join 是否被下推。
+
+### 适用范围与限制
+
+- **Join 类型**：`INNER JOIN` 和 `CROSS JOIN` 可下推；Outer Join、Semi Join、Anti Join 不会被下推，仍在本地执行。
+- **同一 Catalog**：一次合并下推的表必须属于同一个 JDBC Catalog（即相同的 JDBC URI、认证信息和驱动）。跨两个 JDBC Catalog 的 Join，或 JDBC 外表与内表的 Join，均不会下推。
+- **必须存在跨表谓词**：一组表只有在至少存在一个连接其中两张表的谓词时才会被下推；否则规则会跳过，避免下推为纯笛卡儿积。
+- **谓词整组下推**：一组内的所有谓词必须能够完整翻译为远端方言。如果其中任何一个谓词不可下推（例如使用了仅 StarRocks 支持的函数），则整组回退到本地 Join。
+- **统计信息**：合并后的 JDBC Scan 复用与单表 JDBC Scan 相同的默认统计信息。后续算子会将 Join 结果视作一张默认大小的表，不会基于底表估计基数。
