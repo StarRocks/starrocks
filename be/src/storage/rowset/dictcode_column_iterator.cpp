@@ -14,14 +14,6 @@
 
 #include "storage/rowset/dictcode_column_iterator.h"
 
-#include <cstring>
-
-#ifdef __AVX2__
-#include <immintrin.h>
-#elif defined(__ARM_NEON) && defined(__aarch64__)
-#include <arm_neon.h>
-#endif
-
 #include "column/array_column.h"
 #include "column/column_helper.h"
 #include "column/nullable_column.h"
@@ -89,60 +81,13 @@ Status GlobalDictCodeColumnIterator::decode_string_dict_codes(const Column& code
         word_nulls->resize(0);
         word_nulls->append(null_data);
         if (codes.has_null()) {
-            // assign code 0 if input data is null
+            // assign code 0 if input data is null; gcc/clang auto-vectorize this on the
+            // -mavx2 x86 and armv8-a NEON builds, so no hand-written intrinsics are needed
             auto* dst = res_data.data();
             const auto* nulls = null_data.data();
-
-#ifdef __AVX2__
-            const __m256i zero = _mm256_setzero_si256();
-            size_t i = 0;
-
-            for (; i + 8 <= size; i += 8) {
-                // Load 8 null flags (uint8_t) and expand to 8 int32s
-                __m128i null8 = _mm_loadl_epi64(reinterpret_cast<const __m128i*>(nulls + i));
-                __m256i null32 = _mm256_cvtepu8_epi32(null8);
-
-                // Create mask: 0xFFFFFFFF where null==0, 0 where null!=0
-                __m256i mask = _mm256_cmpeq_epi32(null32, zero);
-
-                // Load res_data and AND with mask (zeros out null positions)
-                __m256i data = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(dst + i));
-                __m256i result = _mm256_and_si256(data, mask);
-                _mm256_storeu_si256(reinterpret_cast<__m256i*>(dst + i), result);
-            }
-
-            for (; i < size; ++i) {
-                dst[i] = nulls[i] == 0 ? dst[i] : 0;
-            }
-#elif defined(__ARM_NEON) && defined(__aarch64__)
-            const uint32x4_t zero = vdupq_n_u32(0);
-            size_t i = 0;
-
-            for (; i + 4 <= size; i += 4) {
-                // Load 4 null flags safely into uint32 and expand
-                uint32_t null_bytes;
-                memcpy(&null_bytes, nulls + i, 4);
-                uint8x8_t null8 = vcreate_u8(null_bytes);
-                uint16x4_t null16 = vget_low_u16(vmovl_u8(null8));
-                uint32x4_t null32 = vmovl_u16(null16);
-
-                // Create mask: 0xFFFFFFFF where null==0
-                uint32x4_t mask = vceqq_u32(null32, zero);
-
-                // Load res_data and AND with mask
-                int32x4_t data = vld1q_s32(dst + i);
-                int32x4_t result = vandq_s32(data, vreinterpretq_s32_u32(mask));
-                vst1q_s32(dst + i, result);
-            }
-
-            for (; i < size; ++i) {
-                dst[i] = nulls[i] == 0 ? dst[i] : 0;
-            }
-#else
             for (size_t i = 0; i < size; ++i) {
                 dst[i] = nulls[i] == 0 ? dst[i] : 0;
             }
-#endif
         }
     }
 
