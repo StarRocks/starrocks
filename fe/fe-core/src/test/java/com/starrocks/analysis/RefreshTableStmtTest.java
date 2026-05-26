@@ -50,18 +50,16 @@ public class RefreshTableStmtTest {
     public void testRefreshTableParserAndAnalyzer(@Mocked MetadataMgr metadataMgr,
                                                   @Mocked Table table,
                                                   @Mocked Database database) {
-        GlobalStateMgr.getCurrentState().setMetadataMgr(metadataMgr);
-        new Expectations(metadataMgr, database) {
+        new Expectations() {
             {
+                GlobalStateMgr.getCurrentState().getMetadataMgr();
+                result = metadataMgr;
+
                 metadataMgr.getTable((ConnectContext) any, anyString, anyString, anyString);
                 result = table;
 
                 metadataMgr.getDb((ConnectContext) any, anyString, anyString);
                 result = database;
-
-                database.isSystemDatabase();
-                result = false;
-                minTimes = 0;
             }
         };
         String sql_1 = "REFRESH EXTERNAL TABLE db1.table1";
