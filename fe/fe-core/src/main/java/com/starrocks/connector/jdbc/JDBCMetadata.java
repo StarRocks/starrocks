@@ -260,7 +260,6 @@ public class JDBCMetadata implements ConnectorMetadata {
                         Table table = schemaResolver.getTable(tableId, tblName, fullSchema,
                                 partitionColumns, dbName, catalogName, properties);
                         if (table != null) {
-                            table.setComment(schemaResolver.getTableComment(connection, dbName, tblName));
                             if (table instanceof JDBCTable && !originalJdbcTypes.isEmpty()) {
                                 ((JDBCTable) table).setOriginalJdbcColumnTypes(originalJdbcTypes);
                             }
@@ -271,6 +270,16 @@ public class JDBCMetadata implements ConnectorMetadata {
                         return null;
                     }
                 });
+    }
+
+    @Override
+    public String getTableComment(ConnectContext context, String dbName, String tblName) {
+        try (Connection connection = getConnection()) {
+            return schemaResolver.getTableComment(connection, dbName, tblName);
+        } catch (SQLException e) {
+            LOG.warn("get table comment for JDBC catalog fail!", e);
+            return "";
+        }
     }
 
     @Override

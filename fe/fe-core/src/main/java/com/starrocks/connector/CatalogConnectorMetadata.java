@@ -149,6 +149,16 @@ public class CatalogConnectorMetadata implements ConnectorMetadata {
     }
 
     @Override
+    public String getTableComment(ConnectContext context, String dbName, String tblName) {
+        ConnectorMetadata metadata = metadataOfTable(tblName);
+        if (metadata == null) {
+            metadata = metadataOfDb(dbName);
+        }
+
+        return metadata.getTableComment(context, dbName, tblName);
+    }
+
+    @Override
     public TableVersionRange getTableVersionRange(String dbName, Table table,
                                                   Optional<ConnectorTableVersion> startVersion,
                                                   Optional<ConnectorTableVersion> endVersion) {
