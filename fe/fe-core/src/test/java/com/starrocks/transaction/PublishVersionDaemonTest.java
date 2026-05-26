@@ -653,6 +653,66 @@ public class PublishVersionDaemonTest {
     }
 
     @Test
+    public void testStartRefusesToRestartBeforeDeleteTxnLogExecutorTerminates() {
+        // Mirror for the deleteTxnLogExecutor branch of the restart guard.
+        PublishVersionDaemon daemon = new PublishVersionDaemon();
+        ThreadPoolExecutor blockedPool = new ThreadPoolExecutor(
+                1, 1, 0L, java.util.concurrent.TimeUnit.MILLISECONDS,
+                new java.util.concurrent.ArrayBlockingQueue<>(1));
+        blockedPool.execute(() -> {
+            try {
+                Thread.sleep(30_000L);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+        });
+        blockedPool.shutdown();
+        daemon.deleteTxnLogExecutor = blockedPool;
+
+        try {
+            Assertions.assertThrows(IllegalStateException.class, daemon::start);
+        } finally {
+            blockedPool.shutdownNow();
+        }
+    }
+
+    @Test
+    public void testOnStoppedLogsWhenExecutorRefusesToTerminate() {
+        // awaitExecutorTermination returns false when the underlying pool ignores the
+        // interrupt long enough to outlast the drain budget; onStopped must log a warning
+        // and proceed instead of nulling the reference, so the next start() restart guard
+        // can fire. Covers the LOG.warn branches in awaitExecutorTermination plus the
+        // "keep reference" outcome.
+        PublishVersionDaemon daemon = new PublishVersionDaemon();
+        ThreadPoolExecutor stuck = new ThreadPoolExecutor(
+                1, 1, 0L, java.util.concurrent.TimeUnit.MILLISECONDS,
+                new java.util.concurrent.ArrayBlockingQueue<>(1));
+        stuck.execute(() -> {
+            long deadline = System.currentTimeMillis() + 2000L;
+            while (System.currentTimeMillis() < deadline) {
+                try {
+                    Thread.sleep(50);
+                } catch (InterruptedException ignored) {
+                    // simulate uninterruptible publish RPC
+                }
+            }
+        });
+        daemon.taskExecutor = stuck;
+        int oldTimeout = Config.leader_demotion_drain_timeout_sec;
+        Config.leader_demotion_drain_timeout_sec = 1;
+        try {
+            daemon.onStopped();
+            // Reference is retained because the await timed out; subsequent start() guard
+            // would fire.
+            Assertions.assertNotNull(daemon.taskExecutor,
+                    "taskExecutor reference must be retained when drain timed out");
+        } finally {
+            Config.leader_demotion_drain_timeout_sec = oldTimeout;
+            stuck.shutdownNow();
+        }
+    }
+
+    @Test
     public void testConfigRefreshListenersDoNotAccumulateAcrossStopCycles() throws Exception {
         ConfigRefreshDaemon configDaemon = GlobalStateMgr.getCurrentState().getConfigRefreshDaemon();
         @SuppressWarnings("unchecked")

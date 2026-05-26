@@ -14,6 +14,7 @@
 
 package com.starrocks.lake.vacuum;
 
+import com.starrocks.common.Config;
 import org.apache.hadoop.util.BlockingThreadPoolExecutorService;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
@@ -56,6 +57,38 @@ public class AutovacuumDaemonTest {
                     "rebuilt executor must accept new submissions");
         } finally {
             daemon.setStop();
+        }
+    }
+
+    @Test
+    public void testOnStoppedLogsWhenExecutorRefusesToTerminate() {
+        // When a vacuum worker ignores shutdownNow's interrupt long enough to outlast the
+        // drain budget, onStopped must log a warning and proceed rather than block forever.
+        // Covers the LOG.warn / catch branches in onStopped's awaitTermination.
+        AutovacuumDaemon daemon = new AutovacuumDaemon();
+        BlockingThreadPoolExecutorService stuck =
+                BlockingThreadPoolExecutorService.newInstance(1, 0, 1, TimeUnit.HOURS, "autovacuum-stuck-test");
+        stuck.execute(() -> {
+            long deadline = System.currentTimeMillis() + 2000L;
+            while (System.currentTimeMillis() < deadline) {
+                try {
+                    Thread.sleep(50);
+                } catch (InterruptedException ignored) {
+                    // simulate uninterruptible vacuum work
+                }
+            }
+        });
+        daemon.executorService = stuck;
+        int oldTimeout = Config.leader_demotion_drain_timeout_sec;
+        Config.leader_demotion_drain_timeout_sec = 1;
+        try {
+            daemon.onStopped();
+            // Drain timed out; pool is still shutdown and reference retained for the
+            // restart guard.
+            Assertions.assertTrue(stuck.isShutdown());
+        } finally {
+            Config.leader_demotion_drain_timeout_sec = oldTimeout;
+            stuck.shutdownNow();
         }
     }
 
