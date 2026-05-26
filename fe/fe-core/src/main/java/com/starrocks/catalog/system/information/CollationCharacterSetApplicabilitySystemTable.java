@@ -21,22 +21,18 @@ import com.starrocks.type.TypeFactory;
 
 import static com.starrocks.catalog.system.SystemTable.builder;
 
-public class SchemataSystemTable {
-    private static final String NAME = "schemata";
+public class CollationCharacterSetApplicabilitySystemTable {
+    private static final String NAME = "collation_character_set_applicability";
 
     public static SystemTable create(String catalogName) {
         return new SystemTable(
                 catalogName,
-                SystemId.SCHEMATA_ID,
+                SystemId.COLLATION_CHARACTER_SET_APPLICABILITY_ID,
                 NAME,
                 Table.TableType.SCHEMA,
                 builder()
-                        .column("CATALOG_NAME", TypeFactory.createVarcharType(512))
-                        .column("SCHEMA_NAME", TypeFactory.createVarcharType(32))
-                        .column("DEFAULT_CHARACTER_SET_NAME", TypeFactory.createVarcharType(32))
-                        .column("DEFAULT_COLLATION_NAME", TypeFactory.createVarcharType(32))
-                        .column("SQL_PATH", TypeFactory.createVarcharType(512))
-                        .column("DEFAULT_ENCRYPTION", TypeFactory.createVarcharType(3))
-                        .build(), TSchemaTableType.SCH_SCHEMATA);
+                        .column("COLLATION_NAME", TypeFactory.createVarcharType(64))
+                        .column("CHARACTER_SET_NAME", TypeFactory.createVarcharType(64))
+                        .build(), TSchemaTableType.SCH_COLLATION_CHARACTER_SET_APPLICABILITY);
     }
 }
