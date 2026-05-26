@@ -574,6 +574,8 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
      * operator can retry CANCEL ALTER ... FORCE.
      */
     protected boolean lakePublishVersionWithSkip(String reason) {
+        LOG.info("force-cancel no-op publish: meta alter job {} watershedTxnId {} reason \"{}\"",
+                jobId, watershedTxnId, reason);
         try {
             TxnInfoPB txnInfo = new TxnInfoPB();
             txnInfo.txnId = watershedTxnId;
@@ -582,7 +584,6 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
             txnInfo.txnType = TxnTypePB.TXN_NORMAL;
             txnInfo.gtid = watershedGtid;
             txnInfo.noOpPublish = true;
-            txnInfo.noOpPublishReason = reason == null ? "force cancel of alter job" : reason;
 
             for (long physicalPartitionId : physicalPartitionIndexMap.rowKeySet()) {
                 long commitVersion = commitVersionMap.get(physicalPartitionId);
