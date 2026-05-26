@@ -39,6 +39,7 @@ public class ChangesScanImplementationRule extends ImplementationRule {
                 logical.getColRefToColumnMetaMap(),
                 logical.getLimit(),
                 logical.getPredicate(),
+                logical.getProjection(),
                 logical.getBase(),
                 logical.getHead(),
                 logical.getDelta(),

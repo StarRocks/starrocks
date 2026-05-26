@@ -23,6 +23,7 @@ import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
+import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
@@ -41,12 +42,13 @@ public class PhysicalChangesScanOperator extends PhysicalScanOperator {
                                        Map<ColumnRefOperator, Column> colRefToColumnMetaMap,
                                        long limit,
                                        ScalarOperator predicate,
+                                       Projection projection,
                                        Bookmark base,
                                        Bookmark head,
                                        BookmarkChange delta,
                                        List<ChangesMetaDescriptor> changesMetaDescriptors) {
         super(OperatorType.PHYSICAL_CHANGES_SCAN, table,
-                colRefToColumnMetaMap, limit, predicate, null);
+                colRefToColumnMetaMap, limit, predicate, projection);
         this.base = base;
         this.head = head;
         this.delta = delta;
