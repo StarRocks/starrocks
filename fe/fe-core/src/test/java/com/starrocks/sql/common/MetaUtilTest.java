@@ -17,6 +17,7 @@ import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PhysicalPartition;
@@ -38,6 +39,9 @@ import org.junit.jupiter.api.Test;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 public class MetaUtilTest {
 
@@ -147,5 +151,65 @@ public class MetaUtilTest {
                 MetaUtils.getColumnIdsByColumnNames(olapTable, Lists.newArrayList("b")).get(0));
         Assertions.assertEquals(ColumnId.create("c"),
                 MetaUtils.getColumnIdsByColumnNames(olapTable, Lists.newArrayList("c")).get(0));
+    }
+
+    @Test
+    public void testGetRangeDistributionColumnsPerIndex() {
+        // Mirror the ColocateChecker E1 fix: each visible MaterializedIndex must resolve to its
+        // OWN sort key, not the base index's. A rollup/MV with a shorter sort-key arity would
+        // otherwise feed RangeColocateScanDispatch boundaries the rollup's tablets can never
+        // align against, livelocking the colocate alignment iteration.
+        Column keyOne = new Column("k1", IntegerType.INT, true);
+        Column keyTwo = new Column("k2", IntegerType.INT, true);
+        Column valueOne = new Column("v1", IntegerType.INT, false);
+        long baseIndexId = 1000L;
+        long rollupIndexId = 1001L;
+
+        List<Column> baseSchema = Lists.newArrayList(keyOne, keyTwo, valueOne);
+        MaterializedIndexMeta baseMeta = mock(MaterializedIndexMeta.class);
+        when(baseMeta.getSchema()).thenReturn(baseSchema);
+        when(baseMeta.getSortKeyIdxes()).thenReturn(Lists.newArrayList(0, 1));
+
+        // Rollup has its own schema where k1 is the only sort-key column (and its own index 0).
+        List<Column> rollupSchema = Lists.newArrayList(keyOne, valueOne);
+        MaterializedIndexMeta rollupMeta = mock(MaterializedIndexMeta.class);
+        when(rollupMeta.getSchema()).thenReturn(rollupSchema);
+        when(rollupMeta.getSortKeyIdxes()).thenReturn(Lists.newArrayList(0));
+
+        OlapTable olapTable = mock(OlapTable.class);
+        when(olapTable.getBaseIndexMetaId()).thenReturn(baseIndexId);
+        when(olapTable.getIndexMetaByMetaId(baseIndexId)).thenReturn(baseMeta);
+        when(olapTable.getIndexMetaByMetaId(rollupIndexId)).thenReturn(rollupMeta);
+        when(olapTable.getBaseSchema()).thenReturn(baseSchema);
+
+        // Per-index resolution returns each index's own sort-key columns.
+        List<Column> baseSortKey = MetaUtils.getRangeDistributionColumns(olapTable, baseIndexId);
+        Assertions.assertEquals(2, baseSortKey.size());
+        Assertions.assertEquals("k1", baseSortKey.get(0).getName());
+        Assertions.assertEquals("k2", baseSortKey.get(1).getName());
+
+        List<Column> rollupSortKey = MetaUtils.getRangeDistributionColumns(olapTable, rollupIndexId);
+        Assertions.assertEquals(1, rollupSortKey.size());
+        Assertions.assertEquals("k1", rollupSortKey.get(0).getName());
+
+        // Default overload (no index id) delegates to the base index.
+        List<Column> defaultSortKey = MetaUtils.getRangeDistributionColumns(olapTable);
+        Assertions.assertEquals(baseSortKey, defaultSortKey);
+    }
+
+    @Test
+    public void testGetRangeDistributionColumnsRejectsUnknownIndexMetaId() {
+        // The per-index overload must throw rather than silently fall back to the base index
+        // when a caller passes a stale id from a dropped rollup. ColocateChecker catches and
+        // logs around the call site so the checker degrades gracefully, but the contract here
+        // is "no such index meta → fail loudly".
+        OlapTable olapTable = mock(OlapTable.class);
+        when(olapTable.getName()).thenReturn("t1");
+        when(olapTable.getIndexMetaByMetaId(9999L)).thenReturn(null);
+
+        IllegalArgumentException thrown = Assertions.assertThrows(IllegalArgumentException.class,
+                () -> MetaUtils.getRangeDistributionColumns(olapTable, 9999L));
+        Assertions.assertTrue(thrown.getMessage().contains("9999"));
+        Assertions.assertTrue(thrown.getMessage().contains("t1"));
     }
 }

@@ -604,6 +604,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String ENABLE_RANGE_DISTRIBUTION = "enable_range_distribution";
 
+    public static final String ENABLE_TABLET_PRE_SPLIT = "enable_tablet_pre_split";
+
     public static final String ENABLE_PRUNE_ICEBERG_MANIFEST = "enable_prune_iceberg_manifest";
 
     public static final String ENABLE_READ_ICEBERG_PUFFIN_NDV = "enable_read_iceberg_puffin_ndv";
@@ -1988,6 +1990,13 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = ENABLE_RANGE_DISTRIBUTION, flag = VariableMgr.INVISIBLE)
     private boolean enableRangeDistribution = false;
+
+    // Per-session opt-out for Sample-Based Tablet Pre-Split. Defaults to true so the FE-side
+    // Config gates (enable_tablet_pre_split_for_*) are the primary on/off switch; users with
+    // session-specific reasons (e.g. a one-off load they want to leave undisturbed) can flip
+    // this to false. Both the Config and the session var must be true for pre-split to run.
+    @VariableMgr.VarAttr(name = ENABLE_TABLET_PRE_SPLIT)
+    private boolean enableTabletPreSplit = true;
 
     @VariableMgr.VarAttr(name = SINGLE_NODE_EXEC_PLAN, flag = VariableMgr.INVISIBLE)
     private boolean singleNodeExecPlan = false;
@@ -4793,6 +4802,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setEnableRangeDistribution(boolean enableRangeDistribution) {
         this.enableRangeDistribution = enableRangeDistribution;
+    }
+
+    public boolean isEnableTabletPreSplit() {
+        return enableTabletPreSplit;
+    }
+
+    public void setEnableTabletPreSplit(boolean enableTabletPreSplit) {
+        this.enableTabletPreSplit = enableTabletPreSplit;
     }
 
     public void setAllowDefaultPartition(boolean allowDefaultPartition) {

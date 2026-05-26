@@ -544,6 +544,63 @@ All transaction metrics share the following labels:
 - Unit: Count
 - Description: The number of times blacklisted SQL has been intercepted.
 
+## `starrocks_fe_tablet_pre_split_eligibility_skipped`
+
+- Unit: Count
+- Type: Cumulative
+- Labels: `reason` — the SkipReason enum value (lower-cased), one of `not_range_distribution`, `table_not_normal`, `has_materialized_view_or_rollup`, `unsupported_sort_key`, `metadata_not_resolved`, `multiple_base_index_tablets`, `partition_not_empty`, `disabled_by_config`, `disabled_by_session`.
+- Description: Total Sample-Based Tablet Pre-Split invocations that the FE-side eligibility gate declined before any sampler ran, broken down by the specific reason. Operators can use this counter to attribute "pre-split not running" to a single eligibility branch at a glance.
+
+## `starrocks_fe_tablet_pre_split_sampler_invocations`
+
+- Unit: Count
+- Type: Cumulative
+- Description: Total sampler invocations driven by Sample-Based Tablet Pre-Split. Incremented once per eligible invocation when the production sampler pipeline starts a sample.
+
+## `starrocks_fe_tablet_pre_split_sampler_failed`
+
+- Unit: Count
+- Type: Cumulative
+- Labels: `reason` — the post-eligibility failure category (lower-cased SkipReason), one of `sample_failed` (sampler executor threw), `timeout_pre_submit` (sample + plan + build phase exceeded `tablet_pre_split_pre_submit_timeout_seconds`), `submit_failed` (`TabletReshardJobMgr` rejected admission).
+- Description: Total times the sampler attempted but did not produce an admitted reshard job, broken down by reason. Distinct from `tablet_pre_split_eligibility_skipped` (sampler never ran) and from `tablet_pre_split_tier_used` (which records the tier that succeeded). Meta-tier → data-tier fallback alone is not a failure; it is tracked via `tablet_pre_split_tier_used{tier=data_tier}`.
+
+## `starrocks_fe_tablet_pre_split_tier_used`
+
+- Unit: Count
+- Type: Cumulative
+- Labels: `tier` — `meta_tier` (boundaries computed from Parquet/ORC row-group statistics; no row data read) or `data_tier` (boundaries computed from actual row samples collected via a FILES sub-query — covers both direct data-tier invocations and meta-tier → data-tier fallbacks).
+- Description: Total Sample-Based Tablet Pre-Split invocations by which sampler tier produced the boundaries.
+
+## `starrocks_fe_tablet_pre_split_boundaries_planned`
+
+- Unit: Count
+- Type: Histogram
+- Description: Number of boundary tuples produced by the planner per invocation. Equals `effectiveTabletCount - 1` (a K-tablet split needs K-1 cut points).
+
+## `starrocks_fe_tablet_pre_split_pre_submit_wait_ms`
+
+- Unit: ms
+- Type: Histogram
+- Description: Wall-clock time spent in the pre-submit phase of Sample-Based Tablet Pre-Split (sample + plan + build reshard job). Capped by `tablet_pre_split_pre_submit_timeout_seconds`.
+
+## `starrocks_fe_tablet_pre_split_post_submit_wait_ms`
+
+- Unit: ms
+- Type: Histogram
+- Description: Wall-clock time the coordinator spent awaiting `FINISHED` on the admitted Sample-Based Tablet Pre-Split reshard job. Fires on the INSERT-from-FILES production path (the hook synchronously awaits FINISHED so the triggering INSERT plans against the post-split layout) and on the optional `runPreSplit` synchronous-await wrapper used by tests. The Broker Load production path is fire-and-forget and does not update this histogram.
+
+## `starrocks_fe_tablet_pre_split_post_submit_hard_cap`
+
+- Unit: Count
+- Type: Cumulative
+- Description: Total Sample-Based Tablet Pre-Split post-submit hard-cap events. Incremented when the admitted reshard job did not reach `FINISHED` within `tablet_pre_split_post_submit_wait_seconds`. Fires on the INSERT-from-FILES production path on timeout (the INSERT then proceeds without abort against the currently visible tablet layout — still the original layout if the daemon hasn't transitioned, or partially / fully post-split if the daemon raced past the wait. `tablet_pre_split_load_abort` is NOT incremented because the INSERT itself is not aborted) and on the `runPreSplit` synchronous-await wrapper. The Broker Load production path does not await and so does not update this counter.
+
+## `starrocks_fe_tablet_pre_split_load_abort`
+
+- Unit: Count
+- Type: Cumulative
+- Description: Total load transactions aborted because Sample-Based Tablet Pre-Split could not confirm the admitted reshard job reached `FINISHED` in time. Sibling counter of `tablet_pre_split_post_submit_hard_cap`. Production load paths proceed without abort against the currently visible layout on post-submit timeout rather than abort, so this counter stays at zero in production today; it only fires when a caller uses the strict `runPreSplit` wrapper (tests, or a future caller that opts into abort-on-timeout).
+
 ## `starrocks_fe_tablet_max_compaction_score`
 
 - Unit: Count
