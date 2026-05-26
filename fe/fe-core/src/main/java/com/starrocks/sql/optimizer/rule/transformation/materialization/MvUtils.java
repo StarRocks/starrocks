@@ -1514,9 +1514,15 @@ public class MvUtils {
     }
 
     /**
-     * DFS over the expression tree collecting physical columns referenced in each Scan's predicate,
-     * grouped by table id into {@code predicateColumnsByTable}.
-     * Nested Agg subtrees are skipped to exclude Agg->Agg->...->Scan paths.
+     * DFS over the expression tree collecting physical columns referenced in predicates,
+     * grouped by table into {@code predicateColumnsByTable}. Nested Agg subtrees are skipped.
+     *
+     * <p>Columns are collected from three sources:
+     * <ul>
+     *   <li>Pushed-down predicates on {@link LogicalScanOperator}</li>
+     *   <li>Predicates on {@link LogicalFilterOperator} (filters not pushed into scan)</li>
+     *   <li>ON predicates on {@link LogicalJoinOperator}</li>
+     * </ul>
      */
     public static void collectPredicateColumnsByTable(OptExpression node, Map<Table, Set<String>> predicateColumnsByTable) {
         if (node.getOp() instanceof LogicalScanOperator) {
@@ -1535,11 +1541,17 @@ public class MvUtils {
             }
             return;
         }
+        // Collect columns referenced in LogicalFilter predicates (e.g. filters not pushed into scan).
+        if (node.getOp() instanceof LogicalFilterOperator filter && filter.getPredicate() != null) {
+            Map<Integer, List<Pair<Table, String>>> colRefToTableColumns = new HashMap<>();
+            buildSPJFullColumnsToTableColumns(node, colRefToTableColumns);
+            collectPredicateColumnsByTable(filter.getPredicate(), colRefToTableColumns, predicateColumnsByTable);
+        }
         // Collect columns referenced in JOIN ON filter predicates (e.g. ON a.id = b.id AND a.col = 1).
         if (node.getOp() instanceof LogicalJoinOperator join && join.getOnPredicate() != null) {
             Map<Integer, List<Pair<Table, String>>> colRefToTableColumns = new HashMap<>();
             buildSPJFullColumnsToTableColumns(node, colRefToTableColumns);
-            collectJoinOnPredicateColumnsByTable(join.getOnPredicate(), colRefToTableColumns, predicateColumnsByTable);
+            collectPredicateColumnsByTable(join.getOnPredicate(), colRefToTableColumns, predicateColumnsByTable);
         }
         for (OptExpression child : node.getInputs()) {
             if (child.getOp() instanceof LogicalAggregationOperator) {
@@ -1550,40 +1562,28 @@ public class MvUtils {
     }
 
     /**
-     * Extracts filter predicate columns from a JOIN ON expression into {@code predicateColumnsByTable}.
-     *
-     * The ON expression is split into atomic conjuncts. A conjunct is treated as a filter predicate
-     * (rather than an equi-join condition) only when at least one of its direct children is a pure
-     * constant expression (i.e. {@link ScalarOperator#isConstant()} returns true, covering literals,
-     * constant functions like {@code concat(1,'2',3)}, etc.). Since constant children contribute no
-     * column refs, {@code clause.getUsedColumns()} is equivalent to collecting only non-constant children.
+     * Collects all physical columns referenced in {@code predicate} into {@code predicateColumnsByTable},
+     * resolving column ids to (table, column name) pairs via {@code colRefToTableColumns}.
      *
      * Examples:
      * <ul>
-     *   <li>{@code a.id = b.id}                              → skipped (both sides reference columns)</li>
-     *   <li>{@code concat(a.col,'x') = concat(b.id,'2',3)}   → skipped (both sides reference columns)</li>
+     *   <li>{@code a.id = b.id}                              → a.id added to tableA, b.id to tableB</li>
+     *   <li>{@code concat(a.col,'x') = concat(b.id,'2',3)}   → a.col added to tableA, b.id to tableB</li>
      *   <li>{@code a.col = 1}                                → col from a added</li>
      *   <li>{@code concat(a.col,'x') = concat(1,'2',3)}      → col from a added</li>
+     *   <li>{@code a.col1 > a.col2}                          → col1, col2 from a added</li>
      * </ul>
      */
-    private static void collectJoinOnPredicateColumnsByTable(ScalarOperator onPredicate,
+    private static void collectPredicateColumnsByTable(ScalarOperator predicate,
                                                              Map<Integer, List<Pair<Table, String>>> colRefToTableColumns,
                                                              Map<Table, Set<String>> predicateColumnsByTable) {
-        for (ScalarOperator clause : Utils.extractConjuncts(onPredicate)) {
-            // Skip conjuncts where no direct child is a pure constant (e.g. col_a = col_b equi-joins).
-            boolean hasConstantChild = clause.getChildren().stream().anyMatch(ScalarOperator::isConstant);
-            if (!hasConstantChild) {
-                continue;
+        predicate.getUsedColumns().getStream().forEach(colId -> {
+            for (Pair<Table, String> tableColumn :
+                    colRefToTableColumns.getOrDefault(colId, Collections.emptyList())) {
+                predicateColumnsByTable.computeIfAbsent(tableColumn.first, t -> new HashSet<>())
+                        .add(tableColumn.second);
             }
-            clause.getUsedColumns().getStream().forEach(colId -> {
-                List<Pair<Table, String>> resolved =
-                        colRefToTableColumns.getOrDefault(colId, Collections.emptyList());
-                for (Pair<Table, String> tableColumn : resolved) {
-                    predicateColumnsByTable.computeIfAbsent(tableColumn.first, t -> new HashSet<>())
-                            .add(tableColumn.second);
-                }
-            });
-        }
+        });
     }
 
     /**

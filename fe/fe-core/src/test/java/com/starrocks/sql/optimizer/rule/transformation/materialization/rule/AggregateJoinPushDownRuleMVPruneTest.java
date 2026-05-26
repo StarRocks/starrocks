@@ -23,6 +23,7 @@ import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.optimizer.MaterializationContext;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalFilterOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
@@ -91,6 +92,18 @@ public class AggregateJoinPushDownRuleMVPruneTest {
         return node;
     }
 
+    /**
+     * Builds an {@link OptExpression} wrapping a real {@link LogicalFilterOperator} with the given
+     * predicate, and a single child node.
+     */
+    private static OptExpression filterNode(ScalarOperator predicate, OptExpression child) {
+        LogicalFilterOperator filter = new LogicalFilterOperator(predicate);
+        OptExpression node = Mockito.mock(OptExpression.class);
+        Mockito.when(node.getOp()).thenReturn(filter);
+        Mockito.when(node.getInputs()).thenReturn(ImmutableList.of(child));
+        return node;
+    }
+
     // -----------------------------------------------------------------------
     // Group 1: Scan predicate
     // -----------------------------------------------------------------------
@@ -155,10 +168,11 @@ public class AggregateJoinPushDownRuleMVPruneTest {
     // -----------------------------------------------------------------------
 
     /**
-     * JOIN ON {@code a.id = b.id} (pure equi-join) → nothing collected.
+     * JOIN ON {@code a.id = b.id} → a.id collected for tableA, b.id collected for tableB.
+     * Both sides must appear in the MV's group-by for the rewrite to be valid.
      */
     @Test
-    public void testJoinOnEquiJoinSkipped() {
+    public void testJoinOnEquiJoinCollectsBothSides() {
         Table tableA = mockTable("a");
         Table tableB = mockTable("b");
         ColumnRefOperator aId = new ColumnRefOperator(1, IntegerType.INT, "id", true);
@@ -175,11 +189,13 @@ public class AggregateJoinPushDownRuleMVPruneTest {
         Map<Table, Set<String>> result = new HashMap<>();
         MvUtils.collectPredicateColumnsByTable(join, result);
 
-        assertTrue(result.isEmpty(), "Pure equi-join should not contribute predicate columns");
+        assertEquals(2, result.size());
+        assertEquals(Set.of("id"), result.get(tableA));
+        assertEquals(Set.of("id"), result.get(tableB));
     }
 
     /**
-     * JOIN ON {@code a.id = b.id AND a.col = 1} → only a.col collected, equi-join skipped.
+     * JOIN ON {@code a.id = b.id AND a.col = 1} → a.id and a.col collected for tableA, b.id for tableB.
      */
     @Test
     public void testJoinOnCompoundPartialFilter() {
@@ -203,9 +219,9 @@ public class AggregateJoinPushDownRuleMVPruneTest {
         Map<Table, Set<String>> result = new HashMap<>();
         MvUtils.collectPredicateColumnsByTable(join, result);
 
-        assertEquals(1, result.size());
-        assertEquals(Set.of("col"), result.get(tableA));
-        assertFalse(result.containsKey(tableB));
+        assertEquals(2, result.size());
+        assertEquals(Set.of("id", "col"), result.get(tableA));
+        assertEquals(Set.of("id"), result.get(tableB));
     }
 
     /**
@@ -240,8 +256,8 @@ public class AggregateJoinPushDownRuleMVPruneTest {
     }
 
     /**
-     * JOIN ON scan predicate and JOIN ON filter both contribute: scan has {@code col1 = 1},
-     * ON has {@code a.col2 = b.id AND a.col3 = 99} → col1, col3 collected for tableA (equi skipped).
+     * Scan predicate {@code col1 = 1} and JOIN ON {@code a.col2 = b.id AND a.col3 = 99}:
+     * col1, col2, col3 collected for tableA; b.id collected for tableB.
      */
     @Test
     public void testScanPredicateAndJoinOnFilterCombined() {
@@ -258,7 +274,7 @@ public class AggregateJoinPushDownRuleMVPruneTest {
 
         // scan predicate: col1 = 1
         ScalarOperator scanPred = new BinaryPredicateOperator(BinaryType.EQ, aCol1, ConstantOperator.createInt(1));
-        // ON: a.col2 = b.id (equi, skipped) AND a.col3 = 99 (filter)
+        // ON: a.col2 = b.id (equi, both sides collected) AND a.col3 = 99 (filter)
         ScalarOperator onPred = CompoundPredicateOperator.and(
                 new BinaryPredicateOperator(BinaryType.EQ, aCol2, bId),
                 new BinaryPredicateOperator(BinaryType.EQ, aCol3, ConstantOperator.createInt(99)));
@@ -271,15 +287,76 @@ public class AggregateJoinPushDownRuleMVPruneTest {
         Map<Table, Set<String>> result = new HashMap<>();
         MvUtils.collectPredicateColumnsByTable(join, result);
 
+        assertEquals(2, result.size());
+        assertEquals(Set.of("col1", "col2", "col3"), result.get(tableA));
+        assertEquals(Set.of("id"), result.get(tableB));
+    }
+
+    /**
+     * LogicalFilterOperator above a scan with predicate {@code col1 > 5 AND col2 = 1} → both cols collected.
+     *
+     * filters not pushed into the scan must still contribute their referenced columns
+     * so that MV candidates can be pruned correctly.
+     */
+    @Test
+    public void testFilterOperatorPredicateAddsColumns() {
+        Table tableA = mockTable("a");
+        ColumnRefOperator ref1 = new ColumnRefOperator(1, IntegerType.INT, "col1", true);
+        ColumnRefOperator ref2 = new ColumnRefOperator(2, IntegerType.INT, "col2", true);
+        Column col1 = new Column("col1", IntegerType.INT);
+        Column col2 = new Column("col2", IntegerType.INT);
+
+        // scan has no pushed-down predicate
+        OptExpression scan = scanNode(tableA, ImmutableMap.of(ref1, col1, ref2, col2), null);
+
+        // filter above scan: col1 > 5 AND col2 = 1
+        ScalarOperator filterPred = CompoundPredicateOperator.and(
+                new BinaryPredicateOperator(BinaryType.GT, ref1, ConstantOperator.createInt(5)),
+                new BinaryPredicateOperator(BinaryType.EQ, ref2, ConstantOperator.createInt(1)));
+        OptExpression filter = filterNode(filterPred, scan);
+
+        Map<Table, Set<String>> result = new HashMap<>();
+        MvUtils.collectPredicateColumnsByTable(filter, result);
+
         assertEquals(1, result.size());
-        assertEquals(Set.of("col1", "col3"), result.get(tableA));
+        assertEquals(Set.of("col1", "col2"), result.get(tableA));
+    }
+
+    /**
+     * JOIN ON {@code a.col1 > a.col2} (same-table column comparison, no constant child) →
+     * both col1 and col2 collected.
+     *
+     * a same-table conjunct must not be skipped just because it has no constant child.
+     */
+    @Test
+    public void testJoinOnSameTableColumnComparisonCollected() {
+        Table tableA = mockTable("a");
+        Table tableB = mockTable("b");
+        ColumnRefOperator aCol1 = new ColumnRefOperator(1, IntegerType.INT, "col1", true);
+        ColumnRefOperator aCol2 = new ColumnRefOperator(2, IntegerType.INT, "col2", true);
+        ColumnRefOperator bId   = new ColumnRefOperator(3, IntegerType.INT, "id",   true);
+        Column colA1 = new Column("col1", IntegerType.INT);
+        Column colA2 = new Column("col2", IntegerType.INT);
+        Column colBI = new Column("id",   IntegerType.INT);
+
+        // ON: a.col1 > a.col2 (same-table filter, no constant child)
+        ScalarOperator onPred = new BinaryPredicateOperator(BinaryType.GT, aCol1, aCol2);
+
+        OptExpression leftScan  = scanNode(tableA, ImmutableMap.of(aCol1, colA1, aCol2, colA2), null);
+        OptExpression rightScan = scanNode(tableB, ImmutableMap.of(bId, colBI), null);
+        OptExpression join = joinNode(onPred, ImmutableList.of(leftScan, rightScan));
+
+        Map<Table, Set<String>> result = new HashMap<>();
+        MvUtils.collectPredicateColumnsByTable(join, result);
+
+        assertEquals(1, result.size(), "Only tableA columns should be collected");
+        assertEquals(Set.of("col1", "col2"), result.get(tableA));
+        assertFalse(result.containsKey(tableB));
     }
 
     // -----------------------------------------------------------------------
     // Group 3: validMvGroupByAndPredicateColumns
     // -----------------------------------------------------------------------
-
-    private static final AggregateJoinPushDownRule RULE = new AggregateJoinPushDownRule();
 
     /**
      * Builds a mock {@link MaterializationContext} with pre-cached predicate/grouping columns
