@@ -328,7 +328,7 @@ public class Config extends ConfigBase {
      * 60m     60 minutes
      * 120s    120 seconds
      */
-    @ConfField
+    @ConfField(mutable = true)
     public static boolean enable_profile_log = true;
     @ConfField(mutable = true, comment = "Minimum query latency (ms) to log a profile to fe.profile.log. " +
             "Only queries with latency >= this value are logged. 0 means log all profiles (no threshold).")
