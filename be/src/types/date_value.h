@@ -101,6 +101,12 @@ public:
 
     std::string to_string() const;
 
+    // Formats into the provided buffer as "YYYY-MM-DD" (10 chars).
+    // Returns the number of characters written (always 10) or -1 on error.
+    int to_string(char* s, size_t n) const;
+
+    static constexpr int max_string_length() { return 10; }
+
     JulianDate julian() const { return _julian; }
 
     // Convert to C++20 chrono sys_days for time arithmetic
