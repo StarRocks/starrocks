@@ -119,6 +119,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: 在 `audit_log_roll_interval` 参数指定的每个保留期内，可以保留的审计日志文件的最大数量。
 - 引入版本: -
 
+### `audit_stmt_before_execute`
+
+- 默认值: false
+- 类型: Boolean
+- 单位: -
+- 是否可变: Yes
+- 描述: 控制 FE 是否在语句执行前输出 `BEFORE_QUERY` 审计事件。启用后，ConnectProcessor 会在执行前写入一条审计日志，并在执行后继续写入原有的 `AFTER_QUERY` 审计日志。对于此分支中的 multi-statement 请求，审计记录仍保持命令级别，而不是按每条子语句分别记录。
+- 引入版本: -
+
 ### `bdbje_log_level`
 
 - 默认值: INFO

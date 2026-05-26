@@ -67,6 +67,7 @@ import com.starrocks.mysql.MysqlPacket;
 import com.starrocks.mysql.MysqlProto;
 import com.starrocks.mysql.MysqlSerializer;
 import com.starrocks.mysql.MysqlServerStatusFlag;
+import com.starrocks.plugin.AuditEvent;
 import com.starrocks.plugin.AuditEvent.EventType;
 import com.starrocks.proto.PQueryStatistics;
 import com.starrocks.rpc.RpcException;
@@ -128,6 +129,7 @@ public class ConnectProcessor {
     private ByteBuffer packetBuf;
 
     protected StmtExecutor executor = null;
+    private boolean auditBeforeExecLogged = false;
 
     public ConnectProcessor(ConnectContext context) {
         this.ctx = context;
@@ -216,6 +218,28 @@ public class ConnectProcessor {
 
     public void auditAfterExec(String origStmt, StatementBase parsedStmt, PQueryStatistics statistics) {
         auditAfterExec(origStmt, parsedStmt, statistics, null);
+    }
+
+    public void auditBeforeExec(String origStmt, StatementBase parsedStmt) {
+        if (!Config.audit_stmt_before_execute) {
+            return;
+        }
+
+        ctx.getAuditEventBuilder().setEventType(EventType.BEFORE_QUERY)
+                .setState(ctx.getState().toString())
+                .setErrorCode(ctx.getNormalizedErrorCode())
+                .setReturnRows(ctx.getReturnRows())
+                .setStmtId(ctx.getStmtId())
+                .setQueryId(ctx.getQueryId() == null ? "NaN" : ctx.getQueryId().toString())
+                .setQuerySource(ctx.getQuerySource().toString())
+                .setCommand(ctx.getCommandStr())
+                .setPreparedStmtId(null);
+
+        ctx.getAuditEventBuilder().setIsQuery(ctx.getState().isQuery());
+        ctx.getAuditEventBuilder().setFeIp(FrontendOptions.getLocalHostAddress());
+        ctx.getAuditEventBuilder().setStmt(formatStmtForAudit(origStmt, parsedStmt));
+        GlobalStateMgr.getCurrentState().getAuditEventProcessor().handleAuditEvent(
+                ctx.getAuditEventBuilder().buildSnapshot());
     }
 
     public void auditAfterExec(String origStmt, StatementBase parsedStmt, PQueryStatistics statistics,
@@ -308,18 +332,23 @@ public class ConnectProcessor {
         ctx.getAuditEventBuilder().setQueriedRelations(
                 AnalyzerUtils.collectAllTableAndViewRelationNamesForAudit(parsedStmt));
 
+        ctx.getAuditEventBuilder().setStmt(formatStmtForAudit(origStmt, parsedStmt));
+
+        AuditEvent auditEvent = ctx.getAuditEventBuilder().buildSnapshot();
+        GlobalStateMgr.getCurrentState().getAuditEventProcessor().handleAuditEvent(auditEvent);
+    }
+
+    private String formatStmtForAudit(String origStmt, StatementBase parsedStmt) {
         if (parsedStmt != null && AuditEncryptionChecker.needEncrypt(parsedStmt)) {
             // Some information like username, password in the stmt should not be printed.
-            ctx.getAuditEventBuilder().setStmt(SqlCredentialRedactor.redact(origStmt));
+            return SqlCredentialRedactor.redact(origStmt);
         } else if (parsedStmt == null) {
             // invalid sql, record the original statement to avoid audit log can't replay
             // but redact sensitive credentials first
-            ctx.getAuditEventBuilder().setStmt(SqlCredentialRedactor.redact(origStmt));
+            return SqlCredentialRedactor.redact(origStmt);
         } else {
-            ctx.getAuditEventBuilder().setStmt(LogUtil.removeLineSeparator(origStmt));
+            return LogUtil.removeLineSeparator(origStmt);
         }
-
-        GlobalStateMgr.getCurrentState().getAuditEventProcessor().handleAuditEvent(ctx.getAuditEventBuilder().build());
     }
 
     public static String computeStatementDigest(StatementBase queryStmt) {
@@ -339,6 +368,19 @@ public class ConnectProcessor {
         }
     }
 
+    private void resetAuditEventBuilder() {
+        ctx.getAuditEventBuilder().reset();
+        ctx.getAuditEventBuilder()
+                .setTimestamp(System.currentTimeMillis())
+                .setClientIp(ctx.getMysqlChannel().getRemoteHostPortString())
+                .setUser(ctx.getQualifiedUser())
+                .setAuthorizedUser(
+                        ctx.getCurrentUserIdentity() == null ? "null" : ctx.getCurrentUserIdentity().toString())
+                .setDb(ctx.getDatabase())
+                .setCatalog(ctx.getCurrentCatalog())
+                .setWarehouse(ctx.getCurrentWarehouseName());
+    }
+
     // process COM_QUERY statement,
     protected void handleQuery() {
         MetricRepo.COUNTER_REQUEST_ALL.increase(1L);
@@ -353,16 +395,8 @@ public class ConnectProcessor {
             ending--;
         }
         originStmt = new String(bytes, 1, ending, StandardCharsets.UTF_8);
-        ctx.getAuditEventBuilder().reset();
-        ctx.getAuditEventBuilder()
-                .setTimestamp(System.currentTimeMillis())
-                .setClientIp(ctx.getMysqlChannel().getRemoteHostPortString())
-                .setUser(ctx.getQualifiedUser())
-                .setAuthorizedUser(
-                        ctx.getCurrentUserIdentity() == null ? "null" : ctx.getCurrentUserIdentity().toString())
-                .setDb(ctx.getDatabase())
-                .setCatalog(ctx.getCurrentCatalog())
-                .setWarehouse(ctx.getCurrentWarehouseName());
+        auditBeforeExecLogged = false;
+        resetAuditEventBuilder();
         Tracers.register(ctx);
         // set isQuery before `forwardToLeader` to make it right for audit log.
         ctx.getState().setIsQuery(true);
@@ -535,6 +569,11 @@ public class ConnectProcessor {
             if (ctx.getIsLastStmt()) {
                 executor.addRunningQueryDetail(parsedStmt);
             }
+            if (!auditBeforeExecLogged) {
+                ctx.getState().setIsQuery(ctx.isQueryStmt(parsedStmt));
+                auditBeforeExec(originStmt, parsedStmt);
+                auditBeforeExecLogged = true;
+            }
             executor.execute();
 
             // do not execute following stmt when current stmt failed, this is consistent with mysql server
@@ -677,6 +716,10 @@ public class ConnectProcessor {
 
             executor = new StmtExecutor(ctx, executeStmt);
             ctx.setExecutor(executor);
+            if (enableAudit) {
+                resetAuditEventBuilder();
+                auditBeforeExec(originStmt, executeStmt);
+            }
 
             if (enableAudit && isQuery) {
                 executor.addRunningQueryDetail(executeStmt);

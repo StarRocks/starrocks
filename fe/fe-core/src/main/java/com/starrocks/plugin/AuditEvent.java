@@ -39,6 +39,8 @@ import com.starrocks.server.WarehouseManager;
 
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
+import java.lang.reflect.Field;
+import java.lang.reflect.Modifier;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -171,6 +173,21 @@ public class AuditEvent {
 
     @AuditField(value = "QueriedRelations", ignore_empty = true)
     public List<String> queriedRelations = Collections.emptyList();
+
+    public AuditEvent copy() {
+        AuditEvent copied = new AuditEvent();
+        try {
+            for (Field field : AuditEvent.class.getFields()) {
+                if (Modifier.isStatic(field.getModifiers())) {
+                    continue;
+                }
+                field.set(copied, field.get(this));
+            }
+        } catch (IllegalAccessException e) {
+            throw new IllegalStateException("Failed to copy audit event", e);
+        }
+        return copied;
+    }
 
     public static class AuditEventBuilder {
 
@@ -450,6 +467,10 @@ public class AuditEvent {
 
         public AuditEvent build() {
             return this.auditEvent;
+        }
+
+        public AuditEvent buildSnapshot() {
+            return build().copy();
         }
 
         // Copy execution statistics from another audit event

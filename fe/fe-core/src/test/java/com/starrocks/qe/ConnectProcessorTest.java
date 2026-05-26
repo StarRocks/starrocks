@@ -40,6 +40,7 @@ import com.starrocks.analysis.AccessTestUtil;
 import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.authorization.PrivilegeBuiltinConstants;
 import com.starrocks.catalog.InternalCatalog;
+import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.profile.Tracers;
@@ -439,6 +440,49 @@ public class ConnectProcessorTest extends DDLTestBase {
 
         processor.processOnce();
         Assertions.assertEquals(MysqlCommand.COM_QUERY, myContext.getCommand());
+    }
+
+    @Test
+    public void testAuditBeforeAndAfterOnceForMultiStatement() throws Exception {
+        boolean oldAuditStmtBeforeExecute = Config.audit_stmt_before_execute;
+        Config.audit_stmt_before_execute = true;
+        try {
+            MysqlSerializer serializer = MysqlSerializer.newInstance();
+            serializer.writeInt1(3);
+            serializer.writeEofString("select 1; select 2;");
+            ConnectContext ctx = initMockContext(mockChannel(serializer.toByteBuffer()), GlobalStateMgr.getCurrentState());
+            List<String> auditRecords = new ArrayList<>();
+            ConnectProcessor processor = new ConnectProcessor(ctx) {
+                @Override
+                public void auditBeforeExec(String origStmt, StatementBase parsedStmt) {
+                    auditRecords.add("BEFORE:" + origStmt);
+                }
+
+                @Override
+                public void auditAfterExec(String origStmt, StatementBase parsedStmt, PQueryStatistics statistics,
+                                           String digestFromLeader) {
+                    auditRecords.add("AFTER:" + ctx.getState().toString() + ":" + origStmt);
+                }
+            };
+
+            new MockUp<StmtExecutor>() {
+                @Mock
+                public void execute() {
+                }
+
+                @Mock
+                public PQueryStatistics getQueryStatisticsForAuditLog() {
+                    return null;
+                }
+            };
+
+            processor.processOnce();
+            Assertions.assertEquals(2, auditRecords.size());
+            Assertions.assertEquals("BEFORE:select 1; select 2;", auditRecords.get(0));
+            Assertions.assertEquals("AFTER:OK:select 1; select 2;", auditRecords.get(1));
+        } finally {
+            Config.audit_stmt_before_execute = oldAuditStmtBeforeExecute;
+        }
     }
 
     @Test

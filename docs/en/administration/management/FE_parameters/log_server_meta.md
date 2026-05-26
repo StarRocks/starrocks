@@ -119,6 +119,15 @@ This topic introduces the following types of FE configurations:
 - Description: The maximum number of audit log files that can be retained within each retention period specified by the `audit_log_roll_interval` parameter.
 - Introduced in: -
 
+### `audit_stmt_before_execute`
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Controls whether FE emits a `BEFORE_QUERY` audit event before statement execution. When enabled, ConnectProcessor writes one audit record before execution and still writes the normal `AFTER_QUERY` audit record after execution. For multi-statement requests in this branch, audit records remain command-level rather than per sub-statement.
+- Introduced in: -
+
 ### `bdbje_log_level`
 
 - Default: INFO
