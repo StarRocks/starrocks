@@ -160,8 +160,7 @@ StatusOr<llvm::orc::JITTargetMachineBuilder> make_target_machine_builder() {
 
 void add_absolute_symbol(llvm::orc::LLJIT& lljit, const std::string& name, void* function_ptr) {
     llvm::orc::MangleAndInterner mangle(lljit.getExecutionSession(), lljit.getDataLayout());
-    llvm::orc::ExecutorSymbolDef symbol(llvm::orc::ExecutorAddr::fromPtr(function_ptr),
-                                        llvm::JITSymbolFlags::Exported);
+    llvm::orc::ExecutorSymbolDef symbol(llvm::orc::ExecutorAddr::fromPtr(function_ptr), llvm::JITSymbolFlags::Exported);
     auto error = lljit.getMainJITDylib().define(llvm::orc::absoluteSymbols({{mangle(name), symbol}}));
     llvm::cantFail(std::move(error));
 }
