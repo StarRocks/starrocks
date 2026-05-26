@@ -137,6 +137,7 @@ set(EXEC_FILES
     schema_scanner/schema_columns_scanner.cpp
     schema_scanner/schema_column_stats_usage_scanner.cpp
     schema_scanner/schema_charsets_scanner.cpp
+    schema_scanner/schema_collation_character_set_applicability_scanner.cpp
     schema_scanner/schema_collations_scanner.cpp
     schema_scanner/schema_statistics_scanner.cpp
     schema_scanner/schema_triggers_scanner.cpp
