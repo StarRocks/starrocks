@@ -48,6 +48,7 @@
 #include "common/system/master_info.h"
 #include "common/util/thrift_client_cache.h"
 #include "gen_cpp/FrontendService.h"
+#include "gutil/walltime.h"
 #include "platform/thrift_rpc_helper.h"
 #include "runtime/exec_env.h"
 #include "runtime/fragment_mgr.h"

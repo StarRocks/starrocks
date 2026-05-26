@@ -198,11 +198,19 @@ Process-scoped runtime environment resources below full Runtime and above Runtim
 - Core tests: `runtime_env_test`
 - Remediation: Keep RuntimeEnv limited to process-scoped runtime environment resources; move query execution, storage, service, connector, and UDF integration upward.
 
+### StoragePrimitive (`storageprimitive`)
+Primitive storage contracts and value types shared below ComputeEnv without concrete Storage engine, tablet, rowset, lake, service, or full Exec coupling.
+- Targets: `StoragePrimitive`
+- Allowed internal include prefixes: `storage/primitive/`, `exprs/`, `runtime/`, `column/`, `types/`, `common/`, `base/`, `gutil/`, `gen_cpp/`
+- Allowed target deps: `ExprCore`, `RuntimeCore`, `ChunkCore`, `ColumnCore`, `Types`, `Common`, `Base`, `Gutil`, `StarRocksGen`
+- Core tests: `storage_primitive_test`
+- Remediation: Keep StoragePrimitive limited to reusable storage contracts and value types; move concrete storage engine, tablet, rowset, lake, service, connector, and full Exec integration upward.
+
 ### ComputeEnv (`computeenv`)
 Shared compute-side BE environment boundary for process-scoped compute resources and pipeline controls below full Exec/Storage and above RuntimeEnv.
 - Targets: `ComputeEnv`
-- Allowed internal include prefixes: `compute_env/`, `exec/runtime_filter/`, `exec/query_cache/ticket_checker.h`, `exec/pipeline/pipeline_fwd.h`, `exec/pipeline/operator.h`, `exec/pipeline/primitives/`, `exec/pipeline/runtime_filter_core_types.h`, `exec/pipeline/scan/scan_morsel.h`, `exec/pipeline/scan/morsel_queue.h`, `exec/pipeline/scan/morsel_queue_builder.h`, `exec/pipeline/scan/fixed_morsel_queue.h`, `exec/pipeline/scan/fixed_morsel_queue_builder.h`, `exec/pipeline/scan/dynamic_morsel_queue.h`, `exec/pipeline/scan/dynamic_morsel_queue_builder.h`, `exec/pipeline/scan/ticketed_morsel_queue.h`, `exprs/`, `serde/`, `runtime/env/`, `runtime/`, `util/time_guard.h`, `platform/`, `column/`, `types/`, `common/`, `base/`, `gutil/`, `gen_cpp/`
-- Allowed target deps: `ExecPrimitive`, `ExprCore`, `Serde`, `Util`, `RuntimeEnv`, `RuntimeCore`, `Platform`, `ChunkCore`, `ColumnCore`, `Types`, `Common`, `Base`, `Gutil`, `StarRocksGen`
+- Allowed internal include prefixes: `compute_env/`, `exec/runtime_filter/`, `exec/query_cache/ticket_checker.h`, `exec/pipeline/pipeline_fwd.h`, `exec/pipeline/operator.h`, `exec/pipeline/primitives/`, `exec/pipeline/runtime_filter_core_types.h`, `exec/pipeline/scan/scan_morsel.h`, `exec/pipeline/scan/morsel_queue.h`, `exec/pipeline/scan/morsel_queue_builder.h`, `exec/pipeline/scan/fixed_morsel_queue.h`, `exec/pipeline/scan/fixed_morsel_queue_builder.h`, `exec/pipeline/scan/dynamic_morsel_queue.h`, `exec/pipeline/scan/dynamic_morsel_queue_builder.h`, `exec/pipeline/scan/ticketed_morsel_queue.h`, `storage/primitive/`, `exprs/`, `serde/`, `runtime/env/`, `runtime/`, `util/time_guard.h`, `platform/`, `column/`, `types/`, `common/`, `base/`, `gutil/`, `gen_cpp/`
+- Allowed target deps: `StoragePrimitive`, `ExecPrimitive`, `ExprCore`, `Serde`, `Util`, `RuntimeEnv`, `RuntimeCore`, `Platform`, `ChunkCore`, `ColumnCore`, `Types`, `Common`, `Base`, `Gutil`, `StarRocksGen`
 - Core tests: `compute_env_test`, `compute_env_sorting_test`
 - Remediation: Keep ComputeEnv limited to process-scoped compute resources, shared compute-side service contracts, stable execution primitives, and reusable compute-side sorting algorithms; move concrete Exec, Storage, Service, Connector, and Agent integration upward.
 

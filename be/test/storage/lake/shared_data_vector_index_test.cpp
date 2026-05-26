@@ -23,6 +23,7 @@
 #include "common/config_vector_index_fwd.h"
 #include "fs/fs_factory.h"
 #include "fs/fs_util.h"
+#include "gutil/walltime.h"
 #include "storage/chunk_helper.h"
 #include "storage/index/index_descriptor.h"
 #include "storage/index/vector/vector_index_reader.h"

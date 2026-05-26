@@ -15,6 +15,7 @@
 #include <gtest/gtest.h>
 
 #include "column/chunk_factory.h"
+#include "gutil/walltime.h"
 #include "storage/binlog_test_base.h"
 #include "storage/chunk_helper.h"
 #include "storage/rowset/rowset_factory.h"

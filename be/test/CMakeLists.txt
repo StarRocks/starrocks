@@ -366,6 +366,7 @@ add_subdirectory(types)
 add_subdirectory(exec)
 add_subdirectory(connector)
 add_subdirectory(formats)
+add_subdirectory(storage_primitive)
 add_subdirectory(runtime)
 add_subdirectory(compute_env)
 add_subdirectory(exprs)
@@ -508,7 +509,6 @@ SET(DW_TEST_FILES
     ./storage/publish_version_manager_test.cpp
     ./storage/publish_version_task_test.cpp
     ./storage/push_handler_test.cpp
-    ./storage/range_test.cpp
     ./storage/replication_txn_manager_test.cpp
     ./storage/replication_utils_test.cpp
     ./storage/roaring2range_test.cpp

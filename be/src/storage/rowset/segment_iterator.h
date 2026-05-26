@@ -21,7 +21,7 @@
 #include "common/statusor.h"
 #include "storage/chunk_iterator.h"
 #include "storage/olap_common.h"
-#include "storage/range.h"
+#include "storage/primitive/range.h"
 
 namespace starrocks {
 class Segment;

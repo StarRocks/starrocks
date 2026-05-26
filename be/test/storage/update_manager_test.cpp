@@ -22,6 +22,7 @@
 #include "base/testutil/assert.h"
 #include "column/chunk_factory.h"
 #include "fs/fs_util.h"
+#include "gutil/walltime.h"
 #include "runtime/mem_tracker.h"
 #include "storage/chunk_helper.h"
 #include "storage/del_vector.h"
