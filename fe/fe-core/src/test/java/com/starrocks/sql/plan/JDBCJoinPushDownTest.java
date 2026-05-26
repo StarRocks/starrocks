@@ -111,6 +111,47 @@ public class JDBCJoinPushDownTest extends ConnectorPlanTestBase {
     }
 
     @Test
+    public void testTwoTableJoinWithOuterLimit() throws Exception {
+        // After PushDownJoinToJDBCRule merges the join into a derived JDBC scan, MERGE_LIMIT_RULES
+        // folds the outer LIMIT 100 into the scan's limit field. JDBCScanNode.getJDBCQueryStr()
+        // then emits "LIMIT 100" at the tail of the BE-side SQL — the LIMIT lands in the wrapped
+        // subquery's outer SELECT (not inside the merged inner SQL).
+        String sql = "select t1.a, t2.b from jdbc0.partitioned_db0.tbl0 t1 " +
+                "join jdbc0.partitioned_db0.tbl1 t2 on t1.a = t2.a " +
+                "limit 100";
+        String plan = getFragmentPlan(sql);
+        Assertions.assertEquals(1, countOccurrences(plan, "TABLE: (SELECT "));
+        assertContains(plan,
+                "TABLE: (SELECT ",
+                "FROM (SELECT `a` FROM `tbl0` WHERE (`a` IS NOT NULL)) t0 "
+                        + "INNER JOIN (SELECT `a`, `b` FROM `tbl1` WHERE (`a` IS NOT NULL)) t1 "
+                        + "ON (t0.`a` = t1.`a`)) sr_merged",
+                ") sr_merged LIMIT 100");
+    }
+
+    @Test
+    public void testTwoTableJoinWithCountStar() throws Exception {
+        // count(*) doesn't reference any specific column. PruneScanColumnRule's "smallest column"
+        // fallback after PushDownJoinToJDBCRule leaves the merged scan with a single column in
+        // its external output, but the inner merged SQL still SELECTs both join keys (needed
+        // for the ON clause). The count(*) aggregate stays as a local AGGREGATE above the JDBC
+        // scan — there is no aggregation pushdown to JDBC.
+        String sql = "select count(*) from jdbc0.partitioned_db0.tbl0 t1 "
+                + "join jdbc0.partitioned_db0.tbl1 t2 on t1.a = t2.a";
+        String plan = getFragmentPlan(sql);
+        Assertions.assertEquals(1, countOccurrences(plan, "TABLE: (SELECT "));
+        // Merged scan: both atoms' join key visible in inner SQL.
+        assertContains(plan,
+                "FROM (SELECT `a` FROM `tbl0` WHERE (`a` IS NOT NULL)) t0 "
+                        + "INNER JOIN (SELECT `a` FROM `tbl1` WHERE (`a` IS NOT NULL)) t1 "
+                        + "ON (t0.`a` = t1.`a`)) sr_merged",
+                "AGGREGATE",
+                "count(*)");
+        // count(*) is NOT pushed to JDBC — the BE-side SQL must not contain count.
+        assertNotContains(plan, "QUERY: SELECT count");
+    }
+
+    @Test
     public void testThreeTableJoin() throws Exception {
         String sql = "select t1.a, t2.b, t3.c from jdbc0.partitioned_db0.tbl0 t1 " +
                 "join jdbc0.partitioned_db0.tbl1 t2 on t1.a = t2.a " +

@@ -185,6 +185,32 @@ on ao.customer_id = ac.customer_id
 where o.order_id = 2 and ao.order_id in (3, 4)
 order by o.order_id, ao.order_id;
 
+-- Outer LIMIT lands on the merged QUERY, not on the inner subqueries.
+explain select o.order_id, c.region
+from jdbc_join_pushdown_${uuid0}.db_join_pushdown_${uuid0}.orders o
+join jdbc_join_pushdown_${uuid0}.db_join_pushdown_${uuid0}.customers c
+on o.customer_id = c.customer_id
+limit 100;
+
+select count(*) from (
+    select o.order_id, c.region
+    from jdbc_join_pushdown_${uuid0}.db_join_pushdown_${uuid0}.orders o
+    join jdbc_join_pushdown_${uuid0}.db_join_pushdown_${uuid0}.customers c
+    on o.customer_id = c.customer_id
+    limit 100
+) t;
+
+-- count(*) over the merged JDBC scan must not crash (regression for fullSchema mismatch NPE).
+explain select count(*)
+from jdbc_join_pushdown_${uuid0}.db_join_pushdown_${uuid0}.orders o
+join jdbc_join_pushdown_${uuid0}.db_join_pushdown_${uuid0}.customers c
+on o.customer_id = c.customer_id;
+
+select count(*)
+from jdbc_join_pushdown_${uuid0}.db_join_pushdown_${uuid0}.orders o
+join jdbc_join_pushdown_${uuid0}.db_join_pushdown_${uuid0}.customers c
+on o.customer_id = c.customer_id;
+
 set enable_jdbc_join_push_down=false;
 explain select o.order_id, c.region, o.amount
 from jdbc_join_pushdown_${uuid0}.db_join_pushdown_${uuid0}.orders o

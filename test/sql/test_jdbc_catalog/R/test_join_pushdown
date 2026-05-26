@@ -372,6 +372,42 @@ order by o.order_id, ao.order_id;
 2	east	3	west
 2	east	4	north
 -- !result
+explain select o.order_id, c.region
+from jdbc_join_pushdown_${uuid0}.db_join_pushdown_${uuid0}.orders o
+join jdbc_join_pushdown_${uuid0}.db_join_pushdown_${uuid0}.customers c
+on o.customer_id = c.customer_id
+limit 100;
+-- result:
+[REGEX](?s)^(?!.*HASH JOIN).*[0-9]+:SCAN JDBC[ \t]*
+     TABLE: \(SELECT t0\.`order_id` AS c1, t0\.`customer_id` AS c2, t1\.`customer_id` AS c5, t1\.`region` AS c6 FROM \(SELECT `order_id`, `customer_id` FROM `db_join_pushdown_[a-f0-9]+`\.`orders` WHERE \(`customer_id` IS NOT NULL\)\) t0 INNER JOIN \(SELECT `customer_id`, `region` FROM `db_join_pushdown_[a-f0-9]+`\.`customers` WHERE \(`customer_id` IS NOT NULL\)\) t1 ON \(t0\.`customer_id` = t1\.`customer_id`\)\) sr_merged[ \t]*
+     QUERY: SELECT `c1`, `c6` FROM \(SELECT t0\.`order_id` AS c1, t0\.`customer_id` AS c2, t1\.`customer_id` AS c5, t1\.`region` AS c6 FROM \(SELECT `order_id`, `customer_id` FROM `db_join_pushdown_[a-f0-9]+`\.`orders` WHERE \(`customer_id` IS NOT NULL\)\) t0 INNER JOIN \(SELECT `customer_id`, `region` FROM `db_join_pushdown_[a-f0-9]+`\.`customers` WHERE \(`customer_id` IS NOT NULL\)\) t1 ON \(t0\.`customer_id` = t1\.`customer_id`\)\) sr_merged LIMIT 100[ \t]*
+-- !result
+select count(*) from (
+    select o.order_id, c.region
+    from jdbc_join_pushdown_${uuid0}.db_join_pushdown_${uuid0}.orders o
+    join jdbc_join_pushdown_${uuid0}.db_join_pushdown_${uuid0}.customers c
+    on o.customer_id = c.customer_id
+    limit 100
+) t;
+-- result:
+5
+-- !result
+explain select count(*)
+from jdbc_join_pushdown_${uuid0}.db_join_pushdown_${uuid0}.orders o
+join jdbc_join_pushdown_${uuid0}.db_join_pushdown_${uuid0}.customers c
+on o.customer_id = c.customer_id;
+-- result:
+[REGEX](?s)^(?!.*HASH JOIN)(?!.*QUERY: SELECT count).*AGGREGATE.*[0-9]+:SCAN JDBC[ \t]*
+     TABLE: \(SELECT t0\.`customer_id` AS c2, t1\.`customer_id` AS c5 FROM \(SELECT `customer_id` FROM `db_join_pushdown_[a-f0-9]+`\.`orders` WHERE \(`customer_id` IS NOT NULL\)\) t0 INNER JOIN \(SELECT `customer_id` FROM `db_join_pushdown_[a-f0-9]+`\.`customers` WHERE \(`customer_id` IS NOT NULL\)\) t1 ON \(t0\.`customer_id` = t1\.`customer_id`\)\) sr_merged[ \t]*
+     QUERY: SELECT `c2` FROM \(SELECT t0\.`customer_id` AS c2, t1\.`customer_id` AS c5 FROM \(SELECT `customer_id` FROM `db_join_pushdown_[a-f0-9]+`\.`orders` WHERE \(`customer_id` IS NOT NULL\)\) t0 INNER JOIN \(SELECT `customer_id` FROM `db_join_pushdown_[a-f0-9]+`\.`customers` WHERE \(`customer_id` IS NOT NULL\)\) t1 ON \(t0\.`customer_id` = t1\.`customer_id`\)\) sr_merged[ \t]*
+-- !result
+select count(*)
+from jdbc_join_pushdown_${uuid0}.db_join_pushdown_${uuid0}.orders o
+join jdbc_join_pushdown_${uuid0}.db_join_pushdown_${uuid0}.customers c
+on o.customer_id = c.customer_id;
+-- result:
+5
+-- !result
 set enable_jdbc_join_push_down=false;
 -- result:
 -- !result

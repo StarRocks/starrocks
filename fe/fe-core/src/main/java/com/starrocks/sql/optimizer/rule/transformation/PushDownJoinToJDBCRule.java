@@ -453,6 +453,7 @@ public class PushDownJoinToJDBCRule extends TransformationRule {
         JDBCTable primaryTable = group.get(0).table;
         JDBCTable mergedTable = new JDBCTable(primaryTable);
         mergedTable.setPushDownQuery(pushDownSQL);
+        mergedTable.setNewFullSchema(new ArrayList<>(mergedColRefToColumnMap.values()));
 
         LogicalJDBCScanOperator mergedOp = new LogicalJDBCScanOperator(
                 mergedTable,

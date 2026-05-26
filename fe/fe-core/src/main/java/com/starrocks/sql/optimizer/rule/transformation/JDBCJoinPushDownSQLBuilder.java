@@ -38,6 +38,7 @@ import com.starrocks.type.PrimitiveType;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -345,7 +346,7 @@ public class JDBCJoinPushDownSQLBuilder {
 
         @Override
         public Boolean visitCall(CallOperator op, Void ctx) {
-            String fnName = op.getFnName();
+            String fnName = op.getFnName().toLowerCase(Locale.ROOT);
             int arity = op.getChildren().size();
             if (BINARY_INFIX_FUNCTIONS.containsKey(fnName)) {
                 return arity == 2 && allChildrenPushable(op);
@@ -511,14 +512,15 @@ public class JDBCJoinPushDownSQLBuilder {
 
         @Override
         public String visitCall(CallOperator op, Void context) {
-            String sqlOp = BINARY_INFIX_FUNCTIONS.get(op.getFnName());
+            String fnName = op.getFnName().toLowerCase(Locale.ROOT);
+            String sqlOp = BINARY_INFIX_FUNCTIONS.get(fnName);
             if (sqlOp != null && op.getChildren().size() == 2) {
                 // Binary infix operator (e.g., add → +)
                 String left = op.getChild(0).accept(this, null);
                 String right = op.getChild(1).accept(this, null);
                 return "(" + left + " " + sqlOp + " " + right + ")";
             }
-            if ("concat".equals(op.getFnName()) && op.getChildren().size() >= 2) {
+            if ("concat".equals(fnName) && op.getChildren().size() >= 2) {
                 List<String> args = op.getChildren().stream()
                         .map(child -> child.accept(this, null))
                         .collect(Collectors.toList());

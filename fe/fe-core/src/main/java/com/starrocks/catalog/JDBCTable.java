@@ -14,6 +14,7 @@
 
 package com.starrocks.catalog;
 
+import com.google.common.base.Preconditions;
 import com.google.common.base.Splitter;
 import com.google.common.base.Strings;
 import com.google.common.collect.Sets;
@@ -218,10 +219,13 @@ public class JDBCTable extends Table {
     // sr_merged alias so the outer scan can give it its own alias without producing
     // "(<inner>) sr_merged t0" double-alias garbage.
     public String getPushDownQuery() {
-        if (!derivedTable) {
-            return null;
-        }
-        return jdbcTable.substring(1, jdbcTable.length() - 2 - DERIVED_TABLE_ALIAS.length());
+        Preconditions.checkState(derivedTable, "getPushDownQuery called on non-derived JDBCTable");
+        String suffix = ") " + DERIVED_TABLE_ALIAS;
+        int endExclusive = jdbcTable.length() - suffix.length();
+        Preconditions.checkState(
+                endExclusive >= 1 && jdbcTable.charAt(0) == '(' && jdbcTable.endsWith(suffix),
+                "JDBCTable not in derived-table form: %s", jdbcTable);
+        return jdbcTable.substring(1, endExclusive);
     }
 
     public static String normalizePassThroughQuery(String query) {
