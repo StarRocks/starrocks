@@ -27,7 +27,6 @@ import com.starrocks.proto.EncryptionKeyPB;
 import com.starrocks.proto.EncryptionKeyTypePB;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.NodeMgr;
-import com.starrocks.sql.optimizer.statistics.CachedStatisticStorage;
 import com.starrocks.statistic.AnalyzeMgr;
 import com.starrocks.statistic.ExternalBasicStatsMeta;
 import com.starrocks.statistic.ExternalHistogramStatsMeta;
@@ -52,7 +51,7 @@ import java.util.List;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 
 public class EditLogTest {
     public static final Logger LOG = LogManager.getLogger(EditLogTest.class);
@@ -230,26 +229,29 @@ public class EditLogTest {
 
     @Test
     public void testReplayExternalBasicStatsInvalidatesCacheWithoutRefresh() throws Exception {
-        AtomicBoolean invalidated = new AtomicBoolean(false);
+        AtomicInteger submittedCacheTasks = new AtomicInteger(0);
 
         new MockUp<AnalyzeMgr>() {
             @Mock
+            public void refreshConnectorTableBasicStatisticsCacheAfterReplay(ExternalBasicStatsMeta basicStatsMeta) {
+                submittedCacheTasks.incrementAndGet();
+            }
+
+            @Mock
+            public void expireConnectorTableAndColumnStatisticsAfterReplay(ExternalBasicStatsMeta basicStatsMeta) {
+                submittedCacheTasks.incrementAndGet();
+            }
+
+            @Mock
             public void refreshConnectorTableBasicStatisticsCache(String catalogName, String dbName, String tableName,
                                                                   List<String> columns, boolean async) {
-                Assertions.fail("External stats journal replay should not refresh connector stats cache");
+                Assertions.fail("External stats journal replay should not refresh connector stats cache synchronously");
             }
 
             @Mock
             public void expireConnectorTableAndColumnStatistics(String catalogName, String dbName,
                                                                String tableName, List<String> columns) {
-                Assertions.fail("External stats journal replay should not resolve connector table metadata");
-            }
-        };
-
-        new MockUp<CachedStatisticStorage>() {
-            @Mock
-            public void expireAllConnectorTableColumnStatistics() {
-                invalidated.set(true);
+                Assertions.fail("External stats journal replay should not resolve connector table metadata synchronously");
             }
         };
 
@@ -259,41 +261,45 @@ public class EditLogTest {
 
         new EditLog(null).loadJournal(GlobalStateMgr.getCurrentState(), journal);
 
-        Assertions.assertTrue(invalidated.get());
+        Assertions.assertEquals(1, submittedCacheTasks.get());
         Assertions.assertEquals(meta, GlobalStateMgr.getCurrentState().getAnalyzeMgr()
                 .getExternalTableBasicStatsMeta("catalog", "db", "table"));
 
-        invalidated.set(false);
         JournalEntity removeJournal = new JournalEntity(OperationType.OP_REMOVE_EXTERNAL_BASIC_STATS_META, meta);
         new EditLog(null).loadJournal(GlobalStateMgr.getCurrentState(), removeJournal);
 
-        Assertions.assertTrue(invalidated.get());
+        Assertions.assertEquals(2, submittedCacheTasks.get());
         Assertions.assertNull(GlobalStateMgr.getCurrentState().getAnalyzeMgr()
                 .getExternalTableBasicStatsMeta("catalog", "db", "table"));
     }
 
     @Test
     public void testReplayExternalHistogramStatsInvalidatesCacheWithoutRefresh() throws Exception {
-        AtomicBoolean invalidated = new AtomicBoolean(false);
+        AtomicInteger submittedCacheTasks = new AtomicInteger(0);
 
         new MockUp<AnalyzeMgr>() {
             @Mock
+            public void refreshConnectorTableHistogramStatisticsCacheAfterReplay(
+                    ExternalHistogramStatsMeta histogramStatsMeta) {
+                submittedCacheTasks.incrementAndGet();
+            }
+
+            @Mock
+            public void expireConnectorTableHistogramStatisticsCacheAfterReplay(
+                    ExternalHistogramStatsMeta histogramStatsMeta) {
+                submittedCacheTasks.incrementAndGet();
+            }
+
+            @Mock
             public void refreshConnectorTableHistogramStatisticsCache(String catalogName, String dbName, String tableName,
                                                                      List<String> columns, boolean async) {
-                Assertions.fail("External histogram journal replay should not refresh connector histogram cache");
+                Assertions.fail("External histogram journal replay should not refresh connector histogram cache synchronously");
             }
 
             @Mock
             public void expireConnectorTableHistogramStatisticsCache(String catalogName, String dbName,
                                                                      String tableName, List<String> columns) {
-                Assertions.fail("External histogram journal replay should not resolve connector table metadata");
-            }
-        };
-
-        new MockUp<CachedStatisticStorage>() {
-            @Mock
-            public void expireAllConnectorHistogramStatistics() {
-                invalidated.set(true);
+                Assertions.fail("External histogram journal replay should not resolve connector table metadata synchronously");
             }
         };
 
@@ -303,15 +309,14 @@ public class EditLogTest {
 
         new EditLog(null).loadJournal(GlobalStateMgr.getCurrentState(), journal);
 
-        Assertions.assertTrue(invalidated.get());
+        Assertions.assertEquals(1, submittedCacheTasks.get());
         Assertions.assertTrue(GlobalStateMgr.getCurrentState().getAnalyzeMgr()
                 .getExternalHistogramStatsMetaMap().containsValue(meta));
 
-        invalidated.set(false);
         JournalEntity removeJournal = new JournalEntity(OperationType.OP_REMOVE_EXTERNAL_HISTOGRAM_STATS_META, meta);
         new EditLog(null).loadJournal(GlobalStateMgr.getCurrentState(), removeJournal);
 
-        Assertions.assertTrue(invalidated.get());
+        Assertions.assertEquals(2, submittedCacheTasks.get());
         Assertions.assertFalse(GlobalStateMgr.getCurrentState().getAnalyzeMgr()
                 .getExternalHistogramStatsMetaMap().containsValue(meta));
     }

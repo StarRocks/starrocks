@@ -86,6 +86,9 @@ public class AnalyzeMgr implements Writable {
     private static final ExecutorService ANALYZE_TASK_THREAD_POOL = ThreadPoolManager.newDaemonFixedThreadPool(
             Config.statistic_analyze_task_pool_size, Integer.MAX_VALUE,
             "analyze-task-concurrency-pool", true);
+    private static final ExecutorService REPLAY_EXTERNAL_STATS_CACHE_THREAD_POOL =
+            ThreadPoolManager.newDaemonFixedThreadPool(1, Integer.MAX_VALUE,
+                    "replay-external-stats-cache-pool", true);
 
     private final Set<Long> dropPartitionIds = new ConcurrentSkipListSet<>();
     private final List<Pair<Long, Long>> checkTableIds = Lists.newArrayList(CHECK_ALL_TABLES);
@@ -367,6 +370,32 @@ public class AnalyzeMgr implements Writable {
         GlobalStateMgr.getCurrentState().getStatisticStorage().expireConnectorTableColumnStatistics(table, columns);
     }
 
+    public void refreshConnectorTableBasicStatisticsCacheAfterReplay(ExternalBasicStatsMeta basicStatsMeta) {
+        REPLAY_EXTERNAL_STATS_CACHE_THREAD_POOL.execute(() -> {
+            try {
+                refreshConnectorTableBasicStatisticsCache(basicStatsMeta.getCatalogName(), basicStatsMeta.getDbName(),
+                        basicStatsMeta.getTableName(), basicStatsMeta.getColumns(), true);
+            } catch (Throwable t) {
+                LOG.warn("Failed to refresh external connector basic stats cache after replay, catalog: {}, db: {}, "
+                                + "table: {}", basicStatsMeta.getCatalogName(), basicStatsMeta.getDbName(),
+                        basicStatsMeta.getTableName(), t);
+            }
+        });
+    }
+
+    public void expireConnectorTableAndColumnStatisticsAfterReplay(ExternalBasicStatsMeta basicStatsMeta) {
+        REPLAY_EXTERNAL_STATS_CACHE_THREAD_POOL.execute(() -> {
+            try {
+                expireConnectorTableAndColumnStatistics(basicStatsMeta.getCatalogName(), basicStatsMeta.getDbName(),
+                        basicStatsMeta.getTableName(), basicStatsMeta.getColumns());
+            } catch (Throwable t) {
+                LOG.warn("Failed to expire external connector basic stats cache after replay, catalog: {}, db: {}, "
+                                + "table: {}", basicStatsMeta.getCatalogName(), basicStatsMeta.getDbName(),
+                        basicStatsMeta.getTableName(), t);
+            }
+        });
+    }
+
     public void refreshConnectorTableBasicStatisticsCache(String catalogName, String dbName, String tableName,
                                                           List<String> columns, boolean async) {
         Table table = GlobalStateMgr.getCurrentState().getMetadataMgr()
@@ -486,6 +515,36 @@ public class AnalyzeMgr implements Writable {
         } else {
             GlobalStateMgr.getCurrentState().getStatisticStorage().getConnectorHistogramStatisticsSync(table, columns);
         }
+    }
+
+    public void refreshConnectorTableHistogramStatisticsCacheAfterReplay(ExternalHistogramStatsMeta histogramStatsMeta) {
+        REPLAY_EXTERNAL_STATS_CACHE_THREAD_POOL.execute(() -> {
+            try {
+                refreshConnectorTableHistogramStatisticsCache(histogramStatsMeta.getCatalogName(),
+                        histogramStatsMeta.getDbName(), histogramStatsMeta.getTableName(),
+                        Lists.newArrayList(histogramStatsMeta.getColumn()), true);
+            } catch (Throwable t) {
+                LOG.warn("Failed to refresh external connector histogram cache after replay, catalog: {}, db: {}, "
+                                + "table: {}, column: {}", histogramStatsMeta.getCatalogName(),
+                        histogramStatsMeta.getDbName(), histogramStatsMeta.getTableName(),
+                        histogramStatsMeta.getColumn(), t);
+            }
+        });
+    }
+
+    public void expireConnectorTableHistogramStatisticsCacheAfterReplay(ExternalHistogramStatsMeta histogramStatsMeta) {
+        REPLAY_EXTERNAL_STATS_CACHE_THREAD_POOL.execute(() -> {
+            try {
+                expireConnectorTableHistogramStatisticsCache(histogramStatsMeta.getCatalogName(),
+                        histogramStatsMeta.getDbName(), histogramStatsMeta.getTableName(),
+                        Lists.newArrayList(histogramStatsMeta.getColumn()));
+            } catch (Throwable t) {
+                LOG.warn("Failed to expire external connector histogram cache after replay, catalog: {}, db: {}, "
+                                + "table: {}, column: {}", histogramStatsMeta.getCatalogName(),
+                        histogramStatsMeta.getDbName(), histogramStatsMeta.getTableName(),
+                        histogramStatsMeta.getColumn(), t);
+            }
+        });
     }
 
     public void expireConnectorTableHistogramStatisticsCache(String catalogName, String dbName, String tableName,

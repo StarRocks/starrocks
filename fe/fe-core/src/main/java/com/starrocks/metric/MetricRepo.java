@@ -536,7 +536,8 @@ public final class MetricRepo {
                 "replayed_journal_id", MetricUnit.NOUNIT, "replayed journal id of this frontend") {
             @Override
             public Long getValue() {
-                return GlobalStateMgr.getCurrentState().getReplayedJournalId();
+                GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
+                return globalStateMgr.isLeader() ? globalStateMgr.getMaxJournalId() : globalStateMgr.getReplayedJournalId();
             }
         };
         STARROCKS_METRIC_REGISTER.addMetric(replayedJournalId);

@@ -100,7 +100,7 @@ public class MetricRepoTest extends PlanTestBase {
     public void testReplayedJournalIdMetric() {
         List<Metric> metrics = MetricRepo.getMetricsByName("replayed_journal_id");
         Assertions.assertEquals(1, metrics.size());
-        Assertions.assertEquals(GlobalStateMgr.getCurrentState().getReplayedJournalId(), metrics.get(0).getValue());
+        Assertions.assertEquals(GlobalStateMgr.getCurrentState().getMaxJournalId(), metrics.get(0).getValue());
     }
 
     @Test

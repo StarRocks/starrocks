@@ -102,16 +102,10 @@ public interface StatisticStorage {
     default void expireConnectorTableColumnStatistics(Table table, List<String> columns) {
     }
 
-    default void expireAllConnectorTableColumnStatistics() {
-    }
-
     default void refreshConnectorTableColumnStatistics(Table table, List<String> columns, boolean isSync) {
     }
 
     default void expireConnectorHistogramStatistics(Table table, List<String> columns) {
-    }
-
-    default void expireAllConnectorHistogramStatistics() {
     }
 
     void addColumnStatistic(Table table, String column, ColumnStatistic columnStatistic);

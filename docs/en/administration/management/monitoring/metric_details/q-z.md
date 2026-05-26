@@ -530,7 +530,7 @@ For more information on how to build a monitoring service for your StarRocks clu
 
 - Unit: Count
 - Type: Instantaneous
-- Description: The latest journal ID replayed by this FE node.
+- Description: The latest journal ID applied by this FE node. Leader FEs report the max journal ID.
 
 ## `starrocks_fe_publish_version_daemon_loop_total`
 
@@ -967,4 +967,3 @@ All transaction metrics share the following labels:
 - Description: Number of cumulative compaction tasks waiting for execution.
 
 ## `writable_blocks_total (Deprecated)`
-

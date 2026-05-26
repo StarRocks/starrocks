@@ -987,8 +987,8 @@ public class EditLog {
                     globalStateMgr.getAnalyzeMgr().replayAddExternalBasicStatsMeta(basicStatsMeta);
                     if (!GlobalStateMgr.isCheckpointThread()) {
                         // Do not resolve external table metadata during replay. Connector metadata calls may block
-                        // on HMS/HDFS. The journal updates stats metadata synchronously; caches reload lazily.
-                        globalStateMgr.getStatisticStorage().expireAllConnectorTableColumnStatistics();
+                        // on HMS/HDFS. The journal updates stats metadata synchronously; caches refresh asynchronously.
+                        globalStateMgr.getAnalyzeMgr().refreshConnectorTableBasicStatisticsCacheAfterReplay(basicStatsMeta);
                     }
                     break;
                 }
@@ -996,7 +996,7 @@ public class EditLog {
                     ExternalBasicStatsMeta basicStatsMeta = (ExternalBasicStatsMeta) journal.data();
                     globalStateMgr.getAnalyzeMgr().replayRemoveExternalBasicStatsMeta(basicStatsMeta);
                     if (!GlobalStateMgr.isCheckpointThread()) {
-                        globalStateMgr.getStatisticStorage().expireAllConnectorTableColumnStatistics();
+                        globalStateMgr.getAnalyzeMgr().expireConnectorTableAndColumnStatisticsAfterReplay(basicStatsMeta);
                     }
                     break;
                 }
@@ -1005,8 +1005,9 @@ public class EditLog {
                     globalStateMgr.getAnalyzeMgr().replayAddExternalHistogramStatsMeta(histogramStatsMeta);
                     if (!GlobalStateMgr.isCheckpointThread()) {
                         // Do not resolve external table metadata during replay. Connector metadata calls may block
-                        // on HMS/HDFS. The journal updates stats metadata synchronously; caches reload lazily.
-                        globalStateMgr.getStatisticStorage().expireAllConnectorHistogramStatistics();
+                        // on HMS/HDFS. The journal updates stats metadata synchronously; caches refresh asynchronously.
+                        globalStateMgr.getAnalyzeMgr().refreshConnectorTableHistogramStatisticsCacheAfterReplay(
+                                histogramStatsMeta);
                     }
                     break;
                 }
@@ -1014,7 +1015,8 @@ public class EditLog {
                     ExternalHistogramStatsMeta histogramStatsMeta = (ExternalHistogramStatsMeta) journal.data();
                     globalStateMgr.getAnalyzeMgr().replayRemoveExternalHistogramStatsMeta(histogramStatsMeta);
                     if (!GlobalStateMgr.isCheckpointThread()) {
-                        globalStateMgr.getStatisticStorage().expireAllConnectorHistogramStatistics();
+                        globalStateMgr.getAnalyzeMgr().expireConnectorTableHistogramStatisticsCacheAfterReplay(
+                                histogramStatsMeta);
                     }
                     break;
                 }
