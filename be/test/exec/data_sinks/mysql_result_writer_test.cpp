@@ -22,10 +22,10 @@
 #include "column/struct_column.h"
 #include "common/object_pool.h"
 #include "common/runtime_profile.h"
+#include "compute_env/result/buffer_control_block.h"
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
 #include "gen_cpp/Types_types.h"
-#include "runtime/buffer_control_block.h"
 #include "runtime/runtime_state.h"
 #include "types/logical_type.h"
 
@@ -110,6 +110,13 @@ TEST_F(MysqlResultWriterTest, should_set_binary_null_bit_after_fallback_column) 
     MysqlResultWriter writer(&sinker, expr_ctxs, true, &profile);
     RuntimeState dummy_state;
     ASSERT_TRUE(writer.init(&dummy_state).ok());
+
+    // ExprContext::evaluate() DCHECKs that each context was prepared and opened, and
+    // process_chunk() evaluates them, so prepare/open before feeding the writer.
+    for (auto* ctx : expr_ctxs) {
+        ASSERT_TRUE(ctx->prepare(&dummy_state).ok());
+        ASSERT_TRUE(ctx->open(&dummy_state).ok());
+    }
 
     auto result_or = writer.process_chunk(&chunk);
     ASSERT_TRUE(result_or.ok());
