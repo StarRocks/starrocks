@@ -532,12 +532,16 @@ public final class MetricRepo {
         };
         STARROCKS_METRIC_REGISTER.addMetric(maxJournalId);
 
-        GaugeMetric<Long> replayedJournalId = (GaugeMetric<Long>) new GaugeMetric<Long>(
+        Metric<Long> replayedJournalId = new LeaderAwareGaugeMetricLong(
                 "replayed_journal_id", MetricUnit.NOUNIT, "replayed journal id of this frontend") {
             @Override
-            public Long getValue() {
-                GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
-                return globalStateMgr.isLeader() ? globalStateMgr.getMaxJournalId() : globalStateMgr.getReplayedJournalId();
+            public Long getValueLeader() {
+                return GlobalStateMgr.getCurrentState().getMaxJournalId();
+            }
+
+            @Override
+            public Long getValueNonLeader() {
+                return GlobalStateMgr.getCurrentState().getReplayedJournalId();
             }
         };
         STARROCKS_METRIC_REGISTER.addMetric(replayedJournalId);

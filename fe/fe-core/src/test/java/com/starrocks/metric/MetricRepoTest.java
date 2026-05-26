@@ -101,6 +101,11 @@ public class MetricRepoTest extends PlanTestBase {
         List<Metric> metrics = MetricRepo.getMetricsByName("replayed_journal_id");
         Assertions.assertEquals(1, metrics.size());
         Assertions.assertEquals(GlobalStateMgr.getCurrentState().getMaxJournalId(), metrics.get(0).getValue());
+
+        MetricVisitor visitor = new PrometheusMetricVisitor("");
+        visitor.visit(metrics.get(0));
+        String output = visitor.build();
+        Assertions.assertTrue(output.contains("replayed_journal_id{is_leader=\"true\"}"), output);
     }
 
     @Test

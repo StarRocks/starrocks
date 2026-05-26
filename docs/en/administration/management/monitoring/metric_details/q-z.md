@@ -531,6 +531,7 @@ For more information on how to build a monitoring service for your StarRocks clu
 - Unit: Count
 - Type: Instantaneous
 - Description: The latest journal ID applied by this FE node. Leader FEs report the max journal ID.
+- Labels: `is_leader`.
 
 ## `starrocks_fe_publish_version_daemon_loop_total`
 

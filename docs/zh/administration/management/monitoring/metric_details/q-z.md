@@ -531,6 +531,7 @@ description: "Alphabetical q - z"
 - 单位：计数
 - 类型：瞬时
 - 描述：此 FE 节点已应用的最新 Journal ID。Leader FE 上报最大 Journal ID。
+- 标签：`is_leader`。
 
 ## `starrocks_fe_publish_version_daemon_loop_total`
 
