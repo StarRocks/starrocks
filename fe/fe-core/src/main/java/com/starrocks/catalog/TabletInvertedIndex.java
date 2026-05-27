@@ -224,13 +224,32 @@ public class TabletInvertedIndex implements MemoryTrackable {
         try {
             CopyOnWriteArrayList<Replica> replicas = tabletToReplicaList.computeIfAbsent(tabletId,
                     k -> new CopyOnWriteArrayList<>());
-            replicas.add(replica);
+            long backendId = replica.getBackendId();
 
-            Set<Long> tabletIds = backendToTabletIdList.computeIfAbsent(replica.getBackendId(),
+            // Restore the per-(tabletId, backendId) uniqueness invariant that the prior
+            // Map<backendId, Replica> inner container provided in branch-3.5 before #66288.
+            // Replace the first existing entry in place so concurrent readers see an atomic
+            // swap (never a transient absence). FE restart / journal replay rebuilds this
+            // index through the same path, so once this fix lands no duplicates ever form
+            // and no historical sweep is needed.
+            int firstIdx = -1;
+            for (int i = 0; i < replicas.size(); i++) {
+                if (replicas.get(i).getBackendId() == backendId) {
+                    firstIdx = i;
+                    break;
+                }
+            }
+            if (firstIdx >= 0) {
+                replicas.set(firstIdx, replica);
+            } else {
+                replicas.add(replica);
+            }
+
+            Set<Long> tabletIds = backendToTabletIdList.computeIfAbsent(backendId,
                     k -> ConcurrentHashMap.newKeySet());
             tabletIds.add(tabletId);
 
-            LOG.debug("add replica {} of tablet {} in backend {}", replica.getId(), tabletId, replica.getBackendId());
+            LOG.debug("add replica {} of tablet {} in backend {}", replica.getId(), tabletId, backendId);
         } finally {
             mutationLock.unlock();
         }
