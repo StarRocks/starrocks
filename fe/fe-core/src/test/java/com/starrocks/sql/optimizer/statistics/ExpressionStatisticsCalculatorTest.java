@@ -1873,7 +1873,7 @@ public class ExpressionStatisticsCalculatorTest {
         Assertions.assertEquals(1.0, stat.getMaxValue(), 0.001);
 
         // probability for true should be 2/100, so 0.02 * 1000 = 20 rows for each value.
-        assertBooleanDistribution(stat, 19, 981, 0.0);
+        assertBooleanDistribution(stat, 20, 980, 0.0);
     }
 
     @Test
@@ -1923,9 +1923,8 @@ public class ExpressionStatisticsCalculatorTest {
         Assertions.assertEquals(0.0, stat.getMinValue(), 0.001);
         Assertions.assertEquals(1.0, stat.getMaxValue(), 0.001);
         Assertions.assertNotNull(stat.getHistogram());
-        // TRUE comes from the existing predicate calculator.
-        // NULL upper bound: 1 - (1 - 0.3) * (1 - 0.1) = 0.37.
-        assertBooleanDistribution(stat, 80L, 550L, 0.37);
+
+        assertBooleanDistribution(stat, 80L, 750L, 0.17);
     }
 
     @Test
@@ -1948,8 +1947,7 @@ public class ExpressionStatisticsCalculatorTest {
         Assertions.assertEquals(1.0, stat.getMaxValue(), 0.001);
         Assertions.assertNotNull(stat.getHistogram());
         // TRUE comes from the existing predicate calculator.
-        // NULL uses the same upper bound as AND.
-        assertBooleanDistribution(stat, 520L, 110L, 0.37);
+        assertBooleanDistribution(stat, 520L, 250L, 0.23);
     }
 
     @Test
@@ -1969,7 +1967,7 @@ public class ExpressionStatisticsCalculatorTest {
         Assertions.assertEquals(0.0, stat.getMinValue(), 0.001);
         Assertions.assertEquals(1.0, stat.getMaxValue(), 0.001);
         Assertions.assertNotNull(stat.getHistogram());
-        assertBooleanDistribution(stat, 700L, 0L, 0.3);
+        assertBooleanDistribution(stat, 500L, 200L, 0.3);
     }
 
     @Test

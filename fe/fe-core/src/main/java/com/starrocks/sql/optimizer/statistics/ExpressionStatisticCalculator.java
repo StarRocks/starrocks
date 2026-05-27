@@ -76,6 +76,9 @@ public class ExpressionStatisticCalculator {
         return operator.accept(new ExpressionStatisticVisitor(input, rowCount), null);
     }
 
+    private record NullableBooleanProbabilities(double pTrue, double pFalse, double pNull) {
+    }
+
     private static class ExpressionStatisticVisitor extends ScalarOperatorVisitor<ColumnStatistic, Void> {
         private final Statistics inputStatistics;
         // Some functions estimate need plan node row count, such as COUNT
@@ -149,24 +152,76 @@ public class ExpressionStatisticCalculator {
                 return ColumnStatistic.unknown();
             }
 
-            // Lambda arguments are synthetic refs, not input Statistics columns. PredicateStatisticsCalculator fetches
-            // every ColumnRef from Statistics, so compound lambda predicates can fail on missing stats for lambda columns.
-            // Return conservative boolean stats instead of estimating table-column selectivity for them.
-            if (containsLambdaArgument(operator)) {
-                return buildGenericBooleanStatistic(operator, estimateCompoundNullsFraction(operator, context));
+            if (operator.isNot()) {
+                // not just swaps pTrue and pFalse, pNull stays the same.
+                return computeBooleanProbabilities(operator.getChild(0), context).stream()
+                        .map(p -> buildCompoundResult(operator, p.pFalse(), p.pTrue(), p.pNull())).findFirst()
+                        .orElseGet(ColumnStatistic::unknown);
             }
 
-            Statistics predicateStatistics = PredicateStatisticsCalculator.statisticsCalculate(operator, inputStatistics);
-            if (predicateStatistics == null || Double.isNaN(predicateStatistics.getOutputRowCount())) {
+            var left = computeBooleanProbabilities(operator.getChild(0), context);
+            var right = computeBooleanProbabilities(operator.getChild(1), context);
+
+            if (left.isEmpty() || right.isEmpty()) {
                 return ColumnStatistic.unknown();
             }
 
-            long inputRows = Math.max(1L, Math.round(rowCount));
-            double nullsFraction = estimateCompoundNullsFraction(operator, context);
-            long nullRows = Math.round(inputRows * nullsFraction);
-            long nonNullRows = Math.max(0L, inputRows - nullRows);
-            long trueRows = Math.min(nonNullRows, estimatePredicateTrueRows(predicateStatistics, inputRows));
-            long falseRows = nonNullRows - trueRows;
+            double pTrue;
+            double pFalse;
+            var l = left.get();
+            var r = right.get();
+            if (operator.isAnd()) {
+                pTrue = l.pTrue() * r.pTrue();
+                pFalse = (l.pFalse() + r.pFalse()) - (l.pFalse() * r.pFalse());
+            } else {
+                pTrue = (l.pTrue() + r.pTrue()) - (l.pTrue() * r.pTrue());
+                pFalse = l.pFalse() * r.pFalse();
+            }
+            double pNull = 1.0 - pTrue - pFalse;
+
+            return buildCompoundResult(operator, pTrue, pFalse, pNull);
+        }
+
+        private Optional<NullableBooleanProbabilities> computeBooleanProbabilities(ScalarOperator child, Void context) {
+            ColumnStatistic childStat = child.accept(this, context);
+
+            // Extract from boolean MCV histogram if available. This is the most accurate strategy since it reflects the actual boolean value distribution.
+            if (!childStat.isUnknown() && childStat.getHistogram() != null) {
+                Map<String, Long> mcv = childStat.getHistogram().getMCV();
+                if (mcv != null && (!mcv.isEmpty())) {
+                    String trueKey = booleanToMcvValue(true);
+                    String falseKey = booleanToMcvValue(false);
+                    if (mcv.containsKey(trueKey) || mcv.containsKey(falseKey)) {
+                        long trueCount = mcv.getOrDefault(trueKey, 0L);
+                        long falseCount = mcv.getOrDefault(falseKey, 0L);
+                        long inputRows = Math.max(1L, Math.round(rowCount));
+                        double pNull = childStat.getNullsFraction();
+                        double pTrue = clampFraction((double) trueCount / inputRows);
+                        double pFalse = clampFraction((double) falseCount / inputRows);
+                        return Optional.of(new NullableBooleanProbabilities(pTrue, pFalse, pNull));
+                    }
+                }
+            }
+
+            // Use PredicateStatisticsCalculator selectivity as a fallback.
+            Statistics predicateStatistics = PredicateStatisticsCalculator.statisticsCalculate(child, inputStatistics);
+            if (predicateStatistics != null && !Double.isNaN(predicateStatistics.getOutputRowCount())) {
+                double inputStatisticsRows = inputStatistics.getOutputRowCount();
+                if (!Double.isNaN(inputStatisticsRows) && inputStatisticsRows > 0) {
+                    double pTrue = clampFraction(predicateStatistics.getOutputRowCount() / inputStatisticsRows);
+                    double pNull = childStat.isUnknown() ? 0.0 : childStat.getNullsFraction();
+                    double pFalse = clampFraction(1.0 - pTrue - pNull);
+                    return Optional.of(new NullableBooleanProbabilities(pTrue, pFalse, pNull));
+                }
+            }
+
+            return Optional.empty();
+        }
+
+        private ColumnStatistic buildCompoundResult(CompoundPredicateOperator operator, double pTrue, double pFalse,
+                                                    double pNull) {
+            long trueRows = Math.round(rowCount * pTrue);
+            long falseRows = Math.round(rowCount * pFalse);
 
             Map<String, Long> mcvs = new HashMap<>();
             if (trueRows > 0) {
@@ -178,8 +233,7 @@ public class ExpressionStatisticCalculator {
 
             ColumnStatistic.Builder builder = ColumnStatistic.builder()
                     .setMinValue(0)
-                    .setMaxValue(1)
-                    .setNullsFraction(nullsFraction)
+                    .setMaxValue(1).setNullsFraction(pNull)
                     .setAverageRowSize(operator.getType().getTypeSize())
                     .setDistinctValuesCount(mcvs.size());
 
@@ -190,44 +244,7 @@ public class ExpressionStatisticCalculator {
             return builder.build();
         }
 
-        private boolean containsLambdaArgument(ScalarOperator operator) {
-            return operator.asStream().anyMatch(op -> op instanceof ColumnRefOperator column
-                    && column.getOpType() == OperatorType.LAMBDA_ARGUMENT);
-        }
 
-        private ColumnStatistic buildGenericBooleanStatistic(ScalarOperator operator, double nullsFraction) {
-            return ColumnStatistic.builder()
-                    .setMinValue(0)
-                    .setMaxValue(1)
-                    .setNullsFraction(clampFraction(nullsFraction))
-                    .setAverageRowSize(operator.getType().getTypeSize())
-                    .setDistinctValuesCount(2)
-                    .build();
-        }
-
-        private long estimatePredicateTrueRows(Statistics predicateStatistics, long inputRows) {
-            double inputStatisticsRows = inputStatistics.getOutputRowCount();
-            if (Double.isNaN(inputStatisticsRows) || inputStatisticsRows <= 0) {
-                return Math.max(0L, Math.round(predicateStatistics.getOutputRowCount()));
-            }
-            double selectivity = clampFraction(predicateStatistics.getOutputRowCount() / inputStatisticsRows);
-            return Math.max(0L, Math.round(inputRows * selectivity));
-        }
-
-        private double estimateCompoundNullsFraction(CompoundPredicateOperator operator, Void context) {
-            if (operator.isNot()) {
-                return getExpressionNullsFraction(operator.getChild(0), context);
-            }
-
-            double leftNullFraction = getExpressionNullsFraction(operator.getChild(0), context);
-            double rightNullFraction = getExpressionNullsFraction(operator.getChild(1), context);
-            return 1.0 - (1.0 - leftNullFraction) * (1.0 - rightNullFraction);
-        }
-
-        private double getExpressionNullsFraction(ScalarOperator operator, Void context) {
-            ColumnStatistic statistic = operator.accept(this, context);
-            return statistic.isUnknown() ? 0.0 : clampFraction(statistic.getNullsFraction());
-        }
 
         private static double clampFraction(double value) {
             if (Double.isNaN(value)) {
