@@ -19,13 +19,7 @@ import com.starrocks.sql.ast.AssertNumRowsElement;
 import com.starrocks.sql.ast.JoinOperator;
 import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.SetType;
-import com.starrocks.sql.ast.expression.AnalyticWindow;
-import com.starrocks.sql.ast.expression.AnalyticWindowBoundary;
 import com.starrocks.sql.ast.expression.CompoundPredicate;
-import com.starrocks.thrift.TAnalyticWindow;
-import com.starrocks.thrift.TAnalyticWindowBoundary;
-import com.starrocks.thrift.TAnalyticWindowBoundaryType;
-import com.starrocks.thrift.TAnalyticWindowType;
 import com.starrocks.thrift.TAssertion;
 import com.starrocks.thrift.TExprOpcode;
 import com.starrocks.thrift.TJoinOp;
@@ -100,21 +94,6 @@ public final class ThriftEnumConverter {
         }
     }
 
-    public static TAnalyticWindow analyticWindowToThrift(AnalyticWindow window) {
-        Preconditions.checkNotNull(window, "Analytic window should not be null when converting to thrift");
-        TAnalyticWindow result = new TAnalyticWindow(analyticWindowTypeToThrift(window.getType()));
-        AnalyticWindowBoundary leftBoundary = window.getLeftBoundary();
-        if (leftBoundary.getBoundaryType() != AnalyticWindowBoundary.BoundaryType.UNBOUNDED_PRECEDING) {
-            result.setWindow_start(analyticWindowBoundaryToThrift(leftBoundary, window.getType()));
-        }
-        AnalyticWindowBoundary rightBoundary = window.getRightBoundary();
-        Preconditions.checkNotNull(rightBoundary, "Right boundary must be set before converting to thrift");
-        if (rightBoundary.getBoundaryType() != AnalyticWindowBoundary.BoundaryType.UNBOUNDED_FOLLOWING) {
-            result.setWindow_end(analyticWindowBoundaryToThrift(rightBoundary, window.getType()));
-        }
-        return result;
-    }
-
     public static TKeysType keysTypeToThrift(KeysType keysType) {
         Preconditions.checkNotNull(keysType, "Keys type should not be null");
         return switch (keysType) {
@@ -144,36 +123,5 @@ public final class ThriftEnumConverter {
             return SetType.VERBOSE;
         }
         return SetType.SESSION;
-    }
-
-    private static TAnalyticWindowBoundary analyticWindowBoundaryToThrift(AnalyticWindowBoundary boundary,
-                                                                          AnalyticWindow.Type windowType) {
-        TAnalyticWindowBoundary result = new TAnalyticWindowBoundary(
-                analyticWindowBoundaryTypeToThrift(boundary.getBoundaryType()));
-        if (boundary.getBoundaryType().isOffset() && windowType == AnalyticWindow.Type.ROWS) {
-            Preconditions.checkNotNull(boundary.getOffsetValue(), "Offset value is required for ROWS window");
-            result.setRows_offset_value(boundary.getOffsetValue().longValue());
-        }
-        // TODO: range windows need range_offset_predicate
-        return result;
-    }
-
-    private static TAnalyticWindowBoundaryType analyticWindowBoundaryTypeToThrift(
-            AnalyticWindowBoundary.BoundaryType boundaryType) {
-        Preconditions.checkState(!boundaryType.isAbsolutePos());
-        switch (boundaryType) {
-            case CURRENT_ROW:
-                return TAnalyticWindowBoundaryType.CURRENT_ROW;
-            case PRECEDING:
-                return TAnalyticWindowBoundaryType.PRECEDING;
-            case FOLLOWING:
-                return TAnalyticWindowBoundaryType.FOLLOWING;
-            default:
-                throw new IllegalStateException("Unsupported boundary type: " + boundaryType);
-        }
-    }
-
-    private static TAnalyticWindowType analyticWindowTypeToThrift(AnalyticWindow.Type type) {
-        return type == AnalyticWindow.Type.ROWS ? TAnalyticWindowType.ROWS : TAnalyticWindowType.RANGE;
     }
 }
