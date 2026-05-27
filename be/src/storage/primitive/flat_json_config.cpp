@@ -12,46 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#pragma once
+#include "storage/primitive/flat_json_config.h"
 
-#include <map>
-#include <string>
-#include <vector>
-
-#include "common/global_types.h"
-
+#include "common/config_json_flat_fwd.h"
 namespace starrocks {
 
-class BaseRowset;
-class Segment;
-
-struct VectorSearchOption {
-public:
-    int64_t k;
-
-    std::vector<float> query_vector;
-
-    std::string vector_distance_column_name;
-
-    bool use_vector_index = false;
-
-    int vector_column_id;
-
-    SlotId vector_slot_id;
-
-    std::map<std::string, std::string> query_params;
-
-    double vector_range;
-
-    int result_order;
-
-    bool use_ivfpq = false;
-
-    double pq_refine_factor;
-
-    double k_factor;
-
-    VectorSearchOption() = default;
-};
+FlatJsonConfig::FlatJsonConfig()
+        : _flat_json_null_factor(config::json_flat_null_factor),
+          _flat_json_sparsity_factor(config::json_flat_sparsity_factor),
+          _flat_json_max_column_max(config::json_flat_column_max) {}
 
 } // namespace starrocks

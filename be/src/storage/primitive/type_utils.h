@@ -14,7 +14,9 @@
 
 #pragma once
 
-#include "storage/olap_common.h"
+#include <cstddef>
+
+#include "types/logical_type.h"
 
 namespace starrocks {
 
@@ -80,4 +82,4 @@ public:
     }
 };
 
-}; // namespace starrocks
+} // namespace starrocks
