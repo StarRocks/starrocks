@@ -25,6 +25,7 @@ import com.starrocks.connector.CatalogConnector;
 import com.starrocks.connector.ConnectorMetadataRequestContext;
 import com.starrocks.connector.GetRemoteFilesParams;
 import com.starrocks.connector.RemoteFileInfo;
+import com.starrocks.connector.paimon.PaimonMinMaxUtil;
 import com.starrocks.connector.paimon.PaimonRemoteFileDesc;
 import com.starrocks.connector.paimon.PaimonSplitsInfo;
 import com.starrocks.credential.CloudConfiguration;
@@ -34,6 +35,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.plan.HDFSScanNodePredicates;
 import com.starrocks.thrift.TExplainLevel;
+import com.starrocks.thrift.TExprMinMaxValue;
 import com.starrocks.thrift.THdfsFileFormat;
 import com.starrocks.thrift.THdfsScanNode;
 import com.starrocks.thrift.THdfsScanRange;
@@ -53,10 +55,12 @@ import org.apache.paimon.table.source.DataSplit;
 import org.apache.paimon.table.source.DeletionFile;
 import org.apache.paimon.table.source.RawFile;
 import org.apache.paimon.table.source.Split;
+import org.apache.paimon.types.RowType;
 import org.apache.paimon.utils.InstantiationUtil;
 
 import java.util.ArrayList;
 import java.util.Base64;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -149,6 +153,7 @@ public class PaimonScanNode extends ScanNode {
             return;
         }
 
+        RowType rowType = paimonTable.getNativeTable().rowType();
         boolean forceJNIReader = ConnectContext.get().getSessionVariable().getPaimonForceJNIReader();
         Map<BinaryRow, Long> selectedPartitions = Maps.newHashMap();
         for (Split split : splits) {
@@ -160,12 +165,17 @@ public class PaimonScanNode extends ScanNode {
                     boolean validFormat = rawFiles.stream().allMatch(p -> fromType(p.format()) != THdfsFileFormat.UNKNOWN);
                     if (validFormat) {
                         Optional<List<DeletionFile>> deletionFiles = dataSplit.deletionFiles();
+                        List<DataFileMeta> dataFiles = dataSplit.dataFiles();
                         for (int i = 0; i < rawFiles.size(); i++) {
-                            if (deletionFiles.isPresent()) {
-                                splitRawFileScanRangeLocations(rawFiles.get(i), deletionFiles.get().get(i));
-                            } else {
-                                splitRawFileScanRangeLocations(rawFiles.get(i), null);
+                            // Extract per-file min/max stats from DataFileMeta
+                            Map<Integer, TExprMinMaxValue> minMaxValues = Collections.emptyMap();
+                            if (i < dataFiles.size()) {
+                                minMaxValues = PaimonMinMaxUtil.toThriftMinMaxValueBySlots(
+                                        rowType, dataFiles.get(i), tupleDescriptor.getSlots());
                             }
+                            DeletionFile deletionFile = (deletionFiles.isPresent()) ?
+                                    deletionFiles.get().get(i) : null;
+                            splitRawFileScanRangeLocations(rawFiles.get(i), deletionFile, minMaxValues);
                         }
                     } else {
                         long totalFileLength = getTotalFileLength(dataSplit);
@@ -243,15 +253,20 @@ public class PaimonScanNode extends ScanNode {
     }
 
     public void splitRawFileScanRangeLocations(RawFile rawFile, @Nullable DeletionFile deletionFile) {
+        splitRawFileScanRangeLocations(rawFile, deletionFile, Collections.emptyMap());
+    }
+
+    public void splitRawFileScanRangeLocations(RawFile rawFile, @Nullable DeletionFile deletionFile,
+                                               Map<Integer, TExprMinMaxValue> minMaxValues) {
         SessionVariable sv = SessionVariable.DEFAULT_SESSION_VARIABLE;
         long splitSize = sv.getConnectorMaxSplitSize();
         long totalSize = rawFile.length();
         long offset = rawFile.offset();
         boolean needSplit = totalSize > splitSize;
         if (needSplit) {
-            splitScanRangeLocations(rawFile, offset, totalSize, splitSize, deletionFile);
+            splitScanRangeLocations(rawFile, offset, totalSize, splitSize, deletionFile, minMaxValues);
         } else {
-            addRawFileScanRangeLocations(rawFile, deletionFile);
+            addRawFileScanRangeLocations(rawFile, deletionFile, minMaxValues);
         }
     }
 
@@ -260,26 +275,39 @@ public class PaimonScanNode extends ScanNode {
                                         long length,
                                         long splitSize,
                                         @Nullable DeletionFile deletionFile) {
+        splitScanRangeLocations(rawFile, offset, length, splitSize, deletionFile, Collections.emptyMap());
+    }
+
+    public void splitScanRangeLocations(RawFile rawFile,
+                                        long offset,
+                                        long length,
+                                        long splitSize,
+                                        @Nullable DeletionFile deletionFile,
+                                        Map<Integer, TExprMinMaxValue> minMaxValues) {
         long remainingBytes = length;
         do {
             if (remainingBytes < 2 * splitSize) {
-                addRawFileScanRangeLocations(rawFile, offset + length - remainingBytes, remainingBytes, deletionFile);
+                addRawFileScanRangeLocations(rawFile, offset + length - remainingBytes,
+                        remainingBytes, deletionFile, minMaxValues);
                 remainingBytes = 0;
             } else {
-                addRawFileScanRangeLocations(rawFile, offset + length - remainingBytes, splitSize, deletionFile);
+                addRawFileScanRangeLocations(rawFile, offset + length - remainingBytes,
+                        splitSize, deletionFile, minMaxValues);
                 remainingBytes -= splitSize;
             }
         } while (remainingBytes > 0);
     }
 
-    private void addRawFileScanRangeLocations(RawFile rawFile, @Nullable DeletionFile deletionFile) {
-        addRawFileScanRangeLocations(rawFile, rawFile.offset(), rawFile.length(), deletionFile);
+    private void addRawFileScanRangeLocations(RawFile rawFile, @Nullable DeletionFile deletionFile,
+                                              Map<Integer, TExprMinMaxValue> minMaxValues) {
+        addRawFileScanRangeLocations(rawFile, rawFile.offset(), rawFile.length(), deletionFile, minMaxValues);
     }
 
     private void addRawFileScanRangeLocations(RawFile rawFile,
                                               long offset,
                                               long length,
-                                              @Nullable DeletionFile deletionFile) {
+                                              @Nullable DeletionFile deletionFile,
+                                              Map<Integer, TExprMinMaxValue> minMaxValues) {
         TScanRangeLocations scanRangeLocations = new TScanRangeLocations();
 
         THdfsScanRange hdfsScanRange = new THdfsScanRange();
@@ -296,6 +324,11 @@ public class PaimonScanNode extends ScanNode {
             paimonDeletionFile.setOffset(deletionFile.offset());
             paimonDeletionFile.setLength(deletionFile.length());
             hdfsScanRange.setPaimon_deletion_file(paimonDeletionFile);
+        }
+
+        // Populate per-file min/max stats for native reader file skipping
+        if (minMaxValues != null && !minMaxValues.isEmpty()) {
+            hdfsScanRange.setMin_max_values(minMaxValues);
         }
 
         TScanRange scanRange = new TScanRange();

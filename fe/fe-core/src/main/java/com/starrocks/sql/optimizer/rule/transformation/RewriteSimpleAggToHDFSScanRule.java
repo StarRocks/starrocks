@@ -32,6 +32,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalFileScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalHiveScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalIcebergScanOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalPaimonScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
 import com.starrocks.sql.optimizer.operator.pattern.MultiOpPattern;
@@ -58,7 +59,8 @@ public class RewriteSimpleAggToHDFSScanRule extends TransformationRule {
 
     private static final Set<OperatorType> SUPPORTED = Set.of(OperatorType.LOGICAL_HIVE_SCAN,
             OperatorType.LOGICAL_ICEBERG_SCAN,
-            OperatorType.LOGICAL_FILE_SCAN
+            OperatorType.LOGICAL_FILE_SCAN,
+            OperatorType.LOGICAL_PAIMON_SCAN
     );
 
     public static final RewriteSimpleAggToHDFSScanRule SCAN_NO_PROJECT =
@@ -154,6 +156,9 @@ public class RewriteSimpleAggToHDFSScanRule extends TransformationRule {
                     scanOperator.getTvrVersionRange());
         } else if (scanOperator instanceof LogicalFileScanOperator) {
             newMetaScan = new LogicalFileScanOperator(scanOperator.getTable(),
+                    newScanColumnRefs, newScanColumnMeta, scanOperator.getLimit(), scanOperator.getPredicate());
+        } else if (scanOperator instanceof LogicalPaimonScanOperator) {
+            newMetaScan = new LogicalPaimonScanOperator(scanOperator.getTable(),
                     newScanColumnRefs, newScanColumnMeta, scanOperator.getLimit(), scanOperator.getPredicate());
         } else {
             LOG.warn("Unexpected scan operator: " + scanOperator);

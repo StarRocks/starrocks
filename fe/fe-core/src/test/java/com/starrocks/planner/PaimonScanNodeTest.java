@@ -179,4 +179,83 @@ public class PaimonScanNodeTest {
         TScanRangeLocations tScanRangeLocations = scanNode.getScanRangeLocations(10).get(0);
         Assertions.assertEquals(THdfsFileFormat.UNKNOWN, tScanRangeLocations.getScan_range().getHdfs_scan_range().getFile_format());
     }
+
+    @Test
+    public void testSplitRawFileScanRangeWithMinMaxValues(@Mocked PaimonTable table, @Mocked RawFile rawFile) {
+        TupleDescriptor desc = new TupleDescriptor(new TupleId(0));
+        desc.setTable(table);
+        new Expectations() {
+            {
+                rawFile.format();
+                result = "parquet";
+                rawFile.path();
+                result = "/data/file1.parquet";
+                rawFile.offset();
+                result = 0L;
+                rawFile.length();
+                result = 1000L;
+            }
+        };
+
+        PaimonScanNode scanNode = new PaimonScanNode(new PlanNodeId(0), desc, "XXX");
+
+        // Build min/max values map
+        com.starrocks.thrift.TExprMinMaxValue minMaxValue = new com.starrocks.thrift.TExprMinMaxValue();
+        minMaxValue.setType(com.starrocks.thrift.TExprNodeType.INT_LITERAL);
+        minMaxValue.setMin_int_value(10);
+        minMaxValue.setMax_int_value(100);
+        minMaxValue.setHas_null(false);
+        minMaxValue.setAll_null(false);
+
+        java.util.Map<Integer, com.starrocks.thrift.TExprMinMaxValue> minMaxValues = new HashMap<>();
+        minMaxValues.put(1, minMaxValue);
+
+        // Call with min/max values
+        scanNode.splitRawFileScanRangeLocations(rawFile, null, minMaxValues);
+
+        List<TScanRangeLocations> locations = scanNode.getScanRangeLocations(10);
+        Assertions.assertEquals(1, locations.size());
+
+        // Verify min/max values are set on the scan range
+        var hdfsScanRange = locations.get(0).getScan_range().getHdfs_scan_range();
+        Assertions.assertTrue(hdfsScanRange.isSetMin_max_values());
+        Assertions.assertEquals(1, hdfsScanRange.getMin_max_values().size());
+
+        com.starrocks.thrift.TExprMinMaxValue result = hdfsScanRange.getMin_max_values().get(1);
+        Assertions.assertNotNull(result);
+        Assertions.assertEquals(com.starrocks.thrift.TExprNodeType.INT_LITERAL, result.getType());
+        Assertions.assertEquals(10, result.getMin_int_value());
+        Assertions.assertEquals(100, result.getMax_int_value());
+        Assertions.assertFalse(result.isHas_null());
+    }
+
+    @Test
+    public void testSplitRawFileScanRangeWithoutMinMaxValues(@Mocked PaimonTable table, @Mocked RawFile rawFile) {
+        TupleDescriptor desc = new TupleDescriptor(new TupleId(0));
+        desc.setTable(table);
+        new Expectations() {
+            {
+                rawFile.format();
+                result = "orc";
+                rawFile.path();
+                result = "/data/file1.orc";
+                rawFile.offset();
+                result = 0L;
+                rawFile.length();
+                result = 500L;
+            }
+        };
+
+        PaimonScanNode scanNode = new PaimonScanNode(new PlanNodeId(0), desc, "XXX");
+
+        // Call without min/max values (legacy path)
+        scanNode.splitRawFileScanRangeLocations(rawFile, null);
+
+        List<TScanRangeLocations> locations = scanNode.getScanRangeLocations(10);
+        Assertions.assertEquals(1, locations.size());
+
+        // Verify min/max values are NOT set on the scan range
+        var hdfsScanRange = locations.get(0).getScan_range().getHdfs_scan_range();
+        Assertions.assertFalse(hdfsScanRange.isSetMin_max_values());
+    }
 }
