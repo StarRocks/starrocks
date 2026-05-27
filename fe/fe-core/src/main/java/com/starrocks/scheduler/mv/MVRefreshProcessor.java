@@ -911,6 +911,16 @@ public abstract class MVRefreshProcessor {
                 }
             }
 
+            // Pinned mode reads from a pinned snapshot — drift check is irrelevant there.
+            if (!isPinnedMode()) {
+                MVRefreshSchemaChecker.checkExternalBaseSchemaCompat(mv);
+                if (!mv.isActive()) {
+                    throw new DmlException(String.format(
+                            "Materialized view: %s/%d is not active due to %s.",
+                            mv.getName(), mv.getId(), mv.getInactiveReason()));
+                }
+            }
+
             if (shouldSyncPartitionsAfterExternalRefresh(retryNum)) {
                 try (Timer ignored = Tracers.watchScope("MVRefreshSyncPartitions")) {
                     // sync partitions between mv and base tables out of lock
