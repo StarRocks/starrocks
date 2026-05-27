@@ -1485,8 +1485,16 @@ public class ConnectContext {
                     msg = String.format("the table %s table_query_timeout is %ds, pending time:%s",
                             tableName, tableTimeout, pendingTime);
                 } else {
+                    String timeoutVariable;
+                    if (isExecLoadType()) {
+                        timeoutVariable = SessionVariable.INSERT_TIMEOUT;
+                    } else if (isMetadataContext()) {
+                        timeoutVariable = SessionVariable.METADATA_COLLECT_QUERY_TIMEOUT;
+                    } else {
+                        timeoutVariable = SessionVariable.QUERY_TIMEOUT;
+                    }
                     msg = String.format("please increase the '%s' session variable, pending time:%s",
-                            isExecLoadType() ? SessionVariable.INSERT_TIMEOUT : SessionVariable.QUERY_TIMEOUT, pendingTime);
+                            timeoutVariable, pendingTime);
                 }
                 errMsg = ErrorCode.ERR_TIMEOUT.formatErrorMsg(getExecType(), execTimeout, msg);
             }
