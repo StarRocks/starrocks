@@ -326,7 +326,7 @@ public class Config extends ConfigBase {
      * 60m     60 minutes
      * 120s    120 seconds
      */
-    @ConfField
+    @ConfField(mutable = true, comment = "Whether to enable writing query profiles to fe.profile.log.")
     public static boolean enable_profile_log = true;
     @ConfField
     public static String profile_log_dir = Config.STARROCKS_HOME_DIR + "/log";
