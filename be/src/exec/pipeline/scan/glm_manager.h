@@ -20,7 +20,7 @@
 #include "base/phmap/phmap.h"
 #include "gen_cpp/PlanNodes_types.h"
 #include "storage/lake/types_fwd.h"
-#include "storage/olap_common.h"
+#include "storage/primitive/storage_ids.h"
 #include "storage/rowset/base_rowset.h"
 #include "storage/rowset/rowset.h"
 
