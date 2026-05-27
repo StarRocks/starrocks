@@ -46,5 +46,9 @@ void run_drop_auto_increment_map_task(const std::shared_ptr<DropAutoIncrementMap
                                       ExecEnv* exec_env);
 void run_remote_snapshot_task(const std::shared_ptr<RemoteSnapshotAgentTaskRequest>& agent_task_req, ExecEnv* exec_env);
 void run_replicate_snapshot_task(const std::shared_ptr<ReplicateSnapshotAgentTaskRequest>& agent_task_req,
+<<<<<<< HEAD
                                  ExecEnv* exec_env);
+=======
+                                 ExecEnv* exec_env, ThreadPool* replicate_file_pool);
+>>>>>>> 43d6f52c63 ([BugFix] Fix shared-data lake replication file-copy crashes (#73666))
 } // namespace starrocks

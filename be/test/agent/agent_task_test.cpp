@@ -258,6 +258,56 @@ TEST_F(AgentTaskTest, clone_task_under_dropping) {
     tablet->set_is_dropping(false);
 }
 
+<<<<<<< HEAD
+=======
+TEST_F(AgentTaskTest, get_thread_pool_returns_registered_pools) {
+    auto* agent_server = ExecEnv::GetInstance()->agent_server();
+
+    EXPECT_NE(nullptr, agent_server->get_thread_pool(TTaskType::CREATE));
+    EXPECT_NE(nullptr, agent_server->get_thread_pool(TTaskType::ALTER));
+    EXPECT_NE(nullptr, agent_server->get_thread_pool(TTaskType::REMOTE_SNAPSHOT));
+}
+
+// The dedicated `replicate_file` pool is built by AgentServer::Impl::init() alongside
+// `replicate_snapshot`. Verify it's exposed via the public accessor and is a distinct
+// pool from `replicate_snapshot` — the distinct-pool invariant is what makes the
+// outer-task -> ThreadPoolToken::wait() pattern in lake replication safe.
+TEST_F(AgentTaskTest, get_lake_replicate_file_thread_pool_returns_distinct_pool) {
+    auto* agent_server = ExecEnv::GetInstance()->agent_server();
+
+    auto* file_pool = agent_server->get_lake_replicate_file_thread_pool();
+    auto* snapshot_pool = agent_server->get_thread_pool(TTaskType::REPLICATE_SNAPSHOT);
+    EXPECT_NE(nullptr, file_pool);
+    EXPECT_NE(nullptr, snapshot_pool);
+    EXPECT_NE(file_pool, snapshot_pool);
+}
+
+TEST_F(AgentTaskTest, get_thread_pool_returns_null_for_unsupported_types) {
+    auto* agent_server = ExecEnv::GetInstance()->agent_server();
+
+    const int unsupported_types[] = {TTaskType::PUSH, TTaskType::REALTIME_PUSH, TTaskType::EXTERNAL_CLUSTER_SNAPSHOT,
+                                     TTaskType::NUM_TASK_TYPE, -1};
+    for (int type : unsupported_types) {
+        EXPECT_EQ(nullptr, agent_server->get_thread_pool(type)) << type;
+    }
+}
+
+TEST_F(AgentTaskTest, update_thread_pool_size_applies_cpu_scaled_policy) {
+    auto* agent_server = ExecEnv::GetInstance()->agent_server();
+    auto* thread_pool = agent_server->get_thread_pool(TTaskType::UPLOAD);
+    ASSERT_NE(nullptr, thread_pool);
+
+    const int original_max_threads = thread_pool->max_threads();
+    DeferOp defer([agent_server, original_max_threads]() {
+        agent_server->update_max_thread_by_type(TTaskType::UPLOAD, original_max_threads);
+    });
+
+    agent_server->update_max_thread_by_type(TTaskType::UPLOAD, 0);
+
+    ASSERT_EQ(std::max(1, CpuInfo::num_cores()), thread_pool->max_threads());
+}
+
+>>>>>>> 43d6f52c63 ([BugFix] Fix shared-data lake replication file-copy crashes (#73666))
 TEST_F(AgentTaskTest, update_clone_thread_pool_size_by_task_type) {
     auto* agent_server = ExecEnv::GetInstance()->agent_server();
     auto* thread_pool = agent_server->get_thread_pool(TTaskType::CLONE);

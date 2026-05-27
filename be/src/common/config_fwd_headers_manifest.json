@@ -877,6 +877,7 @@
         "transaction_publish_version_thread_pool_idle_time_ms",
         "transaction_publish_version_thread_pool_num_min",
         "replication_threads",
+        "lake_replication_file_copy_threads",
         "max_batch_publish_latency_ms",
         "wait_apply_time",
         "enable_drop_tablet_if_unfinished_txn"
