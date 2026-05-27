@@ -88,7 +88,7 @@ Release date: November 30, 2021
 * Fix some problems with grouping sets[# 1395](https://github.com/StarRocks/starrocks/issues/1395) [# 1119](https://github.com/StarRocks/starrocks/pull/1119)
 * Fix the problem of some indicators of date_format
 * Fix a boundary condition issue with aggregated streamming[# 1584](https://github.com/StarRocks/starrocks/pull/1584)
-* For details, please refer to[link](https://github.com/StarRocks/starrocks/compare/1.19.2...1.19.3)
+* [More details](https://github.com/StarRocks/starrocks/compare/1.19.2...1.19.3)
 
 ## 1.19.4
 

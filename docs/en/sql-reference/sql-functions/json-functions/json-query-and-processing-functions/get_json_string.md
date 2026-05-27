@@ -32,7 +32,7 @@ Returns a value of the VARCHAR type. If no matching object is found, NULL is ret
 
 ## Examples
 
-### Example 1: Get the value whose key is `k1`.
+### Example 1: Get the value whose key is `k1`
 
 ```sql
 SELECT get_json_string('{"k1":"v1", "k2":"v2"}', "$.k1");
@@ -46,7 +46,7 @@ SELECT get_json_string('{"k1":"v1", "k2":"v2"}', "$.k1");
 +---------------------------------------------------+
 ```
 
-### Example 2: Get the value whose key is `a` from the first element.
+### Example 2: Get the value whose key is `a` from the first element
 
 ```sql
 SELECT get_json_object('[{"a":"123", "b": "456"},{"a":"23", "b": "56"}]', '$[0].a');
@@ -74,7 +74,7 @@ SELECT get_json_string('{"k1":"v1", "my.key":["e1", "e2", "e3"]}', '$."my.key"[1
 +------------------------------------------------------------------------------+
 ```
 
-### Example 4: Get the first element in the array whose path is `k1.key -> k2`.
+### Example 4: Get the first element in the array whose path is `k1.key -> k2`
 
 ```sql
 SELECT get_json_string('{"k1.key":{"k2":["v1", "v2"]}}', '$."k1.key".k2[0]');
@@ -88,7 +88,7 @@ SELECT get_json_string('{"k1.key":{"k2":["v1", "v2"]}}', '$."k1.key".k2[0]');
 +-----------------------------------------------------------------------+
 ```
 
-### Example 5: Get all values whose key is `k1` from the array.
+### Example 5: Get all values whose key is `k1` from the array
 
 ```sql
 SELECT get_json_string('[{"k1":"v1"}, {"k2":"v2"}, {"k1":"v3"}, {"k1":"v4"}]', '$.[*].k1');

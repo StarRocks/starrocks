@@ -90,6 +90,6 @@ For JDBC connections, since StarRocks supports SSL authentication, you do not ne
 
 ## FAQ
 
-#### Q1: When I connect to StarRocks using DBeaver, an error is returned "Unable to load authentication plugin 'mysql_native_password'".
+#### Q1: When I connect to StarRocks using DBeaver, an error is returned "Unable to load authentication plugin 'mysql_native_password'"
 
 A: You need to upgrade JDBC 5 to version 5.1.46 or later.
