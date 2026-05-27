@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Returns the difference between two date values in the specified unit."
 ---
 
 # date_diff

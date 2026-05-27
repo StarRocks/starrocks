@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Returns values from an array that matches the given filter."
 ---
 
 # array_filter

@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "SHOW CREATE FUNCTION returns the `CREATE FUNCTION` DDL for a user-defined function."
 ---
 
 # SHOW CREATE FUNCTION

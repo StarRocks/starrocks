@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "This function is an aggregate function that is used to aggregate HLL fields."
 ---
 
 # hll_raw_agg

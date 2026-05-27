@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 keywords: ['alter table']
+description: "ALTER TABLE Modifies an existing table, including:"
 ---
 
 # ALTER TABLE

@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Sorts the elements of an array in ascending order."
 ---
 
 # array_sort

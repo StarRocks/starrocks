@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Creates a named STRUCT or ROW value from the given values."
 ---
 
 # row

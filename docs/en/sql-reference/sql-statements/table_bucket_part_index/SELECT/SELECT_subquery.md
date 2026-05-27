@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 sidebar_label: "Subquery"
+description: "Subqueries are categorized into two types in terms of relevance:"
 ---
 
 # Subquery

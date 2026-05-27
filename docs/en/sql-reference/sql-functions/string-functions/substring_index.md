@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Extracts a substring that precedes or follows the `count` occurrences of the delimiter."
 ---
 
 # substring_index

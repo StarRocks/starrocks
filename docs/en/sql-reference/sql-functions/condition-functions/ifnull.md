@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "If `expr1` is NULL, returns expr2."
 ---
 
 # ifnull

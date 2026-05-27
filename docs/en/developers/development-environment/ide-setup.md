@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Some people want to become StarRocks contributor, but are troubled by the development environment, so here I write a tutorial about it."
 ---
 
 # Setup IDE  for developing StarRocks

@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Calculates the square of a value."
 ---
 
 # square

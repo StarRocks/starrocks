@@ -80,13 +80,13 @@ Every page must open with frontmatter between `---` delimiters.
 
 **Required:**
 - `displayed_sidebar: docs` — must be present on every page.
+- `description` — one-sentence plain-text summary of the page (under 160 characters). Required on every page except those with `unlisted: true`. Used by Algolia search snippets and the `llms.txt` LLM index. No markdown formatting, code spans, or links.
 
 **Optional:**
 - `sidebar_position` — integer controlling sort order within a sidebar category.
 - `sidebar_label` — overrides the H1 as the sidebar link text.
 - `toc_max_heading_level` — integer (2–6) capping right-side TOC depth.
 - `keywords` — list of terms for search and SEO.
-- `description` — meta description shown in search results.
 - `unlisted: true` — keeps the URL live but hides the page from navigation and search.
 - `hide_table_of_contents: true` — removes the right-side TOC.
 - `title` — overrides the H1 as the browser tab title and SEO metadata.

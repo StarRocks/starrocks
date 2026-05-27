@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Returns the quarter part of a date, in the range of 1 to 4."
 ---
 
 # quarter

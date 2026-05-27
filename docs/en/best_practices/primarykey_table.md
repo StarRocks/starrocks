@@ -1,5 +1,6 @@
 ---
 sidebar_position: 40
+description: "The Primary Key table uses a new storage engine designed by StarRocks."
 ---
 
 # Primary Key tables

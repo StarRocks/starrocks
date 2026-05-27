@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 sidebar_label: "Logging, Server, and Metadata"
+description: "FE configuration parameters for logging, server settings, and metadata management."
 ---
 
 # FE Configuration - Logging, Server, and Metadata

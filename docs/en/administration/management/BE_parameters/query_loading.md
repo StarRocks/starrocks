@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 sidebar_label: "Query and Loading"
+description: "BE configuration parameters for query execution and data loading."
 ---
 
 import BEConfigMethod from '../../../_assets/commonMarkdown/BE_config_method.mdx'

@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Indicates whether a column is an aggregate column."
 ---
 
 # grouping

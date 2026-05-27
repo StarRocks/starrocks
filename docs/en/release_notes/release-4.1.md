@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "StarRocks 4.1 release notes: multi-tenant range-based tablet auto-splitting, large-capacity tablet support (100 GB target), Fast Schema Evolution V2 for shared-data, Iceberg DELETE support, and expanded SQL functions."
 ---
 
 # StarRocks version 4.1

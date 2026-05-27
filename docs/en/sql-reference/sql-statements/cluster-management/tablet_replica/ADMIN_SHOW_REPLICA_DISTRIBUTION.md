@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "ADMIN SHOW REPLICA DISTRIBUTION is used to show the distribution status of a table or a partition replica."
 ---
 
 # ADMIN SHOW REPLICA DISTRIBUTION

@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Suspends or resumes a pipe:"
 ---
 
 # SUSPEND or RESUME PIPE

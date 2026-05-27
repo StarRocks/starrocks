@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Delete a dictionary object or clear the cached data within a dictionary object."
 ---
 
 # DROP DICTIONARY

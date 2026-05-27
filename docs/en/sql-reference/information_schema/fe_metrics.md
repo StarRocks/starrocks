@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "`fe_metrics` provides information about the metrics of each FE node."
 ---
 
 # fe_metrics

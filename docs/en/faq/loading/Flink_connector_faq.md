@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Frequently asked questions about the StarRocks Flink connector, including timezone handling and sink configuration issues."
 ---
 
 # Flink Connector

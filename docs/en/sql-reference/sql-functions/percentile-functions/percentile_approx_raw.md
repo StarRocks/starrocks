@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Returns the value that corresponds to a specified percentile from `x`."
 ---
 
 # percentile_approx_raw

@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Automate deployment and management of a StarRocks cluster on a Kubernetes cluster with the StarRocks Kubernetes Operator."
 ---
 
 # StarRocks Kubernetes Operator

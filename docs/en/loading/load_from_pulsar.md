@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "How to use Routine Load to continuously load data from Apache Pulsar topics into StarRocks, with CSV and JSON format support."
 ---
 import Experimental from '../_assets/commonMarkdown/_experimental.mdx'
 

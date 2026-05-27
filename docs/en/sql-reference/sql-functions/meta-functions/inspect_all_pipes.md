@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Returns metadata for all pipes in the current database as a JSON string."
 ---
 
 # inspect_all_pipes

@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "`recyclebin_catalogs` provides metadata information of deleted databases, tables, and partitions temporarily stored in the FE recycle bin."
 ---
 
 # recyclebin_catalogs

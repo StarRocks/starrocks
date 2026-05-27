@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "BITMAP is often used to accelerate count distinct."
 ---
 
 # BITMAP

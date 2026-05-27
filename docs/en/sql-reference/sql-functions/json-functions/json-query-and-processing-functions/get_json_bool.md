@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Parses and gets the boolean value from a specified JSON path in a JSON string."
 ---
 
 # get_json_bool

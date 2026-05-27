@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 toc_max_heading_level: 4
 sidebar_position: 50
+description: "How to create and use full-text inverted indexes in StarRocks (from v3.3) to accelerate text keyword searches and LIKE queries by indexing individual words."
 ---
 
 import Beta from '../../_assets/commonMarkdown/_beta.mdx'

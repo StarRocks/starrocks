@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Converts a string into a BITMAP."
 ---
 
 # bitmap_from_string

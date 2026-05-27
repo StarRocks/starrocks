@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Removes the leading spaces or specified characters from the beginning (left) of the `str` argument."
 ---
 
 # ltrim

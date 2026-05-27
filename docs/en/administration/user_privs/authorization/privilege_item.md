@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 sidebar_position: 20
 sidebar_label: "Privilege Items"
+description: "Privileges granted to a user or role determine which operations the user or role can perform on certain objects."
 ---
 
 # Privileges supported by StarRocks

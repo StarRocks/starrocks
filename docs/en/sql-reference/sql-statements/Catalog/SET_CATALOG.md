@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Switches to a specified catalog in the current session."
 ---
 
 # SET CATALOG

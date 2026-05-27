@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 sidebar_position: 40
+description: "How to use Colocate Join in StarRocks to perform joins locally without network data transmission by co-locating data from joined tables in the same Colocation Group."
 ---
 
 # Colocate Join

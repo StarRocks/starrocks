@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 toc_max_heading_level: 5
+description: "A Hive catalog is a kind of external catalog that is supported by StarRocks from v2.4 onwards."
 ---
 
 # Hive catalog

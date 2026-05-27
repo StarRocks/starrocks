@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Intercepts `len` elements from a BITMAP value `src` starting from the position specified by `offset`."
 ---
 
 # sub_bitmap

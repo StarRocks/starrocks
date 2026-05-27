@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Transforms the input `arg` into a binary."
 ---
 
 # bin

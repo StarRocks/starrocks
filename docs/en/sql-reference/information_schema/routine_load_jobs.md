@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "`routine_load_jobs` provides information about routine load jobs."
 ---
 
 # routine_load_jobs

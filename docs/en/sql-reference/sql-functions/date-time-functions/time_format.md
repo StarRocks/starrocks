@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Formats TIME-type values in the specified format."
 ---
 
 # time_format

@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Attempts to repair the specified table or partitions."
 ---
 
 # ADMIN REPAIR

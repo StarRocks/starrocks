@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Adds a specified number of days to a given date or date time."
 ---
 
 # days_add

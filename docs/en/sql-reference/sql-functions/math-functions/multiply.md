@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Computes the product of the arguments."
 ---
 
 # multiply

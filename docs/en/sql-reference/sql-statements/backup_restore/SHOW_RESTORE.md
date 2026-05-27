@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Views the last RESTORE task in a specified database."
 ---
 
 # SHOW RESTORE

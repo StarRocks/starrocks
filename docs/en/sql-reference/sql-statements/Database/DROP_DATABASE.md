@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "DROP DATABASE is used to delete a database in StarRocks."
 ---
 
 # DROP DATABASE

@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Returns an array of all the values in the specified map."
 ---
 
 # map_values

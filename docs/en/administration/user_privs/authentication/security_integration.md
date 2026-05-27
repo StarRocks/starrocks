@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 sidebar_position: 20
+description: "Integrate StarRocks with external authentication systems using security integration."
 ---
 
 # Authenticate with Security Integration

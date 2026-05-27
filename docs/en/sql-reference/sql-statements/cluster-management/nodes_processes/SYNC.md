@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Synchronizes the data consistency among different sessions."
 ---
 
 # SYNC

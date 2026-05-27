@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "If the str string is not empty and does not contain trailing_char character in the end, it appends trailing_char character to the end."
 ---
 
 # append_trailing_char_if_absent

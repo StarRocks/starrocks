@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 sidebar_label: "Feature Differences"
+description: "This topic lists the differences of features supported in shared-nothing and shared-data clusters."
 ---
 
 import EditionSpecificFeature from '../_assets/commonMarkdown/Edition_Specific_Feature.mdx'

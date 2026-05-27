@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Subtracts the specified time interval from a date."
 ---
 
 # date_sub,subdate

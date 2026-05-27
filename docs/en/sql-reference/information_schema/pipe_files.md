@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "`pipe_files` provides the status of the data files to be loaded via a specified pipe."
 ---
 
 # pipe_files

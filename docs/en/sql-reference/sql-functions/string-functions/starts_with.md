@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "This function returns 1 when a string starts with a specified prefix."
 ---
 
 # starts_with

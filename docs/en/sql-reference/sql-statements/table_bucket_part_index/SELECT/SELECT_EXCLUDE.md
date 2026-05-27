@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 sidebar_label: "EXCLUDE"
+description: "This feature is supported starting from version 4.0."
 ---
 
 # EXCLUDE

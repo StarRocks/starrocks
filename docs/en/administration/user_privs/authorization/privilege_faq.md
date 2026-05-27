@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 sidebar_position: 50
+description: "This error may happen if the role is not activated."
 ---
 
 # Privilege FAQ

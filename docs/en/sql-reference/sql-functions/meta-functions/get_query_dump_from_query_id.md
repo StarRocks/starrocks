@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Returns a debug dump for a previously executed query located by its query_id, for post-mortem analysis of query planning."
 ---
 
 # get_query_dump_from_query_id

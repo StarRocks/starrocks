@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "This function repeats `str` by a number of times according to `count`."
 ---
 
 # repeat

@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Currently, only insert is supported."
 ---
 
 # DataX

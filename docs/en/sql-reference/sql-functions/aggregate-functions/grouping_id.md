@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "grouping_id is used to distinguish the grouping statistics results of the same grouping standard."
 ---
 
 

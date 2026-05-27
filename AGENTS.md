@@ -48,6 +48,7 @@ cd test && python3 run.py -v
 - PR titles: `[BugFix] ...`, `[Feature] ...`, `[Enhancement] ...`, `[Refactor] ...`, `[UT] ...`, `[Doc] ...`, or `[Tool] ...`.
 - Fill the repository PR template completely, including behavior-change classification and test/docs checkboxes.
 - Bug-fix PRs intended for branch backports must set the version checkboxes that drive auto-backporting.
+- When editing any file under `docs/`, read `docs/CLAUDE.md` for documentation-specific rules before making changes.
 
 ## Nested Guides
 

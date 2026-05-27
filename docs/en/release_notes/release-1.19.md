@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "StarRocks 1.19 release notes: early feature improvements, performance enhancements, and bug fixes for the storage engine and query execution."
 ---
 
 # StarRocks version 1.19

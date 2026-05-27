@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "SHOW USAGE RESOURCE GROUPS shows the usage information of resource groups."
 ---
 
 # SHOW USAGE RESOURCE GROUPS

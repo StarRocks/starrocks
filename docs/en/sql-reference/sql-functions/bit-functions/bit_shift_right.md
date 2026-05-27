@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Shifts the binary representation of a numeric expression to the right by a specified number of bits."
 ---
 
 # bit_shift_right_logical

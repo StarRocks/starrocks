@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 sidebar_position: 10
+description: "How to configure StarRocks' cost-based optimizer (CBO) by collecting full, sampled, and histogram statistics for internal and external tables to improve query plan accuracy."
 ---
 
 # Gather statistics for CBO

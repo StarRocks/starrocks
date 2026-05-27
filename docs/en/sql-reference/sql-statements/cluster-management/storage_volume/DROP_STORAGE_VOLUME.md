@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "DROP STORAGE VOLUME drops a storage volume."
 ---
 
 # DROP STORAGE VOLUME

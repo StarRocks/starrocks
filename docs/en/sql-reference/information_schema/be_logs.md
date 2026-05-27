@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "`be_logs` provides information about the logs of each BE node."
 ---
 
 # be_logs

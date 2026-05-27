@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "This function uses the first argument sep as the separator which combines the second with the rest to form a string."
 ---
 
 # concat_ws

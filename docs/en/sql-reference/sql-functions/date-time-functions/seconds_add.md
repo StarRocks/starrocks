@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "DATETIME SECONDS_ADD(DATETIME expr1,INT expr2)"
 ---
 
 # seconds_add

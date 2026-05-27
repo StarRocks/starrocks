@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Returns the last day of an input DATE or DATETIME expression based on the specified date part."
 ---
 
 # last_day

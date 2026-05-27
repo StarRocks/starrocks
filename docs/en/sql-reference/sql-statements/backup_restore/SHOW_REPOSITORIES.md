@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Views the repositories created in StarRocks."
 ---
 
 # SHOW REPOSITORIES

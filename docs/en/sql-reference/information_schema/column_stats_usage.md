@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "`column_stats_usage` provides information about the usage of column statistics."
 ---
 
 # column_stats_usage

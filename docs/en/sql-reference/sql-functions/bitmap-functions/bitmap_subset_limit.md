@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Intercepts a specified number of elements from a BITMAP value with element value starting from `start range`."
 ---
 
 # bitmap_subset_limit

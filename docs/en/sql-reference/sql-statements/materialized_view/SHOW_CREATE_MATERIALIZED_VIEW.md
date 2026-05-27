@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "SHOW CREATE MATERIALIZED VIEW shows the definition of a specific asynchronous materialized view."
 ---
 
 # SHOW CREATE MATERIALIZED VIEW

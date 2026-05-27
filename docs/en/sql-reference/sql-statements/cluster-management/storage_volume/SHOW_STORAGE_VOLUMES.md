@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "SHOW STORAGE VOLUMES shows the storage volumes in your StarRocks cluster."
 ---
 
 # SHOW STORAGE VOLUMES

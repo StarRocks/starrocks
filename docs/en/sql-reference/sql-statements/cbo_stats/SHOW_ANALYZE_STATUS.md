@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "SHOW ANALYZE STATUS views the status of collection tasks."
 ---
 
 # SHOW ANALYZE STATUS

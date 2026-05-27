@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 sidebar_position: 20
+description: "From v3.1 onwards, StarRocks supports metrics for asynchronous materialized views."
 ---
 
 # Monitoring Metrics for Asynchronous Materialized Views

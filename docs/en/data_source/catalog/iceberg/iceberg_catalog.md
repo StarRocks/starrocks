@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 toc_max_heading_level: 5
 keywords: ['iceberg']
+description: "An Iceberg catalog is a type of external catalog that is supported by StarRocks from v2.4 onwards."
 ---
 import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';

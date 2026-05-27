@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Converts an array into BITMAP values."
 ---
 
 # array_to_bitmap

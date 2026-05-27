@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Returns a random UUID of the VARCHAR type."
 ---
 
 # uuid

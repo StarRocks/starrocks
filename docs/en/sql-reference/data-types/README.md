@@ -1,6 +1,7 @@
 ---
 sidebar_position: 1
 displayed_sidebar: docs
+description: "StarRocks supports the following data types: [Numeric](#numeric), [String](#string), [Date](#date), [Semi-structured](#semi-structured), and [Others](#others)."
 ---
 
 # Data type overview

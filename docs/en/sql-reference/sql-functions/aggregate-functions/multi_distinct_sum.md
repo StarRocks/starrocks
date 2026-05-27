@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Returns the sum of distinct values in `expr`, equivalent to sum(distinct expr)."
 ---
 
 # multi_distinct_sum

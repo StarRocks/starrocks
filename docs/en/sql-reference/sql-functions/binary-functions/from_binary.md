@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Converts a binary value to a VARCHAR string based on the specified binary format (`binary_type`)."
 ---
 
 # from_binary

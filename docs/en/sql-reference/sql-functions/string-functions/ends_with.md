@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Returns `true` if a string ends with a specified suffix."
 ---
 
 # ends_with

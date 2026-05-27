@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Checks whether a JSON object contains an element that can be located by the `json_path` expression."
 ---
 
 # json_exists

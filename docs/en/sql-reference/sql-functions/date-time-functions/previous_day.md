@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Returns the date of the first specified day of week (DOW) that occurs before the input date (DATE  or DATETIME)."
 ---
 
 # previous_day

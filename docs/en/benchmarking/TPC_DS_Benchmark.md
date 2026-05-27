@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "TPC-DS benchmark comparing StarRocks and Trino on 99 complex SQL queries across 24 tables at 1 TB scale, covering retail sales and return data."
 ---
 
 # TPC-DS Benchmarking

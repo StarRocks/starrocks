@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Updates rows in a Primary Key table."
 ---
 
 # UPDATE

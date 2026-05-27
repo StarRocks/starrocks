@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "StarRocks FE configuration reference: complete list of FE parameters configurable in fe.conf or via ADMIN SET FRONTEND CONFIG."
 ---
 
 import FEConfigMethod from '../../_assets/commonMarkdown/FE_config_method.mdx'

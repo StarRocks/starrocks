@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Creates an order-preserving composite binary key from multiple heterogeneous input columns."
 ---
 
 # encode_sort_key

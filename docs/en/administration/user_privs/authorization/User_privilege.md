@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 sidebar_position: 30
+description: "StarRocks employs both role-based access control (RBAC) and identity-based access control (IBAC) to manage privileges within a StarRocks cluster, allowing cluster administrators to easily restrict ..."
 ---
 
 # Manage user privileges

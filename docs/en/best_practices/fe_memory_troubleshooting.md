@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 keywords: ['FE', 'Coordinator Node','memory', 'OOM', 'JVM', 'troubleshooting', 'heap']
+description: "Prevent 'FE memory full' issues, quickly recover, and find out the cause as much as possible to prevent recurrence."
 ---
 
 # FE / Coordinator Node memory full issue troubleshooting

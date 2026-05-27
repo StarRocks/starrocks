@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Returns the smallest value from a list of one or more parameters."
 ---
 
 # least

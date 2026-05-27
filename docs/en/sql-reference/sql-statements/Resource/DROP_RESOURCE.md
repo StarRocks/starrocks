@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Use DROP RESOURCE to drop an existing resource."
 ---
 
 # DROP RESOURCE

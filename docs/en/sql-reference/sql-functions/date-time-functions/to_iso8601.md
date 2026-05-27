@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Converts the specified date into a string in ISO 8601 format."
 ---
 
 # to_iso8601

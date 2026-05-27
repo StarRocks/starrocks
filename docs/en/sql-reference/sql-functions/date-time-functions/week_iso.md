@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Returns the ISO standard week of the year for the specified date as an integer within the range of `1` to `53`."
 ---
 
 # week_iso

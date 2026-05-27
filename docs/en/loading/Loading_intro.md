@@ -9,6 +9,7 @@ keywords:
   - Pipe
   - Routine Load
   - Spark Load
+description: "Overview of StarRocks data loading options: Stream Load, Broker Load, Routine Load, INSERT, Spark Load, and Pipe, with guidance on choosing the right method."
 ---
 
 <head><meta name="docsearch:pagerank" content="100"/></head>

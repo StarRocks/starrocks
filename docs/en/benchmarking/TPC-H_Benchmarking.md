@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "TPC-H benchmark results comparing StarRocks (local storage and Hive external tables) against Trino on 100 GB scale with 22 decision-support queries."
 ---
 
 # TPC-H Benchmark

@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "`fe_locks` provides information about metadata locks in StarRocks FE."
 ---
 
 # fe_locks

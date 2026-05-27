@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "ADMIN SHOW CONFIG displays the configuration of the current cluster (Currently, only FE configuration items can be displayed)."
 ---
 
 # ADMIN SHOW CONFIG

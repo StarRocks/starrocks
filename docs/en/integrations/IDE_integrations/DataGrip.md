@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "DataGrip supports querying both internal data and external data in StarRocks."
 ---
 
 # DataGrip

@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "This section describes the common error codes for query requests."
 ---
 
 # Error Codes

@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "This function returns the first matching substring in the target value which matches the regular expression pattern."
 ---
 
 import Tip from '../../../_assets/commonMarkdown/quickstart-shared-nothing-tip.mdx';

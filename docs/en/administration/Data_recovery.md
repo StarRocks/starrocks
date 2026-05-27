@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Recover mistakenly deleted databases/tables/partitions."
 ---
 
 # Data Recovery

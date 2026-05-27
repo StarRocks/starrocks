@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Returns partition information for a table as a JSON string."
 ---
 
 # inspect_table_partition_info

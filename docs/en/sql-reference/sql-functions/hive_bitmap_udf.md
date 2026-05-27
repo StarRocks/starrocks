@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 sidebar_position: 0.9
+description: "Hive Bitmap UDF provides UDFs that can be directly used in Hive."
 ---
 
 # Hive Bitmap UDF

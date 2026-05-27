@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 sidebar_position: 60
+description: "This document explains how to obtain and analyze text-based Query Profiles in StarRocks."
 ---
 
 # Explain Analyze

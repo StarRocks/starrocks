@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "How to load JSON data into StarRocks using Stream Load or Routine Load, with JSON path expressions for field mapping and nested object handling."
 ---
 
 # Introduction

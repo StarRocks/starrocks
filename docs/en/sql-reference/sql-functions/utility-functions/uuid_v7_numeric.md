@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Returns a time-ordered UUID v7 of the LARGEINT type."
 ---
 
 # uuid_v7_numeric

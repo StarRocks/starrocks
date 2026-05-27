@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Broker Load does not support re-running load jobs that have been run successfully and are in the FINISHED state."
 ---
 
 # Broker Load

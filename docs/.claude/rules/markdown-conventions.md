@@ -13,6 +13,7 @@ Every page must include frontmatter between `---` delimiters at the top of the f
 ### Required fields
 
 - `displayed_sidebar`: Always set to `docs`. Required on every page.
+- `description`: One-sentence summary of the page content (under 160 characters). Required on every page except those with `unlisted: true`. Used by Algolia search result snippets and LLM index files (`llms.txt`). Must be plain text — no markdown formatting, no code spans, no links.
 
 ### Optional fields
 
@@ -22,7 +23,6 @@ Every page must include frontmatter between `---` delimiters at the top of the f
 | `sidebar_label` | Overrides the H1 heading as the text shown in the sidebar |
 | `toc_max_heading_level` | Integer (2–6) capping the depth of the right-side table of contents |
 | `keywords` | List of terms for search and SEO |
-| `description` | Meta description shown in search results |
 | `unlisted` | Set to `true` to keep the URL accessible but hide the page from navigation and search |
 | `hide_table_of_contents` | Set to `true` to remove the right-side TOC from the page |
 | `title` | Overrides the H1 as the page title in the browser tab and SEO metadata |
@@ -32,6 +32,7 @@ Minimal frontmatter example:
 ```markdown
 ---
 displayed_sidebar: docs
+description: "One sentence describing what this page covers."
 ---
 ```
 

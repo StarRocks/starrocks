@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "This function returns the ascii value of the leftmost character of a given string."
 ---
 
 # ascii

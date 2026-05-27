@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Split string `str` by regexp expression `pattern`, return maximum `max_split` elements in `ARRAY<VARCHAR>` type."
 ---
 
 # regexp_split

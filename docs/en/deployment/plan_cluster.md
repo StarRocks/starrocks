@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "This topic describes how to plan resources for your StarRocks cluster in production from the perspectives of node count, CPU core count, memory size, and storage size."
 ---
 
 # Plan StarRocks Cluster

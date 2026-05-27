@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "`be_threads` provides information about the threads running on each BE node."
 ---
 
 # be_threads

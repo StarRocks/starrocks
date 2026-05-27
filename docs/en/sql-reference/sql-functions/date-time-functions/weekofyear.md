@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Returns the week number for a given date within a year."
 ---
 
 # weekofyear

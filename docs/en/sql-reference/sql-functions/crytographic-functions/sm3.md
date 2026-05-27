@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Uses the SM3 digest algorithm to encrypt a string into a 256-bit hexadecimal string."
 ---
 
 # sm3

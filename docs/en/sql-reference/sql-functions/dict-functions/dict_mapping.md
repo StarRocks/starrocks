@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Returns the value mapped to the specified key in a dictionary table."
 ---
 
 # dict_mapping

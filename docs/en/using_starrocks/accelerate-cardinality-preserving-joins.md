@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 sidebar_position: 120
+description: "How to use table pruning to accelerate cardinality-preserving joins in StarRocks by removing redundant joined tables that do not affect query results."
 ---
 
 # Accelerate Cardinality-Preserving Joins

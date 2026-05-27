@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Converts a Unix timestamp to a DATETIME type value."
 ---
 
 # to_datetime_ntz

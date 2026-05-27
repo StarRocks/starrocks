@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "SHOW BROKER views the information of all brokers that have been added to the StarRocks cluster."
 ---
 
 # SHOW BROKER

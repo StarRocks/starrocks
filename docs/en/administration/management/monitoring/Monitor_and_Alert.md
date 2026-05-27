@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "StarRocks provides a monitor and alert solution by using Prometheus and Grafana."
 ---
 
 # Monitor and Alert with Prometheus and Grafana

@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Splits and parses text into tokens based on the specified tokenizer."
 ---
 
 # tokenize

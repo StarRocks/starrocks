@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "StarRocks 2.5 and later versions support user-defined variables."
 ---
 
 # User-defined variables

@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 sidebar_position: 40
+description: "How to create and use Aggregate tables in StarRocks with aggregate keys and aggregate functions to pre-aggregate data during loading and speed up aggregate queries."
 ---
 
 # Aggregate table

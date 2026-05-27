@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "This topic describes some frequently asked questions (FAQ) and common issues about Data Cache and provides troubleshooting steps and solutions to these issues."
 ---
 
 # Data Cache FAQ

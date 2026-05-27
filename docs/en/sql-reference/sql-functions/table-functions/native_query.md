@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "`native_query` is a JDBC catalog table function."
 ---
 
 # native_query

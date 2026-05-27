@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Extracts all substrings from the target string (`str`) that matches a regular expression pattern (`pattern`) and corresponds to the regex group index specified by `pos`."
 ---
 
 # regexp_extract_all

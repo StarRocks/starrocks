@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 sidebar_position: 50
+description: "This document provides practical tips and best practices for optimizing query performance in StarRocks through effective schema design and foundational table choices."
 ---
 
 # Schema Tuning Recipes

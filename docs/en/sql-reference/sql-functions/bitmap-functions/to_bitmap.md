@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "The input is unsigned bigint with the value ranging from 0 to 18446744073709551615, and the output is bitmap containing this element."
 ---
 
 # to_bitmap

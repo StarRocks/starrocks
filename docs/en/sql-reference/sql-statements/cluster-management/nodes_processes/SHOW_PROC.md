@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "SHOW PROC shows certain indicators of the StarRocks cluster."
 ---
 
 # SHOW PROC

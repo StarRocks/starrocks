@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "`warehouse_queries` provides information about queries running on each warehouse."
 ---
 
 # warehouse_queries

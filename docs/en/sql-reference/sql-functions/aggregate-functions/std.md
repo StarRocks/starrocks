@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Returns the standard deviation of an expression."
 ---
 
 # std

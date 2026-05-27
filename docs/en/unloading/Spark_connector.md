@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "StarRocks provides a self-developed connector named StarRocks Connector for Apache Spark™ (Spark connector for short) to help you read data from a StarRocks table by using Spark."
 ---
 
 # Read data from StarRocks using Spark connector

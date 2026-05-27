@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "If `expr1` evaluates to TRUE, returns `expr2`."
 ---
 
 # if

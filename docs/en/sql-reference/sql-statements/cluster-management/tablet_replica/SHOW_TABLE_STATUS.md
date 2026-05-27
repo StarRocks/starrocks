@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "SHOW TABLE STATUS is used to view some of the information in Table."
 ---
 
 # SHOW TABLE STATUS

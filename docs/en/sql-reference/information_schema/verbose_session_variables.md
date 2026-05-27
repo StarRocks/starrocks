@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "`verbose_session_variables` provides detailed information about session variables, including their default values and whether they have been changed from the default."
 ---
 
 # verbose_session_variables

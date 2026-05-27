@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Calculate the equi-width histogram bucket."
 ---
 
 # equiwidth_bucket

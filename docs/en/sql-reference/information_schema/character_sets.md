@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "`character_sets` identifies the character sets available."
 ---
 
 # character_sets

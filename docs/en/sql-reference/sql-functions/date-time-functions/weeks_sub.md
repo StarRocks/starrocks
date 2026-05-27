@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Subtracts a specified number of weeks from a datetime or date value."
 ---
 
 # weeks_sub

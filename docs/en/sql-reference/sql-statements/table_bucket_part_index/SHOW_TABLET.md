@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "SHOW TABLET displays tablet related information."
 ---
 
 # SHOW TABLET

@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Returns the population covariance of two expressions."
 ---
 
 # covar_pop

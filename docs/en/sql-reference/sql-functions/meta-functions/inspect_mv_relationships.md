@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Returns the mapping from external base tables to materialized views stored in ConnectorTblMetaInfoMgr."
 ---
 
 # inspect_mv_relationships

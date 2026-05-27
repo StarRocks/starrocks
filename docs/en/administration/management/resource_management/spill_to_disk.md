@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 sidebar_position: 50
+description: "This topic describes how to spill intermediate computation results of large operators to local disks and object storage."
 ---
 
 import Beta from '../../../_assets/commonMarkdown/_beta.mdx'

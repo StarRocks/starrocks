@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "This topic describes how to scale in and out the node of StarRocks."
 ---
 
 # Scale in and out

@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Executes an HTTP request and returns the response as a JSON string."
 ---
 
 # http_request

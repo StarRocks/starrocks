@@ -16,7 +16,7 @@ const isVersioningDisabled = !!process.env.DISABLE_VERSIONING || false;
 /** @type {import('@docusaurus/types').Config} */
 const config = {
   title: "StarRocks",
-  tagline: "StarRocks documentation",
+  tagline: "The fastest open-source OLAP database for real-time analytics at scale",
   favicon: "img/favicon.ico",
 
   url: "https://docs.starrocks.io/",
@@ -158,18 +158,25 @@ const config = {
           includePages: false,
           includeDocs: true,
           includeVersionedDocs: false,
-          excludeRoutes: [], 
+          excludeRoutes: [
+            '/docs/cover_pages/**',
+            '/docs/category/**',
+          ],
         },
         llmsTxt: {
           enableLlmsFullTxt: true,
           includeBlog: false,
           includePages: false,
           includeDocs: true,
-          excludeRoutes: [],
+          excludeRoutes: [
+            '/docs/cover_pages/**',
+            '/docs/category/**',
+          ],
+          autoSectionDepth: 2,
 
           // Site metadata
           siteTitle: 'StarRocks Documentation',
-          siteDescription: 'Documentation for StarRocks, the fastest and most reliable OLAP database. StarRocks is Standard SQL compliant.',
+          siteDescription: 'StarRocks is an open-source, high-performance OLAP database for real-time analytics at scale. It supports Standard SQL, materialized views, data lakes (Iceberg, Delta Lake, Hudi), stream ingestion (Kafka, Flink), and cloud-native deployment. This documentation covers SQL reference, table design, data loading, query acceleration, administration, and release notes.',
         },
       },
     ],

@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Removes duplicate elements from an array."
 ---
 
 # array_distinct

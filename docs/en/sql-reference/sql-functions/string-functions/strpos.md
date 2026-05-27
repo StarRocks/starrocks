@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Returns the position of the N-th substring in a string."
 ---
 
 # strpos
