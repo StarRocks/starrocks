@@ -89,7 +89,7 @@ public class BrokerLoadJobPreSplitFiringTest {
             // Hook fired once, against the load's bound context.
             verify(context, times(1)).bindScope();
             hookStatic.verify(() -> BrokerLoadPreSplitHook.maybeRunPreSplit(
-                    eq(db), eq(targetTable), eq(brokerDesc),
+                    eq(context), eq(db), eq(targetTable), eq(brokerDesc),
                     eq(fileGroups), eq(fileStatuses), eq(computeResource)));
         }
     }
@@ -119,7 +119,7 @@ public class BrokerLoadJobPreSplitFiringTest {
             // so the load's submit-time SET survives FE failover.
             verify(sessionVariable).setEnableTabletPreSplit(false);
             hookStatic.verify(() -> BrokerLoadPreSplitHook.maybeRunPreSplit(
-                    any(), any(), any(), any(), any(), any()));
+                    any(), any(), any(), any(), any(), any(), any()));
         }
     }
 
@@ -146,7 +146,7 @@ public class BrokerLoadJobPreSplitFiringTest {
                     List.of(firstInput, secondInput), Map.of());
 
             hookStatic.verify(() -> BrokerLoadPreSplitHook.maybeRunPreSplit(
-                    any(), any(), any(), any(), any(), any()), times(2));
+                    any(), any(), any(), any(), any(), any(), any()), times(2));
         }
     }
 }

@@ -4496,6 +4496,13 @@ public class Config extends ConfigBase {
             + "order so meta tier falls back to data tier (row sampling).")
     public static double tablet_pre_split_meta_tier_overlap_threshold = 0.3;
 
+    @ConfField(mutable = true, comment = "Maximum number of predicted target partitions a single "
+            + "Sample-Based Tablet Pre-Split invocation will operate on. Excess predicted partitions "
+            + "(those with the lowest sample count) are dropped and fall back to runtime auto-create "
+            + "with no pre-split. Bounds hook latency on pathological multi-partition loads. Set to "
+            + "zero or a negative value to disable the cap.")
+    public static int tablet_pre_split_max_partitions_per_load = 32;
+
     /**
      * Whether to enable tracing historical nodes when cluster scale
      */

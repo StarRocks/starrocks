@@ -18,7 +18,6 @@ import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.NullVariant;
 import com.starrocks.catalog.TableFunctionTable;
-import com.starrocks.catalog.Variant;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.thrift.TBrokerFileStatus;
@@ -57,11 +56,13 @@ class InsertFromFilesSampleSubqueryExecutorTest {
         SampleSubqueryExecutor.SampleExecution execution = executor.execute(
                 bigintRequest(sourceTable, sortKeyColumn));
 
-        List<List<Variant>> rows = Lists.newArrayList(execution.rows());
+        List<SampleRow> rows = Lists.newArrayList(execution.rows());
         Assertions.assertEquals(3, rows.size());
-        Assertions.assertEquals("100", rows.get(0).get(0).getStringValue());
-        Assertions.assertEquals("200", rows.get(1).get(0).getStringValue());
-        Assertions.assertEquals("300", rows.get(2).get(0).getStringValue());
+        Assertions.assertEquals("100", rows.get(0).sortKeyTuple().get(0).getStringValue());
+        Assertions.assertEquals("200", rows.get(1).sortKeyTuple().get(0).getStringValue());
+        Assertions.assertEquals("300", rows.get(2).sortKeyTuple().get(0).getStringValue());
+        Assertions.assertTrue(rows.get(0).partitionSourceTuple().isEmpty(),
+                "unpartitioned request must leave the partition-source tuple empty");
         Assertions.assertEquals(4L * 1024L * 1024L, execution.estimates().totalBytes());
     }
 
@@ -157,11 +158,11 @@ class InsertFromFilesSampleSubqueryExecutorTest {
                 new InsertFromFilesScanContext(sourceTable, Mockito.mock(ComputeResource.class)),
                 List.of(nullableSortKey), /*sampleByteLimit=*/ Long.MAX_VALUE, /*seed=*/ 0L));
 
-        List<List<Variant>> rows = Lists.newArrayList(execution.rows());
+        List<SampleRow> rows = Lists.newArrayList(execution.rows());
         Assertions.assertEquals(2, rows.size());
-        Assertions.assertInstanceOf(NullVariant.class, rows.get(0).get(0),
+        Assertions.assertInstanceOf(NullVariant.class, rows.get(0).sortKeyTuple().get(0),
                 "nullable column null cell must decode to NullVariant");
-        Assertions.assertEquals("42", rows.get(1).get(0).getStringValue());
+        Assertions.assertEquals("42", rows.get(1).sortKeyTuple().get(0).getStringValue());
     }
 
     @Test
@@ -276,13 +277,14 @@ class InsertFromFilesSampleSubqueryExecutorTest {
 
         Assertions.assertTrue(capturedSql.toString().contains("SELECT `tenant`, `position` FROM FILES"),
                 "both sort-key columns must appear in the projection: " + capturedSql);
-        List<List<Variant>> rows = Lists.newArrayList(execution.rows());
+        List<SampleRow> rows = Lists.newArrayList(execution.rows());
         Assertions.assertEquals(2, rows.size());
-        Assertions.assertEquals(2, rows.get(0).size(), "each decoded row carries a value per sort-key column");
-        Assertions.assertEquals("100", rows.get(0).get(0).getStringValue());
-        Assertions.assertEquals("200", rows.get(0).get(1).getStringValue());
-        Assertions.assertEquals("100", rows.get(1).get(0).getStringValue());
-        Assertions.assertEquals("300", rows.get(1).get(1).getStringValue());
+        Assertions.assertEquals(2, rows.get(0).sortKeyTuple().size(),
+                "each decoded row carries a value per sort-key column");
+        Assertions.assertEquals("100", rows.get(0).sortKeyTuple().get(0).getStringValue());
+        Assertions.assertEquals("200", rows.get(0).sortKeyTuple().get(1).getStringValue());
+        Assertions.assertEquals("100", rows.get(1).sortKeyTuple().get(0).getStringValue());
+        Assertions.assertEquals("300", rows.get(1).sortKeyTuple().get(1).getStringValue());
     }
 
     @Test

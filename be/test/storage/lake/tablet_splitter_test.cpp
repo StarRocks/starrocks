@@ -694,7 +694,8 @@ struct SortKeyColumnSpec {
 };
 
 static TabletMetadataPtr make_empty_metadata_with_sort_key(const SortKeyColumnSpec& col_spec,
-                                                           const TabletRangePB& parent_range) {
+                                                           const TabletRangePB& parent_range,
+                                                           bool set_sort_key_idxes = true) {
     auto m = std::make_shared<TabletMetadataPB>();
     m->set_id(1);
     m->set_version(1);
@@ -711,7 +712,9 @@ static TabletMetadataPtr make_empty_metadata_with_sort_key(const SortKeyColumnSp
     if (col_spec.precision > 0) col->set_precision(col_spec.precision);
     if (col_spec.scale > 0) col->set_frac(col_spec.scale); // ColumnPB.frac is the scale field
     if (col_spec.length > 0) col->set_length(col_spec.length);
-    schema->add_sort_key_idxes(0);
+    if (set_sort_key_idxes) {
+        schema->add_sort_key_idxes(0);
+    }
 
     *m->mutable_range() = parent_range;
     return m;
@@ -720,6 +723,15 @@ static TabletMetadataPtr make_empty_metadata_with_sort_key(const SortKeyColumnSp
 static TabletMetadataPtr make_empty_metadata_bigint_key(std::optional<int64_t> parent_lower,
                                                         std::optional<int64_t> parent_upper) {
     return make_empty_metadata_with_sort_key({.type = TYPE_BIGINT}, make_bigint_range_pb(parent_lower, parent_upper));
+}
+
+// Like make_empty_metadata_bigint_key but with an empty sort_key_idxes -- the schema
+// shape of a range-distributed DUPLICATE table created without an explicit ORDER BY.
+// The external-boundaries path must fall back to the key columns instead of rejecting.
+static TabletMetadataPtr make_empty_metadata_bigint_key_no_sort_key_idxes(std::optional<int64_t> parent_lower,
+                                                                          std::optional<int64_t> parent_upper) {
+    return make_empty_metadata_with_sort_key({.type = TYPE_BIGINT}, make_bigint_range_pb(parent_lower, parent_upper),
+                                             /*set_sort_key_idxes=*/false);
 }
 
 static TabletMetadataPtr make_empty_metadata_decimal64_key(int precision, int scale) {
@@ -874,6 +886,21 @@ TEST(TabletSplitterExternalBoundariesTest, empty_tablet_happy_path_k2) {
     ASSERT_EQ(2, out.size());
     EXPECT_TRUE(out[0].rowset_stats.empty());
     EXPECT_TRUE(out[1].rowset_stats.empty());
+}
+
+// -----------------------------------------------------------------------------
+// Empty sort_key_idxes (table created without an explicit ORDER BY): the sort key
+// falls back to the key columns, so the split must succeed -- not be rejected and
+// degraded to an identical (un-split) tablet.
+// -----------------------------------------------------------------------------
+TEST(TabletSplitterExternalBoundariesTest, empty_sort_key_idxes_falls_back_to_key_columns) {
+    auto m = make_empty_metadata_bigint_key_no_sort_key_idxes(0, 100);
+    ASSERT_TRUE(m->schema().sort_key_idxes().empty());
+    auto ranges = make_ranges({make_bigint_range_pb(0, 50), make_bigint_range_pb(50, 100)});
+    std::vector<TabletRangeInfo> out;
+    auto status = compute_split_ranges_from_external_boundaries(/*tablet_manager=*/nullptr, m, ranges, &out);
+    ASSERT_TRUE(status.ok()) << status;
+    ASSERT_EQ(2, out.size());
 }
 
 // -----------------------------------------------------------------------------

@@ -382,7 +382,7 @@ public class BrokerLoadJob extends BulkLoadJob {
         try (ConnectContext.ScopeGuard ignored = context.bindScope()) {
             for (PreSplitHookInput input : preSplitInputs) {
                 BrokerLoadPreSplitHook.maybeRunPreSplit(
-                        db, input.targetTable(), brokerDesc,
+                        context, db, input.targetTable(), brokerDesc,
                         input.fileGroups(), input.fileStatuses(), computeResource);
             }
         }

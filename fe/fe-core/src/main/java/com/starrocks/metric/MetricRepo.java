@@ -335,6 +335,14 @@ public final class MetricRepo {
     public static LongCounterMetric COUNTER_TABLET_PRE_SPLIT_POST_SUBMIT_HARD_CAP;
     public static LongCounterMetric COUNTER_TABLET_PRE_SPLIT_LOAD_ABORT;
     public static LongCounterMetric COUNTER_TABLET_PRE_SPLIT_SAMPLER_INVOCATIONS;
+    public static LongCounterMetric COUNTER_TABLET_PRE_SPLIT_PARTITIONS_CAPPED;
+    public static LongCounterMetric COUNTER_TABLET_PRE_SPLIT_PARTITIONS_TOTAL;
+    public static final MetricWithLabelGroup<LongCounterMetric> COUNTER_TABLET_PRE_SPLIT_PRE_CREATE =
+            new MetricWithLabelGroup<>("result",
+                    () -> new LongCounterMetric("tablet_pre_split_pre_create",
+                            MetricUnit.REQUESTS,
+                            "total multi-partition pre-create attempts by result "
+                                    + "(succeeded|failed|already_exists)"));
     public static final MetricWithLabelGroup<LongCounterMetric> COUNTER_TABLET_PRE_SPLIT_SAMPLER_FAILED =
             new MetricWithLabelGroup<>("reason",
                     () -> new LongCounterMetric("tablet_pre_split_sampler_failed",
@@ -951,6 +959,18 @@ public final class MetricRepo {
                 "tablet_pre_split_sampler_invocations", MetricUnit.REQUESTS,
                 "total sampler invocations driven by Sample-Based Tablet Pre-Split");
         STARROCKS_METRIC_REGISTER.addMetric(COUNTER_TABLET_PRE_SPLIT_SAMPLER_INVOCATIONS);
+
+        COUNTER_TABLET_PRE_SPLIT_PARTITIONS_CAPPED = new LongCounterMetric(
+                "tablet_pre_split_partitions_capped", MetricUnit.REQUESTS,
+                "total predicted partitions dropped by the Sample-Based Tablet Pre-Split per-load cap "
+                        + "(tablet_pre_split_max_partitions_per_load)");
+        STARROCKS_METRIC_REGISTER.addMetric(COUNTER_TABLET_PRE_SPLIT_PARTITIONS_CAPPED);
+
+        COUNTER_TABLET_PRE_SPLIT_PARTITIONS_TOTAL = new LongCounterMetric(
+                "tablet_pre_split_partitions_total", MetricUnit.REQUESTS,
+                "total target partitions counted by the Sample-Based Tablet Pre-Split "
+                        + "multi-partition coordinator (one increment per PartitionSamples entry)");
+        STARROCKS_METRIC_REGISTER.addMetric(COUNTER_TABLET_PRE_SPLIT_PARTITIONS_TOTAL);
 
         // 3. histogram
         HISTO_QUERY_LATENCY = METRIC_REGISTER.histogram(MetricRegistry.name("query", "latency", "ms"));

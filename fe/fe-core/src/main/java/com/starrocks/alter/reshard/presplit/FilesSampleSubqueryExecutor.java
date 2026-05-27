@@ -131,14 +131,17 @@ abstract class FilesSampleSubqueryExecutor implements SampleSubqueryExecutor {
     public final SampleExecution execute(SampleRequest request) throws StarRocksException {
         Source source = resolveSource(request);
         List<Column> sortKeyColumns = request.getSortKey();
+        List<Column> partitionSourceColumns = request.getPartitionSourceColumns();
 
         double samplingRate = pickSamplingRate(source.totalFileBytes());
         int rowLimit = pickRowLimit(request.getSampleByteLimit());
 
         String sampleSql = buildSampleSql(
-                source.filesProperties(), sortKeyColumns, samplingRate, rowLimit, request.getSeed());
+                source.filesProperties(), sortKeyColumns, partitionSourceColumns,
+                samplingRate, rowLimit, request.getSeed());
         List<TResultBatch> resultBatches = runSampleQuery(sampleSql, source.computeResource());
-        Iterator<List<Variant>> rowIterator = decodeRows(resultBatches, sortKeyColumns).iterator();
+        Iterator<SampleRow> rowIterator =
+                decodeRows(resultBatches, sortKeyColumns, partitionSourceColumns).iterator();
         return new SampleExecution(rowIterator, new Estimates(source.totalFileBytes(), 0L));
     }
 
@@ -165,8 +168,13 @@ abstract class FilesSampleSubqueryExecutor implements SampleSubqueryExecutor {
 
     /**
      * Builds the sampling SELECT against the supplied FILES properties. Projects
-     * every sort-key column so multi-column sort keys produce tuple-valued
-     * samples that {@link BoundaryPlanner} can lex-sort and quantile-cut.
+     * every sort-key column followed by every partition-source column (so the
+     * projection list is {@code sortKey, partitionSource} in order) — multi-
+     * column sort keys produce tuple-valued samples that {@link BoundaryPlanner}
+     * can lex-sort and quantile-cut, and the trailing partition-source columns
+     * feed a downstream multi-partition grouper. When
+     * {@code partitionSourceColumns} is empty the projection collapses to the
+     * sort key alone, identical to the pre-extension shape.
      *
      * <p>String literal escaping covers both {@code "} and {@code \} so a
      * crafted property value cannot break out of the double-quoted form and
@@ -177,11 +185,19 @@ abstract class FilesSampleSubqueryExecutor implements SampleSubqueryExecutor {
      */
     @VisibleForTesting
     static String buildSampleSql(
-            Map<String, String> filesProperties, List<Column> sortKeyColumns,
+            Map<String, String> filesProperties,
+            List<Column> sortKeyColumns,
+            List<Column> partitionSourceColumns,
             double samplingRate, int rowLimit, long seed) {
-        String projection = sortKeyColumns.stream()
-                .map(column -> SqlUtils.getIdentSql(column.getName()))
-                .collect(Collectors.joining(", "));
+        List<String> projectedIdentifiers = new ArrayList<>(
+                sortKeyColumns.size() + partitionSourceColumns.size());
+        for (Column column : sortKeyColumns) {
+            projectedIdentifiers.add(SqlUtils.getIdentSql(column.getName()));
+        }
+        for (Column column : partitionSourceColumns) {
+            projectedIdentifiers.add(SqlUtils.getIdentSql(column.getName()));
+        }
+        String projection = String.join(", ", projectedIdentifiers);
         String propertiesClause = filesProperties.entrySet().stream()
                 .map(property -> '"' + escapeDoubleQuoted(property.getKey()) + "\" = \""
                         + escapeDoubleQuoted(property.getValue()) + '"')
@@ -195,6 +211,19 @@ abstract class FilesSampleSubqueryExecutor implements SampleSubqueryExecutor {
                 Double.toString(samplingRate),
                 orderShuffleSeed,
                 rowLimit);
+    }
+
+    /**
+     * Backwards-compatible overload for callers that have only a sort key
+     * (unpartitioned target). Delegates with an empty partition-source list so
+     * the synthesized SQL matches the pre-extension shape exactly.
+     */
+    @VisibleForTesting
+    static String buildSampleSql(
+            Map<String, String> filesProperties, List<Column> sortKeyColumns,
+            double samplingRate, int rowLimit, long seed) {
+        return buildSampleSql(filesProperties, sortKeyColumns, List.of(),
+                samplingRate, rowLimit, seed);
     }
 
     /**
@@ -261,9 +290,11 @@ abstract class FilesSampleSubqueryExecutor implements SampleSubqueryExecutor {
         return context;
     }
 
-    private List<List<Variant>> decodeRows(List<TResultBatch> resultBatches, List<Column> sortKeyColumns)
-            throws StarRocksException {
-        List<List<Variant>> rows = new ArrayList<>();
+    private List<SampleRow> decodeRows(
+            List<TResultBatch> resultBatches,
+            List<Column> sortKeyColumns,
+            List<Column> partitionSourceColumns) throws StarRocksException {
+        List<SampleRow> rows = new ArrayList<>();
         if (resultBatches == null) {
             return rows;
         }
@@ -273,28 +304,47 @@ abstract class FilesSampleSubqueryExecutor implements SampleSubqueryExecutor {
                 continue;
             }
             for (ByteBuffer rowBuffer : batchRows) {
-                rows.add(decodeRow(rowBuffer, sortKeyColumns));
+                rows.add(decodeRow(rowBuffer, sortKeyColumns, partitionSourceColumns));
             }
         }
         return rows;
     }
 
     /**
-     * Decode one HTTP_PROTOCAL JSON row ({@code {"data":[<val0>, ...]}}) into
-     * a sort-key tuple. Nullable columns accept JSON nulls and decode to
-     * {@link com.starrocks.catalog.NullVariant}; non-nullable columns surface
-     * a null cell as an executor failure rather than silently dropping the
-     * row. Any shape deviation or type-coerce failure becomes a
+     * Decode one HTTP_PROTOCAL JSON row ({@code {"data":[<val0>, ...]}}) into a
+     * {@link SampleRow}. The JSON array carries
+     * {@code sortKeyColumns.size() + partitionSourceColumns.size()} cells in
+     * projection order: the first slice fills the row's sort-key tuple, the
+     * trailing slice fills its partition-source tuple. When
+     * {@code partitionSourceColumns} is empty the trailing slice is empty and
+     * the row collapses to the pre-extension single-tuple shape.
+     *
+     * <p>Nullable columns accept JSON nulls and decode to
+     * {@link com.starrocks.catalog.NullVariant}; non-nullable columns surface a
+     * null cell as an executor failure rather than silently dropping the row.
+     * Any shape deviation or type-coerce failure becomes a
      * {@link StarRocksException} so the coordinator records SAMPLE_FAILED
      * instead of letting an unchecked exception unwind the load thread.
      */
-    private List<Variant> decodeRow(ByteBuffer rowBuffer, List<Column> sortKeyColumns) throws StarRocksException {
-        JsonArray dataArray = extractDataArray(rowBuffer, sortKeyColumns.size());
-        List<Variant> tupleValues = new ArrayList<>(sortKeyColumns.size());
+    private SampleRow decodeRow(
+            ByteBuffer rowBuffer,
+            List<Column> sortKeyColumns,
+            List<Column> partitionSourceColumns) throws StarRocksException {
+        int expectedArity = sortKeyColumns.size() + partitionSourceColumns.size();
+        JsonArray dataArray = extractDataArray(rowBuffer, expectedArity);
+        List<Variant> sortKeyValues = new ArrayList<>(sortKeyColumns.size());
         for (int columnIndex = 0; columnIndex < sortKeyColumns.size(); columnIndex++) {
-            tupleValues.add(decodeCell(dataArray.get(columnIndex), sortKeyColumns.get(columnIndex)));
+            sortKeyValues.add(decodeCell(
+                    dataArray.get(columnIndex), sortKeyColumns.get(columnIndex), COLUMN_ROLE_SORT_KEY));
         }
-        return tupleValues;
+        List<Variant> partitionSourceValues = new ArrayList<>(partitionSourceColumns.size());
+        for (int columnIndex = 0; columnIndex < partitionSourceColumns.size(); columnIndex++) {
+            partitionSourceValues.add(decodeCell(
+                    dataArray.get(sortKeyColumns.size() + columnIndex),
+                    partitionSourceColumns.get(columnIndex),
+                    COLUMN_ROLE_PARTITION_SOURCE));
+        }
+        return new SampleRow(sortKeyValues, partitionSourceValues);
     }
 
     /**
@@ -331,22 +381,28 @@ abstract class FilesSampleSubqueryExecutor implements SampleSubqueryExecutor {
      * type. Null cells produce a typed {@link Variant#nullVariant} for nullable
      * columns (BoundaryPlanner's compareTo orders {@code NullVariant} lower
      * than any non-null value); non-nullable columns reject null as a schema
-     * invariant violation.
+     * invariant violation. {@code columnRole} names the projection slice the
+     * cell belongs to (sort-key or partition-source) so a non-null violation
+     * reports the schema an operator should actually inspect.
      */
-    private Variant decodeCell(JsonElement valueElement, Column column) throws StarRocksException {
+    private Variant decodeCell(JsonElement valueElement, Column column, String columnRole) throws StarRocksException {
         if (valueElement.isJsonNull()) {
             if (column.isAllowNull()) {
                 return Variant.nullVariant(column.getType());
             }
-            throw new StarRocksException(errorPrefix + "sample returned a null value for non-nullable sort-key column "
-                    + column.getName());
+            throw new StarRocksException(errorPrefix + "sample returned a null value for non-nullable "
+                    + columnRole + " column " + column.getName());
         }
         try {
             return Variant.of(column.getType(), valueElement.getAsString());
         } catch (RuntimeException variantFailure) {
-            throw new StarRocksException(errorPrefix + "failed to coerce sample value for column "
-                    + column.getName() + " to " + column.getType().toSql() + ": " + variantFailure.getMessage(),
+            throw new StarRocksException(errorPrefix + "failed to coerce sample value for " + columnRole
+                    + " column " + column.getName() + " to " + column.getType().toSql() + ": "
+                    + variantFailure.getMessage(),
                     variantFailure);
         }
     }
+
+    private static final String COLUMN_ROLE_SORT_KEY = "sort-key";
+    private static final String COLUMN_ROLE_PARTITION_SOURCE = "partition-source";
 }

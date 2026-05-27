@@ -15,22 +15,34 @@
 package com.starrocks.alter.reshard.presplit;
 
 import com.google.common.base.Preconditions;
+import com.starrocks.alter.reshard.SplitTabletJobFactory;
+import com.starrocks.alter.reshard.TabletReshardJob;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PhysicalPartition;
+import com.starrocks.catalog.Tablet;
+import com.starrocks.catalog.TabletRange;
+import com.starrocks.catalog.Tuple;
 import com.starrocks.common.Config;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.TimeoutException;
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.common.MetaUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.time.Duration;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 
@@ -45,6 +57,22 @@ import java.util.Optional;
  * Broker Load): it runs the eligibility gate, then drives the
  * {@link PreSplitPipeline} through the pre-submit / submit / post-submit
  * phases described in the design doc.
+ *
+ * <p><b>Entry points</b>:
+ * <ul>
+ *   <li>{@link #submitAsynchronously} — single-partition path used by the
+ *       load hooks when the target table has exactly one physical partition.
+ *       Returns immediately after admitting the reshard job; the daemon
+ *       drives it to FINISHED asynchronously.</li>
+ *   <li>{@link #runPreSplit} — synchronous-await variant of
+ *       {@link #submitAsynchronously} (tests and any future synchronous
+ *       integration); blocks on {@link PreSplitPipeline#awaitFinished}.</li>
+ *   <li>{@link #submitForPartitionsCombined} — multi-partition path;
+ *       takes a {@link PartitionSampleGrouper#group grouped} list of
+ *       {@link PartitionSamples}, pre-creates missing partitions, and
+ *       submits ONE combined reshard via
+ *       {@link com.starrocks.alter.reshard.SplitTabletJobFactory#forExternalBoundariesMultiTablet}.</li>
+ * </ul>
  */
 public final class TabletPreSplitCoordinator {
 
@@ -342,4 +370,231 @@ public final class TabletPreSplitCoordinator {
         long clamped = Math.max(2L, Math.min(proposed, maxSplitCount));
         return (int) clamped;
     }
+
+    /**
+     * Multi-partition entry point. Drives per-partition pre-create + boundary
+     * planning, then submits ONE combined reshard job spanning every partition
+     * whose pre-create + plan succeeded.
+     *
+     * <p>For each {@link PartitionSamples} entry:
+     * <ul>
+     *   <li>If {@code !existsInCatalog}, call
+     *       {@link com.starrocks.server.LocalMetastore#addPartitions} to
+     *       pre-create. If the partition raced into the catalog after the
+     *       grouper's snapshot, the call is skipped and recorded as
+     *       {@link PreSplitMetrics.PreCreateResult#ALREADY_EXISTS}.</li>
+     *   <li>Re-resolve the post-create state under a brief intensive table
+     *       READ lock and verify per-partition eligibility (single base
+     *       tablet, empty). Mismatches surface as
+     *       {@link SkipReason#PARTITION_NOT_ELIGIBLE_POST_CREATE} for that
+     *       partition only; sibling partitions continue.</li>
+     *   <li>Compute K_i via {@link #selectTabletCount} and plan boundaries
+     *       via {@link BoundaryPlanner#planRowQuantileBoundaries}. K_i &lt; 2
+     *       cannot occur (the selector clamps); planner returning no-split
+     *       (effectiveK &lt; 2 from duplicate-collapse) yields
+     *       {@link SkipReason#NO_USEFUL_CUTS} for that partition.</li>
+     * </ul>
+     *
+     * <p>After the loop, when at least one partition contributed,
+     * {@link SplitTabletJobFactory#forExternalBoundariesMultiTablet} builds
+     * the combined job and
+     * {@link com.starrocks.alter.reshard.TabletReshardJobMgr#addTabletReshardJob}
+     * admits it. Any synchronous failure of either step downgrades the whole
+     * hook to {@link SkipReason#SUBMIT_FAILED} — the in-flight per-partition
+     * Submitted markers are NOT promoted (the load proceeds against the
+     * pre-create-only layout).
+     *
+     * <p>The concurrent same-table race surfaces asynchronously inside
+     * {@code SplitTabletJob.runPendingJob}'s {@code setTableState}; the
+     * caller's {@code awaitFinishedAllowingFallback} handles
+     * {@link SkipReason#JOB_FAILED_BEFORE_FINISH} from there.
+     *
+     * @param ctx ConnectContext used both for {@code LocalMetastore.addPartitions}
+     *            (which reads the caller's compute resource for tablet
+     *            allocation) and for any analyzer pass that the entry's
+     *            AddPartitionClause defers.
+     * @return {@link PreSplitOutcome.SubmittedCombined} on success;
+     *         {@link PreSplitOutcome.Skipped} with a specific reason when no
+     *         partition contributed or the combined submit failed.
+     */
+    public static PreSplitOutcome submitForPartitionsCombined(
+            Database database, OlapTable table, List<PartitionSamples> partitionSamplesList,
+            int activeComputeNodeCount, ConnectContext ctx) {
+        Objects.requireNonNull(database, "database");
+        Objects.requireNonNull(table, "table");
+        Objects.requireNonNull(partitionSamplesList, "partitionSamplesList");
+        Objects.requireNonNull(ctx, "ctx");
+        Preconditions.checkArgument(activeComputeNodeCount >= 1,
+                "activeComputeNodeCount must be >= 1, was %s", activeComputeNodeCount);
+
+        // Phase 1: table-level eligibility re-check (defensive against concurrent ALTER
+        // between the caller's earlier check and this entry).
+        SkipReason tableLevelReason = PreSplitTargets.findEligibleTable(database, table);
+        if (tableLevelReason != null) {
+            return skipEligibility(tableLevelReason);
+        }
+
+        // Phase 2: per-partition pre-create + plan, accumulating into oldTabletIdToRanges.
+        // perPartitionResults is parallel-by-input bookkeeping: Skipped(reason) for dropped
+        // entries, Submitted(null) sentinel for entries that fed the combined job.
+        List<Column> sortKey = MetaUtils.getRangeDistributionColumns(table);
+        Map<Long, List<TabletRange>> oldTabletIdToRanges = new LinkedHashMap<>();
+        List<PreSplitOutcome> perPartitionResults = new ArrayList<>(partitionSamplesList.size());
+
+        for (PartitionSamples entry : partitionSamplesList) {
+            PreSplitMetrics.recordPartitionCounted();
+            PreSplitOutcome perPartition = planOnePartition(
+                    database, table, entry, sortKey, activeComputeNodeCount, ctx, oldTabletIdToRanges);
+            perPartitionResults.add(perPartition);
+        }
+
+        if (oldTabletIdToRanges.isEmpty()) {
+            return new PreSplitOutcome.Skipped(SkipReason.NO_USEFUL_CUTS);
+        }
+
+        // Phase 3: single combined submit. Any synchronous failure here surfaces as
+        // SUBMIT_FAILED — the per-partition Submitted-pending markers were never promoted
+        // to a real reshard job so callers see "no pre-split happened".
+        try {
+            TabletReshardJob combinedJob = SplitTabletJobFactory.forExternalBoundariesMultiTablet(
+                    database, table, oldTabletIdToRanges);
+            GlobalStateMgr.getCurrentState().getTabletReshardJobMgr().addTabletReshardJob(combinedJob);
+            return new PreSplitOutcome.SubmittedCombined(combinedJob, perPartitionResults);
+        } catch (StarRocksException submitFailure) {
+            LOG.warn("Pre-split combined submit failed for table {}: {}",
+                    table.getName(), submitFailure.getMessage());
+            return skipPostEligibility(SkipReason.SUBMIT_FAILED);
+        } catch (RuntimeException submitFailure) {
+            // forExternalBoundariesMultiTablet validates the range list shape and may throw
+            // IllegalArgumentException for bad caller-supplied ranges. Map to SUBMIT_FAILED
+            // so the load still proceeds against the pre-create-only layout.
+            LOG.warn("Pre-split combined submit rejected for table {}: {}",
+                    table.getName(), submitFailure.getMessage());
+            return skipPostEligibility(SkipReason.SUBMIT_FAILED);
+        }
+    }
+
+    /**
+     * Pre-create (when missing), re-resolve post-create state, and plan
+     * boundaries for one {@link PartitionSamples} entry. On success, mutates
+     * {@code oldTabletIdToRanges} and returns a {@code Submitted(null)}
+     * sentinel; on any per-partition failure, returns a {@link PreSplitOutcome.Skipped}
+     * carrying the specific reason. Throwables are caught and mapped — the
+     * caller iterates the full list regardless of one entry's outcome.
+     */
+    private static PreSplitOutcome planOnePartition(
+            Database database, OlapTable table, PartitionSamples entry, List<Column> sortKey,
+            int activeComputeNodeCount, ConnectContext ctx,
+            Map<Long, List<TabletRange>> oldTabletIdToRanges) {
+        try {
+            if (!entry.existsInCatalog()) {
+                // Cheap pre-check: if the partition raced into the catalog since the grouper
+                // snapshot, skip the addPartitions call and record ALREADY_EXISTS. addPartitions
+                // would otherwise silently dedupe — we want the metric to attribute correctly.
+                if (table.getPartition(entry.partitionName()) != null) {
+                    PreSplitMetrics.recordPreCreate(PreSplitMetrics.PreCreateResult.ALREADY_EXISTS);
+                } else {
+                    try {
+                        GlobalStateMgr.getCurrentState().getLocalMetastore()
+                                .addPartitions(ctx, database, table.getName(), entry.analyzedClause());
+                        PreSplitMetrics.recordPreCreate(PreSplitMetrics.PreCreateResult.SUCCEEDED);
+                    } catch (Throwable preCreateFailure) {
+                        LOG.warn("Pre-split pre-create failed for partition {} on table {}: {}",
+                                entry.partitionName(), table.getName(), preCreateFailure.getMessage());
+                        PreSplitMetrics.recordPreCreate(PreSplitMetrics.PreCreateResult.FAILED);
+                        // Bucket as a post-eligibility (sampler-failed) reason: the eligibility
+                        // gate already passed and we attempted real work. Aligns with
+                        // SUBMIT_FAILED's bucketing in submitForPartitionsCombined.
+                        PreSplitMetrics.recordSamplerFailed(SkipReason.PRE_CREATE_FAILED);
+                        return new PreSplitOutcome.Skipped(SkipReason.PRE_CREATE_FAILED);
+                    }
+                }
+            }
+
+            // Brief intensive READ lock for post-create re-resolve. Lock is acquired BEFORE the
+            // try block so a throw from the lock call does not run the finally release.
+            ResolvedPartition resolved = resolveUnderReadLock(database, table, entry.partitionName());
+            if (resolved == null) {
+                PreSplitMetrics.recordEligibilitySkip(SkipReason.PARTITION_NOT_ELIGIBLE_POST_CREATE);
+                return new PreSplitOutcome.Skipped(SkipReason.PARTITION_NOT_ELIGIBLE_POST_CREATE);
+            }
+
+            int requestedTabletCount = selectTabletCount(
+                    new Estimates(entry.estimatedBytes(), 0L), activeComputeNodeCount);
+            SampleSet sampleSet = buildSampleSet(entry);
+            BoundaryPlannerResult planResult = BoundaryPlanner.planRowQuantileBoundaries(
+                    sampleSet, requestedTabletCount, sortKey);
+            if (planResult.isNoSplit()) {
+                PreSplitMetrics.recordEligibilitySkip(SkipReason.NO_USEFUL_CUTS);
+                return new PreSplitOutcome.Skipped(SkipReason.NO_USEFUL_CUTS);
+            }
+
+            List<TabletRange> tabletRanges = DefaultPreSplitPipeline.buildTabletRanges(
+                    planResult.getBoundaries());
+            oldTabletIdToRanges.put(resolved.oldTabletId, tabletRanges);
+            // Submitted(null) is a "fed-into-combined-submit" sentinel; promoted at the outer
+            // level when the combined job is admitted.
+            return new PreSplitOutcome.Submitted(null);
+        } catch (StarRocksException planFailure) {
+            LOG.warn("Pre-split per-partition planning failed for partition {} on table {}: {}",
+                    entry.partitionName(), table.getName(), planFailure.getMessage());
+            PreSplitMetrics.recordSamplerFailed(SkipReason.SAMPLE_FAILED);
+            return new PreSplitOutcome.Skipped(SkipReason.SAMPLE_FAILED);
+        } catch (RuntimeException planFailure) {
+            LOG.warn("Pre-split per-partition planning errored for partition {} on table {}: {}",
+                    entry.partitionName(), table.getName(), planFailure.getMessage());
+            PreSplitMetrics.recordSamplerFailed(SkipReason.SAMPLE_FAILED);
+            return new PreSplitOutcome.Skipped(SkipReason.SAMPLE_FAILED);
+        }
+    }
+
+    /**
+     * Acquire an intensive table READ lock, re-resolve the partition's
+     * default physical partition + base index, verify single-tablet + empty,
+     * and return the discovered oldTabletId. Returns {@code null} when any
+     * eligibility check fails (caller maps to PARTITION_NOT_ELIGIBLE_POST_CREATE).
+     */
+    private static ResolvedPartition resolveUnderReadLock(Database database, OlapTable table, String partitionName) {
+        Locker locker = new Locker();
+        locker.lockTableWithIntensiveDbLock(database.getId(), table.getId(), LockType.READ);
+        try {
+            Partition partition = table.getPartition(partitionName);
+            if (partition == null) {
+                return null;
+            }
+            PhysicalPartition physicalPartition = partition.getDefaultPhysicalPartition();
+            if (physicalPartition == null) {
+                return null;
+            }
+            MaterializedIndex baseIndex = physicalPartition.getIndex(table.getBaseIndexMetaId());
+            if (baseIndex == null) {
+                return null;
+            }
+            List<Tablet> tablets = baseIndex.getTablets();
+            if (tablets.size() != 1 || baseIndex.getRowCount() > 0) {
+                return null;
+            }
+            return new ResolvedPartition(physicalPartition.getId(), tablets.get(0).getId());
+        } finally {
+            locker.unLockTableWithIntensiveDbLock(database.getId(), table.getId(), LockType.READ);
+        }
+    }
+
+    /**
+     * Project the entry's {@link SampleRow} list into a {@link SampleSet} the
+     * {@link BoundaryPlanner} consumes — only the sort-key tuples and a
+     * zero-byte {@link Estimates} are needed here (estimatedBytes already
+     * drove K_i selection).
+     */
+    private static SampleSet buildSampleSet(PartitionSamples entry) {
+        List<SampleRow> rows = entry.samples();
+        List<Tuple> sortKeyTuples = new ArrayList<>(rows.size());
+        for (SampleRow row : rows) {
+            sortKeyTuples.add(new Tuple(row.sortKeyTuple()));
+        }
+        return new SampleSet(sortKeyTuples, Estimates.ZERO);
+    }
+
+    /** One partition's post-create resolution: stable IDs the coordinator passes to the factory. */
+    private record ResolvedPartition(long physicalPartitionId, long oldTabletId) { }
 }
