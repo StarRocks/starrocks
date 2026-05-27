@@ -694,6 +694,90 @@ TEST_F(IcebergTableSinkTest, decompose_to_pipeline_row_delta_update) {
     EXPECT_EQ(row_delta_ctx->data_sink_ctx->parquet_field_ids[0].field_id, 1);
 }
 
+// Regression for BE crash on UPDATE of an Iceberg table with complex-typed columns
+// (StarRocksTest #11370). The data sub-sink builds an override_tuple_desc from the
+// data-column slots. Previously it copied only slot->type().type (the LogicalType
+// enum), producing a childless ARRAY/MAP TypeDescriptor whose to_thrift() dereferenced
+// children[0] on an empty vector -> SIGSEGV in TypeDescriptor::to_thrift(). The fix
+// passes the full slot->type(), so children are preserved here.
+TEST_F(IcebergTableSinkTest, decompose_to_pipeline_row_delta_update_complex_type) {
+    // Tuple layout for a pure UPDATE row-delta write: [_file, _pos, c1 ARRAY<INT>].
+    TDescriptorTableBuilder table_desc_builder;
+    TSlotDescriptorBuilder slot_desc_builder;
+    auto file_slot = slot_desc_builder.type(LogicalType::TYPE_VARCHAR)
+                             .column_name("_file")
+                             .column_pos(0)
+                             .nullable(false)
+                             .build();
+    auto pos_slot =
+            slot_desc_builder.type(LogicalType::TYPE_BIGINT).column_name("_pos").column_pos(1).nullable(false).build();
+    auto array_type = TypeDescriptor::create_array_type(TypeDescriptor(LogicalType::TYPE_INT));
+    auto c1_slot = slot_desc_builder.type(array_type).column_name("c1").column_pos(2).nullable(true).build();
+    TTupleDescriptorBuilder tuple_desc_builder;
+    tuple_desc_builder.add_slot(file_slot);
+    tuple_desc_builder.add_slot(pos_slot);
+    tuple_desc_builder.add_slot(c1_slot);
+    tuple_desc_builder.build(&table_desc_builder);
+    DescriptorTbl* tbl = nullptr;
+    EXPECT_OK(DescriptorTbl::create(_runtime_state, &_pool, table_desc_builder.desc_tbl(), &tbl,
+                                    config::vector_chunk_size));
+    _runtime_state->set_desc_tbl(tbl);
+
+    TIcebergTable t_iceberg_table;
+    TColumn t_column;
+    t_column.__set_column_name("c1");
+    t_iceberg_table.__set_columns({t_column});
+
+    TIcebergSchemaField c1_field;
+    c1_field.__set_field_id(1);
+    c1_field.__set_name("c1");
+    TIcebergSchema iceberg_schema;
+    iceberg_schema.__set_fields({c1_field});
+    t_iceberg_table.__set_iceberg_schema(iceberg_schema);
+
+    TTableDescriptor tdesc;
+    tdesc.__set_icebergTable(t_iceberg_table);
+    IcebergTableDescriptor* ice_table_desc = _pool.add(new IcebergTableDescriptor(tdesc, &_pool));
+    tbl->get_tuple_descriptor(0)->set_table_desc(ice_table_desc);
+    tbl->_tbl_desc_map[0] = ice_table_desc;
+
+    auto context = std::make_shared<pipeline::PipelineBuilderContext>(_fragment_context.get(), 1, 1);
+
+    TDataSink data_sink;
+    data_sink.__set_type(TDataSinkType::ICEBERG_ROW_DELTA_SINK);
+    TIcebergTableSink iceberg_table_sink;
+    iceberg_table_sink.__set_location("/path/to/table");
+    iceberg_table_sink.__set_data_location("/path/to/table/data");
+    iceberg_table_sink.__set_tuple_id(0);
+    iceberg_table_sink.__set_write_mode(TIcebergWriteMode::ROW_DELTA_UPDATE);
+    data_sink.__set_iceberg_table_sink(iceberg_table_sink);
+
+    std::vector<TExpr> exprs = {make_slot_ref_expr(0), make_slot_ref_expr(1), make_slot_ref_expr(2)};
+
+    IcebergTableSink sink(&_pool, exprs);
+    pipeline::OpFactories prev_operators{std::make_shared<pipeline::EmptySetOperatorFactory>(10, 10)};
+
+    // Without the fix this call crashes (SIGSEGV) while building override_tuple_desc.
+    EXPECT_OK(sink.decompose_to_pipeline(prev_operators, data_sink, context.get()));
+
+    pipeline::Pipeline* pl = const_cast<pipeline::Pipeline*>(context->last_pipeline());
+    pipeline::OperatorFactory* op_factory = pl->sink_operator_factory();
+    auto connector_sink_factory = dynamic_cast<pipeline::ConnectorSinkOperatorFactory*>(op_factory);
+    ASSERT_NE(connector_sink_factory, nullptr);
+
+    auto* row_delta_ctx =
+            dynamic_cast<connector::IcebergRowDeltaSinkContext*>(connector_sink_factory->_sink_context.get());
+    ASSERT_NE(row_delta_ctx, nullptr);
+
+    // The data-only tuple descriptor must preserve the full ARRAY<INT> type, children included.
+    ASSERT_NE(row_delta_ctx->data_sink_ctx->override_tuple_desc, nullptr);
+    ASSERT_EQ(row_delta_ctx->data_sink_ctx->override_tuple_desc->slots().size(), 1);
+    const auto& data_type = row_delta_ctx->data_sink_ctx->override_tuple_desc->slots()[0]->type();
+    EXPECT_EQ(data_type.type, TYPE_ARRAY);
+    ASSERT_EQ(data_type.children.size(), 1);
+    EXPECT_EQ(data_type.children[0].type, TYPE_INT);
+}
+
 // Drives mixed row-delta create_row_delta_sink_context() end-to-end via decompose_to_pipeline,
 // then exercises IcebergRowDeltaSinkProvider::create_chunk_sink() on the
 // resulting context. Covers:
