@@ -14,5 +14,39 @@
 
 #pragma once
 
-// This header intentionally starts as a module anchor. ComputeEnv service
-// contracts should be added only when an Exec/Storage migration needs them.
+#include <memory>
+
+#include "common/status.h"
+
+namespace starrocks {
+
+namespace pipeline {
+class DriverLimiter;
+class PipelineTimer;
+} // namespace pipeline
+
+struct ComputeEnvOptions {
+    int max_num_pipeline_drivers = 0;
+};
+
+class ComputeEnv {
+public:
+    ComputeEnv();
+    ~ComputeEnv();
+
+    ComputeEnv(const ComputeEnv&) = delete;
+    ComputeEnv& operator=(const ComputeEnv&) = delete;
+
+    Status init(const ComputeEnvOptions& options);
+    void stop();
+    void destroy();
+
+    pipeline::DriverLimiter* driver_limiter() const { return _driver_limiter.get(); }
+    pipeline::PipelineTimer* pipeline_timer() const { return _pipeline_timer.get(); }
+
+private:
+    std::unique_ptr<pipeline::DriverLimiter> _driver_limiter;
+    std::unique_ptr<pipeline::PipelineTimer> _pipeline_timer;
+};
+
+} // namespace starrocks

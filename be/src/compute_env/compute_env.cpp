@@ -13,3 +13,33 @@
 // limitations under the License.
 
 #include "compute_env/compute_env.h"
+
+#include <utility>
+
+#include "compute_env/pipeline/driver_limiter.h"
+#include "compute_env/pipeline/pipeline_timer.h"
+
+namespace starrocks {
+
+ComputeEnv::ComputeEnv() = default;
+
+ComputeEnv::~ComputeEnv() = default;
+
+Status ComputeEnv::init(const ComputeEnvOptions& options) {
+    auto driver_limiter = std::make_unique<pipeline::DriverLimiter>(options.max_num_pipeline_drivers);
+    auto pipeline_timer = std::make_unique<pipeline::PipelineTimer>();
+    RETURN_IF_ERROR(pipeline_timer->start());
+
+    _driver_limiter = std::move(driver_limiter);
+    _pipeline_timer = std::move(pipeline_timer);
+    return Status::OK();
+}
+
+void ComputeEnv::stop() {}
+
+void ComputeEnv::destroy() {
+    _driver_limiter.reset();
+    _pipeline_timer.reset();
+}
+
+} // namespace starrocks

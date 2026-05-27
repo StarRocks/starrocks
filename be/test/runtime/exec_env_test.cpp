@@ -18,6 +18,7 @@
 
 #include "base/metrics.h"
 #include "base/testutil/assert.h"
+#include "compute_env/compute_env.h"
 #include "platform/platform_env.h"
 #include "runtime/env/global_env.h"
 
@@ -35,8 +36,9 @@ TEST(ExecEnvTest, refresh_service_contexts_keeps_context_views_in_sync) {
     EXPECT_EQ(env.runtime_services().lookup_dispatcher_mgr, nullptr);
     EXPECT_EQ(env.runtime_services().cache_mgr, nullptr);
 
-    env._driver_limiter = reinterpret_cast<pipeline::DriverLimiter*>(0x2);
-    env._pipeline_timer = reinterpret_cast<pipeline::PipelineTimer*>(0x3);
+    ComputeEnvOptions compute_env_options;
+    compute_env_options.max_num_pipeline_drivers = 2;
+    ASSERT_OK(env.compute_env()->init(compute_env_options));
     env._broker_mgr = reinterpret_cast<BrokerMgr*>(0x5);
     env._lake_tablet_manager = reinterpret_cast<lake::TabletManager*>(0x7);
     env._fragment_mgr = reinterpret_cast<FragmentMgr*>(0x8);
@@ -48,8 +50,8 @@ TEST(ExecEnvTest, refresh_service_contexts_keeps_context_views_in_sync) {
 
     EXPECT_EQ(env.execution_services().thread_pool, global_env->thread_pool());
     EXPECT_EQ(env.execution_services().workgroup_manager, nullptr);
-    EXPECT_EQ(env.execution_services().driver_limiter, env._driver_limiter);
-    EXPECT_EQ(env.execution_services().pipeline_timer, env._pipeline_timer);
+    EXPECT_EQ(env.execution_services().driver_limiter, env.compute_env()->driver_limiter());
+    EXPECT_EQ(env.execution_services().pipeline_timer, env.compute_env()->pipeline_timer());
     EXPECT_EQ(env.execution_services().max_executor_threads, global_env->max_executor_threads());
 
     EXPECT_EQ(env.rpc_services().backend_client_cache, platform_env->backend_client_cache());
