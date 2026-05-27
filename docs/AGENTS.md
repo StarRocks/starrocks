@@ -67,7 +67,6 @@ A task is complete when:
 
 - All requested changes have been made to the specified files only.
 - Corresponding pages in all three language directories (`en/`, `zh/`, `ja/`) have been updated, or the user has been informed if a `ja/` page does not exist.
-- Vale and markdownlint report no errors on all edited files.
 - A summary of every changed file (with path) has been provided to the user.
 - The user has been asked whether they are ready to commit and push.
 

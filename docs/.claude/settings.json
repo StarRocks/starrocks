@@ -1,20 +1,5 @@
 {
   "hooks": {
-    "PostToolUse": [
-      {
-        "matcher": "Edit|Write",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash .claude/hooks/vale-check.sh"
-          },
-          {
-            "type": "command",
-            "command": "bash .claude/hooks/markdownlint-check.sh"
-          }
-        ]
-      }
-    ],
     "PreToolUse": [
       {
         "matcher": "Bash",
