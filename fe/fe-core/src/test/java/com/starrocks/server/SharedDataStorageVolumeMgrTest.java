@@ -42,10 +42,12 @@ import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.connector.share.credential.CloudConfigurationConstants;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.aws.AwsCloudConfiguration;
+import com.starrocks.credential.azure.AzureCloudConfigurationProvider;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.lake.snapshot.ClusterSnapshotMgr;
+import com.starrocks.lake.snapshot.RestoreClusterSnapshotMgr;
 import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
@@ -90,6 +92,7 @@ import static com.starrocks.connector.share.credential.CloudConfigurationConstan
 import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AWS_S3_REGION;
 import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AWS_S3_SECRET_KEY;
 import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AWS_S3_USE_AWS_SDK_DEFAULT_BEHAVIOR;
+import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AZURE_ADLS2_ENDPOINT;
 
 public class SharedDataStorageVolumeMgrTest {
     @Mocked
@@ -1642,5 +1645,25 @@ public class SharedDataStorageVolumeMgrTest {
         Assertions.assertFalse(svm.hasStorageVolumeBindAsVirtualGroup(notExistedGroupId));
 
         svm.removeStorageVolume(storageVolumeName);
+    }
+
+    @Test
+    public void testValidateParamsSkipsAzurePathKeyDuringRestore() throws DdlException {
+        StorageVolumeMgr svm = new SharedDataStorageVolumeMgr();
+        Map<String, String> params = new HashMap<>();
+        params.put(AZURE_ADLS2_ENDPOINT, "https://example.dfs.core.windows.net");
+        params.put(AzureCloudConfigurationProvider.AZURE_PATH_KEY, "some/path");
+
+        // Without the env var, AZURE_PATH_KEY is absent from PARAM_NAMES and should be rejected
+        Assertions.assertThrows(DdlException.class, () -> svm.validateParams("adls2", params));
+
+        // While a restore is active, AZURE_PATH_KEY must be silently skipped
+        new MockUp<RestoreClusterSnapshotMgr>() {
+            @Mock
+            public boolean isRestoring() {
+                return true;
+            }
+        };
+        Assertions.assertDoesNotThrow(() -> svm.validateParams("adls2", params));
     }
 }
