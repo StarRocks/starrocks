@@ -791,9 +791,12 @@ public class FunctionAnalyzer {
 
     /**
      * Canonicalize the compression argument of a percentile function. Only an
-     * integer literal (or literal NULL) is accepted; CAST, arithmetic, column
-     * references and other expressions are rejected up front. Values outside
-     * [MIN, MAX] and literal NULL are replaced with the default.
+     * integer literal, a user variable bound to an integer constant, or literal
+     * NULL is accepted; CAST, arithmetic, and column references (including
+     * CTE-projected ones) are rejected up front so the planner, MV rewrite, and
+     * BE all see one canonical compression literal rather than an expression that
+     * would only fold later. Values outside [MIN, MAX] and literal NULL are
+     * replaced with the default.
      *
      * AST mutation via {@code setChild} follows the established
      * {@code FunctionAnalyzer} pattern (see {@code date_trunc} normalization).
