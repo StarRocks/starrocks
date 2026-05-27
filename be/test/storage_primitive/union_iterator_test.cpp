@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "storage/union_iterator.h"
+#include "storage/primitive/union_iterator.h"
 
 #include <gtest/gtest.h>
 
@@ -24,7 +24,7 @@
 #include "column/fixed_length_column.h"
 #include "column/schema.h"
 #include "common/config_exec_fwd.h"
-#include "storage/chunk_helper.h"
+#include "types/type_info.h"
 
 namespace starrocks {
 
