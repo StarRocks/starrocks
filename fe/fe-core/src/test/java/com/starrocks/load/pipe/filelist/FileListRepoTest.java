@@ -52,6 +52,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static com.starrocks.load.pipe.PipeFileRecord.JSON_FIELD_ERROR_MESSAGE;
@@ -224,10 +225,16 @@ public class FileListRepoTest {
     @Test
     public void testCreator() throws RuntimeException, StarRocksException {
         mockExecutor();
+        AtomicBoolean tablePresentInMetastore = new AtomicBoolean(false);
         new MockUp<RepoCreator>() {
             @Mock
             public boolean checkDatabaseExists() {
                 return true;
+            }
+
+            @Mock
+            public boolean checkTableExists() {
+                return tablePresentInMetastore.get();
             }
         };
         SimpleExecutor executor = SimpleExecutor.getRepoExecutor();
@@ -256,6 +263,7 @@ public class FileListRepoTest {
             @Mock
             public void executeDDL(String sql) {
                 changed.addAndGet(1);
+                tablePresentInMetastore.set(true);
             }
         };
         creator.run();
@@ -274,6 +282,62 @@ public class FileListRepoTest {
         Assertions.assertTrue(creator.isDatabaseExists());
         Assertions.assertTrue(creator.isTableExists());
         Assertions.assertEquals(2, changed.get());
+    }
+
+    @Test
+    public void testRecreateAfterDrop() throws RuntimeException, StarRocksException {
+        AtomicBoolean databasePresent = new AtomicBoolean(true);
+        AtomicBoolean tablePresent = new AtomicBoolean(true);
+        new MockUp<RepoCreator>() {
+            @Mock
+            public boolean checkDatabaseExists() {
+                return databasePresent.get();
+            }
+
+            @Mock
+            public boolean checkTableExists() {
+                return tablePresent.get();
+            }
+        };
+        new MockUp<SystemInfoService>() {
+            @Mock
+            public int getSystemTableExpectedReplicationNum() {
+                return 1;
+            }
+        };
+        AtomicInteger ddlCount = new AtomicInteger(0);
+        new MockUp<SimpleExecutor>() {
+            @Mock
+            public void executeDDL(String sql) {
+                ddlCount.addAndGet(1);
+                tablePresent.set(true);
+            }
+        };
+
+        RepoCreator creator = RepoCreator.getInstance();
+
+        // Steady state: database and table both exist; run() should be a no-op
+        // for table creation (correctTable is a no-op because replicas already match).
+        creator.run();
+        Assertions.assertTrue(creator.isDatabaseExists());
+        Assertions.assertTrue(creator.isTableExists());
+        int baseline = ddlCount.get();
+
+        // Simulate user `DROP DATABASE _statistics_`: both database and table disappear.
+        databasePresent.set(false);
+        tablePresent.set(false);
+        creator.run();
+        Assertions.assertFalse(creator.isDatabaseExists());
+        Assertions.assertFalse(creator.isTableExists());
+
+        // StatisticsMetaManager re-creates the database; the table is still missing.
+        databasePresent.set(true);
+        creator.run();
+        // RepoCreator must observe the missing table and recreate it instead of
+        // skipping due to a stale cached `tableExists=true` flag.
+        Assertions.assertTrue(creator.isDatabaseExists());
+        Assertions.assertTrue(creator.isTableExists());
+        Assertions.assertEquals(baseline + 1, ddlCount.get());
     }
 
     @Test
