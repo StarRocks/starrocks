@@ -517,12 +517,12 @@ public class BackupHandler extends FrontendDaemon implements Writable, MemoryTra
                 stmt.getTimeoutMs(), globalStateMgr, repository.getId());
         List<Function> allFunctions = Lists.newArrayList();
 
-        if (!stmt.withOnClause() || stmt.allFunction()) {
+        if (!stmt.containsExternalCatalog() && (!stmt.withOnClause() || stmt.allFunction())) {
             for (Map.Entry<String, List<Function>> entry : db.getNameToFunction().entrySet()) {
                 List<Function> fns = entry.getValue();
                 allFunctions.addAll(fns);
             }
-        } else {
+        } else if (!stmt.containsExternalCatalog()) {
             for (FunctionRef fnRef : stmt.getFnRefs()) {
                 String functionName = fnRef.getFunctionName();
 
