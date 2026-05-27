@@ -984,6 +984,7 @@ PROPERTIES
     "aws.s3.secret_key" = "<iam_user_secret_key>"
 );
 ```
+
 </TabItem>
 
 <TabItem value="AZURE" label="Microsoft Azure Blob Storage" >
