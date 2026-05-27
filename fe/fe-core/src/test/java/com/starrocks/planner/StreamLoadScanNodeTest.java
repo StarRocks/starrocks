@@ -465,6 +465,91 @@ public class StreamLoadScanNodeTest {
     }
 
     @Test
+    public void testHllColumnsNoFunctionExpr() {
+        assertThrows(StarRocksException.class, () -> {
+            DescriptorTable descTbl = new DescriptorTable();
+
+            List<Column> columns = getHllSchema();
+            TupleDescriptor dstDesc = descTbl.createTupleDescriptor("DstTableDesc");
+            for (Column column : columns) {
+                SlotDescriptor slot = descTbl.addSlotDescriptor(dstDesc);
+                slot.setColumn(column);
+                slot.setIsMaterialized(true);
+                if (column.isAllowNull()) {
+                    slot.setIsNullable(true);
+                } else {
+                    slot.setIsNullable(false);
+                }
+            }
+
+            new Expectations() {
+                {
+                    dstTable.getColumn("k1");
+                    result = columns.stream().filter(c -> c.getName().equals("k1")).findFirst().get();
+
+                    dstTable.getColumn("v1");
+                    result = columns.stream().filter(c -> c.getName().equals("v1")).findFirst().get();
+                }
+            };
+
+            TStreamLoadPutRequest request = getBaseRequest();
+            request.setFileType(TFileType.FILE_STREAM);
+            request.setColumns("k1, v1");
+            StreamLoadScanNode scanNode = getStreamLoadScanNode(dstDesc, request);
+
+            scanNode.init(descTbl);
+            scanNode.finalizeStats();
+        });
+    }
+
+    @Test
+    public void testHllColumnsWrongFunction() {
+        assertThrows(StarRocksException.class, () -> {
+            DescriptorTable descTbl = new DescriptorTable();
+
+            List<Column> columns = getHllSchema();
+            TupleDescriptor dstDesc = descTbl.createTupleDescriptor("DstTableDesc");
+            for (Column column : columns) {
+                SlotDescriptor slot = descTbl.addSlotDescriptor(dstDesc);
+                slot.setColumn(column);
+                slot.setIsMaterialized(true);
+                if (column.isAllowNull()) {
+                    slot.setIsNullable(true);
+                } else {
+                    slot.setIsNullable(false);
+                }
+            }
+
+            new Expectations() {{
+                globalStateMgr.getFunction((Function) any, (Function.CompareMode) any);
+                result = new ScalarFunction(new FunctionName("upper"), Lists.newArrayList(), IntegerType.BIGINT, false);
+                minTimes = 0;
+            }};
+
+            new Expectations() {
+                {
+                    dstTable.getColumn("k1");
+                    result = columns.stream().filter(c -> c.getName().equals("k1")).findFirst().get();
+
+                    dstTable.getColumn("k2");
+                    result = null;
+
+                    dstTable.getColumn("v1");
+                    result = columns.stream().filter(c -> c.getName().equals("v1")).findFirst().get();
+                }
+            };
+
+            TStreamLoadPutRequest request = getBaseRequest();
+            request.setFileType(TFileType.FILE_STREAM);
+            request.setColumns("k1,k2, v1=upper(k2)");
+            StreamLoadScanNode scanNode = getStreamLoadScanNode(dstDesc, request);
+
+            scanNode.init(descTbl);
+            scanNode.finalizeStats();
+        });
+    }
+
+    @Test
     public void testHllColumnsNoHllHash() {
         assertThrows(StarRocksException.class, () -> {
             
