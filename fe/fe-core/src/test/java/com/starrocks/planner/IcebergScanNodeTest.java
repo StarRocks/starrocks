@@ -204,7 +204,7 @@ public class IcebergScanNodeTest {
         Assertions.assertEquals(1, res.size(), "1 scan task");
         Assertions.assertEquals(1, scanNode.getScannedDataFiles().size(), "1 DataFile");
         Assertions.assertEquals(0, scanNode.getPosAppliedDeleteFiles().size());
-        Assertions.assertEquals(0, scanNode.getEqualAppliedDeleteFiles().size());
+        Assertions.assertEquals(0, scanNode.getAppliedEqualDeleteFiles().size());
         List<RemoteFileInfo> empty = new ArrayList<>();
         try {
             scanNode.rebuildScanRange(empty);
@@ -268,7 +268,7 @@ public class IcebergScanNodeTest {
         Assertions.assertEquals(1, result.size());
         Assertions.assertEquals(1, scanSource.getScannedDataFiles().size(), "should have 1 scanned data file");
         Assertions.assertEquals(1, scanSource.getPosAppliedDeleteFiles().size(), "should have 1 pos delete");
-        Assertions.assertEquals(1, scanSource.getEqualAppliedDeleteFiles().size(), "should have 1 eq delete");
+        Assertions.assertEquals(1, scanSource.getAppliedEqualDeleteFiles().size(), "should have 1 eq delete");
     }
 
 
@@ -572,7 +572,7 @@ public class IcebergScanNodeTest {
 
         Mockito.when(scanNode.getPlanNodeName()).thenReturn("IcebergScanNode");
         Mockito.when(scanNode.getPosAppliedDeleteFiles()).thenReturn(Set.of(pos1, pos2));
-        Mockito.when(scanNode.getEqualAppliedDeleteFiles()).thenReturn(Set.of(eq1));
+        Mockito.when(scanNode.getAppliedEqualDeleteFiles()).thenReturn(Set.of(eq1));
         Mockito.when(scanNode.getScannedDataFiles()).thenReturn(Set.of(data1, data2));
 
         // 3. Mock PlanFragment
