@@ -978,14 +978,19 @@ public class DefaultCoordinator extends Coordinator {
                         hint = null;
                     }
                     if (hint == null) {
-                        hint = String.format("please increase the '%s' session variable and retry",
-                                SessionVariable.QUERY_TIMEOUT);
+                        hint = buildSessionTimeoutHint();
                     }
                     ErrorReport.reportTimeoutException(ErrorCode.ERR_TIMEOUT, "Query", timeoutS, hint);
                 }
                 throw new StarRocksException(ec, errMsg);
             }
         }
+    }
+
+    private String buildSessionTimeoutHint() {
+        String timeoutVariable = connectContext != null && connectContext.isMetadataContext() ?
+                SessionVariable.METADATA_COLLECT_QUERY_TIMEOUT : SessionVariable.QUERY_TIMEOUT;
+        return String.format("please increase the '%s' session variable and retry", timeoutVariable);
     }
 
     @Override
