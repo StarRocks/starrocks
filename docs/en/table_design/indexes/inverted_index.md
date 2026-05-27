@@ -157,7 +157,7 @@ Here, keyword must be a string literal; expressions are not supported.
     ```
 **Notes:**
 
-- During queries, keywords can be matched fuzzily using `%`, in the format of `%keyword%`. However, the keyword must contain a part of a word. For example, if the keyword is <code>starrocks&nbsp;</code>, it cannot match the word `starrocks` because it contains spaces.
+- During queries, keywords can be matched fuzzily using `%`, in the format of `%keyword%`. However, the keyword must contain a part of a word. For example, if the keyword is `starrocks `, it cannot match the word `starrocks` because it contains spaces.
 
     ```SQL
     MySQL [example_db]> SELECT * FROM t WHERE t.value MATCH "star%";

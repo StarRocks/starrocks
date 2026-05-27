@@ -35,7 +35,7 @@ SET @var_name = expr [, ...];
 
 | **Parameter** | **Required** | **Description**                                              |
 | ------------- | ------------ | ------------------------------------------------------------ |
-| var_name      | Yes          | The name of the user-defined variable. The naming conventions are as follows:<ul><li>The name can contain letters, digits (0-9), and underscores (\_). </li><li>The name cannot exceed 64 characters in length.</li></ul>You can declare a string as a user-defined variable, such as @'my-var', @"my-var", and @\`my-var\`. User-defined variables of the STRING type can contain characters other than letters, digits, and underscores (_), such as periods (.). |
+| var_name      | Yes          | The name of the user-defined variable. The naming conventions are as follows:<ul><li>The name can contain letters, digits (0-9), and underscores (`_`). </li><li>The name cannot exceed 64 characters in length.</li></ul>You can declare a string as a user-defined variable, such as @'my-var', @"my-var", and @\`my-var\`. User-defined variables of the STRING type can contain characters other than letters, digits, and underscores (_), such as periods (.). |
 | expr          | Yes          | The value of the user-defined variable. You can specify a number (such as 43) or a complex expression (such as the value returned by a SELECT statement) for this parameter. The data type of the variable is the same as the data type of the result returned by the expression. |
 
 ### Examples

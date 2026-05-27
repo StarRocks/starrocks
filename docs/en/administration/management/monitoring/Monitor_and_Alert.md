@@ -601,7 +601,8 @@ Follow these procedures to configure alerts for **Frontends Status**:
    1. Retrieve the metric values from Prometheus through PromQL queries. PromQL is a data query DSL language developed by Prometheus, and it is also used in the JSON templates of Dashboards. The `expr` property of each monitoring item corresponds to the respective PromQL. You can click **Run queries** on the rule settings page to view the query results.
    2. Apply functions and modes to process the result data from the above queries. Usually, you need to use the Last function to retrieve the latest value and use Strict mode to ensure that if the returned value is non-numeric data, it can be displayed as `NaN`.
    3. Set rules for the processed query results. Taking FE as an example, if the FE node status is alive, the output result is `1`. If the FE node is down, the result is `0`. Therefore, you can set the rule to `IS BELOW 1`, meaning an alert will be triggered when this condition occurs.
-   </details>
+
+  </details>
 
 5. Set up alert evaluation rules.
 
