@@ -493,8 +493,29 @@ public class BackupHandler extends FrontendDaemon implements Writable, MemoryTra
         BackupJob backupJob = new BackupJob(stmt.getLabel(), dbId, dbName, tblRefs,
                 stmt.getTimeoutMs(), globalStateMgr, repository.getId());
         List<Function> allFunctions = Lists.newArrayList();
+<<<<<<< HEAD
         for (FunctionRef fnRef : stmt.getFnRefs()) {
             allFunctions.addAll(fnRef.getFunctions());
+=======
+
+        if (!stmt.containsExternalCatalog() && (!stmt.withOnClause() || stmt.allFunction())) {
+            for (Map.Entry<String, List<Function>> entry : db.getNameToFunction().entrySet()) {
+                List<Function> fns = entry.getValue();
+                allFunctions.addAll(fns);
+            }
+        } else if (!stmt.containsExternalCatalog()) {
+            for (FunctionRef fnRef : stmt.getFnRefs()) {
+                String functionName = fnRef.getFunctionName();
+
+                List<Function> functionList = db.getFunctionsByName(functionName);
+                if (functionList.isEmpty()) {
+                    ErrorReport.reportDdlException(ErrorCode.ERR_COMMON_ERROR,
+                            "Invalid backup function(s), function name: " + functionName);
+                }
+
+                allFunctions.addAll(functionList);
+            }
+>>>>>>> 01a157dd08 ([BugFix] Fix BACKUP ON (ALL FUNCTION) / (ALL EXTERNAL CATALOGS) failures (#73790))
         }
         backupJob.setBackupFunctions(allFunctions);
         backupJob.setBackupCatalogs(stmt.getExternalCatalogRefs().stream()

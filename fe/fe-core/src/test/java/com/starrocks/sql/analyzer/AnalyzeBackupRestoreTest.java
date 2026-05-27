@@ -101,6 +101,12 @@ public class AnalyzeBackupRestoreTest {
         analyzeSuccess("BACKUP DATABASE test SNAPSHOT snapshot_label2 TO `repo` ON " +
                 "( ALL FUNCTIONS, ALL TABLES, ALL VIEWS, ALL MATERIALIZED VIEWS ) " +
                 "PROPERTIES (\"type\" = \"full\",\"timeout\" = \"3600\");");
+        analyzeSuccess("BACKUP DATABASE test SNAPSHOT snapshot_label2 TO `repo` ON ( ALL FUNCTIONS ) " +
+                "PROPERTIES (\"type\" = \"full\",\"timeout\" = \"3600\");");
+        analyzeSuccess("BACKUP DATABASE test SNAPSHOT snapshot_label2 TO `repo` ON ( ALL FUNCTION ) " +
+                "PROPERTIES (\"type\" = \"full\",\"timeout\" = \"3600\");");
+        analyzeSuccess("BACKUP SNAPSHOT test.snapshot_label2 TO `repo` ON ( ALL FUNCTIONS ) " +
+                "PROPERTIES (\"type\" = \"full\",\"timeout\" = \"3600\");");
         analyzeSuccess("BACKUP ALL EXTERNAL CATALOGS SNAPSHOT snapshot_label2 TO `repo` " +
                        "PROPERTIES (\"type\" = \"full\",\"timeout\" = \"3600\");");
         analyzeSuccess("BACKUP EXTERNAL CATALOG (catalog1) SNAPSHOT snapshot_label2 TO `repo` " +

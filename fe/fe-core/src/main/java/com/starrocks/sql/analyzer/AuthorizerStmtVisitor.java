@@ -2363,14 +2363,27 @@ public class AuthorizerStmtVisitor implements AstVisitor<Void, ConnectContext> {
         if (!statement.containsExternalCatalog()) {
             List<TableRef> tableRefs = statement.getTableRefs();
             List<FunctionRef> functionRefs = statement.getFnRefs();
-            if (tableRefs.isEmpty() && functionRefs.isEmpty()) {
+            if (tableRefs.isEmpty() && functionRefs.isEmpty()
+                    && !statement.allTable() && !statement.allMV()
+                    && !statement.allView() && !statement.allFunction()) {
                 String dBName = statement.getDbName();
                 throw new SemanticException("Database: %s is empty", dBName);
             }
 
-            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(statement.getDbName());
+            String resolvedDbName = statement.getDbName();
+            if (resolvedDbName == null) {
+                resolvedDbName = context.getDatabase();
+            }
+            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(resolvedDbName);
+            final String dbNameForRefs = resolvedDbName;
             tableRefs.forEach(tableRef -> {
+<<<<<<< HEAD
                 TableName tableName = tableRef.getName();
+=======
+                String tblName = tableRef.getTableName();
+                TableName tableName = new TableName(context.getCurrentCatalog(), dbNameForRefs, tblName);
+
+>>>>>>> 01a157dd08 ([BugFix] Fix BACKUP ON (ALL FUNCTION) / (ALL EXTERNAL CATALOGS) failures (#73790))
                 try {
                     Authorizer.checkTableAction(context, tableName,
                             PrivilegeType.EXPORT);
@@ -2382,6 +2395,10 @@ public class AuthorizerStmtVisitor implements AstVisitor<Void, ConnectContext> {
                 }
             });
 
+            if (db == null && (!functionRefs.isEmpty() || statement.allFunction())) {
+                throw new SemanticException("Database: " + resolvedDbName + " does not exist");
+            }
+
             functionRefs.forEach(functionRef -> {
                 List<Function> fns = functionRef.getFunctions();
                 for (Function fn : fns) {
@@ -2392,10 +2409,23 @@ public class AuthorizerStmtVisitor implements AstVisitor<Void, ConnectContext> {
                         AccessDeniedException.reportAccessDenied(
                                 InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
                                 context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
-                                PrivilegeType.DROP.name(), ObjectType.FUNCTION.name(), fn.getSignature());
+                                PrivilegeType.USAGE.name(), ObjectType.FUNCTION.name(), fn.getSignature());
                     }
                 }
             });
+
+            if (statement.allFunction()) {
+                for (Function fn : db.getFunctions()) {
+                    try {
+                        Authorizer.checkFunctionAction(context, db, fn, PrivilegeType.USAGE);
+                    } catch (AccessDeniedException e) {
+                        AccessDeniedException.reportAccessDenied(
+                                InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
+                                context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                                PrivilegeType.USAGE.name(), ObjectType.FUNCTION.name(), fn.getSignature());
+                    }
+                }
+            }
         } else {
             List<CatalogRef> externalCatalogs = statement.getExternalCatalogRefs();
             externalCatalogs.forEach(externalCatalog -> {
