@@ -62,12 +62,14 @@ import com.starrocks.sql.optimizer.rule.ivm.IvmDeltaAggregateRule;
 import com.starrocks.sql.optimizer.rule.ivm.IvmDeltaFilterRule;
 import com.starrocks.sql.optimizer.rule.ivm.IvmDeltaIcebergScanRule;
 import com.starrocks.sql.optimizer.rule.ivm.IvmDeltaJoinRule;
+import com.starrocks.sql.optimizer.rule.ivm.IvmDeltaOlapScanRule;
 import com.starrocks.sql.optimizer.rule.ivm.IvmDeltaProjectRule;
 import com.starrocks.sql.optimizer.rule.ivm.IvmDeltaUnionRule;
 import com.starrocks.sql.optimizer.rule.ivm.IvmVersionAggregateRule;
 import com.starrocks.sql.optimizer.rule.ivm.IvmVersionFilterRule;
 import com.starrocks.sql.optimizer.rule.ivm.IvmVersionIcebergScanRule;
 import com.starrocks.sql.optimizer.rule.ivm.IvmVersionJoinRule;
+import com.starrocks.sql.optimizer.rule.ivm.IvmVersionOlapScanRule;
 import com.starrocks.sql.optimizer.rule.ivm.IvmVersionProjectRule;
 import com.starrocks.sql.optimizer.rule.ivm.IvmVersionUnionRule;
 import com.starrocks.sql.optimizer.rule.transformation.CastToEmptyRule;
@@ -451,12 +453,14 @@ public class RuleSet {
                     new IvmDeltaJoinRule(),
                     new IvmDeltaUnionRule(),
                     new IvmDeltaIcebergScanRule(),
+                    new IvmDeltaOlapScanRule(),
                     new IvmDeltaFilterRule(),
                     new IvmDeltaProjectRule(),
                     new IvmVersionAggregateRule(),
                     new IvmVersionJoinRule(),
                     new IvmVersionUnionRule(),
                     new IvmVersionIcebergScanRule(),
+                    new IvmVersionOlapScanRule(),
                     new IvmVersionFilterRule(),
                     new IvmVersionProjectRule()
             ));

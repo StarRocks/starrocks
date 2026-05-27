@@ -23,6 +23,9 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PartitionNames;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.VectorSearchOptions;
+import com.starrocks.common.tvr.TvrDeltaStats;
+import com.starrocks.common.tvr.TvrTableDelta;
+import com.starrocks.common.tvr.TvrTableDeltaTrait;
 import com.starrocks.sql.ast.TableSampleClause;
 import com.starrocks.sql.optimizer.base.DistributionSpec;
 import com.starrocks.sql.optimizer.operator.Operator;
@@ -34,6 +37,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 
 public final class LogicalOlapScanOperator extends LogicalScanOperator {
     private DistributionSpec distributionSpec;
@@ -143,6 +147,14 @@ public final class LogicalOlapScanOperator extends LogicalScanOperator {
     public boolean isEmptyOutputRows() {
         return selectedTabletId == null || selectedTabletId.isEmpty() ||
                 selectedPartitionId == null || selectedPartitionId.isEmpty();
+    }
+
+    public Optional<TvrTableDeltaTrait> getTvrTableDeltaTrait() {
+        if (tvrVersionRange instanceof TvrTableDelta) {
+            return Optional.of(TvrTableDeltaTrait.ofMonotonic((TvrTableDelta) tvrVersionRange,
+                    TvrDeltaStats.EMPTY));
+        }
+        return Optional.empty();
     }
 
     public List<Long> getHintsTabletIds() {
