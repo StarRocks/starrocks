@@ -49,6 +49,7 @@
 #include "staros_integration/staros_worker.h"
 #include "staros_integration/staros_worker_runtime.h"
 #include "storage/lake/filenames.h"
+#include "storage/primitive/storage_stats.h"
 
 namespace starrocks {
 
