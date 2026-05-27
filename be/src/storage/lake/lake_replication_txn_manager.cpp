@@ -36,7 +36,7 @@
 #include "storage/lake/meta_file.h"
 #include "storage/lake/tablet.h"
 #include "storage/lake/tablet_manager.h"
-#include "storage/primary_key_encoding_types.h"
+#include "storage/primitive/primary_key_encoding_types.h"
 #include "storage/segment_stream_converter.h"
 #include "storage/tablet_schema.h"
 #include "types/logical_type.h"

@@ -17,7 +17,7 @@
 #include "column/chunk_factory.h"
 #include "common/config_exec_fwd.h"
 #include "gtest/gtest.h"
-#include "storage/aggregate_type.h"
+#include "storage/primitive/aggregate_type.h"
 #include "storage/vector_chunk_iterator.h"
 
 namespace starrocks {

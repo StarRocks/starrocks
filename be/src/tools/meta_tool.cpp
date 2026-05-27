@@ -82,6 +82,7 @@
 #include "storage/olap_define.h"
 #include "storage/primary_key_dump.h"
 #include "storage/primitive/storage_stats.h"
+#include "storage/primitive/zone_map_detail.h"
 #include "storage/rowset/binary_plain_page.h"
 #include "storage/rowset/column_iterator.h"
 #include "storage/rowset/column_reader.h"
@@ -95,7 +96,6 @@
 #include "storage/sstable/table.h"
 #include "storage/tablet_meta.h"
 #include "storage/tablet_meta_manager.h"
-#include "storage/zone_map_detail.h"
 #include "types/olap_type_infra.h"
 #include "util/logging.h"
 
