@@ -14,6 +14,8 @@
 
 #pragma once
 
+#include <unordered_map>
+
 #include "connector/connector.h"
 #include "exec/olap_scan_prepare.h"
 #include "storage/conjunctive_predicates.h"
@@ -89,21 +91,39 @@ public:
     const TabletReaderParams& TEST_params() const { return _params; }
 
 private:
+    struct ReusableReaderKey {
+        lake::PreparedTabletReadStatePtr prepared_tablet_read_state;
+    };
+    struct RuntimeFilterSnapshot {
+        bool has_descriptor = false;
+        bool stream_build = false;
+        bool arrived = false;
+        size_t version = 0;
+    };
+    using RuntimeFilterSnapshots = std::unordered_map<int32_t, RuntimeFilterSnapshot>;
+
     Status get_tablet(const TInternalScanRange& scan_range);
     Status init_global_dicts(TabletReaderParams* params);
     Status init_unused_output_columns(const std::vector<std::string>& unused_output_columns);
     Status init_scanner_columns(std::vector<uint32_t>& scanner_columns, std::vector<uint32_t>& reader_columns);
     void decide_chunk_size(bool has_predicate);
     Status init_reader_params(const std::vector<OlapScanRange*>& key_ranges);
-    Status init_tablet_reader(RuntimeState* state);
+    Status init_tablet_reader(RuntimeState* state, bool use_prepared_state = true);
     Status reopen_reader(RuntimeState* state);
-    void apply_child_split_context(const pipeline::LakeSplitContext& split_context);
+    void apply_child_split_context(const pipeline::LakeSplitContext& split_context, bool use_prepared_state);
     Status build_scan_range(RuntimeState* state);
     void init_counter(RuntimeState* state);
     void update_realtime_counter(Chunk* chunk);
     void update_counter(RuntimeState* state);
     void refresh_reusable_reader_key();
     const pipeline::LakeSplitContext* reusable_child_context(pipeline::ScanMorsel& morsel) const;
+    Status rebuild_scan_conjuncts(RuntimeState* state);
+    void reset_reader_before_runtime_filter_reinit(RuntimeState* state);
+    Status reinit_reader_with_late_runtime_filters(RuntimeState* state,
+                                                   RuntimeFilterSnapshots runtime_filter_snapshots);
+    RuntimeFilterSnapshots capture_runtime_filter_snapshots() const;
+    void remember_runtime_filter_snapshots(RuntimeFilterSnapshots snapshots);
+    bool needs_late_runtime_filter_reinit(const RuntimeFilterSnapshots& current_snapshots) const;
 
     Status _extend_schema_by_access_paths();
     void _inherit_default_value_from_json(TabletColumn* column, const TabletColumn& root_column,
@@ -136,10 +156,8 @@ private:
     // projection iterator, doing the job of choosing |_scanner_columns| from |_reader_columns|.
     std::shared_ptr<ChunkIterator> _prj_iter;
     bool _needs_reopen = false;
-    struct ReusableReaderKey {
-        lake::PreparedTabletReadStatePtr prepared_tablet_read_state;
-    };
     ReusableReaderKey _reusable_reader_key;
+    RuntimeFilterSnapshots _observed_runtime_filter_snapshots;
 
     std::unordered_set<uint32_t> _unused_output_column_ids;
     // For release memory.
@@ -230,6 +248,7 @@ private:
     RuntimeProfile::Counter* _lake_prepared_split_tasks_counter = nullptr;
     RuntimeProfile::Counter* _lake_reusable_segment_iter_created_counter = nullptr;
     RuntimeProfile::Counter* _lake_reusable_segment_iter_reused_counter = nullptr;
+    RuntimeProfile::Counter* _lake_late_rf_reinit_counter = nullptr;
 
     // Page count
     RuntimeProfile::Counter* _pages_count_memory_counter = nullptr;
