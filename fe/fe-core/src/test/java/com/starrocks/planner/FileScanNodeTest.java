@@ -890,7 +890,7 @@ public class FileScanNodeTest {
         scanNode.setLoadInfo(jobId, txnId, table, brokerDesc, fileGroups, true, loadParallelInstanceNum);
 
         ExceptionChecker.expectThrowsWithMsg(StarRocksException.class,
-                "HLL column must use hll_hash function",
+                "HLL column must use hll_hash, hll_empty, or hll_deserialize function",
                 () -> {
                     scanNode.init(descTable);
                     scanNode.finalizeStats();
@@ -984,7 +984,7 @@ public class FileScanNodeTest {
         scanNode.setLoadInfo(jobId, txnId, table, brokerDesc, fileGroups, true, loadParallelInstanceNum);
 
         ExceptionChecker.expectThrowsWithMsg(StarRocksException.class,
-                "HLL column must use hll_hash function",
+                "HLL column must use hll_hash, hll_empty, or hll_deserialize function",
                 () -> {
                     scanNode.init(descTable);
                     scanNode.finalizeStats();
