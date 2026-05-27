@@ -1289,6 +1289,40 @@ TEST_F(VecMathFunctionsTest, AbsTest) {
     }
 }
 
+TEST_F(VecMathFunctionsTest, AbsDecimalNullableAllNullPreservesScale) {
+    constexpr int precision = 38;
+    constexpr int input_scale = 8;
+    constexpr int result_scale = 12;
+
+    auto data_column = DecimalV3Column<int128_t>::create(precision, input_scale);
+    data_column->append_default(2);
+
+    auto null_column = NullColumn::create();
+    null_column->append(1);
+    null_column->append(1);
+
+    Columns columns;
+    columns.emplace_back(NullableColumn::create(std::move(data_column), std::move(null_column)));
+
+    FunctionContext::TypeDesc return_type;
+    return_type.type = TYPE_DECIMAL128;
+    return_type.precision = precision;
+    return_type.scale = result_scale;
+    std::unique_ptr<FunctionContext> ctx(
+            FunctionContext::create_test_context(std::vector<FunctionContext::TypeDesc>(), return_type));
+
+    ColumnPtr result = MathFunctions::abs_decimal128(ctx.get(), columns).value();
+    ASSERT_TRUE(result->is_nullable());
+    ASSERT_EQ(2, result->size());
+    ASSERT_TRUE(result->is_null(0));
+    ASSERT_TRUE(result->is_null(1));
+
+    auto result_data =
+            ColumnHelper::cast_to<TYPE_DECIMAL128>(FunctionHelper::get_data_column_of_nullable(result)).get();
+    EXPECT_EQ(precision, result_data->precision());
+    EXPECT_EQ(result_scale, result_data->scale());
+}
+
 TEST_F(VecMathFunctionsTest, CotTest) {
     {
         Columns columns;
