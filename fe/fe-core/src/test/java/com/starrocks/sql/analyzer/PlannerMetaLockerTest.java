@@ -59,6 +59,10 @@ public class PlannerMetaLockerTest {
         } catch (Exception ignored) {
         }
         try {
+            starRocksAssert.dropTable("test_table");
+        } catch (Exception ignored) {
+        }
+        try {
             DDLStmtExecutor.execute(
                     UtFrameUtils.parseStmtWithNewParser("drop resource group test_rg", connectContext),
                     connectContext);

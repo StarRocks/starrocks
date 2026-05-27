@@ -176,24 +176,36 @@ public class PlannerMetaLocker implements AutoCloseable {
 
         Table table = metadataMgr.getTable(session, catalogName, dbName, tbName);
         if (table == null) {
-            // Fallback: Sync MV names are index names, not table names.
-            // When querying via [_SYNC_MV_] hint, we need to resolve through the
-            // materialized index to find the base table and its database.
-            // This ensures the database is registered in currentSqlDbIds for
-            // resource group classifier matching.
-            Pair<Table, MaterializedIndexMeta> mvIndex =
-                    GlobalStateMgr.getCurrentState().getLocalMetastore()
-                            .getMaterializedViewIndex(dbName, tbName);
-            if (mvIndex != null) {
-                table = mvIndex.first;
-            }
-        }
-
-        if (table == null) {
             return null;
         }
 
         return new Pair<>(db, table);
+    }
+
+    private static Pair<Database, Table> resolveSyncMV(ConnectContext session, TableName tableName) {
+        String dbName = tableName.getDb();
+        String tbName = tableName.getTbl();
+
+        if (Strings.isNullOrEmpty(dbName)) {
+            dbName = session.getDatabase();
+        }
+        if (Strings.isNullOrEmpty(dbName) || Strings.isNullOrEmpty(tbName)) {
+            return null;
+        }
+
+        Pair<Table, MaterializedIndexMeta> mvIndex =
+                GlobalStateMgr.getCurrentState().getLocalMetastore()
+                        .getMaterializedViewIndex(dbName, tbName);
+        if (mvIndex == null) {
+            return null;
+        }
+
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
+        if (db == null) {
+            return null;
+        }
+
+        return new Pair<>(db, mvIndex.first);
     }
 
     private static class TableCollector extends AstTraverser<Void, Void> {
@@ -262,6 +274,9 @@ public class PlannerMetaLocker implements AutoCloseable {
         @Override
         public Void visitTable(TableRelation node, Void context) {
             Pair<Database, Table> dbAndTable = resolveTable(session, node.getName());
+            if (dbAndTable == null && node.isSyncMVQuery()) {
+                dbAndTable = resolveSyncMV(session, node.getName());
+            }
             put(dbAndTable);
             return null;
         }
