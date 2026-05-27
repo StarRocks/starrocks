@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "storage/aggregate_type.h"
+#include "storage/primitive/aggregate_type.h"
 
 #include <algorithm>
 

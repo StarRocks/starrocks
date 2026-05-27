@@ -34,8 +34,6 @@
 
 #pragma once
 
-#include <storage/flat_json_config.h>
-
 #include <memory> // for unique_ptr
 
 #include "column/vectorized_fwd.h"
@@ -44,6 +42,7 @@
 #include "gutil/strings/substitute.h"
 #include "runtime/global_dict/types.h"
 #include "runtime/global_dict/types_fwd_decl.h"
+#include "storage/primitive/flat_json_config.h"
 #ifndef __APPLE__
 #include "storage/index/inverted/inverted_writer.h"
 #endif

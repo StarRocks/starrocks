@@ -28,7 +28,7 @@
 #include "column/nullable_column.h"
 #include "column/schema.h"
 #include "runtime/descriptors.h"
-#include "storage/type_utils.h"
+#include "storage/primitive/type_utils.h"
 #include "types/datum.h"
 #include "types/type_descriptor.h"
 

@@ -17,8 +17,6 @@
 
 #pragma once
 
-#include <storage/flat_json_config.h>
-
 #include <cstddef>
 #include <cstdint>
 #include <functional>
@@ -38,6 +36,7 @@
 #include "common/status.h"
 #include "common/statusor.h"
 #include "exprs/expr.h"
+#include "storage/primitive/flat_json_config.h"
 #include "storage/rowset/column_reader.h"
 #include "types/logical_type.h"
 #include "velocypack/vpack.h"

@@ -46,9 +46,9 @@
 #include "gen_cpp/descriptors.pb.h"
 #include "gen_cpp/olap_file.pb.h"
 #include "runtime/agg_state_desc.h"
-#include "storage/aggregate_type.h"
 #include "storage/olap_define.h"
-#include "storage/primary_key_encoding_types.h"
+#include "storage/primitive/aggregate_type.h"
+#include "storage/primitive/primary_key_encoding_types.h"
 #include "storage/tablet_index.h"
 #include "storage/types.h"
 

@@ -84,14 +84,6 @@ namespace starrocks {
 
 const std::string kBreakpointMsg = "primary key apply stopped";
 
-std::string EditVersion::to_string() const {
-    if (minor_number() == 0) {
-        return strings::Substitute("$0", major_number());
-    } else {
-        return strings::Substitute("$0.$1", major_number(), minor_number());
-    }
-}
-
 TabletUpdates::TabletUpdates(Tablet& tablet) : _tablet(tablet), _unused_rowsets(UINT64_MAX) {}
 
 TabletUpdates::~TabletUpdates() {

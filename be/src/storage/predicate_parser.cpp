@@ -22,8 +22,8 @@
 #include "storage/column_expr_predicate.h"
 #include "storage/column_predicate.h"
 #include "storage/predicate_tree/predicate_tree.hpp"
+#include "storage/primitive/type_utils.h"
 #include "storage/tablet_schema.h"
-#include "storage/type_utils.h"
 
 namespace starrocks {
 

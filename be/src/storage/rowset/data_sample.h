@@ -22,7 +22,7 @@
 #include "storage/olap_common.h"
 #include "storage/primitive/range.h"
 #include "storage/primitive/rowid_types.h"
-#include "storage/zone_map_detail.h"
+#include "storage/primitive/zone_map_detail.h"
 #include "types/logical_type.h"
 
 namespace starrocks {
