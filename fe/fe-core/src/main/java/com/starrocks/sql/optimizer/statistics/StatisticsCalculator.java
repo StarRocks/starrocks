@@ -1297,13 +1297,13 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
                 outputRowCount = max(innerRowCount, leftRowCount);
                 joinStatsBuilder.setOutputRowCount(outputRowCount);
                 computeNullFractionForOuterJoin(leftRowCount, innerRowCount, outputRowCount,
-                        leftStatistics, rightStatistics, eqOnPredicates, joinStatsBuilder);
+                        leftStatistics, rightStatistics, eqOnPredicates, hasUnknownColumnStatistics, joinStatsBuilder);
                 break;
             case ASOF_LEFT_OUTER_JOIN:
                 joinStatsBuilder = Statistics.buildFrom(innerJoinStats);
                 joinStatsBuilder.setOutputRowCount(leftRowCount);
                 computeNullFractionForOuterJoin(leftRowCount, innerRowCount, leftRowCount, leftStatistics, rightStatistics,
-                        eqOnPredicates, joinStatsBuilder);
+                        eqOnPredicates, hasUnknownColumnStatistics, joinStatsBuilder);
                 break;
             case LEFT_SEMI_JOIN:
                 joinStatsBuilder = Statistics.buildFrom(StatisticsEstimateUtils.adjustStatisticsByRowCount(
@@ -1325,7 +1325,7 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
                 outputRowCount = max(innerRowCount, rightRowCount);
                 joinStatsBuilder.setOutputRowCount(outputRowCount);
                 computeNullFractionForOuterJoin(rightRowCount, innerRowCount, outputRowCount,
-                        rightStatistics, leftStatistics, eqOnPredicates, joinStatsBuilder);
+                        rightStatistics, leftStatistics, eqOnPredicates, hasUnknownColumnStatistics, joinStatsBuilder);
                 break;
             case RIGHT_ANTI_JOIN:
                 joinStatsBuilder = Statistics.buildFrom(innerJoinStats);
@@ -1341,9 +1341,9 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
                         max(leftRowCount, max(rightRowCount, max(innerRowCount, leftRowCount + rightRowCount - innerRowCount)));
                 joinStatsBuilder.setOutputRowCount(outputRowCount);
                 computeNullFractionForOuterJoin(leftRowCount, innerRowCount, outputRowCount,
-                        leftStatistics, rightStatistics, eqOnPredicates, joinStatsBuilder);
+                        leftStatistics, rightStatistics, eqOnPredicates, hasUnknownColumnStatistics, joinStatsBuilder);
                 computeNullFractionForOuterJoin(rightRowCount, innerRowCount, outputRowCount,
-                        rightStatistics, leftStatistics, eqOnPredicates, joinStatsBuilder);
+                        rightStatistics, leftStatistics, eqOnPredicates, hasUnknownColumnStatistics, joinStatsBuilder);
                 break;
             default:
                 throw new StarRocksPlannerException("Not support join type : " + joinType,
@@ -1446,7 +1446,7 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
     private void computeNullFractionForOuterJoin(double outerSideRowCount, double innerRowCount,
                                                  double outputRowCount, Statistics outerSideStatistics,
                                                  Statistics innerSideStatistics, List<BinaryPredicateOperator> eqOnPredicates,
-                                                 Statistics.Builder builder) {
+                                                 boolean hasUncertainSelectivity, Statistics.Builder builder) {
         // Collect the eq-join column refs that belong to the outer (preserved) side.
         // Only these columns had their null fractions zeroed during inner join estimation.
         final var outerColumns = outerSideStatistics.getUsedColumns();
@@ -1480,24 +1480,28 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
 
         // Compute new null fractions for the inner (nullable) side's columns.
         // Two sources of NULLs for inner-side columns after an outer join:
-        // 1. Unmatched rows: outerSideRowCount - innerRowCount (row-count based)
-        // 2. Null-key rows: outer-side rows whose join key is NULL can never match,
+        // 1. Unmatched rows: outerSideRowCount - innerRowCount (row-count based, from selectivity)
+        // 2. Null-key rows: outer-side rows whose join key is NULL can never match under normal =,
         //    so inner-side columns are NULL for those rows regardless of row-count estimates.
-        // We use the maximum of the two as a lower bound on the null row count.
-        // For EQ_FOR_NULL (<=>) predicates, NULL keys can match, so we must exclude those columns from the null-key adjustment.
-        final var eqForNullJoinKeyColumns = getEqForNullJoinKeyColumns(eqOnPredicates);
-        final double maxOuterKeyNullFraction = outerEqJoinColumns.stream() //
-                .filter(col -> !eqForNullJoinKeyColumns.contains(col)) //
-                .map(outerSideStatistics::getColumnStatistic) //
-                .filter(Objects::nonNull) //
-                .filter(stat -> !stat.isUnknown()) //
-                .map(ColumnStatistic::getNullsFraction) //
-                .max(Double::compareTo) //
-                .orElse(0.0);
-
-        double nullRowsFromSelectivity = Math.max(0, outerSideRowCount - innerRowCount);
-        double nullRowsFromNullKey = maxOuterKeyNullFraction * outerSideRowCount;
-        double effectiveNullRowCount = Math.max(nullRowsFromSelectivity, nullRowsFromNullKey);
+        //
+        // Source (2) is only used as a fallback when the computed selectivity is uncertain, making the
+        // selectivity-based estimate (1) unreliable.
+        final double nullRowsFromSelectivity = Math.max(0, outerSideRowCount - innerRowCount);
+        double effectiveNullRowCount = nullRowsFromSelectivity;
+        if (hasUncertainSelectivity) {
+            // For EQ_FOR_NULL (<=>) predicates, NULL keys can match, so we exclude those columns.
+            final var eqForNullJoinKeyColumns = getEqForNullJoinKeyColumns(eqOnPredicates);
+            final double maxOuterKeyNullFraction = outerEqJoinColumns.stream() //
+                    .filter(col -> !eqForNullJoinKeyColumns.contains(col)) //
+                    .map(outerSideStatistics::getColumnStatistic) //
+                    .filter(Objects::nonNull) //
+                    .filter(stat -> !stat.isUnknown()) //
+                    .map(ColumnStatistic::getNullsFraction) //
+                    .max(Double::compareTo) //
+                    .orElse(0.0);
+            final double nullRowsFromNullKey = maxOuterKeyNullFraction * outerSideRowCount;
+            effectiveNullRowCount = Math.max(nullRowsFromSelectivity, nullRowsFromNullKey);
+        }
 
         if (effectiveNullRowCount > 0 && outputRowCount > 0) {
             for (final var entry : innerSideStatistics.getColumnStatistics().entrySet()) {

@@ -906,6 +906,224 @@ public class StatisticsCalculatorTest {
         Assertions.assertTrue(valStat.getNullsFraction() >= outerKeyNullFraction - 0.01);
     }
 
+    /**
+     * LEFT OUTER JOIN with left=1M, right=950K, actual null frac on join key=5%, but
+     * estimated null frac=15%. The null fraction for inner-side columns should reflect only the row-count gap (~5%) since
+     * selectivity estimation should be preferred.
+     */
+    @ParameterizedTest
+    @EnumSource(value = OuterJoin.class)
+    public void testOuterJoinKnownStatsUsesSelectivityNotNullKeyFraction(OuterJoin outerJoin) {
+        // GIVEN
+        final var outerKey = columnRefFactory.create("outer_key", IntegerType.BIGINT, true);
+        final var innerKey = columnRefFactory.create("inner_key", IntegerType.BIGINT, true);
+        final var innerVal = columnRefFactory.create("inner_val", IntegerType.BIGINT, true);
+
+        // Outer side: 1M rows, join key has 15% null fraction (stale/overestimated)
+        final double staleOuterKeyNullFraction = 0.15;
+        final var outerBuilder = Statistics.builder();
+        outerBuilder.setOutputRowCount(1_000_000);
+        outerBuilder.addColumnStatistics(ImmutableMap.of(
+                outerKey, new ColumnStatistic(1, 1_000_000, staleOuterKeyNullFraction, 8, 800_000)));
+        final var outerGroup = new Group(0);
+        outerGroup.setStatistics(outerBuilder.build());
+        outerGroup.setLogicalProperty(new LogicalProperty(new ColumnRefSet(Lists.newArrayList(outerKey))));
+
+        // Inner side: 950K rows, known stats on join key
+        final var innerBuilder = Statistics.builder();
+        innerBuilder.setOutputRowCount(950_000);
+        innerBuilder.addColumnStatistics(ImmutableMap.of(
+                innerKey, new ColumnStatistic(1, 1_000_000, 0.0, 8, 800_000),
+                innerVal, new ColumnStatistic(0, 100, 0.02, 8, 50)));
+        final var innerGroup = new Group(1);
+        innerGroup.setStatistics(innerBuilder.build());
+        innerGroup.setLogicalProperty(new LogicalProperty(new ColumnRefSet(Lists.newArrayList(innerKey, innerVal))));
+
+        JoinOperator joinType;
+        BinaryPredicateOperator joinPred;
+        GroupExpression groupExpr;
+        if (outerJoin == OuterJoin.LEFT_OUTER_JOIN) {
+            joinType = JoinOperator.LEFT_OUTER_JOIN;
+            joinPred = new BinaryPredicateOperator(BinaryType.EQ, outerKey, innerKey);
+            groupExpr = new GroupExpression(
+                    new LogicalJoinOperator(joinType, joinPred), Lists.newArrayList(outerGroup, innerGroup));
+        } else {
+            joinType = JoinOperator.RIGHT_OUTER_JOIN;
+            joinPred = new BinaryPredicateOperator(BinaryType.EQ, innerKey, outerKey);
+            groupExpr = new GroupExpression(
+                    new LogicalJoinOperator(joinType, joinPred), Lists.newArrayList(innerGroup, outerGroup));
+        }
+        groupExpr.setGroup(new Group(2));
+
+        final var ctx = new ExpressionContext(groupExpr);
+
+        // WHEN
+        new StatisticsCalculator(ctx, columnRefFactory, optimizerContext).estimatorStats();
+        final var valStat = ctx.getStatistics().getColumnStatistic(innerVal);
+
+        // THEN — null fraction should be modest (driven by selectivity, not by the 15% null fraction)
+        Assertions.assertTrue(valStat.getNullsFraction() < staleOuterKeyNullFraction);
+    }
+
+    /**
+     * Selectivity path: When outer has MORE rows than inner and all stats are known,
+     * the inner-side null fraction should reflect the unmatched-row gap.
+     */
+    @Test
+    public void testLeftJoinKnownStatsWithUnmatchedRows() {
+        // GIVEN
+        final var outerKey = columnRefFactory.create("outer_key", IntegerType.BIGINT, true);
+        final var innerKey = columnRefFactory.create("inner_key", IntegerType.BIGINT, true);
+        final var innerVal = columnRefFactory.create("inner_val", IntegerType.BIGINT, true);
+
+        final var outerBuilder = Statistics.builder();
+        outerBuilder.setOutputRowCount(1000);
+        outerBuilder.addColumnStatistics(ImmutableMap.of(
+                outerKey, new ColumnStatistic(1, 1000, 0, 8, 500)));
+        final var outerGroup = new Group(0);
+        outerGroup.setStatistics(outerBuilder.build());
+        outerGroup.setLogicalProperty(new LogicalProperty(new ColumnRefSet(Lists.newArrayList(outerKey))));
+
+        final var innerBuilder = Statistics.builder();
+        innerBuilder.setOutputRowCount(200);
+        innerBuilder.addColumnStatistics(ImmutableMap.of(
+                innerKey, new ColumnStatistic(1, 500, 0, 8, 200),
+                innerVal, new ColumnStatistic(0, 100, 0.0, 8, 50)));
+        final var innerGroup = new Group(1);
+        innerGroup.setStatistics(innerBuilder.build());
+        innerGroup.setLogicalProperty(new LogicalProperty(new ColumnRefSet(Lists.newArrayList(innerKey, innerVal))));
+
+        final var joinPred = new BinaryPredicateOperator(BinaryType.EQ, outerKey, innerKey);
+        final var joinOp = new LogicalJoinOperator(JoinOperator.LEFT_OUTER_JOIN, joinPred);
+        final var groupExpr = new GroupExpression(joinOp, Lists.newArrayList(outerGroup, innerGroup));
+        groupExpr.setGroup(new Group(2));
+
+        final var ctx = new ExpressionContext(groupExpr);
+
+        // WHEN
+        new StatisticsCalculator(ctx, columnRefFactory, optimizerContext).estimatorStats();
+        final var valStat = ctx.getStatistics().getColumnStatistic(innerVal);
+
+        // THEN — inner-side null fraction should be positive (some outer rows unmatched)
+        Assertions.assertTrue(valStat.getNullsFraction() > 0,
+                "Inner-side column should have non-zero null fraction due to unmatched outer rows");
+    }
+
+    /**
+     * Unknown stats fallback path: When inner-side join key has UNKNOWN stats,
+     * innerRowCount defaults to max(left, right), making selectivity-based null count = 0.
+     * The fallback should use the outer-side key null fraction instead.
+     */
+    @ParameterizedTest
+    @EnumSource(value = OuterJoin.class)
+    public void testOuterJoinUnknownStatsUsesNullKeyFallback(OuterJoin outerJoin) {
+        // GIVEN
+        final var outerKey = columnRefFactory.create("outer_key", IntegerType.BIGINT, true);
+        final var outerCol = columnRefFactory.create("outer_col", IntegerType.BIGINT, true);
+        final var innerKey = columnRefFactory.create("inner_key", IntegerType.BIGINT, true);
+        final var innerVal = columnRefFactory.create("inner_val", IntegerType.BIGINT, true);
+
+        // Outer side (preserved): 1000 rows, high null fraction on join key
+        final double outerKeyNullFraction = 0.90;
+        final var outerBuilder = Statistics.builder();
+        outerBuilder.setOutputRowCount(1000);
+        outerBuilder.addColumnStatistics(ImmutableMap.of(
+                outerKey, new ColumnStatistic(1, 1000, outerKeyNullFraction, 8, 500),
+                outerCol, new ColumnStatistic(0, 100, 0, 8, 100)));
+        final var outerGroup = new Group(0);
+        outerGroup.setStatistics(outerBuilder.build());
+        outerGroup.setLogicalProperty(new LogicalProperty(
+                new ColumnRefSet(Lists.newArrayList(outerKey, outerCol))));
+
+        // Inner side: 500 rows, UNKNOWN stats on the join key
+        final var innerBuilder = Statistics.builder();
+        innerBuilder.setOutputRowCount(500);
+        innerBuilder.addColumnStatistics(ImmutableMap.of(
+                innerKey, ColumnStatistic.unknown(),
+                innerVal, new ColumnStatistic(0, 100, 0.001, 8, 50)));
+        final var innerGroup = new Group(1);
+        innerGroup.setStatistics(innerBuilder.build());
+        innerGroup.setLogicalProperty(new LogicalProperty(
+                new ColumnRefSet(Lists.newArrayList(innerKey, innerVal))));
+
+        JoinOperator joinType;
+        BinaryPredicateOperator joinPred;
+        GroupExpression groupExpr;
+        if (outerJoin == OuterJoin.LEFT_OUTER_JOIN) {
+            joinType = JoinOperator.LEFT_OUTER_JOIN;
+            joinPred = new BinaryPredicateOperator(BinaryType.EQ, outerKey, innerKey);
+            groupExpr = new GroupExpression(
+                    new LogicalJoinOperator(joinType, joinPred), Lists.newArrayList(outerGroup, innerGroup));
+        } else {
+            joinType = JoinOperator.RIGHT_OUTER_JOIN;
+            joinPred = new BinaryPredicateOperator(BinaryType.EQ, innerKey, outerKey);
+            groupExpr = new GroupExpression(
+                    new LogicalJoinOperator(joinType, joinPred), Lists.newArrayList(innerGroup, outerGroup));
+        }
+        groupExpr.setGroup(new Group(2));
+
+        final var ctx = new ExpressionContext(groupExpr);
+
+        // WHEN
+        new StatisticsCalculator(ctx, columnRefFactory, optimizerContext).estimatorStats();
+        final var innerValStat = ctx.getStatistics().getColumnStatistic(innerVal);
+
+        // THEN — inner-side null fraction should reflect the outer key's null fraction
+        Assertions.assertTrue(innerValStat.getNullsFraction() >= outerKeyNullFraction - 0.01,
+                "With unknown stats, inner-side null fraction (" + innerValStat.getNullsFraction()
+                        + ") should reflect outer key null fraction (" + outerKeyNullFraction
+                        + ") for " + outerJoin);
+    }
+
+    /**
+     * Unknown stats fallback path: FULL OUTER JOIN where one side has UNKNOWN key stats.
+     * Both sides' non-join columns should get elevated null fractions.
+     */
+    @Test
+    public void testFullOuterJoinUnknownStatsUsesNullKeyFallback() {
+        // GIVEN
+        final var leftKey = columnRefFactory.create("left_key", IntegerType.BIGINT, true);
+        final var leftVal = columnRefFactory.create("left_val", IntegerType.BIGINT, true);
+        final var rightKey = columnRefFactory.create("right_key", IntegerType.BIGINT, true);
+        final var rightVal = columnRefFactory.create("right_val", IntegerType.BIGINT, true);
+
+        // Left: 1000 rows, 80% null fraction on key
+        final double leftKeyNullFraction = 0.80;
+        final var leftBuilder = Statistics.builder();
+        leftBuilder.setOutputRowCount(1000);
+        leftBuilder.addColumnStatistics(ImmutableMap.of(
+                leftKey, new ColumnStatistic(1, 1000, leftKeyNullFraction, 8, 200),
+                leftVal, new ColumnStatistic(0, 100, 0.01, 8, 50)));
+        final var leftGroup = new Group(0);
+        leftGroup.setStatistics(leftBuilder.build());
+        leftGroup.setLogicalProperty(new LogicalProperty(new ColumnRefSet(Lists.newArrayList(leftKey, leftVal))));
+
+        // Right: 500 rows, UNKNOWN stats on key
+        final var rightBuilder = Statistics.builder();
+        rightBuilder.setOutputRowCount(500);
+        rightBuilder.addColumnStatistics(ImmutableMap.of(
+                rightKey, ColumnStatistic.unknown(),
+                rightVal, new ColumnStatistic(0, 100, 0.02, 8, 30)));
+        final var rightGroup = new Group(1);
+        rightGroup.setStatistics(rightBuilder.build());
+        rightGroup.setLogicalProperty(new LogicalProperty(new ColumnRefSet(Lists.newArrayList(rightKey, rightVal))));
+
+        final var joinPred = new BinaryPredicateOperator(BinaryType.EQ, leftKey, rightKey);
+        final var joinOp = new LogicalJoinOperator(JoinOperator.FULL_OUTER_JOIN, joinPred);
+        final var groupExpr = new GroupExpression(joinOp, Lists.newArrayList(leftGroup, rightGroup));
+        groupExpr.setGroup(new Group(2));
+
+        final var ctx = new ExpressionContext(groupExpr);
+
+        // WHEN
+        new StatisticsCalculator(ctx, columnRefFactory, optimizerContext).estimatorStats();
+        final var rightValStat = ctx.getStatistics().getColumnStatistic(rightVal);
+
+        // THEN — right side is nullable from left's perspective, and left key has 80% nulls
+        // With unknown stats fallback, the right-side null fraction should reflect the left key's null fraction
+        Assertions.assertTrue(rightValStat.getNullsFraction() >= leftKeyNullFraction - 0.05);
+    }
+
     private static File newFolder(File root, String... subDirs) throws IOException {
         String subFolder = String.join("/", subDirs);
         File result = new File(root, subFolder);
