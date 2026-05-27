@@ -1,0 +1,50 @@
+-- name: test_iceberg_rewrite_equality_delete_files
+-- Fixture (hosted on the CI OSS bucket, shared with test_iceberg_equality_delete_null_key): a v2 table
+-- (id,data) with 10 rows (incl. two NULL-id rows), one data file, and two equality-delete files (keys
+-- {3,6} and the NULL key). The procedure must turn the equality deletes into position deletes while
+-- the visible rows stay identical -- deleted keys, NULL included, must not resurrect. register_table
+-- pins v4.metadata.json, so the conversion commit advances only this run's catalog entry and never
+-- touches the shared fixture files.
+create external catalog iceberg_eqconv_${uuid0} PROPERTIES ("type"="iceberg", "iceberg.catalog.type"="hive", "iceberg.catalog.hive.metastore.uris"="${iceberg_catalog_hive_metastore_uris}", "aws.s3.access_key"="${oss_ak}", "aws.s3.secret_key"="${oss_sk}", "aws.s3.endpoint"="${oss_endpoint}");
+-- result:
+-- !result
+create database iceberg_eqconv_${uuid0}.eq_delete_db_${uuid0};
+-- result:
+-- !result
+call iceberg_eqconv_${uuid0}.system.register_table("eq_delete_db_${uuid0}", "eq_del_convert", "oss://${oss_bucket}/iceberg_ci_db/eq_del_convert/metadata/v4.metadata.json");
+-- result:
+-- !result
+set new_planner_optimize_timeout = 30000;
+-- result:
+-- !result
+select * from iceberg_eqconv_${uuid0}.eq_delete_db_${uuid0}.eq_del_convert order by id;
+-- result:
+1	n1
+2	n2
+4	n4
+5	n5
+7	n7
+8	n8
+-- !result
+alter table iceberg_eqconv_${uuid0}.eq_delete_db_${uuid0}.eq_del_convert execute rewrite_equality_delete_files();
+-- result:
+[REGEX]eq_delete_db_\w+\teq_del_convert\t2\t1\t3\t4\t\d+\tsuccess
+-- !result
+select * from iceberg_eqconv_${uuid0}.eq_delete_db_${uuid0}.eq_del_convert order by id;
+-- result:
+1	n1
+2	n2
+4	n4
+5	n5
+7	n7
+8	n8
+-- !result
+drop table iceberg_eqconv_${uuid0}.eq_delete_db_${uuid0}.eq_del_convert;
+-- result:
+-- !result
+drop database iceberg_eqconv_${uuid0}.eq_delete_db_${uuid0};
+-- result:
+-- !result
+drop catalog iceberg_eqconv_${uuid0};
+-- result:
+-- !result

@@ -1,0 +1,25 @@
+-- name: test_iceberg_rewrite_equality_delete_files
+-- Fixture (hosted on the CI OSS bucket, shared with test_iceberg_equality_delete_null_key): a v2 table
+-- (id,data) with 10 rows (incl. two NULL-id rows), one data file, and two equality-delete files (keys
+-- {3,6} and the NULL key). The procedure must turn the equality deletes into position deletes while
+-- the visible rows stay identical -- deleted keys, NULL included, must not resurrect. register_table
+-- pins v4.metadata.json, so the conversion commit advances only this run's catalog entry and never
+-- touches the shared fixture files.
+create external catalog iceberg_eqconv_${uuid0} PROPERTIES ("type"="iceberg", "iceberg.catalog.type"="hive", "iceberg.catalog.hive.metastore.uris"="${iceberg_catalog_hive_metastore_uris}", "aws.s3.access_key"="${oss_ak}", "aws.s3.secret_key"="${oss_sk}", "aws.s3.endpoint"="${oss_endpoint}");
+create database iceberg_eqconv_${uuid0}.eq_delete_db_${uuid0};
+call iceberg_eqconv_${uuid0}.system.register_table("eq_delete_db_${uuid0}", "eq_del_convert", "oss://${oss_bucket}/iceberg_ci_db/eq_del_convert/metadata/v4.metadata.json");
+
+set new_planner_optimize_timeout = 30000;
+
+-- baseline: equality deletes hide keys {3,6} and the two NULL-id rows -> 6 visible rows
+select * from iceberg_eqconv_${uuid0}.eq_delete_db_${uuid0}.eq_del_convert order by id;
+
+-- convert the live equality deletes of the current snapshot into position deletes (whole table)
+alter table iceberg_eqconv_${uuid0}.eq_delete_db_${uuid0}.eq_del_convert execute rewrite_equality_delete_files();
+
+-- after conversion: identical visible rows (now hidden by position deletes instead)
+select * from iceberg_eqconv_${uuid0}.eq_delete_db_${uuid0}.eq_del_convert order by id;
+
+drop table iceberg_eqconv_${uuid0}.eq_delete_db_${uuid0}.eq_del_convert;
+drop database iceberg_eqconv_${uuid0}.eq_delete_db_${uuid0};
+drop catalog iceberg_eqconv_${uuid0};

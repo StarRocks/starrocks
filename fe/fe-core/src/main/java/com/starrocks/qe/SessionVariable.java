@@ -4565,6 +4565,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         enableGlobalRuntimeFilter = value;
     }
 
+    public long getRuntimeFilterScanWaitTime() {
+        return runtimeFilterScanWaitTime;
+    }
+
+    public void setRuntimeFilterScanWaitTime(long value) {
+        runtimeFilterScanWaitTime = value;
+    }
+
     public boolean getEnableTopNRuntimeFilter() {
         return enableTopNRuntimeFilter;
     }

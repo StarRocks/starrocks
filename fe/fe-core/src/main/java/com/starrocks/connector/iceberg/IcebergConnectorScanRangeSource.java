@@ -659,7 +659,7 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
         return appliedPosDeleteFiles;
     }
 
-    public Set<DeleteFile> getEqualAppliedDeleteFiles() {
+    public Set<DeleteFile> getAppliedEqualDeleteFiles() {
         return appliedEqualDeleteFiles;
     }
 
