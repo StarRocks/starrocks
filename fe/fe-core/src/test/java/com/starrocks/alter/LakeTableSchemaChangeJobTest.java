@@ -448,6 +448,14 @@ public class LakeTableSchemaChangeJobTest {
             public void sendAgentTask(AgentBatchTask batchTask) {
                 batchTask.getAllTasks().forEach(t -> t.setFinished(true));
             }
+            // Stub the no-op publish RPC so this unit test does not need a
+            // live BE. Production force-cancel sends publish_version(no_op=true)
+            // to advance the partition version chain; the BE-side behaviour
+            // is exercised by integration tests, not here.
+            @Mock
+            public boolean lakePublishVersionWithSkip(String reason) {
+                return true;
+            }
         };
 
         schemaChangeJob.runPendingJob();
@@ -488,6 +496,11 @@ public class LakeTableSchemaChangeJobTest {
             @Mock
             public void sendAgentTask(AgentBatchTask batchTask) {
                 batchTask.getAllTasks().forEach(t -> t.setFinished(true));
+            }
+            // See testForceCancelAtFinishedRewriting for why we stub this.
+            @Mock
+            public boolean lakePublishVersionWithSkip(String reason) {
+                return true;
             }
         };
         schemaChangeJob.runPendingJob();

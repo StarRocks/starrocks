@@ -136,6 +136,17 @@ public class LakeTableAlterMetaJobTest {
         // Phase 2: CANCEL ALTER TABLE ... FORCE must bypass the FINISHED_REWRITING
         // guard. Lake AlterMeta has no shadow tablets to clean up — pure state
         // transition + persisted edit log.
+        //
+        // Stub the no-op publish RPC so this unit test does not need a live
+        // BE. Production force-cancel sends publish_version(no_op=true) to
+        // advance the partition version chain past the cancelled alter; the
+        // BE-side short-circuit behaviour is exercised by integration tests.
+        new MockUp<LakeTableAlterMetaJobBase>() {
+            @Mock
+            public boolean lakePublishVersionWithSkip(String reason) {
+                return true;
+            }
+        };
         Assertions.assertEquals(AlterJobV2.JobState.PENDING, job.getJobState());
         job.runPendingJob();
         job.runRunningJob();
