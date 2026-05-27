@@ -647,6 +647,7 @@ SET(DW_TEST_FILES
     ./storage/schema_change_test.cpp
     ./storage/segment_flush_executor_test.cpp
     ./storage/segment_stream_converter_test.cpp
+    ./storage/del_file_stream_converter_test.cpp
     ./storage/short_key_index_test.cpp
     ./storage/size_tiered_compaction_policy_test.cpp
     ./storage/snapshot_meta_test.cpp

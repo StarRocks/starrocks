@@ -105,6 +105,15 @@ public:
                                                              const std::string& target_file_location,
                                                              const WritableFileOptions& opts, int max_retry);
 
+    // Returns Status::NotSupported if the source/target PK encoding combination would produce
+    // byte-incompatible .del file copies in the lake-to-lake path (which raw-copies .del files
+    // without re-encoding). Specifically rejects either direction of V1<->V2 on a single
+    // non-string fixed-length PK column. Returns Status::OK for safe combinations and for
+    // non-PK target tablets.
+    static Status check_pk_encoding_compat(int64_t src_tablet_id, int64_t target_tablet_id,
+                                           const TabletMetadata& src_tablet_meta,
+                                           const TabletMetadata& target_tablet_meta);
+
     // Decide whether to use parallel copy for current tablet files.
     static bool should_use_parallel_copy(size_t file_count, const ThreadPool* thread_pool);
 
