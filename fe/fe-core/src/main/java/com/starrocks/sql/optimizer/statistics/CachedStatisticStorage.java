@@ -54,6 +54,7 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
 public class CachedStatisticStorage implements StatisticStorage, MemoryTrackable {
@@ -96,7 +97,7 @@ public class CachedStatisticStorage implements StatisticStorage, MemoryTrackable
 
         try {
             CompletableFuture<Map<TableStatsCacheKey, Optional<Long>>> result = tableStatsCache.getAll(keys);
-            waitForStatsFutureIfWaitEnabled(result, "tableId: %s".formatted(tableId));
+            waitForStatsFutureIfWaitEnabled(result, () -> "tableId: %s".formatted(tableId));
             if (result.isDone()) {
                 Map<TableStatsCacheKey, Optional<Long>> data = result.get();
                 return keys.stream().collect(Collectors.toMap(TableStatsCacheKey::getPartitionId,
@@ -348,7 +349,7 @@ public class CachedStatisticStorage implements StatisticStorage, MemoryTrackable
         try {
             CompletableFuture<Optional<ColumnStatistic>> result =
                     columnStatistics.get(new ColumnStatsCacheKey(table.getId(), column));
-            waitForStatsFutureIfWaitEnabled(result, "tableId: %s, column: %s".formatted(table.getId(), column));
+            waitForStatsFutureIfWaitEnabled(result, () -> "tableId: %s, column: %s".formatted(table.getId(), column));
             if (result.isDone()) {
                 Optional<ColumnStatistic> realResult;
                 realResult = result.get();
@@ -389,7 +390,7 @@ public class CachedStatisticStorage implements StatisticStorage, MemoryTrackable
             CompletableFuture<Map<ColumnStatsCacheKey, Optional<ColumnStatistic>>> result =
                     columnStatistics.getAll(cacheKeys);
 
-            waitForStatsFutureIfWaitEnabled(result, "tableId: %s, columns: [%s]".formatted(table.getId(),
+            waitForStatsFutureIfWaitEnabled(result, () -> "tableId: %s, columns: [%s]".formatted(table.getId(),
                     stringifyColumnCacheKeys(cacheKeys)));
             if (result.isDone()) {
                 List<ColumnStatistic> columnStatistics = new ArrayList<>();
@@ -429,7 +430,7 @@ public class CachedStatisticStorage implements StatisticStorage, MemoryTrackable
         try {
             CompletableFuture<Map<ColumnStatsCacheKey, Optional<PartitionStats>>> resultFuture =
                     partitionStatistics.getAll(cacheKeys);
-            waitForStatsFutureIfWaitEnabled(resultFuture, "tableId: %s, columns: [%s]".formatted(table.getId(),
+            waitForStatsFutureIfWaitEnabled(resultFuture, () -> "tableId: %s, columns: [%s]".formatted(table.getId(),
                     stringifyColumnCacheKeys(cacheKeys)));
 
             if (resultFuture.isDone()) {
@@ -546,7 +547,7 @@ public class CachedStatisticStorage implements StatisticStorage, MemoryTrackable
 
         try {
             CompletableFuture<Map<ColumnStatsCacheKey, Optional<Histogram>>> result = histogramCache.getAll(cacheKeys);
-            waitForStatsFutureIfWaitEnabled(result, "tableId: %s, columns: [%s]".formatted(tableId,
+            waitForStatsFutureIfWaitEnabled(result, () -> "tableId: %s, columns: [%s]".formatted(tableId,
                     stringifyColumnCacheKeys(cacheKeys)));
             if (result.isDone()) {
                 Map<ColumnStatsCacheKey, Optional<Histogram>> realResult;
@@ -654,7 +655,7 @@ public class CachedStatisticStorage implements StatisticStorage, MemoryTrackable
 
         try {
             CompletableFuture<Optional<MultiColumnCombinedStatistics>> result = multiColumnStats.get(tableId);
-            waitForStatsFutureIfWaitEnabled(result, "tableId: %s".formatted(tableId));
+            waitForStatsFutureIfWaitEnabled(result, () -> "tableId: %s".formatted(tableId));
             if (result.isDone()) {
                 Optional<MultiColumnCombinedStatistics> data = result.get();
                 return data.orElse(MultiColumnCombinedStatistics.EMPTY);
@@ -737,8 +738,8 @@ public class CachedStatisticStorage implements StatisticStorage, MemoryTrackable
         return cacheBuilder.buildAsync(cacheLoader);
     }
 
-    private <T> void waitForStatsFutureIfWaitEnabled(CompletableFuture<T> future, String context) throws InterruptedException,
-            ExecutionException {
+    private <T> void waitForStatsFutureIfWaitEnabled(CompletableFuture<T> future, Supplier<String> contextSupplier)
+            throws InterruptedException, ExecutionException {
         try {
             if (Config.enable_sync_statistics_load) {
                 final var timeoutMs = Config.sync_statistics_load_timeout_ms;
@@ -746,7 +747,7 @@ public class CachedStatisticStorage implements StatisticStorage, MemoryTrackable
             }
         } catch (TimeoutException e) {
             LOG.warn("Timeout waiting for stats to be loaded into the cache. (timeout: {}ms, context: {})",
-                    Config.sync_statistics_load_timeout_ms, context);
+                    Config.sync_statistics_load_timeout_ms, contextSupplier.get());
         }
     }
 

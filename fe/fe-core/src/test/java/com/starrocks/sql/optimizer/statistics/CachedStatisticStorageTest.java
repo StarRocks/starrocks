@@ -57,6 +57,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import java.util.function.Supplier;
 
 public class CachedStatisticStorageTest {
     public static ConnectContext connectContext;
@@ -527,8 +528,9 @@ public class CachedStatisticStorageTest {
 
             // WHEN
             // The method should return without throwing despite the future not completing
+            Supplier<String> contextSupplier = () -> "context";
             Deencapsulation.invoke(storage, "waitForStatsFutureIfWaitEnabled", neverCompletingFuture,
-                    "context");
+                    contextSupplier);
 
             // THEN
             // Future should still not be done (timeout was caught internally)
@@ -551,8 +553,9 @@ public class CachedStatisticStorageTest {
 
             // WHEN
             // Should return immediately without waiting
+            Supplier<String> contextSupplier = () -> "context";
             Deencapsulation.invoke(storage, "waitForStatsFutureIfWaitEnabled", neverCompletingFuture,
-                    "context");
+                    contextSupplier);
 
             // THEN
             Assertions.assertFalse(neverCompletingFuture.isDone());
