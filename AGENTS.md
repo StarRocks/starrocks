@@ -40,6 +40,7 @@ cd test && python3 run.py -v
 - Protobuf fields must stay optional/repeated; never add `required` and never reuse ordinals.
 - Thrift fields must stay optional/repeated; never add `required` and never reuse ordinals.
 - User-facing config or metric changes must update the matching docs in `docs/en/` and `docs/zh/` when applicable.
+- When editing any file under `docs/`, read `docs/CLAUDE.md` for documentation-specific rules before making changes.
 
 ## PR Contract
 

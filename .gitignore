@@ -104,6 +104,8 @@ build/
 cmake-build-debug/
 CMakeLists.txt
 .claude
+!docs/.claude/
+!docs/.claude/**
 .clangd
 .cursor/
 .codex/

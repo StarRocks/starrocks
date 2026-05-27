@@ -1,0 +1,31 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash .claude/hooks/vale-check.sh"
+          },
+          {
+            "type": "command",
+            "command": "bash .claude/hooks/markdownlint-check.sh"
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "if": "Bash(git *)",
+            "command": "bash .claude/hooks/docs-git-process-hooks/check-git-best-practices.sh"
+          }
+        ]
+      }
+    ]
+  }
+}

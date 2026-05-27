@@ -48,6 +48,31 @@ npm start
 npm run build
 ```
 
+## Critical Instructions
+
+Never violate these directives. If a task would require violating them, stop and ask the user for clarification before proceeding:
+
+- Do not add information beyond the requested changes.
+- Do not modify files other than those specified by the user.
+- Do not modify frontmatter unless explicitly instructed.
+- Do not use training data for StarRocks technical facts. Verify all commands, configuration options, parameter names, and version numbers against existing documentation in the same language directory before writing them. If a technical detail cannot be confirmed from existing docs, list the unconfirmed items and ask the user how to proceed.
+- When editing a page in `en/`, `zh/`, or `ja/`, update the corresponding pages in the other language directories. If a `ja/` page does not yet exist, note this in your completion summary and ask the user whether to create it.
+- Do not commit or push without explicit confirmation from the user.
+- When a task attempt fails, try no more than two approaches before stopping to ask for instructions.
+- When stopping to ask for clarification: state the blocker, list what you have verified or attempted, and ask one specific question. Do not ask multiple questions at once.
+
+## Definition of Done
+
+A task is complete when:
+
+- All requested changes have been made to the specified files only.
+- Corresponding pages in all three language directories (`en/`, `zh/`, `ja/`) have been updated, or the user has been informed if a `ja/` page does not exist.
+- Vale and markdownlint report no errors on all edited files.
+- A summary of every changed file (with path) has been provided to the user.
+- The user has been asked whether they are ready to commit and push.
+
+After presenting the completion summary, wait for explicit user instruction before making further changes.
+
 ## Writing Documentation
 
 ### File Format
