@@ -57,6 +57,7 @@
 #include "storage/primitive/chunk_iterator.h"
 #include "storage/primitive/empty_iterator.h"
 #include "storage/primitive/projection_iterator.h"
+#include "storage/primitive/union_iterator.h"
 #include "storage/rowset/metadata_cache.h"
 #include "storage/rowset/rowid_range_option.h"
 #include "storage/rowset/short_key_range_option.h"
@@ -64,7 +65,6 @@
 #include "storage/tablet_index.h"
 #include "storage/tablet_manager.h"
 #include "storage/tablet_meta_manager.h"
-#include "storage/union_iterator.h"
 #include "storage/update_manager.h"
 #include "storage/utils.h"
 

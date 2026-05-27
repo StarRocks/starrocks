@@ -575,7 +575,6 @@ SET(DW_TEST_FILES
     ./storage/tablet_test.cpp
     ./storage/tablet_updates_schema_change_test.cpp
     ./storage/tablet_updates_test.cpp
-    ./storage/union_iterator_test.cpp
     ./storage/unique_iterator_test.cpp
     ./storage/update_manager_test.cpp
     ./storage/utils_test.cpp

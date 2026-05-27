@@ -22,6 +22,7 @@ set(STORAGE_PRIMITIVE_TEST_FILES
     projection_iterator_test.cpp
     range_test.cpp
     row_source_mask_test.cpp
+    union_iterator_test.cpp
 )
 
 set(STORAGE_PRIMITIVE_TEST_LINK_LIBS
