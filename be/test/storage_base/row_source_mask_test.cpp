@@ -12,14 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "storage/row_source_mask.h"
+#include "storage/base/row_source_mask.h"
 
 #include <gtest/gtest.h>
 
 #include "common/config_rowset_fwd.h"
 #include "common/config_storage_fwd.h"
 #include "fs/fs_util.h"
-#include "storage/olap_define.h"
+#include "storage/base/storage_path_constants.h"
 
 namespace starrocks {
 
@@ -30,7 +30,7 @@ protected:
 
         // create tmp dir
         std::stringstream tmp_dir_s;
-        tmp_dir_s << config::storage_root_path << TMP_PREFIX;
+        tmp_dir_s << config::storage_root_path << kStorageTmpPrefix;
         _tmp_dir = tmp_dir_s.str();
         fs::create_directories(_tmp_dir);
     }

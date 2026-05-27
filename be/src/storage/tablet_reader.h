@@ -19,8 +19,8 @@
 
 #include "column/vectorized_fwd.h"
 #include "runtime/mem_pool.h"
+#include "storage/base/row_source_mask.h"
 #include "storage/delete_predicates.h"
-#include "storage/row_source_mask.h"
 #include "storage/rowset/rowset.h"
 #include "storage/rowset/rowset_options.h"
 #include "storage/seek_range.h"

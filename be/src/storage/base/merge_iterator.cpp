@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "storage/merge_iterator.h"
+#include "storage/base/merge_iterator.h"
 
 #include <memory>
 #include <queue>
@@ -22,7 +22,6 @@
 #include "column/chunk_factory.h"
 #include "compute_env/sorting/sorting.h"
 #include "gutil/strings/substitute.h"
-#include "storage/chunk_helper.h"
 
 namespace starrocks {
 

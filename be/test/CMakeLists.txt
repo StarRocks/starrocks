@@ -367,6 +367,7 @@ add_subdirectory(exec)
 add_subdirectory(connector)
 add_subdirectory(formats)
 add_subdirectory(storage_primitive)
+add_subdirectory(storage_base)
 add_subdirectory(runtime)
 add_subdirectory(compute_env)
 add_subdirectory(exprs)
@@ -492,7 +493,6 @@ SET(DW_TEST_FILES
     ./storage/load_spill_pipeline_merge_test.cpp
     ./storage/memtable_flush_executor_test.cpp
     ./storage/memtable_test.cpp
-    ./storage/merge_iterator_test.cpp
     ./storage/metadata_util_test.cpp
     ./storage/meta_reader_test.cpp
     ./storage/non_retryable_load_errors_test.cpp
@@ -550,7 +550,6 @@ SET(DW_TEST_FILES
     ./storage/rowset_update_state_test.cpp
     ./storage/rowset/zone_map_index_test.cpp
     ./storage/rows_mapper_test.cpp
-    ./storage/row_source_mask_test.cpp
     ./storage/row_store_encoder_test.cpp
     ./storage/schema_change_test.cpp
     ./storage/segment_flush_executor_test.cpp

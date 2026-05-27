@@ -43,6 +43,25 @@ target_link_libraries(StoragePrimitive PUBLIC
     StarRocksGen
 )
 
+ADD_BE_LIB(StorageBase
+    base/merge_iterator.cpp
+    base/row_source_mask.cpp
+)
+
+target_link_libraries(StorageBase PUBLIC
+    ComputeEnv
+    StoragePrimitive
+    Serde
+    RuntimeCore
+    ChunkCore
+    ColumnCore
+    Types
+    Common
+    Base
+    Gutil
+    StarRocksGen
+)
+
 set(STORAGE_FILES
     base_tablet.cpp
     delete_handler.cpp
@@ -166,10 +185,8 @@ set(STORAGE_FILES
     convert_helper.cpp
     delete_predicates.cpp
     disjunctive_predicates.cpp
-    merge_iterator.cpp
     predicate_parser.cpp
     push_handler.cpp
-    row_source_mask.cpp
     row_store_encoder.cpp
     row_store_encoder_simple.cpp
     row_store_encoder_factory.cpp
@@ -337,4 +354,4 @@ ADD_BE_LIB(Storage
     ${STORAGE_FILES}
 )
 
-target_link_libraries(Storage PUBLIC StoragePrimitive ExecPrimitive ComputeEnv Serde Platform Cache)
+target_link_libraries(Storage PUBLIC StorageBase StoragePrimitive ExecPrimitive ComputeEnv Serde Platform Cache)
