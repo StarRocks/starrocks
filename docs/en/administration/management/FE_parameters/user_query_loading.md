@@ -422,6 +422,25 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Description: Controls whether UPDATE statements can trigger automatic statistics collection. When enabled, UPDATE operations that modify table data may schedule statistics collection through the same ingestion-based statistics framework controlled by `enable_statistic_collect_on_first_load`. Disabling this configuration skips statistics collection for UPDATE statements while keeping load-triggered statistics collection behavior unchanged.
 - Introduced in: v3.5.11, v4.0.4
 
+### `enable_sync_statistics_load`
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Controls whether queries wait for all statistics to be loaded before execution. When enabled, if a query references a table/column whose statistics are not fully loaded, the query will wait until the statistics loading is complete before proceeding. This ensures that the query optimizer has access to the latest statistics for better plan generation but may increase query latency if statistics loading takes time. When disabled, queries will proceed without waiting for statistics to load, which may lead to suboptimal plans if statistics are missing or outdated.
+- Introduced in: -
+
+### `sync_statistics_load_timeout_ms`
+
+- Default: 5000
+- Type: Int
+- Unit: Milliseconds
+- Is mutable: Yes
+- Description: Timeout to synchronously wait for stats (when `enable_sync_statistics_load` is enabled). When the stats are not available during this time, the query will proceed without the stats, which may lead to suboptimal plans. Set this value to a reasonable time based on your cluster's performance and workload characteristics.
+- Introduced in: -
+
+
 ### `enable_udf`
 
 - Default: false
