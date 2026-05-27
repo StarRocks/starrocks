@@ -243,7 +243,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 默认值: true
 - 类型: Boolean
 - 单位: -
-- 是否可变: No
+- 是否可变: Yes
 - 描述: 是否启用 profile 日志。启用此功能后，FE 会将每个查询的 profile 日志（由 `ProfileManager` 生成的序列化 `queryDetail` JSON）写入 profile 日志接收器。此日志记录仅在 `enable_collect_query_detail_info` 也启用时执行；当 `enable_profile_log_compress` 启用时，JSON 可能会在日志记录前进行 gzip 压缩。Profile 日志文件由 `profile_log_dir`、`profile_log_roll_num`、`profile_log_roll_interval` 管理，并根据 `profile_log_delete_age` 进行轮转/删除（支持 `7d`、`10h`、`60m`、`120s` 等格式）。禁用此功能会停止写入 profile 日志（减少磁盘 I/O、压缩 CPU 和存储使用）。
 - 引入版本: v3.2.5
 
