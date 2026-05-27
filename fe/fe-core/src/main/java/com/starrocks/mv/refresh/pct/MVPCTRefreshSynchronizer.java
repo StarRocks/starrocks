@@ -33,6 +33,7 @@ import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.scheduler.mv.BaseTableSnapshotInfo;
 import com.starrocks.scheduler.mv.MVRefreshProcessor;
+import com.starrocks.scheduler.mv.MVRefreshSchemaChecker;
 import com.starrocks.scheduler.mv.pct.PCTRefreshScope;
 import com.starrocks.scheduler.mv.pct.PCTTableSnapshotInfo;
 import com.starrocks.sql.analyzer.MaterializedViewAnalyzer;
@@ -181,6 +182,17 @@ public final class MVPCTRefreshSynchronizer {
                     processor.refreshExternalTable(baseTableCandidatePartitions);
                 } else {
                     processor.getLogger().info("Skip refreshExternalTable in pinned PCT mode");
+                }
+            }
+
+            // Pinned mode reads from a pinned snapshot — drift check is irrelevant there.
+            if (!processor.isPinnedMode()) {
+                MaterializedView mv = processor.getMv();
+                MVRefreshSchemaChecker.checkExternalBaseSchemaCompat(mv);
+                if (!mv.isActive()) {
+                    throw new DmlException(String.format(
+                            "Materialized view: %s/%d is not active due to %s.",
+                            mv.getName(), mv.getId(), mv.getInactiveReason()));
                 }
             }
 
