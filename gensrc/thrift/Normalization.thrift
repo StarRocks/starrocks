@@ -97,6 +97,7 @@ struct TNormalAnalyticNode {
   8: optional binary partition_by_eq
   9: optional binary order_by_eq
   10: optional bool has_outer_join_child
+  11: optional list<bool> order_by_is_asc
 }
 
 struct TNormalAssertNumRowsNode {

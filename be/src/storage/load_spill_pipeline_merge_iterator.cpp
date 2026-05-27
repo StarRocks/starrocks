@@ -23,7 +23,7 @@
 #include "storage/load_chunk_spiller.h"
 #include "storage/load_spill_block_manager.h"
 #include "storage/merge_iterator.h"
-#include "storage/union_iterator.h"
+#include "storage/primitive/union_iterator.h"
 
 namespace starrocks {
 

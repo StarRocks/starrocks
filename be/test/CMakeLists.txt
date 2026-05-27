@@ -555,6 +555,7 @@ SET(DW_TEST_FILES
     ./storage/schema_change_test.cpp
     ./storage/segment_flush_executor_test.cpp
     ./storage/segment_stream_converter_test.cpp
+    ./storage/del_file_stream_converter_test.cpp
     ./storage/short_key_index_test.cpp
     ./storage/size_tiered_compaction_policy_test.cpp
     ./storage/snapshot_meta_test.cpp
@@ -574,7 +575,6 @@ SET(DW_TEST_FILES
     ./storage/tablet_test.cpp
     ./storage/tablet_updates_schema_change_test.cpp
     ./storage/tablet_updates_test.cpp
-    ./storage/union_iterator_test.cpp
     ./storage/unique_iterator_test.cpp
     ./storage/update_manager_test.cpp
     ./storage/utils_test.cpp

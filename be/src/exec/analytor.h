@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include <algorithm>
 #include <queue>
 #include <string>
 
@@ -103,6 +104,15 @@ class Analytor final : public pipeline::ContextWithDependency {
         int64_t _count = 0;
         int64_t _cumulative_size = 0;
         int64_t _average_size = 0;
+    };
+
+    enum class RangeBoundaryType { UNBOUNDED_PRECEDING, UNBOUNDED_FOLLOWING, CURRENT_ROW, PRECEDING, FOLLOWING };
+
+    struct RangeBoundarySpec {
+        RangeBoundaryType type = RangeBoundaryType::CURRENT_ROW;
+        ExprContext* expr_ctx = nullptr;
+        MutableColumnPtr column;
+        bool has_offset = false;
     };
 
 public:
@@ -204,10 +214,16 @@ private:
     // cannot evaluate window function until all the data of current partition is reached
     // For example, `cume_dist` need all the data to calculate
     void _materializing_process_for_half_unbounded_range_frame(RuntimeState* state);
-    // For window frame `ROWS BETWEEN N PRECEDING AND CURRENT ROW`
+    // For generic RANGE frames materialized and processed by definition.
+    void _materializing_process_for_range_frame(RuntimeState* state);
+    // For RANGE frames whose start is UNBOUNDED PRECEDING and whose finite end bound only grows.
+    void _materializing_process_for_growing_range_frame(RuntimeState* state);
+    // For ROWS frames with finite bounds.
     void _materializing_process_for_sliding_frame(RuntimeState* state);
     ProcessByPartitionFunc _materializing_process_impl = nullptr;
 
+    // Update all window aggregate states from the frame range [frame_start, frame_end) within the current
+    // buffered partition [partition_start, partition_end). Positions are local to the analytor's buffered columns.
     void _update_window_batch(int64_t partition_start, int64_t partition_end, int64_t frame_start, int64_t frame_end);
     void _update_window_batch_removable_cumulatively();
 
@@ -222,6 +238,12 @@ private:
     int64_t _find_first_not_equal_for_hash_based_partition(int64_t target, int64_t start, int64_t end);
     void _find_candidate_partition_ends();
     void _find_candidate_peer_group_ends();
+    void _compute_range_nonnull_segment();
+    FrameRange _get_frame_for_range();
+    bool _is_growing_range_frame() const;
+    int64_t _resolve_range_offset_boundary(const RangeBoundarySpec& boundary, bool is_start, bool current_row_is_null);
+    int64_t _seek_range_frame_boundary_with_offset(const RangeBoundarySpec& boundary, bool is_start);
+    void _reset_range_frame_cursors();
 
     bool _has_output() const { return _output_chunk_index < _input_chunks.size(); }
     int64_t _first_global_position_of_current_chunk() const {
@@ -233,7 +255,8 @@ private:
     int64_t _window_result_position() const {
         return _get_global_position(_current_row_position) - _first_global_position_of_current_chunk();
     }
-    FrameRange _get_frame_range() const {
+    FrameRange _get_frame_for_rows() const {
+        DCHECK(!_is_range_window);
         if (_is_unbounded_preceding) {
             return {_partition.start, _current_row_position + _rows_end_offset + 1};
         } else {
@@ -274,6 +297,18 @@ private:
     int64_t _rows_end_offset = 0;
 
     bool _is_unbounded_preceding = false;
+    bool _is_range_window = false;
+    bool _is_range_offset_window = false;
+    bool _range_order_is_asc = true;
+    TypeDescriptor _range_order_type;
+    RangeBoundarySpec _range_start_boundary;
+    RangeBoundarySpec _range_end_boundary;
+    bool _range_nonnull_segment_valid = false;
+    int64_t _range_nonnull_start = 0;
+    int64_t _range_nonnull_end = 0;
+    int64_t _range_start_frame_cursor = 0;
+    int64_t _range_end_frame_cursor = 0;
+    int64_t _range_cumulative_frame_end = 0;
 
     // The offset of the n-th window function in a row of window functions.
     std::vector<size_t> _agg_states_offsets;

@@ -95,6 +95,13 @@ CONF_Int32(sleep_one_second, "1");
 // The count of thread to replication
 CONF_mInt32(replication_threads, "0");
 
+// Number of threads in the dedicated thread pool for per-file copy in lake-to-lake replication.
+// 0 means cpu_cores * 4 (matches replication_threads default semantics); negative means -value * cpu_cores.
+// This pool is intentionally separate from the agent-task replicate_snapshot pool so that per-file
+// copy sub-tasks can be awaited from the outer task without tripping the thread-pool self-deadlock
+// guard. The pool is built once at startup; CN restart is required to change its size.
+CONF_Int32(lake_replication_file_copy_threads, "0");
+
 CONF_Int32(max_batch_publish_latency_ms, "100");
 
 CONF_mInt64(wait_apply_time, "6000"); // 6s

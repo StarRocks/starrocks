@@ -24,6 +24,7 @@ ADD_BE_LIB(StoragePrimitive
     primitive/empty_iterator.cpp
     primitive/projection_iterator.cpp
     primitive/range.cpp
+    primitive/union_iterator.cpp
 )
 
 target_link_libraries(StoragePrimitive PUBLIC
@@ -64,6 +65,7 @@ set(STORAGE_FILES
     replication_txn_manager.cpp
     replication_utils.cpp
     segment_stream_converter.cpp
+    del_file_stream_converter.cpp
     rowset_update_state.cpp
     rowset_column_update_state.cpp
     update_compaction_state.cpp
@@ -179,7 +181,6 @@ set(STORAGE_FILES
     lake_meta_reader.cpp
     olap_meta_reader.cpp
     seek_tuple.cpp
-    union_iterator.cpp
     unique_iterator.cpp
     column_aggregate_func.cpp
     chunk_aggregator.cpp
