@@ -1,16 +1,3 @@
 {
-  "hooks": {
-    "PreToolUse": [
-      {
-        "matcher": "Bash",
-        "hooks": [
-          {
-            "type": "command",
-            "if": "Bash(git *)",
-            "command": "bash .claude/hooks/docs-git-process-hooks/check-git-best-practices.sh"
-          }
-        ]
-      }
-    ]
-  }
+  "hooks": {}
 }
