@@ -694,6 +694,27 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
                 updateCatalog(db, table, true);
                 table.setState(OlapTable.OlapTableState.NORMAL);
             } else if (jobState == JobState.CANCELLED) {
+                // FORCE-cancel left BE with no-op tablet_metadata at commitVersion
+                // and the live path bumped partition.VisibleVersion to match.
+                // Replay must do the same; otherwise an FE recovering from a
+                // pre-cancel image keeps VisibleVersion=commitVersion-1 and
+                // subsequent load publishes compute base from the wrong version.
+                if (forceSkippedAtCommitted) {
+                    for (long physicalPartitionId : physicalPartitionIndexMap.rowKeySet()) {
+                        PhysicalPartition physicalPartition = table.getPhysicalPartition(physicalPartitionId);
+                        if (physicalPartition == null) {
+                            continue;
+                        }
+                        Long commitVersion = commitVersionMap.get(physicalPartitionId);
+                        if (commitVersion == null) {
+                            continue;
+                        }
+                        // Idempotent against later loads having moved past commitVersion
+                        if (physicalPartition.getVisibleVersion() == commitVersion - 1) {
+                            physicalPartition.updateVisibleVersion(commitVersion, finishedTimeMs);
+                        }
+                    }
+                }
                 table.setState(OlapTable.OlapTableState.NORMAL);
             } else if (jobState == JobState.PENDING || jobState == JobState.WAITING_TXN) {
                 table.setState(OlapTable.OlapTableState.SCHEMA_CHANGE);

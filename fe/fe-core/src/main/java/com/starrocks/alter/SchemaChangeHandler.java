@@ -3020,6 +3020,19 @@ public class SchemaChangeHandler extends AlterHandler {
                             + "This is an operator-only escape hatch for publish-stuck alter jobs; "
                             + "disable it again immediately after recovery.");
         }
+        // FORCE is designed for lake (shared-data) publish-stuck recovery only.
+        // Non-lake alter jobs don't have a stuck-publish failure mode, AND the
+        // two-arg cancel(reason, true) path skips the SchemaChangeJobV2 /
+        // RollupJobV2 one-arg cancel(String) override that releases
+        // createReplicaLatch before entering the synchronized block — applying
+        // it to a PENDING shared-nothing alter would hang until task timeout.
+        // Reject up front rather than silently degrade.
+        if (force && !(schemaChangeJobV2 instanceof LakeTableSchemaChangeJobBase
+                || schemaChangeJobV2 instanceof LakeTableAlterMetaJobBase)) {
+            throw new DdlException(
+                    "CANCEL ALTER TABLE ... FORCE is only supported on shared-data (lake) tables. "
+                            + "For shared-nothing tables, use the regular CANCEL ALTER TABLE syntax.");
+        }
         boolean cancelled = force
                 ? schemaChangeJobV2.cancel(reason, true)
                 : schemaChangeJobV2.cancel(reason);

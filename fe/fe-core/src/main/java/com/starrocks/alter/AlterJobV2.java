@@ -170,6 +170,14 @@ public abstract class AlterJobV2 implements Writable {
         this.timeoutMs = job.timeoutMs;
         this.warehouseId = job.warehouseId;
         this.computeResource = job.computeResource;
+        // FORCE-cancel audit marker. Must be persisted via copyForPersist so a
+        // replay can tell whether to apply the no-op publish version bump,
+        // otherwise FE recovering from a pre-cancel image leaves its
+        // VisibleVersion at commitVersion-1 while BE already has tablet_metadata
+        // at commitVersion (written by lakePublishVersionWithSkip), and
+        // subsequent loads' publish would re-apply the cancelled alter's
+        // txn_log on top of the wrong base.
+        this.forceSkippedAtCommitted = job.forceSkippedAtCommitted;
     }
 
     public long getJobId() {
@@ -260,6 +268,9 @@ public abstract class AlterJobV2 implements Writable {
         copy.warehouseId = this.warehouseId;
         copy.computeResource = this.computeResource;
         copy.forceSkippedAtCommitted = this.forceSkippedAtCommitted;
+        // NOTE: lake subclasses do NOT call this. Their copyForPersist() uses
+        // subclass copy constructors that chain through AlterJobV2(AlterJobV2)
+        // above. Keep these two in sync if you add new base fields.
     }
 
     public static void persistStateChange(AlterJobV2 job, JobState newState) {

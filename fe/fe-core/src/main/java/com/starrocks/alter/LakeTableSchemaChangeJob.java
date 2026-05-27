@@ -1067,6 +1067,25 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
                 table.onReload();
                 visualiseShadowIndex(table);
             } else if (jobState == JobState.CANCELLED) {
+                // FORCE-cancel left BE with no-op tablet_metadata at commitVersion
+                // and the live path bumped partition.VisibleVersion to match.
+                // Replay must do the same; otherwise an FE recovering from a
+                // pre-cancel image keeps VisibleVersion=commitVersion-1 and
+                // subsequent load publishes compute base from the wrong version,
+                // re-applying the cancelled alter's txn_log on top.
+                if (forceSkippedAtCommitted) {
+                    for (PhysicalPartition physicalPartition : table.getPhysicalPartitions()) {
+                        Long commitVersion = commitVersionMap.get(physicalPartition.getId());
+                        if (commitVersion == null) {
+                            continue;
+                        }
+                        // Idempotent: subsequent loads may have already advanced
+                        // past commitVersion before the replay reached here.
+                        if (physicalPartition.getVisibleVersion() == commitVersion - 1) {
+                            physicalPartition.setVisibleVersion(commitVersion, finishedTimeMs);
+                        }
+                    }
+                }
                 removeShadowIndex(table);
             } else {
                 throw new RuntimeException("unknown job state '{}'" + jobState.name());
