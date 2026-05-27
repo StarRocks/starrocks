@@ -938,8 +938,14 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
                 if (regularTablets.isEmpty()) {
                     continue;
                 }
+                // Mirror lakePublishVersion()'s isFileBundling dispatch: for
+                // bundled tables BE expects the partition's new version as a
+                // single bundle file, so we must send aggregate_publish too —
+                // otherwise the no-op publish lands as per-tablet metadata and
+                // subsequent loads have to limp through BE's mixed-format
+                // compatibility path.
                 Utils.publishVersion(regularTablets, txnInfo, commitVersion - 1, commitVersion,
-                        computeResource, false);
+                        computeResource, isFileBundling);
             }
             return true;
         } catch (Exception e) {

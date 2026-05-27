@@ -599,16 +599,30 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
             txnInfo.gtid = watershedGtid;
             txnInfo.noOpPublish = true;
 
+            // Follow the same single-vs-aggregate dispatch as the normal
+            // lakePublishVersion() so that the no-op publish writes metadata
+            // in the format consistent with how the partition's data is
+            // already stored on OSS. Without this, an alter on a
+            // file_bundling=true table would have its no-op publish written
+            // per-tablet while subsequent loads expect a bundle file,
+            // forcing BE into the (working but fragile) mixed-format
+            // recovery code path.
+            boolean useAggregatePublish = enableFileBundling() || (isFileBundling && !disableFileBundling());
             for (long physicalPartitionId : physicalPartitionIndexMap.rowKeySet()) {
                 long commitVersion = commitVersionMap.get(physicalPartitionId);
                 Map<Long, MaterializedIndex> dirtyIndexMap = physicalPartitionIndexMap.row(physicalPartitionId);
+                List<Tablet> aggregateTablets = useAggregatePublish ? new ArrayList<>() : null;
                 for (MaterializedIndex index : dirtyIndexMap.values()) {
-                    // Use the per-tablet publishVersion path. The no-op publish
-                    // writes V-1 content as V on each affected tablet; the BE
-                    // short-circuit at transactions.cpp's main publish loop
-                    // handles both bundled and non-bundled tables uniformly.
-                    Utils.publishVersion(index.getTablets(), txnInfo, commitVersion - 1, commitVersion,
-                            computeResource, false);
+                    if (useAggregatePublish) {
+                        aggregateTablets.addAll(index.getTablets());
+                    } else {
+                        Utils.publishVersion(index.getTablets(), txnInfo, commitVersion - 1, commitVersion,
+                                computeResource, false);
+                    }
+                }
+                if (useAggregatePublish && !aggregateTablets.isEmpty()) {
+                    Utils.publishVersion(aggregateTablets, txnInfo, commitVersion - 1, commitVersion,
+                            computeResource, true);
                 }
             }
             return true;
