@@ -49,7 +49,6 @@
 #include "staros_integration/staros_worker.h"
 #include "staros_integration/staros_worker_runtime.h"
 #include "storage/lake/filenames.h"
-#include "storage/olap_common.h"
 
 namespace starrocks {
 
