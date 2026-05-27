@@ -178,8 +178,8 @@ Status RowsMapperIterator::_refill_buf() {
     // end is harmless given the sequential access pattern (_pos only ever advances)
     // and is robust if the caller ever skips a range.
     const uint64_t remaining_rows = _row_count - _pos;
-    const uint64_t buf_rows = std::min(remaining_rows, static_cast<uint64_t>(config::lake_rows_mapper_read_buf_bytes) /
-                                                               EACH_ROW_SIZE);
+    const uint64_t buf_rows =
+            std::min(remaining_rows, static_cast<uint64_t>(config::lake_rows_mapper_read_buf_bytes) / EACH_ROW_SIZE);
     if (buf_rows == 0) {
         _buf.clear();
         _buf_pos = _pos;
