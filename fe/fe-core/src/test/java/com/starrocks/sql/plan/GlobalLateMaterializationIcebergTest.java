@@ -415,15 +415,16 @@ public class GlobalLateMaterializationIcebergTest extends ConnectorPlanTestBase 
         String sql;
         String plan;
 
-        // GLM with Iceberg v2 tables (no equality delete)
+        // GLM with Iceberg v2 tables (no equality delete). GLM only kicks in when the plan
+        // carries a row limit, so every v2 case below bounds rows via LIMIT.
         sql = "select * from iceberg0.unpartitioned_db.t0_v2 t0 inner join iceberg0.partitioned_db.t1_v2 t1 " +
-                "on t0.id = t1.id";
+                "on t0.id = t1.id limit 10";
         plan = getFragmentPlan(sql);
         assertContains(plan, "FETCH");
         assertContains(plan, "lookup node");
 
         sql = "select t0.* from iceberg0.unpartitioned_db.t0_v2 t0 inner join iceberg0.partitioned_db.t1_v2 t1 " +
-                "on t0.id = t1.id";
+                "on t0.id = t1.id limit 10";
         plan = getFragmentPlan(sql);
         assertContains(plan, "FETCH");
         assertContains(plan, "table: t0_v2");
@@ -440,9 +441,9 @@ public class GlobalLateMaterializationIcebergTest extends ConnectorPlanTestBase 
         String sql;
         String plan;
 
-        // v2 and v3 tables joined together
+        // v2 and v3 tables joined together (LIMIT bounds rows so GLM activates)
         sql = "select t0.date, t1.date from iceberg0.unpartitioned_db.t0 t0 " +
-                "inner join iceberg0.unpartitioned_db.t0_v2 t1 on t0.id = t1.id";
+                "inner join iceberg0.unpartitioned_db.t0_v2 t1 on t0.id = t1.id limit 10";
         plan = getFragmentPlan(sql);
         assertContains(plan, "FETCH");
         assertContains(plan, "table: t0");
