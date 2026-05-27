@@ -110,10 +110,19 @@ public:
     explicit ParallelIOBufferLimitGuard(const std::string& new_value) {
         _original = config::parallel_io_buffer_limit;
         config::parallel_io_buffer_limit = new_value;
+        // get_parallel_read_buffer_limit() short-circuits to its 1GB fallback when the
+        // process memory limit is unset and never consults the config. The service layer
+        // injects that limit at startup; unit tests must do the same or the buffer limit
+        // would never trip.
+        SharedBufferedInputStream::set_process_mem_limit(kProcessMemLimit);
     }
-    ~ParallelIOBufferLimitGuard() { config::parallel_io_buffer_limit = _original; }
+    ~ParallelIOBufferLimitGuard() {
+        config::parallel_io_buffer_limit = _original;
+        SharedBufferedInputStream::set_process_mem_limit(0);
+    }
 
 private:
+    static constexpr int64_t kProcessMemLimit = int64_t{1} * 1024 * 1024 * 1024; // 1GB
     std::string _original;
 };
 
