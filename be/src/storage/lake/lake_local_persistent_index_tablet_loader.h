@@ -18,9 +18,9 @@
 #include <utility>
 
 #include "column/schema.h"
-#include "storage/edit_version.h"
 #include "storage/lake/tablet_metadata.h"
 #include "storage/persistent_index.h"
+#include "storage/primitive/edit_version.h"
 #include "storage/rowset/segment.h"
 
 namespace starrocks {

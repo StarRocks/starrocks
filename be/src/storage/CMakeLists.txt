@@ -20,10 +20,14 @@ set(EXECUTABLE_OUTPUT_PATH "${BUILD_DIR}/src/storage")
 add_subdirectory(rowset)
 
 ADD_BE_LIB(StoragePrimitive
+    primitive/aggregate_type.cpp
     primitive/chunk_iterator.cpp
+    primitive/edit_version.cpp
     primitive/empty_iterator.cpp
+    primitive/flat_json_config.cpp
     primitive/projection_iterator.cpp
     primitive/range.cpp
+    primitive/storage_ids.cpp
     primitive/union_iterator.cpp
 )
 
@@ -40,12 +44,10 @@ target_link_libraries(StoragePrimitive PUBLIC
 )
 
 set(STORAGE_FILES
-    aggregate_type.cpp
     base_tablet.cpp
     delete_handler.cpp
     del_vector.cpp
     delta_column_group.cpp
-    flat_json_config.cpp
     flat_json_metrics.cpp
     key_coder.cpp
     memtable_flush_executor.cpp
@@ -55,7 +57,6 @@ set(STORAGE_FILES
     kv_store.cpp
     local_tablet_reader.cpp
     publish_version_manager.cpp
-    olap_common.cpp
     olap_define.cpp
     olap_server.cpp
     persistent_index.cpp

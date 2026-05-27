@@ -25,7 +25,7 @@
 #include "storage/lake/txn_log.h"
 #include "storage/lake/types_fwd.h"
 #include "storage/olap_common.h"
-#include "storage/primary_key_encoding_types.h"
+#include "storage/primitive/primary_key_encoding_types.h"
 #include "storage/rowset/rowset_meta.h"
 #include "tablet_manager.h"
 

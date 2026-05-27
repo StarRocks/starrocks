@@ -65,13 +65,13 @@
 #include "storage/metadata_util.h"
 #include "storage/olap_define.h"
 #include "storage/primitive/empty_iterator.h"
+#include "storage/primitive/type_utils.h"
 #include "storage/row_source_mask.h"
 #include "storage/rows_mapper.h"
 #include "storage/rowset/rowset.h"
 #include "storage/rowset/rowset_factory.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_manager.h"
-#include "storage/type_utils.h"
 
 namespace starrocks {
 

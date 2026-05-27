@@ -20,7 +20,7 @@
 
 #include "column/vectorized_fwd.h"
 #include "storage/file_stream_converter.h"
-#include "storage/primary_key_encoding_types.h"
+#include "storage/primitive/primary_key_encoding_types.h"
 #include "storage/types.h"
 
 namespace starrocks {
