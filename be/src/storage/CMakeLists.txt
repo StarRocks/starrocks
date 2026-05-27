@@ -24,6 +24,7 @@ ADD_BE_LIB(StoragePrimitive
     primitive/empty_iterator.cpp
     primitive/projection_iterator.cpp
     primitive/range.cpp
+    primitive/storage_ids.cpp
     primitive/union_iterator.cpp
 )
 
@@ -55,7 +56,6 @@ set(STORAGE_FILES
     kv_store.cpp
     local_tablet_reader.cpp
     publish_version_manager.cpp
-    olap_common.cpp
     olap_define.cpp
     olap_server.cpp
     persistent_index.cpp
