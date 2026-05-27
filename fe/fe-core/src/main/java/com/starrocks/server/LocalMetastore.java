@@ -1155,6 +1155,16 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
             metaChanged = true;
         }
 
+        // The light_weight_tablet_creation snapshot from the lock-free phase decides whether
+        // the loop in buildPartitions sends CreateReplicaTask. If a concurrent ALTER flipped
+        // this property between the snapshot and the commit, the lock-free phase used a stale
+        // value and the new partition would land without v1 metadata under a table that now
+        // claims it has v1 in object storage - which silently undermines the downgrade
+        // backfill in alterLightWeightTabletCreation. Treat this as a meta change and retry.
+        if (olapTable.isLightWeightTabletCreation() != copiedTable.isLightWeightTabletCreation()) {
+            metaChanged = true;
+        }
+
         if (metaChanged) {
             throw new DdlException("Table[" + tableName + "]'s meta has been changed. try again.");
         }
@@ -2018,6 +2028,11 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
 
     void buildPartitions(Database db, OlapTable table, List<PhysicalPartition> partitions,
                          ComputeResource computeResource) throws DdlException {
+        buildPartitions(db, table, partitions, computeResource, false);
+    }
+
+    void buildPartitions(Database db, OlapTable table, List<PhysicalPartition> partitions,
+                         ComputeResource computeResource, boolean backfill) throws DdlException {
         if (partitions.isEmpty()) {
             return;
         }
@@ -2033,7 +2048,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
                 }
             }
         }
-        if (numAliveNodes == 0 && !table.isLightWeightTabletCreation()) {
+        if (numAliveNodes == 0 && (backfill || !table.isLightWeightTabletCreation())) {
             if (RunMode.isSharedDataMode()) {
                 throw new DdlException("no alive compute nodes");
             } else {
@@ -2053,6 +2068,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         option.setEnableTabletCreationOptimization(table.isCloudNativeTableOrMaterializedView()
                 && (Config.lake_enable_tablet_creation_optimization || table.isFileBundling()));
         option.setGtid(GlobalStateMgr.getCurrentState().getGtidGenerator().nextGtid());
+        option.setBackfill(backfill);
 
         try {
             GlobalStateMgr.getCurrentState().getConsistencyChecker().addCreatingTableId(table.getId());
@@ -4132,7 +4148,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         }
     }
 
-    private void alterLightWeightTabletCreation(OlapTable table,
+    private void alterLightWeightTabletCreation(Database db, OlapTable table,
                                                 Map<String, String> properties,
                                                 List<Runnable> appliers) throws DdlException {
         if (!table.isCloudNativeTable()) {
@@ -4149,7 +4165,34 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
                     " must be bool type(false/true)");
         }
         boolean newValue = Boolean.parseBoolean(value);
+        // true -> false: tablets that never published (visibleVersion == 1) have no v1
+        // metadata or schema file in object storage. Re-dispatch CreateReplicaTask for those
+        // tablets so that downgrade to a version without the CN-side fallback can read v1
+        // from object storage.
+        if (table.isLightWeightTabletCreation() && !newValue) {
+            backfillLightWeightTabletMetadata(db, table);
+        }
         appliers.add(() -> table.setLightWeightTabletCreation(newValue));
+    }
+
+    private void backfillLightWeightTabletMetadata(Database db, OlapTable table) throws DdlException {
+        ConnectContext ctx = ConnectContext.get();
+        ComputeResource computeResource = ctx != null ? ctx.getCurrentComputeResource()
+                                                      : WarehouseManager.DEFAULT_RESOURCE;
+        List<PhysicalPartition> partitionsToBackfill = new ArrayList<>();
+        for (Partition partition : table.getPartitions()) {
+            for (PhysicalPartition pp : partition.getSubPartitions()) {
+                if (pp.getVisibleVersion() == PhysicalPartition.PARTITION_INIT_VERSION) {
+                    partitionsToBackfill.add(pp);
+                }
+            }
+        }
+        if (partitionsToBackfill.isEmpty()) {
+            return;
+        }
+        LOG.info("backfilling tablet metadata for table {}.{}: {} physical partitions",
+                db.getFullName(), table.getName(), partitionsToBackfill.size());
+        buildPartitions(db, table, partitionsToBackfill, computeResource, true /* backfill */);
     }
 
     private void alterTableQueryTimeout(OlapTable table,
@@ -4254,7 +4297,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
             alterLakeCompactionMaxParallel(table, properties, appliers);
         }
         if (propertiesToPersist.containsKey(PropertyAnalyzer.PROPERTIES_LIGHT_WEIGHT_TABLET_CREATION)) {
-            alterLightWeightTabletCreation(table, properties, appliers);
+            alterLightWeightTabletCreation(db, table, properties, appliers);
         }
         if (propertiesToPersist.containsKey(PropertyAnalyzer.PROPERTIES_TABLE_QUERY_TIMEOUT)) {
             alterTableQueryTimeout(table, properties, appliers);
