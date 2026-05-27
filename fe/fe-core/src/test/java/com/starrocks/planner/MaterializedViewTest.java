@@ -5516,7 +5516,9 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
         testRewriteOK(mv, "select empid, deptno,\n" +
                 " sum(salary) as total, count(salary)  as cnt\n" +
                 " from emps group by empid, deptno having sum(salary) > 10");
-        testRewriteOK(mv, "select empid,\n" +
+        // MV HAVING is evaluated per (empid, deptno). Rolling it up to empid can lose
+        // filtered dept groups without base-table compensation, so this rewrite is unsafe.
+        testRewriteFail(mv, "select empid,\n" +
                 " sum(salary) as total, count(salary)  as cnt\n" +
                 " from emps group by empid having sum(salary) > 10");
     }

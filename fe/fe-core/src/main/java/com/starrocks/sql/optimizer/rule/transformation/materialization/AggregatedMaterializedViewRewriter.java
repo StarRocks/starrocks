@@ -153,6 +153,20 @@ public final class AggregatedMaterializedViewRewriter extends MaterializedViewRe
         EquationRewriter queryExprToMvExprRewriter =
                 buildEquationRewriter(mvProjection, rewriteContext, false);
 
+        if (isRollup && mvAggOp.getPredicate() != null) {
+            if (requiresGroupingRollup(mvGroupingKeys, queryGroupingKeys, queryRangePredicate)) {
+                OptimizerTraceUtil.logMVRewriteFailReason(mvRewriteContext,
+                        "Rollup aggregate with MV HAVING predicate is unsafe when MV grouping keys are finer " +
+                                "than query grouping keys, mv grouping keys:{}, query grouping keys:{}",
+                        mvGroupingKeys, queryGroupingKeys);
+                return null;
+            }
+            if (!canCompensateMvAggregatePredicateForRollup(rewriteContext, mvAggOp, queryAggOp,
+                    queryExprToMvExprRewriter, columnRewriter)) {
+                return null;
+            }
+        }
+
         if (isRollup) {
             return rewriteForRollup(queryAggOp, queryGroupingKeys, columnRewriter, queryExprToMvExprRewriter,
                     rewriteContext, mvOptExpr);
@@ -344,6 +358,27 @@ public final class AggregatedMaterializedViewRewriter extends MaterializedViewRe
         return true;
     }
 
+    private boolean canCompensateMvAggregatePredicateForRollup(RewriteContext rewriteContext,
+                                                               LogicalAggregationOperator mvAggregationOperator,
+                                                               LogicalAggregationOperator queryAggregationOperator,
+                                                               EquationRewriter queryExprToMvExprRewriter,
+                                                               ColumnRewriter columnRewriter) {
+        AggregateFunctionRewriter aggregateFunctionRewriter =
+                new AggregateFunctionRewriter(queryExprToMvExprRewriter,
+                        rewriteContext.getQueryRefFactory(), queryAggregationOperator.getAggregations());
+        Pair<Map<ColumnRefOperator, ScalarOperator>, Boolean> result =
+                rewriteAggregatePredicateColumns(rewriteContext, queryAggregationOperator,
+                        queryExprToMvExprRewriter, columnRewriter,
+                        new ColumnRefSet(rewriteContext.getQueryColumnSet()), aggregateFunctionRewriter);
+        if (result.first == null || result.second) {
+            OptimizerTraceUtil.logMVRewriteFailReason(mvRewriteContext,
+                    "Rewrite rollup aggregate with MV HAVING predicate failed: cannot rewrite aggregate predicate");
+            return false;
+        }
+        return canCompensateMvAggregatePredicate(rewriteContext, mvAggregationOperator,
+                queryAggregationOperator, new ReplaceColumnRefRewriter(result.first));
+    }
+
     private ScalarOperator rewriteMvAggregatePredicate(RewriteContext rewriteContext, ScalarOperator mvPredicate) {
         ReplaceColumnRefRewriter rewriter = new ReplaceColumnRefRewriter(rewriteContext.getOutputMapping());
         ScalarOperator rewritten = rewriter.rewrite(mvPredicate.clone());
@@ -450,6 +485,12 @@ public final class AggregatedMaterializedViewRewriter extends MaterializedViewRe
         if (mv.getRefreshScheme().isSync() && mv.getDefaultDistributionInfo() instanceof RandomDistributionInfo) {
             return true;
         }
+        return requiresGroupingRollup(mvGroupingKeys, queryGroupingKeys, queryRangePredicate);
+    }
+
+    private boolean requiresGroupingRollup(List<ScalarOperator> mvGroupingKeys,
+                                           List<ScalarOperator> queryGroupingKeys,
+                                           ScalarOperator queryRangePredicate) {
         // after equivalence class rewrite, there may be same group keys, so here just get the distinct grouping keys
         List<ScalarOperator> distinctMvKeys = mvGroupingKeys.stream().distinct().collect(Collectors.toList());
         BitSet matchedGroupByKeySet = new BitSet(distinctMvKeys.size());

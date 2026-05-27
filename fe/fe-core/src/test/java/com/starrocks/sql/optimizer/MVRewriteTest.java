@@ -693,6 +693,30 @@ public class MVRewriteTest extends StarRocksTestBase {
     }
 
     @Test
+    public void testMvHavingDoesNotRollupRewriteOverFilteredGroups() throws Exception {
+        String tableName = "having_rollup_base";
+        String mvName = "mv_having_rollup";
+        String duplicateTable = "CREATE TABLE " + tableName + " ( " +
+                "id bigint, region varchar(32), channel varchar(32), amount decimal(18, 2) ) " +
+                "DUPLICATE KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 3 " +
+                "PROPERTIES ('replication_num' = '1');";
+        starRocksAssert.withTable(duplicateTable);
+        try {
+            String createMV = "CREATE MATERIALIZED VIEW " + mvName + " " +
+                    "DISTRIBUTED BY HASH(region) " +
+                    "AS SELECT region, channel, SUM(amount) AS s, COUNT(*) AS c " +
+                    "FROM " + tableName + " GROUP BY region, channel HAVING SUM(amount) > 1;";
+            String query = "SELECT region, SUM(amount) AS s, COUNT(*) AS c FROM " + tableName +
+                    " GROUP BY region HAVING SUM(amount) > 10;";
+
+            starRocksAssert.withMaterializedView(createMV).query(query).explainWithout(mvName);
+        } finally {
+            starRocksAssert.dropMaterializedView(mvName);
+            starRocksAssert.dropTable(tableName);
+        }
+    }
+
+    @Test
     public void testQueryHavingRewritesWithMvWithoutHaving() throws Exception {
         String tableName = "mv_having_complete_base";
         String mvName = "mv_having_complete";
