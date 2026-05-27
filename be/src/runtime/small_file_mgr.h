@@ -25,12 +25,12 @@
 #include <vector>
 
 #include "common/status.h"
+#include "common/util/thrift_client_cache.h"
 #include "gen_cpp/Types_types.h"
-#include "runtime/client_cache.h"
 
 namespace starrocks {
 
-class ExecEnv;
+class MetricRegistry;
 
 struct CacheEntry {
     std::string path; // absolute path
@@ -43,7 +43,7 @@ struct CacheEntry {
  */
 class SmallFileMgr {
 public:
-    SmallFileMgr(ExecEnv* env, std::string local_path);
+    explicit SmallFileMgr(std::string local_path, MetricRegistry* metrics = nullptr);
 
     ~SmallFileMgr();
 
@@ -66,7 +66,6 @@ private:
 
 private:
     std::mutex _lock;
-    [[maybe_unused]] ExecEnv* _exec_env;
     std::string _local_path;
     // file id -> small file
     std::unordered_map<int64_t, CacheEntry> _file_cache;

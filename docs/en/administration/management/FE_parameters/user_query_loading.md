@@ -206,7 +206,7 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Unit: -
 - Is mutable: Yes
 - Description: Controls the behavior of Materialized View (MV) Fast Schema Evolution (FSE). Valid values are: `strict` (default) - only allow FSE when `isSupportFastSchemaEvolutionInDanger` is true and clear affected partition entries from the version map; `force` - allow FSE even when `isSupportFastSchemaEvolutionInDanger` is false and clear affected partition entries to trigger recomputation on refresh; `force_no_clear` - allow FSE even when `isSupportFastSchemaEvolutionInDanger` is false but do not clear partition entries.
-- Introduced in: v3.4.0
+- Introduced in: v4.1.0
 
 ### `enable_auto_collect_array_ndv`
 
@@ -1169,6 +1169,15 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Unit: Seconds
 - Is mutable: Yes
 - Description: The default timeout duration for a prepared transaction.
+- Introduced in: -
+
+### `rejected_records_retained_days`
+
+- Default: 7
+- Type: Int
+- Unit: Days
+- Is mutable: Yes
+- Description: Number of daily partitions to keep in the internal `_statistics_.rejected_records` system table. The value is passed to `TableKeeper` (clamped to a minimum of 1) and reconciled into the target table's `partition_live_number` property on every keeper tick. Adjust this value when you need rejected row history beyond the default week (for audit or longer replay windows) or when storage budgets are tight. The value only affects new daily partitions and the keeper's TTL reconciliation; it does not retroactively restore already-dropped partitions.
 - Introduced in: -
 
 ### `routine_load_task_consume_second`

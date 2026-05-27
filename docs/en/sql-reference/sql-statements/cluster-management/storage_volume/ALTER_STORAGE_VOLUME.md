@@ -11,6 +11,7 @@ ALTER STORAGE VOLUME alters the credential properties, comment, or status (`enab
 > - Only users with the ALTER privilege on a specific storage volume can perform this operation.
 > - The `TYPE`, `LOCATIONS`, and other path-related properties of an existing storage volume cannot be altered. You can only alter its credential-related properties. If you changed the path-related configuration items, the databases and tables you created before the change become read-only, and you cannot load data into them.
 > - When `enabled` is `false`, the corresponding storage volume cannot be referenced.
+> - In shared-data mode, StarRocks performs a storage accessibility check during `ALTER STORAGE VOLUME` only when the `enable_storage_volume_access_check` configuration is enabled (enabled by default). If this check is enabled and the updated credentials or endpoint cannot access remote storage, the statement fails. You can turn off this check by disabling `enable_storage_volume_access_check`.
 
 ## Syntax
 

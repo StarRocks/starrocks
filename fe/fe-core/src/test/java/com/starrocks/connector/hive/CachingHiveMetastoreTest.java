@@ -28,7 +28,9 @@ import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.type.BitmapType;
 import com.starrocks.type.IntegerType;
 import com.starrocks.type.PrimitiveType;
+import mockit.Delegate;
 import mockit.Expectations;
+import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hive.metastore.api.NoSuchObjectException;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
@@ -36,11 +38,17 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.lang.reflect.InvocationTargetException;
+import java.nio.file.Files;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static com.starrocks.connector.hive.RemoteFileInputFormat.ORC;
 import static org.apache.hadoop.hive.common.StatsSetupConst.TASK;
@@ -52,6 +60,11 @@ public class CachingHiveMetastoreTest {
     private ExecutorService executor;
     private long expireAfterWriteSec = 30;
     private long refreshAfterWriteSec = -1;
+    private static final String AVRO_SCHEMA_LITERAL = "{\"type\":\"record\",\"name\":\"AvroSchemaTest\","
+            + "\"fields\":[{\"name\":\"id\",\"type\":\"int\"}]}";
+    private static final String AVRO_SCHEMA_LITERAL_UPDATED = "{\"type\":\"record\",\"name\":\"AvroSchemaTest\","
+            + "\"fields\":[{\"name\":\"id\",\"type\":\"int\"},{\"name\":\"name\",\"type\":\"string\","
+            + "\"default\":\"unknown\"}]}";
 
     @BeforeEach
     public void setUp() throws Exception {
@@ -63,6 +76,33 @@ public class CachingHiveMetastoreTest {
     @AfterEach
     public void tearDown() {
         executor.shutdown();
+    }
+
+    private HiveTable createAvroTable(Map<String, String> serdeProperties) {
+        return createAvroTable(serdeProperties, Map.of());
+    }
+
+    private HiveTable createAvroTable(Map<String, String> serdeProperties, Map<String, String> tableProperties) {
+        Map<String, String> properties = new HashMap<>();
+        properties.put(HiveTable.HIVE_TABLE_SERDE_LIB, HiveClassNames.AVRO_SERDE_CLASS);
+        properties.put(HiveTable.HIVE_TABLE_INPUT_FORMAT, HiveClassNames.AVRO_INPUT_FORMAT_CLASS);
+        properties.put(HiveTable.HIVE_TABLE_COLUMN_NAMES, "id");
+        properties.put(HiveTable.HIVE_TABLE_COLUMN_TYPES, "int");
+        properties.putAll(tableProperties);
+        return new HiveTable.Builder()
+                .setId(1)
+                .setTableName("avro_tbl")
+                .setCatalogName("hive_catalog")
+                .setHiveDbName("db1")
+                .setHiveTableName("avro_tbl")
+                .setTableLocation("file:///tmp/avro_tbl")
+                .setFullSchema(Lists.newArrayList(new Column("id", IntegerType.INT)))
+                .setDataColumnNames(Lists.newArrayList("id"))
+                .setPartitionColumnNames(Lists.newArrayList())
+                .setProperties(properties)
+                .setSerdeProperties(serdeProperties)
+                .setStorageFormat(HiveStorageFormat.AVRO)
+                .build();
     }
 
     @Test
@@ -118,13 +158,166 @@ public class CachingHiveMetastoreTest {
     }
 
     @Test
+    public void testLoadTableResolveAvroSchemaLiteral() {
+        HiveTable table = createAvroTable(Map.of(AvroSchemaResolver.AVRO_SCHEMA_LITERAL, AVRO_SCHEMA_LITERAL));
+        new Expectations(metastore) {
+            {
+                metastore.getTable("db1", "avro_tbl");
+                result = table;
+            }
+        };
+
+        CachingHiveMetastore cachingHiveMetastore =
+                new CachingHiveMetastore(metastore, executor, executor, expireAfterWriteSec, refreshAfterWriteSec, 1000,
+                        false, Optional.of(new AvroSchemaResolver(new Configuration())));
+
+        HiveTable loadedTable = (HiveTable) cachingHiveMetastore.loadTable(DatabaseTableName.of("db1", "avro_tbl"));
+        Assertions.assertEquals(new org.apache.avro.Schema.Parser().parse(AVRO_SCHEMA_LITERAL).toString(),
+                loadedTable.getAvroSchemaJson());
+    }
+
+    @Test
+    public void testLoadTableResolveAvroSchemaLiteralFromTableProperties() {
+        HiveTable table = createAvroTable(Map.of(), Map.of(AvroSchemaResolver.AVRO_SCHEMA_LITERAL, AVRO_SCHEMA_LITERAL));
+        new Expectations(metastore) {
+            {
+                metastore.getTable("db1", "avro_tbl");
+                result = table;
+            }
+        };
+
+        CachingHiveMetastore cachingHiveMetastore =
+                new CachingHiveMetastore(metastore, executor, executor, expireAfterWriteSec, refreshAfterWriteSec, 1000,
+                        false, Optional.of(new AvroSchemaResolver(new Configuration())));
+
+        HiveTable loadedTable = (HiveTable) cachingHiveMetastore.loadTable(DatabaseTableName.of("db1", "avro_tbl"));
+        Assertions.assertEquals(new org.apache.avro.Schema.Parser().parse(AVRO_SCHEMA_LITERAL).toString(),
+                loadedTable.getAvroSchemaJson());
+    }
+
+    @Test
+    public void testLoadTableResolveAvroSchemaUrl() throws Exception {
+        java.nio.file.Path schemaPath = Files.createTempFile("sr-avro-schema", ".avsc");
+        Files.writeString(schemaPath, AVRO_SCHEMA_LITERAL);
+        HiveTable table = createAvroTable(Map.of(AvroSchemaResolver.AVRO_SCHEMA_URL, schemaPath.toUri().toString()));
+        new Expectations(metastore) {
+            {
+                metastore.getTable("db1", "avro_tbl");
+                result = table;
+                minTimes = 0;
+            }
+        };
+
+        CachingHiveMetastore cachingHiveMetastore =
+                new CachingHiveMetastore(metastore, executor, executor, expireAfterWriteSec, refreshAfterWriteSec, 1000,
+                        false, Optional.of(new AvroSchemaResolver(new Configuration())));
+
+        HiveTable loadedTable = (HiveTable) cachingHiveMetastore.loadTable(DatabaseTableName.of("db1", "avro_tbl"));
+        Assertions.assertEquals(new org.apache.avro.Schema.Parser().parse(AVRO_SCHEMA_LITERAL).toString(),
+                loadedTable.getAvroSchemaJson());
+    }
+
+    @Test
+    public void testLoadTableResolveAvroSchemaUrlFromTableProperties() throws Exception {
+        java.nio.file.Path schemaPath = Files.createTempFile("sr-avro-schema-table-properties", ".avsc");
+        Files.writeString(schemaPath, AVRO_SCHEMA_LITERAL);
+        HiveTable table =
+                createAvroTable(Map.of(), Map.of(AvroSchemaResolver.AVRO_SCHEMA_URL, schemaPath.toUri().toString()));
+        new Expectations(metastore) {
+            {
+                metastore.getTable("db1", "avro_tbl");
+                result = table;
+                minTimes = 0;
+            }
+        };
+
+        CachingHiveMetastore cachingHiveMetastore =
+                new CachingHiveMetastore(metastore, executor, executor, expireAfterWriteSec, refreshAfterWriteSec, 1000,
+                        false, Optional.of(new AvroSchemaResolver(new Configuration())));
+
+        HiveTable loadedTable = (HiveTable) cachingHiveMetastore.loadTable(DatabaseTableName.of("db1", "avro_tbl"));
+        Assertions.assertEquals(new org.apache.avro.Schema.Parser().parse(AVRO_SCHEMA_LITERAL).toString(),
+                loadedTable.getAvroSchemaJson());
+    }
+
+    @Test
+    public void testLoadTableResolveAvroSchemaUrlAfterInvalidate() throws Exception {
+        java.nio.file.Path schemaPath = Files.createTempFile("sr-avro-schema-refresh", ".avsc");
+        Files.writeString(schemaPath, AVRO_SCHEMA_LITERAL);
+        HiveTable firstTable =
+                createAvroTable(Map.of(AvroSchemaResolver.AVRO_SCHEMA_URL, schemaPath.toUri().toString()));
+        HiveTable refreshedTable =
+                createAvroTable(Map.of(AvroSchemaResolver.AVRO_SCHEMA_URL, schemaPath.toUri().toString()));
+        new Expectations(metastore) {
+            {
+                metastore.getTable("db1", "avro_tbl");
+                returns(firstTable, refreshedTable);
+            }
+        };
+
+        CachingHiveMetastore cachingHiveMetastore =
+                new CachingHiveMetastore(metastore, executor, executor, expireAfterWriteSec, refreshAfterWriteSec, 1000,
+                        false, Optional.of(new AvroSchemaResolver(new Configuration())));
+
+        HiveTable loadedTable = (HiveTable) cachingHiveMetastore.getTable("db1", "avro_tbl");
+        Assertions.assertEquals(new org.apache.avro.Schema.Parser().parse(AVRO_SCHEMA_LITERAL).toString(),
+                loadedTable.getAvroSchemaJson());
+
+        Files.writeString(schemaPath, AVRO_SCHEMA_LITERAL_UPDATED);
+        cachingHiveMetastore.invalidateTable("db1", "avro_tbl");
+        HiveTable reloadedTable = (HiveTable) cachingHiveMetastore.getTable("db1", "avro_tbl");
+        Assertions.assertEquals(new org.apache.avro.Schema.Parser().parse(AVRO_SCHEMA_LITERAL_UPDATED).toString(),
+                reloadedTable.getAvroSchemaJson());
+    }
+
+    @Test
+    public void testLoadTableResolveAvroSchemaUrlWithCache() throws Exception {
+        java.nio.file.Path schemaPath = Files.createTempFile("sr-avro-schema-cache", ".avsc");
+        Files.writeString(schemaPath, AVRO_SCHEMA_LITERAL);
+        HiveTable table = createAvroTable(Map.of(AvroSchemaResolver.AVRO_SCHEMA_URL, schemaPath.toUri().toString()));
+        new Expectations(metastore) {
+            {
+                metastore.getTable("db1", "avro_tbl");
+                result = table;
+                minTimes = 0;
+            }
+        };
+
+        AvroSchemaResolver resolver = new AvroSchemaResolver(new Configuration());
+        CachingHiveMetastore cachingHiveMetastore =
+                new CachingHiveMetastore(metastore, executor, executor, expireAfterWriteSec, refreshAfterWriteSec, 1000,
+                        false, Optional.of(resolver));
+
+        // First load: resolve from URL
+        HiveTable loadedTable1 = (HiveTable) cachingHiveMetastore.loadTable(DatabaseTableName.of("db1", "avro_tbl"));
+        String schema1 = loadedTable1.getAvroSchemaJson();
+        Assertions.assertNotNull(schema1);
+
+        // Update the file content
+        Files.writeString(schemaPath, AVRO_SCHEMA_LITERAL_UPDATED);
+
+        // Second load (direct call to loadTable, bypass tableCache):
+        // avroSchemaCache should return cached schema, avoiding URL re-read
+        HiveTable loadedTable2 = (HiveTable) cachingHiveMetastore.loadTable(DatabaseTableName.of("db1", "avro_tbl"));
+        String schema2 = loadedTable2.getAvroSchemaJson();
+        Assertions.assertEquals(schema1, schema2); // Should be cached old value
+
+        // After invalidateTable: avroSchemaCache cleared, should get new schema
+        cachingHiveMetastore.invalidateTable("db1", "avro_tbl");
+        HiveTable loadedTable3 = (HiveTable) cachingHiveMetastore.loadTable(DatabaseTableName.of("db1", "avro_tbl"));
+        String schema3 = loadedTable3.getAvroSchemaJson();
+        Assertions.assertEquals(new org.apache.avro.Schema.Parser().parse(AVRO_SCHEMA_LITERAL_UPDATED).toString(),
+                schema3);
+    }
+
+    @Test
     public void testGetTransactionalTable() {
         CachingHiveMetastore cachingHiveMetastore = new CachingHiveMetastore(
                 metastore, executor, executor,
                 expireAfterWriteSec, refreshAfterWriteSec, 1000, false);
         // get insert only table
-        com.starrocks.catalog.Table table = cachingHiveMetastore.getTable("transactional_db", "insert_only");
-        Assertions.assertNotNull(table);
+        Assertions.assertThrows(StarRocksConnectorException.class,
+                () -> cachingHiveMetastore.getTable("transactional_db", "insert_only"));
         // get full acid table
         Assertions.assertThrows(StarRocksConnectorException.class,
                 () -> cachingHiveMetastore.getTable("transactional_db", "full_acid"));
@@ -358,6 +551,134 @@ public class CachingHiveMetastoreTest {
                 HivePartitionName.of("db1", "table1", "col1=2"));
 
         Assertions.assertEquals(2, cachingHiveMetastore.getPresentPartitionsStatistics(partitionNames).size());
+    }
+
+    @Test
+    public void testPartitionStatsCacheHasNoAutoRefresh() throws Exception {
+        // Even though refreshIntervalSec=1s elapses between two gets, partitionStatsCache
+        // must not register a refreshAfterWrite policy. If it did, the second get would
+        // schedule an async reload triggering a second metastore.getPartitionStatistics
+        // call; JMockit's strict maxTimes=1 asserts this does not happen.
+        new Expectations(metastore) {
+            {
+                metastore.getPartitionStatistics(
+                        (com.starrocks.catalog.Table) any, (List<String>) any);
+                result = Map.of(
+                        "col1=1", HivePartitionStats.empty(),
+                        "col1=2", HivePartitionStats.empty());
+                maxTimes = 1;
+            }
+        };
+
+        CachingHiveMetastore cache = new CachingHiveMetastore(
+                metastore, executor, executor,
+                expireAfterWriteSec, /*refreshIntervalSec*/ 1L, 1000, false);
+
+        com.starrocks.catalog.Table table = cache.getTable("db1", "table1");
+        List<String> parts = Lists.newArrayList("col1=1", "col1=2");
+
+        cache.getPartitionStatistics(table, parts);
+        Thread.sleep(1500L);
+        cache.getPartitionStatistics(table, parts);
+        // Allow any (incorrect) async reload to run before JMockit verifies expectations.
+        Thread.sleep(500L);
+    }
+
+    @Test
+    public void testRefreshTableKeepsPartitionStatsDuringAsyncRefresh() throws Exception {
+        boolean previousRefreshPartitionStats = Config.enable_refresh_hive_partitions_statistics;
+        CountDownLatch refreshStarted = new CountDownLatch(1);
+        CountDownLatch allowRefreshComplete = new CountDownLatch(1);
+        AtomicInteger loadCount = new AtomicInteger(0);
+        HivePartitionStats cachedStats = HivePartitionStats.fromCommonStats(10, 100, 1);
+        HivePartitionStats refreshedStats = HivePartitionStats.fromCommonStats(20, 200, 2);
+        List<String> parts = Lists.newArrayList("col1=1", "col1=2");
+
+        try {
+            Config.enable_refresh_hive_partitions_statistics = true;
+            new Expectations(metastore) {
+                {
+                    metastore.getPartitionKeysByValue(anyString, "table1", (List<Optional<String>>) any);
+                    result = parts;
+                    minTimes = 0;
+
+                    metastore.getPartitionStatistics(
+                            (com.starrocks.catalog.Table) any, (List<String>) any);
+                    result = new Delegate() {
+                        Map<String, HivePartitionStats> getPartitionStatistics(
+                                com.starrocks.catalog.Table table, List<String> partitions) {
+                            int call = loadCount.incrementAndGet();
+                            if (call == 1) {
+                                return Map.of(
+                                        "col1=1", cachedStats,
+                                        "col1=2", cachedStats);
+                            }
+
+                            refreshStarted.countDown();
+                            try {
+                                if (!allowRefreshComplete.await(5, TimeUnit.SECONDS)) {
+                                    throw new IllegalStateException("timed out waiting to complete partition stats refresh");
+                                }
+                            } catch (InterruptedException e) {
+                                Thread.currentThread().interrupt();
+                                throw new RuntimeException(e);
+                            }
+                            return Map.of(
+                                    "col1=1", refreshedStats,
+                                    "col1=2", refreshedStats);
+                        }
+                    };
+                    minTimes = 0;
+                }
+            };
+
+            CachingHiveMetastore cache = new CachingHiveMetastore(
+                    metastore, executor, executor,
+                    expireAfterWriteSec, refreshAfterWriteSec, 1000, false);
+
+            com.starrocks.catalog.Table table = cache.getTable("db1", "table1");
+            cache.getPartitionStatistics(table, parts);
+
+            cache.refreshTable("db1", "table1", true);
+            Assertions.assertTrue(refreshStarted.await(5, TimeUnit.SECONDS));
+
+            for (String part : parts) {
+                HivePartitionName name = HivePartitionName.of("db1", "table1", part);
+                Assertions.assertTrue(cache.partitionStatsCache.asMap().containsKey(name));
+                Assertions.assertTrue(cache.partitionStatsCache.asMap().get(name).isDone());
+                Assertions.assertEquals(10,
+                        cache.partitionStatsCache.asMap().get(name).join().getCommonStats().getRowNums());
+            }
+
+            cache.refreshTable("db1", "table1", true);
+            Thread.sleep(100L);
+            Assertions.assertEquals(2, loadCount.get());
+
+            allowRefreshComplete.countDown();
+            boolean refreshCompleted = false;
+            long deadlineNanos = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
+            while (System.nanoTime() < deadlineNanos) {
+                refreshCompleted = true;
+                for (String part : parts) {
+                    HivePartitionName name = HivePartitionName.of("db1", "table1", part);
+                    CompletableFuture<HivePartitionStats> future = cache.partitionStatsCache.asMap().get(name);
+                    if (future == null || !future.isDone()
+                            || future.join().getCommonStats().getRowNums() != 20) {
+                        refreshCompleted = false;
+                        break;
+                    }
+                }
+                if (refreshCompleted) {
+                    break;
+                }
+                Thread.sleep(10L);
+            }
+            Assertions.assertTrue(refreshCompleted);
+            Assertions.assertEquals(2, loadCount.get());
+        } finally {
+            allowRefreshComplete.countDown();
+            Config.enable_refresh_hive_partitions_statistics = previousRefreshPartitionStats;
+        }
     }
 
     @Test

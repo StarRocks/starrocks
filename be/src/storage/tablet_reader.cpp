@@ -19,6 +19,7 @@
 #include <utility>
 #include <vector>
 
+#include "column/chunk_factory.h"
 #include "column/column_access_path.h"
 #include "column/datum_convert.h"
 #include "common/config_json_flat_fwd.h"
@@ -34,10 +35,11 @@
 #include "storage/column_predicate_rewriter.h"
 #include "storage/conjunctive_predicates.h"
 #include "storage/delete_predicates.h"
-#include "storage/empty_iterator.h"
 #include "storage/merge_iterator.h"
 #include "storage/olap_common.h"
 #include "storage/predicate_parser.h"
+#include "storage/primitive/empty_iterator.h"
+#include "storage/primitive/union_iterator.h"
 #include "storage/rowset/column_reader.h"
 #include "storage/rowset/rowid_range_option.h"
 #include "storage/seek_range.h"
@@ -45,7 +47,6 @@
 #include "storage/tablet_updates.h"
 #include "storage/type_info_allocator_adapter.h"
 #include "storage/types.h"
-#include "storage/union_iterator.h"
 #include "types/logical_type.h"
 #include "util/json_flattener.h"
 
@@ -214,7 +215,7 @@ Status TabletReader::_init_collector_for_pk_index_read() {
         pk_column_ids.emplace_back(i);
     }
     auto pk_schema = ChunkHelper::convert_schema(tablet_schema, pk_column_ids);
-    auto keys = ChunkHelper::new_chunk(pk_schema, 1);
+    auto keys = ChunkFactory::new_chunk(pk_schema, 1);
     size_t num_pk_eq_predicates = 0;
 
     PredicateAndNode pushdown_pred_root;

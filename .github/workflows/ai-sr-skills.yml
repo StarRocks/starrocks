@@ -1,0 +1,159 @@
+name: AI SR SKILLS
+
+on:
+  pull_request_target:
+    branches:
+      - main
+    types:
+      - opened
+      - reopened
+
+concurrency:
+  group: AI-SR-SKILLS-${{ github.event.number }}
+  cancel-in-progress: true
+
+permissions:
+  pull-requests: write
+
+jobs:
+  assign-reviewer:
+    runs-on: [self-hosted, normal]
+    continue-on-error: true
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+    if: >
+      github.event.action == 'opened' &&
+      !startsWith(github.head_ref, 'mergify/') &&
+      !contains(github.head_ref, '-sync-pr-')
+    steps:
+      - name: Sync skills to latest
+        run: |
+          set -e
+          SKILL_REPO="$HOME/starrocks-skills"
+          SKILL_DEST="$HOME/.claude/skills"
+
+          if [ -d "$SKILL_REPO/.git" ]; then
+            cd "$SKILL_REPO" && git pull --ff-only --quiet \
+              || echo "WARN: git pull failed, using current checkout"
+          else
+            echo "WARN: $SKILL_REPO is not a git checkout, skip pull"
+          fi
+
+          mkdir -p "$SKILL_DEST"
+          for skill_dir in "$SKILL_REPO"/*/; do
+            [ -d "$skill_dir" ] || continue
+            name=$(basename "$skill_dir")
+            rsync -a --delete "$skill_dir" "$SKILL_DEST/$name/"
+          done
+
+          echo "Skills synced to $SKILL_DEST:"
+          ls -1 "$SKILL_DEST"
+
+      - name: Recommend Reviewer (AI)
+        run: |
+          echo "=== DEBUG ==="
+          echo "PR: ${{ github.event.number }}"
+          echo "ACTION: ${{ github.event.action }}"
+          echo "BASE_REF: ${{ github.base_ref }}"
+          echo "HEAD_REF: ${{ github.head_ref }}"
+          echo "CLAUDE_CODE_OAUTH_TOKEN length: ${#CLAUDE_CODE_OAUTH_TOKEN}"
+          echo "GITHUB_TOKEN length: ${#GITHUB_TOKEN}"
+          echo "=== RUN ==="
+          # Runs inside claude-cli docker; produces only "Recommended reviewer: <login>"
+          # output. The host-side "Apply Reviewer" step below actually attaches it
+          # (gh is not available inside the container).
+          # tee captures the skill's stdout for the downstream steps to parse.
+          docker exec -i -u claudeuser \
+            -e GITHUB_TOKEN="${GITHUB_TOKEN}" \
+            -e CLAUDE_CODE_OAUTH_TOKEN="${CLAUDE_CODE_OAUTH_TOKEN}" \
+            claude-cli claude --dangerously-skip-permissions \
+            -p "/starrocks-assign-pr-reviewer https://github.com/${{ github.repository }}/pull/${{ github.event.number }}" \
+            2>&1 | tee "${RUNNER_TEMP}/ai_output.txt" || true
+
+      - name: Apply Reviewer
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR: ${{ github.event.number }}
+          REPO: ${{ github.repository }}
+        run: |
+          # The skill runs inside claude-cli docker where `gh` is unavailable,
+          # so it can only print "Recommended reviewer: <login>" and asks for
+          # manual assignment. Host runner has `gh` + GITHUB_TOKEN, so attach
+          # the reviewer here instead. Idempotent: gh ignores duplicates.
+          ai_output="${RUNNER_TEMP}/ai_output.txt"
+          if [ ! -f "$ai_output" ]; then
+            echo "no ai_output, skip"
+            exit 0
+          fi
+          reviewer=$(grep -iE '^\**Recommended reviewer:' "$ai_output" | tail -1 \
+            | sed -E 's/^\**[Rr]ecommended reviewer:\**[[:space:]]*//' \
+            | grep -oE '[A-Za-z0-9][A-Za-z0-9-]*' | head -1 || true)
+          if [ -z "$reviewer" ] || [ "$reviewer" = "none" ]; then
+            echo "no reviewer extracted, skip"
+            exit 0
+          fi
+          # Self-review guard: GitHub rejects request-review from the PR author.
+          author=$(gh pr view "$PR" -R "$REPO" --json author -q '.author.login' 2>/dev/null || true)
+          if [ -n "$author" ] && [ "$reviewer" = "$author" ]; then
+            echo "skip: recommended reviewer ($reviewer) is the PR author"
+            exit 0
+          fi
+          echo "Assigning reviewer: $reviewer"
+          gh pr edit "$PR" -R "$REPO" --add-reviewer "$reviewer" \
+            || echo "WARN: gh pr edit --add-reviewer failed (permissions, already a reviewer, or transient API error)"
+
+      - name: Notify Slack
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
+          PR: ${{ github.event.number }}
+          REPO: ${{ github.repository }}
+          TITLE: ${{ github.event.pull_request.title }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          CHANNEL_ID: C0B4GU36HJN
+        run: |
+          set -e
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool
+          cd ci-tool && git pull
+
+          # Parse the primary reviewer from the skill's output.
+          # The skill prints: "Recommended reviewer: <login>"
+          # (see starrocks-skills/starrocks-assign-pr-reviewer/SKILL.md "Output Template").
+          # The LLM often wraps the line/value in markdown bold or italics
+          # (e.g. **Recommended reviewer: kevincai**, Recommended reviewer: **kevincai**).
+          # Tolerate optional leading *, then extract only valid GitHub login chars
+          # ([A-Za-z0-9-]) to drop @, **, backticks, etc.
+          ai_output="${RUNNER_TEMP}/ai_output.txt"
+          reviewers=""
+          if [ -f "$ai_output" ]; then
+            reviewers=$(grep -iE '^\**Recommended reviewer:' "$ai_output" | tail -1 \
+              | sed -E 's/^\**[Rr]ecommended reviewer:\**[[:space:]]*//' \
+              | grep -oE '[A-Za-z0-9][A-Za-z0-9-]*' | head -1 || true)
+          fi
+
+          if [ -z "$reviewers" ]; then
+            echo "Could not extract AI-assigned reviewers from output, skip Slack notification"
+            exit 0
+          fi
+          echo "AI assigned: $(echo "$reviewers" | tr '\n' ' ')"
+
+          # GitHub login -> Slack ID; unmapped users fall back to plain @login
+          mentions=""
+          while IFS= read -r login; do
+            [ -z "$login" ] && continue
+            slack_id=$(jq -r --arg k "$login" '.[$k] // empty' conf/member_slack.json)
+            if [ -n "$slack_id" ]; then
+              mentions="${mentions}<@${slack_id}> "
+            else
+              mentions="${mentions}@${login} "
+            fi
+          done <<< "$reviewers"
+
+          text="${mentions}You were assigned as reviewer for <${PR_URL}|#${PR} ${TITLE}>"
+
+          python3 lib/slack_notify.py \
+            --mode channel \
+            --token "$SLACK_BOT_TOKEN" \
+            --channel "$CHANNEL_ID" \
+            --text "$text"

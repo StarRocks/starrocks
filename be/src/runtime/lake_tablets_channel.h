@@ -21,6 +21,7 @@ namespace starrocks {
 class LoadChannel;
 class MemTracker;
 class RuntimeProfile;
+class TableMetricsManager;
 struct TabletsChannelKey;
 
 namespace lake {
@@ -29,6 +30,7 @@ class TabletManager;
 
 std::shared_ptr<TabletsChannel> new_lake_tablets_channel(LoadChannel* load_channel, lake::TabletManager* tablet_manager,
                                                          const TabletsChannelKey& key, MemTracker* mem_tracker,
-                                                         RuntimeProfile* parent_profile);
+                                                         RuntimeProfile* parent_profile,
+                                                         TableMetricsManager* table_metrics_mgr = nullptr);
 
 } // namespace starrocks

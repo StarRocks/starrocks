@@ -14,17 +14,33 @@
 
 set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/connector")
 
-ADD_BE_LIB(Connector
+ADD_BE_LIB(ConnectorPrimitive
         connector.cpp
+        data_source.cpp
+        data_source_provider.cpp
+)
+
+target_link_libraries(ConnectorPrimitive PUBLIC
+        ExecPrimitive
+        ExprCore
+        RuntimeCore
+        ChunkCore
+        ColumnCore
+        Types
+        Common
+        Base
+        Gutil
+        StarRocksGen
+)
+
+ADD_BE_LIB(Connector
+        connector_registry.cpp
         hive_connector.cpp
-        es_connector.cpp
         jdbc_connector.cpp
         lake_connector.cpp
-        mysql_connector.cpp
-        benchmark_connector.cpp
         cache_stats_connector.cpp
         file_connector.cpp
-        binlog_connector.cpp
+        file_scan_metrics.cpp
         iceberg_connector.cpp
         connector_chunk_sink.cpp
         file_chunk_sink.cpp
@@ -38,4 +54,130 @@ ADD_BE_LIB(Connector
         deletion_vector/deletion_vector.cpp
         deletion_vector/deletion_bitmap.cpp
         iceberg_delete_sink.cpp
+        iceberg_row_delta_sink.cpp
+)
+
+target_link_libraries(Connector PUBLIC ConnectorPrimitive ComputeEnv Cache)
+target_link_libraries(Connector PRIVATE Platform)
+
+if (WITH_CONNECTOR_ELASTICSEARCH)
+    ADD_BE_LIB(ConnectorElasticsearch
+            elasticsearch/es_connector.cpp
+            elasticsearch/es_predicate.cpp
+            elasticsearch/es_query_builder.cpp
+            elasticsearch/es_scan_reader.cpp
+            elasticsearch/es_scroll_parser.cpp
+            elasticsearch/es_scroll_query.cpp
+    )
+
+    target_link_libraries(ConnectorElasticsearch PUBLIC
+            ConnectorPrimitive
+            HttpCore
+            ExprCore
+            RuntimeCore
+            ChunkCore
+            ColumnCore
+            Types
+            Common
+            Base
+            Gutil
+            StarRocksGen
+    )
+endif()
+
+if (WITH_CONNECTOR_MYSQL)
+    ADD_BE_LIB(ConnectorMySQL
+            mysql/mysql_connector.cpp
+            mysql/mysql_scanner.cpp
+    )
+
+    target_link_libraries(ConnectorMySQL PUBLIC
+            ConnectorPrimitive
+            ExprCore
+            RuntimeCore
+            ChunkCore
+            ColumnCore
+            Types
+            Common
+            Base
+            Gutil
+            StarRocksGen
+    )
+
+    target_link_libraries(ConnectorMySQL PRIVATE
+            mysql
+    )
+endif()
+
+if (WITH_CONNECTOR_BENCHMARK)
+    ADD_BE_LIB(ConnectorBenchmark
+            benchmark/benchmark_connector.cpp
+            benchmark/benchmark_scanner.cpp
+    )
+
+    target_link_libraries(ConnectorBenchmark PUBLIC
+            ConnectorPrimitive
+            ExprCore
+            RuntimeCore
+            ChunkCore
+            ColumnCore
+            Types
+            Common
+            Base
+            Gutil
+            StarRocksGen
+    )
+
+    target_link_libraries(ConnectorBenchmark PRIVATE
+            benchgen
+            arrow
+    )
+endif()
+
+ADD_BE_LIB(ConnectorBootstrap
+        connector_bootstrap.cpp
+)
+
+target_link_libraries(ConnectorBootstrap PUBLIC
+        Common
+)
+
+target_link_libraries(ConnectorBootstrap PRIVATE
+        Connector
+        Base
+        Gutil
+        StarRocksGen
+)
+
+if (WITH_CONNECTOR_BENCHMARK)
+    target_compile_definitions(ConnectorBootstrap PRIVATE STARROCKS_WITH_CONNECTOR_BENCHMARK)
+    target_link_libraries(ConnectorBootstrap PRIVATE
+            ConnectorBenchmark
+    )
+endif()
+
+if (WITH_CONNECTOR_ELASTICSEARCH)
+    target_compile_definitions(ConnectorBootstrap PRIVATE STARROCKS_WITH_CONNECTOR_ELASTICSEARCH)
+    target_link_libraries(ConnectorBootstrap PRIVATE
+            ConnectorElasticsearch
+    )
+endif()
+
+if (WITH_CONNECTOR_MYSQL)
+    target_compile_definitions(ConnectorBootstrap PRIVATE STARROCKS_WITH_CONNECTOR_MYSQL)
+    target_link_libraries(ConnectorBootstrap PRIVATE
+            ConnectorMySQL
+    )
+endif()
+
+ADD_BE_LIB(ConnectorBuiltinRegistry
+        connector_registry_init.cpp
+)
+
+target_link_libraries(ConnectorBuiltinRegistry PUBLIC
+        Connector
+        Common
+        Base
+        Gutil
+        StarRocksGen
 )

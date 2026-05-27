@@ -140,7 +140,9 @@ jobs:
               - 'test/AGENTS.md'
               - 'handbook/**'
               - 'build-support/README.md'
+              - 'build-support/handbook_plan.py'
               - 'build-support/check_repo_handbook.py'
+              - 'build-support/test_handbook_plan.py'
               - 'build-support/test_check_repo_handbook.py'
 
       - uses: actions/checkout@v6
@@ -150,6 +152,7 @@ jobs:
         if: steps.path-filter.outputs.handbook == 'true'
         run: |
           python3 -m unittest build-support/test_check_repo_handbook.py
+          python3 -m unittest build-support/test_handbook_plan.py
 
       - name: Handbook Check
         if: steps.path-filter.outputs.handbook == 'true'
@@ -249,7 +252,6 @@ jobs:
       PR_NUMBER: ${{ github.event.number }}
       BRANCH: ${{ github.base_ref }}
       REPO: ${{ github.repository }}
-    continue-on-error: true
     strategy:
       fail-fast: false
       matrix:
@@ -291,19 +293,12 @@ jobs:
     needs:
       - be-checker
       - thirdparty-update
-    if: always() && needs.be-checker.outputs.output1 == 'true'
+    if: "!cancelled() && needs.be-checker.outputs.output1 == 'true'"
     name: Thirdparty Info
     outputs:
       centos7_image_cache_id: ${{ steps.info.outputs.centos7_image_cache_id }}
       ubuntu_image_cache_id: ${{ steps.info.outputs.ubuntu_image_cache_id }}
     steps:
-      - name: Check Result
-        run: |
-          if [[ "${{ needs.thirdparty-update.result }}" == 'failure' ]]; then
-            echo "::error:: Thirdparty Update Error!"
-            exit 1
-          fi
-
       - name: Download Thirdparty Artifact
         if: needs.thirdparty-update.result == 'success'
         uses: actions/download-artifact@v6
@@ -311,13 +306,41 @@ jobs:
           pattern: THIRDPARTY-RESULT-*
           path: outputs
 
+      - name: Check Result
+        run: |
+          update_result='${{ needs.thirdparty-update.result }}'
+          if [[ "$update_result" == 'failure' || "$update_result" == 'cancelled' ]]; then
+            echo "::error::thirdparty-update did not complete (result=$update_result)"
+            exit 1
+          fi
+          # 'skipped' means this PR didn't touch thirdparty - nothing to verify,
+          # downstream BUILD reuses the default cached image.
+          if [[ "$update_result" != 'success' ]]; then
+            exit 0
+          fi
+          # Defensive (only when update reported success): verify both platforms
+          # produced their artifact. Catches accidental re-introduction of
+          # `continue-on-error: true`, silent upload-artifact failures, and
+          # empty image_cache.info files.
+          missing=()
+          for platform in centos7 ubuntu; do
+            f="./outputs/THIRDPARTY-RESULT-${platform}/image_cache.info"
+            if [[ ! -s "$f" ]]; then
+              missing+=("${platform}")
+            fi
+          done
+          if [[ ${#missing[@]} -gt 0 ]]; then
+            echo "::error::Thirdparty Update succeeded but missing artifact for: ${missing[*]}"
+            exit 1
+          fi
+
       - name: Read Info
         id: info
         run: |
           if [[ "${{ needs.thirdparty-update.result }}" == 'success' ]]; then
-            image_cache_id=$(cat "./outputs/THIRDPARTY-RESULT-centos7/image_cache.info" || echo "")
+            image_cache_id=$(cat "./outputs/THIRDPARTY-RESULT-centos7/image_cache.info")
             echo "centos7_image_cache_id=${image_cache_id}" >> $GITHUB_OUTPUT
-            image_cache_id=$(cat "./outputs/THIRDPARTY-RESULT-ubuntu/image_cache.info" || echo "")
+            image_cache_id=$(cat "./outputs/THIRDPARTY-RESULT-ubuntu/image_cache.info")
             echo "ubuntu_image_cache_id=${image_cache_id}" >> $GITHUB_OUTPUT
           else
             echo "centos7_image_cache_id=" >> $GITHUB_OUTPUT
@@ -352,14 +375,14 @@ jobs:
           ./bin/elastic-ut.sh --pr ${PR_NUMBER} --module be --branch ${{ steps.branch.outputs.branch }} --repository ${{ github.repository }}
 
       - name: clean ECI
-        if: always()
+        if: always() && steps.run_ut.outputs.ECI_ID
         run: |
           echo ${{ steps.run_ut.outputs.ECI_ID }}
-          eci rm ${{ steps.run_ut.outputs.ECI_ID }}
+          eci rm ${{ steps.run_ut.outputs.ECI_ID }} || true
 
       - name: Upload log
         uses: actions/upload-artifact@v6
-        if: always()
+        if: always() && steps.run_ut.outputs.BE_LOG
         with:
           name: BE UT LOG
           path: ${{ steps.run_ut.outputs.BE_LOG }}
@@ -461,6 +484,7 @@ jobs:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           fail_on_error: true
           level: error
+          reviewdog_flags: "-tee"
 
   fe-ut:
     runs-on: [self-hosted, normal]
@@ -502,15 +526,15 @@ jobs:
           ./bin/elastic-ut.sh --pr ${PR_NUMBER} --module fe --branch ${{steps.branch.outputs.branch}} --build Release --repository ${{ github.repository }}
 
       - name: Clean ECI
-        if: always()
+        if: always() && steps.run_ut.outputs.ECI_ID
         run: |
           echo ${{ steps.run_ut.outputs.ECI_ID }}
           echo ">>> Dmesg info:"
           eci exec ${{ steps.run_ut.outputs.ECI_ID }} bash -c "dmesg -T"
-          eci rm ${{ steps.run_ut.outputs.ECI_ID }}
+          eci rm ${{ steps.run_ut.outputs.ECI_ID }} || true
 
       - name: Upload log
-        if: always()
+        if: always() && steps.run_ut.outputs.RES_LOG
         uses: actions/upload-artifact@v6
         with:
           name: FE UT LOG

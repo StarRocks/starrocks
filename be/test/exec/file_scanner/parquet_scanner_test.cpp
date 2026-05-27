@@ -14,8 +14,12 @@
 
 #include "exec/file_scanner/parquet_scanner.h"
 
+#include <arrow/builder.h>
+#include <arrow/io/file.h>
 #include <gtest/gtest.h>
+#include <parquet/arrow/writer.h>
 
+#include <filesystem>
 #include <memory>
 #include <utility>
 
@@ -34,6 +38,31 @@
 namespace starrocks {
 
 class ParquetScannerTest : public ::testing::Test {
+public:
+    static void SetUpTestSuite() {
+        const char* starrocks_home = getenv("STARROCKS_HOME");
+        ASSERT_NE(nullptr, starrocks_home);
+        _tmp_root_dir = std::filesystem::path(starrocks_home) / "be/test/exec/test_data/parquet_scanner/tmp";
+        ASSERT_FALSE(_tmp_root_dir.empty());
+        ASSERT_EQ(std::filesystem::path("tmp"), _tmp_root_dir.filename());
+
+        std::error_code ec;
+        std::filesystem::create_directories(_tmp_root_dir, ec);
+        ASSERT_FALSE(ec) << "failed to create directory " << _tmp_root_dir << ": " << ec.message();
+    }
+
+    static void TearDownTestSuite() {
+        ASSERT_FALSE(_tmp_root_dir.empty());
+        ASSERT_EQ(std::filesystem::path("tmp"), _tmp_root_dir.filename());
+        ASSERT_NE(std::filesystem::path(), _tmp_root_dir.parent_path());
+        ASSERT_EQ(std::filesystem::path("parquet_scanner"), _tmp_root_dir.parent_path().filename());
+
+        std::error_code ec;
+        std::filesystem::remove_all(_tmp_root_dir, ec);
+        ASSERT_FALSE(ec) << "failed to remove directory " << _tmp_root_dir << ": " << ec.message();
+    }
+
+private:
     std::vector<TBrokerRangeDesc> generate_ranges(const std::vector<std::string>& file_names,
                                                   int32_t num_columns_from_file,
                                                   const std::vector<std::string>& columns_from_path) {
@@ -101,11 +130,16 @@ class ParquetScannerTest : public ::testing::Test {
     std::unique_ptr<ParquetScanner> create_parquet_scanner(
             const std::string& timezone, DescriptorTbl* desc_tbl,
             const std::unordered_map<size_t, ::starrocks::TExpr>& dst_slot_exprs,
-            const std::vector<TBrokerRangeDesc>& ranges) {
+            const std::vector<TBrokerRangeDesc>& ranges, int32_t chunk_size = 0) {
         /// Init RuntimeState
+        TQueryOptions query_options;
+        if (chunk_size > 0) {
+            query_options.__set_batch_size(chunk_size);
+        }
         auto query_globals = TQueryGlobals();
         query_globals.time_zone = timezone;
-        RuntimeState* state = _obj_pool.add(new RuntimeState(TUniqueId(), TQueryOptions(), query_globals, nullptr));
+        RuntimeState* state = _obj_pool.add(
+                new RuntimeState(TUniqueId(), query_options, query_globals, static_cast<ExecEnv*>(nullptr)));
         state->set_desc_tbl(desc_tbl);
         state->init_instance_mem_tracker();
 
@@ -309,12 +343,138 @@ class ParquetScannerTest : public ::testing::Test {
         return result;
     }
 
+    void create_dictionary_string_parquet(const std::string& file_name, const std::vector<std::string>& values,
+                                          std::string* file_path) {
+        *file_path = (_tmp_root_dir / file_name).string();
+
+        arrow::StringDictionaryBuilder builder;
+        for (const auto& value : values) {
+            ASSERT_OK(builder.Append(value));
+        }
+
+        std::shared_ptr<arrow::Array> array;
+        ASSERT_OK(builder.Finish(&array));
+
+        auto schema = arrow::schema({arrow::field("zone", array->type(), true)});
+        auto table = arrow::Table::Make(schema, {array});
+
+        ASSERT_NE(nullptr, table);
+        ASSERT_EQ(values.size(), table->num_rows());
+
+        auto output_res = arrow::io::FileOutputStream::Open(*file_path);
+        ASSERT_TRUE(output_res.ok()) << output_res.status().ToString();
+        std::shared_ptr<arrow::io::FileOutputStream> output = output_res.ValueOrDie();
+
+        auto arrow_props = ::parquet::ArrowWriterProperties::Builder().store_schema()->build();
+        auto status = ::parquet::arrow::WriteTable(*table, arrow::default_memory_pool(), output, table->num_rows(),
+                                                   ::parquet::default_writer_properties(), arrow_props);
+        ASSERT_TRUE(status.ok()) << status.ToString();
+        ASSERT_TRUE(output->Close().ok());
+    }
+
+    void create_nested_dictionary_parquet(const std::string& file_name,
+                                          const std::vector<std::vector<std::string>>& values, std::string* file_path) {
+        *file_path = (_tmp_root_dir / file_name).string();
+
+        arrow::ListBuilder list_builder(arrow::default_memory_pool(),
+                                        std::make_unique<arrow::StringDictionaryBuilder>(arrow::default_memory_pool()));
+        auto* dict_builder = down_cast<arrow::StringDictionaryBuilder*>(list_builder.value_builder());
+
+        for (const auto& list : values) {
+            ASSERT_OK(list_builder.Append());
+            for (const auto& val : list) {
+                ASSERT_OK(dict_builder->Append(val));
+            }
+        }
+
+        std::shared_ptr<arrow::Array> array;
+        ASSERT_OK(list_builder.Finish(&array));
+
+        auto schema = arrow::schema({arrow::field("nested_dict", array->type(), true)});
+        auto table = arrow::Table::Make(schema, {array});
+
+        auto output_res = arrow::io::FileOutputStream::Open(*file_path);
+        ASSERT_TRUE(output_res.ok()) << output_res.status().ToString();
+        std::shared_ptr<arrow::io::FileOutputStream> output = output_res.ValueOrDie();
+
+        auto arrow_props = ::parquet::ArrowWriterProperties::Builder().store_schema()->build();
+        auto status = ::parquet::arrow::WriteTable(*table, arrow::default_memory_pool(), output, table->num_rows(),
+                                                   ::parquet::default_writer_properties(), arrow_props);
+        ASSERT_TRUE(status.ok()) << status.ToString();
+        ASSERT_TRUE(output->Close().ok());
+    }
+
+    void create_struct_dictionary_parquet(const std::string& file_name, const std::vector<std::string>& values,
+                                          std::string* file_path) {
+        *file_path = (_tmp_root_dir / file_name).string();
+
+        auto dict_builder = std::make_shared<arrow::StringDictionaryBuilder>(arrow::default_memory_pool());
+        auto struct_type = arrow::struct_({arrow::field("name", dict_builder->type(), true)});
+        arrow::StructBuilder struct_builder(struct_type, arrow::default_memory_pool(), {dict_builder});
+
+        for (const auto& value : values) {
+            ASSERT_OK(struct_builder.Append());
+            ASSERT_OK(dict_builder->Append(value));
+        }
+
+        std::shared_ptr<arrow::Array> array;
+        ASSERT_OK(struct_builder.Finish(&array));
+
+        auto schema = arrow::schema({arrow::field("struct_dict", array->type(), true)});
+        auto table = arrow::Table::Make(schema, {array});
+
+        auto output_res = arrow::io::FileOutputStream::Open(*file_path);
+        ASSERT_TRUE(output_res.ok()) << output_res.status().ToString();
+        std::shared_ptr<arrow::io::FileOutputStream> output = output_res.ValueOrDie();
+
+        auto arrow_props = ::parquet::ArrowWriterProperties::Builder().store_schema()->build();
+        auto status = ::parquet::arrow::WriteTable(*table, arrow::default_memory_pool(), output, table->num_rows(),
+                                                   ::parquet::default_writer_properties(), arrow_props);
+        ASSERT_TRUE(status.ok()) << status.ToString();
+        ASSERT_TRUE(output->Close().ok());
+    }
+
+    void create_map_dictionary_parquet(const std::string& file_name,
+                                       const std::vector<std::vector<std::pair<std::string, std::string>>>& values,
+                                       std::string* file_path) {
+        *file_path = (_tmp_root_dir / file_name).string();
+
+        auto key_builder = std::make_shared<arrow::StringBuilder>(arrow::default_memory_pool());
+        auto item_builder = std::make_shared<arrow::StringDictionaryBuilder>(arrow::default_memory_pool());
+        arrow::MapBuilder map_builder(arrow::default_memory_pool(), key_builder, item_builder, false);
+
+        for (const auto& map_values : values) {
+            ASSERT_OK(map_builder.Append());
+            for (const auto& [key, value] : map_values) {
+                ASSERT_OK(key_builder->Append(key));
+                ASSERT_OK(item_builder->Append(value));
+            }
+        }
+
+        std::shared_ptr<arrow::Array> array;
+        ASSERT_OK(map_builder.Finish(&array));
+
+        auto schema = arrow::schema({arrow::field("map_dict", array->type(), true)});
+        auto table = arrow::Table::Make(schema, {array});
+
+        auto output_res = arrow::io::FileOutputStream::Open(*file_path);
+        ASSERT_TRUE(output_res.ok()) << output_res.status().ToString();
+        std::shared_ptr<arrow::io::FileOutputStream> output = output_res.ValueOrDie();
+
+        auto arrow_props = ::parquet::ArrowWriterProperties::Builder().store_schema()->build();
+        auto status = ::parquet::arrow::WriteTable(*table, arrow::default_memory_pool(), output, table->num_rows(),
+                                                   ::parquet::default_writer_properties(), arrow_props);
+        ASSERT_TRUE(status.ok()) << status.ToString();
+        ASSERT_TRUE(output->Close().ok());
+    }
+
     void check_schema(const std::string& path,
                       const std::vector<std::pair<std::string, TypeDescriptor>>& expected_schema) {
         RuntimeProfile* profile = _obj_pool.add(new RuntimeProfile("test_prof", true));
         ScannerCounter* counter = _obj_pool.add(new ScannerCounter());
         auto query_globals = TQueryGlobals();
-        RuntimeState* state = _obj_pool.add(new RuntimeState(TUniqueId(), TQueryOptions(), query_globals, nullptr));
+        RuntimeState* state = _obj_pool.add(
+                new RuntimeState(TUniqueId(), TQueryOptions(), query_globals, static_cast<ExecEnv*>(nullptr)));
 
         auto ranges = generate_ranges({path}, 0, {});
         TBrokerScanRange* broker_scan_range = _obj_pool.add(new TBrokerScanRange());
@@ -375,6 +535,7 @@ class ParquetScannerTest : public ::testing::Test {
     }
 
 private:
+    inline static std::filesystem::path _tmp_root_dir;
     std::string test_exec_dir;
     RuntimeState* _runtime_state;
     ObjectPool _obj_pool;
@@ -623,6 +784,60 @@ TEST_F(ParquetScannerTest, test_to_json) {
     }
 }
 
+TEST_F(ParquetScannerTest, test_data_quality_error_context_for_json) {
+    // When convert_array_to_column fails inside
+    // ParquetScanner::append_batch_to_src_chunk, the returned Status must be
+    // prefixed with file/column/batch_row_range context so operators can
+    // identify the offending source without re-running the load. Without this
+    // wrapping the user only sees the raw converter message
+    // ("Data quality error: Unfinished string") with no idea which file,
+    // column, or row range triggered it.
+    //
+    // Setup: a single-row parquet file whose only column is a STRING with
+    // value `"unterminated` (a leading double quote with no terminator).
+    // Mapping this column to a JSON dest slot routes it through
+    // arrow_to_json_converter.cpp's STRING branch, which calls vpack and
+    // fails with "Unfinished string".
+    const std::string parquet_file_name = (_tmp_root_dir / "bad_json.parquet").string();
+    {
+        arrow::StringBuilder builder;
+        ASSERT_OK(builder.Append(R"("unterminated)"));
+        std::shared_ptr<arrow::Array> array;
+        ASSERT_OK(builder.Finish(&array));
+        auto schema = arrow::schema({arrow::field("col_json_string", array->type(), true)});
+        auto table = arrow::Table::Make(schema, {array});
+        auto output_res = arrow::io::FileOutputStream::Open(parquet_file_name);
+        ASSERT_TRUE(output_res.ok()) << output_res.status().ToString();
+        std::shared_ptr<arrow::io::FileOutputStream> output = output_res.ValueOrDie();
+        auto arrow_props = ::parquet::ArrowWriterProperties::Builder().store_schema()->build();
+        auto write_st = ::parquet::arrow::WriteTable(*table, arrow::default_memory_pool(), output, table->num_rows(),
+                                                     ::parquet::default_writer_properties(), arrow_props);
+        ASSERT_TRUE(write_st.ok()) << write_st.ToString();
+        ASSERT_TRUE(output->Close().ok());
+    }
+    DeferOp defer([&]() { std::filesystem::remove(parquet_file_name); });
+
+    auto slot_infos = select_columns({"col_json_string"}, true);
+    auto ranges = generate_ranges({parquet_file_name}, slot_infos.size(), {});
+    auto* desc_tbl = DescTblHelper::generate_desc_tbl(_runtime_state, _obj_pool, {slot_infos, slot_infos});
+    auto scanner = create_parquet_scanner("UTC", desc_tbl, {}, ranges);
+
+    ASSERT_OK(scanner->open());
+    DeferOp close_scanner([&] { scanner->close(); });
+    auto res = scanner->get_next();
+    ASSERT_FALSE(res.ok()) << "expected get_next to surface the malformed JSON failure";
+
+    const std::string msg = res.status().to_string();
+    EXPECT_NE(std::string::npos, msg.find("file=" + parquet_file_name))
+            << "Status should carry the offending file path: " << msg;
+    EXPECT_NE(std::string::npos, msg.find("column=col_json_string"))
+            << "Status should carry the offending column name: " << msg;
+    EXPECT_NE(std::string::npos, msg.find("batch_row_range=["))
+            << "Status should carry the in-batch row range: " << msg;
+    EXPECT_NE(std::string::npos, msg.find("Unfinished string"))
+            << "Status should still carry the underlying converter message: " << msg;
+}
+
 TEST_F(ParquetScannerTest, test_selected_parquet_data) {
     auto column_names = std::vector<std::string>{
             "col_date",     "col_datetime", "col_char",   "col_varchar",      "col_boolean",       "col_tinyint",
@@ -639,6 +854,123 @@ TEST_F(ParquetScannerTest, test_selected_parquet_data) {
         }
     };
     validate(scanner, 36865, check);
+}
+
+TEST_F(ParquetScannerTest, test_dictionary_string_parquet_data) {
+    std::string parquet_file_name;
+    create_dictionary_string_parquet("dictionary_string.parquet", {"Center", "Edge", "Middle", "Center"},
+                                     &parquet_file_name);
+    DeferOp defer([&]() { std::filesystem::remove(parquet_file_name); });
+
+    SlotTypeDescInfoArray slot_infos = {{"zone", TypeDescriptor::create_varchar_type(1048576), true}};
+    auto ranges = generate_ranges({parquet_file_name}, slot_infos.size(), {});
+    auto* desc_tbl = DescTblHelper::generate_desc_tbl(_runtime_state, _obj_pool, {slot_infos, {}});
+    auto scanner = create_parquet_scanner("UTC", desc_tbl, {}, ranges);
+    auto check = [](const ChunkPtr& chunk) {
+        ASSERT_EQ(1, chunk->num_columns());
+        ASSERT_EQ(4, chunk->num_rows());
+        auto col = chunk->columns()[0];
+        EXPECT_EQ("'Center'", col->debug_item(0));
+        EXPECT_EQ("'Edge'", col->debug_item(1));
+        EXPECT_EQ("'Middle'", col->debug_item(2));
+        EXPECT_EQ("'Center'", col->debug_item(3));
+    };
+    validate(scanner, 4, check);
+}
+
+TEST_F(ParquetScannerTest, test_dictionary_string_parquet_data_with_small_chunk_size) {
+    std::string parquet_file_name;
+    create_dictionary_string_parquet("dictionary_string_small_chunk.parquet",
+                                     {"Center", "Edge", "Middle", "Center", "North"}, &parquet_file_name);
+    DeferOp defer([&]() { std::filesystem::remove(parquet_file_name); });
+
+    SlotTypeDescInfoArray slot_infos = {{"zone", TypeDescriptor::create_varchar_type(1048576), true}};
+    auto ranges = generate_ranges({parquet_file_name}, slot_infos.size(), {});
+    auto* desc_tbl = DescTblHelper::generate_desc_tbl(_runtime_state, _obj_pool, {slot_infos, {}});
+    auto scanner = create_parquet_scanner("UTC", desc_tbl, {}, ranges, 2);
+
+    std::vector<std::string> actual_values;
+    std::vector<size_t> chunk_rows;
+    auto check = [&](const ChunkPtr& chunk) {
+        ASSERT_EQ(1, chunk->num_columns());
+        chunk_rows.emplace_back(chunk->num_rows());
+        auto col = chunk->columns()[0];
+        for (size_t i = 0; i < col->size(); ++i) {
+            actual_values.emplace_back(col->debug_item(i));
+        }
+    };
+    validate(scanner, 5, check);
+
+    ASSERT_EQ(std::vector<size_t>({2, 2, 1}), chunk_rows);
+    ASSERT_EQ((std::vector<std::string>{"'Center'", "'Edge'", "'Middle'", "'Center'", "'North'"}), actual_values);
+}
+
+TEST_F(ParquetScannerTest, test_nested_dictionary_string_parquet) {
+    std::string parquet_file_name;
+    create_nested_dictionary_parquet("nested_dictionary.parquet", {{"a", "b"}, {"c"}}, &parquet_file_name);
+    DeferOp defer([&]() { std::filesystem::remove(parquet_file_name); });
+
+    TypeDescriptor type_list(TYPE_ARRAY);
+    type_list.children.emplace_back(TYPE_VARCHAR);
+    type_list.children.back().len = 1048576;
+
+    SlotTypeDescInfoArray slot_infos = {{"nested_dict", type_list, true}};
+    auto ranges = generate_ranges({parquet_file_name}, slot_infos.size(), {});
+    auto* desc_tbl = DescTblHelper::generate_desc_tbl(_runtime_state, _obj_pool, {slot_infos, {}});
+    auto scanner = create_parquet_scanner("UTC", desc_tbl, {}, ranges);
+
+    auto check = [](const ChunkPtr& chunk) {
+        ASSERT_EQ(1, chunk->num_columns());
+        ASSERT_EQ(2, chunk->num_rows());
+        auto col = chunk->columns()[0];
+        EXPECT_EQ("['a','b']", col->debug_item(0));
+        EXPECT_EQ("['c']", col->debug_item(1));
+    };
+    validate(scanner, 2, check);
+}
+
+TEST_F(ParquetScannerTest, test_struct_dictionary_string_parquet) {
+    std::string parquet_file_name;
+    create_struct_dictionary_parquet("struct_dictionary.parquet", {"a", "b"}, &parquet_file_name);
+    DeferOp defer([&]() { std::filesystem::remove(parquet_file_name); });
+
+    auto type_struct = TypeDescriptor::create_struct_type({"name"}, {TypeDescriptor::create_varchar_type(1048576)});
+    SlotTypeDescInfoArray slot_infos = {{"struct_dict", type_struct, true}};
+    auto ranges = generate_ranges({parquet_file_name}, slot_infos.size(), {});
+    auto* desc_tbl = DescTblHelper::generate_desc_tbl(_runtime_state, _obj_pool, {slot_infos, {}});
+    auto scanner = create_parquet_scanner("UTC", desc_tbl, {}, ranges);
+
+    auto check = [](const ChunkPtr& chunk) {
+        ASSERT_EQ(1, chunk->num_columns());
+        ASSERT_EQ(2, chunk->num_rows());
+        auto col = chunk->columns()[0];
+        EXPECT_EQ("{name:'a'}", col->debug_item(0));
+        EXPECT_EQ("{name:'b'}", col->debug_item(1));
+    };
+    validate(scanner, 2, check);
+}
+
+TEST_F(ParquetScannerTest, test_map_dictionary_string_parquet) {
+    std::string parquet_file_name;
+    create_map_dictionary_parquet("map_dictionary.parquet", {{{"k1", "a"}, {"k2", "b"}}, {{"k3", "c"}}},
+                                  &parquet_file_name);
+    DeferOp defer([&]() { std::filesystem::remove(parquet_file_name); });
+
+    auto type_map = TypeDescriptor::create_map_type(TypeDescriptor::create_varchar_type(1048576),
+                                                    TypeDescriptor::create_varchar_type(1048576));
+    SlotTypeDescInfoArray slot_infos = {{"map_dict", type_map, true}};
+    auto ranges = generate_ranges({parquet_file_name}, slot_infos.size(), {});
+    auto* desc_tbl = DescTblHelper::generate_desc_tbl(_runtime_state, _obj_pool, {slot_infos, {}});
+    auto scanner = create_parquet_scanner("UTC", desc_tbl, {}, ranges);
+
+    auto check = [](const ChunkPtr& chunk) {
+        ASSERT_EQ(1, chunk->num_columns());
+        ASSERT_EQ(2, chunk->num_rows());
+        auto col = chunk->columns()[0];
+        EXPECT_EQ("{'k1':'a','k2':'b'}", col->debug_item(0));
+        EXPECT_EQ("{'k3':'c'}", col->debug_item(1));
+    };
+    validate(scanner, 2, check);
 }
 
 TEST_F(ParquetScannerTest, test_arrow_null) {

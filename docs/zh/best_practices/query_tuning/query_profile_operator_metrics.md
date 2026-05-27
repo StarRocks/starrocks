@@ -96,6 +96,33 @@ keywords: ['profile', 'query']
 | QueryPeakScheduleTime | 最大 Pipeline 调度时间 | 简单查询 < 1s 正常 |
 | QuerySpillBytes | 溢出到磁盘的数据 | < 1GB 正常 |
 
+### 各表在各 BE 上的扫描统计
+
+合并后的查询 Profile 中会附加一个 `PerTableScanStats` 子树，按"表 × BE 节点"两个维度汇总 Scan 算子的输出。它在各
+Instance Profile 还未被同构合并时遍历 Profile 树，把每个 Scan 算子 `UniqueMetrics` 上发布的 `RowsRead`、`BytesRead`、
+`RawRowsRead` 计数器以及 `Database`、`Table` InfoString 与所在 Instance 的 `Address` 组合后聚合得到。聚合键包含库名，
+因此不同数据库下的同名表（如 `db1.orders` 与 `db2.orders`）不会被合并到同一桶；若 BE 未上报库名则回退使用裸表名。该汇总可用于
+快速识别表在不同 BE 上的扫描倾斜，以及哪些表是某次查询扫描成本的主要来源。
+
+结构如下：
+
+```
+PerTableScanStats
+  TableNum / ScanRows / ScanBytes / RawScanRows   -- 全查询合计
+  Table: <库名>.<表名>                            -- 缺少库名时退化为 <表名>
+    HostNum / ScanRows / ScanBytes / RawScanRows  -- 表级合计
+    Host: <host:port>
+      ScanRows / ScanBytes / RawScanRows          -- 单 (表, BE) 维度
+```
+
+| 指标 | 描述 |
+|--------|-------------|
+| TableNum | 本次查询涉及的表数量（仅顶层）|
+| HostNum | 扫描该表的 BE 节点数（表级别）|
+| ScanRows | 过滤后读取行数，按对应维度汇总 |
+| ScanBytes | 过滤后读取字节数，按对应维度汇总（部分 connector 未上报）|
+| RawScanRows | 谓词过滤前的原始读取行数，按对应维度汇总 |
+
 ### Fragment 指标
 
 Fragment 级别的执行细节：

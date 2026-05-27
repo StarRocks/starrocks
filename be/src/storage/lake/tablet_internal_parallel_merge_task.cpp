@@ -14,8 +14,11 @@
 
 #include "storage/lake/tablet_internal_parallel_merge_task.h"
 
+#include "column/chunk_factory.h"
+#include "column/chunk_schema_helper.h"
 #include "common/config_exec_fwd.h"
 #include "common/runtime_profile.h"
+#include "exec/spill/input_stream.h"
 #include "exec/spill/options.h"
 #include "exec/spill/serde.h"
 #include "exec/spill/spiller.h"
@@ -25,6 +28,7 @@
 #include "storage/aggregate_iterator.h"
 #include "storage/chunk_helper.h"
 #include "storage/lake/tablet_writer.h"
+#include "storage/lake/vacuum.h"
 #include "storage/load_chunk_spiller.h"
 #include "storage/load_spill_block_manager.h"
 #include "storage/load_spill_pipeline_merge_iterator.h"
@@ -58,8 +62,8 @@ void TabletInternalParallelMergeTask::run() {
     SCOPED_THREAD_LOCAL_MEM_SETTER(_merge_mem_tracker.get(), false);
     MonotonicStopWatch timer;
     timer.start();
-    auto char_field_indexes = ChunkHelper::get_char_field_indexes(*_schema);
-    auto chunk_shared_ptr = ChunkHelper::new_chunk(*_schema, config::vector_chunk_size);
+    auto char_field_indexes = ChunkSchemaHelper::get_char_field_indexes(*_schema);
+    auto chunk_shared_ptr = ChunkFactory::new_chunk(*_schema, config::vector_chunk_size);
     auto chunk = chunk_shared_ptr.get();
     auto st = Status::OK();
 
@@ -91,6 +95,30 @@ void TabletInternalParallelMergeTask::run() {
     if (st.ok()) {
         SCOPED_TIMER(_write_io_timer);
         st = _writer->finish();
+    }
+    // Hot-delete spill files written under flat layout: their per-block dtors are no-ops
+    // (skip_file_deletion = true), so we proactively batch-delete the merged-and-committed
+    // files here. Only collect when:
+    //   1. Merge succeeded — failed-merge files are reclaimed by the offline vacuum_full job
+    //      once the txn becomes inactive, avoiding races with files still in use upstream.
+    //   2. Block::path() returns a non-empty value — i.e. it is a FileBlock under flat layout.
+    //      LogBlock and legacy FileBlock return nullopt and are filtered out (no-op).
+    // MUST run BEFORE release_block_groups() because that call clears the vector.
+    if (st.ok()) {
+        std::vector<std::string> spill_paths;
+        for (const auto& bg : _task->block_groups) {
+            if (bg == nullptr) continue;
+            for (const auto& block : bg->blocks()) {
+                if (block == nullptr) continue;
+                if (auto p = block->path(); p.has_value() && !p->empty()) {
+                    spill_paths.emplace_back(std::move(*p));
+                }
+            }
+        }
+        if (!spill_paths.empty()) {
+            VLOG(2) << "load spill hot delete: " << spill_paths.size() << " files for txn " << _writer->txn_id();
+            delete_files_async(std::move(spill_paths));
+        }
     }
     // Release block groups to free up spill disk space
     _task->release_block_groups();

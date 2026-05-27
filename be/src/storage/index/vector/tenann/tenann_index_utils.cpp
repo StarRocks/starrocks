@@ -16,6 +16,14 @@
 
 #include "storage/index/vector/tenann/tenann_index_utils.h"
 
+#include <algorithm>
+#include <cmath>
+#include <limits>
+
+#include "common/config_vector_index_fwd.h"
+#include "common/logging.h"
+#include "tenann/index/parameters.h"
+
 namespace starrocks {
 
 #define CHECK_AND_RETURN(STANDARD_STR, NAME, TYPE) \
@@ -52,6 +60,19 @@ static StatusOr<tenann::IndexType> convert_to_index_type(const std::string& type
     }
 }
 
+static StatusOr<tenann::ScalarQuantizerType> convert_to_quantizer_type(const std::string& type_string) {
+    const std::string standard_type_string = boost::algorithm::to_lower_copy(type_string);
+    if (false) {
+    }
+    CHECK_AND_RETURN(standard_type_string, flat, tenann::ScalarQuantizerType::kFlat)
+    CHECK_AND_RETURN(standard_type_string, sq4, tenann::ScalarQuantizerType::kSQ4)
+    CHECK_AND_RETURN(standard_type_string, sq8, tenann::ScalarQuantizerType::kSQ8)
+    CHECK_AND_RETURN(standard_type_string, pq, tenann::ScalarQuantizerType::kPQ)
+    else {
+        return Status::InternalError("Do not support quantizer type " + type_string);
+    }
+}
+
 static StatusOr<tenann::MetricType> convert_to_metric_type(const std::string& type_string) {
     const std::string standard_type_string = boost::algorithm::to_lower_copy(type_string);
     if (false) {
@@ -78,7 +99,8 @@ StatusOr<tenann::IndexMeta> get_vector_meta(const std::shared_ptr<TabletIndex>& 
     meta.SetIndexType(index_type);
 
     if (meta.index_type() == tenann::IndexType::kFaissIvfPq) {
-        meta.index_params()[starrocks::index::vector::NLIST] = int(4 * sqrt(starrocks::index::vector::nb_));
+        CRITICAL_CHECK_AND_GET(tablet_index, index_properties, nlist, param_value)
+        meta.index_params()[starrocks::index::vector::NLIST] = std::atoi(param_value.c_str());
 
         CRITICAL_CHECK_AND_GET(tablet_index, index_properties, nbits, param_value)
         meta.index_params()[starrocks::index::vector::NBITS] = std::atoi(param_value.c_str());
@@ -91,6 +113,22 @@ StatusOr<tenann::IndexMeta> get_vector_meta(const std::shared_ptr<TabletIndex>& 
 
         CRITICAL_CHECK_AND_GET(tablet_index, index_properties, m, param_value)
         meta.index_params()[starrocks::index::vector::M] = std::atoi(param_value.c_str());
+
+        // Quantizer is optional. Absence is equivalent to "flat" so that pre-quantization
+        // indexes (built before this property existed) keep working unchanged.
+        GET_OR_DEFAULT(tablet_index, index_properties, quantizer, param_value, "flat")
+        ASSIGN_OR_RETURN(auto quantizer_type, convert_to_quantizer_type(param_value))
+        meta.index_params()[starrocks::index::vector::QUANTIZER] = static_cast<int>(quantizer_type);
+
+        if (quantizer_type == tenann::ScalarQuantizerType::kPQ) {
+            // PQ requires m_pq (no sensible default — must divide dim) and accepts an
+            // optional nbits_pq (default 8, matching faiss).
+            CRITICAL_CHECK_AND_GET(tablet_index, index_properties, m_pq, param_value)
+            meta.index_params()[starrocks::index::vector::M_PQ] = std::atoi(param_value.c_str());
+
+            GET_OR_DEFAULT(tablet_index, index_properties, nbits_pq, param_value, "8")
+            meta.index_params()[starrocks::index::vector::NBITS_PQ] = std::atoi(param_value.c_str());
+        }
 
         GET_OR_DEFAULT(tablet_index, search_properties, efsearch, param_value, "40")
         meta.search_params()[starrocks::index::vector::EF_SEARCH] = std::atoi(param_value.c_str());
@@ -117,6 +155,62 @@ StatusOr<tenann::IndexMeta> get_vector_meta(const std::shared_ptr<TabletIndex>& 
     }
 
     return meta;
+}
+
+int compute_adaptive_ef_search(int user_ef, int query_k, size_t segment_num_rows) {
+    int ef_base = std::max(user_ef, query_k);
+    if (ef_base <= 0) return 0;
+    int64_t baseline = config::vector_adaptive_ef_baseline_rows;
+    if (baseline <= 0 || static_cast<int64_t>(segment_num_rows) <= baseline) {
+        return ef_base;
+    }
+    // `vector_adaptive_ef_alpha` / `vector_adaptive_ef_cap` are mutable doubles
+    // and `strtod` accepts "nan"/"inf". Validate up front so the formula below
+    // never produces a non-finite value that would make `static_cast<int>` UB.
+    double alpha = config::vector_adaptive_ef_alpha;
+    double cap = config::vector_adaptive_ef_cap;
+    if (!std::isfinite(alpha) || !std::isfinite(cap)) return ef_base;
+    double ratio = static_cast<double>(segment_num_rows) / static_cast<double>(baseline);
+    double factor = std::min(1.0 + alpha * std::log2(ratio), cap);
+    if (factor <= 1.0) return ef_base;
+    // Clamp before casting to int: float-to-int conversion is UB when the
+    // double exceeds the int range. Pathological cap/ef_base combinations
+    // (or future config tuning) could cross INT_MAX otherwise.
+    double scaled = static_cast<double>(ef_base) * factor;
+    if (scaled >= static_cast<double>(std::numeric_limits<int>::max())) {
+        return std::numeric_limits<int>::max();
+    }
+    return static_cast<int>(scaled);
+}
+
+void apply_adaptive_ef_search(tenann::IndexMeta* meta, size_t segment_num_rows, int query_k, bool user_set_ef) {
+    if (!config::enable_vector_adaptive_search) return;
+    if (user_set_ef) return;
+
+    auto& params = meta->search_params();
+    auto it = params.find(starrocks::index::vector::EF_SEARCH);
+    if (it == params.end()) return;
+
+    int user_ef = 0;
+    try {
+        if (it->is_number_integer()) {
+            user_ef = it->get<int>();
+        } else if (it->is_string()) {
+            user_ef = std::stoi(it->get<std::string>());
+        } else {
+            return;
+        }
+    } catch (...) {
+        return;
+    }
+    if (user_ef <= 0) return;
+
+    int eff_ef = compute_adaptive_ef_search(user_ef, query_k, segment_num_rows);
+    if (eff_ef != user_ef) {
+        params[starrocks::index::vector::EF_SEARCH] = eff_ef;
+        VLOG(2) << "Adaptive ef_search: user_ef=" << user_ef << " query_k=" << query_k << " rows=" << segment_num_rows
+                << " effective=" << eff_ef;
+    }
 }
 
 } // namespace starrocks

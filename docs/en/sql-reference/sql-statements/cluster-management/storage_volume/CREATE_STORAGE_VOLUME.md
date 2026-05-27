@@ -11,6 +11,8 @@ A storage volume consists of the properties and credential information of the re
 > **CAUTION**
 >
 > Only users with the CREATE STORAGE VOLUME privilege on the SYSTEM level can perform this operation.
+>
+> In shared-data mode, StarRocks performs a storage accessibility check for each `LOCATION` during `CREATE STORAGE VOLUME` when the FE configuration item `enable_storage_volume_access_check` is enabled (enabled by default). If this check is enabled and credential, endpoint, or network access is invalid, the statement fails immediately. You can turn off this check by disabling `enable_storage_volume_access_check`.
 
 ## Syntax
 
@@ -59,7 +61,8 @@ import Beta from '../../../../_assets/commonMarkdown/_beta.mdx'
 | azure.adls2.sas_token               | The shared access signatures (SAS) used to authorize requests for your Azure Data Lake Storage Gen2. |
 | azure.adls2.oauth2_use_managed_identity | Whether to use Managed Identity to authorize requests for your Azure Data Lake Storage Gen2. Default: `false`. |
 | azure.adls2.oauth2_tenant_id        | The Tenant ID of the Managed Identity used to authorize requests for your Azure Data Lake Storage Gen2. |
-| azure.adls2.oauth2_client_id        | The Client ID of the Managed Identity used to authorize requests for your Azure Data Lake Storage Gen2. |
+| azure.adls2.oauth2_client_id        | <ul><li>For Managed Identity Authentication: The Client ID of the Managed Identity used to authorize requests for your Azure Data Lake Storage Gen2.</li><li>For Workload Identity: The client ID (application ID) of the Azure AD application (user-assigned managed identity or app registration) associated with the workload identity.</li></ul> |
+| azure.adls2.oauth2_token_file       | The absolute file path to the OAuth2 token file projected into the pod by the Azure Workload Identity webhook. |
 | gcp.gcs.service_account_email	      | The email address in the JSON file generated at the creation of the Service Account, for example, `user@hello.iam.gserviceaccount.com`. |
 | gcp.gcs.service_account_private_key_id | The Private Key ID in the JSON file generated at the creation of the Service Account. |
 | gcp.gcs.service_account_private_key | The Private Key in the JSON file generated at the creation of the Service Account, for example, `-----BEGIN PRIVATE KEY----xxxx-----END PRIVATE KEY-----\n`. |
@@ -205,6 +208,16 @@ Creating a storage volume on Azure Data Lake Storage Gen2 is supported from v3.4
   "azure.adls2.oauth2_client_id" = "<client_id>" 
   ```
 
+- If you use Workload Identity to access Azure Data Lake Storage Gen2, set the following properties:
+
+  ```SQL
+  "enabled" = "{ true | false }",
+  "azure.adls2.endpoint" = "<endpoint_url>",
+  "azure.adls2.oauth2_token_file" = "<path_to_token>",
+  "azure.adls2.oauth2_tenant_id" = "<service_principal_tenant_id>",
+  "azure.adls2.oauth2_client_id" = "<service_client_id>"
+  ```
+
 :::note
 Azure Data Lake Storage Gen1 is not supported.
 :::
@@ -242,7 +255,7 @@ Azure Data Lake Storage Gen1 is not supported.
 - If you use S3 protocol with the IAM user-based authentication to access Google Storage, set the following properties:
 
   :::tip 
-  Google Storage is supported using the [XML API](https://cloud.google.com/storage/docs/interoperability), and the settings use the AWS S3 syntax. In this case, you must set `TYPE` as `S3` and `LOCATIONS` to an S3 protocol-compatible storage location.
+  Google Storage is supported using the [XML API](https://docs.cloud.google.com/storage/docs/interoperability), and the settings use the AWS S3 syntax. In this case, you must set `TYPE` as `S3` and `LOCATIONS` to an S3 protocol-compatible storage location.
   :::
 
   ```SQL

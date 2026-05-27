@@ -14,12 +14,14 @@
 
 #include <gtest/gtest.h>
 
+#include "base/testutil/assert.h"
 #include "column/column_helper.h"
 #include "column/const_column.h"
 #include "column/fixed_length_column.h"
 #include "column/nullable_column.h"
+#include "column/raw_data_visitor.h"
 #include "column/vectorized_fwd.h"
-#include "exec/sorting/sorting.h"
+#include "compute_env/sorting/sorting.h"
 #include "types/date_value.h"
 
 namespace starrocks {
@@ -91,7 +93,9 @@ TEST(FixedLengthColumnTest, test_nullable) {
     ASSERT_EQ(100, column->size());
     ASSERT_EQ(100 * 5, column->byte_size());
 
-    const auto* data = reinterpret_cast<const int32_t*>(column->raw_data());
+    RawDataVisitor rv;
+    ASSERT_OK(column->accept(&rv));
+    const auto* data = reinterpret_cast<const int32_t*>(rv.result());
     for (int i = 0; i < 100; i++) {
         if (i % 2) {
             ASSERT_EQ(true, column->is_null(i));
@@ -114,7 +118,8 @@ TEST(FixedLengthColumnTest, test_nullable) {
         }
     }
 
-    data = reinterpret_cast<const int32_t*>(column->raw_data());
+    ASSERT_OK(column->accept(&rv));
+    data = reinterpret_cast<const int32_t*>(rv.result());
     for (int i = 0; i < 100; i++) {
         if (i % 3) {
             ASSERT_EQ(true, column->is_null(i));
@@ -183,8 +188,8 @@ TEST(FixedLengthColumnTest, test_append_numbers) {
     auto c1 = Int32Column::create();
     ASSERT_EQ(values.size(), c1->append_numbers(buff, length));
     ASSERT_EQ(values.size(), c1->size());
+    const auto& p = c1->immutable_data();
     for (size_t i = 0; i < values.size(); i++) {
-        auto* p = reinterpret_cast<const int32_t*>(c1->raw_data());
         ASSERT_EQ(values[i], p[i]);
     }
 
@@ -192,10 +197,9 @@ TEST(FixedLengthColumnTest, test_append_numbers) {
     auto c2 = NullableColumn::create(Int32Column::create(), NullColumn::create());
     ASSERT_EQ(values.size(), c2->append_numbers(buff, length));
     ASSERT_EQ(values.size(), c2->size());
-    auto* nullable_c2 = down_cast<NullableColumn*>(c2.get());
+    const auto& datas = GetContainer<TYPE_INT>::get_data(c2.get());
     for (size_t i = 0; i < values.size(); i++) {
-        auto* p = reinterpret_cast<const int32_t*>(nullable_c2->data_column()->raw_data());
-        ASSERT_EQ(values[i], p[i]);
+        ASSERT_EQ(values[i], datas[i]);
     }
 }
 
@@ -674,7 +678,7 @@ TEST(FixedLengthColumnTest, test_fill_range) {
     Filter filter{1, 0, 1, 0, 1};
     ASSERT_TRUE(c1->fill_range(ids, filter).ok());
 
-    auto* p = reinterpret_cast<const int64_t*>(c1->raw_data());
+    const auto& p = c1->immutable_data();
     ASSERT_EQ(0, p[0]);
     ASSERT_EQ(values[1], p[1]);
     ASSERT_EQ(0, p[2]);

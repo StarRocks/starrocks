@@ -39,7 +39,6 @@ public class HiveMetadataFactory {
     private final ExecutorService pullRemoteFileExecutor;
     private final Executor updateRemoteFilesExecutor;
     private final Executor updateStatisticsExecutor;
-    private final Executor refreshOthersFeExecutor;
     private final boolean isRecursive;
     private final boolean enableHmsEventsIncrementalSync;
     private final HdfsEnvironment hdfsEnvironment;
@@ -54,7 +53,6 @@ public class HiveMetadataFactory {
                                ExecutorService pullRemoteFileExecutor,
                                Executor updateRemoteFilesExecutor,
                                Executor updateStatisticsExecutor,
-                               Executor refreshOthersFeExecutor,
                                boolean isRecursive,
                                boolean enableHmsEventsIncrementalSync,
                                HdfsEnvironment hdfsEnvironment,
@@ -68,7 +66,6 @@ public class HiveMetadataFactory {
         this.pullRemoteFileExecutor = pullRemoteFileExecutor;
         this.updateRemoteFilesExecutor = updateRemoteFilesExecutor;
         this.updateStatisticsExecutor = updateStatisticsExecutor;
-        this.refreshOthersFeExecutor = refreshOthersFeExecutor;
         this.isRecursive = isRecursive;
         this.enableHmsEventsIncrementalSync = enableHmsEventsIncrementalSync;
         this.hdfsEnvironment = hdfsEnvironment;
@@ -78,9 +75,10 @@ public class HiveMetadataFactory {
 
     public HiveMetadata create() {
         HiveMetastoreOperations hiveMetastoreOperations = new HiveMetastoreOperations(
-                createQueryLevelInstance(metastore, perQueryMetastoreMaxNum),
-                metastore instanceof CachingHiveMetastore,
-                hdfsEnvironment.getConfiguration(), metastoreType, catalogName);
+                createQueryLevelInstance(metastore, perQueryMetastoreMaxNum,
+                        Optional.of(new AvroSchemaResolver(hdfsEnvironment.getConfiguration()))),
+                metastore instanceof CachingHiveMetastore, hdfsEnvironment.getConfiguration(), metastoreType,
+                catalogName);
         RemoteFileOperations remoteFileOperations = new RemoteFileOperations(
                 CachingRemoteFileIO.createQueryLevelInstance(remoteFileIO, perQueryCacheRemotePathMaxMemoryRatio),
                 pullRemoteFileExecutor,
@@ -92,7 +90,7 @@ public class HiveMetadataFactory {
 
         Optional<HiveCacheUpdateProcessor> cacheUpdateProcessor = getCacheUpdateProcessor();
         return new HiveMetadata(catalogName, hdfsEnvironment, hiveMetastoreOperations, remoteFileOperations,
-                statisticsProvider, cacheUpdateProcessor, updateStatisticsExecutor, refreshOthersFeExecutor,
+                statisticsProvider, cacheUpdateProcessor, updateStatisticsExecutor,
                 connectorProperties);
     }
 

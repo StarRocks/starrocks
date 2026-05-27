@@ -18,7 +18,6 @@
 
 #include <climits>
 
-#include "agent/master_info.h"
 #include "base/debug/trace.h"
 #include "base/phmap/phmap_fwd_decl.h"
 #include "base/testutil/sync_point.h"
@@ -27,9 +26,9 @@
 #include "common/config_lake_fwd.h"
 #include "common/config_primary_key_fwd.h"
 #include "common/config_storage_fwd.h"
+#include "common/system/master_info.h"
 #include "gutil/strings/join.h"
 #include "runtime/current_thread.h"
-#include "runtime/exec_env.h"
 #include "storage/lake/lake_primary_index.h"
 #include "storage/lake/lake_primary_key_recover.h"
 #include "storage/lake/meta_file.h"
@@ -403,10 +402,11 @@ public:
         SCOPED_THREAD_LOCAL_SINGLETON_CHECK_MEM_TRACKER_SETTER(
                 config::enable_pk_strict_memcheck ? _tablet.update_mgr()->mem_tracker() : nullptr);
         // local persistent index will update index version, so we need to load first
-        // still need prepre primary index even there is an empty compaction
+        // still need prepare primary index even when this iteration produced no
+        // rowset changes (legacy "empty compaction" or admin no-op publish)
         if (_index_entry == nullptr &&
-            (_has_empty_compaction || (_metadata->enable_persistent_index() &&
-                                       _metadata->persistent_index_type() == PersistentIndexTypePB::LOCAL))) {
+            (_has_no_op_apply || (_metadata->enable_persistent_index() &&
+                                  _metadata->persistent_index_type() == PersistentIndexTypePB::LOCAL))) {
             // get lock to avoid gc
             _tablet.update_mgr()->lock_shard_pk_index_shard(_tablet.id());
             DeferOp defer([&]() { _tablet.update_mgr()->unlock_shard_pk_index_shard(_tablet.id()); });
@@ -493,7 +493,7 @@ private:
         _metadata->GetReflection()->MutableUnknownFields(_metadata.get())->Clear();
         _metadata->set_version(_new_version);
         if (_skip_write_tablet_metadata) {
-            return ExecEnv::GetInstance()->lake_tablet_manager()->cache_tablet_metadata(_metadata);
+            return _tablet.tablet_mgr()->cache_tablet_metadata(_metadata);
         }
         // Persist the tablet metadata
         RETURN_IF_ERROR(_tablet.put_metadata(_metadata));
@@ -1039,7 +1039,7 @@ public:
         _metadata->GetReflection()->MutableUnknownFields(_metadata.get())->Clear();
         _metadata->set_version(_new_version);
         if (_skip_write_tablet_metadata) {
-            return ExecEnv::GetInstance()->lake_tablet_manager()->cache_tablet_metadata(_metadata);
+            return _tablet.tablet_mgr()->cache_tablet_metadata(_metadata);
         }
         return _tablet.put_metadata(_metadata);
     }
@@ -1138,8 +1138,8 @@ private:
 
         std::vector<uint32_t> input_rowsets_id(op_compaction.input_rowsets().begin(),
                                                op_compaction.input_rowsets().end());
-        ASSIGN_OR_RETURN(auto tablet_schema, ExecEnv::GetInstance()->lake_tablet_manager()->get_output_rowset_schema(
-                                                     input_rowsets_id, _metadata.get()));
+        ASSIGN_OR_RETURN(auto tablet_schema,
+                         _tablet.tablet_mgr()->get_output_rowset_schema(input_rowsets_id, _metadata.get()));
         int64_t output_rowset_schema_id = tablet_schema->id();
 
         auto last_input_pos = pre_input_pos;

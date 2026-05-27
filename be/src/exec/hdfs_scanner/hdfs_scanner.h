@@ -18,17 +18,18 @@
 #include <boost/algorithm/string.hpp>
 
 #include "cache/cache_options.h"
+#include "cache/scan/cache_input_stream.h"
+#include "cache/scan/shared_buffered_input_stream.h"
 #include "column/column_access_path.h"
 #include "common/runtime_profile.h"
 #include "connector/deletion_vector/deletion_bitmap.h"
 #include "exec/olap_scan_prepare.h"
 #include "exec/pipeline/scan/morsel.h"
+#include "exec/pipeline/scan/scan_morsel.h"
 #include "exec/runtime_filter/runtime_filter_probe.h"
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
 #include "fs/fs.h"
-#include "io/cache_input_stream.h"
-#include "io/shared_buffered_input_stream.h"
 #include "runtime/descriptors.h"
 #include "runtime/runtime_state_fwd.h"
 
@@ -122,6 +123,18 @@ struct HdfsScanStats {
 
     // late materialize round-by-round
     int64_t group_min_round_cost = 0;
+
+    // Parquet global-dict opt application — populated by parquet::GroupReader as
+    // it wraps column readers with dict-aware adapters.  These counters answer
+    // "did the FE global-dict optimization actually reach Parquet column readers
+    // on this scan instance, and through which wrapper path?" for Hive/Iceberg
+    // workloads where the connector-level dict map can otherwise lie about
+    // schema-evolved files.
+    int64_t global_dict_total_row_groups = 0;       // selected row groups this scanner read
+    int64_t global_dict_applied_row_groups = 0;     // row groups with >=1 dict-wrapped slot
+    int64_t global_dict_applied_slots = 0;          // sum of wrapped slots across row groups
+    int64_t global_dict_dict_code_reader_slots = 0; // wrapped via LowCardColumnReader
+    int64_t global_dict_encode_reader_slots = 0;    // wrapped via LowRowsColumnReader
 
     // orc stripe information
     std::vector<int64_t> orc_stripe_sizes{};
@@ -259,6 +272,7 @@ struct HdfsScannerParams {
     const TupleDescriptor* min_max_tuple_desc = nullptr;
 
     std::vector<std::string>* hive_column_names = nullptr;
+    std::string avro_schema_json;
 
     bool case_sensitive = false;
 
@@ -281,6 +295,12 @@ struct HdfsScannerParams {
 
     std::atomic<int32_t>* lazy_column_coalesce_counter;
     bool use_min_max_opt = false;
+    // Mirrors THdfsScanNode.can_use_any_column.  When true, PruneHDFSScanColumnRule
+    // injected a placeholder materialized column because all queried columns were
+    // partition columns.  Used together with use_min_max_opt to skip reading the
+    // placeholder from the data file.
+    bool can_use_any_column = false;
+
     bool use_count_opt = false;
     bool orc_use_column_names = false;
     bool parquet_page_index_enable = false;
@@ -298,11 +318,12 @@ struct HdfsScannerContext {
         bool decode_needed = true;
 
         std::string formatted_name(bool case_sensitive) const {
-            return case_sensitive ? name() : boost::algorithm::to_lower_copy(name());
+            auto n = std::string(name());
+            return case_sensitive ? n : boost::algorithm::to_lower_copy(n);
         }
-        const std::string& name() const { return slot_desc->col_name(); }
+        std::string_view name() const { return slot_desc->col_name(); }
         int32_t col_unique_id() const { return slot_desc->col_unique_id(); }
-        const std::string& col_physical_name() const { return slot_desc->col_physical_name(); }
+        std::string_view col_physical_name() const { return slot_desc->col_physical_name(); }
         const SlotId slot_id() const { return slot_desc->id(); }
         const TypeDescriptor& slot_type() const { return slot_desc->type(); }
     };
@@ -353,6 +374,11 @@ struct HdfsScannerContext {
     bool orc_use_column_names = false;
 
     bool use_min_max_opt = false;
+    // Set when can_use_any_column is propagated from the scan node.  In combination
+    // with use_min_max_opt this tells update_min_max_columns() that any materialized
+    // column without a min/max entry is a placeholder and should be filled with a
+    // default value instead of being read from the data file.
+    bool can_use_any_column = false;
 
     bool use_count_opt = false;
     bool is_first_split = false;
@@ -484,8 +510,8 @@ public:
     bool has_split_tasks() const { return _scanner_ctx.has_split_tasks; }
 
     static StatusOr<std::unique_ptr<RandomAccessFile>> create_random_access_file(
-            std::shared_ptr<io::SharedBufferedInputStream>& shared_buffered_input_stream,
-            std::shared_ptr<io::CacheInputStream>& cache_input_stream, const OpenFileOptions& options);
+            std::shared_ptr<SharedBufferedInputStream>& shared_buffered_input_stream,
+            std::shared_ptr<CacheInputStream>& cache_input_stream, const OpenFileOptions& options);
 
 protected:
     Status open_random_access_file();
@@ -510,8 +536,8 @@ protected:
     std::unique_ptr<RandomAccessFile> _file;
     // by default it's no compression.
     CompressionTypePB _compression_type = CompressionTypePB::NO_COMPRESSION;
-    std::shared_ptr<io::CacheInputStream> _cache_input_stream = nullptr;
-    std::shared_ptr<io::SharedBufferedInputStream> _shared_buffered_input_stream = nullptr;
+    std::shared_ptr<CacheInputStream> _cache_input_stream = nullptr;
+    std::shared_ptr<SharedBufferedInputStream> _shared_buffered_input_stream = nullptr;
     int64_t _total_running_time = 0;
 
 public:

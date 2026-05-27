@@ -22,16 +22,16 @@
 #include "common/status.h"
 #include "common/system/backend_options.h"
 #include "exec/olap_scan_node.h"
+#include "exec/query_scan_metrics.h"
 #include "exprs/chunk_predicate_evaluator.h"
 #include "exprs/expr_executor.h"
 #include "runtime/current_thread.h"
 #include "runtime/global_dict/fragment_dict_state.h"
 #include "runtime/runtime_state.h"
-#include "runtime/starrocks_metrics.h"
 #include "storage/chunk_helper.h"
 #include "storage/column_predicate_rewriter.h"
 #include "storage/predicate_parser.h"
-#include "storage/projection_iterator.h"
+#include "storage/primitive/projection_iterator.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_manager.h"
 
@@ -65,6 +65,16 @@ Status TabletScanner::init(RuntimeState* runtime_state, const TabletScannerParam
     RETURN_IF_ERROR(_init_unused_output_columns(*params.unused_output_columns));
     RETURN_IF_ERROR(_init_return_columns());
     RETURN_IF_ERROR(_init_global_dicts());
+    // _init_global_dicts intersects the FE-level dict map with this scan's
+    // materialized tablet schema, so the resulting size counts columns that
+    // will actually flow through the encoded path on this scan instance.
+    // Mirrors the marker emitted from the pipeline scan paths.
+    if (_params.global_dictmaps != nullptr && !_params.global_dictmaps->empty() &&
+        _parent->runtime_profile() != nullptr) {
+        _parent->runtime_profile()->add_info_string("GlobalDictOptApplied", "true");
+        _parent->runtime_profile()->add_info_string("GlobalDictAppliedSlots",
+                                                    std::to_string(_params.global_dictmaps->size()));
+    }
     RETURN_IF_ERROR(_init_reader_params(params.key_ranges));
     Schema child_schema = ChunkHelper::convert_schema(_tablet_schema, _reader_columns);
     _reader = std::make_shared<TabletReader>(_tablet, Version(0, _version), std::move(child_schema));
@@ -394,8 +404,8 @@ void TabletScanner::update_counter() {
 
     COUNTER_SET(_parent->_pushdown_predicates_counter, (int64_t)_params.pred_tree.size());
 
-    StarRocksMetrics::instance()->query_scan_bytes.increment(_compressed_bytes_read);
-    StarRocksMetrics::instance()->query_scan_rows.increment(_raw_rows_read);
+    QueryScanMetrics::instance()->query_scan_bytes.increment(_compressed_bytes_read);
+    QueryScanMetrics::instance()->query_scan_rows.increment(_raw_rows_read);
 
     if (_reader->stats().decode_dict_ns > 0) {
         RuntimeProfile::Counter* c = ADD_TIMER(_parent->_scan_profile, "DictDecode");

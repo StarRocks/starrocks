@@ -214,7 +214,7 @@ v3.5.0 以降、StarRocks は自動収集中に、テーブルのデータが前
 | statistic_auto_collect_max_predicate_column_size_on_sample_strategy | INT    | 16       | 自動フル収集タスクがサンプル収集ポリシーに当たったとき、テーブルに異常に多くのPredicate Columnがあり、この設定項目を超えた場合、タスクはPredicate Columnのフル収集に切り替わらず、すべての列のサンプル収集に維持されます。この設定項目は、この動作のためのPredicate Columnの最大値を制御します。 |
 | statistic_auto_collect_predicate_columns_threshold | INT     | 32       | 自動収集中にテーブルの列数がこの設定を超えた場合、Predicate Columnの列統計のみが収集されます。 |
 | statistic_predicate_columns_persist_interval_sec   | LONG    | 60       | FE が Predicate Column の統計情報を同期し、永続化する間隔。 |
-| statistic_predicate_columns_ttl_hours       | LONG    | 24       | FE にキャッシュされた Predicate Column 統計の消去時間。 |
+| statistic_predicate_columns_ttl_hours       | LONG    | 24       | FE にキャッシュされた Predicate Column の TTL（時間）。vacuum が古いデータを削除。負の値で vacuum を無効化。 |
 | enable_predicate_columns_collection         | BOOLEAN | TRUE     | Predicate Column の収集を有効にするかどうか。無効にすると、クエリ最適化中に Predicate Column が記録されません。 |
 | enable_manual_collect_array_ndv             | BOOLEAN | FALSE        | ARRAY タイプの NDV 情報の手動収集を有効にするかどうか。 |
 | enable_auto_collect_array_ndv               | BOOLEAN | FALSE        | ARRAY タイプの NDV 情報の自動収集を有効にするかどうか。 |
@@ -252,7 +252,7 @@ ANALYZE [FULL|SAMPLE] TABLE tbl_name
   - `PREDICATE COLUMNS`：Predicate Column のみから統計情報を収集する。v3.5.0 からサポート。
   - `MULTIPLE COLUMNS`：指定した複数の列から共同の統計情報を収集する。現在のところ、複数列の手動同期収集のみがサポートされている。手動で統計情報を収集する列の数は `statistics_max_multi_column_combined_num` を超えることはできず、デフォルト値は `10` である。v3.5.0 からサポートされている。
 
-- [WITH SYNC | ASYNC MODE]: 手動収集タスクを同期モードまたは非同期モードで実行するかどうか。指定しない場合、デフォルトで同期収集が使用されます。
+- `WITH SYNC | ASYNC MODE`: 手動収集タスクを同期モードまたは非同期モードで実行するかどうか。指定しない場合、デフォルトで同期収集が使用されます。
 
 - `PROPERTIES`: カスタムパラメータ。`PROPERTIES` が指定されていない場合、`fe.conf` ファイルのデフォルト設定が使用されます。実際に使用されるプロパティは、SHOW ANALYZE STATUS の出力の `Properties` 列で確認できます。
 
@@ -320,7 +320,7 @@ ANALYZE TABLE tbl_name UPDATE HISTOGRAM ON col_name [, col_name]
 
 - `col_name`: 統計を収集する列。複数の列をカンマ（`,`）で区切ります。このパラメータが指定されていない場合、テーブル全体が収集されます。ヒストグラムにはこのパラメータが必要です。
 
-- [WITH SYNC | ASYNC MODE]: 手動収集タスクを同期モードまたは非同期モードで実行するかどうか。指定しない場合、デフォルトで同期収集が使用されます。
+- `WITH SYNC | ASYNC MODE`: 手動収集タスクを同期モードまたは非同期モードで実行するかどうか。指定しない場合、デフォルトで同期収集が使用されます。
 
 - `WITH N BUCKETS`: ヒストグラム収集のためのバケット数 `N`。指定しない場合、`fe.conf` のデフォルト値が使用されます。
 
@@ -646,7 +646,7 @@ KILL ANALYZE <ID>
 
 ## 外部テーブルの統計情報を収集する
 
-v3.2.0 以降、StarRocks は Hive、Iceberg、Hudi テーブルの統計情報の収集をサポートしています。構文は StarRocks 内部テーブルの収集と似ています。**ただし、手動完全収集、手動ヒストグラム収集（v3.2.7 以降）、および自動完全収集のみがサポートされています。サンプル収集はサポートされていません。** v3.3.0 以降、StarRocks は Delta Lake テーブルの統計情報と STRUCT のサブフィールドの統計情報の収集をサポートしています。v3.4.0 以降、StarRocks はクエリトリガーによる ANALYZE タスクを介した自動統計収集をサポートしています。
+v3.2.0 以降、StarRocks は Hive、Iceberg、Hudi テーブルの統計情報の収集をサポートしています。構文は StarRocks 内部テーブルの収集と似ています。**ただし、手動完全収集、手動ヒストグラム収集（v3.2.7 以降）、および自動完全収集のみがサポートされています。** v3.3.0 以降、StarRocks は Delta Lake テーブルの統計情報と STRUCT のサブフィールドの統計情報の収集をサポートしています。v3.4.0 以降、StarRocks はクエリトリガーによる ANALYZE タスクを介した自動統計収集をサポートしています。v3.4.0以降、StarRocks では外部テーブルに対する手動サンプル収集（`ANALYZE TABLE ... SAMPLE`）もサポートされています。ヒストグラムの収集は、現時点では Hive 外部テーブルでのみサポートされています。
 
 収集された統計情報は `default_catalog` の `_statistics_` の `external_column_statistics` テーブルに保存されます。Hive Metastore には保存されず、他の検索エンジンと共有することはできません。Hive/Iceberg/Hudi テーブルの統計情報が収集されているかどうかを確認するために、`default_catalog._statistics_.external_column_statistics` テーブルからデータをクエリできます。
 
@@ -675,7 +675,7 @@ partition_name:
 外部テーブルの統計情報を収集する際には、以下の制限が適用されます：
 
 - Hive、Iceberg、Hudi、および Delta Lake（v3.3.0 以降）テーブルの統計情報のみを収集できます。
-- 手動完全収集、手動ヒストグラム収集（v3.2.7 以降）、および自動完全収集のみがサポートされています。サンプル収集はサポートされていません。
+- サポートされているのは、手動フル収集、手動ヒストグラム収集（v3.2.7 以降）、自動フル収集、クエリによる収集（v3.4.0 以降）、および手動サンプル収集（v3.4.0 以降）のみです。ヒストグラム収集は、Hive 外部テーブルでのみサポートされています。
 - システムが完全統計を自動的に収集するには、Analyze ジョブを作成する必要があります。これは、StarRocks 内部テーブルの統計を収集する場合とは異なり、システムがデフォルトでバックグラウンドで行います。
 - 自動収集タスクの場合：
   - 特定のテーブルの統計情報のみを収集できます。データベース内のすべてのテーブルの統計情報や外部カタログ内のすべてのデータベースの統計情報を収集することはできません。

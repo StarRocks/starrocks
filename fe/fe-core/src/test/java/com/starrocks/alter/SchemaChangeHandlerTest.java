@@ -871,6 +871,46 @@ public class SchemaChangeHandlerTest extends TestWithFeService {
     }
 
     @Test
+    public void testAlterTableAddColumnDefaultCurrentTimestampPreservesGenerator() throws Exception {
+        String createTableStmt = "CREATE TABLE test.test_alter_add_now (\n" +
+                "id BIGINT NOT NULL\n" +
+                ") PRIMARY KEY(id)\n" +
+                "DISTRIBUTED BY HASH(id) BUCKETS 1\n" +
+                "PROPERTIES (\n" +
+                "    'replication_num' = '1',\n" +
+                "    'fast_schema_evolution' = 'true'\n" +
+                ");";
+        createTable(createTableStmt);
+
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        OlapTable table = (OlapTable) db.getTable("test_alter_add_now");
+        Assertions.assertNotNull(table);
+
+        String alterSql = "ALTER TABLE test.test_alter_add_now ADD COLUMN ts DATETIME DEFAULT current_timestamp";
+        AlterTableStmt alterStmt = (AlterTableStmt) parseAndAnalyzeStmt(alterSql);
+        Assertions.assertDoesNotThrow(() -> {
+            SchemaChangeHandler handler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
+            handler.process(alterStmt.getAlterClauseList(), db, table);
+        });
+        jobSize++;
+
+        Column tsCol = table.getColumn("ts");
+        Assertions.assertNotNull(tsCol);
+        Assertions.assertNotNull(tsCol.getDefaultExpr());
+        // ALTER-time string is preserved on defaultValue so BE can backfill pre-existing rows.
+        Assertions.assertNotNull(tsCol.getDefaultValue(),
+                "ALTER-time materialization must be kept for BE backfill of pre-existing rows");
+        Assertions.assertEquals(Column.DefaultValueType.CONST, tsCol.getDefaultValueType());
+
+        // Metadata callers (DESCRIBE, information_schema.columns) must surface the generator, not the
+        // frozen literal stashed in defaultValue by the schema-change backfill path.
+        List<String> extras = Lists.newArrayList();
+        Assertions.assertEquals("CURRENT_TIMESTAMP", tsCol.getMetaDefaultValue(extras));
+        Assertions.assertTrue(extras.contains("DEFAULT_GENERATED"),
+                "current_timestamp default must be reported as DEFAULT_GENERATED");
+    }
+
+    @Test
     public void testSortKeyUpdatedAfterAddKeyColumnAgg() throws Exception {
         createTable("CREATE TABLE test.sc_agg_sort_key (\n"
                 + "k0 INT,\n"
@@ -904,6 +944,36 @@ public class SchemaChangeHandlerTest extends TestWithFeService {
         OlapTable tbl = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
                 .getTable(db.getFullName(), "sc_uniq_sort_key");
         doTestSortKeyUpdatedAfterAddKeyColumn(tbl, "test.sc_uniq_sort_key");
+    }
+
+    @Test
+    public void testSortKeyFallbackToIndexesWhenUniqueIdsMissing() throws Exception {
+        createTable("CREATE TABLE test.sc_agg_sort_key_fallback (\n"
+                + "k0 INT,\n"
+                + "k1 INT,\n"
+                + "k2 INT,\n"
+                + "k3 INT,\n"
+                + "v0 INT SUM DEFAULT '0'\n"
+                + ") AGGREGATE KEY(k0, k1, k2, k3)\n"
+                + "DISTRIBUTED BY HASH(k0) BUCKETS 1\n"
+                + "ORDER BY(k3, k2, k1, k0)\n"
+                + "PROPERTIES ('replication_num' = '1', 'fast_schema_evolution' = 'true');");
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        OlapTable tbl = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(db.getFullName(), "sc_agg_sort_key_fallback");
+        MaterializedIndexMeta indexMeta = tbl.getIndexMetaByMetaId(tbl.getBaseIndexMetaId());
+        Assertions.assertEquals(Arrays.asList(3, 2, 1, 0), indexMeta.getSortKeyIdxes());
+        Assertions.assertNotNull(indexMeta.getSortKeyUniqueIds());
+
+        // Emulate legacy metadata: sort key indexes exist but unique ids are absent.
+        indexMeta.setSortKeyUniqueIds(null);
+        indexMeta.getSchema().get(1).setUniqueId(Column.COLUMN_UNIQUE_ID_INIT_VALUE);
+
+        executeAlterAndWaitDone("alter table test.sc_agg_sort_key_fallback add column new_v1 int MAX default '0'");
+
+        MaterializedIndexMeta updatedIndexMeta = tbl.getIndexMetaByMetaId(tbl.getBaseIndexMetaId());
+        Assertions.assertEquals(Arrays.asList(3, 2, 1, 0), updatedIndexMeta.getSortKeyIdxes());
+        Assertions.assertNull(updatedIndexMeta.getSortKeyUniqueIds());
     }
 
     private void doTestSortKeyUpdatedAfterAddKeyColumn(OlapTable tbl, String qualifiedName) throws Exception {

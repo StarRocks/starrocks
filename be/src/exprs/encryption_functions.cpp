@@ -228,10 +228,7 @@ private:
 static StatusOr<ColumnPtr> aes_encrypt_2params(FunctionContext* ctx, const Columns& columns) {
     DCHECK_EQ(columns.size(), 2);
 
-    // Check if data or key columns are only_null
-    if (columns[0]->only_null() || columns[1]->only_null()) {
-        return columns[0]->only_null() ? columns[0] : columns[1];
-    }
+    RETURN_IF_COLUMNS_ONLY_NULL(columns);
 
     auto src_viewer = ColumnViewer<TYPE_VARCHAR>(columns[0]);
     auto key_viewer = ColumnViewer<TYPE_VARCHAR>(columns[1]);
@@ -283,10 +280,7 @@ static StatusOr<ColumnPtr> aes_encrypt_2params(FunctionContext* ctx, const Colum
 static StatusOr<ColumnPtr> aes_decrypt_2params(FunctionContext* ctx, const Columns& columns) {
     DCHECK_EQ(columns.size(), 2);
 
-    // Check if data or key columns are only_null
-    if (columns[0]->only_null() || columns[1]->only_null()) {
-        return columns[0]->only_null() ? columns[0] : columns[1];
-    }
+    RETURN_IF_COLUMNS_ONLY_NULL(columns);
 
     auto src_viewer = ColumnViewer<TYPE_VARCHAR>(columns[0]);
     auto key_viewer = ColumnViewer<TYPE_VARCHAR>(columns[1]);
@@ -830,7 +824,7 @@ struct EncodeColumnToDigest {
         if constexpr (lt_is_string<LT> || lt_is_binary<LT>) {
             // String/Binary types
             auto* col = data_col ? down_cast<const ColumnType*>(data_col) : nullptr;
-            const uint8_t* null_data = null_col ? null_col->raw_data() : nullptr;
+            const uint8_t* null_data = null_col ? null_col->immutable_data().data() : nullptr;
             for (size_t row = 0; row < chunk_size; row++) {
                 if (null_data && null_data[row]) {
                     uint8_t marker = static_cast<uint8_t>(RowFingerprintValueType::Null);
@@ -846,7 +840,7 @@ struct EncodeColumnToDigest {
         } else if constexpr (lt_is_arithmetic<LT> || lt_is_date_or_datetime<LT> || lt_is_decimal<LT> ||
                              lt_is_largeint<LT>) {
             // Fixed-length types: numerics, dates, decimals
-            auto* data = data_col ? reinterpret_cast<const CppType*>(data_col->raw_data()) : nullptr;
+            const auto* data = data_col ? GetContainer<LT>::get_data(data_col).data() : nullptr;
             RowFingerprintValueType marker_type;
 
             if constexpr (sizeof(CppType) == 1) {
@@ -868,7 +862,7 @@ struct EncodeColumnToDigest {
             }
 
             uint8_t marker = static_cast<uint8_t>(marker_type);
-            const uint8_t* null_data = null_col ? null_col->raw_data() : nullptr;
+            const auto* null_data = null_col ? null_col->immutable_data().data() : nullptr;
             for (size_t row = 0; row < chunk_size; row++) {
                 if (null_data && null_data[row]) {
                     uint8_t null_marker = static_cast<uint8_t>(RowFingerprintValueType::Null);
@@ -888,7 +882,7 @@ struct EncodeColumnToDigest {
             // Fallback for unsupported types (JSON, HLL, OBJECT, STRUCT, ARRAY, MAP, etc.)
             // Cast to string representation and encode
             auto* col = data_col ? down_cast<const ColumnType*>(data_col) : nullptr;
-            const uint8_t* null_data = null_col ? null_col->raw_data() : nullptr;
+            const auto* null_data = null_col ? null_col->immutable_data().data() : nullptr;
             for (size_t row = 0; row < chunk_size; row++) {
                 if (null_data && null_data[row]) {
                     uint8_t marker = static_cast<uint8_t>(RowFingerprintValueType::Null);

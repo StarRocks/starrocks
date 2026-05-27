@@ -40,9 +40,10 @@ PROPERTIES (
     "authentication_ldap_simple_server_host" = "",
     "authentication_ldap_simple_server_port" = "",
     "authentication_ldap_simple_bind_base_dn" = "",
-    "authentication_ldap_simple_user_search_attr" = ""
+    "authentication_ldap_simple_user_search_attr" = "",
     "authentication_ldap_simple_bind_root_dn" = "",
     "authentication_ldap_simple_bind_root_pwd" = "",
+    "authentication_ldap_simple_bind_dn_pattern" = "",
     "authentication_ldap_simple_ssl_conn_allow_insecure" = "{true | false}",
     "authentication_ldap_simple_ssl_conn_trust_store_path" = "",
     "authentication_ldap_simple_ssl_conn_trust_store_pwd" = "",
@@ -74,13 +75,13 @@ PROPERTIES (
 
 ##### authentication_ldap_simple_bind_base_dn
 
-- 必需：是
-- 描述：集群搜索的 LDAP 用户的基本专有名称 (DN)。
+- 必需：否
+- 描述：集群搜索的 LDAP 用户的基本专有名称 (DN)。使用搜索绑定模式时必需。使用直接绑定模式（配置 `authentication_ldap_simple_bind_dn_pattern`）时不需要。
 
 ##### authentication_ldap_simple_user_search_attr
 
-- 必需：是
-- 描述：用于登录 LDAP 服务的用户属性，例如 `uid`。
+- 必需：否
+- 描述：用于登录 LDAP 服务的用户属性，例如 `uid`。使用搜索绑定模式时必需。
 
 :::note
 
@@ -97,13 +98,18 @@ PROPERTIES (
 
 ##### authentication_ldap_simple_bind_root_dn
 
-- 必需：是
-- 描述：LDAP 服务的管理员 DN。
+- 必需：否
+- 描述：LDAP 服务的管理员 DN。使用搜索绑定模式时必需。
 
 ##### authentication_ldap_simple_bind_root_pwd
 
-- 必需：是
-- 描述：LDAP 服务的管理员密码。
+- 必需：否
+- 描述：LDAP 服务的管理员密码。使用搜索绑定模式时必需。
+
+##### authentication_ldap_simple_bind_dn_pattern
+
+- 必需：否
+- 描述：直接绑定认证的 DN 模式。使用 `${USER}` 作为用户名的占位符。模式必须生成合法的 LDAP Distinguished Name（DN），不支持 UPN 格式（如 `${USER}@domain`）。例如 `uid=${USER},ou=People,dc=example,dc=com`。多个模式之间用分号分隔，系统将按顺序尝试每个模式直到成功。设置此参数后，系统将跳过搜索步骤直接使用构造的 DN 进行绑定，因此不需要配置 `authentication_ldap_simple_bind_base_dn`、`authentication_ldap_simple_user_search_attr`、`authentication_ldap_simple_bind_root_dn` 和 `authentication_ldap_simple_bind_root_pwd`。
 
 ##### authentication_ldap_simple_ssl_conn_allow_insecure
 

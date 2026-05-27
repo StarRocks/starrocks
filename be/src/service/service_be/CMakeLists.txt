@@ -19,6 +19,7 @@ set(EXECUTABLE_OUTPUT_PATH "${BUILD_DIR}/src/service_be")
 
 set(SERVICE_BE_FILES
     backend_service.cpp
+    config_update_hooks.cpp
     http_service.cpp
     internal_service.cpp
     starrocks_be.cpp

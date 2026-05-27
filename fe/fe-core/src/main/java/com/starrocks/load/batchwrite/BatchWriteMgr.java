@@ -14,14 +14,18 @@
 
 package com.starrocks.load.batchwrite;
 
+import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Table;
 import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.common.ThreadPoolManager;
-import com.starrocks.common.util.FrontendDaemon;
+import com.starrocks.common.util.LeaderDaemon;
 import com.starrocks.load.streamload.StreamLoadInfo;
 import com.starrocks.load.streamload.StreamLoadKvParams;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.KeysType;
+import com.starrocks.thrift.TEnvelopeType;
 import com.starrocks.thrift.TStatus;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.warehouse.Utils;
@@ -36,6 +40,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.stream.Collectors;
@@ -45,7 +50,7 @@ import static com.starrocks.server.WarehouseManager.DEFAULT_WAREHOUSE_NAME;
 /**
  * Manages batch write operations.
  */
-public class BatchWriteMgr extends FrontendDaemon {
+public class BatchWriteMgr extends LeaderDaemon {
 
     private static final Logger LOG = LoggerFactory.getLogger(BatchWriteMgr.class);
 
@@ -61,10 +66,13 @@ public class BatchWriteMgr extends FrontendDaemon {
     // An assigner that manages the assignment of coordinator backends.
     private final CoordinatorBackendAssigner coordinatorBackendAssigner;
 
-    // A thread pool executor for executing batch write tasks.
-    private final ThreadPoolExecutor threadPoolExecutor;
+    // A thread pool executor for executing batch write tasks. Not final: shutdownNow() in
+    // onStopped() and rebuilt by start() so leader-side worker threads exit promptly on
+    // demotion and a fresh pool is available after re-election.
+    private volatile ThreadPoolExecutor threadPoolExecutor;
 
-    private final TxnStateDispatcher txnStateDispatcher;
+    // Rebuilt together with threadPoolExecutor so it never holds a reference to a shut down pool.
+    private volatile TxnStateDispatcher txnStateDispatcher;
 
     public BatchWriteMgr() {
         super("merge-commit-mgr", Config.merge_commit_gc_check_interval_ms);
@@ -79,15 +87,72 @@ public class BatchWriteMgr extends FrontendDaemon {
 
     @Override
     public synchronized void start() {
+        // Refuse to overlap with a previous worker that did not drain in onStopped(): if the
+        // pool is shutdown but not yet terminated, in-flight merge-commit submissions from the
+        // previous leader session are still running.
+        if (threadPoolExecutor != null && threadPoolExecutor.isShutdown() && !threadPoolExecutor.isTerminated()) {
+            throw new IllegalStateException(
+                    "BatchWriteMgr threadPoolExecutor has not terminated; refuse to restart");
+        }
+        if (threadPoolExecutor == null || threadPoolExecutor.isShutdown()) {
+            threadPoolExecutor = ThreadPoolManager.newDaemonCacheThreadPool(
+                    Config.merge_commit_executor_threads_num, "merge-commit", true);
+            txnStateDispatcher = new TxnStateDispatcher(threadPoolExecutor);
+        }
         super.start();
         this.coordinatorBackendAssigner.start();
         LOG.info("Start batch write manager");
     }
 
     @Override
-    protected void runAfterCatalogReady() {
+    protected void runAfterLeaseValid() {
         setInterval(Config.merge_commit_gc_check_interval_ms);
         cleanupInactiveJobs();
+    }
+
+    @Override
+    protected void onStopped() {
+        // mergeCommitJobs and the per-table backend-assigner registrations are leader-session
+        // bookkeeping: BE coordinators are picked again when the next leader sees the next
+        // request. Drop the registrations so a new leader does not inherit assignments made
+        // against a sealed editlog. The owned thread pool and the coordinator assigner are
+        // shut down so their worker threads exit promptly during demotion drain; both are
+        // rebuilt by start() on re-election.
+        lock.writeLock().lock();
+        try {
+            for (MergeCommitJob job : mergeCommitJobs.values()) {
+                try {
+                    coordinatorBackendAssigner.unregisterBatchWrite(job.getId());
+                } catch (Throwable t) {
+                    LOG.warn("unregister batch write {} failed", job.getId(), t);
+                }
+            }
+            mergeCommitJobs.clear();
+            MergeCommitMetricRegistry.getInstance().setJobNum(0);
+        } finally {
+            lock.writeLock().unlock();
+        }
+        try {
+            coordinatorBackendAssigner.stop();
+        } catch (Throwable t) {
+            LOG.warn("stop coordinatorBackendAssigner failed", t);
+        }
+        if (threadPoolExecutor != null && !threadPoolExecutor.isShutdown()) {
+            // shutdownNow() interrupts in-flight merge-commit submissions; wait boundedly so a
+            // subsequent start() does not race a still-alive worker against a freshly created
+            // pool. If termination times out start() will refuse to rebuild.
+            threadPoolExecutor.shutdownNow();
+            try {
+                if (!threadPoolExecutor.awaitTermination(
+                        Config.leader_demotion_drain_timeout_sec, TimeUnit.SECONDS)) {
+                    LOG.error("BatchWriteMgr threadPoolExecutor did not terminate within {}s",
+                            Config.leader_demotion_drain_timeout_sec);
+                }
+            } catch (InterruptedException ie) {
+                Thread.currentThread().interrupt();
+                LOG.warn("Interrupted while waiting for BatchWriteMgr threadPoolExecutor to terminate");
+            }
+        }
     }
 
     /**
@@ -206,6 +271,18 @@ public class BatchWriteMgr extends FrontendDaemon {
             status.setError_msgs(Collections.singletonList(
                     String.format("Failed to build stream load info, error: %s", e.getMessage())));
             return new Pair<>(status, null);
+        }
+
+        if (streamLoadInfo.getEnvelope() == TEnvelopeType.DEBEZIUM) {
+            Table table = GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    .getTable(tableId.getDbName(), tableId.getTableName());
+            if (table instanceof OlapTable && ((OlapTable) table).getKeysType() != KeysType.PRIMARY_KEYS) {
+                TStatus status = new TStatus();
+                status.setStatus_code(TStatusCode.INVALID_ARGUMENT);
+                status.setError_msgs(Collections.singletonList(
+                        "envelope=debezium is only supported on PRIMARY KEY tables"));
+                return new Pair<>(status, null);
+            }
         }
 
         Integer batchWriteIntervalMs = params.getBatchWriteIntervalMs().orElse(null);

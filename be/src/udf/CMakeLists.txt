@@ -27,8 +27,8 @@ set(UDF_FILES
   python/env.cpp
   python/callstub.cpp
   udf_call_stub.cpp
-  udf_downloader.cpp
-  udf_downloader.h
 )
 
 ADD_BE_LIB(Udf ${UDF_FILES})
+
+target_link_libraries(Udf PUBLIC RuntimeEnv Platform)

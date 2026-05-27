@@ -20,17 +20,17 @@
 #include "column/datum_tuple.h"
 #include "common/config_exec_fwd.h"
 #include "common/config_metrics_fwd.h"
+#include "common/metrics/process_metrics_registry.h"
 #include "exec/exec_factory.h"
 #include "exec/pipeline/scan/morsel.h"
+#include "exec/pipeline/scan/olap_morsel_queue.h"
 #include "gen_cpp/PlanNodes_types.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/exec_env.h"
 #include "runtime/global_dict/fragment_dict_state.h"
 #include "runtime/runtime_state.h"
-#include "runtime/starrocks_metrics.h"
 #include "runtime/stream_load/load_stream_mgr.h"
 #include "runtime/stream_load/stream_load_pipe.h"
-#include "util/global_metrics_registry.h"
 
 namespace starrocks {
 
@@ -39,10 +39,10 @@ public:
     void SetUp() override {
         config::enable_system_metrics = false;
         config::enable_metric_calculator = false;
-        GlobalMetricsRegistry::instance()->metrics()->set_collect_hook_enabled(true);
 
         _mem_tracker = std::make_shared<MemTracker>(-1, "connector scan");
         _exec_env = ExecEnv::GetInstance();
+        _exec_env->process_metrics_registry()->root_registry()->set_collect_hook_enabled(true);
     }
     void TearDown() override {}
 
@@ -75,8 +75,8 @@ std::shared_ptr<RuntimeState> ConnectorScanNodeTest::create_runtime_state() {
 std::shared_ptr<RuntimeState> ConnectorScanNodeTest::create_runtime_state(const TQueryOptions& query_options) {
     TUniqueId fragment_id;
     TQueryGlobals query_globals;
-    std::shared_ptr<RuntimeState> runtime_state =
-            std::make_shared<RuntimeState>(fragment_id, query_options, query_globals, _exec_env);
+    std::shared_ptr<RuntimeState> runtime_state = std::make_shared<RuntimeState>(
+            fragment_id, query_options, query_globals, &_exec_env->query_execution_services(), _exec_env);
     auto* fragment_dict_state = runtime_state->obj_pool()->add(new FragmentDictState());
     runtime_state->set_fragment_dict_state(fragment_dict_state);
     TUniqueId id;
@@ -188,6 +188,25 @@ TEST_F(ConnectorScanNodeTest, test_convert_scan_range_to_morsel_queue_factory_cl
     ASSERT_TRUE(morsel_queue_factory->is_shared());
 }
 
+TEST_F(ConnectorScanNodeTest, lake_morsel_queue_builder_preserves_olap_capability) {
+    std::shared_ptr<RuntimeState> runtime_state = create_runtime_state();
+    std::vector<TypeDescriptor> types;
+    types.emplace_back(TYPE_INT);
+    auto* descs = create_table_desc(runtime_state.get(), types);
+    auto tnode = create_tplan_node_cloud();
+    auto scan_node = std::make_shared<starrocks::ConnectorScanNode>(runtime_state->obj_pool(), *tnode, *descs);
+    ASSERT_OK(scan_node->init(*tnode, runtime_state.get()));
+
+    auto scan_ranges = create_scan_ranges_cloud(1);
+    ASSIGN_OR_ABORT(auto builder, scan_node->convert_scan_range_to_morsel_queue_builder(
+                                          scan_ranges, scan_node->id(), 1,
+                                          /*enable_tablet_internal_parallel=*/false,
+                                          TTabletInternalParallelMode::type::AUTO, scan_ranges.size()));
+    ASSIGN_OR_ABORT(auto queue, builder->build());
+    ASSERT_EQ(pipeline::MorselQueue::Type::DYNAMIC, queue->type());
+    ASSERT_NE(nullptr, dynamic_cast<pipeline::OlapMorselQueue*>(queue.get()));
+}
+
 std::shared_ptr<TPlanNode> ConnectorScanNodeTest::create_tplan_node_hive() {
     std::vector<::starrocks::TTupleId> tuple_ids{0};
 
@@ -263,6 +282,25 @@ TEST_F(ConnectorScanNodeTest, test_convert_scan_range_to_morsel_queue_factory_hi
                             scan_ranges, no_scan_ranges_per_driver_seq, scan_node->id(), pipeline_dop, false,
                             enable_tablet_internal_parallel, tablet_internal_parallel_mode));
     ASSERT_TRUE(morsel_queue_factory->is_shared());
+}
+
+TEST_F(ConnectorScanNodeTest, hive_morsel_queue_builder_uses_generic_dynamic_queue) {
+    std::shared_ptr<RuntimeState> runtime_state = create_runtime_state();
+    std::vector<TypeDescriptor> types;
+    types.emplace_back(TYPE_INT);
+    auto* descs = create_table_desc(runtime_state.get(), types);
+    auto tnode = create_tplan_node_hive();
+    auto scan_node = std::make_shared<starrocks::ConnectorScanNode>(runtime_state->obj_pool(), *tnode, *descs);
+    ASSERT_OK(scan_node->init(*tnode, runtime_state.get()));
+
+    auto scan_ranges = create_scan_ranges_hive(1);
+    ASSIGN_OR_ABORT(auto builder, scan_node->convert_scan_range_to_morsel_queue_builder(
+                                          scan_ranges, scan_node->id(), 1,
+                                          /*enable_tablet_internal_parallel=*/false,
+                                          TTabletInternalParallelMode::type::AUTO, scan_ranges.size()));
+    ASSIGN_OR_ABORT(auto queue, builder->build());
+    ASSERT_EQ(pipeline::MorselQueue::Type::DYNAMIC, queue->type());
+    ASSERT_EQ(nullptr, dynamic_cast<pipeline::OlapMorselQueue*>(queue.get()));
 }
 
 std::shared_ptr<TPlanNode> ConnectorScanNodeTest::create_tplan_node_stream_load() {
@@ -365,6 +403,21 @@ TEST_F(ConnectorScanNodeTest, test_stream_load_thread_pool) {
     ASSERT_EQ(1, tuple.get(0).get_int32());
     ASSERT_EQ("test", tuple.get(1).get_slice());
     ASSERT_TRUE(scan_node->use_stream_load_thread_pool());
+}
+
+TEST_F(ConnectorScanNodeTest, missing_connector_returns_unknown_error) {
+    std::shared_ptr<RuntimeState> runtime_state = create_runtime_state();
+    std::vector<TypeDescriptor> types;
+    types.emplace_back(TYPE_INT);
+    auto* descs = create_table_desc(runtime_state.get(), types);
+
+    auto tnode = create_tplan_node_hive();
+    tnode->connector_scan_node.connector_name = "__missing_connector__";
+    auto scan_node = std::make_shared<starrocks::ConnectorScanNode>(runtime_state->obj_pool(), *tnode, *descs);
+
+    auto status = scan_node->init(*tnode, runtime_state.get());
+    ASSERT_TRUE(status.is_unknown()) << status;
+    ASSERT_NE(status.message().find("Unknown connector: __missing_connector__"), std::string::npos);
 }
 
 // When FE sets catalog_type explicitly, use it.

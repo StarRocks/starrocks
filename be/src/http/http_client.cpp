@@ -17,9 +17,6 @@
 
 #include "http/http_client.h"
 
-#include "common/config_http_fwd.h"
-#include "fs/fs_util.h"
-
 namespace starrocks {
 
 HttpClient::HttpClient() = default;
@@ -32,6 +29,10 @@ HttpClient::~HttpClient() {
     if (_header_list != nullptr) {
         curl_slist_free_all(_header_list);
         _header_list = nullptr;
+    }
+    if (_resolve_list != nullptr) {
+        curl_slist_free_all(_resolve_list);
+        _resolve_list = nullptr;
     }
 }
 
@@ -49,6 +50,10 @@ Status HttpClient::init(const std::string& url) {
     if (_header_list != nullptr) {
         curl_slist_free_all(_header_list);
         _header_list = nullptr;
+    }
+    if (_resolve_list != nullptr) {
+        curl_slist_free_all(_resolve_list);
+        _resolve_list = nullptr;
     }
     // set error_buf
     _error_buf[0] = 0;
@@ -69,12 +74,15 @@ Status HttpClient::init(const std::string& url) {
         LOG(WARNING) << "fail to set CURLOPT_FAILONERROR, msg=" << _to_errmsg(code);
         return Status::InternalError("fail to set CURLOPT_FAILONERROR");
     }
-    // set redirect
+    // Enable automatic redirect following by default
+    // Note: For SSRF-sensitive use cases (like http_request() function),
+    // call set_follow_redirects(false) after init() to disable this
     code = curl_easy_setopt(_curl, CURLOPT_FOLLOWLOCATION, 1L);
     if (code != CURLE_OK) {
         LOG(WARNING) << "fail to set CURLOPT_FOLLOWLOCATION, msg=" << _to_errmsg(code);
         return Status::InternalError("fail to set CURLOPT_FOLLOWLOCATION");
     }
+    // Limit maximum number of redirects to prevent infinite loops
     code = curl_easy_setopt(_curl, CURLOPT_MAXREDIRS, 20);
     if (code != CURLE_OK) {
         LOG(WARNING) << "fail to set CURLOPT_MAXREDIRS, msg=" << _to_errmsg(code);
@@ -215,34 +223,6 @@ Status HttpClient::execute(const std::function<bool(const void* data, size_t len
     return Status::OK();
 }
 
-StatusOr<uint64_t> HttpClient::download(const std::string& local_path) {
-    // set method to GET
-    set_method(GET);
-
-    // TODO(zc) Move this download speed limit outside to limit download speed
-    // at system level
-    curl_easy_setopt(_curl, CURLOPT_LOW_SPEED_LIMIT, config::download_low_speed_limit_kbps * 1024);
-    curl_easy_setopt(_curl, CURLOPT_LOW_SPEED_TIME, config::download_low_speed_time);
-    curl_easy_setopt(_curl, CURLOPT_MAX_RECV_SPEED_LARGE, config::max_download_speed_kbps * 1024);
-
-    WritableFileOptions opts{.sync_on_close = true, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
-    ASSIGN_OR_RETURN(auto output_file, fs::new_writable_file(opts, local_path));
-
-    Status status;
-    auto callback = [&status, &output_file, &local_path](const void* data, size_t length) {
-        status = output_file->append(Slice((const char*)data, length));
-        if (!status.ok()) {
-            LOG(WARNING) << "fail to write data to file, file=" << local_path << ", error=" << status;
-            return false;
-        }
-        return true;
-    };
-    RETURN_IF_ERROR(execute(callback));
-    RETURN_IF_ERROR(status);
-    RETURN_IF_ERROR(output_file->close());
-    return output_file->size();
-}
-
 Status HttpClient::download(const std::function<Status(const void* data, size_t length)>& callback,
                             int32_t min_speed_limit_kbps, int32_t min_speed_time_sec, int32_t max_speed_limit_kbps) {
     // set method to GET
@@ -278,6 +258,26 @@ const char* HttpClient::_to_errmsg(CURLcode code) {
         return curl_easy_strerror(code);
     }
     return _error_buf;
+}
+
+void HttpClient::set_resolve_host(const std::string& resolve_entry) {
+    // Pin DNS resolution to prevent DNS rebinding attacks
+    // Format: "hostname:port:ip_address" (e.g., "example.com:443:93.184.216.34")
+    // See: https://curl.se/libcurl/c/CURLOPT_RESOLVE.html
+
+    // Free existing resolve list if any
+    if (_resolve_list != nullptr) {
+        curl_slist_free_all(_resolve_list);
+        _resolve_list = nullptr;
+    }
+
+    // Add the resolve entry
+    _resolve_list = curl_slist_append(_resolve_list, resolve_entry.c_str());
+
+    // Apply to curl handle
+    if (_curl != nullptr && _resolve_list != nullptr) {
+        curl_easy_setopt(_curl, CURLOPT_RESOLVE, _resolve_list);
+    }
 }
 
 Status HttpClient::execute_with_retry(int retry_times, int sleep_time,

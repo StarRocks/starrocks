@@ -79,36 +79,10 @@
                         "deployment/prepare_deployment_files"
                     ]
                 },
-                {
-                    "type": "category",
-                    "label": "Shared-nothing deployment",
-                    "link": {
-                        "type": "doc",
-                        "id": "cover_pages/shared_nothing_deployment"
-                    },
-                    "items": [
-                        "deployment/deploy_manually",
-                        "deployment/sr_operator",
-                        "deployment/helm"
-                    ]
-                },
-                {
-                    "type": "category",
-                    "label": "Shared-data deployment",
-                    "link": {
-                        "type": "doc",
-                        "id": "deployment/shared_data/shared_data"
-                    },
-                    "items": [
-                        "deployment/shared_data/s3",
-                        "deployment/shared_data/gcs",
-                        "deployment/shared_data/azure",
-                        "deployment/shared_data/other",
-                        "deployment/shared_data/minio",
-                        "deployment/shared_data/hdfs",
-                        "deployment/shared_data/feature-support-shared-data"
-                    ]
-                },
+                "deployment/deploy_manually",
+                "deployment/deploy_shared_data_manually",
+                "deployment/sr_operator",
+                "deployment/helm",
                 {
                     "type": "category",
                     "label": "Manage your deployment",
@@ -121,7 +95,8 @@
                         "deployment/upgrade",
                         "deployment/downgrade"
                     ]
-                }
+                },
+                "deployment/feature-support-shared-data"
             ]
         },
         {
@@ -158,7 +133,8 @@
                         "loading/loading_introduction/loading_concepts",
                         "loading/loading_introduction/loading_considerations",
                         "loading/loading_introduction/feature-support-loading-and-unloading",
-                        "loading/loading_introduction/troubleshooting_loading"
+                        "loading/loading_introduction/troubleshooting_loading",
+                        "loading/loading_introduction/rejected_records"
                     ]
                 },
                 {
@@ -439,12 +415,17 @@
                         "integrations/IDE_integrations/DataGrip",
                         "integrations/IDE_integrations/Dataphin",
                         "integrations/IDE_integrations/DBeaver",
-                        "integrations/IDE_integrations/jupysql"
+                        "integrations/IDE_integrations/jupysql",
+                        "integrations/IDE_integrations/marimo"
                     ]
                 },
                 {
                     "type": "doc",
                     "id": "integrations/other_integrations/datadog_support"
+                },
+                {
+                    "type": "doc",
+                    "id": "integrations/JDBC_driver"
                 },
                 {
                     "type": "doc",

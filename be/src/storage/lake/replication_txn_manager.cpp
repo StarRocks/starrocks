@@ -18,16 +18,17 @@
 #include <sys/stat.h>
 
 #include <filesystem>
+#include <numeric>
 #include <set>
 
-#include "agent/agent_server.h"
-#include "agent/master_info.h"
-#include "agent/task_signatures_manager.h"
 #include "base/string/string_parser.hpp"
 #include "base/utility/defer_op.h"
+#include "column/schema.h"
 #include "common/config_http_fwd.h"
 #include "common/config_rowset_fwd.h"
 #include "common/system/backend_options.h"
+#include "common/system/master_info.h"
+#include "common/util/thrift_client_cache.h"
 #include "fs/fs.h"
 #include "fs/fs_memory.h"
 #include "fs/key_cache.h"
@@ -37,11 +38,14 @@
 #include "gutil/strings/stringpiece.h"
 #include "gutil/strings/substitute.h"
 #include "http/http_client.h"
-#include "runtime/client_cache.h"
+#include "platform/thrift_rpc_helper.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
+#include "storage/chunk_helper.h"
+#include "storage/del_file_stream_converter.h"
 #include "storage/delete_handler.h"
 #include "storage/delta_column_group.h"
+#include "storage/lake/filenames.h"
 #include "storage/lake/location_provider.h"
 #include "storage/lake/meta_file.h"
 #include "storage/lake/tablet.h"
@@ -54,7 +58,7 @@
 #include "storage/segment_stream_converter.h"
 #include "storage/snapshot_manager.h"
 #include "storage/tablet_updates.h"
-#include "util/thrift_rpc_helper.h"
+#include "types/logical_type.h"
 
 namespace starrocks::lake {
 
@@ -157,7 +161,8 @@ Status ReplicationTxnManager::remote_snapshot(const TRemoteSnapshotRequest& requ
     return tablet.put_txn_slog(txn_log);
 }
 
-Status ReplicationTxnManager::replicate_snapshot(const TReplicateSnapshotRequest& request) {
+Status ReplicationTxnManager::replicate_snapshot(const TReplicateSnapshotRequest& request,
+                                                 ThreadPool* replicate_file_thread_pool) {
     if (UNLIKELY(StorageEngine::instance()->bg_worker_stopped())) {
         return Status::InternalError("Process is going to quit. The replicate snapshot will stop");
     }
@@ -185,7 +190,7 @@ Status ReplicationTxnManager::replicate_snapshot(const TReplicateSnapshotRequest
     ASSIGN_OR_RETURN(auto tablet_metadata, tablet.get_metadata(request.visible_version));
 
     if (request.src_tablet_type == TTabletType::TABLET_TYPE_LAKE) {
-        auto status = _lake_replication_txn_manager->replicate_lake_remote_storage(request);
+        auto status = _lake_replication_txn_manager->replicate_lake_remote_storage(request, replicate_file_thread_pool);
         if (!status.ok()) {
             LOG(WARNING) << "Failed to replicate lake remote file, tablet_id: " << request.tablet_id
                          << ", txn_id: " << request.transaction_id << ", src_tablet_id: " << request.src_tablet_id
@@ -371,15 +376,19 @@ Status ReplicationTxnManager::replicate_remote_snapshot(const TReplicateSnapshot
             txn_log->mutable_op_replication()->mutable_source_schema()->CopyFrom(
                     TabletMeta::rowset_meta_pb_with_max_rowset_version(rowset_metas).tablet_schema());
             source_schema_pb = &txn_log->op_replication().source_schema();
-        } else {
-            // Get source schema from previous saved in tablet meta
+        } else if (tablet_metadata->has_source_schema()) {
+            // Get source schema from previous saved in tablet meta. Protobuf returns a default
+            // instance if the field is unset; gate on has_source_schema() so the null check
+            // below actually catches a missing schema.
             source_schema_pb = &tablet_metadata->source_schema();
         }
 
         if (source_schema_pb == nullptr) {
-            LOG(WARNING) << "Failed to get source schema, tablet meta has schema: "
-                         << snapshot_meta.tablet_meta().has_schema() << ", rowset meta has schema: "
-                         << (!rowset_metas.empty() && rowset_metas.front().has_tablet_schema());
+            LOG(WARNING) << "Failed to get source schema for PK tablet " << tablet_metadata->id()
+                         << ", snapshot has_schema=" << snapshot_meta.tablet_meta().has_schema()
+                         << ", front rowset has_tablet_schema="
+                         << (!rowset_metas.empty() && rowset_metas.front().has_tablet_schema())
+                         << ", tablet_meta has_source_schema=" << tablet_metadata->has_source_schema();
             return Status::Corruption("Failed to get source schema");
         }
     }
@@ -397,8 +406,13 @@ Status ReplicationTxnManager::replicate_remote_snapshot(const TReplicateSnapshot
     std::vector<std::string> files_to_delete;
     CancelableDefer clean_files([&files_to_delete]() { lake::delete_files_async(std::move(files_to_delete)); });
 
-    auto file_converters =
-            build_file_converters(_tablet_manager, request, filename_map, column_unique_id_map, files_to_delete);
+    // Determine source/target PK encoding for .del-file transcoding. NONE sentinels stay set for
+    // non-PK tables and cause build_file_converters to skip the .del transcode branch.
+    ASSIGN_OR_RETURN(auto del_transcode_ctx, prepare_del_transcode_context(*tablet_metadata, *source_schema_pb));
+
+    auto file_converters = build_file_converters(_tablet_manager, request, filename_map, column_unique_id_map,
+                                                 files_to_delete, del_transcode_ctx.pkey_schema,
+                                                 del_transcode_ctx.source_encoding, del_transcode_ctx.target_encoding);
 
     RETURN_IF_ERROR(ReplicationUtils::download_remote_snapshot(
             src_snapshot_info.backend.host, src_snapshot_info.backend.http_port, request.src_token,
@@ -640,14 +654,72 @@ Status ReplicationTxnManager::convert_dcg_column_unique_ids(
     return Status::OK();
 }
 
+StatusOr<DelTranscodeContext> ReplicationTxnManager::prepare_del_transcode_context(
+        const TabletMetadata& tablet_metadata, const TabletSchemaPB& source_schema_pb) {
+    DelTranscodeContext ctx;
+    if (!is_primary_key(tablet_metadata)) {
+        return ctx;
+    }
+
+    // target_schema is shared because ChunkHelper::convert_schema takes TabletSchemaCSPtr;
+    // source_schema is only read locally for validation, so a stack instance suffices.
+    auto target_schema = std::make_shared<TabletSchema>(tablet_metadata.schema());
+    TabletSchema source_schema(source_schema_pb);
+    // PK encoding must be valid on both sides; PK_ENCODING_TYPE_NONE here would indicate
+    // corrupted metadata (TabletSchema falls back to V1 for pre-PR-69939 PK tables, so
+    // an invalid value should not slip through silently).
+    ASSIGN_OR_RETURN(ctx.target_encoding, target_schema->primary_key_encoding_type_or_error());
+    ASSIGN_OR_RETURN(ctx.source_encoding, source_schema.primary_key_encoding_type_or_error());
+
+    // Cross-cluster PK contract: column count and per-column logical type must agree.
+    // Cluster-to-cluster replication only makes sense if PK structure matches; surface
+    // any mismatch loudly instead of attempting unsafe transcoding.
+    if (source_schema.num_key_columns() != target_schema->num_key_columns()) {
+        return Status::NotSupported(strings::Substitute(
+                "PK column count mismatch between source ($0) and target ($1) on tablet $2",
+                source_schema.num_key_columns(), target_schema->num_key_columns(), tablet_metadata.id()));
+    }
+    for (size_t i = 0; i < target_schema->num_key_columns(); ++i) {
+        if (source_schema.column(i).type() != target_schema->column(i).type()) {
+            return Status::NotSupported(strings::Substitute(
+                    "PK column[$0] logical type mismatch between source ($1) and target ($2) on tablet $3", i,
+                    logical_type_to_string(source_schema.column(i).type()),
+                    logical_type_to_string(target_schema->column(i).type()), tablet_metadata.id()));
+        }
+    }
+
+    // Explicitly reject V2 -> V1 on the byte-incompatible PK shape. The reverse direction
+    // is not transcodable (no V2 -> typed-column decoder) and a byte copy would leave
+    // V2-shaped bytes that the V1 target reader misinterprets.
+    if (ctx.source_encoding == PrimaryKeyEncodingType::PK_ENCODING_TYPE_V2 &&
+        ctx.target_encoding == PrimaryKeyEncodingType::PK_ENCODING_TYPE_V1 &&
+        is_single_fixed_length_non_string_primary_key(*target_schema)) {
+        return Status::NotSupported(
+                strings::Substitute("V2 source -> V1 target cross-cluster replication is not supported on a single "
+                                    "non-string fixed-length PK column (.del files would byte-copy and be misread on "
+                                    "the target). Tablet $0, pk_logical_type $1",
+                                    tablet_metadata.id(), logical_type_to_string(target_schema->column(0).type())));
+    }
+
+    std::vector<ColumnId> pk_idxes(target_schema->num_key_columns());
+    std::iota(pk_idxes.begin(), pk_idxes.end(), 0);
+    ctx.pkey_schema = std::make_shared<Schema>(ChunkHelper::convert_schema(target_schema, pk_idxes));
+    return ctx;
+}
+
 // Helper function to create replication txn log with converted metadata
 FileConverterCreatorFunc ReplicationTxnManager::build_file_converters(
         const TabletManager* tablet_manager, const TReplicateSnapshotRequest& request,
         const std::unordered_map<std::string, std::pair<std::string, FileEncryptionPair>>& filename_map,
-        std::unordered_map<uint32_t, uint32_t>& column_unique_id_map, std::vector<std::string>& files_to_delete) {
-    auto file_converters = [tablet_manager, request, filename_map, &column_unique_id_map, &files_to_delete](
-                                   const std::string& file_name,
-                                   uint64_t file_size) -> StatusOr<std::unique_ptr<FileStreamConverter>> {
+        std::unordered_map<uint32_t, uint32_t>& column_unique_id_map, std::vector<std::string>& files_to_delete,
+        SchemaPtr pkey_schema, PrimaryKeyEncodingType source_pk_encoding, PrimaryKeyEncodingType target_pk_encoding) {
+    const bool need_del_transcode =
+            pkey_schema != nullptr &&
+            requires_v1_to_v2_del_transcode(source_pk_encoding, target_pk_encoding, *pkey_schema);
+    auto file_converters = [tablet_manager, request, filename_map, &column_unique_id_map, &files_to_delete, pkey_schema,
+                            source_pk_encoding, target_pk_encoding,
+                            need_del_transcode](const std::string& file_name,
+                                                uint64_t file_size) -> StatusOr<std::unique_ptr<FileStreamConverter>> {
         if (request.transaction_id < get_master_info().min_active_txn_id) {
             LOG(WARNING) << "Transaction is aborted, txn_id: " << request.transaction_id
                          << ", tablet_id: " << request.tablet_id << ", src_tablet_id: " << request.src_tablet_id
@@ -671,6 +743,10 @@ FileConverterCreatorFunc ReplicationTxnManager::build_file_converters(
 
         files_to_delete.push_back(std::move(segment_location));
 
+        if (need_del_transcode && is_del(file_name)) {
+            return std::make_unique<DelFileStreamConverter>(file_name, file_size, std::move(output_file), pkey_schema,
+                                                            source_pk_encoding, target_pk_encoding);
+        }
         if ((is_segment(file_name) || is_cols(file_name)) && !column_unique_id_map.empty()) {
             return std::make_unique<SegmentStreamConverter>(file_name, file_size, std::move(output_file),
                                                             &column_unique_id_map);

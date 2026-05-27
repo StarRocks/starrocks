@@ -21,8 +21,8 @@
 #include "column/fixed_length_column.h"
 #include "gutil/casts.h"
 #include "json2pb/pb_to_json.h"
-#include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
+#include "runtime/service_contexts.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_metadata.h"
 #include "types/logical_type.h"
@@ -91,7 +91,10 @@ std::pair<Columns, UInt32Column::Ptr> ListRowsets::process(RuntimeState* runtime
         return {};
     }
 
-    auto tablet_mgr = runtime_state->exec_env()->lake_tablet_manager();
+    const auto* query_execution_services = runtime_state->query_execution_services();
+    auto* tablet_mgr = query_execution_services != nullptr && query_execution_services->lake != nullptr
+                               ? query_execution_services->lake->lake_tablet_manager
+                               : nullptr;
     if (UNLIKELY(tablet_mgr == nullptr)) {
         state->set_status(Status::InternalError("Only works for tablets in the cloud-native table"));
         return {};

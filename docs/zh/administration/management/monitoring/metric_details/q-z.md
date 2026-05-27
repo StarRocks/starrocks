@@ -8,10 +8,10 @@ description: "Alphabetical q - z"
 
 :::note
 
-物化视图和共享数据集群的指标在相应章节中详细介绍：
+物化视图和存算分离集群的指标在相应章节中详细介绍：
 
 - [异步物化视图指标](../metrics-materialized_view.md)
-- [共享数据仪表盘指标和 Starlet 仪表盘指标](../metrics-shared-data.md)
+- [存算分离仪表盘指标和 Starlet 仪表盘指标](../metrics-shared-data.md)
 
 有关如何为 StarRocks 集群构建监控服务的更多信息，请参阅 [监控和告警](../Monitor_and_Alert.md)。
 
@@ -65,6 +65,48 @@ description: "Alphabetical q - z"
 
 - 单位：计数
 - 描述：扫描的总行数。
+
+## `query_spill_trigger_total`
+
+- 单位：计数
+- 标签：`storage_type`
+- 描述：按存储后端（`local`、`remote`）细分的、触发过至少一次落盘的 spillable 算子实例数量。每个算子实例首次执行 flush 回调时累加一次。
+
+## `query_spill_bytes_write_total`
+
+- 单位：字节
+- 标签：`storage_type`
+- 描述：按存储后端细分的、spillable 算子累计写入溢出存储的有效负载字节数。
+
+## `query_spill_bytes_read_total`
+
+- 单位：字节
+- 标签：`storage_type`
+- 描述：按存储后端细分的、恢复阶段从溢出存储累计读回的有效负载字节数。
+
+## `query_spill_blocks_write_total`
+
+- 单位：计数
+- 标签：`storage_type`
+- 描述：按存储后端细分的、为写入分配的溢出 block 数量。用于估算写路径的 IO 次数规模。
+
+## `query_spill_blocks_read_total`
+
+- 单位：计数
+- 标签：`storage_type`
+- 描述：按存储后端细分的、打开用于读取的溢出 block 数量。用于估算读路径的 IO 次数规模。
+
+## `query_spill_write_io_duration_ns_total`
+
+- 单位：纳秒
+- 标签：`storage_type`
+- 描述：按存储后端细分的、写侧溢出 IO（block append 与 flush）累计耗时。用于跟踪写盘性能。
+
+## `query_spill_read_io_duration_ns_total`
+
+- 单位：纳秒
+- 标签：`storage_type`
+- 描述：按存储后端细分的、恢复阶段读侧溢出 IO（block 读取）累计耗时。用于跟踪读盘性能。
 
 ## `readable_blocks_total (Deprecated)`
 
@@ -203,6 +245,12 @@ description: "Alphabetical q - z"
 - 单位: 计数
 - 描述: 小文件缓存的数量。
 
+## `spill_disk_bytes_used`
+
+- 单位: 字节
+- 标签: `storage_type`
+- 描述: 所有溢出存储目录当前已占用的磁盘字节数。`storage_type=local` 汇总 BE 溢出 `DirManager` 管理的每个目录中正在使用的字节数。`storage_type=remote` 为对称保留，当前始终为 0，因为远端溢出存储由单独的查询实例各自管理，没有全局的聚合数据。
+
 ## `snmp`
 
 - 单位: -
@@ -268,6 +316,72 @@ description: "Alphabetical q - z"
 
 - 单位: 计数
 - 描述: 读取的有效行数（不包括格式无效的行）。标签: `file_format`, `scan_type`。
+
+## `starrocks_be_flat_json_access_hit_total`
+
+- 单位: 计数
+- 类型: 累积值
+- 描述: 扫描时 flat JSON 子列访问命中次数的累计值。汇总自单次扫描的 `flat_json_hits` 与 `merge_json_hits` 统计。
+
+## `starrocks_be_flat_json_access_miss_total`
+
+- 单位: 计数
+- 类型: 累积值
+- 描述: 扫描时 flat JSON 子列访问未命中次数的累计值。汇总自单次扫描的 `dynamic_json_hits` 统计（未被物化为 flat 子列的路径）。
+
+## `starrocks_be_flat_json_cast_duration_ns_total`
+
+- 单位: 纳秒
+- 类型: 累积值
+- 描述: 扫描时对 flat JSON 子列值进行类型转换的累计耗时。
+
+## `starrocks_be_flat_json_compaction_schema_change_total`
+
+- 单位: 计数
+- 类型: 累积值
+- 描述: 在 compaction 过程中 `HyperJsonTransformer` 因输入 flat JSON schema 与上一段不同而重新初始化的次数。数值偏高表示参与 compaction 的 segment 间 schema 抖动。
+
+## `starrocks_be_flat_json_compaction_total`
+
+- 单位: 计数
+- 类型: 累积值
+- 描述: `FlatJsonColumnCompactor` 执行 JSON 列扁平化的 compaction 调用次数。
+
+## `starrocks_be_flat_json_flatten_duration_ns_total`
+
+- 单位: 纳秒
+- 类型: 累积值
+- 描述: 扫描时 JSON 扁平化的累计耗时。
+
+## `starrocks_be_flat_json_merge_duration_ns_total`
+
+- 单位: 纳秒
+- 类型: 累积值
+- 描述: 扫描时将 flat JSON 子列合并回完整 JSON 的累计耗时。
+
+## `starrocks_be_flat_json_paths_discovered_total`
+
+- 单位: 计数
+- 类型: 累积值
+- 描述: 在 flat JSON 段写入过程中 `JsonPathDeriver` 探测到的 JSON 路径总数。
+
+## `starrocks_be_flat_json_paths_extracted_total`
+
+- 单位: 计数
+- 类型: 累积值
+- 描述: `FlatJsonColumnWriter` 物化为子列的 JSON 路径总数（含附加的 null/remain 列）。
+
+## `starrocks_be_flat_json_segment_write_total`
+
+- 单位: 计数
+- 类型: 累积值
+- 描述: 触发 flat JSON 列抽取的 segment 写入次数。
+
+## `starrocks_be_flat_json_write_rows_total`
+
+- 单位: 计数
+- 类型: 累积值
+- 描述: 进入 `FlatJsonColumnWriter` 的行数（在 `append()` 处统计，实际扁平化之前）。
 
 ## `starrocks_be_mem_pool_mem_limit_bytes`
 
@@ -352,6 +466,24 @@ description: "Alphabetical q - z"
 - 单位：计数
 - 描述：在段打开期间未找到段文件（文件丢失）的总次数。持续增加的值可能表示数据丢失或存储不一致。
 
+## `starrocks_be_staros_shard_info_fallback_total`
+
+- 单位：计数
+- 类型：累积
+- 描述：仅存算分离模式。BE 的 StarOSWorker 因本地缓存中没有所需的 shard 信息（即 FE 在查询 / 合并 / lake 操作引用该 shard 之前尚未将其推送到该 BE）而实际向 starmgr 发起的 RPC（`g_starlet->get_shard_info()`）总次数。仅在 starlet 就绪检查通过且 RPC 实际发出后才计入；starlet 尚未就绪的超时不包含在内。正常情况下该值应接近零。持续或上升的速率是一个强烈信号，表明 FE 端的任务或节点选择正把任务调度到尚未拥有该 shard 的 BE，或者 FE 端的 shard 推送存在滞后。建议告警：单个 BE 在 5 分钟窗口内的速率过高。
+
+## `starrocks_be_staros_shard_info_fallback_failed_total`
+
+- 单位：计数
+- 类型：累积
+- 描述：仅存算分离模式。`starrocks_be_staros_shard_info_fallback_total` 中 starmgr RPC 返回非 OK 状态的子集。可使用比率 `failed_total / fallback_total` 将 starmgr 的瞬时错误与正常的成功回退区分开来进行告警。
+
+## `starrocks_be_staros_shard_count`
+
+- 单位：计数
+- 类型：瞬时值
+- 描述：仅存算分离模式。当前分配给该 BE 的 StarOSWorker 的 shard 数量（即 worker 本地 shard 表的大小）。该值在 `StarOSWorker::add_shard` 与 `StarOSWorker::remove_shard` 内同步写入（mutation 时推送），不是在指标采集时重新计算；因此采集到的值反映的是最近一次 shard 表的变更结果。BE 关闭时该 gauge 不会被清零，会保留到下一次发生 mutation 为止。可用于观测各 BE 之间的 shard 分布均衡情况，并发现与 FE 端调度结果的偏差。
+
 ## `starrocks_fe_clone_task_copy_bytes`
 
 - 单位：字节
@@ -380,13 +512,13 @@ description: "Alphabetical q - z"
 
 - 单位：毫秒
 - 类型：瞬时
-- 描述：表示特定仓库下最后一次查询或加载的结束时间。对于无共享集群，此项仅监控默认仓库。
+- 描述：表示特定仓库下最后一次查询或加载的结束时间。对于存算一体集群，此项仅监控默认仓库。
 
 ## `starrocks_fe_memory_usage`
 
 - 单位：字节或计数
 - 类型：瞬时
-- 描述：表示特定仓库下各种模块的内存统计信息。对于无共享集群，此项仅监控默认仓库。
+- 描述：表示特定仓库下各种模块的内存统计信息。对于存算一体集群，此项仅监控默认仓库。
 
 ## `starrocks_fe_meta_log_count`
 
@@ -528,6 +660,63 @@ description: "Alphabetical q - z"
 - 单位：计数
 - 描述：被拦截的黑名单 SQL 的次数。
 
+## `starrocks_fe_tablet_pre_split_eligibility_skipped`
+
+- 单位：计数
+- 类型：累计
+- 标签：`reason` — SkipReason 枚举值（小写形式），取值之一：`not_range_distribution`、`table_not_normal`、`has_materialized_view_or_rollup`、`unsupported_sort_key`、`metadata_not_resolved`、`multiple_base_index_tablets`、`partition_not_empty`、`disabled_by_config`、`disabled_by_session`。
+- 描述：基于采样的 Tablet 预分裂（Sample-Based Tablet Pre-Split）在 FE 端被资格门拒绝、采样器尚未启动的总次数，按拒绝原因细分。运维可据此一眼定位"预分裂没跑"是哪条具体分支造成的。
+
+## `starrocks_fe_tablet_pre_split_sampler_invocations`
+
+- 单位：计数
+- 类型：累计
+- 描述：由基于采样的 Tablet 预分裂触发的采样器调用总次数。每次资格门通过、生产采样管道开始采样时递增一次。
+
+## `starrocks_fe_tablet_pre_split_sampler_failed`
+
+- 单位：计数
+- 类型：累计
+- 标签：`reason` — 资格门通过后的失败类别（SkipReason 的小写形式），取值之一：`sample_failed`（采样执行器抛错）、`timeout_pre_submit`（采样 + 规划 + 构建阶段超出 `tablet_pre_split_pre_submit_timeout_seconds`）、`submit_failed`（`TabletReshardJobMgr` 拒绝接纳）。
+- 描述：采样器尝试但未能产出已接纳的 reshard 作业的总次数，按原因细分。与 `tablet_pre_split_eligibility_skipped`（采样器从未运行）以及 `tablet_pre_split_tier_used`（记录成功生成边界的层级）相区分。meta-tier → data-tier 回退本身不算失败，由 `tablet_pre_split_tier_used{tier=data_tier}` 跟踪。
+
+## `starrocks_fe_tablet_pre_split_tier_used`
+
+- 单位：计数
+- 类型：累计
+- 标签：`tier` — `meta_tier`（边界由 Parquet/ORC row-group 统计算出，不读取行数据）或 `data_tier`（边界由 FILES 子查询采样的实际行算出，包含直接 data-tier 调用与 meta-tier → data-tier 回退两种来源）。
+- 描述：基于采样的 Tablet 预分裂调用总数，按生成边界的采样器层级细分。
+
+## `starrocks_fe_tablet_pre_split_boundaries_planned`
+
+- 单位：计数
+- 类型：直方图
+- 描述：每次调用规划器产生的边界元组数量。等于 `effectiveTabletCount - 1`（K 个 tablet 的切分需要 K-1 个切点）。
+
+## `starrocks_fe_tablet_pre_split_pre_submit_wait_ms`
+
+- 单位：毫秒
+- 类型：直方图
+- 描述：基于采样的 Tablet 预分裂在「提交前阶段」（采样 + 规划 + 构建 reshard 作业）耗费的墙钟时间。受 `tablet_pre_split_pre_submit_timeout_seconds` 上限约束。
+
+## `starrocks_fe_tablet_pre_split_post_submit_wait_ms`
+
+- 单位：毫秒
+- 类型：直方图
+- 描述：协调器等待已提交的预分裂 reshard 作业到达 `FINISHED` 状态所耗费的墙钟时间。INSERT-from-FILES 生产路径上触发（hook 同步等待 FINISHED，使本次 INSERT 直接看到分裂后的 tablet 布局）；测试用的 `runPreSplit` 同步包装路径也触发。Broker Load 生产路径采用 fire-and-forget，不会更新此直方图。
+
+## `starrocks_fe_tablet_pre_split_post_submit_hard_cap`
+
+- 单位：计数
+- 类型：累计
+- 描述：基于采样的 Tablet 预分裂触发提交后硬上限的事件总数。已提交的 reshard 作业未能在 `tablet_pre_split_post_submit_wait_seconds` 内到达 `FINISHED` 时递增。INSERT-from-FILES 生产路径超时后会触发（INSERT 此时**不中止地继续执行**，按当时可见的 Tablet 布局做计划 —— 守护线程还未推进则仍为原单 tablet 布局，若守护线程在我们放弃等待之后才完成则可能已部分／完全分裂；**不**递增 `tablet_pre_split_load_abort`，因为 INSERT 本身未被中止）；测试用的 `runPreSplit` 同步包装路径也会触发。Broker Load 生产路径不等待，因此不会更新此计数器。
+
+## `starrocks_fe_tablet_pre_split_load_abort`
+
+- 单位：计数
+- 类型：累计
+- 描述：因基于采样的 Tablet 预分裂未能在限定时间内确认 reshard 作业到达 `FINISHED` 而导致回滚的导入事务总数。`tablet_pre_split_post_submit_hard_cap` 的姊妹计数器。生产导入路径超时后不中止地继续执行（按当时可见的布局做计划）而非中止事务，因此该计数器在当前生产环境保持为零；仅在使用严格语义的 `runPreSplit` 包装路径（测试，或未来选择 "超时即中止" 的调用方）时触发。
+
 ## `starrocks_fe_tablet_max_compaction_score`
 
 - 单位：计数
@@ -586,19 +775,19 @@ description: "Alphabetical q - z"
 
 - 单位：计数
 - 类型：瞬时
-- 描述：表示特定仓库下正在运行的BACKUP任务数量。对于无共享集群，此项仅监控默认仓库。对于共享数据集群，此值始终为 `0`。
+- 描述：表示特定仓库下正在运行的BACKUP任务数量。对于存算一体集群，此项仅监控默认仓库。对于存算分离集群，此值始终为 `0`。
 
 ## `starrocks_fe_unfinished_query`
 
 - 单位：计数
 - 类型：瞬时
-- 描述：表示特定仓库下当前正在运行的查询数量。对于无共享集群，此项仅监控默认仓库。
+- 描述：表示特定仓库下当前正在运行的查询数量。对于存算一体集群，此项仅监控默认仓库。
 
 ## `starrocks_fe_unfinished_restore_job`
 
 - 单位：计数
 - 类型：瞬时
-- 描述：表示特定仓库下正在运行的RESTORE任务数量。对于无共享集群，此项仅监控默认仓库。对于共享数据集群，此值始终为 `0`。
+- 描述：表示特定仓库下正在运行的RESTORE任务数量。对于存算一体集群，此项仅监控默认仓库。对于存算分离集群，此值始终为 `0`。
 
 ## `storage_page_cache_mem_bytes`
 

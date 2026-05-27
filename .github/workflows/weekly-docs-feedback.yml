@@ -89,6 +89,29 @@ jobs:
           echo "  ${manual_dependabot_url}" >> feedback.md
           echo " " >> feedback.md
 
+      - name: Check for broken external links
+        continue-on-error: true
+        uses: lycheeverse/lychee-action@v2.8.0
+        with:
+          fail: false
+          args: >
+            --config docs/lychee.toml
+            --format markdown
+            --output lychee-broken-links.md
+            "docs/en/**/*.md*"
+            "docs/zh/**/*.md*"
+            "docs/ja/**/*.md*"
+
+      - name: Append broken links to feedback
+        run: |
+          echo " " >> feedback.md
+          echo "## Broken external links" >> feedback.md
+          if [ -f lychee-broken-links.md ] && grep -q "Errors per input" lychee-broken-links.md; then
+            cat lychee-broken-links.md >> feedback.md
+          else
+            echo "No broken links detected." >> feedback.md
+          fi
+
       - name: Create issue from file
         if: always()
         id: weekly-feedback-report

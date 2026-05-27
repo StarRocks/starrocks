@@ -16,6 +16,8 @@
 
 #include "exec/pipeline/capture_version_operator.h"
 #include "exec/pipeline/pipeline_builder.h"
+#include "exec/pipeline/scan/morsel.h"
+#include "exec/pipeline/scan/scan_morsel.h"
 
 namespace starrocks {
 
@@ -29,7 +31,7 @@ StatusOr<pipeline::MorselQueueFactoryPtr> CaptureVersionNode::scan_range_to_mors
     [[maybe_unused]] bool has_more_morsel = false;
     pipeline::ScanMorsel::build_scan_morsels(id(), scan_ranges, true, &morsels, &has_more_morsel);
     DCHECK(has_more_morsel == false);
-    auto morsel_queue = std::make_unique<pipeline::FixedMorselQueue>(std::move(morsels));
+    auto morsel_queue = std::make_unique<pipeline::OlapFixedMorselQueue>(std::move(morsels));
     return std::make_unique<pipeline::SharedMorselQueueFactory>(std::move(morsel_queue), 1);
 }
 

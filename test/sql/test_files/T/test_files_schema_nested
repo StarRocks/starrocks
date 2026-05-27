@@ -1,0 +1,19 @@
+-- name: test_files_schema_nested
+
+create database db_${uuid0};
+use db_${uuid0};
+
+-- ORC partial STRUCT: file has col_struct with 8 subfields; schema declares only 2.
+-- All declared subfields exist in the file, so this works today on the current BE
+-- (no dependence on the ORC nested flex-mapping bugfix).
+shell: ossutil64 cp --force ./sql/test_files/orc_format/struct_mix.snappy.orc oss://${oss_bucket}/test_files/orc_format/${uuid0}/ | grep -Pv "(average|elapsed)"
+select col_int, col_struct.c_int, col_struct.c_varchar from files(
+    "path" = "oss://${oss_bucket}/test_files/orc_format/${uuid0}/*",
+    "format" = "orc",
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
+    "aws.s3.endpoint" = "${oss_endpoint}",
+    "schema" = "col_int INT, col_struct STRUCT<c_int INT, c_varchar VARCHAR(1048576)>")
+order by col_int limit 3;
+
+shell: ossutil64 rm -rf oss://${oss_bucket}/test_files/orc_format/${uuid0}/ > /dev/null

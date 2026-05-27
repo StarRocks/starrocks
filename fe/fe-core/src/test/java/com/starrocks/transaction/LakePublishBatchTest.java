@@ -127,13 +127,13 @@ public class LakePublishBatchTest {
     }
 
     /**
-     * Simulates the real PublishVersionDaemon's periodic behavior by retrying runAfterCatalogReady()
+     * Simulates the real PublishVersionDaemon's periodic behavior by retrying runAfterLeaseValid()
      * until all waiters are satisfied. This prevents flakiness caused by transient RPC failures or
      * thread pool scheduling delays under CI load.
      */
     private void awaitPublish(PublishVersionDaemon daemon, VisibleStateWaiter... waiters) {
         Awaitility.await().atMost(60, TimeUnit.SECONDS).pollInterval(1, TimeUnit.SECONDS).until(() -> {
-            daemon.runAfterCatalogReady();
+            daemon.runAfterLeaseValid();
             for (VisibleStateWaiter waiter : waiters) {
                 if (!waiter.await(500, TimeUnit.MILLISECONDS)) {
                     return false;
@@ -304,12 +304,12 @@ public class LakePublishBatchTest {
                 Lists.newArrayList(), null);
 
         PublishVersionDaemon publishVersionDaemon = new PublishVersionDaemon();
-        publishVersionDaemon.runAfterCatalogReady();
+        publishVersionDaemon.runAfterLeaseValid();
         TransactionState transactionState9 = globalTransactionMgr.getDatabaseTransactionMgr(db.getId()).
                 getTransactionState(transactionId9);
         boolean success = false;
         for (int i = 0; i < 10; i++) {
-            publishVersionDaemon.runAfterCatalogReady();
+            publishVersionDaemon.runAfterLeaseValid();
             if (waiter9.await(1, TimeUnit.SECONDS)) {
                 success = true;
                 break;
@@ -366,7 +366,7 @@ public class LakePublishBatchTest {
         };
 
         PublishVersionDaemon publishVersionDaemon = new PublishVersionDaemon();
-        publishVersionDaemon.runAfterCatalogReady();
+        publishVersionDaemon.runAfterLeaseValid();
 
         TransactionState transactionState1 = globalTransactionMgr.getDatabaseTransactionMgr(db.getId()).
                 getTransactionState(transactionId5);
@@ -429,7 +429,7 @@ public class LakePublishBatchTest {
         };
 
         PublishVersionDaemon publishVersionDaemon = new PublishVersionDaemon();
-        publishVersionDaemon.runAfterCatalogReady();
+        publishVersionDaemon.runAfterLeaseValid();
 
         TransactionState transactionState1 = globalTransactionMgr.getDatabaseTransactionMgr(db.getId()).
                 getTransactionState(transactionId7);
@@ -547,7 +547,7 @@ public class LakePublishBatchTest {
         publishVersionDaemon.publishingTransactionIds.add(transactionId6);
 
         Config.lake_enable_batch_publish_version = true;
-        publishVersionDaemon.runAfterCatalogReady();
+        publishVersionDaemon.runAfterLeaseValid();
         Assertions.assertFalse(waiter6.await(5, TimeUnit.SECONDS));
         Assertions.assertFalse(waiter7.await(5, TimeUnit.SECONDS));
 
@@ -592,24 +592,41 @@ public class LakePublishBatchTest {
                 Lists.newArrayList(), null);
 
         {
-            TransactionStateBatch readyStateBatch = globalTransactionMgr.getReadyPublishTransactionsBatch().get(0);
+            // Pick the batch that belongs to *this* parameterized invocation's table. Other
+            // parameterized invocations share the same DB and may still have an in-flight
+            // async publish whose batch is also returned here; taking get(0) blindly would
+            // race with that prior invocation and silently target the wrong table.
+            long myTableId = table.getId();
+            TransactionStateBatch readyStateBatch = null;
+            for (TransactionStateBatch batch : globalTransactionMgr.getReadyPublishTransactionsBatch()) {
+                if (batch.getTableId() == myTableId) {
+                    readyStateBatch = batch;
+                    break;
+                }
+            }
+            Assertions.assertNotNull(readyStateBatch, "no ready batch for table " + myTableId);
             Assertions.assertEquals(2, readyStateBatch.size());
 
             DatabaseTransactionMgr transactionMgr = globalTransactionMgr.getDatabaseTransactionMgr(db.getId());
             Assertions.assertTrue(transactionMgr.checkTxnStateBatchConsistent(db, readyStateBatch));
 
-            // keep origin version
+            // keep origin version. Wrap the mutation in try/finally: an assertion failure here
+            // would otherwise leave partition.visibleVersion=0 and corrupt every subsequent
+            // test method that uses this table (publishPartitionBatch's
+            // visibleVersion+1 == versions.get(0) check would then permanently fail).
             Map<Partition, Long> partitionVersions = new HashMap<>();
             for (Partition partition : table.getPartitions()) {
                 partitionVersions.put(partition, partition.getDefaultPhysicalPartition().getVisibleVersion());
                 partition.getDefaultPhysicalPartition().setVisibleVersion(0, System.currentTimeMillis());
             }
-            Assertions.assertFalse(transactionMgr.checkTxnStateBatchConsistent(db, readyStateBatch));
-
-            // restore partition version
-            for (Map.Entry<Partition, Long> entry : partitionVersions.entrySet()) {
-                entry.getKey().getDefaultPhysicalPartition()
-                        .setVisibleVersion(entry.getValue(), System.currentTimeMillis());
+            try {
+                Assertions.assertFalse(transactionMgr.checkTxnStateBatchConsistent(db, readyStateBatch));
+            } finally {
+                // restore partition version
+                for (Map.Entry<Partition, Long> entry : partitionVersions.entrySet()) {
+                    entry.getKey().getDefaultPhysicalPartition()
+                            .setVisibleVersion(entry.getValue(), System.currentTimeMillis());
+                }
             }
             Assertions.assertTrue(transactionMgr.checkTxnStateBatchConsistent(db, readyStateBatch));
 
@@ -621,21 +638,38 @@ public class LakePublishBatchTest {
                 originPartitionCommitInfos.put(partitionCommitInfo, partitionCommitInfo.getVersion());
                 partitionCommitInfo.setVersion(99);
             }
-            Assertions.assertFalse(transactionMgr.checkTxnStateBatchConsistent(db, readyStateBatch));
-
-            // restore
-            for (Map.Entry<PartitionCommitInfo, Long> entry : originPartitionCommitInfos.entrySet()) {
-                entry.getKey().setVersion(entry.getValue());
+            try {
+                Assertions.assertFalse(transactionMgr.checkTxnStateBatchConsistent(db, readyStateBatch));
+            } finally {
+                // restore
+                for (Map.Entry<PartitionCommitInfo, Long> entry : originPartitionCommitInfos.entrySet()) {
+                    entry.getKey().setVersion(entry.getValue());
+                }
             }
             Assertions.assertTrue(transactionMgr.checkTxnStateBatchConsistent(db, readyStateBatch));
 
             PublishVersionDaemon publishVersionDaemon = new PublishVersionDaemon();
-            publishVersionDaemon.runAfterCatalogReady();
+            publishVersionDaemon.runAfterLeaseValid();
         }
     }
 
     @Test
     public void testBatchPublishShadowIndex() throws Exception {
+        // Strict cut on diverging loaded-index snapshots (see
+        // DatabaseTransactionMgr.getReadyToPublishTxnListBatch) breaks this scenario into
+        // single-txn batches per snapshot, but TransactionGraph.getTxnsWithTxnDependencyBatch
+        // refuses to return chains smaller than min_version_num. Production default is 1; the
+        // class-level setUp raises it to 2 to stress batching. Lower it back for this one
+        // test so the post-cut single-txn batches actually publish.
+        Config.lake_batch_publish_min_version_num = 1;
+        try {
+            doTestBatchPublishShadowIndex();
+        } finally {
+            Config.lake_batch_publish_min_version_num = 2;
+        }
+    }
+
+    private void doTestBatchPublishShadowIndex() throws Exception {
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(DB);
         Table table = GlobalStateMgr.getCurrentState().getLocalMetastore()
                 .getTable(db.getFullName(), TABLE_SCHEMA_CHANGE);
@@ -711,12 +745,147 @@ public class LakePublishBatchTest {
         LakeService lakeService = BrpcProxy.getLakeService(shadowTabletNode.getHost(), shadowTabletNode.getBrpcPort());
         assertInstanceOf(MockedBackend.MockLakeService.class, lakeService);
         MockedBackend.MockLakeService mockLakeService = (MockedBackend.MockLakeService) lakeService;
-        PublishLogVersionBatchRequest request = mockLakeService.pollPublishLogVersionBatchRequests();
-        assertNotNull(request);
-        assertEquals(List.of(shadowTablet.getId()), request.getTabletIds());
-        assertEquals(2, request.getTxnInfos().size());
-        assertEquals(txn2, request.getTxnInfos().get(0).getTxnId());
-        assertEquals(txn3, request.getTxnInfos().get(1).getTxnId());
+        // Strict cut in DatabaseTransactionMgr.getReadyToPublishTxnListBatch splits txn1
+        // away from txn2/txn3 (their loadedIndexIds snapshots differ across the schema
+        // change boundary), and the resulting single-txn batches publish via
+        // PublishVersionDaemon.publishLakeTransactionAsync. That path calls
+        // Utils.publishLogVersion per txn, producing one PublishLogVersionBatchRequest
+        // per shadow-loaded txn (txn2 then txn3) instead of one combined request.
+        PublishLogVersionBatchRequest firstShadowRequest = mockLakeService.pollPublishLogVersionBatchRequests();
+        assertNotNull(firstShadowRequest);
+        assertEquals(List.of(shadowTablet.getId()), firstShadowRequest.getTabletIds());
+        assertEquals(1, firstShadowRequest.getTxnInfos().size());
+        assertEquals(txn2, firstShadowRequest.getTxnInfos().get(0).getTxnId());
+
+        PublishLogVersionBatchRequest secondShadowRequest = mockLakeService.pollPublishLogVersionBatchRequests();
+        assertNotNull(secondShadowRequest);
+        assertEquals(List.of(shadowTablet.getId()), secondShadowRequest.getTabletIds());
+        assertEquals(1, secondShadowRequest.getTxnInfos().size());
+        assertEquals(txn3, secondShadowRequest.getTxnInfos().get(0).getTxnId());
+    }
+
+    private List<TabletCommitInfo> getPartitionTabletCommitInfos(Partition partition) {
+        List<TabletCommitInfo> commitInfos = Lists.newArrayList();
+        MaterializedIndex baseIndex = partition.getDefaultPhysicalPartition().getLatestBaseIndex();
+        for (Long tabletId : baseIndex.getTabletIdsInOrder()) {
+            for (Long backendId : GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendIds()) {
+                commitInfos.add(new TabletCommitInfo(tabletId, backendId));
+            }
+        }
+        return commitInfos;
+    }
+
+    @Test
+    public void testTrimBatchAtVersionGapMidBatch() throws Exception {
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(DB);
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), TABLE_AGG_OFF);
+
+        // Pick two partitions: one without gap, one that will have a gap
+        List<Partition> allPartitions = Lists.newArrayList(table.getPartitions());
+        Partition partNoGap = allPartitions.get(0);
+        Partition partWithGap = allPartitions.get(2);
+
+        List<TabletCommitInfo> tabletsNoGap = getPartitionTabletCommitInfos(partNoGap);
+        List<TabletCommitInfo> tabletsWithGap = getPartitionTabletCommitInfos(partWithGap);
+
+        GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
+
+        // Commit txn1 touching partNoGap only
+        long txnId1 = globalTransactionMgr.beginTransaction(db.getId(), Lists.newArrayList(table.getId()),
+                "trim_mid_1_" + UUIDUtil.genUUID(), transactionSource,
+                TransactionState.LoadJobSourceType.FRONTEND, Config.stream_load_default_timeout_second);
+        VisibleStateWaiter waiter1 = globalTransactionMgr.commitTransaction(
+                db.getId(), txnId1, tabletsNoGap, Lists.newArrayList(), null);
+
+        // Commit txn2 touching partNoGap only
+        long txnId2 = globalTransactionMgr.beginTransaction(db.getId(), Lists.newArrayList(table.getId()),
+                "trim_mid_2_" + UUIDUtil.genUUID(), transactionSource,
+                TransactionState.LoadJobSourceType.FRONTEND, Config.stream_load_default_timeout_second);
+        VisibleStateWaiter waiter2 = globalTransactionMgr.commitTransaction(
+                db.getId(), txnId2, tabletsNoGap, Lists.newArrayList(), null);
+
+        // Create version gap on partWithGap (simulates SplitTabletJob.updateNextVersions)
+        PhysicalPartition physWithGap = partWithGap.getDefaultPhysicalPartition();
+        long savedNextVersion = physWithGap.getNextVersion();
+        physWithGap.setNextVersion(savedNextVersion + 1); // skip one version
+
+        // Commit txn3 touching partWithGap (will have version gap)
+        long txnId3 = globalTransactionMgr.beginTransaction(db.getId(), Lists.newArrayList(table.getId()),
+                "trim_mid_3_" + UUIDUtil.genUUID(), transactionSource,
+                TransactionState.LoadJobSourceType.FRONTEND, Config.stream_load_default_timeout_second);
+        VisibleStateWaiter waiter3 = globalTransactionMgr.commitTransaction(
+                db.getId(), txnId3, tabletsWithGap, Lists.newArrayList(), null);
+
+        // Build batch manually: [txn1, txn2, txn3]
+        DatabaseTransactionMgr dbTxnMgr = globalTransactionMgr.getDatabaseTransactionMgr(db.getId());
+        TransactionStateBatch batch = new TransactionStateBatch(Lists.newArrayList(
+                dbTxnMgr.getTransactionState(txnId1),
+                dbTxnMgr.getTransactionState(txnId2),
+                dbTxnMgr.getTransactionState(txnId3)));
+
+        // Call trimBatchAtVersionGap
+        PublishVersionDaemon daemon = new PublishVersionDaemon();
+        TransactionStateBatch trimmed = daemon.trimBatchAtVersionGap(batch);
+
+        // Verify: txn3 touches gap partition, so batch is trimmed to [txn1, txn2]
+        assertNotNull(trimmed);
+        assertEquals(2, trimmed.size());
+        assertEquals(txnId1, trimmed.getTransactionStates().get(0).getTransactionId());
+        assertEquals(txnId2, trimmed.getTransactionStates().get(1).getTransactionId());
+
+        // Cleanup: fill the phantom version gap and publish all transactions
+        physWithGap.updateVisibleVersion(physWithGap.getVisibleVersion() + 1);
+        awaitPublish(daemon, waiter1, waiter2, waiter3);
+    }
+
+    @Test
+    public void testTrimBatchAtVersionGapHeadTxn() throws Exception {
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(DB);
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), TABLE_AGG_OFF);
+
+        // Pick two partitions
+        List<Partition> allPartitions = Lists.newArrayList(table.getPartitions());
+        Partition partWithGap = allPartitions.get(0);
+        Partition partNoGap = allPartitions.get(1);
+
+        List<TabletCommitInfo> tabletsWithGap = getPartitionTabletCommitInfos(partWithGap);
+        List<TabletCommitInfo> tabletsNoGap = getPartitionTabletCommitInfos(partNoGap);
+
+        GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
+
+        // Create version gap on partWithGap (simulates SplitTabletJob.updateNextVersions)
+        PhysicalPartition physWithGap = partWithGap.getDefaultPhysicalPartition();
+        long savedNextVersion = physWithGap.getNextVersion();
+        physWithGap.setNextVersion(savedNextVersion + 1);
+
+        // Commit txn1 touching partWithGap (HEAD txn with gap)
+        long txnId1 = globalTransactionMgr.beginTransaction(db.getId(), Lists.newArrayList(table.getId()),
+                "trim_head_1_" + UUIDUtil.genUUID(), transactionSource,
+                TransactionState.LoadJobSourceType.FRONTEND, Config.stream_load_default_timeout_second);
+        VisibleStateWaiter waiter1 = globalTransactionMgr.commitTransaction(
+                db.getId(), txnId1, tabletsWithGap, Lists.newArrayList(), null);
+
+        // Commit txn2 touching partNoGap
+        long txnId2 = globalTransactionMgr.beginTransaction(db.getId(), Lists.newArrayList(table.getId()),
+                "trim_head_2_" + UUIDUtil.genUUID(), transactionSource,
+                TransactionState.LoadJobSourceType.FRONTEND, Config.stream_load_default_timeout_second);
+        VisibleStateWaiter waiter2 = globalTransactionMgr.commitTransaction(
+                db.getId(), txnId2, tabletsNoGap, Lists.newArrayList(), null);
+
+        // Build batch: [txn1 (gap), txn2 (no gap)]
+        DatabaseTransactionMgr dbTxnMgr = globalTransactionMgr.getDatabaseTransactionMgr(db.getId());
+        TransactionStateBatch batch = new TransactionStateBatch(Lists.newArrayList(
+                dbTxnMgr.getTransactionState(txnId1),
+                dbTxnMgr.getTransactionState(txnId2)));
+
+        // Call trimBatchAtVersionGap: head txn touches gap → returns null
+        PublishVersionDaemon daemon = new PublishVersionDaemon();
+        TransactionStateBatch trimmed = daemon.trimBatchAtVersionGap(batch);
+        Assertions.assertNull(trimmed);
+
+        // Cleanup: fill the gap and publish all transactions
+        physWithGap.updateVisibleVersion(physWithGap.getVisibleVersion() + 1);
+        awaitPublish(daemon, waiter1, waiter2);
     }
 
     private List<TabletCommitInfo> commitAllTablets(List<LakeTablet> tablets) {

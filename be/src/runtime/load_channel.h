@@ -66,6 +66,10 @@ class LoadChannel;
 class LoadChannelMgr;
 class OlapTableSchemaParam;
 class RuntimeProfile;
+class DiagnoseDaemon;
+class BrpcStubCache;
+class MetricRegistry;
+class TableMetricsManager;
 
 namespace lake {
 class TabletManager;
@@ -85,8 +89,10 @@ class LoadChannel {
     using LakeTabletManager = lake::TabletManager;
 
 public:
-    LoadChannel(LoadChannelMgr* mgr, LakeTabletManager* lake_tablet_mgr, const UniqueId& load_id, int64_t txn_id,
-                const std::string& txn_trace_parent, int64_t timeout_s, std::unique_ptr<MemTracker> mem_tracker);
+    LoadChannel(LoadChannelMgr* mgr, LakeTabletManager* lake_tablet_mgr, DiagnoseDaemon* diagnose_daemon,
+                BrpcStubCache* brpc_stub_cache, const UniqueId& load_id, int64_t txn_id,
+                const std::string& txn_trace_parent, int64_t timeout_s, std::unique_ptr<MemTracker> mem_tracker,
+                MetricRegistry* metrics = nullptr, TableMetricsManager* table_metrics_mgr = nullptr);
 
     ~LoadChannel();
 
@@ -144,6 +150,10 @@ private:
 
     LoadChannelMgr* _load_mgr;
     [[maybe_unused]] LakeTabletManager* _lake_tablet_mgr;
+    DiagnoseDaemon* _diagnose_daemon;
+    BrpcStubCache* _brpc_stub_cache;
+    MetricRegistry* _metrics = nullptr;
+    TableMetricsManager* _table_metrics_mgr = nullptr;
     UniqueId _load_id;
     int64_t _txn_id;
     int64_t _timeout_s;

@@ -74,7 +74,7 @@ public class HiveMetastore implements IHiveMetastore {
     @Override
     public void createDb(String dbName, Map<String, String> properties) {
         String location = properties.getOrDefault(LOCATION_PROPERTY, "");
-        long dbId = ConnectorTableId.CONNECTOR_ID_GENERATOR.getNextId().asInt();
+        long dbId = ConnectorTableId.CONNECTOR_ID_GENERATOR.getNextId().asLong();
         Database database = new Database(dbId, dbName, location);
         client.createDatabase(HiveMetastoreApiConverter.toMetastoreApiDatabase(database));
     }
@@ -128,6 +128,10 @@ public class HiveMetastore implements IHiveMetastore {
             if (AcidUtils.isFullAcidTable(table)) {
                 throw new StarRocksConnectorException(String.format(
                         "%s.%s is a hive transactional table(full acid), sr didn't support it yet", dbName, tableName));
+            }
+            if (table.getParameters() != null && AcidUtils.isInsertOnlyTable(table.getParameters())) {
+                throw new StarRocksConnectorException(String.format(
+                        "%s.%s is a hive transactional table(insert only), sr didn't support it yet", dbName, tableName));
             }
             if (table.getTableType().equalsIgnoreCase("VIRTUAL_VIEW")) {
                 return HiveMetastoreApiConverter.toHiveView(table, catalogName);
@@ -207,6 +211,11 @@ public class HiveMetastore implements IHiveMetastore {
         ImmutableMap.Builder<String, Partition> resultBuilder = ImmutableMap.builder();
         for (Map.Entry<String, List<String>> entry : partitionNameToPartitionValues.entrySet()) {
             Partition partition = partitionValuesToPartition.get(entry.getValue());
+            if (partition == null) {
+                throw new StarRocksConnectorException(
+                        "Hive metastore did not return partition [%s] for table %s.%s (requested %s partitions, got %s)",
+                        entry.getKey(), dbName, tblName, partitionNames.size(), partitions.size());
+            }
             resultBuilder.put(entry.getKey(), partition);
         }
         return resultBuilder.build();

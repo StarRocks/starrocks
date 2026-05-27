@@ -23,6 +23,7 @@ import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.Status;
+import com.starrocks.common.util.concurrent.lock.LockTimeoutException;
 import com.starrocks.load.loadv2.JobState;
 import com.starrocks.load.loadv2.LoadJob;
 import com.starrocks.load.loadv2.LoadMgr;
@@ -40,9 +41,12 @@ import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.DmlStmt;
+import com.starrocks.sql.ast.ShowGrantsStmt;
+import com.starrocks.sql.ast.UserRef;
 import com.starrocks.sql.ast.txn.BeginStmt;
 import com.starrocks.sql.ast.txn.CommitStmt;
 import com.starrocks.sql.ast.txn.RollbackStmt;
+import com.starrocks.sql.ast.warehouse.ShowWarehousesStmt;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.sql.plan.ExecPlan;
@@ -153,6 +157,22 @@ public class ExplicitTxnTest {
 
         Assertions.assertTrue(context.getState().isError());
         Assertions.assertEquals(ErrorCode.ERR_EXPLICIT_TXN_NOT_SUPPORT_STMT, context.getState().getErrorCode());
+    }
+
+    @Test
+    public void testShowStmtAllowedInExplicitTxn() {
+        // SHOW statements are read-only metadata queries and must be allowed inside an
+        // explicit transaction (regression for ERR_EXPLICIT_TXN_NOT_SUPPORT_STMT on SHOW GRANTS / SHOW WAREHOUSES).
+        ConnectContext context = new ConnectContext();
+        context.setThreadLocalInfo();
+        context.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
+        context.setTxnId(1);
+
+        ShowGrantsStmt showGrants = new ShowGrantsStmt(new UserRef("u1", "%"), NodePosition.ZERO);
+        Assertions.assertDoesNotThrow(() -> ExplicitTxnStatementValidator.validate(showGrants, context));
+
+        ShowWarehousesStmt showWarehouses = new ShowWarehousesStmt(null);
+        Assertions.assertDoesNotThrow(() -> ExplicitTxnStatementValidator.validate(showWarehouses, context));
     }
 
     @Test
@@ -537,6 +557,60 @@ public class ExplicitTxnTest {
         Assertions.assertEquals(0, context.getTxnId());
         Assertions.assertNull(globalTransactionMgr.getExplicitTxnState(transactionId));
         Assertions.assertEquals("database 0 is not found", context.getState().getErrorMessage());
+    }
+
+    @Test
+    public void testCommitTimeoutPassedInMilliseconds() {
+        // Regression: commitStmt() reads query_timeout (seconds) and previously passed it
+        // directly to GlobalTransactionMgr.retryCommitOnRateLimitExceeded(..., long timeoutMs),
+        // causing a 300s query_timeout to become a 300ms lock wait.
+        ConnectContext context = new ConnectContext();
+        context.setThreadLocalInfo();
+        context.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
+
+        int queryTimeoutS = 300;
+        context.getSessionVariable().setQueryTimeoutS(queryTimeoutS);
+
+        Database db1 = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("db1");
+        Assertions.assertNotNull(db1);
+
+        GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
+        long transactionId = globalTransactionMgr.getTransactionIDGenerator().getNextTransactionId();
+        TransactionState transactionState = new TransactionState(transactionId, "timeout-unit-test", null,
+                TransactionState.LoadJobSourceType.INSERT_STREAMING,
+                new TransactionState.TxnCoordinator(TransactionState.TxnSourceType.FE, FrontendOptions.getLocalHostAddress()),
+                context.getExecTimeout() * 1000L);
+        transactionState.setDbId(db1.getId());
+
+        ExplicitTxnState explicitTxnState = new ExplicitTxnState();
+        explicitTxnState.setTransactionState(transactionState);
+
+        ExplicitTxnState.ExplicitTxnStateItem item = new ExplicitTxnState.ExplicitTxnStateItem();
+        item.setTabletCommitInfos(List.of());
+        item.setTabletFailInfos(List.of());
+        explicitTxnState.addTransactionItem(item);
+
+        globalTransactionMgr.addTransactionState(transactionId, explicitTxnState);
+        context.setTxnId(transactionId);
+
+        long[] capturedTimeoutMs = {-1L};
+        new MockUp<GlobalTransactionMgr>() {
+            @Mock
+            public VisibleStateWaiter retryCommitOnRateLimitExceeded(
+                    Database db, long txnId, List<TabletCommitInfo> commitInfos, List<TabletFailInfo> failInfos,
+                    TxnCommitAttachment attachment, long timeoutMs) throws LockTimeoutException {
+                capturedTimeoutMs[0] = timeoutMs;
+                // Short-circuit the rest of commitStmt; the exception is caught and reported as error.
+                throw new LockTimeoutException(
+                        "get database write lock timeout, database=" + db.getFullName() + ", timeout=" + timeoutMs + "ms");
+            }
+        };
+
+        TransactionStmtExecutor.commitStmt(context, new CommitStmt(NodePosition.ZERO));
+
+        Assertions.assertEquals((long) queryTimeoutS * 1000L, capturedTimeoutMs[0],
+                "query_timeout (" + queryTimeoutS + "s) must be passed to retryCommitOnRateLimitExceeded "
+                        + "as milliseconds, got " + capturedTimeoutMs[0]);
     }
 
     @Test

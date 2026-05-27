@@ -40,6 +40,7 @@
 #include "gen_cpp/PlanNodes_types.h"
 #include "runtime/current_thread.h"
 #include "runtime/descriptors.h"
+#include "runtime/runtime_state.h"
 #include "types/logical_type.h"
 #ifndef __APPLE__
 #include "udf/java/java_udf.h"
@@ -157,7 +158,8 @@ bool AggrAutoContext::is_low_reduction(const size_t agg_count, const size_t chun
 }
 
 Status init_udaf_context(int64_t fid, const std::string& url, const std::string& checksum, const std::string& symbol,
-                         FunctionContext* context, const TCloudConfiguration& cloud_configuration);
+                         FunctionContext* context, const TCloudConfiguration& cloud_configuration,
+                         bool use_cache = false, bool* cache_hit_out = nullptr);
 
 int64_t Aggregator::get_two_level_threahold() {
     if (config::two_level_memory_threshold < 0) {
@@ -293,14 +295,31 @@ Status Aggregator::open(RuntimeState* state) {
                             [](const auto& ctx) { return ctx.binary_type == TFunctionBinaryType::SRJAR; });
 #ifndef __APPLE__
     if (_has_udaf) {
-        auto promise_st = call_function_in_pthread(state, [this]() {
+        auto& opts = state->query_options();
+        bool enable_cache = opts.__isset.enable_cache_udaf && opts.enable_cache_udaf;
+        auto promise_st = call_function_in_pthread(state, [this, enable_cache]() {
             std::vector<int> attached_udaf_idx;
             attached_udaf_idx.reserve(_agg_fn_ctxs.size());
             for (int i = 0; i < _agg_fn_ctxs.size(); ++i) {
                 if (_fns[i].binary_type == TFunctionBinaryType::SRJAR) {
                     const auto& fn = _fns[i];
-                    auto st = init_udaf_context(fn.fid, fn.hdfs_location, fn.checksum, fn.aggregate_fn.symbol,
-                                                _agg_fn_ctxs[i], fn.cloud_configuration);
+                    // use_cache only when isolation is explicitly shared and enable_cache_udaf is set
+                    bool use_cache = enable_cache && fn.__isset.isolated && !fn.isolated;
+                    bool cache_hit = false;
+                    Status st;
+                    {
+                        SCOPED_TIMER(_agg_stat->udaf_load_timer);
+                        st = init_udaf_context(fn.fid, fn.hdfs_location, fn.checksum, fn.aggregate_fn.symbol,
+                                               _agg_fn_ctxs[i], fn.cloud_configuration, use_cache,
+                                               use_cache ? &cache_hit : nullptr);
+                    }
+                    if (use_cache) {
+                        if (cache_hit) {
+                            COUNTER_UPDATE(_agg_stat->udaf_cache_hit_count, 1);
+                        } else {
+                            COUNTER_UPDATE(_agg_stat->udaf_cache_populate_count, 1);
+                        }
+                    }
                     if (!st.ok()) {
                         for (int idx : attached_udaf_idx) {
                             destroy_java_udaf_context(_agg_fn_ctxs[idx]);
@@ -1518,6 +1537,22 @@ typename HashVariantType::Type Aggregator::_try_to_apply_compressed_key_opt(type
     typename HashVariantType::Type type = input_type;
     if (_group_by_types.empty()) {
         return type;
+    }
+    // Don't shadow direct-array variants with the slice_cx1 rewrite.
+    // TINYINT / BOOL / SMALLINT route to SmallFixedSizeHashMap-backed
+    // direct arrays; the slice_cx1 path sits on the same direct array
+    // under int8 but adds a per-row bitcompress_serialize step, so any
+    // query that supplies range stats via `group_by_min_max` would
+    // otherwise silently regress to the slower slice path.
+    if (_group_by_types.size() == 1) {
+        switch (_group_by_types[0].result_type.type) {
+        case TYPE_TINYINT:
+        case TYPE_BOOLEAN:
+        case TYPE_SMALLINT:
+            return type;
+        default:
+            break;
+        }
     }
     for (size_t i = 0; i < _ranges.size(); ++i) {
         if (!_ranges[i].has_value()) {

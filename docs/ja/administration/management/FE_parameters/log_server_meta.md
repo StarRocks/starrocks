@@ -243,7 +243,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - デフォルト：true
 - タイプ：Boolean
 - 単位：-
-- 変更可能：No
+- 変更可能：Yes
 - 説明：プロファイルロギングを有効にするかどうか。この機能が有効になっている場合、FE はクエリごとのプロファイルログ (ProfileManager によって生成されたシリアル化された `queryDetail` JSON) をプロファイルログシンクに書き込みます。このロギングは `enable_collect_query_detail_info` も有効になっている場合にのみ実行されます。`enable_profile_log_compress` が有効になっている場合、JSON はロギング前に gzipped されることがあります。プロファイルログファイルは `profile_log_dir`、`profile_log_roll_num`、`profile_log_roll_interval` によって管理され、`profile_log_delete_age` ( `7d`、`10h`、`60m`、`120s` などの形式をサポート) に従ってローテーション/削除されます。この機能を無効にすると、プロファイルログの書き込みが停止します (ディスク I/O、圧縮 CPU、ストレージ使用量の削減)。
 - 導入時期：v3.2.5
 
@@ -262,7 +262,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - タイプ：Boolean
 - 単位：-
 - 変更可能：No
-- 説明：この項目が `true` に設定されている場合、システムはログとクエリ詳細レコードに書き込まれる前に機密性の高い SQL コンテンツを置き換えるか隠します。この設定を尊重するコードパスには、ConnectProcessor.formatStmt (監査ログ)、StmtExecutor.addRunningQueryDetail (クエリ詳細)、および SimpleExecutor.formatSQL (内部エクゼキュータログ) が含まれます。この機能が有効になっている場合、無効な SQL は固定の非機密化メッセージに置き換えられる可能性があり、資格情報 (ユーザー/パスワード) は隠され、SQL フォーマッターはサニタイズされた表現を生成する必要があります (ダイジェスト形式の出力を有効にすることもできます)。これにより、監査/内部ログでの機密リテラルや資格情報の漏洩が減少しますが、ログとクエリ詳細に元の完全な SQL テキストが含まれなくなることになります (これは再生やデバッグに影響する可能性があります)。
+- 説明：この項目が `true` に設定されている場合、システムはログ、クエリ詳細レコード、およびクエリプロファイルに書き込まれる前に機密性の高い SQL コンテンツを置き換えるか隠します。この設定を尊重するコードパスには、ConnectProcessor.formatStmt (監査ログ)、StmtExecutor.addRunningQueryDetail (クエリ詳細)、SimpleExecutor.formatSQL (内部エクゼキュータログ)、および StmtExecutor.buildTopLevelProfile / processProfileAsync (プロファイルの `Summary` セクションに格納される `Sql Statement` および `ExplainPlan` info-string) が含まれます。この機能が有効になっている場合、無効な SQL は固定の非機密化メッセージに置き換えられる可能性があり、資格情報 (ユーザー/パスワード) は隠され、SQL フォーマッターはサニタイズされた表現を生成する必要があります (ダイジェスト形式の出力を有効にすることもできます)。セッション変数 `enable_explain_in_profile` によって追加される `ExplainPlan` フィールドについても、本設定により埋め込まれる `EXPLAIN COSTS` テキストのリテラルが強制的にダイジェスト化されるため、プロファイル内で `Sql Statement` が非機密化されているにもかかわらず `ExplainPlan` が元のリテラルを露出してしまうことを防ぎます。これにより、監査/内部ログおよびプロファイルでの機密リテラルや資格情報の漏洩が減少しますが、ログ、クエリ詳細、およびプロファイルに元の完全な SQL テキストが含まれなくなることになります (これは再生やデバッグに影響する可能性があります)。
 - 導入時期：-
 
 ### `internal_log_delete_age`
@@ -830,6 +830,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明：FE ノードの MySQL サーバーが保持するバックログキューの長さ。
 - 導入時期：-
 
+### `mysql_send_packet_timeout_ms`
+
+- デフォルト：60000
+- タイプ：Long
+- 単位：Milliseconds
+- 変更可能：Yes
+- 説明：MySQL プロトコルチャネルにおけるパケット単位の書き込みタイムアウト。結果行を送信する際、低速クライアントの TCP 受信バッファが空くまで FE ワーカーが待つ時間を制限します。これを設けないと、ワーカーが `Selector.select()` で無期限にブロックし、クエリが `KILL QUERY` で終了できなくなります。`0` に設定するとタイムアウトを無効化します（従来の無期限待機の動作）。
+- 導入時期：v4.1
+
 ### `mysql_server_version`
 
 - デフォルト：8.0.33
@@ -1239,6 +1248,24 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 変更可能：Yes
 - 説明：定期的な Hive メタデータキャッシュ更新を有効にするかどうか。有効にすると、StarRocks は Hive クラスターのメタストア (Hive Metastore または AWS Glue) をポーリングし、頻繁にアクセスされる Hive カタログのキャッシュされたメタデータを更新してデータ変更を認識します。`true` は Hive メタデータキャッシュ更新を有効にすることを示し、`false` は無効にすることを示します。
 - 導入時期：v2.5.5
+
+### `refresh_other_fe_dispatch_executor_thread_num`
+
+- デフォルト：4
+- タイプ：Integer
+- 単位：-
+- 変更可能：Yes
+- 説明：Connector の書き込みパスから実行される非同期の "refresh other FE" バックグラウンドジョブをスケジュールする、FE グローバルのディスパッチ実行プール内のスレッド数です。これらのスレッドはバックグラウンド更新タスクを起動するだけで、他の FE に対して更新 RPC を直接送信しません。変更は再起動なしで実行中の FE に反映されます。
+- 導入時期：-
+
+### `refresh_other_fe_rpc_executor_thread_num`
+
+- デフォルト：4
+- タイプ：Integer
+- 単位：-
+- 変更可能：Yes
+- 説明： "refresh other FE" の fan-out に使用される、FE グローバルの RPC 実行プール内のスレッド数です。この実行プールにより、同期および非同期の外部テーブル更新フローで他の FE に同時送信される更新 RPC の数が制限されます。変更は再起動なしで実行中の FE に反映されます。
+- 導入時期：-
 
 ### `enable_collect_query_detail_info`
 

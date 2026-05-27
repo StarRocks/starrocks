@@ -37,6 +37,7 @@
 #include <storage/flat_json_config.h>
 
 #include <cstdint>
+#include <map>
 #include <memory>
 #include <string>
 #include <vector>
@@ -44,7 +45,7 @@
 #include "common/status.h"
 #include "gen_cpp/segment.pb.h"
 #include "gutil/macros.h"
-#include "io/core/input_stream.h"
+#include "io/input_stream.h"
 #include "runtime/global_dict/types.h"
 #include "runtime/global_dict/types_fwd_decl.h"
 #include "storage/row_store_encoder_factory.h"
@@ -62,6 +63,8 @@ class WritableFile;
 class Chunk;
 class ColumnWriter;
 class Schema;
+struct SegmentFileInfo;
+class SegmentMetadataPB;
 
 extern const char* const k_segment_magic;
 extern const uint32_t k_segment_magic_length;
@@ -81,9 +84,17 @@ struct SegmentWriterOptions {
     GlobalDictByNameMaps* global_dicts = nullptr;
     std::vector<int32_t> referenced_column_ids;
     SegmentFileMark segment_file_mark;
+    // Full paths (including location scheme) for vector index files, keyed by index_id.
+    // Populated by the tablet writer for shared-data mode where the location provider
+    // resolves object-storage paths; in shared-nothing mode this map is empty and the
+    // segment writer falls back to IndexDescriptor-based path construction.
+    std::map<int64_t, std::string> vector_index_file_paths;
     std::string encryption_meta;
     bool is_compaction = false;
+    bool skip_vector_index = false;
+    bool defer_vector_index_build = false; // async mode: skip .vi file generation, keep metadata
     std::shared_ptr<FlatJsonConfig> flat_json_config = nullptr;
+    uint32_t vector_index_build_threshold = 0;
 };
 
 // SegmentWriter is responsible for writing data into single segment by all or partital columns.
@@ -153,6 +164,14 @@ public:
 
     const std::string& encryption_meta() const { return _opts.encryption_meta; }
 
+    const std::map<int64_t, std::string>& vector_index_file_paths() const { return _opts.vector_index_file_paths; }
+
+    bool has_vector_index_written() const { return _has_vector_index_written; }
+
+    bool defer_vector_index_build() const { return _opts.defer_vector_index_build; }
+
+    uint32_t vector_index_build_threshold() const { return _opts.vector_index_build_threshold; }
+
     int64_t bundle_file_offset() const;
 
     StatusOr<std::unique_ptr<io::NumericStatistics>> get_numeric_statistics();
@@ -160,8 +179,21 @@ public:
     bool has_key() { return _has_key; }
 
     const VariantTuple& get_sort_key_min() { return _sort_key_min; }
-
     const VariantTuple& get_sort_key_max() { return _sort_key_max; }
+
+    // Transfer sort-key min, max, samples, and interval into a SegmentFileInfo.
+    // Moves _sort_key_samples out; preserves the carrier invariant
+    // (samples.empty() <=> interval == 0).
+    void write_sort_key_fields_to(SegmentFileInfo& file_info);
+
+    // Copy sort-key min, max, samples, and interval into a proto.
+    // Used by update_manager.cpp which reads from SegmentWriter directly
+    // instead of going through a SegmentFileInfo carrier.
+    void write_sort_key_fields_to(SegmentMetadataPB* segment_meta) const;
+
+    // Accessors for sort-key samples (used in unit tests).
+    int64_t get_sort_key_sample_row_interval() const { return _sort_key_sample_row_interval; }
+    const std::vector<VariantTuple>& get_sort_key_samples() const { return _sort_key_samples; }
 
 private:
     Status _write_short_key_index();
@@ -187,6 +219,13 @@ private:
     std::vector<uint32_t> _sort_column_indexes;
     VariantTuple _sort_key_min;
     VariantTuple _sort_key_max;
+
+    // Sort-key sampler state. Armed at most once, on the first init() call
+    // with has_key=true and non-empty _sort_column_indexes. Preserved across
+    // vertical-writer non-key column-group re-init calls.
+    std::vector<VariantTuple> _sort_key_samples;
+    int64_t _next_sort_key_sample_row_index = 0;
+    int64_t _sort_key_sample_row_interval = 0; // 0 = disabled / not yet armed
     std::unique_ptr<Schema> _schema_without_full_row_column;
 
     // num rows written when appending [partial] columns
@@ -195,6 +234,8 @@ private:
     uint32_t _num_rows = 0;
 
     DictColumnsValidMap _global_dict_columns_valid_info;
+
+    bool _has_vector_index_written = false;
 };
 
 } // namespace starrocks

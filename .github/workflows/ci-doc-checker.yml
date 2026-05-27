@@ -59,6 +59,61 @@ jobs:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           labels: documentation
 
+  link-check:
+    runs-on: ubuntu-latest
+    needs: add-doc-label
+    env:
+      PR_NUMBER: ${{ github.event.number }}
+    steps:
+      - name: clean
+        run: |
+          rm -rf ${{ github.workspace }}
+          mkdir -p ${{ github.workspace }}
+
+      - name: BRANCH INFO
+        id: branch
+        run: echo "branch=${{github.base_ref}}" >> $GITHUB_OUTPUT
+
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Checkout PR
+        run: |
+          BRANCH=${{steps.branch.outputs.branch}}
+          git config --global user.name "docs-automation[bot]"
+          git config --global user.email "docs-automation[bot]@starrocks.io"
+          git checkout $BRANCH
+          git pull
+          BRANCH_NAME="${BRANCH}-${PR_NUMBER}"
+          git fetch origin pull/${PR_NUMBER}/head:${BRANCH_NAME}
+          git checkout $BRANCH_NAME
+          git checkout -b merge_pr
+          git merge --squash --no-edit ${BRANCH} || (echo "::error::Merge conflict, please check." && exit -1)
+
+      - uses: tj-actions/changed-files@22103cc46bda19c2b464ffe86db46df6922fd323
+        id: changed-files
+        with:
+          files: |
+            docs/en/**/*.md
+            docs/en/**/*.mdx
+            docs/ja/**/*.md
+            docs/ja/**/*.mdx
+            docs/zh/**/*.md
+            docs/zh/**/*.mdx
+          separator: " "
+
+      - name: Check links in changed files
+        if: steps.changed-files.outputs.any_changed == 'true'
+        uses: lycheeverse/lychee-action@v2.8.0
+        with:
+          fail: true
+          args: >
+            --config docs/lychee.toml
+            --scheme https
+            --scheme file
+            ${{ steps.changed-files.outputs.all_changed_files }}
+
   markdownlint:
     runs-on: ubuntu-latest
     needs: add-doc-label
@@ -155,7 +210,7 @@ jobs:
           git merge --squash --no-edit ${BRANCH} || (echo "::error::Merge conflict, please check." && exit -1)
 
       # 2. Replicate the Node.js setup
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
           node-version: 24
 
@@ -175,7 +230,7 @@ jobs:
       # 3. Your original Docusaurus build logic
       - name: Docusaurus build
         env:
-          NODE_OPTIONS: --max-old-space-size=8192
+          NODE_OPTIONS: --max-old-space-size=9216
           DISABLE_VERSIONING: true
           DOCUSAURUS_IGNORE_SSG_WARNINGS: true
         working-directory: ./docs/docusaurus

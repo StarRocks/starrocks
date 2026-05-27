@@ -16,6 +16,7 @@
 
 #include <bthread/bthread.h>
 #include <gtest/gtest.h>
+#include <unistd.h>
 
 #include <random>
 #include <thread>
@@ -25,6 +26,7 @@
 #include "base/testutil/id_generator.h"
 #include "base/testutil/sync_point.h"
 #include "column/chunk.h"
+#include "column/chunk_factory.h"
 #include "column/datum_tuple.h"
 #include "column/fixed_length_column.h"
 #include "column/schema.h"
@@ -86,7 +88,8 @@ protected:
 
     void do_block_merger(bool use_profile);
 
-    constexpr static const char* const kTestDirectory = "test_lake_async_delta_writer";
+    // Suffix with PID so concurrent processes (e.g. gtest-parallel) never share this dir.
+    inline static const std::string kTestDirectory = "test_lake_async_delta_writer_" + std::to_string(getpid());
 
     int64_t _partition_id;
     std::shared_ptr<TabletMetadata> _tablet_metadata;
@@ -225,7 +228,7 @@ TEST_F(LakeAsyncDeltaWriterTest, test_write) {
 
     auto check_segment = [&](const SegmentSharedPtr& segment) {
         ASSIGN_OR_ABORT(auto seg_iter, segment->new_iterator(*_schema, opts));
-        auto read_chunk_ptr = ChunkHelper::new_chunk(*_schema, 1024);
+        auto read_chunk_ptr = ChunkFactory::new_chunk(*_schema, 1024);
         ASSERT_OK(seg_iter->get_next(read_chunk_ptr.get()));
         ASSERT_EQ(2 * kChunkSize, read_chunk_ptr->num_rows());
         for (int i = 0; i < read_chunk_ptr->num_rows(); i++) {
@@ -427,7 +430,7 @@ TEST_F(LakeAsyncDeltaWriterTest, test_write_concurrently) {
 
     auto check_segment = [&](const SegmentSharedPtr& segment) {
         ASSIGN_OR_ABORT(auto seg_iter, segment->new_iterator(*_schema, opts));
-        auto read_chunk_ptr = ChunkHelper::new_chunk(*_schema, opts.chunk_size);
+        auto read_chunk_ptr = ChunkFactory::new_chunk(*_schema, opts.chunk_size);
         ASSERT_OK(seg_iter->get_next(read_chunk_ptr.get()));
         ASSERT_EQ(opts.chunk_size, read_chunk_ptr->num_rows());
         for (int i = 0; i < read_chunk_ptr->num_rows(); i++) {

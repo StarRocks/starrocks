@@ -43,6 +43,8 @@
 #include <cstring>
 
 #include "base/concurrency/concurrent_limiter.h"
+#include "base/metrics.h"
+#include "base/testutil/assert.h"
 #include "base/testutil/sync_point.h"
 #include "common/config_ingest_fwd.h"
 #include "common/process_exit.h"
@@ -50,12 +52,13 @@
 #include "gen_cpp/FrontendService_types.h"
 #include "gen_cpp/HeartbeatService_types.h"
 #include "http/http_channel.h"
+#include "http/http_common.h"
 #include "http/http_request.h"
+#include "platform/platform_env.h"
 #include "runtime/exec_env.h"
 #include "runtime/stream_load/load_stream_mgr.h"
 #include "runtime/stream_load/stream_load_context.h"
 #include "runtime/stream_load/stream_load_executor.h"
-#include "util/brpc_stub_cache.h"
 
 class mg_connection;
 
@@ -91,8 +94,13 @@ public:
         k_response_str = "";
         config::streaming_load_max_mb = 1;
 
+        auto* platform_env = PlatformEnv::GetInstance();
+        if (platform_env->brpc_stub_cache() == nullptr) {
+            ASSERT_OK(platform_env->init(&_metrics));
+            _owns_platform_env = true;
+        }
+        _env._refresh_service_contexts();
         _env._load_stream_mgr = new LoadStreamMgr();
-        _env._brpc_stub_cache = new BrpcStubCache(&_env);
         _env._stream_load_executor = new StreamLoadExecutor(&_env);
 
         _evhttp_req = evhttp_request_new(nullptr, nullptr);
@@ -100,12 +108,14 @@ public:
         _limiter.reset(new ConcurrentLimiter(1000));
     }
     void TearDown() override {
-        delete _env._brpc_stub_cache;
-        _env._brpc_stub_cache = nullptr;
         delete _env._load_stream_mgr;
         _env._load_stream_mgr = nullptr;
         delete _env._stream_load_executor;
         _env._stream_load_executor = nullptr;
+        if (_owns_platform_env) {
+            PlatformEnv::GetInstance()->destroy();
+            _owns_platform_env = false;
+        }
 
         if (_evhttp_req != nullptr) {
             evhttp_request_free(_evhttp_req);
@@ -116,6 +126,8 @@ private:
     ExecEnv _env;
     evhttp_request* _evhttp_req = nullptr;
     std::unique_ptr<ConcurrentLimiter> _limiter;
+    MetricRegistry _metrics{"stream_load_action_test"};
+    bool _owns_platform_env = false;
 };
 
 TEST_F(StreamLoadActionTest, no_auth) {
@@ -629,6 +641,26 @@ TEST_F(StreamLoadActionTest, url_table_key_decode_fail) {
     request._params.emplace(HTTP_TABLE_KEY, "%RR");
     request.set_handler(&action);
     ASSERT_EQ(-1, action.on_header(&request));
+}
+
+TEST_F(StreamLoadActionTest, invalid_envelope) {
+    StreamLoadAction action(&_env, _limiter.get());
+
+    HttpRequest request(_evhttp_req);
+    request._params.emplace(HTTP_DB_KEY, "db");
+    request._params.emplace(HTTP_TABLE_KEY, "tbl");
+    request._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic cm9vdDo=");
+    request._headers.emplace(HttpHeaders::CONTENT_LENGTH, "0");
+    request._headers.emplace(HTTP_FORMAT_KEY, "json");
+    request._headers.emplace(HTTP_ENVELOPE, "custom");
+    request.set_handler(&action);
+
+    ASSERT_EQ(-1, action.on_header(&request));
+
+    rapidjson::Document doc;
+    doc.Parse(k_response_str.c_str());
+    ASSERT_STREQ("Fail", doc["Status"].GetString());
+    ASSERT_NE(nullptr, std::strstr(doc["Message"].GetString(), "Unknown envelope type: custom"));
 }
 
 } // namespace starrocks

@@ -2,4 +2,3 @@
 # Paths are relative to be/. Remove entries as files switch to config_<domain>_fwd.h.
 
 src/common/config.cpp
-src/http/action/update_config_action.cpp

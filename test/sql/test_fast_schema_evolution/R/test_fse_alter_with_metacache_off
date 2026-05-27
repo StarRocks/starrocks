@@ -1,0 +1,46 @@
+-- name: test_lake_alter_add_first_key_no_metacache @cloud
+update information_schema.be_configs set value = "0" where name = "lake_metadata_cache_limit";
+-- result:
+-- !result
+create database test_db_${uuid0};
+-- result:
+-- !result
+use test_db_${uuid0};
+-- result:
+-- !result
+create table t1 (k1 int, k2 int, v1 int) duplicate key(k1)
+  distributed by hash(k1) buckets 1 properties("replication_num" = "1");
+-- result:
+-- !result
+insert into t1 values (1, 10, 100), (2, 20, 200), (3, 30, 300);
+-- result:
+-- !result
+alter table t1 add column k0 int key default "0" first;
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+select * from t1 order by k1;
+-- result:
+0	1	10	100
+0	2	20	200
+0	3	30	300
+-- !result
+insert into t1 values (-1, 4, 40, 400);
+-- result:
+-- !result
+select * from t1 order by k1;
+-- result:
+0	1	10	100
+0	2	20	200
+0	3	30	300
+-1	4	40	400
+-- !result
+drop database test_db_${uuid0};
+-- result:
+-- !result
+update information_schema.be_configs set value = "2147483648" where name = "lake_metadata_cache_limit";
+-- result:
+-- !result

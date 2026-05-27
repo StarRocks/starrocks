@@ -61,6 +61,16 @@ public class LocalMetaStoreSharedDataTest {
 
     @Test
     public void testAlterDatabaseSetProperty() {
+        boolean oldVal = Config.enable_storage_volume_access_check;
+        Config.enable_storage_volume_access_check = false;
+        try {
+            testAlterDatabaseSetPropertyImpl();
+        } finally {
+            Config.enable_storage_volume_access_check = oldVal;
+        }
+    }
+
+    private void testAlterDatabaseSetPropertyImpl() {
         String dbName = "db_for_alter_db_set_property";
         Assertions.assertDoesNotThrow(() -> starRocksAssert.withDatabase(dbName));
 

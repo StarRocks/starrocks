@@ -33,13 +33,13 @@
 #include "base/phmap/phmap.h"
 #include "column/nullable_column.h"
 #include "column/vectorized_fwd.h"
+#include "common/block_split_bloom_filter.h"
 #include "common/object_pool.h"
 #include "common/status.h"
 #include "common/statusor.h"
 #include "exprs/expr.h"
 #include "storage/rowset/column_reader.h"
 #include "types/logical_type.h"
-#include "util/block_split_bloom_filter.h"
 #include "velocypack/vpack.h"
 
 namespace starrocks {

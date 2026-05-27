@@ -38,7 +38,10 @@
 
 #include <memory>
 
+#include "column/chunk_factory.h"
+#include "column/column_helper.h"
 #include "column/datum_convert.h"
+#include "column/raw_data_visitor.h"
 #include "storage/chunk_helper.h"
 #include "storage/rowset/options.h"
 #include "storage/rowset/page_decoder.h"
@@ -57,11 +60,11 @@ public:
 
     template <LogicalType type, class PageDecoderType>
     void copy_one(PageDecoderType* decoder, StorageCppType<type>* ret) {
-        auto column = ChunkHelper::column_from_field_type(type, true);
+        auto column = ChunkFactory::column_from_field_type(type, true);
         size_t n = 1;
         ASSERT_TRUE(decoder->next_batch(&n, column.get()).ok());
         ASSERT_EQ(1, n);
-        *ret = *reinterpret_cast<const StorageCppType<type>*>(column->raw_data());
+        *ret = GetStorageContainer<type>::get_data(column, 0);
     }
 
     template <LogicalType Type, class PageBuilderType, class PageDecoderType, int ReserveHead = 0>
@@ -106,16 +109,15 @@ public:
                 FAIL() << "Fail at index " << i << " inserted=" << src[i] << " got=" << out;
             }
         }
-        auto column = ChunkHelper::column_from_field_type(Type, false);
+        auto column = ChunkFactory::column_from_field_type(Type, false);
 
         status = page_decoder.next_batch(&size, column.get());
         ASSERT_TRUE(status.ok());
 
-        auto* values = reinterpret_cast<const CppType*>(column->raw_data());
-        auto* decoded = (CppType*)values;
+        const auto values = GetStorageContainer<Type>::get_data(column);
         for (uint i = 0; i < size; i++) {
-            if (src[i] != decoded[i]) {
-                FAIL() << "Fail at index " << i << " inserted=" << src[i] << " got=" << decoded[i];
+            if (src[i] != values[i]) {
+                FAIL() << "Fail at index " << i << " inserted=" << src[i] << " got=" << values[i];
             }
         }
 
@@ -126,14 +128,14 @@ public:
             EXPECT_EQ((int32_t)(seek_off), page_decoder.current_index());
             CppType ret;
             copy_one<Type, PageDecoderType>(&page_decoder, &ret);
-            EXPECT_EQ(decoded[seek_off], ret);
+            EXPECT_EQ(values[seek_off], ret);
         }
     }
 
     template <LogicalType Type, class PageBuilderType, class PageDecoderType>
     void test_encode_decode_page_vectorized() {
         using CppType = StorageCppType<Type>;
-        auto src = ChunkHelper::column_from_field_type(Type, false);
+        auto src = ChunkFactory::column_from_field_type(Type, false);
         CppType value = 0;
         size_t count = 64 * 1024 / sizeof(CppType);
         src->reserve(count);
@@ -145,7 +147,9 @@ public:
         PageBuilderOptions options;
         options.data_page_size = 64 * 1024;
         PageBuilderType page_builder(options);
-        size_t added = page_builder.add(reinterpret_cast<const uint8_t*>(src->raw_data()), count);
+        RawDataVisitor visitor;
+        ASSERT_TRUE(src->accept(&visitor).ok());
+        size_t added = page_builder.add(visitor.result(), count);
         ASSERT_EQ(count, added);
         OwnedSlice s = page_builder.finish()->build();
 
@@ -175,7 +179,7 @@ public:
                 src_value++;
             }
 
-            auto dst = ChunkHelper::column_from_field_type(Type, false);
+            auto dst = ChunkFactory::column_from_field_type(Type, false);
             dst->reserve(count);
             size_t size = count;
             status = page_decoder.next_batch(&size, dst.get());
@@ -196,7 +200,7 @@ public:
             ASSERT_TRUE(status.ok());
             ASSERT_EQ(0, page_decoder.current_index());
 
-            auto dst = ChunkHelper::column_from_field_type(Type, false);
+            auto dst = ChunkFactory::column_from_field_type(Type, false);
             size_t size = count / 2;
             dst->reserve(size);
             status = page_decoder.next_batch(&size, dst.get());
@@ -217,7 +221,7 @@ public:
             ASSERT_TRUE(status.ok());
             ASSERT_EQ(0, page_decoder.current_index());
 
-            auto dst = ChunkHelper::column_from_field_type(Type, false);
+            auto dst = ChunkFactory::column_from_field_type(Type, false);
             SparseRange<> read_range;
             read_range.add(Range<>(0, count / 3));
             read_range.add(Range<>(count / 2, (count * 2 / 3)));
@@ -534,7 +538,7 @@ TEST_F(BitShufflePageTest, TestReadByRowids) {
     st = page_decoder.init();
     ASSERT_TRUE(st.ok());
 
-    auto column = ChunkHelper::column_from_field_type(TYPE_INT, false);
+    auto column = ChunkFactory::column_from_field_type(TYPE_INT, false);
     rowid_t rowids[] = {0, 50, 99};
     size_t num_read = 3;
     st = page_decoder.read_by_rowids(0, rowids, &num_read, column.get());

@@ -16,24 +16,25 @@ Review the information in this section before downgrading. Perform any recommend
 
 - **For patch version downgrade**
 
-  You can downgrade your StarRocks cluster across patch versions, for example, from v2.2.11 directly to v2.2.6.
+  You can downgrade your StarRocks cluster across patch versions, for example, from v3.5.11 directly to v3.5.6.
 
 - **For minor version downgrade**
 
-  For compatibility and safety reasons, we strongly recommend you downgrade your StarRocks cluster **consecutively from one minor version to another**. For example, to downgrade a StarRocks v2.5 cluster to v2.2, you need to downgrade it in the following order: v2.5.x --> v2.4.x --> v2.3.x --> v2.2.x.
-
-  :::warning
-
-  After upgrading StarRocks to v3.3, DO NOT downgrade it directly to v3.2.0, v3.2.1, or v3.2.2, otherwise it will cause metadata loss. You must downgrade the cluster to v3.2.3 or later to prevent the issue.
-
-  :::
+  For compatibility and safety reasons, we strongly recommend you downgrade your StarRocks cluster **consecutively from one minor version to another**. For example, to downgrade a StarRocks v3.5 cluster to v3.2, you need to downgrade it in the following order: v3.5.x --> v3.4.x --> v3.3.x --> v3.2.x.
 
 - **For major version downgrade**
 
-  You can only downgrade your StarRocks v3.0 cluster to v2.5.3 and later versions.
+  You can only downgrade your StarRocks v4.1 cluster to v4.0.6 and later versions.
 
-  - StarRocks upgrades the BDB library in v3.0. However, BDBJE cannot be rolled back. You must use BDB library of v3.0 after a downgrade.
-  - The new RBAC privilege system is used by default after you upgrade to v3.0. You can only use the RBAC privilege system after a downgrade.
+  :::warning
+
+  **Downgrade Notes**
+
+  - After upgrading StarRocks to v4.1, DO NOT downgrade to any v4.0 version below v4.0.6.
+
+    Due to internal changes in data layout introduced in v4.1 (related to tablet splitting and distribution mechanisms), clusters upgraded to v4.1 may generate metadata and storage structures that are not fully compatible with earlier versions. As a result, downgrade from v4.1 is only supported to v4.0.6 or later. Downgrading to versions prior to v4.0.6 is not supported. This limitation is due to backward compatibility constraints in how earlier versions interpret tablet layout and distribution metadata.
+
+  :::
 
 ### Downgrade procedure
 
@@ -67,14 +68,6 @@ ADMIN SET FRONTEND CONFIG ("disable_balance"="false");
 ADMIN SET FRONTEND CONFIG ("disable_colocate_balance"="false");
 ```
 
-- **If you downgrade from v2.2 and later versions**
-
-Set the FE configuration item `ignore_unknown_log_id` to `true`. Because it is a static parameter, you must modify it in the FE configuration file **fe.conf** and restart the node to allow the modification to take effect. After the downgrade and the first checkpoint are completed, you can reset it to `false` and restart the node.
-
-- **If you have enabled FQDN access**
-
-If you have enabled FQDN access (supported from v2.4 onwards) and need to downgrade to versions earlier than v2.4, you must switch to IP address access before downgrading. See [Rollback FQDN](../administration/management/enable_fqdn.md#rollback) for detailed instructions.
-
 ## Downgrade FE
 
 :::note
@@ -103,10 +96,6 @@ After the compatibility configuration and the availability test, you can downgra
 
    b. You can check whether the image file has been synchronized by viewing the log file **fe.log** of the Leader FE. A record of log like "push image.* from subdir [] to other nodes. totally xx nodes, push successful xx nodes" suggests that the image file has been successfully synchronized. 
 
-   > **CAUTION**
-   >
-   > The ALTER SYSTEM CREATE IMAGE statement is supported in v2.5.3 and later. In earlier versions, you need to create a metadata snapshot by restarting the Leader FE.
-
 2. Navigate to the working directory of the FE node and stop the node.
 
    ```Bash
@@ -126,13 +115,6 @@ After the compatibility configuration and the availability test, you can downgra
    cp -r /tmp/StarRocks-x.x.x/fe/spark-dpp  .
    ```
 
-   > **CAUTION**
-   >
-   > If you are downgrading StarRocks v3.0 to v2.5, you must follow these steps after you replace the deployment files:
-   >
-   > 1. Copy the file **fe/lib/starrocks-bdb-je-18.3.13.jar** of the v3.0 deployment to the directory **fe/lib** of the v2.5 deployment.
-   > 2. Delete the file **fe/lib/je-7.\*.jar**.
-
 4. Start the FE node.
 
    ```Bash
@@ -149,7 +131,7 @@ After the compatibility configuration and the availability test, you can downgra
 
    > **CAUTION**
    >
-   > Suppose you have downgraded your cluster after a failed upgrade and you want to upgrade the cluster again, for example, 2.5->3.0->2.5->3.0. To prevent metadata upgrade failure for some Follower FEs, repeat Step 1 to trigger a new snapshot before upgrading.
+   > Suppose you have downgraded your cluster after a failed upgrade and you want to upgrade the cluster again, for example, 3.5->4.0->3.5->4.0. To prevent metadata upgrade failure for some Follower FEs, repeat Step 1 to trigger a new snapshot before upgrading.
 
 ## Downgrade BE
 

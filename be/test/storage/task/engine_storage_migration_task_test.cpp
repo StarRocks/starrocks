@@ -23,21 +23,28 @@
 #include "base/testutil/sync_point.h"
 #include "base/time/timezone_utils.h"
 #include "base/utility/defer_op.h"
+#include "column/chunk_factory.h"
 #include "common/config_exec_fwd.h"
 #include "common/config_path_fwd.h"
 #include "common/config_rowset_fwd.h"
 #include "common/config_storage_fwd.h"
+#include "common/metrics/process_metrics_registry.h"
 #include "common/system/cpu_info.h"
 #include "common/system/disk_info.h"
 #include "common/system/mem_info.h"
 #include "exec/pipeline/query_context.h"
 #include "fs/fs_util.h"
 #include "fs/key_cache.h"
+#include "platform/platform_env.h"
+#include "platform/store_path.h"
+#include "platform/user_function_cache.h"
+#include "runtime/chunk_helper.h"
 #include "runtime/current_thread.h"
 #include "runtime/descriptor_helper.h"
+#include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
 #include "runtime/mem_tracker.h"
-#include "runtime/user_function_cache.h"
+#include "runtime/runtime_state.h"
 #include "storage/chunk_helper.h"
 #include "storage/delta_writer.h"
 #include "storage/lake/tablet_manager.h"
@@ -108,24 +115,24 @@ public:
         EXPECT_TRUE(RowsetFactory::create_rowset_writer(writer_context, &writer).ok());
 
         auto schema = ChunkHelper::convert_schema(tablet->tablet_schema());
-        auto chunk = ChunkHelper::new_chunk(schema, keys.size());
-        auto cols = chunk->mutable_columns();
+        auto chunk = ChunkFactory::new_chunk(schema, keys.size());
+        auto cols = chunk->columns();
         for (int64_t key : keys) {
             if (schema.num_key_fields() == 1) {
-                cols[0]->append_datum(Datum(key));
+                cols[0]->as_mutable_ptr()->append_datum(Datum(key));
             } else {
-                cols[0]->append_datum(Datum(key));
+                cols[0]->as_mutable_ptr()->append_datum(Datum(key));
                 string v = fmt::to_string(key * 234234342345);
-                cols[1]->append_datum(Datum(Slice(v)));
-                cols[2]->append_datum(Datum((int32_t)key));
+                cols[1]->as_mutable_ptr()->append_datum(Datum(Slice(v)));
+                cols[2]->as_mutable_ptr()->append_datum(Datum((int32_t)key));
             }
             int vcol_start = schema.num_key_fields();
-            cols[vcol_start]->append_datum(Datum((int16_t)(key % 100 + 1)));
+            cols[vcol_start]->as_mutable_ptr()->append_datum(Datum((int16_t)(key % 100 + 1)));
             if (cols[vcol_start + 1]->is_binary()) {
                 string v = fmt::to_string(key % 1000 + 2);
-                cols[vcol_start + 1]->append_datum(Datum(Slice(v)));
+                cols[vcol_start + 1]->as_mutable_ptr()->append_datum(Datum(Slice(v)));
             } else {
-                cols[vcol_start + 1]->append_datum(Datum((int32_t)(key % 1000 + 2)));
+                cols[vcol_start + 1]->as_mutable_ptr()->append_datum(Datum((int32_t)(key % 1000 + 2)));
             }
         }
         if (!keys.empty()) {
@@ -263,14 +270,14 @@ public:
     static void rowset_writer_add_rows(std::unique_ptr<RowsetWriter>& writer, const TabletSchemaCSPtr& tablet_schema) {
         std::vector<std::string> test_data;
         auto schema = ChunkHelper::convert_schema(tablet_schema);
-        auto chunk = ChunkHelper::new_chunk(schema, 1024);
+        auto chunk = ChunkFactory::new_chunk(schema, 1024);
         for (size_t i = 0; i < 1024; ++i) {
             test_data.push_back("well" + std::to_string(i));
-            auto cols = chunk->mutable_columns();
-            cols[0]->append_datum(Datum(static_cast<int32_t>(i)));
+            auto cols = chunk->columns();
+            cols[0]->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(i)));
             Slice field_1(test_data[i]);
-            cols[1]->append_datum(Datum(field_1));
-            cols[2]->append_datum(Datum(static_cast<int32_t>(10000 + i)));
+            cols[1]->as_mutable_ptr()->append_datum(Datum(field_1));
+            cols[2]->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(10000 + i)));
         }
         auto st = writer->add_chunk(*chunk);
         ASSERT_TRUE(st.ok()) << st.to_string() << ", version:" << writer->version();
@@ -474,17 +481,17 @@ TEST_F(EngineStorageMigrationTaskTest, test_concurrent_ingestion_and_migration) 
         ASSERT_TRUE(new_tablet_uid.hi == old_tablet_uid.hi && new_tablet_uid.lo == old_tablet_uid.lo);
         // prepare chunk
         std::vector<std::string> test_data;
-        auto chunk = ChunkHelper::new_chunk(tuple_desc->slots(), 1024);
+        auto chunk = RuntimeChunkHelper::new_chunk(tuple_desc->slots(), 1024);
         std::vector<uint32_t> indexes;
         indexes.reserve(1024);
         for (size_t i = 0; i < 1024; ++i) {
             indexes.push_back(i);
             test_data.push_back("well" + std::to_string(i));
-            auto cols = chunk->mutable_columns();
-            cols[0]->append_datum(Datum(static_cast<int32_t>(i)));
+            auto cols = chunk->columns();
+            cols[0]->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(i)));
             Slice field_1(test_data[i]);
-            cols[1]->append_datum(Datum(field_1));
-            cols[2]->append_datum(Datum(static_cast<int32_t>(10000 + i)));
+            cols[1]->as_mutable_ptr()->append_datum(Datum(field_1));
+            cols[2]->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(10000 + i)));
         }
         auto st = delta_writer->write(*chunk, indexes.data(), 0, indexes.size());
         ASSERT_TRUE(st.ok());
@@ -553,15 +560,15 @@ TEST_F(EngineStorageMigrationTaskTest, test_concurrent_ingestion_and_migration_p
         ASSERT_TRUE(new_tablet_uid.hi == old_tablet_uid.hi && new_tablet_uid.lo == old_tablet_uid.lo);
         // prepare chunk
         std::vector<std::string> test_data;
-        auto chunk = ChunkHelper::new_chunk(tuple_desc->slots(), 1024);
+        auto chunk = RuntimeChunkHelper::new_chunk(tuple_desc->slots(), 1024);
         std::vector<uint32_t> indexes;
         indexes.reserve(1024);
         for (size_t i = 0; i < 1024; ++i) {
             indexes.push_back(i);
-            auto cols = chunk->mutable_columns();
-            cols[0]->append_datum(Datum(static_cast<int64_t>(i)));
-            cols[1]->append_datum(Datum(static_cast<int16_t>(i + 1)));
-            cols[2]->append_datum(Datum(static_cast<int32_t>(i + 2)));
+            auto cols = chunk->columns();
+            cols[0]->as_mutable_ptr()->append_datum(Datum(static_cast<int64_t>(i)));
+            cols[1]->as_mutable_ptr()->append_datum(Datum(static_cast<int16_t>(i + 1)));
+            cols[2]->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(i + 2)));
         }
         auto st = delta_writer->write(*chunk, indexes.data(), 0, indexes.size());
         ASSERT_TRUE(st.ok());
@@ -777,12 +784,17 @@ int main(int argc, char** argv) {
     }
 
     auto* global_env = starrocks::GlobalEnv::GetInstance();
-    (void)global_env->init();
+    // Metric singletons keep registry back-pointers, so the process registry must outlive shutdown.
+    static auto* process_metrics_registry = new starrocks::ProcessMetricsRegistry("starrocks_be");
+    (void)global_env->init(process_metrics_registry->root_registry());
+    auto* platform_env = starrocks::PlatformEnv::GetInstance();
+    (void)platform_env->init(process_metrics_registry->root_registry());
     starrocks::StorageEngine* engine = nullptr;
     starrocks::EngineOptions options;
     options.store_paths = paths;
     options.compaction_mem_tracker = global_env->process_mem_tracker();
     options.update_mem_tracker = global_env->update_mem_tracker();
+    options.table_metrics_mgr = process_metrics_registry->table_metrics_mgr();
     starrocks::Status s = starrocks::StorageEngine::open(options, &engine);
     if (!s.ok()) {
         starrocks::fs::remove_all(root_path_1);
@@ -792,7 +804,7 @@ int main(int argc, char** argv) {
         return -1;
     }
     auto* exec_env = starrocks::ExecEnv::GetInstance();
-    (void)exec_env->init(paths);
+    (void)exec_env->init(paths, process_metrics_registry, global_env);
     int r = RUN_ALL_TESTS();
 
     sleep(10);
@@ -812,6 +824,7 @@ int main(int argc, char** argv) {
     }
 #endif
     exec_env->destroy();
+    platform_env->destroy();
     global_env->stop();
 
     return r;

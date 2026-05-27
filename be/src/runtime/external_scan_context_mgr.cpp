@@ -42,24 +42,26 @@
 #include "base/uid_util.h"
 #include "common/config_runtime_fwd.h"
 #include "common/thread/thread.h"
+#include "compute_env/result/result_queue_mgr.h"
+#include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/query_context.h"
 #include "runtime/exec_env.h"
 #include "runtime/fragment_mgr.h"
-#include "runtime/result_queue_mgr.h"
-#include "runtime/starrocks_metrics.h"
-#include "util/global_metrics_registry.h"
+#include "runtime/runtime_metrics.h"
 
 namespace starrocks {
 
-ExternalScanContextMgr::ExternalScanContextMgr(ExecEnv* exec_env) : _exec_env(exec_env) {
+ExternalScanContextMgr::ExternalScanContextMgr(ExecEnv* exec_env, MetricRegistry* metrics) : _exec_env(exec_env) {
     // start the reaper thread for gc the expired context
     _keep_alive_reaper = std::make_unique<std::thread>(
             std::bind<void>(std::mem_fn(&ExternalScanContextMgr::gc_expired_context), this));
     Thread::set_thread_name(_keep_alive_reaper.get()->native_handle(), "kepalive_reaper");
-    REGISTER_GAUGE_STARROCKS_METRIC(active_scan_context_count, [this]() {
-        std::lock_guard<std::mutex> l(_lock);
-        return _active_contexts.size();
-    });
+    if (metrics != nullptr) {
+        REGISTER_GAUGE_RUNTIME_METRIC(metrics, active_scan_context_count, [this]() {
+            std::lock_guard<std::mutex> l(_lock);
+            return _active_contexts.size();
+        });
+    }
 }
 
 ExternalScanContextMgr::~ExternalScanContextMgr() {

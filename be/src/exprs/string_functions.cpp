@@ -32,6 +32,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cstring>
 #include <iomanip>
 #include <memory>
 #include <sstream>
@@ -2501,6 +2502,92 @@ StatusOr<ColumnPtr> StringFunctions::ltrim(FunctionContext* context, const starr
 
 StatusOr<ColumnPtr> StringFunctions::rtrim(FunctionContext* context, const starrocks::Columns& columns) {
     return trim_impl<TRIM_RIGHT>(context, columns);
+}
+
+// MySQL TRIM(... FROM ...): remove the whole `remstr` byte sequence repeatedly (UTF-8 safe; empty remstr = no-op).
+template <TrimType trim_type>
+struct SubstrTrimFunction {
+    template <LogicalType Type, LogicalType ResultType, class RemoveArg, class Utf8Index>
+    static ColumnPtr evaluate(const ColumnPtr& column, RemoveArg&& remstr, Utf8Index&& /*utf8_index*/) {
+        const auto* src = down_cast<const BinaryColumn*>(column.get());
+
+        auto dst = RunTimeColumnType<TYPE_VARCHAR>::create();
+        auto& dst_offsets = dst->get_offset();
+        auto& dst_bytes = dst->get_bytes();
+
+        const auto num_rows = src->size();
+        raw::make_room(&dst_offsets, num_rows + 1);
+        dst_offsets[0] = 0;
+        dst_bytes.reserve(src->get_immutable_bytes().size());
+
+        const char* rdata = remstr.data();
+        const size_t rlen = remstr.size();
+
+        for (size_t i = 0; i < num_rows; ++i) {
+            auto s = src->get_slice(i);
+            const char* from = s.data;
+            const char* to = s.data + s.size;
+            if (rlen > 0) {
+                // Compare remaining length against rlen (instead of forming
+                // `from + rlen` / `to - rlen` first) to avoid constructing a
+                // pointer outside the buffer when rlen exceeds what is left.
+                if constexpr (trim_type == TRIM_LEFT || trim_type == TRIM_BOTH) {
+                    while (static_cast<size_t>(to - from) >= rlen && memcmp(from, rdata, rlen) == 0) {
+                        from += rlen;
+                    }
+                }
+                if constexpr (trim_type == TRIM_RIGHT || trim_type == TRIM_BOTH) {
+                    while (static_cast<size_t>(to - from) >= rlen && memcmp(to - rlen, rdata, rlen) == 0) {
+                        to -= rlen;
+                    }
+                }
+            }
+            dst_bytes.insert(dst_bytes.end(), (uint8_t*)from, (uint8_t*)to);
+            dst_offsets[i + 1] = dst_bytes.size();
+        }
+        return dst;
+    }
+};
+
+template <TrimType trim_type>
+static StatusOr<ColumnPtr> substr_trim_impl(FunctionContext* context, const starrocks::Columns& columns) {
+    auto* state = reinterpret_cast<TrimState*>(context->get_function_state(FunctionContext::FRAGMENT_LOCAL));
+    DCHECK(!!state);
+    return VectorizedUnaryFunction<SubstrTrimFunction<trim_type>>::template evaluate<TYPE_VARCHAR, const std::string&>(
+            columns[0], state->remove_chars, state->utf8_index);
+}
+
+Status StringFunctions::trim_string_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
+    if (scope != FunctionContext::FRAGMENT_LOCAL) {
+        return Status::OK();
+    }
+    if (!context->is_constant_column(1)) {
+        return Status::InvalidArgument(
+                "The second parameter of trim_string/ltrim_string/rtrim_string only accepts a literal value");
+    }
+    if (!context->is_notnull_constant_column(1)) {
+        return Status::InvalidArgument("The second parameter should not be null");
+    }
+    auto remove_col = context->get_constant_column(1);
+    const Slice chars = ColumnHelper::get_const_value<TYPE_VARCHAR>(remove_col);
+
+    auto* state = new TrimState();
+    context->set_function_state(scope, state);
+    state->remove_chars.assign(chars.get_data(), chars.get_size()); // empty allowed -> no-op
+    state->is_utf8 = false;
+    return Status::OK();
+}
+
+StatusOr<ColumnPtr> StringFunctions::trim_string(FunctionContext* context, const starrocks::Columns& columns) {
+    return substr_trim_impl<TRIM_BOTH>(context, columns);
+}
+
+StatusOr<ColumnPtr> StringFunctions::ltrim_string(FunctionContext* context, const starrocks::Columns& columns) {
+    return substr_trim_impl<TRIM_LEFT>(context, columns);
+}
+
+StatusOr<ColumnPtr> StringFunctions::rtrim_string(FunctionContext* context, const starrocks::Columns& columns) {
+    return substr_trim_impl<TRIM_RIGHT>(context, columns);
 }
 
 DEFINE_STRING_UNARY_FN_WITH_IMPL(hex_intImpl, v) {

@@ -22,7 +22,6 @@
 #include <unordered_set>
 #include <utility>
 
-#include "agent/master_info.h"
 #include "base/concurrency/stopwatch.hpp"
 #include "base/simd/simd.h"
 #include "base/time/timezone_utils.h"
@@ -37,12 +36,15 @@
 #include "common/runtime_profile.h"
 #include "common/status.h"
 #include "common/statusor.h"
+#include "common/system/master_info.h"
 #include "exec/hdfs_scanner/hdfs_scanner.h"
 #include "exprs/chunk_predicate_evaluator.h"
+#include "exprs/decimal_cast_expr.h"
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
 #include "exprs/variant_path_reader.h"
 #include "formats/parquet/column_reader_factory.h"
+#include "formats/parquet/complex_column_reader.h"
 #include "formats/parquet/iceberg_row_id_reader.h"
 #include "formats/parquet/metadata.h"
 #include "formats/parquet/parquet_pos_reader.h"
@@ -51,7 +53,9 @@
 #include "formats/parquet/scalar_column_reader.h"
 #include "formats/parquet/schema.h"
 #include "gen_cpp/Exprs_types.h"
-#include "storage/chunk_helper.h"
+#include "runtime/chunk_helper.h"
+#include "runtime/mem_pool.h"
+#include "storage/convert_helper.h"
 #include "types/type_descriptor.h"
 #include "utils.h"
 
@@ -72,7 +76,7 @@ namespace {
 // Note: this only handles *exact* duplicates (identical offset and size).  True byte-range
 // overlaps are not expected because the parquet format guarantees that column chunks for
 // different columns occupy non-overlapping byte ranges within the file.
-void deduplicate_io_ranges(std::vector<io::SharedBufferedInputStream::IORange>* ranges) {
+void deduplicate_io_ranges(std::vector<SharedBufferedInputStream::IORange>* ranges) {
     if (ranges == nullptr || ranges->size() <= 1) {
         return;
     }
@@ -112,7 +116,15 @@ StatusOr<ColumnPtr> build_exact_typed_variant_projection(const VariantColumn* va
         return Status::NotFound("variant path is not an exact typed leaf");
     }
     if (reader.typed_type_desc() != target_type) {
-        return Status::NotFound("variant typed leaf type does not match target slot type");
+        // VARCHAR / CHAR / VARBINARY / BINARY all share the same physical BinaryColumn
+        // representation (raw bytes).  Allow the fast typed-column path when both the
+        // shredded leaf type and the target type are in this "string-like" family.
+        auto is_string_like = [](LogicalType t) {
+            return t == TYPE_VARCHAR || t == TYPE_CHAR || t == TYPE_VARBINARY || t == TYPE_BINARY;
+        };
+        if (!is_string_like(reader.typed_type_desc().type) || !is_string_like(target_type.type)) {
+            return Status::NotFound("variant typed leaf type does not match target slot type");
+        }
     }
 
     const size_t num_rows = variant_src->size();
@@ -144,30 +156,94 @@ StatusOr<ColumnPtr> build_exact_typed_variant_projection(const VariantColumn* va
     // above; const-non-null has no outer null mask to propagate).
     const bool has_outer_nulls = !variant_src->is_constant() && variant_src->is_nullable() &&
                                  down_cast<const NullableColumn*>(variant_src.get())->has_null();
+
+    // Fast path: no outer nulls to merge.  eff_typed already carries the complete null
+    // structure (rows where the shredded leaf is absent are already null in typed_col).
+    // Clone it directly instead of splitting into data + null and reassembling.
+    if (!has_outer_nulls) {
+        if (eff_typed->is_nullable()) {
+            return eff_typed->clone();
+        }
+        // Typed column is non-nullable (all values present): wrap with an all-zero null mask.
+        return NullableColumn::create(eff_typed->clone(), NullColumn::create(num_rows, 0));
+    }
+
+    // Slow path: merge outer nulls from variant_src into the typed null mask.
     const bool has_typed_nulls = eff_typed->is_nullable() && down_cast<const NullableColumn*>(eff_typed)->has_null();
 
     auto result_null = NullColumn::create(num_rows, 0);
     NullData& result_null_data = result_null->get_data();
 
-    if (has_outer_nulls && has_typed_nulls) {
+    if (has_typed_nulls) {
         const auto outer = down_cast<const NullableColumn*>(variant_src.get())->immutable_null_column_data();
         const auto typed = down_cast<const NullableColumn*>(eff_typed)->immutable_null_column_data();
         for (size_t i = 0; i < num_rows; ++i) {
             result_null_data[i] = outer[i] | typed[i];
         }
-    } else if (has_outer_nulls) {
+    } else {
         const auto outer = down_cast<const NullableColumn*>(variant_src.get())->immutable_null_column_data();
         std::copy(outer.begin(), outer.end(), result_null_data.begin());
-    } else if (has_typed_nulls) {
-        const auto typed = down_cast<const NullableColumn*>(eff_typed)->immutable_null_column_data();
-        std::copy(typed.begin(), typed.end(), result_null_data.begin());
     }
-    // else: no nulls anywhere — result_null stays all-zero.
 
     auto result_data = ColumnHelper::get_data_column(eff_typed)->clone();
     auto result = NullableColumn::create(std::move(result_data), std::move(result_null));
     result->update_has_null();
     return result;
+}
+
+// Cast a typed-shredded decimal column to a (possibly different) decimal target type.
+//
+// This function is needed because the shredded typed column already holds native decimal
+// storage (int32 / int64 / int128 physical values with precision+scale baked into the
+// TypeDescriptor). That is NOT a variant-binary-encoded value, so VariantRowConverter::cast_to
+// cannot be used: that path decodes variant binary wire format and explicitly excludes
+// decimal targets (see the "VARIANT -> Decimal types: DecimalNonDecimalCast" comment in
+// variant_row_converter.cpp). Instead we go through TypeConverter::convert_column, which
+// understands native decimal storage and handles precision/scale widening correctly.
+//
+// If source_type == target_type (same precision and scale) no conversion is necessary and the
+// column is returned as-is.
+StatusOr<ColumnPtr> cast_decimal_projection_column(const ColumnPtr& source_column, const TypeDescriptor& source_type,
+                                                   const TypeDescriptor& target_type) {
+    if (source_type == target_type) {
+        return source_column;
+    }
+
+    const TypeConverter* converter = get_type_converter(source_type.type, target_type.type);
+    if (converter == nullptr) {
+        return Status::NotFound("no decimal converter for variant typed projection");
+    }
+
+    TypeInfoPtr source_type_info = get_type_info(source_type);
+    TypeInfoPtr target_type_info = get_type_info(target_type);
+    if (source_type_info == nullptr || target_type_info == nullptr) {
+        return Status::NotSupported("missing type info for decimal variant projection");
+    }
+
+    auto result = ColumnHelper::create_column(target_type, true);
+    MemPool mem_pool;
+    RETURN_IF_ERROR(converter->convert_column(source_type_info.get(), *source_column, target_type_info.get(),
+                                              result.get(), &mem_pool));
+    return result;
+}
+
+StatusOr<ColumnPtr> build_decimal_typed_variant_projection(const VariantColumn* variant_column,
+                                                           const ColumnPtr& variant_src, const VariantPath& path,
+                                                           const TypeDescriptor& target_type) {
+    VariantPathReader reader;
+    reader.prepare(variant_column, &path);
+    if (!reader.is_typed_exact()) {
+        return Status::NotFound("variant path is not an exact typed leaf");
+    }
+
+    const TypeDescriptor& source_type = reader.typed_type_desc();
+    if (!source_type.is_decimalv3_type() || !target_type.is_decimalv3_type()) {
+        return Status::NotFound("variant typed leaf is not decimal");
+    }
+
+    ASSIGN_OR_RETURN(auto exact_source_projection,
+                     build_exact_typed_variant_projection(variant_column, variant_src, path, source_type));
+    return cast_decimal_projection_column(exact_source_projection, source_type, target_type);
 }
 
 template <LogicalType ResultType>
@@ -196,7 +272,53 @@ StatusOr<ColumnPtr> build_variant_projection_column(const VariantColumn* variant
         RETURN_IF_ERROR(cast_status);
     }
 
-    return builder.build(false);
+    // Keep virtual-column schema stable across chunks: variant leaf extraction is semantically nullable,
+    // so always return NullableColumn instead of data-dependent nullable/non-nullable output.
+    return builder.build_nullable_column();
+}
+
+template <LogicalType ResultType>
+StatusOr<ColumnPtr> build_decimal_variant_projection_column(const VariantColumn* variant_column,
+                                                            const ColumnPtr& variant_src, const VariantPath& path,
+                                                            const TypeDescriptor& target_type) {
+    const size_t num_rows = variant_src->size();
+
+    ColumnBuilder<ResultType> builder(num_rows, target_type.precision, target_type.scale);
+    VariantPathReader reader;
+    reader.prepare(variant_column, &path);
+
+    const bool src_is_const = variant_src->is_constant();
+    for (size_t row = 0; row < num_rows; ++row) {
+        if (variant_src->is_null(row)) {
+            builder.append_null();
+            continue;
+        }
+        size_t variant_row = src_is_const ? 0 : row;
+        VariantReadResult read = reader.read_row(variant_row);
+        if (read.state != VariantReadState::kValue) {
+            builder.append_null();
+            continue;
+        }
+        auto variant_ref = read.value.as_ref();
+        const VariantValue& variant_value = variant_ref.get_value();
+        if (variant_value.type() == VariantType::NULL_TYPE) {
+            builder.append_null();
+            continue;
+        }
+        RunTimeCppType<ResultType> decimal_value{};
+        ASSIGN_OR_RETURN(bool overflow,
+                         cast_variant_to_decimal<RunTimeCppType<ResultType>>(&decimal_value, variant_value,
+                                                                             target_type.precision, target_type.scale));
+        if (overflow) {
+            builder.append_null();
+        } else {
+            builder.append(decimal_value);
+        }
+    }
+
+    // Keep virtual-column schema stable across chunks: variant leaf extraction is semantically nullable,
+    // so always return NullableColumn instead of data-dependent nullable/non-nullable output.
+    return builder.build_nullable_column();
 }
 
 StatusOr<ColumnPtr> project_variant_leaf_column(const ColumnPtr& variant_src, const VariantPath& path,
@@ -209,6 +331,13 @@ StatusOr<ColumnPtr> project_variant_leaf_column(const ColumnPtr& variant_src, co
     auto exact_typed_result = build_exact_typed_variant_projection(variant_column, variant_src, path, target_type);
     if (exact_typed_result.ok()) {
         return exact_typed_result;
+    }
+    if (target_type.is_decimalv3_type()) {
+        auto decimal_typed_result =
+                build_decimal_typed_variant_projection(variant_column, variant_src, path, target_type);
+        if (decimal_typed_result.ok()) {
+            return decimal_typed_result;
+        }
     }
 
     switch (target_type.type) {
@@ -236,6 +365,12 @@ StatusOr<ColumnPtr> project_variant_leaf_column(const ColumnPtr& variant_src, co
         return build_variant_projection_column<TYPE_DATETIME>(variant_column, variant_src, path, zone);
     case TYPE_TIME:
         return build_variant_projection_column<TYPE_TIME>(variant_column, variant_src, path, zone);
+    case TYPE_DECIMAL32:
+        return build_decimal_variant_projection_column<TYPE_DECIMAL32>(variant_column, variant_src, path, target_type);
+    case TYPE_DECIMAL64:
+        return build_decimal_variant_projection_column<TYPE_DECIMAL64>(variant_column, variant_src, path, target_type);
+    case TYPE_DECIMAL128:
+        return build_decimal_variant_projection_column<TYPE_DECIMAL128>(variant_column, variant_src, path, target_type);
     case TYPE_VARIANT:
         return build_variant_projection_column<TYPE_VARIANT>(variant_column, variant_src, path, zone);
     default:
@@ -244,27 +379,39 @@ StatusOr<ColumnPtr> project_variant_leaf_column(const ColumnPtr& variant_src, co
 }
 
 bool collect_variant_leaf_paths(const ColumnAccessPath* node, std::vector<VariantSegment>* segments,
-                                std::vector<std::string>* shredded_paths) {
+                                VariantShreddedReadHints* hints) {
     if (!node->is_field() || node->path().empty()) {
         return false;
     }
 
     segments->emplace_back(VariantSegment::make_object(node->path()));
     if (node->children().empty()) {
+        // A VARIANT-typed leaf hint is not precise enough for shredded-path pruning.
+        // FE may truncate paths with unsupported JSON semantics (e.g. array index in
+        // "$.a[0].b"), producing an intermediate VARIANT leaf like "a". Restricting
+        // reads to that lossy prefix can drop needed descendants and return NULL.
+        if (node->value_type().type == LogicalType::TYPE_VARIANT) {
+            segments->pop_back();
+            return false;
+        }
         VariantPath path(*segments);
         auto shredded_path = path.to_shredded_path();
         if (!shredded_path.has_value()) {
             segments->pop_back();
             return false;
         }
-        shredded_paths->emplace_back(std::move(*shredded_path));
+        auto st = hints->add_path(std::move(*shredded_path));
+        if (!st.ok()) {
+            segments->pop_back();
+            return false;
+        }
         segments->pop_back();
         return true;
     }
 
     bool valid = true;
     for (const auto& child : node->children()) {
-        valid = collect_variant_leaf_paths(child.get(), segments, shredded_paths) && valid;
+        valid = collect_variant_leaf_paths(child.get(), segments, hints) && valid;
     }
     segments->pop_back();
     return valid;
@@ -329,12 +476,17 @@ Status GroupReader::prepare() {
         }
     }
 
+    // Promote shredded variant virtual columns to direct typed_value proxy readers (Phase 3.5).
+    // Must run after _prepare_column_readers() (which sets skip_base_payload) and after
+    // select_offset_index (so the underlying typed_value readers already have the correct range).
+    RETURN_IF_ERROR(_promote_variant_virtual_columns());
+
     // if coalesce read enabled, we have to
     // 1. allocate shared buffered input stream and
     // 2. collect io ranges of every row group reader.
     // 3. set io ranges to the stream.
     if (config::parquet_coalesce_read_enable && _param.sb_stream != nullptr) {
-        std::vector<io::SharedBufferedInputStream::IORange> ranges;
+        std::vector<SharedBufferedInputStream::IORange> ranges;
         int64_t end_offset = 0;
         collect_io_ranges(&ranges, &end_offset, ColumnIOType::PAGES);
         int32_t counter = _param.lazy_column_coalesce_counter->load(std::memory_order_relaxed);
@@ -482,7 +634,9 @@ Status GroupReader::get_next(ChunkPtr* chunk, size_t* row_count) {
         // ── Phase 4: variant virtual conjunct evaluation ───────────────────────
         // active_chunk has count rows; variant_filter is also size count.
         // Simple element-wise AND merges it with chunk_filter (also size count).
-        ASSIGN_OR_RETURN(Filter variant_filter, _apply_deferred_variant_conjuncts(active_chunk, count));
+        auto deferred_projected_chunk = std::make_shared<Chunk>();
+        ASSIGN_OR_RETURN(Filter variant_filter,
+                         _apply_deferred_variant_conjuncts(active_chunk, count, &deferred_projected_chunk));
         if (!variant_filter.empty()) {
             if (SIMD::count_nonzero(variant_filter.data(), variant_filter.size()) == 0) {
                 continue;
@@ -501,6 +655,10 @@ Status GroupReader::get_next(ChunkPtr* chunk, size_t* row_count) {
             if (active_chunk->num_rows() == 0) {
                 continue;
             }
+            // Keep deferred projected virtual columns aligned with active_chunk rows.
+            // Both were built on the same pre-filter row space [0, count).
+            RETURN_IF_ERROR(_align_deferred_projected_chunk_after_filter(active_chunk, deferred_projected_chunk,
+                                                                         chunk_filter, count));
         }
 
         // Compute the post-filter range / slice for Phase 5 and Phase 6 lazy reads.
@@ -559,7 +717,7 @@ Status GroupReader::get_next(ChunkPtr* chunk, size_t* row_count) {
         {
             SCOPED_RAW_TIMER(&_param.stats->group_dict_decode_ns);
             *row_count = active_chunk->num_rows();
-            RETURN_IF_ERROR(_fill_dst_chunk(active_chunk, chunk));
+            RETURN_IF_ERROR(_fill_dst_chunk(active_chunk, deferred_projected_chunk, chunk));
         }
         break;
     }
@@ -705,7 +863,28 @@ StatusOr<Datum> GroupReader::_get_extended_bigint_value(SlotId slot_id) const {
     return Datum(node.int_literal.value);
 }
 
-VariantShreddedReadHints GroupReader::_get_variant_shredded_hints(const std::string& column_name) const {
+// Derives the set of shredded paths that the planner wants to materialise for the given
+// variant column, based on the column_access_paths pushed down from the FE.
+//
+// The result is a VariantShreddedReadHints whose shredded_paths / parsed_shredded_paths are
+// the minimal, non-redundant set of leaf paths, suitable for passing to ColumnReaderFactory.
+//
+// Return value semantics:
+//   - Empty hints  → no path restriction; the reader auto-discovers paths from the schema.
+//   - Non-empty    → only the listed paths (and their ancestors, for traversal) are read.
+//
+// Special cases that cause an early return with empty hints:
+//   1. No column_access_paths present at all.
+//   2. The access-path entry for this column has no children (full-column scan requested).
+//   3. Any child path fails to produce a valid shredded-path string (e.g. contains array index).
+//
+// Post-processing steps applied before returning:
+//   - Deduplication: paths collected from multiple access-path entries are de-duped by string.
+//   - Ancestor pruning: if both "a.b" and "a.b.c" are present, "a.b.c" is redundant (the
+//     "a.b" request already covers the "a.b.c" subtree) and is dropped. Pruning uses parsed
+//     segment comparison rather than string prefix matching to avoid false matches like
+//     "a.bc" vs "a.b".
+VariantShreddedReadHints GroupReader::_get_variant_shredded_hints(std::string_view column_name) const {
     VariantShreddedReadHints hints;
     if (_param.column_access_paths == nullptr || _param.column_access_paths->empty()) {
         return hints;
@@ -716,49 +895,74 @@ VariantShreddedReadHints GroupReader::_get_variant_shredded_hints(const std::str
         if (access_path == nullptr || access_path->path() != column_name) {
             continue;
         }
+        // No children means the whole variant column is accessed; disable path-level pruning.
         if (access_path->children().empty()) {
-            hints.shredded_paths.clear();
+            hints.clear();
             return hints;
         }
 
         std::vector<VariantSegment> segments;
         for (const auto& child : access_path->children()) {
-            size_t old_size = hints.shredded_paths.size();
-            if (!collect_variant_leaf_paths(child.get(), &segments, &hints.shredded_paths)) {
-                hints.shredded_paths.clear();
+            // collect_variant_leaf_paths walks the access-path subtree and appends each
+            // leaf as a shredded-path string + parsed VariantPath into `hints`.
+            // Returns false if any path is invalid (e.g. contains an array-index segment).
+            if (!collect_variant_leaf_paths(child.get(), &segments, &hints)) {
+                hints.clear();
                 return hints;
-            }
-            for (size_t i = old_size; i < hints.shredded_paths.size(); ++i) {
-                if (!unique_paths.emplace(hints.shredded_paths[i]).second) {
-                    hints.shredded_paths[i].clear();
-                }
             }
         }
     }
 
-    hints.shredded_paths.erase(std::remove_if(hints.shredded_paths.begin(), hints.shredded_paths.end(),
-                                              [](const std::string& path) { return path.empty(); }),
-                               hints.shredded_paths.end());
-
-    // Remove paths that are strict prefixes of another hint path.
-    // e.g. if both "a.b" and "a.b.c" are collected, "a.b" is redundant.
-    // A shredded path p is a prefix of q if q starts with p followed by '.' or '['.
-    auto is_prefix_of_another = [&](const std::string& p) {
-        for (const auto& q : hints.shredded_paths) {
-            if (q.size() <= p.size()) continue;
-            if (q[p.size()] != '.' && q[p.size()] != '[') continue;
-            if (q.compare(0, p.size(), p) == 0) return true;
+    // Deduplicate and prune redundant descendant paths.
+    // A path p is redundant if another collected path q is a strict ancestor of p:
+    // requesting q already covers p's entire subtree, so keeping p causes unnecessary work.
+    // Example: if both "a.b" and "a.b.c" are present, "a.b.c" is dropped because the
+    // "a.b" request already causes "a.b.c" columns to be read.
+    //
+    // Determine which paths to keep in a read-only pass over the original vectors, then
+    // build the output in a separate pass.  Moving elements during the comparison pass
+    // would leave moved-from slots (empty segments) that act as universal ancestors and
+    // incorrectly prune all subsequent paths.
+    const size_t n = hints.shredded_paths.size();
+    std::vector<bool> keep(n, false);
+    for (size_t i = 0; i < n; ++i) {
+        // Drop exact string duplicates.
+        if (!unique_paths.emplace(hints.shredded_paths[i]).second) {
+            continue;
         }
-        return false;
-    };
-    hints.shredded_paths.erase(
-            std::remove_if(hints.shredded_paths.begin(), hints.shredded_paths.end(), is_prefix_of_another),
-            hints.shredded_paths.end());
+        // Drop path i if any other path j is a strict ancestor of i.
+        bool has_ancestor = false;
+        for (size_t j = 0; j < n; ++j) {
+            if (i == j) {
+                continue;
+            }
+            if (hints.parsed_shredded_paths[j].is_strict_prefix_of(hints.parsed_shredded_paths[i])) {
+                has_ancestor = true;
+                break;
+            }
+        }
+        if (!has_ancestor) {
+            keep[i] = true;
+        }
+    }
+    std::vector<std::string> pruned_paths;
+    std::vector<VariantPath> pruned_parsed_paths;
+    pruned_paths.reserve(n);
+    pruned_parsed_paths.reserve(n);
+    for (size_t i = 0; i < n; ++i) {
+        if (keep[i]) {
+            pruned_paths.emplace_back(std::move(hints.shredded_paths[i]));
+            pruned_parsed_paths.emplace_back(std::move(hints.parsed_shredded_paths[i]));
+        }
+    }
+    hints.shredded_paths = std::move(pruned_paths);
+    hints.parsed_shredded_paths = std::move(pruned_parsed_paths);
     return hints;
 }
 
 Status GroupReader::_create_column_readers() {
     SCOPED_RAW_TIMER(&_param.stats->column_reader_init_ns);
+    _global_dict_applied_in_group = false;
     // ColumnReaderOptions is used by all column readers in one row group
     ColumnReaderOptions& opts = _column_reader_opts;
     opts.file_meta_data = _param.file_metadata;
@@ -777,7 +981,7 @@ Status GroupReader::_create_column_readers() {
     std::unordered_map<std::string, SlotId> physical_variant_slots_by_name;
     for (const auto& column : _param.read_cols) {
         if (!column.is_extended_variant_virtual && column.slot_type().type == LogicalType::TYPE_VARIANT) {
-            physical_variant_slots_by_name.emplace(column.slot_desc->col_name(), column.slot_id());
+            physical_variant_slots_by_name.emplace(std::string(column.slot_desc->col_name()), column.slot_id());
         }
     }
 
@@ -899,6 +1103,43 @@ Status GroupReader::_create_column_readers() {
             }
         }
     }
+
+    // Register lightweight zone-map readers for virtual variant columns.
+    // These allow PredicateFilterEvaluator to apply row-group and page-level zone-map
+    // filtering on shredded typed-leaf columns without reading any actual data.
+    // The readers are keyed by virtual slot id so that get_column_reader(virtual_slot_id)
+    // returns them; collect_io_ranges does not touch them (they are not in active/lazy
+    // column index lists).
+    for (const auto& [virtual_slot_id, projection] : _variant_virtual_projections) {
+        SlotId source_slot_id = projection.source_slot_id;
+        ColumnReader* source_reader = nullptr;
+        if (source_slot_id >= 0) {
+            // Physical VARIANT source: look up in _column_readers.
+            auto it = _column_readers.find(source_slot_id);
+            if (it != _column_readers.end()) {
+                source_reader = it->second.get();
+            }
+        } else {
+            // Hidden VARIANT source: look up in _hidden_slot_index.
+            auto it = _hidden_slot_index.find(source_slot_id);
+            if (it != _hidden_slot_index.end()) {
+                source_reader = it->second->reader.get();
+            }
+        }
+        if (source_reader == nullptr) continue;
+        auto* variant_reader = down_cast<VariantColumnReader*>(source_reader);
+        _column_readers.emplace(virtual_slot_id,
+                                std::make_unique<VariantVirtualZoneMapReader>(variant_reader, projection.parsed_path,
+                                                                              projection.target_type));
+    }
+
+    if (_param.stats != nullptr) {
+        _param.stats->global_dict_total_row_groups++;
+        if (_global_dict_applied_in_group) {
+            _param.stats->global_dict_applied_row_groups++;
+        }
+    }
+
     return Status::OK();
 }
 
@@ -907,7 +1148,7 @@ StatusOr<ColumnReaderPtr> GroupReader::_create_column_reader(const GroupReaderPa
     const auto* schema_node = _param.file_metadata->schema().get_stored_column_by_field_idx(column.idx_in_parquet);
     {
         if (column.slot_type().type == LogicalType::TYPE_VARIANT && schema_node != nullptr &&
-            schema_node->type == ColumnType::STRUCT && column.t_lake_schema_field == nullptr) {
+            schema_node->type == ColumnType::STRUCT) {
             VariantShreddedReadHints hints = _get_variant_shredded_hints(column.slot_desc->col_name());
             ASSIGN_OR_RETURN(column_reader, ColumnReaderFactory::create_variant_column_reader(_column_reader_opts,
                                                                                               schema_node, hints));
@@ -920,10 +1161,20 @@ StatusOr<ColumnReaderPtr> GroupReader::_create_column_reader(const GroupReaderPa
                                                          column.t_lake_schema_field));
         }
         if (_param.global_dictmaps->contains(column.slot_id())) {
+            GlobalDictReaderKind kind = GlobalDictReaderKind::kNone;
             ASSIGN_OR_RETURN(
                     column_reader,
                     ColumnReaderFactory::create(std::move(column_reader), _param.global_dictmaps->at(column.slot_id()),
-                                                column.slot_id(), _row_group_metadata->num_rows));
+                                                column.slot_id(), _row_group_metadata->num_rows, &kind));
+            if (_param.stats != nullptr && kind != GlobalDictReaderKind::kNone) {
+                _param.stats->global_dict_applied_slots++;
+                if (kind == GlobalDictReaderKind::kDictCode) {
+                    _param.stats->global_dict_dict_code_reader_slots++;
+                } else if (kind == GlobalDictReaderKind::kLowRowsEncode) {
+                    _param.stats->global_dict_encode_reader_slots++;
+                }
+                _global_dict_applied_in_group = true;
+            }
         }
         if (column_reader == nullptr) {
             // this shouldn't happen but guard
@@ -1120,6 +1371,189 @@ void GroupReader::_process_columns_and_conjunct_ctxs() {
     }
 }
 
+Status GroupReader::_promote_variant_virtual_columns() {
+    // For each hidden variant source whose VariantColumnReader has _skip_base_payload=true
+    // (all requested shredded paths are scalar typed-value leaves), promote ALL virtual slots
+    // backed by that source to VariantTypedValueProxy readers in _column_readers.  This lets
+    // the proxy participate in Phase 2 dict-filter and eliminates the Phase 3 hidden-source
+    // read and Phase 4 deferred variant conjunct evaluation entirely.
+    //
+    // Full-promotion is all-or-nothing per source: if any virtual slot lacks a typed_value
+    // leaf, we skip the source entirely.  Partial promotion would corrupt the hidden source's
+    // read path (dict-filtered readers output INT codes, not decoded values).
+
+    // Build: hidden source slot_id → list of (virtual slot info) backed by that source.
+    struct VirtualSlotInfo {
+        SlotId virtual_slot_id;
+        int read_col_idx;
+        bool decode_needed;
+        bool has_conjunct;
+    };
+    std::unordered_map<SlotId, std::vector<VirtualSlotInfo>> slots_by_source;
+    {
+        int idx = 0;
+        for (const auto& column : _param.read_cols) {
+            if (column.is_extended_variant_virtual) {
+                auto proj_it = _variant_virtual_projections.find(column.slot_id());
+                if (proj_it != _variant_virtual_projections.end()) {
+                    SlotId src_id = proj_it->second.source_slot_id;
+                    // Only promote hidden sources (negative slot IDs).
+                    if (src_id < 0) {
+                        bool has_conj = _param.conjunct_ctxs_by_slot.count(column.slot_id()) > 0;
+                        slots_by_source[src_id].push_back({column.slot_id(), idx, column.decode_needed, has_conj});
+                    }
+                }
+            }
+            ++idx;
+        }
+    }
+
+    bool any_promoted = false;
+
+    for (auto& [src_name, hidden_source] : _hidden_variant_sources) {
+        SlotId src_id = hidden_source.slot_id;
+        auto slots_it = slots_by_source.find(src_id);
+        if (slots_it == slots_by_source.end()) continue;
+
+        auto* vreader = dynamic_cast<VariantColumnReader*>(hidden_source.reader.get());
+        if (vreader == nullptr || !vreader->skip_base_payload()) continue;
+
+        const auto& virtual_slots = slots_it->second;
+
+        // Check: can ALL virtual slots be promoted?  Three conditions must hold for each slot:
+        // 1. Has a scalar typed_value leaf reader.
+        // 2. Fallback value column is all-null for this row group (data is exclusively in
+        //    typed_value).  If any path has non-null fallback values, _read_range_skip_base_payload's
+        //    runtime detection would fall back to the base payload — which promotion bypasses,
+        //    producing all-NULLs.
+        // 3. The typed_value leaf's read type is directly compatible with the virtual slot's
+        //    target column type for raw writing.  Variable-length types (VARCHAR/VARBINARY etc.)
+        //    share the same BinaryColumn layout and are mutually compatible.  Fixed-size types
+        //    must match exactly; a mismatch (e.g. INT32 typed_value → BIGINT slot) causes the
+        //    PlainDecoder to write the wrong element width into the destination column, crashing.
+        const uint64_t rg_num_rows = get_row_group_metadata()->num_rows;
+        auto var_len_type = [](LogicalType t) {
+            return t == TYPE_VARCHAR || t == TYPE_CHAR || t == TYPE_VARBINARY || t == TYPE_BINARY;
+        };
+        bool all_promotable = true;
+        std::unordered_set<ColumnReader*> promoted_leaf_readers;
+        std::unordered_map<SlotId, ColumnReader*> leaf_readers_by_slot;
+        for (const auto& vsi : virtual_slots) {
+            auto proj_it = _variant_virtual_projections.find(vsi.virtual_slot_id);
+            if (proj_it == _variant_virtual_projections.end()) {
+                all_promotable = false;
+                break;
+            }
+            const auto& parsed_path = proj_it->second.parsed_path;
+            ColumnReader* leaf = vreader->scalar_typed_value_reader_for_path(parsed_path);
+            if (leaf == nullptr) {
+                all_promotable = false;
+                break;
+            }
+            if (!promoted_leaf_readers.insert(leaf).second) {
+                all_promotable = false;
+                break;
+            }
+            leaf_readers_by_slot.emplace(vsi.virtual_slot_id, leaf);
+            if (!vreader->fallback_values_all_null_in_row_group_for_path(parsed_path, rg_num_rows)) {
+                all_promotable = false;
+                break;
+            }
+            const TypeDescriptor* leaf_type = vreader->typed_value_read_type_for_path(parsed_path);
+            const TypeDescriptor& target = proj_it->second.target_type;
+            bool type_ok = (leaf_type != nullptr) &&
+                           (var_len_type(leaf_type->type) && var_len_type(target.type) ? true : *leaf_type == target);
+            if (!type_ok) {
+                all_promotable = false;
+                break;
+            }
+        }
+        if (!all_promotable) continue;
+
+        // Fully promote: create VariantTypedValueProxy for each virtual slot.
+        for (const auto& vsi : virtual_slots) {
+            ColumnReader* leaf = leaf_readers_by_slot.at(vsi.virtual_slot_id);
+
+            auto proxy = std::make_unique<VariantTypedValueProxy>(leaf);
+
+            if (vsi.has_conjunct) {
+                // Attempt dict filter for each conjunct; fall back to expression eval if failed.
+                const auto& conjuncts = _param.conjunct_ctxs_by_slot.at(vsi.virtual_slot_id);
+                for (ExprContext* ctx : conjuncts) {
+                    std::vector<std::string> sub_field_path;
+                    // sub_field_path is empty: virtual slot IS the leaf value directly.
+                    if (proxy->try_to_use_dict_filter(ctx, vsi.decode_needed, vsi.virtual_slot_id, sub_field_path, 0)) {
+                        _use_as_dict_filter_column(vsi.read_col_idx, vsi.virtual_slot_id, sub_field_path);
+                    } else {
+                        _left_no_dict_filter_conjuncts_by_slot[vsi.virtual_slot_id].push_back(ctx);
+                    }
+                }
+            }
+            // Always place promoted slots in active indices regardless of conjunct presence.
+            // Projection-only promoted slots must also be active to guarantee active_chunk
+            // has a valid row count when it is the only column set being read.
+            _active_column_indices.push_back(vsi.read_col_idx);
+            _active_slot_ids.push_back(vsi.virtual_slot_id);
+
+            _column_readers[vsi.virtual_slot_id] = std::move(proxy);
+            _promoted_virtual_slots.insert(vsi.virtual_slot_id);
+            _variant_virtual_projections.erase(vsi.virtual_slot_id);
+        }
+
+        // Mark source as fully promoted and remove it from the active/lazy hidden-source lists.
+        hidden_source.fully_promoted = true;
+        _active_hidden_slot_ids.erase(
+                std::remove(_active_hidden_slot_ids.begin(), _active_hidden_slot_ids.end(), src_id),
+                _active_hidden_slot_ids.end());
+        _lazy_hidden_slot_ids.erase(std::remove(_lazy_hidden_slot_ids.begin(), _lazy_hidden_slot_ids.end(), src_id),
+                                    _lazy_hidden_slot_ids.end());
+        // Also remove the hidden source's slot_id from _active_slot_ids (added in Step 4 of
+        // _process_columns_and_conjunct_ctxs when the source was classified as active).
+        _active_slot_ids.erase(std::remove(_active_slot_ids.begin(), _active_slot_ids.end(), src_id),
+                               _active_slot_ids.end());
+
+        any_promoted = true;
+    }
+
+    if (!any_promoted) return Status::OK();
+
+    // Rebuild _column_read_order_ctx to include newly promoted active columns.
+    {
+        std::unordered_map<int, size_t> col_cost;
+        size_t all_cost = 0;
+        for (int col_idx : _active_column_indices) {
+            size_t flat_size = _param.read_cols[col_idx].slot_type().get_flat_size();
+            col_cost[col_idx] = flat_size;
+            all_cost += flat_size;
+        }
+        _column_read_order_ctx =
+                std::make_unique<ColumnReadOrderCtx>(_active_column_indices, all_cost, std::move(col_cost));
+    }
+
+    // Rebuild deferred conjunct list, excluding promoted slots.
+    {
+        std::vector<ExprContext*> remaining;
+        std::unordered_set<SlotId> remaining_ids;
+        for (const auto& column : _param.read_cols) {
+            if (!column.is_extended_variant_virtual) continue;
+            SlotId slot_id = column.slot_id();
+            if (_deferred_conjunct_slot_ids.count(slot_id) == 0) continue;
+            if (_promoted_virtual_slots.count(slot_id) > 0) continue;
+            auto it = _param.conjunct_ctxs_by_slot.find(slot_id);
+            if (it != _param.conjunct_ctxs_by_slot.end()) {
+                for (ExprContext* ctx : it->second) {
+                    remaining.push_back(ctx);
+                }
+                remaining_ids.insert(slot_id);
+            }
+        }
+        _deferred_variant_virtual_conjunct_ctxs = std::move(remaining);
+        _deferred_conjunct_slot_ids = std::move(remaining_ids);
+    }
+
+    return Status::OK();
+}
+
 bool GroupReader::_try_to_use_dict_filter(const GroupReaderParam::Column& column, ExprContext* ctx,
                                           std::vector<std::string>& sub_field_path, bool is_decode_needed) {
     const Expr* root_expr = ctx->root();
@@ -1164,7 +1598,7 @@ ChunkPtr GroupReader::_create_read_chunk(const std::vector<SlotId>& slot_ids, bo
     return chunk;
 }
 
-void GroupReader::collect_io_ranges(std::vector<io::SharedBufferedInputStream::IORange>* ranges, int64_t* end_offset,
+void GroupReader::collect_io_ranges(std::vector<SharedBufferedInputStream::IORange>* ranges, int64_t* end_offset,
                                     ColumnIOTypeFlags types) {
     int64_t end = 0;
     // collect io of active column
@@ -1181,6 +1615,10 @@ void GroupReader::collect_io_ranges(std::vector<io::SharedBufferedInputStream::I
         _column_readers[slot_id]->collect_column_io_range(ranges, &end, types, false);
     }
     for (const auto& [name, hidden_source] : _hidden_variant_sources) {
+        // Fully-promoted sources have all their virtual slots promoted to VariantTypedValueProxy
+        // readers in _column_readers (Phase 2).  Their IO is registered via the proxy entries
+        // in _active_column_indices above; skip the source here to avoid duplicate IO ranges.
+        if (hidden_source.fully_promoted) continue;
         hidden_source.reader->collect_column_io_range(ranges, &end, types, hidden_source.is_active);
     }
     deduplicate_io_ranges(ranges);
@@ -1199,7 +1637,7 @@ Status GroupReader::_init_read_chunk() {
         }
     }
     size_t chunk_size = _param.chunk_size;
-    ASSIGN_OR_RETURN(_read_chunk, ChunkHelper::new_chunk_checked(read_slots, chunk_size));
+    ASSIGN_OR_RETURN(_read_chunk, RuntimeChunkHelper::new_chunk_checked(read_slots, chunk_size));
     // Only pre-allocate active hidden sources in _read_chunk so they can be shared with
     // active_chunk.  Lazy hidden sources are created fresh each iteration in Phase 6
     // and merged into active_chunk there; they do not need a permanent slot here.
@@ -1277,26 +1715,31 @@ const cctz::time_zone& GroupReader::_get_variant_projection_timezone() {
 //
 // Returns an empty Filter when there are no conjuncts (all rows pass).
 // Returns the applied filter otherwise; caller checks for all-zero to skip the range.
-StatusOr<Filter> GroupReader::_apply_deferred_variant_conjuncts(ChunkPtr& active_chunk, size_t raw_count) {
+StatusOr<Filter> GroupReader::_apply_deferred_variant_conjuncts(ChunkPtr& active_chunk, size_t raw_count,
+                                                                ChunkPtr* projected_chunk) {
+    DCHECK(projected_chunk != nullptr);
+    *projected_chunk = std::make_shared<Chunk>();
     if (_deferred_variant_virtual_conjunct_ctxs.empty()) {
         return Filter{};
     }
     SCOPED_RAW_TIMER(&_param.stats->expr_filter_ns);
 
-    // Build eval_chunk: one projected column per virtual slot whose source is available.
+    // Build eval_chunk: one projected column per deferred-conjunct virtual slot whose source is available.
     // Physical sources and active hidden sources are in active_chunk.
     // Lazy hidden sources are absent from active_chunk and are skipped here; by design,
     // virtual columns with conjuncts always use active sources, so this is correct.
     ChunkPtr eval_chunk = std::make_shared<Chunk>();
     for (const auto& [slot_id, projection] : _variant_virtual_projections) {
-        if (!active_chunk->is_slot_exist(projection.source_slot_id)) {
-            if (_deferred_conjunct_slot_ids.count(slot_id)) {
-                return Status::InternalError(
-                        fmt::format("variant virtual column {} has deferred conjunct but source slot {} "
-                                    "is not in active_chunk",
-                                    slot_id, projection.source_slot_id));
-            }
+        bool has_conjunct = _deferred_conjunct_slot_ids.count(slot_id) > 0;
+        if (!has_conjunct) {
             continue;
+        }
+        bool source_in_chunk = active_chunk->is_slot_exist(projection.source_slot_id);
+        if (!source_in_chunk) {
+            return Status::InternalError(
+                    fmt::format("variant virtual column {} has deferred conjunct but source slot {} "
+                                "is not in active_chunk",
+                                slot_id, projection.source_slot_id));
         }
         const ColumnPtr& source_col = active_chunk->get_column_by_slot_id(projection.source_slot_id);
         ASSIGN_OR_RETURN(auto result_col,
@@ -1304,6 +1747,7 @@ StatusOr<Filter> GroupReader::_apply_deferred_variant_conjuncts(ChunkPtr& active
                                                      _get_variant_projection_timezone()));
         eval_chunk->append_column(std::move(result_col), slot_id);
     }
+    *projected_chunk = eval_chunk;
 
     // Guard: if no columns were projected, treat as all-pass.
     if (eval_chunk->num_columns() == 0) {
@@ -1315,11 +1759,34 @@ StatusOr<Filter> GroupReader::_apply_deferred_variant_conjuncts(ChunkPtr& active
                                                _deferred_variant_virtual_conjunct_ctxs, eval_chunk.get(), &filter));
     if (hit_count == 0) {
         _param.stats->late_materialize_skip_rows += raw_count;
+        // eval_conjuncts_into_filter returns 0 (all rows rejected) without zeroing the filter
+        // when it short-circuits early (e.g. true_count == 0 path). Zero it out explicitly so
+        // the caller's count_nonzero check correctly skips the chunk.
+        filter.assign(filter.size(), 0);
     }
 
     // active_chunk is NOT filtered here; the caller merges this filter with
     // chunk_filter and applies the combined result once after Phase 4.
     return filter;
+}
+
+Status GroupReader::_align_deferred_projected_chunk_after_filter(const ChunkPtr& active_chunk,
+                                                                 const ChunkPtr& deferred_projected_chunk,
+                                                                 const Filter& chunk_filter, size_t pre_filter_rows) {
+    if (deferred_projected_chunk == nullptr || deferred_projected_chunk->num_columns() == 0) {
+        return Status::OK();
+    }
+    if (deferred_projected_chunk->num_rows() == pre_filter_rows) {
+        deferred_projected_chunk->filter_range(chunk_filter, 0, pre_filter_rows);
+        return Status::OK();
+    }
+    if (deferred_projected_chunk->num_rows() != active_chunk->num_rows()) {
+        return Status::InternalError(
+                fmt::format("variant deferred projected chunk row count mismatch: projected_rows={}, "
+                            "pre_filter_rows={}, active_rows={}",
+                            deferred_projected_chunk->num_rows(), pre_filter_rows, active_chunk->num_rows()));
+    }
+    return Status::OK();
 }
 
 // _fill_dst_chunk copies physical columns from active_chunk into *chunk, then computes
@@ -1331,7 +1798,7 @@ StatusOr<Filter> GroupReader::_apply_deferred_variant_conjuncts(ChunkPtr& active
 //   - Lazy hidden variant sources (read in Phase 6, merged into active_chunk)
 // All projection sources are therefore found directly in active_chunk.
 //
-Status GroupReader::_fill_dst_chunk(ChunkPtr& active_chunk, ChunkPtr* chunk) {
+Status GroupReader::_fill_dst_chunk(ChunkPtr& active_chunk, const ChunkPtr& projected_chunk, ChunkPtr* chunk) {
     active_chunk->check_or_die();
 
     // Pass 1: virtual projections — must run BEFORE Pass 2.
@@ -1340,6 +1807,22 @@ Status GroupReader::_fill_dst_chunk(ChunkPtr& active_chunk, ChunkPtr* chunk) {
     // 791-793).  Pass 2 performs a destructive swap that would move the physical source
     // column out of active_chunk, so virtual projections must read their sources first.
     for (const auto& [slot_id, projection] : _variant_virtual_projections) {
+        // Reuse deferred-conjunct projection if available; this avoids a second
+        // project_variant_leaf_column(path seek + decode) for the same virtual slot.
+        if (projected_chunk != nullptr && projected_chunk->is_slot_exist(slot_id)) {
+            const ColumnPtr& projected_col = projected_chunk->get_column_by_slot_id(slot_id);
+            if (projected_col == nullptr) {
+                return Status::InternalError(
+                        fmt::format("variant deferred projected column for slot {} is null", slot_id));
+            }
+            if (projected_col->size() != active_chunk->num_rows()) {
+                return Status::InternalError(
+                        fmt::format("variant deferred projected column row count mismatch for slot {}: {} vs {}",
+                                    slot_id, projected_col->size(), active_chunk->num_rows()));
+            }
+            (*chunk)->get_column_by_slot_id(slot_id) = projected_col;
+            continue;
+        }
         if (!active_chunk->is_slot_exist(projection.source_slot_id)) {
             return Status::InternalError(fmt::format("variant virtual column source slot {} not found in active_chunk",
                                                      projection.source_slot_id));
@@ -1352,7 +1835,7 @@ Status GroupReader::_fill_dst_chunk(ChunkPtr& active_chunk, ChunkPtr* chunk) {
     }
 
     // Pass 2: physical columns — destructive swap from active_chunk into *chunk.
-    // Slots that have a virtual projection have no entry in _column_readers and are skipped.
+    // Virtual projection slots are skipped here; their output was filled in Pass 1.
     for (const auto& column : _param.read_cols) {
         SlotId slot_id = column.slot_id();
         if (_variant_virtual_projections.count(slot_id)) continue;

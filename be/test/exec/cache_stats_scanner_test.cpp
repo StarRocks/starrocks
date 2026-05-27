@@ -59,8 +59,9 @@ public:
         TQueryOptions query_options;
         TQueryGlobals query_globals;
         TUniqueId fragment_id;
-        _state = _pool.add(
-                new RuntimeState(query_id, fragment_id, query_options, query_globals, ExecEnv::GetInstance()));
+        auto* exec_env = ExecEnv::GetInstance();
+        _state = _pool.add(new RuntimeState(query_id, fragment_id, query_options, query_globals,
+                                            &exec_env->query_execution_services(), exec_env));
         _state->init_mem_trackers(query_id);
     }
 

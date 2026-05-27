@@ -14,11 +14,15 @@
 
 #pragma once
 
+#include <fmt/format.h>
 #include <google/protobuf/repeated_field.h>
 #include <google/protobuf/stubs/common.h>
 
 #include <cstdint>
+#include <memory_resource>
 #include <optional>
+#include <string>
+#include <string_view>
 #include <unordered_map>
 #include <vector>
 
@@ -47,7 +51,8 @@ class RowPositionDescriptor;
 
 class SlotDescriptor {
 public:
-    SlotDescriptor(SlotId id, std::string name, TypeDescriptor type);
+    SlotDescriptor(SlotId id, std::string name, TypeDescriptor type,
+                   std::pmr::memory_resource* mr = std::pmr::get_default_resource());
 
     SlotId id() const { return _id; }
     const TypeDescriptor& type() const { return _type; }
@@ -60,16 +65,16 @@ public:
 
     int slot_size() const { return _slot_size; }
 
-    const std::string& col_name() const { return _col_name; }
+    std::string_view col_name() const { return _col_name; }
 
     void to_protobuf(PSlotDescriptor* pslot) const;
 
     std::string debug_string() const;
 
     int32_t col_unique_id() const { return _col_unique_id; }
-    const std::string& col_physical_name() const { return _col_physical_name; }
+    std::string_view col_physical_name() const { return _col_physical_name; }
 
-    SlotDescriptor(const TSlotDescriptor& tdesc);
+    SlotDescriptor(const TSlotDescriptor& tdesc, std::pmr::memory_resource* mr = std::pmr::get_default_resource());
 
 private:
     friend class DescriptorTbl;
@@ -81,9 +86,9 @@ private:
     const SlotId _id;
     TypeDescriptor _type;
     const TupleId _parent;
-    const std::string _col_name;
+    const std::pmr::string _col_name;
     const int32_t _col_unique_id;
-    const std::string _col_physical_name;
+    const std::pmr::string _col_physical_name;
 
     // the idx of the slot in the tuple descriptor (0-based).
     // this is provided by the FE
@@ -99,24 +104,45 @@ private:
 
     const bool _is_virtual;
 
-    SlotDescriptor(const PSlotDescriptor& pdesc);
+    SlotDescriptor(const PSlotDescriptor& pdesc, std::pmr::memory_resource* mr = std::pmr::get_default_resource());
 };
 
 // Base class for table descriptors.
 class TableDescriptor {
 public:
-    TableDescriptor(const TTableDescriptor& tdesc);
+    TableDescriptor(const TTableDescriptor& tdesc, std::pmr::memory_resource* mr = std::pmr::get_default_resource());
     virtual ~TableDescriptor() = default;
     TableId table_id() const { return _id; }
     virtual std::string debug_string() const;
 
-    const std::string& name() const { return _name; }
-    const std::string& database() const { return _database; }
+    std::string_view name() const { return _name; }
+    std::string_view database() const { return _database; }
 
 private:
-    std::string _name;
-    std::string _database;
+    std::pmr::string _name;
+    std::pmr::string _database;
     TableId _id;
+};
+
+class MySQLTableDescriptor : public TableDescriptor {
+public:
+    MySQLTableDescriptor(const TTableDescriptor& tdesc,
+                         std::pmr::memory_resource* mr = std::pmr::get_default_resource());
+    std::string debug_string() const override;
+    std::string_view mysql_db() const { return _mysql_db; }
+    std::string_view mysql_table() const { return _mysql_table; }
+    std::string_view host() const { return _host; }
+    std::string_view port() const { return _port; }
+    std::string_view user() const { return _user; }
+    std::string_view passwd() const { return _passwd; }
+
+private:
+    std::pmr::string _mysql_db;
+    std::pmr::string _mysql_table;
+    std::pmr::string _host;
+    std::pmr::string _port;
+    std::pmr::string _user;
+    std::pmr::string _passwd;
 };
 
 class TupleDescriptor {
@@ -147,6 +173,7 @@ public:
 private:
     friend class DescriptorTbl;
     friend class OlapTableSchemaParam;
+    friend class ObjectPool;
 
     const TupleId _id;
     TableDescriptor* _table_desc;
@@ -171,7 +198,6 @@ public:
     TableDescriptor* get_table_descriptor(TableId id) const;
     TupleDescriptor* get_tuple_descriptor(TupleId id) const;
     SlotDescriptor* get_slot_descriptor(SlotId id) const;
-    SlotDescriptor* get_slot_descriptor_with_column(SlotId id) const;
 
     // return all registered tuple descriptors
     void get_tuple_descs(std::vector<TupleDescriptor*>* descs) const;
@@ -179,16 +205,23 @@ public:
     std::string debug_string() const;
 
 private:
-    typedef std::unordered_map<TableId, TableDescriptor*> TableDescriptorMap;
-    typedef std::unordered_map<TupleId, TupleDescriptor*> TupleDescriptorMap;
-    typedef std::unordered_map<SlotId, SlotDescriptor*> SlotDescriptorMap;
+    using TableDescriptorMap = std::pmr::unordered_map<TableId, TableDescriptor*>;
+    using TupleDescriptorMap = std::pmr::unordered_map<TupleId, TupleDescriptor*>;
+    using SlotDescriptorMap = std::pmr::unordered_map<SlotId, SlotDescriptor*>;
+
+    std::pmr::memory_resource* _mr;
 
     TableDescriptorMap _tbl_desc_map;
     TupleDescriptorMap _tuple_desc_map;
     SlotDescriptorMap _slot_desc_map;
-    SlotDescriptorMap _slot_with_column_name_map;
 
-    DescriptorTbl() = default;
+    DescriptorTbl()
+            : _mr(std::pmr::get_default_resource()), _tbl_desc_map(_mr), _tuple_desc_map(_mr), _slot_desc_map(_mr) {}
+
+    explicit DescriptorTbl(std::pmr::memory_resource* mr)
+            : _mr(mr), _tbl_desc_map(_mr), _tuple_desc_map(_mr), _slot_desc_map(_mr) {}
+
+    friend class ObjectPool;
 };
 
 // Records positions of tuples within row produced by ExecNode.
@@ -277,3 +310,9 @@ protected:
 };
 
 } // namespace starrocks
+
+template <>
+struct fmt::formatter<starrocks::RowPositionDescriptor::Type>
+        : formatter<std::underlying_type_t<starrocks::RowPositionDescriptor::Type>> {
+    auto format(starrocks::RowPositionDescriptor::Type value, format_context& ctx) const -> format_context::iterator;
+};

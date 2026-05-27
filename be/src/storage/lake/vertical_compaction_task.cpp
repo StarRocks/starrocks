@@ -14,12 +14,14 @@
 
 #include "storage/lake/vertical_compaction_task.h"
 
-#include "agent/master_info.h"
 #include "base/time/time.h"
 #include "base/utility/defer_op.h"
+#include "column/chunk_factory.h"
+#include "column/chunk_schema_helper.h"
 #include "common/config_compaction_fwd.h"
 #include "common/config_lake_fwd.h"
 #include "common/config_storage_fwd.h"
+#include "common/system/master_info.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
@@ -219,8 +221,8 @@ Status VerticalCompactionTask::compact_column_group(bool is_key, int column_grou
     RETURN_IF_ERROR(reader.open(reader_params));
 
     CompactionTaskStats prev_stats;
-    auto chunk = ChunkHelper::new_chunk(schema, chunk_size);
-    auto char_field_indexes = ChunkHelper::get_char_field_indexes(schema);
+    auto chunk = ChunkFactory::new_chunk(schema, chunk_size);
+    auto char_field_indexes = ChunkSchemaHelper::get_char_field_indexes(schema);
     std::vector<uint64_t> rssid_rowids;
     rssid_rowids.reserve(chunk_size);
 
@@ -269,8 +271,11 @@ Status VerticalCompactionTask::compact_column_group(bool is_key, int column_grou
             source_masks->clear();
         }
 
-        _context->progress.update((100 * column_group_index + 100 * reader.stats().raw_rows_read / _total_num_rows) /
-                                  column_group_size);
+        if (_total_num_rows > 0 && column_group_size > 0) {
+            _context->progress.update(
+                    (100 * column_group_index + 100 * reader.stats().raw_rows_read / _total_num_rows) /
+                    column_group_size);
+        }
         CompactionTaskStats temp_stats;
         temp_stats.collect(reader.stats());
         CompactionTaskStats diff_stats = temp_stats - prev_stats;

@@ -21,6 +21,7 @@
 
 #include "base/testutil/assert.h"
 #include "column/fixed_length_column.h"
+#include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks::pipeline {
@@ -94,6 +95,9 @@ ChunkPtr SinkIOBufferTest::gen_test_chunk(int value) {
 
 std::shared_ptr<RuntimeState> SinkIOBufferTest::gen_test_runtime_state() {
     auto runtime_state = std::make_shared<RuntimeState>();
+    auto* exec_env = ExecEnv::GetInstance();
+    runtime_state->set_exec_env(exec_env);
+    runtime_state->set_query_execution_services(&exec_env->query_execution_services());
     auto mem_tracker = std::make_shared<MemTracker>();
     runtime_state->set_query_mem_tracker(mem_tracker);
     return runtime_state;

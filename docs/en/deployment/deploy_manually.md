@@ -2,15 +2,15 @@
 displayed_sidebar: docs
 ---
 
-# Deploy StarRocks manually
+import ManualPrep from '../_assets/deployment/manual_prep.mdx'
 
-:::tip
-The preparations for manual deployment are outlined in the [Deployment prerequisites](./deployment_prerequisites.md) and [Check environment configurations](./environment_configurations.md) documents. Please start there if you are planning a production deployment. If you are getting started with StarRocks and would like to follow one of the Quick Starts, please refer to [Quick Starts](../quick_start/quick_start.mdx).
-:::
+# Deploy Shared-nothing StarRocks Manually
 
-This topic describes how to manually deploy shared-nothing StarRocks (in which the BE is responsible for both storage and computing). For other modes of installation, see [Deployment Overview](../deployment/deployment_overview.md).
+<ManualPrep />
 
-To deploy a shared-data StarRocks cluster (decoupled storage and computing), see [Deploy and use shared-data StarRocks](../deployment/shared_data/s3.md)
+This topic describes how to manually deploy a shared-nothing StarRocks cluster (in which BE is responsible for both storage and computing). For other modes of installation, see [Deployment Overview](../deployment/deployment_overview.md).
+
+To deploy a shared-data StarRocks cluster (decoupled storage and computing), see [Deploy Shared-data StarRocks Manually](../deployment/deploy_shared_data_manually.md).
 
 ## Step 1: Start the Leader FE node
 
@@ -63,7 +63,7 @@ The following procedures are performed on an FE instance.
       JAVA_HOME = <path_to_JDK>
       ```
 
-   f.  For information about advanced configuration items, see [Parameter Configuration - FE configuration items](../administration/management/FE_configuration.md).
+   For information about advanced configuration items, see [Parameter Configuration - FE configuration items](../administration/management/FE_configuration.md).
 
 3. Start the FE node.
 
@@ -93,11 +93,11 @@ The following procedures are performed on an FE instance.
 
    A record of log like "2022-08-10 16:12:29,911 INFO (UNKNOWN x.x.x.x_9010_1660119137253(-1)|1) [FeServer.start():52] thrift server started with port 9020." suggests that the FE node is started properly.
 
-## Step 2: (For shared-nothing) Start the BE service
+## Step 2: Start the BE service
 
 :::note
 
-You can only add BE nodes to shared-nothing clusters. Adding BE nodes to shared-data clusters is not recommended and may lead to unknown behaviors.
+You can only add BE nodes to shared-nothing clusters and CN nodes to shared-data clusters. Otherwise, it may lead to unknown behaviors.
 
 :::
 
@@ -112,7 +112,7 @@ The following procedures are performed on the BE instances.
 
 2. Navigate to the directory that stores the [StarRocks BE deployment files](../deployment/prepare_deployment_files.md) you prepared earlier, and modify the BE configuration file **be/conf/be.conf**.
 
-   a. Specify the data directory in the configuration item `storage_root_path`.
+   a. Specify the data directory in the configuration item `storage_root_path`. Multiple volumes are separated by semicolon (;). Example: `/data1;/data2`.
 
       ```YAML
       # Replace <storage_root_path> with the data directory you have created.
@@ -126,6 +126,7 @@ The following procedures are performed on the BE instances.
       be_http_port = xxxx              # Default: 8040
       heartbeat_service_port = yyyy    # Default: 9050
       brpc_port = zzzz                 # Default: 8060
+      starlet_port = uuuu              # Default: 9070
       ```
 
    c. If you want to enable IP address access for your cluster, you must add the configuration item `priority_networks` in the configuration file and assign a dedicated IP address (in the CIDR format) to the BE node. You can ignore this configuration item if you want to enable FQDN access for your cluster.
@@ -171,78 +172,16 @@ The following procedures are performed on the BE instances.
 
 > **NOTE**
 >
-> A high-availability cluster of BEs is automatically formed when at least three BE nodes are deployed and added to a StarRocks cluster.
-> If you want to deploy just one BE node, you must set `default_replication_num` to `1` in the FE configuration file **fe/conf/fe.conf**.
-
-      ```YAML
-      default_replication_num = 1
-      ```
-
-## Step 2: (For shared-data) Start the CN service
-
-:::note
-
-You can only add CN nodes to shared-data clusters. Adding CN nodes to shared-nothing clusters is not recommended and may lead to unknown behaviors.
-
-:::
-
-A Compute Node (CN) is a stateless computing service that does not maintain data itself. You can optionally add CN nodes to your cluster to provide extra computing resources for queries. You can deploy CN nodes with the BE deployment files. Compute Nodes are supported since v2.4.
-
-1. Navigate to the directory that stores the [StarRocks BE deployment files](../deployment/prepare_deployment_files.md) you prepared earlier, and modify the CN configuration file **be/conf/cn.conf**.
-
-   a. If any of the CN ports mentioned in the [Environment Configuration Checklist](../deployment/environment_configurations.md) are occupied, you must assign valid alternatives in the CN configuration file.
-
-      ```YAML
-      be_port = vvvv                   # Default: 9060
-      be_http_port = xxxx              # Default: 8040
-      heartbeat_service_port = yyyy    # Default: 9050
-      brpc_port = zzzz                 # Default: 8060
-      ```
-
-   b. If you want to enable IP address access for your cluster, you must add the configuration item `priority_networks` in the configuration file and assign a dedicated IP address (in the CIDR format) to the CN node. You can ignore this configuration item if you want to enable FQDN access for your cluster.
-
-      ```YAML
-      priority_networks = x.x.x.x/x
-      ```
-
-      > **NOTE**
-      >
-      > - You can run `ifconfig` in your terminal to view the IP address(es) owned by the instance.
-      > - From v3.3.0, StarRocks supports deployment based on IPv6.
-
-   c. If you have multiple JDKs installed on the instance, and you want to use a specific JDK that is different from the one specified in the environment variable `JAVA_HOME`, you must specify the path where the chosen JDK is installed by adding the configuration item `JAVA_HOME` in the configuration file.
-
-      ```YAML
-      # Replace <path_to_JDK> with the path where the chosen JDK is installed.
-      JAVA_HOME = <path_to_JDK>
-      ```
-
-   For information about advanced configuration items, see [Parameter Configuration - BE configuration items](../administration/management/BE_configuration.md) because most of CN's parameters are inherited from BE.
-
-2. Start the CN node.
-
-   ```Bash
-   ./be/bin/start_cn.sh --daemon
-   ```
-
-   > **CAUTION**
-   >
-   > - Before starting the CN node with FQDN access enabled, make sure you have assigned hostnames for all instances in **/etc/hosts**. See [Environment Configuration Checklist - Hostnames](../deployment/environment_configurations.md#hostnames) for more information.
-   > - You do not need to specify the parameter `--host_type` when you start CN nodes.
-
-3. Check the CN logs to verify if the CN node is started successfully.
-
-   ```Bash
-   cat be/log/cn.INFO | grep heartbeat
-   ```
-
-   A record of log like "I0313 15:03:45.820030 412450 thrift_server.cpp:375] heartbeat has started listening port on 9050" suggests that the CN node is started properly.
-
-4. You can start new CN nodes by repeating the above procedures on other instances.
+> - A high-availability cluster of BEs is automatically formed when at least three BE nodes are deployed and added to a StarRocks cluster.
+> - If you want to deploy just one BE node, you must set `default_replication_num` to `1` in the FE configuration file **fe/conf/fe.conf**.
+>
+>   ```YAML
+>   default_replication_num = 1
+>   ```
 
 ## Step 3: Set up the cluster
 
-After all FE and BE/CN nodes are started properly, you can set up the StarRocks cluster.
+After all FE and BE nodes are started properly, you can set up the StarRocks cluster.
 
 The following procedures are performed on a MySQL client. You must have MySQL client 5.5.0 or later installed.
 
@@ -289,9 +228,7 @@ The following procedures are performed on a MySQL client. You must have MySQL cl
    - If the field `Role` is `FOLLOWER`, this FE node is eligible to be elected as the Leader FE node.
    - If the field `Role` is `LEADER`, this FE node is the Leader FE node.
 
-3. Add the BE/CN nodes to the cluster.
-
-   - (For shared-nothing) Add BE nodes.
+3. Add the BE nodes to the cluster.
 
    ```SQL
    -- Replace <be_address> with the IP address (priority_networks) 
@@ -304,22 +241,7 @@ The following procedures are performed on a MySQL client. You must have MySQL cl
    >
    > You can use the preceding command to add multiple BE nodes at a time. Each `<be_address>:<heartbeat_service_port>` pair represents one BE node.
 
-   - (For shared-data) Add CN nodes.
-
-   ```SQL
-   -- Replace <cn_address> with the IP address (priority_networks) 
-   -- or FQDN of the CN node, and replace <heartbeat_service_port> 
-   -- with the heartbeat_service_port (Default: 9050) you specified in cn.conf.
-   ALTER SYSTEM ADD COMPUTE NODE "<cn_address>:<heartbeat_service_port>";
-   ```
-
-   > **NOTE**
-   >
-   > You can add multiple CN nodes with one SQL. Each `<cn_address>:<heartbeat_service_port>` pair represents one CN node.
-
-4. Check the status of the BE/CN nodes by executing the following SQL.
-
-   - (For shared-nothing) Check BE node status.
+4. Check the status of the BE nodes by executing the following SQL.
 
    ```SQL
    SHOW PROC '/backends'\G
@@ -359,37 +281,6 @@ The following procedures are performed on a MySQL client. You must have MySQL cl
    ```
 
    If the field `Alive` is `true`, this BE node is properly started and added to the cluster.
-
-   - (For shared-data) Check CN node status.
-
-   ```SQL
-   SHOW PROC '/compute_nodes'\G
-   ```
-
-   Example:
-
-   ```Plain
-   MySQL [(none)]> SHOW PROC '/compute_nodes'\G
-   *************************** 1. row ***************************
-           ComputeNodeId: 10003
-                      IP: x.x.x.x
-           HeartbeatPort: 9050
-                  BePort: 9060
-                HttpPort: 8040
-                BrpcPort: 8060
-           LastStartTime: 2023-03-13 15:11:13
-           LastHeartbeat: 2023-03-13 15:11:13
-                   Alive: true
-    SystemDecommissioned: false
-   ClusterDecommissioned: false
-                  ErrMsg: 
-                 Version: 2.5.2-c3772fb
-   1 row in set (0.00 sec)
-   ```
-
-   If the field `Alive` is `true`, this CN node is properly started and added to the cluster.
-
-   After CNs are properly started and you want to use CNs during queries, set the system variables `SET prefer_compute_node = true;` and `SET use_compute_nodes = -1;`. For more information, see [System variables](../sql-reference/System_variable.md#descriptions-of-variables).
 
 ## Step 4: (Optional) Deploy a high-availability FE cluster
 
@@ -540,12 +431,6 @@ You can stop the StarRocks cluster by running the following commands on the corr
   ./be/bin/stop_be.sh
   ```
 
-- Stop a CN node.
-
-  ```Bash
-  ./be/bin/stop_cn.sh
-  ```
-
 ## Troubleshooting
 
 Try the following steps to identify the errors that occur when you start the FE or BE nodes:
@@ -565,15 +450,6 @@ Try the following steps to identify the errors that occur when you start the FE 
   ```
 
   Having identified and resolved the problem, you must first terminate the existing BE process, delete the existing **storage** directory, create a new data storage directory, and then restart the BE node with the correct configuration.
-
-
-- If a CN node is not started properly, you can identify the problem by checking its log in **be/log/cn.WARNING**.
-
-  ```Bash
-  cat be/log/cn.WARNING
-  ```
-
-  Having identified and resolved the problem, you must first terminate the existing CN process, and then restart the CN node with the correct configuration.
 
 ## What to do next
 

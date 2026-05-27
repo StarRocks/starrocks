@@ -20,6 +20,8 @@
 #include <utility>
 
 #include "base/failpoint/fail_point.h"
+#include "common/thread/priority_thread_pool.hpp"
+#include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/group_execution/execution_group.h"
 #include "exec/pipeline/pipeline.h"
 #include "exec/pipeline/pipeline_driver.h"
@@ -28,7 +30,6 @@
 #include "exec/workgroup/work_group.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
-#include "util/priority_thread_pool.hpp"
 
 namespace starrocks::pipeline {
 
@@ -114,7 +115,8 @@ void CollectStatsSourceInitializeEvent::process(RuntimeState* state) {
             }
         }
 
-        auto* prepare_thread_pool = state->exec_env()->pipeline_prepare_pool();
+        auto* query_execution_services = state->query_execution_services();
+        auto* prepare_thread_pool = query_execution_services->execution->pipeline_prepare_pool;
         DCHECK(prepare_thread_pool != nullptr);
 
         std::vector<DriverPtr> all_drivers;

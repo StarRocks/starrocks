@@ -61,6 +61,11 @@ Usage: $0 <options>
      --with-dynamic                 enable to build with dynamic libs
      --with-aws                     enable to test aws
      --with-bench                   enable to build with benchmark
+     --without-connector-benchmark  build without the benchgen-backed benchmark connector
+     --without-connector-elasticsearch
+                                    build without the Elasticsearch connector
+     --without-connector-mysql
+                                    build without the MySQL connector
      --excluding-test-suit          don't run cases of specific suit
      --module                       module to run uts
      --build-target TARGET          only build the specified target (e.g. base_test)
@@ -69,6 +74,7 @@ Usage: $0 <options>
      --use-staros                   DEPRECATED. an alias of --enable-shared-data option
      --without-debug-symbol-split   split debug symbol out of the test binary to accelerate the speed
                                     of loading binary into memory and start execution.
+     --without-tenann               build without tenann (vector index library); default is ON on Linux
      -j                             build parallel
 
   Eg.
@@ -113,6 +119,9 @@ OPTS=$(${GETOPT_BIN} \
   -l 'module:' \
   -l 'with-aws' \
   -l 'with-bench' \
+  -l 'without-connector-benchmark' \
+  -l 'without-connector-elasticsearch' \
+  -l 'without-connector-mysql' \
   -l 'excluding-test-suit:' \
   -l 'use-staros' \
   -l 'enable-shared-data' \
@@ -121,6 +130,7 @@ OPTS=$(${GETOPT_BIN} \
   -l 'without-java-ext' \
   -l 'without-debug-symbol-split' \
   -l 'without-java-ext' \
+  -l 'without-tenann' \
   -o 'j:' \
   -l 'help' \
   -l 'run' \
@@ -142,6 +152,9 @@ HELP=0
 WITH_AWS=OFF
 USE_STAROS=OFF
 WITH_GCOV=OFF
+WITH_CONNECTOR_BENCHMARK=ON
+WITH_CONNECTOR_ELASTICSEARCH=ON
+WITH_CONNECTOR_MYSQL=ON
 if starrocks_is_darwin; then
     WITH_STARCACHE=OFF
 else
@@ -150,6 +163,11 @@ fi
 WITH_DEBUG_SYMBOL_SPLIT=ON
 BUILD_JAVA_EXT=ON
 BUILD_TARGET=
+if starrocks_is_darwin; then
+    WITH_TENANN=OFF
+else
+    WITH_TENANN=ON
+fi
 if [[ -z ${WITH_DYNAMIC} ]]; then
     WITH_DYNAMIC=OFF
 fi
@@ -168,12 +186,16 @@ while true; do
         --with-aws) WITH_AWS=ON; shift ;;
         --with-gcov) WITH_GCOV=ON; shift ;;
         --with-dynamic) WITH_DYNAMIC=ON; shift ;;
+        --without-connector-benchmark) WITH_CONNECTOR_BENCHMARK=OFF; shift ;;
+        --without-connector-elasticsearch) WITH_CONNECTOR_ELASTICSEARCH=OFF; shift ;;
+        --without-connector-mysql) WITH_CONNECTOR_MYSQL=OFF; shift ;;
         --without-starcache) WITH_STARCACHE=OFF; shift ;;
         --excluding-test-suit) EXCLUDING_TEST_SUIT=$2; shift 2;;
         --enable-shared-data|--use-staros) USE_STAROS=ON; shift ;;
         --build-target) BUILD_TARGET=$2; shift 2;;
         --without-debug-symbol-split) WITH_DEBUG_SYMBOL_SPLIT=OFF; shift ;;
         --without-java-ext) BUILD_JAVA_EXT=OFF; shift ;;
+        --without-tenann) WITH_TENANN=OFF; shift ;;
         -j) PARALLEL=$2; shift 2 ;;
         --) shift ;  break ;;
         *) echo "Internal error" ; exit 1 ;;
@@ -220,8 +242,8 @@ fi
 
 CMAKE_BUILD_DIR=${CMAKE_BUILD_PREFIX}/ut_build_${CMAKE_BUILD_TYPE}
 if [ ${CLEAN} -eq 1 ]; then
-    rm ${CMAKE_BUILD_DIR} -rf
-    rm ${STARROCKS_HOME}/be/output/ -rf
+    rm -rf ${CMAKE_BUILD_DIR}
+    rm -rf ${STARROCKS_HOME}/be/output/
 fi
 
 if [ ! -d ${CMAKE_BUILD_DIR} ]; then
@@ -276,7 +298,11 @@ ${CMAKE_CMD}  -G "${CMAKE_GENERATOR}" \
             -DUSE_STAROS=${USE_STAROS} \
             -DSTARLET_INSTALL_DIR=${STARLET_INSTALL_DIR}          \
             -DWITH_GCOV=${WITH_GCOV} \
+            -DWITH_CONNECTOR_BENCHMARK=${WITH_CONNECTOR_BENCHMARK} \
+            -DWITH_CONNECTOR_ELASTICSEARCH=${WITH_CONNECTOR_ELASTICSEARCH} \
+            -DWITH_CONNECTOR_MYSQL=${WITH_CONNECTOR_MYSQL} \
             -DWITH_STARCACHE=${WITH_STARCACHE} \
+            -DWITH_TENANN=${WITH_TENANN} \
             -DSTARROCKS_JIT_ENABLE=${ENABLE_JIT} \
             -DWITH_RELATIVE_SRC_PATH=OFF \
             -DENABLE_MULTI_DYNAMIC_LIBS=${WITH_DYNAMIC} \
@@ -400,7 +426,13 @@ export CLASSPATH=${STARROCKS_HOME}/java-extensions/java-utils/target/*:$CLASSPAT
 
 # ===========================================================
 
-export ASAN_OPTIONS="abort_on_error=1:disable_coredump=0:unmap_shadow_on_exit=1:detect_stack_use_after_return=1"
+asan_options="abort_on_error=1:disable_coredump=0:unmap_shadow_on_exit=1:detect_stack_use_after_return=1"
+if starrocks_is_darwin && [[ "${CMAKE_BUILD_TYPE}" == "ASAN" ]]; then
+    # Apple libc++ container annotations can report false positives in static
+    # third-party initializers before gtest starts, for example RE2.
+    asan_options="${asan_options}:detect_container_overflow=0"
+fi
+export ASAN_OPTIONS="${asan_options}"
 
 if [ $WITH_AWS = "OFF" ]; then
     append_negative_case "*S3*"

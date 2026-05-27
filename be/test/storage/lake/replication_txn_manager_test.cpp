@@ -23,11 +23,13 @@
 #include "base/path/filesystem_util.h"
 #include "base/testutil/assert.h"
 #include "base/testutil/id_generator.h"
+#include "column/chunk_factory.h"
 #include "common/config_rowset_fwd.h"
 #include "common/config_storage_fwd.h"
 #include "fs/fs.h"
 #include "fs/fs_util.h"
 #include "fs/key_cache.h"
+#include "platform/store_path.h"
 #include "runtime/exec_env.h"
 #include "storage/chunk_helper.h"
 #include "storage/delta_column_group.h"
@@ -40,7 +42,6 @@
 #include "storage/lake/transactions.h"
 #include "storage/lake/update_manager.h"
 #include "storage/olap_define.h"
-#include "storage/options.h"
 #include "storage/replication_utils.h"
 #include "storage/rowset/rowset_factory.h"
 #include "storage/rowset/rowset_options.h"
@@ -181,24 +182,24 @@ public:
             return *writer->build();
         }
         auto schema = ChunkHelper::convert_schema(tablet->thread_safe_get_tablet_schema());
-        auto chunk = ChunkHelper::new_chunk(schema, keys.size());
-        auto cols = chunk->mutable_columns();
+        auto chunk = ChunkFactory::new_chunk(schema, keys.size());
+        auto cols = chunk->columns();
         for (int64_t key : keys) {
             if (schema.num_key_fields() == 1) {
-                cols[0]->append_datum(Datum(key));
+                cols[0]->as_mutable_ptr()->append_datum(Datum(key));
             } else {
-                cols[0]->append_datum(Datum(key));
+                cols[0]->as_mutable_ptr()->append_datum(Datum(key));
                 string v = fmt::to_string(key * 234234342345);
-                cols[1]->append_datum(Datum(Slice(v)));
-                cols[2]->append_datum(Datum((int32_t)key));
+                cols[1]->as_mutable_ptr()->append_datum(Datum(Slice(v)));
+                cols[2]->as_mutable_ptr()->append_datum(Datum((int32_t)key));
             }
             int vcol_start = schema.num_key_fields();
-            cols[vcol_start]->append_datum(Datum((int16_t)(key % 100 + 1)));
+            cols[vcol_start]->as_mutable_ptr()->append_datum(Datum((int16_t)(key % 100 + 1)));
             if (cols[vcol_start + 1]->is_binary()) {
                 string v = fmt::to_string(key % 1000 + 2);
-                cols[vcol_start + 1]->append_datum(Datum(Slice(v)));
+                cols[vcol_start + 1]->as_mutable_ptr()->append_datum(Datum(Slice(v)));
             } else {
-                cols[vcol_start + 1]->append_datum(Datum((int32_t)(key % 1000 + 2)));
+                cols[vcol_start + 1]->as_mutable_ptr()->append_datum(Datum((int32_t)(key % 1000 + 2)));
             }
         }
         if (one_delete == nullptr && !keys.empty()) {
@@ -313,7 +314,7 @@ TEST_P(LakeReplicationTxnManagerTest, test_replicate_snapshot_failed) {
     replicate_snapshot_request.__set_src_visible_version(_src_version);
     replicate_snapshot_request.__set_src_snapshot_infos({remote_snapshot_info});
 
-    status = _replication_txn_manager->replicate_snapshot(replicate_snapshot_request);
+    status = _replication_txn_manager->replicate_snapshot(replicate_snapshot_request, nullptr);
     EXPECT_FALSE(status.ok()) << status;
 
     auto slog_path = _tablet_manager->txn_slog_location(_tablet_id, _transaction_id);
@@ -394,10 +395,10 @@ TEST_P(LakeReplicationTxnManagerTest, test_run_normal) {
     replicate_snapshot_request.__set_src_visible_version(_src_version);
     replicate_snapshot_request.__set_src_snapshot_infos({remote_snapshot_info});
 
-    status = _replication_txn_manager->replicate_snapshot(replicate_snapshot_request);
+    status = _replication_txn_manager->replicate_snapshot(replicate_snapshot_request, nullptr);
     EXPECT_TRUE(status.ok()) << status;
 
-    status = _replication_txn_manager->replicate_snapshot(replicate_snapshot_request);
+    status = _replication_txn_manager->replicate_snapshot(replicate_snapshot_request, nullptr);
     EXPECT_TRUE(status.ok()) << status;
 
     auto txn_info = TxnInfoPB();
@@ -463,10 +464,10 @@ TEST_P(LakeReplicationTxnManagerTest, test_run_normal_encrypted) {
     replicate_snapshot_request.__set_src_visible_version(_src_version);
     replicate_snapshot_request.__set_src_snapshot_infos({remote_snapshot_info});
 
-    status = _replication_txn_manager->replicate_snapshot(replicate_snapshot_request);
+    status = _replication_txn_manager->replicate_snapshot(replicate_snapshot_request, nullptr);
     EXPECT_TRUE(status.ok()) << status;
 
-    status = _replication_txn_manager->replicate_snapshot(replicate_snapshot_request);
+    status = _replication_txn_manager->replicate_snapshot(replicate_snapshot_request, nullptr);
     EXPECT_TRUE(status.ok()) << status;
 
     auto txn_info = TxnInfoPB();
@@ -546,7 +547,7 @@ TEST_P(LakeReplicationTxnManagerTest, test_incremental_non_pk_skips_dcg_download
     replicate_snapshot_request.__set_src_visible_version(_src_version);
     replicate_snapshot_request.__set_src_snapshot_infos({remote_snapshot_info});
 
-    status = _replication_txn_manager->replicate_snapshot(replicate_snapshot_request);
+    status = _replication_txn_manager->replicate_snapshot(replicate_snapshot_request, nullptr);
     EXPECT_TRUE(status.ok()) << status;
 
     // Verify txn_log has no DCG metadata (the .dcgs_snapshot file was skipped)
@@ -610,7 +611,7 @@ TEST_P(LakeReplicationTxnManagerTest, test_full_snapshot_creates_dcg_file_even_w
     replicate_snapshot_request.__set_src_visible_version(_src_version);
     replicate_snapshot_request.__set_src_snapshot_infos({remote_snapshot_info});
 
-    status = _replication_txn_manager->replicate_snapshot(replicate_snapshot_request);
+    status = _replication_txn_manager->replicate_snapshot(replicate_snapshot_request, nullptr);
     EXPECT_TRUE(status.ok()) << status;
 
     // Verify txn_log has no DCG metadata (empty .dcgs_snapshot produces no DCGs)
@@ -782,6 +783,158 @@ TEST_F(LakeReplicationTxnManagerStaticFunctionTest, test_build_file_converters_h
     EXPECT_TRUE(lake::is_segment(new_segment));
     EXPECT_TRUE(lake::is_del(old_del));
     EXPECT_TRUE(lake::is_del(new_del));
+}
+
+namespace {
+
+// Build a TabletMetadataPB suitable for prepare_del_transcode_context tests.
+//   keys_type=PRIMARY_KEYS, single (or composite) PK columns with the given types,
+//   set primary_key_encoding_type to the requested value.
+TabletMetadataPB make_pk_tablet_metadata(int64_t id, PrimaryKeyEncodingTypePB encoding,
+                                         const std::vector<std::string>& pk_type_names) {
+    TabletMetadataPB meta;
+    meta.set_id(id);
+    auto* schema = meta.mutable_schema();
+    schema->set_keys_type(PRIMARY_KEYS);
+    schema->set_primary_key_encoding_type(encoding);
+    for (size_t i = 0; i < pk_type_names.size(); ++i) {
+        auto* col = schema->add_column();
+        col->set_unique_id(static_cast<uint32_t>(i));
+        col->set_name("c" + std::to_string(i));
+        col->set_type(pk_type_names[i]);
+        if (pk_type_names[i] == "VARCHAR") {
+            col->set_length(32);
+        }
+        col->set_is_key(true);
+        col->set_is_nullable(false);
+    }
+    return meta;
+}
+
+// Build a duplicate-keys (non-PK) TabletMetadataPB.
+TabletMetadataPB make_non_pk_tablet_metadata(int64_t id) {
+    TabletMetadataPB meta;
+    meta.set_id(id);
+    auto* schema = meta.mutable_schema();
+    schema->set_keys_type(DUP_KEYS);
+    auto* col = schema->add_column();
+    col->set_unique_id(0);
+    col->set_name("c0");
+    col->set_type("INT");
+    col->set_is_key(true);
+    col->set_is_nullable(false);
+    return meta;
+}
+
+} // namespace
+
+// prepare_del_transcode_context: non-PK target returns empty context.
+TEST_F(LakeReplicationTxnManagerStaticFunctionTest, test_prepare_del_transcode_context_non_pk) {
+    auto target = make_non_pk_tablet_metadata(1);
+    auto source = make_non_pk_tablet_metadata(2);
+    auto ctx_or = lake::ReplicationTxnManager::prepare_del_transcode_context(target, source.schema());
+    ASSERT_TRUE(ctx_or.ok()) << ctx_or.status();
+    EXPECT_EQ(nullptr, ctx_or.value().pkey_schema);
+    EXPECT_EQ(PrimaryKeyEncodingType::PK_ENCODING_TYPE_NONE, ctx_or.value().source_encoding);
+    EXPECT_EQ(PrimaryKeyEncodingType::PK_ENCODING_TYPE_NONE, ctx_or.value().target_encoding);
+}
+
+// prepare_del_transcode_context: V1 source + V2 target on single INT PK builds a valid context
+// with the expected encodings + pkey_schema.
+TEST_F(LakeReplicationTxnManagerStaticFunctionTest, test_prepare_del_transcode_context_v1_to_v2_success) {
+    auto target = make_pk_tablet_metadata(1, PrimaryKeyEncodingTypePB::PK_ENCODING_TYPE_V2, {"INT"});
+    auto source = make_pk_tablet_metadata(2, PrimaryKeyEncodingTypePB::PK_ENCODING_TYPE_V1, {"INT"});
+    auto ctx_or = lake::ReplicationTxnManager::prepare_del_transcode_context(target, source.schema());
+    ASSERT_TRUE(ctx_or.ok()) << ctx_or.status();
+    EXPECT_EQ(PrimaryKeyEncodingType::PK_ENCODING_TYPE_V1, ctx_or.value().source_encoding);
+    EXPECT_EQ(PrimaryKeyEncodingType::PK_ENCODING_TYPE_V2, ctx_or.value().target_encoding);
+    ASSERT_NE(nullptr, ctx_or.value().pkey_schema);
+    EXPECT_EQ(1, ctx_or.value().pkey_schema->num_fields());
+}
+
+// prepare_del_transcode_context: source has 2 PK columns, target has 1 -> NotSupported.
+TEST_F(LakeReplicationTxnManagerStaticFunctionTest, test_prepare_del_transcode_context_pk_count_mismatch) {
+    auto target = make_pk_tablet_metadata(1, PrimaryKeyEncodingTypePB::PK_ENCODING_TYPE_V2, {"INT"});
+    auto source = make_pk_tablet_metadata(2, PrimaryKeyEncodingTypePB::PK_ENCODING_TYPE_V1, {"INT", "INT"});
+    auto ctx_or = lake::ReplicationTxnManager::prepare_del_transcode_context(target, source.schema());
+    ASSERT_FALSE(ctx_or.ok());
+    EXPECT_TRUE(ctx_or.status().is_not_supported()) << ctx_or.status();
+}
+
+// prepare_del_transcode_context: source PK column type differs from target -> NotSupported.
+TEST_F(LakeReplicationTxnManagerStaticFunctionTest, test_prepare_del_transcode_context_pk_type_mismatch) {
+    auto target = make_pk_tablet_metadata(1, PrimaryKeyEncodingTypePB::PK_ENCODING_TYPE_V2, {"INT"});
+    auto source = make_pk_tablet_metadata(2, PrimaryKeyEncodingTypePB::PK_ENCODING_TYPE_V1, {"BIGINT"});
+    auto ctx_or = lake::ReplicationTxnManager::prepare_del_transcode_context(target, source.schema());
+    ASSERT_FALSE(ctx_or.ok());
+    EXPECT_TRUE(ctx_or.status().is_not_supported()) << ctx_or.status();
+}
+
+// prepare_del_transcode_context: V2 source -> V1 target on single non-string fixed PK -> NotSupported.
+TEST_F(LakeReplicationTxnManagerStaticFunctionTest, test_prepare_del_transcode_context_v2_to_v1_rejected) {
+    auto target = make_pk_tablet_metadata(1, PrimaryKeyEncodingTypePB::PK_ENCODING_TYPE_V1, {"INT"});
+    auto source = make_pk_tablet_metadata(2, PrimaryKeyEncodingTypePB::PK_ENCODING_TYPE_V2, {"INT"});
+    auto ctx_or = lake::ReplicationTxnManager::prepare_del_transcode_context(target, source.schema());
+    ASSERT_FALSE(ctx_or.ok());
+    EXPECT_TRUE(ctx_or.status().is_not_supported()) << ctx_or.status();
+}
+
+// prepare_del_transcode_context: V1<->V2 on VARCHAR PK (byte-compatible) is allowed.
+TEST_F(LakeReplicationTxnManagerStaticFunctionTest, test_prepare_del_transcode_context_varchar_pk_compatible) {
+    auto target = make_pk_tablet_metadata(1, PrimaryKeyEncodingTypePB::PK_ENCODING_TYPE_V2, {"VARCHAR"});
+    auto source = make_pk_tablet_metadata(2, PrimaryKeyEncodingTypePB::PK_ENCODING_TYPE_V1, {"VARCHAR"});
+    auto ctx_or = lake::ReplicationTxnManager::prepare_del_transcode_context(target, source.schema());
+    ASSERT_TRUE(ctx_or.ok()) << ctx_or.status();
+}
+
+// check_pk_encoding_compat: non-PK target -> OK.
+TEST_F(LakeReplicationTxnManagerStaticFunctionTest, test_lake_to_lake_compat_non_pk) {
+    auto src = make_non_pk_tablet_metadata(1);
+    auto tgt = make_non_pk_tablet_metadata(2);
+    auto st = lake::LakeReplicationTxnManager::check_pk_encoding_compat(1, 2, src, tgt);
+    EXPECT_TRUE(st.ok()) << st;
+}
+
+// check_pk_encoding_compat: matching V2 encoding -> OK.
+TEST_F(LakeReplicationTxnManagerStaticFunctionTest, test_lake_to_lake_compat_same_encoding) {
+    auto src = make_pk_tablet_metadata(1, PrimaryKeyEncodingTypePB::PK_ENCODING_TYPE_V2, {"INT"});
+    auto tgt = make_pk_tablet_metadata(2, PrimaryKeyEncodingTypePB::PK_ENCODING_TYPE_V2, {"INT"});
+    auto st = lake::LakeReplicationTxnManager::check_pk_encoding_compat(1, 2, src, tgt);
+    EXPECT_TRUE(st.ok()) << st;
+}
+
+// check_pk_encoding_compat: V1 -> V2 on single fixed PK -> NotSupported.
+TEST_F(LakeReplicationTxnManagerStaticFunctionTest, test_lake_to_lake_compat_v1_to_v2_rejected) {
+    auto src = make_pk_tablet_metadata(1, PrimaryKeyEncodingTypePB::PK_ENCODING_TYPE_V1, {"BIGINT"});
+    auto tgt = make_pk_tablet_metadata(2, PrimaryKeyEncodingTypePB::PK_ENCODING_TYPE_V2, {"BIGINT"});
+    auto st = lake::LakeReplicationTxnManager::check_pk_encoding_compat(1, 2, src, tgt);
+    ASSERT_FALSE(st.ok());
+    EXPECT_TRUE(st.is_not_supported()) << st;
+}
+
+// check_pk_encoding_compat: V2 -> V1 on single fixed PK -> NotSupported.
+TEST_F(LakeReplicationTxnManagerStaticFunctionTest, test_lake_to_lake_compat_v2_to_v1_rejected) {
+    auto src = make_pk_tablet_metadata(1, PrimaryKeyEncodingTypePB::PK_ENCODING_TYPE_V2, {"INT"});
+    auto tgt = make_pk_tablet_metadata(2, PrimaryKeyEncodingTypePB::PK_ENCODING_TYPE_V1, {"INT"});
+    auto st = lake::LakeReplicationTxnManager::check_pk_encoding_compat(1, 2, src, tgt);
+    ASSERT_FALSE(st.ok());
+    EXPECT_TRUE(st.is_not_supported()) << st;
+}
+
+// check_pk_encoding_compat: V1 -> V2 on VARCHAR PK -> OK (byte-compatible).
+TEST_F(LakeReplicationTxnManagerStaticFunctionTest, test_lake_to_lake_compat_varchar_pk_allowed) {
+    auto src = make_pk_tablet_metadata(1, PrimaryKeyEncodingTypePB::PK_ENCODING_TYPE_V1, {"VARCHAR"});
+    auto tgt = make_pk_tablet_metadata(2, PrimaryKeyEncodingTypePB::PK_ENCODING_TYPE_V2, {"VARCHAR"});
+    auto st = lake::LakeReplicationTxnManager::check_pk_encoding_compat(1, 2, src, tgt);
+    EXPECT_TRUE(st.ok()) << st;
+}
+
+// check_pk_encoding_compat: V1 -> V2 on composite PK -> OK (byte-compatible).
+TEST_F(LakeReplicationTxnManagerStaticFunctionTest, test_lake_to_lake_compat_composite_pk_allowed) {
+    auto src = make_pk_tablet_metadata(1, PrimaryKeyEncodingTypePB::PK_ENCODING_TYPE_V1, {"INT", "INT"});
+    auto tgt = make_pk_tablet_metadata(2, PrimaryKeyEncodingTypePB::PK_ENCODING_TYPE_V2, {"INT", "INT"});
+    auto st = lake::LakeReplicationTxnManager::check_pk_encoding_compat(1, 2, src, tgt);
+    EXPECT_TRUE(st.ok()) << st;
 }
 
 // Test convert_dcg_meta_for_pk: converts DeltaColumnGroupList from snapshot into DeltaColumnGroupMetadataPB

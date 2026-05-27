@@ -104,14 +104,18 @@ enum TExecNodePhase {
 // what to do when hitting a debug point (TQueryOptions.DEBUG_ACTION)
 enum TDebugAction {
   WAIT,
-  FAIL
+  FAIL,
+  BLOCK_SOURCE_OPERATOR,
+  BLOCK_SINK_OPERATOR
 }
 
 struct TKeyRange {
-  1: required i64 begin_key
-  2: required i64 end_key
+  1: optional i64 begin_key
+  2: optional i64 end_key
   3: required Types.TPrimitiveType column_type
   4: required string column_name
+  5: optional list<Exprs.TExpr> list_values
+  6: optional bool has_null
 }
 
 // The information contained in subclasses of ScanNode captured in two separate
@@ -161,6 +165,12 @@ enum TFileFormatType {
     FORMAT_AVRO = 11,
 }
 
+// CDC envelope format for JSON data
+enum TEnvelopeType {
+    NONE = 0,
+    DEBEZIUM = 1,
+}
+
 // One broker range information.
 struct TBrokerRangeDesc {
     1: required Types.TFileType file_type
@@ -185,6 +195,10 @@ struct TBrokerRangeDesc {
     12: optional string jsonpaths
     13: optional string json_root
     14: optional Types.TCompressionType compression_type
+    // CDC envelope format
+    15: optional TEnvelopeType envelope
+    // last modification time of the file in milliseconds (epoch), for rejected-record anchors
+    16: optional i64 modification_time
 }
 
 enum TObjectStoreType {
@@ -444,6 +458,9 @@ struct THdfsScanRange {
     // as first_row_id + row_position for non-compacted files.
     // The _last_updated_sequence_number fallback value is passed via the extended_columns map.
     37: optional i64 first_row_id;
+
+    // whether to use JNI scanner to read Avro data (default: false = use native C++ scanner)
+    38: optional bool use_avro_jni_reader
 }
 
 struct TBinlogScanRange {
@@ -666,6 +683,8 @@ struct TOlapScanNode {
   55: optional i32 next_uniq_id
 
   56: optional bool enable_global_late_materialization
+
+  57: optional list<Exprs.TExpr> partition_conjuncts
 }
 
 struct TJDBCScanNode {
@@ -716,6 +735,10 @@ struct TLakeScanNode {
   46: optional i32 next_uniq_id
 
   56: optional bool enable_global_late_materialization
+
+  57: optional TVectorSearchOptions vector_search_options
+
+  60: optional list<Exprs.TExpr> partition_conjuncts
 }
 
 struct TEqJoinCondition {
@@ -1033,8 +1056,9 @@ enum TAnalyticWindowBoundaryType {
 struct TAnalyticWindowBoundary {
   1: required TAnalyticWindowBoundaryType type
 
-  // Predicate that checks: child tuple '<=' buffered tuple + offset for the orderby expr
-  2: optional Exprs.TExpr range_offset_predicate
+  // Boundary key expression for RANGE windows with PRECEDING/FOLLOWING offsets,
+  // evaluated on the current row. This is not a predicate.
+  2: optional Exprs.TExpr range_boundary_expr
 
   // Offset from the current row for ROWS windows.
   3: optional i64 rows_offset_value
@@ -1101,6 +1125,9 @@ struct TAnalyticNode {
   // For profile attributes' printing: `Partition Keys` `Aggregate Functions`
   10: optional string sql_partition_keys
   11: optional string sql_aggregate_functions
+  // ORDER BY directions corresponding to order_by_exprs.
+  // true means ASC, false means DESC.
+  12: optional list<bool> order_by_is_asc
 
   20: optional bool has_outer_join_child
   21: optional bool use_hash_based_partition
@@ -1303,6 +1330,9 @@ struct THdfsScanNode {
     27: optional i64 scan_node_id
 
     28: optional list<TColumnAccessPath> column_access_paths
+
+    // database name it scans, used to disambiguate same-named tables across databases
+    29: optional string database_name
 }
 
 struct TProjectNode {

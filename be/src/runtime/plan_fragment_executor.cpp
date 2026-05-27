@@ -41,6 +41,9 @@
 #include "base/uid_util.h"
 #include "common/logging.h"
 #include "common/object_pool.h"
+#include "compute_env/data_stream/data_stream_mgr.h"
+#include "compute_env/result/result_buffer_mgr.h"
+#include "compute_env/result/result_queue_mgr.h"
 #include "exec/data_sink.h"
 #include "exec/exchange_node.h"
 #include "exec/exec_factory.h"
@@ -48,15 +51,12 @@
 #include "exec/scan_node.h"
 #include "gutil/map_util.h"
 #include "runtime/current_thread.h"
-#include "runtime/data_stream_mgr.h"
 #include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
 #include "runtime/global_dict/fragment_dict_state.h"
 #include "runtime/mem_tracker.h"
 #include "runtime/message_body_sink.h"
 #include "runtime/profile_report_worker.h"
-#include "runtime/result_buffer_mgr.h"
-#include "runtime/result_queue_mgr.h"
 #include "runtime/runtime_filter_cache.h"
 #include "runtime/runtime_filter_worker.h"
 #include "runtime/stream_load/stream_load_context.h"
@@ -64,8 +64,17 @@
 
 namespace starrocks {
 
-PlanFragmentExecutor::PlanFragmentExecutor(ExecEnv* exec_env, report_status_callback report_status_cb)
-        : _exec_env(exec_env),
+namespace {
+
+const RuntimeServices& runtime_services(const QueryExecutionServices* query_execution_services) {
+    return *query_execution_services->runtime;
+}
+
+} // namespace
+
+PlanFragmentExecutor::PlanFragmentExecutor(const QueryExecutionServices* query_execution_services,
+                                           report_status_callback report_status_cb)
+        : _query_execution_services(query_execution_services),
           _report_status_cb(std::move(report_status_cb)),
 
           _start_time_ms(MonotonicMillis()) {}
@@ -123,10 +132,11 @@ Status PlanFragmentExecutor::prepare(const TExecPlanFragmentParams& request) {
 
     if (params.__isset.runtime_filter_params && params.runtime_filter_params.id_to_prober_params.size() != 0) {
         _is_runtime_filter_merge_node = true;
-        _exec_env->runtime_filter_worker()->open_query(_query_id, request.query_options, params.runtime_filter_params,
-                                                       false);
+        runtime_services(_query_execution_services)
+                .runtime_filter_worker->open_query(_query_id, request.query_options, params.runtime_filter_params,
+                                                   false);
     }
-    _exec_env->stream_mgr()->prepare_pass_through_chunk_buffer(_query_id);
+    runtime_services(_query_execution_services).stream_mgr->prepare_pass_through_chunk_buffer(_query_id);
 
     // set #senders of exchange nodes before calling Prepare()
     std::vector<ExecNode*> exch_nodes;
@@ -201,8 +211,9 @@ Status PlanFragmentExecutor::open() {
     if (query_options.query_type == TQueryType::LOAD && (query_options.load_job_type == TLoadJobType::BROKER ||
                                                          query_options.load_job_type == TLoadJobType::INSERT_QUERY ||
                                                          query_options.load_job_type == TLoadJobType::INSERT_VALUES)) {
-        RETURN_IF_ERROR(starrocks::ExecEnv::GetInstance()->profile_report_worker()->register_non_pipeline_load(
-                _runtime_state->fragment_instance_id()));
+        RETURN_IF_ERROR(
+                runtime_services(_query_execution_services)
+                        .profile_report_worker->register_non_pipeline_load(_runtime_state->fragment_instance_id()));
     }
 
     Status status = _open_internal_vectorized();
@@ -361,7 +372,8 @@ void PlanFragmentExecutor::update_status(const Status& new_status) {
             _status = new_status;
             if (_runtime_state->query_options().query_type == TQueryType::EXTERNAL) {
                 TUniqueId fragment_instance_id = _runtime_state->fragment_instance_id();
-                _exec_env->result_queue_mgr()->update_queue_status(fragment_instance_id, new_status);
+                runtime_services(_query_execution_services)
+                        .result_queue_mgr->update_queue_status(fragment_instance_id, new_status);
             }
         }
     }
@@ -384,8 +396,8 @@ void PlanFragmentExecutor::cancel() {
     if (query_options.query_type == TQueryType::LOAD && (query_options.load_job_type == TLoadJobType::BROKER ||
                                                          query_options.load_job_type == TLoadJobType::INSERT_QUERY ||
                                                          query_options.load_job_type == TLoadJobType::INSERT_VALUES)) {
-        starrocks::ExecEnv::GetInstance()->profile_report_worker()->unregister_non_pipeline_load(
-                _runtime_state->fragment_instance_id());
+        runtime_services(_query_execution_services)
+                .profile_report_worker->unregister_non_pipeline_load(_runtime_state->fragment_instance_id());
     }
     if (_stream_load_contexts.size() > 0) {
         for (const auto& stream_load_context : _stream_load_contexts) {
@@ -394,16 +406,18 @@ void PlanFragmentExecutor::cancel() {
                 stream_load_context->body_sink->cancel(st);
             }
             if (_channel_stream_load) {
-                _exec_env->stream_context_mgr()->remove_channel_context(stream_load_context);
+                runtime_services(_query_execution_services)
+                        .stream_context_mgr->remove_channel_context(stream_load_context);
             }
         }
         _stream_load_contexts.resize(0);
     }
-    _runtime_state->exec_env()->stream_mgr()->cancel(_runtime_state->fragment_instance_id());
-    (void)_runtime_state->exec_env()->result_mgr()->cancel(_runtime_state->fragment_instance_id());
+    _runtime_state->query_execution_services()->runtime->stream_mgr->cancel(_runtime_state->fragment_instance_id());
+    (void)_runtime_state->query_execution_services()->runtime->result_mgr->cancel(
+            _runtime_state->fragment_instance_id());
 
     if (_is_runtime_filter_merge_node) {
-        _runtime_state->exec_env()->runtime_filter_worker()->close_query(_query_id);
+        _runtime_state->query_execution_services()->runtime->runtime_filter_worker->close_query(_query_id);
     }
 }
 
@@ -437,9 +451,9 @@ void PlanFragmentExecutor::close() {
     _chunk.reset();
 
     if (_is_runtime_filter_merge_node) {
-        _exec_env->runtime_filter_worker()->close_query(_query_id);
+        runtime_services(_query_execution_services).runtime_filter_worker->close_query(_query_id);
     }
-    _exec_env->stream_mgr()->destroy_pass_through_chunk_buffer(_query_id);
+    runtime_services(_query_execution_services).stream_mgr->destroy_pass_through_chunk_buffer(_query_id);
 
     // Prepare may not have been called, which sets _runtime_state
     if (_runtime_state != nullptr) {
@@ -449,8 +463,8 @@ void PlanFragmentExecutor::close() {
              query_options.load_job_type == TLoadJobType::INSERT_QUERY ||
              query_options.load_job_type == TLoadJobType::INSERT_VALUES) &&
             !_runtime_state->is_cancelled()) {
-            starrocks::ExecEnv::GetInstance()->profile_report_worker()->unregister_non_pipeline_load(
-                    _runtime_state->fragment_instance_id());
+            runtime_services(_query_execution_services)
+                    .profile_report_worker->unregister_non_pipeline_load(_runtime_state->fragment_instance_id());
         }
 
         if (_stream_load_contexts.size() > 0) {
@@ -460,7 +474,8 @@ void PlanFragmentExecutor::close() {
                     stream_load_context->body_sink->cancel(st);
                 }
                 if (_channel_stream_load) {
-                    _exec_env->stream_context_mgr()->remove_channel_context(stream_load_context);
+                    runtime_services(_query_execution_services)
+                            .stream_context_mgr->remove_channel_context(stream_load_context);
                 }
             }
             _stream_load_contexts.resize(0);

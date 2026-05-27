@@ -42,7 +42,7 @@ public class BackendNodeInfo extends ComputeNodeInfo {
 
     public BackendNodeInfo(Backend backend) {
         super(backend);
-        this.lastReportTabletsTime = backend.getBackendStatus().lastSuccessReportTabletsTime;
+        this.lastReportTabletsTime = backend.getBackendStatus().getLastSuccessReportTabletsTimeStr();
         this.memUsed = backend.getMemUsedBytes();
         this.memLimit = backend.getMemLimitBytes();
         this.dataUsedCapacity = backend.getDataUsedCapacityB();

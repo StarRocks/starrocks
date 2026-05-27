@@ -38,6 +38,7 @@
 #include <fstream>
 #include <limits>
 #include <memory>
+#include <memory_resource>
 #include <mutex>
 #include <optional>
 #include <string>
@@ -52,6 +53,8 @@
 #include "common/logging.h"
 #include "gen_cpp/InternalService_types.h" // for TQueryOptions
 #include "gen_cpp/Types_types.h"           // for TUniqueId
+#include "runtime/arena_allocator.h"
+#include "runtime/exec_env_fwd.h"
 #include "runtime/mem_tracker.h"
 
 namespace starrocks {
@@ -59,7 +62,6 @@ namespace starrocks {
 class DescriptorTbl;
 class ObjectPool;
 class Status;
-class ExecEnv;
 class Expr;
 class DateTimeValue;
 class MemPool;
@@ -75,6 +77,7 @@ class QueryStatistics;
 class QueryStatisticsRecvr;
 class FragmentDictState;
 class RuntimeStateHelper;
+class RejectedRecordWriter;
 using BroadcastJoinRightOffsprings = std::unordered_set<int32_t>;
 namespace pipeline {
 class QueryContext;
@@ -95,7 +98,15 @@ public:
     RuntimeState(const RuntimeState&) = delete;
     // for ut only
     RuntimeState(const TUniqueId& fragment_instance_id, const TQueryOptions& query_options,
+                 const TQueryGlobals& query_globals, const QueryExecutionServices* query_execution_services,
+                 ExecEnv* exec_env);
+    // for ut only
+    RuntimeState(const TUniqueId& fragment_instance_id, const TQueryOptions& query_options,
                  const TQueryGlobals& query_globals, ExecEnv* exec_env);
+
+    RuntimeState(const TUniqueId& query_id, const TUniqueId& fragment_instance_id, const TQueryOptions& query_options,
+                 const TQueryGlobals& query_globals, const QueryExecutionServices* query_execution_services,
+                 ExecEnv* exec_env);
 
     RuntimeState(const TUniqueId& query_id, const TUniqueId& fragment_instance_id, const TQueryOptions& query_options,
                  const TQueryGlobals& query_globals, ExecEnv* exec_env);
@@ -103,6 +114,7 @@ public:
     // RuntimeState for executing expr in fe-support.
     explicit RuntimeState(const TQueryGlobals& query_globals);
 
+    RuntimeState(const QueryExecutionServices* query_execution_services, ExecEnv* exec_env);
     explicit RuntimeState(ExecEnv* exec_env);
 
     // Empty d'tor to avoid issues with std::unique_ptr.
@@ -140,9 +152,24 @@ public:
     const std::string& last_query_id() const { return _last_query_id; }
     const TUniqueId& query_id() const { return _query_id; }
     const TUniqueId& fragment_instance_id() const { return _fragment_instance_id; }
+    const QueryExecutionServices* query_execution_services() const { return _query_execution_services; }
+    void set_query_execution_services(const QueryExecutionServices* query_execution_services) {
+        _query_execution_services = query_execution_services;
+    }
     ExecEnv* exec_env() { return _exec_env; }
+    void set_exec_env(ExecEnv* exec_env) { _exec_env = exec_env; }
     MemTracker* instance_mem_tracker() { return _instance_mem_tracker.get(); }
     MemPool* instance_mem_pool() { return _instance_mem_pool.get(); }
+
+    // Fragment-level shared MemPool for placement-new allocations.
+    // Owned by RuntimeState so it outlives all PipelineDrivers.
+    MemPool* fragment_mem_pool() { return _fragment_mem_pool.get(); }
+
+    // PMR memory resource backed by the fragment MemPool.
+    std::pmr::memory_resource* mem_resource() { return _mem_resource.get(); }
+
+    // Create the fragment-level MemPool. Called once during fragment preparation.
+    void init_fragment_mem_pool();
     std::shared_ptr<MemTracker> query_mem_tracker_ptr() { return _query_mem_tracker; }
     void set_query_mem_tracker(const std::shared_ptr<MemTracker>& query_mem_tracker) {
         _query_mem_tracker = query_mem_tracker;
@@ -235,13 +262,30 @@ public:
 
     const std::string& db() const { return _db; }
 
+    // Target table name of the current load. Populated by OlapTableSink on
+    // init so RejectedRecordWriter can stamp rows with the correct
+    // (target_database, target_table) pair. Scanner-phase rejections
+    // inherit whatever the sink set earlier in the fragment's init
+    // sequence; if no sink ran first (rare) this stays empty and the
+    // writer records an empty string, which the FE side treats the
+    // same as NULL.
+    void set_table_name(const std::string& table_name) { _table_name = table_name; }
+
+    const std::string& table_name() const { return _table_name; }
+
     void set_load_label(const std::string& label) { _load_label = label; }
 
     const std::string& load_label() const { return _load_label; }
 
     const std::string& get_error_log_file_path() const { return _error_log_file_path; }
 
-    const std::string& get_rejected_record_file_path() const { return _rejected_record_file_path; }
+    // Lazily-constructed per-fragment writer that persists rejected rows as
+    // JSON Lines for the sync daemon to ship to
+    // `_statistics_.rejected_records`. Returns nullptr when the writer has
+    // not been created; callers should go through
+    // `RuntimeStateHelper::rejected_record_writer(state)` which handles
+    // lazy construction under lock.
+    RejectedRecordWriter* rejected_record_writer_or_null() const { return _rejected_record_writer.get(); }
 
     bool has_reached_max_error_msg_num(bool is_summary = false);
 
@@ -249,6 +293,13 @@ public:
         return _query_options.log_rejected_record_num == -1 ||
                _query_options.log_rejected_record_num > _num_log_rejected_rows;
     }
+
+    // Single accounting point for rejected-row counting, bumped from
+    // inside `RejectedRecordWriter::append_serialized`. All entry paths
+    // that eventually reach the writer (legacy helper, ORC capture,
+    // Parquet ArrowConvertContext) share this counter so the per-load
+    // cap in `log_rejected_record_num` fires symmetrically.
+    void note_rejected_record() { _num_log_rejected_rows.fetch_add(1, std::memory_order_relaxed); }
 
     int64_t num_bytes_load_from_source() const noexcept { return _num_bytes_load_from_source.load(); }
 
@@ -340,6 +391,33 @@ public:
     bool enable_full_sort_use_german_string() const {
         return _query_options.__isset.enable_full_sort_use_german_string &&
                _query_options.enable_full_sort_use_german_string;
+    }
+
+    bool http_request_ssl_verification_required() const {
+        return _query_options.__isset.http_request_ssl_verification_required &&
+               _query_options.http_request_ssl_verification_required;
+    }
+
+    int32_t http_request_security_level() const {
+        return _query_options.__isset.http_request_security_level ? _query_options.http_request_security_level
+                                                                  : 3; // default: RESTRICTED
+    }
+
+    const std::string& http_request_ip_allowlist() const {
+        static const std::string empty;
+        return _query_options.__isset.http_request_ip_allowlist ? _query_options.http_request_ip_allowlist : empty;
+    }
+
+    const std::string& http_request_host_allowlist_regexp() const {
+        static const std::string empty;
+        return _query_options.__isset.http_request_host_allowlist_regexp
+                       ? _query_options.http_request_host_allowlist_regexp
+                       : empty;
+    }
+
+    bool http_request_allow_private_in_allowlist() const {
+        return _query_options.__isset.http_request_allow_private_in_allowlist &&
+               _query_options.http_request_allow_private_in_allowlist;
     }
 
     int32_t spill_mem_table_size() const {
@@ -476,8 +554,6 @@ public:
     void set_enable_pipeline_engine(bool enable_pipeline_engine) { _enable_pipeline_engine = enable_pipeline_engine; }
     bool enable_pipeline_engine() const { return _enable_pipeline_engine; }
 
-    Status reset_epoch();
-
     int64_t get_rpc_http_min_size() {
         return _query_options.__isset.rpc_http_min_size ? _query_options.rpc_http_min_size : kRpcHttpMinSize;
     }
@@ -556,7 +632,7 @@ private:
 
     // Set per-query state.
     void _init(const TUniqueId& fragment_instance_id, const TQueryOptions& query_options,
-               const TQueryGlobals& query_globals, ExecEnv* exec_env);
+               const TQueryGlobals& query_globals, const QueryExecutionServices* query_execution_services);
 
     // put runtime state before _obj_pool, so that it will be deconstructed after
     // _obj_pool. Because some object in _obj_pool will use profile when deconstructing.
@@ -571,9 +647,19 @@ private:
 
     std::mutex _error_log_lock;
 
+    // Guards lazy construction of `_rejected_record_writer`. Used to be
+    // named after the legacy tab-delimited file it guarded; the file is
+    // gone but the mutex keeps the historical name so call sites remain
+    // stable across the deletion.
     std::mutex _rejected_record_lock;
-    std::string _rejected_record_file_path;
-    std::unique_ptr<std::ofstream> _rejected_record_file;
+    // Writer. Lazily constructed by RuntimeStateHelper on first
+    // append so enabled-but-never-triggered loads pay no allocation cost.
+    // Held via shared_ptr so this header does not need RejectedRecordWriter's
+    // complete type for destruction. Letting unique_ptr destruct here would
+    // force runtime_state.cpp (RuntimeCore layer) to include the writer
+    // header, which lives in the higher Runtime layer and breaks the module
+    // boundary check.
+    std::shared_ptr<RejectedRecordWriter> _rejected_record_writer;
 
     // Username of user that is executing the query to which this RuntimeState belongs.
     std::string _user;
@@ -587,6 +673,7 @@ private:
     TUniqueId _query_id;
     TUniqueId _fragment_instance_id;
     TQueryOptions _query_options;
+    const QueryExecutionServices* _query_execution_services = nullptr;
     ExecEnv* _exec_env = nullptr;
 
     // MemTracker that is shared by all fragment instances running on this host.
@@ -596,12 +683,23 @@ private:
     // Memory usage of this fragment instance
     std::shared_ptr<MemTracker> _instance_mem_tracker;
 
+    // Fragment-level memory pool for placement-new allocation of query objects
+    // (ExecNodes, Descriptors, etc.).  Declared BEFORE _obj_pool so that it is
+    // destroyed AFTER _obj_pool (C++ reverse member destruction order).  This
+    // guarantees ObjectPool calls destructors before MemPool memory is freed.
+    //
+    // Owned here (not in FragmentContext) because RuntimeState is ref-counted
+    // via shared_ptr and PipelineDrivers can outlive FragmentContext.
+    std::unique_ptr<MemPool> _fragment_mem_pool;
+    // PMR adapter — nullptr when _fragment_mem_pool is null.
+    std::unique_ptr<MemPoolResource> _mem_resource;
+
     std::shared_ptr<ObjectPool> _obj_pool;
 
     // if true, execution should stop with a CANCELLED status
     std::atomic<bool> _is_cancelled{false};
 
-    int _per_fragment_instance_idx;
+    int _per_fragment_instance_idx = 0;
     int _num_per_fragment_instances = 0;
 
     // used as send id
@@ -657,6 +755,7 @@ private:
     int64_t _txn_id = 0;
     std::string _load_label;
     std::string _db;
+    std::string _table_name;
 
     std::string _error_log_file_path;
     std::ofstream* _error_log_file = nullptr; // error file path, absolute path

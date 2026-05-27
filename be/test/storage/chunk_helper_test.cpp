@@ -15,7 +15,6 @@
 #include "storage/chunk_helper.h"
 
 #include "column/chunk.h"
-#include "column/chunk_slice.h"
 #include "column/column.h"
 #include "column/column_helper.h"
 #include "column/nullable_column.h"
@@ -23,6 +22,7 @@
 #include "common/config_exec_fwd.h"
 #include "common/object_pool.h"
 #include "gtest/gtest.h"
+#include "runtime/chunk_helper.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/descriptors.h"
 #include "runtime/mem_tracker.h"
@@ -39,8 +39,6 @@ protected:
 
     TSlotDescriptor _create_slot_desc(LogicalType type, const std::string& col_name, int col_pos);
     TupleDescriptor* _create_tuple_desc();
-
-    SegmentedChunkPtr build_segmented_chunk();
 
     // A tuple with one column
     TupleDescriptor* _create_simple_desc() {
@@ -116,80 +114,6 @@ TupleDescriptor* ChunkHelperTest::_create_tuple_desc() {
     return tuple_desc;
 }
 
-SegmentedChunkPtr ChunkHelperTest::build_segmented_chunk() {
-    auto* tuple_desc = _create_simple_desc2();
-    auto segmented_chunk = SegmentedChunk::create(1 << 16);
-    segmented_chunk->append_column(Int32Column::create(), 0);
-    segmented_chunk->append_column(BinaryColumn::create(), 1);
-    segmented_chunk->build_columns();
-
-    // put 100 chunks into the segmented chunk
-    int row_id = 0;
-    for (int i = 0; i < 100; i++) {
-        size_t chunk_rows = 4096;
-        auto chunk = ChunkHelper::new_chunk(*tuple_desc, chunk_rows);
-        for (int j = 0; j < chunk_rows; j++) {
-            chunk->get_column_raw_ptr_by_index(0)->append_datum(row_id++);
-            std::string str = fmt::format("str{}", row_id);
-            chunk->get_column_raw_ptr_by_index(1)->append_datum(Slice(str));
-        }
-
-        segmented_chunk->append_chunk(std::move(chunk));
-    }
-    return segmented_chunk;
-}
-
-TEST_F(ChunkHelperTest, new_chunk_with_tuple) {
-    auto* tuple_desc = _create_tuple_desc();
-
-    auto chunk = ChunkHelper::new_chunk(*tuple_desc, 1024);
-
-    // check
-    ASSERT_EQ(chunk->num_columns(), 9);
-    ASSERT_EQ(chunk->get_column_by_slot_id(0)->get_name(), "integral-1");
-    ASSERT_EQ(chunk->get_column_by_slot_id(1)->get_name(), "integral-2");
-    ASSERT_EQ(chunk->get_column_by_slot_id(2)->get_name(), "integral-4");
-    ASSERT_EQ(chunk->get_column_by_slot_id(3)->get_name(), "integral-8");
-    ASSERT_EQ(chunk->get_column_by_slot_id(4)->get_name(), "int128");
-    ASSERT_EQ(chunk->get_column_by_slot_id(5)->get_name(), "float-4");
-    ASSERT_EQ(chunk->get_column_by_slot_id(6)->get_name(), "float-8");
-    ASSERT_EQ(chunk->get_column_by_slot_id(7)->get_name(), "binary");
-    ASSERT_EQ(chunk->get_column_by_slot_id(8)->get_name(), "binary");
-}
-
-TEST_F(ChunkHelperTest, ReorderChunk) {
-    auto* tuple_desc = _create_tuple_desc();
-
-    auto reversed_slots = tuple_desc->slots();
-    std::reverse(reversed_slots.begin(), reversed_slots.end());
-    auto chunk = ChunkHelper::new_chunk(reversed_slots, 1024);
-
-    // check
-    ASSERT_EQ(chunk->num_columns(), 9);
-    ASSERT_EQ(chunk->columns()[8]->get_name(), "integral-1");
-    ASSERT_EQ(chunk->columns()[7]->get_name(), "integral-2");
-    ASSERT_EQ(chunk->columns()[6]->get_name(), "integral-4");
-    ASSERT_EQ(chunk->columns()[5]->get_name(), "integral-8");
-    ASSERT_EQ(chunk->columns()[4]->get_name(), "int128");
-    ASSERT_EQ(chunk->columns()[3]->get_name(), "float-4");
-    ASSERT_EQ(chunk->columns()[2]->get_name(), "float-8");
-    ASSERT_EQ(chunk->columns()[1]->get_name(), "binary");
-    ASSERT_EQ(chunk->columns()[0]->get_name(), "binary");
-
-    ChunkHelper::reorder_chunk(*tuple_desc, chunk.get());
-    // check
-    ASSERT_EQ(chunk->num_columns(), 9);
-    ASSERT_EQ(chunk->columns()[0]->get_name(), "integral-1");
-    ASSERT_EQ(chunk->columns()[1]->get_name(), "integral-2");
-    ASSERT_EQ(chunk->columns()[2]->get_name(), "integral-4");
-    ASSERT_EQ(chunk->columns()[3]->get_name(), "integral-8");
-    ASSERT_EQ(chunk->columns()[4]->get_name(), "int128");
-    ASSERT_EQ(chunk->columns()[5]->get_name(), "float-4");
-    ASSERT_EQ(chunk->columns()[6]->get_name(), "float-8");
-    ASSERT_EQ(chunk->columns()[7]->get_name(), "binary");
-    ASSERT_EQ(chunk->columns()[8]->get_name(), "binary");
-}
-
 TEST_F(ChunkHelperTest, Accumulator) {
     constexpr size_t kDesiredSize = 4096;
     auto* tuple_desc = _create_simple_desc();
@@ -198,7 +122,7 @@ TEST_F(ChunkHelperTest, Accumulator) {
     size_t output_rows = 0;
     // push small chunks
     for (int i = 0; i < 10; i++) {
-        auto chunk = ChunkHelper::new_chunk(*tuple_desc, 1025);
+        auto chunk = RuntimeChunkHelper::new_chunk(*tuple_desc, 1025);
         chunk->get_column_raw_ptr_by_index(0)->append_default(1025);
         input_rows += 1025;
 
@@ -210,7 +134,7 @@ TEST_F(ChunkHelperTest, Accumulator) {
     }
     // push large chunks
     for (int i = 0; i < 10; i++) {
-        auto chunk = ChunkHelper::new_chunk(*tuple_desc, 8888);
+        auto chunk = RuntimeChunkHelper::new_chunk(*tuple_desc, 8888);
         chunk->get_column_raw_ptr_by_index(0)->append_default(8888);
         input_rows += 8888;
         static_cast<void>(accumulator.push(std::move(chunk)));
@@ -225,72 +149,13 @@ TEST_F(ChunkHelperTest, Accumulator) {
 
     // push empty chunks
     for (int i = 0; i < ChunkAccumulator::kAccumulateLimit; i++) {
-        auto chunk = ChunkHelper::new_chunk(*tuple_desc, 1);
+        auto chunk = RuntimeChunkHelper::new_chunk(*tuple_desc, 1);
         static_cast<void>(accumulator.push(std::move(chunk)));
     }
     EXPECT_TRUE(accumulator.reach_limit());
     auto output = accumulator.pull();
     EXPECT_EQ(nullptr, output);
     EXPECT_TRUE(accumulator.reach_limit());
-}
-
-TEST_F(ChunkHelperTest, SegmentedChunk) {
-    auto segmented_chunk = build_segmented_chunk();
-
-    [[maybe_unused]] auto downgrade_result = segmented_chunk->downgrade();
-    [[maybe_unused]] auto upgrade_result = segmented_chunk->upgrade_if_overflow();
-
-    EXPECT_EQ(409600, segmented_chunk->num_rows());
-    EXPECT_EQ(7, segmented_chunk->num_segments());
-    EXPECT_EQ(7781406, segmented_chunk->memory_usage());
-    EXPECT_EQ(2, segmented_chunk->columns().size());
-    auto column0 = segmented_chunk->columns()[0];
-    EXPECT_EQ(false, column0->is_nullable());
-    EXPECT_EQ(false, column0->has_null());
-    EXPECT_EQ(409600, column0->size());
-    std::vector<uint32_t> indexes = {1, 2, 4, 10000, 20000};
-    ColumnPtr cloned = column0->clone_selective(indexes.data(), 0, indexes.size());
-    EXPECT_EQ("[1, 2, 4, 10000, 20000]", cloned->debug_string());
-
-    // reset
-    segmented_chunk->reset();
-    EXPECT_EQ(0, segmented_chunk->num_rows());
-    EXPECT_EQ(7, segmented_chunk->num_segments());
-    EXPECT_EQ(7781406, segmented_chunk->memory_usage());
-
-    // slicing
-    segmented_chunk = build_segmented_chunk();
-    SegmentedChunkSlice slice;
-    slice.reset(segmented_chunk);
-    size_t total_rows = 0;
-    while (!slice.empty()) {
-        auto chunk = slice.cutoff(1000);
-        EXPECT_LE(chunk->num_rows(), 1000);
-        const auto& slices = ColumnHelper::as_column<BinaryColumn>(chunk->get_column_by_index(1))->immutable_data();
-        for (int i = 0; i < chunk->num_rows(); i++) {
-            EXPECT_EQ(total_rows + i, chunk->get_column_by_index(0)->get(i).get_int32());
-            EXPECT_EQ(fmt::format("str{}", total_rows + i + 1), slices[i].to_string());
-        }
-        total_rows += chunk->num_rows();
-    }
-    EXPECT_EQ(409600, total_rows);
-    EXPECT_EQ(0, segmented_chunk->num_rows());
-    EXPECT_EQ(7, segmented_chunk->num_segments());
-    segmented_chunk->check_or_die();
-
-    // append
-    auto seg1 = build_segmented_chunk();
-    auto seg2 = build_segmented_chunk();
-    seg1->append(seg2, 1);
-    EXPECT_EQ(409600 * 2 - 1, seg1->num_rows());
-    seg1->check_or_die();
-    // clone_selective
-    {
-        std::vector<uint32_t> index{1, 2, 4, 10000, 20000};
-        auto column1 = seg1->columns()[1];
-        ColumnPtr str_column1 = column1->clone_selective(index.data(), 0, index.size());
-        EXPECT_EQ("['str2', 'str3', 'str5', 'str10001', 'str20001']", str_column1->debug_string());
-    }
 }
 
 class ChunkPipelineAccumulatorTest : public ::testing::Test {

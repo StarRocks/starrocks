@@ -20,8 +20,10 @@
 #include <gtest/gtest.h>
 #include <rapidjson/document.h>
 
+#include <cstring>
 #include <string>
 
+#include "base/metrics.h"
 #include "base/testutil/assert.h"
 #include "base/testutil/sync_point.h"
 #include "common/config_ingest_fwd.h"
@@ -29,12 +31,13 @@
 #include "gen_cpp/FrontendService_types.h"
 #include "gen_cpp/HeartbeatService_types.h"
 #include "http/http_channel.h"
+#include "http/http_common.h"
 #include "http/http_request.h"
+#include "platform/platform_env.h"
 #include "runtime/exec_env.h"
 #include "runtime/stream_load/load_stream_mgr.h"
 #include "runtime/stream_load/stream_load_executor.h"
 #include "runtime/stream_load/transaction_mgr.h"
-#include "util/brpc_stub_cache.h"
 
 class mg_connection;
 
@@ -68,8 +71,13 @@ public:
         k_response_str = "";
         config::streaming_load_max_mb = 1;
 
+        auto* platform_env = PlatformEnv::GetInstance();
+        if (platform_env->brpc_stub_cache() == nullptr) {
+            ASSERT_OK(platform_env->init(&_metrics));
+            _owns_platform_env = true;
+        }
+        _env._refresh_service_contexts();
         _env._load_stream_mgr = new LoadStreamMgr();
-        _env._brpc_stub_cache = new BrpcStubCache(&_env);
         _env._stream_load_executor = new StreamLoadExecutor(&_env);
         _env._stream_context_mgr = new StreamContextMgr();
         _env._transaction_mgr = new TransactionMgr(&_env);
@@ -82,12 +90,14 @@ public:
         _env._transaction_mgr = nullptr;
         delete _env._stream_context_mgr;
         _env._stream_context_mgr = nullptr;
-        delete _env._brpc_stub_cache;
-        _env._brpc_stub_cache = nullptr;
         delete _env._load_stream_mgr;
         _env._load_stream_mgr = nullptr;
         delete _env._stream_load_executor;
         _env._stream_load_executor = nullptr;
+        if (_owns_platform_env) {
+            PlatformEnv::GetInstance()->destroy();
+            _owns_platform_env = false;
+        }
 
         if (_evhttp_req != nullptr) {
             evhttp_request_free(_evhttp_req);
@@ -97,6 +107,8 @@ public:
 protected:
     ExecEnv _env;
     evhttp_request* _evhttp_req = nullptr;
+    MetricRegistry _metrics{"transaction_stream_load_action_test"};
+    bool _owns_platform_env = false;
 };
 
 TEST_F(TransactionStreamLoadActionTest, txn_begin_no_auth) {
@@ -1033,6 +1045,44 @@ TEST_F(TransactionStreamLoadActionTest, release_resource_for_on_header_failure) 
     ASSERT_EQ(2, ctx->num_refs());
     ASSERT_TRUE(ctx->lock.try_lock());
     ctx->lock.unlock();
+}
+
+TEST_F(TransactionStreamLoadActionTest, on_header_invalid_envelope) {
+    TransactionStreamLoadAction action(&_env);
+    auto ctx = new StreamLoadContext(&_env);
+    ctx->ref();
+    ctx->db = "db";
+    ctx->table = "tbl";
+    ctx->label = "invalid_envelope";
+    ctx->body_sink = std::make_shared<StreamLoadPipe>();
+    bool remove_from_stream_context_mgr = false;
+    DeferOp defer([&]() {
+        if (remove_from_stream_context_mgr) {
+            _env.stream_context_mgr()->remove(ctx->label);
+        }
+        if (ctx->unref()) {
+            delete ctx;
+        }
+    });
+    ASSERT_OK((_env.stream_context_mgr())->put(ctx->label, ctx));
+    remove_from_stream_context_mgr = true;
+
+    HttpRequest request(_evhttp_req);
+    request.set_handler(&action);
+    request._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic cm9vdDo=");
+    request._headers.emplace(HttpHeaders::CONTENT_LENGTH, "3");
+    request._headers.emplace(HTTP_DB_KEY, ctx->db);
+    request._headers.emplace(HTTP_TABLE_KEY, ctx->table);
+    request._headers.emplace(HTTP_LABEL_KEY, ctx->label);
+    request._headers.emplace(HTTP_FORMAT_KEY, "json");
+    request._headers.emplace(HTTP_ENVELOPE, "custom");
+
+    ASSERT_EQ(-1, action.on_header(&request));
+
+    rapidjson::Document doc;
+    doc.Parse(k_response_str.c_str());
+    ASSERT_STREQ("INVALID_ARGUMENT", doc["Status"].GetString());
+    ASSERT_NE(nullptr, std::strstr(doc["Message"].GetString(), "Unknown envelope type: custom"));
 }
 
 TEST_F(TransactionStreamLoadActionTest, release_resource_for_not_handle) {

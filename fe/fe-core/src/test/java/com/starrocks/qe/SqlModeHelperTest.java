@@ -60,4 +60,12 @@ public class SqlModeHelperTest {
             Assertions.fail("No exception throws");
         });
     }
+
+    @Test
+    public void testForbidInvalidImplicitCastEncodeDecode() throws DdlException {
+        long encoded = SqlModeHelper.encode("FORBID_INVALID_IMPLICIT_CAST");
+        Assertions.assertEquals(SqlModeHelper.MODE_FORBID_INVALID_IMPLICIT_CAST, encoded);
+        Assertions.assertEquals("FORBID_INVALID_IMPLICIT_CAST", SqlModeHelper.decode(encoded));
+        Assertions.assertTrue(SqlModeHelper.check(encoded, SqlModeHelper.MODE_FORBID_INVALID_IMPLICIT_CAST));
+    }
 }

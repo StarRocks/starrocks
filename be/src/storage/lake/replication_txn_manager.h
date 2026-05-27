@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include "column/vectorized_fwd.h"
 #include "common/status.h"
 #include "fs/encryption.h"
 #include "gen_cpp/AgentService_types.h"
@@ -24,14 +25,28 @@
 #include "storage/lake/txn_log.h"
 #include "storage/lake/types_fwd.h"
 #include "storage/olap_common.h"
+#include "storage/primary_key_encoding_types.h"
 #include "storage/rowset/rowset_meta.h"
 #include "tablet_manager.h"
+
+namespace starrocks {
+class ThreadPool;
+} // namespace starrocks
 
 using starrocks::FileConverterCreatorFunc;
 
 namespace starrocks::lake {
 
 class TabletManager;
+
+// Inputs needed by ReplicationTxnManager::build_file_converters to drive .del-file
+// transcoding for cross-cluster replication intake. NONE encodings + null pkey_schema
+// signal "no transcoding" (non-PK tables or compatible PK shapes).
+struct DelTranscodeContext {
+    SchemaPtr pkey_schema;
+    PrimaryKeyEncodingType source_encoding = PrimaryKeyEncodingType::PK_ENCODING_TYPE_NONE;
+    PrimaryKeyEncodingType target_encoding = PrimaryKeyEncodingType::PK_ENCODING_TYPE_NONE;
+};
 
 class ReplicationTxnManager {
 public:
@@ -41,16 +56,39 @@ public:
 
     Status remote_snapshot(const TRemoteSnapshotRequest& request, TSnapshotInfo* src_snapshot_info);
 
-    Status replicate_snapshot(const TReplicateSnapshotRequest& request);
+    Status replicate_snapshot(const TReplicateSnapshotRequest& request, ThreadPool* replicate_file_thread_pool);
 
     Status clear_snapshots(const TxnLogPtr& txn_slog);
 
     DISALLOW_COPY_AND_MOVE(ReplicationTxnManager);
 
+    // Validates source/target PK structure for cross-cluster replication intake and computes
+    // the PK encoding pair + pkey schema needed to drive .del-file transcoding.
+    //
+    // For non-PK target tablets, returns a context with NONE encodings and null pkey_schema --
+    // the caller passes those through to build_file_converters as the "no transcoding" signal.
+    //
+    // Returns Status::NotSupported on:
+    //   - PK column count mismatch between source and target
+    //   - per-column logical type mismatch
+    //   - V2 source -> V1 target on the byte-incompatible single-non-string-fixed-length PK
+    //     shape (no V2 -> typed-column decoder exists).
+    // Returns Status::InternalError if either side reports PK_ENCODING_TYPE_NONE for a PK
+    // table (corrupted metadata: TabletSchema falls back to V1 for pre-PR-69939 schemas).
+    static StatusOr<DelTranscodeContext> prepare_del_transcode_context(const TabletMetadata& tablet_metadata,
+                                                                       const TabletSchemaPB& source_schema_pb);
+
+    // pkey_schema, source_pk_encoding, target_pk_encoding describe the on-disk PK encoding of
+    // .del files arriving in this snapshot. When source != target on a shape that is NOT
+    // byte-compatible (V1 -> V2 + single non-string fixed-length PK), the converter for .del
+    // files is swapped for a DelFileStreamConverter that re-encodes the payload at intake.
+    // Pass nullptr / PK_ENCODING_TYPE_NONE for non-PK tables (no .del transcoding considered).
     static FileConverterCreatorFunc build_file_converters(
             const TabletManager* tablet_manager, const TReplicateSnapshotRequest& request,
             const std::unordered_map<std::string, std::pair<std::string, FileEncryptionPair>>& filename_map,
-            std::unordered_map<uint32_t, uint32_t>& column_unique_id_map, std::vector<std::string>& files_to_delete);
+            std::unordered_map<uint32_t, uint32_t>& column_unique_id_map, std::vector<std::string>& files_to_delete,
+            SchemaPtr pkey_schema, PrimaryKeyEncodingType source_pk_encoding,
+            PrimaryKeyEncodingType target_pk_encoding);
 
     // Convert DeltaColumnGroupSnapshotPB from shared-nothing non-PK table snapshot
     // into DeltaColumnGroupMetadataPB for shared-data replication.

@@ -15,12 +15,14 @@
 set(FS_CORE_TEST_FILES
     ../base/cxa_throw_wrap.cpp
     encrypt_file_test.cpp
+    file_utils_test.cpp
     fs_core_test.cpp
+    fs_registry_test.cpp
 )
 
 set(FS_CORE_TEST_LINK_LIBS
     FSCore
-    IOCore
+    IO
     Common
     Base
     Gutil

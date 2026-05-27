@@ -19,6 +19,7 @@
 #include <ios>
 #include <sstream>
 
+#include "base/format.h"
 #include "common/object_pool.h"
 #include "common/status.h"
 #include "gen_cpp/Descriptors_types.h"
@@ -27,11 +28,11 @@
 
 namespace starrocks {
 const int RowDescriptor::INVALID_IDX = -1;
-SlotDescriptor::SlotDescriptor(SlotId id, std::string name, TypeDescriptor type)
+SlotDescriptor::SlotDescriptor(SlotId id, std::string name, TypeDescriptor type, std::pmr::memory_resource* mr)
         : _id(id),
           _type(std::move(type)),
           _parent(0),
-          _col_name(std::move(name)),
+          _col_name(name, mr),
           _col_unique_id(-1),
           _slot_idx(0),
           _slot_size(_type.get_slot_size()),
@@ -40,13 +41,13 @@ SlotDescriptor::SlotDescriptor(SlotId id, std::string name, TypeDescriptor type)
           _is_nullable(true),
           _is_virtual(false) {}
 
-SlotDescriptor::SlotDescriptor(const TSlotDescriptor& tdesc)
+SlotDescriptor::SlotDescriptor(const TSlotDescriptor& tdesc, std::pmr::memory_resource* mr)
         : _id(tdesc.id),
           _type(TypeDescriptor::from_thrift(tdesc.slotType)),
           _parent(tdesc.parent),
-          _col_name(tdesc.colName),
+          _col_name(tdesc.colName, mr),
           _col_unique_id(tdesc.col_unique_id),
-          _col_physical_name(tdesc.col_physical_name),
+          _col_physical_name(tdesc.col_physical_name, mr),
           _slot_idx(tdesc.slotIdx),
           _slot_size(_type.get_slot_size()),
           _is_materialized(tdesc.isMaterialized),
@@ -56,11 +57,11 @@ SlotDescriptor::SlotDescriptor(const TSlotDescriptor& tdesc)
                                : (tdesc.__isset.nullIndicatorBit ? tdesc.nullIndicatorBit != -1 : true)),
           _is_virtual(tdesc.__isset.is_virtual_column ? tdesc.is_virtual_column : false) {}
 
-SlotDescriptor::SlotDescriptor(const PSlotDescriptor& pdesc)
+SlotDescriptor::SlotDescriptor(const PSlotDescriptor& pdesc, std::pmr::memory_resource* mr)
         : _id(pdesc.id()),
           _type(TypeDescriptor::from_protobuf(pdesc.slot_type())),
           _parent(pdesc.parent()),
-          _col_name(pdesc.col_name()),
+          _col_name(pdesc.col_name(), mr),
           _col_unique_id(-1),
           _slot_idx(pdesc.slot_idx()),
           _slot_size(_type.get_slot_size()),
@@ -79,7 +80,7 @@ void SlotDescriptor::to_protobuf(PSlotDescriptor* pslot) const {
     pslot->set_byte_offset(0);
     pslot->set_null_indicator_byte(0);
     pslot->set_null_indicator_bit(_is_nullable ? 0 : -1);
-    pslot->set_col_name(_col_name);
+    pslot->set_col_name(_col_name.data(), _col_name.size());
     pslot->set_slot_idx(_slot_idx);
     pslot->set_is_materialized(_is_materialized);
     pslot->set_is_nullable(_is_nullable);
@@ -93,12 +94,28 @@ std::string SlotDescriptor::debug_string() const {
     return out.str();
 }
 
-TableDescriptor::TableDescriptor(const TTableDescriptor& tdesc)
-        : _name(tdesc.tableName), _database(tdesc.dbName), _id(tdesc.id) {}
+TableDescriptor::TableDescriptor(const TTableDescriptor& tdesc, std::pmr::memory_resource* mr)
+        : _name(tdesc.tableName, mr), _database(tdesc.dbName, mr), _id(tdesc.id) {}
 
 std::string TableDescriptor::debug_string() const {
     std::stringstream out;
     out << "#name=" << _name;
+    return out.str();
+}
+
+MySQLTableDescriptor::MySQLTableDescriptor(const TTableDescriptor& tdesc, std::pmr::memory_resource* mr)
+        : TableDescriptor(tdesc, mr),
+          _mysql_db(tdesc.mysqlTable.db, mr),
+          _mysql_table(tdesc.mysqlTable.table, mr),
+          _host(tdesc.mysqlTable.host, mr),
+          _port(tdesc.mysqlTable.port, mr),
+          _user(tdesc.mysqlTable.user, mr),
+          _passwd(tdesc.mysqlTable.passwd, mr) {}
+
+std::string MySQLTableDescriptor::debug_string() const {
+    std::stringstream out;
+    out << "MySQLTable(" << TableDescriptor::debug_string() << " _db" << _mysql_db << " table=" << _mysql_table
+        << " host=" << _host << " port=" << _port << " user=" << _user << " passwd=" << _passwd;
     return out.str();
 }
 
@@ -276,17 +293,6 @@ SlotDescriptor* DescriptorTbl::get_slot_descriptor(SlotId id) const {
     }
 }
 
-SlotDescriptor* DescriptorTbl::get_slot_descriptor_with_column(SlotId id) const {
-    // TODO: is there some boost function to do exactly this?
-    auto i = _slot_with_column_name_map.find(id);
-
-    if (i == _slot_with_column_name_map.end()) {
-        return nullptr;
-    } else {
-        return i->second;
-    }
-}
-
 // return all registered tuple descriptors
 void DescriptorTbl::get_tuple_descs(std::vector<TupleDescriptor*>* descs) const {
     descs->clear();
@@ -352,3 +358,10 @@ RowPositionDescriptor* RowPositionDescriptor::from_thrift(const TRowPositionDesc
 }
 
 } // namespace starrocks
+
+auto fmt::formatter<starrocks::RowPositionDescriptor::Type>::format(const starrocks::RowPositionDescriptor::Type value,
+                                                                    format_context& ctx) const
+        -> format_context::iterator {
+    return formatter<std::underlying_type_t<starrocks::RowPositionDescriptor::Type>>::format(
+            starrocks::enum_to_underlying_type(value), ctx);
+}

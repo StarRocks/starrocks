@@ -26,7 +26,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.AutoInferUtil;
-import com.starrocks.common.util.FrontendDaemon;
+import com.starrocks.common.util.LeaderDaemon;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.load.pipe.filelist.RepoCreator;
 import com.starrocks.qe.ConnectContext;
@@ -76,7 +76,7 @@ import static com.starrocks.type.FloatType.DOUBLE;
 import static com.starrocks.type.IntegerType.BIGINT;
 import static com.starrocks.type.JsonType.JSON;
 
-public class StatisticsMetaManager extends FrontendDaemon {
+public class StatisticsMetaManager extends LeaderDaemon {
     private static final Logger LOG = LogManager.getLogger(StatisticsMetaManager.class);
 
     public StatisticsMetaManager() {
@@ -454,12 +454,16 @@ public class StatisticsMetaManager extends FrontendDaemon {
         }
     }
 
-    private void trySleep(long millis) {
-        try {
-            Thread.sleep(millis);
-        } catch (InterruptedException e) {
-            LOG.warn(e.getMessage(), e);
-        }
+    /**
+     * Sleep for {@code millis} ms. Re-throws {@link InterruptedException} so the caller can stop
+     * the current leader-session cycle promptly. Callers running inside {@link #runAfterLeaseValid}
+     * must propagate the exception (or otherwise return) instead of swallowing it, so that
+     * {@link LeaderDaemon#stopGracefully(long)} can drain the worker on demotion. The interrupt
+     * flag is intentionally cleared by {@link Thread#sleep}; we let the exception itself signal
+     * stop.
+     */
+    private void trySleep(long millis) throws InterruptedException {
+        Thread.sleep(millis);
     }
 
     private boolean createTable(String tableName) {
@@ -487,7 +491,7 @@ public class StatisticsMetaManager extends FrontendDaemon {
         }
     }
 
-    public boolean alterTable(String tableName) {
+    public boolean alterTable(String tableName) throws InterruptedException {
         ConnectContext context = StatisticUtils.buildConnectContext();
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(STATISTICS_DB_NAME);
         Table table =  GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tableName);
@@ -500,7 +504,7 @@ public class StatisticsMetaManager extends FrontendDaemon {
         }
     }
 
-    public boolean alterFullStatisticsTable(ConnectContext context, Table table) {
+    public boolean alterFullStatisticsTable(ConnectContext context, Table table) throws InterruptedException {
         for (String columnName : FULL_STATISTICS_COMPATIBLE_COLUMNS) {
             if (table.getColumn(columnName) == null) {
                 if (columnName.equalsIgnoreCase("collection_size")) {
@@ -526,6 +530,9 @@ public class StatisticsMetaManager extends FrontendDaemon {
                     }
 
                     while (table.getColumn(columnName) == null) {
+                        if (isStopped()) {
+                            return false;
+                        }
                         // `alter table` may be sync in the shared-nothing cluster. So we need to check if job is done.
                         // TODO(stephen): This check is not robust because we can't get job handle here.
                         List<AlterJobV2> unfinishedAlterJobs = GlobalStateMgr.getCurrentState().getAlterJobMgr()
@@ -553,19 +560,22 @@ public class StatisticsMetaManager extends FrontendDaemon {
         return true;
     }
 
-    private void refreshStatisticsTable(String tableName) {
-        while (!checkTableExist(tableName)) {
+    private void refreshStatisticsTable(String tableName) throws InterruptedException {
+        while (!isStopped() && !checkTableExist(tableName)) {
             if (createTable(tableName)) {
                 break;
             }
             LOG.warn("create statistics table " + tableName + " failed");
             trySleep(10000);
         }
+        if (isStopped()) {
+            return;
+        }
         if (checkTableExist(tableName)) {
             StatisticUtils.alterSystemTableReplicationNumIfNecessary(tableName);
         }
 
-        while (!checkTableCompatible(tableName)) {
+        while (!isStopped() && !checkTableCompatible(tableName)) {
             if (alterTable(tableName)) {
                 break;
             }
@@ -575,14 +585,17 @@ public class StatisticsMetaManager extends FrontendDaemon {
     }
 
     @Override
-    protected void runAfterCatalogReady() {
+    protected void runAfterLeaseValid() throws InterruptedException {
         // To make UT pass, some UT will create database and table
         trySleep(Config.statistic_manager_sleep_time_sec * 1000);
-        while (!checkDatabaseExist()) {
+        while (!isStopped() && !checkDatabaseExist()) {
             if (createDatabase()) {
                 break;
             }
             trySleep(10000);
+        }
+        if (isStopped()) {
+            return;
         }
 
         refreshStatisticsTable(SAMPLE_STATISTICS_TABLE_NAME);
@@ -593,6 +606,9 @@ public class StatisticsMetaManager extends FrontendDaemon {
         refreshStatisticsTable(MULTI_COLUMN_STATISTICS_TABLE_NAME);
         refreshStatisticsTable(SPM_BASELINE_TABLE_NAME);
         refreshStatisticsTable(QUERY_HISTORY_TABLE_NAME);
+        if (isStopped()) {
+            return;
+        }
 
         GlobalStateMgr.getCurrentState().getAnalyzeMgr().clearStatisticFromDroppedPartition();
         GlobalStateMgr.getCurrentState().getAnalyzeMgr().clearStatisticFromDroppedTable();
@@ -603,25 +619,30 @@ public class StatisticsMetaManager extends FrontendDaemon {
     }
 
     public void createStatisticsTablesForTest() {
-        while (!checkDatabaseExist()) {
-            if (createDatabase()) {
-                break;
+        try {
+            while (!checkDatabaseExist()) {
+                if (createDatabase()) {
+                    break;
+                }
+                trySleep(1);
             }
-            trySleep(1);
-        }
 
-        boolean existsSample = false;
-        boolean existsFull = false;
-        while (!existsSample || !existsFull) {
-            existsSample = checkTableExist(SAMPLE_STATISTICS_TABLE_NAME);
-            existsFull = checkTableExist(FULL_STATISTICS_TABLE_NAME);
-            if (!existsSample) {
-                createTable(SAMPLE_STATISTICS_TABLE_NAME);
+            boolean existsSample = false;
+            boolean existsFull = false;
+            while (!existsSample || !existsFull) {
+                existsSample = checkTableExist(SAMPLE_STATISTICS_TABLE_NAME);
+                existsFull = checkTableExist(FULL_STATISTICS_TABLE_NAME);
+                if (!existsSample) {
+                    createTable(SAMPLE_STATISTICS_TABLE_NAME);
+                }
+                if (!existsFull) {
+                    createTable(FULL_STATISTICS_TABLE_NAME);
+                }
+                trySleep(1);
             }
-            if (!existsFull) {
-                createTable(FULL_STATISTICS_TABLE_NAME);
-            }
-            trySleep(1);
+        } catch (InterruptedException e) {
+            // Test helper: just restore the interrupt flag and return.
+            Thread.currentThread().interrupt();
         }
     }
 

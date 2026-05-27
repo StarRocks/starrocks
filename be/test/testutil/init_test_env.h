@@ -1,0 +1,172 @@
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+#pragma once
+
+#include <butil/file_util.h>
+#include <butil/files/file_path.h>
+
+#include "base/path/file_util.h"
+#include "base/time/timezone_utils.h"
+#include "cache/datacache.h"
+#include "common/config_cache_fwd.h"
+#include "common/config_path_fwd.h"
+#include "common/config_storage_fwd.h"
+#include "common/metrics/process_metrics_registry.h"
+#include "common/system/cpu_info.h"
+#include "common/system/disk_info.h"
+#include "common/system/mem_info.h"
+#include "connector/connector_bootstrap.h"
+#include "exec/pipeline/query_context.h"
+#include "fs/fs_provider_bootstrap.h"
+#include "gtest/gtest.h"
+#include "platform/platform_env.h"
+#include "platform/user_function_cache.h"
+#include "runtime/current_thread.h"
+#include "runtime/exec_env.h"
+#include "runtime/mem_tracker.h"
+#include "runtime/memory/mem_chunk_allocator.h"
+#include "storage/lake/tablet_manager.h"
+#include "storage/options.h"
+#include "storage/storage_engine.h"
+#include "storage/tablet_manager.h"
+#include "storage/update_manager.h"
+#include "types/time_types.h"
+#include "util/logging.h"
+
+namespace starrocks {
+
+extern void shutdown_tracer();
+
+int init_test_env(int argc, char** argv) {
+    ::testing::InitGoogleTest(&argc, argv);
+    if (getenv("STARROCKS_HOME") == nullptr) {
+        fprintf(stderr, "you need set STARROCKS_HOME environment variable.\n");
+        exit(-1);
+    }
+    std::string conffile = std::string(getenv("STARROCKS_HOME")) + "/conf/be_test.conf";
+    if (!config::init(conffile.c_str())) {
+        fprintf(stderr, "error read config file. \n");
+        return -1;
+    }
+    auto fs_registry_status = fs::install_builtin_file_system_providers();
+    CHECK(fs_registry_status.ok()) << fs_registry_status;
+    butil::FilePath curr_dir(std::filesystem::current_path());
+    butil::FilePath storage_root;
+    CHECK(butil::CreateNewTempDirectory("tmp_ut_", &storage_root));
+    butil::FilePath spill_path = storage_root.Append("spill");
+    CHECK(butil::CreateDirectory(spill_path));
+    config::storage_root_path = storage_root.value();
+    config::enable_event_based_compaction_framework = false;
+    config::l0_snapshot_size = 1048576;
+    config::storage_flood_stage_left_capacity_bytes = 10485600;
+    config::spill_local_storage_dir = spill_path.value();
+
+    FLAGS_alsologtostderr = true;
+    init_glog(argv[0], true);
+    CpuInfo::init();
+    DiskInfo::init();
+    MemInfo::init();
+    CHECK(UserFunctionCache::instance()->init(config::user_function_dir).ok());
+
+    date::init_date_cache();
+    // Disable global cache of timezone info when running unit tests
+    // Save tons of time in parallel unit test mode
+    // TimezoneUtils::init_time_zones();
+
+    std::vector<StorePath> paths;
+    paths.emplace_back(config::storage_root_path);
+    // Metric singletons keep registry back-pointers, so the process registry must outlive shutdown.
+    static auto* process_metrics_registry = new ProcessMetricsRegistry("starrocks_be");
+
+    auto* global_env = GlobalEnv::GetInstance();
+    config::disable_storage_page_cache = true;
+    auto st = global_env->init(process_metrics_registry->root_registry());
+    CHECK(st.ok()) << st;
+    auto* platform_env = PlatformEnv::GetInstance();
+    st = platform_env->init(process_metrics_registry->root_registry());
+    CHECK(st.ok()) << st;
+
+    auto compaction_mem_tracker = std::make_unique<MemTracker>();
+    auto update_mem_tracker = std::make_unique<MemTracker>();
+    StorageEngine* engine = nullptr;
+    EngineOptions options;
+    options.store_paths = paths;
+    options.compaction_mem_tracker = compaction_mem_tracker.get();
+    options.update_mem_tracker = update_mem_tracker.get();
+    options.table_metrics_mgr = process_metrics_registry->table_metrics_mgr();
+    Status s = StorageEngine::open(options, &engine);
+    if (!s.ok()) {
+        butil::DeleteFile(storage_root, true);
+        fprintf(stderr, "storage engine open failed, path=%s, msg=%s\n", config::storage_root_path.c_str(),
+                s.to_string().c_str());
+        return -1;
+    }
+    engine->start_schedule_apply_thread();
+
+    // Pagecache is turned off by default, and some test cases require cache to be turned on,
+    // and some test cases do not. For easy management, we turn cache off during unit test
+    // initialization. If there are test cases that require Pagecache, it must be responsible
+    // for managing it.
+    auto* cache_env = DataCache::GetInstance();
+    config::datacache_enable = false;
+    std::vector<std::string> cache_storage_root_paths;
+    cache_storage_root_paths.reserve(paths.size());
+    for (const auto& path : paths) {
+        cache_storage_root_paths.emplace_back(path.path);
+    }
+    DataCacheInitOptions cache_init_options;
+    cache_init_options.storage_root_paths = std::move(cache_storage_root_paths);
+    cache_init_options.metrics = process_metrics_registry->root_registry();
+    cache_init_options.process_mem_limit = global_env->process_mem_limit();
+    cache_init_options.process_mem_tracker = global_env->process_mem_tracker();
+    st = cache_env->init(cache_init_options);
+    CHECK(st.ok()) << st;
+
+    auto* exec_env = ExecEnv::GetInstance();
+    st = connector::bootstrap_builtin_connectors();
+    CHECK(st.ok()) << st;
+    st = exec_env->init(paths, process_metrics_registry, global_env);
+    CHECK(st.ok()) << st;
+
+    int r = RUN_ALL_TESTS();
+
+    // clear some trash objects kept in tablet_manager so mem_tracker checks will not fail
+    CHECK(engine->tablet_manager()->start_trash_sweep().ok());
+    (void)butil::DeleteFile(storage_root, true);
+    exec_env->wait_for_finish();
+    // delete engine
+    engine->stop();
+    // destroy exec env
+    tls_thread_status.set_mem_tracker(nullptr);
+    exec_env->stop();
+#ifdef USE_STAROS
+    if (exec_env->lake_tablet_manager() != nullptr) {
+        exec_env->lake_tablet_manager()->stop();
+    }
+#endif
+    delete engine;
+    exec_env->destroy();
+    platform_env->destroy();
+    cache_env->destroy();
+    global_env->stop();
+
+    shutdown_tracer();
+
+    shutdown_logging();
+
+    return r;
+}
+
+} // namespace starrocks

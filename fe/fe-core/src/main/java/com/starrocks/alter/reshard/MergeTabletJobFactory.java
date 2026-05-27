@@ -30,7 +30,6 @@ import com.starrocks.common.util.concurrent.lock.AutoCloseableLock;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.MergeTabletClause;
 import com.starrocks.sql.ast.TabletGroupList;
 
@@ -77,8 +76,6 @@ public class MergeTabletJobFactory implements TabletReshardJobFactory {
             throw new StarRocksException("No tablets need to merge in table "
                     + db.getFullName() + '.' + table.getName());
         }
-
-        createNewShards(reshardingPhysicalPartitions);
 
         long jobId = GlobalStateMgr.getCurrentState().getNextId();
         return new MergeTabletJob(jobId, db.getId(), table.getId(), reshardingPhysicalPartitions);
@@ -257,6 +254,14 @@ public class MergeTabletJobFactory implements TabletReshardJobFactory {
 
     private List<List<Long>> createMergeTabletGroups(
             PhysicalPartition physicalPartition, MaterializedIndex oldIndex, long targetSize) {
+        // pairThresh: a single tablet at or above this is excluded from merging — aligned with
+        //             TabletReshardUtils.needMerge() so a tablet that on its own already satisfies
+        //             the new size band cannot be picked up as a merge candidate.
+        // mergeCap:   maximum cumulative size of a merge group; merged output stays strictly below
+        //             splitThreshold so it cannot turn around and trigger a split.
+        long pairThresh = TabletReshardUtils.mergePairThreshold(targetSize);
+        long mergeCap = TabletReshardUtils.mergeGroupCap(targetSize);
+
         // MaterializedIndex tablets are already ordered by range.
         List<Tablet> orderedTablets = oldIndex.getTablets();
         List<List<Long>> mergeTabletGroups = new ArrayList<>();
@@ -266,29 +271,23 @@ public class MergeTabletJobFactory implements TabletReshardJobFactory {
         long visibleVersionTime = physicalPartition.getVisibleVersionTime();
         for (Tablet tablet : orderedTablets) {
             if (!(tablet instanceof LakeTablet)) {
-                if (currentTabletGroup.size() >= 2) {
-                    mergeTabletGroups.add(currentTabletGroup);
-                }
+                flushMergeTabletGroup(mergeTabletGroups, currentTabletGroup);
                 currentTabletGroup = new ArrayList<>();
                 currentSize = 0;
                 continue;
             }
 
             long dataSize = tablet.getDataSize(true);
-            if (dataSize >= targetSize
+            if (dataSize >= pairThresh
                     || ((LakeTablet) tablet).getDataSizeUpdateTime() < visibleVersionTime) {
-                if (currentTabletGroup.size() >= 2) {
-                    mergeTabletGroups.add(currentTabletGroup);
-                }
+                flushMergeTabletGroup(mergeTabletGroups, currentTabletGroup);
                 currentTabletGroup = new ArrayList<>();
                 currentSize = 0;
                 continue;
             }
 
-            if (currentSize + dataSize > targetSize) {
-                if (currentTabletGroup.size() >= 2) {
-                    mergeTabletGroups.add(currentTabletGroup);
-                }
+            if (currentSize + dataSize > mergeCap) {
+                flushMergeTabletGroup(mergeTabletGroups, currentTabletGroup);
                 currentTabletGroup = new ArrayList<>();
                 currentSize = 0;
             }
@@ -297,11 +296,14 @@ public class MergeTabletJobFactory implements TabletReshardJobFactory {
             currentSize += dataSize;
         }
 
-        if (currentTabletGroup.size() >= 2) {
-            mergeTabletGroups.add(currentTabletGroup);
-        }
-
+        flushMergeTabletGroup(mergeTabletGroups, currentTabletGroup);
         return mergeTabletGroups;
+    }
+
+    private static void flushMergeTabletGroup(List<List<Long>> groups, List<Long> currentGroup) {
+        if (currentGroup.size() >= 2) {
+            groups.add(currentGroup);
+        }
     }
 
     private List<ReshardingTablet> createReshardingTablets(MaterializedIndex index,
@@ -391,36 +393,6 @@ public class MergeTabletJobFactory implements TabletReshardJobFactory {
         }
 
         return newIndex;
-    }
-
-    private void createNewShards(Map<Long, ReshardingPhysicalPartition> reshardingPhysicalPartitions)
-            throws StarRocksException {
-        for (ReshardingPhysicalPartition reshardingPhysicalPartition : reshardingPhysicalPartitions.values()) {
-            long physicalPartitionId = reshardingPhysicalPartition.getPhysicalPartitionId();
-            for (ReshardingMaterializedIndex reshardingIndex : reshardingPhysicalPartition
-                    .getReshardingIndexes().values()) {
-                MaterializedIndex newIndex = reshardingIndex.getMaterializedIndex();
-                Map<Long, List<Long>> newToOldTabletIds = new HashMap<>();
-                for (ReshardingTablet reshardingTablet : reshardingIndex.getReshardingTablets()) {
-                    List<Long> oldTabletIds = reshardingTablet.getOldTabletIds();
-                    for (long newTabletId : reshardingTablet.getNewTabletIds()) {
-                        newToOldTabletIds.put(newTabletId, oldTabletIds);
-                    }
-                }
-
-                Map<String, String> properties = new HashMap<>();
-                properties.put(LakeTablet.PROPERTY_KEY_TABLE_ID, Long.toString(table.getId()));
-                properties.put(LakeTablet.PROPERTY_KEY_PARTITION_ID, Long.toString(physicalPartitionId));
-                properties.put(LakeTablet.PROPERTY_KEY_INDEX_ID, Long.toString(newIndex.getId()));
-
-                GlobalStateMgr.getCurrentState().getStarOSAgent().createShardsForMerge(
-                        newToOldTabletIds,
-                        table.getPartitionFilePathInfo(physicalPartitionId),
-                        table.getPartitionFileCacheInfo(physicalPartitionId),
-                        newIndex.getShardGroupId(),
-                        properties, WarehouseManager.DEFAULT_RESOURCE);
-            }
-        }
     }
 
     private static MergingTablet createMergingTablet(List<Long> oldTabletIds) {

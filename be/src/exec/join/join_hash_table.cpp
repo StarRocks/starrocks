@@ -22,15 +22,14 @@
 #include "column/chunk.h"
 #include "column/vectorized_fwd.h"
 #include "common/runtime_profile.h"
+#include "common/stack_util.h"
 #include "common/statusor.h"
 #include "common/system/cpu_info.h"
-#include "exec/hash_join_node.h"
 #include "exec/join/join_hash_map_method.h"
 #include "exec/join/join_key_constructor.h"
+#include "exprs/column_ref.h"
 #include "runtime/descriptors.h"
-#include "serde/column_array_serde.h"
 #include "types/logical_type_infra.h"
-#include "util/stack_util.h"
 
 namespace starrocks {
 

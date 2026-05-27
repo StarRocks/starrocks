@@ -21,12 +21,13 @@
 #include "exec/pipeline/pipeline_driver_executor.h"
 #include "exec/pipeline/sink/sink_io_buffer.h"
 #include "exec/plain_text_builder.h"
+#include "exec/workgroup/work_group.h"
 #include "exprs/expr_executor.h"
 #include "exprs/expr_factory.h"
 #include "formats/csv/converter.h"
+#include "formats/io/formatted_output_stream.h"
 #include "fs/fs_broker.h"
 #include "fs/fs_factory.h"
-#include "io/formatted_output_stream.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks::pipeline {

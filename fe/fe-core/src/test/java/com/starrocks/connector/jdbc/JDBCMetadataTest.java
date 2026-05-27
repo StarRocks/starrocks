@@ -39,7 +39,10 @@ import org.junit.jupiter.api.Test;
 import java.sql.Connection;
 import java.sql.DatabaseMetaData;
 import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
+import java.sql.Statement;
 import java.sql.Types;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -60,6 +63,12 @@ public class JDBCMetadataTest {
     DatabaseMetaData metaData;
     @Mocked
     PreparedStatement preparedStatement;
+    @Mocked
+    Statement statement;
+    @Mocked
+    ResultSet queryResultSet;
+    @Mocked
+    ResultSetMetaData queryResultSetMetaData;
     MockResultSet partitionsInfoTablesResult;
     private Map<String, String> properties;
     private MockResultSet dbResult;
@@ -372,15 +381,26 @@ public class JDBCMetadataTest {
     }
 
     @Test
-    public void testGetTableSetsCommentFromMetadata() throws SQLException {
-        // Prepare a TABLES result set with REMARKS for tbl1
+    public void testGetTableDoesNotFetchComment() throws SQLException {
+        // getTable() must not populate the comment — keep its hot path single
+        // round-trip (getColumns only). Comment fetch is deferred to
+        // getTableComment(). No getTables() mock is set for "tbl1" here so any
+        // unintended REMARKS round-trip in the lambda would also surface via the
+        // returned table's empty comment.
+        JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog", dataSource);
+        Table table = jdbcMetadata.getTable(new ConnectContext(), "test", "tbl1");
+        Assertions.assertNotNull(table);
+        Assertions.assertEquals("", table.getComment());
+    }
+
+    @Test
+    public void testGetTableCommentReadsRemarks() throws SQLException {
         MockResultSet tablesWithRemarks = new MockResultSet("tables_with_remarks");
         tablesWithRemarks.addColumn("TABLE_NAME", Arrays.asList("tbl1"));
         tablesWithRemarks.addColumn("REMARKS", Arrays.asList("jdbc table comment"));
 
         new Expectations() {
             {
-                // getColumns is already mocked in setUp; here we only need to mock getTables for a single table
                 connection.getMetaData().getTables("test", null, "tbl1", new String[] {"TABLE", "VIEW"});
                 result = tablesWithRemarks;
                 minTimes = 0;
@@ -388,9 +408,86 @@ public class JDBCMetadataTest {
         };
 
         JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog", dataSource);
-        Table table = jdbcMetadata.getTable(new ConnectContext(), "test", "tbl1");
-        Assertions.assertNotNull(table);
-        Assertions.assertEquals("jdbc table comment", table.getComment());
+        String comment = jdbcMetadata.getTableComment(new ConnectContext(), "test", "tbl1");
+        Assertions.assertEquals("jdbc table comment", comment);
+    }
+
+    @Test
+    public void testGetTableFromQuery() throws SQLException {
+        String passThroughQuery = "SELECT 1 AS id, payload ? 'k' AS name FROM docs";
+        String metadataQuery = "SELECT * FROM (" + passThroughQuery + ") starrocks_query WHERE 1 = 0";
+
+        new Expectations() {
+            {
+                connection.createStatement();
+                result = statement;
+                minTimes = 1;
+
+                statement.executeQuery(metadataQuery);
+                result = queryResultSet;
+                minTimes = 1;
+
+                queryResultSet.getMetaData();
+                result = queryResultSetMetaData;
+                minTimes = 1;
+
+                queryResultSetMetaData.getColumnCount();
+                result = 2;
+                minTimes = 1;
+
+                queryResultSetMetaData.getColumnType(1);
+                result = Types.INTEGER;
+                minTimes = 1;
+                queryResultSetMetaData.getColumnTypeName(1);
+                result = "INTEGER";
+                minTimes = 1;
+                queryResultSetMetaData.getPrecision(1);
+                result = 4;
+                minTimes = 1;
+                queryResultSetMetaData.getScale(1);
+                result = 0;
+                minTimes = 1;
+                queryResultSetMetaData.getColumnLabel(1);
+                result = "id";
+                minTimes = 1;
+                queryResultSetMetaData.isNullable(1);
+                result = ResultSetMetaData.columnNoNulls;
+                minTimes = 1;
+
+                queryResultSetMetaData.getColumnType(2);
+                result = Types.VARCHAR;
+                minTimes = 1;
+                queryResultSetMetaData.getColumnTypeName(2);
+                result = "VARCHAR";
+                minTimes = 1;
+                queryResultSetMetaData.getPrecision(2);
+                result = 20;
+                minTimes = 1;
+                queryResultSetMetaData.getScale(2);
+                result = 0;
+                minTimes = 1;
+                queryResultSetMetaData.getColumnLabel(2);
+                result = "name";
+                minTimes = 1;
+                queryResultSetMetaData.isNullable(2);
+                result = ResultSetMetaData.columnNullable;
+                minTimes = 1;
+            }
+        };
+
+        JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog", dataSource);
+        Table table = jdbcMetadata.getTableFromQuery(new ConnectContext(), "test", passThroughQuery + ";");
+        Assertions.assertInstanceOf(JDBCTable.class, table);
+        JDBCTable jdbcTable = (JDBCTable) table;
+        Assertions.assertTrue(jdbcTable.isQueryTable());
+        Assertions.assertEquals("(" + passThroughQuery + ") starrocks_query", jdbcTable.getCatalogTableName());
+        Assertions.assertEquals(2, jdbcTable.getFullSchema().size());
+        Assertions.assertEquals("id", jdbcTable.getFullSchema().get(0).getName());
+        Assertions.assertEquals(Types.INTEGER, jdbcTable.getOriginalJdbcColumnTypes().get("id"));
+        Assertions.assertEquals(Types.VARCHAR, jdbcTable.getOriginalJdbcColumnTypes().get("name"));
+        Assertions.assertEquals(IntegerType.INT, jdbcTable.getFullSchema().get(0).getType());
+        Assertions.assertEquals("name", jdbcTable.getFullSchema().get(1).getName());
+        Assertions.assertEquals(TypeFactory.createVarcharType(20), jdbcTable.getFullSchema().get(1).getType());
     }
 
     @Test

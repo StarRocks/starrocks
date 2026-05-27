@@ -14,9 +14,9 @@
 
 #pragma once
 
+#include <common/thread/priority_thread_pool.hpp>
 #include <orc/OrcFile.hh>
 #include <orc/Writer.hh>
-#include <util/priority_thread_pool.hpp>
 
 #include "column/column.h"
 #include "formats/file_writer.h"
@@ -35,7 +35,7 @@ namespace starrocks::formats {
 
 class AsyncOrcOutputStream : public orc::OutputStream {
 public:
-    AsyncOrcOutputStream(io::AsyncFlushOutputStream* _stream);
+    AsyncOrcOutputStream(formats::AsyncFlushOutputStream* _stream);
 
     ~AsyncOrcOutputStream() override = default;
 
@@ -50,7 +50,7 @@ public:
     const std::string& getName() const override;
 
 private:
-    io::AsyncFlushOutputStream* _stream;
+    formats::AsyncFlushOutputStream* _stream;
     bool _is_closed = false;
 };
 

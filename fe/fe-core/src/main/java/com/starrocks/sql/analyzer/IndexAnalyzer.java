@@ -244,9 +244,6 @@ public class IndexAnalyzer {
 
     // VectorIndexUtil methods
     public static void checkVectorIndexValid(Column column, Map<String, String> properties, KeysType keysType) {
-        if (RunMode.isSharedDataMode()) {
-            throw new SemanticException("The vector index does not support shared data mode");
-        }
         if (!Config.enable_experimental_vector) {
             throw new SemanticException(
                     "The vector index is disabled, enable it by setting FE config `enable_experimental_vector` to true");
@@ -354,6 +351,39 @@ public class IndexAnalyzer {
             }
         }
 
+        if (vectorIndexType == VectorIndexType.HNSW) {
+            // User-typed property keys have not been normalized yet (lower-casing
+            // happens at the end of this method), so look up case-insensitively.
+            String quantizer = getPropertyIgnoreCase(properties, IndexParamsKey.QUANTIZER.name());
+            String mPq = getPropertyIgnoreCase(properties, IndexParamsKey.M_PQ.name());
+            String nbitsPq = getPropertyIgnoreCase(properties, IndexParamsKey.NBITS_PQ.name());
+            boolean isPq = quantizer != null
+                    && quantizer.equalsIgnoreCase(VectorIndexParams.QuantizerType.PQ.name());
+
+            if (isPq) {
+                if (mPq == null) {
+                    throw new SemanticException("`M_PQ` is required when QUANTIZER = pq");
+                }
+                int mPqValue = Integer.parseInt(mPq);
+
+                String dim = getPropertyIgnoreCase(properties, CommonIndexParamKey.DIM.name());
+                int dimValue = Integer.parseInt(dim);
+                if (dimValue % mPqValue != 0) {
+                    throw new SemanticException(
+                            "`DIM` should be a multiple of `M_PQ` for PQ-quantized HNSW index");
+                }
+            } else {
+                // BE silently ignores M_PQ / NBITS_PQ for non-PQ quantizers; fail
+                // loudly so users don't think the value took effect.
+                if (mPq != null) {
+                    throw new SemanticException("`M_PQ` is only allowed when QUANTIZER = pq");
+                }
+                if (nbitsPq != null) {
+                    throw new SemanticException("`NBITS_PQ` is only allowed when QUANTIZER = pq");
+                }
+            }
+        }
+
         // add default properties
         Set<String> indexParams = indexParamsGroupByType.get(vectorIndexType);
         paramsNeedDefault.keySet().removeIf(key -> !indexParams.contains(key));
@@ -366,6 +396,21 @@ public class IndexAnalyzer {
                 .collect(Collectors.toMap(entry -> entry.getKey().toLowerCase(), entry -> entry.getValue().toLowerCase()));
         properties.clear();
         properties.putAll(lowerProperties);
+    }
+
+    /**
+     * Look up a property by name in a case-insensitive fashion.
+     * Needed because vector-index properties are not normalized until after
+     * {@link #checkVectorIndexValid} returns, but cross-field validation runs
+     * before that normalization.
+     */
+    private static String getPropertyIgnoreCase(Map<String, String> properties, String key) {
+        for (Map.Entry<String, String> entry : properties.entrySet()) {
+            if (entry.getKey().equalsIgnoreCase(key)) {
+                return entry.getValue();
+            }
+        }
+        return null;
     }
 
     private static void addDefaultVectorProperties(Map<String, String> properties,

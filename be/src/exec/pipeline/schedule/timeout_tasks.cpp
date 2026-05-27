@@ -16,10 +16,11 @@
 
 #include "common/config_exec_flow_fwd.h"
 #include "exec/pipeline/fragment_context.h"
+#include "exec/pipeline/pipeline_driver.h"
 #include "exec/pipeline/pipeline_fwd.h"
+#include "exec/pipeline/query_context.h"
 #include "exec/pipeline/schedule/common.h"
 #include "runtime/logconfig.h"
-#include "util/stack_util.h"
 
 namespace starrocks::pipeline {
 void CheckFragmentTimeout::Run() {

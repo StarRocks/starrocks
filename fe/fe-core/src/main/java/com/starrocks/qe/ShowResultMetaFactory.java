@@ -63,6 +63,7 @@ import com.starrocks.sql.ast.ShowComputeNodeBlackListStmt;
 import com.starrocks.sql.ast.ShowComputeNodesStmt;
 import com.starrocks.sql.ast.ShowCreateDbStmt;
 import com.starrocks.sql.ast.ShowCreateExternalCatalogStmt;
+import com.starrocks.sql.ast.ShowCreateFunctionStmt;
 import com.starrocks.sql.ast.ShowCreateRoutineLoadStmt;
 import com.starrocks.sql.ast.ShowCreateTableStmt;
 import com.starrocks.sql.ast.ShowDataCacheRulesStmt;
@@ -518,6 +519,13 @@ public class ShowResultMetaFactory implements AstVisitorExtendInterface<ShowResu
     }
 
     @Override
+    public ShowResultSetMetaData visitShowCreateFunctionStatement(ShowCreateFunctionStmt statement, Void context) {
+        return ShowResultSetMetaData.builder()
+                .addColumn(new Column("Create Function", TypeFactory.createVarcharType(30)))
+                .build();
+    }
+
+    @Override
     public ShowResultSetMetaData visitShowRepositoriesStatement(ShowRepositoriesStmt statement, Void context) {
         ShowResultSetMetaData.Builder builder = ShowResultSetMetaData.builder();
         for (String title : ShowRepositoriesStmt.TITLE_NAMES) {
@@ -869,6 +877,7 @@ public class ShowResultMetaFactory implements AstVisitorExtendInterface<ShowResu
                 .column("creator", TypeFactory.createVarcharType(64))
                 .column("last_refresh_process_time", DATETIME)
                 .column("last_refresh_job_id", TypeFactory.createVarcharType(64))
+                .column("last_refresh_time", DATETIME)
                 .build();
     }
 

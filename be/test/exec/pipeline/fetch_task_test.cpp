@@ -21,6 +21,7 @@
 
 #include <chrono>
 #include <memory>
+#include <ranges>
 #include <thread>
 #include <vector>
 
@@ -32,6 +33,7 @@
 #include "exec/tablet_info.h"
 #include "gen_cpp/Descriptors_types.h"
 #include "gtest/gtest.h"
+#include "platform/platform_env.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
 
@@ -41,17 +43,17 @@ namespace {
 constexpr int32_t kSourceNodeId = 1;
 
 int reserve_unused_local_port() {
-    int fd = socket(AF_INET, SOCK_STREAM, 0);
+    int fd = ::socket(AF_INET, SOCK_STREAM, 0);
     EXPECT_NE(fd, -1);
     sockaddr_in addr{};
     addr.sin_family = AF_INET;
     addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
     addr.sin_port = 0;
-    EXPECT_EQ(bind(fd, reinterpret_cast<const sockaddr*>(&addr), sizeof(addr)), 0);
+    EXPECT_EQ(::bind(fd, reinterpret_cast<const sockaddr*>(&addr), sizeof(addr)), 0);
     socklen_t len = sizeof(addr);
-    EXPECT_EQ(getsockname(fd, reinterpret_cast<sockaddr*>(&addr), &len), 0);
+    EXPECT_EQ(::getsockname(fd, reinterpret_cast<sockaddr*>(&addr), &len), 0);
     int port = ntohs(addr.sin_port);
-    EXPECT_EQ(close(fd), 0);
+    EXPECT_EQ(::close(fd), 0);
     return port;
 }
 
@@ -80,13 +82,15 @@ std::shared_ptr<FetchProcessor> create_fetch_processor(const std::shared_ptr<Sta
 }
 
 std::unique_ptr<RuntimeState> create_runtime_state(int query_timeout_s) {
+    ExecEnv* exec_env = ExecEnv::GetInstance();
     TUniqueId fragment_instance_id;
     fragment_instance_id.hi = 1;
     fragment_instance_id.lo = 2;
     TQueryOptions query_options;
     query_options.__set_query_timeout(query_timeout_s);
     TQueryGlobals query_globals;
-    return std::make_unique<RuntimeState>(fragment_instance_id, query_options, query_globals, ExecEnv::GetInstance());
+    return std::make_unique<RuntimeState>(fragment_instance_id, query_options, query_globals,
+                                          &exec_env->query_execution_services(), exec_env);
 }
 
 bool wait_task_done(const FetchTaskPtr& task, int timeout_ms) {
@@ -202,7 +206,7 @@ TEST(FetchTaskTest, local_callback_safe_when_unit_expired) {
 
 TEST(FetchTaskTest, submit_remote_rpc_failure_marks_done_and_updates_status) {
     ASSERT_NE(ExecEnv::GetInstance(), nullptr);
-    ASSERT_NE(ExecEnv::GetInstance()->brpc_stub_cache(), nullptr);
+    ASSERT_NE(PlatformEnv::GetInstance()->brpc_stub_cache(), nullptr);
 
     const int unused_port = reserve_unused_local_port();
     auto processor = create_fetch_processor(create_nodes_info(unused_port));
@@ -227,7 +231,7 @@ TEST(FetchTaskTest, submit_remote_rpc_failure_marks_done_and_updates_status) {
 
 TEST(FetchTaskTest, submit_remote_rpc_failure_handles_expired_unit) {
     ASSERT_NE(ExecEnv::GetInstance(), nullptr);
-    ASSERT_NE(ExecEnv::GetInstance()->brpc_stub_cache(), nullptr);
+    ASSERT_NE(PlatformEnv::GetInstance()->brpc_stub_cache(), nullptr);
 
     const int unused_port = reserve_unused_local_port();
     auto processor = create_fetch_processor(create_nodes_info(unused_port));

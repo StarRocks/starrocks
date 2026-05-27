@@ -1205,13 +1205,15 @@ public class StreamLoadTask extends AbstractStreamLoadTask {
     public RuntimeProfile buildTopLevelProfile(boolean isAborted) {
         RuntimeProfile profile = new RuntimeProfile("Load");
         RuntimeProfile summaryProfile = new RuntimeProfile("Summary");
+        java.time.ZoneId profileZone = TimeUtils.getTimeZone().toZoneId();
         summaryProfile.addInfoString(ProfileManager.QUERY_ID, DebugUtil.printId(loadId));
         summaryProfile.addInfoString(ProfileManager.START_TIME,
-                TimeUtils.longToTimeString(createTimeMs));
+                TimeUtils.longToTimeStringWithTimeZone(createTimeMs, profileZone));
 
         long currentTimestamp = System.currentTimeMillis();
         long totalTimeMs = currentTimestamp - createTimeMs;
-        summaryProfile.addInfoString(ProfileManager.END_TIME, TimeUtils.longToTimeString(currentTimestamp));
+        summaryProfile.addInfoString(ProfileManager.END_TIME,
+                TimeUtils.longToTimeStringWithTimeZone(currentTimestamp, profileZone));
         summaryProfile.addInfoString(ProfileManager.TOTAL_TIME, DebugUtil.getPrettyStringMs(totalTimeMs));
 
         summaryProfile.addInfoString(ProfileManager.QUERY_TYPE, "Load");
@@ -1726,6 +1728,21 @@ public class StreamLoadTask extends AbstractStreamLoadTask {
             info.setLoad_start_time(TimeUtils.longToTimeString(startLoadingTimeMs));
             info.setLoad_commit_time(TimeUtils.longToTimeString(commitTimeMs));
             info.setLoad_finish_time(TimeUtils.longToTimeString(endTimeMs));
+            // New BE prefers these UTC epoch-ms fields and converts to the session
+            // zone on materialization, so the rendered column value matches whatever
+            // zone the querying session is in.
+            if (createTimeMs > 0) {
+                info.setCreate_time_ms(createTimeMs);
+            }
+            if (startLoadingTimeMs > 0) {
+                info.setLoad_start_time_ms(startLoadingTimeMs);
+            }
+            if (commitTimeMs > 0) {
+                info.setLoad_commit_time_ms(commitTimeMs);
+            }
+            if (endTimeMs > 0) {
+                info.setLoad_finish_time_ms(endTimeMs);
+            }
 
             info.setType(getStringByType());
 

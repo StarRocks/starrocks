@@ -19,6 +19,7 @@
 #include "exec/pipeline/scan/olap_chunk_source.h"
 #include "exec/pipeline/scan/olap_scan_context.h"
 #include "fmt/format.h"
+#include "gutil/casts.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
@@ -62,7 +63,7 @@ OlapScanOperator::OlapScanOperator(OperatorFactory* factory, int32_t id, int32_t
 }
 
 OlapScanOperator::~OlapScanOperator() {
-    auto* state = runtime_state();
+    auto* state = get_factory()->runtime_state();
     if (state == nullptr) {
         return;
     }

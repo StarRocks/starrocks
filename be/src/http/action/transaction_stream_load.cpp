@@ -27,8 +27,7 @@
 #include <rapidjson/prettywriter.h>
 #include <thrift/protocol/TDebugProtocol.h>
 
-#include "agent/master_info.h"
-#include "base/metrics.h"
+#include "base/auth/auth_info.h"
 #include "base/testutil/sync_point.h"
 #include "base/time/time.h"
 #include "base/uid_util.h"
@@ -36,8 +35,9 @@
 #include "common/config_ingest_fwd.h"
 #include "common/config_rpc_client_fwd.h"
 #include "common/logging.h"
+#include "common/system/master_info.h"
 #include "common/util/debug_util.h"
-#include "common/utils.h"
+#include "common/util/thrift_client_cache.h"
 #include "gen_cpp/FrontendService.h"
 #include "gen_cpp/FrontendService_types.h"
 #include "gen_cpp/HeartbeatService_types.h"
@@ -46,14 +46,12 @@
 #include "http/http_headers.h"
 #include "http/http_request.h"
 #include "http/http_response.h"
-#include "http/utils.h"
-#include "runtime/client_cache.h"
+#include "platform/thrift_rpc_helper.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
 #include "runtime/fragment_mgr.h"
 #include "runtime/load_path_mgr.h"
 #include "runtime/plan_fragment_executor.h"
-#include "runtime/starrocks_metrics.h"
 #include "runtime/stream_load/load_stream_mgr.h"
 #include "runtime/stream_load/stream_load_context.h"
 #include "runtime/stream_load/stream_load_executor.h"
@@ -61,7 +59,6 @@
 #include "runtime/stream_load/transaction_mgr.h"
 #include "util/byte_buffer.h"
 #include "util/json_util.h"
-#include "util/thrift_rpc_helper.h"
 
 namespace starrocks {
 
@@ -454,6 +451,14 @@ Status TransactionStreamLoadAction::_parse_request(HttpRequest* http_req, Stream
         }
     } else {
         request.__set_strip_outer_array(false);
+    }
+    if (!http_req->header(HTTP_ENVELOPE).empty()) {
+        auto envelope_str = http_req->header(HTTP_ENVELOPE);
+        if (boost::iequals(envelope_str, "debezium")) {
+            request.__set_envelope(TEnvelopeType::DEBEZIUM);
+        } else if (!boost::iequals(envelope_str, "none")) {
+            return Status::InvalidArgument(fmt::format("Unknown envelope type: {}", envelope_str));
+        }
     }
     if (http_req->header(HTTP_PARTIAL_UPDATE) == "true") {
         request.__set_partial_update(true);

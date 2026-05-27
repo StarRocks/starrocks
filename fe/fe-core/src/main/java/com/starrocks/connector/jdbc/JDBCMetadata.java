@@ -24,8 +24,8 @@ import com.starrocks.catalog.JDBCTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
-import com.starrocks.connector.ConnectorMetadatRequestContext;
 import com.starrocks.connector.ConnectorMetadata;
+import com.starrocks.connector.ConnectorMetadataRequestContext;
 import com.starrocks.connector.ConnectorTableId;
 import com.starrocks.connector.PartitionInfo;
 import com.starrocks.connector.PartitionUtil;
@@ -43,6 +43,8 @@ import org.apache.logging.log4j.Logger;
 import java.sql.Connection;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Statement;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -60,7 +62,7 @@ public class JDBCMetadata implements ConnectorMetadata {
 
     private JDBCMetaCache<String, Database> dbCache;
     private JDBCMetaCache<JDBCTableName, List<String>> partitionNamesCache;
-    private JDBCMetaCache<JDBCTableName, Integer> tableIdCache;
+    private JDBCMetaCache<JDBCTableName, Long> tableIdCache;
     private JDBCMetaCache<JDBCTableName, Table> tableInstanceCache;
     private JDBCMetaCache<JDBCTableName, List<Partition>> partitionInfoCache;
 
@@ -325,7 +327,8 @@ public class JDBCMetadata implements ConnectorMetadata {
                 k -> {
                     try (Connection connection = getConnection();
                             ResultSet columnSet = schemaResolver.getColumns(connection, dbName, tblName)) {
-                        List<Column> fullSchema = schemaResolver.convertToSRTable(columnSet);
+                        Map<String, Integer> originalJdbcTypes = new HashMap<>();
+                        List<Column> fullSchema = schemaResolver.convertToSRTable(columnSet, originalJdbcTypes);
                         List<Column> partitionColumns = Lists.newArrayList();
                         if (schemaResolver.isSupportPartitionInformation()) {
                             partitionColumns = listPartitionColumns(dbName, tblName, fullSchema);
@@ -334,12 +337,14 @@ public class JDBCMetadata implements ConnectorMetadata {
                             return null;
                         }
 
-                        Integer tableId = tableIdCache.getPersistentCache(jdbcTable,
-                                j -> ConnectorTableId.CONNECTOR_ID_GENERATOR.getNextId().asInt());
+                        Long tableId = tableIdCache.getPersistentCache(jdbcTable,
+                                j -> ConnectorTableId.CONNECTOR_ID_GENERATOR.getNextId().asLong());
                         Table table = schemaResolver.getTable(tableId, tblName, fullSchema,
                                 partitionColumns, dbName, catalogName, properties);
                         if (table != null) {
-                            table.setComment(schemaResolver.getTableComment(connection, dbName, tblName));
+                            if (table instanceof JDBCTable && !originalJdbcTypes.isEmpty()) {
+                                ((JDBCTable) table).setOriginalJdbcColumnTypes(originalJdbcTypes);
+                            }
                         }
                         return table;
                     } catch (SQLException | DdlException e) {
@@ -350,7 +355,50 @@ public class JDBCMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public List<String> listPartitionNames(String databaseName, String tableName, ConnectorMetadatRequestContext requestContext) {
+    public String getTableComment(ConnectContext context, String dbName, String tblName) {
+        try (Connection connection = getConnection()) {
+            return schemaResolver.getTableComment(connection, dbName, tblName);
+        } catch (SQLException e) {
+            LOG.warn("get table comment for JDBC catalog fail!", e);
+            return "";
+        }
+    }
+
+    @Override
+    public Table getTableFromQuery(ConnectContext context, String dbName, String query) {
+        String normalizedQuery = JDBCTable.normalizePassThroughQuery(query);
+        String metadataQuery = "SELECT * FROM (" + normalizedQuery + ") starrocks_query WHERE 1 = 0";
+        try (Connection connection = getConnection();
+                Statement statement = connection.createStatement()) {
+            int queryTimeoutSeconds = schemaResolver.getQueryTimeoutSeconds();
+            if (queryTimeoutSeconds > 0) {
+                statement.setQueryTimeout(queryTimeoutSeconds);
+            }
+
+            try (ResultSet resultSet = statement.executeQuery(metadataQuery)) {
+                Map<String, Integer> originalJdbcTypes = new HashMap<>();
+                List<Column> fullSchema = schemaResolver.convertToSRTable(resultSet.getMetaData(), originalJdbcTypes);
+                if (fullSchema.isEmpty()) {
+                    throw new StarRocksConnectorException("pass-through query returned no columns");
+                }
+
+                long tableId = ConnectorTableId.CONNECTOR_ID_GENERATOR.getNextId().asLong();
+                JDBCTable queryTable = new JDBCTable(tableId, "_query_" + tableId, fullSchema, dbName, catalogName,
+                        properties);
+                queryTable.setPassThroughQuery(normalizedQuery);
+                if (!originalJdbcTypes.isEmpty()) {
+                    queryTable.setOriginalJdbcColumnTypes(originalJdbcTypes);
+                }
+                return queryTable;
+            }
+        } catch (SQLException | DdlException e) {
+            throw new StarRocksConnectorException("get query table for JDBC catalog fail!", e);
+        }
+    }
+
+    @Override
+    public List<String> listPartitionNames(String databaseName, String tableName,
+                                           ConnectorMetadataRequestContext requestContext) {
         return partitionNamesCache.get(new JDBCTableName(null, databaseName, tableName),
                 k -> {
                     try (Connection connection = getConnection()) {

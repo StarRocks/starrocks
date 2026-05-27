@@ -119,10 +119,6 @@ add_library(pprof STATIC IMPORTED)
 set_target_properties(pprof PROPERTIES IMPORTED_LOCATION
     ${GPERFTOOLS_HOME}/lib/libprofiler.a)
 
-add_library(tcmalloc STATIC IMPORTED)
-set_target_properties(tcmalloc PROPERTIES IMPORTED_LOCATION
-    ${GPERFTOOLS_HOME}/lib/libtcmalloc.a)
-
 add_library(protobuf STATIC IMPORTED GLOBAL)
 set_target_properties(protobuf PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libprotobuf.a)
 
@@ -188,6 +184,21 @@ add_library(crypto STATIC IMPORTED GLOBAL)
 set_target_properties(crypto PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libcrypto.a)
 
 add_library(AWS::crypto ALIAS crypto)
+
+add_library(libz STATIC IMPORTED GLOBAL)
+set_target_properties(libz PROPERTIES
+    IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libz.a
+    INTERFACE_INCLUDE_DIRECTORIES ${THIRDPARTY_DIR}/include)
+
+# Pre-declare ZLIB::ZLIB for third-party config packages that call
+# find_package(ZLIB), so they do not create a competing imported target.
+add_library(ZLIB::ZLIB ALIAS libz)
+set(ZLIB_FOUND TRUE)
+set(ZLIB_INCLUDE_DIR "${THIRDPARTY_DIR}/include")
+set(ZLIB_INCLUDE_DIRS "${THIRDPARTY_DIR}/include")
+set(ZLIB_LIBRARY "${THIRDPARTY_DIR}/lib/libz.a")
+set(ZLIB_LIBRARIES ZLIB::ZLIB)
+
 set(AWSSDK_ROOT_DIR ${THIRDPARTY_DIR})
 set(AWSSDK_COMMON_RUNTIME_LIBS "aws-crt-cpp;aws-c-auth;aws-c-cal;aws-c-common;aws-c-compression;aws-c-event-stream;aws-c-http;aws-c-io;aws-c-mqtt;aws-c-s3;aws-checksums;s2n;aws-c-sdkutils")
 foreach(lib IN ITEMS ${AWSSDK_COMMON_RUNTIME_LIBS})
@@ -347,7 +358,7 @@ if (ENABLE_MULTI_DYNAMIC_LIBS)
         set_target_properties(fmt PROPERTIES IMPORTED_LOCATION ${FMT_SHARED_LIBRARY})
         file(GLOB FMT_SHARED_FILES "${FMT_SHARED_DIR}/libfmt*.dylib")
     else()
-        set_target_properties(fmt PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib64/libfmt.so.8)
+        set_target_properties(fmt PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib64/libfmt.so.10)
         file(GLOB FMT_SHARED_FILES "${THIRDPARTY_DIR}/lib64/libfmt.so*")
     endif()
     install(FILES ${FMT_SHARED_FILES} DESTINATION ${OUTPUT_DIR}/lib)
@@ -360,9 +371,6 @@ endif()
 starrocks_resolve_thirdparty_library(RYU_LIBRARY libryu.a)
 add_library(ryu STATIC IMPORTED)
 set_target_properties(ryu PROPERTIES IMPORTED_LOCATION ${RYU_LIBRARY})
-
-add_library(libz STATIC IMPORTED GLOBAL)
-set_target_properties(libz PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libz.a)
 
 add_library(libbz2 STATIC IMPORTED)
 set_target_properties(libbz2 PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libbz2.a)
@@ -448,30 +456,24 @@ set_target_properties(benchgen PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/li
 
 set(absl_DIR "${THIRDPARTY_DIR}/lib/cmake/absl" CACHE PATH "absl search path" FORCE)
 find_package(absl CONFIG REQUIRED)
-if (APPLE)
-    # Homebrew's exported gRPC targets are not self-contained on Darwin. Import the
-    # shared libraries directly for local development builds and surface the host
-    # dylib requirement explicitly in output/be packaging.
-    add_library(gRPC::grpc SHARED IMPORTED GLOBAL)
-    set_target_properties(gRPC::grpc PROPERTIES
-        IMPORTED_LOCATION "${THIRDPARTY_DIR}/lib/libgrpc.dylib"
-        INTERFACE_INCLUDE_DIRECTORIES "${THIRDPARTY_DIR}/include")
-    add_library(gRPC::grpc++ SHARED IMPORTED GLOBAL)
-    set_target_properties(gRPC::grpc++ PROPERTIES
-        IMPORTED_LOCATION "${THIRDPARTY_DIR}/lib/libgrpc++.dylib"
-        INTERFACE_INCLUDE_DIRECTORIES "${THIRDPARTY_DIR}/include"
-        INTERFACE_LINK_LIBRARIES "gRPC::grpc")
-    set(gRPC_VERSION "darwin-manual")
-    set(gRPC_INCLUDE_DIR "${THIRDPARTY_DIR}/include")
-else()
-    set(gRPC_DIR "${THIRDPARTY_DIR}/lib/cmake/grpc" CACHE PATH "grpc search path")
-    find_package(gRPC CONFIG REQUIRED)
-    get_target_property(gRPC_INCLUDE_DIR gRPC::grpc INTERFACE_INCLUDE_DIRECTORIES)
-endif()
+
+# Pre-declare protobuf::libprotobuf + Protobuf_FOUND so gRPCConfig.cmake's
+# guarded find_package(Protobuf) is skipped. TP ships no ProtobufConfig.cmake
+# for 3.14; without this, module-mode FindProtobuf can bind to a host
+# protobuf (e.g. Homebrew 33.x) whose imported target then collides with
+# the ALIAS below.
+add_library(protobuf::libprotobuf ALIAS protobuf)
+set(Protobuf_FOUND TRUE)
+set(PROTOBUF_FOUND TRUE)
+set(Protobuf_INCLUDE_DIR "${THIRDPARTY_DIR}/include")
+set(Protobuf_INCLUDE_DIRS "${THIRDPARTY_DIR}/include")
+set(Protobuf_LIBRARIES protobuf::libprotobuf)
+
+set(gRPC_DIR "${THIRDPARTY_DIR}/lib/cmake/grpc" CACHE PATH "grpc search path")
+find_package(gRPC CONFIG REQUIRED)
+get_target_property(gRPC_INCLUDE_DIR gRPC::grpc INTERFACE_INCLUDE_DIRECTORIES)
 message(STATUS "Using gRPC ${gRPC_VERSION}")
 include_directories(SYSTEM ${gRPC_INCLUDE_DIR})
-add_library(protobuf::libprotobuf ALIAS protobuf)
-add_library(ZLIB::ZLIB ALIAS libz)
 
 # Disable libdeflate on aarch64
 if ("${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "x86" OR "${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "x86_64")

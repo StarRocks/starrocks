@@ -15,9 +15,11 @@
 #include "exec/pipeline/exchange/exchange_parallel_merge_source_operator.h"
 
 #include "common/config_exec_flow_fwd.h"
+#include "compute_env/data_stream/data_stream_mgr.h"
+#include "compute_env/data_stream/data_stream_recvr.h"
+#include "compute_env/pipeline/observer.h"
+#include "exec/pipeline/query_context.h"
 #include "exec/sort_exec_exprs.h"
-#include "runtime/data_stream_mgr.h"
-#include "runtime/data_stream_recvr.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
 #include "runtime/runtime_state_helper.h"
@@ -32,7 +34,7 @@ Status ExchangeParallelMergeSourceOperator::prepare(RuntimeState* state) {
     _merger = factory->get_merge_path_merger(state);
     _merger->bind_profile(_driver_sequence, _unique_metrics.get());
     _stream_recvr->attach_observer(state, observer());
-    _stream_recvr->attach_query_ctx(state->query_ctx());
+    _stream_recvr->attach_query_ctx(state->query_ctx()->get_shared_ptr());
     _merger->attach_observer(state, observer());
     return Status::OK();
 }
@@ -97,7 +99,8 @@ void ExchangeParallelMergeSourceOperatorFactory::close(RuntimeState* state) {
 DataStreamRecvr* ExchangeParallelMergeSourceOperatorFactory::get_stream_recvr(RuntimeState* state) {
     if (_stream_recvr == nullptr) {
         auto query_statistic_recv = RuntimeStateHelper::query_recv(state);
-        _stream_recvr = state->exec_env()->stream_mgr()->create_recvr(
+        auto* query_execution_services = state->query_execution_services();
+        _stream_recvr = query_execution_services->runtime->stream_mgr->create_recvr(
                 state, _row_desc, state->fragment_instance_id(), _plan_node_id, _num_sender,
                 config::exchg_node_buffer_size_bytes, true, query_statistic_recv, true, _degree_of_parallelism, true);
     }

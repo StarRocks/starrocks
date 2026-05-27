@@ -19,7 +19,10 @@
 #include "base/time/time.h"
 #include "base/utility/defer_op.h"
 #include "column/binary_column.h"
+#include "column/chunk_factory.h"
+#include "column/raw_data_visitor.h"
 #include "common/config_primary_key_fwd.h"
+#include "common/stack_util.h"
 #include "common/tracer.h"
 #include "fs/fs_factory.h"
 #include "fs/fs_util.h"
@@ -34,7 +37,6 @@
 #include "storage/rowset/rowset_options.h"
 #include "storage/rowset/segment_rewriter.h"
 #include "storage/tablet.h"
-#include "util/stack_util.h"
 
 namespace starrocks {
 
@@ -90,7 +92,6 @@ Status RowsetUpdateState::_load_deletes(Rowset* rowset, uint32_t idx, Column* pk
     auto col = pk_column->clone();
     const auto* end = read_buffer.data() + read_buffer.size();
     RETURN_IF_ERROR(serde::ColumnArraySerde::deserialize(read_buffer.data(), end, col.get()));
-    TRY_CATCH_BAD_ALLOC(col->raw_data());
     _memory_usage += col != nullptr ? col->memory_usage() : 0;
     _deletes[idx] = std::move(col);
     return Status::OK();
@@ -124,7 +125,7 @@ Status RowsetUpdateState::_load_upserts(Rowset* rowset, uint32_t idx, Column* pk
 
     // only hold pkey, so can use larger chunk size
     ChunkUniquePtr chunk_shared_ptr;
-    TRY_CATCH_BAD_ALLOC(chunk_shared_ptr = ChunkHelper::new_chunk(pkey_schema, 4096));
+    TRY_CATCH_BAD_ALLOC(chunk_shared_ptr = ChunkFactory::new_chunk(pkey_schema, 4096));
     auto chunk = chunk_shared_ptr.get();
     auto& dest = _upserts[idx];
     auto col = pk_column->clone();
@@ -150,10 +151,6 @@ Status RowsetUpdateState::_load_upserts(Rowset* rowset, uint32_t idx, Column* pk
         itr->close();
     }
     dest = std::move(col);
-    // This is a little bit trick. If pk column is a binary column, we will call function `raw_data()` in the following
-    // And the function `raw_data()` will build slice of pk column which will increase the memory usage of pk column
-    // So we try build slice in advance in here to make sure the correctness of memory statistics
-    TRY_CATCH_BAD_ALLOC(dest->raw_data());
     _memory_usage += dest != nullptr ? dest->memory_usage() : 0;
 
     return Status::OK();
@@ -353,10 +350,10 @@ Status RowsetUpdateState::_prepare_partial_update_value_columns(Tablet* tablet, 
         return Status::OK();
     }
     ChunkUniquePtr chunk;
-    TRY_CATCH_BAD_ALLOC(chunk = ChunkHelper::new_chunk(_partial_update_value_columns_schema, 4096));
+    TRY_CATCH_BAD_ALLOC(chunk = ChunkFactory::new_chunk(_partial_update_value_columns_schema, 4096));
     auto num_rows = rowset->segments()[idx]->num_rows();
     _partial_update_states[idx].partial_update_value_columns =
-            ChunkHelper::new_chunk(_partial_update_value_columns_schema, num_rows);
+            ChunkFactory::new_chunk(_partial_update_value_columns_schema, num_rows);
     while (true) {
         chunk->reset();
         auto st = itr->get_next(chunk.get());
@@ -415,7 +412,7 @@ Status RowsetUpdateState::_prepare_partial_update_states(Tablet* tablet, Rowset*
     TRY_CATCH_BAD_ALLOC(_partial_update_states[idx].write_columns_uid.resize(read_columns.size()));
     TRY_CATCH_BAD_ALLOC(_partial_update_states[idx].src_rss_rowids.resize(_upserts[idx]->size()));
     for (uint32_t i = 0; i < read_columns.size(); ++i) {
-        auto column = ChunkHelper::column_from_field(*read_column_schema.field(i).get());
+        auto column = ChunkFactory::column_from_field(*read_column_schema.field(i).get());
         read_columns[i] = column->clone_empty();
         _partial_update_states[idx].write_columns[i] = column->clone_empty();
         _partial_update_states[idx].write_columns_uid[i] = read_column_schema.field(i)->uid();
@@ -492,7 +489,7 @@ Status RowsetUpdateState::_prepare_auto_increment_partial_update_states(Tablet* 
                                                     idx);
     _auto_increment_partial_update_states[idx].src_rss_rowids.resize(_upserts[idx]->size());
 
-    auto column = ChunkHelper::column_from_field(*read_column_schema.field(0).get());
+    auto column = ChunkFactory::column_from_field(*read_column_schema.field(0).get());
     read_column[0] = column->clone_empty();
     _auto_increment_partial_update_states[idx].write_column = column->clone_empty();
 
@@ -552,8 +549,9 @@ Status RowsetUpdateState::_prepare_auto_increment_partial_update_states(Tablet* 
     */
     _auto_increment_partial_update_states[idx].delete_pks = _upserts[idx]->clone_empty();
     std::vector<uint32_t> delete_idxes;
-    const auto* data =
-            reinterpret_cast<const int64*>(_auto_increment_partial_update_states[idx].write_column->raw_data());
+    RawDataVisitor visitor;
+    RETURN_IF_ERROR(_auto_increment_partial_update_states[idx].write_column->accept(&visitor));
+    const auto* data = reinterpret_cast<const int64*>(visitor.result());
 
     // just check the rows which are not exist in the previous version
     // because the rows exist in the previous version may contain 0 which are specified by the user

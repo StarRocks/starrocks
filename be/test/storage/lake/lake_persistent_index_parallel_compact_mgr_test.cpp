@@ -20,8 +20,10 @@
 
 #include "base/testutil/assert.h"
 #include "column/column_helper.h"
+#include "column/raw_data_visitor.h"
 #include "common/config_primary_key_fwd.h"
 #include "fs/fs_util.h"
+#include "storage/chunk_helper.h"
 #include "storage/lake/join_path.h"
 #include "storage/lake/persistent_index_sstable.h"
 #include "storage/persistent_index.h"
@@ -175,7 +177,9 @@ protected:
             if (pk_column->is_binary()) {
                 key = ColumnHelper::get_binary_column(pk_column.get())->get_slice(0).to_string();
             } else {
-                key = std::string(reinterpret_cast<const char*>(pk_column->raw_data()), pk_column->type_size());
+                RawDataVisitor visitor;
+                EXPECT_OK(pk_column->accept(&visitor));
+                key = std::string(reinterpret_cast<const char*>(visitor.result()), pk_column->type_size());
             }
 
             IndexValue val(start_key + i);
@@ -1337,7 +1341,9 @@ TEST_F(LakePersistentIndexParallelCompactMgrTest, test_compact_with_tablet_range
         if (pk_column->is_binary()) {
             return ColumnHelper::get_binary_column(pk_column.get())->get_slice(0).to_string();
         } else {
-            return std::string(reinterpret_cast<const char*>(pk_column->raw_data()), pk_column->type_size());
+            RawDataVisitor visitor;
+            EXPECT_OK(pk_column->accept(&visitor));
+            return std::string(reinterpret_cast<const char*>(visitor.result()), pk_column->type_size());
         }
     };
 

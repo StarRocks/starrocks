@@ -1001,7 +1001,7 @@ public class ShowStmtMetaTest {
     public void testShowMaterializedViewsStmt() {
         ShowMaterializedViewsStmt stmt = new ShowMaterializedViewsStmt("test_db", null);
         ShowResultSetMetaData metaData = new ShowResultMetaFactory().getMetadata(stmt);
-        Assertions.assertEquals(27, metaData.getColumnCount());
+        Assertions.assertEquals(28, metaData.getColumnCount());
         Assertions.assertEquals("id", metaData.getColumn(0).getName());
         Assertions.assertEquals("database_name", metaData.getColumn(1).getName());
         Assertions.assertEquals("name", metaData.getColumn(2).getName());
@@ -1029,6 +1029,7 @@ public class ShowStmtMetaTest {
         Assertions.assertEquals("creator", metaData.getColumn(24).getName());
         Assertions.assertEquals("last_refresh_process_time", metaData.getColumn(25).getName());
         Assertions.assertEquals("last_refresh_job_id", metaData.getColumn(26).getName());
+        Assertions.assertEquals("last_refresh_time", metaData.getColumn(27).getName());
     }
 
     @Test
@@ -1135,7 +1136,7 @@ public class ShowStmtMetaTest {
     public void testShowTransactionStmt() {
         ShowTransactionStmt stmt = new ShowTransactionStmt("test_db", null, NodePosition.ZERO);
         ShowResultSetMetaData metaData = new ShowResultMetaFactory().getMetadata(stmt);
-        Assertions.assertEquals(16, metaData.getColumnCount());
+        Assertions.assertEquals(18, metaData.getColumnCount());
         Assertions.assertEquals("TransactionId", metaData.getColumn(0).getName());
         Assertions.assertEquals("Label", metaData.getColumn(1).getName());
         Assertions.assertEquals("Coordinator", metaData.getColumn(2).getName());
@@ -1152,6 +1153,8 @@ public class ShowStmtMetaTest {
         Assertions.assertEquals("TimeoutMs", metaData.getColumn(13).getName());
         Assertions.assertEquals("PreparedTimeoutMs", metaData.getColumn(14).getName());
         Assertions.assertEquals("ErrMsg", metaData.getColumn(15).getName());
+        Assertions.assertEquals("NoOpPublish", metaData.getColumn(16).getName());
+        Assertions.assertEquals("NoOpPublishReason", metaData.getColumn(17).getName());
     }
 
     @Test

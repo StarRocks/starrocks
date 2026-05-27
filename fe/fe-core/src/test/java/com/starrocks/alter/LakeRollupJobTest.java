@@ -73,8 +73,8 @@ public class LakeRollupJobTest {
     @BeforeAll
     public static void setUp() throws Exception {
         new MockUp<MaterializedViewHandler>() {
-            @Mock protected void runAfterCatalogReady() {
-                System.out.println("Mocked MaterializedViewHandler.runAfterCatalogReady() called");
+            @Mock protected void runAfterLeaseValid() {
+                System.out.println("Mocked MaterializedViewHandler.runAfterLeaseValid() called");
             }
         };
 
@@ -298,7 +298,8 @@ public class LakeRollupJobTest {
             public static void sendAggregatePublishVersionRequest(AggregatePublishVersionRequest request,
                     long baseVersion, ComputeResource computeResource,
                     Map<Long, Double> compactionScores,
-                    Map<Long, Long> tabletRowNum)
+                    Map<Long, Long> tabletRowNum,
+                    java.util.List<com.starrocks.proto.VectorIndexBuildInfoPB> vectorIndexBuildInfos)
                     throws NoAliveBackendException, RpcException {
                 // Do nothing, just return successfully
             }

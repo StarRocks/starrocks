@@ -20,17 +20,21 @@ set(EXECUTABLE_OUTPUT_PATH "${BUILD_DIR}/src/service")
 add_subdirectory(service_be)
 
 set(EXEC_FILES
+    backend_metrics_initializer.cpp
     backend_base.cpp
     daemon.cpp
-    greplog.cpp
     internal_service.cpp
-    staros_worker.cpp
+    service_metrics.cpp
     mem_hook.cpp
 )
 
 ADD_BE_LIB(Service
         ${EXEC_FILES}
 )
+
+target_link_libraries(Service PRIVATE Platform)
+target_link_libraries(ServiceBE PUBLIC Service)
+target_link_libraries(ServiceBE PRIVATE ConnectorBootstrap)
 
 # only build starrocks_be when TEST is off
 if ((NOT ${MAKE_TEST} STREQUAL "ON") AND (NOT BUILD_FORMAT_LIB))
@@ -49,6 +53,8 @@ if ((NOT ${MAKE_TEST} STREQUAL "ON") AND (NOT BUILD_FORMAT_LIB))
     # set_target_properties(starrocks_be PROPERTIES LINK_FLAGS -pthread)
 
     target_link_libraries(starrocks_be
+        ServiceBE
+        Service
         ${STARROCKS_LINK_LIBS}
         )
     STARROCKS_FORCE_LOAD_LIBS(starrocks_be Exprs ExprCore)

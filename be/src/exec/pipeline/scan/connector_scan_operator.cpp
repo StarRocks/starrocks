@@ -16,15 +16,19 @@
 
 #include "common/config_scan_io_fwd.h"
 #include "connector/lake_connector.h"
+#include "exec/catalog_scan_metrics.h"
 #include "exec/connector_scan_node.h"
 #include "exec/pipeline/pipeline_driver.h"
+#include "exec/pipeline/query_context.h"
 #include "exec/pipeline/scan/balanced_chunk_buffer.h"
+#include "exec/pipeline/scan/scan_morsel.h"
 #include "exprs/expr_executor.h"
+#include "gutil/casts.h"
+#include "gutil/walltime.h"
 #include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
 #include "runtime/global_dict/parser.h"
 #include "runtime/runtime_state.h"
-#include "util/global_metrics_registry.h"
 
 namespace starrocks::pipeline {
 
@@ -622,7 +626,7 @@ int64_t ConnectorScanOperator::get_scan_table_id() const {
     }
 
     TupleId tuple_id = tuple_ids[0];
-    const TupleDescriptor* tuple_desc = runtime_state()->desc_tbl().get_tuple_descriptor(tuple_id);
+    const TupleDescriptor* tuple_desc = get_factory()->runtime_state()->desc_tbl().get_tuple_descriptor(tuple_id);
     if (tuple_desc != nullptr && tuple_desc->table_desc() != nullptr) {
         return tuple_desc->table_desc()->table_id();
     }
@@ -638,7 +642,7 @@ ConnectorChunkSource::ConnectorChunkSource(ScanOperator* op, RuntimeProfile* run
           _scan_node(scan_node),
           _limit(scan_node->limit()),
           _runtime_in_filters(op->runtime_in_filters()),
-          _runtime_bloom_filters(op->runtime_bloom_filters()),
+          _runtime_bloom_filters(op->get_factory()->get_runtime_bloom_filters()),
           _enable_adaptive_io_tasks(enable_adaptive_io_tasks) {
     _conjunct_ctxs = scan_node->conjunct_ctxs();
     _conjunct_ctxs.insert(_conjunct_ctxs.end(), _runtime_in_filters.begin(), _runtime_in_filters.end());
@@ -934,7 +938,7 @@ uint64_t ConnectorChunkSource::avg_row_mem_bytes() const {
 }
 
 void ConnectorChunkSource::_update_catalog_metrics() {
-    auto* catalog_metrics = GlobalMetricsRegistry::instance()->catalog_scan_metrics();
+    auto* catalog_metrics = CatalogScanMetrics::instance();
     if (catalog_metrics == nullptr || _scan_node == nullptr) {
         return;
     }

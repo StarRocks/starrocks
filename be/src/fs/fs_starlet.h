@@ -39,6 +39,16 @@ StatusOr<std::pair<std::string, int64_t>> parse_starlet_uri(std::string_view uri
 
 std::unique_ptr<FileSystem> new_fs_starlet();
 
+#if defined(USE_STAROS) && !defined(BUILD_FORMAT_LIB)
+namespace fs {
+
+struct FileSystemProvider;
+
+FileSystemProvider new_starlet_file_system_provider(int priority = 30);
+
+} // namespace fs
+#endif // defined(USE_STAROS) && !defined(BUILD_FORMAT_LIB)
+
 // Create a starlet filesystem for cross-cluster migration with optional S3 raw path mode.
 //
 // When `use_raw_path` is true:

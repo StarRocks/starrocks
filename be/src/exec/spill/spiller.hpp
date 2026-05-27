@@ -35,10 +35,12 @@
 #include "exec/spill/spiller.h"
 #include "exec/workgroup/work_group_fwd.h"
 #include "gen_cpp/InternalService_types.h"
+#include "runtime/runtime_state_fwd.h"
 #include "storage/chunk_helper.h"
 
 namespace starrocks::spill {
 DECLARE_FAIL_POINT(spill_restore_sleep);
+DECLARE_FAIL_POINT(spill_restore_error);
 
 template <class TaskExecutor, class MemGuard>
 Status Spiller::spill(RuntimeState* state, const ChunkPtr& chunk, MemGuard&& guard) {
@@ -209,7 +211,7 @@ Status RawSpillerWriter::flush(RuntimeState* state, MemGuard&& guard) {
     };
 
     auto yield_func = [&](workgroup::ScanTask&& task) { TaskExecutor::force_submit(std::move(task)); };
-    auto query_type = state->query_options().query_type;
+    auto query_type = spill_query_type(state);
     auto io_task = workgroup::ScanTask(_spiller->options().wg, std::move(task), std::move(yield_func));
     io_task.set_query_type(query_type);
     RETURN_IF_ERROR(TaskExecutor::submit(std::move(io_task)));
@@ -244,6 +246,7 @@ Status SpillerReader::trigger_restore(RuntimeState* state, MemGuard&& guard) {
         _running_restore_tasks++;
         auto restore_task = [this, guard, trace = TraceInfo(state), _stream = _stream](auto& yield_ctx) {
             SCOPED_SET_TRACE_INFO({}, trace.query_id, trace.fragment_id);
+            SCOPED_SET_MODULE_TYPE(ThreadModuleType::QUERY);
             auto yield_defer = yield_ctx.defer_finished();
             RETURN_IF(!guard.scoped_begin(), (void)0);
             DEFER_GUARD_END(guard);
@@ -268,6 +271,10 @@ Status SpillerReader::trigger_restore(RuntimeState* state, MemGuard&& guard) {
                 res = task.do_read(yield_ctx, serd_ctx);
 
                 FAIL_POINT_TRIGGER_EXECUTE(spill_restore_sleep, { sleep(10); });
+                // Simulate a non-EOF error coming out of the restore IO task
+                // (e.g. ColumnarSerde::deserialize hitting a short read).
+                FAIL_POINT_TRIGGER_EXECUTE(spill_restore_error,
+                                           { res = Status::InternalError("inject spill_restore_error"); });
 
                 if (yield_ctx.need_yield && !yield_ctx.is_finished()) {
                     COUNTER_UPDATE(_spiller->metrics().restore_task_yield_times, 1);
@@ -285,7 +292,7 @@ Status SpillerReader::trigger_restore(RuntimeState* state, MemGuard&& guard) {
             auto ctx = std::any_cast<SpillIOTaskContextPtr>(task.get_work_context().task_context_data);
             TaskExecutor::force_submit(std::move(task));
         };
-        auto query_type = state->query_options().query_type;
+        auto query_type = spill_query_type(state);
         auto io_task = workgroup::ScanTask(_spiller->options().wg, std::move(restore_task), std::move(yield_func));
         io_task.set_query_type(query_type);
         RETURN_IF_ERROR(TaskExecutor::submit(std::move(io_task)));
@@ -384,7 +391,7 @@ Status PartitionedSpillerWriter::flush(RuntimeState* state, bool is_final_flush,
         return Status::OK();
     };
     auto yield_func = [&](workgroup::ScanTask&& task) { TaskExecutor::force_submit(std::move(task)); };
-    auto query_type = state->query_options().query_type;
+    auto query_type = spill_query_type(state);
     auto io_task = workgroup::ScanTask(_spiller->options().wg, std::move(task), std::move(yield_func));
     io_task.set_query_type(query_type);
     RETURN_IF_ERROR(TaskExecutor::submit(std::move(io_task)));

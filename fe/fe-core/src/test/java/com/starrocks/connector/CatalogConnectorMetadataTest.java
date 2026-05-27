@@ -16,6 +16,7 @@ package com.starrocks.connector;
 
 import com.google.common.collect.ImmutableList;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.MvId;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.system.information.InfoSchemaDb;
 import com.starrocks.common.StarRocksException;
@@ -84,7 +85,8 @@ public class CatalogConnectorMetadataTest {
         List<String> tblNames = catalogConnectorMetadata.listTableNames(new ConnectContext(), InfoSchemaDb.DATABASE_NAME);
         List<String> expected = ImmutableList.of("tables", "table_privileges", "referential_constraints",
                 "key_column_usage", "routines", "schemata", "columns", "character_sets", "collations",
-                "table_constraints", "engines", "user_privileges", "schema_privileges", "statistics",
+                "table_constraints", "engines", "user_privileges", "collation_character_set_applicability",
+                "schema_privileges", "statistics",
                 "triggers", "events", "views", "partitions", "column_privileges"
         );
         assertEquals(expected, tblNames);
@@ -176,7 +178,7 @@ public class CatalogConnectorMetadataTest {
                 times = 1;
 
                 connectorMetadata.clear();
-                connectorMetadata.listPartitionNames("test_db", "test_tbl", ConnectorMetadatRequestContext.DEFAULT);
+                connectorMetadata.listPartitionNames("test_db", "test_tbl", ConnectorMetadataRequestContext.DEFAULT);
                 connectorMetadata.dropTable(ctx, null);
                 connectorMetadata.refreshTable("test_db", null, null, false);
                 connectorMetadata.alterMaterializedView(null);
@@ -213,7 +215,7 @@ public class CatalogConnectorMetadataTest {
         );
 
         catalogConnectorMetadata.clear();
-        catalogConnectorMetadata.listPartitionNames("test_db", "test_tbl", ConnectorMetadatRequestContext.DEFAULT);
+        catalogConnectorMetadata.listPartitionNames("test_db", "test_tbl", ConnectorMetadataRequestContext.DEFAULT);
         catalogConnectorMetadata.dropTable(ctx, null);
         catalogConnectorMetadata.refreshTable("test_db", null, null, false);
         catalogConnectorMetadata.alterMaterializedView(null);
@@ -265,5 +267,27 @@ public class CatalogConnectorMetadataTest {
 
         Map<String, String> actualProperties = catalogConnectorMetadata.getCatalogProperties();
         assertEquals(expectedProperties, actualProperties);
+    }
+
+    @Test
+    void testAcquireTvrSnapshotDelegatesToChild(@Mocked ConnectorMetadata connectorMetadata, @Mocked Table table) {
+        MvId mvId = new MvId(1L, 2L);
+        TvrTableSnapshot expected = TvrTableSnapshot.of(123L);
+        new Expectations() {
+            {
+                connectorMetadata.acquireTvrSnapshot("test_db", table, mvId);
+                result = expected;
+                times = 1;
+            }
+        };
+
+        CatalogConnectorMetadata catalogConnectorMetadata = new CatalogConnectorMetadata(
+                connectorMetadata,
+                informationSchemaMetadata,
+                metaMetadata
+        );
+
+        TvrTableSnapshot actual = catalogConnectorMetadata.acquireTvrSnapshot("test_db", table, mvId);
+        assertEquals(expected, actual);
     }
 }

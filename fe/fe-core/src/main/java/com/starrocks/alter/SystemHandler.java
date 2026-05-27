@@ -250,8 +250,8 @@ public class SystemHandler extends AlterHandler {
     }
 
     @Override
-    protected void runAfterCatalogReady() {
-        super.runAfterCatalogReady();
+    protected void runAfterLeaseValid() {
+        super.runAfterLeaseValid();
 
         // check all decommissioned backends, if there is no tablet on that backend, drop it.
         SystemInfoService systemInfoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();

@@ -56,6 +56,8 @@ public class IndexParams {
                 true, "false", null);
         register(builder, IndexType.VECTOR, IndexParamType.COMMON, VectorIndexParams.CommonIndexParamKey.INDEX_BUILD_THRESHOLD,
                 false, false, null, null);
+        register(builder, IndexType.VECTOR, IndexParamType.COMMON, VectorIndexParams.CommonIndexParamKey.INDEX_BUILD_MODE,
+                false, false, null, null);
 
         // index
         register(builder, IndexType.VECTOR, IndexParamType.INDEX, VectorIndexParams.IndexParamsKey.M, false, true, "16", null);
@@ -67,6 +69,14 @@ public class IndexParams {
                 null);
         register(builder, IndexType.VECTOR, IndexParamType.INDEX, VectorIndexParams.IndexParamsKey.M_IVFPQ, false, false, null,
                 null);
+        // HNSW quantizer parameters (all optional; omission == flat, preserving
+        // backward compatibility with indexes built before quantization existed).
+        register(builder, IndexType.VECTOR, IndexParamType.INDEX, VectorIndexParams.IndexParamsKey.QUANTIZER,
+                false, false, null, null);
+        register(builder, IndexType.VECTOR, IndexParamType.INDEX, VectorIndexParams.IndexParamsKey.M_PQ,
+                false, false, null, null);
+        register(builder, IndexType.VECTOR, IndexParamType.INDEX, VectorIndexParams.IndexParamsKey.NBITS_PQ,
+                false, false, null, null);
 
         // search
         register(builder, IndexType.VECTOR, IndexParamType.SEARCH, VectorIndexParams.SearchParamsKey.EFSEARCH, false, false, null,

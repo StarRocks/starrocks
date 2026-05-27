@@ -20,6 +20,7 @@
 #include <curl/curl.h>
 
 #include <cstdio>
+#include <functional>
 #include <string>
 #include <unordered_map>
 
@@ -27,8 +28,7 @@
 #include "common/statusor.h"
 #include "http/http_headers.h"
 #include "http/http_method.h"
-#include "http/http_response.h"
-#include "http/utils.h"
+
 namespace starrocks {
 
 // Helper class to access HTTP resource
@@ -94,6 +94,26 @@ public:
         curl_easy_setopt(_curl, CURLOPT_SSL_VERIFYPEER, 0L);
         curl_easy_setopt(_curl, CURLOPT_SSL_VERIFYHOST, 0L);
     }
+
+    // Pin DNS resolution to a specific IP address to prevent DNS rebinding attacks
+    // Format: "hostname:port:ip_address" (e.g., "example.com:443:93.184.216.34")
+    // This forces curl to use the specified IP for the given hostname, bypassing DNS resolution
+    void set_resolve_host(const std::string& resolve_entry);
+
+    // Control whether HTTP error status codes (4xx, 5xx) should cause curl to fail
+    // When set to false, the response body will be returned even for HTTP errors
+    void set_fail_on_error(bool fail) { curl_easy_setopt(_curl, CURLOPT_FAILONERROR, fail ? 1L : 0L); }
+
+    // Override the HTTP method string without changing curl's transfer
+    // semantics. Use this when you need PUT with an inline body via
+    // set_payload() -- set_method(PUT) sets CURLOPT_UPLOAD which
+    // conflicts with CURLOPT_POSTFIELDS used by set_payload().
+    void set_custom_method(const char* method) { curl_easy_setopt(_curl, CURLOPT_CUSTOMREQUEST, method); }
+
+    // Control whether to follow HTTP redirects (3xx responses)
+    // Default is true (follow redirects). Set to false to disable redirect following,
+    // which is important for SSRF protection in http_request() function.
+    void set_follow_redirects(bool follow) { curl_easy_setopt(_curl, CURLOPT_FOLLOWLOCATION, follow ? 1L : 0L); }
     // used to get content length
     int64_t get_content_length() const {
         // CURLINFO_CONTENT_LENGTH_DOWNLOAD is deprecated since v7.55.0
@@ -114,10 +134,6 @@ public:
         set_method(HEAD);
         return execute();
     }
-
-    // helper function to download a file, you can call this function to downlaod
-    // a file to local_path
-    StatusOr<uint64_t> download(const std::string& local_path);
 
     Status download(const std::function<Status(const void* data, size_t length)>& callback,
                     int32_t min_speed_limit_kbps, int32_t min_speed_time_sec, int32_t max_speed_limit_kbps);
@@ -146,6 +162,7 @@ private:
     const HttpCallback* _callback = nullptr;
     char _error_buf[CURL_ERROR_SIZE];
     curl_slist* _header_list = nullptr;
+    curl_slist* _resolve_list = nullptr; // For CURLOPT_RESOLVE (DNS pinning to prevent rebinding)
 
     // Store headers for easy management
     std::unordered_map<std::string, std::string> _headers;

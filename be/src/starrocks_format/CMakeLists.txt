@@ -24,7 +24,7 @@ set(STARROCKS_LIBS
     ${WL_START_GROUP}
     Base
     Common
-    Column
+    ChunkCore
     ColumnCore
     Connector
     Exec
@@ -33,20 +33,20 @@ set(STARROCKS_LIBS
     FileSystem
     FSCore
     Formats
+    orc
     Gutil
+    HttpCore
     IO
     Serde
     Storage
     Rowset
     Runtime
     RuntimeCore
-    TypesCore
     Types
     Util
     Script
     StarRocksGen
     Webserver
-    TestUtil
     Cache
     ${WL_END_GROUP}
 )

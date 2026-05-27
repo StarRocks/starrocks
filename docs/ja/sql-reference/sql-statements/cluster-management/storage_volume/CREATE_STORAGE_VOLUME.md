@@ -61,7 +61,8 @@ import Beta from '../../../../_assets/commonMarkdown/_beta.mdx'
 | azure.adls2.sas_token                | Azure Data Lake Storage Gen2 へのリクエストを承認するために使用される共有アクセス署名 (SAS) です。 |
 | azure.adls2.oauth2_use_managed_identity | Azure Data Lake Storage Gen2 へのリクエストを認証するために Managed Identity を使用するかどうか。デフォルト: `false`。|
 | azure.adls2.oauth2_tenant_id        | Azure Data Lake Storage Gen2 へのリクエストを認証するために使用される Managed Identity の Tenant ID。 |
-| azure.adls2.oauth2_client_id        | Azure Data Lake Storage Gen2 へのリクエストを認証するために使用される Managed Identity の Client ID。 |
+| azure.adls2.oauth2_client_id        | <ul><li>マネージド ID 認証の場合：Azure Data Lake Storage Gen2 へのリクエストを認証するために使用される Managed Identity の Client ID。</li><li>ワークロード ID 認証の場合：ワークロード ID に関連付けられている Azure AD アプリケーション（ユーザー割り当ての マネージド ID またはアプリ登録）のクライアント ID（アプリケーション ID）。</li></ul> |
+| azure.adls2.oauth2_token_file       | Azure ワークロード ID ウェブフックによってポッドにマッピングされた、OAuth2 トークンファイルへの絶対ファイルパス。 |
 | gcp.gcs.service_account_email	      | Service Account 作成時に生成された JSON ファイル内のメールアドレスです。例：`user@hello.iam.gserviceaccount.com`。 |
 | gcp.gcs.service_account_private_key_id | Service Account 作成時に生成された JSON ファイル内の秘密鍵 ID です。 |
 | gcp.gcs.service_account_private_key | Service Account 作成時に生成された JSON ファイル内の秘密鍵です。例：`-----BEGIN PRIVATE KEY----xxxx-----END PRIVATE KEY-----\n`。 |
@@ -207,6 +208,16 @@ Azure Data Lake Storage Gen2 でのストレージボリュームの作成は v3
   "azure.adls2.oauth2_client_id" = "<client_id>" 
   ```
 
+- ワークロード ID を使用して Azure Data Lake Storage Gen2 にアクセスする場合、次のプロパティを設定します：
+
+  ```SQL
+  "enabled" = "{ true | false }",
+  "azure.adls2.endpoint" = "<endpoint_url>",
+  "azure.adls2.oauth2_token_file" = "<path_to_token>",
+  "azure.adls2.oauth2_tenant_id" = "<service_principal_tenant_id>",
+  "azure.adls2.oauth2_client_id" = "<service_client_id>"
+  ```
+
 :::note
 Azure Data Lake Storage Gen1 はサポートされていません。
 :::
@@ -244,7 +255,7 @@ Azure Data Lake Storage Gen1 はサポートされていません。
 - IAM ユーザーベース認証で S3 プロトコルを使用して Google Storage にアクセスする場合（v3.5.1 からサポート）、次のプロパティを設定します：
 
   :::tip 
-  Google Storage は [XML API](https://cloud.google.com/storage/docs/interoperability) を使用してサポートされており、設定は AWS S3 の構文を使用する。この場合、`TYPE` を `S3` に、`LOCATIONS` を S3 プロトコルと互換性のあるストレージのロケーションに設定する必要がある。
+  Google Storage は [XML API](https://docs.cloud.google.com/storage/docs/interoperability) を使用してサポートされており、設定は AWS S3 の構文を使用する。この場合、`TYPE` を `S3` に、`LOCATIONS` を S3 プロトコルと互換性のあるストレージのロケーションに設定する必要がある。
   :::
 
   ```SQL

@@ -98,6 +98,7 @@ import com.starrocks.common.io.Writable;
 import com.starrocks.common.mv.MaterializedViewDependencyGraph;
 import com.starrocks.common.util.Daemon;
 import com.starrocks.common.util.FrontendDaemon;
+import com.starrocks.common.util.LeaderDaemon;
 import com.starrocks.common.util.LogUtil;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.SmallFileMgr;
@@ -144,6 +145,7 @@ import com.starrocks.lake.compaction.CompactionMgr;
 import com.starrocks.lake.snapshot.ClusterSnapshotMgr;
 import com.starrocks.lake.vacuum.AutovacuumDaemon;
 import com.starrocks.lake.vacuum.FullVacuumDaemon;
+import com.starrocks.lake.vector.VectorIndexBuildScheduler;
 import com.starrocks.leader.CheckpointController;
 import com.starrocks.leader.ReportHandler;
 import com.starrocks.leader.TabletCollector;
@@ -199,6 +201,7 @@ import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.ShowExecutor;
 import com.starrocks.qe.SimpleScheduler;
 import com.starrocks.qe.VariableMgr;
+import com.starrocks.qe.scheduler.Deployer;
 import com.starrocks.qe.scheduler.slot.BaseSlotManager;
 import com.starrocks.qe.scheduler.slot.GlobalSlotProvider;
 import com.starrocks.qe.scheduler.slot.LocalSlotProvider;
@@ -210,7 +213,6 @@ import com.starrocks.rpc.ThriftRPCRequestExecutor;
 import com.starrocks.scheduler.MVActiveChecker;
 import com.starrocks.scheduler.TaskManager;
 import com.starrocks.scheduler.history.TableKeeper;
-import com.starrocks.scheduler.mv.MVJobExecutor;
 import com.starrocks.scheduler.mv.MaterializedViewMgr;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.Authorizer;
@@ -277,9 +279,10 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Future;
-import java.util.concurrent.FutureTask;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -333,12 +336,12 @@ public class GlobalStateMgr {
     private final DatabaseQuotaRefresher updateDbUsedDataQuotaDaemon;
 
     private FrontendDaemon labelCleaner; // To clean old LabelInfo, ExportJobInfos
-    private FrontendDaemon txnTimeoutChecker; // To abort timeout txns
+    private LeaderDaemon txnTimeoutChecker; // To abort timeout txns
     private FrontendDaemon taskCleaner;   // To clean expire Task/TaskRun
     private FrontendDaemon tableKeeper;   // Maintain internal history tables
     private JournalWriter journalWriter; // leader only: write journal log
     private Daemon replayer;
-    private Daemon timePrinter;
+    private LeaderDaemon timePrinter;
     private final EsRepository esRepository;  // it is a daemon, so add it here
     private final MetastoreEventsProcessor metastoreEventsProcessor;
     private final ConnectorTableMetadataProcessor connectorTableMetadataProcessor;
@@ -353,6 +356,12 @@ public class GlobalStateMgr {
 
     // True indicates that the node is transferring to the leader, using this state avoids forwarding stmt to its own node.
     private volatile boolean isInTransferringToLeader = false;
+    private final AtomicLong leaderGeneration = new AtomicLong(0L);
+    private final AtomicBoolean leaderWorkAdmissionOpen = new AtomicBoolean(false);
+    private volatile LeaderLease activeLeaderLease = LeaderLease.INVALID;
+    private volatile LeaderRoleState leaderRoleState = LeaderRoleState.INACTIVE;
+    private volatile FrontendNodeType pendingDemotionTargetType;
+    private volatile long leaderRoleStateSinceMs = System.currentTimeMillis();
 
     // false if default_warehouse is not created.
     private boolean isDefaultWarehouseCreated = false;
@@ -377,6 +386,7 @@ public class GlobalStateMgr {
     private CheckpointController checkpointController;
     private CheckpointWorker checkpointWorker;
     private boolean checkpointWorkerStarted = false;
+    private boolean deployerListenerRegistered = false;
 
     private HAProtocol haProtocol = null;
 
@@ -423,7 +433,6 @@ public class GlobalStateMgr {
     private final RoutineLoadScheduler routineLoadScheduler;
     private final RoutineLoadTaskScheduler routineLoadTaskScheduler;
 
-    private final MVJobExecutor mvMVJobExecutor;
 
     private final SmallFileMgr smallFileMgr;
 
@@ -475,6 +484,9 @@ public class GlobalStateMgr {
 
     // For LakeTable
     private final CompactionMgr compactionMgr;
+
+    // For async vector index build
+    private VectorIndexBuildScheduler vectorIndexBuildScheduler;
 
     // For compaction forbidden policy
     private final CompactionControlScheduler compactionControlScheduler;
@@ -532,6 +544,8 @@ public class GlobalStateMgr {
     private final DDLStmtExecutor ddlStmtExecutor;
     private final ShowExecutor showExecutor;
     private final ExecutorService queryDeployExecutor;
+    private final ThreadPoolExecutor refreshOtherFeDispatchExecutor;
+    private final ThreadPoolExecutor refreshOtherFeRpcExecutor;
     private final WarehouseIdleChecker warehouseIdleChecker;
 
     private final ClusterSnapshotMgr clusterSnapshotMgr;
@@ -547,6 +561,20 @@ public class GlobalStateMgr {
     private JwkMgr jwkMgr;
 
     private final TabletReshardJobMgr tabletReshardJobMgr;
+
+    enum LeaderRoleState {
+        // This FE is not serving leader-only work. It may be a follower/observer,
+        // or a previous leader activation attempt may have been rolled back.
+        INACTIVE,
+        // Leader activation is in progress. Journal/open/fencing related steps are
+        // still being initialized, so leader-only work must not be admitted yet.
+        ACTIVATING,
+        // Leader activation has completed and this FE can admit new leader-only work.
+        ACTIVE,
+        // Leader demotion has started. New leader-only work must be rejected and
+        // in-flight work should treat the current lease as expired.
+        DEMOTING
+    }
 
     public NodeMgr getNodeMgr() {
         return nodeMgr;
@@ -623,6 +651,10 @@ public class GlobalStateMgr {
 
     public CompactionMgr getCompactionMgr() {
         return compactionMgr;
+    }
+
+    public VectorIndexBuildScheduler getVectorIndexBuildScheduler() {
+        return vectorIndexBuildScheduler;
     }
 
     public CompactionControlScheduler getCompactionControlScheduler() {
@@ -755,8 +787,6 @@ public class GlobalStateMgr {
         this.lockChecker = new LockChecker();
         this.routineLoadScheduler = new RoutineLoadScheduler(routineLoadMgr);
         this.routineLoadTaskScheduler = new RoutineLoadTaskScheduler(routineLoadMgr);
-        this.mvMVJobExecutor = new MVJobExecutor();
-
         this.smallFileMgr = new SmallFileMgr();
 
         this.dynamicPartitionScheduler = new DynamicPartitionScheduler("DynamicPartitionScheduler",
@@ -793,6 +823,7 @@ public class GlobalStateMgr {
             this.storageVolumeMgr = new SharedDataStorageVolumeMgr();
             this.autovacuumDaemon = new AutovacuumDaemon();
             this.fullVacuumDaemon = new FullVacuumDaemon();
+            this.vectorIndexBuildScheduler = new VectorIndexBuildScheduler();
         } else {
             this.storageVolumeMgr = new SharedNothingStorageVolumeMgr();
         }
@@ -865,6 +896,17 @@ public class GlobalStateMgr {
         this.queryDeployExecutor =
                 ThreadPoolManager.newDaemonFixedThreadPool(Config.query_deploy_threadpool_size, Integer.MAX_VALUE,
                         "query-deploy", true);
+        this.refreshOtherFeDispatchExecutor = ThreadPoolManager.newDaemonFixedThreadPool(
+                Config.refresh_other_fe_dispatch_executor_thread_num,
+                Math.max(16, Config.refresh_other_fe_dispatch_executor_thread_num * 4),
+                "refresh-other-fe-dispatch",
+                true);
+        this.refreshOtherFeRpcExecutor = ThreadPoolManager.newDaemonFixedThreadPool(
+                Config.refresh_other_fe_rpc_executor_thread_num,
+                Math.max(16, Config.refresh_other_fe_rpc_executor_thread_num * 4),
+                "refresh-other-fe-rpc",
+                true);
+        getConfigRefreshDaemon().registerListener(this::refreshOtherFeExecutorConfig);
 
         this.warehouseIdleChecker = new WarehouseIdleChecker();
 
@@ -874,6 +916,28 @@ public class GlobalStateMgr {
         this.jwkMgr = new JwkMgr();
 
         this.tabletReshardJobMgr = new TabletReshardJobMgr();
+    }
+
+    private void refreshOtherFeExecutorConfig() {
+        try {
+            if (Config.refresh_other_fe_dispatch_executor_thread_num > 0) {
+                ThreadPoolManager.setFixedThreadPoolSize(
+                        refreshOtherFeDispatchExecutor, Config.refresh_other_fe_dispatch_executor_thread_num);
+            } else {
+                LOG.warn("ignore invalid config refresh_other_fe_dispatch_executor_thread_num={}",
+                        Config.refresh_other_fe_dispatch_executor_thread_num);
+            }
+
+            if (Config.refresh_other_fe_rpc_executor_thread_num > 0) {
+                ThreadPoolManager.setFixedThreadPoolSize(
+                        refreshOtherFeRpcExecutor, Config.refresh_other_fe_rpc_executor_thread_num);
+            } else {
+                LOG.warn("ignore invalid config refresh_other_fe_rpc_executor_thread_num={}",
+                        Config.refresh_other_fe_rpc_executor_thread_num);
+            }
+        } catch (Exception e) {
+            LOG.warn("failed to refresh refresh-other-FE executor config", e);
+        }
     }
 
     public static void destroyCheckpoint() {
@@ -1305,6 +1369,8 @@ public class GlobalStateMgr {
             initDefaultWarehouse();
         }
 
+        beginLeaderActivation();
+
         // set this after replay thread stopped. to avoid replay thread modify them.
         isReady.set(false);
 
@@ -1332,6 +1398,8 @@ public class GlobalStateMgr {
         dominationStartTimeMs = System.currentTimeMillis();
 
         try {
+            publishLeaderLease(getEpoch());
+
             if (Config.bdbje_reset_election_group || nodeMgr.isFirstTimeStartUp()) {
                 nodeMgr.resetFrontends();
             }
@@ -1375,8 +1443,14 @@ public class GlobalStateMgr {
             checkCaseInsensitive();
         } catch (StarRocksException e) {
             LOG.warn("Failed to set ENABLE_ADAPTIVE_SINK_DOP", e);
+            if (!isReady.get()) {
+                rollbackLeaderActivation();
+                feType = oldType;
+                throw new RuntimeException("transfer to leader failed", e);
+            }
         } catch (Throwable t) {
             LOG.warn("transfer to leader failed with error", t);
+            rollbackLeaderActivation();
             feType = oldType;
             throw t;
         }
@@ -1401,6 +1475,95 @@ public class GlobalStateMgr {
     public void setFrontendNodeType(FrontendNodeType newType) {
         // just for test, don't call it directly
         feType = newType;
+    }
+
+    @VisibleForTesting
+    void beginLeaderActivation() {
+        leaderWorkAdmissionOpen.set(false);
+        activeLeaderLease = LeaderLease.INVALID;
+        pendingDemotionTargetType = null;
+        updateLeaderRoleState(LeaderRoleState.ACTIVATING);
+    }
+
+    @VisibleForTesting
+    void publishLeaderLease(long haEpoch) {
+        Preconditions.checkState(haEpoch >= 0, "leader epoch must be non-negative, actual: %s", haEpoch);
+        Preconditions.checkState(feType == FrontendNodeType.LEADER,
+                "can only publish leader lease when FE type is LEADER, actual: %s", feType);
+        Preconditions.checkState(leaderRoleState == LeaderRoleState.ACTIVATING,
+                "can only publish leader lease during activation, actual state: %s", leaderRoleState);
+        long generation = leaderGeneration.incrementAndGet();
+        activeLeaderLease = new LeaderLease(haEpoch, generation);
+        leaderWorkAdmissionOpen.set(true);
+        pendingDemotionTargetType = null;
+        updateLeaderRoleState(LeaderRoleState.ACTIVE);
+    }
+
+    @VisibleForTesting
+    void rollbackLeaderActivation() {
+        leaderWorkAdmissionOpen.set(false);
+        activeLeaderLease = LeaderLease.INVALID;
+        pendingDemotionTargetType = null;
+        updateLeaderRoleState(LeaderRoleState.INACTIVE);
+    }
+
+    @VisibleForTesting
+    void beginLeaderDemotion(FrontendNodeType targetType) {
+        leaderWorkAdmissionOpen.set(false);
+        leaderGeneration.incrementAndGet();
+        activeLeaderLease = LeaderLease.INVALID;
+        pendingDemotionTargetType = targetType;
+        updateLeaderRoleState(LeaderRoleState.DEMOTING);
+    }
+
+    public LeaderLease captureLeaderLease() {
+        return activeLeaderLease;
+    }
+
+    public LeaderLease captureLeaderLeaseOrThrow() {
+        LeaderLease lease = activeLeaderLease;
+        Preconditions.checkState(isLeaderLeaseValid(lease),
+                "leader lease is not available. feType=%s, state=%s, admissionOpen=%s, lease=%s",
+                feType, leaderRoleState, leaderWorkAdmissionOpen.get(), lease);
+        return lease;
+    }
+
+    public boolean isLeaderLeaseValid(LeaderLease lease) {
+        return lease != null
+                && lease.isValid()
+                && lease.equals(activeLeaderLease)
+                && leaderWorkAdmissionOpen.get()
+                && feType == FrontendNodeType.LEADER
+                && leaderRoleState == LeaderRoleState.ACTIVE;
+    }
+
+    public void checkLeaderLease(LeaderLease lease) {
+        Preconditions.checkState(isLeaderLeaseValid(lease),
+                "leader lease is stale. expected=%s, actual=%s, state=%s, admissionOpen=%s",
+                lease, activeLeaderLease, leaderRoleState, leaderWorkAdmissionOpen.get());
+    }
+
+    public boolean isLeaderWorkAdmissionOpen() {
+        return leaderWorkAdmissionOpen.get();
+    }
+
+    public boolean isLeaderDemoting() {
+        return leaderRoleState == LeaderRoleState.DEMOTING;
+    }
+
+    @VisibleForTesting
+    LeaderRoleState getLeaderRoleState() {
+        return leaderRoleState;
+    }
+
+    @VisibleForTesting
+    FrontendNodeType getPendingDemotionTargetType() {
+        return pendingDemotionTargetType;
+    }
+
+    private void updateLeaderRoleState(LeaderRoleState newState) {
+        leaderRoleState = newState;
+        leaderRoleStateSinceMs = System.currentTimeMillis();
     }
 
     // start all daemon threads only running on Master
@@ -1470,7 +1633,6 @@ public class GlobalStateMgr {
         statisticAutoCollector.start();
         taskManager.start();
         taskCleaner.start();
-        mvMVJobExecutor.start();
         pipeListener.start();
         pipeScheduler.start();
         mvActiveChecker.start();
@@ -1491,6 +1653,8 @@ public class GlobalStateMgr {
             starMgrMetaSyncer.start();
             autovacuumDaemon.start();
             fullVacuumDaemon.start();
+
+            vectorIndexBuildScheduler.start();
         }
 
         if (Config.enable_safe_mode) {
@@ -1514,6 +1678,66 @@ public class GlobalStateMgr {
 
         if (RunMode.isSharedDataMode()) {
             tabletReshardJobMgr.start();
+        }
+    }
+
+    /**
+     * Symmetric counterpart to {@link #startLeaderOnlyDaemonThreads()}. Stops the leader-only
+     * daemons that have been migrated to {@link com.starrocks.common.util.LeaderDaemon}, in reverse
+     * start order, so leader-session state is released promptly during demotion and the FE
+     * singletons become reusable when this node is re-elected.
+     *
+     * TODO: migrate the remaining {@code Daemon}-based leader tasks and add them here.
+     */
+    void stopLeaderOnlyDaemonThreads() {
+        long timeoutMs = Math.max(1000L, Config.leader_demotion_drain_timeout_sec * 1000L);
+        // Stop in the reverse order of startLeaderOnlyDaemonThreads().
+        stopOne("tabletCollector", () -> tabletCollector.stopGracefully(timeoutMs));
+        stopOne("reportHandler", () -> reportHandler.stopGracefully(timeoutMs));
+        stopOne("temporaryTableCleaner", () -> temporaryTableCleaner.stopGracefully(timeoutMs));
+        stopOne("metaRecoveryDaemon", () -> metaRecoveryDaemon.stopGracefully(timeoutMs));
+        stopOne("replicationMgr", () -> replicationMgr.stopGracefully(timeoutMs));
+        stopOne("safeModeChecker", () -> safeModeChecker.stopGracefully(timeoutMs));
+        stopOne("spmAutoCapturer", () -> spmAutoCapturer.stopGracefully(timeoutMs));
+        stopOne("mvActiveChecker", () -> mvActiveChecker.stopGracefully(timeoutMs));
+        stopOne("statisticAutoCollector", () -> statisticAutoCollector.stopGracefully(timeoutMs));
+        stopOne("statisticsMetaManager", () -> statisticsMetaManager.stopGracefully(timeoutMs));
+        stopOne("updateDbUsedDataQuotaDaemon", () -> updateDbUsedDataQuotaDaemon.stopGracefully(timeoutMs));
+        stopOne("dynamicPartitionScheduler", () -> dynamicPartitionScheduler.stopGracefully(timeoutMs));
+        stopOne("batchWriteMgr", () -> batchWriteMgr.stopGracefully(timeoutMs));
+        stopOne("routineLoadTaskScheduler", () -> routineLoadTaskScheduler.stopGracefully(timeoutMs));
+        stopOne("routineLoadScheduler", () -> routineLoadScheduler.stopGracefully(timeoutMs));
+        if (timePrinter != null) {
+            stopOne("timePrinter", () -> timePrinter.stopGracefully(timeoutMs));
+        }
+        stopOne("recycleBin", () -> getRecycleBin().stopGracefully(timeoutMs));
+        stopOne("backupHandler", () -> getBackupHandler().stopGracefully(timeoutMs));
+        stopOne("consistencyChecker", () -> consistencyChecker.stopGracefully(timeoutMs));
+        stopOne("alterJobMgr", () -> getAlterJobMgr().stopGracefully(timeoutMs));
+        if (txnTimeoutChecker != null) {
+            stopOne("txnTimeoutChecker", () -> txnTimeoutChecker.stopGracefully(timeoutMs));
+        }
+        stopOne("publishVersionDaemon", () -> publishVersionDaemon.stopGracefully(timeoutMs));
+        stopOne("loadLoadingChecker", () -> loadLoadingChecker.stopGracefully(timeoutMs));
+        stopOne("loadEtlChecker", () -> loadEtlChecker.stopGracefully(timeoutMs));
+        stopOne("loadsHistorySyncer", () -> loadsHistorySyncer.stopGracefully(timeoutMs));
+        stopOne("loadTimeoutChecker", () -> loadTimeoutChecker.stopGracefully(timeoutMs));
+        stopOne("loadJobScheduler", () -> loadJobScheduler.stopGracefully(timeoutMs));
+        if (!RunMode.isSharedDataMode()) {
+            stopOne("colocateTableBalancer",
+                    () -> ColocateTableBalancer.getInstance().stopGracefully(timeoutMs));
+            stopOne("tabletScheduler", () -> tabletScheduler.stopGracefully(timeoutMs));
+            stopOne("tabletChecker", () -> tabletChecker.stopGracefully(timeoutMs));
+        }
+        stopOne("heartbeatMgr", () -> heartbeatMgr.stopGracefully(timeoutMs));
+        stopOne("keyRotationDaemon", () -> keyRotationDaemon.stopGracefully(timeoutMs));
+    }
+
+    private void stopOne(String name, Runnable action) {
+        try {
+            action.run();
+        } catch (Throwable t) {
+            LOG.warn("stop {} failed", name, t);
         }
     }
 
@@ -1547,6 +1771,12 @@ public class GlobalStateMgr {
         if (RunMode.isSharedDataMode()) {
             compactionMgr.start();
             StarMgrServer.getCurrentState().startCheckpointWorker();
+        }
+        // Register listeners that need a fully-constructed GlobalStateMgr (e.g. classes whose
+        // own static initializer transitively touches MetricRepo / getCurrentState()).
+        if (!deployerListenerRegistered) {
+            Deployer.registerConfigListener(configRefreshDaemon);
+            deployerListenerRegistered = true;
         }
         configRefreshDaemon.start();
 
@@ -1587,6 +1817,13 @@ public class GlobalStateMgr {
         if (!isDefaultWarehouseCreated) {
             // A brand-new cluster was up for the first time, the follower/observer node initializes its default warehouse here.
             initDefaultWarehouse();
+        }
+
+        // If this node was serving as LEADER, cleanly stop leader-only daemons before taking on
+        // the new role. Runs after the admission fence is closed by the demotion orchestrator so
+        // no new leader-side work can enter while cleanup is in flight.
+        if (feType == FrontendNodeType.LEADER) {
+            stopLeaderOnlyDaemonThreads();
         }
 
         // transfer from INIT/UNKNOWN to OBSERVER/FOLLOWER
@@ -1939,10 +2176,10 @@ public class GlobalStateMgr {
     }
 
     public void createTxnTimeoutChecker() {
-        txnTimeoutChecker = new FrontendDaemon("txnTimeoutChecker",
+        txnTimeoutChecker = new LeaderDaemon("txnTimeoutChecker",
                 Config.transaction_clean_interval_second * 1000L) {
             @Override
-            protected void runAfterCatalogReady() {
+            protected void runAfterLeaseValid() {
                 globalTransactionMgr.abortTimeoutTxns();
 
                 try {
@@ -2232,9 +2469,9 @@ public class GlobalStateMgr {
 
     public void createTimePrinter() {
         // time printer will write timestamp edit log every 10 seconds
-        timePrinter = new FrontendDaemon("timePrinter", 10 * 1000L) {
+        timePrinter = new LeaderDaemon("timePrinter", 10 * 1000L) {
             @Override
-            protected void runAfterCatalogReady() {
+            protected void runAfterLeaseValid() {
                 Timestamp stamp = new Timestamp();
                 editLog.logTimestamp(stamp);
             }
@@ -2398,6 +2635,11 @@ public class GlobalStateMgr {
         return feType == FrontendNodeType.LEADER;
     }
 
+    @VisibleForTesting
+    long getLeaderRoleStateSinceMs() {
+        return leaderRoleStateSinceMs;
+    }
+
     public void setSynchronizedTime(long time) {
         this.synchronizedTimeMs = time;
     }
@@ -2546,6 +2788,11 @@ public class GlobalStateMgr {
         refreshOthersFeTable(tableName, partitionNames, true);
     }
 
+    /**
+     * Refresh external table metadata on every peer FE and wait for all peer RPCs to finish.
+     * This method is synchronous from the caller's perspective, while the per-peer RPC fan-out
+     * is still bounded by {@code refreshOtherFeRpcExecutor}.
+     */
     public void refreshOthersFeTable(TableName tableName, List<String> partitions, boolean isSync) throws DdlException {
         List<Frontend> allFrontends = GlobalStateMgr.getCurrentState().getNodeMgr().getFrontends(null);
         if (allFrontends.size() == 0) {
@@ -2557,8 +2804,7 @@ public class GlobalStateMgr {
                 continue;
             }
 
-            resultMap.put(fe.getHost(), refreshOtherFesTable(
-                    new TNetworkAddress(fe.getHost(), fe.getRpcPort()), tableName, partitions));
+            resultMap.put(fe.getHost(), submitRefreshOtherFeRpc(fe, tableName, partitions));
         }
 
         String errMsg = "";
@@ -2586,8 +2832,47 @@ public class GlobalStateMgr {
         }
     }
 
-    public Future<TStatus> refreshOtherFesTable(TNetworkAddress thriftAddress, TableName tableName,
-                                                List<String> partitions) {
+    /**
+     * Enqueue a background "refresh other FE" job and return immediately to the caller.
+     * The dispatched task eventually reuses {@link #refreshOthersFeTable(TableName, List, boolean)}
+     * so asynchronous and synchronous refreshes share the same peer RPC concurrency limit.
+     */
+    public Future<?> refreshOthersFeTableAsync(TableName tableName, List<String> partitions) {
+        List<String> partitionsSnapshot = partitions == null ? List.of() : new ArrayList<>(partitions);
+        try {
+            return refreshOtherFeDispatchExecutor.submit(() -> {
+                try {
+                    refreshOthersFeTable(tableName, partitionsSnapshot, false);
+                } catch (Throwable t) {
+                    LOG.error("Async refresh others fe failed on {}.{}.{} with partitions {}",
+                            tableName.getCatalog(), tableName.getDb(), tableName.getTbl(), partitionsSnapshot, t);
+                }
+            });
+        } catch (RejectedExecutionException e) {
+            LOG.error("Async refresh others fe dispatch rejected on {}.{}.{} with partitions {}",
+                    tableName.getCatalog(), tableName.getDb(), tableName.getTbl(), partitionsSnapshot, e);
+            return CompletableFuture.failedFuture(e);
+        }
+    }
+
+    private Future<TStatus> submitRefreshOtherFeRpc(Frontend fe, TableName tableName, List<String> partitions) {
+        TNetworkAddress thriftAddress = new TNetworkAddress(fe.getHost(), fe.getRpcPort());
+        try {
+            return refreshOtherFeRpcExecutor.submit(() -> refreshOtherFeTableRpc(thriftAddress, tableName, partitions));
+        } catch (RejectedExecutionException e) {
+            LOG.warn("Refresh other FE rpc enqueue rejected for {}", thriftAddress, e);
+            return CompletableFuture.completedFuture(buildRefreshOtherFeRejectedStatus(e));
+        }
+    }
+
+    private TStatus buildRefreshOtherFeRejectedStatus(RejectedExecutionException e) {
+        TStatus status = new TStatus(TStatusCode.INTERNAL_ERROR);
+        status.setError_msgs(Lists.newArrayList(e.getMessage()));
+        return status;
+    }
+
+    private TStatus refreshOtherFeTableRpc(TNetworkAddress thriftAddress, TableName tableName,
+                                           List<String> partitions) {
         int timeout;
         if (ConnectContext.get() == null || ConnectContext.get().getSessionVariable() == null) {
             timeout = Config.thrift_rpc_timeout_ms * 10;
@@ -2595,35 +2880,29 @@ public class GlobalStateMgr {
             timeout = ConnectContext.get().getExecTimeout() * 1000 + Config.thrift_rpc_timeout_ms;
         }
 
-        FutureTask<TStatus> task = new FutureTask<TStatus>(() -> {
-            TRefreshTableRequest request = new TRefreshTableRequest();
-            request.setCatalog_name(tableName.getCatalog());
-            request.setDb_name(tableName.getDb());
-            request.setTable_name(tableName.getTbl());
-            request.setPartitions(partitions);
-            try {
-                TRefreshTableResponse response = ThriftRPCRequestExecutor.call(
-                        ThriftConnectionPool.frontendPool,
-                        thriftAddress,
-                        timeout,
-                        client -> client.refreshTable(request));
-                return response.getStatus();
-            } catch (Exception e) {
-                LOG.warn("call fe {} refreshTable rpc method failed", thriftAddress, e);
-                TStatus status = new TStatus(TStatusCode.INTERNAL_ERROR);
-                status.setError_msgs(Lists.newArrayList(e.getMessage()));
-                return status;
-            }
-        });
-
-        new Thread(task).start();
-
-        return task;
+        TRefreshTableRequest request = new TRefreshTableRequest();
+        request.setCatalog_name(tableName.getCatalog());
+        request.setDb_name(tableName.getDb());
+        request.setTable_name(tableName.getTbl());
+        request.setPartitions(partitions);
+        try {
+            TRefreshTableResponse response = ThriftRPCRequestExecutor.call(
+                    ThriftConnectionPool.frontendPool,
+                    thriftAddress,
+                    timeout,
+                    client -> client.refreshTable(request));
+            return response.getStatus();
+        } catch (Exception e) {
+            LOG.warn("call fe {} refreshTable rpc method failed", thriftAddress, e);
+            TStatus status = new TStatus(TStatusCode.INTERNAL_ERROR);
+            status.setError_msgs(Lists.newArrayList(e.getMessage()));
+            return status;
+        }
     }
 
     private boolean supportRefreshTableType(Table table) {
         return table.isHiveTable() || table.isHudiTable() || table.isHiveView() || table.isIcebergTable()
-                || table.isJDBCTable() || table.isDeltalakeTable() || table.isPaimonTable();
+                || table.isJDBCTable() || table.isDeltalakeTable() || table.isPaimonTable() || table.isOdpsTable();
     }
 
     public void refreshExternalTable(ConnectContext context, TableName tableName, List<String> partitions) {

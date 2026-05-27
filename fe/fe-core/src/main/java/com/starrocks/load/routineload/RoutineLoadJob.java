@@ -315,6 +315,19 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
     protected ComputeResource computeResource = WarehouseManager.DEFAULT_RESOURCE;
 
     protected QueryableReentrantReadWriteLock lock = new QueryableReentrantReadWriteLock(true);
+
+    // Monotonically increased whenever `applyModifyJob` is called with a non-null
+    // RoutineLoadDataSourceProperties (i.e. any ALTER ROUTINE LOAD that carries a data-source
+    // clause), regardless of whether `modifyDataSourceProperties` actually mutated a field or
+    // threw. The conservative bump is intentional: a spurious bump only costs one extra
+    // scheduler refetch, while missing a bump could send stale-config fetch results into apply.
+    // Used by refreshPartitionsIfNeeded() to detect mid-flight ALTER and discard a stale fetch.
+    // Reads happen under read or write lock; writes happen under writeLock. Not persisted in the
+    // checkpoint image - reinitialized to 0 on image load, then re-incremented for each
+    // ALTER ROUTINE LOAD edit log entry replayed afterwards (so the post-restart value depends
+    // on replay). The absolute value carries no meaning across restarts; only monotonic
+    // comparison between a snapshot and its corresponding apply matters.
+    protected long dataSourceConfigVersion = 0;
     // TODO(ml): error sample
 
     // save the latest 3 error log urls
@@ -420,6 +433,9 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
             } else {
                 jobProperties.put(CreateRoutineLoadStmt.STRIP_OUTER_ARRAY, "false");
             }
+            if (!Strings.isNullOrEmpty(stmt.getEnvelope())) {
+                jobProperties.put(CreateRoutineLoadStmt.ENVELOPE, stmt.getEnvelope());
+            }
         } else if (stmt.getFormat().equals("avro")) {
             jobProperties.put(CreateRoutineLoadStmt.FORMAT, "avro");
             if (!Strings.isNullOrEmpty(stmt.getJsonPaths())) {
@@ -431,6 +447,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
         } else {
             throw new StarRocksException("Invalid format type.");
         }
+
         taskConsumeSecond = stmt.getTaskConsumeSecond();
         taskTimeoutSecond = stmt.getTaskTimeoutSecond();
 
@@ -719,6 +736,14 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
 
     public String getJsonRoot() {
         String value = jobProperties.get(CreateRoutineLoadStmt.JSONROOT);
+        if (value == null) {
+            return "";
+        }
+        return value;
+    }
+
+    public String getEnvelope() {
+        String value = jobProperties.get(CreateRoutineLoadStmt.ENVELOPE);
         if (value == null) {
             return "";
         }
@@ -1539,6 +1564,21 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
         }
 
         // check if partition has been changed
+        refreshPartitionsIfNeeded();
+    }
+
+    /**
+     * Refresh the per-job view of external partitions and trigger a reschedule if it changed.
+     *
+     * The default implementation runs the legacy `unprotectNeedReschedule` decision under the
+     * per-job writeLock. Subclasses whose decision requires a slow external call (e.g. a BE
+     * brpc to fetch broker metadata) should override this method and split the work into a
+     * snapshot phase under readLock, a fetch phase under no per-job lock, and an apply phase
+     * under writeLock that checks `dataSourceConfigVersion` to discard a stale result.
+     *
+     * Called by the single-threaded routine-load scheduler on each scheduler tick.
+     */
+    protected void refreshPartitionsIfNeeded() throws StarRocksException {
         writeLock();
         try {
             if (unprotectNeedReschedule()) {
@@ -1757,6 +1797,11 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
         sb.append("\"").append(CreateRoutineLoadStmt.JSONROOT).append("\"=\"");
         sb.append(getJsonRoot()).append("\",\n");
 
+        if (!Strings.isNullOrEmpty(getEnvelope())) {
+            sb.append("\"").append(CreateRoutineLoadStmt.ENVELOPE).append("\"=\"");
+            sb.append(getEnvelope()).append("\",\n");
+        }
+
         sb.append("\"").append(LoadStmt.STRICT_MODE).append("\"=\"");
         sb.append(isStrictMode()).append("\",\n");
 
@@ -1862,6 +1907,8 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
             } catch (DdlException e) {
                 LOG.error("modify data source properties failed", e);
             }
+            // Invalidate any in-flight partition-fetch snapshot.
+            ++dataSourceConfigVersion;
         }
     }
 

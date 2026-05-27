@@ -79,6 +79,7 @@ services:
       iceberg_net:
     environment:
       - HOST_TYPE=FQDN
+      - AWS_EC2_METADATA_DISABLED=true
 
   rest:
     image: apache/iceberg-rest-fixture

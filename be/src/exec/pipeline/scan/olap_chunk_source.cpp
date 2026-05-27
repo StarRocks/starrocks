@@ -22,6 +22,7 @@
 
 #include "base/string/string_parser.hpp"
 #include "cache/data_cache_hit_rate_counter.hpp"
+#include "column/chunk_factory.h"
 #include "column/column.h"
 #include "column/column_access_path.h"
 #include "column/field.h"
@@ -29,35 +30,43 @@
 #include "common/status.h"
 #include "common/statusor.h"
 #include "common/util/table_metrics.h"
+#include "exec/catalog_scan_metrics.h"
 #include "exec/olap_scan_node.h"
 #include "exec/olap_scan_prepare.h"
+#include "exec/pipeline/fragment_context.h"
+#include "exec/pipeline/query_context.h"
 #include "exec/pipeline/scan/glm_manager.h"
 #include "exec/pipeline/scan/olap_scan_context.h"
+#include "exec/pipeline/scan/scan_morsel.h"
 #include "exec/pipeline/scan/scan_operator.h"
+#include "exec/query_scan_metrics.h"
 #include "exec/workgroup/work_group.h"
 #include "exprs/chunk_predicate_evaluator.h"
 #include "exprs/jsonpath.h"
 #include "gen_cpp/Metrics_types.h"
 #include "gen_cpp/RuntimeProfile_types.h"
+#include "gutil/casts.h"
 #include "gutil/map_util.h"
 #include "io/io_profiler.h"
+#include "runtime/chunk_helper.h"
 #include "runtime/current_thread.h"
 #include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
 #include "runtime/global_dict/fragment_dict_state.h"
+#include "runtime/runtime_state.h"
 #include "storage/chunk_helper.h"
 #include "storage/column_predicate_rewriter.h"
 #include "storage/extends_column_utils.h"
+#include "storage/flat_json_metrics.h"
 #include "storage/index/vector/vector_search_option.h"
 #include "storage/metadata_util.h"
 #include "storage/predicate_parser.h"
-#include "storage/projection_iterator.h"
+#include "storage/primitive/projection_iterator.h"
 #include "storage/runtime_range_pruner.hpp"
 #include "storage/storage_engine.h"
 #include "storage/virtual_column_utils.h"
 #include "types/json_value.h"
 #include "types/logical_type.h"
-#include "util/global_metrics_registry.h"
 
 namespace starrocks::pipeline {
 
@@ -103,6 +112,7 @@ Status OlapChunkSource::prepare(RuntimeState* state) {
     _slots = &tuple_desc->slots();
 
     _runtime_profile->add_info_string("Table", tuple_desc->table_desc()->name());
+    _runtime_profile->add_info_string("Database", tuple_desc->table_desc()->database());
     if (thrift_olap_scan_node.__isset.rollup_name) {
         _runtime_profile->add_info_string("Rollup", thrift_olap_scan_node.rollup_name);
     }
@@ -536,8 +546,9 @@ Status OlapChunkSource::_init_olap_reader(RuntimeState* runtime_state) {
     std::vector<uint32_t> reader_columns;
 
     RETURN_IF_ERROR(_get_tablet(_scan_range));
-    _table_metrics = GlobalMetricsRegistry::instance()->table_metrics_mgr()->get_table_metrics(
-            _tablet->tablet_meta()->table_id());
+    if (auto* table_metrics_mgr = runtime_state->exec_env()->table_metrics_mgr(); table_metrics_mgr != nullptr) {
+        _table_metrics = table_metrics_mgr->get_table_metrics(_tablet->tablet_meta()->table_id());
+    }
 
     auto scope = IOProfiler::scope(IOProfiler::TAG_QUERY, _scan_range->tablet_id);
 
@@ -568,6 +579,13 @@ Status OlapChunkSource::_init_olap_reader(RuntimeState* runtime_state) {
     RETURN_IF_ERROR(_extend_schema_by_access_paths());
     ASSIGN_OR_RETURN(_tablet_schema, extend_schema_by_virtual_columns(_tablet_schema, *_slots));
     RETURN_IF_ERROR(_init_global_dicts(&_params));
+    // _init_global_dicts intersects the FE-level dict map with this scan's
+    // materialized tablet schema, so the resulting size counts columns that
+    // will actually flow through the encoded path on this scan instance.
+    if (_params.global_dictmaps != nullptr && !_params.global_dictmaps->empty()) {
+        _runtime_profile->add_info_string("GlobalDictOptApplied", "true");
+        _runtime_profile->add_info_string("GlobalDictAppliedSlots", std::to_string(_params.global_dictmaps->size()));
+    }
     RETURN_IF_ERROR(_init_glm(&_params));
     RETURN_IF_ERROR(_init_unused_output_columns(thrift_olap_scan_node.unused_output_column_name));
     RETURN_IF_ERROR(_init_reader_params(_scan_ctx->key_ranges()));
@@ -622,8 +640,8 @@ Status OlapChunkSource::_init_olap_reader(RuntimeState* runtime_state) {
 }
 
 Status OlapChunkSource::_read_chunk(RuntimeState* state, ChunkPtr* chunk) {
-    ASSIGN_OR_RETURN(auto chunk_ptr,
-                     ChunkHelper::new_chunk_pooled_checked(_prj_iter->output_schema(), _runtime_state->chunk_size()));
+    ASSIGN_OR_RETURN(auto chunk_ptr, RuntimeChunkHelper::new_chunk_pooled_checked(_prj_iter->output_schema(),
+                                                                                  _runtime_state->chunk_size()));
     chunk->reset(chunk_ptr);
     auto scope = IOProfiler::scope(IOProfiler::TAG_QUERY, _tablet->tablet_id());
     return _read_chunk_from_storage(_runtime_state, (*chunk).get());
@@ -830,13 +848,13 @@ void OlapChunkSource::_update_counter() {
                 "PushdownPredicateTree", _params.pred_tree.visit([](const auto& node) { return node.debug_string(); }));
     }
 
-    StarRocksMetrics::instance()->query_scan_bytes.increment(_scan_bytes);
-    StarRocksMetrics::instance()->query_scan_rows.increment(_scan_rows_num);
+    QueryScanMetrics::instance()->query_scan_bytes.increment(_scan_bytes);
+    QueryScanMetrics::instance()->query_scan_rows.increment(_scan_rows_num);
     _table_metrics->scan_read_bytes.increment(_scan_bytes);
     _table_metrics->scan_read_rows.increment(_scan_rows_num);
 
     // Update catalog scan metrics for internal table
-    auto* catalog_metrics = GlobalMetricsRegistry::instance()->catalog_scan_metrics();
+    auto* catalog_metrics = CatalogScanMetrics::instance();
     if (catalog_metrics != nullptr) {
         catalog_metrics->update_scan_bytes("default", _scan_bytes);
         catalog_metrics->update_scan_rows("default", _scan_rows_num);
@@ -886,6 +904,7 @@ void OlapChunkSource::_update_counter() {
             COUNTER_UPDATE(path_counter, v);
         }
         COUNTER_UPDATE(_access_path_hits_counter, total);
+        FlatJsonMetrics::instance()->flat_json_access_hit_total.increment(total);
     }
     if (_reader->stats().dynamic_json_hits.size() > 0) {
         std::string access_path_unhits = "AccessPathUnhits";
@@ -902,6 +921,7 @@ void OlapChunkSource::_update_counter() {
             COUNTER_UPDATE(path_counter, v);
         }
         COUNTER_UPDATE(_access_path_unhits_counter, total);
+        FlatJsonMetrics::instance()->flat_json_access_miss_total.increment(total);
     }
     if (_reader->stats().extract_json_hits.size() > 0) {
         const std::string counter_name = "AccessPathExtract";
@@ -927,14 +947,17 @@ void OlapChunkSource::_update_counter() {
     if (_reader->stats().json_cast_ns > 0) {
         RuntimeProfile::Counter* c = ADD_CHILD_TIMER(_runtime_profile, "FlatJsonCast", parent_name);
         COUNTER_UPDATE(c, _reader->stats().json_cast_ns);
+        FlatJsonMetrics::instance()->flat_json_cast_duration_ns_total.increment(_reader->stats().json_cast_ns);
     }
     if (_reader->stats().json_merge_ns > 0) {
         RuntimeProfile::Counter* c = ADD_CHILD_TIMER(_runtime_profile, "FlatJsonMerge", parent_name);
         COUNTER_UPDATE(c, _reader->stats().json_merge_ns);
+        FlatJsonMetrics::instance()->flat_json_merge_duration_ns_total.increment(_reader->stats().json_merge_ns);
     }
     if (_reader->stats().json_flatten_ns > 0) {
         RuntimeProfile::Counter* c = ADD_CHILD_TIMER(_runtime_profile, "FlatJsonFlatten", parent_name);
         COUNTER_UPDATE(c, _reader->stats().json_flatten_ns);
+        FlatJsonMetrics::instance()->flat_json_flatten_duration_ns_total.increment(_reader->stats().json_flatten_ns);
     }
 
     // Data sampling

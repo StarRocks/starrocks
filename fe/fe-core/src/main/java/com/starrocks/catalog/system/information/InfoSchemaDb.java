@@ -17,6 +17,8 @@ package com.starrocks.catalog.system.information;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.system.SystemId;
+import com.starrocks.catalog.system.SystemTable;
+import com.starrocks.common.Config;
 
 import static com.starrocks.catalog.InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME;
 import static com.starrocks.server.CatalogMgr.isInternalCatalog;
@@ -26,6 +28,12 @@ import static java.util.Objects.requireNonNull;
 public class InfoSchemaDb extends Database {
     public static final String DATABASE_NAME = "information_schema";
 
+    // Held outside nameToTable / idToTable to avoid colliding with the MySQL 8
+    // variants registered under the same name. Resolved per-query in getTable()
+    // based on the runtime-mutable Config.mysql_server_version.
+    private final SystemTable routinesV5;
+    private final SystemTable statisticsV5;
+
     public InfoSchemaDb() {
         this(DEFAULT_INTERNAL_CATALOG_NAME);
     }
@@ -34,6 +42,9 @@ public class InfoSchemaDb extends Database {
         super(SystemId.INFORMATION_SCHEMA_DB_ID, DATABASE_NAME);
         requireNonNull(catalogName, "catalogName is null");
         super.setCatalogName(catalogName);
+
+        this.routinesV5 = RoutinesSystemTable.createV5(catalogName);
+        this.statisticsV5 = StatisticsSystemTable.createV5(catalogName);
 
         super.registerTableUnlocked(TablesSystemTable.create(catalogName));
         super.registerTableUnlocked(PartitionsSystemTableSystemTable.create(catalogName));
@@ -46,6 +57,7 @@ public class InfoSchemaDb extends Database {
         super.registerTableUnlocked(ColumnsSystemTable.create(catalogName));
         super.registerTableUnlocked(CharacterSetsSystemTable.create(catalogName));
         super.registerTableUnlocked(CollationsSystemTable.create(catalogName));
+        super.registerTableUnlocked(CollationCharacterSetApplicabilitySystemTable.create(catalogName));
         super.registerTableUnlocked(TableConstraintsSystemTable.create(catalogName));
         super.registerTableUnlocked(EnginesSystemTable.create(catalogName));
         super.registerTableUnlocked(UserPrivilegesSystemTable.create(catalogName));
@@ -111,7 +123,27 @@ public class InfoSchemaDb extends Database {
 
     @Override
     public Table getTable(String name) {
-        return super.getTable(name.toLowerCase());
+        String lower = name.toLowerCase();
+        if (isLegacyMysqlVersion()) {
+            if ("routines".equals(lower)) {
+                return routinesV5;
+            }
+            if ("statistics".equals(lower)) {
+                return statisticsV5;
+            }
+        }
+        return super.getTable(lower);
+    }
+
+    // True when Config.mysql_server_version advertises a MySQL 5.x release. The
+    // config is @ConfField(mutable=true), so this is read per call and changes
+    // via ADMIN SET CONFIG take effect on the next query without restart.
+    private static boolean isLegacyMysqlVersion() {
+        String v = Config.mysql_server_version;
+        if (v == null || v.isEmpty()) {
+            return false;
+        }
+        return v.startsWith("5.") || v.equals("5");
     }
 
     public static boolean isInfoSchemaDb(String dbName) {

@@ -14,6 +14,7 @@ displayed_sidebar: docs
 
 ```Haskell
 cast(input as type)
+input :: type
 ```
 
 ## 参数说明
@@ -60,7 +61,25 @@ cast(input as type)
     +-----------------------+
 ```
 
-示例二：转换为 ARRAY 类型。
+示例二：使用 `::` 简写形式进行相同的转换。
+
+```Plain Text
+    select '9.5'::DECIMAL(10,2);
+    select NULL::INT;
+    select 1::BIGINT;
+    select '5'::INT::STRING;       -- 链式转换
+    select (1 + 2)::DECIMAL(10,2); -- 带括号的表达式
+```
+
+`::` 等价于 `CAST(input AS type)`，并使用 StarRocks 的 CAST 语义。
+
+:::warning
+
+如果视图或物化视图 DDL 使用 `::`，保存的原始定义中可能包含 `::`。这些定义与不支持该简写语法的旧版本 StarRocks 或工具不向后兼容。
+
+:::
+
+示例三：转换为 ARRAY 类型。
 
 ```Plain Text
     -- Convert string to ARRAY<ANY>.
@@ -117,7 +136,7 @@ cast(input as type)
     +--------------------------------------------------------------+
 ```
 
-示例三：导入中转换原始数据。
+示例四：导入中转换原始数据。
 
 ```bash
 curl --location-trusted -u <username>:<password> -T ~/user_data/bigint \

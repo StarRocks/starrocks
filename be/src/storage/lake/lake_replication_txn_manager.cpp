@@ -17,28 +17,29 @@
 #include <atomic>
 #include <mutex>
 
-#include "agent/agent_server.h"
-#include "agent/master_info.h"
 #include "base/testutil/sync_point.h"
 #include "base/utility/defer_op.h"
 #include "common/config_lake_fwd.h"
 #include "common/config_rowset_fwd.h"
+#include "common/system/master_info.h"
 #include "common/thread/threadpool.h"
 #include "fs/fs_factory.h"
 #include "fs/fs_starlet.h"
 #include "fs/fs_util.h"
 #include "fs/key_cache.h"
-#include "gen_cpp/Types_constants.h"
-#include "gen_cpp/Types_types.h"
 #include "gen_cpp/lake_types.pb.h"
 #include "persistent_index_sstable.h"
 #include "replication_txn_manager.h"
-#include "runtime/exec_env.h"
+#include "storage/del_file_stream_converter.h"
 #include "storage/lake/filenames.h"
 #include "storage/lake/join_path.h"
+#include "storage/lake/meta_file.h"
 #include "storage/lake/tablet.h"
 #include "storage/lake/tablet_manager.h"
+#include "storage/primary_key_encoding_types.h"
 #include "storage/segment_stream_converter.h"
+#include "storage/tablet_schema.h"
+#include "types/logical_type.h"
 #include "util/dynamic_cache.h"
 #include "vacuum.h"
 
@@ -109,7 +110,8 @@ std::string remove_db_id_component(const std::string& path, int64_t db_id) {
     return path.substr(0, pos + 1) + path.substr(pos + db_pattern.length());
 }
 
-Status LakeReplicationTxnManager::replicate_lake_remote_storage(const TReplicateSnapshotRequest& request) {
+Status LakeReplicationTxnManager::replicate_lake_remote_storage(const TReplicateSnapshotRequest& request,
+                                                                ThreadPool* replicate_file_thread_pool) {
     auto src_tablet_id = request.src_tablet_id;
     auto src_visible_version = request.src_visible_version;
     auto src_db_id = request.src_db_id;
@@ -251,8 +253,14 @@ Status LakeReplicationTxnManager::replicate_lake_remote_storage(const TReplicate
     std::vector<std::string> files_to_delete;
     CancelableDefer clean_files([&files_to_delete]() { lake::delete_files_async(std::move(files_to_delete)); });
 
-    auto file_converters = lake::ReplicationTxnManager::build_file_converters(_tablet_manager, request, filename_map,
-                                                                              column_unique_id_map, files_to_delete);
+    // src_tablet_meta->has_schema() is guaranteed by the early Corruption return above.
+    RETURN_IF_ERROR(check_pk_encoding_compat(src_tablet_id, target_tablet_id, *src_tablet_meta, *target_tablet_meta));
+
+    // PK transcoding is gated above; pass nullptr/NONE so the converter never enters the .del
+    // transcode branch in this code path.
+    auto file_converters = lake::ReplicationTxnManager::build_file_converters(
+            _tablet_manager, request, filename_map, column_unique_id_map, files_to_delete, /*pkey_schema=*/nullptr,
+            PrimaryKeyEncodingType::PK_ENCODING_TYPE_NONE, PrimaryKeyEncodingType::PK_ENCODING_TYPE_NONE);
 
     // Track which segments have size changes
     std::unordered_map<std::string, size_t> segment_size_changes;
@@ -262,7 +270,7 @@ Status LakeReplicationTxnManager::replicate_lake_remote_storage(const TReplicate
     watch.start();
     std::atomic<size_t> total_file_size{0};
 
-    ThreadPool* repl_pool = get_replicate_file_thread_pool();
+    ThreadPool* repl_pool = replicate_file_thread_pool;
     bool use_parallel = should_use_parallel_copy(filename_map.size(), repl_pool);
     std::mutex mu;
     std::mutex* shared_mutex = nullptr;
@@ -438,18 +446,6 @@ Status LakeReplicationTxnManager::replicate_lake_remote_storage(const TReplicate
     return Status::OK();
 }
 
-ThreadPool* LakeReplicationTxnManager::get_replicate_file_thread_pool() {
-    if (_replicate_file_thread_pool != nullptr) {
-        return _replicate_file_thread_pool;
-    }
-    auto* agent_srv = ExecEnv::GetInstance()->agent_server();
-    if (agent_srv == nullptr) {
-        return nullptr;
-    }
-    _replicate_file_thread_pool = agent_srv->get_thread_pool(TTaskType::REPLICATE_SNAPSHOT);
-    return _replicate_file_thread_pool;
-}
-
 bool LakeReplicationTxnManager::should_use_parallel_copy(size_t file_count, const ThreadPool* thread_pool) {
     if (thread_pool == nullptr) {
         return false;
@@ -466,6 +462,38 @@ bool LakeReplicationTxnManager::should_use_parallel_copy(size_t file_count, cons
         return false;
     }
     return thread_pool->num_queued_tasks() <= num_threads * kParallelCopyMaxQueuePerThread;
+}
+
+Status LakeReplicationTxnManager::check_pk_encoding_compat(int64_t src_tablet_id, int64_t target_tablet_id,
+                                                           const TabletMetadata& src_tablet_meta,
+                                                           const TabletMetadata& target_tablet_meta) {
+    if (!is_primary_key(target_tablet_meta)) {
+        return Status::OK();
+    }
+    // Lake-to-lake replication routes .del files through copy_non_segment_file_with_retry (a raw
+    // byte copy), not through file_converters. So if source/target use different PK encodings in
+    // a way that produces non-byte-compatible .del bytes (single non-string fixed-length PK +
+    // V1<->V2), the byte copy would silently corrupt the target. Reject explicitly until .del
+    // is routed through a transcoding converter on this path as well.
+    //
+    // V1 source vs V2 target shows up when the source tablet is from a pre-#69939 cloud-native
+    // cluster (V1 default) and the target is post-#69939 (V2 default for new cloud-native tables).
+    TabletSchema source_schema(src_tablet_meta.schema());
+    TabletSchema target_schema(target_tablet_meta.schema());
+    ASSIGN_OR_RETURN(auto source_encoding, source_schema.primary_key_encoding_type_or_error());
+    ASSIGN_OR_RETURN(auto target_encoding, target_schema.primary_key_encoding_type_or_error());
+    if (source_encoding != target_encoding && is_single_fixed_length_non_string_primary_key(target_schema)) {
+        LOG(WARNING) << "Lake-to-lake replication with PK encoding mismatch is not supported, src_tablet: "
+                     << src_tablet_id << ", target_tablet: " << target_tablet_id
+                     << ", source_encoding: " << static_cast<int>(source_encoding)
+                     << ", target_encoding: " << static_cast<int>(target_encoding)
+                     << ", pk_logical_type: " << logical_type_to_string(target_schema.column(0).type());
+        return Status::NotSupported(
+                "Lake-to-lake replication with V1<->V2 primary-key encoding change on a single "
+                "non-string fixed-length PK column is not supported; .del files in this path "
+                "are byte-copied without re-encoding and would fail to apply on the target.");
+    }
+    return Status::OK();
 }
 
 StatusOr<size_t> LakeReplicationTxnManager::copy_non_segment_file_with_retry(

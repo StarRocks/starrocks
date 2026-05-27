@@ -48,10 +48,6 @@ public:
 
     bool is_struct() const override;
 
-    const uint8_t* raw_data() const override;
-
-    uint8_t* mutable_raw_data() override;
-
     size_t size() const override;
 
     size_t capacity() const override;

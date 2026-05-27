@@ -18,6 +18,8 @@
 
 #include <memory>
 
+#include "column/chunk_factory.h"
+#include "column/chunk_schema_helper.h"
 #include "common/config_exec_fwd.h"
 #include "common/config_storage_fwd.h"
 #include "exprs/expr_factory.h"
@@ -185,10 +187,10 @@ Status ConvertedSchemaChange::init() {
     _new_tablet_schema = _new_tablet.get_schema();
     _new_schema = ChunkHelper::convert_schema(_new_tablet_schema);
 
-    _base_chunk = ChunkHelper::new_chunk(_base_schema, config::vector_chunk_size);
-    _new_chunk = ChunkHelper::new_chunk(_new_schema, config::vector_chunk_size);
+    _base_chunk = ChunkFactory::new_chunk(_base_schema, config::vector_chunk_size);
+    _new_chunk = ChunkFactory::new_chunk(_new_schema, config::vector_chunk_size);
 
-    _char_field_indexes = ChunkHelper::get_char_field_indexes(_new_schema);
+    _char_field_indexes = ChunkSchemaHelper::get_char_field_indexes(_new_schema);
     _mem_pool = std::make_unique<MemPool>();
     return Status::OK();
 }
@@ -248,8 +250,7 @@ Status DirectSchemaChange::process(RowsetPtr rowset, RowsetMetadata* new_rowset_
         new_rowset_metadata->add_segment_size(f.size.value());
         new_rowset_metadata->add_segment_encryption_metas(f.encryption_meta);
         auto* segment_meta = new_rowset_metadata->add_segment_metas();
-        f.sort_key_min.to_proto(segment_meta->mutable_sort_key_min());
-        f.sort_key_max.to_proto(segment_meta->mutable_sort_key_max());
+        f.write_sort_key_fields_to(segment_meta);
         segment_meta->set_num_rows(f.num_rows);
         segment_meta->set_segment_idx(segment_idx);
     }
@@ -286,14 +287,19 @@ Status SortedSchemaChange::process(RowsetPtr rowset, RowsetMetadata* new_rowset_
     RETURN_IF_ERROR(reader->prepare());
     RETURN_IF_ERROR(reader->open(_read_params));
 
-    // create writer
+    // Pass the new tablet schema directly so DeltaWriter does not consult TableSchemaService.
+    // The schema-service lookup is keyed by (db_id, table_id, schema_id) and falls back to an
+    // FE RPC; without catalog ids on the alter task the RPC goes out with zeros and FE replies
+    // "Table not exist". The schema-change task already holds the exact schema, so we sidestep
+    // the lookup entirely.
     ASSIGN_OR_RETURN(auto writer, DeltaWriterBuilder()
                                           .set_tablet_manager(_tablet_manager)
                                           .set_tablet_id(_new_tablet.id())
                                           .set_txn_id(_txn_id)
                                           .set_max_buffer_size(_max_buffer_size)
                                           .set_mem_tracker(CurrentThread::mem_tracker())
-                                          .set_schema_id(_new_tablet_schema->id()) // TODO: pass tablet schema directly
+                                          .set_schema_id(_new_tablet_schema->id())
+                                          .set_tablet_schema(_new_tablet_schema)
                                           .build());
     RETURN_IF_ERROR(writer->open());
     DeferOp defer([&]() { writer->close(); });
@@ -340,8 +346,7 @@ Status SortedSchemaChange::process(RowsetPtr rowset, RowsetMetadata* new_rowset_
         new_rowset_metadata->add_segment_size(f.size.value());
         new_rowset_metadata->add_segment_encryption_metas(f.encryption_meta);
         auto* segment_meta = new_rowset_metadata->add_segment_metas();
-        f.sort_key_min.to_proto(segment_meta->mutable_sort_key_min());
-        f.sort_key_max.to_proto(segment_meta->mutable_sort_key_max());
+        f.write_sort_key_fields_to(segment_meta);
         segment_meta->set_num_rows(f.num_rows);
         segment_meta->set_segment_idx(segment_idx);
     }

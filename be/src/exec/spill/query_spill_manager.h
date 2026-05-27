@@ -14,14 +14,10 @@
 
 #pragma once
 
-#include <atomic>
-#include <mutex>
-#include <string>
-#include <unordered_map>
-#include <vector>
+#include <memory>
 
+#include "exec/spill/global_spill_manager.h"
 #include "exec/spill/log_block_manager.h"
-#include "fs/fs.h"
 #include "gen_cpp/Types_types.h"
 
 namespace starrocks {
@@ -29,26 +25,10 @@ class TQueryOptions;
 }
 
 namespace starrocks::spill {
-class GlobalSpillManager {
-public:
-    size_t spillable_operators() const { return _spillable_operators; }
-
-    void increase_spillable_operators() { _spillable_operators++; }
-    void decrease_spillable_operators() { _spillable_operators--; }
-
-    size_t spill_expected_reserved_bytes() const { return _expected_reserved_bytes; }
-    void inc_reserve_bytes(size_t bytes) { _expected_reserved_bytes += bytes; }
-    void dec_reserve_bytes(size_t bytes) { _expected_reserved_bytes -= bytes; }
-
-private:
-    std::atomic_size_t _spillable_operators = 0;
-    std::atomic_size_t _expected_reserved_bytes = 0;
-};
-
 class QuerySpillManager {
 public:
-    QuerySpillManager(const TUniqueId& uid, GlobalSpillManager* global_spill_manager)
-            : _uid(uid), _global_spill_manager(global_spill_manager) {}
+    QuerySpillManager(const TUniqueId& uid, GlobalSpillManager* global_spill_manager, DirManager* spill_dir_mgr)
+            : _uid(uid), _global_spill_manager(global_spill_manager), _spill_dir_mgr(spill_dir_mgr) {}
 
     Status init_block_manager(const TQueryOptions& query_options);
 
@@ -61,9 +41,12 @@ public:
     BlockManager* block_manager() const { return _block_manager.get(); }
 
 private:
+    Status init_local_block_manager();
+
     TUniqueId _uid;
     std::unique_ptr<BlockManager> _block_manager;
     std::unique_ptr<DirManager> _remote_dir_manager;
     GlobalSpillManager* _global_spill_manager = nullptr;
+    DirManager* _spill_dir_mgr = nullptr;
 };
 } // namespace starrocks::spill

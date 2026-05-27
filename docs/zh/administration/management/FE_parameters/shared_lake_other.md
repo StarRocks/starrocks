@@ -269,7 +269,16 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: String
 - 单位: -
 - 是否可变: No
-- 描述: 您使用的对象存储类型。在共享数据模式下，StarRocks 支持将数据存储在 HDFS、Azure Blob（v3.1.1 起支持）、Azure Data Lake Storage Gen2（v3.4.1 起支持）、Google Storage（带原生 SDK，v3.5.1 起支持）以及与 S3 协议兼容的对象存储系统（如 AWS S3 和 MinIO）中。有效值：`S3`（默认）、`HDFS`、`AZBLOB`、`ADLS2` 和 `GS`。如果您将此参数指定为 `S3`，则必须添加以 `aws_s3` 为前缀的参数。如果您将此参数指定为 `AZBLOB`，则必须添加以 `azure_blob` 为前缀的参数。如果您将此参数指定为 `ADLS2`，则必须添加以 `azure_adls2` 为前缀的参数。如果您将此参数指定为 `GS`，则必须添加以 `gcp_gcs` 为前缀的参数。如果您将此参数指定为 `HDFS`，则只需指定 `cloud_native_hdfs_url`。
+- 描述: 您使用的对象存储类型。在存算分离模式下，StarRocks 支持将数据存储在 HDFS、Azure Blob（v3.1.1 起支持）、Azure Data Lake Storage Gen2（v3.4.1 起支持）、Google Storage（带原生 SDK，v3.5.1 起支持）以及与 S3 协议兼容的对象存储系统（如 AWS S3 和 MinIO）中。有效值：`S3`（默认）、`HDFS`、`AZBLOB`、`ADLS2` 和 `GS`。如果您将此参数指定为 `S3`，则必须添加以 `aws_s3` 为前缀的参数。如果您将此参数指定为 `AZBLOB`，则必须添加以 `azure_blob` 为前缀的参数。如果您将此参数指定为 `ADLS2`，则必须添加以 `azure_adls2` 为前缀的参数。如果您将此参数指定为 `GS`，则必须添加以 `gcp_gcs` 为前缀的参数。如果您将此参数指定为 `HDFS`，则只需指定 `cloud_native_hdfs_url`。
+- 引入版本: -
+
+### `enable_admin_skip_committed_txn`
+
+- 默认值: false
+- 类型: Boolean
+- 单位: -
+- 是否可变: Yes
+- 描述: 是否启用 `ADMIN SKIP COMMITTED TRANSACTION` 语句。值为 `false` 时该语句会被拒绝并报错。这是面向运维的应急通道，用于解除存算分离（lake）表上某个已 `COMMITTED` 但 publish 卡死的事务的阻塞；卡死事务的数据贡献会被丢弃，但分区可见版本仍会通过一次"no-op publish"（写出一份不含该事务数据变更的新元数据文件）正常推进。仅支持 `file_bundling=true` 的 lake 表；仅支持导入和 lake-compaction 类型事务（alter / schema change 暂不支持）。仅在运维需要手动解除卡死事务时打开，使用完毕后请重新关闭，避免被误用。
 - 引入版本: -
 
 ### `enable_load_volume_from_conf`
@@ -350,7 +359,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: Long
 - 单位: 分钟
 - 是否可变: Yes
-- 描述: 共享数据集群中保留历史数据版本的时间范围。在此时间范围内的历史数据版本不会在 Compactions 后通过 AutoVacuum 自动清理。您需要将此值设置得大于最大查询时间，以避免正在运行的查询访问的数据在查询完成之前被删除。从 v3.3.0、v3.2.5 和 v3.1.10 开始，默认值已从 `5` 更改为 `30`。
+- 描述: 存算分离集群中保留历史数据版本的时间范围。在此时间范围内的历史数据版本不会在 Compactions 后通过 AutoVacuum 自动清理。您需要将此值设置得大于最大查询时间，以避免正在运行的查询访问的数据在查询完成之前被删除。从 v3.3.0、v3.2.5 和 v3.1.10 开始，默认值已从 `5` 更改为 `30`。
 - 引入版本: v3.1.0
 
 ### `lake_autovacuum_parallel_partitions`
@@ -359,7 +368,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: Int
 - 单位: -
 - 是否可变: No
-- 描述: 共享数据集群中可同时进行 AutoVacuum 的分区最大数量。AutoVacuum 是 Compactions 后的垃圾回收。
+- 描述: 存算分离集群中可同时进行 AutoVacuum 的分区最大数量。AutoVacuum 是 Compactions 后的垃圾回收。
 - 引入版本: v3.1.0
 
 ### `lake_autovacuum_partition_naptime_seconds`
@@ -368,7 +377,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: Long
 - 单位: 秒
 - 是否可变: Yes
-- 描述: 共享数据集群中同一分区两次 AutoVacuum 操作之间的最小间隔。
+- 描述: 存算分离集群中同一分区两次 AutoVacuum 操作之间的最小间隔。
 - 引入版本: v3.1.0
 
 ### `lake_autovacuum_stale_partition_threshold`
@@ -386,7 +395,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: Boolean
 - 单位: -
 - 是否可变: Yes
-- 描述: 如果此项设置为 `true`，则在共享数据集群中，当子任务之一成功时，系统将认为 Compaction 操作成功。
+- 描述: 如果此项设置为 `true`，则在存算分离集群中，当子任务之一成功时，系统将认为 Compaction 操作成功。
 - 引入版本: v3.5.2
 
 ### `lake_compaction_disable_ids`
@@ -395,7 +404,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: String
 - 单位: -
 - 是否可变: Yes
-- 描述: 在共享数据模式下禁用 Compaction 的表或分区列表。格式为 `tableId1;partitionId2`，以分号分隔，例如 `12345;98765`。
+- 描述: 在存算分离模式下禁用 Compaction 的表或分区列表。格式为 `tableId1;partitionId2`，以分号分隔，例如 `12345;98765`。
 - 引入版本: v3.4.4
 
 ### `lake_compaction_history_size`
@@ -404,7 +413,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: Int
 - 单位: -
 - 是否可变: Yes
-- 描述: 在共享数据集群中，Leader FE 内存中保留的最近成功 Compaction 任务记录数。您可以使用 `SHOW PROC '/compactions'` 命令查看最近成功的 Compaction 任务记录。请注意，Compaction 历史记录存储在 FE 进程内存中，如果 FE 进程重启，它将丢失。
+- 描述: 在存算分离集群中，Leader FE 内存中保留的最近成功 Compaction 任务记录数。您可以使用 `SHOW PROC '/compactions'` 命令查看最近成功的 Compaction 任务记录。请注意，Compaction 历史记录存储在 FE 进程内存中，如果 FE 进程重启，它将丢失。
 - 引入版本: v3.1.0
 
 ### `lake_compaction_max_parallel_default`
@@ -421,7 +430,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: Int
 - 单位: -
 - 是否可变: Yes
-- 描述: 共享数据集群中允许的最大并发 Compaction 任务数。将此项设置为 `-1` 表示以自适应方式计算并发任务数。将此值设置为 `0` 将禁用 Compaction。
+- 描述: 存算分离集群中允许的最大并发 Compaction 任务数。将此项设置为 `-1` 表示以自适应方式计算并发任务数。将此值设置为 `0` 将禁用 Compaction。
 - 引入版本: v3.1.0
 
 ### `lake_compaction_score_selector_min_score`
@@ -430,7 +439,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: Double
 - 单位: -
 - 是否可变: Yes
-- 描述: 触发共享数据集群中 Compaction 操作的 Compaction Score 阈值。当分区的 Compaction Score 大于或等于此值时，系统会对该分区执行 Compaction。
+- 描述: 触发存算分离集群中 Compaction 操作的 Compaction Score 阈值。当分区的 Compaction Score 大于或等于此值时，系统会对该分区执行 Compaction。
 - 引入版本: v3.1.0
 
 ### `lake_compaction_score_upper_bound`
@@ -439,7 +448,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: Long
 - 单位: -
 - 是否可变: Yes
-- 描述: 共享数据集群中分区的 Compaction Score 上限。`0` 表示无上限。此项仅在 `lake_enable_ingest_slowdown` 设置为 `true` 时生效。当分区的 Compaction Score 达到或超过此上限时，传入的加载任务将被拒绝。从 v3.3.6 开始，默认值从 `0` 更改为 `2000`。
+- 描述: 存算分离集群中分区的 Compaction Score 上限。`0` 表示无上限。此项仅在 `lake_enable_ingest_slowdown` 设置为 `true` 时生效。当分区的 Compaction Score 达到或超过此上限时，传入的加载任务将被拒绝。从 v3.3.6 开始，默认值从 `0` 更改为 `2000`。
 - 引入版本: v3.2.0
 
 ### `lake_compaction_interval_ms_on_success`
@@ -457,7 +466,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: Boolean
 - 单位: -
 - 是否可变: Yes
-- 描述: 在共享数据集群中，云原生表 tablet 迁移期间是否平衡计算节点之间的 tablet 数量。`true` 表示在计算节点之间平衡 tablet，`false` 表示禁用此功能。
+- 描述: 在存算分离集群中，云原生表 tablet 迁移期间是否平衡计算节点之间的 tablet 数量。`true` 表示在计算节点之间平衡 tablet，`false` 表示禁用此功能。
 - 引入版本: v3.3.4
 
 ### `lake_enable_ingest_slowdown`
@@ -466,7 +475,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: Boolean
 - 单位: -
 - 是否可变: Yes
-- 描述: 是否在共享数据集群中启用数据摄取减速。当数据摄取减速启用时，如果分区的 Compaction Score 超过 `lake_ingest_slowdown_threshold`，则该分区上的加载任务将受到限制。此配置仅在 `run_mode` 设置为 `shared_data` 时生效。从 v3.3.6 开始，默认值从 `false` 更改为 `true`。
+- 描述: 是否在存算分离集群中启用数据摄取减速。当数据摄取减速启用时，如果分区的 Compaction Score 超过 `lake_ingest_slowdown_threshold`，则该分区上的加载任务将受到限制。此配置仅在 `run_mode` 设置为 `shared_data` 时生效。从 v3.3.6 开始，默认值从 `false` 更改为 `true`。
 - 引入版本: v3.2.0
 
 ### `lake_ingest_slowdown_threshold`
@@ -475,7 +484,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: Long
 - 单位: -
 - 是否可变: Yes
-- 描述: 触发共享数据集群中数据摄取减速的 Compaction Score 阈值。此配置仅在 `lake_enable_ingest_slowdown` 设置为 `true` 时生效。
+- 描述: 触发存算分离集群中数据摄取减速的 Compaction Score 阈值。此配置仅在 `lake_enable_ingest_slowdown` 设置为 `true` 时生效。
 - 引入版本: v3.2.0
 
 ### `lake_publish_version_max_threads`
@@ -484,7 +493,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: Int
 - 单位: -
 - 是否可变: Yes
-- 描述: 共享数据集群中版本发布任务的最大线程数。
+- 描述: 存算分离集群中版本发布任务的最大线程数。
 - 引入版本: v3.2.0
 
 ### `meta_sync_force_delete_shard_meta`
@@ -493,7 +502,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: Boolean
 - 单位: -
 - 是否可变: Yes
-- 描述: 是否允许直接删除共享数据集群的元数据，绕过清理远程存储文件。建议仅在存在大量待清理分片，导致 FE JVM 内存压力过大时才将此项设置为 `true`。请注意，启用此功能后，属于分片或 tablet 的数据文件无法自动清理。
+- 描述: 是否允许直接删除存算分离集群的元数据，绕过清理远程存储文件。建议仅在存在大量待清理分片，导致 FE JVM 内存压力过大时才将此项设置为 `true`。请注意，启用此功能后，属于分片或 tablet 的数据文件无法自动清理。
 - 引入版本: v3.2.10, v3.3.3
 
 ### `run_mode`
@@ -503,13 +512,13 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 单位: -
 - 是否可变: No
 - 描述: StarRocks 集群的运行模式。有效值：`shared_data` 和 `shared_nothing`（默认）。
-  - `shared_data` 表示以共享数据模式运行 StarRocks。
+  - `shared_data` 表示以存算分离模式运行 StarRocks。
   - `shared_nothing` 表示以共享无数据模式运行 StarRocks。
 
   > **CAUTION**
   >
   > - StarRocks 集群不能同时采用 `shared_data` 和 `shared_nothing` 模式。不支持混合部署。
-  > - 集群部署后，请勿更改 `run_mode`。否则，集群将无法重启。不支持从共享无数据集群转换为共享数据集群，反之亦然。
+  > - 集群部署后，请勿更改 `run_mode`。否则，集群将无法重启。不支持从共享无数据集群转换为存算分离集群，反之亦然。
 
 - 引入版本: -
 
@@ -519,7 +528,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: Long
 - 单位: 秒
 - 是否可变: Yes
-- 描述: FE 清理共享数据集群中未使用的 tablet 和 shard 组的时间。在此阈值内创建的 tablet 和 shard 组将不会被清理。
+- 描述: FE 清理存算分离集群中未使用的 tablet 和 shard 组的时间。在此阈值内创建的 tablet 和 shard 组将不会被清理。
 - 引入版本: -
 
 ### `star_mgr_meta_sync_interval_sec`
@@ -527,8 +536,8 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 默认值: 600
 - 类型: Long
 - 单位: 秒
-- 是否可变: No
-- 描述: FE 在共享数据集群中与 StarMgr 进行周期性元数据同步的间隔。
+- 是否可变: Yes
+- 描述: FE 在存算分离集群中与 StarMgr 进行周期性元数据同步的间隔。
 - 引入版本: -
 
 ### `starmgr_grpc_server_max_worker_threads`
@@ -551,13 +560,14 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 ## 数据湖
 
-### `files_enable_insert_push_down_schema`
+### `files_enable_insert_push_down_column_type`
 
 - 默认值: true
+- 别名: `files_enable_insert_push_down_schema`
 - 类型: Boolean
 - 单位: -
 - 是否可变: Yes
-- 描述: 启用后，分析器将尝试将目标表 schema 推送到 `files()` 表函数中，用于 INSERT ... FROM files() 操作。这仅适用于源是 FileTableFunctionRelation、目标是原生表且 SELECT 列表中包含相应的 slot-ref 列（或 *）的情况。分析器会将选择的列与目标列匹配（计数必须匹配），短暂锁定目标表，并用非复杂类型（Parquet JSON 等复杂类型 `->` `array<varchar>` 会跳过）的深拷贝目标列类型替换文件列类型。原始文件表中的列名会保留。这减少了摄取期间文件类型推断引起的类型不匹配和松散性。
+- 描述: 启用后，StarRocks 会将目标表的列类型下推到 `files()` 表函数，用于 `INSERT INTO target_table SELECT ... FROM files()` 操作。仅对 files 推断出的已有列进行类型重写，不添加或删除列。复杂类型会跳过。这可减少由文件类型推断不准确引起的类型不匹配错误。如需完整的 schema 下推（列名和类型），请使用 INSERT 属性 `enable_push_down_schema`。
 - 引入版本: v3.4.0, v3.5.0
 
 ### `hdfs_read_buffer_size_kb`
@@ -611,7 +621,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: Boolean
 - 单位: -
 - 是否可变: Yes
-- 描述: 启用后，PublishVersionDaemon 会为同一个 Lake（共享数据）表/分区批处理就绪事务，并将其版本一起发布，而不是为每个事务单独发布。在 RunMode shared-data 中，守护进程调用 getReadyPublishTransactionsBatch() 并使用 publishVersionForLakeTableBatch(...) 执行分组发布操作（减少 RPC 并提高吞吐量）。禁用时，守护进程回退到通过 publishVersionForLakeTable(...) 进行的逐事务发布。实现通过内部集合协调进行中的工作，以避免在切换开关时重复发布，并且受 `lake_publish_version_max_threads` 的线程池大小影响。
+- 描述: 启用后，PublishVersionDaemon 会为同一个 Lake（存算分离）表/分区批处理就绪事务，并将其版本一起发布，而不是为每个事务单独发布。在 RunMode shared-data 中，守护进程调用 getReadyPublishTransactionsBatch() 并使用 publishVersionForLakeTableBatch(...) 执行分组发布操作（减少 RPC 并提高吞吐量）。禁用时，守护进程回退到通过 publishVersionForLakeTable(...) 进行的逐事务发布。实现通过内部集合协调进行中的工作，以避免在切换开关时重复发布，并且受 `lake_publish_version_max_threads` 的线程池大小影响。
 - 引入版本: v3.2.0
 
 ### `lake_enable_tablet_creation_optimization`
@@ -620,8 +630,17 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: boolean
 - 单位: -
 - 是否可变: Yes
-- 描述: 启用后，StarRocks 在共享数据模式下优化云原生表和物化视图的 tablet 创建，通过为物理分区下的所有 tablet 创建单个共享 tablet 元数据，而不是为每个 tablet 创建不同的元数据。这减少了表创建、rollup 和 schema 变更作业期间创建的 tablet 任务和元数据/文件数量。优化仅适用于云原生表/物化视图，并与 `file_bundling` 结合（后者重用相同的优化逻辑）。注意：schema 变更和 rollup 作业明确禁用使用 `file_bundling` 的表的优化，以避免使用相同名称的文件被覆盖。谨慎启用——它改变了创建的 tablet 元数据的粒度，并可能影响副本创建和文件命名行为。
+- 描述: 启用后，StarRocks 在存算分离模式下优化云原生表和物化视图的 tablet 创建，通过为物理分区下的所有 tablet 创建单个共享 tablet 元数据，而不是为每个 tablet 创建不同的元数据。这减少了表创建、rollup 和 schema 变更作业期间创建的 tablet 任务和元数据/文件数量。优化仅适用于云原生表/物化视图，并与 `file_bundling` 结合（后者重用相同的优化逻辑）。注意：schema 变更和 rollup 作业明确禁用使用 `file_bundling` 的表的优化，以避免使用相同名称的文件被覆盖。谨慎启用——它改变了创建的 tablet 元数据的粒度，并可能影响副本创建和文件命名行为。
 - 引入版本: v3.3.1, v3.4.0, v3.5.0
+
+### `lake_create_tablet_max_retries`
+
+- 默认值: 1
+- 类型: Int
+- 单位: -
+- 是否可变: Yes
+- 描述: 存算分离模式下建表时 create tablet 任务失败后的最大重试次数。当 CN 不可达或宕机时，失败的任务会在其他存活的 CN 上重试。仅发送阶段的失败（RPC 错误、节点宕机）会触发重试；CN 返回的错误和超时不会重试。设置为 `0` 可禁用重试。
+- 引入版本: v4.1
 
 ### `lake_use_combined_txn_log`
 
@@ -629,8 +648,17 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: Boolean
 - 单位: -
 - 是否可变: Yes
-- 描述: 当此项设置为 `true` 时，系统允许 Lake 表使用组合事务日志路径进行相关事务。仅适用于共享数据集群。
+- 描述: 当此项设置为 `true` 时，系统允许 Lake 表使用组合事务日志路径进行相关事务。仅适用于存算分离集群。
 - 引入版本: v3.3.7, v3.4.0, v3.5.0
+
+### `lake_vi_build_load_tail_delay_ms`
+
+- 默认值：300000
+- 类型：Long
+- 单位：毫秒
+- 是否动态：是
+- 描述：存算分离模式下，若某个 tablet 的最新 pending 版本是纯导入（没有未构建的 compaction 产物），调度 async 向量索引构建前等待的时长。延迟窗口内若有新的 compaction 到来，其版本会和 load tail 一起构建；而 compaction 产物本身总是立即派发。仅对声明了 async 向量索引的表生效。
+- 引入版本：v4.2.0
 
 ### `lake_repair_metadata_fetch_max_version_batch_size`
 
@@ -714,6 +742,14 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 是否可变: Yes
 - 描述: LDAP 服务器开始搜索用户身份验证信息的基准 DN。
 - 引入版本: -
+
+### `authentication_ldap_simple_bind_dn_pattern`
+
+- 默认值: 空字符串
+- 类型: String
+- 单位: -
+- 是否可变: Yes
+- 描述: 用于直接绑定认证的 DN 模板。使用 `${USER}` 作为用户名占位符。模板必须生成合法的 LDAP Distinguished Name（DN），不支持 UPN 格式（如 `${USER}@domain`）。例如 `uid=${USER},ou=People,dc=example,dc=com`。多个模板可用分号分隔，系统会按顺序依次尝试直到成功。设置后将跳过搜索步骤，直接使用构造的 DN 进行绑定认证。
 
 ### `authentication_ldap_simple_bind_root_dn`
 

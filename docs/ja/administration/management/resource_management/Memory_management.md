@@ -14,7 +14,7 @@ sidebar_position: 40
 |   Metric  | Name | Description |
 | --- | --- | --- |
 |  process   |  BE の使用メモリ合計  | |
-|  query\_pool   |   データクエリによるメモリ使用量  | 実行レイヤーとストレージレイヤーの2つの部分から成ります。|
+|  `query_pool`   |   データクエリによるメモリ使用量  | 実行レイヤーとストレージレイヤーの2つの部分から成ります。|
 |  load   |  データロードによるメモリ使用量    | 一般的に MemTable|
 |  table_meta   |   メタデータメモリ | S Schema、Tablet メタデータ、RowSet メタデータ、Column メタデータ、ColumnReader、IndexReader |
 |  compaction   |   マルチバージョンメモリコンパクション  |  データインポート完了後に発生するコンパクション |
@@ -47,7 +47,7 @@ sidebar_position: 40
 
 ## メモリ使用量の確認
 
-* **mem\_tracker**
+* **`mem_tracker`**
 
 ~~~ bash
 //全体のメモリ統計を表示
@@ -57,37 +57,15 @@ sidebar_position: 40
 <http://be_ip:be_http_port/mem_tracker?type=query_pool&upper_level=3>
 ~~~
 
-* **tcmalloc**
+* **jemalloc**
 
 ~~~ bash
 <http://be_ip:be_http_port/memz>
 ~~~
 
-~~~plain text
-------------------------------------------------
-MALLOC:      777276768 (  741.3 MiB) アプリケーションによって使用されているバイト数
-MALLOC: +   8851890176 ( 8441.8 MiB) ページヒープフリーリストのバイト数
-MALLOC: +    143722232 (  137.1 MiB) セントラルキャッシュフリーリストのバイト数
-MALLOC: +     21869824 (   20.9 MiB) トランスファーキャッシュフリーリストのバイト数
-MALLOC: +    832509608 (  793.9 MiB) スレッドキャッシュフリーリストのバイト数
-MALLOC: +     58195968 (   55.5 MiB) malloc メタデータのバイト数
-MALLOC:   ------------
-MALLOC: =  10685464576 (10190.5 MiB) 実際に使用されているメモリ（物理 + スワップ）
-MALLOC: +  25231564800 (24062.7 MiB) OS に解放されたバイト数（アンマップされたもの）
-MALLOC:   ------------
-MALLOC: =  35917029376 (34253.1 MiB) 使用されている仮想アドレス空間
-MALLOC:
-MALLOC:         112388              使用中のスパン数
-MALLOC:            335              使用中のスレッドヒープ数
-MALLOC:           8192              Tcmalloc ページサイズ
-------------------------------------------------
-ReleaseFreeMemory() を呼び出して、フリーリストメモリを OS に解放します（madvise() 経由）。
-OS に解放されたバイト数は仮想アドレス空間を占有しますが、物理メモリは占有しません。
-~~~
+`/memz` ページには、BE プロセスのメモリ制限、現在のプロセスメモリ使用量、jemalloc アロケータ統計、および Update Manager のメモリ統計が表示されます。jemalloc セクションの `allocated`、`active`、`resident`、`mapped`、`retained`、`metadata` などの項目は、オブジェクトが実際に使用しているメモリとアロケータが保持しているメモリを区別するために役立ちます。
 
-この方法でクエリされたメモリは正確です。ただし、StarRocks の一部のメモリは予約されているが使用されていない場合があります。TcMalloc は予約されたメモリをカウントし、使用されているメモリをカウントしません。
-
-ここで `Bytes in use by application` は現在使用されているメモリを指します。
+アロケータが保持しているメモリは、オブジェクトが現在使用しているメモリより大きくなる場合があります。`/mem_tracker` と `/memz` を併用して、StarRocks のメモリ Tracker とプロセスレベルのアロケータ統計を比較してください。
 
 * **metrics**
 

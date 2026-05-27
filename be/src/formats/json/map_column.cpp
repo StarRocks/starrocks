@@ -14,6 +14,7 @@
 
 #include "column/map_column.h"
 
+#include "common/simdjson_util.h"
 #include "fmt/format.h"
 #include "formats/json/map_column.h"
 #include "formats/json/nullable_column.h"
@@ -21,7 +22,7 @@
 
 namespace starrocks {
 
-Status add_map_column(Column* column, const TypeDescriptor& type_desc, const std::string& name,
+Status add_map_column(Column* column, const TypeDescriptor& type_desc, std::string_view name,
                       simdjson::ondemand::value* value) {
     auto map_column = down_cast<MapColumn*>(column);
 
@@ -60,6 +61,9 @@ Status add_map_column(Column* column, const TypeDescriptor& type_desc, const std
 
         return Status::OK();
     } catch (simdjson::simdjson_error& e) {
+        if (is_simdjson_critical_error(e.error())) {
+            throw;
+        }
         auto err_msg = strings::Substitute("Failed to parse value as object, column=$0, error=$1", name,
                                            simdjson::error_message(e.error()));
         return Status::DataQualityError(err_msg);

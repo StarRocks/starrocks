@@ -39,7 +39,9 @@
 #include <fstream>
 #include <iostream>
 
+#include "column/chunk_factory.h"
 #include "column/column.h"
+#include "column/column_helper.h"
 #include "common/logging.h"
 #include "common/util/debug_util.h"
 #include "gen_cpp/segment.pb.h"
@@ -108,10 +110,10 @@ public:
 
         //check values
 
-        auto column = ChunkHelper::column_from_field_type(TYPE_VARCHAR, false);
+        auto column = ChunkFactory::column_from_field_type(TYPE_VARCHAR, false);
         size_t size = slices.size();
         status = page_decoder.next_batch(&size, column.get());
-        auto* values = reinterpret_cast<const Slice*>(column->raw_data());
+        auto values = GetStorageContainer<TYPE_VARCHAR>::get_data(column);
         ASSERT_TRUE(status.ok());
         ASSERT_EQ(slices.size(), size);
         ASSERT_EQ("Individual", values[0].to_string());
@@ -130,14 +132,14 @@ public:
         ASSERT_TRUE(status.ok()) << status.to_string();
         // read 3 items
         ASSERT_EQ(3, size);
-        values = reinterpret_cast<const Slice*>(column->raw_data());
+        values = GetStorageContainer<TYPE_VARCHAR>::get_data(column);
         ASSERT_EQ("Nature", values[0].to_string());
         ASSERT_EQ("Captain", values[1].to_string());
         ASSERT_EQ("Xmas", values[2].to_string());
 
         ASSERT_TRUE(page_decoder.seek_to_position_in_page(0).ok());
         ASSERT_EQ(0, page_decoder.current_index());
-        column = ChunkHelper::column_from_field_type(TYPE_VARCHAR, false);
+        column = ChunkFactory::column_from_field_type(TYPE_VARCHAR, false);
         SparseRange<> read_range;
         read_range.add(Range<>(0, 2));
         read_range.add(Range<>(4, 7));
@@ -217,7 +219,7 @@ public:
             ASSERT_TRUE(status.ok());
 
             //check values
-            auto column = ChunkHelper::column_from_field_type(TYPE_VARCHAR, false);
+            auto column = ChunkFactory::column_from_field_type(TYPE_VARCHAR, false);
 
             size_t num = 1;
             size_t pos = random() % (page_start_ids[slice_index + 1] - page_start_ids[slice_index]);
@@ -226,7 +228,7 @@ public:
             ASSERT_TRUE(status.ok());
             status = page_decoder.next_batch(&num, column.get());
             ASSERT_TRUE(status.ok());
-            auto* values = reinterpret_cast<const Slice*>(column->raw_data());
+            const auto values = GetStorageContainer<TYPE_VARCHAR>::get_data(column);
             std::string expect = contents[page_start_ids[slice_index] + pos].to_string();
             std::string actual = values[0].to_string();
             ASSERT_EQ(expect, actual) << "slice index:" << slice_index << ", pos:" << pos
@@ -237,7 +239,7 @@ public:
             status = page_decoder.seek_to_position_in_page(0);
             ASSERT_TRUE(status.ok());
             size_t slice_num = page_start_ids[slice_index + 1] - page_start_ids[slice_index];
-            auto dst = ChunkHelper::column_from_field_type(TYPE_VARCHAR, false);
+            auto dst = ChunkFactory::column_from_field_type(TYPE_VARCHAR, false);
             SparseRange<> read_range;
             read_range.add(Range<>(0, slice_num / 3));
             read_range.add(Range<>(slice_num / 2, (slice_num * 2 / 3)));
@@ -341,7 +343,7 @@ TEST_F(BinaryDictPageTest, TestNextBatchWithFilter) {
 
     // Case 1: Without NULLs (nullptr passed for null_data)
     {
-        auto column = ChunkHelper::column_from_field_type(TYPE_VARCHAR, false);
+        auto column = ChunkFactory::column_from_field_type(TYPE_VARCHAR, false);
 
         // Prepare filter: >= "c_300"
         std::unique_ptr<ColumnPredicate> predicate(new_column_ge_predicate(get_type_info(TYPE_VARCHAR), 0, "c_300"));
@@ -378,7 +380,7 @@ TEST_F(BinaryDictPageTest, TestNextBatchWithFilter) {
     // Case 2: With NULLs (null_data passed)
     {
         // Use NullableColumn
-        auto column = ChunkHelper::column_from_field_type(TYPE_VARCHAR, true);
+        auto column = ChunkFactory::column_from_field_type(TYPE_VARCHAR, true);
 
         // Prepare filter: >= "c_300"
         std::unique_ptr<ColumnPredicate> predicate(new_column_ge_predicate(get_type_info(TYPE_VARCHAR), 0, "c_300"));
@@ -463,7 +465,7 @@ TEST_F(BinaryDictPageTest, TestReadByRowids) {
     page_decoder.set_dict_decoder(dict_page_decoder.get());
     ASSERT_TRUE(page_decoder.init().ok());
 
-    auto column = ChunkHelper::column_from_field_type(TYPE_VARCHAR, false);
+    auto column = ChunkFactory::column_from_field_type(TYPE_VARCHAR, false);
 
     rowid_t rowids[] = {1, 3, 5, 8};
     size_t num_read = 4;

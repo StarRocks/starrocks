@@ -15,6 +15,8 @@
 #include "storage/lake/spark_load.h"
 
 #include "base/utility/defer_op.h"
+#include "column/chunk_factory.h"
+#include "column/chunk_schema_helper.h"
 #include "exec/file_scanner/file_scanner.h"
 #include "runtime/runtime_state.h"
 #include "storage/chunk_helper.h"
@@ -60,8 +62,8 @@ Status SparkLoadHandler::_load_convert(VersionedTablet& cur_tablet) {
 
     auto tablet_schema = cur_tablet.get_schema();
     Schema schema = ChunkHelper::convert_schema(tablet_schema);
-    ChunkPtr chunk = ChunkHelper::new_chunk(schema, 0);
-    auto char_field_indexes = ChunkHelper::get_char_field_indexes(schema);
+    ChunkPtr chunk = ChunkFactory::new_chunk(schema, 0);
+    auto char_field_indexes = ChunkSchemaHelper::get_char_field_indexes(schema);
 
     // 2. Init PushBrokerReader to read broker file if exist,
     //    in case of empty push this will be skipped.
@@ -122,8 +124,7 @@ Status SparkLoadHandler::_load_convert(VersionedTablet& cur_tablet) {
         op_write->mutable_rowset()->add_segment_size(f.size.value());
         op_write->mutable_rowset()->add_segment_encryption_metas(f.encryption_meta);
         auto* segment_meta = op_write->mutable_rowset()->add_segment_metas();
-        f.sort_key_min.to_proto(segment_meta->mutable_sort_key_min());
-        f.sort_key_max.to_proto(segment_meta->mutable_sort_key_max());
+        f.write_sort_key_fields_to(segment_meta);
         segment_meta->set_num_rows(f.num_rows);
         segment_meta->set_segment_idx(segment_idx);
     }

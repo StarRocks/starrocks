@@ -24,8 +24,14 @@
 #include "common/config_exec_flow_fwd.h"
 #include "common/config_exec_fwd.h"
 #include "common/runtime_profile.h"
+#include "compute_env/compute_env.h"
+#include "compute_env/data_stream/data_stream_mgr.h"
+#include "compute_env/pipeline/driver_limiter.h"
 #include "exec/capture_version_node.h"
 #include "exec/cross_join_node.h"
+#include "exec/data_sinks/data_stream_sender.h"
+#include "exec/data_sinks/result_sink.h"
+#include "exec/data_sinks/tablet_sink.h"
 #include "exec/exchange_node.h"
 #include "exec/exec_factory.h"
 #include "exec/exec_node.h"
@@ -34,25 +40,23 @@
 #include "exec/olap_scan_node.h"
 #include "exec/pipeline/adaptive/event.h"
 #include "exec/pipeline/fragment_context.h"
+#include "exec/pipeline/group_execution/execution_group.h"
 #include "exec/pipeline/pipeline_builder.h"
 #include "exec/pipeline/pipeline_driver_executor.h"
 #include "exec/pipeline/pipeline_fwd.h"
 #include "exec/pipeline/scan/morsel.h"
+#include "exec/pipeline/scan/scan_morsel.h"
 #include "exec/pipeline/schedule/common.h"
 #include "exec/pipeline/sink/result_sink_operator.h"
 #include "exec/scan_node.h"
-#include "exec/tablet_sink.h"
 #include "exec/workgroup/work_group.h"
 #include "gutil/casts.h"
 #include "gutil/map_util.h"
 #include "runtime/batch_write/batch_write_mgr.h"
-#include "runtime/data_stream_mgr.h"
-#include "runtime/data_stream_sender.h"
 #include "runtime/descriptors.h"
 #include "runtime/descriptors_ext.h"
 #include "runtime/exec_env.h"
 #include "runtime/global_dict/fragment_dict_state.h"
-#include "runtime/result_sink.h"
 #include "runtime/runtime_state_helper.h"
 #include "runtime/stream_load/stream_load_context.h"
 #include "runtime/stream_load/transaction_mgr.h"
@@ -116,7 +120,7 @@ Status FragmentExecutor::_prepare_query_ctx(ExecEnv* exec_env, const UnifiedExec
 
     const bool query_ctx_should_exist = t_desc_tbl.__isset.is_cached && t_desc_tbl.is_cached;
     ASSIGN_OR_RETURN(_query_ctx, exec_env->query_context_mgr()->get_or_register(query_id, query_ctx_should_exist));
-    _query_ctx->set_exec_env(exec_env);
+    _query_ctx->set_query_execution_services(&exec_env->query_execution_services());
     if (params.__isset.instances_number) {
         _query_ctx->set_total_fragments(params.instances_number);
     }
@@ -162,14 +166,12 @@ Status FragmentExecutor::_prepare_fragment_ctx(const UnifiedExecPlanFragmentPara
     const auto& coord = request.common().coord;
     const auto& query_id = request.common().params.query_id;
     const auto& fragment_instance_id = request.fragment_instance_id();
-    const auto& is_stream_pipeline = request.is_stream_pipeline();
 
     _fragment_ctx = std::make_shared<FragmentContext>();
 
     _fragment_ctx->set_query_id(query_id);
     _fragment_ctx->set_fragment_instance_id(fragment_instance_id);
     _fragment_ctx->set_fe_addr(coord);
-    _fragment_ctx->set_is_stream_pipeline(is_stream_pipeline);
 
     if (request.common().__isset.adaptive_dop_param) {
         _fragment_ctx->set_enable_adaptive_dop(true);
@@ -227,9 +229,11 @@ Status FragmentExecutor::_prepare_runtime_state(ExecEnv* exec_env, const Unified
     const auto& t_desc_tbl = request.common().desc_tbl;
     auto& wg = _wg;
 
-    _fragment_ctx->set_runtime_state(
-            std::make_unique<RuntimeState>(query_id, fragment_instance_id, query_options, query_globals, exec_env));
+    _fragment_ctx->set_runtime_state(std::make_unique<RuntimeState>(query_id, fragment_instance_id, query_options,
+                                                                    query_globals,
+                                                                    &exec_env->query_execution_services(), exec_env));
     auto* runtime_state = _fragment_ctx->runtime_state();
+    runtime_state->init_fragment_mem_pool();
     runtime_state->set_enable_pipeline_engine(true);
     runtime_state->set_fragment_ctx(_fragment_ctx.get());
     runtime_state->set_fragment_dict_state(_fragment_ctx->dict_state());
@@ -393,11 +397,9 @@ static std::unordered_set<int32_t> collect_broadcast_join_right_offsprings(
     return offsprings;
 }
 
-// there will be partition values used by this batch of scan ranges and maybe following scan ranges
-// so before process this batch of scan ranges, we have to put partition values into the table associated with.
-static Status add_scan_ranges_partition_values(RuntimeState* runtime_state,
-                                               const std::vector<TScanRangeParams>& scan_ranges) {
-    auto* obj_pool = runtime_state->obj_pool();
+Status FragmentExecutor::add_scan_ranges_partition_values(RuntimeState* runtime_state,
+                                                          const std::vector<TScanRangeParams>& scan_ranges) {
+    auto* obj_pool = RuntimeStateHelper::global_obj_pool(runtime_state);
     const DescriptorTbl& desc_tbl = runtime_state->desc_tbl();
     TTableId cache_table_id = -1;
     TableDescriptor* table = nullptr;
@@ -417,7 +419,7 @@ static Status add_scan_ranges_partition_values(RuntimeState* runtime_state,
         if (table == nullptr) continue;
         // only HiveTableDescriptor(includes hive,iceberg,hudi,deltalake etc) supports this feature.
         HiveTableDescriptor* hive_table = down_cast<HiveTableDescriptor*>(table);
-        RETURN_IF_ERROR(hive_table->add_partition_value(runtime_state, obj_pool, hdfs_scan_range.partition_id,
+        RETURN_IF_ERROR(hive_table->add_partition_value(obj_pool, hdfs_scan_range.partition_id,
                                                         hdfs_scan_range.partition_value));
     }
     return Status::OK();
@@ -426,7 +428,7 @@ static Status add_scan_ranges_partition_values(RuntimeState* runtime_state,
 static Status add_per_driver_scan_ranges_partition_values(RuntimeState* runtime_state,
                                                           const PerDriverScanRangesMap& map) {
     for (const auto& [_, scan_ranges] : map) {
-        RETURN_IF_ERROR(add_scan_ranges_partition_values(runtime_state, scan_ranges));
+        RETURN_IF_ERROR(FragmentExecutor::add_scan_ranges_partition_values(runtime_state, scan_ranges));
     }
     return Status::OK();
 }
@@ -576,7 +578,7 @@ Status FragmentExecutor::_prepare_exec_plan(ExecEnv* exec_env, const UnifiedExec
             enable_shared_scan = false;
         }
 
-        RETURN_IF_ERROR(add_scan_ranges_partition_values(runtime_state, scan_ranges));
+        RETURN_IF_ERROR(FragmentExecutor::add_scan_ranges_partition_values(runtime_state, scan_ranges));
         RETURN_IF_ERROR(add_per_driver_scan_ranges_partition_values(runtime_state, scan_ranges_per_driver_seq));
         bool has_more_morsel = ScanMorsel::has_more_scan_ranges(scan_ranges) ||
                                has_more_per_driver_seq_scan_ranges(scan_ranges_per_driver_seq);
@@ -745,7 +747,6 @@ Status FragmentExecutor::_prepare_pipeline_driver(ExecEnv* exec_env, const Unifi
     const auto& fragment = request.common().fragment;
     const auto& params = request.common().params;
 
-    auto is_stream_pipeline = request.is_stream_pipeline();
     ExecNode* plan = _fragment_ctx->plan();
 
     Drivers drivers;
@@ -753,7 +754,7 @@ Status FragmentExecutor::_prepare_pipeline_driver(ExecEnv* exec_env, const Unifi
     auto* runtime_state = _fragment_ctx->runtime_state();
     size_t sink_dop = _calc_sink_dop(ExecEnv::GetInstance(), request);
     // Build pipelines
-    PipelineBuilderContext context(_fragment_ctx.get(), degree_of_parallelism, sink_dop, is_stream_pipeline);
+    PipelineBuilderContext context(_fragment_ctx.get(), degree_of_parallelism, sink_dop);
     context.init_colocate_groups(std::move(_colocate_exec_groups));
     PipelineBuilder builder(context);
     ASSIGN_OR_RETURN(auto exec_ops, builder.decompose_exec_node_to_pipeline(*_fragment_ctx, plan));
@@ -777,7 +778,8 @@ Status FragmentExecutor::_prepare_pipeline_driver(ExecEnv* exec_env, const Unifi
     auto [exec_groups, pipelines] = builder.build();
     _fragment_ctx->set_pipelines(std::move(exec_groups), std::move(pipelines));
 
-    if (runtime_state->query_options().__isset.enable_pipeline_event_scheduler &&
+    if (config::enable_pipeline_event_scheduler &&
+        runtime_state->query_options().__isset.enable_pipeline_event_scheduler &&
         runtime_state->query_options().enable_pipeline_event_scheduler) {
         // check all pipeline in fragment support event scheduler
         bool all_support_event_scheduler = true;
@@ -793,7 +795,7 @@ Status FragmentExecutor::_prepare_pipeline_driver(ExecEnv* exec_env, const Unifi
         all_support_event_scheduler = all_support_event_scheduler && !runtime_state->enable_wait_dependent_event();
         if (all_support_event_scheduler) {
             _fragment_ctx->init_event_scheduler();
-            RETURN_IF_ERROR(_fragment_ctx->set_pipeline_timer(exec_env->pipeline_timer()));
+            RETURN_IF_ERROR(_fragment_ctx->set_pipeline_timer(exec_env->compute_env()->pipeline_timer()));
         }
     }
     runtime_state->set_enable_event_scheduler(_fragment_ctx->enable_event_scheduler());
@@ -827,7 +829,8 @@ Status FragmentExecutor::_prepare_pipeline_driver(ExecEnv* exec_env, const Unifi
     }
 
     // Acquire driver token to avoid overload
-    ASSIGN_OR_RETURN(auto driver_token, exec_env->driver_limiter()->try_acquire(_fragment_ctx->total_dop()));
+    ASSIGN_OR_RETURN(auto driver_token,
+                     exec_env->compute_env()->driver_limiter()->try_acquire(_fragment_ctx->total_dop()));
     _fragment_ctx->set_driver_token(std::move(driver_token));
 
     return Status::OK();
@@ -900,8 +903,9 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
         int64_t prepare_pipeline_driver_time = 0;
 
         int64_t process_mem_bytes = GlobalEnv::GetInstance()->process_mem_tracker()->consumption();
-        size_t num_process_drivers = ExecEnv::GetInstance()->driver_limiter()->num_total_drivers();
+        size_t num_process_drivers = 0;
     } profiler;
+    profiler.num_process_drivers = exec_env->compute_env()->driver_limiter()->num_total_drivers();
 
     DeferOp defer([this, &request, &prepare_success, &profiler]() {
         if (prepare_success) {
@@ -934,14 +938,12 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
 
             VLOG_QUERY << "Prepare fragment succeed: query_id=" << print_id(request.common().params.query_id)
                        << " fragment_instance_id=" << print_id(request.fragment_instance_id())
-                       << " is_stream_pipeline=" << request.is_stream_pipeline()
                        << " backend_num=" << request.backend_num()
                        << " fragment plan=" << fragment_ctx->plan()->debug_string();
         } else {
             _fail_cleanup(prepare_success);
             LOG(WARNING) << "Prepare fragment failed: " << print_id(request.common().params.query_id)
                          << " fragment_instance_id=" << print_id(request.fragment_instance_id())
-                         << " is_stream_pipeline=" << request.is_stream_pipeline()
                          << " backend_num=" << request.backend_num();
             VLOG_QUERY << "Prepare fragment failed fragment=" << request.common().fragment;
         }
@@ -991,6 +993,7 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
 
 Status FragmentExecutor::execute(ExecEnv* exec_env) {
     bool prepare_success = false;
+    (void)exec_env;
     DeferOp defer([this, &prepare_success]() {
         if (!prepare_success) {
             _fail_cleanup(true);
@@ -1071,7 +1074,7 @@ Status FragmentExecutor::append_incremental_scan_ranges(ExecEnv* exec_env, const
                                 print_id(query_id), print_id(instance_id)));
         }
 
-        RETURN_IF_ERROR(add_scan_ranges_partition_values(runtime_state, scan_ranges));
+        RETURN_IF_ERROR(FragmentExecutor::add_scan_ranges_partition_values(runtime_state, scan_ranges));
         pipeline::Morsels morsels;
         bool has_more_morsel = false;
         pipeline::ScanMorsel::build_scan_morsels(node_id, scan_ranges, true, &morsels, &has_more_morsel);
@@ -1102,7 +1105,7 @@ Status FragmentExecutor::append_incremental_scan_ranges(ExecEnv* exec_env, const
             bool has_more_morsel = has_more_per_driver_seq_scan_ranges(per_driver_scan_ranges);
             for (const auto& [driver_seq, scan_ranges] : per_driver_scan_ranges) {
                 if (scan_ranges.size() == 0) continue;
-                RETURN_IF_ERROR(add_scan_ranges_partition_values(runtime_state, scan_ranges));
+                RETURN_IF_ERROR(FragmentExecutor::add_scan_ranges_partition_values(runtime_state, scan_ranges));
                 pipeline::Morsels morsels;
                 [[maybe_unused]] bool local_has_more;
                 pipeline::ScanMorsel::build_scan_morsels(node_id, scan_ranges, true, &morsels, &local_has_more);

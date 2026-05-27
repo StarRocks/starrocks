@@ -17,30 +17,38 @@
 #include <memory>
 #include <vector>
 
-#include "agent/master_info.h"
 #include "base/utility/defer_op.h"
 #include "common/config_exec_flow_fwd.h"
 #include "common/config_rpc_client_fwd.h"
 #include "common/config_scan_io_fwd.h"
 #include "common/status.h"
+#include "common/system/master_info.h"
 #include "common/thread/thread.h"
+#include "common/util/thrift_client_cache.h"
+#include "compute_env/data_stream/data_stream_mgr.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/pipeline_fwd.h"
 #include "exec/pipeline/scan/connector_scan_operator.h"
 #include "exec/pipeline/scan/glm_manager.h"
 #include "exec/spill/query_spill_manager.h"
 #include "exec/workgroup/work_group.h"
-#include "runtime/client_cache.h"
+#include "platform/thrift_rpc_helper.h"
 #include "runtime/current_thread.h"
-#include "runtime/data_stream_mgr.h"
 #include "runtime/exec_env.h"
 #include "runtime/query_statistics.h"
 #include "runtime/runtime_filter_cache.h"
+#include "runtime/runtime_state.h"
 #include "runtime/runtime_state_helper.h"
-#include "util/global_metrics_registry.h"
-#include "util/thrift_rpc_helper.h"
 
 namespace starrocks::pipeline {
+
+namespace {
+
+const RuntimeServices* runtime_services(const QueryExecutionServices* query_execution_services) {
+    return query_execution_services != nullptr ? query_execution_services->runtime : nullptr;
+}
+
+} // namespace
 
 QueryContext::QueryContext()
         : _fragment_mgr(new FragmentContextManager()),
@@ -49,7 +57,6 @@ QueryContext::QueryContext()
           _num_active_fragments(0),
           _wg_running_query_token_ptr(nullptr) {
     _sub_plan_query_statistics_recvr = std::make_shared<QueryStatisticsRecvr>();
-    _stream_epoch_manager = std::make_shared<StreamEpochManager>();
     _lifetime_sw.start();
 }
 
@@ -81,11 +88,11 @@ QueryContext::~QueryContext() noexcept {
 
     // Accounting memory usage during QueryContext's destruction should not use query-level MemTracker, but its released
     // in the mid of QueryContext destruction, so use process-level memory tracker
-    if (_exec_env != nullptr) {
+    if (auto* services = runtime_services(_query_execution_services); services != nullptr) {
         if (_is_runtime_filter_coordinator) {
-            _exec_env->runtime_filter_worker()->close_query(_query_id);
+            services->runtime_filter_worker->close_query(_query_id);
         }
-        _exec_env->runtime_filter_cache()->remove(_query_id);
+        services->runtime_filter_cache->remove(_query_id);
     }
 
     // Make sure all bytes are released back to parent trackers.
@@ -114,6 +121,9 @@ void QueryContext::count_down_fragments(QueryContextManager* query_context_mgr) 
 }
 
 void QueryContext::count_down_fragments() {
+    if (auto* services = runtime_services(_query_execution_services); services != nullptr) {
+        return this->count_down_fragments(services->query_context_mgr);
+    }
     return this->count_down_fragments(ExecEnv::GetInstance()->query_context_mgr());
 }
 
@@ -196,8 +206,11 @@ void QueryContext::init_mem_tracker(int64_t query_mem_limit, MemTracker* parent,
 Status QueryContext::init_spill_manager(const TQueryOptions& query_options) {
     Status st;
     std::call_once(_init_spill_manager_once, [this, &st, &query_options]() {
-        auto* g_spill_manager = ExecEnv::GetInstance()->global_spill_manager();
-        _spill_manager = std::make_unique<spill::QuerySpillManager>(_query_id, g_spill_manager);
+        auto* services = runtime_services(_query_execution_services);
+        auto* g_spill_manager =
+                services != nullptr ? services->global_spill_manager : ExecEnv::GetInstance()->global_spill_manager();
+        auto* spill_dir_mgr = services != nullptr ? services->spill_dir_mgr : ExecEnv::GetInstance()->spill_dir_mgr();
+        _spill_manager = std::make_unique<spill::QuerySpillManager>(_query_id, g_spill_manager, spill_dir_mgr);
         st = _spill_manager->init_block_manager(query_options);
     });
     return st;
@@ -369,12 +382,14 @@ QueryContextManager::QueryContextManager(size_t log2_num_slots)
           _context_maps(_num_slots),
           _second_chance_maps(_num_slots) {}
 
-Status QueryContextManager::init() {
+Status QueryContextManager::init(MetricRegistry* metrics) {
+    _metrics = metrics;
     // regist query context metrics
-    auto metrics = GlobalMetricsRegistry::instance()->metrics();
-    _query_ctx_cnt = std::make_unique<UIntGauge>(MetricUnit::NOUNIT);
-    metrics->register_metric(_metric_name, _query_ctx_cnt.get());
-    metrics->register_hook(_metric_name, [this]() { _query_ctx_cnt->set_value(this->size()); });
+    if (_metrics != nullptr) {
+        _query_ctx_cnt = std::make_unique<UIntGauge>(MetricUnit::NOUNIT);
+        _metrics->register_metric(_metric_name, _query_ctx_cnt.get());
+        _metrics->register_hook(_metric_name, [this]() { _query_ctx_cnt->set_value(this->size()); });
+    }
 
     try {
         _clean_thread = std::make_shared<std::thread>(_clean_func, this);
@@ -418,8 +433,9 @@ size_t QueryContextManager::_slot_idx(const TUniqueId& query_id) {
 
 QueryContextManager::~QueryContextManager() {
     // unregist metrics
-    auto metrics = GlobalMetricsRegistry::instance()->metrics();
-    metrics->deregister_hook(_metric_name);
+    if (_metrics != nullptr) {
+        _metrics->deregister_hook(_metric_name);
+    }
     _query_ctx_cnt.reset();
 
     if (_clean_thread) {

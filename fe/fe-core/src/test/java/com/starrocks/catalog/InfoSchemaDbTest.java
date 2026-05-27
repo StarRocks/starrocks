@@ -108,6 +108,44 @@ public class InfoSchemaDbTest {
     }
 
     @Test
+    public void testRoutinesAndStatisticsSwitchOnMysqlVersion() {
+        InfoSchemaDb db = new InfoSchemaDb();
+        String original = Config.mysql_server_version;
+        try {
+            Config.mysql_server_version = "8.0.33";
+            Table routinesV8 = db.getTable("routines");
+            Table statisticsV8 = db.getTable("statistics");
+            Assertions.assertEquals(31, routinesV8.getBaseSchema().size());
+            Assertions.assertEquals(18, statisticsV8.getBaseSchema().size());
+            Assertions.assertTrue(routinesV8.getBaseSchema().stream()
+                    .anyMatch(c -> "DATA_TYPE".equalsIgnoreCase(c.getName())));
+            Assertions.assertTrue(statisticsV8.getBaseSchema().stream()
+                    .anyMatch(c -> "IS_VISIBLE".equalsIgnoreCase(c.getName())));
+
+            Config.mysql_server_version = "5.7.28";
+            Table routinesV5 = db.getTable("routines");
+            Table statisticsV5 = db.getTable("statistics");
+            Assertions.assertEquals(23, routinesV5.getBaseSchema().size());
+            Assertions.assertEquals(16, statisticsV5.getBaseSchema().size());
+            Assertions.assertFalse(routinesV5.getBaseSchema().stream()
+                    .anyMatch(c -> "DATA_TYPE".equalsIgnoreCase(c.getName())));
+            Assertions.assertFalse(statisticsV5.getBaseSchema().stream()
+                    .anyMatch(c -> "IS_VISIBLE".equalsIgnoreCase(c.getName())));
+            Assertions.assertFalse(statisticsV5.getBaseSchema().stream()
+                    .anyMatch(c -> "EXPRESSION".equalsIgnoreCase(c.getName())));
+
+            // Other MySQL-8 additions ride on tables that don't shift ordinals,
+            // so they stay registered regardless of the advertised version.
+            Table collations = db.getTable("collations");
+            Assertions.assertNotNull(collations);
+            Assertions.assertTrue(collations.getBaseSchema().stream()
+                    .anyMatch(c -> "PAD_ATTRIBUTE".equalsIgnoreCase(c.getName())));
+        } finally {
+            Config.mysql_server_version = original;
+        }
+    }
+
+    @Test
     public void testInitRole() throws Exception {
         TGetGrantsToRolesOrUserRequest request = new TGetGrantsToRolesOrUserRequest();
         request.setType(TGrantsToType.ROLE);

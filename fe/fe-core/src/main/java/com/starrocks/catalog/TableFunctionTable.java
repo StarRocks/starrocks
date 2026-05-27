@@ -42,6 +42,8 @@ import com.starrocks.sql.ast.LoadStmt;
 import com.starrocks.sql.ast.expression.Delimiter;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorFunctions;
+import com.starrocks.sql.parser.ParsingException;
+import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.TBrokerFileStatus;
 import com.starrocks.thrift.TBrokerRangeDesc;
@@ -146,6 +148,8 @@ public class TableFunctionTable extends Table {
     private static final String PROPERTY_LIST_FILES_ONLY = "list_files_only";
     private static final String PROPERTY_LIST_RECURSIVELY = "list_recursively";
 
+    public static final String PROPERTY_SCHEMA = "schema";
+
     public enum MisMatchFillValue {
         NONE,       // error
         NULL;
@@ -188,6 +192,8 @@ public class TableFunctionTable extends Table {
     private List<TBrokerFileStatus> fileStatuses = Lists.newArrayList();
 
     private MisMatchFillValue misMatchFillValue = MisMatchFillValue.NONE;
+
+    private Optional<List<Column>> explicitSchemaColumns = Optional.empty();
 
     // for unload data
     private String compressionType;
@@ -255,9 +261,11 @@ public class TableFunctionTable extends Table {
     private void setSchemaForLoadAndQuery() throws DdlException {
         parseFilesForLoadAndQuery();
 
-        // infer schema from files
-        List<Column> columns = new ArrayList<>();
-        if (path.startsWith(FAKE_PATH)) {
+        List<Column> columns;
+        if (explicitSchemaColumns.isPresent()) {
+            columns = new ArrayList<>(explicitSchemaColumns.get());
+        } else if (path.startsWith(FAKE_PATH)) {
+            columns = new ArrayList<>();
             columns.add(new Column("col_int", IntegerType.INT));
             columns.add(new Column("col_string", VarcharType.VARCHAR));
         } else {
@@ -398,6 +406,12 @@ public class TableFunctionTable extends Table {
             tTableFunctionTable.setCsv_column_seperator(csvColumnSeparator);
             tTableFunctionTable.setCsv_row_delimiter(csvRowDelimiter);
             tTableFunctionTable.setCsv_include_header(csvIncludeHeader);
+            if (csvEnclose != 0) {
+                tTableFunctionTable.setCsv_enclose(csvEnclose);
+            }
+            if (csvEscape != 0) {
+                tTableFunctionTable.setCsv_escape(csvEscape);
+            }
         }
         tTableFunctionTable.setParquet_use_legacy_encoding(parquetUseLegacyEncoding);
         TParquetOptions parquetOptions = new TParquetOptions();
@@ -464,6 +478,26 @@ public class TableFunctionTable extends Table {
 
         if (!SUPPORTED_FORMATS.contains(format.toLowerCase())) {
             throw new DdlException("not supported format: " + format);
+        }
+
+        if (properties.containsKey(PROPERTY_SCHEMA)) {
+            rejectIfPresent(properties, PROPERTY_AUTO_DETECT_SAMPLE_FILES, PROPERTY_SCHEMA);
+            rejectIfPresent(properties, PROPERTY_AUTO_DETECT_SAMPLE_ROWS, PROPERTY_SCHEMA);
+            rejectIfPresent(properties, PROPERTY_AUTO_DETECT_TYPES, PROPERTY_SCHEMA);
+
+            String schemaStr = properties.get(PROPERTY_SCHEMA);
+            if (Strings.isNullOrEmpty(schemaStr) || schemaStr.trim().isEmpty()) {
+                throw new DdlException("'schema' property is empty");
+            }
+            try {
+                List<Column> cols = SqlParser.parseFilesSchema(schemaStr);
+                if (cols.isEmpty()) {
+                    throw new DdlException("'schema' declares no columns");
+                }
+                explicitSchemaColumns = Optional.of(cols);
+            } catch (ParsingException e) {
+                throw new DdlException("invalid 'schema': " + e.getMessage(), e);
+            }
         }
 
         String colsFromPathProp = properties.get(PROPERTY_COLUMNS_FROM_PATH);
@@ -754,6 +788,10 @@ public class TableFunctionTable extends Table {
         return misMatchFillValue != MisMatchFillValue.NONE;
     }
 
+    public boolean hasExplicitSchema() {
+        return explicitSchemaColumns.isPresent();
+    }
+
     @Override
     public String toString() {
         return String.format("TABLE('path'='%s', 'format'='%s')", path, format);
@@ -806,6 +844,12 @@ public class TableFunctionTable extends Table {
     }
 
     public void parsePropertiesForUnload(List<Column> columns, SessionVariable sessionVariable) {
+        if (properties.containsKey(PROPERTY_SCHEMA)) {
+            throw new SemanticException(
+                    "'schema' is not supported in INSERT INTO FILES (unload); " +
+                    "output columns are determined by the SELECT list");
+        }
+
         List<String> columnNames = columns.stream()
                 .map(Column::getName)
                 .collect(Collectors.toList());
@@ -928,6 +972,29 @@ public class TableFunctionTable extends Table {
             this.csvIncludeHeader = includeHeader.equalsIgnoreCase("true");
         }
 
+        // csv enclose & escape options: accept exactly one single-byte ASCII character.
+        // Reject empty, multi-character, or multi-byte (non-ASCII) values so that the
+        // byte transmitted to BE unambiguously represents the user's intent.
+        if (properties.containsKey(PROPERTY_CSV_ENCLOSE)) {
+            byte[] bs = properties.get(PROPERTY_CSV_ENCLOSE).getBytes(StandardCharsets.UTF_8);
+            if (bs.length != 1) {
+                throw new SemanticException(
+                        "csv.enclose must be a single-byte ASCII character, got \"%s\" (%d bytes)",
+                        properties.get(PROPERTY_CSV_ENCLOSE), bs.length);
+            }
+            this.csvEnclose = bs[0];
+        }
+
+        if (properties.containsKey(PROPERTY_CSV_ESCAPE)) {
+            byte[] bs = properties.get(PROPERTY_CSV_ESCAPE).getBytes(StandardCharsets.UTF_8);
+            if (bs.length != 1) {
+                throw new SemanticException(
+                        "csv.escape must be a single-byte ASCII character, got \"%s\" (%d bytes)",
+                        properties.get(PROPERTY_CSV_ESCAPE), bs.length);
+            }
+            this.csvEscape = bs[0];
+        }
+
         // parquet options
         if (properties.containsKey(PROPERTY_PARQUET_USE_LEGACY_ENCODING)) {
             String useLegacyEncoding = properties.getOrDefault(PROPERTY_PARQUET_USE_LEGACY_ENCODING, "false");
@@ -962,6 +1029,14 @@ public class TableFunctionTable extends Table {
 
         public List<Column> build() {
             return columns;
+        }
+    }
+
+    private static void rejectIfPresent(Map<String, String> props, String key, String against)
+            throws DdlException {
+        if (props.containsKey(key)) {
+            throw new DdlException(
+                    String.format("'%s' cannot be used together with '%s'", key, against));
         }
     }
 }

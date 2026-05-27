@@ -24,12 +24,14 @@
 #include "base/testutil/sync_point.h"
 #include "common/config_hdfs_fwd.h"
 #include "common/system/backend_options.h"
+#include "exec/data_sinks/file_result_writer.h"
 #include "fs/encrypt_file.h"
+#include "fs/fs_registry.h"
+#include "fs/fs_scheme.h"
 #include "fs/fs_util.h"
 #include "fs/hdfs/hdfs_fs_cache.h"
 #include "gen_cpp/AgentService_types.h"
 #include "gutil/strings/substitute.h"
-#include "runtime/file_result_writer.h"
 #include "udf/java/utils.h"
 #include "util/hdfs_util.h"
 
@@ -717,11 +719,8 @@ StatusOr<std::unique_ptr<WritableFile>> HdfsFileSystem::new_writable_file(const 
     }
 
     // `io.file.buffer.size` of https://apache.github.io/hadoop/hadoop-project-dist/hadoop-common/core-default.xml
-    int hdfs_write_buffer_size = 0;
     // pass zero to hdfsOpenFile will use the default hdfs_write_buffer_size
-    if (_options.result_file_options != nullptr) {
-        hdfs_write_buffer_size = _options.result_file_options->write_buffer_size_kb;
-    }
+    int hdfs_write_buffer_size = _options.hdfs_write_buffer_size_kb;
     if (_options.export_sink != nullptr && _options.export_sink->__isset.hdfs_write_buffer_size_kb) {
         hdfs_write_buffer_size = _options.export_sink->hdfs_write_buffer_size_kb;
     }
@@ -787,5 +786,63 @@ Status HdfsFileSystem::rename_file(const std::string& src, const std::string& ta
 std::unique_ptr<FileSystem> new_fs_hdfs(const FSOptions& options) {
     return std::make_unique<HdfsFileSystem>(options);
 }
+
+namespace fs {
+namespace {
+
+thread_local std::shared_ptr<FileSystem> tls_fs_hdfs_registry;
+
+bool match_hdfs_fallback_shared(std::string_view uri) {
+    return is_fallback_to_hadoop_fs(uri);
+}
+
+bool match_hdfs_fallback_unique(std::string_view uri, const FSOptions&) {
+    return is_fallback_to_hadoop_fs(uri);
+}
+
+bool match_hdfs_default_shared(std::string_view) {
+    return true;
+}
+
+bool match_hdfs_default_unique(std::string_view, const FSOptions&) {
+    return true;
+}
+
+StatusOr<std::shared_ptr<FileSystem>> create_hdfs_shared(std::string_view) {
+    if (tls_fs_hdfs_registry == nullptr) {
+        tls_fs_hdfs_registry.reset(new_fs_hdfs(FSOptions()).release());
+    }
+    return tls_fs_hdfs_registry;
+}
+
+StatusOr<std::unique_ptr<FileSystem>> create_hdfs_unique(std::string_view, const FSOptions& options) {
+    return new_fs_hdfs(options);
+}
+
+} // namespace
+
+FileSystemProvider new_hdfs_fallback_file_system_provider(int priority) {
+    return {
+            .id = "hdfs-fallback",
+            .priority = priority,
+            .match_shared = match_hdfs_fallback_shared,
+            .create_shared = create_hdfs_shared,
+            .match_unique = match_hdfs_fallback_unique,
+            .create_unique = create_hdfs_unique,
+    };
+}
+
+FileSystemProvider new_hdfs_file_system_provider(int priority) {
+    return {
+            .id = "hdfs",
+            .priority = priority,
+            .match_shared = match_hdfs_default_shared,
+            .create_shared = create_hdfs_shared,
+            .match_unique = match_hdfs_default_unique,
+            .create_unique = create_hdfs_unique,
+    };
+}
+
+} // namespace fs
 
 } // namespace starrocks

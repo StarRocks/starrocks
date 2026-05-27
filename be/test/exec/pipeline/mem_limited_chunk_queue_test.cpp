@@ -23,9 +23,9 @@
 #include "common/config_storage_fwd.h"
 #include "common/runtime_profile.h"
 #include "exec/pipeline/exchange/multi_cast_local_exchange.h"
+#include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/pipeline_fwd.h"
 #include "exec/pipeline/query_context.h"
-#include "exec/pipeline/stream_epoch_manager.h"
 #include "exec/workgroup/work_group.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
@@ -86,7 +86,7 @@ public:
         chunk->append_column(std::move(col), 0);
         return chunk;
     }
-    size_t _next_value = 0;
+    uint64_t _next_value = 0;
     size_t _chunk_size;
 };
 

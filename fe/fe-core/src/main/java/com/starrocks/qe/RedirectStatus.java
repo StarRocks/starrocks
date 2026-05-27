@@ -35,6 +35,7 @@ import com.starrocks.sql.ast.AdminShowConfigStmt;
 import com.starrocks.sql.ast.AdminShowReplicaDistributionStmt;
 import com.starrocks.sql.ast.AdminShowReplicaStatusStmt;
 import com.starrocks.sql.ast.AdminShowTabletStatusStmt;
+import com.starrocks.sql.ast.AdminSkipCommittedTransactionStmt;
 import com.starrocks.sql.ast.AlterCatalogStmt;
 import com.starrocks.sql.ast.AlterDatabaseQuotaStmt;
 import com.starrocks.sql.ast.AlterDatabaseRenameStatement;
@@ -804,6 +805,12 @@ public class RedirectStatus {
         @Override
         public RedirectStatus visitAdminAlterAutomatedSnapshotIntervalStatement(AdminAlterAutomatedSnapshotIntervalStmt clause,
                                                                                 Void context) {
+            return visitDDLStatement(clause, context);
+        }
+
+        @Override
+        public RedirectStatus visitAdminSkipCommittedTransactionStatement(AdminSkipCommittedTransactionStmt clause,
+                                                                            Void context) {
             return visitDDLStatement(clause, context);
         }
 

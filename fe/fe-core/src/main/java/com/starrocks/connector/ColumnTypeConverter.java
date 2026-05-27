@@ -105,6 +105,8 @@ import static org.apache.hadoop.hive.serde2.typeinfo.TypeInfoFactory.stringTypeI
 import static org.apache.hadoop.hive.serde2.typeinfo.TypeInfoFactory.timestampTypeInfo;
 
 public class ColumnTypeConverter {
+    // UUID canonical string form: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
+    public static final int UUID_VARCHAR_LENGTH = 36;
     public static final String DECIMAL_PATTERN = "^decimal\\((\\d+), *(\\d+)\\)";
     public static final String COMPLEX_PATTERN = "([0-9a-z<>(),:_ ]+)";
     public static final String ARRAY_PATTERN = "^array<" + COMPLEX_PATTERN + ">";
@@ -600,7 +602,8 @@ public class ColumnTypeConverter {
             String fieldName = field.name();
             org.apache.paimon.types.DataType type = field.type();
             Type fieldType = ColumnTypeConverter.fromPaimonType(type);
-            Column column = new Column(fieldName, fieldType, type.isNullable(), field.description());
+            // Force all Paimon columns to be nullable (true) regardless of their DataType's nullable property.
+            Column column = new Column(fieldName, fieldType, true, field.description());
             columns.add(column);
         }
         return columns;
@@ -799,8 +802,9 @@ public class ColumnTypeConverter {
                 }
                 return new StructType(structFields);
             case BINARY:
-            case UUID:
                 return VarbinaryType.VARBINARY;
+            case UUID:
+                return TypeFactory.createVarcharType(UUID_VARCHAR_LENGTH);
             case TIME:
                 return com.starrocks.type.DateType.TIME;
             case VARIANT:

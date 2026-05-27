@@ -14,11 +14,13 @@
 
 #include "storage/lake/horizontal_compaction_task.h"
 
-#include "agent/master_info.h"
 #include "base/time/time.h"
 #include "base/utility/defer_op.h"
+#include "column/chunk_factory.h"
+#include "column/chunk_schema_helper.h"
 #include "common/config_compaction_fwd.h"
 #include "common/config_storage_fwd.h"
+#include "common/system/master_info.h"
 #include "runtime/current_thread.h"
 #include "runtime/runtime_state.h"
 #include "storage/chunk_helper.h"
@@ -92,8 +94,8 @@ Status HorizontalCompactionTask::execute(CancelFunc cancel_func, ThreadPool* flu
         writer->try_enable_pk_index_eager_build();
     }
 
-    auto chunk = ChunkHelper::new_chunk(schema, chunk_size);
-    auto char_field_indexes = ChunkHelper::get_char_field_indexes(schema);
+    auto chunk = ChunkFactory::new_chunk(schema, chunk_size);
+    auto char_field_indexes = ChunkSchemaHelper::get_char_field_indexes(schema);
     std::vector<uint64_t> rssid_rowids;
     rssid_rowids.reserve(chunk_size);
 
@@ -131,7 +133,9 @@ Status HorizontalCompactionTask::execute(CancelFunc cancel_func, ThreadPool* flu
         chunk->reset();
         rssid_rowids.clear();
 
-        _context->progress.update(100 * reader.stats().raw_rows_read / total_num_rows);
+        if (total_num_rows > 0) {
+            _context->progress.update(100 * reader.stats().raw_rows_read / total_num_rows);
+        }
         _context->stats->collect(reader.stats());
     }
 

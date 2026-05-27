@@ -142,13 +142,15 @@ Controls the encoding technique used for DATETIME and DECIMAL data types. Valid 
 
 If this item is set to `true`:
 
-- For DATETIME type, the system uses `INT96` encoding.
 - For DECIMAL type, the system uses `fixed_len_byte_array` encoding.
+- For DATETIME type, the system uses `INT96` encoding.
 
 If this item is set to `false`:
 
-- For DATETIME type, the system uses `INT64` encoding.
 - For DECIMAL type, the system uses `INT32` or `INT64` encoding.
+- For DATETIME type, the system uses `INT64` encoding.
+  - **Instant Semantics**: If `isAdjustedToUTC` is set to `true` for the Parquet TIMESTAMP type, the system outputs a timestamp normalized to UTC. Each value unambiguously identifies a single instant on the timeline, and can be transferred into a specific timezone.
+  - **Local Semantics**: If `isAdjustedToUTC` is set to `false` for the Parquet TIMESTAMP type, the system outputs a timestamp that represents the year, month, day, hour, minute, second, and sub-second in a local timezone, regardless of what specific timezone is considered local. Such values are always displayed the same way, regardless of the local timezone in effect, and do not identify instants on the timeline.
 
 :::note
 
@@ -238,13 +240,26 @@ If StarRocks fails to unionize all the columns, it generates a schema error repo
 All data files in a single batch must be of the same file format.
 :::
 
-##### Push down target table schema check
+##### Push down target table column types / schema
 
-From v3.4.0 onwards, the system supports pushing down the target table schema check to the Scan stage of `FILES()`.
+From v3.4.0 onwards, the system supports pushing down target table column types to the Scan stage of `FILES()` to improve type inference accuracy.
 
-Schema detection of `FILES()` is not fully strict. For example, any integer column in CSV files is inferred and checked as the BIGINT type when the function is reading the files. In this case, if the corresponding column in the target table is the `TINYINT` type, the CSV data records that exceed the BIGINT type will not be filtered. Instead, they will be filled with `NULL` implicitly.
+Schema detection of `FILES()` is not fully strict. For example, any integer column in CSV files is inferred as the BIGINT type when the function is reading the files. In this case, if the corresponding column in the target table is the `TINYINT` type, the CSV data records that exceed the TINYINT range will not be filtered. Instead, they will be filled with `NULL` implicitly.
 
-To address this issue, the system introduces the dynamic FE configuration item `files_enable_insert_push_down_schema` to control whether to push down the target table schema check to the Scan stage of `FILES()`. By setting `files_enable_insert_push_down_schema` to `true`, the system will filter the data records which fail the target table schema check at the file reading.
+To address this issue, the system introduces the dynamic FE configuration item `files_enable_insert_push_down_column_type` (alias: `files_enable_insert_push_down_schema`) to control whether to push down the target table column types to the Scan stage of `FILES()`. By setting `files_enable_insert_push_down_column_type` to `true`, the system will rewrite the types of matched file columns with the target table column types at the file reading stage. Only columns that already exist in the inferred file schema are affected; no columns are added or removed.
+
+For full schema push-down (both column names and types), you can set the INSERT property `enable_push_down_schema` to `true`. Unlike the FE configuration, this is specified on the INSERT statement itself rather than in the `FILES()` properties:
+
+```sql
+INSERT INTO target_table
+PROPERTIES ("enable_push_down_schema" = "true")
+SELECT * FROM FILES(
+    "path" = "s3://...",
+    "format" = "parquet"
+);
+```
+
+When `enable_push_down_schema` is `true`, StarRocks reshapes the `FILES()` schema to match the target table columns — adding columns that are missing from the inferred schema and trimming the schema to only the columns actually read by the SELECT list. Note that in `BY NAME` mode with `SELECT *`, the `*` is expanded to the target table's column names rather than the file's original columns, so extra file columns are dropped even with `SELECT *`.
 
 ##### Union files with different schema
 
@@ -539,13 +554,29 @@ If you choose Data Lake Storage Gen2 as your storage system, take one of the fol
   "azure.adls2.oauth2_client_endpoint" = "<service_principal_client_endpoint>"
   ```
 
-  The following table describes the parameters you need to configure `in StorageCredentialParams`.
+  The following table describes the parameters you need to configure in `StorageCredentialParams`.
 
   | **Parameter**                      | **Required** | **Description**                                              |
   | ---------------------------------- | ------------ | ------------------------------------------------------------ |
   | `azure.adls2.oauth2_client_id`       | Yes          | The client (application) ID of the service principal.        |
   | `azure.adls2.oauth2_client_secret`   | Yes          | The value of the new client (application) secret created.    |
   | `azure.adls2.oauth2_client_endpoint` | Yes          | The OAuth 2.0 token endpoint (v1) of the service principal or application. |
+
+- To choose the Workload Identity authentication method, configure `StorageCredentialParams` as follows:
+
+  ```SQL
+  "azure.adls2.oauth2_token_file" = "<path_to_token>",
+  "azure.adls2.oauth2_tenant_id" = "<service_principal_tenant_id>",
+  "azure.adls2.oauth2_client_id" = "<service_client_id>"
+  ```
+
+  The following table describes the parameters you need to configure in `StorageCredentialParams`.
+
+  | **Parameter**                           | **Required** | **Description**                                              |
+  | --------------------------------------- | ------------ | ------------------------------------------------------------ |
+  | azure.adls2.oauth2_token_file           | Yes          | The absolute file path to the OAuth2 token file projected into the pod by the Azure Workload Identity webhook. |
+  | azure.adls2.oauth2_tenant_id            | Yes          | The ID of the tenant whose data you want to access.          |
+  | azure.adls2.oauth2_client_id            | Yes          | The client ID (application ID) of the Azure AD application (user-assigned managed identity or app registration) associated with the workload identity. |
 
 ##### Azure Data Lake Storage Gen1
 
@@ -610,6 +641,105 @@ From v3.2 onwards, StarRocks can extract the value of a key/value pair from the 
 ```
 
 Suppose the data file **file1** is stored under a path in the format of `/geo/country=US/city=LA/`. You can specify the `columns_from_path` parameter as `"columns_from_path" = "country, city"` to extract the geographic information in the file path as the value of columns that are returned. For further instructions, see Example 4.
+
+#### `schema`
+
+From v4.1.2 onwards, `FILES()` supports an explicit `schema` parameter that lets you declare exactly which columns to read and their StarRocks types, bypassing BE-side schema inference.
+
+```SQL
+"schema" = "col_name TYPE[, col_name TYPE ...]"
+```
+
+When `schema` is set, `FILES()` reads only the declared columns with the declared types. Automatic schema detection (sampling-based inference) is skipped, which makes query behavior predictable when the underlying files evolve differently across batches.
+
+##### Supported types
+
+All StarRocks scalar and complex types (`ARRAY`, `MAP`, `STRUCT`) are supported inside `schema`, except StarRocks-only aggregate types (`HLL`, `BITMAP`, `PERCENTILE`), which have no representation in Parquet/ORC/Avro/CSV and are rejected at any depth (top level or inside `ARRAY` / `MAP` value / `STRUCT` field). For `STRUCT`, you may declare only a subset of subfields; undeclared subfields are ignored during projection.
+
+Example of a partial nested declaration:
+
+```SQL
+"schema" = "request_data STRUCT<device_data STRUCT<platform VARCHAR(64)>, now BIGINT>"
+```
+
+##### Forbidden tokens inside the schema string
+
+The following tokens are rejected and produce a validation error:
+
+- `NULL` / `NOT NULL`
+- `DEFAULT`
+- `COMMENT`
+- `KEY` (and related key-type descriptors)
+- `AUTO_INCREMENT`
+- Charset specifiers (for example `CHARACTER SET`)
+- Aggregation descriptors (for example `SUM`, `REPLACE`)
+- Generated-column clauses (`AS (...)`)
+
+Example (invalid):
+
+```SQL
+"schema" = "id BIGINT NOT NULL, dt DATE DEFAULT '2026-01-01'"
+```
+
+##### Column matching semantics per format
+
+- **Parquet / ORC / Avro**: schema columns are matched against file columns **by name**, and matching is **case-sensitive**. For example, `UserId` in `schema` does not match `userid` in the file.
+- **CSV**: schema columns are matched **by position**. The names in `schema` act only as aliases for the ordinal columns in the CSV file. The first schema item maps to the first CSV column, the second to the second, and so on.
+
+##### Mutual exclusions
+
+`schema` cannot be combined with any of the auto-detection parameters. Using any of the following together with `schema` is a validation error:
+
+- `auto_detect_sample_files`
+- `auto_detect_sample_rows`
+- `auto_detect_types`
+
+##### Interactions with other properties and statements
+
+- **`fill_mismatch_column_with`**: Declared columns that are missing from some files follow the existing `fill_mismatch_column_with` behavior — `none` fails the query, `null` fills `NULL` for the missing column.
+- **`columns_from_path`**: Path-extracted columns are appended **after** the `schema` columns. If a `columns_from_path` name collides with a name in `schema`, the query fails with a validation error.
+- **`list_files_only = true`**: `schema` is silently ignored when `list_files_only` is `true` (only file metadata is returned).
+- **`DESC FILES(..., "schema" = ...)`**: Explicitly rejected. Use `DESC FILES(...)` without `schema` to inspect the inferred file schema.
+- **`INSERT INTO FILES(..., "schema" = ...)` (unload)**: Explicitly rejected. `schema` is a read-path parameter only.
+- **INSERT push-down interactions**:
+  - The FE configuration `files_enable_insert_push_down_column_type` (alias `files_enable_insert_push_down_schema`) is **silently skipped** when `schema` is set, because the user-declared types already determine column types.
+  - Combining `schema` with the INSERT property `enable_push_down_schema = true` is a validation error.
+
+##### Examples
+
+Parquet matched by name:
+
+```sql
+SELECT user_id, event_time
+FROM FILES(
+  "path" = "s3://bucket/path/*.parquet",
+  "format" = "parquet",
+  "schema" = "user_id BIGINT, event_time DATETIME"
+);
+```
+
+CSV matched by position (the names `a` and `b` are aliases for the first and second CSV columns):
+
+```sql
+SELECT *
+FROM FILES(
+  "path" = "s3://bucket/path/*.csv",
+  "format" = "csv",
+  "csv.column_separator" = ",",
+  "schema" = "a BIGINT, b VARCHAR(64)"
+);
+```
+
+Partial nested declaration (only two subfields of `request_data` are projected):
+
+```sql
+SELECT request_data.device_data.platform, request_data.now
+FROM FILES(
+  "path" = "s3://bucket/path/*.parquet",
+  "format" = "parquet",
+  "schema" = "request_data STRUCT<device_data STRUCT<platform VARCHAR(64)>, now BIGINT>"
+);
+```
 
 #### `list_files_only`
 
@@ -914,7 +1044,12 @@ unload_data_param ::=
     "compression" = { "uncompressed" | "gzip" | "snappy" | "zstd | "lz4" },
     "partition_by" = "<column_name> [, ...]",
     "single" = { "true" | "false" } ,
-    "target_max_file_size" = "<int>"
+    "target_max_file_size" = "<int>",
+    "csv.column_separator" = "<column_separator>",
+    "csv.row_delimiter" = "<row_delimiter>",
+    "csv.include_header" = { "true" | "false" },
+    "csv.enclose" = "<enclose_character>",
+    "csv.escape" = "<escape_character>"
 ```
 
 | **Key**          | **Required** | **Description**                                              |
@@ -923,6 +1058,11 @@ unload_data_param ::=
 | `partition_by`     | No           | The list of columns that are used to partition data files into different storage paths. Multiple columns are separated by commas (,). `FILES()` extracts the key/value information of the specified columns and stores the data files under the storage paths featured with the extracted key/value pair. For further instructions, see Example 7. |
 | `single`           | No           | Whether to unload the data into a single file. Valid values:<ul><li>`true`: The data is stored in a single data file.</li><li>`false` (Default): The data is stored in multiple files if the amount of data unloaded exceeds 512 MB.</li></ul>                  |
 | `target_max_file_size` | No           | The best-effort maximum size of each file in the batch to be unloaded. Unit: Bytes. Default value: 1073741824 (1 GB). When the size of data to be unloaded exceeds this value, the data will be divided into multiple files, and the size of each file will not significantly exceed this value. Introduced in v3.2.7. |
+| `csv.column_separator` | No       | The column separator used in CSV-format output files. Default value: `\t`. Only applicable when `format` is `csv`.                       |
+| `csv.row_delimiter` | No          | The row delimiter used in CSV-format output files. Default value: `\n`. Only applicable when `format` is `csv`.                          |
+| `csv.include_header` | No         | Whether to include column names as the first row of CSV-format output files. Valid values: `true`, `false` (default). Only applicable when `format` is `csv`. |
+| `csv.enclose`      | No           | The character used to enclose each field value in CSV-format output files. When specified, all non-NULL fields are wrapped with this character, and occurrences of the enclose/escape characters within field values are escaped using the `csv.escape` character. NULL values are output as `\N` without enclosing. Type: single-byte ASCII character. Multi-character or multi-byte (non-ASCII) values are rejected with a semantic error. Default: `NONE` (disabled). Only applicable when `format` is `csv`. |
+| `csv.escape`       | No           | The character used to escape the enclose character and the escape character itself within field values. Type: single-byte ASCII character. Multi-character or multi-byte (non-ASCII) values are rejected with a semantic error. Default: `NONE`. Common combinations:<ul><li>`"csv.enclose"="\""`, `"csv.escape"="\""`: RFC 4180 style (doubled quotes).</li><li>`"csv.enclose"="\""`, `"csv.escape"="\\"`: backslash escape style.</li></ul>**NOTE**<br />When re-importing RFC 4180 doubled-quote output (where `escape` equals `enclose`) back into StarRocks, set only `csv.enclose` without `csv.escape` on the read side. StarRocks' CSV reader natively handles doubled quotes via its ENCLOSE state. |
 
 ## Examples
 

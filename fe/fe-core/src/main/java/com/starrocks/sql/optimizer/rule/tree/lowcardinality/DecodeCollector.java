@@ -45,6 +45,8 @@ import com.starrocks.sql.optimizer.base.HashDistributionSpec;
 import com.starrocks.sql.optimizer.base.Ordering;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorType;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalCTEConsumeOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalCTEProduceOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashAggregateOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHiveScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalIcebergScanOperator;
@@ -97,7 +99,6 @@ import java.util.Set;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
-import static com.starrocks.sql.ast.expression.BinaryType.EQ_FOR_NULL;
 import static org.apache.iceberg.TableProperties.DEFAULT_FILE_FORMAT;
 import static org.apache.iceberg.TableProperties.DEFAULT_FILE_FORMAT_DEFAULT;
 
@@ -193,6 +194,8 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
     private final List<Pair<Integer, Integer>> joinEqColumnGroups = Lists.newArrayList();
 
     private final UnionDictionaryManager unionDictionaryManager;
+
+    private final Map<Integer, DecodeInfo> cteDecodeInfo = Maps.newHashMap();
 
     // operators which are the children of Match operator
     private final ColumnRefSet matchChildren = new ColumnRefSet();
@@ -400,7 +403,7 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
             for (CallOperator agg : aggregateExprs) {
                 if (agg.getColumnRefs().stream().map(ColumnRefOperator::getId)
                         .anyMatch(context.allStringColumns::contains)) {
-                    context.stringAggregateExprs.addAll(aggregateExprs);
+                    context.stringAggregateExprs.put(aggregateId, aggregateExprs);
                     context.allStringColumns.add(aggregateId);
                     break;
                 }
@@ -416,6 +419,24 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
             info.inputStringColumns.intersect(alls);
             if (!info.isEmpty()) {
                 context.operatorDecodeInfo.put(operator, info);
+                if (operator instanceof PhysicalHashAggregateOperator hashAgg) {
+                    hashAgg.getAggregations().keySet().forEach(agg -> {
+                        context.aggIdToSupportColumns.computeIfAbsent(agg.getId(), k -> new ColumnRefSet())
+                                .union(info.inputStringColumns);
+                    });
+                }
+                if (operator instanceof PhysicalWindowOperator window) {
+                    window.getAnalyticCall().keySet().forEach(agg -> {
+                        context.aggIdToSupportColumns.computeIfAbsent(agg.getId(), k -> new ColumnRefSet())
+                                .union(info.inputStringColumns);
+                    });
+                }
+                if (operator instanceof PhysicalTopNOperator topN && topN.getPreAggCall() != null) {
+                    topN.getPreAggCall().keySet().forEach(agg -> {
+                        context.aggIdToSupportColumns.computeIfAbsent(agg.getId(), k -> new ColumnRefSet())
+                                .union(info.inputStringColumns);
+                    });
+                }
             }
         }
         // Filling context's structOpToFieldUseStringRefMap and structRefToFieldUseStringRefMap with fields in
@@ -529,7 +550,12 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
             context = DecodeInfo.create();
             for (int i = 0; i < optExpression.arity(); ++i) {
                 OptExpression child = optExpression.inputAt(i);
-                context.addChildInfo(collectImpl(child, optExpression));
+                DecodeInfo info = collectImpl(child, optExpression);
+                if (child.getOp() instanceof PhysicalCTEProduceOperator produce) {
+                    cteDecodeInfo.put(produce.getCteId(), info);
+                } else {
+                    context.addChildInfo(info);
+                }
             }
         }
 
@@ -566,6 +592,35 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
     @Override
     public DecodeInfo visit(OptExpression optExpression, DecodeInfo context) {
         return context.createDecodeInfo();
+    }
+
+    @Override
+    public DecodeInfo visitPhysicalCTEProduce(OptExpression optExpression, DecodeInfo context) {
+        return context.createOutputInfo();
+    }
+
+    @Override
+    public DecodeInfo visitPhysicalCTEConsume(OptExpression optExpression, DecodeInfo context) {
+        PhysicalCTEConsumeOperator consume = optExpression.getOp().cast();
+        context = cteDecodeInfo.get(consume.getCteId());
+        Preconditions.checkNotNull(context);
+        if (context.outputStringColumns.isEmpty()) {
+            return DecodeInfo.empty();
+        }
+        DecodeInfo info = DecodeInfo.empty();
+        info.inputStringColumns.union(context.outputStringColumns);
+        // Map producer columns to consumer columns (like a projection)
+        for (var entry : consume.getCteOutputColumnRefMap().entrySet()) {
+            ColumnRefOperator consumerCol = entry.getKey();
+            ColumnRefOperator producerCol = entry.getValue();
+
+            if (info.inputStringColumns.contains(producerCol.getId())) {
+                setDefineExpr(consumerCol, producerCol, 1);
+                info.outputStringColumns.union(consumerCol);
+                info.usedStringColumns.union(producerCol);
+            }
+        }
+        return info;
     }
 
     @Override
@@ -639,12 +694,7 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
 
     @Override
     public DecodeInfo visitPhysicalFilter(OptExpression optExpression, DecodeInfo context) {
-        if (optExpression.getInputs().get(0).getOp() instanceof PhysicalOlapScanOperator) {
-            // PhysicalFilter->PhysicalOlapScan is a special pattern, the Filter's predicate is extracted from OlapScan,
-            // we should keep the DecodeInfo from it's input.
-            return context.createOutputInfo();
-        }
-        return context.createDecodeInfo();
+        return context.createOutputInfo();
     }
 
     private boolean tryHandleJoinEqPredicate(DecodeInfo decodeInfo,
@@ -936,7 +986,7 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
         return info;
     }
 
-    private boolean shouldProcessAggFunction(CallOperator agg) {
+    private boolean shouldProcessAggFunction(CallOperator agg, ColumnRefSet supportColumns, boolean isFirstStage) {
         final boolean enableArrayAgg = sessionVariable.isEnableArrayAggLowCardinalityOptimize()
                 && sessionVariable.isEnableArrayLowCardinalityOptimize()
                 && sessionVariable.isEnableStructLowCardinalityOptimize();
@@ -948,11 +998,16 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
             return false;
         }
         if (isArrayAgg) {
-            // dictify array_agg only when the first child can be dictified.
+            ColumnRefSet candidateColumns = agg.getUsedColumns();
+            if (isFirstStage && agg.getArguments().get(0).isColumnRef()
+                    && !agg.getArguments().get(0).getType().isStringType()) {
+                candidateColumns.except(List.of(agg.getArguments().get(0).cast()));
+            }
             return agg.getChildren().stream().allMatch(c -> c.isColumnRef() || c.isConstantRef())
-                    && agg.getChild(0).isColumnRef() && agg.getFunction().getArgs()[0].isStringType();
+                    && supportColumns.containsAny(candidateColumns);
         }
-        return agg.getChildren().size() == 1 && agg.getChildren().get(0).isColumnRef();
+        return agg.getChildren().size() == 1 && agg.getChildren().get(0).isColumnRef()
+                && supportColumns.containsAll(agg.getUsedColumns());
     }
 
     @Override
@@ -966,9 +1021,14 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
         ColumnRefSet disableColumns = new ColumnRefSet();
         for (ColumnRefOperator key : aggregate.getAggregations().keySet()) {
             CallOperator agg = aggregate.getAggregations().get(key);
-            if (!shouldProcessAggFunction(agg)) {
+            final boolean isFirstStage = !agg.getArguments().isEmpty() &&
+                    (!(agg.getArguments().get(0) instanceof ColumnRefOperator ref) || ref.getId() != key.getId());
+            if (!shouldProcessAggFunction(agg, info.inputStringColumns, isFirstStage)) {
                 disableColumns.union(agg.getUsedColumns());
                 disableColumns.union(key);
+            } else if (isFirstStage && FunctionSet.ARRAY_AGG.equals(agg.getFnName()) &&
+                    agg.getArguments().get(0).isColumnRef() && !agg.getArguments().get(0).getType().isStringType()) {
+                disableColumns.union((ColumnRefOperator) agg.getArguments().get(0));
             }
         }
 
@@ -984,41 +1044,33 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
                 continue;
             }
             CallOperator value = aggregate.getAggregations().get(key);
-            if (FunctionSet.ARRAY_AGG.equals(value.getFnName())) {
-                if (!value.getChild(0).isColumnRef() ||
-                        !info.inputStringColumns.contains(value.getChild(0).cast())) {
-                    continue;
-                }
-            } else if (!info.inputStringColumns.containsAll(value.getUsedColumns())) {
-                continue;
-            }
             // aggregate ref -> aggregate expr
             stringAggregateExpressions.computeIfAbsent(key.getId(), x -> Lists.newArrayList()).add(value);
+            AggregateFunction aggFn = (AggregateFunction) value.getFunction();
+            if (aggFn.getIntermediateTypeOrReturnType().isStructType()
+                    && !structRefToFieldUseStringRef.containsKey(key.getId())) {
+                final Map<String, ColumnRefOperator> fieldsData;
+                if (FunctionSet.ARRAY_AGG.equals(aggFn.functionName())) {
+                    fieldsData = Maps.newHashMap();
+                    StructType structType = (StructType) aggFn.getIntermediateTypeOrReturnType();
+                    Preconditions.checkState(structType.getFields().size() == value.getArguments().size());
+                    for (int i = 0; i < value.getArguments().size(); i++) {
+                        if (value.getArguments().get(i).isColumnRef() && value.getArguments().get(i).getType().isStringType()
+                                && info.inputStringColumns.contains(value.getArguments().get(i).cast())) {
+                            fieldsData.put(structType.getField(i).getName(), value.getArguments().get(i).cast());
+                        }
+                    }
+                } else if (FunctionSet.ANY_VALUE.equals(aggFn.functionName())) {
+                    fieldsData = getFieldUseStringRefMap(value.getArguments().get(0));
+                } else {
+                    throw new UnsupportedOperationException(
+                            String.format("Unsupported function: %s with Struct Type", aggFn.functionName()));
+                }
+                Preconditions.checkNotNull(fieldsData);
+                structOpToFieldUseStringRef.put(value, fieldsData);
+            }
             if (supportLowCardinality(value.getType())) {
                 info.outputStringColumns.union(key.getId());
-                AggregateFunction aggFn = (AggregateFunction) value.getFunction();
-                if (aggFn.getIntermediateTypeOrReturnType().isStructType()
-                        && !structRefToFieldUseStringRef.containsKey(key.getId())) {
-                    final Map<String, ColumnRefOperator> fieldsData;
-                    if (FunctionSet.ARRAY_AGG.equals(aggFn.functionName())) {
-                        fieldsData = Maps.newHashMap();
-                        StructType structType = (StructType) aggFn.getIntermediateTypeOrReturnType();
-                        Preconditions.checkState(structType.getFields().size() == value.getArguments().size());
-                        for (int i = 0; i < value.getArguments().size(); i++) {
-                            if (value.getArguments().get(i).isColumnRef()
-                                    && info.inputStringColumns.contains(value.getArguments().get(i).cast())) {
-                                fieldsData.put(structType.getField(i).getName(), value.getArguments().get(i).cast());
-                            }
-                        }
-                    } else if (FunctionSet.ANY_VALUE.equals(aggFn.functionName())) {
-                        fieldsData = getFieldUseStringRefMap(value.getArguments().get(0));
-                    } else {
-                        throw new UnsupportedOperationException(
-                                String.format("Unsupported function: %s with Struct Type", aggFn.functionName()));
-                    }
-                    Preconditions.checkNotNull(fieldsData);
-                    structOpToFieldUseStringRef.put(value, fieldsData);
-                }
                 setDefineExpr(key, value, 1);
             } else if (aggregate.getType().isLocal() || aggregate.getType().isDistinct()) {
                 // count/count distinct, need output dict-set in 1st stage
@@ -1628,9 +1680,6 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
 
         @Override
         public ScalarOperator visitBinaryPredicate(BinaryPredicateOperator predicate, Void context) {
-            if (predicate.getBinaryType() == EQ_FOR_NULL) {
-                return forbidden(visitChildren(predicate, context), predicate);
-            }
             return merge(visitChildren(predicate, context), predicate);
         }
 

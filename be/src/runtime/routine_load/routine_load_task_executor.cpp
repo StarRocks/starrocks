@@ -42,21 +42,57 @@
 #include "base/uid_util.h"
 #include "base/utility/defer_op.h"
 #include "common/status.h"
+#include "rapidjson/document.h"
+#include "rapidjson/stringbuffer.h"
+#include "rapidjson/writer.h"
 #include "runtime/exec_env.h"
 #include "runtime/routine_load/data_consumer_group.h"
 #include "runtime/routine_load/kafka_consumer_pipe.h"
+#include "runtime/runtime_metrics.h"
 #include "runtime/stream_load/load_stream_mgr.h"
 #include "runtime/stream_load/stream_load_context.h"
 #include "runtime/stream_load/stream_load_executor.h"
-#include "util/global_metrics_registry.h"
 
 namespace starrocks {
 
-Status RoutineLoadTaskExecutor::init() {
-    REGISTER_GAUGE_STARROCKS_METRIC(routine_load_task_count, [this]() {
-        std::lock_guard<std::mutex> l(_lock);
-        return _task_map.size();
-    })
+namespace {
+
+// Build a JSON anchor that identifies the streaming source of a routine
+// load task fragment. Threaded into TQueryOptions.routine_load_source_info
+// so BE's RuntimeStateHelper::append_rejected_record_to_file can populate
+// _statistics_.rejected_records.source_info with the kafka topic/offsets
+// instead of the hardcoded "stream-load-pipe" SequentialFile name.
+std::string build_kafka_source_info(const TKafkaLoadInfo& info) {
+    rapidjson::Document d;
+    d.SetObject();
+    auto& alloc = d.GetAllocator();
+    d.AddMember("format", "kafka", alloc);
+    d.AddMember("topic",
+                rapidjson::Value(info.topic.c_str(), static_cast<rapidjson::SizeType>(info.topic.size()), alloc),
+                alloc);
+    rapidjson::Value parts(rapidjson::kArrayType);
+    rapidjson::Value offsets(rapidjson::kArrayType);
+    for (const auto& [partition, begin] : info.partition_begin_offset) {
+        parts.PushBack(partition, alloc);
+        offsets.PushBack(begin, alloc);
+    }
+    d.AddMember("partitions", parts, alloc);
+    d.AddMember("begin_offsets", offsets, alloc);
+    rapidjson::StringBuffer buf;
+    rapidjson::Writer<rapidjson::StringBuffer> w(buf);
+    d.Accept(w);
+    return std::string(buf.GetString(), buf.GetSize());
+}
+
+} // namespace
+
+Status RoutineLoadTaskExecutor::init(MetricRegistry* metrics) {
+    if (metrics != nullptr) {
+        REGISTER_GAUGE_RUNTIME_METRIC(metrics, routine_load_task_count, [this]() {
+            std::lock_guard<std::mutex> l(_lock);
+            return _task_map.size();
+        })
+    }
 
     auto st = ThreadPoolBuilder("routine_load")
                       .set_min_threads(0)
@@ -323,6 +359,11 @@ Status RoutineLoadTaskExecutor::submit_task(const TRoutineLoadTask& task) {
     switch (task.type) {
     case TLoadSourceType::KAFKA:
         ctx->kafka_info = std::make_unique<KafkaLoadInfo>(task.kafka_load_info);
+        // Make the kafka topic/partitions/offsets visible to the fragment's
+        // RuntimeState so rejected_records.source_info points back at the
+        // real source instead of the SequentialFile placeholder name.
+        ctx->put_result.params.query_options.__set_routine_load_source_info(
+                build_kafka_source_info(task.kafka_load_info));
         break;
 #ifndef __APPLE__
     case TLoadSourceType::PULSAR:

@@ -22,22 +22,24 @@
 #include "base/failpoint/fail_point.h"
 #include "base/status.h"
 #include "column/chunk.h"
+#include "column/chunk_factory.h"
 #include "column/column_helper.h"
 #include "column/vectorized_fwd.h"
 #include "common/object_pool.h"
 #include "common/runtime_profile.h"
+#include "compute_env/sorting/sort_permute.h"
+#include "compute_env/sorting/sorting.h"
 #include "connector/hive_connector.h"
 #include "exec/pipeline/lookup_operator.h"
 #include "exec/pipeline/query_context.h"
 #include "exec/pipeline/scan/glm_manager.h"
-#include "exec/sorting/sort_permute.h"
-#include "exec/sorting/sorting.h"
 #include "exprs/expr_executor.h"
 #include "exprs/expr_factory.h"
 #include "runtime/descriptors.h"
+#include "runtime/runtime_state.h"
 #include "serde/column_array_serde.h"
 #include "storage/chunk_helper.h"
-#include "storage/range.h"
+#include "storage/primitive/range.h"
 
 namespace starrocks::pipeline {
 
@@ -887,7 +889,7 @@ auto NativeLookUpTask::_late_materialize_by_row_locators(RuntimeState* state, co
 
         // init chunk iterator
         do {
-            ChunkPtr chunk(ChunkHelper::new_chunk_pooled(iterator->output_schema(), row_id_ranges.span_size()));
+            ChunkPtr chunk(ChunkFactory::new_chunk_pooled(iterator->output_schema(), row_id_ranges.span_size()));
             auto status = iterator->get_next(chunk.get());
             if (status.is_end_of_file()) {
                 break;

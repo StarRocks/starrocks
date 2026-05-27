@@ -11,6 +11,7 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
+#pragma once
 #include <chrono>
 #include <memory>
 
@@ -24,7 +25,7 @@
 #include "column/json_column.h"
 #include "column/runtime_type_traits.h"
 #include "column/vectorized_fwd.h"
-#include "exec/sorting/sorting.h"
+#include "compute_env/sorting/sorting.h"
 #include "exprs/arithmetic_operation.h"
 #include "exprs/function_context.h"
 #include "exprs/function_helper.h"
@@ -2145,6 +2146,12 @@ public:
         const ColumnPtr& array_column = columns[0];
         const ColumnPtr& target_column = columns[1];
 
+        // When target is only_null, its internal data column is Int8Column (from create_const_null_column)
+        // which doesn't match the expected element type. Handle this upfront by searching for NULL in arrays.
+        if (target_column->only_null()) {
+            return _process_only_null_target(array_column);
+        }
+
         bool is_const_array = array_column->is_constant();
         ColumnPtr array_data_column = FunctionHelper::get_data_column_of_const(array_column);
         bool is_nullable_array = array_data_column->is_nullable();
@@ -2216,6 +2223,61 @@ private:
         return is_scalar_logical_type(type) || type == TYPE_ARRAY || type == TYPE_MAP || type == TYPE_STRUCT;
     }
 
+    // Handle the case where target is only_null (all NULLs).
+    // We search for NULL elements in each array.
+    static StatusOr<ColumnPtr> _process_only_null_target(const ColumnPtr& array_column) {
+        bool is_const_array = array_column->is_constant();
+        ColumnPtr array_data_column = FunctionHelper::get_data_column_of_const(array_column);
+        bool is_nullable_array = array_data_column->is_nullable();
+        NullColumnPtr array_null_column;
+        const NullColumn::ValueType* array_null_data = nullptr;
+        if (is_nullable_array) {
+            const auto* nullable_col = down_cast<const NullableColumn*>(array_data_column.get());
+            array_null_column = nullable_col->null_column();
+            array_null_data = nullable_col->immutable_null_column_data().data();
+            array_data_column = nullable_col->data_column();
+        }
+
+        const auto* arr_col = down_cast<const ArrayColumn*>(array_data_column.get());
+        const auto& elements_column = arr_col->elements_column();
+        const NullColumn::ValueType* elements_null_data =
+                down_cast<const NullableColumn*>(elements_column.get())->immutable_null_column_data().data();
+        const auto& offsets_column = arr_col->offsets_column();
+        const auto offsets_data = offsets_column->immutable_data();
+
+        size_t num_rows = is_const_array ? 1 : arr_col->size();
+        auto result_column = ReturnType::create();
+        result_column->resize(num_rows);
+        auto* result_data = result_column->get_data().data();
+
+        for (size_t i = 0; i < num_rows; i++) {
+            if (is_nullable_array && array_null_data[is_const_array ? 0 : i]) {
+                result_data[i] = 0;
+                continue;
+            }
+            size_t offset = is_const_array ? offsets_data[0] : offsets_data[i];
+            size_t array_size =
+                    is_const_array ? offsets_data[1] - offsets_data[0] : offsets_data[i + 1] - offsets_data[i];
+            size_t position = 0;
+            for (size_t j = 0; j < array_size; j++) {
+                if (elements_null_data[offset + j]) {
+                    position = j + 1;
+                    break;
+                }
+            }
+            result_data[i] = PositionEnabled ? position : (position != 0);
+        }
+
+        ColumnPtr result = result_column;
+        if (is_nullable_array) {
+            result = NullableColumn::create(std::move(result), array_null_column->clone());
+        }
+        if (is_const_array) {
+            result = ConstColumn::create(std::move(result), array_column->size());
+        }
+        return result;
+    }
+
     static void _build_hash_table(const ColumnPtr& column, ArrayContainsState* state) {
         DCHECK(!column->is_constant() && !column->is_nullable());
         const ArrayColumn* array_column = down_cast<const ArrayColumn*>(column.get());
@@ -2226,8 +2288,8 @@ private:
                 down_cast<const NullableColumn*>(array_column->elements_column().get())->null_column();
         const auto& offsets_column = array_column->offsets_column();
 
-        const CppType* elements_data = reinterpret_cast<const CppType*>(elements_column->raw_data());
-        const NullColumn::ValueType* null_data = null_column->raw_data();
+        const auto& elements_data = GetContainer<LT>::get_data(elements_column);
+        const auto& null_data = null_column->immutable_data();
         const UInt32Column::ValueType* offsets_data = offsets_column->immutable_data().data();
         // column may be null
         size_t offset = offsets_data[0];
@@ -2258,7 +2320,7 @@ private:
         result_column->resize(is_const_target ? 1 : num_rows);
         size_t result_size = result_column->size();
 
-        const CppType* target_data = reinterpret_cast<const CppType*>(targets->raw_data());
+        const auto& target_data = GetContainer<LT>::get_data(targets);
         auto* result_data = result_column->get_data().data();
 
         for (size_t i = 0; i < result_size; i++) {
@@ -2291,15 +2353,14 @@ private:
         }
 
         const auto& elements_column = down_cast<const ArrayColumn*>(arrays.get())->elements_column();
-        const auto& elements = down_cast<const NullableColumn*>(elements_column.get())->data_column();
-        const CppType* elements_data = reinterpret_cast<const CppType*>(elements->raw_data());
+        const auto& elements_data = GetContainer<LT>::get_data(elements_column);
         const NullColumn::ValueType* elements_null_data =
                 down_cast<const NullableColumn*>(elements_column.get())->immutable_null_column_data().data();
 
         const auto& offsets_column = down_cast<const ArrayColumn*>(arrays.get())->offsets_column();
         const auto offsets_data = offsets_column->immutable_data();
 
-        const CppType* targets_data = reinterpret_cast<const CppType*>(targets->raw_data());
+        const auto& targets_data = GetContainer<LT>::get_data(targets);
 
         // if both two columns are constant, we only compute the first row once
         size_t num_rows = (is_const_array && is_const_target) ? 1 : std::max(arrays->size(), targets->size());
@@ -2403,8 +2464,8 @@ public:
         }
         ColumnPtr array_column = FunctionHelper::get_data_column_of_const(column);
         const auto& [offsets_column, elements_column, null_column] = ColumnHelper::unpack_array_column(array_column);
-        const CppType* elements_data = reinterpret_cast<const CppType*>(elements_column->raw_data());
-        const NullColumn::ValueType* null_data = null_column->raw_data();
+        const auto& elements_data = GetContainer<LT>::get_data(elements_column);
+        const NullColumn::ValueType* null_data = null_column->immutable_data().data();
         const UInt32Column::ValueType* offsets_data = offsets_column->immutable_data().data();
         size_t offset = offsets_data[0];
         size_t array_size = offsets_data[1] - offset;
@@ -2423,8 +2484,8 @@ public:
             const auto& [target_offsets_column, target_elements_column, target_null_column] =
                     ColumnHelper::unpack_array_column(FunctionHelper::get_data_column_of_const(target_column));
 
-            const CppType* target_elements_data = reinterpret_cast<const CppType*>(target_elements_column->raw_data());
-            const NullColumn::ValueType* target_elements_null_data = target_null_column->raw_data();
+            const auto& target_elements_data = GetContainer<LT>::get_data(target_elements_column);
+            const NullColumn::ValueType* target_elements_null_data = target_null_column->immutable_data().data();
             const UInt32Column::ValueType* target_offsets_data = target_offsets_column->immutable_data().data();
 
             size_t target_offset = target_offsets_data[0];
@@ -2509,8 +2570,9 @@ public:
 private:
     static constexpr bool is_supported(LogicalType type) { return is_scalar_logical_type(type); }
 
-    static void _build_hash_table(const CppType* elements_data, const NullColumn::ValueType* elements_null_data,
-                                  size_t offset, size_t array_size, ArrayContainsAllState* state) {
+    static void _build_hash_table(const ColumnType::ImmContainer& elements_data,
+                                  const NullColumn::ValueType* elements_null_data, size_t offset, size_t array_size,
+                                  ArrayContainsAllState* state) {
         HashMap* hash_map = std::get_if<HashMap>(&(state->variant));
         DCHECK(hash_map != nullptr);
 
@@ -2528,7 +2590,8 @@ private:
     }
 
     template <bool HTFromLeft>
-    static bool _process_with_hash_table(const ArrayContainsAllState* state, const CppType* elements_data,
+    static bool _process_with_hash_table(const ArrayContainsAllState* state,
+                                         const ColumnType::ImmContainer& elements_data,
                                          const NullColumn::ValueType* elements_null_data, size_t offset,
                                          size_t array_size) {
         const HashMap* hash_map = std::get_if<HashMap>(&(state->variant));
@@ -2583,9 +2646,10 @@ private:
         return true;
     }
 
-    static inline bool _check_element_equal(const CppType* left_data, const NullColumn::ValueType* left_null_data,
-                                            const CppType* right_data, const NullColumn::ValueType* right_null_data,
-                                            size_t lhs, size_t rhs) {
+    static inline bool _check_element_equal(const ColumnType::ImmContainer& left_data,
+                                            const NullColumn::ValueType* left_null_data,
+                                            const ColumnType::ImmContainer& right_data,
+                                            const NullColumn::ValueType* right_null_data, size_t lhs, size_t rhs) {
         bool is_lhs_null = left_null_data[lhs];
         bool is_rhs_null = right_null_data[rhs];
         if (is_lhs_null ^ is_rhs_null) {
@@ -2597,8 +2661,9 @@ private:
         return left_data[lhs] == right_data[rhs];
     }
 
-    static void _build_prefix_table(const CppType* elements_data, const NullColumn::ValueType* null_data, size_t offset,
-                                    size_t array_size, ArrayContainsAllState* state) {
+    static void _build_prefix_table(const ColumnType::ImmContainer& elements_data,
+                                    const NullColumn::ValueType* null_data, size_t offset, size_t array_size,
+                                    ArrayContainsAllState* state) {
         if (array_size == 0) {
             return;
         }
@@ -2626,8 +2691,9 @@ private:
         }
     }
 
-    static bool _process_with_prefix_table(const ArrayContainsAllState* state, const CppType* left_elements_data,
-                                           const CppType* right_elements_data,
+    static bool _process_with_prefix_table(const ArrayContainsAllState* state,
+                                           const ColumnType::ImmContainer& left_elements_data,
+                                           const ColumnType::ImmContainer& right_elements_data,
                                            const NullColumn::ValueType* left_elements_null_data,
                                            const NullColumn::ValueType* right_elements_null_data, size_t left_offset,
                                            size_t left_array_size, size_t right_offset, size_t right_array_size) {
@@ -2679,13 +2745,13 @@ private:
 
         const auto& [left_offsets_column, left_elements_column, left_elements_null_column] =
                 ColumnHelper::unpack_array_column(left_arrays);
-        const CppType* left_elements_data = reinterpret_cast<const CppType*>(left_elements_column->raw_data());
+        const auto& left_elements_data = GetContainer<LT>::get_data(left_elements_column);
         const NullColumn::ValueType* left_elements_null_data = left_elements_null_column->immutable_data().data();
         const auto* left_offsets_data = left_offsets_column->immutable_data().data();
 
         const auto& [right_offsets_column, right_elements_column, right_elements_null_column] =
                 ColumnHelper::unpack_array_column(right_arrays);
-        const CppType* right_elements_data = reinterpret_cast<const CppType*>(right_elements_column->raw_data());
+        const auto& right_elements_data = GetContainer<LT>::get_data(right_elements_column);
         const NullColumn::ValueType* right_elements_null_data = right_elements_null_column->immutable_data().data();
         const auto* right_offsets_data = right_offsets_column->immutable_data().data();
 
@@ -2763,7 +2829,7 @@ private:
                     tmp_state.variant = HashMap{};
                     // we build hash table on the side with less elements
                     build_from_left = left_not_null_element_num <= right_not_null_element_num;
-                    const CppType* build_elements_data = build_from_left ? left_elements_data : right_elements_data;
+                    const auto& build_elements_data = build_from_left ? left_elements_data : right_elements_data;
                     const NullColumn::ValueType* build_elements_null_data =
                             build_from_left ? left_elements_null_data : right_elements_null_data;
                     size_t build_array_offset = build_from_left ? left_array_offset : right_array_offset;
@@ -2774,7 +2840,7 @@ private:
                     state_ref = &tmp_state;
                 }
 
-                const CppType* probe_elements_data = !build_from_left ? left_elements_data : right_elements_data;
+                const auto& probe_elements_data = !build_from_left ? left_elements_data : right_elements_data;
                 const NullColumn::ValueType* probe_elements_null_data =
                         !build_from_left ? left_elements_null_data : right_elements_null_data;
                 size_t probe_array_offset = !build_from_left ? left_array_offset : right_array_offset;

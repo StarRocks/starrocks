@@ -14,6 +14,7 @@
 
 #include "storage/primary_key_recover.h"
 
+#include "column/chunk_factory.h"
 #include "serde/column_array_serde.h"
 #include "storage/chunk_helper.h"
 #include "storage/primary_key_encoder.h"
@@ -40,7 +41,7 @@ Status PrimaryKeyRecover::recover() {
     std::vector<uint32_t> rowids;
     rowids.reserve(DEFAULT_CHUNK_SIZE);
     PrimaryIndex::DeletesMap new_deletes;
-    auto chunk_shared_ptr = ChunkHelper::new_chunk(pkey_schema, DEFAULT_CHUNK_SIZE);
+    auto chunk_shared_ptr = ChunkFactory::new_chunk(pkey_schema, DEFAULT_CHUNK_SIZE);
     auto chunk = chunk_shared_ptr.get();
     // 3. scan all rowsets and segments to build primary index
     RETURN_IF_ERROR(rowset_iterator(

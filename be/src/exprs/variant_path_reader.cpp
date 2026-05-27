@@ -99,7 +99,7 @@ static VariantReadResult drill_down_column(const Column* col, size_t row, const 
     VariantRowRef val_ref = val.as_ref();
     DCHECK(suffix != nullptr);
     auto field = VariantPath::seek_view(val_ref, *suffix, seg_offset);
-    if (!field.ok()) return VariantReadResult{.state = VariantReadState::kMissing};
+    if (!field.ok() || field.value().is_null()) return VariantReadResult{.state = VariantReadState::kMissing};
     return VariantReadResult{.state = VariantReadState::kValue, .value = std::move(field).value().to_owned()};
 }
 

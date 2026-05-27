@@ -87,7 +87,13 @@ public class InsertOverwriteJobRunnerTest {
                 .withTable("create table insert_overwrite_test.t4(c1 int, c2 int, c3 int) " +
                         "DUPLICATE KEY(c1, c2) PARTITION BY RANGE(c1) "
                         + "(PARTITION p1 VALUES [('-2147483648'), ('10')), PARTITION p2 VALUES [('10'), ('20')))"
-                        + " DISTRIBUTED BY HASH(`c2`) BUCKETS 2 PROPERTIES('replication_num'='1');");
+                        + " DISTRIBUTED BY HASH(`c2`) BUCKETS 2 PROPERTIES('replication_num'='1');")
+                .withTable("create table insert_overwrite_test.t_lambda_target(k1 int, k2 array<int>) " +
+                        "distributed by hash(k1) buckets 3 properties('replication_num' = '1');")
+                .withTable("create table insert_overwrite_test.t_lambda_src1(k1 int, k2 array<int>) " +
+                        "distributed by hash(k1) buckets 3 properties('replication_num' = '1');")
+                .withTable("create table insert_overwrite_test.t_lambda_src2(k1 int, k2 array<int>) " +
+                        "distributed by hash(k1) buckets 3 properties('replication_num' = '1');");
     }
 
     @Test
@@ -318,5 +324,19 @@ public class InsertOverwriteJobRunnerTest {
         // No temp partitions to clean up since prepare() never completed
         runner.cancel();
         Assertions.assertEquals(InsertOverwriteJobState.OVERWRITE_FAILED, insertOverwriteJob.getJobState());
+    }
+
+    @Test
+    public void testInsertOverwriteWithUnionAllAndLambda() throws Exception {
+        // Integration regression for issue #72831: INSERT OVERWRITE + UNION ALL + lambda used to
+        // surface "expr_type does not match slot_type" because the second plan was reading
+        // ColumnRefOperators allocated by the first plan's ColumnRefFactory. The lambda-arg cache
+        // now lives on ColumnRefFactory, so re-plan automatically starts with a fresh cache.
+        connectContext.getSessionVariable().setOptimizerExecuteTimeout(300000000);
+        String sql = "insert overwrite t_lambda_target " +
+                "select k1, array_map(x -> x + 1, k2) from t_lambda_src1 " +
+                "union all " +
+                "select k1, array_map(x -> x + 2, k2) from t_lambda_src2";
+        cluster.runSql("insert_overwrite_test", sql);
     }
 }

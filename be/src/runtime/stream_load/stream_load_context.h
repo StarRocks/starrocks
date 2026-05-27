@@ -40,6 +40,7 @@
 #include <future>
 #include <vector>
 
+#include "base/auth/auth_info.h"
 #include "base/concurrency/concurrent_limiter.h"
 #include "base/metrics.h"
 #include "base/string/string_util.h"
@@ -47,7 +48,6 @@
 #include "base/uid_util.h"
 #include "common/status.h"
 #include "common/system/backend_options.h"
-#include "common/utils.h"
 #include "gen_cpp/BackendService_types.h"
 #include "gen_cpp/FrontendService_types.h"
 #include "pulsar/Client.h"

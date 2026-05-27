@@ -38,24 +38,25 @@
 
 #include <string_view>
 
-#include "agent/master_info.h"
+#include "base/auth/auth_info.h"
 #include "base/testutil/sync_point.h"
 #include "base/utility/defer_op.h"
 #include "common/config_ingest_fwd.h"
 #include "common/process_exit.h"
 #include "common/status.h"
 #include "common/statusor.h"
-#include "common/utils.h"
+#include "common/system/master_info.h"
+#include "common/util/thrift_client_cache.h"
 #include "gen_cpp/FrontendService.h"
-#include "runtime/client_cache.h"
+#include "gutil/walltime.h"
+#include "platform/thrift_rpc_helper.h"
 #include "runtime/exec_env.h"
 #include "runtime/fragment_mgr.h"
 #include "runtime/message_body_sink.h"
 #include "runtime/plan_fragment_executor.h"
-#include "runtime/starrocks_metrics.h"
 #include "runtime/stream_load/stream_load_context.h"
+#include "runtime/stream_load/stream_load_metrics.h"
 #include "storage/non_retryable_load_errors.h"
-#include "util/thrift_rpc_helper.h"
 
 namespace starrocks {
 
@@ -77,7 +78,7 @@ Status StreamLoadExecutor::execute_plan_fragment(StreamLoadContext* ctx) {
         return Status::ServiceUnavailable("Service is shutting down, please retry later!");
     }
 
-    StarRocksMetrics::instance()->txn_exec_plan_total.increment(1);
+    StreamLoadMetrics::instance()->txn_exec_plan_total.increment(1);
 // submit this params
 #ifndef BE_TEST
     ctx->ref();
@@ -114,8 +115,9 @@ Status StreamLoadExecutor::execute_plan_fragment(StreamLoadContext* ctx) {
                     }
 
                     if (status.ok()) {
-                        StarRocksMetrics::instance()->stream_receive_bytes_total.increment(ctx->total_receive_bytes);
-                        StarRocksMetrics::instance()->stream_load_rows_total.increment(ctx->number_loaded_rows);
+                        auto* metrics = StreamLoadMetrics::instance();
+                        metrics->stream_receive_bytes_total.increment(ctx->total_receive_bytes);
+                        metrics->stream_load_rows_total.increment(ctx->number_loaded_rows);
                     }
                 } else {
                     LOG(WARNING) << "fragment execute failed"
@@ -145,10 +147,12 @@ Status StreamLoadExecutor::execute_plan_fragment(StreamLoadContext* ctx) {
                     ctx->error_url = to_load_error_http_path(executor->runtime_state()->get_error_log_file_path());
                 }
 
-                if (!executor->runtime_state()->get_rejected_record_file_path().empty()) {
-                    ctx->rejected_record_path = fmt::format("{}:{}", BackendOptions::get_localBackend().host,
-                                                            executor->runtime_state()->get_rejected_record_file_path());
-                }
+                // The legacy tab-delimited rejected-record file was removed;
+                // ctx->rejected_record_path is never populated anymore. The
+                // StreamLoadContext response JSON still carries the field
+                // for backward compatibility but it will always be empty.
+                // Clients should query `_statistics_.rejected_records` by
+                // Label or txn_id to retrieve rejected rows.
 
                 if (ctx->unref()) {
                     delete ctx;
@@ -169,7 +173,7 @@ Status StreamLoadExecutor::execute_plan_fragment(StreamLoadContext* ctx) {
 }
 
 Status StreamLoadExecutor::begin_txn(StreamLoadContext* ctx) {
-    StarRocksMetrics::instance()->txn_begin_request_total.increment(1);
+    StreamLoadMetrics::instance()->txn_begin_request_total.increment(1);
 
     TLoadTxnBeginRequest request;
     set_request_auth(&request, ctx->auth);
@@ -213,7 +217,7 @@ Status StreamLoadExecutor::begin_txn(StreamLoadContext* ctx) {
 }
 
 Status StreamLoadExecutor::commit_txn(StreamLoadContext* ctx) {
-    StarRocksMetrics::instance()->txn_commit_request_total.increment(1);
+    StreamLoadMetrics::instance()->txn_commit_request_total.increment(1);
 
     TLoadTxnCommitRequest request;
     set_request_auth(&request, ctx->auth);
@@ -330,7 +334,7 @@ bool wait_txn_visible_until(const AuthInfo& auth, std::string_view db, std::stri
 }
 
 Status StreamLoadExecutor::prepare_txn(StreamLoadContext* ctx) {
-    StarRocksMetrics::instance()->txn_commit_request_total.increment(1);
+    StreamLoadMetrics::instance()->txn_commit_request_total.increment(1);
 
     TLoadTxnCommitRequest request;
     set_request_auth(&request, ctx->auth);
@@ -384,7 +388,7 @@ Status StreamLoadExecutor::prepare_txn(StreamLoadContext* ctx) {
 }
 
 Status StreamLoadExecutor::rollback_txn(StreamLoadContext* ctx) {
-    StarRocksMetrics::instance()->txn_rollback_request_total.increment(1);
+    StreamLoadMetrics::instance()->txn_rollback_request_total.increment(1);
 
     TNetworkAddress master_addr = get_master_address();
     TLoadTxnRollbackRequest request;

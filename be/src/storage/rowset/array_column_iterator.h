@@ -14,7 +14,7 @@
 
 #pragma once
 
-#include "storage/range.h"
+#include "storage/primitive/range.h"
 #include "storage/rowset/column_iterator.h"
 #include "storage/rowset/column_reader.h"
 

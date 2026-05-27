@@ -272,6 +272,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明：使用するオブジェクトストレージのタイプ。共有データモードでは、StarRocks は HDFS、Azure Blob (v3.1.1 以降でサポート)、Azure Data Lake Storage Gen2 (v3.4.1 以降でサポート)、Google Storage (ネイティブ SDK、v3.5.1 以降でサポート)、および S3 プロトコルと互換性のあるオブジェクトストレージシステム (AWS S3、MinIO など) にデータを格納することをサポートしています。有効な値: `S3` (デフォルト)、`HDFS`、`AZBLOB`、`ADLS2`、および `GS`。このパラメーターを `S3` に指定した場合、`aws_s3` で始まるパラメーターを追加する必要があります。`AZBLOB` に指定した場合、`azure_blob` で始まるパラメーターを追加する必要があります。`ADLS2` に指定した場合、`azure_adls2` で始まるパラメーターを追加する必要があります。`GS` に指定した場合、`gcp_gcs` で始まるパラメーターを追加する必要があります。`HDFS` に指定した場合、`cloud_native_hdfs_url` のみを指定する必要があります。
 - 導入時期：-
 
+### `enable_admin_skip_committed_txn`
+
+- デフォルト：false
+- タイプ：Boolean
+- 単位：-
+- 変更可能：Yes
+- 説明：`ADMIN SKIP COMMITTED TRANSACTION` 文を有効にするかどうかを制御します。`false` の場合、当該文はエラーで拒否されます。共有データ（lake）テーブル上で publish が永久にスタックした `COMMITTED` トランザクションを運用者が手動で解除するための非常用エスケープハッチです。スタックしたトランザクションのデータ寄与は破棄されますが、「no-op publish」（このトランザクションのデータ変更を含まない新しい tablet メタデータファイルを書き出す）によってパーティションの可視バージョンは前進します。対応するのは `file_bundling=true` の lake テーブル、かつインポートと lake-compaction 種別のトランザクションのみ（alter / schema-change は未対応）。誤操作を防ぐため、運用者がスタックしたトランザクションを解除する必要があるときだけ有効化し、復旧後は速やかに無効化してください。
+- 導入時期：-
+
 ### `enable_load_volume_from_conf`
 
 - デフォルト：false
@@ -527,7 +536,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - デフォルト：600
 - タイプ：Long
 - 単位：Seconds
-- 変更可能：No
+- 変更可能：Yes
 - 説明：FE が共有データクラスターで StarMgr と定期的なメタデータ同期を実行する間隔。
 - 導入時期：-
 
@@ -551,13 +560,14 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 ## データレイク
 
-### `files_enable_insert_push_down_schema`
+### `files_enable_insert_push_down_column_type`
 
 - デフォルト：true
+- エイリアス：`files_enable_insert_push_down_schema`
 - タイプ：Boolean
 - 単位：-
 - 変更可能：Yes
-- 説明：有効にすると、アナライザは INSERT ... FROM files() 操作のためにターゲットテーブルスキーマを `files()` テーブル関数にプッシュしようとします。これは、ソースが FileTableFunctionRelation であり、ターゲットがネイティブテーブルであり、SELECT リストにそれに対応するスロット参照列 (または *) が含まれている場合にのみ適用されます。アナライザは選択された列をターゲット列に一致させ (カウントが一致する必要があります)、ターゲットテーブルを一時的にロックし、ファイル列の型を非複合型 (Parquet JSON -> `array<varchar>` のような複合型はスキップされます) のディープコピーされたターゲット列型で置き換えます。元のファイルテーブルからの列名は保持されます。これにより、取り込み中のファイルベースの型推論による型ミスマッチと緩さが軽減されます。
+- 説明：有効にすると、StarRocks は `INSERT INTO target_table SELECT ... FROM files()` 操作において、ターゲットテーブルの列型を `files()` テーブル関数にプッシュダウンします。files から推論済みの列の型のみが書き換えられ、列の追加や削除は行われません。複合型はスキップされます。これにより、ファイルベースの型推論の不正確さによる型不一致エラーが軽減されます。列名と型を含む完全なスキーマのプッシュダウンには、INSERT プロパティ `enable_push_down_schema` を使用してください。
 - 導入時期：v3.4.0, v3.5.0
 
 ### `hdfs_read_buffer_size_kb`
@@ -635,6 +645,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 変更可能：Yes
 - 説明：有効にすると、StarRocks は共有データモードのクラウドネイティブテーブルおよびマテリアライズドビューのタブレット作成を最適化し、タブレットごとに個別のメタデータではなく、物理パーティション下のすべてのタブレットに単一の共有タブレットメタデータを作成します。これにより、テーブル作成、ロールアップ、スキーマ変更ジョブ中に作成されるタブレット作成タスクとメタデータ/ファイルの数が削減されます。この最適化はクラウドネイティブテーブル/マテリアライズドビューにのみ適用され、`file_bundling` と組み合わせて使用されます (後者は同じ最適化ロジックを再利用します)。注: スキーマ変更およびロールアップジョブは、同じ名前のファイルが上書きされるのを避けるため、`file_bundling` を使用するテーブルでは明示的に最適化を無効にします。注意して有効にしてください。作成されるタブレットメタデータの粒度が変更され、レプリカ作成とファイル命名の動作に影響する可能性があります。
 - 導入時期：v3.3.1, v3.4.0, v3.5.0
+
+### `lake_create_tablet_max_retries`
+
+- デフォルト：1
+- タイプ：Int
+- 単位：-
+- 変更可能：Yes
+- 説明：共有データモードでテーブル作成時に失敗した create tablet タスクの最大リトライ回数。CN が到達不能またはダウンしている場合、失敗したタスクは別の生存 CN でリトライされます。送信フェーズの失敗（RPCエラー、ノードダウン）のみがリトライされます。CN が返すエラーやタイムアウトはリトライされません。`0` に設定するとリトライを無効にします。
+- 導入時期：v4.1
 
 ### `lake_use_combined_txn_log`
 
@@ -718,6 +737,14 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 変更可能：Yes
 - 説明：LDAP サーバーがユーザーの認証情報の検索を開始する基底 DN。
 - 導入時期：-
+
+### `authentication_ldap_simple_bind_dn_pattern`
+
+- デフォルト：Empty string
+- タイプ：String
+- 単位：-
+- 変更可能：Yes
+- 説明：直接バインド認証用の DN パターン。ユーザー名のプレースホルダーとして `${USER}` を使用します。パターンは有効な LDAP Distinguished Name（DN）を生成する必要があります。`${USER}@domain` のような UPN 形式はサポートされていません。例：`uid=${USER},ou=People,dc=example,dc=com`。複数のパターンをセミコロンで区切ることができ、システムは成功するまで順番に試行します。設定すると検索ステップがスキップされ、構築された DN で直接バインド認証が行われます。
 
 ### `authentication_ldap_simple_bind_root_dn`
 

@@ -272,6 +272,15 @@ This topic introduces the following types of FE configurations:
 - Description: The type of object storage you use. In shared-data mode, StarRocks supports storing data in HDFS, Azure Blob (supported from v3.1.1 onwards), Azure Data Lake Storage Gen2 (supported from v3.4.1 onwards), Google Storage (with native SDK, supported from v3.5.1 onwards), and object storage systems that are compatible with the S3 protocol (such as AWS S3, and MinIO). Valid value: `S3` (Default), `HDFS`, `AZBLOB`, `ADLS2`, and `GS`. If you specify this parameter as `S3`, you must add the parameters prefixed by `aws_s3`. If you specify this parameter as `AZBLOB`, you must add the parameters prefixed by `azure_blob`. If you specify this parameter as `ADLS2`, you must add the parameters prefixed by `azure_adls2`. If you specify this parameter as `GS`, you must add the parameters prefixed by `gcp_gcs`. If you specify this parameter as `HDFS`, you only need to specify `cloud_native_hdfs_url`.
 - Introduced in: -
 
+### `enable_admin_skip_committed_txn`
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to enable the `ADMIN SKIP COMMITTED TRANSACTION` statement. When `false`, the statement is rejected with an error. This is an operator-only escape hatch for unblocking a publish-stuck `COMMITTED` transaction on a shared-data (lake) table; the stuck transaction's data contribution is discarded, while the partition's visible version still advances via a "no-op publish" (a new metadata file is written that carries no data changes from this transaction). Only supports lake tables with `file_bundling=true`; load and lake-compaction transaction types only (alter / schema-change are not yet supported). Enable only when an operator needs to manually unblock a stuck transaction, and disable again afterwards to prevent accidental use.
+- Introduced in: -
+
 ### `enable_load_volume_from_conf`
 
 - Default: false
@@ -527,7 +536,7 @@ This topic introduces the following types of FE configurations:
 - Default: 600
 - Type: Long
 - Unit: Seconds
-- Is mutable: No
+- Is mutable: Yes
 - Description: The interval at which FE runs the periodical metadata synchronization with StarMgr in a shared-data cluster.
 - Introduced in: -
 
@@ -551,13 +560,14 @@ This topic introduces the following types of FE configurations:
 
 ## Data Lake
 
-### `files_enable_insert_push_down_schema`
+### `files_enable_insert_push_down_column_type`
 
 - Default: true
+- Alias: `files_enable_insert_push_down_schema`
 - Type: Boolean
 - Unit: -
 - Is mutable: Yes
-- Description: When enabled, the analyzer will attempt to push the target table schema into the `files()` table function for INSERT ... FROM files() operations. This only applies when the source is a FileTableFunctionRelation, the target is a native table, and the SELECT list contains corresponding slot-ref columns (or *). The analyzer will match select columns to target columns (counts must match), lock the target table briefly, and replace file-column types with deep-copied target column types for non-complex types (complex types such as Parquet JSON `->` `array<varchar>` are skipped). Column names from the original files table are preserved. This reduces type-mismatch and looseness from file-based type inference during ingestion.
+- Description: When enabled, StarRocks pushes target table column types down to the `files()` table function for `INSERT INTO target_table SELECT ... FROM files()` operations. Only the types of columns already inferred from the files are rewritten; no columns are added or removed. Complex types are skipped. This reduces type-mismatch errors caused by imprecise file-based type inference. For full schema push-down (column names and types), use the INSERT property `enable_push_down_schema`.
 - Introduced in: v3.4.0, v3.5.0
 
 ### `hdfs_read_buffer_size_kb`
@@ -614,6 +624,15 @@ This topic introduces the following types of FE configurations:
 - Description: When enabled, StarRocks optimizes tablet creation for cloud-native tables and materialized views in shared-data mode by creating a single shared tablet metadata for all tablets under a physical partition instead of distinct metadata per tablet. This reduces the number of tablet creation tasks and metadata/files produced during table creation, rollup, and schema-change jobs. The optimization is applied only for cloud-native tables/materialized views and is combined with `file_bundling` (the latter reuses the same optimization logic). Note: schema-change and rollup jobs explicitly disable the optimization for tables using `file_bundling` to avoid overwriting files with identical names. Enable cautiously — it changes the granularity of created tablet metadata and can affect how replica creation and file naming behave.
 - Introduced in: v3.3.1, v3.4.0, v3.5.0
 
+### `lake_create_tablet_max_retries`
+
+- Default: 1
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The maximum number of retry attempts for failed create-tablet tasks in shared-data mode. When a CN is unreachable or down during table creation, the failed tasks are retried on an alternative alive CN. Only send-phase failures (RPC errors, node down) are retried; CN-reported errors and timeouts are not retried. Set to `0` to disable retry.
+- Introduced in: v4.1
+
 ### `lake_use_combined_txn_log`
 
 - Default: false
@@ -622,6 +641,15 @@ This topic introduces the following types of FE configurations:
 - Is mutable: Yes
 - Description: When this item is set to `true`, the system allows Lake tables to use the combined transaction log path for relevant transactions. Available for shared-data clusters only.
 - Introduced in: v3.3.7, v3.4.0, v3.5.0
+
+### `lake_vi_build_load_tail_delay_ms`
+
+- Default: 300000
+- Type: Long
+- Unit: Milliseconds
+- Is mutable: Yes
+- Description: Delay before dispatching async vector index build for a tablet whose latest pending version is load-only (no pending compaction product). Within this window, if a new compaction arrives, its version is built together with the tail; compaction products themselves are always dispatched immediately. Only effective in shared-data mode for tables with an async vector index.
+- Introduced in: v4.2.0
 
 ### `lake_repair_metadata_fetch_max_version_batch_size`
 
@@ -715,6 +743,14 @@ This topic introduces the following types of FE configurations:
 - Is mutable: Yes
 - Description: The base DN, which is the point from which the LDAP server starts to search for users' authentication information.
 - Introduced in: -
+
+### `authentication_ldap_simple_bind_dn_pattern`
+
+- Default: Empty string
+- Type: String
+- Unit: -
+- Is mutable: Yes
+- Description: The DN pattern for direct bind authentication. Use `${USER}` as a placeholder for the username. The pattern must produce a valid LDAP Distinguished Name (DN); UPN-style patterns like `${USER}@domain` are not supported. For example, `uid=${USER},ou=People,dc=example,dc=com`. Multiple patterns can be separated by semicolons, and the system will try each pattern in order until one succeeds. When set, the search step is skipped and the system binds directly with the constructed DN.
 
 ### `authentication_ldap_simple_bind_root_dn`
 

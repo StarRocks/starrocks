@@ -66,6 +66,48 @@ For more information on how to build a monitoring service for your StarRocks clu
 - Unit: Count
 - Description: Total number of scanned rows.
 
+## `query_spill_trigger_total`
+
+- Unit: Count
+- Labels: `storage_type`
+- Description: Number of spillable operator instances that triggered at least one spill, broken down by storage backend (`local`, `remote`). Incremented once per operator instance at the first flush callback.
+
+## `query_spill_bytes_write_total`
+
+- Unit: Bytes
+- Labels: `storage_type`
+- Description: Cumulative payload bytes written by spillable operators to spill storage, broken down by storage backend (`local`, `remote`).
+
+## `query_spill_bytes_read_total`
+
+- Unit: Bytes
+- Labels: `storage_type`
+- Description: Cumulative payload bytes read back from spill storage during restore, broken down by storage backend.
+
+## `query_spill_blocks_write_total`
+
+- Unit: Count
+- Labels: `storage_type`
+- Description: Number of spill blocks allocated for writing, broken down by storage backend. Useful for estimating IO count scale on the write path.
+
+## `query_spill_blocks_read_total`
+
+- Unit: Count
+- Labels: `storage_type`
+- Description: Number of spill blocks opened for reading, broken down by storage backend. Useful for estimating IO count scale on the read path.
+
+## `query_spill_write_io_duration_ns_total`
+
+- Unit: Nanoseconds
+- Labels: `storage_type`
+- Description: Cumulative wall-clock time spent in write-side spill IO (block append and flush), broken down by storage backend. Useful for tracking write-side spill performance.
+
+## `query_spill_read_io_duration_ns_total`
+
+- Unit: Nanoseconds
+- Labels: `storage_type`
+- Description: Cumulative wall-clock time spent in read-side spill IO (block reads during restore), broken down by storage backend. Useful for tracking read-side spill performance.
+
 ## `readable_blocks_total (Deprecated)`
 
 ## `resource_group_bigquery_count`
@@ -203,6 +245,12 @@ For more information on how to build a monitoring service for your StarRocks clu
 - Unit: Count
 - Description: Number of small file caches.
 
+## `spill_disk_bytes_used`
+
+- Unit: Bytes
+- Labels: `storage_type`
+- Description: Current disk bytes reserved across all spill storage directories. The `storage_type=local` variant aggregates the live reserved bytes across every directory managed by the BE's spill `DirManager`. The `storage_type=remote` variant is reported for completeness and is currently always 0 because remote spill storage is tracked per-query rather than globally.
+
 ## `snmp`
 
 - Unit: -
@@ -268,6 +316,72 @@ For more information on how to build a monitoring service for your StarRocks clu
 
 - Unit: Count
 - Description: Number of valid rows read (excluding rows with invalid format). Labels: `file_format`, `scan_type`.
+
+## `starrocks_be_flat_json_access_hit_total`
+
+- Unit: Count
+- Type: Cumulative
+- Description: Total number of flat JSON sub-column access hits observed during scan. Aggregated from the per-scan `flat_json_hits` and `merge_json_hits` statistics.
+
+## `starrocks_be_flat_json_access_miss_total`
+
+- Unit: Count
+- Type: Cumulative
+- Description: Total number of flat JSON sub-column access misses observed during scan. Aggregated from the per-scan `dynamic_json_hits` statistics (paths not materialized as flat columns).
+
+## `starrocks_be_flat_json_cast_duration_ns_total`
+
+- Unit: Nanosecond
+- Type: Cumulative
+- Description: Total time spent casting flat JSON sub-column values during scan.
+
+## `starrocks_be_flat_json_compaction_schema_change_total`
+
+- Unit: Count
+- Type: Cumulative
+- Description: Total number of times `HyperJsonTransformer` is re-initialized for compaction input with a different flat JSON schema than the previous input. A high rate indicates schema churn across segments being compacted.
+
+## `starrocks_be_flat_json_compaction_total`
+
+- Unit: Count
+- Type: Cumulative
+- Description: Total number of compaction invocations that flatten JSON columns via `FlatJsonColumnCompactor`.
+
+## `starrocks_be_flat_json_flatten_duration_ns_total`
+
+- Unit: Nanosecond
+- Type: Cumulative
+- Description: Total time spent flattening JSON values during scan.
+
+## `starrocks_be_flat_json_merge_duration_ns_total`
+
+- Unit: Nanosecond
+- Type: Cumulative
+- Description: Total time spent merging flat JSON sub-columns back to full JSON during scan.
+
+## `starrocks_be_flat_json_paths_discovered_total`
+
+- Unit: Count
+- Type: Cumulative
+- Description: Total number of JSON paths discovered by `JsonPathDeriver` during flat JSON segment writes.
+
+## `starrocks_be_flat_json_paths_extracted_total`
+
+- Unit: Count
+- Type: Cumulative
+- Description: Total number of JSON paths materialized as sub-columns by `FlatJsonColumnWriter` (includes the synthetic null/remain columns).
+
+## `starrocks_be_flat_json_segment_write_total`
+
+- Unit: Count
+- Type: Cumulative
+- Description: Total number of segment writes that invoke flat JSON column extraction.
+
+## `starrocks_be_flat_json_write_rows_total`
+
+- Unit: Count
+- Type: Cumulative
+- Description: Total number of rows appended to `FlatJsonColumnWriter` (counted at `append()`, before actual flattening).
 
 ## `starrocks_be_mem_pool_mem_limit_bytes`
 
@@ -351,6 +465,24 @@ For more information on how to build a monitoring service for your StarRocks clu
 
 - Unit: Count
 - Description: Total number of times a segment file was not found (file missing) during segment open. A continuously increasing value may indicate data loss or storage inconsistency.
+
+## `starrocks_be_staros_shard_info_fallback_total`
+
+- Unit: Count
+- Type: Cumulative
+- Description: Shared-data only. Total number of actual starmgr RPCs (`g_starlet->get_shard_info()`) that the BE's StarOSWorker had to issue because the requested shard info was not in the local cache (i.e. the FE had not pushed the shard to this BE before a query/compaction/lake operation referenced it). Only counted when the starlet readiness check passes and the RPC is actually dispatched; starlet-not-ready timeouts are not included. Should normally be near zero. A sustained or rising rate is a strong signal that FE-side task or node selection is scheduling work on a BE that does not yet have the shard, or that shard push propagation from FE is lagging. Recommended alert: high per-BE rate over a 5-minute window.
+
+## `starrocks_be_staros_shard_info_fallback_failed_total`
+
+- Unit: Count
+- Type: Cumulative
+- Description: Shared-data only. Subset of `starrocks_be_staros_shard_info_fallback_total` where the starmgr RPC returned a non-OK status. Use the ratio `failed_total / fallback_total` to alert on transient starmgr errors separately from routine successful fallbacks.
+
+## `starrocks_be_staros_shard_count`
+
+- Unit: Count
+- Type: Instantaneous
+- Description: Shared-data only. Number of shards currently assigned to this BE's StarOSWorker (size of the worker's local shard table). Updated synchronously inside `StarOSWorker::add_shard` and `StarOSWorker::remove_shard` (push-on-mutation), so the value reflects the last shard table mutation rather than being recomputed at scrape time. The gauge is not reset on BE shutdown and will retain its last value until the next mutation. Use it to observe shard distribution balance across BEs and to detect drift from the FE-side placement.
 
 ## `starrocks_fe_clone_task_copy_bytes`
 
@@ -526,6 +658,63 @@ All transaction metrics share the following labels:
 - Unit: Count
 - Description: The number of times blacklisted SQL has been intercepted.
 
+## `starrocks_fe_tablet_pre_split_eligibility_skipped`
+
+- Unit: Count
+- Type: Cumulative
+- Labels: `reason` — the SkipReason enum value (lower-cased), one of `not_range_distribution`, `table_not_normal`, `has_materialized_view_or_rollup`, `unsupported_sort_key`, `metadata_not_resolved`, `multiple_base_index_tablets`, `partition_not_empty`, `disabled_by_config`, `disabled_by_session`.
+- Description: Total Sample-Based Tablet Pre-Split invocations that the FE-side eligibility gate declined before any sampler ran, broken down by the specific reason. Operators can use this counter to attribute "pre-split not running" to a single eligibility branch at a glance.
+
+## `starrocks_fe_tablet_pre_split_sampler_invocations`
+
+- Unit: Count
+- Type: Cumulative
+- Description: Total sampler invocations driven by Sample-Based Tablet Pre-Split. Incremented once per eligible invocation when the production sampler pipeline starts a sample.
+
+## `starrocks_fe_tablet_pre_split_sampler_failed`
+
+- Unit: Count
+- Type: Cumulative
+- Labels: `reason` — the post-eligibility failure category (lower-cased SkipReason), one of `sample_failed` (sampler executor threw), `timeout_pre_submit` (sample + plan + build phase exceeded `tablet_pre_split_pre_submit_timeout_seconds`), `submit_failed` (`TabletReshardJobMgr` rejected admission).
+- Description: Total times the sampler attempted but did not produce an admitted reshard job, broken down by reason. Distinct from `tablet_pre_split_eligibility_skipped` (sampler never ran) and from `tablet_pre_split_tier_used` (which records the tier that succeeded). Meta-tier → data-tier fallback alone is not a failure; it is tracked via `tablet_pre_split_tier_used{tier=data_tier}`.
+
+## `starrocks_fe_tablet_pre_split_tier_used`
+
+- Unit: Count
+- Type: Cumulative
+- Labels: `tier` — `meta_tier` (boundaries computed from Parquet/ORC row-group statistics; no row data read) or `data_tier` (boundaries computed from actual row samples collected via a FILES sub-query — covers both direct data-tier invocations and meta-tier → data-tier fallbacks).
+- Description: Total Sample-Based Tablet Pre-Split invocations by which sampler tier produced the boundaries.
+
+## `starrocks_fe_tablet_pre_split_boundaries_planned`
+
+- Unit: Count
+- Type: Histogram
+- Description: Number of boundary tuples produced by the planner per invocation. Equals `effectiveTabletCount - 1` (a K-tablet split needs K-1 cut points).
+
+## `starrocks_fe_tablet_pre_split_pre_submit_wait_ms`
+
+- Unit: ms
+- Type: Histogram
+- Description: Wall-clock time spent in the pre-submit phase of Sample-Based Tablet Pre-Split (sample + plan + build reshard job). Capped by `tablet_pre_split_pre_submit_timeout_seconds`.
+
+## `starrocks_fe_tablet_pre_split_post_submit_wait_ms`
+
+- Unit: ms
+- Type: Histogram
+- Description: Wall-clock time the coordinator spent awaiting `FINISHED` on the admitted Sample-Based Tablet Pre-Split reshard job. Fires on the INSERT-from-FILES production path (the hook synchronously awaits FINISHED so the triggering INSERT plans against the post-split layout) and on the optional `runPreSplit` synchronous-await wrapper used by tests. The Broker Load production path is fire-and-forget and does not update this histogram.
+
+## `starrocks_fe_tablet_pre_split_post_submit_hard_cap`
+
+- Unit: Count
+- Type: Cumulative
+- Description: Total Sample-Based Tablet Pre-Split post-submit hard-cap events. Incremented when the admitted reshard job did not reach `FINISHED` within `tablet_pre_split_post_submit_wait_seconds`. Fires on the INSERT-from-FILES production path on timeout (the INSERT then proceeds without abort against the currently visible tablet layout — still the original layout if the daemon hasn't transitioned, or partially / fully post-split if the daemon raced past the wait. `tablet_pre_split_load_abort` is NOT incremented because the INSERT itself is not aborted) and on the `runPreSplit` synchronous-await wrapper. The Broker Load production path does not await and so does not update this counter.
+
+## `starrocks_fe_tablet_pre_split_load_abort`
+
+- Unit: Count
+- Type: Cumulative
+- Description: Total load transactions aborted because Sample-Based Tablet Pre-Split could not confirm the admitted reshard job reached `FINISHED` in time. Sibling counter of `tablet_pre_split_post_submit_hard_cap`. Production load paths proceed without abort against the currently visible layout on post-submit timeout rather than abort, so this counter stays at zero in production today; it only fires when a caller uses the strict `runPreSplit` wrapper (tests, or a future caller that opts into abort-on-timeout).
+
 ## `starrocks_fe_tablet_max_compaction_score`
 
 - Unit: Count
@@ -602,6 +791,26 @@ All transaction metrics share the following labels:
 
 - Unit: Bytes
 - Description: Memory used by storage page cache.
+
+## `spm_baseline_count`
+
+- Unit: Count
+- Type: Instantaneous
+- Description: Current number of global SQL Plan Management (SPM) baselines on the FE leader.
+
+## `spm_capture_candidate_total`
+
+- Unit: Count
+- Type: Cumulative
+- Labels: `result` (`captured`, `skipped_duplicate`, `skipped_table_count`, `skipped_table_missing`, `skipped_db_missing`, `skipped_pattern_mismatch`, or `failed`)
+- Description: Total number of SPM auto-capture candidate processing results. Each series records how query-history candidates are classified during auto-capture.
+
+## `spm_rewrite_total`
+
+- Unit: Count
+- Type: Cumulative
+- Labels: `result` (`hit`, `miss`, or `error`)
+- Description: Total number of SPM rewrite attempts by result. `hit` means a baseline is matched and applied successfully. `miss` means rewrite is attempted but no enabled baseline matches. `error` means rewrite falls back because an exception occurs during the SPM rewrite flow.
 
 ## `stream_load`
 
@@ -809,4 +1018,3 @@ All transaction metrics share the following labels:
 - Description: Number of cumulative compaction tasks waiting for execution.
 
 ## `writable_blocks_total (Deprecated)`
-

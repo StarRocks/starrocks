@@ -20,6 +20,7 @@
 #include "column/binary_column.h"
 #include "column/column_visitor_adapter.h"
 #include "column/const_column.h"
+#include "column/decimalv3_column.h"
 #include "column/json_column.h"
 #include "column/map_column.h"
 #include "column/nullable_column.h"
@@ -31,7 +32,11 @@ namespace starrocks {
 
 // MutableRawDataVisitor calls mutable_raw_data() on the visited column and stores
 // the resulting pointer for the caller to retrieve via result().
-// Supported: FixedLengthColumn<T>, DecimalV3Column<T>, AdaptiveNullableColumn.
+// Supported column types:
+//   - FixedLengthColumn<T>, DecimalV3Column<T>: returns raw data pointer directly
+//   - NullableColumn, ConstColumn: recurses into the inner data column
+//   - ArrayColumn: recurses into the elements column
+//   - AdaptiveNullableColumn: materializes first, then recurses into the data column
 // All other column types return NotSupported.
 class MutableRawDataVisitor final : public ColumnVisitorMutableAdapter<MutableRawDataVisitor> {
 public:
@@ -71,6 +76,110 @@ public:
 
 private:
     uint8_t* _result = nullptr;
+};
+
+// RawDataVisitor calls raw_data() on the visited column and stores
+// the resulting pointer for the caller to retrieve via result().
+// This is the const counterpart of MutableRawDataVisitor.
+// Supported column types:
+//   - FixedLengthColumn<T>, DecimalV3Column<T>: returns the raw element buffer
+//   - NullableColumn, ConstColumn: recurses into the inner data column
+//   - ArrayColumn: recurses into the elements column
+//   - AdaptiveNullableColumn: materializes first, then recurses into the data column
+// All other column types return NotSupported.
+class RawDataVisitor final : public ColumnVisitorAdapter<RawDataVisitor> {
+public:
+    RawDataVisitor() : ColumnVisitorAdapter(this) {}
+
+    template <typename T>
+    Status do_visit(const FixedLengthColumn<T>& column) {
+        _result = column.raw_data();
+        return Status::OK();
+    }
+
+    template <typename T>
+    Status do_visit(const DecimalV3Column<T>& column) {
+        _result = column.raw_data();
+        return Status::OK();
+    }
+
+    Status do_visit(const ArrayColumn& column) { return column.elements_column_raw_ptr()->accept(this); }
+
+    Status do_visit(const ConstColumn& column) { return column.data_column_raw_ptr()->accept(this); }
+
+    Status do_visit(const NullableColumn& column) { return column.data_column_raw_ptr()->accept(this); }
+
+    Status do_visit(const AdaptiveNullableColumn& column) {
+        return column.materialized_raw_data_column()->accept(this);
+    }
+
+    // Fallback for all unsupported column types.
+    template <typename T>
+    static Status do_visit(const T& column) {
+        return Status::NotSupported("RawDataVisitor: unsupported column type {}", column.get_name());
+    }
+
+    const uint8_t* result() const { return _result; }
+
+private:
+    const uint8_t* _result = nullptr;
+};
+
+// RawBytesVisitor calls raw_bytes() on the visited column and stores
+// the resulting pointer for the caller to retrieve via result().
+// Supported column types:
+//   - FixedLengthColumn<T>, DecimalV3Column<T>: returns the raw element buffer
+//   - BinaryColumn, LargeBinaryColumn: returns the flat bytes buffer (not the Slice cache)
+//   - NullableColumn, ConstColumn: recurses into the inner data column
+//   - ArrayColumn: recurses into the elements column
+//   - AdaptiveNullableColumn: materializes first, then recurses into the data column
+// All other column types return NotSupported.
+class RawBytesVisitor final : public ColumnVisitorAdapter<RawBytesVisitor> {
+public:
+    RawBytesVisitor() : ColumnVisitorAdapter(this) {}
+
+    template <typename T>
+    Status do_visit(const FixedLengthColumn<T>& column) {
+        _result = column.raw_bytes();
+        return Status::OK();
+    }
+
+    template <typename T>
+    Status do_visit(const DecimalV3Column<T>& column) {
+        _result = column.raw_bytes();
+        return Status::OK();
+    }
+
+    Status do_visit(const BinaryColumn& column) {
+        _result = column.raw_bytes();
+        return Status::OK();
+    }
+
+    Status do_visit(const LargeBinaryColumn& column) {
+        _result = column.raw_bytes();
+        return Status::OK();
+    }
+
+    Status do_visit(const ArrayColumn& column) { return column.elements_column_raw_ptr()->accept(this); }
+
+    Status do_visit(const ConstColumn& column) { return column.data_column_raw_ptr()->accept(this); }
+
+    Status do_visit(const NullableColumn& column) { return column.data_column_raw_ptr()->accept(this); }
+
+    Status do_visit(const AdaptiveNullableColumn& column) {
+        return column.materialized_raw_data_column()->accept(this);
+    }
+
+    // Fallback for all unsupported column types.
+    template <typename T>
+    static Status do_visit(const T& column) {
+        return Status::NotSupported("RawBytesVisitor: unsupported column type {}", column.get_name());
+    }
+
+    const uint8_t* result() const { return _result; }
+
+private:
+    const uint8_t* _result = nullptr;
 };
 
 } // namespace starrocks

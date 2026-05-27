@@ -15,15 +15,92 @@
 #include "storage/index/inverted/builtin/builtin_inverted_index_iterator.h"
 
 #include <CLucene.h>
+#include <CLucene/analysis/LanguageBasedAnalyzer.h>
+#include <fmt/format.h>
 
+#include <boost/locale/encoding_errors.hpp>
+#include <boost/locale/encoding_utf.hpp>
 #include <memory>
+#include <vector>
 
+#include "column/chunk_factory.h"
 #include "common/runtime_profile.h"
 #include "exprs/function_context.h"
 #include "exprs/like_predicate.h"
 #include "storage/chunk_helper.h"
 
 namespace starrocks {
+BuiltinInvertedIndexIterator::BuiltinInvertedIndexIterator(const std::shared_ptr<TabletIndex>& index_meta,
+                                                           InvertedReader* reader, OlapReaderStatistics* stats,
+                                                           std::unique_ptr<BitmapIndexIterator>& bitmap_itr,
+                                                           const size_t& segment_rows)
+        : InvertedIndexIterator(index_meta, reader, stats),
+          _bitmap_itr(std::move(bitmap_itr)),
+          _segment_rows(segment_rows) {
+    if (_analyser_type == InvertedIndexParserType::PARSER_ENGLISH) {
+        _builtin_query_analyzer = std::make_unique<SimpleAnalyzer>();
+    } else if (_analyser_type == InvertedIndexParserType::PARSER_STANDARD) {
+        _query_analyzer = std::make_unique<lucene::analysis::standard::StandardAnalyzer>();
+    } else if (_analyser_type == InvertedIndexParserType::PARSER_CHINESE) {
+        auto chinese_analyzer = _CLNEW lucene::analysis::LanguageBasedAnalyzer();
+        chinese_analyzer->setLanguage(L"cjk");
+        _query_analyzer.reset(chinese_analyzer);
+    }
+
+    if (_query_analyzer != nullptr) {
+        _query_string_reader = std::make_unique<lucene::util::StringReader>(L"");
+    }
+}
+
+Status BuiltinInvertedIndexIterator::_tokenize_query_by_parser(const Slice& query, std::vector<std::string>* tokens) {
+    tokens->clear();
+    std::string query_str = query.to_string();
+    if (query_str.empty()) {
+        return Status::OK();
+    }
+
+    switch (_analyser_type) {
+    case InvertedIndexParserType::PARSER_NONE:
+        tokens->emplace_back(std::move(query_str));
+        return Status::OK();
+    case InvertedIndexParserType::PARSER_ENGLISH: {
+        std::vector<SliceToken> slice_tokens;
+        _builtin_query_analyzer->tokenize(query_str.data(), query_str.size(), slice_tokens);
+        tokens->reserve(slice_tokens.size());
+        for (const auto& token : slice_tokens) {
+            if (!token.empty()) {
+                tokens->emplace_back(token.text.to_string());
+            }
+        }
+        return Status::OK();
+    }
+    case InvertedIndexParserType::PARSER_STANDARD:
+    case InvertedIndexParserType::PARSER_CHINESE: {
+        try {
+            std::wstring wquery = boost::locale::conv::utf_to_utf<TCHAR>(query_str);
+            _query_string_reader->init(wquery.c_str(), wquery.size(), false);
+            auto stream = _query_analyzer->reusableTokenStream(L"", _query_string_reader.get());
+            lucene::analysis::Token token;
+            while (stream->next(&token)) {
+                if (token.termLength() == 0) {
+                    continue;
+                }
+                tokens->emplace_back(boost::locale::conv::utf_to_utf<char>(token.termBuffer(),
+                                                                           token.termBuffer() + token.termLength()));
+            }
+        } catch (const boost::locale::conv::conversion_error& e) {
+            return Status::InvalidArgument(fmt::format("Invalid UTF-8 query for inverted index: {}", e.what()));
+        } catch (const std::exception& e) {
+            return Status::InternalError(fmt::format("Failed to tokenize inverted index query with parser {}: {}",
+                                                     inverted_index_parser_type_to_string(_analyser_type), e.what()));
+        }
+        return Status::OK();
+    }
+    default:
+        return Status::NotSupported("Unsupported parser type for builtin inverted query tokenization");
+    }
+}
+
 std::string get_next_prefix(const Slice& prefix_s) {
     std::string next_prefix = prefix_s.to_string();
 
@@ -90,7 +167,7 @@ Status BuiltinInvertedIndexIterator::_wildcard_query(const Slice* search_query, 
             } else if (!st.ok()) {
                 return st;
             } else {
-                auto column = ChunkHelper::column_from_field_type(TYPE_VARCHAR, false);
+                auto column = ChunkFactory::column_from_field_type(TYPE_VARCHAR, false);
                 size_t read_num = 1;
                 RETURN_IF_ERROR(_bitmap_itr->next_batch_dictionary(&read_num, column.get()));
                 Slice s = down_cast<BinaryColumn*>(column.get())->immutable_data()[0];
@@ -228,10 +305,12 @@ Status BuiltinInvertedIndexIterator::_wildcard_query(const Slice* search_query, 
     return _bitmap_itr->read_union_bitmap(hit_rowids, bitmap);
 }
 
-Status BuiltinInvertedIndexIterator::read_from_inverted_index(const std::string& column_name, const void* query_value,
+Status BuiltinInvertedIndexIterator::read_from_inverted_index(const std::string_view column_name,
+                                                              const void* query_value,
                                                               InvertedIndexQueryType query_type,
                                                               roaring::Roaring* bitmap) {
     const auto* search_query = reinterpret_cast<const Slice*>(query_value);
+    bitmap->clear();
     switch (query_type) {
     case InvertedIndexQueryType::EQUAL_QUERY: {
         RETURN_IF_ERROR(_equal_query(search_query, bitmap));
@@ -243,19 +322,17 @@ Status BuiltinInvertedIndexIterator::read_from_inverted_index(const std::string&
     }
     case InvertedIndexQueryType::MATCH_ALL_QUERY:
     case InvertedIndexQueryType::MATCH_ANY_QUERY: {
-        std::string search_query_str = search_query->to_string();
-        std::istringstream iss(search_query_str);
-        std::string cur_predicate;
+        std::vector<std::string> predicates;
+        RETURN_IF_ERROR(_tokenize_query_by_parser(*search_query, &predicates));
+        if (predicates.empty()) {
+            return Status::OK();
+        }
         bool first = true;
         roaring::Roaring roaring;
-        while (iss >> cur_predicate) {
+        for (const auto& predicate : predicates) {
             roaring.clear();
-            Slice s(cur_predicate);
-            if (cur_predicate.find('%') != std::string::npos) {
-                RETURN_IF_ERROR(_wildcard_query(&s, &roaring));
-            } else {
-                RETURN_IF_ERROR(_equal_query(&s, &roaring));
-            }
+            Slice s(predicate);
+            RETURN_IF_ERROR(_equal_query(&s, &roaring));
 
             if (first) {
                 *bitmap = std::move(roaring);
@@ -267,7 +344,6 @@ Status BuiltinInvertedIndexIterator::read_from_inverted_index(const std::string&
             } else {
                 DCHECK(false) << "do not support query type";
             }
-            cur_predicate.clear();
         }
         break;
     }
@@ -277,7 +353,7 @@ Status BuiltinInvertedIndexIterator::read_from_inverted_index(const std::string&
     return Status::OK();
 }
 
-Status BuiltinInvertedIndexIterator::read_null(const std::string& column_name, roaring::Roaring* bitmap) {
+Status BuiltinInvertedIndexIterator::read_null(const std::string_view column_name, roaring::Roaring* bitmap) {
     return Status::InternalError("Unsupported");
 }
 

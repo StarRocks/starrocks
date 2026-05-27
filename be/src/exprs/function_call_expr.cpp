@@ -23,15 +23,14 @@
 #include "column/column_helper.h"
 #include "column/const_column.h"
 #include "column/vectorized_fwd.h"
+#include "common/bloom_filter.h"
 #include "exprs/agg/combinator/agg_state_utils.h"
 #include "exprs/agg/combinator/state_function.h"
 #include "exprs/builtin_functions.h"
 #include "exprs/expr_context.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/current_thread.h"
-#include "runtime/user_function_cache.h"
 #include "types/logical_type.h"
-#include "util/bloom_filter.h"
 
 namespace starrocks {
 
@@ -122,8 +121,8 @@ Status VectorizedFunctionCallExpr::prepare(starrocks::RuntimeState* state, starr
     _is_returning_random_value = _fn.fid == 10300 /* rand */ || _fn.fid == 10301 /* random */ ||
                                  _fn.fid == 10302 /* rand */ || _fn.fid == 10303 /* random */ ||
                                  _fn.fid == 100015 /* uuid */ || _fn.fid == 100016 /* uuid_numeric */ ||
-                                 _fn.fid == 100025 /* uuid_v7 */ || _fn.fid == 100026 /* uuid_v7_numeric */
-            ;
+                                 _fn.fid == 100025 /* uuid_v7 */ || _fn.fid == 100026 /* uuid_v7_numeric */ ||
+                                 _fn.fid == 30470 /* http_request */;
 
     return Status::OK();
 }

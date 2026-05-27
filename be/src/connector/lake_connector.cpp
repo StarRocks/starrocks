@@ -18,36 +18,60 @@
 
 #include "base/string/string_parser.hpp"
 #include "base/testutil/sync_point.h"
+#include "column/chunk.h"
+#include "column/chunk_factory.h"
 #include "column/column_access_path.h"
+#include "column/column_helper.h"
 #include "common/config_lake_fwd.h"
 #include "common/config_scan_io_fwd.h"
 #include "common/config_starlet_fwd.h"
 #include "common/config_storage_fwd.h"
+#include "common/object_pool.h"
 #include "exec/connector_scan_node.h"
 #include "exec/olap_scan_prepare.h"
 #include "exec/pipeline/fragment_context.h"
+#include "exec/pipeline/query_context.h"
 #include "exec/pipeline/scan/glm_manager.h"
+#include "exec/pipeline/scan/olap_dynamic_morsel_queue_builder.h"
+#include "exec/pipeline/scan/scan_morsel.h"
+#include "exec/pipeline/scan/split_scan_morsel.h"
+#include "exec/query_scan_metrics.h"
 #include "exprs/chunk_predicate_evaluator.h"
+#include "exprs/column_access_path_resolver.h"
+#include "exprs/expr_executor.h"
 #include "exprs/expr_factory.h"
 #include "exprs/jsonpath.h"
 #include "fs/fs.h"
 #include "fs/key_cache.h"
+#include "runtime/chunk_helper.h"
 #include "runtime/current_thread.h"
-#include "runtime/exec_env.h"
 #include "runtime/global_dict/fragment_dict_state.h"
 #include "runtime/global_dict/parser.h"
-#include "runtime/starrocks_metrics.h"
+#include "runtime/service_contexts.h"
 #include "storage/chunk_helper.h"
 #include "storage/column_predicate_rewriter.h"
+#include "storage/flat_json_metrics.h"
+#include "storage/index/vector/vector_search_option.h"
 #include "storage/lake/table_schema_service.h"
 #include "storage/lake/tablet.h"
 #include "storage/predicate_parser.h"
-#include "storage/projection_iterator.h"
+#include "storage/primitive/projection_iterator.h"
 #include "storage/rowset/short_key_range_option.h"
 #include "storage/runtime_range_pruner.hpp"
 #include "storage/virtual_column_utils.h"
 
 namespace starrocks::connector {
+
+namespace {
+
+lake::TabletManager* lake_tablet_manager(RuntimeState* state) {
+    const auto* query_execution_services = state->query_execution_services();
+    return query_execution_services != nullptr && query_execution_services->lake != nullptr
+                   ? query_execution_services->lake->lake_tablet_manager
+                   : nullptr;
+}
+
+} // namespace
 
 LakeDataSource::LakeDataSource(const LakeDataSourceProvider* provider, const TScanRange& scan_range)
         : _provider(provider), _scan_range(scan_range.internal_scan_range) {}
@@ -67,7 +91,19 @@ Status LakeDataSource::open(RuntimeState* state) {
     TupleDescriptor* tuple_desc = state->desc_tbl().get_tuple_descriptor(thrift_lake_scan_node.tuple_id);
     _slots = &tuple_desc->slots();
 
+    if (thrift_lake_scan_node.__isset.vector_search_options) {
+        const auto& vector_search_options = thrift_lake_scan_node.vector_search_options;
+        _use_vector_index = vector_search_options.enable_use_ann;
+        if (_use_vector_index) {
+            _use_ivfpq = vector_search_options.use_ivfpq;
+            _vector_distance_column_name = vector_search_options.vector_distance_column_name;
+            _vector_slot_id = vector_search_options.vector_slot_id;
+            _params.vector_search_option = std::make_shared<VectorSearchOption>();
+        }
+    }
+
     _runtime_profile->add_info_string("Table", tuple_desc->table_desc()->name());
+    _runtime_profile->add_info_string("Database", tuple_desc->table_desc()->database());
     if (thrift_lake_scan_node.__isset.rollup_name) {
         _runtime_profile->add_info_string("Rollup", thrift_lake_scan_node.rollup_name);
     }
@@ -79,8 +115,9 @@ Status LakeDataSource::open(RuntimeState* state) {
 
     // init column access paths
     if (thrift_lake_scan_node.__isset.column_access_paths) {
+        auto path_resolver = make_column_access_path_resolver(state, state->obj_pool());
         for (int i = 0; i < thrift_lake_scan_node.column_access_paths.size(); ++i) {
-            auto st = ColumnAccessPath::create(thrift_lake_scan_node.column_access_paths[i], state, state->obj_pool());
+            auto st = ColumnAccessPath::create(thrift_lake_scan_node.column_access_paths[i], path_resolver);
             if (LIKELY(st.ok())) {
                 _column_access_paths.emplace_back(std::move(st.value()));
             } else {
@@ -150,8 +187,8 @@ void LakeDataSource::close(RuntimeState* state) {
 }
 
 Status LakeDataSource::get_next(RuntimeState* state, ChunkPtr* chunk) {
-    ASSIGN_OR_RETURN(auto chunk_ptr,
-                     ChunkHelper::new_chunk_pooled_checked(_prj_iter->output_schema(), _runtime_state->chunk_size()));
+    ASSIGN_OR_RETURN(auto chunk_ptr, RuntimeChunkHelper::new_chunk_pooled_checked(_prj_iter->output_schema(),
+                                                                                  _runtime_state->chunk_size()));
     chunk->reset(chunk_ptr);
 
     do {
@@ -196,7 +233,7 @@ Status LakeDataSource::get_next(RuntimeState* state, ChunkPtr* chunk) {
 Status LakeDataSource::get_tablet(const TInternalScanRange& scan_range) {
     int64_t tablet_id = scan_range.tablet_id;
     int64_t version = strtoul(scan_range.version.c_str(), nullptr, 10);
-    auto tablet_manager = ExecEnv::GetInstance()->lake_tablet_manager();
+    auto* tablet_manager = _provider->tablet_manager();
     ASSIGN_OR_RETURN(_tablet, tablet_manager->get_tablet(tablet_id, version));
     auto& lake_scan_node = _provider->_t_lake_scan_node;
     if (lake_scan_node.__isset.schema_key) {
@@ -260,7 +297,14 @@ Status LakeDataSource::init_scanner_columns(std::vector<uint32_t>& scanner_colum
                                             std::vector<uint32_t>& reader_columns) {
     for (auto slot : *_slots) {
         DCHECK(slot->is_materialized());
-        int32_t index = _tablet_schema->field_index(slot->col_name());
+        int32_t index;
+        if (_use_vector_index && !_use_ivfpq && slot->id() == _vector_slot_id) {
+            index = _tablet_schema->num_columns();
+            _params.vector_search_option->vector_column_id = index;
+            _params.vector_search_option->vector_slot_id = slot->id();
+        } else {
+            index = _tablet_schema->field_index(slot->col_name());
+        }
         if (index < 0) {
             std::stringstream ss;
             ss << "invalid field name: " << slot->col_name();
@@ -337,6 +381,24 @@ Status LakeDataSource::init_reader_params(const std::vector<OlapScanRange*>& key
     }
     if (thrift_lake_scan_node.__isset.enable_gin_filter) {
         _params.enable_gin_filter = thrift_lake_scan_node.enable_gin_filter;
+    }
+
+    _params.use_vector_index = _use_vector_index;
+    if (_use_vector_index) {
+        const auto& vector_options = thrift_lake_scan_node.vector_search_options;
+        _params.vector_search_option->vector_distance_column_name = _vector_distance_column_name;
+        _params.vector_search_option->k = vector_options.vector_limit_k;
+        for (const std::string& str : vector_options.query_vector) {
+            _params.vector_search_option->query_vector.push_back(std::stof(str));
+        }
+        if (_runtime_state->query_options().__isset.ann_params) {
+            _params.vector_search_option->query_params = _runtime_state->query_options().ann_params;
+        }
+        _params.vector_search_option->vector_range = vector_options.vector_range;
+        _params.vector_search_option->result_order = vector_options.result_order;
+        _params.vector_search_option->use_ivfpq = _use_ivfpq;
+        _params.vector_search_option->k_factor = _runtime_state->query_options().k_factor;
+        _params.vector_search_option->pq_refine_factor = _runtime_state->query_options().pq_refine_factor;
     }
 
     ASSIGN_OR_RETURN(auto pred_tree, _conjuncts_manager->get_predicate_tree(parser, _predicate_free_pool));
@@ -423,6 +485,13 @@ Status LakeDataSource::init_tablet_reader(RuntimeState* runtime_state) {
     RETURN_IF_ERROR(_extend_schema_by_access_paths());
     ASSIGN_OR_RETURN(_tablet_schema, extend_schema_by_virtual_columns(_tablet_schema, *_slots));
     RETURN_IF_ERROR(init_global_dicts(&_params));
+    // init_global_dicts intersects the FE-level dict map with this scan's
+    // materialized tablet schema, so the resulting size counts columns that
+    // will actually flow through the encoded path on this scan instance.
+    if (_params.global_dictmaps != nullptr && !_params.global_dictmaps->empty() && _runtime_profile != nullptr) {
+        _runtime_profile->add_info_string("GlobalDictOptApplied", "true");
+        _runtime_profile->add_info_string("GlobalDictAppliedSlots", std::to_string(_params.global_dictmaps->size()));
+    }
     RETURN_IF_ERROR(init_unused_output_columns(thrift_lake_scan_node.unused_output_column_name));
     RETURN_IF_ERROR(init_reader_params(_scanner_ranges));
 
@@ -430,7 +499,7 @@ Status LakeDataSource::init_tablet_reader(RuntimeState* runtime_state) {
     if (_params.lake_io_opts.cache_file_only && _slots != nullptr &&
         has_all_pk_columns_selected(_tablet_schema.get(), *_slots)) {
         auto metadata = _tablet.metadata();
-        auto* tablet_mgr = ExecEnv::GetInstance()->lake_tablet_manager();
+        auto* tablet_mgr = _provider->tablet_manager();
         _params.lake_io_opts.sst_warmup_done = std::make_shared<std::atomic<bool>>(false);
         _params.lake_io_opts.sst_warmup_fn = [metadata, tablet_mgr]() -> Status {
             return warmup_pk_index_sst_files(metadata.get(), tablet_mgr);
@@ -1055,8 +1124,8 @@ void LakeDataSource::update_counter(RuntimeState* state) {
                 "PushdownPredicateTree", _params.pred_tree.visit([](const auto& node) { return node.debug_string(); }));
     }
 
-    StarRocksMetrics::instance()->query_scan_bytes.increment(_bytes_read);
-    StarRocksMetrics::instance()->query_scan_rows.increment(_raw_rows_read);
+    QueryScanMetrics::instance()->query_scan_bytes.increment(_bytes_read);
+    QueryScanMetrics::instance()->query_scan_rows.increment(_raw_rows_read);
 
     if (_reader->stats().decode_dict_ns > 0) {
         RuntimeProfile::Counter* c = ADD_TIMER(_runtime_profile, "DictDecode");
@@ -1137,6 +1206,7 @@ void LakeDataSource::update_counter(RuntimeState* state) {
             COUNTER_UPDATE(path_counter, v);
         }
         COUNTER_UPDATE(_access_path_hits_counter, total);
+        FlatJsonMetrics::instance()->flat_json_access_hit_total.increment(total);
     }
     if (_reader->stats().dynamic_json_hits.size() > 0) {
         RuntimeProfile::Counter* _access_path_unhits_counter =
@@ -1153,6 +1223,7 @@ void LakeDataSource::update_counter(RuntimeState* state) {
             COUNTER_UPDATE(path_counter, v);
         }
         COUNTER_UPDATE(_access_path_unhits_counter, total);
+        FlatJsonMetrics::instance()->flat_json_access_miss_total.increment(total);
     }
     if (_reader->stats().extract_json_hits.size() > 0) {
         const std::string counter_name = "AccessPathExtract";
@@ -1178,14 +1249,17 @@ void LakeDataSource::update_counter(RuntimeState* state) {
     if (_reader->stats().json_cast_ns > 0) {
         RuntimeProfile::Counter* c = ADD_CHILD_TIMER(_runtime_profile, "FlatJsonCast", parent_name);
         COUNTER_UPDATE(c, _reader->stats().json_cast_ns);
+        FlatJsonMetrics::instance()->flat_json_cast_duration_ns_total.increment(_reader->stats().json_cast_ns);
     }
     if (_reader->stats().json_merge_ns > 0) {
         RuntimeProfile::Counter* c = ADD_CHILD_TIMER(_runtime_profile, "FlatJsonMerge", parent_name);
         COUNTER_UPDATE(c, _reader->stats().json_merge_ns);
+        FlatJsonMetrics::instance()->flat_json_merge_duration_ns_total.increment(_reader->stats().json_merge_ns);
     }
     if (_reader->stats().json_flatten_ns > 0) {
         RuntimeProfile::Counter* c = ADD_CHILD_TIMER(_runtime_profile, "FlatJsonFlatten", parent_name);
         COUNTER_UPDATE(c, _reader->stats().json_flatten_ns);
+        FlatJsonMetrics::instance()->flat_json_flatten_duration_ns_total.increment(_reader->stats().json_flatten_ns);
     }
     if (state && state->query_ctx()) {
         state->query_ctx()->incr_read_stats(_reader->stats().io_count_local_disk, _reader->stats().io_count_remote);
@@ -1197,17 +1271,38 @@ void LakeDataSource::update_counter(RuntimeState* state) {
 LakeDataSourceProvider::LakeDataSourceProvider(ConnectorScanNode* scan_node, const TPlanNode& plan_node)
         : _scan_node(scan_node), _t_lake_scan_node(plan_node.lake_scan_node) {}
 
+// _partition_conjunct_ctxs share this provider's ObjectPool and self-close in their destructor.
+LakeDataSourceProvider::~LakeDataSourceProvider() = default;
+
 DataSourcePtr LakeDataSourceProvider::create_data_source(const TScanRange& scan_range) {
     return std::make_unique<LakeDataSource>(this, scan_range);
 }
 
 Status LakeDataSourceProvider::init(ObjectPool* pool, RuntimeState* state) {
+    if (_tablet_manager == nullptr) {
+        _tablet_manager = lake_tablet_manager(state);
+    }
+    RETURN_IF(_tablet_manager == nullptr, Status::InternalError("lake tablet manager is not initialized"));
     if (_t_lake_scan_node.__isset.bucket_exprs) {
         const auto& bucket_exprs = _t_lake_scan_node.bucket_exprs;
         _partition_exprs.resize(bucket_exprs.size());
         for (int i = 0; i < bucket_exprs.size(); ++i) {
             RETURN_IF_ERROR(ExprFactory::create_expr_tree(pool, bucket_exprs[i], &_partition_exprs[i], state));
         }
+    }
+    if (_t_lake_scan_node.__isset.partition_conjuncts) {
+        const auto& partition_conjuncts = _t_lake_scan_node.partition_conjuncts;
+        _partition_conjunct_ctxs.resize(partition_conjuncts.size());
+        for (int i = 0; i < partition_conjuncts.size(); ++i) {
+            RETURN_IF_ERROR(
+                    ExprFactory::create_expr_tree(pool, partition_conjuncts[i], &_partition_conjunct_ctxs[i], state));
+        }
+        // Prepare and open once here. convert_scan_range_to_morsel_queue_builder may run multiple times
+        // per fragment (once per driver sequence), and ExprContext::open short-circuits on
+        // repeat calls, so re-opening after an inline close would leave function state stale.
+        RETURN_IF_ERROR(ExprExecutor::prepare(_partition_conjunct_ctxs, state));
+        RETURN_IF_ERROR(ExprExecutor::open(_partition_conjunct_ctxs, state));
+        _runtime_state = state;
     }
     return Status::OK();
 }
@@ -1223,28 +1318,44 @@ DataSourceProviderPtr LakeConnector::create_data_source_provider(ConnectorScanNo
     return std::make_unique<LakeDataSourceProvider>(scan_node, plan_node);
 }
 
-StatusOr<pipeline::MorselQueuePtr> LakeDataSourceProvider::convert_scan_range_to_morsel_queue(
+StatusOr<pipeline::MorselQueueBuilderPtr> LakeDataSourceProvider::convert_scan_range_to_morsel_queue_builder(
         const std::vector<TScanRangeParams>& scan_ranges, int node_id, int32_t pipeline_dop,
         bool enable_tablet_internal_parallel, TTabletInternalParallelMode::type tablet_internal_parallel_mode,
         size_t num_total_scan_ranges, size_t scan_parallelism) {
-    int64_t lake_scan_parallelism = 0;
-    if (!scan_ranges.empty() && enable_tablet_internal_parallel) {
-        ASSIGN_OR_RETURN(_could_split, _could_tablet_internal_parallel(scan_ranges, pipeline_dop, num_total_scan_ranges,
-                                                                       tablet_internal_parallel_mode,
-                                                                       &lake_scan_parallelism, &splitted_scan_rows));
-        if (_could_split) {
-            ASSIGN_OR_RETURN(_could_split_physically, _could_split_tablet_physically(scan_ranges));
+    // Dynamic partition pruning. The partition conjunct contexts were prepared and opened once
+    // in LakeDataSourceProvider::init and are closed automatically when the owning ObjectPool
+    // tears them down (ExprContext::~ExprContext invokes close()).
+    std::vector<TScanRangeParams> pruned_scan_ranges;
+    const std::vector<TScanRangeParams>* effective_scan_ranges = &scan_ranges;
+    if (!_partition_conjunct_ctxs.empty() && _runtime_state != nullptr) {
+        const auto* tuple_desc = _runtime_state->desc_tbl().get_tuple_descriptor(_t_lake_scan_node.tuple_id);
+        if (prune_scan_ranges_by_partition_conjuncts(_runtime_state, tuple_desc, _partition_conjunct_ctxs, scan_ranges,
+                                                     &pruned_scan_ranges)
+                    .ok()) {
+            effective_scan_ranges = &pruned_scan_ranges;
         }
     }
 
-    ASSIGN_OR_RETURN(auto morsel_queue,
-                     DataSourceProvider::convert_scan_range_to_morsel_queue(
-                             scan_ranges, node_id, pipeline_dop, enable_tablet_internal_parallel,
-                             tablet_internal_parallel_mode, num_total_scan_ranges, (size_t)lake_scan_parallelism));
-    if (_could_split) {
-        morsel_queue->set_has_more_from_split(true);
+    int64_t lake_scan_parallelism = 0;
+    if (!effective_scan_ranges->empty() && enable_tablet_internal_parallel) {
+        ASSIGN_OR_RETURN(_could_split,
+                         _could_tablet_internal_parallel(*effective_scan_ranges, pipeline_dop, num_total_scan_ranges,
+                                                         tablet_internal_parallel_mode, &lake_scan_parallelism,
+                                                         &splitted_scan_rows));
+        if (_could_split) {
+            ASSIGN_OR_RETURN(_could_split_physically, _could_split_tablet_physically(*effective_scan_ranges));
+        }
     }
-    return morsel_queue;
+
+    ASSIGN_OR_RETURN(auto builder,
+                     DataSourceProvider::convert_scan_range_to_morsel_queue_builder(
+                             *effective_scan_ranges, node_id, pipeline_dop, enable_tablet_internal_parallel,
+                             tablet_internal_parallel_mode, num_total_scan_ranges, (size_t)lake_scan_parallelism));
+    builder = pipeline::make_olap_dynamic_morsel_queue_builder_from(std::move(builder));
+    if (_could_split) {
+        builder->set_has_more_from_split(true);
+    }
+    return builder;
 }
 
 StatusOr<bool> LakeDataSourceProvider::_could_tablet_internal_parallel(
@@ -1267,7 +1378,7 @@ StatusOr<bool> LakeDataSourceProvider::_could_tablet_internal_parallel(
         num_table_rows += static_cast<int64_t>(tablet_num_rows);
 #else
         ASSIGN_OR_RETURN(auto tablet_num_rows,
-                         ExecEnv::GetInstance()->lake_tablet_manager()->get_tablet_num_rows(
+                         _tablet_manager->get_tablet_num_rows(
                                  tablet_scan_range.scan_range.internal_scan_range.tablet_id, version));
         num_table_rows += static_cast<int64_t>(tablet_num_rows);
 #endif
@@ -1307,9 +1418,9 @@ StatusOr<bool> LakeDataSourceProvider::_could_split_tablet_physically(
             _tablet_manager->get_tablet_schema(scan_ranges[0].scan_range.internal_scan_range.tablet_id, &version));
     keys_type = first_tablet_schema->keys_type();
 #else
-    ASSIGN_OR_RETURN(auto first_tablet_schema,
-                     ExecEnv::GetInstance()->lake_tablet_manager()->get_tablet_schema(
-                             scan_ranges[0].scan_range.internal_scan_range.tablet_id, &version));
+    ASSIGN_OR_RETURN(
+            auto first_tablet_schema,
+            _tablet_manager->get_tablet_schema(scan_ranges[0].scan_range.internal_scan_range.tablet_id, &version));
     keys_type = first_tablet_schema->keys_type();
 #endif
 

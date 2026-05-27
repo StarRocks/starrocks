@@ -27,7 +27,7 @@
 #include "storage/index/inverted/inverted_index_iterator.h"
 #include "storage/index/inverted/inverted_reader.h"
 #include "storage/olap_common.h" // ColumnId
-#include "storage/range.h"
+#include "storage/primitive/range.h"
 #include "storage/types.h"
 #include "storage/zone_map_detail.h"
 #include "types/datum.h"
@@ -80,6 +80,7 @@ enum class PredicateType {
     kTrue = 14,
     kMap = 15,
     kPlaceHolder = 16,
+    kGinFallback = 17,
 };
 
 std::ostream& operator<<(std::ostream& os, PredicateType p);

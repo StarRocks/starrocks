@@ -30,7 +30,6 @@ import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
-import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
@@ -413,7 +412,7 @@ public class ReportHandlerTest {
         final SystemInfoService currentSystemInfo = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
         Backend reportBackend = currentSystemInfo.getBackend(10001);
         BackendStatus backendStatus = reportBackend.getBackendStatus();
-        backendStatus.lastSuccessReportTabletsTime = TimeUtils.longToTimeString(Long.MAX_VALUE);
+        backendStatus.lastSuccessReportTabletsTimeMs = Long.MAX_VALUE;
 
         ReportHandler.handleMigration(tabletMetaMigrationMap, 10001);
 
@@ -524,5 +523,35 @@ public class ReportHandlerTest {
         Assertions.assertEquals(1, reportHandler.getPendingTabletReportTaskCnt());
         reportHandler.putTabletReportTask(2L, 1L, new HashMap<>());
         Assertions.assertEquals(2, reportHandler.getPendingTabletReportTaskCnt());
+    }
+
+    @Test
+    public void testOnStoppedDrainsQueuesAndClearsPendingTasks() throws Exception {
+        ReportHandler reportHandler = new ReportHandler();
+        reportHandler.putTabletReportTask(1L, 1L, new HashMap<>());
+        reportHandler.putTabletReportTask(2L, 1L, new HashMap<>());
+        Assertions.assertEquals(2, reportHandler.getPendingTabletReportTaskCnt());
+        Assertions.assertTrue(reportHandler.getReportQueueSize() > 0);
+
+        reportHandler.onStopped();
+
+        Assertions.assertEquals(0, reportHandler.getPendingTabletReportTaskCnt(),
+                "pending tablet report tasks must be cleared after onStopped");
+        Assertions.assertEquals(0, reportHandler.getReportQueueSize(),
+                "both report queues must be drained after onStopped");
+    }
+
+    @Test
+    public void testPutTabletReportTaskThrowsAfterStop() {
+        ReportHandler reportHandler = new ReportHandler();
+        reportHandler.setStop();
+        // Must surface as IllegalStateException so LeaderImpl.report() can translate to
+        // NOT_MASTER; silent-drop would leave the BE thinking the report succeeded.
+        IllegalStateException ex = Assertions.assertThrows(IllegalStateException.class,
+                () -> reportHandler.putTabletReportTask(1L, 1L, new HashMap<>()));
+        Assertions.assertTrue(ex.getMessage().contains("stopped"),
+                "exception message should mention stop reason, got: " + ex.getMessage());
+        Assertions.assertEquals(0, reportHandler.getPendingTabletReportTaskCnt());
+        Assertions.assertEquals(0, reportHandler.getReportQueueSize());
     }
 }

@@ -105,7 +105,6 @@ import com.starrocks.sql.StatementPlanner;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.analyzer.SetStmtAnalyzer;
-import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.CreateViewStmt;
 import com.starrocks.sql.ast.DeleteStmt;
 import com.starrocks.sql.ast.DmlStmt;
@@ -555,35 +554,6 @@ public class UtFrameUtils {
 
         Assertions.assertEquals(plan.getFragments().size(), visitedFragments.size(),
                 "Some fragments do not belong to the fragment tree");
-    }
-
-    /*
-     * Return analyzed statement and execution plan for MV maintenance
-     */
-    public static Pair<CreateMaterializedViewStatement, ExecPlan> planMVMaintenance(ConnectContext connectContext,
-                                                                                    String sql)
-            throws DdlException, CloneNotSupportedException {
-        connectContext.setDumpInfo(new QueryDumpInfo(connectContext));
-
-        List<StatementBase> statements =
-                com.starrocks.sql.parser.SqlParser.parse(sql, connectContext.getSessionVariable().getSqlMode());
-        connectContext.getDumpInfo().setOriginStmt(sql);
-        SessionVariable oldSessionVariable = connectContext.getSessionVariable();
-        StatementBase statementBase = statements.get(0);
-
-        try {
-            // update session variable by adding optional hints.
-            if (statementBase.isExistQueryScopeHint()) {
-                processQueryScopeHint(statementBase, connectContext);
-            }
-
-            ExecPlan execPlan = StatementPlanner.plan(statementBase, connectContext);
-            Assertions.assertTrue(statementBase instanceof CreateMaterializedViewStatement);
-            CreateMaterializedViewStatement createMVStmt = (CreateMaterializedViewStatement) statementBase;
-            return Pair.create(createMVStmt, createMVStmt.getMaintenancePlan());
-        } finally {
-            clearQueryScopeHintContext(connectContext, oldSessionVariable);
-        }
     }
 
     private interface GetPlanHook<R> {
@@ -1588,8 +1558,11 @@ public class UtFrameUtils {
 
     public static void stopBackgroundSchemaChangeHandler(long timeoutMs) throws Exception {
         SchemaChangeHandler schemaChangeHandler = GlobalStateMgr.getCurrentState().getAlterJobMgr().getSchemaChangeHandler();
+        // This UT helper only stops the background schema-change loop so tests can drive
+        // schema-change jobs manually. Do not call stopGracefully() here: it runs the
+        // demotion cleanup hook and shuts down AlterHandler's executor, which prevents
+        // subsequent manual job progress in schema-change tests.
         schemaChangeHandler.setStop();
-        schemaChangeHandler.interrupt();
         long endTime = System.currentTimeMillis() + timeoutMs;
         while (schemaChangeHandler.isRunning()) {
             if (System.currentTimeMillis() > endTime) {

@@ -14,15 +14,21 @@
 
 set(COMMON_TEST_FILES
     ../base/cxa_throw_wrap.cpp
+    process_metrics_registry_test.cpp
     backend_options_test.cpp
+    bloom_filter_test.cpp
     config_test.cpp
     cow_test.cpp
+    greplog_test.cpp
     process_exit_test.cpp
     runtime_profile_test.cpp
+    stack_util_test.cpp
     stack_trace_mutex_test.cpp
+    system/master_info_test.cpp
     table_metrics_mgr_test.cpp
     thrift_client_test.cpp
     thread/cpu_usage_info_test.cpp
+    thread/priority_thread_pool_test.cpp
     thread/thread_test.cpp
     thread/threadpool_test.cpp
     tracer_test.cpp

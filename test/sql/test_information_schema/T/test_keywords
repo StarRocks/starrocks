@@ -14,6 +14,6 @@ ADMIN SET FRONTEND CONFIG("max_get_partitions_meta_result_count" = "100000");
 DROP USER IF EXISTS test_user;
 CREATE USER test_user IDENTIFIED BY 'password';
 GRANT SELECT ON information_schema.keywords TO test_user;
-SELECT * FROM information_schema.keywords;
+SELECT * FROM information_schema.keywords ORDER BY word ASC;
 DROP USER test_user;
 DROP DATABASE db_${uuid0};

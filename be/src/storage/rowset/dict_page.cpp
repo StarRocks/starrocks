@@ -19,12 +19,15 @@
 
 #include "base/hash/unaligned_access.h"
 #include "base/string/slice.h" // for Slice
+#include "column/chunk_factory.h"
+#include "column/raw_data_visitor.h"
 #include "common/logging.h"
 #include "gutil/casts.h"
 #include "gutil/strings/substitute.h" // for Substitute
 #include "storage/chunk_helper.h"
-#include "storage/range.h"
+#include "storage/primitive/range.h"
 #include "storage/rowset/bitshuffle_page.h"
+#include "storage/rowset/common.h"
 
 namespace starrocks {
 
@@ -217,7 +220,7 @@ Status DictPageDecoder<Type>::next_batch(const SparseRange<>& range, Column* dst
     DCHECK(_parsed);
     DCHECK(_dict_decoder != nullptr) << "dict decoder pointer is nullptr";
     if (_vec_code_buf == nullptr) {
-        _vec_code_buf = ChunkHelper::column_from_field_type(DataTypeTraits<Type>::type, false);
+        _vec_code_buf = ChunkFactory::column_from_field_type(DataTypeTraits<Type>::type, false);
     }
     _vec_code_buf->resize(0);
     _vec_code_buf->reserve(range.span_size());
@@ -225,7 +228,9 @@ Status DictPageDecoder<Type>::next_batch(const SparseRange<>& range, Column* dst
     RETURN_IF_ERROR(_data_page_decoder->next_batch(range, _vec_code_buf.get()));
     size_t nread = _vec_code_buf->size();
     using cast_type = StorageCppType<DataTypeTraits<Type>::type>;
-    const auto* codewords = reinterpret_cast<const cast_type*>(_vec_code_buf->raw_data());
+    RawDataVisitor visitor;
+    RETURN_IF_ERROR(_vec_code_buf->accept(&visitor));
+    const auto* codewords = reinterpret_cast<const cast_type*>(visitor.result());
     std::vector<ValueType> numbers;
     raw::stl_vector_resize_uninitialized(&numbers, nread);
     for (int i = 0; i < nread; ++i) {

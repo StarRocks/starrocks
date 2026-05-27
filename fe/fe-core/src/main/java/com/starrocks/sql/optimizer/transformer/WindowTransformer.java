@@ -28,6 +28,7 @@ import com.starrocks.sql.ast.OrderByElement;
 import com.starrocks.sql.ast.expression.AnalyticExpr;
 import com.starrocks.sql.ast.expression.AnalyticWindow;
 import com.starrocks.sql.ast.expression.AnalyticWindowBoundary;
+import com.starrocks.sql.ast.expression.ArithmeticExpr;
 import com.starrocks.sql.ast.expression.DecimalLiteral;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.ExprCastFunction;
@@ -35,14 +36,18 @@ import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.IntLiteral;
+import com.starrocks.sql.ast.expression.IntervalLiteral;
 import com.starrocks.sql.ast.expression.LiteralExpr;
 import com.starrocks.sql.ast.expression.NullLiteral;
+import com.starrocks.sql.ast.expression.TimestampArithmeticExpr;
+import com.starrocks.sql.common.TypeManager;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.Ordering;
 import com.starrocks.sql.optimizer.operator.logical.LogicalWindowOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.type.DateType;
 import com.starrocks.type.IntegerType;
 import com.starrocks.type.PrimitiveType;
 import com.starrocks.type.Type;
@@ -199,7 +204,9 @@ public class WindowTransformer {
                 && windowFrame.getRightBoundary().getBoundaryType() != AnalyticWindowBoundary.BoundaryType.PRECEDING
                 && callExpr.getFunctionName().equalsIgnoreCase(AnalyticExpr.FIRSTVALUE) &&
                 !callExpr.getIgnoreNulls()) {
-            windowFrame.setRightBoundary(new AnalyticWindowBoundary(AnalyticWindowBoundary.BoundaryType.CURRENT_ROW, null));
+            windowFrame = new AnalyticWindow(windowFrame.getType(), windowFrame.getLeftBoundary(),
+                    new AnalyticWindowBoundary(AnalyticWindowBoundary.BoundaryType.CURRENT_ROW, null),
+                    windowFrame.getPos());
         }
 
         // Set the default window.
@@ -213,11 +220,8 @@ public class WindowTransformer {
             Preconditions.checkState(!orderByElements.isEmpty(), "Range window frame requires order by columns");
         }
 
-        // Change first_value/last_value RANGE windows to ROWS
-        if ((callExpr.getFunctionName().equalsIgnoreCase(AnalyticExpr.FIRSTVALUE)
-                || callExpr.getFunctionName().equalsIgnoreCase(AnalyticExpr.LASTVALUE))
-                && windowFrame != null
-                && windowFrame.getType() == AnalyticWindow.Type.RANGE) {
+        // Change first_value/last_value RANGE windows to ROWS only when peer-group semantics cannot affect the result.
+        if (canRewriteRangeFirstLastValueToRows(callExpr, windowFrame)) {
             windowFrame = new AnalyticWindow(AnalyticWindow.Type.ROWS, windowFrame.getLeftBoundary(),
                     windowFrame.getRightBoundary());
         }
@@ -246,8 +250,93 @@ public class WindowTransformer {
 
         analyticExpr.getOrderByElements().clear();
         analyticExpr.getOrderByElements().addAll(orderings);
+        windowFrame = withAnalyzedRangeBoundaryExprs(windowFrame, orderByElements);
         return new WindowOperator(analyticExpr, analyticExpr.getPartitionExprs(),
                 orderByElements, windowFrame);
+    }
+
+    private static AnalyticWindow withAnalyzedRangeBoundaryExprs(AnalyticWindow windowFrame,
+                                                                 List<OrderByElement> orderByElements) {
+        if (windowFrame == null || windowFrame.getType() != AnalyticWindow.Type.RANGE) {
+            return windowFrame;
+        }
+        Preconditions.checkState(!orderByElements.isEmpty(), "Range window frame requires order by columns");
+        OrderByElement orderByElement = orderByElements.get(0);
+        if (!hasOffsetBoundary(windowFrame)) {
+            return windowFrame;
+        }
+
+        Expr orderByExpr = orderByElement.getExpr();
+        AnalyticWindowBoundary leftBoundary = withAnalyzedRangeBoundaryExpr(
+                windowFrame.getLeftBoundary(), orderByExpr, orderByElement.getIsAsc());
+        AnalyticWindowBoundary rightBoundary = withAnalyzedRangeBoundaryExpr(
+                windowFrame.getRightBoundary(), orderByExpr, orderByElement.getIsAsc());
+        return new AnalyticWindow(windowFrame.getType(), leftBoundary, rightBoundary, windowFrame.getPos());
+    }
+
+    private static AnalyticWindowBoundary withAnalyzedRangeBoundaryExpr(AnalyticWindowBoundary boundary, Expr orderByExpr,
+                                                                       boolean orderByIsAsc) {
+        if (boundary == null || !boundary.getBoundaryType().isOffset()) {
+            return boundary;
+        }
+        return boundary.withAnalyzedRangeBoundaryExpr(buildRangeBoundaryExpr(boundary, orderByExpr, orderByIsAsc));
+    }
+
+    private static Expr buildRangeBoundaryExpr(AnalyticWindowBoundary boundary, Expr orderByExpr,
+                                               boolean orderByIsAsc) {
+        boolean addOffset =
+                (orderByIsAsc && boundary.getBoundaryType() == AnalyticWindowBoundary.BoundaryType.FOLLOWING) ||
+                        (!orderByIsAsc && boundary.getBoundaryType() == AnalyticWindowBoundary.BoundaryType.PRECEDING);
+        ArithmeticExpr.Operator op = addOffset ? ArithmeticExpr.Operator.ADD : ArithmeticExpr.Operator.SUBTRACT;
+        // AnalyticAnalyzer has already normalized RANGE order keys: DATE keys become DATETIME, and numeric
+        // keys become the common key type. This builder only creates the boundary arithmetic expression.
+        if (orderByExpr.getType().isDateType()) {
+            Preconditions.checkState(orderByExpr.getType().isDatetime(),
+                    "DATE RANGE order key should be cast to DATETIME before boundary expression construction");
+            IntervalLiteral interval = (IntervalLiteral) boundary.getExpr();
+            Expr orderKey = orderByExpr.clone();
+            Expr intervalValue = TypeManager.addCastExpr(interval.getValue().clone(), IntegerType.INT);
+            TimestampArithmeticExpr timestampExpr = new TimestampArithmeticExpr(
+                    op, orderKey, intervalValue, interval.getUnitIdentifier().getDescription(), false);
+            timestampExpr.setType(DateType.DATETIME);
+            return timestampExpr;
+        }
+
+        Type rangeKeyType = orderByExpr.getType();
+        Preconditions.checkState(rangeKeyType.isNumericType(), "RANGE boundary requires a numeric order key");
+        Expr orderKey = orderByExpr.clone();
+        Expr offset = TypeManager.addCastExpr(boundary.getExpr().clone(), rangeKeyType);
+        ArithmeticExpr arithmeticExpr = new ArithmeticExpr(op, orderKey, offset);
+        arithmeticExpr.setType(rangeKeyType);
+        return arithmeticExpr;
+    }
+
+    private static boolean hasOffsetBoundary(AnalyticWindow windowFrame) {
+        return windowFrame.getLeftBoundary().getBoundaryType().isOffset() ||
+                windowFrame.getRightBoundary().getBoundaryType().isOffset();
+    }
+
+    private static boolean canRewriteRangeFirstLastValueToRows(FunctionCallExpr callExpr, AnalyticWindow windowFrame) {
+        if (windowFrame == null || windowFrame.getType() != AnalyticWindow.Type.RANGE || hasOffsetBoundary(windowFrame)) {
+            return false;
+        }
+
+        boolean isFirstValue = callExpr.getFunctionName().equalsIgnoreCase(AnalyticExpr.FIRSTVALUE);
+        boolean isLastValue = callExpr.getFunctionName().equalsIgnoreCase(AnalyticExpr.LASTVALUE);
+        if (!isFirstValue && !isLastValue) {
+            return false;
+        }
+
+        AnalyticWindowBoundary.BoundaryType leftBoundaryType = windowFrame.getLeftBoundary().getBoundaryType();
+        AnalyticWindowBoundary.BoundaryType rightBoundaryType = windowFrame.getRightBoundary().getBoundaryType();
+        if (leftBoundaryType == AnalyticWindowBoundary.BoundaryType.UNBOUNDED_PRECEDING
+                && rightBoundaryType == AnalyticWindowBoundary.BoundaryType.UNBOUNDED_FOLLOWING) {
+            return true;
+        }
+
+        return isFirstValue && !callExpr.getIgnoreNulls()
+                && leftBoundaryType == AnalyticWindowBoundary.BoundaryType.UNBOUNDED_PRECEDING
+                && rightBoundaryType == AnalyticWindowBoundary.BoundaryType.CURRENT_ROW;
     }
 
     /**
@@ -781,4 +870,3 @@ public class WindowTransformer {
         }
     }
 }
-

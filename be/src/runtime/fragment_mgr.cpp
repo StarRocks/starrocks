@@ -41,7 +41,6 @@
 #include <memory>
 #include <sstream>
 
-#include "agent/master_info.h"
 #include "base/concurrency/stopwatch.hpp"
 #include "base/network/network_util.h"
 #include "base/uid_util.h"
@@ -51,9 +50,11 @@
 #include "common/config_runtime_fwd.h"
 #include "common/object_pool.h"
 #include "common/system/backend_options.h"
+#include "common/system/master_info.h"
 #include "common/thread/thread.h"
 #include "common/thread/threadpool.h"
 #include "common/util/misc.h"
+#include "common/util/thrift_client_cache.h"
 #include "common/util/thrift_util.h"
 #include "exec/pipeline/fragment_executor.h"
 #include "gen_cpp/DataSinks_types.h"
@@ -61,7 +62,7 @@
 #include "gen_cpp/HeartbeatService.h"
 #include "gen_cpp/QueryPlanExtra_types.h"
 #include "gutil/strings/substitute.h"
-#include "runtime/client_cache.h"
+#include "platform/thrift_rpc_helper.h"
 #include "runtime/current_thread.h"
 #include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
@@ -70,11 +71,9 @@
 #include "runtime/profile_report_worker.h"
 #include "runtime/runtime_filter_cache.h"
 #include "runtime/runtime_filter_worker.h"
+#include "runtime/runtime_metrics.h"
 #include "runtime/runtime_state_helper.h"
-#include "runtime/starrocks_metrics.h"
 #include "types/datetime_value.h"
-#include "util/global_metrics_registry.h"
-#include "util/thrift_rpc_helper.h"
 
 namespace starrocks {
 
@@ -180,7 +179,7 @@ FragmentExecState::FragmentExecState(const TUniqueId& query_id, const TUniqueId&
           _backend_num(backend_num),
           _exec_env(exec_env),
           _coord_addr(coord_addr),
-          _executor(exec_env,
+          _executor(&exec_env->query_execution_services(),
                     std::bind<void>(std::mem_fn(&FragmentExecState::coordinator_callback), this, std::placeholders::_1,
                                     std::placeholders::_2, std::placeholders::_3, std::placeholders::_3)) {
     _start_time = DateTimeValue::local_time();
@@ -193,8 +192,10 @@ FragmentExecState::~FragmentExecState() {
 }
 
 Status FragmentExecState::prepare(const TExecPlanFragmentParams& params) {
+    const auto* query_execution_services = &_exec_env->query_execution_services();
     _runtime_state = std::make_shared<RuntimeState>(params.params.query_id, params.params.fragment_instance_id,
-                                                    params.query_options, params.query_globals, _exec_env);
+                                                    params.query_options, params.query_globals,
+                                                    query_execution_services, _exec_env);
     _runtime_state->set_fragment_dict_state(_fragment_dict_state.get());
     int func_version = params.__isset.func_version ? params.func_version
                                                    : TFunctionVersion::type::RUNTIME_FILTER_SERIALIZE_VERSION_2;
@@ -218,8 +219,8 @@ Status FragmentExecState::execute() {
                       strings::Substitute("Fail to open fragment $0", print_id(_fragment_instance_id)));
         _executor.close();
     }
-    StarRocksMetrics::instance()->fragment_requests_total.increment(1);
-    StarRocksMetrics::instance()->fragment_request_duration_us.increment(duration_ns / 1000);
+    RuntimeMetrics::instance()->fragment_requests_total.increment(1);
+    RuntimeMetrics::instance()->fragment_request_duration_us.increment(duration_ns / 1000);
     return Status::OK();
 }
 
@@ -300,9 +301,10 @@ void FragmentExecState::coordinator_callback(const Status& status, RuntimeProfil
         if (!runtime_state->get_error_log_file_path().empty()) {
             params.__set_tracking_url(to_load_error_http_path(runtime_state->get_error_log_file_path()));
         }
-        if (!runtime_state->get_rejected_record_file_path().empty()) {
-            params.__set_rejected_record_path(runtime_state->get_rejected_record_file_path());
-        }
+        // The legacy tab-delimited rejected-record file was removed. The
+        // rejected_record_path Thrift field is kept for wire-compat but
+        // is never populated -- consumers should query
+        // `_statistics_.rejected_records` via load_label/txn_id instead.
         if (!runtime_state->export_output_files().empty()) {
             params.__isset.export_files = true;
             params.export_files = runtime_state->export_output_files();
@@ -351,12 +353,15 @@ void FragmentExecState::coordinator_callback(const Status& status, RuntimeProfil
     }
 }
 
-FragmentMgr::FragmentMgr(ExecEnv* exec_env) : _exec_env(exec_env), _cancel_thread([this] { cancel_worker(); }) {
+FragmentMgr::FragmentMgr(ExecEnv* exec_env, MetricRegistry* metrics)
+        : _exec_env(exec_env), _cancel_thread([this] { cancel_worker(); }) {
     Thread::set_thread_name(_cancel_thread, "frag_mgr_cancel");
-    REGISTER_GAUGE_STARROCKS_METRIC(plan_fragment_count, [this]() {
-        std::lock_guard<std::mutex> lock(_lock);
-        return _fragment_map.size();
-    });
+    if (metrics != nullptr) {
+        REGISTER_GAUGE_RUNTIME_METRIC(metrics, plan_fragment_count, [this]() {
+            std::lock_guard<std::mutex> lock(_lock);
+            return _fragment_map.size();
+        });
+    }
     // TODO(zc): we need a better thread-pool
     // now one user can use all the thread pool, others have no resource.
     auto st = ThreadPoolBuilder("fragment_mgr")
@@ -429,6 +434,10 @@ Status FragmentMgr::exec_plan_fragment(const TExecPlanFragmentParams& params, co
                                        const FinishCallback& cb) {
     RETURN_IF_ERROR(
             GlobalEnv::GetInstance()->query_pool_mem_tracker()->check_mem_limit("Start execute plan fragment."));
+
+    if (params.__isset.is_stream_pipeline && params.is_stream_pipeline) {
+        return Status::NotSupported("Legacy incremental MV maintenance is no longer supported");
+    }
 
     const TUniqueId& fragment_instance_id = params.params.fragment_instance_id;
     std::shared_ptr<FragmentExecState> exec_state;
@@ -635,7 +644,7 @@ void FragmentMgr::report_fragments_with_same_host(
             Status executor_status = executor->status();
             if (!executor_status.ok()) {
                 reported[i] = true;
-                ExecEnv::GetInstance()->profile_report_worker()->unregister_non_pipeline_load(
+                _exec_env->profile_report_worker()->unregister_non_pipeline_load(
                         fragment_exec_state->fragment_instance_id());
                 continue;
             }
@@ -700,7 +709,7 @@ void FragmentMgr::report_fragments(const std::vector<TUniqueId>& non_pipeline_ne
 
             Status executor_status = executor->status();
             if (!executor_status.ok()) {
-                ExecEnv::GetInstance()->profile_report_worker()->unregister_non_pipeline_load(
+                _exec_env->profile_report_worker()->unregister_non_pipeline_load(
                         fragment_exec_state->fragment_instance_id());
                 continue;
             }
@@ -769,7 +778,7 @@ void FragmentMgr::report_fragments(const std::vector<TUniqueId>& non_pipeline_ne
     }
 
     for (const auto& fragment_instance_id : fragments_non_exist) {
-        ExecEnv::GetInstance()->profile_report_worker()->unregister_non_pipeline_load(fragment_instance_id);
+        _exec_env->profile_report_worker()->unregister_non_pipeline_load(fragment_instance_id);
     }
 }
 
@@ -825,6 +834,9 @@ Status FragmentMgr::exec_external_plan_fragment(const TScanOpenParams& params, c
         return Status::InvalidArgument(msg.str());
     }
 
+    VLOG_ROW << "BackendService execute open() TQueryPlanInfo: "
+             << apache::thrift::ThriftDebugString(t_query_plan_info);
+
     *query_id = t_query_plan_info.query_id;
 
     // set up desc tbl
@@ -854,7 +866,7 @@ Status FragmentMgr::exec_external_plan_fragment(const TScanOpenParams& params, c
             LOG(WARNING) << "tuple descriptor is null. id: " << slot_ref.tuple_id;
             return Status::InvalidArgument("tuple descriptor is null");
         }
-        auto* slot_desc = desc_tbl->get_slot_descriptor_with_column(slot_ref.slot_id);
+        auto* slot_desc = desc_tbl->get_slot_descriptor(slot_ref.slot_id);
         if (slot_desc == nullptr) {
             LOG(WARNING) << "slot descriptor is null. id: " << slot_ref.slot_id;
             return Status::InvalidArgument("slot descriptor is null");
@@ -864,15 +876,13 @@ Status FragmentMgr::exec_external_plan_fragment(const TScanOpenParams& params, c
         if (!output_names.empty()) {
             col.__set_name(output_names[i]);
         } else {
-            col.__set_name(slot_desc->col_name());
+            col.__set_name(std::string(slot_desc->col_name()));
         }
         col.__set_type(to_thrift(slot_desc->type().type));
         selected_columns->emplace_back(std::move(col));
         i++;
     }
 
-    LOG(INFO) << "BackendService execute open()  TQueryPlanInfo: "
-              << apache::thrift::ThriftDebugString(t_query_plan_info);
     // assign the param used to execute PlanFragment
     TExecPlanFragmentParams exec_fragment_params;
     exec_fragment_params.protocol_version = (InternalServiceVersion::type)0;

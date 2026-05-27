@@ -32,6 +32,7 @@ public class CreateFunctionStmt extends DdlStmt {
     public static final String MD5_CHECKSUM = "md5";
     public static final String TYPE_KEY = "type";
     public static final String ISOLATION_KEY = "isolation";
+    public static final String INTERMEDIATE_KEY = "intermediate";
     public static final String TYPE_STARROCKS_JAR = "StarrocksJar";
     public static final String TYPE_STARROCKS_PYTHON = "Python";
     public static final String EVAL_METHOD_NAME = "evaluate";
@@ -75,6 +76,10 @@ public class CreateFunctionStmt extends DdlStmt {
                     .put(PrimitiveType.BIGINT, Long.class)
                     .put(PrimitiveType.CHAR, String.class)
                     .put(PrimitiveType.VARCHAR, String.class)
+                    .put(PrimitiveType.DECIMAL32, java.math.BigDecimal.class)
+                    .put(PrimitiveType.DECIMAL64, java.math.BigDecimal.class)
+                    .put(PrimitiveType.DECIMAL128, java.math.BigDecimal.class)
+                    .put(PrimitiveType.DECIMAL256, java.math.BigDecimal.class)
                     .build();
 
     public CreateFunctionStmt(String functionType,

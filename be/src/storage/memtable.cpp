@@ -18,23 +18,25 @@
 
 #include "base/time/time.h"
 #include "column/binary_column.h"
+#include "column/chunk_factory.h"
 #include "column/json_column.h"
+#include "column/raw_data_visitor.h"
 #include "common/config_ingest_fwd.h"
 #include "common/config_primary_key_fwd.h"
 #include "common/logging.h"
-#include "exec/sorting/sorting.h"
+#include "compute_env/sorting/sorting.h"
 #include "gutil/strings/substitute.h"
 #include "io/io_profiler.h"
 #include "runtime/current_thread.h"
 #include "runtime/descriptors.h"
 #include "runtime/load_fail_point.h"
-#include "runtime/starrocks_metrics.h"
 #include "storage/chunk_helper.h"
 #include "storage/memtable_sink.h"
 #include "storage/non_retryable_load_errors.h"
 #include "storage/primary_key_encoder.h"
 #include "storage/row_store_encoder.h"
 #include "storage/row_store_encoder_factory.h"
+#include "storage/storage_metrics.h"
 #include "storage/tablet_schema.h"
 #include "types/logical_type_infra.h"
 
@@ -178,7 +180,7 @@ StatusOr<bool> MemTable::insert(const Chunk& chunk, const uint32_t* indexes, uin
     DeferOp defer([&]() { ADD_COUNTER_RELAXED(_stats.insert_time_ns, MonotonicMicros() - start_time); });
     ADD_COUNTER_RELAXED(_stats.insert_count, 1);
     if (_chunk == nullptr) {
-        _chunk = ChunkHelper::new_chunk(*_vectorized_schema, 0);
+        _chunk = ChunkFactory::new_chunk(*_vectorized_schema, 0);
     }
 
     bool is_column_with_row = false;
@@ -342,8 +344,8 @@ Status MemTable::finalize() {
     _chunk.reset();
 
     ADD_COUNTER_RELAXED(_stats.finalize_time_ns, duration_ns);
-    StarRocksMetrics::instance()->memtable_finalize_task_total.increment(1);
-    StarRocksMetrics::instance()->memtable_finalize_duration_us.increment(duration_ns / 1000);
+    StorageMetrics::instance()->memtable_finalize_task_total.increment(1);
+    StorageMetrics::instance()->memtable_finalize_duration_us.increment(duration_ns / 1000);
     return Status::OK();
 }
 
@@ -377,11 +379,11 @@ Status MemTable::flush(SegmentPB* seg_info, bool eos, int64_t* flush_data_size, 
     ADD_COUNTER_RELAXED(_stats.flush_memory_size, memory_usage());
     ADD_COUNTER_RELAXED(_stats.flush_disk_size, io_stat.write_bytes);
 
-    StarRocksMetrics::instance()->memtable_flush_total.increment(1);
-    StarRocksMetrics::instance()->memtable_flush_duration_us.increment(_stats.flush_time_ns / 1000);
-    StarRocksMetrics::instance()->memtable_flush_io_time_us.increment(_stats.io_time_ns / 1000);
-    StarRocksMetrics::instance()->memtable_flush_memory_bytes_total.increment(_stats.flush_memory_size);
-    StarRocksMetrics::instance()->memtable_flush_disk_bytes_total.increment(_stats.flush_disk_size);
+    StorageMetrics::instance()->memtable_flush_total.increment(1);
+    StorageMetrics::instance()->memtable_flush_duration_us.increment(_stats.flush_time_ns / 1000);
+    StorageMetrics::instance()->memtable_flush_io_time_us.increment(_stats.io_time_ns / 1000);
+    StorageMetrics::instance()->memtable_flush_memory_bytes_total.increment(_stats.flush_memory_size);
+    StorageMetrics::instance()->memtable_flush_disk_bytes_total.increment(_stats.flush_disk_size);
     VLOG(2) << "memtable of tablet " << _tablet_id << " flush duration: " << _stats.flush_time_ns / 1000 << "us, "
             << "io time: " << _stats.io_time_ns / 1000 << "us, memory bytes: " << _stats.flush_memory_size
             << ", disk bytes: " << _stats.flush_disk_size;
@@ -483,7 +485,9 @@ Status MemTable::_split_upserts_deletes(ChunkPtr& src, ChunkPtr* upserts, Mutabl
     auto op_column = src->get_column_by_index(op_column_id);
     src->remove_column_by_index(op_column_id);
     size_t nrows = src->num_rows();
-    auto* ops = reinterpret_cast<const uint8_t*>(op_column->raw_data());
+    RawDataVisitor visitor;
+    RETURN_IF_ERROR(op_column->accept(&visitor));
+    const auto* ops = visitor.result();
     size_t ndel = 0;
     for (size_t i = 0; i < nrows; i++) {
         ndel += (ops[i] == TOpType::DELETE);

@@ -19,9 +19,9 @@
 #include "base/uid_util.h"
 #include "column/vectorized_fwd.h"
 #include "common/thread/threadpool.h"
+#include "compute_env/sorting/sorting.h"
 #include "connector/connector_sink_profile.h"
 #include "connector/utils.h"
-#include "exec/sorting/sorting.h"
 #include "formats/file_writer.h"
 #include "fs/fs_fwd.h"
 #include "storage/load_chunk_spiller.h"
@@ -37,6 +37,8 @@ class FragmentContext;
 } // namespace starrocks
 
 namespace starrocks::connector {
+
+class ConnectorSinkSpillExecutor;
 
 using CommitResult = formats::FileWriter::CommitResult;
 using CommitFunc = std::function<void(const CommitResult& result)>;
@@ -61,6 +63,7 @@ struct BufferPartitionChunkWriterContext : PartitionChunkWriterContext {};
 struct SpillPartitionChunkWriterContext : PartitionChunkWriterContext {
     std::shared_ptr<FileSystem> fs;
     pipeline::FragmentContext* fragment_context = nullptr;
+    ConnectorSinkSpillExecutor* spill_executor = nullptr;
     TupleDescriptor* tuple_desc = nullptr;
     std::shared_ptr<std::vector<std::unique_ptr<ColumnEvaluator>>> column_evaluators;
     std::shared_ptr<SortOrdering> sort_ordering;
@@ -95,7 +98,7 @@ public:
 
     std::shared_ptr<formats::FileWriter> file_writer() { return _file_writer; }
 
-    std::shared_ptr<io::AsyncFlushOutputStream> out_stream() { return _out_stream; }
+    std::shared_ptr<formats::AsyncFlushOutputStream> out_stream() { return _out_stream; }
 
     void set_io_poller(AsyncFlushStreamPoller* io_poller) { _io_poller = io_poller; }
 
@@ -122,7 +125,7 @@ protected:
     // Therefore, we must ensure _file_writer is destroyed first, followed by _out_stream.
     // Failing to do so will result in a use-after-free error for _out_stream.
     // TODO: Refactor the file writer and output stream to make them more robust and user-friendly.
-    std::shared_ptr<io::AsyncFlushOutputStream> _out_stream;
+    std::shared_ptr<formats::AsyncFlushOutputStream> _out_stream;
     std::shared_ptr<formats::FileWriter> _file_writer;
     CommitFunc _commit_callback;
     std::string _commit_extra_data;

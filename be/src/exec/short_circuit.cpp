@@ -24,7 +24,10 @@
 #include "common/runtime_profile.h"
 #include "common/status.h"
 #include "common/util/thrift_util.h"
+#include "compute_env/result/result_buffer_mgr.h"
 #include "connector/connector.h"
+#include "exec/data_sinks/memory_scratch_sink.h"
+#include "exec/data_sinks/result_sink.h"
 #include "exec/exec_factory.h"
 #include "exec/scan_node.h"
 #include "exec/short_circuit_hybrid.h"
@@ -32,9 +35,7 @@
 #include "exprs/expr_factory.h"
 #include "runtime/exec_env.h"
 #include "runtime/global_dict/fragment_dict_state.h"
-#include "runtime/memory_scratch_sink.h"
-#include "runtime/result_buffer_mgr.h"
-#include "runtime/result_sink.h"
+#include "runtime/runtime_state.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_manager.h"
 
@@ -79,6 +80,7 @@ public:
             column = _output_expr_ctxs[i]->root()->type().type == TYPE_TIME
                              ? ColumnHelper::convert_time_column_from_double_to_str(column)
                              : column;
+            ColumnHelper::mark_binary_columns(column, _output_expr_ctxs[i]->root()->type());
             result_columns.emplace_back(std::move(column));
         }
 
@@ -141,8 +143,8 @@ ShortCircuitExecutor::ShortCircuitExecutor(ExecEnv* exec_env)
         : _query_id(generate_uuid()), _fragment_instance_id(generate_uuid()), _exec_env(exec_env) {
     TQueryOptions query_options;
     TQueryGlobals query_globals;
-    _runtime_state =
-            std::make_shared<RuntimeState>(_query_id, _fragment_instance_id, query_options, query_globals, _exec_env);
+    _runtime_state = std::make_shared<RuntimeState>(_query_id, _fragment_instance_id, query_options, query_globals,
+                                                    &_exec_env->query_execution_services(), _exec_env);
     _fragment_dict_state = std::make_unique<FragmentDictState>();
     _runtime_state->set_fragment_dict_state(_fragment_dict_state.get());
     _runtime_state->init_instance_mem_tracker();

@@ -14,6 +14,7 @@
 
 package com.starrocks.sql.analyzer.mv;
 
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.FunctionSet;
@@ -47,13 +48,16 @@ import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.IsNullPredicate;
 import com.starrocks.sql.ast.expression.LiteralExprFactory;
 import com.starrocks.sql.ast.expression.SlotRef;
-import com.starrocks.sql.optimizer.rule.tvr.common.TvrOpUtils;
+import com.starrocks.sql.optimizer.rule.ivm.common.IvmOpUtils;
+import com.starrocks.type.Type;
 import org.apache.commons.collections4.CollectionUtils;
 
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.function.Predicate;
 
 /**
  * This class is responsible for analyzing and rewriting the query statement for IVM (Incremental View Maintenance) refresh.
@@ -66,11 +70,11 @@ public class IVMAnalyzer {
     }
 
     public record IVMAnalyzeResult(QueryStatement queryStatement,
-                                   boolean needRetractableSink,
+                                   RowIdStrategy rowIdStrategy,
                                    MaterializedView.RefreshMode currentRefreshMode) {
-        public static IVMAnalyzeResult of(QueryStatement queryStatement, boolean needRetractableSink,
+        public static IVMAnalyzeResult of(QueryStatement queryStatement, RowIdStrategy rowIdStrategy,
                                           MaterializedView.RefreshMode currentRefreshMode) {
-            return new IVMAnalyzeResult(queryStatement, needRetractableSink, currentRefreshMode);
+            return new IVMAnalyzeResult(queryStatement, rowIdStrategy, currentRefreshMode);
         }
     }
 
@@ -85,11 +89,53 @@ public class IVMAnalyzer {
             JoinOperator.CROSS_JOIN
     );
 
+    // Aggregate function whitelist: (function name) -> predicate(argument types).
+    // Only (function, argument-type) combinations explicitly listed here are accepted by
+    // IVMAnalyzer. Unlisted combinations are rejected at CREATE time so the user gets a
+    // clear error instead of silently wrong data or a refresh-time crash. Each entry
+    // documents the boundary verified by tests; widen the predicate (or add a new entry)
+    // only after the (combinator metadata + BE state_union) path has been validated
+    // end-to-end for that type.
+    public static final Map<String, Predicate<Type[]>> IVM_SUPPORTED_AGG_FUNCTIONS =
+            ImmutableMap.<String, Predicate<Type[]>>builder()
+                    // count(*) and count(col) — all argument types are fine; refresh state is BIGINT.
+                    .put(FunctionSet.COUNT,                  args -> args.length <= 1)
+                    // sum: integer / float / DECIMAL.
+                    .put(FunctionSet.SUM,                    args -> isFixedOrFloat(args[0]) || args[0].isDecimalV3())
+                    // avg: integer / float / DECIMAL. DECIMAL was unblocked by #73012 which
+                    // preserves the typed AggStateDesc on the state_union scalar so the
+                    // intermediate (sum, count) tuple keeps its DECIMAL precision/scale.
+                    .put(FunctionSet.AVG,                    args -> isFixedOrFloat(args[0]) || args[0].isDecimalV3())
+                    // min/max: numeric, temporal, and string. VARCHAR was unblocked by #73095
+                    // which relaxed state_union's strict type-equality precondition to accept
+                    // compatible string types (VARCHAR(N) vs catalog-normalized VARCHAR(65533)).
+                    .put(FunctionSet.MIN,                    args -> isFixedOrFloat(args[0]) || isTemporal(args[0])
+                                                                    || args[0].isStringType())
+                    .put(FunctionSet.MAX,                    args -> isFixedOrFloat(args[0]) || isTemporal(args[0])
+                                                                    || args[0].isStringType())
+                    // array_agg: accept single-arg only. ORDER BY in the source query inlines extra
+                    // children via FunctionAnalyzer.getAdjustedAnalyzedAggregateFunction, so args.length
+                    // exceeds 1 for `array_agg(col ORDER BY key)`. IVM state_union is unordered, so
+                    // rejecting ORDER BY variants here keeps semantics safe.
+                    .put(FunctionSet.ARRAY_AGG,              args -> args.length == 1)
+                    // bool_or: associative OR over booleans, no state representation issues.
+                    .put(FunctionSet.BOOL_OR,                args -> args.length == 1 && args[0].isBoolean())
+                    // approx_count_distinct / ndv: HLL state union is well-defined.
+                    .put(FunctionSet.APPROX_COUNT_DISTINCT,  args -> args.length == 1)
+                    .put(FunctionSet.NDV,                    args -> args.length == 1)
+                    .build();
+
+    private static boolean isFixedOrFloat(Type t) {
+        return t.isFixedPointType() || t.isFloatingPointType();
+    }
+
+    private static boolean isTemporal(Type t) {
+        return t.isDate() || t.isDatetime();
+    }
+
     private final ConnectContext connectContext;
     private final CreateMaterializedViewStatement statement;
     private final QueryStatement queryStatement;
-
-    private boolean isNeedRetractableSink = false;
 
     public IVMAnalyzer(ConnectContext connectContext,
                        CreateMaterializedViewStatement statement,
@@ -118,17 +164,31 @@ public class IVMAnalyzer {
 
         try {
             QueryRelation queryRelation = queryStatement.getQueryRelation();
-            rewriteImpl(queryRelation);
-            IVMAnalyzeResult result = IVMAnalyzeResult.of(queryStatement,
-                    isNeedRetractableSink, refreshMode);
+            // Retractable queries produce their own __ROW_ID__ (encode(group_by_keys)); non-retractable
+            // append-only scans rely on storage AUTO_INCREMENT.
+            boolean isRetractable = rewriteImpl(queryRelation);
+            RowIdStrategy strategy = isRetractable
+                    ? RowIdStrategy.QUERY_COMPUTED
+                    : RowIdStrategy.AUTO_INCREMENT;
+            // Trial-rewrite catches drift the analyzer-level checks can't: e.g. a new logical
+            // operator without a matching IvmDelta*Rule, or a combinator's metadata that no
+            // longer matches the BE state-union path. INCREMENTAL only.
+            if (refreshMode.isIncremental()) {
+                IvmTrialRewriter.runTrial(connectContext, statement, queryStatement);
+            }
+            IVMAnalyzeResult result = IVMAnalyzeResult.of(queryStatement, strategy, refreshMode);
             return Optional.of(result);
+        } catch (SemanticException e) {
+            // Already has a self-describing message (rewriteImpl or IvmTrialRewriter). Don't re-wrap.
+            if (refreshMode.isIncremental()) {
+                throw e;
+            }
+            return Optional.empty();
         } catch (Exception e) {
             if (refreshMode.isIncremental()) {
                 throw new SemanticException("Failed to rewrite the query for IVM: %s", e.getMessage());
-            } else {
-                // If the refresh mode is not strictly incremental, we can fallback to full refresh.
-                return Optional.empty();
             }
+            return Optional.empty();
         }
     }
 
@@ -209,22 +269,6 @@ public class IVMAnalyzer {
         return isRetractable;
     }
 
-    private void markRetractableSink() {
-        if (hasMarkedRetractableSink()) {
-            throw new SemanticException("IVMAnalyzer has already marked retractable sink, " +
-                    "but got another mark request.");
-        }
-        this.isNeedRetractableSink = true;
-    }
-
-    private boolean hasMarkedRetractableSink() {
-        return this.isNeedRetractableSink;
-    }
-
-    private boolean isRetractableJoin(JoinOperator joinType) {
-        return !(joinType.isInnerJoin() || joinType.isCrossJoin() || joinType.isLeftSemiJoin());
-    }
-
     private boolean checkRelation(Relation relation) throws AnalysisException {
         if (relation == null) {
             return false;
@@ -244,15 +288,9 @@ public class IVMAnalyzer {
                 throw new SemanticException("IVMAnalyzer does not support with retractable right input, " +
                         "but got: %s", joinRelation.getRight());
             }
-            if (isRetractableJoin(joinType)) {
-                // only can support two tables with outer join, cannot support multi tables with outer join,
-                if (hasMarkedRetractableSink()) {
-                    throw new SemanticException("IVMAnalyzer does not support outer join with multiple tables, " +
-                            "but got: %s", joinType);
-                }
-                markRetractableSink();
-                return true;
-            }
+            // Iceberg tables are currently append-only (no delete files supported) and
+            // only inner/cross joins are allowed — so this branch never produces
+            // retractable output. Revisit when outer-join / delete-file support lands.
             return false;
         } else if (relation instanceof QueryRelation) {
             // If the inner relation is a QueryRelation, we need to rewrite it recursively.
@@ -278,10 +316,6 @@ public class IVMAnalyzer {
         if (CollectionUtils.isEmpty(aggregateExprs)) {
             return false;
         }
-        if (hasMarkedRetractableSink()) {
-            throw new RuntimeException("IVMAnalyzer does not support aggregate functions with " +
-                    "retractable input yet");
-        }
 
         List<Expr> groupByExprs = selectRelation.getGroupBy();
         if (CollectionUtils.isEmpty(groupByExprs)) {
@@ -292,10 +326,21 @@ public class IVMAnalyzer {
         List<IVMAggFunctionInfo> newAggFuncInfos = Lists.newArrayList();
         ExprSubstitutionMap substitutionMap = new ExprSubstitutionMap();
         for (FunctionCallExpr aggFuncExpr : aggregateExprs) {
+            // Distinct flag is dropped by the combinator rewrite below, so incremental
+            // refresh would silently state_union plain state and produce wrong values.
+            if (aggFuncExpr.isDistinct()) {
+                throw new SemanticException(
+                        "IVMAnalyzer does not support distinct aggregate functions, but got: %s",
+                        aggFuncExpr.toString());
+            }
             String aggFuncName = aggFuncExpr.getFunctionName();
+            // Whitelist gate: only (function, argument-type) combinations validated end-to-end
+            // are allowed. Unsupported combinations would either fail at refresh time or silently
+            // produce wrong data; reject them here so the user sees a clear CREATE-time error.
+            checkAggregateFunctionInWhitelist(aggFuncExpr, aggFuncName);
             // build intermediate aggregate function
             FunctionCallExpr intermediateAggFuncExpr = buildIntermediateAggregateFunc(aggFuncExpr);
-            String newAggFuncName = TvrOpUtils.getTvrAggStateColumnName(aggFuncExpr);
+            String newAggFuncName = IvmOpUtils.getIvmAggStateColumnName(aggFuncExpr);
 
             IVMAggFunctionInfo aggFunctionInfo = new IVMAggFunctionInfo(aggFuncExpr, aggFuncName,
                     intermediateAggFuncExpr, newAggFuncName);
@@ -311,15 +356,15 @@ public class IVMAnalyzer {
         selectRelation.setAggregate(newAggFuncs);
 
         // Build the row ID function expression
-        int encodeRowIdVersion = TvrOpUtils.deduceEncodeRowIdVersion(groupByExprs);
+        int encodeRowIdVersion = IvmOpUtils.deduceEncodeRowIdVersion(groupByExprs);
         if (statement != null) {
             statement.setEncodeRowIdVersion(encodeRowIdVersion);
         }
-        FunctionCallExpr rowIdFuncExpr = TvrOpUtils.buildRowIdFuncExpr(encodeRowIdVersion, groupByExprs);
+        FunctionCallExpr rowIdFuncExpr = IvmOpUtils.buildRowIdFuncExpr(encodeRowIdVersion, groupByExprs);
         SelectList selectList = selectRelation.getSelectList();
         List<SelectListItem> newItems = Lists.newArrayList();
         // add row_id func expr
-        newItems.add(new SelectListItem(rowIdFuncExpr, TvrOpUtils.COLUMN_ROW_ID));
+        newItems.add(new SelectListItem(rowIdFuncExpr, IvmOpUtils.COLUMN_ROW_ID));
         // add original items
         selectList.getItems()
                 .stream()
@@ -345,12 +390,26 @@ public class IVMAnalyzer {
         newAggFuncInfos.stream()
                 .forEach(aggFunctionInfo -> newOutputExpressions.add(aggFunctionInfo.newAggFunc));
         selectRelation.setOutputExpr(newOutputExpressions);
-        this.markRetractableSink();
         return true;
     }
 
     private Expr substituteWithMap(Expr expr, ExprSubstitutionMap substitutionMap) {
         return ExprSubstitutionVisitor.rewrite(expr, substitutionMap);
+    }
+
+    private static void checkAggregateFunctionInWhitelist(FunctionCallExpr aggFuncExpr, String aggFuncName) {
+        Predicate<Type[]> rule = IVM_SUPPORTED_AGG_FUNCTIONS.get(aggFuncName.toLowerCase());
+        if (rule == null) {
+            throw new SemanticException(
+                    "IVMAnalyzer does not support aggregate function: %s. Supported functions: %s",
+                    aggFuncName, IVM_SUPPORTED_AGG_FUNCTIONS.keySet());
+        }
+        Type[] argTypes = aggFuncExpr.getChildren().stream().map(Expr::getType).toArray(Type[]::new);
+        if (!rule.test(argTypes)) {
+            throw new SemanticException(
+                    "IVMAnalyzer does not support %s with argument types %s",
+                    aggFuncName, Arrays.toString(argTypes));
+        }
     }
 
     public static MaterializedView.RefreshMode getRefreshMode(CreateMaterializedViewStatement statement) {
@@ -361,9 +420,21 @@ public class IVMAnalyzer {
         }
         if (properties.containsKey(PropertyAnalyzer.PROPERTIES_MV_REFRESH_MODE)) {
             String mode = properties.get(PropertyAnalyzer.PROPERTIES_MV_REFRESH_MODE);
-            return MaterializedView.RefreshMode.valueOf(mode.toUpperCase());
+            MaterializedView.RefreshMode parsed;
+            try {
+                parsed = MaterializedView.RefreshMode.valueOf(mode.toUpperCase());
+            } catch (IllegalArgumentException e) {
+                throw new SemanticException("Invalid refresh_mode: " + mode +
+                        ". Only INCREMENTAL, PCT are supported.");
+            }
+            // AUTO is intentionally not exposed to users; the implementation is preserved
+            // internally for future revival.
+            if (parsed == MaterializedView.RefreshMode.AUTO) {
+                throw new SemanticException("Invalid refresh_mode: " + mode +
+                        ". Only INCREMENTAL, PCT are supported.");
+            }
+            return parsed;
         } else {
-            // Default to INCREMENTAL
             return MaterializedView.RefreshMode.PCT;
         }
     }

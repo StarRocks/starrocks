@@ -26,8 +26,11 @@
 #include "base/testutil/sync_point.h"
 #include "base/time/time.h"
 #include "base/utility/defer_op.h"
+#include "common/brpc/brpc_stub_cache.h"
 #include "common/config_lake_fwd.h"
+#include "common/config_vector_index_fwd.h"
 #include "common/status.h"
+#include "common/system/cpu_info.h"
 #include "common/thread/thread.h"
 #include "common/thread/threadpool.h"
 #include "exec/write_combined_txn_log.h"
@@ -50,7 +53,8 @@
 #include "storage/lake/update_manager.h"
 #include "storage/lake/vacuum.h"
 #include "storage/lake/vacuum_full.h"
-#include "util/brpc_stub_cache.h"
+#include "storage/lake/vector_index_build_task.h"
+#include "storage/tablet_index.h"
 
 namespace starrocks {
 
@@ -78,6 +82,10 @@ ThreadPool* drop_table_thread_pool(ExecEnv* env) {
 
 ThreadPool* vacuum_thread_pool(ExecEnv* env) {
     return get_thread_pool(env, TTaskType::RELEASE_SNAPSHOT);
+}
+
+ThreadPool* vector_index_build_thread_pool(ExecEnv* env) {
+    return env ? env->lake_services().lake_vector_index_build_thread_pool : nullptr;
 }
 
 int get_num_publish_queued_tasks(void*) {
@@ -169,6 +177,25 @@ bool should_rebuild_pindex(const std::unordered_set<int64>& rebuild_pindex_table
     return false;
 }
 
+// Returns true if any VECTOR index has index_build_mode = "async".
+bool is_async_vector_index_table(const TabletMetadataPB& metadata) {
+    if (!metadata.has_schema()) return false;
+    for (const auto& index_pb : metadata.schema().table_indices()) {
+        if (!index_pb.has_index_type() || index_pb.index_type() != VECTOR) {
+            continue;
+        }
+        TabletIndex parsed;
+        if (!parsed.init_from_pb(index_pb).ok()) {
+            continue;
+        }
+        auto it = parsed.common_properties().find("index_build_mode");
+        if (it != parsed.common_properties().end() && it->second == "async") {
+            return true;
+        }
+    }
+    return false;
+}
+
 } // namespace
 
 // Get txn_ids string from request (compatible with both new and old FE versions)
@@ -198,6 +225,10 @@ void LakeServiceImpl::publish_version(::google::protobuf::RpcController* control
                                       ::google::protobuf::Closure* done) {
     brpc::ClosureGuard guard(done);
     auto cntl = static_cast<brpc::Controller*>(controller);
+    // Server-side BRPC queue time: latency from RPC arrival on this server to handler entry.
+    // Used to attribute the FE-measured publish_rpc cost vs BE handler cost gap.
+    // cntl can be nullptr in unit tests, so guard the access.
+    int64_t brpc_queue_us = (cntl != nullptr) ? cntl->latency_us() : 0;
 
     if (!request->has_base_version()) {
         cntl->SetFailed("missing base version");
@@ -238,9 +269,13 @@ void LakeServiceImpl::publish_version(::google::protobuf::RpcController* control
                 // Splitting tablet
                 const auto& splitting_tablet_info = resharding_tablet_info.splitting_tablet_info();
                 task_num += splitting_tablet_info.new_tablet_ids_size();
+                int32_t split_count = splitting_tablet_info.new_tablet_ids_size();
+                int32_t split_index = 0;
                 for (auto new_tablet_id : splitting_tablet_info.new_tablet_ids()) {
                     publish_tablet_infos.emplace_back(lake::PublishTabletInfo::SPLITTING_TABLET,
-                                                      splitting_tablet_info.old_tablet_id(), new_tablet_id);
+                                                      splitting_tablet_info.old_tablet_id(), new_tablet_id, split_count,
+                                                      split_index);
+                    split_index++;
                 }
             } else if (resharding_tablet_info.has_merging_tablet_info()) {
                 // Merging tablets
@@ -335,10 +370,17 @@ void LakeServiceImpl::publish_version(::google::protobuf::RpcController* control
                     TRACE_COUNTER_INCREMENT("queuing_latency_us", queuing_latency);
                     TEST_SYNC_POINT_CALLBACK("LakeServiceImpl::publish_version:before_publish", &txns);
 
+                    // Look up FE-provided built version for async vector index build
+                    int64_t fe_built_version = 0;
+                    auto bv_it = request->tablet_built_versions().find(tablet_info.get_tablet_id_in_metadata());
+                    if (bv_it != request->tablet_built_versions().end()) {
+                        fe_built_version = bv_it->second;
+                    }
+
                     StatusOr<TabletMetadataPtr> res;
                     if (std::chrono::system_clock::now() < timeout_deadline) {
                         res = lake::publish_version(_tablet_mgr, tablet_info, base_version, new_version, txns,
-                                                    skip_write_tablet_metadata);
+                                                    skip_write_tablet_metadata, fe_built_version);
                     } else {
                         auto t = MilliSecondsSinceEpochFromTimePoint(timeout_deadline);
                         res = Status::TimedOut(fmt::format("reached deadline={}/timeout={}", t, timeout_ms));
@@ -346,7 +388,11 @@ void LakeServiceImpl::publish_version(::google::protobuf::RpcController* control
                     if (res.ok()) {
                         auto metadata = std::move(res).value();
                         auto score = compaction_score(_tablet_mgr, metadata);
-                        TabletMetadataPB* prealloc_metadata = nullptr;
+                        // Copy metadata out of the lock(response_mtx), to let it execute in parallel.
+                        TabletMetadataPB local_metadata;
+                        if (skip_write_tablet_metadata) {
+                            local_metadata.CopyFrom(*metadata);
+                        }
                         {
                             std::lock_guard l(response_mtx);
                             response->mutable_compaction_scores()->insert({metadata->id(), score});
@@ -358,13 +404,31 @@ void LakeServiceImpl::publish_version(::google::protobuf::RpcController* control
                                 response->mutable_tablet_row_nums()->insert({metadata->id(), row_nums});
                             }
                             if (skip_write_tablet_metadata) {
-                                auto& map = *response->mutable_tablet_metas();
-                                prealloc_metadata = &map[metadata->id()];
+                                (*response->mutable_tablet_metas())[metadata->id()].Swap(&local_metadata);
                             }
                         }
-                        // Move copy metadata out of the lock(response_mtx), to let it execute in parallel.
-                        if (prealloc_metadata != nullptr) {
-                            prealloc_metadata->CopyFrom(*metadata);
+                        // Report tablet for async VI build only on async-mode tables
+                        // whose new rowset(s) have vector_index_ids. Sync-mode tables
+                        // build VI inline on write/compaction, so FE dispatch is unneeded.
+                        bool new_rowset_has_vi = false;
+                        if (is_async_vector_index_table(*metadata)) {
+                            for (const auto& rowset : metadata->rowsets()) {
+                                int64_t rv = rowset.has_version() ? rowset.version() : 0;
+                                if (rv <= base_version) continue; // existing rowset, not from this publish
+                                for (int i = 0; i < rowset.segment_metas_size(); i++) {
+                                    if (rowset.segment_metas(i).vector_index_ids_size() > 0) {
+                                        new_rowset_has_vi = true;
+                                        break;
+                                    }
+                                }
+                                if (new_rowset_has_vi) break;
+                            }
+                        }
+                        if (new_rowset_has_vi) {
+                            std::lock_guard l(response_mtx);
+                            auto* info = response->add_vector_index_build_infos();
+                            info->set_tablet_id(metadata->id());
+                            info->set_version(metadata->version());
                         }
                     } else {
                         if (res.status().is_resource_busy()) {
@@ -507,13 +571,10 @@ void LakeServiceImpl::publish_version(::google::protobuf::RpcController* control
     latch.wait();
     auto cost = butil::gettimeofday_us() - start_ts;
     auto is_slow = cost >= config::lake_publish_version_slow_log_ms * 1000;
-    if (config::lake_enable_publish_version_trace_log && is_slow) {
-        LOG(INFO) << "Published txns=" << get_txn_ids_string(request) << ". cost=" << cost << "us\n"
-                  << trace->DumpToString();
-    } else if (is_slow) {
+    if (is_slow) {
         LOG(INFO) << "Published txns=" << get_txn_ids_string(request)
                   << ". tablets=" << JoinInts(request->tablet_ids(), ",") << " cost=" << cost
-                  << "us, trace: " << trace->MetricsAsJSON();
+                  << "us brpc_queue_us=" << brpc_queue_us << ", trace: " << trace->MetricsAsJSON();
     }
     TEST_SYNC_POINT("LakeServiceImpl::publish_version:return");
 }
@@ -563,6 +624,9 @@ struct AggregatePublishContext {
             // Use swap to avoid copy
             (*response->mutable_tablet_ranges())[tid].Swap(&range);
         }
+        for (const auto& info : resp->vector_index_build_infos()) {
+            *response->add_vector_index_build_infos() = info;
+        }
     }
 
     void add_publish_request_ctx(std::unique_ptr<brpc::Controller> cntl, std::unique_ptr<PublishVersionResponse> resp) {
@@ -589,7 +653,7 @@ struct AggregatePublishContext {
 
     void put_aggregate_metadata(ExecEnv* env) {
         if (!has_failure) {
-            auto thread_pool = env->put_aggregate_metadata_thread_pool();
+            auto thread_pool = env->lake_services().put_aggregate_metadata_thread_pool;
             if (UNLIKELY(thread_pool == nullptr)) {
                 publish_status = Status::InternalError("can not find put_aggregate_metadata thread pool");
             } else {
@@ -1113,7 +1177,7 @@ void LakeServiceImpl::get_tablet_stats(::google::protobuf::RpcController* contro
         cntl->SetFailed("missing tablet_infos");
         return;
     }
-    auto thread_pool = _env->lake_metadata_fetch_thread_pool();
+    auto thread_pool = _env->lake_services().lake_metadata_fetch_thread_pool;
     TEST_SYNC_POINT_CALLBACK("LakeServiceImpl::get_tablet_stats:thread_pool", &thread_pool);
     if (UNLIKELY(thread_pool == nullptr)) {
         cntl->SetFailed("lake metadata fetch thread pool is null");
@@ -1160,23 +1224,26 @@ void LakeServiceImpl::get_tablet_stats(::google::protobuf::RpcController* contro
                     for (const auto& rowset : (*tablet_metadata)->rowsets()) {
                         int64_t num_deletes = 0;
                         if (is_pk_tablet) {
-                            if (accurate_mode) {
+                            if (rowset.has_range()) {
+                                // Rowset went through a reshard (split or merge-back). Shared delvec
+                                // cardinality reflects the parent's full delete set, not this child's
+                                // share, so reading delvec would over-subtract. Use the pre-scaled
+                                // num_dels written by tablet_splitter / tablet_merger / tablet_reshard_helper.
+                                num_deletes = rowset.has_num_dels() ? rowset.num_dels() : 0;
+                            } else if (accurate_mode) {
                                 // Accurate mode (default): fetch delete vectors from object storage.
-                                // NOTE!! Each segment incurs a remote metadata read - expensive for large tablets.
+                                // Reuses the already-loaded tablet metadata to avoid repeated loads per segment.
                                 num_deletes = static_cast<int64_t>(
-                                        _tablet_mgr->update_mgr()->get_rowset_num_deletes(tablet_id, version, rowset));
-                            } else {
+                                        _tablet_mgr->update_mgr()->get_rowset_num_deletes(**tablet_metadata, rowset));
+                            } else if (rowset.has_num_dels()) {
                                 // Approximate mode: prefer the pre-stored num_dels field in rowset
                                 // metadata. This avoids additional I/O while still providing a reasonable estimate.
                                 // Rows deleted but not yet compacted may be slightly overcounted.
-                                if (rowset.has_num_dels()) {
-                                    num_deletes = rowset.num_dels();
-                                } else {
-                                    // Fallback for old metadata without num_dels.
-                                    num_deletes =
-                                            static_cast<int64_t>(_tablet_mgr->update_mgr()->get_rowset_num_deletes(
-                                                    tablet_id, version, rowset));
-                                }
+                                num_deletes = rowset.num_dels();
+                            } else {
+                                // Fallback for old metadata without num_dels.
+                                num_deletes = static_cast<int64_t>(
+                                        _tablet_mgr->update_mgr()->get_rowset_num_deletes(**tablet_metadata, rowset));
                             }
                         }
                         // For non-PK tablets, num_deletes stays 0: they have no delete vectors.
@@ -1397,7 +1464,7 @@ struct AggregateCompactContext {
     void write_combined_txn_log(ExecEnv* env) {
         if (final_status.ok()) {
             VLOG(2) << "Write combined txn log. pb=" << combined_txn_log.ShortDebugString();
-            auto thread_pool = env->put_combined_txn_log_thread_pool();
+            auto thread_pool = env->execution_services().put_combined_txn_log_thread_pool;
             if (UNLIKELY(thread_pool == nullptr)) {
                 final_status = Status::InternalError("can not find put_combined_txn_log thread pool");
             } else {
@@ -1765,7 +1832,7 @@ void LakeServiceImpl::get_tablet_metadatas(::google::protobuf::RpcController* co
         Status::InvalidArgument("max_version should be >= min_version").to_protobuf(response->mutable_status());
         return;
     }
-    auto thread_pool = _env->lake_metadata_fetch_thread_pool();
+    auto thread_pool = _env->lake_services().lake_metadata_fetch_thread_pool;
     TEST_SYNC_POINT_CALLBACK("LakeServiceImpl::get_tablet_metadatas:thread_pool", &thread_pool);
     if (UNLIKELY(thread_pool == nullptr)) {
         Status::ServiceUnavailable("lake metadata fetch thread pool is null").to_protobuf(response->mutable_status());
@@ -2068,6 +2135,110 @@ void LakeServiceImpl::repair_tablet_metadata(::google::protobuf::RpcController* 
                      << " tablets, the first " << messages.size() << " tablets: [" << JoinStrings(messages, "; ")
                      << "]";
     }
+}
+
+void LakeServiceImpl::build_vector_index(::google::protobuf::RpcController* controller,
+                                         const ::starrocks::BuildVectorIndexRequest* request,
+                                         ::starrocks::BuildVectorIndexResponse* response,
+                                         ::google::protobuf::Closure* done) {
+    brpc::ClosureGuard guard(done);
+    auto cntl = static_cast<brpc::Controller*>(controller);
+
+    if (!request->has_tablet_id()) {
+        cntl->SetFailed("missing tablet_id");
+        return;
+    }
+    if (!request->has_version()) {
+        cntl->SetFailed("missing version");
+        return;
+    }
+
+    auto thread_pool = vector_index_build_thread_pool(_env);
+    if (UNLIKELY(thread_pool == nullptr)) {
+        cntl->SetFailed("no thread pool to run vector index build task");
+        return;
+    }
+
+    // Adaptive sizing: pool_size * omp_threads <= nproc * cpu_ratio.
+    const int nproc = CpuInfo::num_cores();
+    const int budget = std::max(2, static_cast<int>(nproc * config::vector_index_build_max_cpu_ratio));
+    const int configured_omp = std::max(1, static_cast<int>(config::config_vector_index_build_concurrency));
+    const int effective_pool = std::max(1, budget / configured_omp);
+    const int effective_omp = std::min(configured_omp, std::max(1, budget / effective_pool));
+    if (thread_pool->max_threads() != effective_pool) {
+        auto st = thread_pool->update_max_threads(effective_pool);
+        if (UNLIKELY(!st.ok())) {
+            LOG(WARNING) << "build_vector_index: failed to resize thread pool from " << thread_pool->max_threads()
+                         << " to " << effective_pool << ", tablet=" << request->tablet_id()
+                         << ", version=" << request->version() << ", error=" << st;
+            st.to_protobuf(response->mutable_status());
+            return;
+        }
+    }
+
+    LOG(INFO) << "build_vector_index RPC: tablet=" << request->tablet_id() << " version=" << request->version();
+
+    // Tablet-level dedup
+    {
+        std::lock_guard lock(_building_vi_mutex);
+        if (_building_vi_tablets.count(request->tablet_id())) {
+            Status::ResourceBusy("vector index build already in progress").to_protobuf(response->mutable_status());
+            return;
+        }
+        _building_vi_tablets.insert(request->tablet_id());
+    }
+    DeferOp remove_building([&] {
+        std::lock_guard lock(_building_vi_mutex);
+        _building_vi_tablets.erase(request->tablet_id());
+    });
+
+    lake::VectorIndexBuildTask build_task(_tablet_mgr);
+    build_task.set_omp_threads(effective_omp);
+    auto prepare_st = build_task.prepare(*request);
+    if (!prepare_st.ok()) {
+        prepare_st.to_protobuf(response->mutable_status());
+        return;
+    }
+
+    size_t work_count = build_task.work_count();
+    std::vector<Status> segment_results(work_count);
+
+    if (work_count > 0) {
+        auto latch = BThreadCountDownLatch(work_count);
+        for (size_t i = 0; i < work_count; i++) {
+            auto seg_task = std::make_shared<CancellableRunnable>(
+                    [&, i] {
+                        DeferOp defer([&] { latch.count_down(); });
+                        segment_results[i] = build_task.build_one_segment(i);
+                        if (!segment_results[i].ok()) {
+                            LOG(WARNING) << "VectorIndexBuildTask: tablet=" << build_task.tablet_id() << " segment["
+                                         << i << "] failed: " << segment_results[i];
+                        }
+                    },
+                    [&, i] {
+                        segment_results[i] = Status::Cancelled("vector index segment build cancelled");
+                        latch.count_down();
+                    });
+            auto st = thread_pool->submit(std::move(seg_task));
+            if (!st.ok()) {
+                segment_results[i] = st;
+                latch.count_down();
+            }
+        }
+        latch.wait();
+    }
+
+    int failed_count = 0;
+    for (const auto& st : segment_results) {
+        if (!st.ok()) {
+            failed_count++;
+        }
+    }
+    int64_t new_built_version = build_task.compute_built_version(segment_results);
+    response->set_new_built_version(new_built_version);
+    LOG(INFO) << "build_vector_index: tablet=" << request->tablet_id() << " new_built_version=" << new_built_version
+              << " segments_built=" << (work_count - failed_count) << " segments_failed=" << failed_count;
+    Status::OK().to_protobuf(response->mutable_status());
 }
 
 } // namespace starrocks

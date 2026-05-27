@@ -27,7 +27,7 @@
 #include "formats/parquet/stored_column_reader.h"
 #include "formats/parquet/types.h"
 #include "formats/parquet/utils.h"
-#include "storage/range.h"
+#include "storage/primitive/range.h"
 
 namespace starrocks {
 class Column;

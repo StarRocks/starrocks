@@ -14,9 +14,9 @@
 
 #pragma once
 
+#include "cache/scan/cache_select_input_stream.hpp"
 #include "exec/hdfs_scanner/hdfs_scanner.h"
 #include "formats/disk_range.hpp"
-#include "io/cache_select_input_stream.hpp"
 
 namespace starrocks {
 
@@ -41,8 +41,8 @@ private:
     Status _fetch_iceberg_delete_files();
     Status _create_input_stream();
     Status _write_entire_file(const std::string& file_path, size_t file_size);
-    static Status _write_disk_ranges(std::shared_ptr<io::SharedBufferedInputStream>& shared_input_stream,
-                                     std::shared_ptr<io::CacheInputStream>& cache_input_stream,
+    static Status _write_disk_ranges(std::shared_ptr<SharedBufferedInputStream>& shared_input_stream,
+                                     std::shared_ptr<CacheInputStream>& cache_input_stream,
                                      const std::vector<DiskRange>& disk_ranges);
 };
 

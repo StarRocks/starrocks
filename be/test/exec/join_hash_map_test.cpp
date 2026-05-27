@@ -25,7 +25,6 @@
 #include "exec/join/join_hash_table.h"
 #include "exec/join/join_key_constructor.h"
 #include "runtime/descriptor_helper.h"
-#include "runtime/exec_env.h"
 #include "runtime/mem_tracker.h"
 
 namespace starrocks {
@@ -64,6 +63,7 @@ protected:
                                                   int32_t column_pos, bool nullable);
     static void add_tuple_descriptor(TDescriptorTableBuilder* table_desc_builder, LogicalType column_type,
                                      bool nullable, size_t column_count = 3);
+    DescriptorTbl* create_descriptor_tbl(TDescriptorTableBuilder* table_desc_builder);
     static std::shared_ptr<RuntimeProfile> create_runtime_profile();
     std::shared_ptr<RowDescriptor> create_row_desc(TDescriptorTableBuilder* table_desc_builder);
     std::shared_ptr<RowDescriptor> create_probe_desc(TDescriptorTableBuilder* probe_desc_builder);
@@ -835,7 +835,7 @@ void JoinHashMapTest::check_empty_hash_map(TJoinOp::type join_type, int num_prob
                 check_int32_column(*ColumnHelper::get_data_column(result_chunk->columns()[i].get()), num_probe_rows,
                                    i * 10 + 1);
             } else {
-                check_int32_column(*result_chunk->mutable_columns()[i], num_probe_rows, i * 10 + 1);
+                check_int32_column(*result_chunk->columns()[i], num_probe_rows, i * 10 + 1);
             }
         }
         if (expect_num_colums > 3) {
@@ -880,33 +880,42 @@ std::shared_ptr<RuntimeProfile> JoinHashMapTest::create_runtime_profile() {
     return profile;
 }
 
+DescriptorTbl* JoinHashMapTest::create_descriptor_tbl(TDescriptorTableBuilder* table_desc_builder) {
+    auto* tbl = _object_pool->add(new DescriptorTbl());
+    auto thrift_tbl = table_desc_builder->desc_tbl();
+
+    for (const auto& tdesc : thrift_tbl.tupleDescriptors) {
+        auto* tuple_desc = _object_pool->add(new TupleDescriptor(tdesc));
+        tbl->_tuple_desc_map[tdesc.id] = tuple_desc;
+    }
+
+    for (const auto& sdesc : thrift_tbl.slotDescriptors) {
+        auto* slot_desc = _object_pool->add(new SlotDescriptor(sdesc));
+        tbl->_slot_desc_map[sdesc.id] = slot_desc;
+
+        auto tuple = tbl->_tuple_desc_map.find(sdesc.parent);
+        CHECK(tuple != tbl->_tuple_desc_map.end());
+        tuple->second->add_slot(slot_desc);
+    }
+
+    return tbl;
+}
+
 std::shared_ptr<RowDescriptor> JoinHashMapTest::create_row_desc(TDescriptorTableBuilder* table_desc_builder) {
     std::vector<TTupleId> row_tuples = std::vector<TTupleId>{0, 1};
-    DescriptorTbl* tbl = nullptr;
-    CHECK(DescriptorTbl::create(_runtime_state.get(), _object_pool.get(), table_desc_builder->desc_tbl(), &tbl,
-                                config::vector_chunk_size)
-                  .ok());
-
+    auto* tbl = create_descriptor_tbl(table_desc_builder);
     return std::make_shared<RowDescriptor>(*tbl, row_tuples);
 }
 
 std::shared_ptr<RowDescriptor> JoinHashMapTest::create_probe_desc(TDescriptorTableBuilder* probe_desc_builder) {
     std::vector<TTupleId> row_tuples = std::vector<TTupleId>{0};
-    DescriptorTbl* tbl = nullptr;
-    CHECK(DescriptorTbl::create(_runtime_state.get(), _object_pool.get(), probe_desc_builder->desc_tbl(), &tbl,
-                                config::vector_chunk_size)
-                  .ok());
-
+    auto* tbl = create_descriptor_tbl(probe_desc_builder);
     return std::make_shared<RowDescriptor>(*tbl, row_tuples);
 }
 
 std::shared_ptr<RowDescriptor> JoinHashMapTest::create_build_desc(TDescriptorTableBuilder* build_desc_builder) {
     std::vector<TTupleId> row_tuples = std::vector<TTupleId>{1};
-    DescriptorTbl* tbl = nullptr;
-    CHECK(DescriptorTbl::create(_runtime_state.get(), _object_pool.get(), build_desc_builder->desc_tbl(), &tbl,
-                                config::vector_chunk_size)
-                  .ok());
-
+    auto* tbl = create_descriptor_tbl(build_desc_builder);
     return std::make_shared<RowDescriptor>(*tbl, row_tuples);
 }
 
@@ -1093,7 +1102,7 @@ TEST_F(JoinHashMapTest, ProbeNullOutput) {
     ASSERT_EQ(chunk->num_columns(), 3);
 
     for (size_t i = 0; i < chunk->num_columns(); i++) {
-        auto null_column = ColumnHelper::as_raw_column<NullableColumn>(chunk->mutable_columns()[i])->null_column();
+        auto null_column = ColumnHelper::as_raw_column<NullableColumn>(chunk->columns()[i])->null_column();
         for (size_t j = 0; j < 2; j++) {
             ASSERT_EQ(null_column->immutable_data()[j], 1);
         }
@@ -1127,7 +1136,7 @@ TEST_F(JoinHashMapTest, BuildDefaultOutput) {
     ASSERT_EQ(chunk->num_columns(), 3);
 
     for (size_t i = 0; i < chunk->num_columns(); i++) {
-        auto null_column = ColumnHelper::as_raw_column<NullableColumn>(chunk->mutable_columns()[i])->null_column();
+        auto null_column = ColumnHelper::as_raw_column<NullableColumn>(chunk->columns()[i])->null_column();
         for (size_t j = 0; j < 2; j++) {
             ASSERT_EQ(null_column->immutable_data()[j], 1);
         }
@@ -2060,7 +2069,7 @@ TEST_F(JoinHashMapTest, OneKeyJoinHashTable) {
     Columns probe_key_columns;
     probe_key_columns.emplace_back(probe_chunk->columns()[0]);
 
-    Columns build_keys_column{build_chunk->mutable_columns()[0]};
+    Columns build_keys_column{build_chunk->columns()[0]};
     hash_table.append_chunk(build_chunk, build_keys_column);
     (void)hash_table.build(_runtime_state.get());
 
@@ -2112,7 +2121,7 @@ TEST_F(JoinHashMapTest, OneNullableKeyJoinHashTable) {
     probe_key_columns.emplace_back(probe_chunk->columns()[0]);
 
     Columns build_key_columns;
-    build_key_columns.emplace_back(build_chunk->mutable_columns()[0]);
+    build_key_columns.emplace_back(build_chunk->columns()[0]);
     hash_table.append_chunk(build_chunk, build_key_columns);
     (void)hash_table.build(_runtime_state.get());
 
@@ -2165,7 +2174,7 @@ TEST_F(JoinHashMapTest, FixedSizeJoinHashTable) {
     probe_key_columns.emplace_back(probe_chunk->columns()[0]);
     probe_key_columns.emplace_back(probe_chunk->columns()[1]);
 
-    Columns build_key_columns{build_chunk->mutable_columns()[0], build_chunk->mutable_columns()[1]};
+    Columns build_key_columns{build_chunk->columns()[0], build_chunk->columns()[1]};
     hash_table.append_chunk(build_chunk, build_key_columns);
     (void)hash_table.build(_runtime_state.get());
 
@@ -2216,7 +2225,7 @@ TEST_F(JoinHashMapTest, SerializeJoinHashTable) {
     probe_key_columns.emplace_back(probe_chunk->columns()[0]);
     probe_key_columns.emplace_back(probe_chunk->columns()[1]);
 
-    Columns build_key_columns{build_chunk->mutable_columns()[0], build_chunk->mutable_columns()[1]};
+    Columns build_key_columns{build_chunk->columns()[0], build_chunk->columns()[1]};
     hash_table.append_chunk(build_chunk, build_key_columns);
     (void)hash_table.build(_runtime_state.get());
 
@@ -2640,9 +2649,9 @@ TEST_F(JoinHashMapTest, NormalHashMapTestLazyOutputAll) {
 
     // prepare data
     auto build_chunk = create_int32_build_chunk(num_build_rows, 0, false);
-    Columns build_key_columns{build_chunk->mutable_columns()[0]};
+    Columns build_key_columns{build_chunk->columns()[0]};
     auto probe_chunk = create_int32_probe_chunk(num_probe_rows, 0, false);
-    Columns probe_key_columns = {probe_chunk->mutable_columns()[0]};
+    Columns probe_key_columns = {probe_chunk->columns()[0]};
     ChunkPtr result_chunk = std::make_shared<Chunk>();
 
     // create param
@@ -2712,9 +2721,9 @@ TEST_F(JoinHashMapTest, NormalHashMapTestLazyOutputPart) {
 
     // prepare data
     auto build_chunk = create_int32_build_chunk(num_build_rows, 0, false);
-    Columns key_columns{build_chunk->mutable_columns()[0]};
+    Columns key_columns{build_chunk->columns()[0]};
     auto probe_chunk = create_int32_probe_chunk(num_probe_rows, 0, false);
-    Columns probe_key_columns = {probe_chunk->mutable_columns()[0]};
+    Columns probe_key_columns = {probe_chunk->columns()[0]};
     ChunkPtr result_chunk = std::make_shared<Chunk>();
 
     // create param
@@ -2784,10 +2793,10 @@ TEST_F(JoinHashMapTest, NormalHashMapTestLazyOutputPartRemain) {
 
     // prepare data
     ChunkPtr build_chunk = create_int32_build_chunk(num_build_rows, 1, false);
-    Columns build_key_columns = {build_chunk->mutable_columns()[0]};
+    Columns build_key_columns = {build_chunk->columns()[0]};
     ChunkPtr probe_chunk = create_int32_probe_chunk(num_probe_rows, 0, false);
     ChunkPtr result_chunk = std::make_shared<Chunk>();
-    Columns probe_key_columns = {probe_chunk->mutable_columns()[0]};
+    Columns probe_key_columns = {probe_chunk->columns()[0]};
 
     // create param
     auto param = create_table_param_int(TJoinOp::RIGHT_OUTER_JOIN, 3);

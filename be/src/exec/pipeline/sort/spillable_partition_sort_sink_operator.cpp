@@ -17,6 +17,7 @@
 #include "base/utility/defer_op.h"
 #include "exec/chunks_sorter_heap_sort.h"
 #include "exec/chunks_sorter_topn.h"
+#include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/query_context.h"
 #include "exec/spill/common.h"
 #include "exec/spill/executor.h"
@@ -81,7 +82,7 @@ Status SpillablePartitionSortSinkOperator::set_finishing(RuntimeState* state) {
                     // the last call will drive LocalMergeSortSourceOperator to work.
                     TRACE_SPILL_LOG << "finish partition rows:" << chunk_sorter->get_output_rows();
                     _sort_context->finish_partition(chunk_sorter->get_output_rows());
-                    _sort_context->unref(runtime_state());
+                    _sort_context->unref(get_factory()->runtime_state());
                     _is_finished = true;
                     return Status::OK();
                 },

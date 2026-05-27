@@ -15,6 +15,7 @@
 package com.starrocks.sql.plan;
 
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.sql.optimizer.statistics.CachedStatisticStorage;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
@@ -42,6 +43,7 @@ class WindowSkewTest extends PlanTestBase {
     public static void beforeClass() throws Exception {
         PlanTestBase.beforeClass();
         FeConstants.runningUnitTest = true;
+        Config.enable_sync_statistics_load = true;
         connectContext.getGlobalStateMgr().setStatisticStorage(new CachedStatisticStorage());
         starRocksAssert.withTable(
                 """
@@ -51,6 +53,22 @@ class WindowSkewTest extends PlanTestBase {
                           `x` int NULL
                         ) ENGINE=OLAP
                         DUPLICATE KEY(`p`, `s`, `x`)
+                        DISTRIBUTED BY HASH(`p`) BUCKETS 3
+                        PROPERTIES (
+                          "replication_num" = "1",
+                          "in_memory" = "false"
+                        );
+                        """
+        );
+        starRocksAssert.withTable(
+                """
+                        CREATE TABLE `window_skew_table_multi_part` (
+                          `p` int NULL,
+                          `p1` int NULL,
+                          `s` int NULL,
+                          `x` int NULL
+                        ) ENGINE=OLAP
+                        DUPLICATE KEY(`p`, `p1`, `s`, `x`)
                         DISTRIBUTED BY HASH(`p`) BUCKETS 3
                         PROPERTIES (
                           "replication_num" = "1",
@@ -97,11 +115,13 @@ class WindowSkewTest extends PlanTestBase {
     private StatisticStorage storage() {
         return connectContext.getGlobalStateMgr().getStatisticStorage();
     }
-
-    private void setColumnStatForP(double nullsFraction) {
+    private void setColumnStatFor(double nullsFraction, String col) {
         final var stat = ColumnStatistic.builder().setNullsFraction(nullsFraction).build();
-        storage().addColumnStatistic(table(), "p", stat);
+        storage().addColumnStatistic(table(), col, stat);
         storage().getColumnStatistics(table(), ALL_COLUMNS);
+    }
+    private void setColumnStatForP(double nullsFraction) {
+        setColumnStatFor(nullsFraction, "p");
     }
 
     private void refreshAndSetColumnStatForP(ColumnStatistic stat) {
@@ -118,7 +138,8 @@ class WindowSkewTest extends PlanTestBase {
         assertContains(plan, "UNION");
         long analyticCount = plan.lines().filter(l -> l.contains("ANALYTIC")).count();
         assertEquals(expectedAnalyticCount, analyticCount,
-                "Expected exactly 2 ANALYTIC operators after UNION split, but found " + analyticCount);
+                "Expected exactly " + expectedAnalyticCount
+                        + " ANALYTIC operators after UNION split, but found " + analyticCount);
     }
 
     private void assertPlanHasUnionAndAnalytic(String plan) {
@@ -282,7 +303,9 @@ class WindowSkewTest extends PlanTestBase {
 
     @Test
     void testWindowWithComplexPartition() throws Exception {
-        setColumnStatForP(0.3);
+        // Test that the rewrite is not triggered if the complex expr stats return a lower
+        // null fraction. In our case null fractions from the CASE WHEN should be (1 - 0.2) * 0.2 = 0.16 --> below threshold
+        setColumnStatForP(0.2);
 
         // Partition by expression (case when) instead of direct column
         String sql = "select p, s, sum(x) " +
@@ -656,7 +679,36 @@ class WindowSkewTest extends PlanTestBase {
         String plan = getCostPlan(sql);
         assertPlanHasUnionAndAnalytic(plan, 4);
     }
+    @Test
+    void testTwoWindowsWithDifferentPartitionColumn() throws Exception {
+        final String multiPartTable = "window_skew_table_multi_part";
+        final var table = getOlapTable(multiPartTable);
+        final var statP = ColumnStatistic.builder().setNullsFraction(0.8).build();
+        final var statP1 = ColumnStatistic.builder().setNullsFraction(0.8).build();
+        storage().addColumnStatistic(table, "p", statP);
+        storage().addColumnStatistic(table, "p1", statP1);
+        setTableStatistics(table, 1000);
+        String sql = "select p, s, " +
+                "sum(x) over (partition by p order by s), " +
+                "avg(x) over (partition by p1 order by s) " +
+                "from " + multiPartTable;
 
+        String plan = getCostPlan(sql);
+        assertPlanHasUnionAndAnalytic(plan, 6);
+    }
+    @Test
+    void testTwoWindowsOneWithDifferentSortColumn() throws Exception {
+        setColumnStatFor(0.8, "p");
+        String sql = "select p, s, " +
+                "sum(x) over (partition by p order by s), " +
+                "avg(x) over (partition by p order by x) " +
+                "from " + TABLE_NAME;
+
+        String plan = getCostPlan(sql);
+        assertPlanHasUnionAndAnalytic(plan, 6);
+
+
+    }
     @Test
     void testWindowSkewDuplicatorRemapsSkewColumn() throws Exception {
 
@@ -669,8 +721,7 @@ class WindowSkewTest extends PlanTestBase {
 
         String plan = getCostPlan(sql);
 
-        assertContains(plan, "UNION");
-        assertContains(plan, "ANALYTIC");
+        assertPlanHasUnionAndAnalytic(plan, 6);
         assertNullSplit(plan);
     }
 }

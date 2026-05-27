@@ -44,6 +44,10 @@ message PublishVersionRequest {
     // 1. The split or merge tablet transaction, in which the txn type in txn_infos is TXN_TABLET_RESHARD.
     // 2. The nornal write transaction but need cross-publish during tablet splitting or merging.
     repeated ReshardingTabletInfoPB resharding_tablet_infos = 10;
+    // Async vector index build: tablet_id -> builtVersion from FE pending set.
+    // BE writes max(pre_metadata_bv, this_value) into new metadata to prevent stale FE values
+    // from overwriting the real watermark after FE leader change.
+    map<int64, int64> tablet_built_versions = 11;
 }
 
 message PublishVersionResponse {
@@ -56,6 +60,14 @@ message PublishVersionResponse {
     map<int64, TabletMetadataPB> tablet_metas = 5;
     // New tablet ranges for tablet splitting
     map<int64, TabletRangePB> tablet_ranges = 6;
+    // Tablets that have async vector indexes and were published in this batch.
+    // FE uses this to register new pending build tasks.
+    repeated VectorIndexBuildInfoPB vector_index_build_infos = 7;
+}
+
+message VectorIndexBuildInfoPB {
+    optional int64 tablet_id = 1;
+    optional int64 version = 2;
 }
 
 message ComputeNodePB {
@@ -301,6 +313,31 @@ message RestoreSnapshotsResponse {
     optional int32 pad = 1;
 }
 
+// Placeholder for external cluster snapshot feature.
+message TabletDataSnapshotPB {
+    optional int64 tablet_id = 1;
+    repeated string new_data_files = 2;
+    repeated string new_metadata_files = 3;
+    repeated string new_schema_files = 4;
+}
+
+// Placeholder for external cluster snapshot feature.
+message UploadSnapshotFilesRequestPB {
+    optional int64 job_id = 1;
+    optional int64 db_id = 2;
+    optional int64 table_id = 3;
+    optional int64 partition_id = 4;
+    optional int64 physical_partition_id = 5;
+    optional int64 dest_tablet_id = 6;
+    repeated TabletDataSnapshotPB tablet_snapshots = 7;
+}
+
+// Placeholder for external cluster snapshot feature.
+message UploadSnapshotFilesResponsePB {
+    optional StatusPB status = 1;
+    repeated int64 failed_tablets = 2;
+}
+
 message AbortCompactionRequest {
     optional int64 txn_id = 1;
 }
@@ -386,6 +423,9 @@ message VacuumFullRequest {
     // All tablet metadata and their data files of these verisons should be retained and can not be
     // vaccummed.
     repeated int64 retain_versions = 7;
+    // Opt-in switch for vacuum_full to reclaim the legacy load_spill layout
+    // `<root>/load_spill/<load_id_uuid>/`
+    optional bool cleanup_legacy_load_spill = 8;
 }
 
 message VacuumFullResponse {
@@ -460,6 +500,25 @@ message RepairTabletMetadataResponse {
     repeated TabletMetadataRepairStatus tablet_repair_statuses = 2;
 }
 
+message BuildVectorIndexRequest {
+    optional int64 tablet_id = 1;
+    // The visible version to load tablet metadata from.
+    optional int64 version = 2;
+    // Max number of rowsets to process per batch. CN returns after processing this many
+    // unbuilt rowsets so FE can do multi-round scheduling. Default: 5.
+    optional int32 max_rowsets_per_batch = 3;
+    // FE-side built version watermark. CN uses max(metadata_bv, this) to skip
+    // already-built rowsets, avoiding redundant S3 existence checks.
+    optional int64 built_version = 4;
+}
+
+message BuildVectorIndexResponse {
+    optional StatusPB status = 1;
+    // The max end_version among all rowsets whose .vi files were built in this batch.
+    // FE uses this to advance the builtVersion watermark.
+    optional int64 new_built_version = 2;
+}
+
 service LakeService {
     rpc publish_version(PublishVersionRequest) returns (PublishVersionResponse);
     rpc aggregate_publish_version(AggregatePublishVersionRequest) returns (PublishVersionResponse);
@@ -483,4 +542,7 @@ service LakeService {
     rpc drop_tablet_cache(DropTabletCacheRequest) returns (DropTabletCacheResponse);
     rpc get_tablet_metadatas(GetTabletMetadatasRequest) returns (GetTabletMetadatasResponse);
     rpc repair_tablet_metadata(RepairTabletMetadataRequest) returns (RepairTabletMetadataResponse);
+    // Placeholder for external cluster snapshot feature.
+    rpc upload_snapshot_files(UploadSnapshotFilesRequestPB) returns (UploadSnapshotFilesResponsePB);
+    rpc build_vector_index(BuildVectorIndexRequest) returns (BuildVectorIndexResponse);
 }

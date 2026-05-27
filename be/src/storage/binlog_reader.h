@@ -20,7 +20,7 @@
 #include "gen_cpp/PlanNodes_constants.h"
 #include "gen_cpp/binlog.pb.h"
 #include "storage/binlog_file_reader.h"
-#include "storage/chunk_iterator.h"
+#include "storage/primitive/chunk_iterator.h"
 #include "storage/rowset/rowset.h"
 
 namespace starrocks {

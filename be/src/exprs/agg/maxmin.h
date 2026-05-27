@@ -209,7 +209,7 @@ public:
                 int64_t frame_end = current_frame_last_position + 1;
                 if (has_null) {
                     const auto null_column = down_cast<const NullColumn*>(columns[1]);
-                    const uint8_t* f_data = null_column->raw_data();
+                    const auto& f_data = null_column->immutable_data();
                     for (size_t i = frame_start; i < frame_end; ++i) {
                         if (f_data[i] == 0) {
                             update(ctx, columns, state, i);
@@ -303,7 +303,7 @@ public:
                 int64_t frame_end = current_frame_last_position + 1;
                 if (has_null) {
                     const auto null_column = down_cast<const NullColumn*>(columns[1]);
-                    const uint8_t* f_data = null_column->raw_data();
+                    const auto& f_data = null_column->immutable_data();
                     for (size_t i = frame_start; i < frame_end; ++i) {
                         if (f_data[i] == 0) {
                             update(ctx, columns, state, i);

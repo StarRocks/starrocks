@@ -22,28 +22,28 @@
 #include <chrono>
 #include <thread>
 
-#include "agent/master_info.h"
 #include "base/testutil/sync_point.h"
 #include "base/utility/defer_op.h"
 #include "common/config_compaction_fwd.h"
 #include "common/config_storage_fwd.h"
 #include "common/status.h"
+#include "common/system/master_info.h"
 #include "common/thread/threadpool.h"
 #include "common/util/misc.h"
+#include "common/util/thrift_client_cache.h"
 #include "fs/fs.h"
 #include "fs/key_cache.h"
 #include "gen_cpp/FrontendService.h"
 #include "gen_cpp/FrontendService_types.h"
+#include "gen_cpp/lake_service.pb.h"
 #include "gutil/stl_util.h"
-#include "runtime/client_cache.h"
+#include "platform/thrift_rpc_helper.h"
 #include "runtime/exec_env.h"
-#include "service/service_be/lake_service.h"
 #include "storage/lake/compaction_task.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_parallel_compaction_manager.h"
 #include "storage/memtable_flush_executor.h"
 #include "storage/storage_engine.h"
-#include "util/thrift_rpc_helper.h"
 
 namespace starrocks::lake {
 

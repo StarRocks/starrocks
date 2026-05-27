@@ -40,8 +40,11 @@
 #include <memory>
 
 #include "base/bit/rle_encoding.h"
+#include "base/compression/block_compression.h"
+#include "base/format.h"
 #include "base/simd/simd.h"
 #include "base/string/faststring.h"
+#include "base/utility/alignment.h"
 #include "column/append_with_mask.h"
 #include "column/nullable_column.h"
 #include "common/config_rowset_fwd.h"
@@ -54,7 +57,6 @@
 #include "storage/rowset/options.h"
 #include "storage/rowset/page_handle.h"
 #include "storage/rowset/page_handle_fwd.h"
-#include "util/compression/block_compression.h"
 
 namespace starrocks {
 

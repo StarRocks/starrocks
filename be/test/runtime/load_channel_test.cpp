@@ -20,6 +20,7 @@
 #include "base/testutil/id_generator.h"
 #include "base/uid_util.h"
 #include "column/chunk.h"
+#include "column/chunk_factory.h"
 #include "column/fixed_length_column.h"
 #include "column/schema.h"
 #include "column/vectorized_fwd.h"
@@ -27,6 +28,8 @@
 #include "common/util/thrift_util.h"
 #include "fs/fs_factory.h"
 #include "fs/fs_util.h"
+#include "platform/platform_env.h"
+#include "runtime/exec_env.h"
 #include "runtime/lake_tablets_channel.h"
 #include "runtime/load_channel_mgr.h"
 #include "runtime/local_tablets_channel.h"
@@ -58,7 +61,7 @@ public:
         _update_manager = std::make_unique<lake::UpdateManager>(_location_provider, _mem_tracker.get());
         _tablet_manager = std::make_unique<lake::TabletManager>(_location_provider, _update_manager.get(), 1024 * 1024);
 
-        _load_channel_mgr = std::make_unique<LoadChannelMgr>();
+        _load_channel_mgr = std::make_unique<LoadChannelMgr>(_tablet_manager.get());
 
         auto metadata = new_tablet_metadata(10086);
         _tablet_schema = TabletSchema::create(metadata->schema());
@@ -193,9 +196,10 @@ protected:
         CHECK_OK(_tablet_manager->put_tablet_metadata(*new_tablet_metadata(10089)));
 
         auto load_mem_tracker = std::make_unique<MemTracker>(-1, "", _mem_tracker.get());
-        _load_channel =
-                std::make_shared<LoadChannel>(_load_channel_mgr.get(), _tablet_manager.get(), UniqueId::gen_uid(),
-                                              next_id(), string(), 1000, std::move(load_mem_tracker));
+        _load_channel = std::make_shared<LoadChannel>(
+                _load_channel_mgr.get(), _tablet_manager.get(), ExecEnv::GetInstance()->diagnose_daemon(),
+                PlatformEnv::GetInstance()->brpc_stub_cache(), UniqueId::gen_uid(), next_id(), string(), 1000,
+                std::move(load_mem_tracker));
     }
 
     void TearDown() override {
@@ -219,9 +223,9 @@ protected:
         opts.chunk_size = 1024;
 
         ASSIGN_OR_ABORT(auto seg_iter, seg->new_iterator(*_schema, opts));
-        auto read_chunk_ptr = ChunkHelper::new_chunk(*_schema, 1024);
+        auto read_chunk_ptr = ChunkFactory::new_chunk(*_schema, 1024);
         while (true) {
-            auto tmp_chunk = ChunkHelper::new_chunk(*_schema, 1024);
+            auto tmp_chunk = ChunkFactory::new_chunk(*_schema, 1024);
             auto st = seg_iter->get_next(tmp_chunk.get());
             if (st.is_end_of_file()) {
                 break;

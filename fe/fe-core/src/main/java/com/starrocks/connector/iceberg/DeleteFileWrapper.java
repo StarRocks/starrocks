@@ -147,6 +147,21 @@ public class DeleteFileWrapper implements DeleteFile {
     }
 
     @Override
+    public String referencedDataFile() {
+        return deleteFile.referencedDataFile();
+    }
+
+    @Override
+    public Long contentOffset() {
+        return deleteFile.contentOffset();
+    }
+
+    @Override
+    public Long contentSizeInBytes() {
+        return deleteFile.contentSizeInBytes();
+    }
+
+    @Override
     public DeleteFile copy() {
         return deleteFile.copy();
     }

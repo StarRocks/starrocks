@@ -49,8 +49,8 @@
 #endif
 #include "base/bit/bitmap.h"   // for BitmapChange
 #include "base/string/slice.h" // for OwnedSlice
+#include "storage/primitive/rowid_types.h"
 #include "storage/rowset/binary_dict_page.h"
-#include "storage/rowset/common.h"
 #include "storage/rowset/page_pointer.h" // for PagePointer
 #include "storage/tablet_schema.h"       // for TabletColumn
 
@@ -318,6 +318,8 @@ private:
     bool _is_global_dict_valid = true;
 
     uint64_t _total_mem_footprint = 0;
+
+    Buffer<Slice> _slice_buf;
 };
 
 } // namespace starrocks

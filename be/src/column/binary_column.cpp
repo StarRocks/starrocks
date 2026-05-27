@@ -48,12 +48,6 @@ void BinaryColumnBase<T>::check_or_die() const {
     for (size_t i = 0; i < size; i++) {
         DCHECK_GE(_offsets[i + 1], _offsets[i]);
     }
-    if (_slices_cache) {
-        for (size_t i = 0; i < size; i++) {
-            DCHECK_EQ(_slices[i].data, get_slice(i).data);
-            DCHECK_EQ(_slices[i].size, get_slice(i).size);
-        }
-    }
 }
 
 template <typename T>
@@ -69,7 +63,7 @@ template <typename SrcOffset>
 void BinaryColumnBase<T>::_append_binary_impl(const BinaryColumnBase<SrcOffset>& src, size_t offset, size_t count) {
     static_assert(sizeof(SrcOffset) <= sizeof(Offset));
     const auto& src_offsets = src.get_offset();
-    const uint8_t* src_base = src.continuous_data();
+    const uint8_t* src_base = src.raw_bytes();
     auto& dst_bytes = get_bytes();
     dst_bytes.insert(dst_bytes.end(), src_base + src_offsets[offset], src_base + src_offsets[offset + count]);
 
@@ -481,25 +475,6 @@ void BinaryColumnBase<T>::build_slices(Container& slices) const {
     for (size_t i = 0; i < _offsets.size() - 1; ++i) {
         slices[i] = {data_ptr + _offsets[i], _offsets[i + 1] - _offsets[i]};
     }
-}
-
-template <typename T>
-void BinaryColumnBase<T>::_build_slices() const {
-    if constexpr (std::is_same_v<T, uint32_t>) {
-        DCHECK_LT(_total_bytes(), (size_t)UINT32_MAX) << "BinaryColumn size overflow";
-    }
-
-    DCHECK(_offsets.size() > 0);
-    _slices_cache = false;
-    _slices.clear();
-
-    _slices.resize(_offsets.size() - 1);
-    const uint8_t* data_ptr = _data_base();
-    for (size_t i = 0; i < _offsets.size() - 1; ++i) {
-        _slices[i] = {data_ptr + _offsets[i], _offsets[i + 1] - _offsets[i]};
-    }
-
-    _slices_cache = true;
 }
 
 template <typename T>
@@ -918,8 +893,12 @@ template <typename T>
 void BinaryColumnBase<T>::put_mysql_row_buffer(MysqlRowBuffer* buf, size_t idx, bool is_binary_protocol) const {
     T start = _offsets[idx];
     T len = _offsets[idx + 1] - start;
-    const uint8_t* base = _data_base();
-    buf->push_string(reinterpret_cast<const char*>(base + start), len);
+    const char* base = reinterpret_cast<const char*>(_data_base());
+    if (_is_binary_type) {
+        buf->push_binary(base + start, len);
+    } else {
+        buf->push_string(base + start, len);
+    }
 }
 
 template <typename T>

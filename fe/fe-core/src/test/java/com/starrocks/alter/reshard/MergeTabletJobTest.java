@@ -15,6 +15,8 @@
 package com.starrocks.alter.reshard;
 
 import com.google.common.base.Preconditions;
+import com.staros.proto.FileCacheInfo;
+import com.staros.proto.FilePathInfo;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndex.IndexState;
@@ -27,11 +29,13 @@ import com.starrocks.catalog.Tuple;
 import com.starrocks.catalog.Variant;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
+import com.starrocks.common.DdlException;
 import com.starrocks.common.Range;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.lake.LakeTablet;
+import com.starrocks.lake.StarOSAgent;
 import com.starrocks.lake.Utils;
 import com.starrocks.proto.AggregatePublishVersionRequest;
 import com.starrocks.proto.PublishVersionRequest;
@@ -39,6 +43,7 @@ import com.starrocks.proto.PublishVersionResponse;
 import com.starrocks.proto.ReshardingTabletInfoPB;
 import com.starrocks.proto.StatusPB;
 import com.starrocks.proto.TxnInfoPB;
+import com.starrocks.proto.VectorIndexBuildInfoPB;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
@@ -433,7 +438,8 @@ public class MergeTabletJobTest {
                                        Map<Long, TabletRange> tabletRanges,
                                        ComputeResource computeResource,
                                        Map<Long, Long> tabletRowNums,
-                                       boolean useAggregatePublish) throws Exception {
+                                       boolean useAggregatePublish,
+                                       List<VectorIndexBuildInfoPB> vectorIndexBuildInfos) throws Exception {
                 throw new RuntimeException("mock");
             }
         };
@@ -465,7 +471,8 @@ public class MergeTabletJobTest {
                                        Map<Long, TabletRange> tabletRanges,
                                        ComputeResource computeResource,
                                        Map<Long, Long> tabletRowNums,
-                                       boolean useAggregatePublish) {
+                                       boolean useAggregatePublish,
+                                       List<VectorIndexBuildInfoPB> vectorIndexBuildInfos) {
                 actualResource.set(computeResource);
             }
         };
@@ -522,6 +529,12 @@ public class MergeTabletJobTest {
         PhysicalPartition physicalPartition = table.getAllPhysicalPartitions().iterator().next();
         MaterializedIndex materializedIndex = physicalPartition.getLatestBaseIndex();
         long oldVersion = physicalPartition.getVisibleVersion();
+
+        // Replay paths do not call createShardsOnStarOS, but in production the original
+        // leader's runPendingJob did. Mirror that here so every tablet inserted into the
+        // FE catalog by replay has a backing staros shard for the subsequent tests
+        // sharing the static table fixture.
+        mergeJob.createShardsOnStarOS();
 
         Assertions.assertEquals(TabletReshardJob.JobState.PENDING, mergeJob.getJobState());
         mergeJob.replay();
@@ -708,6 +721,59 @@ public class MergeTabletJobTest {
         Assertions.assertThrows(StarRocksException.class, factory::createTabletReshardJob);
     }
 
+    /**
+     * pairThresh = ceil(0.8 * targetSize) is now distinct from mergeGroupCap = targetSize.
+     * A tablet whose size is in [pairThresh, targetSize) must be excluded from merging
+     * (it's already close enough to the target band that merging it produces an output that
+     * would land near or above splitThreshold = ceil(1.5 * targetSize)).
+     */
+    @Test
+    public void testMergeTabletJobFactoryExcludesTabletAtPairThreshold() throws Exception {
+        ensureTabletCount(4);
+        PhysicalPartition physicalPartition = table.getAllPhysicalPartitions().iterator().next();
+        MaterializedIndex oldIndex = physicalPartition.getLatestBaseIndex();
+
+        List<Tablet> orderedTablets = new ArrayList<>(oldIndex.getTablets());
+        long visibleVersionTime = physicalPartition.getVisibleVersionTime();
+        // targetSize = 100, pairThresh = 80, mergeCap = 100
+        // sizes: [40, 90, 30, 30]
+        // - 40 < 80, group=[40] size=40
+        // - 90 >= 80 (pairThresh), flush group of size 1 (dropped), reset
+        // - 30 < 80, group=[30] size=30
+        // - 30 < 80, group=[30,30] size=60
+        // - end: flush [30,30]
+        // Expected merge groups: [[30, 30]]; the 90-byte tablet is the exclusion under test.
+        long[] sizes = {40L, 90L, 30L, 30L};
+        for (int i = 0; i < orderedTablets.size(); i++) {
+            LakeTablet tablet = (LakeTablet) orderedTablets.get(i);
+            tablet.setDataSize(sizes[i]);
+            tablet.setDataSizeUpdateTime(visibleVersionTime);
+        }
+
+        MergeTabletClause clause = new MergeTabletClause();
+        clause.setTabletReshardTargetSize(100L);
+        MergeTabletJobFactory factory = new MergeTabletJobFactory(db, table, clause);
+        MergeTabletJob mergeJob = (MergeTabletJob) factory.createTabletReshardJob();
+
+        ReshardingPhysicalPartition reshardingPartition =
+                mergeJob.getReshardingPhysicalPartitions().get(physicalPartition.getId());
+        Assertions.assertNotNull(reshardingPartition);
+        ReshardingMaterializedIndex reshardingIndex =
+                reshardingPartition.getReshardingIndexes().get(oldIndex.getId());
+        Assertions.assertNotNull(reshardingIndex);
+
+        List<List<Long>> mergedTabletGroups = new ArrayList<>();
+        for (ReshardingTablet reshardingTablet : reshardingIndex.getReshardingTablets()) {
+            if (reshardingTablet.getMergingTablet() != null) {
+                mergedTabletGroups.add(reshardingTablet.getMergingTablet().getOldTabletIds());
+            }
+        }
+
+        Assertions.assertEquals(List.of(
+                        List.of(orderedTablets.get(2).getId(), orderedTablets.get(3).getId())),
+                mergedTabletGroups);
+    }
+
     @Test
     public void testMergeTabletJobFactoryRejectNegativeTargetSize() throws Exception {
         MergeTabletClause clause = new MergeTabletClause();
@@ -874,8 +940,10 @@ public class MergeTabletJobTest {
         reshardingPartitions.put(physicalPartition.getId(),
                 new ReshardingPhysicalPartition(physicalPartition.getId(), reshardingIndexes));
 
-        createNewShards(physicalPartition, newIndex, reshardingTablets);
-
+        // Do not pre-create new shards on StarOS here; MergeTabletJob.runPendingJob calls
+        // createShardsOnStarOS as part of the run-state machine. Tests that bypass run()
+        // (replay-only) must call mergeJob.createShardsOnStarOS() explicitly to simulate
+        // the original leader's PENDING step.
         return new MergeTabletJob(GlobalStateMgr.getCurrentState().getNextId(),
                 db.getId(), table.getId(), reshardingPartitions);
     }
@@ -902,6 +970,34 @@ public class MergeTabletJobTest {
                 table.getPartitionFileCacheInfo(physicalPartition.getId()),
                 newIndex.getShardGroupId(),
                 properties, WarehouseManager.DEFAULT_RESOURCE);
+    }
+
+    /**
+     * createShardsOnStarOS wraps any StarRocksException from the StarOS RPC as a
+     * TabletReshardException so the run() catch-and-abort wrapper can fire cleanly.
+     */
+    @Test
+    public void testCreateShardsOnStarOSWrapsStarRocksException() throws Exception {
+        MergeTabletJob mergeJob = createMergeTabletReshardJob();
+
+        new MockUp<StarOSAgent>() {
+            @Mock
+            public void createShardsForMerge(Map<Long, List<Long>> newToOldTabletIds,
+                                             FilePathInfo pathInfo,
+                                             FileCacheInfo cacheInfo,
+                                             long groupId,
+                                             Map<String, String> properties,
+                                             ComputeResource computeResource) throws DdlException {
+                throw new DdlException("simulated StarOS failure");
+            }
+        };
+
+        TabletReshardException thrown = Assertions.assertThrows(TabletReshardException.class,
+                mergeJob::createShardsOnStarOS);
+        Assertions.assertTrue(thrown.getMessage().contains("Failed to create new shards on StarOS"),
+                "expected wrap message, got: " + thrown.getMessage());
+        Assertions.assertTrue(thrown.getMessage().contains("simulated StarOS failure"),
+                "expected original cause message, got: " + thrown.getMessage());
     }
 
 }

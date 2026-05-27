@@ -72,6 +72,24 @@ public class ColocatePropertyInfo {
     }
 
     /**
+     * Extracts the colocate group name from a colocate property value,
+     * stripping the optional column specification suffix.
+     *
+     * @param colocateGroup the property value, e.g. "group1" or "group1:col1,col2"
+     * @return the group name part, e.g. "group1"
+     */
+    public static String getColocateGroupName(String colocateGroup) {
+        if (colocateGroup == null || colocateGroup.isEmpty()) {
+            return colocateGroup;
+        }
+        int colonIndex = colocateGroup.indexOf(':');
+        if (colonIndex < 0) {
+            return colocateGroup;
+        }
+        return colocateGroup.substring(0, colonIndex).trim();
+    }
+
+    /**
      * Returns the original property string format.
      * Inverse of {@link #of(String)}.
      */

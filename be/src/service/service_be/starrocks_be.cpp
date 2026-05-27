@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include <gperftools/malloc_extension.h>
 #include <unistd.h>
 
 #if defined(LEAK_SANITIZER)
@@ -29,9 +28,11 @@
 #include "common/config_lake_fwd.h"
 #include "common/config_network_fwd.h"
 #include "common/config_object_storage_fwd.h"
+#include "common/metrics/process_metrics_registry.h"
 #include "common/process_exit.h"
 #include "common/status.h"
 #include "common/system/backend_options.h"
+#include "connector/connector_bootstrap.h"
 #include "fs/s3/poco_common.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
@@ -49,10 +50,10 @@
 #include "cache/datacache_metrics.h"
 #include "common/system/mem_info.h"
 #include "common/util/thrift_server.h"
-#include "service/staros_worker.h"
+#include "platform/platform_env.h"
+#include "staros_integration/staros_worker_runtime.h"
 #include "storage/storage_engine.h"
 #include "util/logging.h"
-#include "util/thrift_rpc_helper.h"
 
 #ifdef WITH_STARCACHE
 #include "cache/disk_cache/starcache_engine.h"
@@ -68,13 +69,16 @@ DECLARE_bool(socket_keepalive);
 
 namespace starrocks {
 
-StorageEngine* init_storage_engine(GlobalEnv* global_env, std::vector<StorePath> paths, bool as_cn) {
+StorageEngine* init_storage_engine(GlobalEnv* global_env, std::vector<StorePath> paths, bool as_cn,
+                                   TableMetricsManager* table_metrics_mgr) {
+    DCHECK(global_env != nullptr);
     // Init and open storage engine.
     EngineOptions options;
     options.store_paths = std::move(paths);
     options.backend_uid = UniqueId::gen_uid();
     options.compaction_mem_tracker = global_env->compaction_mem_tracker();
     options.update_mem_tracker = global_env->update_mem_tracker();
+    options.table_metrics_mgr = table_metrics_mgr;
     options.need_write_cluster_id = !as_cn;
     StorageEngine* engine = nullptr;
 
@@ -89,9 +93,11 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
     std::string process_name = as_cn ? "CN" : "BE";
 
     int start_step = 1;
+    // Metric singletons keep registry back-pointers, so the process registry must outlive shutdown.
+    static auto* process_metrics_registry = new ProcessMetricsRegistry("starrocks_be");
 
     auto daemon = std::make_unique<Daemon>();
-    daemon->init(as_cn, paths);
+    daemon->init(as_cn, paths, process_metrics_registry);
     LOG(INFO) << process_name << " start step " << start_step++ << ": daemon threads start successfully";
 
 #ifndef __APPLE__
@@ -108,26 +114,46 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
 
     // init global env
     auto* global_env = GlobalEnv::GetInstance();
-    EXIT_IF_ERROR(global_env->init());
+    EXIT_IF_ERROR(global_env->init(process_metrics_registry->root_registry()));
     LOG(INFO) << process_name << " start step " << start_step++ << ": global env init successfully";
+
+    auto* platform_env = PlatformEnv::GetInstance();
+    EXIT_IF_ERROR(platform_env->init(process_metrics_registry->root_registry()));
+    LOG(INFO) << process_name << " start step " << start_step++ << ": platform env init successfully";
 
     // cache env should be initialized before init_storage_engine,
     // because apply task is triggered in init_storage_engine and needs cache env.
 #ifndef __APPLE__
     auto* cache_env = DataCache::GetInstance();
-    EXIT_IF_ERROR(cache_env->init(paths));
+    std::vector<std::string> cache_storage_root_paths;
+    cache_storage_root_paths.reserve(paths.size());
+    for (const auto& path : paths) {
+        cache_storage_root_paths.emplace_back(path.path);
+    }
+    DataCacheInitOptions cache_init_options;
+    cache_init_options.storage_root_paths = std::move(cache_storage_root_paths);
+    cache_init_options.metrics = process_metrics_registry->root_registry();
+    cache_init_options.process_mem_limit = global_env->process_mem_limit();
+    cache_init_options.process_mem_tracker = global_env->process_mem_tracker();
+    EXIT_IF_ERROR(cache_env->init(cache_init_options));
     LOG(INFO) << process_name << " start step " << start_step++ << ": cache env init successfully";
 #else
     // On macOS, skip DataCache initialization
     LOG(INFO) << process_name << " start step " << start_step++ << ": cache env disabled on macOS";
 #endif
 
-    auto* storage_engine = init_storage_engine(global_env, paths, as_cn);
+    auto* storage_engine = init_storage_engine(global_env, paths, as_cn, process_metrics_registry->table_metrics_mgr());
     LOG(INFO) << process_name << " start step " << start_step++ << ": storage engine init successfully";
 
     auto* exec_env = ExecEnv::GetInstance();
-    EXIT_IF_ERROR(exec_env->init(paths, as_cn));
+    EXIT_IF_ERROR(connector::bootstrap_builtin_connectors());
+    EXIT_IF_ERROR(exec_env->init(paths, process_metrics_registry, global_env, as_cn));
     LOG(INFO) << process_name << " start step " << start_step++ << ": exec env init successfully";
+
+#if !defined(__APPLE__) && defined(WITH_STARCACHE)
+    cache_env->attach_peer_cache_stub_cache(platform_env->brpc_stub_cache());
+    LOG(INFO) << process_name << " start step " << start_step++ << ": peer cache BRPC stub cache attached successfully";
+#endif
 
     // Start all background threads of storage engine.
     // SHOULD be called after exec env is initialized.
@@ -140,26 +166,21 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
     auto* local_cache = cache_env->local_disk_cache();
     if (config::datacache_unified_instance_enable && local_cache && local_cache->is_initialized()) {
         auto* starcache = reinterpret_cast<StarCacheEngine*>(local_cache);
-        init_staros_worker(starcache->starcache_instance());
+        init_staros_worker(starcache->starcache_instance(), process_metrics_registry->table_metrics_mgr());
         use_same_datacache_instance = true;
     } else {
-        init_staros_worker(nullptr);
+        init_staros_worker(nullptr, process_metrics_registry->table_metrics_mgr());
     }
 #else
     // On macOS, disable staros worker with starcache
-    init_staros_worker(nullptr);
+    init_staros_worker(nullptr, process_metrics_registry->table_metrics_mgr());
 #endif
     LOG(INFO) << process_name << " start step " << start_step++ << ": staros worker init successfully";
 #endif
 #ifndef __APPLE__
     // Register datacache metrics
-    register_datacache_metrics(use_same_datacache_instance);
+    DataCacheMetrics::instance()->enable_update_hook(use_same_datacache_instance);
 #endif
-
-    // set up thrift client before providing any service to the external
-    // because these services may use thrift client, for example, stream
-    // load will send thrift rpc to FE after http server is started
-    ThriftRpcHelper::setup(exec_env);
 
     // Start thrift server
     int thrift_port = config::be_port;
@@ -167,7 +188,7 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
         thrift_port = config::thrift_port;
         LOG(WARNING) << "'thrift_port' is deprecated, please update be.conf to use 'be_port' instead!";
     }
-    auto thrift_server = BackendService::create<BackendService>(exec_env, thrift_port);
+    auto thrift_server = BackendService::create(exec_env, process_metrics_registry->root_registry(), thrift_port);
 
     if (auto status = thrift_server->start(); !status.ok()) {
         LOG(ERROR) << "Fail to start BackendService thrift server on port " << thrift_port << ": " << status;
@@ -243,12 +264,12 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
 
     // Start HTTP server
 #ifndef __APPLE__
-    auto http_server =
-            std::make_unique<HttpServiceBE>(cache_env, exec_env, config::be_http_port, config::be_http_num_workers);
+    auto http_server = std::make_unique<HttpServiceBE>(cache_env, exec_env, *global_env, process_metrics_registry,
+                                                       config::be_http_port, config::be_http_num_workers);
 #else
     // On macOS, pass nullptr for cache_env
-    auto http_server =
-            std::make_unique<HttpServiceBE>(nullptr, exec_env, config::be_http_port, config::be_http_num_workers);
+    auto http_server = std::make_unique<HttpServiceBE>(nullptr, exec_env, *global_env, process_metrics_registry,
+                                                       config::be_http_port, config::be_http_num_workers);
 #endif
     if (auto status = http_server->start(); !status.ok()) {
         LOG(ERROR) << process_name << " http server did not start correctly, exiting: " << status.message();
@@ -272,7 +293,7 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
 
     // Start heartbeat server
     std::unique_ptr<ThriftServer> heartbeat_server;
-    if (auto ret = create_heartbeat_server(exec_env, config::heartbeat_service_port,
+    if (auto ret = create_heartbeat_server(process_metrics_registry->root_registry(), config::heartbeat_service_port,
                                            config::heartbeat_service_thread_count);
         !ret.ok()) {
         LOG(ERROR) << process_name << " heartbeat server did not start correctly, exiting: " << ret.status().message();
@@ -353,6 +374,9 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
 
     exec_env->destroy();
     LOG(INFO) << process_name << " exit step " << exit_step++ << ": exec env destroy successfully";
+
+    platform_env->destroy();
+    LOG(INFO) << process_name << " exit step " << exit_step++ << ": platform env destroy successfully";
 
     delete storage_engine;
 

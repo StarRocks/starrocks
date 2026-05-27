@@ -57,7 +57,8 @@
 namespace starrocks {
 Status window_init_jvm_context(int64_t fid, const std::string& url, const std::string& checksum,
                                const std::string& symbol, FunctionContext* context,
-                               const TCloudConfiguration& cloud_configuration);
+                               const TCloudConfiguration& cloud_configuration, bool use_cache,
+                               bool* cache_hit_out = nullptr);
 
 Analytor::~Analytor() {
     if (_state != nullptr) {
@@ -79,16 +80,52 @@ Analytor::Analytor(const TPlanNode& tnode, const RowDescriptor& child_row_desc,
         _need_partition_materializing = true;
     }
 
-    TAnalyticWindow window = tnode.analytic_node.window;
-    if (!tnode.analytic_node.__isset.window) {
+    const TAnalyticNode& analytic_node = tnode.analytic_node;
+    if (analytic_node.__isset.order_by_is_asc && !analytic_node.order_by_is_asc.empty()) {
+        _range_order_is_asc = analytic_node.order_by_is_asc[0];
+    }
+
+    TAnalyticWindow window = analytic_node.window;
+    if (!analytic_node.__isset.window) {
         _need_partition_materializing = true;
-    } else if (tnode.analytic_node.window.type == TAnalyticWindowType::RANGE) {
-        // RANGE windows must have UNBOUNDED PRECEDING
-        // RANGE window end bound must be CURRENT ROW or UNBOUNDED FOLLOWING
-        if (!window.__isset.window_start && !window.__isset.window_end) {
+    } else if (analytic_node.window.type == TAnalyticWindowType::RANGE) {
+        _is_range_window = true;
+
+        auto init_range_boundary = [&](bool is_start, const TAnalyticWindowBoundary* boundary) {
+            RangeBoundarySpec spec;
+            if (boundary == nullptr) {
+                spec.type = is_start ? RangeBoundaryType::UNBOUNDED_PRECEDING : RangeBoundaryType::UNBOUNDED_FOLLOWING;
+                return spec;
+            }
+            if (boundary->type == TAnalyticWindowBoundaryType::CURRENT_ROW) {
+                spec.type = RangeBoundaryType::CURRENT_ROW;
+                return spec;
+            }
+            if (boundary->type == TAnalyticWindowBoundaryType::PRECEDING) {
+                spec.type = RangeBoundaryType::PRECEDING;
+            } else {
+                spec.type = RangeBoundaryType::FOLLOWING;
+            }
+            spec.has_offset = true;
+            return spec;
+        };
+
+        _range_start_boundary = init_range_boundary(true, window.__isset.window_start ? &window.window_start : nullptr);
+        _range_end_boundary = init_range_boundary(false, window.__isset.window_end ? &window.window_end : nullptr);
+        _is_range_offset_window = _range_start_boundary.has_offset || _range_end_boundary.has_offset;
+        _is_unbounded_preceding = (_range_start_boundary.type == RangeBoundaryType::UNBOUNDED_PRECEDING);
+
+        if (_range_start_boundary.type == RangeBoundaryType::UNBOUNDED_PRECEDING &&
+            _range_end_boundary.type == RangeBoundaryType::UNBOUNDED_FOLLOWING) {
+            _need_partition_materializing = true;
+        } else if (!(_range_start_boundary.type == RangeBoundaryType::UNBOUNDED_PRECEDING &&
+                     _range_end_boundary.type == RangeBoundaryType::CURRENT_ROW)) {
+            // Non-cumulative RANGE windows are handled by definition in materializing mode.
             _need_partition_materializing = true;
         }
-        _is_unbounded_preceding = !window.__isset.window_start;
+        if (_is_range_offset_window) {
+            _need_partition_materializing = true;
+        }
     } else {
         if (!window.__isset.window_start && !window.__isset.window_end) {
             _need_partition_materializing = true;
@@ -328,6 +365,37 @@ Status Analytor::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* 
                                                         _order_ctxs[i]->root()->is_nullable() | has_outer_join_child,
                                                         _order_ctxs[i]->root()->is_constant(), 0);
     }
+    if (_is_range_window && !_order_ctxs.empty()) {
+        _range_order_type = _order_ctxs[0]->root()->type();
+    }
+    if (_is_range_offset_window) {
+        if (_order_ctxs.size() != 1) {
+            return Status::InvalidArgument("RANGE offset windows require exactly one ORDER BY expression");
+        }
+        DCHECK(analytic_node.__isset.window);
+        const TAnalyticWindow& window = analytic_node.window;
+        auto init_boundary_expr_ctx = [&](RangeBoundarySpec* spec, const TAnalyticWindowBoundary* boundary) -> Status {
+            if (!spec->has_offset) {
+                return Status::OK();
+            }
+            if (boundary == nullptr || !boundary->__isset.range_boundary_expr) {
+                return Status::InvalidArgument("RANGE offset boundary expression is missing");
+            }
+            RETURN_IF_ERROR(
+                    ExprFactory::create_expr_tree(_pool, boundary->range_boundary_expr, &spec->expr_ctx, state));
+            if (spec->expr_ctx->root()->type().type != _range_order_type.type) {
+                return Status::InvalidArgument("RANGE offset boundary expression type must match ORDER BY type");
+            }
+            spec->column = ColumnHelper::create_column(spec->expr_ctx->root()->type(),
+                                                       spec->expr_ctx->root()->is_nullable() | has_outer_join_child,
+                                                       spec->expr_ctx->root()->is_constant(), 0);
+            return Status::OK();
+        };
+        RETURN_IF_ERROR(init_boundary_expr_ctx(&_range_start_boundary,
+                                               window.__isset.window_start ? &window.window_start : nullptr));
+        RETURN_IF_ERROR(
+                init_boundary_expr_ctx(&_range_end_boundary, window.__isset.window_end ? &window.window_end : nullptr));
+    }
 
     SCOPED_TIMER(_runtime_profile->total_time_counter());
 
@@ -337,6 +405,9 @@ Status Analytor::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* 
     _column_resize_timer = ADD_TIMER(_runtime_profile, "ColumnResizeTime");
     _partition_search_timer = ADD_TIMER(_runtime_profile, "PartitionSearchTime");
     _peer_group_search_timer = ADD_TIMER(_runtime_profile, "PeerGroupSearchTime");
+    _udaf_load_timer = ADD_TIMER(_runtime_profile, "UdafLoadTime");
+    _udaf_cache_hit_count = ADD_COUNTER(_runtime_profile, "UdafCacheHitCount", TUnit::UNIT);
+    _udaf_cache_populate_count = ADD_COUNTER(_runtime_profile, "UdafCachePopulateCount", TUnit::UNIT);
 
     DCHECK_EQ(_result_tuple_desc->slots().size(), _agg_functions.size());
 
@@ -356,6 +427,12 @@ Status Analytor::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* 
             RETURN_IF_ERROR(ExprExecutor::prepare(_order_ctxs, state));
         }
     }
+    if (_range_start_boundary.expr_ctx != nullptr) {
+        RETURN_IF_ERROR(ExprExecutor::prepare(_range_start_boundary.expr_ctx, state));
+    }
+    if (_range_end_boundary.expr_ctx != nullptr) {
+        RETURN_IF_ERROR(ExprExecutor::prepare(_range_end_boundary.expr_ctx, state));
+    }
 
     _fns.reserve(_agg_fn_ctxs.size());
     for (int i = 0; i < _agg_fn_ctxs.size(); ++i) {
@@ -370,6 +447,12 @@ Status Analytor::open(RuntimeState* state) {
     RETURN_IF_CANCELLED(state);
     RETURN_IF_ERROR(ExprExecutor::open(_partition_ctxs, state));
     RETURN_IF_ERROR(ExprExecutor::open(_order_ctxs, state));
+    if (_range_start_boundary.expr_ctx != nullptr) {
+        RETURN_IF_ERROR(ExprExecutor::open(_range_start_boundary.expr_ctx, state));
+    }
+    if (_range_end_boundary.expr_ctx != nullptr) {
+        RETURN_IF_ERROR(ExprExecutor::open(_range_end_boundary.expr_ctx, state));
+    }
     for (int i = 0; i < _agg_fn_ctxs.size(); ++i) {
         RETURN_IF_ERROR(ExprExecutor::open(_agg_expr_ctxs[i], state));
         RETURN_IF_ERROR(_evaluate_const_columns(i));
@@ -398,8 +481,24 @@ Status Analytor::open(RuntimeState* state) {
 #ifndef __APPLE__
             if (_fns[i].binary_type == TFunctionBinaryType::SRJAR) {
                 const auto& fn = _fns[i];
-                auto st = window_init_jvm_context(fn.fid, fn.hdfs_location, fn.checksum, fn.aggregate_fn.symbol,
-                                                  _agg_fn_ctxs[i], fn.cloud_configuration);
+                auto& opts = _state->query_options();
+                bool use_cache =
+                        opts.__isset.enable_cache_udaf && opts.enable_cache_udaf && fn.__isset.isolated && !fn.isolated;
+                bool cache_hit = false;
+                Status st;
+                {
+                    SCOPED_TIMER(_udaf_load_timer);
+                    st = window_init_jvm_context(fn.fid, fn.hdfs_location, fn.checksum, fn.aggregate_fn.symbol,
+                                                 _agg_fn_ctxs[i], fn.cloud_configuration, use_cache,
+                                                 use_cache ? &cache_hit : nullptr);
+                }
+                if (use_cache) {
+                    if (cache_hit) {
+                        COUNTER_UPDATE(_udaf_cache_hit_count, 1);
+                    } else {
+                        COUNTER_UPDATE(_udaf_cache_populate_count, 1);
+                    }
+                }
                 RETURN_IF_ERROR(st);
                 attached_udaf_idx.emplace_back(i);
             }
@@ -461,6 +560,8 @@ void Analytor::close(RuntimeState* state) {
         }
 #endif
 
+        ExprExecutor::close(_range_end_boundary.expr_ctx, state);
+        ExprExecutor::close(_range_start_boundary.expr_ctx, state);
         ExprExecutor::close(_order_ctxs, state);
         ExprExecutor::close(_partition_ctxs, state);
 
@@ -502,13 +603,23 @@ std::string Analytor::debug_string() const {
     std::stringstream ss;
     ss << std::boolalpha;
 
-    FrameRange frame = _get_frame_range();
     ss << "current_row_position=" << _get_global_position(_current_row_position) << ", partition=("
        << _get_global_position(_partition.start) << ", " << _get_global_position(_partition.end) << "/"
        << _partition.is_real << "), peer_group=(" << _get_global_position(_peer_group.start) << ", "
-       << _get_global_position(_peer_group.end) << "/" << _peer_group.is_real << ")"
-       << ", frame=[" << frame.start << ", " << frame.end << ")"
-       << ", input_chunks_size=" << _input_chunks.size() << ", output_chunk_index=" << _output_chunk_index
+       << _get_global_position(_peer_group.end) << "/" << _peer_group.is_real << ")";
+    if (_is_range_offset_window) {
+        ss << ", frame=<range-offset>";
+    } else if (_is_range_window && !(_range_start_boundary.type == RangeBoundaryType::CURRENT_ROW &&
+                                     _range_end_boundary.type == RangeBoundaryType::CURRENT_ROW)) {
+        ss << ", frame=<range>";
+    } else if (_is_range_window) {
+        FrameRange frame = {_peer_group.start, _peer_group.end};
+        ss << ", frame=[" << frame.start << ", " << frame.end << ")";
+    } else {
+        FrameRange frame = _get_frame_for_rows();
+        ss << ", frame=[" << frame.start << ", " << frame.end << ")";
+    }
+    ss << ", input_chunks_size=" << _input_chunks.size() << ", output_chunk_index=" << _output_chunk_index
        << ", removed_from_buffer_rows=" << _removed_from_buffer_rows
        << ", removed_chunk_index=" << _removed_chunk_index;
 
@@ -519,29 +630,36 @@ Status Analytor::_prepare_processing_mode(RuntimeState* state, RuntimeProfile* r
     TAnalyticWindow window = _tnode.analytic_node.window;
     _process_impl = &Analytor::_materializing_process;
     std::stringstream process_mode;
+    const bool use_cumulative_mode =
+            (_is_unbounded_preceding && !(_is_range_window && _is_range_offset_window)) || _is_growing_range_frame();
     process_mode << (_need_partition_materializing ? "Materializing/" : "Streaming/");
     process_mode << (_use_removable_cumulative_process ? "RemovableCumulative"
-                                                       : (_is_unbounded_preceding ? "Cumulative" : "ByDefinition"));
+                                                       : (use_cumulative_mode ? "Cumulative" : "ByDefinition"));
     runtime_profile->add_info_string("ProcessMode", process_mode.str());
     if (!_tnode.analytic_node.__isset.window) {
         _materializing_process_impl = &Analytor::_materializing_process_for_unbounded_frame;
     } else if (window.type == TAnalyticWindowType::RANGE) {
-        // RANGE windows must have UNBOUNDED PRECEDING
-        // RANGE window end bound must be CURRENT ROW or UNBOUNDED FOLLOWING
-        DCHECK(!window.__isset.window_start);
-        DCHECK(!window.__isset.window_end || window.window_end.type == TAnalyticWindowBoundaryType::CURRENT_ROW);
-        if (!window.__isset.window_end) {
+        const bool is_unbounded_frame = _range_start_boundary.type == RangeBoundaryType::UNBOUNDED_PRECEDING &&
+                                        _range_end_boundary.type == RangeBoundaryType::UNBOUNDED_FOLLOWING;
+        if (is_unbounded_frame) {
             // RANGE BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING
             _materializing_process_impl = &Analytor::_materializing_process_for_unbounded_frame;
-        } else {
+        } else if (_range_start_boundary.type == RangeBoundaryType::UNBOUNDED_PRECEDING &&
+                   _range_end_boundary.type == RangeBoundaryType::CURRENT_ROW) {
+            DCHECK(!_is_range_offset_window);
             // RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
-            DCHECK_EQ(window.window_end.type, TAnalyticWindowBoundaryType::CURRENT_ROW);
             if (_need_partition_materializing) {
                 _materializing_process_impl = &Analytor::_materializing_process_for_half_unbounded_range_frame;
             } else {
                 _process_impl = &Analytor::_streaming_process_for_half_bounded_range_frame;
                 _materializing_process_impl = nullptr;
             }
+        } else {
+            // Generic RANGE frame (including finite offsets and CURRENT ROW/CURRENT ROW).
+            DCHECK(_need_partition_materializing);
+            _materializing_process_impl = _is_growing_range_frame()
+                                                  ? &Analytor::_materializing_process_for_growing_range_frame
+                                                  : &Analytor::_materializing_process_for_range_frame;
         }
     } else {
         if (!window.__isset.window_start && !window.__isset.window_end) {
@@ -573,6 +691,121 @@ Status Analytor::_prepare_processing_mode(RuntimeState* state, RuntimeProfile* r
     }
 
     return Status::OK();
+}
+
+void Analytor::_compute_range_nonnull_segment() {
+    _range_nonnull_start = _partition.start;
+    _range_nonnull_end = _partition.end;
+
+    // only check when order by column is nullable column
+    if (_order_columns[0]->is_nullable()) {
+        while (_range_nonnull_start < _range_nonnull_end && _order_columns[0]->is_null(_range_nonnull_start)) {
+            ++_range_nonnull_start;
+        }
+        while (_range_nonnull_end > _range_nonnull_start && _order_columns[0]->is_null(_range_nonnull_end - 1)) {
+            --_range_nonnull_end;
+        }
+    }
+
+    _range_nonnull_segment_valid = true;
+    _reset_range_frame_cursors();
+}
+
+void Analytor::_reset_range_frame_cursors() {
+    _range_start_frame_cursor = _range_nonnull_start;
+    _range_end_frame_cursor = _range_nonnull_start;
+    _range_cumulative_frame_end = _partition.start;
+}
+
+int64_t Analytor::_seek_range_frame_boundary_with_offset(const RangeBoundarySpec& boundary, bool is_start) {
+    DCHECK(!_order_columns.empty());
+    DCHECK(boundary.column != nullptr);
+    DCHECK(_range_nonnull_segment_valid);
+
+    int64_t& cursor = is_start ? _range_start_frame_cursor : _range_end_frame_cursor;
+
+    // Constant offsets make boundary keys monotonic in physical order, so cursors only move forward.
+    cursor = std::clamp(cursor, _range_nonnull_start, _range_nonnull_end);
+    while (cursor < _range_nonnull_end) {
+        // cmp compares order_key[cursor] with boundary_value[current_row].
+        // For the start boundary, keep skipping rows before the inclusive lower bound:
+        //   ASC:  key < bound; DESC: key > bound.
+        // For the end boundary, keep skipping rows still inside the inclusive upper bound:
+        //   ASC:  key <= bound; DESC: key >= bound.
+        // The returned cursor is therefore a half-open frame boundary [start, end).
+        const int cmp = _order_columns[0]->compare_at(cursor, _current_row_position, *boundary.column, 1);
+        bool should_advance;
+        if (is_start) {
+            should_advance = _range_order_is_asc ? cmp < 0 : cmp > 0;
+        } else {
+            should_advance = _range_order_is_asc ? cmp <= 0 : cmp >= 0;
+        }
+        if (!should_advance) {
+            break;
+        }
+        ++cursor;
+    }
+    return cursor;
+}
+
+int64_t Analytor::_resolve_range_offset_boundary(const RangeBoundarySpec& boundary, bool is_start,
+                                                 bool current_row_is_null) {
+    switch (boundary.type) {
+    case RangeBoundaryType::UNBOUNDED_PRECEDING:
+        return _partition.start;
+    case RangeBoundaryType::UNBOUNDED_FOLLOWING:
+        return _partition.end;
+    case RangeBoundaryType::CURRENT_ROW:
+        return is_start ? _peer_group.start : _peer_group.end;
+    case RangeBoundaryType::PRECEDING:
+    case RangeBoundaryType::FOLLOWING:
+        break;
+    }
+
+    if (current_row_is_null) {
+        // Finite RANGE boundaries on NULL current rows degenerate to CURRENT ROW peer group.
+        return is_start ? _peer_group.start : _peer_group.end;
+    }
+    DCHECK(_range_nonnull_segment_valid);
+    DCHECK_LT(_range_nonnull_start, _range_nonnull_end);
+
+    DCHECK(boundary.column != nullptr);
+    if (boundary.column->is_null(_current_row_position)) {
+        return is_start ? _range_nonnull_end : _range_nonnull_start;
+    }
+    return _seek_range_frame_boundary_with_offset(boundary, is_start);
+}
+
+bool Analytor::_is_growing_range_frame() const {
+    return _is_range_offset_window && _range_start_boundary.type == RangeBoundaryType::UNBOUNDED_PRECEDING &&
+           _range_end_boundary.has_offset;
+}
+
+Analytor::FrameRange Analytor::_get_frame_for_range() {
+    DCHECK(_is_range_window);
+    if (!_is_range_offset_window) {
+        DCHECK(_range_start_boundary.type == RangeBoundaryType::CURRENT_ROW);
+        DCHECK(_range_end_boundary.type == RangeBoundaryType::CURRENT_ROW);
+        return {_peer_group.start, _peer_group.end};
+    }
+
+    DCHECK(!_order_columns.empty());
+    bool current_row_is_null = _order_columns[0]->is_null(_current_row_position);
+
+    if (!_range_nonnull_segment_valid) {
+        _compute_range_nonnull_segment();
+    }
+
+    int64_t frame_start = _resolve_range_offset_boundary(_range_start_boundary, true, current_row_is_null);
+    int64_t frame_end = _resolve_range_offset_boundary(_range_end_boundary, false, current_row_is_null);
+    DCHECK_GE(frame_start, _partition.start);
+    DCHECK_LE(frame_start, _partition.end);
+    DCHECK_GE(frame_end, _partition.start);
+    DCHECK_LE(frame_end, _partition.end);
+    if (frame_end < frame_start) {
+        frame_end = frame_start;
+    }
+    return {frame_start, frame_end};
 }
 
 Status Analytor::_evaluate_const_columns(int i) {
@@ -616,14 +849,15 @@ void Analytor::_remove_unused_rows(RuntimeState* state) {
         }
     } else if (_use_removable_cumulative_process || !_is_unbounded_preceding) {
         // Both cumulative process or sliding process need to access position around range.start
-        const auto frame = _get_frame_range();
+        const auto frame = _get_frame_for_rows();
         if (_get_global_position(frame.start - 1) <= remove_end_position) {
             return;
         }
     } else {
         // Cumulative process only access the position around the frame.end
-        const auto frame = _get_frame_range();
-        if (_get_global_position(std::min(_current_row_position, frame.end)) <= remove_end_position) {
+        const int64_t referenced_position =
+                _is_range_window ? _current_row_position : std::min(_current_row_position, _get_frame_for_rows().end);
+        if (_get_global_position(referenced_position) <= remove_end_position) {
             return;
         }
     }
@@ -646,6 +880,12 @@ void Analytor::_remove_unused_rows(RuntimeState* state) {
         for (size_t i = 0; i < _order_ctxs.size(); i++) {
             _order_columns[i]->remove_first_n_values(remove_rows);
         }
+        if (_range_start_boundary.column != nullptr) {
+            _range_start_boundary.column->remove_first_n_values(remove_rows);
+        }
+        if (_range_end_boundary.column != nullptr) {
+            _range_end_boundary.column->remove_first_n_values(remove_rows);
+        }
         SCOPED_THREAD_LOCAL_AGG_STATE_ALLOCATOR_SETTER(_allocator.get());
         for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
             _agg_functions[i]->reset_state_for_contraction(
@@ -656,6 +896,12 @@ void Analytor::_remove_unused_rows(RuntimeState* state) {
     _current_row_position -= remove_rows;
     _partition.remove_first_n(remove_rows);
     _peer_group.remove_first_n(remove_rows);
+    if (_range_nonnull_segment_valid) {
+        _range_nonnull_start -= remove_rows;
+        _range_nonnull_end -= remove_rows;
+        _range_start_frame_cursor -= remove_rows;
+        _range_end_frame_cursor -= remove_rows;
+    }
     int32_t candidate_partition_end_size = _candidate_partition_ends.size();
     while (--candidate_partition_end_size >= 0) {
         auto peek = _candidate_partition_ends.front();
@@ -723,6 +969,21 @@ Status Analytor::_add_chunk(const ChunkPtr& chunk) {
             }
             RETURN_IF_ERROR(_order_columns[i]->capacity_limit_reached());
         }
+
+        auto append_range_boundary_column = [&](RangeBoundarySpec* boundary) -> Status {
+            if (!boundary->has_offset) {
+                return Status::OK();
+            }
+            ASSIGN_OR_RETURN(ColumnPtr column, boundary->expr_ctx->evaluate(chunk.get()));
+            TRY_CATCH_BAD_ALLOC(_append_column(chunk_size, boundary->column.get(), column));
+            ASSIGN_OR_RETURN(auto upgrade_col, boundary->column->upgrade_if_overflow());
+            if (upgrade_col != nullptr) {
+                boundary->column = std::move(upgrade_col);
+            }
+            return boundary->column->capacity_limit_reached();
+        };
+        RETURN_IF_ERROR(append_range_boundary_column(&_range_start_boundary));
+        RETURN_IF_ERROR(append_range_boundary_column(&_range_end_boundary));
     }
 
     _input_chunk_first_row_positions.emplace_back(_input_rows);
@@ -763,6 +1024,9 @@ Status Analytor::_materializing_process(RuntimeState* state) {
         if (!_partition.is_real) {
             return Status::OK();
         }
+        if (_is_range_offset_window && !_range_nonnull_segment_valid) {
+            _compute_range_nonnull_segment();
+        }
 
         _init_window_result_columns();
 
@@ -798,7 +1062,7 @@ Status Analytor::_streaming_process_for_half_unbounded_rows_frame(RuntimeState* 
         _find_partition_end();
 
         while (_current_row_position < _partition.end && remain_size > 0) {
-            const FrameRange frame = _get_frame_range();
+            const FrameRange frame = _get_frame_for_rows();
             const bool is_n_following_frame = _rows_end_offset > 0;
 
             // For window clause like `ROWS BETWEEN UNBOUNDED PRECEDING AND M FOLLOWING`,
@@ -902,6 +1166,7 @@ Status Analytor::_streaming_process_for_half_bounded_range_frame(RuntimeState* s
 
 Status Analytor::_streaming_process_for_sliding_frame(RuntimeState* state) {
     PRE_PROCESSING();
+    DCHECK(!_is_range_window);
 
     do {
         if (reached_limit() || state->is_cancelled()) {
@@ -915,7 +1180,7 @@ Status Analytor::_streaming_process_for_sliding_frame(RuntimeState* state) {
         _find_partition_end();
 
         while (_current_row_position < _partition.end && remain_size > 0) {
-            const FrameRange frame = _get_frame_range();
+            const FrameRange frame = _get_frame_for_rows();
             const bool is_n_following_frame = _rows_end_offset > 0;
 
             // For window clause like `ROWS BETWEEN N PRECEDING AND M FOLLOWING`,
@@ -929,7 +1194,7 @@ Status Analytor::_streaming_process_for_sliding_frame(RuntimeState* state) {
             } else {
                 // Update agg state in batch manner for each row.
                 _reset_window_state();
-                const FrameRange range = _get_frame_range();
+                const FrameRange range = _get_frame_for_rows();
                 _update_window_batch(_partition.start, _partition.end, range.start, range.end);
             }
 
@@ -969,7 +1234,7 @@ void Analytor::_materializing_process_for_unbounded_frame(RuntimeState* state) {
 
 void Analytor::_materializing_process_for_half_unbounded_rows_frame(RuntimeState* state) {
     while (_current_row_position < _partition.end && !_is_current_chunk_finished_eval()) {
-        const FrameRange frame = _get_frame_range();
+        const FrameRange frame = _get_frame_for_rows();
         const bool is_n_following_frame = _rows_end_offset > 0;
 
         // For window clause like `ROWS BETWEEN UNBOUNDED PRECEDING AND M FOLLOWING`,
@@ -1019,6 +1284,7 @@ void Analytor::_materializing_process_for_half_unbounded_range_frame(RuntimeStat
 }
 
 void Analytor::_materializing_process_for_sliding_frame(RuntimeState* state) {
+    DCHECK(!_is_range_window);
     if (_use_removable_cumulative_process) {
         while (_current_row_position < _partition.end && !_is_current_chunk_finished_eval()) {
             _update_window_batch_removable_cumulatively();
@@ -1030,12 +1296,73 @@ void Analytor::_materializing_process_for_sliding_frame(RuntimeState* state) {
         while (_current_row_position < _partition.end && !_is_current_chunk_finished_eval()) {
             // Update agg state in batch manner for each row.
             _reset_window_state();
-            const FrameRange range = _get_frame_range();
+            const FrameRange range = _get_frame_for_rows();
             _update_window_batch(_partition.start, _partition.end, range.start, range.end);
 
             _get_window_function_result(_window_result_position(), _window_result_position() + 1);
             _update_current_row_position(1);
         }
+    }
+}
+
+void Analytor::_materializing_process_for_range_frame(RuntimeState* state) {
+    const auto chunk_size = static_cast<int64_t>(_current_chunk_size());
+    while (_current_row_position < _partition.end && !_is_current_chunk_finished_eval()) {
+        _find_peer_group_end();
+        DCHECK(_peer_group.is_real);
+
+        if (_current_row_position == _peer_group.start) {
+            _reset_window_state();
+            const FrameRange range = _get_frame_for_range();
+            _update_window_batch(_partition.start, _partition.end, range.start, range.end);
+        }
+
+        const int64_t base = _first_global_position_of_current_chunk();
+        const int64_t start = _get_global_position(_current_row_position) - base;
+        int64_t end = _get_global_position(_peer_group.end) - base;
+        if (end > chunk_size) {
+            end = chunk_size;
+        }
+        DCHECK_GE(start, 0);
+        DCHECK_GT(end, start);
+
+        _get_window_function_result(start, end);
+        _update_current_row_position(end - start);
+    }
+}
+
+// Process growing RANGE frames such as RANGE BETWEEN UNBOUNDED PRECEDING AND N FOLLOWING/PRECEDING.
+// The frame start is fixed at the partition start, and the finite end boundary moves monotonically forward as
+// peer groups are processed. Therefore the aggregate state can be maintained cumulatively by adding only the newly
+// exposed rows [_range_cumulative_frame_end, range.end) instead of rebuilding the whole frame for each peer group.
+// Results are still written peer-group-wise, clipped to the current output chunk when a peer group crosses chunks.
+void Analytor::_materializing_process_for_growing_range_frame(RuntimeState* state) {
+    const auto chunk_size = static_cast<int64_t>(_current_chunk_size());
+    while (_current_row_position < _partition.end && !_is_current_chunk_finished_eval()) {
+        _find_peer_group_end();
+        DCHECK(_peer_group.is_real);
+
+        if (_current_row_position == _peer_group.start) {
+            const FrameRange range = _get_frame_for_range();
+            DCHECK_EQ(range.start, _partition.start);
+            DCHECK_GE(range.end, _range_cumulative_frame_end);
+            if (range.end > _range_cumulative_frame_end) {
+                _update_window_batch(_partition.start, _partition.end, _range_cumulative_frame_end, range.end);
+                _range_cumulative_frame_end = range.end;
+            }
+        }
+
+        const int64_t base = _first_global_position_of_current_chunk();
+        const int64_t start = _get_global_position(_current_row_position) - base;
+        int64_t end = _get_global_position(_peer_group.end) - base;
+        if (end > chunk_size) {
+            end = chunk_size;
+        }
+        DCHECK_GE(start, 0);
+        DCHECK_GT(end, start);
+
+        _get_window_function_result(start, end);
+        _update_current_row_position(end - start);
     }
 }
 
@@ -1113,6 +1440,12 @@ void Analytor::_reset_state_for_next_partition() {
 
     _partition.start = _partition.end;
     _current_row_position = _partition.start;
+    _range_nonnull_segment_valid = false;
+    _range_nonnull_start = 0;
+    _range_nonnull_end = 0;
+    _range_start_frame_cursor = 0;
+    _range_end_frame_cursor = 0;
+    _range_cumulative_frame_end = 0;
     _reset_window_state();
     DCHECK_GE(_current_row_position, 0);
 }

@@ -17,16 +17,20 @@
 #include <atomic>
 #include <memory>
 
+#include "base/status_fmt.hpp"
 #include "common/config_ingest_fwd.h"
 #include "common/config_scan_io_fwd.h"
+#include "common/thread/priority_thread_pool.hpp"
 #include "common/thread/threadpool.h"
+#include "connector/connector_registry.h"
+#include "exec/pipeline/exec_node_pipeline_adapter.h"
+#include "exec/pipeline/fragment_context.h"
+#include "exec/pipeline/query_context.h"
 #include "exec/pipeline/scan/chunk_buffer_limiter.h"
 #include "exec/pipeline/scan/connector_scan_operator.h"
-#include "exec/stream/scan/stream_scan_operator.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
 #include "runtime/global_dict/parser.h"
-#include "util/priority_thread_pool.hpp"
 
 namespace starrocks {
 
@@ -36,7 +40,12 @@ static constexpr double kChunkBufferMemRatio = pipeline::ConnectorScanOperatorMe
 ConnectorScanNode::ConnectorScanNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs)
         : ScanNode(pool, tnode, descs) {
     _name = "connector_scan";
-    auto c = connector::ConnectorManager::default_instance()->get(tnode.connector_scan_node.connector_name);
+    const auto& connector_name = tnode.connector_scan_node.connector_name;
+    auto c = connector::ConnectorRegistry::default_instance()->get(connector_name);
+    if (c == nullptr) {
+        _connector_status = Status::Unknown("Unknown connector: {}", connector_name);
+        return;
+    }
     _connector_type = c->connector_type();
     if (tnode.connector_scan_node.__isset.catalog_type) {
         _catalog_type = tnode.connector_scan_node.catalog_type;
@@ -53,6 +62,7 @@ ConnectorScanNode::~ConnectorScanNode() {
 }
 
 Status ConnectorScanNode::init(const TPlanNode& tnode, RuntimeState* state) {
+    RETURN_IF_ERROR(_connector_status);
     RETURN_IF_ERROR(ScanNode::init(tnode, state));
     RETURN_IF_ERROR(_data_source_provider->init(_pool, state));
 
@@ -132,8 +142,6 @@ StatusOr<pipeline::OpFactories> ConnectorScanNode::decompose_to_pipeline(pipelin
 
     size_t dop = context->dop_of_source_operator(id());
     std::shared_ptr<pipeline::ConnectorScanOperatorFactory> scan_op = nullptr;
-    bool stream_data_source = _data_source_provider->stream_data_source();
-    bool is_stream_pipeline = context->is_stream_pipeline();
 
     // we do estimated here is because we have peeked all scang ranges and gather more infomration
     // so only here we can make more accurate decision.
@@ -146,12 +154,8 @@ StatusOr<pipeline::OpFactories> ConnectorScanNode::decompose_to_pipeline(pipelin
             max_buffer_capacity, default_buffer_capacity, int64_t(_scan_mem_limit * kChunkBufferMemRatio),
             runtime_state()->chunk_size());
 
-    scan_op = !stream_data_source
-                      ? std::make_shared<pipeline::ConnectorScanOperatorFactory>(
-                                context->next_operator_id(), this, runtime_state(), dop, std::move(buffer_limiter))
-                      : std::make_shared<pipeline::StreamScanOperatorFactory>(
-                                context->next_operator_id(), this, runtime_state(), dop, std::move(buffer_limiter),
-                                is_stream_pipeline);
+    scan_op = std::make_shared<pipeline::ConnectorScanOperatorFactory>(context->next_operator_id(), this,
+                                                                       runtime_state(), dop, std::move(buffer_limiter));
 
     // order matters. we will use scan mem limit to limit chunk source mem bytes.
     scan_op->set_mem_share_arb(_mem_share_arb);
@@ -161,7 +165,7 @@ StatusOr<pipeline::OpFactories> ConnectorScanNode::decompose_to_pipeline(pipelin
                                         _estimated_scan_row_bytes * runtime_state()->chunk_size());
 
     auto&& rc_rf_probe_collector = std::make_shared<RcRfProbeCollector>(1, std::move(this->runtime_filter_collector()));
-    this->init_runtime_filter_for_operator(scan_op.get(), context, rc_rf_probe_collector);
+    pipeline::init_runtime_filter_for_operator(*this, scan_op.get(), context, rc_rf_probe_collector);
 
     auto operators = pipeline::decompose_scan_node_to_pipeline(scan_op, this, context);
 
@@ -410,7 +414,8 @@ bool ConnectorScanNode::_submit_scanner(ConnectorScanner* scanner, bool blockabl
         return _submit_streaming_load_scanner(scanner, blockable);
     }
 
-    auto* thread_pool = runtime_state()->exec_env()->thread_pool();
+    auto* query_execution_services = runtime_state()->query_execution_services();
+    auto* thread_pool = query_execution_services->execution->thread_pool;
     int delta = static_cast<int>(!scanner->keep_priority());
     int32_t num_submit = _scanner_submit_count.fetch_add(delta, std::memory_order_relaxed);
 
@@ -437,7 +442,8 @@ bool ConnectorScanNode::_submit_streaming_load_scanner(ConnectorScanner* scanner
 #ifdef BE_TEST
     _use_stream_load_thread_pool = true;
 #endif
-    ThreadPool* thread_pool = runtime_state()->exec_env()->streaming_load_thread_pool();
+    auto* query_execution_services = runtime_state()->query_execution_services();
+    ThreadPool* thread_pool = query_execution_services->execution->streaming_load_thread_pool;
     _running_threads.fetch_add(1, std::memory_order_release);
     // Assume the thread pool is large enough, so there is no need to set the priority
     Status status = thread_pool->submit_func([this, scanner] { _scanner_thread(scanner); });
@@ -708,11 +714,11 @@ bool ConnectorScanNode::always_shared_scan() const {
     return _data_source_provider->always_shared_scan();
 }
 
-StatusOr<pipeline::MorselQueuePtr> ConnectorScanNode::convert_scan_range_to_morsel_queue(
+StatusOr<pipeline::MorselQueueBuilderPtr> ConnectorScanNode::convert_scan_range_to_morsel_queue_builder(
         const std::vector<TScanRangeParams>& scan_ranges, int node_id, int32_t pipeline_dop,
         bool enable_tablet_internal_parallel, TTabletInternalParallelMode::type tablet_internal_parallel_mode,
         size_t num_total_scan_ranges) {
-    return _data_source_provider->convert_scan_range_to_morsel_queue(
+    return _data_source_provider->convert_scan_range_to_morsel_queue_builder(
             scan_ranges, node_id, pipeline_dop, enable_tablet_internal_parallel, tablet_internal_parallel_mode,
             num_total_scan_ranges);
 }

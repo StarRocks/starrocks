@@ -158,6 +158,18 @@ class ParserTest {
     }
 
     @Test
+    void testAlterTableWithoutAlterClause() {
+        String sql = "alter table tbl";
+        SessionVariable sessionVariable = new SessionVariable();
+        try {
+            SqlParser.parse(sql, sessionVariable);
+            fail("sql should fail to parse.");
+        } catch (Exception e) {
+            assertContains(e.getMessage(), "ALTER TABLE requires at least one alter clause");
+        }
+    }
+
+    @Test
     void testNonReservedWords_1() {
         String sql = "select anti, authentication, auto_increment, cancel, distributed, enclose, escape, export," +
                 "host, incremental, minus, nodes, optimizer, privileges, qualify, skip_header, semi, trace, trim_space "
@@ -187,6 +199,27 @@ class ParserTest {
             Assertions.assertEquals(JoinOperator.INNER_JOIN, bottomJoinRelation.getJoinOp());
         } catch (Exception e) {
             fail("sql should success. errMsg: " + e.getMessage());
+        }
+    }
+
+    @Test
+    void testVariantAsIdentifier() {
+        // VARIANT was added as a baseType keyword; it must remain usable as an identifier
+        // (bare and backticked) — e.g. as a column name or struct field name.
+        SessionVariable sessionVariable = new SessionVariable();
+        List<String> sqls = Lists.newArrayList(
+                "select variant from t",
+                "select `variant` from t",
+                "select t.variant from t",
+                "select t.`variant` from t",
+                "select cast(c as struct<variant int, other varchar(10)>) from t",
+                "select cast(c as struct<`variant` int, other varchar(10)>) from t");
+        for (String sql : sqls) {
+            try {
+                SqlParser.parse(sql, sessionVariable).get(0);
+            } catch (Exception e) {
+                fail("sql should succeed: " + sql + " errMsg: " + e.getMessage());
+            }
         }
     }
 
@@ -277,6 +310,101 @@ class ParserTest {
         Type type2 = stmt.getQueryRelation().getOutputExpression().get(1).getType();
         Assertions.assertEquals(type1, TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL256, 65, 0));
         Assertions.assertEquals(type2, TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL64, 10, 0));
+    }
+
+    @Test
+    void testTypeCast() {
+        SessionVariable sessionVariable = new SessionVariable();
+        sessionVariable.setSqlDialect("sr");
+
+        // Positive cases: each pair must parse to expressions with the same ExprToSql form.
+        String[][] equivalentPairs = {
+                {"select '123'::int", "select cast('123' as int)"},
+                {"select x::decimal(10,2), x::varchar(20) from t",
+                        "select cast(x as decimal(10,2)), cast(x as varchar(20)) from t"},
+                {"select x::int::string from t", "select cast(cast(x as int) as string) from t"},
+                {"select a + b::int from t", "select a + cast(b as int) from t"},
+                {"select -1::int", "select -cast(1 as int)"},
+                {"select -2147483648::int", "select -cast(2147483648 as int)"},
+                {"select x::int < 5 from t", "select cast(x as int) < 5 from t"},
+                {"select a < b::int from t", "select a < cast(b as int) from t"},
+                {"select (a+b)::decimal(10,2) from t", "select cast((a+b) as decimal(10,2)) from t"},
+                {"select t.col::int from t", "select cast(t.col as int) from t"},
+                {"select cast(x as int)::string from t", "select cast(cast(x as int) as string) from t"},
+                {"select x::array<int>, y::map<string,int> from t",
+                        "select cast(x as array<int>), cast(y as map<string,int>) from t"},
+                {"select x::array<int>[1] from t", "select cast(x as array<int>)[1] from t"},
+                {"select get_json_string(j,'$.a')::int from t",
+                        "select cast(get_json_string(j,'$.a') as int) from t"},
+                {"select x::int from t where x::bigint > 0",
+                        "select cast(x as int) from t where cast(x as bigint) > 0"},
+                {"select count(*) over (partition by x::int) from t",
+                        "select count(*) over (partition by cast(x as int)) from t"},
+                {"select NULL::int", "select cast(NULL as int)"},
+                {"select (case when x>0 then 'pos' else 'neg' end)::varchar(10) from t",
+                        "select cast((case when x>0 then 'pos' else 'neg' end) as varchar(10)) from t"},
+        };
+        for (String[] pair : equivalentPairs) {
+            QueryStatement shorthand = (QueryStatement) SqlParser.parse(pair[0], sessionVariable).get(0);
+            QueryStatement classic = (QueryStatement) SqlParser.parse(pair[1], sessionVariable).get(0);
+            SelectList shortList = ((SelectRelation) shorthand.getQueryRelation()).getSelectList();
+            SelectList classicList = ((SelectRelation) classic.getQueryRelation()).getSelectList();
+            assertEquals(classicList.getItems().size(), shortList.getItems().size(),
+                    "select list size mismatch for: " + pair[0]);
+            for (int i = 0; i < shortList.getItems().size(); i++) {
+                String shortSql = ExprToSql.toSql(shortList.getItems().get(i).getExpr());
+                String classicSql = ExprToSql.toSql(classicList.getItems().get(i).getExpr());
+                assertEquals(classicSql, shortSql,
+                        "select item " + i + " differs for: " + pair[0]);
+            }
+        }
+
+        SqlParser.parse("select foo::int.col from t", sessionVariable).get(0);
+
+        // :: with hints should not confuse the hint pre-pass
+        StatementBase hintStatement =
+                SqlParser.parse("select /*+ SET_VAR(query_timeout=10) */ x::int from t", sessionVariable).get(0);
+        Assertions.assertTrue(hintStatement.isExistQueryScopeHint());
+        assertEquals("10", hintStatement.getAllQueryScopeHints().get(0).getValue().get("query_timeout"));
+
+        // :: must bind tighter than || under PIPES_AS_CONCAT
+        SessionVariable concatSession = new SessionVariable();
+        concatSession.setSqlDialect("sr");
+        concatSession.setSqlMode(SqlModeHelper.MODE_PIPES_AS_CONCAT);
+        String[][] concatPairs = {
+                {"select 'a' || 'b'::int", "select 'a' || cast('b' as int)"},
+                {"select x::int || y::int from t",
+                        "select cast(x as int) || cast(y as int) from t"},
+                {"select a || b || c::int from t",
+                        "select a || b || cast(c as int) from t"},
+        };
+        for (String[] pair : concatPairs) {
+            QueryStatement shorthand = (QueryStatement) SqlParser.parse(pair[0], concatSession).get(0);
+            QueryStatement classic = (QueryStatement) SqlParser.parse(pair[1], concatSession).get(0);
+            SelectList shortList = ((SelectRelation) shorthand.getQueryRelation()).getSelectList();
+            SelectList classicList = ((SelectRelation) classic.getQueryRelation()).getSelectList();
+            for (int i = 0; i < shortList.getItems().size(); i++) {
+                String shortSql = ExprToSql.toSql(shortList.getItems().get(i).getExpr());
+                String classicSql = ExprToSql.toSql(classicList.getItems().get(i).getExpr());
+                assertEquals(classicSql, shortSql,
+                        "select item " + i + " differs for: " + pair[0]);
+            }
+        }
+
+        // Negative cases: each must fail to parse
+        String[] invalid = {
+                "select x::",            // missing type
+                "select ::int",          // missing left operand
+                "select 1 : : int",      // two separate ':' tokens, not DOUBLE_COLON
+        };
+        for (String sql : invalid) {
+            try {
+                SqlParser.parse(sql, sessionVariable);
+                fail("Expected parser error for: " + sql);
+            } catch (Exception ignored) {
+                // expected
+            }
+        }
     }
 
     @Test

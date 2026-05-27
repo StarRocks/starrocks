@@ -27,8 +27,8 @@
 #include "connector/connector_chunk_sink.h"
 #include "connector/hive_chunk_sink.h"
 #include "connector/sink_memory_manager.h"
+#include "formats/io/async_flush_output_stream.h"
 #include "formats/utils.h"
-#include "io/async_flush_output_stream.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
 
@@ -36,7 +36,7 @@ namespace starrocks::pipeline {
 namespace {
 
 using CommitResult = formats::FileWriter::CommitResult;
-using Stream = io::AsyncFlushOutputStream;
+using Stream = formats::AsyncFlushOutputStream;
 
 class NoopWritableFile : public WritableFile {
 public:

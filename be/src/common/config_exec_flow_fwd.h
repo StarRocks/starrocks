@@ -27,6 +27,7 @@ CONF_Bool(compress_rowbatches, "true");
 // Compress ratio when shuffle row_batches in network, not in storage engine.
 // If ratio is less than this value, use uncompressed data instead.
 CONF_mDouble(rpc_compress_ratio_threshold, "1.1");
+
 // If true, skip compression when serialized_size exceeds the codec's max input size limit (instead of returning an error).
 CONF_mBool(enable_rpc_compress_overflow_skip, "true");
 
@@ -77,7 +78,7 @@ CONF_mInt64(pipeline_rf_worker_timeout_guard_ms, "-1");
 CONF_mInt64(pipeline_datastream_timeout_guard_ms, "-1");
 
 // whether to enable large column detection in the pipeline execution framework.
-CONF_mBool(pipeline_enable_large_column_checker, "false");
+CONF_mBool(pipeline_enable_large_column_checker, "true");
 
 // Queue size of scan thread pool for pipeline engine.
 CONF_Int64(pipeline_scan_thread_pool_queue_size, "102400");
@@ -93,6 +94,10 @@ CONF_Int64(pipeline_sink_brpc_dop, "64");
 CONF_mBool(pipeline_print_profile, "false");
 
 CONF_mBool(pipeline_timeout_diagnostic, "false");
+
+// BE-wide kill switch for the pipeline event scheduler. When false, the event scheduler is
+// disabled even if the session variable `enable_pipeline_event_scheduler` is true.
+CONF_mBool(enable_pipeline_event_scheduler, "true");
 
 // The arguments of multilevel feedback pipeline_driver_queue. It prioritizes small queries over larger ones,
 // when the value of level_time_slice_base_ns is smaller and queue_ratio_of_adjacent_queue is larger.
@@ -223,6 +228,9 @@ CONF_mInt64(split_exchanger_buffer_chunk_num, "1000");
 CONF_mInt64(two_level_memory_threshold, "-1");
 
 CONF_mBool(enable_pipeline_driver_parallel_prepare, "true");
+
+// When enabled, ScanExecutor uses LockFreeWorkGroupScanTaskQueue for OLAP and connector scan task scheduling.
+CONF_mBool(enable_lock_free_scan_task_queue, "true");
 
 // used by global late materialization, may be removed in the future
 CONF_mInt64(fetch_max_buffer_chunk_num, "8");

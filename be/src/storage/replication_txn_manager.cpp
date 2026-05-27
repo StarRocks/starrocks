@@ -20,14 +20,13 @@
 #include <filesystem>
 #include <set>
 
-#include "agent/agent_server.h"
-#include "agent/master_info.h"
-#include "agent/task_signatures_manager.h"
 #include "base/string/string_parser.hpp"
 #include "base/utility/defer_op.h"
 #include "common/config_http_fwd.h"
 #include "common/config_storage_fwd.h"
 #include "common/system/backend_options.h"
+#include "common/system/master_info.h"
+#include "common/util/thrift_client_cache.h"
 #include "fs/fs.h"
 #include "fs/fs_memory.h"
 #include "gen_cpp/BackendService.h"
@@ -37,7 +36,7 @@
 #include "gutil/strings/substitute.h"
 #include "gutil/strings/util.h"
 #include "http/http_client.h"
-#include "runtime/client_cache.h"
+#include "platform/thrift_rpc_helper.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
 #include "storage/protobuf_file.h"
@@ -48,7 +47,6 @@
 #include "storage/snapshot_manager.h"
 #include "storage/tablet_manager.h"
 #include "storage/tablet_updates.h"
-#include "util/thrift_rpc_helper.h"
 
 namespace starrocks {
 

@@ -17,9 +17,9 @@
 #include <fmt/format.h>
 
 #include "runtime/current_thread.h"
-#include "runtime/starrocks_metrics.h"
 #include "storage/segment_flush_executor.h"
 #include "storage/storage_engine.h"
+#include "storage/storage_metrics.h"
 
 namespace starrocks {
 
@@ -89,10 +89,10 @@ int AsyncDeltaWriter::_execute(void* meta, bthread::TaskIterator<AsyncDeltaWrite
                                   << " tablet_id: " << writer->tablet()->tablet_id() << ": " << st;
     }
     writer->update_task_stat(num_tasks, pending_time_ns);
-    StarRocksMetrics::instance()->async_delta_writer_execute_total.increment(1);
-    StarRocksMetrics::instance()->async_delta_writer_task_total.increment(num_tasks);
-    StarRocksMetrics::instance()->async_delta_writer_task_execute_duration_us.increment(watch.elapsed_time() / 1000);
-    StarRocksMetrics::instance()->async_delta_writer_task_pending_duration_us.increment(pending_time_ns / 1000);
+    StorageMetrics::instance()->async_delta_writer_execute_total.increment(1);
+    StorageMetrics::instance()->async_delta_writer_task_total.increment(num_tasks);
+    StorageMetrics::instance()->async_delta_writer_task_execute_duration_us.increment(watch.elapsed_time() / 1000);
+    StorageMetrics::instance()->async_delta_writer_task_pending_duration_us.increment(pending_time_ns / 1000);
     return 0;
 }
 
