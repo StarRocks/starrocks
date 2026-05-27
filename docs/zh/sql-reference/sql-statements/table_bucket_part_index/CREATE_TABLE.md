@@ -140,6 +140,7 @@ CREATE [EXTERNAL] [TEMPORARY] TABLE [IF NOT EXISTS] [database.]table_name
       "table" = "hudi_table" 
       )
     ```
+
 </details>
 
 ### `TEMPORARY`
