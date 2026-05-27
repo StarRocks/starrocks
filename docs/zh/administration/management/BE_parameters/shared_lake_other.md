@@ -381,6 +381,24 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 描述：存算分离集群下，是否允许 Vertical Compaction 任务在执行时缓存数据到本地磁盘上。`true` 表示启用，`false` 表示不启用。
 - 引入版本：v3.1.7, v3.2.3
 
+### lake_replication_read_buffer_size
+
+- 默认值：16777216
+- 类型：Long
+- 单位：Bytes
+- 是否动态：是
+- 描述：存算分离跨集群复制（lake replication）下载 segment 文件时使用的读缓冲区大小。该值决定每次读取远程文件的分配大小，实际使用时取此设置与 1 MB 的较大值。较大的值减少读取调用次数，可提高吞吐，但增加每个并发下载的内存占用；较小的值降低内存使用但增加 I/O 调用次数。请根据网络带宽、存储 I/O 特性和并行复制线程数量进行调优。
+- 引入版本：v4.1.2
+
+### lake_replication_max_file_copy_retry
+
+- 默认值：3
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：存算分离跨集群复制（lake-to-lake replication）中非 segment 文件（`.sst`、`.delvec`、`.del`、`.cols`）拷贝的最大重试次数。每次尝试会校验已拷贝文件大小是否与源文件一致，以检测因对象存储瞬时问题导致的截断拷贝。如果在不稳定的存储上复制时频繁出现文件损坏，可增大此值。
+- 引入版本：v4.1.2
+
 ### lake_replication_file_copy_threads
 
 - 默认值：0
@@ -388,7 +406,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 单位：-
 - 是否动态：否
 - 描述：存算分离跨集群复制（lake-to-lake replication）逐文件拷贝所使用的独立线程池大小。`0` 表示 `cpu_cores * 4`（与 `replication_threads` 默认语义一致）；负值表示 `-value * cpu_cores`。该线程池与 agent 任务的 `replicate_snapshot` 线程池刻意区分，目的是让外层任务可以安全地通过 `ThreadPoolToken::wait()` 等待逐文件拷贝子任务，而不触发线程池自死锁保护。该线程池在启动时一次性创建，无运行时 resize 入口，调整大小需重启 CN。
-- 引入版本：-
+- 引入版本：v4.1.2
 
 ### lake_service_max_concurrency
 
