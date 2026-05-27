@@ -72,6 +72,71 @@ A task is complete when:
 
 After presenting the completion summary, wait for explicit user instruction before making further changes.
 
+## Markdown Conventions
+
+### Frontmatter
+
+Every page must open with frontmatter between `---` delimiters.
+
+**Required:**
+- `displayed_sidebar: docs` — must be present on every page.
+
+**Optional:**
+- `sidebar_position` — integer controlling sort order within a sidebar category.
+- `sidebar_label` — overrides the H1 as the sidebar link text.
+- `toc_max_heading_level` — integer (2–6) capping right-side TOC depth.
+- `keywords` — list of terms for search and SEO.
+- `description` — meta description shown in search results.
+- `unlisted: true` — keeps the URL live but hides the page from navigation and search.
+- `hide_table_of_contents: true` — removes the right-side TOC.
+- `title` — overrides the H1 as the browser tab title and SEO metadata.
+
+### Language versions
+
+All three language directories must stay in sync: `en/`, `zh/`, and `ja/`. When editing a page in one language, update the corresponding page in the other two. If a `ja/` page does not yet exist, note this in your completion summary and ask whether to create it.
+
+### New pages
+
+1. Create the file under `en/`.
+2. Register it in `docusaurus/sidebars.js`.
+3. Create matching files under `zh/` and `ja/`.
+
+### Code blocks
+
+Always specify a language for fenced code blocks. Never use an unlabeled fence for code that has an identifiable language.
+
+### Admonitions
+
+Use Docusaurus syntax — not RST-style directives:
+
+```markdown
+:::note
+Supplemental information.
+:::
+
+:::tip
+Helpful shortcuts or alternatives.
+:::
+
+:::warning
+Risk of data loss or service disruption.
+:::
+
+:::caution
+Situations requiring extra care.
+:::
+```
+
+Do not stack multiple admonitions directly after one another.
+
+### Links
+
+Use relative paths for internal links: `[text](../category/page.md)`. Do not use absolute URLs for pages within the docs site.
+
+### Images
+
+Place images in `_assets/` and reference with a relative path: `![alt](../_assets/image.png)`.
+
 ## Writing Documentation
 
 ### File Format
