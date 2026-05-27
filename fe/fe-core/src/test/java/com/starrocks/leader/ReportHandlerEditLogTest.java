@@ -19,6 +19,7 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ListMultimap;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.DiskInfo;
 import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.LocalTablet;
@@ -629,5 +630,96 @@ public class ReportHandlerEditLogTest {
 
         // 7. Verify replica is NOT setBad (because EditLog failed, WALApplier won't execute)
         Assertions.assertFalse(tabletReplica.isBad(), "Replica should not be setBad when EditLog write fails");
+    }
+
+    @Test
+    public void testDeleteFromMetaSkipsStaleReportOnOnlineDisk() throws Exception {
+        // Cover the fast-path: when the incoming report version is stale and the replica's
+        // disk is ONLINE, deleteFromMeta must short-circuit without walking the catalog or
+        // deleting the replica.
+        // The other tests in this class register backends with empty disks, so diskInfo
+        // resolves to null and the fast path is never exercised. Here we register an
+        // ONLINE disk that the replica pins to, then drive the backend's authoritative
+        // report version above the version we pass in.
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(DB_NAME);
+        OlapTable table = createOlapTable(TABLE_ID, "test_table_fast_path");
+        db.registerTableUnlocked(table);
+
+        TabletMeta tabletMeta = new TabletMeta(DB_ID, TABLE_ID, PHYSICAL_PARTITION_ID, INDEX_ID, TStorageMedium.HDD);
+        GlobalStateMgr.getCurrentState().getTabletInvertedIndex().addTablet(TABLET_ID, tabletMeta);
+
+        Partition partition = table.getPartition(PARTITION_ID);
+        PhysicalPartition physicalPartition = partition.getDefaultPhysicalPartition();
+        MaterializedIndex index = physicalPartition.getIndex(INDEX_ID);
+        LocalTablet tablet = (LocalTablet) index.getTablet(TABLET_ID);
+
+        // Reset whatever (TABLET_ID, BACKEND_ID*) entries createOlapTable already pushed
+        // into the inverted index. With the pre-#73661 append-only addReplica, the helper's
+        // placeholder replica (which has no pathHash) would otherwise be the one our probe
+        // returns, hiding the ONLINE disk we install below. Mirrors the post-#73661 invariant
+        // of "at most one replica per (tabletId, backendId) in the inverted index".
+        GlobalStateMgr.getCurrentState().getTabletInvertedIndex().deleteReplica(TABLET_ID, BACKEND_ID);
+        GlobalStateMgr.getCurrentState().getTabletInvertedIndex().deleteReplica(TABLET_ID, BACKEND_ID_2);
+
+        long onlinePathHash = 4242L;
+        Replica replica = new Replica(REPLICA_ID, BACKEND_ID, 0, Replica.ReplicaState.NORMAL);
+        replica.updateVersionInfo(2, 2, 2);
+        replica.setPathHash(onlinePathHash);
+        replica.setDeferReplicaDeleteToNextReport(false);
+        // tablet.addReplica registers the replica into the inverted index as well; no
+        // explicit invertedIndex.addReplica needed.
+        tablet.addReplica(replica);
+        // A second replica so tablet.getImmutableReplicas().size() > 1, otherwise the
+        // single-replica setBad branch in deleteFromMeta would also short-circuit and
+        // mask whether the fast-path itself fired.
+        Replica replica2 = new Replica(REPLICA_ID_2, BACKEND_ID_2, 0, Replica.ReplicaState.NORMAL);
+        replica2.updateVersionInfo(2, 2, 2);
+        tablet.addReplica(replica2);
+
+        // Replace BACKEND_ID's empty-disk backend with one that exposes an ONLINE disk
+        // matching the replica's pathHash.
+        DiskInfo onlineDisk = new DiskInfo("/data1");
+        onlineDisk.setPathHash(onlinePathHash);
+        onlineDisk.setState(DiskInfo.DiskState.ONLINE);
+        GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackend(BACKEND_ID)
+                .setDisks(ImmutableMap.of("/data1", onlineDisk));
+
+        // Drive the authoritative report version higher than what we will pass in below.
+        GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo()
+                .updateBackendReportVersion(BACKEND_ID, 100L, DB_ID);
+
+        // Sanity-check the preconditions the fast-path depends on, otherwise a failed
+        // assert below is ambiguous between "fast-path is broken" and "test setup didn't
+        // wire what the fast-path needs".
+        Assertions.assertEquals(100L,
+                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo()
+                        .getBackendReportVersion(BACKEND_ID),
+                "test setup: authoritative report version must be advanced for the fast-path");
+        Assertions.assertSame(replica,
+                GlobalStateMgr.getCurrentState().getTabletInvertedIndex()
+                        .getReplica(TABLET_ID, BACKEND_ID),
+                "test setup: invertedIndex must hand the new replica back to the probe");
+        Assertions.assertEquals(onlinePathHash,
+                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo()
+                        .getBackend(BACKEND_ID).getDisks().get("/data1").getPathHash(),
+                "test setup: ONLINE disk pathHash must match the replica");
+
+        ListMultimap<Long, Long> tabletDeleteFromMeta = ArrayListMultimap.create();
+        tabletDeleteFromMeta.put(DB_ID, TABLET_ID);
+
+        long staleReportVersion = 50L;
+        ReportHandler.deleteFromMeta(tabletDeleteFromMeta, BACKEND_ID, staleReportVersion);
+
+        // Replica must still be there — fast-path skipped it without touching meta.
+        Assertions.assertNotNull(tablet.getReplicaByBackendId(BACKEND_ID),
+                "stale report on ONLINE disk should not delete the replica");
+        Assertions.assertEquals(2, tablet.getImmutableReplicas().size(),
+                "no replicas should be removed when the fast-path skip fires");
+
+        // And no OP_BATCH_DELETE_REPLICA journal entry should have been written. If one
+        // exists, replayNextJournal would return non-null instead of throwing.
+        Assertions.assertThrows(Throwable.class,
+                () -> UtFrameUtils.PseudoJournalReplayer.replayNextJournal(OperationType.OP_BATCH_DELETE_REPLICA),
+                "no edit log entry should have been written when the fast-path skip fires");
     }
 }
