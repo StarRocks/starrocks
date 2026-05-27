@@ -106,6 +106,7 @@ CMakeLists.txt
 .claude
 !docs/.claude/
 !docs/.claude/**
+docs/.claude/settings.local.json
 .clangd
 .cursor/
 .codex/

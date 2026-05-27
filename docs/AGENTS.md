@@ -54,7 +54,7 @@ Never violate these directives. If a task would require violating them, stop and
 
 - Do not add information beyond the requested changes.
 - Do not modify files other than those specified by the user.
-- Do not modify frontmatter unless explicitly instructed.
+- Do not change existing frontmatter unless explicitly instructed. Adding required frontmatter fields to a new page or a page that is missing them is allowed.
 - Do not use training data for StarRocks technical facts. Verify all commands, configuration options, parameter names, and version numbers against existing documentation in the same language directory before writing them. If a technical detail cannot be confirmed from existing docs, list the unconfirmed items and ask the user how to proceed.
 - When editing a page in `en/`, `zh/`, or `ja/`, update the corresponding pages in the other language directories. If a `ja/` page does not yet exist, note this in your completion summary and ask the user whether to create it.
 - Do not commit or push without explicit confirmation from the user.
