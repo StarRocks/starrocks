@@ -453,9 +453,6 @@ JAVA_OPTS="-Dlog4j2.formatMsgNoLookups=true -Xmx8192m -XX:+UseG1GC \
   -XX:+HeapDumpOnOutOfMemoryError \
   -XX:HeapDumpPath=${LOG_DIR}/heap_dump_oom.hprof \
   -Djava.security.policy=${STARROCKS_HOME}/conf/udf_security.policy \
-  -Djava.security.krb5.conf=/etc/krb5.conf \
-  -Dsun.security.krb5.debug=true -Dsun.security.spnego.debug=true \
-  -Dcom.sun.management.jmxremote \
   -Dcom.sun.management.jmxremote.authenticate=false \
   -Dcom.sun.management.jmxremote.ssl=false \
   -agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:8113"
