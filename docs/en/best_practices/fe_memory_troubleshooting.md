@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 keywords: ['FE', 'Coordinator Node','memory', 'OOM', 'JVM', 'troubleshooting', 'heap']
+description: "Prevent 'FE memory full' issues, quickly recover, and find out the cause as much as possible to prevent recurrence."
 ---
 
 import MetaRecv from '../_assets/best_practices/fe_mem_meta_recv.mdx'

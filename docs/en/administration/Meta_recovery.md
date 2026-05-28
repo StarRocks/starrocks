@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Generally, you may have to resort to metadata recovery when and only when one of the following issues occurs:"
 ---
 
 # Metadata Recovery

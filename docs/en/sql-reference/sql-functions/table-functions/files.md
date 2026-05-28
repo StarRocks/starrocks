@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 toc_max_heading_level: 5
+description: "Defines data files in remote storage, used for loading and unloading data:"
 ---
 
 # `FILES`

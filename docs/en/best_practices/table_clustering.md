@@ -1,5 +1,6 @@
 ---
 sidebar_position: 20
+description: "A thoughtful sort‑key is the highest‑leverage physical‑design knob in StarRocks."
 ---
 
 # Table clustering

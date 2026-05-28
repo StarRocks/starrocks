@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "`be_tablets` provides information about tablets on each BE node."
 ---
 
 # be_tablets

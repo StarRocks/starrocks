@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Returns the number of records that meet the specified condition or `0` if no records satisfy the condition."
 ---
 
 # count_if

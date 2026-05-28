@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "The AWS Glue Iceberg REST endpoint implements the [Iceberg REST Catalog Open API specification](https://github.com/apache/iceberg/blob/main/open-api/rest-catalog-open-api.yaml), which provides a st..."
 ---
 
 # Create Iceberg REST Catalog for AWS S3 Tables

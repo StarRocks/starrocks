@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 sidebar_position: 60
+description: "How to use hybrid row-column storage in StarRocks (from v3.2.3) for high-concurrency point queries and partial column updates alongside efficient analytical queries."
 ---
 
 import Beta from '../_assets/commonMarkdown/_beta.mdx'

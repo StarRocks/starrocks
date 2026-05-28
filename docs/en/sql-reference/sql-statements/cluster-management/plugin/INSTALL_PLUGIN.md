@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "INSTALL PLUGIN is used to install a plugin."
 ---
 
 # INSTALL PLUGIN

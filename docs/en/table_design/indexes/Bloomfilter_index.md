@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 sidebar_position: 30
+description: "How to create and manage Bloom filter indexes in StarRocks to skip data files that don't contain queried values, improving query performance on high-cardinality columns like IDs."
 ---
 
 # Bloom filter indexes

@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "`task_runs` provides information about the execution of asynchronous tasks."
 ---
 
 # task_runs

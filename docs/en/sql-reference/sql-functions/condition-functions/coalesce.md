@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Returns the first non-NULL expression among the input parameters."
 ---
 
 # coalesce

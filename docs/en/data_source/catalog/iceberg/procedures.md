@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 keywords: ['iceberg', 'procedures', 'fast forward', 'cherry pick', 'expire snapshots', 'rewrite data files', 'add files', 'register table', 'rollback to snapshot', 'remove orphan files']
+description: "StarRocks Iceberg Catalog supports a variety of procedures for managing Iceberg tables, including snapshot management, branch management, data maintenance, metadata management, and table management."
 ---
 
 # Iceberg Procedures
