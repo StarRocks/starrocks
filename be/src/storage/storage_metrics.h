@@ -125,7 +125,7 @@ public:
     // per file close (output segment, sst, .lcrm, and txn log). This is an approximation:
     // multipart uploads of large files issue several real PUTs, and the publish-time tablet
     // metadata write is not counted here (it happens outside the compaction task).
-    METRIC_DEFINE_INT_COUNTER(lake_compaction_s3_put_count, MetricUnit::OPERATIONS);
+    METRIC_DEFINE_INT_COUNTER(lake_compaction_object_storage_put_count, MetricUnit::OPERATIONS);
 
     METRIC_DEFINE_INT_COUNTER(async_delta_writer_execute_total, MetricUnit::OPERATIONS);
     METRIC_DEFINE_INT_COUNTER(async_delta_writer_task_total, MetricUnit::OPERATIONS);
