@@ -1,0 +1,48 @@
+-- name: test_count_combine_nullable
+DROP DATABASE IF EXISTS test_count_combine_nullable;
+-- result:
+-- !result
+CREATE DATABASE test_count_combine_nullable;
+-- result:
+-- !result
+USE test_count_combine_nullable;
+-- result:
+-- !result
+CREATE TABLE t (
+    region VARCHAR(8),
+    nullable_score INT
+) DUPLICATE KEY(region) DISTRIBUTED BY HASH(region) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+INSERT INTO t VALUES
+    ('CN', 5),
+    ('US', NULL),
+    ('CN', NULL),
+    ('US', 8),
+    ('CN', 12);
+-- result:
+-- !result
+SELECT region, COUNT(*) AS c_all, COUNT(nullable_score) AS c_non_null
+FROM t GROUP BY region ORDER BY region;
+-- result:
+CN	3	2
+US	2	1
+-- !result
+SELECT region,
+       count_state_merge(count_combine())               AS via_star,
+       count_state_merge(count_combine(nullable_score)) AS via_col
+FROM t GROUP BY region ORDER BY region;
+-- result:
+CN	3	2
+US	2	1
+-- !result
+SELECT count_state_merge(count_combine(region)) AS via_combine_nonnull,
+       COUNT(region) AS direct_nonnull
+FROM t;
+-- result:
+5	5
+-- !result
+DROP DATABASE test_count_combine_nullable;
+-- result:
+-- !result
