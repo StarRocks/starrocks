@@ -1,6 +1,6 @@
 # Installation
 
-import TimezoneError from '../_assets/commonMarkdown/_timezone.md'
+import TimezoneError from '../_assets/commonMarkdown/_timezone.mdx'
 
 ## Overview
 

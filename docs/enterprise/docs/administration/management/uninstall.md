@@ -1,6 +1,6 @@
 # Uninstall CelerData Manager and StarRocks
 
-import TimezoneError from '../../_assets/commonMarkdown/_timezone.md'
+import TimezoneError from '../../_assets/commonMarkdown/_timezone.mdx'
 
 1. Run the following commands in sequence on the directories where all nodes are located. 
 

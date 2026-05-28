@@ -1,6 +1,6 @@
 # Administration with CelerData Manager
 
-import TimezoneError from '../../_assets/commonMarkdown/_timezone.md'
+import TimezoneError from '../../_assets/commonMarkdown/_timezone.mdx'
 
 After logging in to CelerData Manager, you can view the status of your cluster on the **Dashboard** page, including Cluster performance, Query monitor, Data loaded, Compaction, Scan TopN, and Load TopN.
 

@@ -4,7 +4,7 @@ sidebar_position: 5
 
 # CelerData Enterprise
 
-import TimezoneError from '../_assets/commonMarkdown/_timezone.md'
+import TimezoneError from '../_assets/commonMarkdown/_timezone.mdx'
 
 CelerData Enterprise adds visual database management and development tools to CelerData Server, powered by StarRocks. CelerData Enterprise provides the following functionality to improve operations and maintenance efficiency and reduce the costs of your clusters:
 
