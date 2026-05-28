@@ -16,6 +16,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <cstring>
 #include <type_traits>
 
 #include "base/types/int256.h"
@@ -31,6 +32,10 @@
 #include <xmmintrin.h>
 #endif
 
+#ifdef __AVX2__
+#include <immintrin.h>
+#endif
+
 #include "base/hash/hash.h"
 #include "base/string/slice.h"
 #include "column/runtime_type_traits.h"
@@ -38,8 +43,85 @@
 
 namespace starrocks {
 
-#if defined(__SSE2__) && !defined(ADDRESS_SANITIZER)
+#if defined(__AVX2__) && !defined(ADDRESS_SANITIZER)
 
+// AVX2 version: 32 bytes per iteration with early-exit on the first mismatching
+// lane. Beats the SSE2 16-byte loop on keys 32..255 bytes (where the wider
+// movemask catches the mismatch one iteration sooner); above 256 bytes libc
+// memcmp wins (ERMS / REP MOVSB on x86_64), so we short-circuit there.
+// Short keys (< 32) skip the AVX2 prologue and use a single SSE2 iteration --
+// the AVX2 main loop never executes on them, and the extra branching slows
+// down what is already a one-load comparison.
+// NOTE: This function reads up to 15 padding bytes past p1/p2 -- every load that
+//       can run off the end is a 16-byte SSE2 load (the 32-byte AVX2 loads stay
+//       in bounds via `offset + 32 <= size1`). Callers must allocate that
+//       trailing slack (see SLICE_MEMEQUAL_OVERFLOW_PADDING).
+// NOTE: typename T must be uint8_t or int8_t.
+template <typename T>
+typename std::enable_if<sizeof(T) == 1, bool>::type memequal_padded(const T* p1, size_t size1, const T* p2,
+                                                                    size_t size2) {
+    if (size1 != size2) {
+        return false;
+    }
+    // Short-key guard: keys under 32 bytes never enter the AVX2 main loop
+    // (its `offset + 32 <= size1` condition is false) -- they would fall
+    // straight into the 16-byte tail with its overlap-anchor logic, which is
+    // ~1.5x slower on small inputs than a plain SSE2 iteration. So for them
+    // we run a plain SSE2 loop. This branch costs ~0.3 ns per call on the
+    // mismatch path; the Equal path doesn't pay it because the CPU
+    // speculates straight through.
+    if (size1 < 32) {
+        for (size_t offset = 0; offset < size1; offset += 16) {
+            uint16_t mask =
+                    _mm_movemask_epi8(_mm_cmpeq_epi8(_mm_loadu_si128(reinterpret_cast<const __m128i*>(p1 + offset)),
+                                                     _mm_loadu_si128(reinterpret_cast<const __m128i*>(p2 + offset))));
+            mask = ~mask;
+            if (mask) {
+                offset += __builtin_ctz(mask);
+                return offset >= size1;
+            }
+        }
+        return true;
+    }
+    constexpr size_t kMemcmpThreshold = 256;
+    if (size1 >= kMemcmpThreshold) {
+        return std::memcmp(p1, p2, size1) == 0;
+    }
+    size_t offset = 0;
+    for (; offset + 32 <= size1; offset += 32) {
+        __m256i v1 = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(p1 + offset));
+        __m256i v2 = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(p2 + offset));
+        uint32_t mask = ~static_cast<uint32_t>(_mm256_movemask_epi8(_mm256_cmpeq_epi8(v1, v2)));
+        if (mask) {
+            return false;
+        }
+    }
+    // Tail: handle up to 31 remaining bytes via one 16-byte SSE2 load and, if
+    // more than 16 bytes remain, an overlapping 16-byte load anchored at the
+    // end of the buffer.
+    if (offset < size1) {
+        __m128i v1 = _mm_loadu_si128(reinterpret_cast<const __m128i*>(p1 + offset));
+        __m128i v2 = _mm_loadu_si128(reinterpret_cast<const __m128i*>(p2 + offset));
+        uint16_t mask = ~static_cast<uint16_t>(_mm_movemask_epi8(_mm_cmpeq_epi8(v1, v2)));
+        if (mask) {
+            offset += __builtin_ctz(mask);
+            return offset >= size1;
+        }
+        if (size1 - offset > 16) {
+            __m128i v1_tail = _mm_loadu_si128(reinterpret_cast<const __m128i*>(p1 + size1 - 16));
+            __m128i v2_tail = _mm_loadu_si128(reinterpret_cast<const __m128i*>(p2 + size1 - 16));
+            uint16_t mask_tail = ~static_cast<uint16_t>(_mm_movemask_epi8(_mm_cmpeq_epi8(v1_tail, v2_tail)));
+            if (mask_tail) {
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
+#elif defined(__SSE2__) && !defined(ADDRESS_SANITIZER)
+
+// SSE2 version: 16 bytes per iteration.
 // NOTE: This function will access 15 excessive bytes after p1 and p2, which should has padding bytes when allocating
 // memory. if withoud pad, please use memequal.
 // NOTE: typename T must be uint8_t or int8_t
@@ -70,6 +152,10 @@ typename std::enable_if<sizeof(T) == 1, bool>::type memequal_padded(const T* p1,
 }
 #endif
 
+// Both SIMD memequal_padded paths overrun the buffer by at most 15 bytes: every
+// load that can read past the end is a 16-byte SSE2 load (the AVX2 path's
+// 32-byte loads are bounded by `offset + 32 <= size1`). Callers must reserve
+// this many trailing bytes.
 static constexpr uint16_t SLICE_MEMEQUAL_OVERFLOW_PADDING = 15;
 class SliceEqual {
 public:

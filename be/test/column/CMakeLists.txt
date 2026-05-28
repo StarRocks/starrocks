@@ -24,6 +24,7 @@ set(COLUMN_TEST_FILES
     column_viewer_core_test.cpp
     fixed_length_column_core_test.cpp
     column_hash_core_test.cpp
+    memequal_padded_core_test.cpp
     array_column_core_test.cpp
     array_view_column_core_test.cpp
     arrow_to_starrocks_converter_test.cpp
