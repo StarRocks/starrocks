@@ -17,6 +17,8 @@
 #include <numeric>
 #include <utility>
 
+#include "base/coding.h"
+#include "base/simd/simd.h"
 #include "column/adaptive_nullable_column.h"
 #include "column/array_column.h"
 #include "column/chunk.h"
@@ -140,7 +142,6 @@ void ChunkHelper::padding_char_column(const starrocks::TabletSchemaCSPtr& tschem
     Bytes& bytes = binary->get_bytes();
 
     // Padding 0 to CHAR field, the storage bitmap index and zone map need it.
-    // TODO(kks): we could improve this if there are many null valus
     auto new_binary = BinaryColumn::create();
     Offsets& new_offset = new_binary->get_offset();
     Bytes& new_bytes = new_binary->get_bytes();
@@ -152,10 +153,45 @@ void ChunkHelper::padding_char_column(const starrocks::TabletSchemaCSPtr& tschem
     new_bytes.assign(num_rows * len, 0); // padding 0
 
     uint32_t from = 0;
-    for (size_t j = 0; j < num_rows; ++j) {
-        uint32_t copy_data_len = std::min(len, offset[j + 1] - offset[j]);
-        strings::memcpy_inlined(new_bytes.data() + from, bytes.data() + offset[j], copy_data_len);
-        from += len; // no copy data will be 0
+    // Optimization: skip memcpy for null rows when there are many nulls
+    // The buffer is pre-zeroed, so null rows already have valid padding
+    if (field.is_nullable()) {
+        auto* nullable_column = down_cast<NullableColumn*>(column);
+        if (!nullable_column->has_null()) {
+            // No nulls: avoid the extra count_nonzero pass and keep the tight loop
+            for (size_t j = 0; j < num_rows; ++j) {
+                uint32_t copy_data_len = std::min(len, offset[j + 1] - offset[j]);
+                strings::memcpy_inlined(new_bytes.data() + from, bytes.data() + offset[j], copy_data_len);
+                from += len;
+            }
+        } else {
+            const uint8_t* null_data = nullable_column->null_column()->get_data().data();
+            size_t null_count = SIMD::count_nonzero(null_data, num_rows);
+            // Only use sparse iteration if more than 12.5% of rows are null
+            if (null_count > num_rows / 8) {
+                for (size_t j = 0; j < num_rows; ++j) {
+                    if (!null_data[j]) {
+                        uint32_t copy_data_len = std::min(len, offset[j + 1] - offset[j]);
+                        strings::memcpy_inlined(new_bytes.data() + from, bytes.data() + offset[j], copy_data_len);
+                    }
+                    from += len;
+                }
+            } else {
+                // Low null ratio: original loop without branch
+                for (size_t j = 0; j < num_rows; ++j) {
+                    uint32_t copy_data_len = std::min(len, offset[j + 1] - offset[j]);
+                    strings::memcpy_inlined(new_bytes.data() + from, bytes.data() + offset[j], copy_data_len);
+                    from += len;
+                }
+            }
+        }
+    } else {
+        // Non-nullable: original loop
+        for (size_t j = 0; j < num_rows; ++j) {
+            uint32_t copy_data_len = std::min(len, offset[j + 1] - offset[j]);
+            strings::memcpy_inlined(new_bytes.data() + from, bytes.data() + offset[j], copy_data_len);
+            from += len;
+        }
     }
 
     for (size_t j = 1; j <= num_rows; ++j) {
