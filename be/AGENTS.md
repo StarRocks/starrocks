@@ -206,6 +206,14 @@ Primitive storage contracts and value types shared below ComputeEnv without conc
 - Core tests: `storage_primitive_test`
 - Remediation: Keep StoragePrimitive limited to reusable storage contracts and value types; move concrete storage engine, tablet, rowset, lake, service, connector, and full Exec integration upward.
 
+### StorageBase (`storagebase`)
+Base storage algorithms and mask-buffer helpers above StoragePrimitive and ComputeEnv without concrete Storage engine, tablet, rowset, lake, service, or full Exec coupling.
+- Targets: `StorageBase`
+- Allowed internal include prefixes: `storage/base/`, `storage/primitive/`, `compute_env/sorting/`, `serde/`, `column/`, `types/`, `common/`, `base/`, `gutil/`, `gen_cpp/`
+- Allowed target deps: `ComputeEnv`, `StoragePrimitive`, `Serde`, `RuntimeCore`, `ChunkCore`, `ColumnCore`, `Types`, `Common`, `Base`, `Gutil`, `StarRocksGen`
+- Core tests: `storage_base_test`
+- Remediation: Keep StorageBase limited to reusable storage algorithms and helpers that may depend on ComputeEnv; move concrete storage engine, tablet, rowset, lake, service, connector, cache, and full Exec integration upward.
+
 ### ComputeEnv (`computeenv`)
 Shared compute-side BE environment boundary for process-scoped compute resources and pipeline controls below full Exec/Storage and above RuntimeEnv.
 - Targets: `ComputeEnv`

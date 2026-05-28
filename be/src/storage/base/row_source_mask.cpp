@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "storage/row_source_mask.h"
+#include "storage/base/row_source_mask.h"
 
 #include <utility>
 
@@ -20,7 +20,7 @@
 #include "common/logging.h"
 #include "common/status.h"
 #include "serde/column_array_serde.h"
-#include "storage/olap_define.h"
+#include "storage/base/storage_path_constants.h"
 
 namespace starrocks {
 
@@ -124,7 +124,7 @@ Status RowSourceMaskBuffer::flush() {
 Status RowSourceMaskBuffer::_create_tmp_file() {
     std::stringstream tmp_file_path_s;
     // storage/tmp/compaction_mask_12345.abcdef
-    tmp_file_path_s << _storage_root_path << TMP_PREFIX << "/"
+    tmp_file_path_s << _storage_root_path << kStorageTmpPrefix << "/"
                     << "compaction_mask_" << _tablet_id << ".XXXXXX";
     std::string tmp_file_path = tmp_file_path_s.str();
     _tmp_file_fd = mkstemp(tmp_file_path.data());

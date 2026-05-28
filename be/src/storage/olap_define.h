@@ -40,6 +40,7 @@
 #include <string>
 
 #include "common/constexpr.h"
+#include "storage/base/storage_path_constants.h"
 
 namespace starrocks {
 
@@ -68,7 +69,7 @@ static const std::string UNUSED_PREFIX = "/unused";                   // NOLINT
 static const std::string ERROR_LOG_PREFIX = "/error_log";             // NOLINT
 static const std::string REJECTED_RECORD_PREFIX = "/rejected_record"; // NOLINT
 static const std::string CLONE_PREFIX = "/clone";                     // NOLINT
-static const std::string TMP_PREFIX = "/tmp";                         // NOLINT
+static const std::string TMP_PREFIX = kStorageTmpPrefix;              // NOLINT
 static const std::string PERSISTENT_INDEX_PREFIX = "/persistent";     // NOLINT
 static const std::string REPLICATION_PREFIX = "/replication";         // NOLINT
 

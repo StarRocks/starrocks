@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "storage/merge_iterator.h"
+#include "storage/base/merge_iterator.h"
 
 #include <gtest/gtest.h>
 
