@@ -1,7 +1,7 @@
 ---
 displayed_sidebar: docs
 sidebar_position: 2
-description: Separate compute and storage
+description: StarRocks object storage tutorial
 ---
 
 # Separate storage and compute
