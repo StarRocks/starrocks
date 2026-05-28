@@ -40,6 +40,7 @@ import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.OrderByElement;
 import com.starrocks.sql.ast.OriginStatement;
 import com.starrocks.sql.ast.QualifiedName;
+import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.RandomDistributionDesc;
 import com.starrocks.sql.ast.Relation;
@@ -258,6 +259,7 @@ public class RecursiveCTEExecutor {
 
     private class RecursiveCTESplitter extends AstTraverser<Void, Void> {
         private final List<CTERelation> nonRecursiveCTEs = Lists.newArrayList();
+        private boolean collectNonRecursiveCTEs = true;
 
         @Override
         public Void visitSelect(SelectRelation node, Void context) {
@@ -267,7 +269,11 @@ public class RecursiveCTEExecutor {
                     if (cteRelation.isRecursive()) {
                         visit(cteRelation, context);
                     } else {
-                        nonRecursiveCTEs.add(cteRelation);
+                        visitWithoutCollectingNonRecursiveCTEs(
+                                cteRelation.getCteQueryStatement().getQueryRelation(), context);
+                        if (collectNonRecursiveCTEs) {
+                            nonRecursiveCTEs.add(cteRelation);
+                        }
                         cteRelations.add(cteRelation);
                     }
                 }
@@ -303,6 +309,16 @@ public class RecursiveCTEExecutor {
 
             node.setRelation(rewriteCTERelation(node.getRelation(), context));
             return null;
+        }
+
+        private void visitWithoutCollectingNonRecursiveCTEs(QueryRelation queryRelation, Void context) {
+            boolean oldCollectNonRecursiveCTEs = collectNonRecursiveCTEs;
+            collectNonRecursiveCTEs = false;
+            try {
+                visit(queryRelation, context);
+            } finally {
+                collectNonRecursiveCTEs = oldCollectNonRecursiveCTEs;
+            }
         }
 
         private Relation rewriteCTERelation(Relation relation, Void context) {
@@ -399,8 +415,8 @@ public class RecursiveCTEExecutor {
                     List.copyOf(nonRecursiveCTEs), tempTableStmt, levelColumnName));
             cteTempTableMap.put(node.getName(), tableRef);
 
-            visit(start.getQueryRelation());
-            visit(recursive.getQueryRelation());
+            visitWithoutCollectingNonRecursiveCTEs(start.getQueryRelation(), context);
+            visitWithoutCollectingNonRecursiveCTEs(recursive.getQueryRelation(), context);
             return null;
         }
 

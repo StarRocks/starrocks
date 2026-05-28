@@ -185,4 +185,17 @@ public class RecursiveCTETest extends PlanTestBase {
         assertContains(plan, "Outer Statement After Rewriting:\n"
                 + "WITH RECURSIVE `cte2`");
     }
+
+    @Test
+    public void testNonRecursiveCTECanReferenceEarlierRecursiveCTE() throws Exception {
+        String sql = "with recursive cte1 as " +
+                "(select v1 from t0 union all select v1 + 1 from cte1 where v1 < 10), " +
+                "cte2 as (select v1 from cte1) " +
+                "select * from cte2";
+        String plan = explainRecursiveCte(sql);
+        assertContains(plan, "Recursive CTE Name: cte1\n"
+                + "Temporary Table: cte1_");
+        assertContains(plan, "WITH RECURSIVE `cte2` (`v1`) AS (SELECT `cte1`.`v1`");
+        assertContains(plan, "FROM (SELECT `test`.`cte1_");
+    }
 }
