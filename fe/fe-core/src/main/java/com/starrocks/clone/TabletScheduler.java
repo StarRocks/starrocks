@@ -42,6 +42,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Multimap;
 import com.google.common.collect.Sets;
+import com.google.common.util.concurrent.RateLimiter;
 import com.starrocks.authentication.UserIdentityUtils;
 import com.starrocks.catalog.CatalogRecycleBin;
 import com.starrocks.catalog.ColocateTableIndex.GroupId;
@@ -181,6 +182,10 @@ public class TabletScheduler extends LeaderDaemon {
     private final Rebalancer rebalancer;
 
     private final AtomicBoolean forceCleanSchedQ = new AtomicBoolean(false);
+
+    // Throttle for error-state replica deletion.
+    private final RateLimiter errorReplicaDeleteRateLimiter =
+            RateLimiter.create(Config.tablet_sched_delete_error_state_replica_permits_per_second);
 
     // result of adding a tablet to pendingTablets
     public enum AddResult {
@@ -452,6 +457,8 @@ public class TabletScheduler extends LeaderDaemon {
      */
     @Override
     protected void runAfterLeaseValid() {
+        refreshErrorReplicaDeleteRateLimiter();
+
         if (!updateWorkingSlots()) {
             return;
         }
@@ -505,6 +512,16 @@ public class TabletScheduler extends LeaderDaemon {
         lastSlotAdjustTime = 0;
         currentSlotPerPathConfig = 0;
         forceCleanSchedQ.set(false);
+    }
+
+    // Re-sync the error-replica delete RateLimiter with Config if the value has changed,
+    // allowing mutable Config updates to take effect at the start of each check loop.
+    private void refreshErrorReplicaDeleteRateLimiter() {
+        double configured = Config.tablet_sched_delete_error_state_replica_permits_per_second;
+        if (configured > 0 && configured != errorReplicaDeleteRateLimiter.getRate()) {
+            errorReplicaDeleteRateLimiter.setRate(configured);
+            LOG.info("error-state replica delete rate limiter updated to {} permits/sec", configured);
+        }
     }
 
     private void updateClusterLoadStatisticsAndPriority() {
@@ -1016,7 +1033,7 @@ public class TabletScheduler extends LeaderDaemon {
         int unavailableCnt = 0;
         for (Replica replica : replicas) {
             if (GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackend(replica.getBackendId()) == null ||
-                    replica.isBad()) {
+                    replica.isBad() || replica.isErrorState()) {
                 unavailableCnt++;
             }
         }
@@ -1133,6 +1150,7 @@ public class TabletScheduler extends LeaderDaemon {
             checkMetaExist(tabletCtx);
             if (deleteBackendDropped(tabletCtx, force)
                     || deleteBadReplica(tabletCtx, force)
+                    || deleteErrorStateReplica(tabletCtx, force)
                     || deleteBackendUnavailable(tabletCtx, force)
                     || deleteCloneOrDecommissionReplica(tabletCtx, force)
                     || deleteLocationMismatchReplica(tabletCtx, force)
@@ -1169,6 +1187,53 @@ public class TabletScheduler extends LeaderDaemon {
                 deleteReplicaInternal(tabletCtx, replica, "replica is bad", force);
                 return true;
             }
+        }
+        return false;
+    }
+
+    private boolean deleteErrorStateReplica(TabletSchedCtx tabletCtx, boolean force) throws SchedException {
+        List<Replica> replicas = tabletCtx.getReplicas();
+        for (Replica replica : replicas) {
+            if (replica.isErrorState()) {
+                // Only drop an error-state replica when at least one other replica is still healthy
+                // and loadable. Dropping the last usable replica would turn a recoverable error-state
+                // tablet into data loss with no source to clone from.
+                if (!hasAnotherHealthyReplica(replicas, replica)) {
+                    LOG.info("skip deleting error-state replica {} of tablet {}: no other healthy replica remains",
+                            replica.getId(), tabletCtx.getTabletId());
+                    return false;
+                }
+                if (!errorReplicaDeleteRateLimiter.tryAcquire()) {
+                    LOG.info("skip deleting error-state replica {} of tablet {} due to throttling",
+                            replica.getId(), tabletCtx.getTabletId());
+                    return false;
+                }
+                deleteReplicaInternal(tabletCtx, replica, "replica is in error state", force);
+                return true;
+            }
+        }
+        return false;
+    }
+
+    // Returns true if `replicas` contains at least one replica other than `exclude` that is
+    // not bad, not in error state, on an alive backend, and in a loadable state.
+    private static boolean hasAnotherHealthyReplica(List<Replica> replicas, Replica exclude) {
+        SystemInfoService infoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+        for (Replica replica : replicas) {
+            if (replica == exclude) {
+                continue;
+            }
+            if (replica.isBad() || replica.isErrorState()) {
+                continue;
+            }
+            if (!replica.getState().canLoad()) {
+                continue;
+            }
+            Backend be = infoService.getBackend(replica.getBackendId());
+            if (be == null || !be.isAlive()) {
+                continue;
+            }
+            return true;
         }
         return false;
     }
@@ -1377,18 +1442,35 @@ public class TabletScheduler extends LeaderDaemon {
             List<Replica> replicas = tabletCtx.getReplicas();
             for (Replica replica : replicas) {
                 boolean forceDropBad = false;
+                String reason = "colocate redundant";
                 if (backendSet.contains(replica.getBackendId())) {
                     if (replica.isBad() && replicas.size() > 1) {
                         forceDropBad = true;
-                        LOG.info("colocate tablet {}, replica {} is bad," +
-                                        "will forcefully drop it, current backend set: {}",
+                        reason = "colocate redundant bad replica";
+                        LOG.info("colocate tablet {}, replica {} is bad, will forcefully drop it," +
+                                        " current backend set: {}",
+                                tabletCtx.getTabletId(), replica.getBackendId(), backendSet);
+                    } else if (replica.isErrorState() && hasAnotherHealthyReplica(replicas, replica)) {
+                        // Only drop an error-state replica when another healthy replica remains,
+                        // otherwise we would turn a recoverable tablet into data loss.
+                        // Throttle through the same rate limiter as the generic path so a colocate
+                        // repair wave cannot bypass tablet_sched_delete_error_state_replica_permits_per_second.
+                        if (!errorReplicaDeleteRateLimiter.tryAcquire()) {
+                            LOG.info("skip deleting error-state replica {} of colocate tablet {} due to throttling",
+                                    replica.getId(), tabletCtx.getTabletId());
+                            continue;
+                        }
+                        forceDropBad = true;
+                        reason = "colocate redundant error-state replica";
+                        LOG.info("colocate tablet {}, replica {} is in error state, will forcefully drop it," +
+                                        " current backend set: {}",
                                 tabletCtx.getTabletId(), replica.getBackendId(), backendSet);
                     } else {
                         continue;
                     }
                 }
 
-                deleteReplicaInternal(tabletCtx, replica, "colocate redundant", forceDropBad);
+                deleteReplicaInternal(tabletCtx, replica, reason, forceDropBad);
                 throw new SchedException(Status.FINISHED, "colocate redundant replica is deleted");
             }
             throw new SchedException(Status.UNRECOVERABLE, "unable to delete any colocate redundant replicas. replicas: " +

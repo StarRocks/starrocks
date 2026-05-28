@@ -252,7 +252,7 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
         SystemInfoService infoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
         try (CloseableLock ignored = CloseableLock.lock(this.rwLock.readLock())) {
             for (Replica replica : replicas) {
-                if (replica.isBad()) {
+                if (replica.isBad() || replica.isErrorState()) {
                     continue;
                 }
 
@@ -271,7 +271,7 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
         Multimap<Replica, Long> map = LinkedHashMultimap.create();
         try (CloseableLock ignored = CloseableLock.lock(this.rwLock.readLock())) {
             for (Replica replica : replicas) {
-                if (replica.isBad()) {
+                if (replica.isBad() || replica.isErrorState()) {
                     continue;
                 }
 

@@ -17,6 +17,7 @@ package com.starrocks.clone;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
+import com.google.common.util.concurrent.RateLimiter;
 import com.starrocks.catalog.CatalogRecycleBin;
 import com.starrocks.catalog.ColocateTableIndex;
 import com.starrocks.catalog.Column;
@@ -50,6 +51,8 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.NodeMgr;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
+import com.starrocks.task.AgentBatchTask;
+import com.starrocks.task.AgentTaskExecutor;
 import com.starrocks.task.CloneTask;
 import com.starrocks.task.CreateReplicaTask;
 import com.starrocks.thrift.TBackend;
@@ -73,6 +76,7 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.util.ArrayList;
@@ -84,6 +88,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.PriorityQueue;
 import java.util.Queue;
+import java.util.Set;
 
 import static com.starrocks.sql.ast.KeysType.DUP_KEYS;
 
@@ -765,6 +770,347 @@ public class TabletSchedulerTest {
                 ((java.util.concurrent.atomic.AtomicBoolean) Deencapsulation.getField(scheduler, "forceCleanSchedQ"))
                         .get(),
                 "forceCleanSchedQ must reset to false");
+    }
+
+    // Combined coverage for the error-state replica handling in the generic redundant-replica path:
+    //   * deleteErrorStateReplica drops one error-state replica and bumps the rate limiter,
+    //   * the rate limiter then throttles the next would-be drop,
+    //   * the safety guard preserves an error-state replica when no healthy peer remains (RF=1).
+    @Test
+    public void testDeleteErrorStateReplica() throws Exception {
+        long beId1 = 10001L;
+        long beId2 = 10002L;
+        long dbIdMulti = 20001L;
+        long tblIdMulti = 20002L;
+        long partIdMulti = 20003L;
+        long physPartIdMulti = 20003L;
+        long indexIdMulti = 20004L;
+
+        long dbIdSingle = 21001L;
+        long tblIdSingle = 21002L;
+        long partIdSingle = 21003L;
+        long physPartIdSingle = 21003L;
+        long indexIdSingle = 21004L;
+        long singleTabletId = 21005L;
+
+        // Use a low rate so the second deletion in the multi-replica scenario is throttled.
+        double savedRate = Config.tablet_sched_delete_error_state_replica_permits_per_second;
+        Config.tablet_sched_delete_error_state_replica_permits_per_second = 0.1;
+
+        // Shared backends - registered so deleteBackendDropped()/Unavailable() don't fire.
+        Backend be1 = new Backend(beId1, "192.168.0.1", 9030);
+        be1.setAlive(true);
+        systemInfoService.addBackend(be1);
+        Backend be2 = new Backend(beId2, "192.168.0.2", 9030);
+        be2.setAlive(true);
+        systemInfoService.addBackend(be2);
+
+        // Multi-replica fixture (two error-state tablets sharing the same index).
+        MaterializedIndex indexMulti = new MaterializedIndex(indexIdMulti);
+        Replica normalA = new Replica(30001L, beId1, 0, Replica.ReplicaState.NORMAL);
+        Replica errorA = new Replica(30002L, beId2, 0, Replica.ReplicaState.NORMAL);
+        errorA.setIsErrorState(true);
+        LocalTablet tabletA = new LocalTablet(20005L, Lists.newArrayList(normalA, errorA));
+        indexMulti.addTablet(tabletA, new TabletMeta(dbIdMulti, tblIdMulti, physPartIdMulti, indexIdMulti, TStorageMedium.HDD));
+
+        Replica normalB = new Replica(30003L, beId1, 0, Replica.ReplicaState.NORMAL);
+        Replica errorB = new Replica(30004L, beId2, 0, Replica.ReplicaState.NORMAL);
+        errorB.setIsErrorState(true);
+        LocalTablet tabletB = new LocalTablet(20006L, Lists.newArrayList(normalB, errorB));
+        indexMulti.addTablet(tabletB, new TabletMeta(dbIdMulti, tblIdMulti, physPartIdMulti, indexIdMulti, TStorageMedium.HDD));
+
+        PhysicalPartition partMulti = new PhysicalPartition(physPartIdMulti, partIdMulti, indexMulti);
+        Database dbMulti = new Database(dbIdMulti, "db_multi");
+        OlapTable tableMulti = new OlapTable(tblIdMulti, "table_multi", null, null, null, null);
+
+        // RF=1 fixture - safety guard scenario.
+        MaterializedIndex indexSingle = new MaterializedIndex(indexIdSingle);
+        Replica errorSolo = new Replica(31001L, beId1, 0, Replica.ReplicaState.NORMAL);
+        errorSolo.setIsErrorState(true);
+        LocalTablet tabletSolo = new LocalTablet(singleTabletId, Lists.newArrayList(errorSolo));
+        indexSingle.addTablet(tabletSolo,
+                new TabletMeta(dbIdSingle, tblIdSingle, physPartIdSingle, indexIdSingle, TStorageMedium.HDD));
+        PhysicalPartition partSingle = new PhysicalPartition(physPartIdSingle, partIdSingle, indexSingle);
+        Database dbSingle = new Database(dbIdSingle, "db_single");
+        OlapTable tableSingle = new OlapTable(tblIdSingle, "table_single", null, null, null, null);
+
+        // One mock setup serves both fixtures - minTimes=0 means unused entries are harmless.
+        new Expectations() {
+            {
+                globalStateMgr.getLocalMetastore().getDbIncludeRecycleBin(dbIdMulti);
+                minTimes = 0;
+                result = dbMulti;
+                globalStateMgr.getLocalMetastore().getTableIncludeRecycleBin(dbMulti, tblIdMulti);
+                minTimes = 0;
+                result = tableMulti;
+                globalStateMgr.getLocalMetastore().getPhysicalPartitionIncludeRecycleBin(tableMulti, physPartIdMulti);
+                minTimes = 0;
+                result = partMulti;
+
+                globalStateMgr.getLocalMetastore().getDbIncludeRecycleBin(dbIdSingle);
+                minTimes = 0;
+                result = dbSingle;
+                globalStateMgr.getLocalMetastore().getTableIncludeRecycleBin(dbSingle, tblIdSingle);
+                minTimes = 0;
+                result = tableSingle;
+                globalStateMgr.getLocalMetastore().getPhysicalPartitionIncludeRecycleBin(tableSingle, physPartIdSingle);
+                minTimes = 0;
+                result = partSingle;
+            }
+        };
+        new MockUp<AgentTaskExecutor>() {
+            @Mock
+            public void submit(AgentBatchTask task) {
+                // no-op for test
+            }
+        };
+
+        try {
+            TabletScheduler scheduler = new TabletScheduler(new TabletSchedulerStat());
+
+            // Scenario A: first error-state tablet -> success (consumes the only token).
+            TabletSchedCtx ctxA = new TabletSchedCtx(TabletSchedCtx.Type.REPAIR, dbIdMulti, tblIdMulti, partIdMulti,
+                    indexIdMulti, tabletA.getId(), System.currentTimeMillis());
+            ctxA.setTablet(tabletA);
+            SchedException exA = Assertions.assertThrows(SchedException.class,
+                    () -> scheduler.handleTabletByTypeAndStatus(
+                            LocalTablet.TabletHealthStatus.FORCE_REDUNDANT, ctxA, new AgentBatchTask()));
+            Assertions.assertEquals(SchedException.Status.FINISHED, exA.getStatus());
+            Assertions.assertTrue(exA.getMessage().contains("redundant replica is deleted"));
+
+            // Scenario B: second error-state tablet -> throttled, no other deleter matches,
+            // so handleRedundantReplica falls through to UNRECOVERABLE.
+            TabletSchedCtx ctxB = new TabletSchedCtx(TabletSchedCtx.Type.REPAIR, dbIdMulti, tblIdMulti, partIdMulti,
+                    indexIdMulti, tabletB.getId(), System.currentTimeMillis());
+            ctxB.setTablet(tabletB);
+            SchedException exB = Assertions.assertThrows(SchedException.class,
+                    () -> scheduler.handleTabletByTypeAndStatus(
+                            LocalTablet.TabletHealthStatus.FORCE_REDUNDANT, ctxB, new AgentBatchTask()));
+            Assertions.assertEquals(SchedException.Status.UNRECOVERABLE, exB.getStatus());
+            Assertions.assertTrue(exB.getMessage().contains("unable to delete any redundant replicas"));
+
+            // Scenario C: RF=1 -> safety guard fires before the rate limiter, the error-state
+            // replica is preserved, and handleRedundantReplica falls through to UNRECOVERABLE.
+            TabletSchedCtx ctxC = new TabletSchedCtx(TabletSchedCtx.Type.REPAIR, dbIdSingle, tblIdSingle, partIdSingle,
+                    indexIdSingle, singleTabletId, System.currentTimeMillis());
+            ctxC.setTablet(tabletSolo);
+            SchedException exC = Assertions.assertThrows(SchedException.class,
+                    () -> scheduler.handleTabletByTypeAndStatus(
+                            LocalTablet.TabletHealthStatus.FORCE_REDUNDANT, ctxC, new AgentBatchTask()));
+            Assertions.assertEquals(SchedException.Status.UNRECOVERABLE, exC.getStatus());
+            Assertions.assertTrue(exC.getMessage().contains("unable to delete any redundant replicas"));
+            Assertions.assertTrue(errorSolo.isErrorState(), "error-state replica should still be present");
+        } finally {
+            Config.tablet_sched_delete_error_state_replica_permits_per_second = savedRate;
+        }
+    }
+
+    // Combined coverage for handleColocateRedundant: the bad-replica branch always drops,
+    // the error-state-replica branch drops once and is then throttled by the same rate
+    // limiter as the generic redundant path so colocate cannot bypass the throttle.
+    @Test
+    public void testHandleColocateRedundantDropsAbnormalReplicas() throws Exception {
+        long beId1 = 12001L;
+        long beId2 = 12002L;
+        long dbId = 22001L;
+        long tblId = 22002L;
+        long partitionId = 22003L;
+        long physicalPartitionId = 22003L;
+        long indexId = 22004L;
+
+        // Low rate so the second error-state colocate drop in this test is throttled.
+        double savedRate = Config.tablet_sched_delete_error_state_replica_permits_per_second;
+        Config.tablet_sched_delete_error_state_replica_permits_per_second = 0.1;
+
+        Backend be1 = new Backend(beId1, "10.2.0.1", 9030);
+        be1.setAlive(true);
+        systemInfoService.addBackend(be1);
+        Backend be2 = new Backend(beId2, "10.2.0.2", 9030);
+        be2.setAlive(true);
+        systemInfoService.addBackend(be2);
+
+        // Three tablets share the same index/partition/db. Order in each replicas list
+        // matters: handleColocateRedundant acts on the first matching replica.
+        MaterializedIndex index = new MaterializedIndex(indexId);
+
+        Replica badReplica = new Replica(32001L, beId1, 0, Replica.ReplicaState.NORMAL);
+        badReplica.setBad(true);
+        Replica healthyForBad = new Replica(32002L, beId2, 0, Replica.ReplicaState.NORMAL);
+        LocalTablet tabletBad = new LocalTablet(22005L, Lists.newArrayList(badReplica, healthyForBad));
+        index.addTablet(tabletBad, new TabletMeta(dbId, tblId, physicalPartitionId, indexId, TStorageMedium.HDD));
+
+        Replica errorReplicaA = new Replica(33001L, beId1, 0, Replica.ReplicaState.NORMAL);
+        errorReplicaA.setIsErrorState(true);
+        Replica healthyForErrA = new Replica(33002L, beId2, 0, Replica.ReplicaState.NORMAL);
+        LocalTablet tabletErrA = new LocalTablet(22006L, Lists.newArrayList(errorReplicaA, healthyForErrA));
+        index.addTablet(tabletErrA, new TabletMeta(dbId, tblId, physicalPartitionId, indexId, TStorageMedium.HDD));
+
+        Replica errorReplicaB = new Replica(33003L, beId1, 0, Replica.ReplicaState.NORMAL);
+        errorReplicaB.setIsErrorState(true);
+        Replica healthyForErrB = new Replica(33004L, beId2, 0, Replica.ReplicaState.NORMAL);
+        LocalTablet tabletErrB = new LocalTablet(22007L, Lists.newArrayList(errorReplicaB, healthyForErrB));
+        index.addTablet(tabletErrB, new TabletMeta(dbId, tblId, physicalPartitionId, indexId, TStorageMedium.HDD));
+
+        PhysicalPartition physicalPartition = new PhysicalPartition(physicalPartitionId, partitionId, index);
+        Database db = new Database(dbId, "db_colocate");
+        OlapTable table = new OlapTable(tblId, "table_colocate", null, null, null, null);
+
+        new Expectations() {
+            {
+                globalStateMgr.getLocalMetastore().getDbIncludeRecycleBin(dbId);
+                minTimes = 0;
+                result = db;
+                globalStateMgr.getLocalMetastore().getTableIncludeRecycleBin(db, tblId);
+                minTimes = 0;
+                result = table;
+                globalStateMgr.getLocalMetastore().getPhysicalPartitionIncludeRecycleBin(table, physicalPartitionId);
+                minTimes = 0;
+                result = physicalPartition;
+            }
+        };
+        new MockUp<AgentTaskExecutor>() {
+            @Mock
+            public void submit(AgentBatchTask task) {
+                // no-op for test
+            }
+        };
+
+        try {
+            TabletScheduler scheduler = new TabletScheduler(new TabletSchedulerStat());
+            Set<Long> backendSet = Sets.newHashSet(beId1, beId2);
+
+            // Scenario A: bad-replica branch drops unconditionally (no rate limiter on bad path).
+            TabletSchedCtx ctxBad = new TabletSchedCtx(TabletSchedCtx.Type.REPAIR, dbId, tblId, partitionId, indexId,
+                    tabletBad.getId(), System.currentTimeMillis());
+            ctxBad.setTablet(tabletBad);
+            ctxBad.setColocateGroupBackendIds(backendSet);
+            SchedException exBad = Assertions.assertThrows(SchedException.class,
+                    () -> scheduler.handleTabletByTypeAndStatus(
+                            LocalTablet.TabletHealthStatus.COLOCATE_REDUNDANT, ctxBad, new AgentBatchTask()));
+            Assertions.assertEquals(SchedException.Status.FINISHED, exBad.getStatus());
+            Assertions.assertTrue(exBad.getMessage().contains("colocate redundant replica is deleted"));
+
+            // Scenario B: error-state branch drops once and consumes the only available token.
+            TabletSchedCtx ctxErrA = new TabletSchedCtx(TabletSchedCtx.Type.REPAIR, dbId, tblId, partitionId, indexId,
+                    tabletErrA.getId(), System.currentTimeMillis());
+            ctxErrA.setTablet(tabletErrA);
+            ctxErrA.setColocateGroupBackendIds(backendSet);
+            SchedException exErrA = Assertions.assertThrows(SchedException.class,
+                    () -> scheduler.handleTabletByTypeAndStatus(
+                            LocalTablet.TabletHealthStatus.COLOCATE_REDUNDANT, ctxErrA, new AgentBatchTask()));
+            Assertions.assertEquals(SchedException.Status.FINISHED, exErrA.getStatus());
+            Assertions.assertTrue(exErrA.getMessage().contains("colocate redundant replica is deleted"));
+
+            // Scenario C: a second error-state colocate tablet is throttled, so the loop falls
+            // through to UNRECOVERABLE and the error-state replica is preserved for the next round.
+            TabletSchedCtx ctxErrB = new TabletSchedCtx(TabletSchedCtx.Type.REPAIR, dbId, tblId, partitionId, indexId,
+                    tabletErrB.getId(), System.currentTimeMillis());
+            ctxErrB.setTablet(tabletErrB);
+            ctxErrB.setColocateGroupBackendIds(backendSet);
+            SchedException exErrB = Assertions.assertThrows(SchedException.class,
+                    () -> scheduler.handleTabletByTypeAndStatus(
+                            LocalTablet.TabletHealthStatus.COLOCATE_REDUNDANT, ctxErrB, new AgentBatchTask()));
+            Assertions.assertEquals(SchedException.Status.UNRECOVERABLE, exErrB.getStatus());
+            Assertions.assertTrue(exErrB.getMessage().contains("unable to delete any colocate redundant replicas"));
+            Assertions.assertTrue(errorReplicaB.isErrorState(),
+                    "throttled error-state colocate replica should still be present");
+        } finally {
+            Config.tablet_sched_delete_error_state_replica_permits_per_second = savedRate;
+        }
+    }
+
+    // Reflection-based coverage for the small private helpers introduced by this feature.
+    // Bundled together because they share no heavy fixture and do not need the full
+    // db/table/partition mock chain.
+    @Test
+    public void testTabletSchedulerErrorStateHelpers() throws Exception {
+        long aliveBe = 30000L;
+        long deadBe = 30001L;
+        long missingBe = 30002L; // intentionally not registered with systemInfoService
+        Backend alive = new Backend(aliveBe, "10.1.0.1", 9030);
+        alive.setAlive(true);
+        systemInfoService.addBackend(alive);
+        Backend dead = new Backend(deadBe, "10.1.0.2", 9030);
+        dead.setAlive(false);
+        systemInfoService.addBackend(dead);
+
+        // ---- refreshErrorReplicaDeleteRateLimiter ----
+        double savedRate = Config.tablet_sched_delete_error_state_replica_permits_per_second;
+        try {
+            Config.tablet_sched_delete_error_state_replica_permits_per_second = 5.0;
+            TabletScheduler scheduler = new TabletScheduler(new TabletSchedulerStat());
+
+            Field rlField = TabletScheduler.class.getDeclaredField("errorReplicaDeleteRateLimiter");
+            rlField.setAccessible(true);
+            RateLimiter limiter = (RateLimiter) rlField.get(scheduler);
+            Assertions.assertEquals(5.0, limiter.getRate(), 1e-9);
+
+            Method refresh = TabletScheduler.class.getDeclaredMethod("refreshErrorReplicaDeleteRateLimiter");
+            refresh.setAccessible(true);
+
+            // Same config -> no-op (false branch of the if predicate).
+            refresh.invoke(scheduler);
+            Assertions.assertEquals(5.0, limiter.getRate(), 1e-9);
+
+            // Changed config -> setRate + LOG.info path.
+            Config.tablet_sched_delete_error_state_replica_permits_per_second = 25.0;
+            refresh.invoke(scheduler);
+            Assertions.assertEquals(25.0, limiter.getRate(), 1e-9);
+
+            // Zero or negative -> ignored (the >0 guard).
+            Config.tablet_sched_delete_error_state_replica_permits_per_second = 0.0;
+            refresh.invoke(scheduler);
+            Assertions.assertEquals(25.0, limiter.getRate(), 1e-9);
+
+            // ---- isDataLost ----
+            Method isDataLost = TabletScheduler.class.getDeclaredMethod("isDataLost", List.class);
+            isDataLost.setAccessible(true);
+
+            Replica healthy = new Replica(60000L, aliveBe, 0, Replica.ReplicaState.NORMAL);
+            Assertions.assertFalse((Boolean) isDataLost.invoke(scheduler, Lists.newArrayList(healthy)));
+
+            Replica bad = new Replica(60001L, aliveBe, 0, Replica.ReplicaState.NORMAL);
+            bad.setBad(true);
+            Assertions.assertTrue((Boolean) isDataLost.invoke(scheduler, Lists.newArrayList(bad)));
+
+            Replica errored = new Replica(60002L, aliveBe, 0, Replica.ReplicaState.NORMAL);
+            errored.setIsErrorState(true);
+            Assertions.assertTrue((Boolean) isDataLost.invoke(scheduler, Lists.newArrayList(errored)));
+
+            // Mixed: only some lost -> not data-lost.
+            Assertions.assertFalse((Boolean) isDataLost.invoke(scheduler, Lists.newArrayList(healthy, errored)));
+
+            // ---- hasAnotherHealthyReplica ----
+            Method hasAnother = TabletScheduler.class.getDeclaredMethod(
+                    "hasAnotherHealthyReplica", List.class, Replica.class);
+            hasAnother.setAccessible(true);
+
+            Replica exclude = new Replica(50000L, aliveBe, 0, Replica.ReplicaState.NORMAL);
+
+            // Each peer flavor below should be skipped, leaving no other healthy peer.
+            Replica peerBad = new Replica(50001L, aliveBe, 0, Replica.ReplicaState.NORMAL);
+            peerBad.setBad(true);
+            Assertions.assertFalse((Boolean) hasAnother.invoke(null, Lists.newArrayList(exclude, peerBad), exclude));
+
+            Replica peerErr = new Replica(50002L, aliveBe, 0, Replica.ReplicaState.NORMAL);
+            peerErr.setIsErrorState(true);
+            Assertions.assertFalse((Boolean) hasAnother.invoke(null, Lists.newArrayList(exclude, peerErr), exclude));
+
+            Replica peerClone = new Replica(50003L, aliveBe, 0, Replica.ReplicaState.CLONE);
+            Assertions.assertFalse((Boolean) hasAnother.invoke(null, Lists.newArrayList(exclude, peerClone), exclude));
+
+            Replica peerDeadBe = new Replica(50004L, deadBe, 0, Replica.ReplicaState.NORMAL);
+            Assertions.assertFalse((Boolean) hasAnother.invoke(null, Lists.newArrayList(exclude, peerDeadBe), exclude));
+
+            Replica peerMissingBe = new Replica(50005L, missingBe, 0, Replica.ReplicaState.NORMAL);
+            Assertions.assertFalse((Boolean) hasAnother.invoke(null, Lists.newArrayList(exclude, peerMissingBe), exclude));
+
+            // Healthy peer present -> true.
+            Replica peerOk = new Replica(50006L, aliveBe, 0, Replica.ReplicaState.NORMAL);
+            Assertions.assertTrue((Boolean) hasAnother.invoke(null, Lists.newArrayList(exclude, peerOk), exclude));
+        } finally {
+            Config.tablet_sched_delete_error_state_replica_permits_per_second = savedRate;
+        }
     }
 
     @Test

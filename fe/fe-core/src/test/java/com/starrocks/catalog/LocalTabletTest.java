@@ -290,4 +290,44 @@ public class LocalTabletTest {
         Multimap<Replica, Long> map2 = tablet.getNormalReplicaBackendPathMap(infoService, true);
         Assertions.assertTrue(map2.size() == 3);
     }
+
+    @Test
+    public void testNormalReplicaSelectorsFilterErrorState() {
+        List<Replica> replicas = Lists.newArrayList(new Replica(10001, 20001, ReplicaState.NORMAL, 10, -1),
+                new Replica(10002, 20002, ReplicaState.NORMAL, 10, -1),
+                new Replica(10003, 20003, ReplicaState.NORMAL, 10, -1));
+        LocalTablet tablet = new LocalTablet(10004, replicas);
+
+        new MockUp<SimpleScheduler>() {
+            @Mock
+            public boolean isInBlocklist(long id) {
+                return false;
+            }
+        };
+
+        new MockUp<SystemInfoService>() {
+            @Mock
+            public boolean checkBackendAlive(long id) {
+                return true;
+            }
+        };
+
+        // Baseline: all three replicas included.
+        Assertions.assertEquals(3, tablet.getNormalReplicaBackendIds().size());
+        Assertions.assertEquals(3, tablet.getNormalReplicaBackendPathMap(infoService, false).size());
+
+        // Marking a replica error-state should exclude it from both write-path selectors,
+        // matching the behavior of the query-path selectors and preventing writes to a
+        // replica that BE will reject once its TabletUpdates enters error state.
+        replicas.get(0).setIsErrorState(true);
+        List<Long> beIds = tablet.getNormalReplicaBackendIds();
+        Assertions.assertEquals(2, beIds.size());
+        Assertions.assertFalse(beIds.contains(20001L));
+
+        Multimap<Replica, Long> map = tablet.getNormalReplicaBackendPathMap(infoService, false);
+        Assertions.assertEquals(2, map.size());
+        for (Map.Entry<Replica, Long> entry : map.entries()) {
+            Assertions.assertNotEquals(20001L, (long) entry.getKey().getBackendId());
+        }
+    }
 }

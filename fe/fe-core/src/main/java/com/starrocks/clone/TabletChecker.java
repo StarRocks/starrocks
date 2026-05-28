@@ -899,6 +899,7 @@ public class TabletChecker extends LeaderDaemon {
         return replica.getState() == Replica.ReplicaState.CLONE
                 || replica.getState() == Replica.ReplicaState.DECOMMISSION
                 || replica.isBad()
+                || replica.isErrorState()
                 || !replicaHostSet.add(backend.getHost());
     }
 
@@ -1330,11 +1331,11 @@ public class TabletChecker extends LeaderDaemon {
                 continue;
             }
 
-            if (replica.isBad()) {
-                LOG.debug("colocate tablet {} has bad replica, need to drop-then-repair, " +
+            if (replica.isBad() || replica.isErrorState()) {
+                LOG.debug("colocate tablet {} has bad or error-state replica, need to drop-then-repair, " +
                                 "current backend set: {}, visible version: {}", localTablet.getId(), backendsSet,
                         visibleVersion);
-                // we use `TabletScheduler#handleColocateRedundant()` to drop bad replica forcefully.
+                // we use `TabletScheduler#handleColocateRedundant()` to drop such replicas forcefully.
                 return TabletHealthStatus.COLOCATE_REDUNDANT;
             }
 
