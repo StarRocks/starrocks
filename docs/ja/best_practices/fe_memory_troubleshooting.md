@@ -4,6 +4,7 @@ keywords: ['FE', 'Coordinator Node','memory', 'OOM', 'JVM', 'troubleshooting', '
 ---
 
 import MetaRecv from '../_assets/best_practices/fe_mem_meta_recv.mdx'
+import MetaRecvStep from '../_assets/best_practices/fe_mem_meta_recv_step.mdx'
 
 # FE / コーディネーターノードのメモリ不足問題のトラブルシューティング
 
@@ -698,7 +699,9 @@ SIMPLE_MAJORITY required 1 replica. But none were active with this master.
 [ConnectScheduler.lambda$printAllRunningQuery$4():339] FE ShutDown! Running Query:SET NAMES utf8, QueryFEAllocatedMemory: 10048
 ```
 
-**処理方法**：FEのJVMメモリ設定を増やしてください。本番環境では最低16GBを推奨し、その後はメタデータの増加に応じて調整してください。復旧については、[メタデータの復旧](../administration/Meta_recovery.md)ドキュメントのステップ8と9を参照してください。
+**処理方法**：FEのJVMメモリ設定を増やしてください。本番環境では最低16GBを推奨し、その後はメタデータの増加に応じて調整してください。
+
+<MetaRecvStep />
 
 ***
 
