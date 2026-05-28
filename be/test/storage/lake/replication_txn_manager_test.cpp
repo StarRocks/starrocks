@@ -902,7 +902,8 @@ TEST_F(LakeReplicationTxnManagerStaticFunctionTest, test_build_file_converters_d
     std::string test_dir = config::storage_root_path + "/build_file_converters_test";
     auto location_provider = std::make_shared<lake::FixedLocationProvider>(test_dir);
     ASSERT_TRUE(FileSystem::Default()->create_dir_recursive(location_provider->segment_root_location(1)).ok());
-    auto update_manager = std::make_unique<lake::UpdateManager>(location_provider, nullptr);
+    auto mem_tracker = std::make_unique<MemTracker>(1024 * 1024);
+    auto update_manager = std::make_unique<lake::UpdateManager>(location_provider, mem_tracker.get());
     auto tablet_manager = std::make_unique<lake::TabletManager>(location_provider, update_manager.get(), 16384);
 
     TReplicateSnapshotRequest request;
@@ -952,7 +953,8 @@ TEST_F(LakeReplicationTxnManagerStaticFunctionTest, test_build_file_converters_d
     std::string test_dir = config::storage_root_path + "/build_file_converters_test2";
     auto location_provider = std::make_shared<lake::FixedLocationProvider>(test_dir);
     ASSERT_TRUE(FileSystem::Default()->create_dir_recursive(location_provider->segment_root_location(1)).ok());
-    auto update_manager = std::make_unique<lake::UpdateManager>(location_provider, nullptr);
+    auto mem_tracker = std::make_unique<MemTracker>(1024 * 1024);
+    auto update_manager = std::make_unique<lake::UpdateManager>(location_provider, mem_tracker.get());
     auto tablet_manager = std::make_unique<lake::TabletManager>(location_provider, update_manager.get(), 16384);
 
     TReplicateSnapshotRequest request;
