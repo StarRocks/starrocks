@@ -668,6 +668,12 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
             this.watershedTxnId = other.watershedTxnId;
             this.watershedGtid = other.watershedGtid;
             this.commitVersionMap = other.commitVersionMap;
+            // FORCE-cancel audit marker. Must be copied here so the
+            // CANCELLED branch below (which reads `this.forceSkippedAtCommitted`)
+            // sees the persisted value when replaying onto an in-memory job
+            // loaded from a pre-cancel image. Without this copy the bump is
+            // silently skipped on recovery — defeating the whole replay fix.
+            this.forceSkippedAtCommitted = other.forceSkippedAtCommitted;
 
             restoreState(other);
         }

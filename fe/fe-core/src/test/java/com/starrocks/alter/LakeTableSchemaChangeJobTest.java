@@ -22,6 +22,9 @@ import com.starrocks.catalog.MaterializedIndex.IndexExtState;
 import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.PhysicalPartition;
+import com.starrocks.catalog.Tablet;
+import com.starrocks.proto.TxnInfoPB;
 import com.starrocks.catalog.SchemaInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TabletInvertedIndex;
@@ -515,6 +518,107 @@ public class LakeTableSchemaChangeJobTest {
         AlterJobV2 persistCopy = schemaChangeJob.copyForPersist();
         Assertions.assertTrue(persistCopy.isForceSkippedAtCommitted(),
                 "copyForPersist must propagate forceSkippedAtCommitted so the edit log records it");
+    }
+
+    @Test
+    public void testLakePublishVersionWithSkipBuildsNoOpTxnInfo() throws Exception {
+        // Cover lakePublishVersionWithSkip's body by intercepting the
+        // underlying Utils.publishVersion call. The helper must build a
+        // TxnInfoPB whose noOpPublish=true so BE's transactions.cpp
+        // short-circuit kicks in and writes V-1 content as V.
+        LakeTableSchemaChangeJob schemaChangeJob = alterTableAddColumn();
+        new MockUp<LakeTableSchemaChangeJob>() {
+            @Mock
+            public void sendAgentTask(AgentBatchTask batchTask) {
+                batchTask.getAllTasks().forEach(t -> t.setFinished(true));
+            }
+        };
+        java.util.concurrent.atomic.AtomicInteger publishCalls = new java.util.concurrent.atomic.AtomicInteger();
+        java.util.concurrent.atomic.AtomicBoolean lastNoOp = new java.util.concurrent.atomic.AtomicBoolean();
+        new MockUp<Utils>() {
+            @Mock
+            public void publishVersion(List<Tablet> tablets, TxnInfoPB txnInfo, long baseVersion,
+                                       long newVersion, com.starrocks.warehouse.cngroup.ComputeResource computeResource,
+                                       boolean useAggregatePublish) {
+                publishCalls.incrementAndGet();
+                lastNoOp.set(txnInfo.noOpPublish);
+            }
+        };
+
+        schemaChangeJob.runPendingJob();
+        schemaChangeJob.runWaitingTxnJob();
+        schemaChangeJob.runRunningJob();
+        Assertions.assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, schemaChangeJob.getJobState());
+
+        Assertions.assertTrue(schemaChangeJob.cancel("force-cancel-publish-body", /*force=*/ true));
+        Assertions.assertEquals(AlterJobV2.JobState.CANCELLED, schemaChangeJob.getJobState());
+        Assertions.assertTrue(publishCalls.get() > 0,
+                "lakePublishVersionWithSkip must invoke Utils.publishVersion at least once");
+        Assertions.assertTrue(lastNoOp.get(),
+                "TxnInfoPB.noOpPublish must be set so BE short-circuits the txn-log apply");
+    }
+
+    @Test
+    public void testForceCancelReplayBumpsVisibleVersion() throws Exception {
+        // Simulate FE replaying a force-cancel edit log entry onto an
+        // in-memory job loaded from a pre-cancel image. The replayed job
+        // carries forceSkippedAtCommitted=true; the in-memory `this` was
+        // loaded from an older image where the flag is false. Before the
+        // copy-marker fix the replay branch silently skipped the version
+        // bump (the if-block read this.forceSkippedAtCommitted=false), so
+        // FE would resume with VisibleVersion=commitVersion-1 against BE
+        // metadata already advanced by the no-op publish — the exact
+        // stuck-state this PR repairs.
+        LakeTableSchemaChangeJob schemaChangeJob = alterTableAddColumn();
+        new MockUp<LakeTableSchemaChangeJob>() {
+            @Mock
+            public void sendAgentTask(AgentBatchTask batchTask) {
+                batchTask.getAllTasks().forEach(t -> t.setFinished(true));
+            }
+            @Mock
+            public boolean lakePublishVersionWithSkip(String reason) {
+                return true;
+            }
+        };
+        schemaChangeJob.runPendingJob();
+        schemaChangeJob.runWaitingTxnJob();
+        schemaChangeJob.runRunningJob();
+        Assertions.assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, schemaChangeJob.getJobState());
+
+        // Capture each partition's commitVersion as (current VisibleVersion + 1):
+        // alter is at FINISHED_REWRITING, no other commits in flight, so the
+        // reserved commit version is exactly the slot right above VisibleVersion.
+        Map<Long, Long> expectedCommitVersion = new HashMap<>();
+        for (PhysicalPartition pp : table.getPhysicalPartitions()) {
+            expectedCommitVersion.put(pp.getId(), pp.getVisibleVersion() + 1);
+        }
+
+        // Run the live force-cancel; the persisted copy must carry the marker.
+        Assertions.assertTrue(schemaChangeJob.cancel("force-cancel-replay-test", /*force=*/ true));
+        AlterJobV2 persistCopy = schemaChangeJob.copyForPersist();
+        Assertions.assertTrue(persistCopy.isForceSkippedAtCommitted());
+
+        // Now simulate the image: a freshly-built in-memory job WITHOUT the
+        // marker, and with each partition's VisibleVersion reset back to
+        // commitVersion-1 (no bump applied yet). Reset both sides to mimic
+        // FE recovery from a pre-cancel image.
+        LakeTableSchemaChangeJob staleInMemory = new LakeTableSchemaChangeJob(schemaChangeJob);
+        staleInMemory.forceSkippedAtCommitted = false;
+        staleInMemory.setJobState(AlterJobV2.JobState.FINISHED_REWRITING);
+        for (PhysicalPartition pp : table.getPhysicalPartitions()) {
+            pp.setVisibleVersion(expectedCommitVersion.get(pp.getId()) - 1, 0);
+        }
+
+        // Replay: the persisted entry (`persistCopy`) carries the marker; the
+        // copy-block inside replay() must propagate it onto `this` so the
+        // CANCELLED branch below applies the version bump.
+        staleInMemory.replay(persistCopy);
+        Assertions.assertTrue(staleInMemory.isForceSkippedAtCommitted(),
+                "replay must copy forceSkippedAtCommitted from the persisted entry");
+        for (PhysicalPartition pp : table.getPhysicalPartitions()) {
+            Assertions.assertEquals(expectedCommitVersion.get(pp.getId()).longValue(), pp.getVisibleVersion(),
+                    "replay must bump VisibleVersion to commitVersion when forceSkippedAtCommitted=true");
+        }
     }
 
     @Test

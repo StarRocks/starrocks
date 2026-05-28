@@ -157,6 +157,12 @@ public class LakeTableAlterMetaJobTest {
         Assertions.assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, job.getJobState());
         Assertions.assertFalse(job.isForceSkippedAtCommitted());
 
+        // Capture each partition's commitVersion as (VisibleVersion + 1).
+        Map<Long, Long> expectedCommitVersion = new HashMap<>();
+        for (PhysicalPartition pp : table.getPhysicalPartitions()) {
+            expectedCommitVersion.put(pp.getId(), pp.getVisibleVersion() + 1);
+        }
+
         // Force cancel succeeds; catalog reverts so the alter property does NOT
         // take effect (operator opted-in to discard the half-applied change).
         Assertions.assertTrue(job.cancel("force-cancel-from-stuck-publish", /*force=*/ true));
@@ -164,6 +170,33 @@ public class LakeTableAlterMetaJobTest {
         Assertions.assertTrue(job.isForceSkippedAtCommitted(),
                 "forceSkippedAtCommitted must record the force-cancel for audit");
         Assertions.assertEquals(OlapTable.OlapTableState.NORMAL, table.getState());
+
+        // copyForPersist must propagate the marker so the edit log records it.
+        AlterJobV2 persistCopy = job.copyForPersist();
+        Assertions.assertTrue(persistCopy.isForceSkippedAtCommitted(),
+                "copyForPersist must propagate forceSkippedAtCommitted");
+
+        // Replay regression: simulate FE recovering from a pre-cancel image
+        // by resetting partition.VisibleVersion AND the marker on a fresh
+        // in-memory job, then replay(persistCopy). The copy-block in replay()
+        // must propagate forceSkippedAtCommitted from the persisted entry
+        // onto `this` before the CANCELLED branch reads it — otherwise the
+        // version bump is silently skipped and FE stays stuck at commitVersion-1
+        // against BE metadata already advanced by the no-op publish.
+        LakeTableAlterMetaJob staleInMemory = (LakeTableAlterMetaJob) persistCopy;
+        staleInMemory.forceSkippedAtCommitted = false;
+        staleInMemory.setJobState(AlterJobV2.JobState.FINISHED_REWRITING);
+        for (PhysicalPartition pp : table.getPhysicalPartitions()) {
+            pp.setVisibleVersion(expectedCommitVersion.get(pp.getId()) - 1, 0);
+        }
+        staleInMemory.replay(persistCopy);
+        Assertions.assertTrue(staleInMemory.isForceSkippedAtCommitted(),
+                "replay must copy forceSkippedAtCommitted from the persisted entry");
+        for (PhysicalPartition pp : table.getPhysicalPartitions()) {
+            Assertions.assertEquals(expectedCommitVersion.get(pp.getId()).longValue(),
+                    pp.getVisibleVersion(),
+                    "replay must bump VisibleVersion to commitVersion when forceSkippedAtCommitted=true");
+        }
     }
 
     @Test
