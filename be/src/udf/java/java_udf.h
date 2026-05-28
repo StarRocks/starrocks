@@ -562,7 +562,7 @@ struct JavaUDAFSharedContext {
     JavaGlobalRef states_clear_method = nullptr;
 };
 
-// Per-aggregator UDAF context stored as FunctionContext::THREAD_LOCAL.
+// Per-aggregator UDAF context owned by FunctionContext::_jvm_udaf_ctxs.
 // Holds a reference to the shared class-level JavaUDAFSharedContext plus
 // mutable per-aggregation state.
 struct JavaUDAFUniqueContext;
@@ -615,12 +615,6 @@ struct JavaUDAFUniqueContext {
     std::unique_ptr<DirectByteBuffer> buffer;
     std::vector<uint8_t> buffer_data;
 };
-
-// Java UDAF lifecycle management based on FunctionContext::THREAD_LOCAL state.
-JavaUDAFUniqueContext* get_java_udaf_context(FunctionContext* ctx);
-void attach_java_udaf_context(FunctionContext* ctx, std::unique_ptr<JavaUDAFUniqueContext> udaf_ctx);
-void clear_java_udaf_states(FunctionContext* ctx);
-void destroy_java_udaf_context(FunctionContext* ctx);
 
 // Check whether java runtime can work
 Status detect_java_runtime();
