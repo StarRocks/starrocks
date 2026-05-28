@@ -366,6 +366,8 @@ public class SchemaChangeHandler extends AlterHandler {
          *      Can not drop any key column is has value with REPLACE method
          */
         long baseIndexMetaId = olapTable.getBaseIndexMetaId();
+        rejectIfTouchesRangeSortKey(olapTable, baseIndexMetaId,
+                "DROP COLUMN", dropColName);
         if (KeysType.PRIMARY_KEYS == olapTable.getKeysType()) {
             List<Column> baseSchema = indexMetaIdToSchema.get(baseIndexMetaId);
             boolean isKey = baseSchema.stream().anyMatch(c -> c.isKey() && c.getName().equalsIgnoreCase(dropColName));
@@ -3579,10 +3581,10 @@ public class SchemaChangeHandler extends AlterHandler {
                 .anyMatch(c -> c.getName().equalsIgnoreCase(colName));
         if (hit) {
             throw new DdlException(operation +
-                " on a range-distribution sort-key column is not supported, " +
-                "because it would change the column set or type/semantics " +
-                "that the existing range tablet boundary values were " +
-                "recorded under. Column: " + colName);
+                " on a sort-key column is not supported on tables with " +
+                "range distribution, because it would change the column set " +
+                "or type/semantics that the existing range tablet boundary " +
+                "values were recorded under. Column: " + colName);
         }
     }
 }

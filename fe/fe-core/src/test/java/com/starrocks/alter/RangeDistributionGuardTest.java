@@ -142,4 +142,18 @@ public class RangeDistributionGuardTest {
         assertTrue(ex.getMessage().toLowerCase().contains("range distribution"),
                 "Expected 'range distribution' in: " + ex.getMessage());
     }
+
+    @Test
+    public void testDropSortKeyColumnRejectedOnRangeDistribution() throws Exception {
+        // DUP range table: k1, k2 are both sort/key columns.
+        starRocksAssert.withTable(rangeTableDdl("t_guard_dropsk"));
+        // Schema-change DDL path — Throwable + message substring, consistent with Task 2.
+        Throwable ex = assertThrows(Throwable.class, () ->
+                starRocksAssert.alterTable(
+                        "alter table t_guard_dropsk drop column k2"));
+        assertTrue(ex.getMessage().toLowerCase().contains("range distribution"),
+                "Expected 'range distribution' in: " + ex.getMessage());
+        assertTrue(ex.getMessage().toLowerCase().contains("k2"),
+                "Expected 'k2' (offending column) in: " + ex.getMessage());
+    }
 }
