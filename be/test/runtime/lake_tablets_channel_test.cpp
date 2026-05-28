@@ -1592,7 +1592,7 @@ TEST_F(LakeTabletsChannelPerPartitionCoordinatorTest, test_two_senders_split_par
 // sender 0's params, and assert that sender 0 ends up the coordinator
 // (collects all logs) and sender 1 collects nothing.
 TEST_F(LakeTabletsChannelPerPartitionCoordinatorTest, test_late_arriving_sender_0_open_claims_via_update_open) {
-    auto* m = RuntimeMetrics::instance();
+    auto* m = StarRocksMetrics::instance();
     int64_t per_partition_before = m->lake_txn_log_collect_per_partition_total.value();
     int64_t orphan_before = m->lake_txn_log_collect_orphan_partition_total.value();
 
