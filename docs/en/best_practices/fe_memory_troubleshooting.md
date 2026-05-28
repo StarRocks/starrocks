@@ -3,6 +3,8 @@ displayed_sidebar: docs
 keywords: ['FE', 'Coordinator Node','memory', 'OOM', 'JVM', 'troubleshooting', 'heap']
 ---
 
+import MetaRecv from '../_assets/best_practices/fe_mem_meta_recv.mdx'
+
 # FE / Coordinator Node memory full issue troubleshooting
 
 Prevent "FE memory full" issues, quickly recover, and find out the cause as much as possible to prevent recurrence.
@@ -204,7 +206,7 @@ Click **Heap before GC** to find the time point when heap memory rises. Use this
 
 ### 3. An internal bug in the FE program caused a crash
 
-This situation is not within the scope of this discussion. Refer to the [Restore Metadata](../administration/Meta_recovery.md) documentation.
+<MetaRecv />
 
 ### 4. JVM bug causes FE crash
 
