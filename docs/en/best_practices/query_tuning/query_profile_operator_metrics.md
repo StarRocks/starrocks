@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 keywords: ['profile', 'query']
 sidebar_position: 80
+description: "Basic information about the query execution:"
 ---
 
 # Query Profile Metrics

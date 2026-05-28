@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "This function returns the position of the first str in strlist (start counting with 1)."
 ---
 
 # find_in_set

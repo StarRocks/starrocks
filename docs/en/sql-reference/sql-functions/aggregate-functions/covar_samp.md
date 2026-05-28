@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Returns the sample covariance of two expressions."
 ---
 
 # covar_samp

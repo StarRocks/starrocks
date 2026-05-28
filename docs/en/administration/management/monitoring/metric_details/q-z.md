@@ -961,4 +961,3 @@ All transaction metrics share the following labels:
 - Description: Number of cumulative compaction tasks waiting for execution.
 
 ## `writable_blocks_total (Deprecated)`
-

@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Returns refresh information for a materialized view including base table partition metadata and version maps."
 ---
 
 # inspect_mv_refresh_info

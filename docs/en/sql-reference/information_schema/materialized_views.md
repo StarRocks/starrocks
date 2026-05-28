@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "`materialized_views` provides information about all materialized views."
 ---
 
 # materialized_views

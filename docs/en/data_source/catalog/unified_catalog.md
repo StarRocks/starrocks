@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 toc_max_heading_level: 5
+description: "A unified catalog is a type of external catalog that is provided by StarRocks from v3.2 onwards to handle tables from Apache Hive™, Apache Iceberg, Apache Hudi, Delta Lake, and Apache Kudu data sou..."
 ---
 
 import Beta from '../../_assets/commonMarkdown/_beta.mdx'

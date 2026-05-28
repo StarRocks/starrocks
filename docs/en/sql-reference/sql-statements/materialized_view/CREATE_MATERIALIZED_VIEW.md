@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "CREATE MATERIALIZED VIEW creates a materialized view."
 ---
 
 # CREATE MATERIALIZED VIEW

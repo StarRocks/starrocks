@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "LARGEINT is a 16-byte signed integer."
 ---
 
 # LARGEINT

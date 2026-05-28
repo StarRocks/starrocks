@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Calculates the difference between two date values (`expr1 - expr2`) and returns a result in days."
 ---
 
 # datediff

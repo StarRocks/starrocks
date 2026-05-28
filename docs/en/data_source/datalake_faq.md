@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "This topic describes some commonly asked questions (FAQ) about data lake and provides solutions to these issues."
 ---
 
 # Data lake FAQ

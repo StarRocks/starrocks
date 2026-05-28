@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "This function returns a string formatted as a currency string."
 ---
 
 # money_format

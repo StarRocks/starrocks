@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 sidebar_position: 70
+description: "Query hints are directives or comments that explicitly suggest the query optimizer on how to execute a query."
 ---
 
 # Query Hint

@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Returns the result of `x` raised to the power of `y`."
 ---
 
 # pow, power, dpow, fpow

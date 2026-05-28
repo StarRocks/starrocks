@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Returns a percentile value based on a discrete distribution of the input column `expr`."
 ---
 
 # percentile_disc

@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Calculates a 32-bit hash value for any type of input and return the bitmap containing the hash value."
 ---
 
 # bitmap_hash

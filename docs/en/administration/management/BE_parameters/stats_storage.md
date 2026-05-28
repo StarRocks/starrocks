@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 sidebar_label: "Statistics and Storage"
+description: "BE configuration parameters for statistics collection and storage engine settings."
 ---
 
 import BEConfigMethod from '../../../_assets/commonMarkdown/BE_config_method.mdx'

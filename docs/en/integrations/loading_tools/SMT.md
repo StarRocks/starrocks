@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "StarRocks Migration Tool (SMT) is a data migration tool provided by StarRocks to load data from source databases through Flink into StarRocks."
 ---
 
 # StarRocks Migration Tool (SMT) 

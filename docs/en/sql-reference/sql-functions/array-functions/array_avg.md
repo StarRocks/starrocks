@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Calculates the average value of all data in an ARRAY and return this result."
 ---
 
 # array_avg

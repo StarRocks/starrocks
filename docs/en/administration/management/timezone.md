@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "This topic describes how to configure a time zone and the impacts of time zone settings."
 ---
 
 # Configure a time zone

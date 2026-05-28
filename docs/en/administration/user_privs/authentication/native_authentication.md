@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 sidebar_position: 10
+description: "Create and manage users using the native authentication within StarRocks through SQL commands."
 ---
 
 # Native Authentication

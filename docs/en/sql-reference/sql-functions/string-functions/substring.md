@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Extracts characters staring from the specified position and returns a substring of specified length."
 ---
 
 # substring, substr

@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "To deploy a shared-data StarRocks cluster (decoupled storage and computing), see [Deploy Shared-data StarRocks Manually](../deployment/deploy_shared_data_manually.md)."
 ---
 
 import ManualPrep from '../_assets/deployment/manual_prep.mdx'

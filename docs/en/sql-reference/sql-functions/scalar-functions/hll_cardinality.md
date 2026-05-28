@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Calculates the cardinality of a single HLL type value."
 ---
 
 # hll_cardinality

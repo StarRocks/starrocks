@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Subtracts specified months from the date."
 ---
 
 # months_sub

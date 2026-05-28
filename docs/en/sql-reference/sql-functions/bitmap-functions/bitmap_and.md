@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Calculates the intersection of two input bitmaps and returns the new bitmap."
 ---
 
 # bitmap_and

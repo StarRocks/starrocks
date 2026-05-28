@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "DROP CATALOG deletes an external catalog."
 ---
 
 # DROP CATALOG

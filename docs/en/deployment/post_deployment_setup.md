@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Before getting your new StarRocks cluster into production, you must secure the initial account and set the necessary variables and properties to allow your cluster to run properly."
 ---
 
 # Post-deployment setup
@@ -39,7 +40,7 @@ StarRocks automatically assigns an empty password to the `root` user when the cl
 
 To allow your StarRocks cluster to work properly in production, you need to set the following system variables:
 
-###  enable_profile                      
+### enable_profile
 
 #### Description
 The boolean switch that controls whether to send the profile of a query for analysis. 
@@ -55,7 +56,7 @@ false
   SET GLOBAL enable_profile = false;
   ```
 
-###  enable_pipeline_engine              
+### enable_pipeline_engine
 
 #### Description
 The boolean switch that controls whether to enable the pipeline execution engine. 
@@ -70,7 +71,7 @@ true
   SET GLOBAL enable_pipeline_engine = true;
   ```
 
-###  parallel_fragment_exec_instance_num 
+### parallel_fragment_exec_instance_num
 
 #### Description
 The number of instances used to scan nodes on each BE. The default value is `1`. 

@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "If `x` is a numerical value, this function returns a hexadecimal string representation of the value."
 ---
 
 # hex

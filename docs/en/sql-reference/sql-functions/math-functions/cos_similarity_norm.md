@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Measures the similarity of two normalized vectors by calculating the cosine of the angle between them."
 ---
 
 # cosine_similarity_norm

@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "This function splits a given string according to the separators and returns the requested part."
 ---
 
 # split_part

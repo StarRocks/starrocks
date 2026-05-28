@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Parses a URL and extracts a component from this URL."
 ---
 
 # parse_url

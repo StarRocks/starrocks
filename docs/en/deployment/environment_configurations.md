@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "This topic lists all environment and system configuration items that you must check and set before deploying StarRocks."
 ---
 
 # Check environment configurations

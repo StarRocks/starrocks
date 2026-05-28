@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "How to transform data during loading in StarRocks: column mapping, filter conditions, and derived column expressions for Stream Load, Broker Load, and Routine Load."
 ---
 
 # Transform data at loading

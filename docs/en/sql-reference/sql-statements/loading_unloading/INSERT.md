@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Inserts data into a specific table or overwrites a specific table with data."
 ---
 
 # INSERT

@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "`fe_threads` provides information about the threads running on each FE node."
 ---
 
 # fe_threads

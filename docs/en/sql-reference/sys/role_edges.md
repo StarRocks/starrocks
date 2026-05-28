@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "By default, only users or roles with the `user_admin` role can access this view."
 ---
 
 # role_edges

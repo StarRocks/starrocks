@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Since version 2.2.0, StarRocks supports JSON."
 ---
 
 # JSON

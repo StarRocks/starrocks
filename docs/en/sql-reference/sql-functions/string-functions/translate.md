@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Substitutes specified characters within a string."
 ---
 
 # translate

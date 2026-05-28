@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "From v3.3.0 onwards, StarRocks supports the BE Blacklist feature, which allows you to forbid the usage of certain BE nodes in query execution, thereby avoiding frequent query failures or other unex..."
 ---
 
 # Manage BE and CN Blacklist

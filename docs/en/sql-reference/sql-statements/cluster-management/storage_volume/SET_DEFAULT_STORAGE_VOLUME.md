@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "SET DEFAULT STORAGE VOLUME sets a storage volume as the default storage volume."
 ---
 
 # SET DEFAULT STORAGE VOLUME

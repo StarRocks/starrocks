@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "CANCEL DECOMMISSION is used to undo a node decommission."
 ---
 
 # CANCEL DECOMMISSION

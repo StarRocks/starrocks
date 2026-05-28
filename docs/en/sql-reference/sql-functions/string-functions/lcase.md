@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "This function converts a string to lower-case."
 ---
 
 # lcase

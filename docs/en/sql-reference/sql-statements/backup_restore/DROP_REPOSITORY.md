@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Deletes a repository."
 ---
 
 # DROP REPOSITORY

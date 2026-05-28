@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "This topic describes how to inspect the metadata information of Iceberg tables in StarRocks."
 ---
 
 # Iceberg Metadata Tables

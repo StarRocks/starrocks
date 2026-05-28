@@ -1,6 +1,7 @@
 ---
 sidebar_position: 10
 keywords: ['partition']
+description: "Fast analytics in StarRocks begin with a table layout that matches your query patterns."
 ---
 
 # Partitioning

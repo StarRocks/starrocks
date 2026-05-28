@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 keywords: ['Routine Load']
+description: "How to create and manage Routine Load jobs in StarRocks to continuously stream data from Apache Kafka topics into StarRocks tables."
 ---
 
 # Load data using Routine Load

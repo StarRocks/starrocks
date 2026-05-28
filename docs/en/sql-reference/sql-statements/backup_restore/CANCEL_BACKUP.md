@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Cancels an ongoing BACKUP task in a specified database."
 ---
 
 # CANCEL BACKUP

@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Obtains an arbitrary row from each aggregated group."
 ---
 
 # any_value

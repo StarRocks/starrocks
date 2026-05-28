@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Big queries include queries that scan too many rows or occupy too many CPU and memory resources."
 ---
 
 # Monitor and manage big queries

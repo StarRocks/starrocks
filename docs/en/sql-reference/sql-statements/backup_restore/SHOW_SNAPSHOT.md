@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Views data snapshots in a specified repository."
 ---
 
 # SHOW SNAPSHOT

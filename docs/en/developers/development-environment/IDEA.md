@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "This tutorial is based on macOS and has been tested on Apple Chip(M1, M2)."
 ---
 
 # Setup StarRocks FE development environment on IDEA

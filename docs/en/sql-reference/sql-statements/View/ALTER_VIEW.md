@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "ALTER VIEW Modifies the definition of a view."
 ---
 
 # ALTER VIEW

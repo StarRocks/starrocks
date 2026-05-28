@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "`stream_loads` provides information about stream load jobs."
 ---
 
 # stream_loads

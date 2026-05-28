@@ -1,3 +1,8 @@
+---
+displayed_sidebar: docs
+description: "Collects and visualizes CPU and memory flame graph profiles for StarRocks FE and BE processes to diagnose performance bottlenecks."
+---
+
 # Process Profile (Proc Profile)
 
 The **Process Profile** (Proc Profile) feature provides a built-in mechanism to collect and visualize performance profiles for StarRocks Frontend (FE) and Backend (BE) processes. By generating flame graphs for CPU and memory allocation, it helps developers and administrators diagnose performance bottlenecks, high resource utilization, and complex runtime issues directly from the Web UI.
