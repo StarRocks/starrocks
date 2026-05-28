@@ -1,6 +1,6 @@
 # Shared-data cluster
 
-import TimezoneError from '../_assets/commonMarkdown/_timezone.md'
+import TimezoneError from '../_assets/commonMarkdown/_timezone.mdx'
 
 These steps are performed when deploying a shared-data database cluster after [installing CelerData Manager and deploying the agents on each database node](./10_install_prep.md). If you are deploying a shared-nothing database cluster, please switch to the [shared-nothing](./30_shared_nothing.md) documentation.
 

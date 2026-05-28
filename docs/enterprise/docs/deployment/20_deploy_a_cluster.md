@@ -1,6 +1,6 @@
 # Deploy a StarRocks cluster
 
-import TimezoneError from '../_assets/commonMarkdown/_timezone.md'
+import TimezoneError from '../_assets/commonMarkdown/_timezone.mdx'
 
 1. Access the Web interface and configure a MySQL database for storing the management, query, and alerting information of CelerData Enterprise. 
 

@@ -23,7 +23,7 @@ The use cases for these two scenarios can be found in [Masking policies](./maski
 
 Policies can be created once and applied to multiple tables. For example, you can create a masking policy for a sensitive field and then apply that policy to all tables that contain this sensitive field.
 
-Policy creation and application are controlled by privileges such as CREATE and APPLY. Administrators can determine whether to delegate these privileges to certain departments based on business scenarios. This allows for flexible privilege management and consistent application of policies across multiple tables, ensuring that sensitive data is protected consistently and according to the defined policies. For more information about privilege management, see [Manage privileges for policies](./manage_priv.md).
+Policy creation and application are controlled by privileges such as CREATE and APPLY. Administrators can determine whether to delegate these privileges to certain departments based on business scenarios. This allows for flexible privilege management and consistent application of policies across multiple tables, ensuring that sensitive data is protected consistently and according to the defined policies. For more information about privilege management, see [Manage privileges for policies](./authorization/user_privs.md).
 
 ## Benefits
 

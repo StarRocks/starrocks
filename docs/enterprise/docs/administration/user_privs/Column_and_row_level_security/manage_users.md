@@ -1,5 +1,5 @@
 # Users and privileges
-import TimezoneError from '../../../_assets/commonMarkdown/_timezone.md'
+import TimezoneError from '../../../_assets/commonMarkdown/_timezone.mdx'
 
 ## Root password
 

@@ -1,6 +1,6 @@
 # Manage a StarRocks cluster
 
-import TimezoneError from '../../_assets/commonMarkdown/_timezone.md'
+import TimezoneError from '../../_assets/commonMarkdown/_timezone.mdx'
 
 ## Upgrade/Rollback
 
