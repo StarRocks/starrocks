@@ -15,19 +15,26 @@
 package com.starrocks.sql.plan;
 
 import com.google.common.collect.ImmutableMap;
+import com.starrocks.catalog.IcebergTable;
 import com.starrocks.common.FeConstants;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.base.ColumnIdentifier;
 import com.starrocks.sql.optimizer.statistics.ColumnDict;
 import com.starrocks.sql.optimizer.statistics.IMinMaxStatsMgr;
 import com.starrocks.sql.optimizer.statistics.IRelaxDictManager;
 import com.starrocks.sql.optimizer.statistics.StatsVersion;
 import mockit.Expectations;
+import mockit.Verifications;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
 import java.nio.ByteBuffer;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Optional;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
 
 public class IcebergCompressedKeyTest extends ConnectorPlanTestBase {
 
@@ -84,6 +91,13 @@ public class IcebergCompressedKeyTest extends ConnectorPlanTestBase {
 
     @Test
     public void testIcebergNumericGroupByFromMinMaxMgr() throws Exception {
+        IcebergTable table = (IcebergTable) GlobalStateMgr.getCurrentState().getMetadataMgr()
+                .getTable(connectContext, "iceberg0", "unpartitioned_db", "t0");
+        ColumnIdentifier expectedId = new ColumnIdentifier(table.getUUID(), table.getColumn("id").getColumnId());
+        // MockIcebergMetadata.getCurrentTvrSnapshot pins TvrVersion.of(1L); the rule must forward
+        // exactly that to IcebergColumnMinMaxMgr so the cache key matches what BE will read.
+        long expectedSnapshotId = 1L;
+
         IMinMaxStatsMgr mgr = IMinMaxStatsMgr.icebergInstance();
         new Expectations(mgr) {
             {
@@ -97,5 +111,16 @@ public class IcebergCompressedKeyTest extends ConnectorPlanTestBase {
         String plan = getVerboseExplain(sql);
         assertContains(plan, "group by min-max stats:");
         assertContains(plan, "- 0:100");
+
+        List<ColumnIdentifier> idCaptures = new ArrayList<>();
+        List<StatsVersion> versionCaptures = new ArrayList<>();
+        new Verifications() {
+            {
+                mgr.getStats(withCapture(idCaptures), withCapture(versionCaptures));
+                times = 1;
+            }
+        };
+        assertEquals(expectedId, idCaptures.get(0));
+        assertEquals(expectedSnapshotId, versionCaptures.get(0).getVersion());
     }
 }
