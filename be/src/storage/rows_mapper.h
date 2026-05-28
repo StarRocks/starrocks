@@ -74,19 +74,22 @@ private:
 //       does a direct `read_at_fully` on the iterator's RAF. Safe and simple
 //       but pays per-call OSS RPC cost.
 //
-//   (2) Pipelined per-segment (after `prepare_segments(segment_row_counts)`):
-//       caller pre-declares every segment's row count. The iterator submits the
-//       first K (= config::lake_rows_mapper_read_parallelism) per-segment reads
-//       to `pk_index_execution_thread_pool` immediately, each on its own
+//   (2) Pipelined sub-chunk (after `prepare_segments(segment_row_counts)`):
+//       caller pre-declares every segment's row count. The iterator splits each
+//       segment into fixed-size sub-chunks (= config::lake_rows_mapper_sub_chunk_bytes,
+//       never spanning a segment boundary) and submits the first K
+//       (= config::lake_rows_mapper_read_parallelism) sub-chunks to
+//       `pk_index_execution_thread_pool` immediately, each on its own
 //       RandomAccessFile so the underlying file class never sees concurrent
-//       access. `next_values(seg_n)` blocks only on the front in-flight chunk,
-//       swaps its owned vector into the caller's `rssid_rowids` (no memcpy),
-//       and submits chunk N+K. This pipelines the caller's per-segment
-//       processing with the still-outstanding remote reads.
+//       access. `next_values(seg_n)` consumes every sub-chunk belonging to the
+//       current segment in order — memcpy-concatenating into the caller's
+//       buffer (the single-sub-chunk case keeps the zero-copy swap fast path).
+//       After each pop the iterator submits the next sub-chunk so K reads stay
+//       in flight.
 //
-// Memory bound (pipelined mode): K × max(per-segment-chunk-bytes). Scales with
-// segment count: many small segments → small footprint; few huge segments →
-// approaches whole-file footprint.
+// Memory bound (pipelined mode): K × sub_chunk_bytes (independent of segment
+// size). Caller's output buffer additionally holds one full segment during
+// consumption.
 //
 class RowsMapperIterator {
 public:
@@ -111,7 +114,7 @@ public:
 private:
     inline static const size_t EACH_ROW_SIZE = 8; // 8 bytes
 
-    // Submit the read for `_next_to_submit` if there's still a declared segment
+    // Submit the read for `_next_sub_chunk_to_submit` if there's still a sub-chunk
     // remaining. Each submission opens its own RandomAccessFile so concurrent
     // tasks never touch shared file-class state.
     Status _maybe_submit_next();
@@ -122,11 +125,19 @@ private:
 
     struct InFlightChunk {
         size_t segment_idx = 0;
+        size_t row_offset_in_segment = 0;     // first row's offset within its segment (rows)
         size_t row_count = 0;
         int64_t file_offset = 0;              // byte offset within the file's body
-        std::vector<uint64_t> data;           // owned, sized to row_count; SWAPPED into caller on consume
+        std::vector<uint64_t> data;           // owned; SWAPPED into caller when segment is single-sub-chunk
         std::unique_ptr<RandomAccessFile> rf; // own RAF — no shared file-class state across tasks
         std::shared_future<Status> future;
+    };
+
+    struct SubChunkDescriptor {
+        size_t segment_idx;
+        size_t row_offset_in_segment; // rows
+        size_t row_count;             // rows
+        int64_t file_offset;          // bytes
     };
 
 private:
@@ -139,13 +150,14 @@ private:
     uint32_t _expected_checksum = 0;
     uint32_t _current_checksum = 0;
 
-    // Pipelined per-segment mode state (populated by `prepare_segments`).
+    // Pipelined sub-chunk mode state (populated by `prepare_segments`).
     std::vector<size_t> _segment_sizes;
-    std::vector<int64_t> _segment_offsets; // byte offset of segment i within the file
-    size_t _next_to_submit = 0;            // next segment index to submit
-    size_t _next_to_serve = 0;             // next segment index to serve via next_values
-    std::deque<InFlightChunk> _in_flight;  // FIFO of in-flight per-segment chunks
-    bool _pipelined = false;               // true after a successful prepare_segments
+    std::vector<SubChunkDescriptor> _sub_chunks;  // flat list, sub-chunks ordered by (segment, row_offset)
+    std::vector<size_t> _segment_sub_chunk_begin; // begin[i..i+1) = sub-chunk range for segment i
+    size_t _next_sub_chunk_to_submit = 0;         // index into _sub_chunks
+    size_t _next_segment_to_serve = 0;            // index into _segment_sizes
+    std::deque<InFlightChunk> _in_flight;         // FIFO of in-flight sub-chunks
+    bool _pipelined = false;                      // true after a successful prepare_segments
 };
 
 // rows mapper file's name for lake table

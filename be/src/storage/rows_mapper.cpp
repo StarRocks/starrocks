@@ -16,6 +16,8 @@
 
 #include <fmt/format.h>
 
+#include <cstring>
+
 #include "base/coding.h"
 #include "base/container/raw_container.h"
 #include "base/debug/trace.h"
@@ -164,46 +166,66 @@ Status RowsMapperIterator::prepare_segments(const std::vector<size_t>& segment_r
                 "RowsMapperIterator: declared segment-row-count sum {} != file row count {}", sum, _row_count));
     }
     _segment_sizes = segment_row_counts;
-    _segment_offsets.resize(segment_row_counts.size());
-    int64_t offset = 0;
-    for (size_t i = 0; i < segment_row_counts.size(); ++i) {
-        _segment_offsets[i] = offset;
-        offset += static_cast<int64_t>(segment_row_counts[i]) * EACH_ROW_SIZE;
-    }
-    _pipelined = true;
-    _next_to_submit = 0;
-    _next_to_serve = 0;
 
-    // Submit the first K chunks immediately so the caller can pipeline the
-    // per-segment processing of segment_0 against the still-outstanding reads
-    // for segments 1..K-1.
+    // Slice each segment into fixed-size sub-chunks that the iterator pipelines
+    // independently — this lifts the parallelism ceiling above the segment count
+    // (a 3-segment-but-117 MiB compaction was previously bottlenecked to 3-way).
+    // Sub-chunks never cross segment boundaries, so consuming a segment of M
+    // sub-chunks consumes exactly M front entries from _in_flight.
+    const int64_t sub_chunk_bytes_cfg =
+            std::max<int64_t>(static_cast<int64_t>(EACH_ROW_SIZE), config::lake_rows_mapper_sub_chunk_bytes);
+    const size_t sub_chunk_rows =
+            std::max<size_t>(1, static_cast<size_t>(sub_chunk_bytes_cfg) / EACH_ROW_SIZE);
+
+    _sub_chunks.clear();
+    _segment_sub_chunk_begin.assign(segment_row_counts.size() + 1, 0);
+    int64_t global_byte_offset = 0;
+    for (size_t seg = 0; seg < segment_row_counts.size(); ++seg) {
+        _segment_sub_chunk_begin[seg] = _sub_chunks.size();
+        size_t remaining = segment_row_counts[seg];
+        size_t row_in_seg = 0;
+        while (remaining > 0) {
+            const size_t this_rows = std::min(sub_chunk_rows, remaining);
+            SubChunkDescriptor desc;
+            desc.segment_idx = seg;
+            desc.row_offset_in_segment = row_in_seg;
+            desc.row_count = this_rows;
+            desc.file_offset = global_byte_offset;
+            _sub_chunks.push_back(desc);
+            global_byte_offset += static_cast<int64_t>(this_rows) * EACH_ROW_SIZE;
+            row_in_seg += this_rows;
+            remaining -= this_rows;
+        }
+    }
+    _segment_sub_chunk_begin[segment_row_counts.size()] = _sub_chunks.size();
+
+    _pipelined = true;
+    _next_sub_chunk_to_submit = 0;
+    _next_segment_to_serve = 0;
+
+    // Submit the first K sub-chunks immediately so the caller's processing of
+    // the first segment overlaps with reads of later sub-chunks.
     const int32_t K = std::max(1, config::lake_rows_mapper_read_parallelism);
     for (int32_t i = 0; i < K; ++i) {
-        if (_next_to_submit >= _segment_sizes.size()) break;
+        if (_next_sub_chunk_to_submit >= _sub_chunks.size()) break;
         RETURN_IF_ERROR(_maybe_submit_next());
     }
     return Status::OK();
 }
 
 Status RowsMapperIterator::_maybe_submit_next() {
-    if (_next_to_submit >= _segment_sizes.size()) return Status::OK();
-    const size_t seg = _next_to_submit++;
-    const size_t row_count = _segment_sizes[seg];
+    if (_next_sub_chunk_to_submit >= _sub_chunks.size()) return Status::OK();
+    const SubChunkDescriptor& desc = _sub_chunks[_next_sub_chunk_to_submit++];
 
     InFlightChunk chunk;
-    chunk.segment_idx = seg;
-    chunk.row_count = row_count;
-    chunk.file_offset = _segment_offsets[seg];
+    chunk.segment_idx = desc.segment_idx;
+    chunk.row_offset_in_segment = desc.row_offset_in_segment;
+    chunk.row_count = desc.row_count;
+    chunk.file_offset = desc.file_offset;
 
-    if (row_count == 0) {
-        // Empty segment — no read needed. Build a ready future returning OK so the
-        // consumer can still pop it uniformly.
-        std::promise<Status> p;
-        p.set_value(Status::OK());
-        chunk.future = p.get_future().share();
-        _in_flight.push_back(std::move(chunk));
-        return Status::OK();
-    }
+    // Sub-chunk descriptors are only produced for non-empty ranges, so every
+    // submitted chunk has at least one row to read.
+    DCHECK_GT(desc.row_count, 0u);
 
     // Each in-flight chunk owns its own RandomAccessFile so concurrent reads never
     // touch shared file-class state (the underlying starlet wrapper has been
@@ -213,14 +235,14 @@ Status RowsMapperIterator::_maybe_submit_next() {
     opts.skip_fill_local_cache = true;
     ASSIGN_OR_RETURN(chunk.rf, fs->new_random_access_file(opts, _path));
 
-    chunk.data.resize(row_count);
+    chunk.data.resize(desc.row_count);
 
     auto promise = std::make_shared<std::promise<Status>>();
     chunk.future = promise->get_future().share();
 
     auto* rf_raw = chunk.rf.get();
     uint64_t* data_raw = chunk.data.data();
-    const size_t bytes = row_count * EACH_ROW_SIZE;
+    const size_t bytes = desc.row_count * EACH_ROW_SIZE;
     const int64_t off = chunk.file_offset;
 
     _in_flight.push_back(std::move(chunk));
@@ -264,24 +286,46 @@ Status RowsMapperIterator::next_values(size_t fetch_cnt, std::vector<uint64_t>* 
 
     if (_pipelined) {
         // Pipelined mode: caller must consume segments in the order declared by
-        // prepare_segments, with `fetch_cnt` matching `_segment_sizes[_next_to_serve]`.
-        if (_next_to_serve >= _segment_sizes.size() || fetch_cnt != _segment_sizes[_next_to_serve]) {
+        // prepare_segments, with `fetch_cnt` matching `_segment_sizes[_next_segment_to_serve]`.
+        if (_next_segment_to_serve >= _segment_sizes.size() ||
+            fetch_cnt != _segment_sizes[_next_segment_to_serve]) {
             return Status::InternalError(fmt::format(
-                    "RowsMapperIterator pipelined consume mismatch: next_to_serve={} fetch_cnt={} expected={}",
-                    _next_to_serve, fetch_cnt,
-                    _next_to_serve < _segment_sizes.size() ? _segment_sizes[_next_to_serve] : 0));
+                    "RowsMapperIterator pipelined consume mismatch: next_segment_to_serve={} fetch_cnt={} expected={}",
+                    _next_segment_to_serve, fetch_cnt,
+                    _next_segment_to_serve < _segment_sizes.size() ? _segment_sizes[_next_segment_to_serve] : 0));
         }
-        // Block on the front chunk only; later chunks keep downloading.
-        auto& front = _in_flight.front();
-        RETURN_IF_ERROR(front.future.get());
-        // O(1) swap — no memcpy. Caller gets ownership of the read data; the
-        // chunk's now-empty vector goes away with `pop_front` below.
-        rssid_rowids->swap(front.data);
-        _in_flight.pop_front();
-        ++_next_to_serve;
-        // Refill the pipeline: one chunk consumed, submit the next-after-K-th
-        // segment so K reads stay in flight (subject to remaining segments).
-        RETURN_IF_ERROR(_maybe_submit_next());
+        const size_t seg = _next_segment_to_serve;
+        const size_t first_sc = _segment_sub_chunk_begin[seg];
+        const size_t end_sc = _segment_sub_chunk_begin[seg + 1];
+        const size_t n_sc = end_sc - first_sc;
+        // fetch_cnt > 0 (guarded above) implies the segment has at least one row
+        // and therefore at least one sub-chunk descriptor.
+        DCHECK_GT(n_sc, 0u);
+
+        if (n_sc == 1) {
+            // Zero-copy fast path: segment fits in a single sub-chunk.
+            auto& front = _in_flight.front();
+            RETURN_IF_ERROR(front.future.get());
+            rssid_rowids->swap(front.data);
+            _in_flight.pop_front();
+            RETURN_IF_ERROR(_maybe_submit_next());
+        } else {
+            // Multi-sub-chunk segment: pre-size output and memcpy each sub-chunk
+            // into its row-offset slot. Sub-chunks of this segment are at the
+            // front of _in_flight in row order (sub-chunks never cross segment
+            // boundaries and were pushed in order).
+            rssid_rowids->resize(fetch_cnt);
+            for (size_t i = 0; i < n_sc; ++i) {
+                auto& front = _in_flight.front();
+                RETURN_IF_ERROR(front.future.get());
+                DCHECK_EQ(front.segment_idx, seg);
+                std::memcpy(rssid_rowids->data() + front.row_offset_in_segment, front.data.data(),
+                            front.row_count * EACH_ROW_SIZE);
+                _in_flight.pop_front();
+                RETURN_IF_ERROR(_maybe_submit_next());
+            }
+        }
+        ++_next_segment_to_serve;
     } else {
         // Sequential fallback: single direct read into the caller's buffer.
         rssid_rowids->resize(fetch_cnt);
