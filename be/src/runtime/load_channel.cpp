@@ -51,6 +51,7 @@
 #include "runtime/diagnose_daemon.h"
 #include "runtime/lake_tablets_channel.h"
 #include "runtime/load_channel_mgr.h"
+#include "runtime/load_fail_point.h"
 #include "runtime/local_tablets_channel.h"
 #include "runtime/mem_tracker.h"
 #include "runtime/runtime_metrics.h"
@@ -135,6 +136,14 @@ void LoadChannel::open(const LoadChannelOpenContext& open_context) {
 
     _last_updated_time.store(time(nullptr), std::memory_order_relaxed);
     bool is_lake_tablet = request.has_is_lake_tablet() && request.is_lake_tablet();
+
+    // Reproduction hook for the lake per-partition coordinator regression.
+    // When enabled on a storage CN, every lake open with sender_id == 0 sleeps
+    // before the find-or-create-channel step below, so sender 0 reliably loses
+    // the first-opener race to any other sender. No-op in release builds and
+    // when the fail point is disabled.
+    FAIL_POINT_TRIGGER_EXECUTE(lake_open_delay_sender_0,
+                               LAKE_OPEN_DELAY_SENDER_0_FP_ACTION(request.sender_id(), is_lake_tablet));
 
     Status st = Status::OK();
     TabletsChannelKey key(request.id(), request.sink_id(), request.index_id());

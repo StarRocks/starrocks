@@ -17,6 +17,8 @@
 #include <fmt/format.h>
 
 #ifdef FIU_ENABLE
+#include <bthread/bthread.h>
+
 #include "base/uid_util.h"
 #include "common/system/backend_options.h"
 #include "gutil/strings/join.h"
@@ -61,6 +63,23 @@ DEFINE_FAIL_POINT(load_pk_preload);
 // Simulates failure during transaction commit at the end of loading.
 // Supported in both shared-nothing and shared-data architectures.
 DEFINE_FAIL_POINT(load_commit_txn);
+
+// ===================================== Coordination-race fail points
+
+// Deterministically reproduces the lake per-partition coordinator regression
+// by artificially delaying sender 0's processing of an open request inside
+// `LoadChannel::open`. With this point enabled on every storage CN, sender 0
+// loses the "first opener" race on every storage BE to whichever other sender
+// arrived first. Pre-fix, `_partition_coordinator` then never contains
+// sender 0, sender 0's EOS skips the collect path, txn_logs flow back to a
+// scattered set of OlapTableSinks, and concurrent writers race on the
+// shared-data OSS `combined_txn_log` path. Post-fix (LoadChannel::open's
+// non-incremental else branch invoking `update_open`), sender 0's claim is
+// recorded regardless of arrival order and the bug stays latched off.
+//
+// Only fires when the open request is for a lake tablet and sender_id == 0.
+// Shared-nothing loads are unaffected.
+DEFINE_FAIL_POINT(lake_open_delay_sender_0);
 
 #ifdef FIU_ENABLE
 
@@ -134,6 +153,20 @@ Status pk_preload_fp_action(int64_t txn_id, int64_t tablet_id) {
 Status commit_txn_fp_action(int64_t txn_id, int64_t tablet_id) {
     LOG_FP(load_commit_txn) << ", txn_id: " << txn_id << ", tablet_id: " << tablet_id;
     return Status::IOError(IO_ERROR_MSG(load_commit_txn, txn_id, tablet_id));
+}
+
+// Delay applied when the fail point fires. 50ms is large relative to any
+// realistic same-DC open-RPC scheduling jitter (typically <1ms) so it
+// reliably forces sender 0 to lose every first-opener race. Adjust only if
+// you need to defeat a different scheduling regime.
+constexpr int64_t kLakeOpenDelayMs = 50;
+
+void lake_open_delay_sender_0_fp_action(int32_t sender_id, bool is_lake_tablet) {
+    if (!is_lake_tablet || sender_id != 0) {
+        return;
+    }
+    LOG_FP(lake_open_delay_sender_0) << ", sender_id=" << sender_id << ", delay_ms=" << kLakeOpenDelayMs;
+    bthread_usleep(kLakeOpenDelayMs * 1000);
 }
 
 #endif

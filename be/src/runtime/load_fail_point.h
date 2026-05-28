@@ -49,6 +49,11 @@ Status segment_flush_fp_action(int64_t txn_id, int64_t tablet_id);
 Status pk_preload_fp_action(int64_t txn_id, int64_t tablet_id);
 Status commit_txn_fp_action(int64_t txn_id, int64_t tablet_id);
 
+// Force sender_id == 0 to lose the first-opener race in `LoadChannel::open`
+// for lake (shared-data) opens. See `lake_open_delay_sender_0` in
+// `load_fail_point.cpp` for the rationale.
+void lake_open_delay_sender_0_fp_action(int32_t sender_id, bool is_lake_tablet);
+
 #define TABLET_WRITER_OPEN_FP_ACTION(remote_host, closure, request) \
     ::starrocks::load::failpoint::tablet_writer_open_fp_action(remote_host, closure, &request)
 #define TABLET_WRITER_ADD_CHUNKS_FP_ACTION(remote_host, closure, request) \
@@ -63,6 +68,8 @@ Status commit_txn_fp_action(int64_t txn_id, int64_t tablet_id);
     return ::starrocks::load::failpoint::segment_flush_fp_action(txn_id, tablet_id)
 #define PK_PRELOAD_FP_ACTION(txn_id, tablet_id) ::starrocks::load::failpoint::pk_preload_fp_action(txn_id, tablet_id)
 #define COMMIT_TXN_FP_ACTION(txn_id, tablet_id) ::starrocks::load::failpoint::commit_txn_fp_action(txn_id, tablet_id)
+#define LAKE_OPEN_DELAY_SENDER_0_FP_ACTION(sender_id, is_lake_tablet) \
+    ::starrocks::load::failpoint::lake_open_delay_sender_0_fp_action(sender_id, is_lake_tablet)
 #else
 #define TABLET_WRITER_OPEN_FP_ACTION(remote_host, closure, request)
 #define TABLET_WRITER_ADD_CHUNKS_FP_ACTION(remote_host, closure, request)
@@ -72,6 +79,7 @@ Status commit_txn_fp_action(int64_t txn_id, int64_t tablet_id);
 #define SEGMENT_FLUSH_FP_ACTION(txn_id, tablet_id)
 #define PK_PRELOAD_FP_ACTION(txn_id, tablet_id)
 #define COMMIT_TXN_FP_ACTION(txn_id, tablet_id)
+#define LAKE_OPEN_DELAY_SENDER_0_FP_ACTION(sender_id, is_lake_tablet)
 #endif
 
 } // namespace starrocks::load::failpoint
