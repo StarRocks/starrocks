@@ -658,9 +658,6 @@ private:
         if (_shard_fs != nullptr) {
             return _shard_fs;
         }
-<<<<<<< HEAD
-        return g_worker->get_shard_filesystem(shard_id, _conf);
-=======
 #ifdef BE_TEST
         // Mirrors the hook in `new_fs_starlet(shard_id, ...)` at the bottom of this file.
         // Tests can inject either a mock filesystem or a failure status here without
@@ -671,8 +668,7 @@ private:
             return fs_st;
         }
 #endif
-        return get_staros_worker()->get_shard_filesystem(shard_id, _conf);
->>>>>>> 43d6f52c63 ([BugFix] Fix shared-data lake replication file-copy crashes (#73666))
+        return g_worker->get_shard_filesystem(shard_id, _conf);
     }
 
 private:

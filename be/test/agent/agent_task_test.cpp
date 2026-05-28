@@ -258,8 +258,6 @@ TEST_F(AgentTaskTest, clone_task_under_dropping) {
     tablet->set_is_dropping(false);
 }
 
-<<<<<<< HEAD
-=======
 TEST_F(AgentTaskTest, get_thread_pool_returns_registered_pools) {
     auto* agent_server = ExecEnv::GetInstance()->agent_server();
 
@@ -307,7 +305,6 @@ TEST_F(AgentTaskTest, update_thread_pool_size_applies_cpu_scaled_policy) {
     ASSERT_EQ(std::max(1, CpuInfo::num_cores()), thread_pool->max_threads());
 }
 
->>>>>>> 43d6f52c63 ([BugFix] Fix shared-data lake replication file-copy crashes (#73666))
 TEST_F(AgentTaskTest, update_clone_thread_pool_size_by_task_type) {
     auto* agent_server = ExecEnv::GetInstance()->agent_server();
     auto* thread_pool = agent_server->get_thread_pool(TTaskType::CLONE);

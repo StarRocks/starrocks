@@ -775,9 +775,6 @@ TEST_F(NewFsStarletTest, test_new_fs_starlet_separate_cache_for_modes) {
     EXPECT_EQ(2, callback_count);
 }
 
-<<<<<<< HEAD
-// Test failure scenario when g_worker->get_shard_filesystem returns error
-=======
 // MockStarletFileSystem subclass that returns a configurable Stat-or-Status from `stat()`.
 // Used by the get_file_size tests below to exercise both the happy path (Stat.size
 // surfaces through StarletFileSystem::get_file_size) and the error-propagation path
@@ -881,8 +878,7 @@ TEST_F(NewFsStarletTest, test_get_file_size_propagates_stat_permission_denied) {
     EXPECT_FALSE(sz_or.ok());
 }
 
-// Test failure scenario when the StarOS worker get_shard_filesystem returns error
->>>>>>> 43d6f52c63 ([BugFix] Fix shared-data lake replication file-copy crashes (#73666))
+// Test failure scenario when g_worker->get_shard_filesystem returns error
 TEST_F(NewFsStarletTest, test_new_fs_starlet_get_shard_filesystem_failure) {
     int64_t test_shard_id = 44444;
 

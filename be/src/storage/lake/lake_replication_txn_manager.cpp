@@ -445,7 +445,10 @@ ThreadPool* LakeReplicationTxnManager::get_replicate_file_thread_pool() {
     if (agent_srv == nullptr) {
         return nullptr;
     }
-    _replicate_file_thread_pool = agent_srv->get_thread_pool(TTaskType::REPLICATE_SNAPSHOT);
+    // Use the dedicated `replicate_file` pool so that the outer REPLICATE_SNAPSHOT
+    // task can wait on per-file sub-tasks without tripping the thread-pool
+    // self-deadlock guard. The pool is owned by AgentServer.
+    _replicate_file_thread_pool = agent_srv->get_lake_replicate_file_thread_pool();
     return _replicate_file_thread_pool;
 }
 

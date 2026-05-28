@@ -577,22 +577,44 @@ void AgentServer::Impl::submit_tasks(TAgentResult& agent_result, const std::vect
             HANDLE_TASK(TTaskType::REMOTE_SNAPSHOT, all_tasks, run_remote_snapshot_task, RemoteSnapshotAgentTaskRequest,
                         remote_snapshot_req, _exec_env);
             break;
-<<<<<<< HEAD
-        case TTaskType::REPLICATE_SNAPSHOT:
-            HANDLE_TASK(TTaskType::REPLICATE_SNAPSHOT, all_tasks, run_replicate_snapshot_task,
-                        ReplicateSnapshotAgentTaskRequest, replicate_snapshot_req, _exec_env);
-=======
         case TTaskType::REPLICATE_SNAPSHOT: {
-            auto* replicate_snapshot_pool = get_thread_pool(TTaskType::REPLICATE_SNAPSHOT);
             // Per-file copy must run on a distinct pool from the outer agent task pool, otherwise
             // ThreadPoolToken::wait() inside the task body would trip the self-deadlock guard.
             auto* replicate_file_pool = _thread_pool_replicate_file.get();
-            submit_task_batch<ReplicateSnapshotAgentTaskRequest>(
-                    TTaskType::REPLICATE_SNAPSHOT, all_tasks, /*pool=*/replicate_snapshot_pool,
-                    &TAgentTaskRequest::replicate_snapshot_req, run_replicate_snapshot_task, &ret_st, _exec_env,
-                    /*replicate_file_pool=*/replicate_file_pool);
->>>>>>> 43d6f52c63 ([BugFix] Fix shared-data lake replication file-copy crashes (#73666))
+            std::string submit_log =
+                    "Submit task success. type=" + to_string(TTaskType::REPLICATE_SNAPSHOT) + ", signatures=";
+            size_t log_count = 0;
+            size_t queue_len = 0;
+            for (auto* task : all_tasks) {
+                auto pool = get_thread_pool(TTaskType::REPLICATE_SNAPSHOT);
+                auto signature = task->signature;
+                std::pair<bool, size_t> register_pair = register_task_info(task_type, signature);
+                if (register_pair.first) {
+                    if (log_count++ < 100) {
+                        submit_log += std::to_string(signature) + ",";
+                    }
+                    queue_len = register_pair.second;
+                    ret_st = pool->submit_func(std::bind(
+                            run_replicate_snapshot_task,
+                            std::make_shared<ReplicateSnapshotAgentTaskRequest>(*task, task->replicate_snapshot_req,
+                                                                                time(nullptr)),
+                            _exec_env, replicate_file_pool));
+                    if (!ret_st.ok()) {
+                        LOG(WARNING) << "fail to submit task. reason: " << ret_st.message() << ", task: " << task;
+                    }
+                } else {
+                    LOG(INFO) << "Submit task failed, already exists type=" << TTaskType::REPLICATE_SNAPSHOT
+                              << ", signature=" << signature;
+                }
+            }
+            if (queue_len > 0) {
+                if (log_count >= 100) {
+                    submit_log += "...,";
+                }
+                LOG(INFO) << submit_log << " task_count_in_queue=" << queue_len;
+            }
             break;
+        }
         case TTaskType::REALTIME_PUSH:
         case TTaskType::PUSH: {
             // should not run here
