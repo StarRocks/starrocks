@@ -14,20 +14,17 @@
 
 package com.starrocks.catalog;
 
-import com.google.common.collect.ImmutableList;
+import com.starrocks.connector.paimon.PaimonMetadata;
 
 import java.util.List;
 
 public class PaimonPartitionKey extends PartitionKey implements NullablePartitionKey {
-    public static final List<String> PARTITION_NULL_VALUES =
-            ImmutableList.of("__DEFAULT_PARTITION__", "null");
-
     public PaimonPartitionKey() {
         super();
     }
 
     @Override
     public List<String> nullPartitionValueList() {
-        return PARTITION_NULL_VALUES;
+        return PaimonMetadata.PARTITION_NULL_VALUES;
     }
 }

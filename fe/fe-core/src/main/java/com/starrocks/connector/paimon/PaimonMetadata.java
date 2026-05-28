@@ -18,7 +18,6 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
-import com.starrocks.catalog.PaimonPartitionKey;
 import com.starrocks.catalog.PaimonTable;
 import com.starrocks.catalog.PaimonView;
 import com.starrocks.catalog.PartitionKey;
@@ -126,7 +125,7 @@ import static org.apache.paimon.catalog.Identifier.DEFAULT_MAIN_BRANCH;
 public class PaimonMetadata implements ConnectorMetadata {
     private static final Logger LOG = LogManager.getLogger(PaimonMetadata.class);
 
-    public static final String PAIMON_PARTITION_NULL_VALUE = "null";
+    public static final List<String> PARTITION_NULL_VALUES = ImmutableList.of("__DEFAULT_PARTITION__", "null");
     private static final String VIEW_DIALECTS_KEY = "starrocks";
     private final Catalog paimonNativeCatalog;
     private final HdfsEnvironment hdfsEnvironment;
@@ -267,7 +266,7 @@ public class PaimonMetadata implements ConnectorMetadata {
             String column = partitionColumnNames.get(i);
             String value = partitionValues[i].trim();
             if (partitionColumnTypes.get(i) instanceof DateType && partitionLegacyName
-                    && !PaimonPartitionKey.PARTITION_NULL_VALUES.contains(value)) {
+                    && !PARTITION_NULL_VALUES.contains(value)) {
                 value = DateTimeUtils.formatDate(Integer.parseInt(value));
             }
             sb.append(column).append("=").append(value);
