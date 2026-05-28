@@ -36,7 +36,9 @@
 
 #include <bthread/bthread.h>
 
+#include <chrono>
 #include <memory>
+#include <random>
 
 #include "base/compression/block_compression.h"
 #include "base/container/lru_cache.h"
@@ -138,14 +140,29 @@ void LoadChannel::open(const LoadChannelOpenContext& open_context) {
     _last_updated_time.store(time(nullptr), std::memory_order_relaxed);
     bool is_lake_tablet = request.has_is_lake_tablet() && request.is_lake_tablet();
 
-    // === REPRO ONLY: hardcoded delay to force sender 0 to lose the first-opener race ===
-    // This is NOT for production. It exists solely on the repro branches to make the
-    // lake per-partition coordinator regression fire on every INSERT instead of ~3% of
-    // the time. Remove before merging anywhere.
-    if (is_lake_tablet && request.has_sender_id() && request.sender_id() == 0 &&
-        request.has_lake_tablet_params() &&
-        request.lake_tablet_params().enable_per_partition_coordinator()) {
-        bthread_usleep(50 * 1000);
+    // === REPRO ONLY: lottery delay to force per-BE different first-opener ===
+    // Each storage CN picks ONE random "lucky sender_id" at process startup. Only that
+    // sender's lake open is let through unblocked; every other sender sleeps 500ms.
+    // Different CNs roll different randoms → different lucky senders → different
+    // first-opener on each CN → multi-coordinator race → combined_txn_log written by
+    // multiple OlapTableSinks → partial file. Without the fix, every INSERT fires the
+    // bug. With the fix, even though first-openers diverge, sender 0 still ends up the
+    // coordinator everywhere via update_open → single writer → no race.
+    // NOT for production.
+    {
+        static int32_t lucky_sender = []() {
+            std::mt19937 gen(std::chrono::steady_clock::now().time_since_epoch().count() ^
+                             reinterpret_cast<uintptr_t>(&__FILE__[0]));
+            int32_t k = std::uniform_int_distribution<int32_t>(0, 31)(gen);
+            LOG(WARNING) << "[REPRO] lottery lucky_sender = " << k
+                         << " (this CN will only let sender_id==" << k << " open without delay)";
+            return k;
+        }();
+        if (is_lake_tablet && request.has_sender_id() && request.sender_id() != lucky_sender &&
+            request.has_lake_tablet_params() &&
+            request.lake_tablet_params().enable_per_partition_coordinator()) {
+            bthread_usleep(500 * 1000);
+        }
     }
     // === END REPRO ===
 
