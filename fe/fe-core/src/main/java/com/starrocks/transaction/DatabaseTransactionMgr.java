@@ -627,6 +627,25 @@ public class DatabaseTransactionMgr {
         transactionState.writeLock();
         TransactionState copiedState = null;
         try {
+            // Re-fetch the latest TransactionState under writeLock. Between releasing
+            // readLock above and acquiring writeLock here, a concurrent commit path may
+            // have COW'd a new TransactionState object and replaced the map entry via
+            // unprotectUpsertTransactionState. The local `transactionState` reference
+            // would then point at a stale snapshot whose status is still PREPARED, even
+            // though the canonical map entry has already advanced to COMMITTED. Without
+            // this re-fetch, unprotectAbortTransaction's status-guard reads from the
+            // stale copy, the abort proceeds, and the freshly committed map entry gets
+            // overwritten with an ABORTED state carrying version=-1.
+            TransactionState latest;
+            readLock();
+            try {
+                latest = unprotectedGetTransactionState(transactionId);
+            } finally {
+                readUnlock();
+            }
+            if (latest != null && latest != transactionState) {
+                transactionState = latest;
+            }
             // COW
             copiedState = new TransactionState(transactionState);
             // before state transform

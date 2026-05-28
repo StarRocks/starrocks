@@ -80,6 +80,7 @@ import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
 import com.starrocks.type.FloatType;
 import com.starrocks.type.IntegerType;
+import mockit.Invocation;
 import mockit.Mock;
 import mockit.MockUp;
 import org.junit.jupiter.api.AfterEach;
@@ -96,6 +97,7 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.hamcrest.CoreMatchers.containsString;
 import static org.hamcrest.MatcherAssert.assertThat;
@@ -1055,6 +1057,120 @@ public class DatabaseTransactionMgrTest {
             assertTrue(transactionState2.getCommitTime() > maxCommitTsBefore);
         } finally {
             releasePersist.countDown();
+        }
+    }
+
+    // Race between commitPreparedTransaction and abortTransaction: abort holds a
+    // local reference to the original (PREPARED) TransactionState that it read
+    // outside the per-txn writeLock; if a concurrent commit upserts a fresh
+    // TransactionState object into idToRunningTransactionState before abort
+    // acquires the writeLock, abort must NOT proceed to COW from the stale
+    // local reference and overwrite the committed map entry with an ABORTED
+    // state carrying version=-1. See lake-mode-commit-abort race report.
+    @Test
+    public void testAbortRaceWithConcurrentCommitDoesNotOverwriteCommittedState() throws Exception {
+        FakeGlobalStateMgr.setGlobalStateMgr(masterGlobalStateMgr);
+        Database db = masterGlobalStateMgr.getLocalMetastore().getDb(GlobalStateMgrTestUtil.testDbId1);
+        DatabaseTransactionMgr masterDbTransMgr =
+                masterTransMgr.getDatabaseTransactionMgr(GlobalStateMgrTestUtil.testDbId1);
+
+        long raceTxnId = masterTransMgr.beginTransaction(GlobalStateMgrTestUtil.testDbId1,
+                Lists.newArrayList(GlobalStateMgrTestUtil.testTableId1),
+                "test_commit_abort_race_" + System.nanoTime(),
+                transactionSource,
+                TransactionState.LoadJobSourceType.FRONTEND, Config.stream_load_default_timeout_second);
+        masterTransMgr.prepareTransaction(GlobalStateMgrTestUtil.testDbId1, raceTxnId, -1,
+                buildTabletCommitInfoList(), Lists.newArrayList(), null);
+
+        TransactionState objectA = masterDbTransMgr.getTransactionState(raceTxnId);
+        assertNotNull(objectA);
+        assertEquals(TransactionStatus.PREPARED, objectA.getTransactionStatus());
+
+        CountDownLatch abortReachedWriteLock = new CountDownLatch(1);
+        CountDownLatch commitCompleted = new CountDownLatch(1);
+        AtomicReference<Thread> abortThreadRef = new AtomicReference<>();
+        AtomicBoolean abortPastWriteLock = new AtomicBoolean(false);
+
+        // Intercept TransactionState.writeLock() only for the abort thread on
+        // the racing txn id, so the test can let the commit thread upsert a
+        // brand-new COMMITTED state object into the running map before abort
+        // acquires the per-txn writeLock and reads from its stale local ref.
+        new MockUp<TransactionState>() {
+            @Mock
+            public void writeLock(Invocation inv) throws InterruptedException {
+                TransactionState ts = (TransactionState) inv.getInvokedInstance();
+                if (Thread.currentThread() == abortThreadRef.get()
+                        && ts.getTransactionId() == raceTxnId
+                        && abortPastWriteLock.compareAndSet(false, true)) {
+                    abortReachedWriteLock.countDown();
+                    assertTrue(commitCompleted.await(10, TimeUnit.SECONDS));
+                }
+                inv.proceed();
+            }
+        };
+
+        Throwable[] abortError = new Throwable[1];
+        Thread abortThread = new Thread(() -> {
+            try {
+                masterDbTransMgr.abortTransaction(raceTxnId, true, "race-fake-timeout", null,
+                        Lists.newArrayList(), Lists.newArrayList());
+            } catch (Throwable t) {
+                abortError[0] = t;
+            }
+        }, "abort-race-thread");
+        abortThreadRef.set(abortThread);
+        abortThread.start();
+
+        // Wait until abort thread has captured the local stale ref to object A
+        // (after readUnlock at the top of abortTransaction) and is parked just
+        // before transactionState.writeLock().
+        assertTrue(abortReachedWriteLock.await(10, TimeUnit.SECONDS),
+                "abort thread did not reach writeLock in time");
+
+        // Run commit to completion on the main thread. After this returns,
+        // idToRunningTransactionState[raceTxnId] holds a brand-new
+        // TransactionState (status=COMMITTED), not the object A captured above.
+        masterTransMgr.commitPreparedTransaction(db, raceTxnId, 1000L);
+
+        TransactionState mapEntryAfterCommit = masterDbTransMgr.getTransactionState(raceTxnId);
+        assertNotNull(mapEntryAfterCommit);
+        assertEquals(TransactionStatus.COMMITTED, mapEntryAfterCommit.getTransactionStatus());
+        Assertions.assertNotSame(objectA, mapEntryAfterCommit,
+                "commit should have upserted a new TransactionState object into the running map");
+
+        // Release abort: it will now acquire the writeLock and either
+        //   (fixed)   re-read idToRunningTransactionState, see COMMITTED, and
+        //             refuse to abort (throwing TransactionAlreadyCommitException), or
+        //   (buggy)   COW from the stale object A (status=PREPARED), flip to
+        //             ABORTED, and overwrite the committed map entry.
+        commitCompleted.countDown();
+        abortThread.join(10_000);
+        Assertions.assertFalse(abortThread.isAlive(), "abort thread should have terminated");
+
+        if (abortError[0] != null) {
+            Throwable cause = abortError[0];
+            while (cause != null && !(cause instanceof TransactionAlreadyCommitException)) {
+                cause = cause.getCause();
+            }
+            assertNotNull(cause, "abort error must be (caused by) TransactionAlreadyCommitException, got "
+                    + abortError[0]);
+        }
+
+        // The committed map entry MUST NOT have been overwritten with ABORTED,
+        // and the partition commit version produced by commit MUST survive.
+        TransactionState finalState = masterDbTransMgr.getTransactionState(raceTxnId);
+        assertNotNull(finalState);
+        assertEquals(TransactionStatus.COMMITTED, finalState.getTransactionStatus(),
+                "stale-ref race must not overwrite the committed entry with ABORTED");
+
+        TableCommitInfo tci = finalState.getIdToTableCommitInfos().get(GlobalStateMgrTestUtil.testTableId1);
+        assertNotNull(tci, "committed state must keep its table commit info");
+        Assertions.assertFalse(tci.getIdToPartitionCommitInfo().isEmpty(),
+                "committed state must keep at least one partition commit info");
+        for (PartitionCommitInfo pci : tci.getIdToPartitionCommitInfo().values()) {
+            Assertions.assertTrue(pci.getVersion() > 0,
+                    "committed partition version must remain positive (not -1 from abort COW), got "
+                            + pci.getVersion());
         }
     }
 
