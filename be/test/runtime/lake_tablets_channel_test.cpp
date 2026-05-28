@@ -1597,8 +1597,7 @@ TEST_F(LakeTabletsChannelPerPartitionCoordinatorTest, test_two_senders_split_par
 // directly: simulate sender 1 opening first, then call `update_open` with
 // sender 0's params, and assert that sender 0 ends up the coordinator
 // (collects all logs) and sender 1 collects nothing.
-TEST_F(LakeTabletsChannelPerPartitionCoordinatorTest,
-       test_late_arriving_sender_0_open_claims_via_update_open) {
+TEST_F(LakeTabletsChannelPerPartitionCoordinatorTest, test_late_arriving_sender_0_open_claims_via_update_open) {
     auto* m = RuntimeMetrics::instance();
     int64_t per_partition_before = m->lake_txn_log_collect_per_partition_total.value();
     int64_t orphan_before = m->lake_txn_log_collect_orphan_partition_total.value();
@@ -1620,8 +1619,8 @@ TEST_F(LakeTabletsChannelPerPartitionCoordinatorTest,
         req.set_load_channel_timeout_s(10);
         req.set_is_vectorized(true);
         req.mutable_schema()->CopyFrom(_open_request.schema());
-        for (auto& [pid, tid] : std::vector<std::pair<int64_t, int64_t>>{
-                     {10, 10086}, {10, 10087}, {11, 10088}, {11, 10089}}) {
+        for (auto& [pid, tid] :
+             std::vector<std::pair<int64_t, int64_t>>{{10, 10086}, {10, 10087}, {11, 10088}, {11, 10089}}) {
             auto* t = req.add_tablets();
             t->set_partition_id(pid);
             t->set_tablet_id(tid);
