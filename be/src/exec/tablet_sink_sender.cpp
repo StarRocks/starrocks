@@ -16,12 +16,12 @@
 
 #include <utility>
 
-#include "base/testutil/sync_point.h"
 #include "column/chunk.h"
 #include "common/statusor.h"
 #include "exec/write_combined_txn_log.h"
 #include "exprs/expr.h"
 #include "runtime/runtime_state.h"
+#include "testutil/sync_point.h"
 
 namespace starrocks {
 
