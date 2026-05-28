@@ -24,6 +24,7 @@ import com.starrocks.catalog.Type;
 import com.starrocks.connector.CatalogConnector;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.CloudConfigurationFactory;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.THdfsFileFormat;
 import com.starrocks.thrift.TScanRangeLocations;
@@ -126,6 +127,9 @@ public class PaimonScanNodeTest {
 
     @Test
     public void testSplitRawFileScanRange(@Mocked PaimonTable table, @Mocked RawFile rawFile) {
+        ConnectContext ctx = new ConnectContext();
+        ctx.setThreadLocalInfo();
+
         BinaryRow row1 = new BinaryRow(2);
         BinaryRowWriter writer = new BinaryRowWriter(row1, 10);
         writer.writeInt(0, 2000);
@@ -159,6 +163,9 @@ public class PaimonScanNodeTest {
 
     @Test
     public void testAddSplitScanRangeLocations(@Mocked PaimonTable table, @Mocked RawFile rawFile) {
+        ConnectContext ctx = new ConnectContext();
+        ctx.setThreadLocalInfo();
+
         BinaryRow row1 = new BinaryRow(2);
         BinaryRowWriter writer = new BinaryRowWriter(row1, 10);
         writer.writeInt(0, 2000);
@@ -181,5 +188,30 @@ public class PaimonScanNodeTest {
         Assertions.assertEquals(1, scanNode.getScanRangeLocations(10).size());
         TScanRangeLocations tScanRangeLocations = scanNode.getScanRangeLocations(10).get(0);
         Assertions.assertEquals(THdfsFileFormat.UNKNOWN, tScanRangeLocations.getScan_range().getHdfs_scan_range().getFile_format());
+    }
+
+    @Test
+    public void testSplitRawFileScanRangeLocationsWithSessionVariable(@Mocked PaimonTable table, @Mocked RawFile rawFile) {
+        ConnectContext ctx = new ConnectContext();
+        ctx.setThreadLocalInfo();
+        ctx.getSessionVariable().setConnectorMaxSplitSize(50L);
+
+        TupleDescriptor desc = new TupleDescriptor(new TupleId(0));
+        new Expectations() {
+            {
+                rawFile.format();
+                result = "orc";
+                rawFile.offset();
+                result = 100L;
+                rawFile.length();
+                result = 120L;
+                rawFile.path();
+                result = "hdfs://dummy";
+            }
+        };
+        desc.setTable(table);
+        PaimonScanNode scanNode = new PaimonScanNode(new PlanNodeId(0), desc, "XXX");
+        scanNode.splitRawFileScanRangeLocations(rawFile, null);
+        Assertions.assertEquals(2, scanNode.getScanRangeLocations(10).size());
     }
 }
