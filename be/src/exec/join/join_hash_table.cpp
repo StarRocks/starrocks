@@ -163,7 +163,12 @@ JoinKeyConstructorUnaryType JoinHashMapSelector::_determine_key_constructor(Runt
     DCHECK_GT(num_keys, 0);
 
     for (size_t i = 0; i < num_keys; i++) {
-        if (!table_items->key_columns[i]->has_null()) {
+        // A null-safe equal (<=>) on float/double also requires NaN == NaN, not only NULL <=> NULL.
+        // A column with no NULLs may still contain NaN, so for float/double we keep the null-safe path
+        // even when has_null() is false: it routes the key through the serialized constructors that
+        // canonicalize NaN. Dropping it here would fall back to the ONE_KEY fast path, which compares
+        // raw float bits and would treat two NaNs as distinct.
+        if (!table_items->key_columns[i]->has_null() && !is_float_type(table_items->join_keys[i].type->type)) {
             table_items->join_keys[i].is_null_safe_equal = false;
         }
     }
