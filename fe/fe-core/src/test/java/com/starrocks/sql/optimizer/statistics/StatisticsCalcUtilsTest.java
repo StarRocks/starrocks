@@ -124,7 +124,7 @@ public class StatisticsCalcUtilsTest {
         partitionIds.add(nonExistentPartitionId);
 
         for (Partition partition : partitions) {
-            partition.getDefaultPhysicalPartition().getLatestBaseIndex().setRowCount(1000);
+            partition.getDefaultPhysicalPartition().getBaseIndex().setRowCount(1000);
         }
 
         List<Column> columns = table.getColumns();
@@ -138,7 +138,7 @@ public class StatisticsCalcUtilsTest {
         LogicalOlapScanOperator olapScanOperator = new LogicalOlapScanOperator(table,
                 refToColumn, columnToRef,
                 null, -1, null,
-                table.getBaseIndexMetaId(),
+                table.getBaseIndexId(),
                 partitionIds,
                 null,
                 false,
@@ -168,7 +168,7 @@ public class StatisticsCalcUtilsTest {
                 .mapToLong(Partition::getId).boxed().collect(Collectors.toList());
 
         for (Partition partition : partitions) {
-            partition.getDefaultPhysicalPartition().getLatestBaseIndex().setRowCount(500);
+            partition.getDefaultPhysicalPartition().getBaseIndex().setRowCount(500);
         }
 
         List<Column> columns = table.getColumns();
@@ -182,7 +182,7 @@ public class StatisticsCalcUtilsTest {
         LogicalOlapScanOperator olapScanOperator = new LogicalOlapScanOperator(table,
                 refToColumn, columnToRef,
                 null, -1, null,
-                table.getBaseIndexMetaId(),
+                table.getBaseIndexId(),
                 partitionIds,
                 null,
                 false,
@@ -232,7 +232,7 @@ public class StatisticsCalcUtilsTest {
         LogicalOlapScanOperator olapScanOperator = new LogicalOlapScanOperator(table,
                 refToColumn, columnToRef,
                 null, -1, null,
-                table.getBaseIndexMetaId(),
+                table.getBaseIndexId(),
                 partitionIds,
                 null,
                 false,
