@@ -468,8 +468,8 @@ TEST_F(TabletSinkIndexChannelTest, send_request_releases_protobuf_memory) {
     ASSERT_OK(sink->open(runtime_state.get()));
     auto tuple_desc = runtime_state->desc_tbl().get_tuple_descriptor(_desc_tbl.tupleDescriptors[0].id);
     ChunkUniquePtr chunk = ChunkHelper::new_chunk(*tuple_desc, 1);
-    chunk->get_column_raw_ptr_by_index(0)->append_datum(Datum(1));
-    chunk->get_column_raw_ptr_by_index(1)->append_datum(Datum(int64_t(1)));
+    chunk->get_column_by_index(0)->append_datum(Datum(1));
+    chunk->get_column_by_index(1)->append_datum(Datum(int64_t(1)));
     ASSERT_OK(sink->send_chunk(runtime_state.get(), chunk.get()));
     // close() flushes the buffered chunk and triggers _send_request with eos=true,
     // which serializes the chunk data and dispatches the RPC.
@@ -561,8 +561,8 @@ TEST_F(TabletSinkIndexChannelTest, ConcurrentSendAndIncrementalInit) {
     // Thread A: send a chunk (which calls _send_chunk_by_node, holding shared lock)
     auto tuple_desc = runtime_state->desc_tbl().get_tuple_descriptor(_desc_tbl.tupleDescriptors[0].id);
     ChunkUniquePtr chunk = ChunkHelper::new_chunk(*tuple_desc, 1);
-    chunk->get_column_raw_ptr_by_index(0)->append_datum(Datum(1));
-    chunk->get_column_raw_ptr_by_index(1)->append_datum(Datum(int64_t(1)));
+    chunk->get_column_by_index(0)->append_datum(Datum(1));
+    chunk->get_column_by_index(1)->append_datum(Datum(int64_t(1)));
 
     std::thread sender([&]() {
         auto st = sink->send_chunk(runtime_state.get(), chunk.get());
