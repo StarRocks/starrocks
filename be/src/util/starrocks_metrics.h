@@ -441,7 +441,11 @@ public:
     METRICS_DEFINE_THREAD_POOL(clone);
     METRICS_DEFINE_THREAD_POOL(remote_snapshot);
     METRICS_DEFINE_THREAD_POOL(replicate_snapshot);
+<<<<<<< HEAD
     METRICS_DEFINE_THREAD_POOL(cluster_snapshot);
+=======
+    METRICS_DEFINE_THREAD_POOL(replicate_file);
+>>>>>>> cea528ae12a... [BugFix] Fix shared-data lake replication file-copy crashes (backport #73666) (#73918)
     METRICS_DEFINE_THREAD_POOL(automatic_partition);
 
     METRIC_DEFINE_INT_COUNTER(exec_runtime_memory_size, MetricUnit::BYTES);

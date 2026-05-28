@@ -119,6 +119,8 @@ public:
 
     ThreadPool* get_thread_pool(int type) const;
 
+    ThreadPool* get_lake_replicate_file_thread_pool() const { return _thread_pool_replicate_file.get(); }
+
     void stop_task_worker_pool(TaskWorkerType type) const;
 
     DISALLOW_COPY_AND_MOVE(Impl);
@@ -147,7 +149,14 @@ private:
     std::unique_ptr<ThreadPool> _thread_pool_drop_auto_increment_map;
     std::unique_ptr<ThreadPool> _thread_pool_remote_snapshot;
     std::unique_ptr<ThreadPool> _thread_pool_replicate_snapshot;
+<<<<<<< HEAD
     std::unique_ptr<ThreadPool> _thread_pool_cluster_snapshot;
+=======
+    // Dedicated pool for per-file copy in lake-to-lake replication, sized by
+    // `lake_replication_file_copy_threads`. Kept distinct from `_thread_pool_replicate_snapshot`
+    // so that the outer agent task can wait on per-file sub-tasks without self-deadlock.
+    std::unique_ptr<ThreadPool> _thread_pool_replicate_file;
+>>>>>>> cea528ae12a... [BugFix] Fix shared-data lake replication file-copy crashes (backport #73666) (#73918)
 
     std::unique_ptr<PushTaskWorkerPool> _push_workers;
     std::unique_ptr<PublishVersionTaskWorkerPool> _publish_version_workers;
@@ -288,10 +297,17 @@ Status AgentServer::Impl::init() {
                 calc_real_num_threads(config::replication_threads, REPLICATION_CPU_CORES_MULTIPLIER),
                 std::numeric_limits<int>::max(), _thread_pool_replicate_snapshot);
 
+<<<<<<< HEAD
         BUILD_DYNAMIC_TASK_THREAD_POOL(cluster_snapshot, 0,
                                        std::max(1, std::min(calc_real_num_threads(config::cluster_snapshot_threads, 1),
                                                             CpuInfo::num_cores() / 4)),
                                        std::numeric_limits<int>::max(), _thread_pool_cluster_snapshot);
+=======
+        BUILD_DYNAMIC_TASK_THREAD_POOL(
+                replicate_file, 0,
+                calc_real_num_threads(config::lake_replication_file_copy_threads, REPLICATION_CPU_CORES_MULTIPLIER),
+                std::numeric_limits<int>::max(), _thread_pool_replicate_file);
+>>>>>>> cea528ae12a... [BugFix] Fix shared-data lake replication file-copy crashes (backport #73666) (#73918)
 
         // It is the same code to create workers of each type, so we use a macro
         // to make code to be more readable.
@@ -347,7 +363,11 @@ void AgentServer::Impl::stop() {
         _thread_pool_clone->shutdown();
         _thread_pool_remote_snapshot->shutdown();
         _thread_pool_replicate_snapshot->shutdown();
+<<<<<<< HEAD
         _thread_pool_cluster_snapshot->shutdown();
+=======
+        _thread_pool_replicate_file->shutdown();
+>>>>>>> cea528ae12a... [BugFix] Fix shared-data lake replication file-copy crashes (backport #73666) (#73918)
 #define STOP_POOL(type, pool_name) pool_name->stop();
 #else
 #define STOP_POOL(type, pool_name)
@@ -852,6 +872,10 @@ void AgentServer::update_max_thread_by_type(int type, int new_val) {
 
 ThreadPool* AgentServer::get_thread_pool(int type) const {
     return _impl->get_thread_pool(type);
+}
+
+ThreadPool* AgentServer::get_lake_replicate_file_thread_pool() const {
+    return _impl->get_lake_replicate_file_thread_pool();
 }
 
 void AgentServer::stop_task_worker_pool(TaskWorkerType type) const {
