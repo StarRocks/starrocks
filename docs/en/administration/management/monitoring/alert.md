@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 toc_max_heading_level: 4
+description: "In the following examples, all variables are prefixed with `$`."
 ---
 
 # Manage Alerts

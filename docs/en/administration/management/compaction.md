@@ -1,5 +1,10 @@
 ---
 displayed_sidebar: docs
+<<<<<<< HEAD
+=======
+keywords: ['compaction']
+description: "This topic describes how to manage compaction in StarRocks shared-data clusters."
+>>>>>>> 67838f4264 ([Doc] Generate llms.txt (#71297))
 ---
 
 # Compaction for Shared-data Clusters

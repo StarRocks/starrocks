@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "BladePipe is a **real-time end-to-end data replication tool**, moving data between **30+** databases, message queues, search engines, caching systems, real-time data warehouses, data lakes and more..."
 ---
 
 # BladePipe

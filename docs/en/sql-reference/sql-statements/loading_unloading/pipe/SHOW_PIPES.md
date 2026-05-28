@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "SHOW PIPES lists the pipes stored in a specified database or in the current database in use."
 ---
 
 # SHOW PIPES

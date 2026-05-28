@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "In earlier versions, there are no rich metrics or efficient methods to monitor the performance, usage, and health of [Data Cache](./data_cache.md)."
 ---
 
 # Data Cache observability

@@ -1,5 +1,10 @@
 ---
 displayed_sidebar: docs
+<<<<<<< HEAD
+=======
+keywords: ['alter table']
+description: "ALTER TABLE Modifies an existing table, including:"
+>>>>>>> 67838f4264 ([Doc] Generate llms.txt (#71297))
 ---
 
 # ALTER TABLE

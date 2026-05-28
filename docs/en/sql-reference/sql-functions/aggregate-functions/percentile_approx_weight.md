@@ -1,3 +1,8 @@
+---
+displayed_sidebar: docs
+description: "Returns the approximation of the p-th percentile with weight. A weighted version of PERCENTILE_APPROX that accepts a weight column or constant for each input value."
+---
+
 # percentile_approx_weight
 
 Returns the approximation of the p-th percentile with weight. The value of p is between 0 and 1, and it can be a single value or an array. PERCENTILE_APPROX_WEIGHT is a weighted version of PERCENTILE_APPROX that allows users to specify a weight (a constant value or numeric column) for each input value.

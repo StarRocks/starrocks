@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 sidebar_label: "Statistics and Storage"
+description: "FE configuration parameters for statistics collection and storage settings."
 ---
 
 # FE Configuration - Statistics and Storage

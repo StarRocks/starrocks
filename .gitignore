@@ -99,8 +99,14 @@ build/
 cmake-build-debug/
 CMakeLists.txt
 .claude
+<<<<<<< HEAD
 CLAUDE.md
 AGENTS.md
+=======
+!docs/.claude/
+!docs/.claude/**
+docs/.claude/settings.local.json
+>>>>>>> 67838f4264 ([Doc] Generate llms.txt (#71297))
 .clangd
 .cursor/
 .codex/

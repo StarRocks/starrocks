@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "StarRocks supports backing up and restoring the following objects:"
 ---
 
 # RESTORE

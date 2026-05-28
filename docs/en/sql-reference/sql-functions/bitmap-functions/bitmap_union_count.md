@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Returns the union of a set of bitmap values and returns the cardinality of the union."
 ---
 
 # bitmap_union_count

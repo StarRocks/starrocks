@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Returns `x` as a value."
 ---
 
 # positive
