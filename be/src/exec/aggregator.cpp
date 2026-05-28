@@ -211,8 +211,16 @@ void AggregatorParams::init() {
         const TExpr& desc = aggregate_functions[i];
         const TFunction& fn = desc.nodes[0].fn;
 
-        if (AggStateUtils::is_count_function(fn.name.function_name)) {
-            // count function is always not nullable
+        if (AggStateUtils::is_count_function(fn.name.function_name) &&
+            fn.name.function_name != FUNCTION_COUNT + AggStateUtils::AGG_STATE_COMBINE_SUFFIX) {
+            // count / count_if / count_union / count_merge route Count* through
+            // serialize_to_column that writes into a plain Int64Column. Only
+            // AggStateCombine unwraps NullableColumn before that write, so for
+            // every other carrier the output column must stay non-nullable —
+            // the mocked (has_nullable_child=false, is_nullable=false) here
+            // delivers that. count_combine MUST fall through so the nested
+            // count lookup sees the real input nullability and picks
+            // CountNullableAggregateFunction for nullable input columns.
             agg_fn_types[i] = {TypeDescriptor(TYPE_BIGINT), TypeDescriptor(TYPE_BIGINT), {}, false, false};
         } else {
             // whether agg function has nullable child
