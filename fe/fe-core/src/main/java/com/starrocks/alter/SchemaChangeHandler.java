@@ -843,6 +843,20 @@ public class SchemaChangeHandler extends AlterHandler {
 
         Column oriColumn = schemaForFinding.get(modColIndex);
 
+        // Range-distribution sort-key column protection (row #4d).
+        rejectIfTouchesRangeSortKey(olapTable, indexMetaIdForFindingColumn,
+                "MODIFY COLUMN", newColName);
+        // Range-distribution keyness-flip protection (row #4e).
+        if (olapTable.isRangeDistribution()
+                && oriColumn.isKey() != modColumn.isKey()) {
+            throw new DdlException(
+                "MODIFY COLUMN that changes keyness is not supported " +
+                "on tables with range distribution, because adding to " +
+                "or removing from the key column set shifts the range " +
+                "sort key on AGG/UNIQUE tables and on tables without " +
+                "explicit ORDER BY. Column: " + newColName);
+        }
+
         for (Index index : olapTable.getIndexes()) {
             if (index.getIndexType() == IndexDef.IndexType.GIN) {
                 if (index.getColumns().contains(oriColumn.getColumnId()) &&

@@ -156,4 +156,54 @@ public class RangeDistributionGuardTest {
         assertTrue(ex.getMessage().toLowerCase().contains("k2"),
                 "Expected 'k2' (offending column) in: " + ex.getMessage());
     }
+
+    @Test
+    public void testModifySortKeyColumnTypeRejectedOnRangeDistribution() throws Exception {
+        starRocksAssert.withTable(rangeTableDdl("t_guard_modsk"));
+        Throwable ex = assertThrows(Throwable.class, () ->
+                starRocksAssert.alterTable(
+                        "alter table t_guard_modsk modify column k1 bigint"));
+        assertTrue(ex.getMessage().toLowerCase().contains("range distribution"),
+                "Expected 'range distribution' in: " + ex.getMessage());
+        assertTrue(ex.getMessage().toLowerCase().contains("k1"),
+                "Expected 'k1' (offending column) in: " + ex.getMessage());
+    }
+
+    @Test
+    public void testModifyKeynessFlipRejectedOnRangeDistribution() throws Exception {
+        // AGG table so that a value column can be promoted via MODIFY ... KEY.
+        starRocksAssert.withTable(
+                "create table t_guard_keyflip (k1 int, v1 int sum)\n" +
+                "AGGREGATE KEY(k1)\n" +
+                "order by(k1)\n" +
+                "properties('replication_num' = '1');");
+        Throwable ex = assertThrows(Throwable.class, () ->
+                starRocksAssert.alterTable(
+                        "alter table t_guard_keyflip modify column v1 int key"));
+        assertTrue(ex.getMessage().toLowerCase().contains("range distribution"),
+                "Expected 'range distribution' in: " + ex.getMessage());
+        assertTrue(ex.getMessage().toLowerCase().contains("keyness")
+                        || ex.getMessage().toLowerCase().contains("key column"),
+                "Expected keyness/key-column language in: " + ex.getMessage());
+    }
+
+    @Test
+    public void testModifyNonSortKeyColumnAllowedOnRangeDistribution() throws Exception {
+        // Positive narrowness test: MODIFY of a non-sort-key, non-key column,
+        // with no keyness change, must still succeed on a range-distribution table.
+        // We declare DUPLICATE KEY(k1, k2) explicitly so that v1 is unambiguously
+        // a value column — otherwise the short-key derivation in
+        // CreateTableAnalyzer.analyzeKeysDesc would pick all three int columns
+        // as keys (k1, k2, v1 fit under SHORTKEY_MAXSIZE_BYTES), and MODIFY
+        // would then change v1's keyness.
+        starRocksAssert.withTable(
+                "create table t_guard_modok (k1 int, k2 int, v1 int)\n" +
+                "DUPLICATE KEY(k1, k2)\n" +
+                "order by(k1, k2)\n" +
+                "properties('replication_num' = '1');");
+        // v1 is a value column (not in (k1, k2) sort key) — widening should pass.
+        starRocksAssert.alterTable(
+                "alter table t_guard_modok modify column v1 bigint");
+        // If it returned without exception, the narrow guard is correct.
+    }
 }
