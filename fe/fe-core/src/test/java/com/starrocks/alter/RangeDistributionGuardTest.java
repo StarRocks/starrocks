@@ -94,4 +94,22 @@ public class RangeDistributionGuardTest {
         assertTrue(ex.getMessage().toLowerCase().contains("range distribution"),
                 "Expected 'range distribution' in: " + ex.getMessage());
     }
+
+    @Test
+    public void testModifySortKeyRejectedOnRangeDistribution() throws Exception {
+        starRocksAssert.withTable(rangeTableDdl("t_guard_orderby"));
+        // Use a column list SHORTER than base schema so this routes to
+        // processModifySortKeyColumn (not the schema-reorder overload).
+        // Unlike the ADD ROLLUP / sync MV paths (which use
+        // ErrorReport.wrapWithRuntimeException and preserve DdlException as the
+        // cause), the SCHEMA_CHANGE path in AlterJobExecutor catches
+        // StarRocksException and re-throws as AlterJobException with only the
+        // message — no cause — so we assert on the message directly rather
+        // than via assertThrowsDdlException's cause-chain walk.
+        Throwable ex = assertThrows(Throwable.class, () ->
+                starRocksAssert.alterTable(
+                        "alter table t_guard_orderby order by (k1)"));
+        assertTrue(ex.getMessage().toLowerCase().contains("range distribution"),
+                "Expected 'range distribution' in: " + ex.getMessage());
+    }
 }

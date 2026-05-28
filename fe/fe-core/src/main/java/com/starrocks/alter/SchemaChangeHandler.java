@@ -1107,6 +1107,12 @@ public class SchemaChangeHandler extends AlterHandler {
     private void processModifySortKeyColumn(ReorderColumnsClause alterClause, OlapTable olapTable,
                                             Map<Long, LinkedList<Column>> indexMetaIdToSchema, List<Integer> sortKeyIdxes,
                                             List<Integer> sortKeyUniqueIds) throws DdlException {
+        if (olapTable.isRangeDistribution()) {
+            throw new DdlException(
+                "Modifying sort key (ALTER TABLE ... ORDER BY) is not " +
+                "supported on tables with range distribution, because the " +
+                "sort key defines tablet boundaries.");
+        }
         LinkedList<Column> targetIndexSchema = indexMetaIdToSchema.get(olapTable.getIndexMetaIdByName(olapTable.getName()));
         // check sort key column list
         Set<String> colNameSet = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
