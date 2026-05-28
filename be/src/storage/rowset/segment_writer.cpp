@@ -51,6 +51,7 @@
 #include "fs/fs.h"          // FileSystem
 #include "gen_cpp/lake_types.pb.h"
 #include "gen_cpp/segment.pb.h"
+#include "storage/base/short_key_index.h"
 #include "storage/chunk_variant_helper.h"
 #include "storage/index/index_descriptor.h"
 #include "storage/row_store_encoder.h"
@@ -59,7 +60,6 @@
 #include "storage/rowset/page_io.h"
 #include "storage/rowset/segment_file_info.h"
 #include "storage/seek_tuple.h"
-#include "storage/short_key_index.h"
 #include "types/json_value.h"
 #include "types/logical_type.h"
 

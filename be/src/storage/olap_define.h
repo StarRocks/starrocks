@@ -40,7 +40,7 @@
 #include <string>
 
 #include "common/constexpr.h"
-#include "storage/base/storage_path_constants.h"
+#include "storage/primitive/storage_path_constants.h"
 
 namespace starrocks {
 
