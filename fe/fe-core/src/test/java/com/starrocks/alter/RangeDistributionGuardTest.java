@@ -128,4 +128,18 @@ public class RangeDistributionGuardTest {
         assertTrue(ex.getMessage().toLowerCase().contains("range distribution"),
                 "Expected 'range distribution' in: " + ex.getMessage());
     }
+
+    @Test
+    public void testAddKeyColumnRejectedOnRangeDistribution() throws Exception {
+        // Range table (order by(k1, k2)). Adding a key column would otherwise
+        // append to the sort key, invalidating stored range tablet boundaries.
+        starRocksAssert.withTable(rangeTableDdl("t_guard_addkey"));
+        // Schema-change DDL path — exception is AlterJobException (no DdlException cause),
+        // so assert on Throwable + message, consistent with the ORDER BY test pattern.
+        Throwable ex = assertThrows(Throwable.class, () ->
+                starRocksAssert.alterTable(
+                        "alter table t_guard_addkey add column k_new int key default '0'"));
+        assertTrue(ex.getMessage().toLowerCase().contains("range distribution"),
+                "Expected 'range distribution' in: " + ex.getMessage());
+    }
 }

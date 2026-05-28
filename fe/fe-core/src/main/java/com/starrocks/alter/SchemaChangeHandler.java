@@ -239,6 +239,14 @@ public class SchemaChangeHandler extends AlterHandler {
                                      Map<Long, LinkedList<Column>> indexMetaIdToSchema,
                                      IntSupplier colUniqueIdSupplier) throws DdlException {
         Column column = buildColumnForAdd(alterClause.getColumnDef(), olapTable);
+        if (olapTable.isRangeDistribution() && column.isKey()) {
+            throw new DdlException(
+                "ADD COLUMN of a key column is not supported on tables with " +
+                "range distribution, because new key columns are appended to " +
+                "the range sort key (AGG/UNIQUE) or derived sort key (no " +
+                "explicit ORDER BY), invalidating stored range tablet " +
+                "boundary values. Column: " + column.getName());
+        }
         ColumnPosition columnPos = alterClause.getColPos();
         String targetIndexName = alterClause.getRollupName();
         checkIndexExists(olapTable, targetIndexName);
@@ -275,6 +283,19 @@ public class SchemaChangeHandler extends AlterHandler {
                                       Map<Long, LinkedList<Column>> indexMetaIdToSchema,
                                       IntSupplier colUniqueIdSupplier) throws DdlException {
         List<Column> columns = buildColumnsForAdd(alterClause, olapTable);
+        if (olapTable.isRangeDistribution()) {
+            for (Column c : columns) {
+                if (c.isKey()) {
+                    throw new DdlException(
+                        "ADD COLUMN of a key column is not supported on " +
+                        "tables with range distribution, because new key " +
+                        "columns are appended to the range sort key " +
+                        "(AGG/UNIQUE) or derived sort key (no explicit " +
+                        "ORDER BY), invalidating stored range tablet boundary " +
+                        "values. Column: " + c.getName());
+                }
+            }
+        }
         String targetIndexName = alterClause.getRollupName();
         checkIndexExists(olapTable, targetIndexName);
 
