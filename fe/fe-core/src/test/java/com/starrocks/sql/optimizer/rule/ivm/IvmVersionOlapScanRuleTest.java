@@ -20,6 +20,7 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.common.tvr.TvrTableDelta;
 import com.starrocks.common.tvr.TvrTableSnapshot;
+import com.starrocks.common.tvr.TvrVersion;
 import com.starrocks.lake.bookmark.Bookmark;
 import com.starrocks.lake.bookmark.BookmarkHolder;
 import com.starrocks.lake.bookmark.BookmarkManager;
@@ -30,6 +31,7 @@ import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.OptimizerFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalValuesOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalVersionOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import org.junit.jupiter.api.Test;
@@ -80,6 +82,63 @@ public class IvmVersionOlapScanRuleTest extends BookmarkTestBase {
         assertNotSame(setup.live, newScan.getTable());
         assertTrue(newScan.getTvrVersionRange().isEmpty(),
                 "consumed version state should be cleared to the empty sentinel, not null");
+    }
+
+    @Test
+    public void testTransform_minEndpoint_returnsEmptyValues() throws Exception {
+        // Endpoint MIN — trial rewrite sentinel or first refresh's from side.
+        // Must emit a real empty relation; scan-with-empty-TVR still reads
+        // live rows at plan time (PlanFragmentBuilder ignores the TVR).
+        Setup setup = setupDupBookmarks();
+        Map<ColumnRefOperator, Column> colRefMap = buildColRefMap(setup.live, setup.factory());
+        LogicalOlapScanOperator scan = LogicalOlapScanOperator.builder()
+                .setTable(setup.live)
+                .setColRefToColumnMetaMap(colRefMap)
+                .setColumnMetaToColRefMap(invert(colRefMap))
+                .setTableVersionRange(TvrTableDelta.of(TvrVersion.MIN, TvrVersion.MIN))
+                .build();
+        OptExpression input = OptExpression.create(LogicalVersionOperator.fromVersion(),
+                OptExpression.create(scan));
+
+        List<OptExpression> result = new IvmVersionOlapScanRule().transform(input, setup.context());
+
+        assertEquals(1, result.size());
+        assertInstanceOf(LogicalValuesOperator.class, result.get(0).getOp());
+        LogicalValuesOperator values = (LogicalValuesOperator) result.get(0).getOp();
+        assertTrue(values.getRows().isEmpty(),
+                "MIN endpoint must produce empty rows, not a live scan");
+        // Preserve scan's output col-refs so downstream join sees the same refs.
+        for (ColumnRefOperator col : scan.getOutputColumns()) {
+            assertTrue(values.getColumnRefSet().contains(col));
+        }
+    }
+
+    @Test
+    public void testTransform_realBookmarkNoOpDelta_stillResolves() throws Exception {
+        // IVM join refresh: this side has no changes (base == head, but real
+        // bookmark ids), so the Version branch still needs resolveById to scope
+        // the table. Regression guard for the codex review on #55743.
+        Setup setup = setupDupBookmarks();
+        Map<ColumnRefOperator, Column> colRefMap = buildColRefMap(setup.live, setup.factory());
+        LogicalOlapScanOperator scan = LogicalOlapScanOperator.builder()
+                .setTable(setup.live)
+                .setColRefToColumnMetaMap(colRefMap)
+                .setColumnMetaToColRefMap(invert(colRefMap))
+                .setTableVersionRange(TvrTableDelta.of(
+                        setup.base.getBookmarkId(), setup.base.getBookmarkId()))
+                .build();
+        OptExpression input = OptExpression.create(LogicalVersionOperator.fromVersion(),
+                OptExpression.create(scan));
+
+        List<OptExpression> result = new IvmVersionOlapScanRule().transform(input, setup.context());
+
+        assertEquals(1, result.size());
+        LogicalOlapScanOperator out = (LogicalOlapScanOperator) result.get(0).getOp();
+        // resolveById must have been called: scoped table is a different
+        // instance from the live table (mirrors fromVersion/toVersion tests).
+        assertNotSame(setup.live, out.getTable());
+        assertTrue(out.getTvrVersionRange().isEmpty(),
+                "consumed version state should be cleared to the empty sentinel");
     }
 
     @Test

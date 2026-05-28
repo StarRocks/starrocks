@@ -17,6 +17,7 @@ package com.starrocks.sql.optimizer.rule.ivm;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.tvr.TvrTableDelta;
 import com.starrocks.common.tvr.TvrTableSnapshot;
+import com.starrocks.common.tvr.TvrVersion;
 import com.starrocks.lake.bookmark.BookmarkScopedTableResolver;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
@@ -24,12 +25,16 @@ import com.starrocks.sql.optimizer.operator.OperatorBuilderFactory;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalValuesOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalVersionOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalVersionOperator.VersionRefType;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
+import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.rule.RuleType;
 import com.starrocks.sql.optimizer.rule.transformation.TransformationRule;
 
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 
 /**
@@ -68,13 +73,23 @@ public class IvmVersionOlapScanRule extends TransformationRule {
         OlapTable liveTable = (OlapTable) scan.getTable();
         TvrTableDelta tvrDelta = (TvrTableDelta) scan.getTvrVersionRange();
 
-        long bookmarkId = (version.getVersionRefType() == VersionRefType.FROM_VERSION)
-                ? tvrDelta.from().getVersion()
-                : tvrDelta.to().getVersion();
+        TvrVersion endpoint = (version.getVersionRefType() == VersionRefType.FROM_VERSION)
+                ? tvrDelta.from()
+                : tvrDelta.to();
+
+        // Endpoint MIN = no rows existed (trial rewrite or first refresh's
+        // from side). Must emit an actually empty relation: a scan with
+        // empty TvrTableSnapshot still reads live rows because
+        // PlanFragmentBuilder.visitPhysicalOlapScan ignores the TVR.
+        if (endpoint.isMin()) {
+            List<ColumnRefOperator> outputColumns = new ArrayList<>(scan.getOutputColumns());
+            return List.of(OptExpression.create(
+                    new LogicalValuesOperator(outputColumns, Collections.emptyList())));
+        }
 
         // resolveById throws SemanticException if the live table has drifted
         // from the bookmark (partition dropped, index replaced, tablet resharded).
-        OlapTable scopedTable = BookmarkScopedTableResolver.resolveById(liveTable, bookmarkId);
+        OlapTable scopedTable = BookmarkScopedTableResolver.resolveById(liveTable, endpoint.getVersion());
 
         // Version state has been consumed (bookmark resolved into the scoped
         // table); reset to the empty sentinel — null would NPE in downstream
