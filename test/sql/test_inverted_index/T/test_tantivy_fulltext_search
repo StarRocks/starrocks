@@ -1,0 +1,174 @@
+-- name: test_tantivy_single_column_basic
+CREATE DATABASE IF NOT EXISTS ${uuid0};
+USE ${uuid0};
+CREATE TABLE t_tantivy_single (
+    id INT,
+    content VARCHAR(65535),
+    INDEX gin_content (content) USING GIN ("parser" = "none", "imp_lib" = "tantivy")
+) DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+
+INSERT INTO t_tantivy_single VALUES
+(1, 'the quick brown fox jumps over the lazy dog'),
+(2, 'starrocks tantivy full text search engine'),
+(3, NULL),
+(4, 'tantivy index on shared data mode'),
+(5, 'quick fox jumps high'),
+(6, 'brown bear sleeps in the forest'),
+(7, 'lazy cat and quick mouse'),
+(8, 'full text search is powerful'),
+(9, NULL),
+(10, 'the fox and the dog are friends');
+
+SELECT count(*) FROM t_tantivy_single WHERE content MATCH_ANY 'fox';
+SELECT count(*) FROM t_tantivy_single WHERE content MATCH_ANY 'quick';
+SELECT count(*) FROM t_tantivy_single WHERE content MATCH_ANY 'tantivy';
+SELECT count(*) FROM t_tantivy_single WHERE content MATCH_ANY 'fox dog';
+SELECT count(*) FROM t_tantivy_single WHERE content MATCH_ALL 'quick fox';
+SELECT count(*) FROM t_tantivy_single WHERE content MATCH_ALL 'full text search';
+SELECT count(*) FROM t_tantivy_single WHERE content MATCH_PHRASE 'quick brown';
+SELECT count(*) FROM t_tantivy_single WHERE content MATCH_PHRASE 'brown fox';
+SELECT count(*) FROM t_tantivy_single WHERE content MATCH_ANY 'nonexistent';
+SELECT count(*) FROM t_tantivy_single WHERE content IS NULL;
+DROP TABLE t_tantivy_single;
+DROP DATABASE ${uuid0};
+
+-- name: test_tantivy_multi_column
+CREATE DATABASE IF NOT EXISTS ${uuid0};
+USE ${uuid0};
+CREATE TABLE t_tantivy_multi (
+    id INT,
+    title VARCHAR(65535),
+    body VARCHAR(65535),
+    tags VARCHAR(65535),
+    INDEX gin_title (title) USING GIN ("parser" = "none", "imp_lib" = "tantivy"),
+    INDEX gin_body (body) USING GIN ("parser" = "none", "imp_lib" = "tantivy"),
+    INDEX gin_tags (tags) USING GIN ("parser" = "none", "imp_lib" = "tantivy")
+) DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+
+INSERT INTO t_tantivy_multi VALUES
+(1, 'starrocks olap', 'the quick brown fox jumps over the lazy dog', 'database search'),
+(2, 'tantivy engine', 'full text search with tantivy inverted index', 'search index'),
+(3, NULL, 'starrocks shared data mode', NULL),
+(4, 'performance test', NULL, 'benchmark speed'),
+(5, 'quick start guide', 'getting started with tantivy search', 'guide tutorial');
+
+SELECT count(*) FROM t_tantivy_multi WHERE title MATCH_ANY 'starrocks';
+SELECT count(*) FROM t_tantivy_multi WHERE body MATCH_ANY 'tantivy';
+SELECT count(*) FROM t_tantivy_multi WHERE tags MATCH_ANY 'search';
+SELECT count(*) FROM t_tantivy_multi WHERE body MATCH_ANY 'search' AND tags MATCH_ANY 'index';
+SELECT count(*) FROM t_tantivy_multi WHERE title IS NULL;
+SELECT count(*) FROM t_tantivy_multi WHERE tags IS NULL;
+DROP TABLE t_tantivy_multi;
+DROP DATABASE ${uuid0};
+
+-- name: test_tantivy_batch_insert
+CREATE DATABASE IF NOT EXISTS ${uuid0};
+USE ${uuid0};
+CREATE TABLE t_tantivy_batch (
+    id INT,
+    content VARCHAR(65535),
+    INDEX gin_content (content) USING GIN ("parser" = "none", "imp_lib" = "tantivy")
+) DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+
+INSERT INTO t_tantivy_batch SELECT generate_series, concat('document number ', cast(generate_series as string), ' with searchable text content') FROM TABLE(generate_series(1, 100));
+SELECT count(*) FROM t_tantivy_batch WHERE content MATCH_ANY 'document';
+SELECT count(*) FROM t_tantivy_batch WHERE content MATCH_ANY 'searchable';
+SELECT count(*) FROM t_tantivy_batch WHERE content MATCH_PHRASE 'searchable text';
+SELECT count(*) FROM t_tantivy_batch WHERE content MATCH_ANY 'nonexistent';
+DROP TABLE t_tantivy_batch;
+DROP DATABASE ${uuid0};
+
+-- name: test_tantivy_add_drop_index @cloud
+CREATE DATABASE IF NOT EXISTS ${uuid0};
+USE ${uuid0};
+
+-- ADD INDEX on empty table, then insert
+CREATE TABLE t_tantivy_add_idx (
+    id INT,
+    content VARCHAR(65535)
+) DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 1
+PROPERTIES ("replication_num" = "1", "replicated_storage" = "false");
+
+ALTER TABLE t_tantivy_add_idx ADD INDEX gin_content (content) USING GIN ("parser" = "english", "imp_lib" = "tantivy");
+function: wait_alter_table_finish()
+INSERT INTO t_tantivy_add_idx VALUES (1, 'the quick brown fox'), (2, 'lazy dog sleeps'), (3, NULL), (4, 'fox jumps high');
+SELECT count(*) FROM t_tantivy_add_idx WHERE content MATCH_ANY 'fox';
+SELECT count(*) FROM t_tantivy_add_idx WHERE content IS NULL;
+
+-- ADD INDEX with backfill (data exists before index)
+CREATE TABLE t_tantivy_backfill (
+    id INT,
+    content VARCHAR(65535)
+) DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 1
+PROPERTIES ("replication_num" = "1", "replicated_storage" = "false");
+
+INSERT INTO t_tantivy_backfill VALUES (1, 'search engine design'), (2, 'tantivy full text'), (3, 'quick brown fox'), (4, NULL);
+ALTER TABLE t_tantivy_backfill ADD INDEX gin_content (content) USING GIN ("parser" = "english", "imp_lib" = "tantivy");
+function: wait_alter_table_finish()
+SELECT count(*) FROM t_tantivy_backfill WHERE content MATCH_ANY 'fox';
+SELECT count(*) FROM t_tantivy_backfill WHERE content MATCH_ALL 'full text';
+
+-- DROP INDEX single column
+DROP INDEX gin_content ON t_tantivy_backfill;
+function: wait_alter_table_finish()
+SELECT count(*) FROM t_tantivy_backfill WHERE content MATCH_ANY 'fox';
+
+-- DROP INDEX multi-column: drop one, keep the other
+CREATE TABLE t_tantivy_multi_drop (
+    id INT,
+    title VARCHAR(65535),
+    body VARCHAR(65535),
+    INDEX gin_title (title) USING GIN ("parser" = "english", "imp_lib" = "tantivy"),
+    INDEX gin_body (body) USING GIN ("parser" = "english", "imp_lib" = "tantivy")
+) DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 1
+PROPERTIES ("replication_num" = "1", "replicated_storage" = "false");
+
+INSERT INTO t_tantivy_multi_drop VALUES (1, 'starrocks analytics', 'the quick fox'), (2, 'tantivy search', 'lazy dog');
+SELECT count(*) FROM t_tantivy_multi_drop WHERE title MATCH_ANY 'search';
+SELECT count(*) FROM t_tantivy_multi_drop WHERE body MATCH_ANY 'fox';
+DROP INDEX gin_title ON t_tantivy_multi_drop;
+function: wait_alter_table_finish()
+SELECT count(*) FROM t_tantivy_multi_drop WHERE body MATCH_ANY 'fox';
+
+-- Compaction after DROP INDEX
+INSERT INTO t_tantivy_multi_drop VALUES (3, 'new row', 'compaction fox test');
+ALTER TABLE t_tantivy_multi_drop COMPACT;
+function: wait_alter_table_finish()
+SELECT count(*) FROM t_tantivy_multi_drop WHERE body MATCH_ANY 'fox';
+
+DROP TABLE t_tantivy_add_idx;
+DROP TABLE t_tantivy_backfill;
+DROP TABLE t_tantivy_multi_drop;
+DROP DATABASE ${uuid0};
+
+-- name: test_tantivy_compaction @cloud
+CREATE DATABASE IF NOT EXISTS ${uuid0};
+USE ${uuid0};
+CREATE TABLE t_tantivy_compact (
+    id INT,
+    content VARCHAR(65535),
+    INDEX gin_content (content) USING GIN ("parser" = "none", "imp_lib" = "tantivy")
+) DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+
+INSERT INTO t_tantivy_compact VALUES (1, 'first batch fox'), (2, 'first batch dog');
+INSERT INTO t_tantivy_compact VALUES (3, 'second batch cat'), (4, 'second batch fox');
+INSERT INTO t_tantivy_compact VALUES (5, 'third batch fox and dog'), (6, 'third batch bear');
+SELECT count(*) FROM t_tantivy_compact WHERE content MATCH_ANY 'fox';
+ALTER TABLE t_tantivy_compact COMPACT;
+function: wait_alter_table_finish()
+SELECT count(*) FROM t_tantivy_compact WHERE content MATCH_ANY 'fox';
+SELECT count(*) FROM t_tantivy_compact WHERE content MATCH_ANY 'dog';
+SELECT count(*) FROM t_tantivy_compact WHERE content MATCH_ALL 'fox dog';
+DROP TABLE t_tantivy_compact;
+DROP DATABASE ${uuid0};

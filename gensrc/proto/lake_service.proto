@@ -336,6 +336,16 @@ message GetTabletMetadatasResponse {
     repeated TabletResult tablet_results = 2;
 }
 
+message DeleteCompoundIndexFilesRequest {
+    repeated int64 tablet_ids = 1;
+    repeated int64 tablet_versions = 2;
+}
+
+message DeleteCompoundIndexFilesResponse {
+    optional StatusPB status = 1;
+    optional int64 deleted_files = 2;
+}
+
 message RepairTabletMetadataRequest {
     // all tablet metadatas with the same version in one physical partition
     repeated TabletMetadataPB tablet_metadatas = 1;
@@ -373,5 +383,6 @@ service LakeService {
     rpc vacuum_full(VacuumFullRequest) returns (VacuumFullResponse);
     rpc get_tablet_metadatas(GetTabletMetadatasRequest) returns (GetTabletMetadatasResponse);
     rpc repair_tablet_metadata(RepairTabletMetadataRequest) returns (RepairTabletMetadataResponse);
+    rpc delete_compound_index_files(DeleteCompoundIndexFilesRequest) returns (DeleteCompoundIndexFilesResponse);
 }
 

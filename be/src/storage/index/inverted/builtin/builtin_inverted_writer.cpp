@@ -50,7 +50,9 @@ public:
 
     void add_values(const void* values, size_t count) override;
 
-    void add_nulls(uint32_t count) override { _builtin_writer->add_nulls(count); }
+    void add_nulls(uint32_t count) override {
+        _builtin_writer->add_nulls(count);
+    }
 
     Status finish(WritableFile* wfile, ColumnMetaPB* meta) override;
 

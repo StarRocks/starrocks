@@ -49,26 +49,35 @@ struct TantivyU32ArrayGuard {
     TantivyU32ArrayGuard& operator=(const TantivyU32ArrayGuard&) = delete;
 };
 
-class TantivyWriterGuard {
+// Owning RAII handle for any FFI pointer that tantivy hands back through
+// `*mut c_void`. The free function is captured as a non-type template
+// parameter, so the dispatch is resolved at compile time and we don't pay
+// for a virtual call in destructors. Three concrete aliases below cover the
+// writer, the local reader, and the compound reader — note that the
+// reader/compound-reader aliases share `tantivy_free_index_reader` because
+// the FFI returns the same underlying `IndexReaderWrapper*` for both load
+// paths (see tantivy/AGENTS.md "Unified reader handle").
+template <auto FreeFn>
+class TantivyFfiHandle {
 public:
-    TantivyWriterGuard() = default;
-    explicit TantivyWriterGuard(void* handle) : _handle(handle) {}
-    ~TantivyWriterGuard() { reset(); }
+    TantivyFfiHandle() = default;
+    explicit TantivyFfiHandle(void* handle) : _handle(handle) {}
+    ~TantivyFfiHandle() { reset(); }
 
-    TantivyWriterGuard(TantivyWriterGuard&& o) noexcept : _handle(std::exchange(o._handle, nullptr)) {}
-    TantivyWriterGuard& operator=(TantivyWriterGuard&& o) noexcept {
+    TantivyFfiHandle(TantivyFfiHandle&& o) noexcept : _handle(std::exchange(o._handle, nullptr)) {}
+    TantivyFfiHandle& operator=(TantivyFfiHandle&& o) noexcept {
         if (this != &o) {
             reset();
             _handle = std::exchange(o._handle, nullptr);
         }
         return *this;
     }
-    TantivyWriterGuard(const TantivyWriterGuard&) = delete;
-    TantivyWriterGuard& operator=(const TantivyWriterGuard&) = delete;
+    TantivyFfiHandle(const TantivyFfiHandle&) = delete;
+    TantivyFfiHandle& operator=(const TantivyFfiHandle&) = delete;
 
     void reset() {
         if (_handle) {
-            tb::tantivy_free_index_writer(_handle);
+            FreeFn(_handle);
             _handle = nullptr;
         }
     }
@@ -81,68 +90,8 @@ private:
     void* _handle = nullptr;
 };
 
-class TantivyReaderGuard {
-public:
-    TantivyReaderGuard() = default;
-    explicit TantivyReaderGuard(void* handle) : _handle(handle) {}
-    ~TantivyReaderGuard() { reset(); }
-
-    TantivyReaderGuard(TantivyReaderGuard&& o) noexcept : _handle(std::exchange(o._handle, nullptr)) {}
-    TantivyReaderGuard& operator=(TantivyReaderGuard&& o) noexcept {
-        if (this != &o) {
-            reset();
-            _handle = std::exchange(o._handle, nullptr);
-        }
-        return *this;
-    }
-    TantivyReaderGuard(const TantivyReaderGuard&) = delete;
-    TantivyReaderGuard& operator=(const TantivyReaderGuard&) = delete;
-
-    void reset() {
-        if (_handle) {
-            tb::tantivy_free_index_reader(_handle);
-            _handle = nullptr;
-        }
-    }
-
-    void* release() { return std::exchange(_handle, nullptr); }
-    void* get() const { return _handle; }
-    explicit operator bool() const { return _handle != nullptr; }
-
-private:
-    void* _handle = nullptr;
-};
-
-class TantivyCompoundReaderGuard {
-public:
-    TantivyCompoundReaderGuard() = default;
-    explicit TantivyCompoundReaderGuard(void* handle) : _handle(handle) {}
-    ~TantivyCompoundReaderGuard() { reset(); }
-
-    TantivyCompoundReaderGuard(TantivyCompoundReaderGuard&& o) noexcept : _handle(std::exchange(o._handle, nullptr)) {}
-    TantivyCompoundReaderGuard& operator=(TantivyCompoundReaderGuard&& o) noexcept {
-        if (this != &o) {
-            reset();
-            _handle = std::exchange(o._handle, nullptr);
-        }
-        return *this;
-    }
-    TantivyCompoundReaderGuard(const TantivyCompoundReaderGuard&) = delete;
-    TantivyCompoundReaderGuard& operator=(const TantivyCompoundReaderGuard&) = delete;
-
-    void reset() {
-        if (_handle) {
-            tb::tantivy_free_index_reader(_handle);
-            _handle = nullptr;
-        }
-    }
-
-    void* release() { return std::exchange(_handle, nullptr); }
-    void* get() const { return _handle; }
-    explicit operator bool() const { return _handle != nullptr; }
-
-private:
-    void* _handle = nullptr;
-};
+using TantivyWriterGuard = TantivyFfiHandle<&tb::tantivy_free_index_writer>;
+using TantivyReaderGuard = TantivyFfiHandle<&tb::tantivy_free_index_reader>;
+using TantivyCompoundReaderGuard = TantivyFfiHandle<&tb::tantivy_free_index_reader>;
 
 } // namespace starrocks

@@ -52,6 +52,33 @@ public:
         return fmt::format("{}/{}_{}_{}.{}", rowset_dir, rowset_id, segment_id, index_id, "vi");
     }
 
+    // Compound index file path — one .idx per (rowset, segment), holding all
+    // tantivy / future-vector indexes for that segment. Distinct from
+    // inverted_index_file_path so clucene/builtin paths stay untouched.
+    static std::string compound_index_file_path(const std::string& rowset_dir,
+                                                const std::string& rowset_id, int segment_id) {
+        return fmt::format("{}/{}_{}.{}", rowset_dir, rowset_id, segment_id, "idx");
+    }
+
+    // Derive the compound .idx path from the segment .dat path by replacing
+    // the extension. Works for both local paths and remote URIs (s3://...).
+    static std::string compound_index_file_path_from_segment(const std::string& segment_path) {
+        auto dot_pos = segment_path.rfind('.');
+        if (dot_pos != std::string::npos) {
+            return segment_path.substr(0, dot_pos) + ".idx";
+        }
+        return segment_path + ".idx";
+    }
+
+    static std::string lake_compound_index_build_dir(const std::string& tmp_root, int64_t tablet_id,
+                                                     int64_t txn_id, int segment_id, int64_t index_id,
+                                                     uintptr_t instance_key) {
+        if (tablet_id != 0 && txn_id != 0) {
+            return fmt::format("{}/{}_{}_{}_{}.ivt", tmp_root, tablet_id, txn_id, segment_id, index_id);
+        }
+        return fmt::format("{}/{}_{}_{}.ivt", tmp_root, instance_key, segment_id, index_id);
+    }
+
     static const std::string get_temporary_null_bitmap_file_name() { return "null_bitmap"; }
 };
 

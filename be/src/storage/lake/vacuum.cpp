@@ -26,6 +26,7 @@
 #include "fs/fs.h"
 #include "gutil/stl_util.h"
 #include "gutil/strings/util.h"
+#include "storage/index/index_descriptor.h"
 #include "storage/lake/filenames.h"
 #include "storage/lake/join_path.h"
 #include "storage/lake/location_provider.h"
@@ -263,6 +264,10 @@ static Status collect_garbage_files(const TabletMetadataPB& metadata, const std:
             // skip delete rowset with bundle file offsets
             for (const auto& segment : rowset.segments()) {
                 RETURN_IF_ERROR(deleter->delete_file(join_path(base_dir, segment)));
+                if (is_segment(segment)) {
+                    (void)deleter->delete_file(join_path(base_dir,
+                            IndexDescriptor::compound_index_file_path_from_segment(segment)));
+                }
             }
         }
         for (const auto& del_file : rowset.del_files()) {
@@ -794,7 +799,8 @@ static StatusOr<std::map<std::string, DirEntry>> list_data_files(FileSystem* fs,
                                                   total_bytes += entry.size.value_or(0);
 
                                                   if (!is_segment(entry.name) &&
-                                                      !is_sst(entry.name)) { // Only segment files and sst
+                                                      !is_sst(entry.name) &&
+                                                      !is_compound_index(entry.name)) {
                                                       return true;
                                                   }
                                                   if (!entry.mtime.has_value()) {
@@ -832,6 +838,11 @@ static StatusOr<std::map<std::string, DirEntry>> find_orphan_data_files(FileSyst
         for (const auto& segment : rowset.segments()) {
             data_files.erase(segment);
             data_files_in_metadatas.emplace(segment);
+            if (is_segment(segment)) {
+                auto bin_name = IndexDescriptor::compound_index_file_path_from_segment(segment);
+                data_files.erase(bin_name);
+                data_files_in_metadatas.emplace(std::move(bin_name));
+            }
         }
     };
     auto check_sst_meta = [&](const PersistentIndexSstableMetaPB& sst_meta) {

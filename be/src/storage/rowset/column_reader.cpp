@@ -54,8 +54,10 @@
 #include "storage/column_predicate.h"
 #include "storage/index/index_descriptor.h"
 #ifndef __APPLE__
+#include "storage/index/compound_index_file_reader.h"
 #include "storage/index/inverted/builtin/builtin_inverted_reader.h"
 #include "storage/index/inverted/inverted_plugin_factory.h"
+#include "storage/index/inverted/tantivy/tantivy_inverted_reader.h"
 #endif
 #include "storage/rowset/array_column_iterator.h"
 #include "storage/rowset/binary_dict_page.h"
@@ -542,6 +544,37 @@ Status ColumnReader::_load_inverted_index(const std::shared_ptr<TabletIndex>& in
                        ASSIGN_OR_RETURN(auto inverted_plugin, InvertedPluginFactory::get_plugin(imp_type));
                        RETURN_IF_ERROR(inverted_plugin->create_inverted_index_reader(index_path, index_meta, type,
                                                                                      &_inverted_index));
+
+                       if (imp_type == InvertedImplementType::TANTIVY) {
+                           auto* tantivy_rdr =
+                                   dynamic_cast<TantivyInvertedReader*>(_inverted_index.get());
+                           RETURN_IF(tantivy_rdr == nullptr,
+                                     Status::Corruption("expected TantivyInvertedReader"));
+                           std::string bin_path;
+                           FileSystem* fs_ptr = nullptr;
+                           if (!opts.rowset_path.empty()) {
+                               bin_path = IndexDescriptor::compound_index_file_path(
+                                       opts.rowset_path, opts.rowsetid.to_string(), _segment->id());
+                               fs_ptr = opts.fs ? opts.fs.get() : FileSystem::Default();
+                           } else {
+                               bin_path = IndexDescriptor::compound_index_file_path_from_segment(
+                                       _segment->file_name());
+                               fs_ptr = _segment->file_system();
+                           }
+                           // open_compound returns NotFound when the .idx file is
+                           // absent — that's the legacy local-directory path; any
+                           // other failure must propagate.
+                           auto st = TantivyInvertedReader::open_compound(
+                                   tantivy_rdr, fs_ptr, bin_path, index_meta->index_id(), _name);
+                           if (st.ok()) {
+                               return Status::OK();
+                           }
+                           if (!st.is_not_found()) {
+                               return st;
+                           }
+                           tantivy_rdr->set_field_name(_name);
+                       }
+
                        RETURN_IF_ERROR(_inverted_index->load(index_opt, _builtin_inverted_index_meta.get()));
                        if (_builtin_inverted_index_meta != nullptr) {
                            auto* builtin_inverted_index = dynamic_cast<BuiltinInvertedReader*>(_inverted_index.get());

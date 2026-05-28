@@ -27,14 +27,26 @@ import java.util.Objects;
 public class MatchExprOperator extends ScalarOperator {
     private List<ScalarOperator> arguments;
     private MatchExpr.MatchOperator matchOperator = MatchExpr.MatchOperator.MATCH;
+    // slop is only meaningful when matchOperator == MATCH_PHRASE; 0 for all others.
+    private int slop = 0;
 
     public MatchExprOperator(MatchExpr.MatchOperator matchOperator, ScalarOperator... arguments) {
         this(Lists.newArrayList(arguments));
         this.matchOperator = matchOperator;
     }
 
+    public MatchExprOperator(MatchExpr.MatchOperator matchOperator, int slop, ScalarOperator... arguments) {
+        this(Lists.newArrayList(arguments));
+        this.matchOperator = matchOperator;
+        this.slop = slop;
+    }
+
     public MatchExpr.MatchOperator getMatchOperator() {
         return matchOperator;
+    }
+
+    public int getSlop() {
+        return slop;
     }
 
     public MatchExprOperator(List<ScalarOperator> arguments) {
@@ -66,7 +78,7 @@ public class MatchExprOperator extends ScalarOperator {
 
     @Override
     public int hashCode() {
-        return Objects.hash(arguments.get(0), arguments.get(1));
+        return Objects.hash(arguments.get(0), arguments.get(1), matchOperator, slop);
     }
 
     @Override
@@ -102,7 +114,9 @@ public class MatchExprOperator extends ScalarOperator {
             return false;
         }
         MatchExprOperator other = (MatchExprOperator) obj;
-        return Objects.equals(this.arguments, other.arguments);
+        return Objects.equals(this.arguments, other.arguments)
+                && this.matchOperator == other.matchOperator
+                && this.slop == other.slop;
     }
 
     @Override
@@ -113,6 +127,7 @@ public class MatchExprOperator extends ScalarOperator {
         this.arguments.forEach(p -> newArguments.add(p.clone()));
         operator.arguments = newArguments;
         operator.matchOperator = matchOperator;
+        operator.slop = slop;
         return operator;
     }
 }

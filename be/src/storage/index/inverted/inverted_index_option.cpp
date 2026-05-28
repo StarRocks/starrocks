@@ -22,10 +22,13 @@ StatusOr<InvertedImplementType> get_inverted_imp_type(const TabletIndex& tablet_
     auto inverted_imp_prop = tablet_index.common_properties().find(INVERTED_IMP_KEY);
     if (inverted_imp_prop != tablet_index.common_properties().end()) {
         const auto& imp_type = inverted_imp_prop->second;
-        if (boost::algorithm::to_lower_copy(imp_type) == TYPE_CLUCENE) {
+        const std::string imp_type_lower = boost::algorithm::to_lower_copy(imp_type);
+        if (imp_type_lower == TYPE_CLUCENE) {
             return InvertedImplementType::CLUCENE;
-        } else if (boost::algorithm::to_lower_copy(imp_type) == TYPE_BUILTIN) {
+        } else if (imp_type_lower == TYPE_BUILTIN) {
             return InvertedImplementType::BUILTIN;
+        } else if (imp_type_lower == TYPE_TANTIVY) {
+            return InvertedImplementType::TANTIVY;
         } else {
             return Status::InvalidArgument("Do not support imp_type : " + imp_type);
         }
@@ -44,6 +47,8 @@ std::string inverted_index_parser_type_to_string(InvertedIndexParserType parser_
         return INVERTED_INDEX_PARSER_ENGLISH;
     case InvertedIndexParserType::PARSER_CHINESE:
         return INVERTED_INDEX_PARSER_CHINESE;
+    case InvertedIndexParserType::PARSER_JIEBA:
+        return INVERTED_INDEX_PARSER_JIEBA;
     default:
         return INVERTED_INDEX_PARSER_UNKNOWN;
     }
@@ -59,6 +64,8 @@ InvertedIndexParserType get_inverted_index_parser_type_from_string(const std::st
         return InvertedIndexParserType::PARSER_ENGLISH;
     } else if (lower_value == INVERTED_INDEX_PARSER_CHINESE) {
         return InvertedIndexParserType::PARSER_CHINESE;
+    } else if (lower_value == INVERTED_INDEX_PARSER_JIEBA) {
+        return InvertedIndexParserType::PARSER_JIEBA;
     }
 
     return InvertedIndexParserType::PARSER_UNKNOWN;

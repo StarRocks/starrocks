@@ -22,12 +22,20 @@ namespace starrocks {
 
 class MatchExpr final : public Expr {
 public:
-    MatchExpr(const TExprNode& node) : Expr(node) {}
+    explicit MatchExpr(const TExprNode& node);
     ~MatchExpr() override {}
 
     Expr* clone(ObjectPool* pool) const override { return pool->add(new MatchExpr(*this)); }
     StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* ptr) override;
     Status prepare(RuntimeState* state, ExprContext* context) override;
+
+    // For MATCH_PHRASE, the slop transmitted via TExprNode.match_expr.slop.
+    // Always 0 for MATCH/MATCH_ANY/MATCH_ALL, or when the FE did not set the
+    // optional thrift field (older FE / older plan cache).
+    int slop() const { return _slop; }
+
+private:
+    int _slop = 0;
 };
 
 } // namespace starrocks

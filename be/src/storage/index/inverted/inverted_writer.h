@@ -15,7 +15,9 @@
 #pragma once
 
 #include "common/status.h"
+#include "common/statusor.h"
 #include "storage/collection.h"
+#include "storage/index/compound_index_common.h"
 
 namespace starrocks {
 class WritableFile;
@@ -36,6 +38,12 @@ public:
     virtual void add_nulls(uint32_t count) = 0;
 
     virtual Status finish(WritableFile* wfile, ColumnMetaPB* meta) = 0;
+
+    virtual bool need_compound() const { return false; }
+
+    virtual StatusOr<CompoundIndexEntry> finish_compound(ColumnMetaPB* /*meta*/) {
+        return Status::InternalError("inverted writer does not implement finish_compound");
+    }
 
     virtual uint64_t size() const = 0;
 };

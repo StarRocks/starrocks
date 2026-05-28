@@ -22,6 +22,7 @@
 #include "fs/key_cache.h"
 #include "runtime/current_thread.h"
 #include "serde/column_array_serde.h"
+#include "storage/index/index_descriptor.h"
 #include "storage/lake/filenames.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/vacuum.h"
@@ -92,7 +93,7 @@ Status HorizontalGeneralTabletWriter::finish(SegmentPB* segment) {
 void HorizontalGeneralTabletWriter::close() {
     if (!_finished && !_files.empty()) {
         std::vector<std::string> full_paths_to_delete;
-        full_paths_to_delete.reserve(_files.size());
+        full_paths_to_delete.reserve(_files.size() * 2);
         for (const auto& f : _files) {
             std::string path;
             if (_location_provider) {
@@ -101,6 +102,16 @@ void HorizontalGeneralTabletWriter::close() {
                 path = _tablet_mgr->segment_location(_tablet_id, f.path);
             }
             full_paths_to_delete.emplace_back(path);
+            if (is_segment(f.path)) {
+                auto bin_name = IndexDescriptor::compound_index_file_path_from_segment(f.path);
+                std::string bin_path;
+                if (_location_provider) {
+                    bin_path = _location_provider->segment_location(_tablet_id, bin_name);
+                } else {
+                    bin_path = _tablet_mgr->segment_location(_tablet_id, bin_name);
+                }
+                full_paths_to_delete.emplace_back(std::move(bin_path));
+            }
         }
         delete_files_async(std::move(full_paths_to_delete));
     }
@@ -113,6 +124,8 @@ Status HorizontalGeneralTabletWriter::reset_segment_writer() {
     SegmentWriterOptions opts;
     opts.is_compaction = _is_compaction;
     opts.global_dicts = _global_dicts;
+    opts.tablet_id = _tablet_id;
+    opts.txn_id = _txn_id;
     WritableFileOptions wopts;
     if (config::enable_transparent_data_encryption) {
         ASSIGN_OR_RETURN(auto pair, KeyCache::instance().create_encryption_meta_pair_using_current_kek());
@@ -292,7 +305,7 @@ Status VerticalGeneralTabletWriter::finish(SegmentPB* segment) {
 void VerticalGeneralTabletWriter::close() {
     if (!_finished && !_files.empty()) {
         std::vector<std::string> full_paths_to_delete;
-        full_paths_to_delete.reserve(_files.size());
+        full_paths_to_delete.reserve(_files.size() * 2);
         for (const auto& f : _files) {
             std::string path;
             if (_location_provider) {
@@ -301,6 +314,16 @@ void VerticalGeneralTabletWriter::close() {
                 path = _tablet_mgr->segment_location(_tablet_id, f.path);
             }
             full_paths_to_delete.emplace_back(path);
+            if (is_segment(f.path)) {
+                auto bin_name = IndexDescriptor::compound_index_file_path_from_segment(f.path);
+                std::string bin_path;
+                if (_location_provider) {
+                    bin_path = _location_provider->segment_location(_tablet_id, bin_name);
+                } else {
+                    bin_path = _tablet_mgr->segment_location(_tablet_id, bin_name);
+                }
+                full_paths_to_delete.emplace_back(std::move(bin_path));
+            }
         }
         delete_files_async(std::move(full_paths_to_delete));
     }
@@ -313,6 +336,8 @@ StatusOr<std::shared_ptr<SegmentWriter>> VerticalGeneralTabletWriter::create_seg
     auto name = gen_segment_filename(_txn_id);
     SegmentWriterOptions opts;
     opts.is_compaction = _is_compaction;
+    opts.tablet_id = _tablet_id;
+    opts.txn_id = _txn_id;
     WritableFileOptions wopts;
     if (config::enable_transparent_data_encryption) {
         ASSIGN_OR_RETURN(auto pair, KeyCache::instance().create_encryption_meta_pair_using_current_kek());

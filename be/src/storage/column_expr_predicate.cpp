@@ -12,10 +12,12 @@
 #include "exprs/expr_context.h"
 #include "exprs/function_call_expr.h"
 #include "exprs/literal.h"
+#include "exprs/match_expr.h"
 #include "runtime/current_thread.h"
 #include "runtime/descriptors.h"
 #include "runtime/runtime_state.h"
 #include "storage/column_predicate.h"
+#include "storage/index/inverted/inverted_index_common.h"
 #include "types/logical_type.h"
 
 namespace starrocks {
@@ -343,12 +345,25 @@ Status ColumnExprPredicate::seek_inverted_index(const std::string& column_name, 
         query_type = InvertedIndexQueryType::MATCH_ANY_QUERY;
     } else if (vaild_match && expr->op() == TExprOpcode::MATCH_ALL) {
         query_type = InvertedIndexQueryType::MATCH_ALL_QUERY;
+    } else if (vaild_match && expr->op() == TExprOpcode::MATCH_PHRASE) {
+        query_type = InvertedIndexQueryType::MATCH_PHRASE_QUERY;
     } else {
         query_type = has_wildcard ? InvertedIndexQueryType::MATCH_WILDCARD_QUERY : InvertedIndexQueryType::EQUAL_QUERY;
     }
 
     roaring::Roaring roaring;
-    RETURN_IF_ERROR(iterator->read_from_inverted_index(column_name, &padded_value, query_type, &roaring));
+    if (query_type == InvertedIndexQueryType::MATCH_PHRASE_QUERY) {
+        // Phrase query needs slop carried via PhraseQueryValue. Slop comes from
+        // TExprNode.match_expr.slop (FE-side parsed from "...~N" pattern suffix);
+        // when absent (old FE), MatchExpr::slop() returns 0 — same as existing behavior.
+        const auto* match_expr = down_cast<const MatchExpr*>(expr);
+        PhraseQueryValue phrase_value;
+        phrase_value.text = padded_value;
+        phrase_value.slop = match_expr->slop();
+        RETURN_IF_ERROR(iterator->read_from_inverted_index(column_name, &phrase_value, query_type, &roaring));
+    } else {
+        RETURN_IF_ERROR(iterator->read_from_inverted_index(column_name, &padded_value, query_type, &roaring));
+    }
     if (with_not) {
         *row_bitmap -= roaring;
     } else {

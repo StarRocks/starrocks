@@ -1,0 +1,77 @@
+-- name: test_tantivy_ddl
+-- DDL-only validation for tantivy imp_lib whitelist + DUP_KEYS limit + tantivy-only params.
+-- Phase 1: BE plugin not yet wired, but FE-side DDL validation should accept the new
+-- imp_lib value and reject the documented error cases.
+ADMIN SET FRONTEND CONFIG("enable_experimental_gin" = "true");
+
+-- 1) imp_lib=tantivy on DUP_KEYS string column should be accepted by FE
+CREATE TABLE `t_tantivy_dup` (
+  `id` bigint NOT NULL,
+  `txt` varchar(200) NOT NULL
+) ENGINE=OLAP
+DUPLICATE KEY(`id`)
+DISTRIBUTED BY HASH(`id`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1",
+"compression" = "LZ4"
+);
+
+-- BE plugin lands; FE accepts the DDL but BE may reject at index materialization.
+-- The CREATE TABLE itself with the inline INDEX clause is the FE-only contract under test.
+CREATE TABLE `t_tantivy_dup_with_index` (
+  `id` bigint NOT NULL,
+  `txt` varchar(200) NOT NULL,
+  INDEX gin_txt(`txt`) USING GIN ("imp_lib" = "tantivy") COMMENT 'tantivy fulltext'
+) ENGINE=OLAP
+DUPLICATE KEY(`id`)
+DISTRIBUTED BY HASH(`id`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1",
+"compression" = "LZ4"
+);
+
+-- 2) tantivy specific params support_phrase / support_bm25 should be accepted
+CREATE TABLE `t_tantivy_with_phrase_hint` (
+  `id` bigint NOT NULL,
+  `txt` varchar(200) NOT NULL,
+  INDEX gin_txt(`txt`) USING GIN (
+    "imp_lib" = "tantivy",
+    "support_phrase" = "true",
+    "support_bm25" = "false"
+  )
+) ENGINE=OLAP
+DUPLICATE KEY(`id`)
+DISTRIBUTED BY HASH(`id`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1",
+"compression" = "LZ4"
+);
+
+-- 3) imp_lib=tantivy on PK table should be REJECTED
+CREATE TABLE `t_tantivy_pk_table` (
+  `id` bigint NOT NULL,
+  `txt` varchar(200) NOT NULL
+) ENGINE=OLAP
+PRIMARY KEY(`id`)
+DISTRIBUTED BY HASH(`id`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1",
+"enable_persistent_index" = "true",
+"compression" = "LZ4"
+);
+
+-- This ALTER must FAIL at the FE side (Tantivy Phase 1 only supports DUPLICATE_KEYS)
+CREATE INDEX gin_pk ON t_tantivy_pk_table (txt) USING GIN ("imp_lib" = "tantivy");
+
+-- 4) support_phrase on clucene/builtin should be REJECTED (tantivy-only param)
+CREATE TABLE `t_clucene_with_phrase` (
+  `id` bigint NOT NULL,
+  `txt` varchar(200) NOT NULL,
+  INDEX gin_txt(`txt`) USING GIN ("imp_lib" = "clucene", "support_phrase" = "true")
+) ENGINE=OLAP
+DUPLICATE KEY(`id`)
+DISTRIBUTED BY HASH(`id`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1",
+"compression" = "LZ4"
+);

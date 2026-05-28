@@ -69,10 +69,12 @@ import com.starrocks.authorization.PrivilegeException;
 import com.starrocks.authorization.RolePrivilegeCollectionV2;
 import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Dictionary;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
+import com.starrocks.catalog.Index;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MapType;
 import com.starrocks.catalog.MaterializedView;
@@ -97,6 +99,7 @@ import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.DefaultValueExpr;
 import com.starrocks.sql.ast.DictionaryGetExpr;
 import com.starrocks.sql.ast.FieldReference;
+import com.starrocks.sql.ast.IndexDef;
 import com.starrocks.sql.ast.LambdaArgument;
 import com.starrocks.sql.ast.LambdaFunctionExpr;
 import com.starrocks.sql.ast.MapExpr;
@@ -1012,7 +1015,133 @@ public class ExpressionAnalyzer {
                 throw new SemanticException("right operand of MATCH must be of type StringLiteral with NOT NULL");
             }
 
+            // Reject empty pattern at FE to avoid the NULL/empty-string semantic trap:
+            // depending on the tokenizer, an empty pattern can match every NULL row
+            // (which is encoded as a placeholder doc) or behave inconsistently across
+            // imp_lib backends. This guard fires for compile-time string literals;
+            // runtime-bound patterns (PREPARE / variables) fall through to BE handling.
+            // For MATCH_PHRASE the AstBuilder has already split off any "~N" suffix,
+            // so an empty pattern here also covers the "MATCH_PHRASE '~3'" case where
+            // only a slop marker was supplied.
+            String patternValue = ((StringLiteral) node.getChild(1)).getValue();
+            if (patternValue.isEmpty()) {
+                throw new SemanticException("MATCH pattern must not be empty (operator: "
+                        + node.getMatchOperator().getName() + ")");
+            }
+
+            SlotRef slotRef = (SlotRef) node.getChild(0);
+            checkGinIndexExists(slotRef);
+
+            if (node.getMatchOperator() == MatchExpr.MatchOperator.MATCH_PHRASE) {
+                checkSupportPhrase(slotRef);
+            }
+
             return null;
+        }
+
+        private void checkSupportPhrase(SlotRef slotRef) {
+            TableName tblName = slotRef.getTblNameWithoutAnalyzed();
+            if (tblName == null || tblName.getTbl() == null) {
+                return;
+            }
+            String dbName = tblName.getDb();
+            if (dbName == null) {
+                dbName = session.getDatabase();
+            }
+            if (dbName == null) {
+                return;
+            }
+            try {
+                Database db = GlobalStateMgr.getCurrentState().getLocalMetastore()
+                        .getDb(dbName);
+                if (db == null) {
+                    return;
+                }
+                Table table = GlobalStateMgr.getCurrentState().getLocalMetastore()
+                        .getTable(db.getFullName(), tblName.getTbl());
+                if (!(table instanceof OlapTable)) {
+                    return;
+                }
+                OlapTable olapTable = (OlapTable) table;
+                String columnName = slotRef.getColumnName();
+                Column column = olapTable.getColumn(columnName);
+                if (column == null) {
+                    return;
+                }
+                ColumnId columnId = column.getColumnId();
+                for (Index index : olapTable.getIndexes()) {
+                    if (index.getIndexType() != IndexDef.IndexType.GIN) {
+                        continue;
+                    }
+                    if (!index.getColumns().contains(columnId)) {
+                        continue;
+                    }
+                    Map<String, String> props = index.getProperties();
+                    String impLib = props.get("imp_lib");
+                    if (!"tantivy".equalsIgnoreCase(impLib)) {
+                        return;
+                    }
+                    String supportPhrase = props.get("support_phrase");
+                    if (!"true".equalsIgnoreCase(supportPhrase)) {
+                        throw new SemanticException(
+                                "MATCH_PHRASE requires support_phrase=true on tantivy index; "
+                                        + "recreate the index with (\"support_phrase\"=\"true\")");
+                    }
+                    return;
+                }
+            } catch (SemanticException e) {
+                throw e;
+            } catch (Exception e) {
+                // Best-effort: if metadata lookup fails, let BE handle it
+            }
+        }
+
+        private void checkGinIndexExists(SlotRef slotRef) {
+            TableName tblName = slotRef.getTblNameWithoutAnalyzed();
+            if (tblName == null || tblName.getTbl() == null) {
+                return;
+            }
+            String dbName = tblName.getDb();
+            if (dbName == null) {
+                dbName = session.getDatabase();
+            }
+            if (dbName == null) {
+                return;
+            }
+            try {
+                Database db = GlobalStateMgr.getCurrentState().getLocalMetastore()
+                        .getDb(dbName);
+                if (db == null) {
+                    return;
+                }
+                Table table = GlobalStateMgr.getCurrentState().getLocalMetastore()
+                        .getTable(db.getFullName(), tblName.getTbl());
+                if (!(table instanceof OlapTable)) {
+                    return;
+                }
+                OlapTable olapTable = (OlapTable) table;
+                String columnName = slotRef.getColumnName();
+                Column column = olapTable.getColumn(columnName);
+                if (column == null) {
+                    return;
+                }
+                ColumnId columnId = column.getColumnId();
+                for (Index index : olapTable.getIndexes()) {
+                    if (index.getIndexType() != IndexDef.IndexType.GIN) {
+                        continue;
+                    }
+                    if (index.getColumns().contains(columnId)) {
+                        return;
+                    }
+                }
+                throw new SemanticException(
+                        "Column '" + columnName + "' has no GIN index; "
+                                + "MATCH requires a GIN index on the target column");
+            } catch (SemanticException e) {
+                throw e;
+            } catch (Exception e) {
+                // Best-effort: if metadata lookup fails, let BE handle it
+            }
         }
 
         // 1. set type = Type.BOOLEAN

@@ -14,7 +14,15 @@
 
 #include "exprs/match_expr.h"
 
+#include "gen_cpp/Exprs_types.h"
+
 namespace starrocks {
+
+MatchExpr::MatchExpr(const TExprNode& node) : Expr(node) {
+    if (node.__isset.match_expr && node.match_expr.__isset.slop) {
+        _slop = node.match_expr.slop;
+    }
+}
 
 StatusOr<ColumnPtr> MatchExpr::evaluate_checked(ExprContext* context, Chunk* ptr) {
     return Status::InternalError("Match can only used as a pushdown predicate on column with GIN in a single query.");

@@ -196,6 +196,12 @@ struct TDictionaryGetExpr {
 }
 
 // This is essentially a union over the subclasses of Expr.
+// Carrier for MATCH-family operator parameters that don't fit cleanly on
+// TExprNode itself. Currently only `slop` (used by MATCH_PHRASE).
+struct TMatchExpr {
+  1: optional i32 slop = 0
+}
+
 struct TExprNode {
   1: required TExprNodeType node_type
   2: required Types.TTypeDesc type
@@ -253,6 +259,13 @@ struct TExprNode {
   56: optional TDictionaryGetExpr dictionary_get_expr
   // whether this expr is only used in index
   57: optional bool is_index_only_filter
+
+  // MATCH_EXPR-specific payload (slop for MATCH_PHRASE; reserved for future
+  // BM25/score/phrase-prefix params). optional + i32 default 0 keeps the wire
+  // backward compatible: an old BE / old FE that does not know about this
+  // field treats slop as 0, which preserves prior behavior for the existing
+  // MATCH/MATCH_ANY/MATCH_ALL operators.
+  58: optional TMatchExpr match_expr
 }
 
 struct TPartitionLiteral {

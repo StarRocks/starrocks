@@ -32,6 +32,7 @@ public class InvertedIndexParams {
     public enum InvertedIndexImpType {
         CLUCENE,
         BUILTIN,
+        TANTIVY,
     }
 
     public enum CommonIndexParamKey implements ParamsKey {
@@ -83,7 +84,18 @@ public class InvertedIndexParams {
         /**
          * Whether to support to reserve the rank result within index
          */
-        RERANK("false");
+        RERANK("false"),
+        /**
+         * Tantivy-only hint: enable phrase matching capability on the index.
+         * Phase 1 only validates whitelist; BE always supports phrase regardless.
+         */
+        SUPPORT_PHRASE("false"),
+        /**
+         * Tantivy-only hint: enable BM25 scoring capability on the index.
+         * Phase 1 only validates whitelist; Phase 2 will use this to enable
+         * fieldnorms in the tantivy schema.
+         */
+        SUPPORT_BM25("false");
 
         private String defaultValue;
 

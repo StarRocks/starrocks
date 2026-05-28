@@ -1742,4 +1742,7 @@ CONF_mBool(enable_cow_optimization, "true");
 // The diagnose level for cow optimization, 0 means no diagnose, 1 means diagnose when use_count > 1, 2 means diagnose when use_count > 2.
 CONF_Int32(cow_optimization_diagnose_level, "0");
 
+CONF_mBool(tantivy_ignore_write_error, "true");
+CONF_String(tantivy_index_local_tmp_dir, "tmp/tantivy_tmp");
+
 } // namespace starrocks::config

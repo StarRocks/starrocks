@@ -14,6 +14,7 @@
 
 #include <gtest/gtest.h>
 
+#include "storage/index/inverted/builtin/builtin_plugin.h"
 #include "storage/index/inverted/inverted_index_option.h"
 #include "storage/index/inverted/inverted_plugin_factory.h"
 #include "storage/tablet_index.h"
@@ -35,25 +36,43 @@ TEST(InvertedIndexPluginTest, factory_test) {
 }
 
 TEST(InvertedIndexPluginTest, option_test) {
-    TabletIndex tablet_index;
+    // Each branch builds a fresh TabletIndex because add_common_properties
+    // is insert-only (no overwrite of an existing key).
+    auto check = [](const std::string& imp_lib_value) {
+        TabletIndex t;
+        t.add_common_properties(INVERTED_IMP_KEY, imp_lib_value);
+        return get_inverted_imp_type(t);
+    };
 
-    // Test get_inverted_imp_type
     {
-        auto res = get_inverted_imp_type(tablet_index);
+        TabletIndex empty;
+        auto res = get_inverted_imp_type(empty);
         ASSERT_FALSE(res.ok());
+    }
 
-        tablet_index.set_common_properties({{INVERTED_IMP_KEY, TYPE_CLUCENE}});
-        res = get_inverted_imp_type(tablet_index);
+    {
+        auto res = check(TYPE_CLUCENE);
         ASSERT_TRUE(res.ok());
         ASSERT_EQ(InvertedImplementType::CLUCENE, res.value());
-
-        tablet_index.set_common_properties({{INVERTED_IMP_KEY, TYPE_BUILTIN}});
-        res = get_inverted_imp_type(tablet_index);
+    }
+    {
+        auto res = check(TYPE_BUILTIN);
         ASSERT_TRUE(res.ok());
         ASSERT_EQ(InvertedImplementType::BUILTIN, res.value());
-
-        tablet_index.set_common_properties({{INVERTED_IMP_KEY, "invalid"}});
-        res = get_inverted_imp_type(tablet_index);
+    }
+    {
+        auto res = check(TYPE_TANTIVY);
+        ASSERT_TRUE(res.ok());
+        ASSERT_EQ(InvertedImplementType::TANTIVY, res.value());
+    }
+    {
+        // Case-insensitive — DDL may carry "TANTIVY", "Tantivy", etc.
+        auto res = check("TANTIVY");
+        ASSERT_TRUE(res.ok());
+        ASSERT_EQ(InvertedImplementType::TANTIVY, res.value());
+    }
+    {
+        auto res = check("invalid");
         ASSERT_FALSE(res.ok());
     }
 
@@ -101,6 +120,27 @@ TEST(InvertedIndexPluginTest, option_test) {
         props[INVERTED_INDEX_TOKENIZED_KEY] = "false";
         ASSERT_FALSE(is_tokenized_from_properties(props));
     }
+}
+
+// A plugin that emits a per-(seg, index) standalone file (builtin / clucene)
+// reports `need_compound() == false` and only implements `finish`. The
+// default `finish_compound` should never be called on such a plugin —
+// ColumnWriter dispatches via need_compound(), so the default body is a
+// last-resort safety net rather than a sentinel. Verify the protocol bit and
+// that calling finish_compound directly fails loudly (not NotSupported, since
+// that status no longer drives any behavioral fallback).
+TEST(InvertedIndexPluginTest, builtin_does_not_produce_compound) {
+    auto* plugin = &BuiltinPlugin::get_instance();
+    TypeInfoPtr typeinfo = get_type_info(TYPE_VARCHAR);
+    TabletIndex tablet_index;
+    std::unique_ptr<InvertedWriter> writer;
+    ASSERT_OK(plugin->create_inverted_index_writer(typeinfo, "c0", "path", &tablet_index, &writer));
+    ASSERT_NE(nullptr, writer);
+
+    EXPECT_FALSE(writer->need_compound());
+
+    auto compound_or = writer->finish_compound(nullptr);
+    ASSERT_FALSE(compound_or.ok());
 }
 
 TEST(InvertedIndexPluginTest, builtin_plugin_test) {
