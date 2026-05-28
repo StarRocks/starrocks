@@ -239,14 +239,7 @@ public class SchemaChangeHandler extends AlterHandler {
                                      Map<Long, LinkedList<Column>> indexMetaIdToSchema,
                                      IntSupplier colUniqueIdSupplier) throws DdlException {
         Column column = buildColumnForAdd(alterClause.getColumnDef(), olapTable);
-        if (olapTable.isRangeDistribution() && column.isKey()) {
-            throw new DdlException(
-                "ADD COLUMN of a key column is not supported on tables with " +
-                "range distribution, because new key columns are appended to " +
-                "the range sort key (AGG/UNIQUE) or derived sort key (no " +
-                "explicit ORDER BY), invalidating stored range tablet " +
-                "boundary values. Column: " + column.getName());
-        }
+        rejectAddingKeyColumnOnRangeDistribution(olapTable, ImmutableList.of(column));
         ColumnPosition columnPos = alterClause.getColPos();
         String targetIndexName = alterClause.getRollupName();
         checkIndexExists(olapTable, targetIndexName);
@@ -283,19 +276,7 @@ public class SchemaChangeHandler extends AlterHandler {
                                       Map<Long, LinkedList<Column>> indexMetaIdToSchema,
                                       IntSupplier colUniqueIdSupplier) throws DdlException {
         List<Column> columns = buildColumnsForAdd(alterClause, olapTable);
-        if (olapTable.isRangeDistribution()) {
-            for (Column c : columns) {
-                if (c.isKey()) {
-                    throw new DdlException(
-                        "ADD COLUMN of a key column is not supported on " +
-                        "tables with range distribution, because new key " +
-                        "columns are appended to the range sort key " +
-                        "(AGG/UNIQUE) or derived sort key (no explicit " +
-                        "ORDER BY), invalidating stored range tablet boundary " +
-                        "values. Column: " + c.getName());
-                }
-            }
-        }
+        rejectAddingKeyColumnOnRangeDistribution(olapTable, columns);
         String targetIndexName = alterClause.getRollupName();
         checkIndexExists(olapTable, targetIndexName);
 
@@ -843,10 +824,12 @@ public class SchemaChangeHandler extends AlterHandler {
 
         Column oriColumn = schemaForFinding.get(modColIndex);
 
-        // Range-distribution sort-key column protection (row #4d).
         rejectIfTouchesRangeSortKey(olapTable, indexMetaIdForFindingColumn,
                 "MODIFY COLUMN", newColName);
-        // Range-distribution keyness-flip protection (row #4e).
+        // A keyness flip (value -> key or key -> value) shifts the
+        // key-derived range sort key on AGG/UNIQUE tables and on tables
+        // without an explicit ORDER BY, even when the column is not
+        // currently in the sort key.
         if (olapTable.isRangeDistribution()
                 && oriColumn.isKey() != modColumn.isKey()) {
             throw new DdlException(
@@ -3579,26 +3562,52 @@ public class SchemaChangeHandler extends AlterHandler {
      * distribution sort-key column set of the given index.
      *
      * Range-distribution tablet boundaries are stored as 1:1 copies of the
-     * base values, and any ADD/DROP/MODIFY that changes the column set or
+     * base values, and any DROP/MODIFY that changes the column set or
      * type/semantics of those columns invalidates the stored boundary
      * interpretation — even if no row physically moves.
      */
     private static void rejectIfTouchesRangeSortKey(
             OlapTable olapTable, long indexMetaId,
-            String operation, String colName) throws DdlException {
+            String operation, String columnName) throws DdlException {
         if (!olapTable.isRangeDistribution()) {
             return;
         }
-        List<Column> rangeSortCols =
+        List<Column> rangeSortKeyColumns =
                 MetaUtils.getRangeDistributionColumns(olapTable, indexMetaId);
-        boolean hit = rangeSortCols.stream()
-                .anyMatch(c -> c.getName().equalsIgnoreCase(colName));
-        if (hit) {
+        boolean isInRangeSortKey = rangeSortKeyColumns.stream()
+                .anyMatch(column -> column.getName().equalsIgnoreCase(columnName));
+        if (isInRangeSortKey) {
             throw new DdlException(operation +
                 " on a sort-key column is not supported on tables with " +
                 "range distribution, because it would change the column set " +
                 "or type/semantics that the existing range tablet boundary " +
-                "values were recorded under. Column: " + colName);
+                "values were recorded under. Column: " + columnName);
+        }
+    }
+
+    /**
+     * Reject ADD COLUMN of a key column on a range-distribution table.
+     *
+     * On AGG/UNIQUE tables new key columns are appended to the range sort
+     * key, and on tables without an explicit ORDER BY the range sort key
+     * is derived from the key columns. Either way, adding a key column
+     * shifts the column set that the existing range tablet boundary
+     * values were recorded under.
+     */
+    private static void rejectAddingKeyColumnOnRangeDistribution(
+            OlapTable olapTable, List<Column> columnsToAdd) throws DdlException {
+        if (!olapTable.isRangeDistribution()) {
+            return;
+        }
+        for (Column column : columnsToAdd) {
+            if (column.isKey()) {
+                throw new DdlException(
+                    "ADD COLUMN of a key column is not supported on tables " +
+                    "with range distribution, because new key columns are " +
+                    "appended to the range sort key (AGG/UNIQUE) or derived " +
+                    "sort key (no explicit ORDER BY), invalidating stored " +
+                    "range tablet boundary values. Column: " + column.getName());
+            }
         }
     }
 }
