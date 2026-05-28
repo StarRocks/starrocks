@@ -14,11 +14,11 @@
 
 #include "column/map_column.h"
 
-#include "util/simdjson_util.h"
 #include "fmt/format.h"
 #include "formats/json/map_column.h"
 #include "formats/json/nullable_column.h"
 #include "gutil/strings/substitute.h"
+#include "util/simdjson_util.h"
 
 namespace starrocks {
 
