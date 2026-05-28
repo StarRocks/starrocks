@@ -25,8 +25,8 @@
 #include "common/config_primary_key_fwd.h"
 #include "storage/lake/rowset_update_state.h"
 #include "storage/olap_common.h"
-#include "storage/primitive/primary_key_encoding_types.h"
 #include "storage/primitive/chunk_iterator.h"
+#include "storage/primitive/primary_key_encoding_types.h"
 
 namespace starrocks::lake {
 
