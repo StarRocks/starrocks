@@ -4,6 +4,7 @@ keywords: ['FE', 'Coordinator Node','memory', 'OOM', 'JVM', 'troubleshooting', '
 ---
 
 import MetaRecv from '../_assets/best_practices/fe_mem_meta_recv.mdx'
+import MetaRecvStep from '../_assets/best_practices/fe_mem_meta_recv_step.mdx'
 
 # FE / Coordinator Node memory full issue troubleshooting
 
@@ -696,7 +697,9 @@ SIMPLE_MAJORITY required 1 replica. But none were active with this master.
 [ConnectScheduler.lambda$printAllRunningQuery$4():339] FE ShutDown! Running Query:SET NAMES utf8, QueryFEAllocatedMemory: 10048
 ```
 
-**Processing Method**: Increase the FE JVM memory configuration, with a recommended minimum of 16GB in production, and adjust later based on the increment of metadata. For recovery, refer to steps 8 and 9 in the [Metadata Recovery](../administration/Meta_recovery.md) documentation.
+**Processing Method**: Increase the FE JVM memory configuration, with a recommended minimum of 16GB in production, and adjust later based on the increment of metadata.
+
+<MetaRecvStep />
 
 ---
 
