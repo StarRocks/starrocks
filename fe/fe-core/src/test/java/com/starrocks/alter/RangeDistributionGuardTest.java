@@ -112,4 +112,20 @@ public class RangeDistributionGuardTest {
         assertTrue(ex.getMessage().toLowerCase().contains("range distribution"),
                 "Expected 'range distribution' in: " + ex.getMessage());
     }
+
+    @Test
+    public void testOptimizeRejectedOnRangeDistribution() throws Exception {
+        starRocksAssert.withTable(rangeTableDdl("t_guard_optimize"));
+        // OPTIMIZE clause is triggered by `alter table ... distributed by ...`
+        // — there is no standalone OPTIMIZE keyword in the grammar.
+        // The analyzer raises SemanticException, but
+        // UtFrameUtils.parseStmtWithNewParser wraps it as AnalysisException, so
+        // we match on Throwable + message rather than the concrete type. The
+        // load-bearing check is the "range distribution" substring.
+        Throwable ex = assertThrows(Throwable.class, () ->
+                starRocksAssert.alterTable(
+                        "alter table t_guard_optimize distributed by hash(k1)"));
+        assertTrue(ex.getMessage().toLowerCase().contains("range distribution"),
+                "Expected 'range distribution' in: " + ex.getMessage());
+    }
 }
