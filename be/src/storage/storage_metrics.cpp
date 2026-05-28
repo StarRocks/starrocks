@@ -183,7 +183,7 @@ void StorageMetrics::install(MetricRegistry* registry) {
     registry->register_metric("update_compaction_duration_us", MetricLabels().add("type", "update"),
                               &update_compaction_duration_us);
 
-    REGISTER_STORAGE_METRIC(lake_compaction_s3_put_count);
+    REGISTER_STORAGE_METRIC(lake_compaction_object_storage_put_count);
 
     REGISTER_STORAGE_METRIC(async_delta_writer_execute_total);
     REGISTER_STORAGE_METRIC(async_delta_writer_task_total);

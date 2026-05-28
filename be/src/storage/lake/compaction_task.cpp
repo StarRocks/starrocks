@@ -140,7 +140,7 @@ Status CompactionTask::fill_compaction_segment_info(TxnLogPB_OpCompaction* op_co
     if (is_lcrm(writer->lcrm_file().path)) {
         ++put_count;
     }
-    StorageMetrics::instance()->lake_compaction_s3_put_count.increment(put_count);
+    StorageMetrics::instance()->lake_compaction_object_storage_put_count.increment(put_count);
     return Status::OK();
 }
 
