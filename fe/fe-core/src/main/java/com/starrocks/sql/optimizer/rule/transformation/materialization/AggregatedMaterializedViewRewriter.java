@@ -153,18 +153,9 @@ public final class AggregatedMaterializedViewRewriter extends MaterializedViewRe
         EquationRewriter queryExprToMvExprRewriter =
                 buildEquationRewriter(mvProjection, rewriteContext, false);
 
-        if (isRollup && mvAggOp.getPredicate() != null) {
-            if (requiresGroupingRollup(mvGroupingKeys, queryGroupingKeys, queryRangePredicate)) {
-                OptimizerTraceUtil.logMVRewriteFailReason(mvRewriteContext,
-                        "Rollup aggregate with MV HAVING predicate is unsafe when MV grouping keys are finer " +
-                                "than query grouping keys, mv grouping keys:{}, query grouping keys:{}",
-                        mvGroupingKeys, queryGroupingKeys);
-                return null;
-            }
-            if (!canCompensateMvAggregatePredicateForRollup(rewriteContext, mvAggOp, queryAggOp,
-                    queryExprToMvExprRewriter, columnRewriter)) {
-                return null;
-            }
+        if (isRollup && !canRewriteRollupWithMvAggregatePredicate(rewriteContext, mvAggOp, queryAggOp,
+                mvGroupingKeys, queryGroupingKeys, queryRangePredicate, queryExprToMvExprRewriter, columnRewriter)) {
+            return null;
         }
 
         if (isRollup) {
@@ -186,6 +177,11 @@ public final class AggregatedMaterializedViewRewriter extends MaterializedViewRe
             if (result.first != null && !result.second) {
                 return result.first;
             } else if (result.second) {
+                if (!canRewriteRollupWithMvAggregatePredicate(rewriteContext, mvAggOp, queryAggOp,
+                        mvGroupingKeys, queryGroupingKeys, queryRangePredicate,
+                        queryExprToMvExprRewriter, columnRewriter)) {
+                    return null;
+                }
                 return rewriteForRollup(queryAggOp, queryGroupingKeys, columnRewriter, queryExprToMvExprRewriter,
                         rewriteContext, mvOptExpr);
             } else {
@@ -356,6 +352,28 @@ public final class AggregatedMaterializedViewRewriter extends MaterializedViewRe
             return false;
         }
         return true;
+    }
+
+    private boolean canRewriteRollupWithMvAggregatePredicate(RewriteContext rewriteContext,
+                                                             LogicalAggregationOperator mvAggregationOperator,
+                                                             LogicalAggregationOperator queryAggregationOperator,
+                                                             List<ScalarOperator> mvGroupingKeys,
+                                                             List<ScalarOperator> queryGroupingKeys,
+                                                             ScalarOperator queryRangePredicate,
+                                                             EquationRewriter queryExprToMvExprRewriter,
+                                                             ColumnRewriter columnRewriter) {
+        if (mvAggregationOperator.getPredicate() == null) {
+            return true;
+        }
+        if (requiresGroupingRollup(mvGroupingKeys, queryGroupingKeys, queryRangePredicate)) {
+            OptimizerTraceUtil.logMVRewriteFailReason(mvRewriteContext,
+                    "Rollup aggregate with MV HAVING predicate is unsafe when MV grouping keys are finer " +
+                            "than query grouping keys, mv grouping keys:{}, query grouping keys:{}",
+                    mvGroupingKeys, queryGroupingKeys);
+            return false;
+        }
+        return canCompensateMvAggregatePredicateForRollup(rewriteContext, mvAggregationOperator,
+                queryAggregationOperator, queryExprToMvExprRewriter, columnRewriter);
     }
 
     private boolean canCompensateMvAggregatePredicateForRollup(RewriteContext rewriteContext,

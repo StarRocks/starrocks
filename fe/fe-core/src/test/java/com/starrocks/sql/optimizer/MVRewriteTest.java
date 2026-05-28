@@ -794,6 +794,28 @@ public class MVRewriteTest extends StarRocksTestBase {
     }
 
     @Test
+    public void testMvHavingDoesNotFallbackRollupAfterProjectionFailure() throws Exception {
+        String tableName = "having_fallback_base";
+        String mvName = "mv_having_fallback";
+        String duplicateTable = "CREATE TABLE " + tableName + " ( " +
+                "id bigint, dt date ) " +
+                "DUPLICATE KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 3 " +
+                "PROPERTIES ('replication_num' = '1');";
+        starRocksAssert.withTable(duplicateTable);
+        try {
+            String createMV = "CREATE MATERIALIZED VIEW " + mvName + " " +
+                    "DISTRIBUTED BY HASH(dt) " +
+                    "AS SELECT dt FROM " + tableName + " GROUP BY dt HAVING COUNT(*) > 1;";
+            String query = "SELECT COUNT(dt) FROM " + tableName + " WHERE dt = '2024-11-27';";
+
+            starRocksAssert.withMaterializedView(createMV).query(query).explainWithout(mvName);
+        } finally {
+            starRocksAssert.dropMaterializedView(mvName);
+            starRocksAssert.dropTable(tableName);
+        }
+    }
+
+    @Test
     public void testAggFunctionInOrder() throws Exception {
         String duplicateTable = "CREATE TABLE " + TEST_TABLE_NAME + " ( k1 int(11) NOT NULL ,  k2  int(11) NOT NULL ,"
                 + "v1  varchar(4096) NOT NULL, v2  float NOT NULL , v3  decimal(20, 7) NOT NULL ) ENGINE=OLAP "
