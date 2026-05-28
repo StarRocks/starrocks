@@ -16,14 +16,6 @@
 
 #include <gtest/gtest.h>
 
-#include "gen_cpp/AgentService_types.h"
-#include "storage/lake/index_delta_group.h"
-#include "storage/lake/index_delta_group_loader.h"
-#include "storage/lake/schema_change.h"
-#include "storage/rowset/bitmap_index_reader.h"
-#include "storage/rowset/column_reader.h"
-#include "storage/rowset/segment.h"
-
 #include <memory>
 #include <string>
 
@@ -38,17 +30,24 @@
 #include "fs/fs.h"
 #include "fs/fs_factory.h"
 #include "fs/fs_util.h"
+#include "gen_cpp/AgentService_types.h"
 #include "gen_cpp/lake_types.pb.h"
 #include "gen_cpp/tablet_schema.pb.h"
 #include "gen_cpp/types.pb.h"
 #include "storage/chunk_helper.h"
 #include "storage/lake/delta_writer.h"
 #include "storage/lake/fixed_location_provider.h"
+#include "storage/lake/index_delta_group.h"
+#include "storage/lake/index_delta_group_loader.h"
 #include "storage/lake/join_path.h"
+#include "storage/lake/schema_change.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/test_util.h"
 #include "storage/lake/update_manager.h"
 #include "storage/lake/versioned_tablet.h"
+#include "storage/rowset/bitmap_index_reader.h"
+#include "storage/rowset/column_reader.h"
+#include "storage/rowset/segment.h"
 #include "storage/tablet_schema.h"
 
 namespace starrocks::lake {
