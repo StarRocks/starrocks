@@ -44,11 +44,12 @@ public class RepoCreator {
                 LOG.warn("database not exists: " + FileListTableRepo.FILE_LIST_DB_NAME);
                 return;
             }
-            if (!checkTableExists()) {
+            tableExists = checkTableExists();
+            if (!tableExists) {
                 createTable();
+                tableExists = true;
                 LOG.info("table created: " + FileListTableRepo.FILE_LIST_TABLE_NAME);
             }
-            tableExists = true;
             correctTable();
         } catch (Exception e) {
             LOG.error("error happens in RepoCreator: ", e);
