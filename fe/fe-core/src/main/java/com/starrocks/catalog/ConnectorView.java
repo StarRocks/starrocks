@@ -94,7 +94,13 @@ public abstract class ConnectorView extends Table {
         return inlineViewDef;
     }
 
+    @Override
     public String getCatalogName() {
         return catalogName;
+    }
+
+    @Override
+    public String getCatalogDBName() {
+        return dbName;
     }
 }
