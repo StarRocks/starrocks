@@ -1580,4 +1580,126 @@ TEST_F(LakeTabletsChannelPerPartitionCoordinatorTest, test_two_senders_split_par
     // claimed by its opener.
     EXPECT_EQ(orphan_before, m->lake_txn_log_collect_orphan_partition_total.value());
 }
+
+// Regression test for the bug where a non-first-opener's non-incremental open
+// was silently no-op'd by LoadChannel::open, leaving its partition claim out of
+// `_partition_coordinator`. The repro: sender 1 arrives at the storage BE
+// first and is recorded as the partition's only coordinator; sender 0 arrives
+// second but its claim was being dropped, so the post-wait election picked
+// sender 1 even though sender 0 has the smaller id — txn_logs were returned
+// to OlapTableSink 1's NC instead of OlapTableSink 0's, and concurrent writes
+// from multiple OlapTableSinks raced to write a partial combined_txn_log on
+// shared-data OSS.
+//
+// With the fix, LoadChannel::open's new else branch invokes
+// `LakeTabletsChannel::update_open` for the late-arriving sender, which
+// re-runs `_record_coordinator_claims`. This test exercises that path
+// directly: simulate sender 1 opening first, then call `update_open` with
+// sender 0's params, and assert that sender 0 ends up the coordinator
+// (collects all logs) and sender 1 collects nothing.
+TEST_F(LakeTabletsChannelPerPartitionCoordinatorTest,
+       test_late_arriving_sender_0_open_claims_via_update_open) {
+    auto* m = RuntimeMetrics::instance();
+    int64_t per_partition_before = m->lake_txn_log_collect_per_partition_total.value();
+    int64_t orphan_before = m->lake_txn_log_collect_orphan_partition_total.value();
+
+    constexpr int kChunkSize = 128;
+    auto chunk = generate_data(kChunkSize);
+
+    // Both senders cover the SAME tablet set across two partitions — this
+    // mirrors how multiple OlapTableSink instances (different sender_ids) on
+    // one FE-coord BE each open all of the storage BE's tablets.
+    auto make_open = [&](int32_t sender_id) {
+        PTabletWriterOpenRequest req;
+        req.mutable_id()->CopyFrom(_open_request.id());
+        req.set_index_id(kIndexId);
+        req.set_txn_id(kTxnId);
+        req.set_num_senders(2);
+        req.set_sender_id(sender_id);
+        req.set_need_gen_rollup(false);
+        req.set_load_channel_timeout_s(10);
+        req.set_is_vectorized(true);
+        req.mutable_schema()->CopyFrom(_open_request.schema());
+        for (auto& [pid, tid] : std::vector<std::pair<int64_t, int64_t>>{
+                     {10, 10086}, {10, 10087}, {11, 10088}, {11, 10089}}) {
+            auto* t = req.add_tablets();
+            t->set_partition_id(pid);
+            t->set_tablet_id(tid);
+        }
+        req.mutable_lake_tablet_params()->set_write_txn_log(false);
+        req.mutable_lake_tablet_params()->set_enable_per_partition_coordinator(true);
+        return req;
+    };
+
+    // Sender 1 wins the race to create the channel (simulates the bug
+    // trigger: a non-zero sender_id arriving first on this storage BE).
+    PTabletWriterOpenResult open_resp;
+    ASSERT_OK(_tablets_channel->open(make_open(1), &open_resp, _schema_param, false));
+
+    // Sender 0's non-incremental open arrives second. LoadChannel::open's new
+    // else branch funnels it through update_open() so the claim is recorded.
+    // Calling update_open directly here is what that else branch boils down to.
+    _tablets_channel->update_open(make_open(0));
+
+    std::atomic<int> close_channel_count{0};
+    std::atomic<int> sender_0_logs{-1};
+    std::atomic<int> sender_1_logs{-1};
+
+    auto sender_task = [&](int sender_id) {
+        PTabletWriterAddChunkRequest add_req;
+        PTabletWriterAddBatchResult add_resp;
+        add_req.set_index_id(kIndexId);
+        add_req.set_sender_id(sender_id);
+        add_req.set_eos(false);
+        add_req.set_packet_seq(0);
+        add_req.set_timeout_ms(30 * 1000);
+        for (int i = 0; i < kChunkSize; i++) {
+            int64_t tablet_id = 10086 + (i % 4);
+            add_req.add_tablet_ids(tablet_id);
+            add_req.add_partition_ids(tablet_id < 10088 ? 10 : 11);
+        }
+        ASSIGN_OR_ABORT(auto chunk_pb, serde::ProtobufChunkSerde::serialize(chunk));
+        add_req.mutable_chunk()->Swap(&chunk_pb);
+        bool close_channel = false;
+        _tablets_channel->add_chunk(&chunk, add_req, &add_resp, &close_channel);
+        ASSERT_EQ(TStatusCode::OK, add_resp.status().status_code()) << add_resp.status().error_msgs(0);
+
+        PTabletWriterAddChunkRequest fin_req;
+        PTabletWriterAddBatchResult fin_resp;
+        fin_req.set_index_id(kIndexId);
+        fin_req.set_sender_id(sender_id);
+        fin_req.set_eos(true);
+        fin_req.set_packet_seq(1);
+        fin_req.add_partition_ids(10);
+        fin_req.add_partition_ids(11);
+        fin_req.set_timeout_ms(30 * 1000);
+        _tablets_channel->add_chunk(nullptr, fin_req, &fin_resp, &close_channel);
+        ASSERT_EQ(TStatusCode::OK, fin_resp.status().status_code()) << fin_resp.status().error_msgs(0);
+        if (close_channel) {
+            close_channel_count.fetch_add(1);
+        }
+        int logs = fin_resp.lake_tablet_data().txn_logs_size();
+        (sender_id == 0 ? sender_0_logs : sender_1_logs).store(logs);
+    };
+
+    auto bids = std::vector<bthread_t>{};
+    ASSIGN_OR_ABORT(auto b0, bthreads::start_bthread([&] { sender_task(0); }));
+    bids.push_back(b0);
+    ASSIGN_OR_ABORT(auto b1, bthreads::start_bthread([&] { sender_task(1); }));
+    bids.push_back(b1);
+    for (auto b : bids) (void)bthread_join(b, nullptr);
+
+    ASSERT_EQ(1, close_channel_count.load());
+
+    // Smallest sender_id wins after update_open recorded sender 0's claim.
+    // Sender 0 must collect ALL 4 tablet logs; sender 1 must collect none.
+    // Without the fix, sender 0_logs would be 0 (claim never recorded) and
+    // sender 1 would be the one returning logs, which is the bug.
+    EXPECT_EQ(4, sender_0_logs.load());
+    EXPECT_EQ(0, sender_1_logs.load());
+
+    // Exactly one coordinator (sender 0) fired the collect path.
+    EXPECT_EQ(per_partition_before + 1, m->lake_txn_log_collect_per_partition_total.value());
+    EXPECT_EQ(orphan_before, m->lake_txn_log_collect_orphan_partition_total.value());
+}
 } // namespace starrocks
