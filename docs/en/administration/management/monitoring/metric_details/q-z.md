@@ -46,12 +46,6 @@ For more information on how to build a monitoring service for your StarRocks clu
 - Unit: -
 - Description: Current query cache usage ratio.
 
-## `query_coordinator_count`
-
-- Unit: Count
-- Type: Instantaneous
-- Description: Number of in-flight queries currently being coordinated by this FE (size of `QeProcessorImpl.coordinatorMap`). Reflects the live count of SQL statements actively executing on the FE, regardless of whether they went through the query queue.
-
 ## `query_mem_bytes`
 
 - Unit: Bytes

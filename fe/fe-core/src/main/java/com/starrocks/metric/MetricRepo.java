@@ -556,15 +556,15 @@ public final class MetricRepo {
         STARROCKS_METRIC_REGISTER.addMetric(metaLogCount);
 
         // currently executing queries on this FE (size of QeProcessorImpl.coordinatorMap)
-        GaugeMetric<Long> queryCoordinatorCount = new GaugeMetric<Long>(
-                "query_coordinator_count", MetricUnit.NOUNIT,
-                "number of in-flight queries currently being coordinated by this FE") {
+        GaugeMetric<Long> activeQueryCount = new GaugeMetric<Long>(
+                "active_query_count", MetricUnit.NOUNIT,
+                "number of in-flight queries currently being executed on this FE") {
             @Override
             public Long getValue() {
                 return QeProcessorImpl.INSTANCE.getCoordinatorCount();
             }
         };
-        STARROCKS_METRIC_REGISTER.addMetric(queryCoordinatorCount);
+        STARROCKS_METRIC_REGISTER.addMetric(activeQueryCount);
 
         // routine load jobs
         for (RoutineLoadJob.JobState state : RoutineLoadJob.JobState.values()) {
