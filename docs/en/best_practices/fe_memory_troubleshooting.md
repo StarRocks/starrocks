@@ -206,7 +206,7 @@ Click **Heap before GC** to find the time point when heap memory rises. Use this
 
 ### 3. An internal bug in the FE program caused a crash
 
-< />
+<MetaRecv />
 
 ### 4. JVM bug causes FE crash
 
