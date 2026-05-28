@@ -253,14 +253,10 @@ public class TabletInvertedIndex implements MemoryTrackable {
         if (GlobalStateMgr.isCheckpointThread()) {
             return;
         }
-<<<<<<< HEAD
-        writeLock();
-=======
         if (tabletIds.isEmpty()) {
             return;
         }
-        mutationLock.lock();
->>>>>>> c8ca6e3893 ([BugFix] Fast-path skip empty input in TabletInvertedIndex.deleteTablets (#73955))
+        writeLock();
         try {
             for (long tabletId : tabletIds) {
                 deleteTabletUnlocked(tabletId);
