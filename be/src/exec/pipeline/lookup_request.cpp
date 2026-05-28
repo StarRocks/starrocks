@@ -27,19 +27,19 @@
 #include "column/vectorized_fwd.h"
 #include "common/object_pool.h"
 #include "common/runtime_profile.h"
+#include "compute_env/sorting/sort_permute.h"
+#include "compute_env/sorting/sorting.h"
 #include "connector/hive_connector.h"
 #include "exec/pipeline/lookup_operator.h"
 #include "exec/pipeline/query_context.h"
 #include "exec/pipeline/scan/glm_manager.h"
-#include "exec/sorting/sort_permute.h"
-#include "exec/sorting/sorting.h"
 #include "exprs/expr_executor.h"
 #include "exprs/expr_factory.h"
 #include "runtime/descriptors.h"
 #include "runtime/runtime_state.h"
 #include "serde/column_array_serde.h"
 #include "storage/chunk_helper.h"
-#include "storage/range.h"
+#include "storage/primitive/range.h"
 
 namespace starrocks::pipeline {
 

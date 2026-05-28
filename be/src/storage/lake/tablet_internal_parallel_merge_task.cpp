@@ -26,13 +26,13 @@
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
 #include "storage/aggregate_iterator.h"
+#include "storage/base/merge_iterator.h"
 #include "storage/chunk_helper.h"
 #include "storage/lake/tablet_writer.h"
 #include "storage/lake/vacuum.h"
 #include "storage/load_chunk_spiller.h"
 #include "storage/load_spill_block_manager.h"
 #include "storage/load_spill_pipeline_merge_iterator.h"
-#include "storage/merge_iterator.h"
 #include "storage/storage_engine.h"
 
 namespace starrocks::lake {

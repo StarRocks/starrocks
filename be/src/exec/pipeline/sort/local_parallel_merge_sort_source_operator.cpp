@@ -17,8 +17,8 @@
 #include <algorithm>
 #include <sstream>
 
+#include "compute_env/pipeline/observer.h"
 #include "exec/pipeline/fragment_context.h"
-#include "exec/pipeline/schedule/observer.h"
 #include "exprs/expr.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
@@ -30,9 +30,7 @@ Status LocalParallelMergeSortSourceOperator::prepare(RuntimeState* state) {
     _sort_context->ref();
     _sort_context->attach_source_observer(state, observer());
     _merger->bind_profile(_merge_parallel_id, _unique_metrics.get());
-    if (state->enable_event_scheduler()) {
-        _merger->add_source_ready_callback([observer = observer()] { observer->source_trigger(); });
-    }
+    _merger->attach_observer(state, observer());
     return Status::OK();
 }
 

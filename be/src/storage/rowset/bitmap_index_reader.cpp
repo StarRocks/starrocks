@@ -48,7 +48,7 @@
 #include "runtime/exec_env.h"
 #include "runtime/mem_tracker.h"
 #include "storage/chunk_helper.h"
-#include "storage/range.h"
+#include "storage/primitive/range.h"
 #include "storage/types.h"
 
 namespace starrocks {

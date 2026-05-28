@@ -43,7 +43,6 @@
 #include "gutil/casts.h"
 #include "gutil/integral_types.h"
 #include "gutil/strings/substitute.h"
-#include "storage/olap_common.h"
 #include "types/date_value.h"
 #include "types/logical_type.h"
 #include "types/time_types.h"

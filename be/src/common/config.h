@@ -221,6 +221,12 @@ CONF_mInt32(lake_replication_max_file_copy_retry, "3");
 // Minimum number of files required to enable parallel copy in lake-to-lake replication.
 // Set to 0 to force disable parallel copy.
 CONF_mInt32(lake_replication_parallel_copy_min_file_count, "2");
+// Number of threads in the dedicated thread pool for per-file copy in lake-to-lake replication.
+// 0 means cpu_cores * 4 (matches replication_threads default semantics); negative means -value * cpu_cores.
+// This pool is intentionally separate from the agent-task replicate_snapshot pool so that per-file
+// copy sub-tasks can be awaited from the outer task without tripping the thread-pool self-deadlock
+// guard. The pool is built once at startup; CN restart is required to change its size.
+CONF_Int32(lake_replication_file_copy_threads, "0");
 
 // The log dir.
 CONF_String(sys_log_dir, "${STARROCKS_HOME}/log");
@@ -540,16 +546,6 @@ CONF_Int32(be_http_port, "8040");
 CONF_Alias(be_http_port, webserver_port);
 // Number of http workers in BE
 CONF_Int32(be_http_num_workers, "48");
-// Whether to enable the BE `/api/_stop_be` HTTP endpoint. When `false`, requests
-// to that endpoint are rejected with HTTP 403 and the BE process is not exited.
-// This config is static and requires a BE restart to take effect.
-CONF_Bool(enable_stop_be_action, "true");
-// Whether `/api/_stop_be` requires HTTP Basic Auth credentials that are then
-// validated against the FE (password + NODE privilege on SYSTEM). Default
-// `false` to preserve historical behavior of accepting unauthenticated shutdown
-// requests; set to `true` to require FE-validated authentication. This config
-// is static and requires a BE restart to take effect.
-CONF_Bool(enable_stop_be_action_fe_auth, "false");
 // Period to update rate counters and sampling counters in ms.
 CONF_mInt32(periodic_counter_update_period_ms, "500");
 

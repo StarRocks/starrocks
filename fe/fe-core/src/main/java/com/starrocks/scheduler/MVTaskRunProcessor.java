@@ -33,6 +33,7 @@ import com.starrocks.metric.IMaterializedViewMetricsEntity;
 import com.starrocks.metric.MaterializedViewMetricsRegistry;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QueryDetail;
+import com.starrocks.qe.QueryState;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.scheduler.mv.MVRefreshExecutor;
 import com.starrocks.scheduler.mv.MVRefreshProcessor;
@@ -358,6 +359,11 @@ public class MVTaskRunProcessor extends BaseTaskRunProcessor implements MVRefres
         try {
             executor.addRunningQueryDetail(insertStmt);
             executor.handleDMLStmtWithProfile(execPlan, insertStmt);
+            // StmtExecutor's filter-ratio check sets ctx.getState() to ERR without throwing;
+            // mirror InsertOverwriteJobRunner.executeInsert by rethrowing here.
+            if (ctx.getState().getStateType() == QueryState.MysqlStateType.ERR) {
+                throw new DmlException(ctx.getState().getErrorMessage());
+            }
         } catch (Exception e) {
             logger.warn("[QueryId:{}] refresh mv {} failed in DML", ctx.getQueryId(), e);
             throw e;

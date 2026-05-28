@@ -26,10 +26,10 @@
 #include "column/vectorized_fwd.h"
 #include "common/global_types.h"
 #include "common/runtime_profile.h"
+#include "compute_env/sorting/sort_permute.h"
 #include "exec/pipeline/fetch_sink_operator.h"
 #include "exec/pipeline/fetch_task.h"
 #include "exec/pipeline/lookup_request.h"
-#include "exec/sorting/sort_permute.h"
 #include "runtime/descriptors.h"
 
 namespace starrocks::pipeline {

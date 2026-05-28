@@ -35,7 +35,7 @@
 #ifdef WITH_TENANN
 #include "storage/index/vector/tenann/del_id_filter.h"
 
-#include "storage/range.h"
+#include "storage/primitive/range.h"
 #include "storage/roaring2range.h"
 #include "tenann/common/type_traits.h"
 #include "tenann/searcher/id_filter.h"

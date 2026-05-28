@@ -172,6 +172,19 @@ void LoadChannel::open(const LoadChannelOpenContext& open_context) {
             COUNTER_UPDATE(_index_num, 1);
         } else if (request.is_incremental()) {
             st = it->second->incremental_open(request, response, _schema);
+        } else {
+            // Channel already created by another sender's non-incremental open.
+            // We must still apply this sender's open params so that per-sender
+            // state derived from open (e.g. the lake per-partition coordinator
+            // claim) reflects every sender, not just the first opener.
+            // Without this, `LakeTabletsChannel::_partition_coordinator` only
+            // records the first opener on each storage BE, causing
+            // `_should_enter_collect_path(sender_id)` to return false for the
+            // other senders' EOS handlers — their EOS responses then carry no
+            // txn_logs back to the FE-coord OlapTableSink, and the combined
+            // txn_log file ends up missing the contributions from whichever
+            // NodeChannel was not coordinated by sender 0.
+            it->second->update_open(request);
         }
     }
     LOG_IF(WARNING, !st.ok()) << "Fail to open index " << key << " of load " << _load_id << ": " << st.to_string();

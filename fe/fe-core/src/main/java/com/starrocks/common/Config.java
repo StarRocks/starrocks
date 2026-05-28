@@ -328,11 +328,13 @@ public class Config extends ConfigBase {
      * 60m     60 minutes
      * 120s    120 seconds
      */
-    @ConfField
+    @ConfField(mutable = true, comment = "Whether to enable writing query profiles to fe.profile.log.")
     public static boolean enable_profile_log = true;
+
     @ConfField(mutable = true, comment = "Minimum query latency (ms) to log a profile to fe.profile.log. " +
             "Only queries with latency >= this value are logged. 0 means log all profiles (no threshold).")
     public static long profile_log_latency_threshold_ms = 0;
+
     @ConfField
     public static String profile_log_dir = Config.STARROCKS_HOME_DIR + "/log";
     @ConfField
@@ -4454,6 +4456,47 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true, comment = "Whether to enable tablet merge in tablet reshard. " +
             "Only takes effect for tables in clusters with run_mode=shared_data.")
     public static boolean tablet_reshard_enable_tablet_merge = false;
+
+    @ConfField(mutable = true, comment = "Whether to enable Sample-Based Tablet Pre-Split for "
+            + "INSERT INTO ... SELECT FROM FILES() loads. Default on as of v4.1.0 after the GA gate. "
+            + "Set to false to disable cluster-wide. The session variable enable_tablet_pre_split "
+            + "must also be true for pre-split to run.")
+    public static boolean enable_tablet_pre_split_for_insert_from_files = true;
+
+    @ConfField(mutable = true, comment = "Whether to enable Sample-Based Tablet Pre-Split for "
+            + "Broker Load. Default on as of v4.1.0 after the GA gate. Set to false to disable "
+            + "cluster-wide. The session variable enable_tablet_pre_split must also be true for "
+            + "pre-split to run.")
+    public static boolean enable_tablet_pre_split_for_broker_load = true;
+
+    @ConfField(mutable = true, comment = "Wall-clock budget for the pre-submit phase of "
+            + "Sample-Based Tablet Pre-Split (sample + plan boundaries + build reshard job). "
+            + "On expiry the coordinator skips pre-split and the load proceeds against the "
+            + "original single tablet.")
+    public static long tablet_pre_split_pre_submit_timeout_seconds = 30L;
+
+    @ConfField(mutable = true, comment = "Maximum time the coordinator will wait for an admitted "
+            + "Sample-Based Tablet Pre-Split reshard job to reach FINISHED. Semantics differ by "
+            + "load path: INSERT-from-FILES synchronously waits and on expiry proceeds without "
+            + "abort — the INSERT then plans against the currently visible tablet layout (still "
+            + "the original layout if the daemon has not yet transitioned, or partially / fully "
+            + "post-split if the daemon raced past the wait), and the hard-cap counter records "
+            + "the timeout; the strict runPreSplit wrapper used by tests aborts the calling load "
+            + "via PreSplitPostSubmitTimeoutException; Broker Load is fire-and-forget and does "
+            + "not wait at all.")
+    public static long tablet_pre_split_post_submit_wait_seconds = 300L;
+
+    @ConfField(mutable = true, comment = "Soft byte cap on the FE-side accumulation buffer of the "
+            + "data-tier reservoir sampler used by Sample-Based Tablet Pre-Split. The sampler stops "
+            + "reading once accumulated values exceed this limit. The first row is always admitted "
+            + "so an oversize row still produces a non-empty sample.")
+    public static long tablet_pre_split_sample_byte_limit = 16L * 1024L * 1024L;
+
+    @ConfField(mutable = true, comment = "Maximum overlap fraction tolerated when Sample-Based "
+            + "Tablet Pre-Split's meta tier (Parquet/ORC row-group metadata) computes boundaries. "
+            + "Above this threshold the cumulative-row count stops being monotone in sorted-min "
+            + "order so meta tier falls back to data tier (row sampling).")
+    public static double tablet_pre_split_meta_tier_overlap_threshold = 0.3;
 
     /**
      * Whether to enable tracing historical nodes when cluster scale

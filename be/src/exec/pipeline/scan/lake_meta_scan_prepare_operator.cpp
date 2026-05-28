@@ -20,7 +20,6 @@
 #include "exec/pipeline/scan/meta_scan_operator.h"
 #include "exec/pipeline/scan/olap_morsel_queue.h"
 #include "gen_cpp/Types_types.h"
-#include "storage/olap_common.h"
 
 namespace starrocks::pipeline {
 

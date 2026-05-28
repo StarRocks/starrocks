@@ -82,6 +82,11 @@ public:
     Status incremental_open(const PTabletWriterOpenRequest& params, PTabletWriterOpenResult* result,
                             std::shared_ptr<OlapTableSchemaParam> schema) override;
 
+    // Re-applied non-incremental open: only re-records the per-partition
+    // coordinator claim. See base class comment for the rationale and
+    // `_record_coordinator_claims` for what is recorded.
+    void update_open(const PTabletWriterOpenRequest& params) override { _record_coordinator_claims(params); }
+
     void cancel(const std::string& reason) override;
 
     void abort() override;

@@ -47,17 +47,18 @@
 #include "rowset_merger.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
+#include "storage/base/merge_iterator.h"
 #include "storage/chunk_helper.h"
-#include "storage/chunk_iterator.h"
 #include "storage/compaction_utils.h"
 #include "storage/del_vector.h"
-#include "storage/empty_iterator.h"
 #include "storage/local_primary_key_compaction_conflict_resolver.h"
 #include "storage/local_primary_key_recover.h"
-#include "storage/merge_iterator.h"
 #include "storage/persistent_index.h"
 #include "storage/persistent_index_load_executor.h"
 #include "storage/primary_key_dump.h"
+#include "storage/primitive/chunk_iterator.h"
+#include "storage/primitive/empty_iterator.h"
+#include "storage/primitive/union_iterator.h"
 #include "storage/rows_mapper.h"
 #include "storage/rowset/base_rowset.h"
 #include "storage/rowset/default_value_column_iterator.h"
@@ -76,21 +77,12 @@
 #include "storage/tablet.h"
 #include "storage/tablet_meta_manager.h"
 #include "storage/types.h"
-#include "storage/union_iterator.h"
 #include "storage/update_compaction_state.h"
 #include "storage/update_manager.h"
 
 namespace starrocks {
 
 const std::string kBreakpointMsg = "primary key apply stopped";
-
-std::string EditVersion::to_string() const {
-    if (minor_number() == 0) {
-        return strings::Substitute("$0", major_number());
-    } else {
-        return strings::Substitute("$0.$1", major_number(), minor_number());
-    }
-}
 
 TabletUpdates::TabletUpdates(Tablet& tablet) : _tablet(tablet), _unused_rowsets(UINT64_MAX) {}
 

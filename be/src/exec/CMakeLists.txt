@@ -39,7 +39,17 @@ ADD_BE_LIB(ExecPrimitive
     ${EXEC_PRIMITIVE_FILES}
 )
 
-target_link_libraries(ExecPrimitive PUBLIC ExprCore RuntimeCore)
+target_link_libraries(ExecPrimitive PUBLIC
+    ExprCore
+    RuntimeCore
+    ChunkCore
+    ColumnCore
+    Types
+    Common
+    Base
+    Gutil
+    StarRocksGen
+)
 
 set(EXEC_SINK_CORE_FILES
     data_sink.cpp
@@ -93,6 +103,7 @@ set(EXEC_SCHEMA_SCANNER_FILES
     schema_scanner/schema_be_configs_scanner.cpp
     schema_scanner/schema_be_threads_scanner.cpp
     schema_scanner/schema_charsets_scanner.cpp
+    schema_scanner/schema_collation_character_set_applicability_scanner.cpp
     schema_scanner/schema_collations_scanner.cpp
     schema_scanner/schema_dummy_scanner.cpp
     schema_scanner/schema_events_scanner.cpp
@@ -106,33 +117,6 @@ ADD_BE_LIB(ExecSchemaScanners
 
 target_link_libraries(ExecSchemaScanners PUBLIC
     ExecSchemaScannerCore
-    RuntimeCore
-    ChunkCore
-    ColumnCore
-    Types
-    Common
-    Base
-    Gutil
-    StarRocksGen
-)
-
-set(EXEC_SORTING_CORE_FILES
-    sorting/compare_column.cpp
-    sorting/merge.cpp
-    sorting/merge_cascade.cpp
-    sorting/merge_column.cpp
-    sorting/merge_path.cpp
-    sorting/sort_column.cpp
-    sorting/sort_cursor.cpp
-    sorting/sort_permute.cpp
-)
-
-ADD_BE_LIB(ExecSortingCore
-    ${EXEC_SORTING_CORE_FILES}
-)
-
-target_link_libraries(ExecSortingCore PUBLIC
-    ExprCore
     RuntimeCore
     ChunkCore
     ColumnCore
@@ -159,7 +143,7 @@ ADD_BE_LIB(ExecJoinCore
 )
 
 target_link_libraries(ExecJoinCore PUBLIC
-    ExecSortingCore
+    ComputeEnv
     ExprCore
     Serde
     RuntimeCore
@@ -198,14 +182,13 @@ set(PIPELINE_RUNTIME_SRCS
     pipeline/pipeline_driver.cpp
     pipeline/audit_statistics_reporter.cpp
     pipeline/exec_state_reporter.cpp
-    pipeline/driver_limiter.cpp
     pipeline/fragment_context.cpp
     pipeline/query_context.cpp
     pipeline/operator_factory.cpp
     pipeline/source_operator.cpp
     pipeline/schedule/timeout_tasks.cpp
     pipeline/schedule/event_scheduler.cpp
-    pipeline/schedule/observer.cpp
+    pipeline/schedule/pipeline_driver_observer.cpp
     pipeline/runtime_filter_types.cpp
     workgroup/pipeline_executor_set.cpp
     workgroup/pipeline_executor_set_manager.cpp
@@ -569,5 +552,5 @@ ADD_BE_LIB(Exec
     $<TARGET_OBJECTS:pipeline_extensions_exec_objs>
 )
 
-target_link_libraries(Exec PUBLIC ExecPrimitive ExecSinkCore SpillCore ExecSchemaScannerCore ExecSchemaScanners ExecSortingCore ExecJoinCore RuntimeEnv Cache)
+target_link_libraries(Exec PUBLIC ExecPrimitive ExecSinkCore SpillCore ExecSchemaScannerCore ExecSchemaScanners ExecJoinCore RuntimeEnv ComputeEnv Cache)
 target_link_libraries(Exec PRIVATE FormatsIO Platform)

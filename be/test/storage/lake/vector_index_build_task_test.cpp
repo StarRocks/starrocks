@@ -24,6 +24,7 @@
 #include "column/nullable_column.h"
 #include "fs/fs_util.h"
 #include "gutil/casts.h"
+#include "gutil/walltime.h"
 #include "storage/chunk_helper.h"
 #include "storage/lake/filenames.h"
 #include "storage/lake/join_path.h"
