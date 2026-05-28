@@ -1095,15 +1095,24 @@ public class DatabaseTransactionMgrTest {
         // the racing txn id, so the test can let the commit thread upsert a
         // brand-new COMMITTED state object into the running map before abort
         // acquires the per-txn writeLock and reads from its stale local ref.
-        new MockUp<TransactionState>() {
+        // The mock signature must match the original (no `throws InterruptedException`)
+        // — wrap the latch wait in unchecked Exception.
+        MockUp<TransactionState> abortLockMock = new MockUp<TransactionState>() {
             @Mock
-            public void writeLock(Invocation inv) throws InterruptedException {
+            public void writeLock(Invocation inv) {
                 TransactionState ts = (TransactionState) inv.getInvokedInstance();
                 if (Thread.currentThread() == abortThreadRef.get()
                         && ts.getTransactionId() == raceTxnId
                         && abortPastWriteLock.compareAndSet(false, true)) {
                     abortReachedWriteLock.countDown();
-                    assertTrue(commitCompleted.await(10, TimeUnit.SECONDS));
+                    try {
+                        if (!commitCompleted.await(10, TimeUnit.SECONDS)) {
+                            throw new RuntimeException("commit did not complete within 10s");
+                        }
+                    } catch (InterruptedException ie) {
+                        Thread.currentThread().interrupt();
+                        throw new RuntimeException(ie);
+                    }
                 }
                 inv.proceed();
             }
@@ -1119,58 +1128,65 @@ public class DatabaseTransactionMgrTest {
             }
         }, "abort-race-thread");
         abortThreadRef.set(abortThread);
-        abortThread.start();
+        try {
+            abortThread.start();
 
-        // Wait until abort thread has captured the local stale ref to object A
-        // (after readUnlock at the top of abortTransaction) and is parked just
-        // before transactionState.writeLock().
-        assertTrue(abortReachedWriteLock.await(10, TimeUnit.SECONDS),
-                "abort thread did not reach writeLock in time");
+            // Wait until abort thread has captured the local stale ref to object A
+            // (after readUnlock at the top of abortTransaction) and is parked just
+            // before transactionState.writeLock().
+            assertTrue(abortReachedWriteLock.await(10, TimeUnit.SECONDS),
+                    "abort thread did not reach writeLock in time");
 
-        // Run commit to completion on the main thread. After this returns,
-        // idToRunningTransactionState[raceTxnId] holds a brand-new
-        // TransactionState (status=COMMITTED), not the object A captured above.
-        masterTransMgr.commitPreparedTransaction(db, raceTxnId, 1000L);
+            // Run commit to completion on the main thread. After this returns,
+            // idToRunningTransactionState[raceTxnId] holds a brand-new
+            // TransactionState (status=COMMITTED), not the object A captured above.
+            masterTransMgr.commitPreparedTransaction(db, raceTxnId, 1000L);
 
-        TransactionState mapEntryAfterCommit = masterDbTransMgr.getTransactionState(raceTxnId);
-        assertNotNull(mapEntryAfterCommit);
-        assertEquals(TransactionStatus.COMMITTED, mapEntryAfterCommit.getTransactionStatus());
-        Assertions.assertNotSame(objectA, mapEntryAfterCommit,
-                "commit should have upserted a new TransactionState object into the running map");
+            TransactionState mapEntryAfterCommit = masterDbTransMgr.getTransactionState(raceTxnId);
+            assertNotNull(mapEntryAfterCommit);
+            assertEquals(TransactionStatus.COMMITTED, mapEntryAfterCommit.getTransactionStatus());
+            Assertions.assertNotSame(objectA, mapEntryAfterCommit,
+                    "commit should have upserted a new TransactionState object into the running map");
 
-        // Release abort: it will now acquire the writeLock and either
-        //   (fixed)   re-read idToRunningTransactionState, see COMMITTED, and
-        //             refuse to abort (throwing TransactionAlreadyCommitException), or
-        //   (buggy)   COW from the stale object A (status=PREPARED), flip to
-        //             ABORTED, and overwrite the committed map entry.
-        commitCompleted.countDown();
-        abortThread.join(10_000);
-        Assertions.assertFalse(abortThread.isAlive(), "abort thread should have terminated");
+            // Release abort: it will now acquire the writeLock and either
+            //   (fixed)   re-read idToRunningTransactionState, see COMMITTED, and
+            //             refuse to abort (throwing TransactionAlreadyCommitException), or
+            //   (buggy)   COW from the stale object A (status=PREPARED), flip to
+            //             ABORTED, and overwrite the committed map entry.
+            commitCompleted.countDown();
+            abortThread.join(10_000);
+            Assertions.assertFalse(abortThread.isAlive(), "abort thread should have terminated");
 
-        if (abortError[0] != null) {
-            Throwable cause = abortError[0];
-            while (cause != null && !(cause instanceof TransactionAlreadyCommitException)) {
-                cause = cause.getCause();
+            if (abortError[0] != null) {
+                Throwable cause = abortError[0];
+                while (cause != null && !(cause instanceof TransactionAlreadyCommitException)) {
+                    cause = cause.getCause();
+                }
+                assertNotNull(cause, "abort error must be (caused by) TransactionAlreadyCommitException, got "
+                        + abortError[0]);
             }
-            assertNotNull(cause, "abort error must be (caused by) TransactionAlreadyCommitException, got "
-                    + abortError[0]);
-        }
 
-        // The committed map entry MUST NOT have been overwritten with ABORTED,
-        // and the partition commit version produced by commit MUST survive.
-        TransactionState finalState = masterDbTransMgr.getTransactionState(raceTxnId);
-        assertNotNull(finalState);
-        assertEquals(TransactionStatus.COMMITTED, finalState.getTransactionStatus(),
-                "stale-ref race must not overwrite the committed entry with ABORTED");
+            // The committed map entry MUST NOT have been overwritten with ABORTED,
+            // and the partition commit version produced by commit MUST survive.
+            TransactionState finalState = masterDbTransMgr.getTransactionState(raceTxnId);
+            assertNotNull(finalState);
+            assertEquals(TransactionStatus.COMMITTED, finalState.getTransactionStatus(),
+                    "stale-ref race must not overwrite the committed entry with ABORTED");
 
-        TableCommitInfo tci = finalState.getIdToTableCommitInfos().get(GlobalStateMgrTestUtil.testTableId1);
-        assertNotNull(tci, "committed state must keep its table commit info");
-        Assertions.assertFalse(tci.getIdToPartitionCommitInfo().isEmpty(),
-                "committed state must keep at least one partition commit info");
-        for (PartitionCommitInfo pci : tci.getIdToPartitionCommitInfo().values()) {
-            Assertions.assertTrue(pci.getVersion() > 0,
-                    "committed partition version must remain positive (not -1 from abort COW), got "
-                            + pci.getVersion());
+            TableCommitInfo tci = finalState.getIdToTableCommitInfos().get(GlobalStateMgrTestUtil.testTableId1);
+            assertNotNull(tci, "committed state must keep its table commit info");
+            Assertions.assertFalse(tci.getIdToPartitionCommitInfo().isEmpty(),
+                    "committed state must keep at least one partition commit info");
+            for (PartitionCommitInfo pci : tci.getIdToPartitionCommitInfo().values()) {
+                Assertions.assertTrue(pci.getVersion() > 0,
+                        "committed partition version must remain positive (not -1 from abort COW), got "
+                                + pci.getVersion());
+            }
+        } finally {
+            // Ensure no thread is left waiting on the latch if the test errored.
+            commitCompleted.countDown();
+            abortThread.join(5_000);
+            abortLockMock.tearDown();
         }
     }
 
