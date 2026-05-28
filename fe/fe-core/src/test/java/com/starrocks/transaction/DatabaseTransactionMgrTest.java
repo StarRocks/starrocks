@@ -1096,8 +1096,10 @@ public class DatabaseTransactionMgrTest {
         // brand-new COMMITTED state object into the running map before abort
         // acquires the per-txn writeLock and reads from its stale local ref.
         // The mock signature must match the original (no `throws InterruptedException`)
-        // — wrap the latch wait in unchecked Exception.
-        MockUp<TransactionState> abortLockMock = new MockUp<TransactionState>() {
+        // — wrap the latch wait in unchecked Exception. Maven surefire runs each
+        // test class in its own JVM (reuseForks=false), so MockUp lifetime is
+        // bounded by the JVM and does not leak to other classes.
+        new MockUp<TransactionState>() {
             @Mock
             public void writeLock(Invocation inv) {
                 TransactionState ts = (TransactionState) inv.getInvokedInstance();
@@ -1186,7 +1188,6 @@ public class DatabaseTransactionMgrTest {
             // Ensure no thread is left waiting on the latch if the test errored.
             commitCompleted.countDown();
             abortThread.join(5_000);
-            abortLockMock.tearDown();
         }
     }
 
