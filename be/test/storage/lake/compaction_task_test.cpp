@@ -283,7 +283,8 @@ TEST_P(LakeDuplicateKeyCompactionTest, test_compaction_metrics) {
     EXPECT_EQ(output_segments, lake_compaction_output_segment_size_recorded_count() - size_recorded_before);
     // One PUT per output segment plus one for the txn log write (this is a duplicate-key,
     // non-PK compaction, so there are no sst or .lcrm files).
-    EXPECT_EQ(output_segments + 1, StorageMetrics::instance()->lake_compaction_object_storage_put_count.value() - put_count_before);
+    EXPECT_EQ(output_segments + 1,
+              StorageMetrics::instance()->lake_compaction_object_storage_put_count.value() - put_count_before);
 }
 
 INSTANTIATE_TEST_SUITE_P(LakeDuplicateKeyCompactionTest, LakeDuplicateKeyCompactionTest,
