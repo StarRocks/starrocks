@@ -66,6 +66,12 @@ namespace starrocks {
 // scanner renders -1 as SQL NULL).
 int32_t parse_pulsar_partition_index(const std::string& logical_topic, const std::string& message_topic);
 
+// Parse the Confluent wire-format schema id from a message: a 0x00 magic byte followed by a 4-byte
+// big-endian schema id. Writes the id to *schema_id and returns true on success; returns false for
+// anything not framed this way (raw Avro, fewer than 5 bytes, wrong magic), so the caller falls back
+// to the normal append path. Used to detect schema-id boundaries within a routine-load batch.
+bool parse_confluent_schema_id(const char* data, size_t size, int32_t* schema_id);
+
 // data consumer group saves a group of data consumers.
 // These data consumers share the same stream load pipe.
 // This class is not thread safe.

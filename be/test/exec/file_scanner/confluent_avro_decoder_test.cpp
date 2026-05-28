@@ -73,6 +73,29 @@ TEST_F(ConfluentAvroDecoderTest, decode_reuses_datum_across_calls) {
     EXPECT_EQ("b", datum.value<avro::GenericRecord>().field("name").value<std::string>());
 }
 
+TEST_F(ConfluentAvroDecoderTest, schema_id_out_param_is_sentinel_in_test_mode) {
+    ConfluentAvroDecoder decoder(record_schema());
+    ASSERT_TRUE(decoder.init().ok());
+
+    // Test mode has no Confluent framing, so there is no real schema id: decode reports -1.
+    const std::vector<uint8_t> payload = {0x36, 0x04, 0x68, 0x69}; // {id: 27, name: "hi"}
+    avro::GenericDatum datum;
+    int32_t schema_id = 12345; // pre-seed to prove decode overwrites it
+    ASSERT_TRUE(decoder.decode(payload.data(), payload.size(), &datum, &schema_id).ok());
+    EXPECT_EQ(-1, schema_id);
+}
+
+TEST_F(ConfluentAvroDecoderTest, schema_id_out_param_may_be_null) {
+    ConfluentAvroDecoder decoder(record_schema());
+    ASSERT_TRUE(decoder.init().ok());
+
+    // The schema_id argument is optional; passing nullptr must not crash.
+    const std::vector<uint8_t> payload = {0x36, 0x04, 0x68, 0x69};
+    avro::GenericDatum datum;
+    ASSERT_TRUE(decoder.decode(payload.data(), payload.size(), &datum, nullptr).ok());
+    EXPECT_EQ(int64_t{27}, datum.value<avro::GenericRecord>().field("id").value<int64_t>());
+}
+
 TEST_F(ConfluentAvroDecoderTest, truncated_payload_returns_error) {
     ConfluentAvroDecoder decoder(record_schema());
     ASSERT_TRUE(decoder.init().ok());

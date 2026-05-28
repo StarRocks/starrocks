@@ -63,7 +63,7 @@ StatusOr<const avro::ValidSchema*> ConfluentAvroDecoder::_resolve(int32_t schema
     return &it->second;
 }
 
-Status ConfluentAvroDecoder::decode(const uint8_t* data, size_t size, avro::GenericDatum* datum) {
+Status ConfluentAvroDecoder::decode(const uint8_t* data, size_t size, avro::GenericDatum* datum, int32_t* schema_id) {
     try {
         const avro::ValidSchema* schema = nullptr;
         const uint8_t* payload = data;
@@ -72,6 +72,9 @@ Status ConfluentAvroDecoder::decode(const uint8_t* data, size_t size, avro::Gene
         if (_test_mode) {
             // Input is a raw Avro datum without Confluent framing.
             schema = &_test_schema;
+            if (schema_id != nullptr) {
+                *schema_id = -1;
+            }
         } else {
             // serdes_framing_read strips the Confluent framing per the serdes config, advances the
             // payload pointer/length past it, and resolves the writer schema (registry-cached).
@@ -84,7 +87,11 @@ Status ConfluentAvroDecoder::decode(const uint8_t* data, size_t size, avro::Gene
             }
             payload = static_cast<const uint8_t*>(p);
             payload_size = sz;
-            ASSIGN_OR_RETURN(schema, _resolve(serdes_schema_id(serdes_schema), serdes_schema));
+            int32_t resolved_id = serdes_schema_id(serdes_schema);
+            if (schema_id != nullptr) {
+                *schema_id = resolved_id;
+            }
+            ASSIGN_OR_RETURN(schema, _resolve(resolved_id, serdes_schema));
         }
 
         auto input = avro::memoryInputStream(payload, payload_size);

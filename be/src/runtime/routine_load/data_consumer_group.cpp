@@ -96,6 +96,17 @@ std::string pulsar_message_id_to_string(const pulsar::MessageId& id) {
 
 } // namespace
 
+// Declared in the header (exposed for unit tests); see header comment for the wire-format contract.
+bool parse_confluent_schema_id(const char* data, size_t size, int32_t* schema_id) {
+    if (data == nullptr || size < 5 || static_cast<uint8_t>(data[0]) != 0x00) {
+        return false;
+    }
+    const auto* p = reinterpret_cast<const uint8_t*>(data);
+    *schema_id = (static_cast<int32_t>(p[1]) << 24) | (static_cast<int32_t>(p[2]) << 16) |
+                 (static_cast<int32_t>(p[3]) << 8) | static_cast<int32_t>(p[4]);
+    return true;
+}
+
 Status KafkaDataConsumerGroup::assign_topic_partitions(StreamLoadContext* ctx) {
     DCHECK(ctx->kafka_info);
     DCHECK(_consumers.size() >= 1);
@@ -176,6 +187,11 @@ Status KafkaDataConsumerGroup::start_all(StreamLoadContext* ctx) {
     // JSON/Avro: one message per buffer (with source metadata). CSV: rows separated by row_delimiter.
     const bool append_as_message =
             ctx->format == TFileFormatType::FORMAT_JSON || ctx->format == TFileFormatType::FORMAT_AVRO;
+
+    // Schema-evolution boundary detection: when enabled (Avro only), track the last Confluent
+    // schema id seen per partition so we can stop a batch right before a schema change.
+    const bool detect_schema_boundary = ctx->enable_schema_evolution && ctx->format == TFileFormatType::FORMAT_AVRO;
+    std::map<int32_t, int32_t> last_schema_id;
     char row_delimiter = '\n';
     if (!append_as_message) {
         auto& per_node_scan_ranges = ctx->put_result.params.params.per_node_scan_ranges;
@@ -277,6 +293,26 @@ Status KafkaDataConsumerGroup::start_all(StreamLoadContext* ctx) {
                 }
             } else {
                 auto timestamp = msg->timestamp();
+                // Stop the batch at a Confluent schema-id boundary: if this message carries a
+                // different schema id than the last one seen on its partition, end the batch
+                // *before* appending it. The offset is not advanced, so the next task re-fetches
+                // this message; everything already appended commits cleanly via the normal path.
+                // A partition's first message only seeds last_schema_id (nothing to compare), so a
+                // boundary never fires on it — there is always at least one appended message first.
+                if (detect_schema_boundary) {
+                    int32_t schema_id = 0;
+                    if (parse_confluent_schema_id(static_cast<const char*>(msg->payload()),
+                                                  static_cast<size_t>(msg->len()), &schema_id)) {
+                        auto [it, inserted] = last_schema_id.try_emplace(msg->partition(), schema_id);
+                        if (!inserted && it->second != schema_id) {
+                            LOG(INFO) << "schema-evolution boundary on partition " << msg->partition() << ": schema id "
+                                      << it->second << " -> " << schema_id << ", stopping batch before offset "
+                                      << msg->offset() << ". grp: " << _grp_id;
+                            eos = true;
+                            continue;
+                        }
+                    }
+                }
                 Status st;
                 if (append_as_message) {
                     StreamMessageMeta meta(ByteBufferMetaType::KAFKA);

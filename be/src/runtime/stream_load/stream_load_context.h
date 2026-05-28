@@ -49,6 +49,7 @@
 #include "common/status.h"
 #include "common/system/backend_options.h"
 #include "gen_cpp/BackendService_types.h"
+#include "gen_cpp/Descriptors_types.h"
 #include "gen_cpp/FrontendService_types.h"
 #include "pulsar/Client.h"
 #include "runtime/exec_env_fwd.h"
@@ -254,6 +255,10 @@ public:
     bool use_streaming = false;
     TFileFormatType::type format = TFileFormatType::FORMAT_CSV_PLAIN;
 
+    // Avro routine load: stop a batch at a Confluent schema-id boundary so old-schema
+    // messages commit before the new schema triggers an ALTER (see KafkaDataConsumerGroup).
+    bool enable_schema_evolution = false;
+
     TStreamLoadPutResult put_result;
 
     int64_t number_total_rows = 0;
@@ -282,6 +287,15 @@ public:
 
     std::vector<TTabletCommitInfo> commit_infos;
     std::vector<TTabletFailInfo> fail_infos;
+
+    // Avro schema evolution: copied from RuntimeState after the fragment finishes when the Avro scanner
+    // hit a schema the table does not cover. detected_schema_columns is the full writer schema, not a
+    // diff. Packed into the rollback attachment so the FE can diff + ALTER + retry.
+    bool schema_change_needed = false;
+    int32_t detected_schema_id = -1;
+    std::vector<TColumn> detected_schema_columns;
+    // varchar/varbinary columns an over-length value overran; the FE widens them (to the varchar max).
+    std::vector<std::string> detected_widen_columns;
 
     std::mutex lock;
 

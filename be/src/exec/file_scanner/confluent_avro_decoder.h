@@ -59,8 +59,9 @@ public:
     Status init();
 
     // Decodes one message into `datum`. `datum` may be reused across calls by the caller.
-    // Any framing/registry/decode failure returns InternalError.
-    Status decode(const uint8_t* data, size_t size, avro::GenericDatum* datum);
+    // If `schema_id` is non-null it receives the Confluent schema id of the message (or -1 in
+    // test mode, which has no framing). Any framing/registry/decode failure returns InternalError.
+    Status decode(const uint8_t* data, size_t size, avro::GenericDatum* datum, int32_t* schema_id = nullptr);
 
 private:
     // Returns the compiled ValidSchema for `schema_id`, compiling+caching it from `serdes_schema`

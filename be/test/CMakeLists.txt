@@ -127,6 +127,7 @@ set(EXEC_FILES
         ./exec/file_scanner/avro_cpp_scanner_test.cpp
         ./exec/file_scanner/avro_datum_path_test.cpp
         ./exec/file_scanner/avro_scanner_test.cpp
+        ./exec/file_scanner/avro_schema_evolution_test.cpp
         ./exec/file_scanner/avro_struct_map_test.cpp
         ./exec/file_scanner/confluent_avro_decoder_test.cpp
         ./exec/file_scanner/csv_scanner_test.cpp

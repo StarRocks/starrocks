@@ -108,6 +108,10 @@ struct TRoutineLoadTask {
     14: optional PlanNodes.TFileFormatType format
     15: optional TPulsarLoadInfo pulsar_load_info
     16: optional double max_filter_ratio
+    // When true (Avro routine load only), the aggregator stops a batch at a Confluent
+    // schema-id boundary so messages written under the old schema commit cleanly before
+    // the new schema triggers an ALTER. FE resolves this per job; unset = legacy behavior.
+    17: optional bool enable_schema_evolution
 }
 
 struct TKafkaMetaProxyRequest {
