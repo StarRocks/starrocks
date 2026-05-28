@@ -27,21 +27,9 @@ select count(1) from default_catalog._statistics_.external_column_statistics
       and db_name      = 'test_file_stats_db_${uuid0}'
       and table_name   = 'file_tbl';
 
--- Wait until the stats cache is warmed and the optimizer reflects collected cardinality.
-LOOP {
-  PROPERTY: {"timeout": 60, "interval": 5, "desc": "wait fe cache stats finished"}
-  result=explain costs select seq from file_tbl;
-  CHECK: re.search(r"cardinality: [1-9][0-9]+", ${result}) != None
-} END LOOP
-
--- After stats are collected the optimizer must assign cardinality > 1 on each scan side.
--- A self-join (A.seq = B.seq + 1) forces two separate scan estimates; if either scan
--- were still at the default cardinality=1 the join estimate would also be trivially 1.
-LOOP {
-  PROPERTY: {"timeout": 10, "interval": 2, "desc": "check join cardinality > 1 after stats"}
-  result=explain verbose select A.seq, B.seq from file_tbl A join file_tbl B on A.seq = B.seq + 1;
-  CHECK: re.search(r"cardinality: [1-9][0-9]+", ${result}) != None
-} END LOOP
+-- Stats are loaded synchronously; cardinality must reflect the actual 200 rows
+-- on the first explain, not the default hardcoded 1.
+function: assert_explain_verbose_contains('select A.seq, B.seq from file_tbl A join file_tbl B on A.seq = B.seq + 1', 'cardinality: 200')
 
 DROP DATABASE test_file_stats_db_${uuid0};
 shell: ossutil64 rm -rf oss://${oss_bucket}/test_analyze_file_table_stats/${uuid0}/ >/dev/null || echo "exit 0" >/dev/null

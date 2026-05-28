@@ -31,9 +31,6 @@ PROPERTIES (
 -- result:
 -- !result
 ANALYZE FULL TABLE file_tbl;
--- result:
-[REGEX]OK
--- !result
 select count(1) from default_catalog._statistics_.external_column_statistics
     where catalog_name = 'default_catalog'
       and db_name      = 'test_file_stats_db_${uuid0}'
@@ -41,16 +38,10 @@ select count(1) from default_catalog._statistics_.external_column_statistics
 -- result:
 6
 -- !result
-LOOP {
-  PROPERTY: {"timeout": 60, "interval": 5, "desc": "wait fe cache stats finished"}
-  result=explain costs select seq from file_tbl;
-  CHECK: re.search(r"cardinality: [1-9][0-9]+", ${result}) != None
-} END LOOP
-LOOP {
-  PROPERTY: {"timeout": 10, "interval": 2, "desc": "check join cardinality > 1 after stats"}
-  result=explain verbose select A.seq, B.seq from file_tbl A join file_tbl B on A.seq = B.seq + 1;
-  CHECK: re.search(r"cardinality: [1-9][0-9]+", ${result}) != None
-} END LOOP
+function: assert_explain_verbose_contains('select A.seq, B.seq from file_tbl A join file_tbl B on A.seq = B.seq + 1', 'cardinality: 200')
+-- result:
+None
+-- !result
 DROP DATABASE test_file_stats_db_${uuid0};
 -- result:
 -- !result
