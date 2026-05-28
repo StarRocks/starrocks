@@ -19,8 +19,10 @@ endif()
 
 set(STORAGE_PRIMITIVE_TEST_FILES
     ${BE_TEST_MACOS_LINK_STUBS}
+    key_coder_test.cpp
     projection_iterator_test.cpp
     range_test.cpp
+    roaring2range_test.cpp
     row_source_mask_test.cpp
     storage_value_types_test.cpp
     union_iterator_test.cpp

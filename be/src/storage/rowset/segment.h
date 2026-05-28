@@ -44,12 +44,12 @@
 #include "gen_cpp/olap_file.pb.h"
 #include "gen_cpp/segment.pb.h"
 #include "gutil/macros.h"
+#include "storage/base/short_key_index.h"
 #include "storage/delta_column_group.h"
 #include "storage/index/inverted/inverted_index_iterator.h"
 #include "storage/options.h"
 #include "storage/rowset/page_handle.h"
 #include "storage/rowset/page_pointer.h"
-#include "storage/short_key_index.h"
 #include "storage/tablet_schema.h"
 
 namespace starrocks {

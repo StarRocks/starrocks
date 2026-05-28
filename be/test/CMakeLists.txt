@@ -435,7 +435,6 @@ SET(DW_TEST_FILES
     ./storage/index/vector_index_test.cpp
     ./storage/index/vector_search_test.cpp
     ./storage/index/builtin_inverted_index_test.cpp
-    ./storage/key_coder_test.cpp
     ./storage/kv_store_test.cpp
     ./storage/lake/alter_tablet_meta_test.cpp
     ./storage/lake/async_delta_writer_test.cpp
@@ -510,7 +509,6 @@ SET(DW_TEST_FILES
     ./storage/push_handler_test.cpp
     ./storage/replication_txn_manager_test.cpp
     ./storage/replication_utils_test.cpp
-    ./storage/roaring2range_test.cpp
     ./storage/rowset/binary_dict_page_test.cpp
     ./storage/rowset/binary_plain_page_test.cpp
     ./storage/rowset/binary_prefix_page_test.cpp
@@ -555,7 +553,6 @@ SET(DW_TEST_FILES
     ./storage/segment_flush_executor_test.cpp
     ./storage/segment_stream_converter_test.cpp
     ./storage/del_file_stream_converter_test.cpp
-    ./storage/short_key_index_test.cpp
     ./storage/size_tiered_compaction_policy_test.cpp
     ./storage/snapshot_meta_test.cpp
     ./storage/sstable/concatenating_iterator_test.cpp

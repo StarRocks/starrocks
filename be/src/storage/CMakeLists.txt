@@ -25,6 +25,7 @@ ADD_BE_LIB(StoragePrimitive
     primitive/edit_version.cpp
     primitive/empty_iterator.cpp
     primitive/flat_json_config.cpp
+    primitive/key_coder.cpp
     primitive/projection_iterator.cpp
     primitive/range.cpp
     primitive/storage_ids.cpp
@@ -46,6 +47,7 @@ target_link_libraries(StoragePrimitive PUBLIC
 ADD_BE_LIB(StorageBase
     base/merge_iterator.cpp
     base/row_source_mask.cpp
+    base/short_key_index.cpp
 )
 
 target_link_libraries(StorageBase PUBLIC
@@ -68,7 +70,6 @@ set(STORAGE_FILES
     del_vector.cpp
     delta_column_group.cpp
     flat_json_metrics.cpp
-    key_coder.cpp
     memtable_flush_executor.cpp
     segment_flush_executor.cpp
     segment_replicate_executor.cpp
@@ -93,7 +94,6 @@ set(STORAGE_FILES
     storage_engine.cpp
     storage_metrics.cpp
     data_dir.cpp
-    short_key_index.cpp
     snapshot_manager.cpp
     snapshot_meta.cpp
     tablet.cpp
