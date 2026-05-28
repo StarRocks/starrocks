@@ -248,8 +248,8 @@ public class FileListRepoTest {
             }
         };
         creator.run();
-        Assertions.assertTrue(creator.isDatabaseExists());
-        Assertions.assertFalse(creator.isTableExists());
+        Assertions.assertTrue(creator.checkDatabaseExists());
+        Assertions.assertFalse(creator.checkTableExists());
 
         // create with 1 replica
         new MockUp<SystemInfoService>() {
@@ -267,7 +267,7 @@ public class FileListRepoTest {
             }
         };
         creator.run();
-        Assertions.assertTrue(creator.isTableExists());
+        Assertions.assertTrue(creator.checkTableExists());
         Assertions.assertEquals(1, changed.get());
 
         // be corrected to 3 replicas
@@ -279,8 +279,8 @@ public class FileListRepoTest {
         };
 
         creator.run();
-        Assertions.assertTrue(creator.isDatabaseExists());
-        Assertions.assertTrue(creator.isTableExists());
+        Assertions.assertTrue(creator.checkDatabaseExists());
+        Assertions.assertTrue(creator.checkTableExists());
         Assertions.assertEquals(2, changed.get());
     }
 
@@ -319,24 +319,24 @@ public class FileListRepoTest {
         // Steady state: database and table both exist; run() should be a no-op
         // for table creation (correctTable is a no-op because replicas already match).
         creator.run();
-        Assertions.assertTrue(creator.isDatabaseExists());
-        Assertions.assertTrue(creator.isTableExists());
+        Assertions.assertTrue(creator.checkDatabaseExists());
+        Assertions.assertTrue(creator.checkTableExists());
         int baseline = ddlCount.get();
 
         // Simulate user `DROP DATABASE _statistics_`: both database and table disappear.
         databasePresent.set(false);
         tablePresent.set(false);
         creator.run();
-        Assertions.assertFalse(creator.isDatabaseExists());
-        Assertions.assertFalse(creator.isTableExists());
+        Assertions.assertFalse(creator.checkDatabaseExists());
+        Assertions.assertFalse(creator.checkTableExists());
 
         // StatisticsMetaManager re-creates the database; the table is still missing.
         databasePresent.set(true);
         creator.run();
         // RepoCreator must observe the missing table and recreate it instead of
         // skipping due to a stale cached `tableExists=true` flag.
-        Assertions.assertTrue(creator.isDatabaseExists());
-        Assertions.assertTrue(creator.isTableExists());
+        Assertions.assertTrue(creator.checkDatabaseExists());
+        Assertions.assertTrue(creator.checkTableExists());
         Assertions.assertEquals(baseline + 1, ddlCount.get());
     }
 

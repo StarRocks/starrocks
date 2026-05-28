@@ -29,25 +29,18 @@ public class RepoCreator {
     private static final Logger LOG = LogManager.getLogger(RepoCreator.class);
     private static final RepoCreator INSTANCE = new RepoCreator();
 
-    private static volatile boolean databaseExists = false;
-    private static volatile boolean tableExists = false;
-
     public static RepoCreator getInstance() {
         return INSTANCE;
     }
 
     public synchronized void run() {
         try {
-            databaseExists = checkDatabaseExists();
-            if (!databaseExists) {
-                tableExists = false;
+            if (!checkDatabaseExists()) {
                 LOG.warn("database not exists: " + FileListTableRepo.FILE_LIST_DB_NAME);
                 return;
             }
-            tableExists = checkTableExists();
-            if (!tableExists) {
+            if (!checkTableExists()) {
                 createTable();
-                tableExists = true;
                 LOG.info("table created: " + FileListTableRepo.FILE_LIST_TABLE_NAME);
             }
             correctTable();
@@ -75,13 +68,5 @@ public class RepoCreator {
 
     public static boolean correctTable() {
         return StatisticUtils.alterSystemTableReplicationNumIfNecessary(FileListTableRepo.FILE_LIST_TABLE_NAME);
-    }
-
-    public boolean isDatabaseExists() {
-        return databaseExists;
-    }
-
-    public boolean isTableExists() {
-        return tableExists;
     }
 }
