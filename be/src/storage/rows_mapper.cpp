@@ -18,6 +18,7 @@
 
 #include "base/coding.h"
 #include "base/container/raw_container.h"
+#include "base/debug/trace.h"
 #include "base/hash/crc32c.h"
 #include "common/config_primary_key_fwd.h"
 #include "fs/fs.h"
@@ -106,7 +107,13 @@ RowsMapperIterator::~RowsMapperIterator() {
 // Open file
 Status RowsMapperIterator::open(const FileInfo& filename) {
     ASSIGN_OR_RETURN(auto fs, FileSystemFactory::CreateSharedFromString(filename.path));
-    ASSIGN_OR_RETURN(_rfile, fs->new_random_access_file(filename.path));
+    // The .lcrm rows-mapper file is read exactly once during compaction publish and
+    // then never accessed again — caching it locally is pure cache pollution that
+    // evicts hotter data (PK index pages, segment blocks). Disable fill-cache so the
+    // bytes are streamed through but not retained.
+    RandomAccessFileOptions opts;
+    opts.skip_fill_local_cache = true;
+    ASSIGN_OR_RETURN(_rfile, fs->new_random_access_file(opts, filename.path));
     int64_t file_size = 0;
     // PERFORMANCE OPTIMIZATION: Reuse file size if already known
     if (filename.size.has_value()) {
@@ -118,6 +125,9 @@ Status RowsMapperIterator::open(const FileInfo& filename) {
         // Fallback: Query file size if not provided (local fs case, very fast)
         ASSIGN_OR_RETURN(file_size, _rfile->get_size());
     }
+    // Surface the .lcrm body size in the COMPACTION publish trace so we can
+    // correlate slow compact_mapper_read_us tails with file size.
+    TRACE_COUNTER_INCREMENT("compact_mapper_filesize_bytes", file_size);
     // 1. read checksum
     std::string checksum_str;
     raw::stl_string_resize_uninitialized(&checksum_str, 4);
