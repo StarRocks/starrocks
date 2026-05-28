@@ -718,7 +718,10 @@ public class PushDownAggregateCollector extends OptExpressionVisitor<Void, Aggre
 
         for (int colId : allGroupByColumns.getColumnIds()) {
             ColumnRefOperator colRef = factory.getColumnRef(colId);
-            if (colRef.getType() != null && !colRef.getType().canGroupBy()) {
+            // Top-level JSON now supports GROUP BY, but is intentionally kept out of
+            // aggregate push-down for now to preserve existing behavior.
+            if (colRef.getType() != null
+                    && (!colRef.getType().canGroupBy() || colRef.getType().isJsonType())) {
                 return false;
             }
         }

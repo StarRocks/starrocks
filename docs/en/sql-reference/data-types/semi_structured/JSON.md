@@ -280,7 +280,8 @@ FROM step2
 ## Limitations and Considerations
 
 - The maximum supported length for JSON-type data is currently 16 MB.
-- ORDER BY, GROUP BY, and JOIN clauses do not support referencing JSON-type columns. If you need to reference them, you can use the CAST function in advance to convert JSON-type columns to other SQL types. For specific conversion methods, please refer to [JSON Type Conversion](../../sql-functions/json-functions/json-query-and-processing-functions/cast.md).
+- ORDER BY and JOIN clauses do not support referencing JSON-type columns. If you need to reference them, you can use the CAST function in advance to convert JSON-type columns to other SQL types. For specific conversion methods, please refer to [JSON Type Conversion](../../sql-functions/json-functions/json-query-and-processing-functions/cast.md).
+- GROUP BY supports a top-level JSON column (for example, `GROUP BY json_col`). Grouping is based on JSON value: object key order does not affect grouping (so `{"a":1,"b":2}` and `{"b":2,"a":1}` belong to the same group), but numerically-equal values such as `1` and `1.0` are treated as distinct groups. Nested JSON inside ARRAY, MAP, or STRUCT is not supported in GROUP BY.
 - JSON-type columns can exist in Duplicate Key tables, Primary Key tables, and Unique Key tables, but not in Aggregate tables.
-- JSON-type columns are not supported as partition keys, bucketing keys, or dimension columns in Duplicate Key tables, Primary Key tables, and Unique Key tables, and cannot be used in JOIN, GROUP BY, or ORDER BY clauses.
+- JSON-type columns are not supported as partition keys, bucketing keys, or dimension columns in Duplicate Key tables, Primary Key tables, and Unique Key tables, and cannot be used in JOIN or ORDER BY clauses.
 - StarRocks supports using `<`, `<=`, `>`, `>=`, `=`, `!=` operators to query JSON data but does not support the IN operator.

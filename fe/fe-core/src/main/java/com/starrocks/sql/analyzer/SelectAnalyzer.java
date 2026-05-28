@@ -657,6 +657,9 @@ public class SelectAnalyzer {
                     new RewriteAliasVisitor(sourceScope, outputScope, outputExpressions, session);
             Expr rewrite = e.accept(visitor, null);
             analyzeExpression(rewrite, analyzeState, sourceScope);
+            if (!rewrite.getType().canGroupBy()) {
+                throw new SemanticException(Type.NOT_SUPPORT_GROUP_BY_ERROR_MSG);
+            }
             return rewrite;
         }).collect(Collectors.toList());
     }

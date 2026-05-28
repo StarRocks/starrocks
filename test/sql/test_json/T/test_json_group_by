@@ -1,0 +1,56 @@
+-- name: test_json_group_by
+CREATE DATABASE test_json_group_by;
+USE test_json_group_by;
+
+CREATE TABLE jt (id INT, j JSON) DUPLICATE KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 3 PROPERTIES ("replication_num" = "1");
+INSERT INTO jt VALUES
+  (1, parse_json('{"a":1,"b":2}')),
+  (2, parse_json('{"b":2,"a":1}')),
+  (3, parse_json('{"a":1,"b":2}')),
+  (4, parse_json('1')),
+  (5, parse_json('1.0')),
+  (6, parse_json('[1,2,3]')),
+  (7, NULL),
+  (8, parse_json('null'));
+
+-- core: key-order independent -> {"a":1,"b":2} and {"b":2,"a":1} are ONE group (3 rows)
+select j, count(*) from jt group by j order by cast(j as string);
+
+-- numeric: 1 vs 1.0 are distinct groups (expect 2 rows)
+select count(*) from (select j from jt where id in (4,5) group by j) t;
+
+-- count(distinct json)
+select count(distinct j) from jt;
+
+-- nested query / derived table
+select count(*) from (select j, count(*) c from jt group by j) s;
+
+-- group by an extracted JSON sub-value
+select count(*) from jt group by json_query(j, '$.a');
+
+-- grouping sets on top-level json, both lowerings
+set enable_rewrite_groupingsets_to_union_all=false;
+select j, count(*) from jt group by grouping sets((j)) order by cast(j as string);
+set enable_rewrite_groupingsets_to_union_all=true;
+select j, count(*) from jt group by grouping sets((j)) order by cast(j as string);
+set enable_rewrite_groupingsets_to_union_all=false;
+
+-- execution-path variation: force parallelism (distributed shuffle path)
+select /*+SET_VAR(pipeline_dop=8)*/ j, count(*) from jt group by j order by cast(j as string);
+
+-- CTE producing a JSON-grouped result
+with g as (select j, count(*) c from jt group by j) select count(*) from g;
+
+-- NULL (id 7) vs JSON 'null' literal (id 8) are distinct groups
+select count(*) from (select j from jt where id in (7,8) group by j) t;
+
+-- execution-path variation: one- vs two-phase aggregation
+select /*+SET_VAR(new_planner_agg_stage=1)*/ j, count(*) from jt group by j order by cast(j as string);
+select /*+SET_VAR(new_planner_agg_stage=2)*/ j, count(*) from jt group by j order by cast(j as string);
+
+-- negative: nested JSON rejected end-to-end
+select count(*) from jt group by [j];
+-- negative: select distinct json rejected
+select distinct j from jt;
+
+DROP DATABASE test_json_group_by;

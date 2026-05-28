@@ -268,12 +268,21 @@ bool TypeDescriptor::support_orderby() const {
 }
 
 bool TypeDescriptor::support_groupby() const {
+    return support_groupby(false);
+}
+
+// Staging mechanism: JSON is groupable only at the top level (mirrors FE Type.canGroupBy).
+// To later support nested JSON, change the TYPE_JSON branch to `return true;`
+// and collapse this back to the original uniform recursion.
+bool TypeDescriptor::support_groupby(bool nested) const {
     if (type == TYPE_ARRAY || type == TYPE_MAP || type == TYPE_STRUCT) {
         return std::all_of(children.begin(), children.end(),
-                           [](const TypeDescriptor& t) { return t.support_groupby(); });
+                           [](const TypeDescriptor& t) { return t.support_groupby(true); });
     }
-    return type != TYPE_JSON && type != TYPE_OBJECT && type != TYPE_PERCENTILE && type != TYPE_HLL &&
-           type != TYPE_VARIANT;
+    if (type == TYPE_JSON) {
+        return !nested;
+    }
+    return type != TYPE_OBJECT && type != TYPE_PERCENTILE && type != TYPE_HLL && type != TYPE_VARIANT;
 }
 
 TypeDescriptor TypeDescriptor::from_storage_type_info(TypeInfo* type_info) {
