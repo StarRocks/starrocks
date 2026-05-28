@@ -1432,6 +1432,19 @@ public class ConnectContext {
     }
 
     /**
+     * Returns the session variable name that governs the timeout for the current execution context,
+     * used when building timeout-hint messages.
+     */
+    public String getTimeoutHintVariable() {
+        if (isExecLoadType()) {
+            return SessionVariable.INSERT_TIMEOUT;
+        } else if (isMetadataContext()) {
+            return SessionVariable.METADATA_COLLECT_QUERY_TIMEOUT;
+        }
+        return SessionVariable.QUERY_TIMEOUT;
+    }
+
+    /**
      * Check the connect context is timeout or not. If true, kill the connection, otherwise, return false.
      *
      * @param now : current time in milliseconds
@@ -1485,16 +1498,8 @@ public class ConnectContext {
                     msg = String.format("the table %s table_query_timeout is %ds, pending time:%s",
                             tableName, tableTimeout, pendingTime);
                 } else {
-                    String timeoutVariable;
-                    if (isExecLoadType()) {
-                        timeoutVariable = SessionVariable.INSERT_TIMEOUT;
-                    } else if (isMetadataContext()) {
-                        timeoutVariable = SessionVariable.METADATA_COLLECT_QUERY_TIMEOUT;
-                    } else {
-                        timeoutVariable = SessionVariable.QUERY_TIMEOUT;
-                    }
                     msg = String.format("please increase the '%s' session variable, pending time:%s",
-                            timeoutVariable, pendingTime);
+                            getTimeoutHintVariable(), pendingTime);
                 }
                 errMsg = ErrorCode.ERR_TIMEOUT.formatErrorMsg(getExecType(), execTimeout, msg);
             }

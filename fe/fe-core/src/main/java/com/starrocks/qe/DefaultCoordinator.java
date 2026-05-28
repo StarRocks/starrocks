@@ -988,8 +988,8 @@ public class DefaultCoordinator extends Coordinator {
     }
 
     private String buildSessionTimeoutHint() {
-        String timeoutVariable = connectContext != null && connectContext.isMetadataContext() ?
-                SessionVariable.METADATA_COLLECT_QUERY_TIMEOUT : SessionVariable.QUERY_TIMEOUT;
+        String timeoutVariable = connectContext != null
+                ? connectContext.getTimeoutHintVariable() : SessionVariable.QUERY_TIMEOUT;
         return String.format("please increase the '%s' session variable and retry", timeoutVariable);
     }
 
