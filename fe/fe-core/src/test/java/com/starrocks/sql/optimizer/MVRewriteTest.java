@@ -743,6 +743,57 @@ public class MVRewriteTest extends StarRocksTestBase {
     }
 
     @Test
+    public void testMvHavingDoesNotFallbackRollupWithAggState() throws Exception {
+        String tableName = "having_state_base";
+        String mvName = "mv_having_state";
+        String duplicateTable = "CREATE TABLE " + tableName + " ( " +
+                "k1 string NOT NULL, k2 decimal(34, 0) ) " +
+                "DUPLICATE KEY(k1, k2) DISTRIBUTED BY HASH(k1) BUCKETS 3 " +
+                "PROPERTIES ('replication_num' = '1');";
+        starRocksAssert.withTable(duplicateTable);
+        try {
+            String createMV = "CREATE MATERIALIZED VIEW " + mvName + " " +
+                    "DISTRIBUTED BY HASH(k1) " +
+                    "AS SELECT k1, avg_union(avg_state(k2)) AS s " +
+                    "FROM " + tableName + " GROUP BY k1 HAVING avg(k2) > 10;";
+            String query = "SELECT k1, avg(k2) AS s FROM " + tableName +
+                    " GROUP BY k1 HAVING avg(k2) > 20;";
+
+            starRocksAssert.withMaterializedView(createMV).query(query).explainWithout(mvName);
+        } finally {
+            starRocksAssert.dropMaterializedView(mvName);
+            starRocksAssert.dropTable(tableName);
+        }
+    }
+
+    @Test
+    public void testMvHavingRandomDistributionRollupWithStrongerHaving() throws Exception {
+        String tableName = "having_random_base";
+        String mvName = "mv_having_random";
+        String duplicateTable = "CREATE TABLE " + tableName + " ( " +
+                "id bigint, region varchar(32), amount decimal(18, 2) ) " +
+                "DUPLICATE KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 3 " +
+                "PROPERTIES ('replication_num' = '1');";
+        starRocksAssert.withTable(duplicateTable);
+        try {
+            String createMV = "CREATE MATERIALIZED VIEW " + mvName + " " +
+                    "DISTRIBUTED BY RANDOM " +
+                    "REFRESH MANUAL " +
+                    "AS SELECT region, SUM(amount) AS s, COUNT(*) AS c " +
+                    "FROM " + tableName + " GROUP BY region HAVING SUM(amount) > 100;";
+            String query = "SELECT region, SUM(amount) AS s, COUNT(*) AS c FROM " + tableName +
+                    " GROUP BY region HAVING SUM(amount) > 200;";
+
+            starRocksAssert.withMaterializedView(createMV)
+                    .query(query)
+                    .explainContains("rollup: " + mvName, "PREDICATES:", "s > 200");
+        } finally {
+            starRocksAssert.dropMaterializedView(mvName);
+            starRocksAssert.dropTable(tableName);
+        }
+    }
+
+    @Test
     public void testAggFunctionInOrder() throws Exception {
         String duplicateTable = "CREATE TABLE " + TEST_TABLE_NAME + " ( k1 int(11) NOT NULL ,  k2  int(11) NOT NULL ,"
                 + "v1  varchar(4096) NOT NULL, v2  float NOT NULL , v3  decimal(20, 7) NOT NULL ) ENGINE=OLAP "
