@@ -68,6 +68,19 @@ Status CompactionTask::execute_index_major_compaction(TxnLogPB* txn_log) {
                 }
                 _context->stats->input_file_size += total_input_sstable_file_size;
             }
+            // Observability: count the PK persistent-index SST files this call just wrote to
+            // object storage. These are written AFTER fill_compaction_segment_info(), so they are
+            // not covered by the writer->ssts() counting there. Counting here also captures
+            // CloudNativeIndexCompactionTask, which never calls fill_compaction_segment_info().
+            if (txn_log->has_op_compaction()) {
+                int64_t index_sst_puts = txn_log->op_compaction().output_sstables_size();
+                if (txn_log->op_compaction().has_output_sstable()) {
+                    ++index_sst_puts;
+                }
+                if (index_sst_puts > 0) {
+                    StorageMetrics::instance()->lake_compaction_object_storage_put_count.increment(index_sst_puts);
+                }
+            }
             return Status::OK();
         }
     }

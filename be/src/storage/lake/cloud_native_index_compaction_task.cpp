@@ -16,6 +16,7 @@
 
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/txn_log.h"
+#include "storage/storage_metrics.h"
 
 namespace starrocks::lake {
 
@@ -34,6 +35,10 @@ Status CloudNativeIndexCompactionTask::execute(CancelFunc cancel_func, ThreadPoo
         _context->txn_log = txn_log;
     } else {
         RETURN_IF_ERROR(_tablet.tablet_manager()->put_txn_log(txn_log));
+        // One PUT for the txn log itself; the PK index SST PUTs were already counted inside
+        // execute_index_major_compaction(). When skip_write_txnlog is set the write is deferred
+        // to the caller, so it is not counted here.
+        StorageMetrics::instance()->lake_compaction_object_storage_put_count.increment(1);
     }
     VLOG(2) << "CloudNative Index compaction finished. tablet: " << _tablet.id() << ", txn_id: " << _txn_id
             << ", statistics: " << _context->stats->to_json_stats();
