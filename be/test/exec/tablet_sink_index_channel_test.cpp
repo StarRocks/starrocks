@@ -16,25 +16,17 @@
 
 #include <gtest/gtest.h>
 
-<<<<<<< HEAD:be/test/exec/tablet_sink_index_channel_test.cpp
-=======
 #include <atomic>
 #include <thread>
 
-#include "base/testutil/assert.h"
-#include "base/testutil/sync_point.h"
-#include "base/utility/defer_op.h"
-#include "common/config_exec_fwd.h"
-#include "common/config_ingest_fwd.h"
-#include "common/util/thrift_util.h"
-#include "exec/data_sinks/tablet_sink.h"
 #include "exec/pipeline/query_context.h"
->>>>>>> 777de828e2 ([BugFix] Fix race condition in TabletSinkSender::_send_chunk_by_node (#73820)):be/test/exec/data_sinks/tablet_sink_index_channel_test.cpp
 #include "exec/tablet_info.h"
 #include "exec/tablet_sink.h"
 #include "runtime/descriptor_helper.h"
 #include "storage/chunk_helper.h"
 #include "testutil/assert.h"
+#include "testutil/sync_point.h"
+#include "util/defer_op.h"
 #include "util/thrift_util.h"
 
 namespace starrocks {
@@ -413,8 +405,6 @@ TEST_F(TabletSinkIndexChannelTest, primary_replica_node_not_connected) {
     ASSERT_TRUE(status.message().find("[R1][E112]Not connected to [10.128.8.0:8060]") != std::string::npos);
 }
 
-<<<<<<< HEAD:be/test/exec/tablet_sink_index_channel_test.cpp
-=======
 // Verify that _send_request() releases protobuf memory via Swap before returning.
 // This prevents cross-tracker memory accounting mismatch where protobuf memory allocated
 // under process_mem_tracker (via SCOPED(nullptr)) would be freed under instance_mem_tracker.
@@ -477,7 +467,7 @@ TEST_F(TabletSinkIndexChannelTest, send_request_releases_protobuf_memory) {
 
     ASSERT_OK(sink->open(runtime_state.get()));
     auto tuple_desc = runtime_state->desc_tbl().get_tuple_descriptor(_desc_tbl.tupleDescriptors[0].id);
-    ChunkUniquePtr chunk = RuntimeChunkHelper::new_chunk(*tuple_desc, 1);
+    ChunkUniquePtr chunk = ChunkHelper::new_chunk(*tuple_desc, 1);
     chunk->get_column_raw_ptr_by_index(0)->append_datum(Datum(1));
     chunk->get_column_raw_ptr_by_index(1)->append_datum(Datum(int64_t(1)));
     ASSERT_OK(sink->send_chunk(runtime_state.get(), chunk.get()));
@@ -570,7 +560,7 @@ TEST_F(TabletSinkIndexChannelTest, ConcurrentSendAndIncrementalInit) {
 
     // Thread A: send a chunk (which calls _send_chunk_by_node, holding shared lock)
     auto tuple_desc = runtime_state->desc_tbl().get_tuple_descriptor(_desc_tbl.tupleDescriptors[0].id);
-    ChunkUniquePtr chunk = RuntimeChunkHelper::new_chunk(*tuple_desc, 1);
+    ChunkUniquePtr chunk = ChunkHelper::new_chunk(*tuple_desc, 1);
     chunk->get_column_raw_ptr_by_index(0)->append_datum(Datum(1));
     chunk->get_column_raw_ptr_by_index(1)->append_datum(Datum(int64_t(1)));
 
@@ -608,5 +598,4 @@ TEST_F(TabletSinkIndexChannelTest, ConcurrentSendAndIncrementalInit) {
     (void)sink->close(runtime_state.get(), Status::OK());
 }
 
->>>>>>> 777de828e2 ([BugFix] Fix race condition in TabletSinkSender::_send_chunk_by_node (#73820)):be/test/exec/data_sinks/tablet_sink_index_channel_test.cpp
 } // namespace starrocks
