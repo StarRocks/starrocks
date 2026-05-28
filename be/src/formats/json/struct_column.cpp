@@ -15,11 +15,8 @@
 #include "formats/json/struct_column.h"
 
 #include "column/struct_column.h"
-<<<<<<< HEAD
-=======
-#include "common/simdjson_util.h"
+#include "util/simdjson_util.h"
 #include "common/statusor.h"
->>>>>>> a609e20401 ([BugFix] Fix Json load nested types partial-append (#73715))
 #include "formats/json/nullable_column.h"
 #include "gutil/strings/substitute.h"
 
