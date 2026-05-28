@@ -38,13 +38,13 @@ public:
 private:
     StatusOr<std::unique_ptr<RandomAccessFile>> open_random_access_file(
             const TIcebergDeleteFile& delete_file, HdfsScanStats& fs_scan_stats, HdfsScanStats& app_scan_stats,
-            std::shared_ptr<io::SharedBufferedInputStream>& shared_buffered_input_stream,
-            std::shared_ptr<io::CacheInputStream>& cache_input_stream) const;
+            std::shared_ptr<SharedBufferedInputStream>& shared_buffered_input_stream,
+            std::shared_ptr<CacheInputStream>& cache_input_stream) const;
 
     static void update_delete_file_io_counter(
             RuntimeProfile* parent_profile, const HdfsScanStats& app_stats, const HdfsScanStats& fs_stats,
-            const std::shared_ptr<io::CacheInputStream>& cache_input_stream,
-            const std::shared_ptr<io::SharedBufferedInputStream>& shared_buffered_input_stream);
+            const std::shared_ptr<CacheInputStream>& cache_input_stream,
+            const std::shared_ptr<SharedBufferedInputStream>& shared_buffered_input_stream);
     Status fill_skip_rowids(const ChunkPtr& chunk) const;
 
     SkipRowsContextPtr _skip_rows_ctx;

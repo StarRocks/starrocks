@@ -20,13 +20,14 @@ endif()
 set(RUNTIME_CORE_TEST_FILES
     ${BE_TEST_MACOS_LINK_STUBS}
     current_thread_core_test.cpp
+    runtime_chunk_helper_test.cpp
     mem_tracker_test.cpp
     mem_pool_test.cpp
     load_fail_point_test.cpp
+    mysql_table_descriptor_core_test.cpp
     query_statistics_test.cpp
     runtime_state_core_test.cpp
     runtime_filter_core_test.cpp
-    thrift_rpc_helper_test.cpp
     memory/mem_chunk_allocator_test.cpp
     memory/system_allocator_test.cpp
     memory/memory_resource_test.cpp
@@ -57,6 +58,35 @@ target_link_libraries(starrocks_runtime_core_test_objs PRIVATE StarRocksPCH)
 set_target_properties(starrocks_runtime_core_test_objs PROPERTIES COMPILE_FLAGS "-fno-access-control")
 add_executable(runtime_core_test $<TARGET_OBJECTS:starrocks_runtime_core_test_objs>)
 target_link_libraries(runtime_core_test ${RUNTIME_CORE_TEST_LINK_LIBS} gtest_main)
+
+set(RUNTIME_ENV_TEST_LINK_LIBS
+    RuntimeEnv
+    RuntimeCore
+    Types
+    Common
+    Base
+    Gutil
+    StarRocksGen
+    hdfs
+    jvm
+    ${STARROCKS_DEPENDENCIES}
+    ${STARROCKS_STATIC_LINK_LIBS}
+    ${WL_LINK_DYNAMIC} ${STARROCKS_SYSTEM_LINK_LIBS} ${WRAP_LINKER_FLAGS}
+    ${WL_START_GROUP}
+    gmock
+    gtest
+    ${WL_END_GROUP}
+)
+
+set(RUNTIME_ENV_TEST_FILES
+    ${BE_TEST_MACOS_LINK_STUBS}
+    runtime_env_test.cpp
+    java_env_test.cpp
+)
+
+add_executable(runtime_env_test ${RUNTIME_ENV_TEST_FILES})
+target_link_libraries(runtime_env_test ${RUNTIME_ENV_TEST_LINK_LIBS} gtest_main)
+set_target_properties(runtime_env_test PROPERTIES COMPILE_FLAGS "-fno-access-control")
 
 set(STREAM_LOAD_METRICS_TEST_LINK_LIBS
     RuntimeCore

@@ -38,10 +38,10 @@
 #include "exprs/expr_executor.h"
 #include "exprs/expr_factory.h"
 #include "fs/fs_factory.h"
+#include "runtime/chunk_helper.h"
 #include "runtime/descriptors_ext.h"
 #include "runtime/global_dict/fragment_dict_state.h"
 #include "runtime/runtime_state.h"
-#include "storage/chunk_helper.h"
 
 namespace starrocks::connector {
 
@@ -675,6 +675,9 @@ void HiveDataSource::_init_counter(RuntimeState* state) {
     if (hdfs_scan_node.__isset.table_name) {
         _runtime_profile->add_info_string("Table", hdfs_scan_node.table_name);
     }
+    if (hdfs_scan_node.__isset.database_name) {
+        _runtime_profile->add_info_string("Database", hdfs_scan_node.database_name);
+    }
     if (hdfs_scan_node.__isset.sql_predicates) {
         _runtime_profile->add_info_string("Predicates", hdfs_scan_node.sql_predicates);
     }
@@ -886,7 +889,7 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
         use_kudu_jni_reader = scan_range.use_kudu_jni_reader;
     }
 
-    bool use_avro_jni_reader = false;
+    bool use_avro_jni_reader = true;
     if (scan_range.__isset.use_avro_jni_reader) {
         use_avro_jni_reader = scan_range.use_avro_jni_reader;
     }
@@ -1009,7 +1012,7 @@ Status HiveDataSource::get_next(RuntimeState* state, ChunkPtr* chunk) {
     // The column order of chunk is required to be invariable. In order to simplify the logic of each scanner,
     // we force to reorder the columns of chunk, so scanner doesn't have to care about the column order anymore.
     // The overhead of reorder is negligible because we only swap columns.
-    ChunkHelper::reorder_chunk(*_tuple_desc, chunk->get());
+    RuntimeChunkHelper::reorder_chunk(*_tuple_desc, chunk->get());
 
     return Status::OK();
 }
@@ -1018,7 +1021,7 @@ Status HiveDataSource::_init_chunk_if_needed(ChunkPtr* chunk, size_t n) {
     if ((*chunk) != nullptr && (*chunk)->num_columns() != 0) {
         return Status::OK();
     }
-    ASSIGN_OR_RETURN(*chunk, ChunkHelper::new_chunk_checked(*_tuple_desc, n));
+    ASSIGN_OR_RETURN(*chunk, RuntimeChunkHelper::new_chunk_checked(*_tuple_desc, n));
 
     return Status::OK();
 }

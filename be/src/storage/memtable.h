@@ -18,12 +18,12 @@
 #include <ostream>
 
 #include "column/vectorized_fwd.h"
-#include "exec/sorting/sort_permute.h"
+#include "compute_env/sorting/sort_permute.h"
 #include "gen_cpp/data.pb.h"
 #include "gen_cpp/olap_file.pb.h"
 #include "storage/chunk_aggregator.h"
 #include "storage/olap_define.h"
-#include "storage/primary_key_encoding_types.h"
+#include "storage/primitive/primary_key_encoding_types.h"
 
 namespace starrocks {
 

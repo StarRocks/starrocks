@@ -64,15 +64,15 @@ class MemTracker;
 /// By default, memory consumption is tracked via calls to Consume()/Release(), either to
 /// the tracker itself or to one of its descendents. Alternatively, a consumption metric
 /// can specified, and then the metric's value is used as the consumption rather than the
-/// tally maintained by Consume() and Release(). A tcmalloc metric is used to track
-/// process memory consumption, since the process memory usage may be higher than the
-/// computed total memory (tcmalloc does not release deallocated memory immediately).
+/// tally maintained by Consume() and Release(). Process memory is tracked separately
+/// because allocator-retained memory may make process usage higher than the computed
+/// total memory.
 //
 /// GcFunctions can be attached to a MemTracker in order to free up memory if the limit is
 /// reached. If LimitExceeded() is called and the limit is exceeded, it will first call
 /// the GcFunctions to try to free memory and recheck the limit. For example, the process
-/// tracker has a GcFunction that releases any unused memory still held by tcmalloc, so
-/// this will be called before the process limit is reported as exceeded. GcFunctions are
+/// tracker can have a GcFunction that releases unused memory, so this will be called
+/// before the process limit is reported as exceeded. GcFunctions are
 /// called in the order they are added, so expensive functions should be added last.
 /// GcFunctions are called with a global lock held, so should be non-blocking and not
 /// call back into MemTrackers, except to release memory.

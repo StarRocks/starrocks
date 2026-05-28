@@ -56,6 +56,7 @@
 #include "base/bit/rle_encoding.h"
 #include "base/compression/block_compression.h"
 #include "base/string/faststring.h"
+#include "base/utility/alignment.h"
 #include "common/bloom_filter.h"
 #include "storage/rowset/array_column_writer.h"
 #include "storage/rowset/bitmap_index_writer.h"
@@ -947,6 +948,14 @@ Status StringColumnWriter::finish() {
         if (!st.ok()) {
             return st;
         }
+    } else {
+        // No append ever ran, so the deferred speculate-and-set-encoding in
+        // append() never ran either and the inner ScalarColumnWriter still has
+        // _encoding_info == nullptr. ScalarColumnWriter::finish() dereferences
+        // _encoding_info unconditionally, so install a default encoding here
+        // before forwarding. DEFAULT_ENCODING resolves to the type's default
+        // inside EncodingInfo::get().
+        RETURN_IF_ERROR(_scalar_column_writer->set_encoding(DEFAULT_ENCODING));
     }
 
     return _scalar_column_writer->finish();
@@ -1103,6 +1112,11 @@ Status DictColumnWriter::finish() {
         if (!st.ok()) {
             return st;
         }
+    } else {
+        // Same deferred-encoding hazard as StringColumnWriter::finish(): with
+        // zero appends the inner ScalarColumnWriter has _encoding_info ==
+        // nullptr, and its finish() would deref it.
+        RETURN_IF_ERROR(_scalar_column_writer->set_encoding(DEFAULT_ENCODING));
     }
 
     return _scalar_column_writer->finish();

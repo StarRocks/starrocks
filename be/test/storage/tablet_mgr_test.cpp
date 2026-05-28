@@ -36,15 +36,16 @@
 #include <memory>
 #include <string>
 
+#include "column/chunk_factory.h"
 #include "common/config_storage_fwd.h"
 #include "fs/fs_util.h"
 #include "gtest/gtest.h"
 #include "runtime/mem_tracker.h"
 #include "storage/chunk_helper.h"
-#include "storage/chunk_iterator.h"
 #include "storage/compaction_manager.h"
 #include "storage/kv_store.h"
 #include "storage/olap_common.h"
+#include "storage/primitive/chunk_iterator.h"
 #include "storage/rowset/column_iterator.h"
 #include "storage/rowset/column_reader.h"
 #include "storage/rowset/metadata_cache.h"
@@ -367,14 +368,14 @@ static void create_rowset_writer_context(RowsetWriterContext* rowset_writer_cont
 static void rowset_writer_add_rows(std::unique_ptr<RowsetWriter>& writer, const TabletSchemaCSPtr& tablet_schema) {
     std::vector<std::string> test_data;
     auto schema = ChunkHelper::convert_schema(tablet_schema);
-    auto chunk = ChunkHelper::new_chunk(schema, 1024);
+    auto chunk = ChunkFactory::new_chunk(schema, 1024);
     for (size_t i = 0; i < 1024; ++i) {
         test_data.push_back("well" + std::to_string(i));
-        auto cols = chunk->mutable_columns();
-        cols[0]->append_datum(Datum(static_cast<int32_t>(i)));
+        auto cols = chunk->columns();
+        cols[0]->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(i)));
         Slice field_1(test_data[i]);
-        cols[1]->append_datum(Datum(field_1));
-        cols[2]->append_datum(Datum(static_cast<int32_t>(10000 + i)));
+        cols[1]->as_mutable_ptr()->append_datum(Datum(field_1));
+        cols[2]->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(10000 + i)));
     }
     auto st = writer->add_chunk(*chunk);
     ASSERT_TRUE(st.ok()) << st.to_string() << ", version:" << writer->version();

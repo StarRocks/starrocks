@@ -257,7 +257,12 @@ struct TSchemaTableSink {
 
 enum TIcebergWriteMode {
     APPEND,
-    ROW_DELTA
+    // Iceberg row-delta UPDATE layout:
+    //   [_file, _pos, data_col1, ..., data_colN]
+    ROW_DELTA_UPDATE,
+    // Iceberg row-delta mixed-operation layout:
+    //   [_file, _pos, data_col1, ..., data_colN, op_code]
+    ROW_DELTA_MIXED
 }
 
 struct TIcebergTableSink {
@@ -271,7 +276,8 @@ struct TIcebergTableSink {
     7: optional i64 target_max_file_size
     8: optional i32 tuple_id
     9: optional string data_location
-    // write mode: ROW_DELTA for UPDATE / MERGE (mixed delete + data files)
+    // write mode: ROW_DELTA_UPDATE for pure UPDATE, ROW_DELTA_MIXED for MERGE-style
+    // mixed routing (delete / update / insert / no-op)
     10: optional TIcebergWriteMode write_mode
     // Codec for position-delete files. `compression_type` is the codec for data
     // files. Each sink populates only the field(s) it actually writes:

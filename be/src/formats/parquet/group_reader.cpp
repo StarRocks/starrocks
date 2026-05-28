@@ -53,8 +53,8 @@
 #include "formats/parquet/scalar_column_reader.h"
 #include "formats/parquet/schema.h"
 #include "gen_cpp/Exprs_types.h"
+#include "runtime/chunk_helper.h"
 #include "runtime/mem_pool.h"
-#include "storage/chunk_helper.h"
 #include "storage/convert_helper.h"
 #include "types/type_descriptor.h"
 #include "utils.h"
@@ -76,7 +76,7 @@ namespace {
 // Note: this only handles *exact* duplicates (identical offset and size).  True byte-range
 // overlaps are not expected because the parquet format guarantees that column chunks for
 // different columns occupy non-overlapping byte ranges within the file.
-void deduplicate_io_ranges(std::vector<io::SharedBufferedInputStream::IORange>* ranges) {
+void deduplicate_io_ranges(std::vector<SharedBufferedInputStream::IORange>* ranges) {
     if (ranges == nullptr || ranges->size() <= 1) {
         return;
     }
@@ -486,7 +486,7 @@ Status GroupReader::prepare() {
     // 2. collect io ranges of every row group reader.
     // 3. set io ranges to the stream.
     if (config::parquet_coalesce_read_enable && _param.sb_stream != nullptr) {
-        std::vector<io::SharedBufferedInputStream::IORange> ranges;
+        std::vector<SharedBufferedInputStream::IORange> ranges;
         int64_t end_offset = 0;
         collect_io_ranges(&ranges, &end_offset, ColumnIOType::PAGES);
         int32_t counter = _param.lazy_column_coalesce_counter->load(std::memory_order_relaxed);
@@ -962,6 +962,7 @@ VariantShreddedReadHints GroupReader::_get_variant_shredded_hints(std::string_vi
 
 Status GroupReader::_create_column_readers() {
     SCOPED_RAW_TIMER(&_param.stats->column_reader_init_ns);
+    _global_dict_applied_in_group = false;
     // ColumnReaderOptions is used by all column readers in one row group
     ColumnReaderOptions& opts = _column_reader_opts;
     opts.file_meta_data = _param.file_metadata;
@@ -1132,6 +1133,13 @@ Status GroupReader::_create_column_readers() {
                                                                               projection.target_type));
     }
 
+    if (_param.stats != nullptr) {
+        _param.stats->global_dict_total_row_groups++;
+        if (_global_dict_applied_in_group) {
+            _param.stats->global_dict_applied_row_groups++;
+        }
+    }
+
     return Status::OK();
 }
 
@@ -1153,10 +1161,20 @@ StatusOr<ColumnReaderPtr> GroupReader::_create_column_reader(const GroupReaderPa
                                                          column.t_lake_schema_field));
         }
         if (_param.global_dictmaps->contains(column.slot_id())) {
+            GlobalDictReaderKind kind = GlobalDictReaderKind::kNone;
             ASSIGN_OR_RETURN(
                     column_reader,
                     ColumnReaderFactory::create(std::move(column_reader), _param.global_dictmaps->at(column.slot_id()),
-                                                column.slot_id(), _row_group_metadata->num_rows));
+                                                column.slot_id(), _row_group_metadata->num_rows, &kind));
+            if (_param.stats != nullptr && kind != GlobalDictReaderKind::kNone) {
+                _param.stats->global_dict_applied_slots++;
+                if (kind == GlobalDictReaderKind::kDictCode) {
+                    _param.stats->global_dict_dict_code_reader_slots++;
+                } else if (kind == GlobalDictReaderKind::kLowRowsEncode) {
+                    _param.stats->global_dict_encode_reader_slots++;
+                }
+                _global_dict_applied_in_group = true;
+            }
         }
         if (column_reader == nullptr) {
             // this shouldn't happen but guard
@@ -1580,7 +1598,7 @@ ChunkPtr GroupReader::_create_read_chunk(const std::vector<SlotId>& slot_ids, bo
     return chunk;
 }
 
-void GroupReader::collect_io_ranges(std::vector<io::SharedBufferedInputStream::IORange>* ranges, int64_t* end_offset,
+void GroupReader::collect_io_ranges(std::vector<SharedBufferedInputStream::IORange>* ranges, int64_t* end_offset,
                                     ColumnIOTypeFlags types) {
     int64_t end = 0;
     // collect io of active column
@@ -1619,7 +1637,7 @@ Status GroupReader::_init_read_chunk() {
         }
     }
     size_t chunk_size = _param.chunk_size;
-    ASSIGN_OR_RETURN(_read_chunk, ChunkHelper::new_chunk_checked(read_slots, chunk_size));
+    ASSIGN_OR_RETURN(_read_chunk, RuntimeChunkHelper::new_chunk_checked(read_slots, chunk_size));
     // Only pre-allocate active hidden sources in _read_chunk so they can be shared with
     // active_chunk.  Lazy hidden sources are created fresh each iteration in Phase 6
     // and merged into active_chunk there; they do not need a permanent slot here.

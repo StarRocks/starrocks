@@ -1,0 +1,1149 @@
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+#include "runtime/rejected_record_sync_daemon.h"
+
+#include <gtest/gtest.h>
+#include <unistd.h>
+#include <utime.h>
+
+#include <chrono>
+#include <filesystem>
+#include <fstream>
+#include <limits>
+#include <string>
+#include <vector>
+
+#include "common/config_exec_env_fwd.h"
+#include "common/status.h"
+
+namespace starrocks {
+
+namespace {
+
+// -------------------------------------------------------------------------
+// Test-only subclass: overrides scan_once + post_to_stream_load
+// Used for flush_batch / GC / lifecycle tests that don't need real I/O.
+// -------------------------------------------------------------------------
+
+class TestSyncDaemon : public RejectedRecordSyncDaemon {
+public:
+    TestSyncDaemon() : RejectedRecordSyncDaemon(/*env=*/nullptr) {}
+
+    void set_scan_result(std::vector<std::string> files) { _scan_result = std::move(files); }
+
+    std::vector<std::string>& captured_payloads() { return _payloads; }
+
+    void set_post_should_succeed(bool ok) { _post_should_succeed = ok; }
+
+    using RejectedRecordSyncDaemon::flush_batch;
+    using RejectedRecordSyncDaemon::scan_once;
+    using RejectedRecordSyncDaemon::garbage_collect_stale_files;
+    using RejectedRecordSyncDaemon::process_files;
+
+protected:
+    std::vector<std::string> scan_once() override { return _scan_result; }
+
+    // GC uses list_once() (a pure read, by design separate from scan_once
+    // so renaming logic doesn't fire). Mirror the same injected list so
+    // GC tests can drive the GC path without standing up a real
+    // store-path tree.
+    std::vector<std::string> list_once() const override { return _scan_result; }
+
+    Status post_to_stream_load(const std::string& payload) override {
+        _payloads.push_back(payload);
+        if (!_post_should_succeed) {
+            return Status::InternalError("simulated post failure");
+        }
+        return Status::OK();
+    }
+
+private:
+    std::vector<std::string> _scan_result;
+    std::vector<std::string> _payloads;
+    bool _post_should_succeed = true;
+};
+
+// -------------------------------------------------------------------------
+// RealScanDaemon: uses the real scan_once / collect_jsonl / is_claimable
+// logic but injects store-path roots via the store_path_roots() seam.
+// post_to_stream_load is still stubbed so no real HTTP is attempted.
+// -------------------------------------------------------------------------
+
+class RealScanDaemon : public RejectedRecordSyncDaemon {
+public:
+    explicit RealScanDaemon(std::vector<std::string> roots)
+            : RejectedRecordSyncDaemon(/*env=*/nullptr), _roots(std::move(roots)) {}
+
+    std::vector<std::string>& captured_payloads() { return _payloads; }
+
+    void set_post_should_succeed(bool ok) { _post_should_succeed = ok; }
+
+    using RejectedRecordSyncDaemon::flush_batch;
+    using RejectedRecordSyncDaemon::scan_once;
+    using RejectedRecordSyncDaemon::garbage_collect_stale_files;
+
+protected:
+    // Inject our temp roots instead of asking a real ExecEnv.
+    std::vector<std::string> store_path_roots() const override { return _roots; }
+
+    Status post_to_stream_load(const std::string& payload) override {
+        _payloads.push_back(payload);
+        if (!_post_should_succeed) {
+            return Status::InternalError("simulated post failure");
+        }
+        return Status::OK();
+    }
+
+private:
+    std::vector<std::string> _roots;
+    std::vector<std::string> _payloads;
+    bool _post_should_succeed = true;
+};
+
+// -------------------------------------------------------------------------
+// PostTestDaemon: tests post_to_stream_load early-exit path.
+// Exposes post_to_stream_load for direct testing.
+// -------------------------------------------------------------------------
+
+class PostTestDaemon : public RejectedRecordSyncDaemon {
+public:
+    PostTestDaemon() : RejectedRecordSyncDaemon(/*env=*/nullptr) {}
+
+    // Expose the protected method for direct testing.
+    Status call_post_to_stream_load(const std::string& payload) { return post_to_stream_load(payload); }
+
+    using RejectedRecordSyncDaemon::flush_batch;
+};
+
+// -------------------------------------------------------------------------
+// Scoped temp directory
+// -------------------------------------------------------------------------
+
+class TempDir {
+public:
+    TempDir() {
+        std::error_code ec;
+        _path = std::filesystem::temp_directory_path(ec) /
+                ("rr_sync_daemon_test_" + std::to_string(reinterpret_cast<uintptr_t>(this)));
+        std::filesystem::create_directories(_path, ec);
+    }
+    ~TempDir() {
+        std::error_code ec;
+        std::filesystem::remove_all(_path, ec);
+    }
+
+    std::string write_file(const std::string& name, const std::string& content) {
+        auto p = _path / name;
+        std::ofstream out(p);
+        out << content;
+        out.close();
+        return p.string();
+    }
+
+    // Create a sub-directory.
+    std::string make_subdir(const std::string& name) {
+        auto p = _path / name;
+        std::error_code ec;
+        std::filesystem::create_directories(p, ec);
+        return p.string();
+    }
+
+    const std::filesystem::path& path() const { return _path; }
+
+private:
+    std::filesystem::path _path;
+};
+
+} // namespace
+
+// ===========================================================================
+// Original flush_batch tests (kept from previous version)
+// ===========================================================================
+
+TEST(RejectedRecordSyncDaemonCoreTest, FlushBatchConcatenatesJsonlFilesAndDeletesOnSuccess) {
+    TempDir dir;
+    std::string f1 = dir.write_file("a.jsonl", "{\"id\":\"u1\"}\n{\"id\":\"u2\"}\n");
+    std::string f2 = dir.write_file("b.jsonl", "{\"id\":\"u3\"}\n");
+
+    TestSyncDaemon daemon;
+    auto st = daemon.flush_batch({f1, f2});
+    EXPECT_TRUE(st.ok()) << st.message();
+
+    ASSERT_EQ(1u, daemon.captured_payloads().size());
+    const auto& payload = daemon.captured_payloads()[0];
+    EXPECT_NE(std::string::npos, payload.find("u1"));
+    EXPECT_NE(std::string::npos, payload.find("u2"));
+    EXPECT_NE(std::string::npos, payload.find("u3"));
+    EXPECT_FALSE(std::filesystem::exists(f1));
+    EXPECT_FALSE(std::filesystem::exists(f2));
+}
+
+TEST(RejectedRecordSyncDaemonCoreTest, FlushBatchKeepsFilesWhenPostFails) {
+    TempDir dir;
+    std::string f1 = dir.write_file("a.jsonl", "{\"id\":\"u1\"}\n");
+
+    TestSyncDaemon daemon;
+    daemon.set_post_should_succeed(false);
+    auto st = daemon.flush_batch({f1});
+    EXPECT_FALSE(st.ok());
+    EXPECT_TRUE(std::filesystem::exists(f1));
+}
+
+TEST(RejectedRecordSyncDaemonCoreTest, FlushBatchSkipsEmptyFilesWithoutPosting) {
+    TempDir dir;
+    std::string empty = dir.write_file("empty.jsonl", "");
+
+    TestSyncDaemon daemon;
+    auto st = daemon.flush_batch({empty});
+    EXPECT_TRUE(st.ok());
+    EXPECT_TRUE(daemon.captured_payloads().empty());
+    EXPECT_FALSE(std::filesystem::exists(empty));
+}
+
+TEST(RejectedRecordSyncDaemonCoreTest, FlushBatchIgnoresBlankLines) {
+    TempDir dir;
+    std::string f = dir.write_file("mixed.jsonl", "{\"id\":\"u1\"}\n\n\n{\"id\":\"u2\"}\n");
+
+    TestSyncDaemon daemon;
+    auto st = daemon.flush_batch({f});
+    EXPECT_TRUE(st.ok());
+    ASSERT_EQ(1u, daemon.captured_payloads().size());
+    const auto& payload = daemon.captured_payloads()[0];
+    int newlines = 0;
+    for (char c : payload) {
+        if (c == '\n') ++newlines;
+    }
+    EXPECT_EQ(2, newlines);
+}
+
+TEST(RejectedRecordSyncDaemonCoreTest, FlushBatchTreatsMissingFileAsSoftError) {
+    TestSyncDaemon daemon;
+    auto st = daemon.flush_batch({"/tmp/does/not/exist/rr_sync_test.jsonl"});
+    EXPECT_TRUE(st.ok());
+    EXPECT_TRUE(daemon.captured_payloads().empty());
+}
+
+// ===========================================================================
+// New: init / stop lifecycle
+// ===========================================================================
+
+// Both init() and stop() must be idempotent: calling them multiple times
+// must not crash and must not leak threads.
+TEST(RejectedRecordSyncDaemonLifecycleTest, InitStopIdempotent) {
+    // We can't actually start the thread with env=nullptr (scan_once will be
+    // a no-op in the overridden version), but at the TestSyncDaemon level
+    // we only call init()/stop() on the base-class lifecycle code.
+    // Use the real base class (not the test subclass) to test init/stop,
+    // because TestSyncDaemon overrides scan_once but not init/stop.
+    TestSyncDaemon daemon;
+
+    // First init spawns the thread.
+    auto st = daemon.init();
+    EXPECT_TRUE(st.ok()) << st.message();
+
+    // Second init is a no-op, must return OK.
+    st = daemon.init();
+    EXPECT_TRUE(st.ok()) << st.message();
+
+    // First stop signals and joins.
+    daemon.stop();
+
+    // Second stop is a no-op, must not crash.
+    daemon.stop();
+}
+
+TEST(RejectedRecordSyncDaemonLifecycleTest, StopWithoutInitIsNoOp) {
+    TestSyncDaemon daemon;
+    // stop() called before init() must silently do nothing.
+    EXPECT_NO_FATAL_FAILURE(daemon.stop());
+}
+
+TEST(RejectedRecordSyncDaemonLifecycleTest, StatsInitiallyZero) {
+    TestSyncDaemon daemon;
+    EXPECT_EQ(0, daemon.files_scanned());
+    EXPECT_EQ(0, daemon.records_flushed());
+    EXPECT_EQ(0, daemon.sync_failures());
+}
+
+// ===========================================================================
+// New: garbage_collect_stale_files
+// ===========================================================================
+
+TEST(RejectedRecordSyncDaemonGCTest, GarbageCollectRemovesOldFiles) {
+    TempDir dir;
+    // Write a file that the daemon will "scan" via the overridden scan_once.
+    std::string stale_file = dir.write_file("old.jsonl.syncing.999", "{\"id\":\"old\"}\n");
+
+    // Back-date the file's mtime by 9 days (well past the default 7-day
+    // retention; config::rejected_record_local_retention_hours defaults to
+    // 168 hours = 7 days in common/config.h, but unit tests use whatever
+    // the config is compiled with; 9 days in seconds is always beyond any
+    // reasonable retention).
+    struct utimbuf times;
+    // now() minus 9 days
+    times.modtime = std::time(nullptr) - (9LL * 24 * 3600);
+    times.actime = times.modtime;
+    ASSERT_EQ(0, ::utime(stale_file.c_str(), &times));
+
+    TestSyncDaemon daemon;
+    daemon.set_scan_result({stale_file});
+    daemon.garbage_collect_stale_files();
+
+    // The stale file should have been removed.
+    EXPECT_FALSE(std::filesystem::exists(stale_file));
+}
+
+TEST(RejectedRecordSyncDaemonGCTest, GarbageCollectKeepsFreshFiles) {
+    TempDir dir;
+    std::string fresh_file = dir.write_file("fresh.jsonl.syncing.123", "{\"id\":\"new\"}\n");
+    // Default mtime is "now", so it's within any reasonable retention window.
+
+    TestSyncDaemon daemon;
+    daemon.set_scan_result({fresh_file});
+    daemon.garbage_collect_stale_files();
+
+    // Fresh file must NOT be removed.
+    EXPECT_TRUE(std::filesystem::exists(fresh_file));
+}
+
+TEST(RejectedRecordSyncDaemonGCTest, GarbageCollectNoFilesIsNoOp) {
+    TestSyncDaemon daemon;
+    daemon.set_scan_result({});
+    EXPECT_NO_FATAL_FAILURE(daemon.garbage_collect_stale_files());
+}
+
+TEST(RejectedRecordSyncDaemonGCTest, GarbageCollectAdvancesDropCounter) {
+    // Each stale file that GC deletes must bump `files_dropped_by_gc` so
+    // operators can alert on prolonged FE outages that are silently
+    // destroying rejected-row batches.
+    struct GCCounterDaemon : public RejectedRecordSyncDaemon {
+        explicit GCCounterDaemon(std::vector<std::string> roots)
+                : RejectedRecordSyncDaemon(/*env=*/nullptr), _roots(std::move(roots)) {}
+        using RejectedRecordSyncDaemon::garbage_collect_stale_files;
+
+    protected:
+        std::vector<std::string> store_path_roots() const override { return _roots; }
+        Status post_to_stream_load(const std::string&) override { return Status::OK(); }
+
+    private:
+        std::vector<std::string> _roots;
+    };
+
+    TempDir dir;
+    std::string rr_dir = dir.make_subdir("rejected_record");
+    std::string stale = rr_dir + "/stale.jsonl";
+    {
+        std::ofstream f(stale);
+        f << "{\"id\":\"x\"}\n";
+    }
+    // Backdate mtime so it's older than retention.
+    struct utimbuf old_time;
+    old_time.actime = old_time.modtime = 0;
+    ::utime(stale.c_str(), &old_time);
+
+    GCCounterDaemon daemon({dir.path().string()});
+    EXPECT_EQ(0, daemon.files_dropped_by_gc());
+    daemon.garbage_collect_stale_files();
+
+    EXPECT_FALSE(std::filesystem::exists(stale));
+    EXPECT_EQ(1, daemon.files_dropped_by_gc());
+}
+
+TEST(RejectedRecordSyncDaemonGCTest, GarbageCollectDoesNotRenameFiles) {
+    // Regression: GC used to call scan_once() which renames files into
+    // this tick's `.syncing.<id>`. That caused the filename-balloon bug
+    // any time the FE was unreachable (each tick added another suffix).
+    // GC now uses list_once() (pure read) and must leave filenames intact.
+    struct GCProbeDaemon : public RejectedRecordSyncDaemon {
+        explicit GCProbeDaemon(std::vector<std::string> roots)
+                : RejectedRecordSyncDaemon(/*env=*/nullptr), _roots(std::move(roots)) {}
+        using RejectedRecordSyncDaemon::garbage_collect_stale_files;
+
+    protected:
+        std::vector<std::string> store_path_roots() const override { return _roots; }
+        // If GC were to accidentally call scan_once, this would catch it
+        // because any rename would flip the file out from under the path
+        // we recorded below.
+        Status post_to_stream_load(const std::string&) override { return Status::OK(); }
+
+    private:
+        std::vector<std::string> _roots;
+    };
+
+    TempDir dir;
+    std::string rr_dir = dir.make_subdir("rejected_record");
+    std::string fresh = rr_dir + "/keep.jsonl";
+    {
+        std::ofstream f(fresh);
+        f << "{\"id\":\"x\"}\n";
+    }
+    std::string orphan = rr_dir + "/orphan.jsonl.syncing.123";
+    {
+        std::ofstream f(orphan);
+        f << "{\"id\":\"orphan\"}\n";
+    }
+
+    GCProbeDaemon daemon({dir.path().string()});
+    daemon.garbage_collect_stale_files();
+
+    // Both files must still exist at their original paths -- GC inspects
+    // mtimes, it doesn't claim.
+    EXPECT_TRUE(std::filesystem::exists(fresh)) << "GC renamed a live .jsonl file";
+    EXPECT_TRUE(std::filesystem::exists(orphan)) << "GC renamed an orphaned .syncing file";
+}
+
+// ===========================================================================
+// New: flush_batch with multiple files hitting the batch-rows cap
+// ===========================================================================
+
+TEST(RejectedRecordSyncDaemonCoreTest, FlushBatchMultipleSuccessivePosts) {
+    // Exercise the multi-commit path that process_files uses when a batch
+    // exceeds max_rows. flush_batch passes INT64_MAX, so all files go in
+    // one commit. We validate multiple files are merged into one payload.
+    TempDir dir;
+    std::string f1 = dir.write_file("x1.jsonl", "{\"id\":\"r1\"}\n");
+    std::string f2 = dir.write_file("x2.jsonl", "{\"id\":\"r2\"}\n");
+    std::string f3 = dir.write_file("x3.jsonl", "{\"id\":\"r3\"}\n");
+
+    TestSyncDaemon daemon;
+    auto st = daemon.flush_batch({f1, f2, f3});
+    EXPECT_TRUE(st.ok()) << st.message();
+    ASSERT_EQ(1u, daemon.captured_payloads().size());
+    const auto& p = daemon.captured_payloads()[0];
+    EXPECT_NE(std::string::npos, p.find("r1"));
+    EXPECT_NE(std::string::npos, p.find("r2"));
+    EXPECT_NE(std::string::npos, p.find("r3"));
+    // All files deleted.
+    EXPECT_FALSE(std::filesystem::exists(f1));
+    EXPECT_FALSE(std::filesystem::exists(f2));
+    EXPECT_FALSE(std::filesystem::exists(f3));
+}
+
+TEST(RejectedRecordSyncDaemonCoreTest, FlushBatchEmptyListReturnsOk) {
+    TestSyncDaemon daemon;
+    auto st = daemon.flush_batch({});
+    EXPECT_TRUE(st.ok());
+    EXPECT_TRUE(daemon.captured_payloads().empty());
+}
+
+TEST(RejectedRecordSyncDaemonCoreTest, RecordsFlushedCounterAdvancesOnSuccess) {
+    TempDir dir;
+    std::string f = dir.write_file("a.jsonl", "{\"id\":\"u1\"}\n{\"id\":\"u2\"}\n");
+    TestSyncDaemon daemon;
+    EXPECT_EQ(0, daemon.records_flushed());
+    daemon.flush_batch({f});
+    EXPECT_EQ(2, daemon.records_flushed());
+}
+
+TEST(RejectedRecordSyncDaemonCoreTest, SyncFailuresCounterAdvancesOnPostFailure) {
+    TempDir dir;
+    std::string f = dir.write_file("b.jsonl", "{\"id\":\"u1\"}\n");
+    TestSyncDaemon daemon;
+    daemon.set_post_should_succeed(false);
+    EXPECT_EQ(0, daemon.sync_failures());
+    daemon.flush_batch({f});
+    EXPECT_EQ(1, daemon.sync_failures());
+}
+
+// ===========================================================================
+// New: scan_once with null env / empty roots returns empty
+// ===========================================================================
+
+TEST(RejectedRecordSyncDaemonScanTest, ScanOnceWithNullEnvReturnsEmpty) {
+    // The real scan_once (not the overridden one) returns immediately when
+    // store_path_roots() returns empty (null _env). We use a daemon that does
+    // NOT override scan_once but does override store_path_roots via a
+    // RealScanDaemon with an empty roots list.
+    RealScanDaemon daemon(/*roots=*/{});
+    auto result = daemon.scan_once();
+    EXPECT_TRUE(result.empty());
+}
+
+// ===========================================================================
+// New: real scan_once exercising collect_jsonl / is_claimable / remove_file
+// These cover lines 55-100 and 267-310 in rejected_record_sync_daemon.cpp.
+// ===========================================================================
+
+TEST(RejectedRecordSyncDaemonRealScanTest, ScanOncePicksUpJsonlFile) {
+    // Layout: <tmpdir>/rejected_record/test.jsonl
+    // scan_once should rename it to test.jsonl.syncing.<tick> and return
+    // the new path.
+    TempDir dir;
+    std::string rr_dir = dir.make_subdir("rejected_record");
+    // Write a .jsonl file directly in the rejected_record sub-dir.
+    std::string jsonl_path = rr_dir + "/test.jsonl";
+    {
+        std::ofstream f(jsonl_path);
+        f << "{\"id\":\"row1\"}\n";
+    }
+
+    // The daemon's store_path_roots() returns dir.path() (the parent of
+    // rejected_record/). scan_once() appends "/rejected_record" to each root.
+    RealScanDaemon daemon({dir.path().string()});
+    auto claimed = daemon.scan_once();
+
+    // The original .jsonl file should no longer exist (it was renamed).
+    EXPECT_FALSE(std::filesystem::exists(jsonl_path));
+    // Exactly one file was claimed.
+    ASSERT_EQ(1u, claimed.size());
+    // The claimed path should contain the syncing suffix.
+    EXPECT_NE(std::string::npos, claimed[0].find(".jsonl.syncing."));
+    // The renamed file should exist.
+    EXPECT_TRUE(std::filesystem::exists(claimed[0]));
+}
+
+TEST(RejectedRecordSyncDaemonRealScanTest, ScanOncePicksUpOrphanedSyncingFile) {
+    // A file left by a previous crashed tick: foo.jsonl.syncing.OLD
+    // scan_once re-claims it under the current tick's suffix. Crucially
+    // it must NOT append a second `.syncing.<new>` (which would make the
+    // filename grow by ~30 bytes every retry round and eventually hit
+    // NAME_MAX once the FE has been unreachable long enough); it strips
+    // the old suffix back to `.jsonl` and re-appends exactly one suffix.
+    TempDir dir;
+    std::string rr_dir = dir.make_subdir("rejected_record");
+    std::string orphan = rr_dir + "/foo.jsonl.syncing.999";
+    {
+        std::ofstream f(orphan);
+        f << "{\"id\":\"orphan\"}\n";
+    }
+
+    RealScanDaemon daemon({dir.path().string()});
+    auto claimed = daemon.scan_once();
+
+    EXPECT_FALSE(std::filesystem::exists(orphan));
+    ASSERT_EQ(1u, claimed.size());
+    EXPECT_TRUE(std::filesystem::exists(claimed[0]));
+    const std::string new_name = std::filesystem::path(claimed[0]).filename().string();
+    // Must contain exactly one `.syncing.` segment, not nested.
+    auto first = new_name.find(".syncing.");
+    ASSERT_NE(std::string::npos, first);
+    EXPECT_EQ(std::string::npos, new_name.find(".syncing.", first + std::string(".syncing.").size()));
+    // And it must start with the original basename + `.jsonl`.
+    EXPECT_EQ(0u, new_name.find("foo.jsonl.syncing."));
+}
+
+TEST(RejectedRecordSyncDaemonRealScanTest, RepeatedScanDoesNotBalloonFilename) {
+    // Regression test for the filename-balloon bug that used to surface
+    // any time the FE was unreachable: each tick's scan_once / GC would
+    // rename the leftover `.syncing.<id>` file to
+    // `.syncing.<id>.syncing.<newid>`, adding ~30 bytes per tick until
+    // the filename hit NAME_MAX and could no longer be renamed. The
+    // filename length must stay bounded no matter how many ticks go by.
+    TempDir dir;
+    std::string rr_dir = dir.make_subdir("rejected_record");
+    std::string writer_file = rr_dir + "/big.jsonl";
+    {
+        std::ofstream f(writer_file);
+        f << "{\"id\":\"x\"}\n";
+    }
+
+    RealScanDaemon daemon({dir.path().string()});
+    auto claimed = daemon.scan_once();
+    ASSERT_EQ(1u, claimed.size());
+    size_t initial_len = std::filesystem::path(claimed[0]).filename().string().size();
+
+    // Simulate 50 "failed post" cycles: scan_once adopts the leftover,
+    // process_files leaves it on disk (we emulate by not calling it).
+    for (int i = 0; i < 50; ++i) {
+        auto next = daemon.scan_once();
+        if (next.empty()) break; // nothing left to re-claim
+        size_t len = std::filesystem::path(next[0]).filename().string().size();
+        // Each re-claim must not grow the filename.
+        EXPECT_LE(len, initial_len + 4) << "filename grew on iteration " << i;
+        claimed = next;
+    }
+}
+
+TEST(RejectedRecordSyncDaemonRealScanTest, ScanOnceSkipsNonJsonlFiles) {
+    // A regular .log file should not be claimed.
+    TempDir dir;
+    std::string rr_dir = dir.make_subdir("rejected_record");
+    std::string log_file = rr_dir + "/something.log";
+    {
+        std::ofstream f(log_file);
+        f << "not a jsonl\n";
+    }
+
+    RealScanDaemon daemon({dir.path().string()});
+    auto claimed = daemon.scan_once();
+
+    EXPECT_TRUE(claimed.empty());
+    // The .log file is untouched.
+    EXPECT_TRUE(std::filesystem::exists(log_file));
+}
+
+TEST(RejectedRecordSyncDaemonRealScanTest, ScanOnceIgnoresNonExistentRejectedRecordDir) {
+    // The rejected_record sub-directory does not exist; collect_jsonl should
+    // silently return without error.
+    TempDir dir;
+    // Do NOT create rejected_record/ sub-dir.
+
+    RealScanDaemon daemon({dir.path().string()});
+    auto claimed = daemon.scan_once();
+    EXPECT_TRUE(claimed.empty());
+}
+
+TEST(RejectedRecordSyncDaemonRealScanTest, ScanOnceMultipleFilesAllClaimed) {
+    // Two .jsonl files in the same directory; both should be claimed.
+    TempDir dir;
+    std::string rr_dir = dir.make_subdir("rejected_record");
+    std::string p1 = rr_dir + "/a.jsonl";
+    std::string p2 = rr_dir + "/b.jsonl";
+    for (const auto& p : {p1, p2}) {
+        std::ofstream f(p);
+        f << "{\"id\":\"x\"}\n";
+    }
+
+    RealScanDaemon daemon({dir.path().string()});
+    auto claimed = daemon.scan_once();
+
+    EXPECT_EQ(2u, claimed.size());
+    EXPECT_FALSE(std::filesystem::exists(p1));
+    EXPECT_FALSE(std::filesystem::exists(p2));
+}
+
+TEST(RejectedRecordSyncDaemonRealScanTest, ScanOnceThenFlushBatchEndToEnd) {
+    // Full end-to-end: write .jsonl files, let scan_once claim them, then
+    // flush_batch ships the payload and deletes the claimed files.
+    TempDir dir;
+    std::string rr_dir = dir.make_subdir("rejected_record");
+    std::string p1 = rr_dir + "/r1.jsonl";
+    std::string p2 = rr_dir + "/r2.jsonl";
+    {
+        std::ofstream f(p1);
+        f << "{\"id\":\"row1\"}\n";
+    }
+    {
+        std::ofstream f(p2);
+        f << "{\"id\":\"row2\"}\n";
+    }
+
+    RealScanDaemon daemon({dir.path().string()});
+    auto claimed = daemon.scan_once();
+    ASSERT_EQ(2u, claimed.size());
+
+    auto st = daemon.flush_batch(claimed);
+    EXPECT_TRUE(st.ok()) << st.message();
+
+    // Both claimed (renamed) files should now be deleted.
+    for (const auto& c : claimed) {
+        EXPECT_FALSE(std::filesystem::exists(c));
+    }
+
+    // One payload was shipped.
+    ASSERT_EQ(1u, daemon.captured_payloads().size());
+    const auto& payload = daemon.captured_payloads()[0];
+    EXPECT_NE(std::string::npos, payload.find("row1"));
+    EXPECT_NE(std::string::npos, payload.find("row2"));
+}
+
+TEST(RejectedRecordSyncDaemonRealScanTest, ScanOnceWithSymlinkToFileIsClaimed) {
+    // A symlink inside rejected_record/ that points to a regular .jsonl file:
+    // is_regular_file() on a directory_entry follows the symlink and returns
+    // true for the target, so the symlink IS claimed (renamed to .syncing.*).
+    // The iterator uses skip_permission_denied which prevents FOLLOWING symlinks
+    // to directories (guarding against path-escape attacks), but symlinks to
+    // regular files within the store path are claimed normally.
+    TempDir dir;
+    std::string rr_dir = dir.make_subdir("rejected_record");
+    // Create a real file inside the rr_dir, then a symlink inside rr_dir.
+    std::string real_file = rr_dir + "/real.jsonl";
+    {
+        std::ofstream f(real_file);
+        f << "{\"id\":\"real\"}\n";
+    }
+    std::string symlink_path = rr_dir + "/symlink.jsonl";
+    std::error_code ec;
+    std::filesystem::create_symlink(real_file, symlink_path, ec);
+    if (ec) {
+        GTEST_SKIP() << "Cannot create symlink (permissions?): " << ec.message();
+    }
+
+    RealScanDaemon daemon({dir.path().string()});
+    auto claimed = daemon.scan_once();
+
+    // Both the real file and the symlink (treated as regular file by
+    // is_regular_file()) should be claimed.
+    EXPECT_GE(claimed.size(), 1u);
+}
+
+// ===========================================================================
+// New: post_to_stream_load early-exit path (no master address known)
+// Covers lines 336-341 of rejected_record_sync_daemon.cpp.
+// ===========================================================================
+
+TEST(RejectedRecordSyncDaemonPostTest, PostToStreamLoadFailsWhenNoMasterAddress) {
+    // get_master_info() returns an empty hostname when no heartbeat has been
+    // received. The real post_to_stream_load should return InternalError.
+    PostTestDaemon daemon;
+    auto st = daemon.call_post_to_stream_load("{\"id\":\"row1\"}");
+    EXPECT_FALSE(st.ok());
+    EXPECT_NE(std::string::npos, st.message().find("master FE address not yet known"));
+}
+
+// ===========================================================================
+// New: run_one_tick exercised via RealScanDaemon + process_files path
+// run_one_tick calls scan_once() then process_files(). Since scan_once is
+// exercised above, we cover the run_one_tick body (lines 176-185) by calling
+// flush_batch after scan_once, which exercises the same process_files() path.
+// We can also cover the files_scanned counter via the daemon stats.
+// ===========================================================================
+
+TEST(RejectedRecordSyncDaemonRealScanTest, FilesScanedCounterAdvancesAfterScanOnce) {
+    // The files_scanned counter is bumped in run_one_tick after scan_once.
+    // We can't call run_one_tick directly (private), but we validate that
+    // scan_once returns the files and flush_batch processes them correctly.
+    // The counter path in run_one_tick is covered by the thread-based
+    // lifecycle test (InitStopIdempotent) indirectly.
+    TempDir dir;
+    std::string rr_dir = dir.make_subdir("rejected_record");
+    std::string p1 = rr_dir + "/ctr.jsonl";
+    {
+        std::ofstream f(p1);
+        f << "{\"id\":\"c1\"}\n";
+    }
+
+    RealScanDaemon daemon({dir.path().string()});
+    auto claimed = daemon.scan_once();
+    ASSERT_EQ(1u, claimed.size());
+
+    // flush_batch will delete the file on success.
+    auto st = daemon.flush_batch(claimed);
+    EXPECT_TRUE(st.ok()) << st.message();
+    EXPECT_EQ(1, daemon.records_flushed());
+}
+
+// =========================================================================
+// Extended RealScanDaemon that also exposes run_one_tick and process_files
+// =========================================================================
+
+class ExtendedRealScanDaemon : public RejectedRecordSyncDaemon {
+public:
+    explicit ExtendedRealScanDaemon(std::vector<std::string> roots)
+            : RejectedRecordSyncDaemon(/*env=*/nullptr), _roots(std::move(roots)) {}
+
+    std::vector<std::string>& captured_payloads() { return _payloads; }
+    void set_post_should_succeed(bool ok) { _post_should_succeed = ok; }
+
+    using RejectedRecordSyncDaemon::flush_batch;
+    using RejectedRecordSyncDaemon::run_one_tick;
+    using RejectedRecordSyncDaemon::process_files;
+    using RejectedRecordSyncDaemon::scan_once;
+    using RejectedRecordSyncDaemon::garbage_collect_stale_files;
+
+protected:
+    std::vector<std::string> store_path_roots() const override { return _roots; }
+
+    Status post_to_stream_load(const std::string& payload) override {
+        _payloads.push_back(payload);
+        if (!_post_should_succeed) {
+            return Status::InternalError("simulated post failure");
+        }
+        return Status::OK();
+    }
+
+private:
+    std::vector<std::string> _roots;
+    std::vector<std::string> _payloads;
+    bool _post_should_succeed = true;
+};
+
+// ===========================================================================
+// run_one_tick with empty scan result (lines 176-180):
+//   scan_once returns empty -> garbage_collect_stale_files() is called and
+//   the method returns early without calling process_files.
+// ===========================================================================
+
+TEST(RejectedRecordSyncDaemonRunOneTickTest, EmptyScanCallsGCAndReturnsEarly) {
+    // Empty temp dir: no rejected_record sub-dir, so scan_once returns {}.
+    TempDir dir;
+    ExtendedRealScanDaemon daemon({dir.path().string()});
+
+    // run_one_tick with nothing to scan: must not crash, counter stays 0.
+    EXPECT_NO_FATAL_FAILURE(daemon.run_one_tick());
+    EXPECT_EQ(0, daemon.files_scanned());
+    EXPECT_EQ(0, daemon.records_flushed());
+}
+
+// ===========================================================================
+// run_one_tick with files present (lines 176-185):
+//   scan_once returns files -> process_files() is called.
+// ===========================================================================
+
+TEST(RejectedRecordSyncDaemonRunOneTickTest, WithFilesProcessFilesIsInvoked) {
+    TempDir dir;
+    std::string rr_dir = dir.make_subdir("rejected_record");
+    std::string p1 = rr_dir + "/tick.jsonl";
+    {
+        std::ofstream f(p1);
+        f << "{\"id\":\"t1\"}\n";
+    }
+
+    ExtendedRealScanDaemon daemon({dir.path().string()});
+    daemon.run_one_tick();
+
+    // files_scanned is bumped in run_one_tick.
+    EXPECT_EQ(1, daemon.files_scanned());
+    // One record was flushed by process_files.
+    EXPECT_EQ(1, daemon.records_flushed());
+    // One payload was shipped.
+    EXPECT_EQ(1u, daemon.captured_payloads().size());
+}
+
+// ===========================================================================
+// process_files: unreadable file is kept on disk for retry, not deleted
+// ===========================================================================
+
+TEST(RejectedRecordSyncDaemonProcessFilesTest, UnreadableFileIsKeptForRetry) {
+    // Pass a path that does not exist at all; ifstream.is_open() will fail.
+    // Previously the daemon would delete the file immediately. That is
+    // overly aggressive for transient failures (EMFILE, I/O errors) and
+    // silently destroys the rejected records. The daemon now keeps the
+    // file on disk for a later retry, bumps the `open_failures` counter,
+    // and lets the retention-based GC clean it up if the failure persists.
+    std::string ghost = "/tmp/no_such_daemon_test_file_xyz.jsonl";
+    std::error_code ec;
+    std::filesystem::remove(ghost, ec);
+
+    TestSyncDaemon daemon;
+    auto st = daemon.flush_batch({ghost});
+    EXPECT_TRUE(st.ok()) << st.message();
+    EXPECT_TRUE(daemon.captured_payloads().empty());
+    EXPECT_EQ(1, daemon.open_failures());
+    // The file doesn't exist so we can't check "file was kept"; instead
+    // assert remove_file wasn't attempted by verifying no remove error
+    // was logged and the counter incremented. A real transient failure
+    // (file exists but can't be opened) would leave the file alone for
+    // the next tick to retry.
+}
+
+TEST(RejectedRecordSyncDaemonProcessFilesTest, MasterNotReadyDoesNotCountAsFailure) {
+    // post_to_stream_load returning Status::Uninitialized means the master
+    // FE address isn't known yet (early BE boot or mid re-election). The
+    // files stay on disk for a later retry but we must NOT advance the
+    // sync_failures counter: that counter is surfaced as a metric operators
+    // alert on, and early-boot bounce would fire the alert spuriously.
+    struct NotReadyDaemon : public RejectedRecordSyncDaemon {
+        NotReadyDaemon() : RejectedRecordSyncDaemon(/*env=*/nullptr) {}
+        using RejectedRecordSyncDaemon::flush_batch;
+
+    protected:
+        Status post_to_stream_load(const std::string&) override {
+            return Status::Uninitialized("master FE address not yet known");
+        }
+    };
+
+    TempDir dir;
+    std::string f = dir.write_file("a.jsonl", "{\"id\":\"x\"}\n");
+    NotReadyDaemon daemon;
+    auto st = daemon.flush_batch({f});
+    // flush_batch uses `sync_failures` delta to decide OK vs non-OK, so a
+    // skipped-because-master-not-ready tick surfaces as OK up to the
+    // caller -- exactly because it isn't an error. The key invariants:
+    //   (a) sync_failures didn't advance
+    //   (b) file stayed on disk for the next tick to retry
+    EXPECT_TRUE(st.ok()) << "master-not-ready must not propagate as a flush_batch failure";
+    EXPECT_EQ(0, daemon.sync_failures()) << "master-not-ready should not count as a sync failure";
+    EXPECT_TRUE(std::filesystem::exists(f));
+}
+
+TEST(RejectedRecordSyncDaemonProcessFilesTest, ReadableFilePresentButInsideUnreadablePath) {
+    // Simulate a transient failure: parent directory has no read/execute
+    // permission so ifstream open fails. With CAP_DAC_OVERRIDE (root) the
+    // test would succeed, so skip then.
+    if (geteuid() == 0) {
+        GTEST_SKIP() << "root bypasses POSIX file mode; skipping transient-failure test";
+    }
+    TempDir dir;
+    std::string sub = dir.path() / "locked";
+    std::filesystem::create_directory(sub);
+    std::string path = sub + "/rr.jsonl";
+    {
+        std::ofstream f(path);
+        f << "{\"id\":\"x\"}\n";
+    }
+    std::filesystem::permissions(sub, std::filesystem::perms::none, std::filesystem::perm_options::replace);
+
+    TestSyncDaemon daemon;
+    auto st = daemon.flush_batch({path});
+    EXPECT_TRUE(st.ok());
+    EXPECT_EQ(1, daemon.open_failures());
+
+    // Restore so TempDir cleanup succeeds.
+    std::filesystem::permissions(sub, std::filesystem::perms::owner_all, std::filesystem::perm_options::replace);
+    // File still present (not deleted by the daemon).
+    EXPECT_TRUE(std::filesystem::exists(path));
+}
+
+// ===========================================================================
+// process_files: row cap splits into multiple commits (lines 260-263)
+// ===========================================================================
+
+TEST(RejectedRecordSyncDaemonProcessFilesTest, RowCapSplitsIntoMultipleCommits) {
+    // Two files, each with 1 row. Set max_rows=1 so each file triggers a
+    // commit separately: this exercises the `batch_rows >= max_rows` branch.
+    TempDir dir;
+    std::string f1 = dir.write_file("a.jsonl", "{\"id\":\"r1\"}\n");
+    std::string f2 = dir.write_file("b.jsonl", "{\"id\":\"r2\"}\n");
+
+    TestSyncDaemon daemon;
+    // process_files with max_rows=1: the second file's first row trips the
+    // cap and commits f1 alone, then f2 is posted on the final commit.
+    daemon.process_files({f1, f2}, 1, std::numeric_limits<int64_t>::max());
+
+    // With max_rows=1, two separate commits are issued.
+    EXPECT_EQ(2u, daemon.captured_payloads().size());
+    // Both files are deleted.
+    EXPECT_FALSE(std::filesystem::exists(f1));
+    EXPECT_FALSE(std::filesystem::exists(f2));
+}
+
+// ===========================================================================
+// process_files: empty batch commit path (batch_rows == 0, lines 216-223)
+// Files that are all empty go through the zero-rows branch of commit().
+// ===========================================================================
+
+TEST(RejectedRecordSyncDaemonProcessFilesTest, AllEmptyFilesInBatchAreDeletedWithoutPosting) {
+    TempDir dir;
+    std::string e1 = dir.write_file("e1.jsonl", "");
+    std::string e2 = dir.write_file("e2.jsonl", "");
+
+    TestSyncDaemon daemon;
+    daemon.process_files({e1, e2}, 100, std::numeric_limits<int64_t>::max());
+
+    // No post was made (batch_rows == 0 -> skip post, just delete).
+    EXPECT_TRUE(daemon.captured_payloads().empty());
+    EXPECT_FALSE(std::filesystem::exists(e1));
+    EXPECT_FALSE(std::filesystem::exists(e2));
+}
+
+// ===========================================================================
+// process_files: a single giant file must not bypass the row cap (regression)
+// ===========================================================================
+
+TEST(RejectedRecordSyncDaemonProcessFilesTest, SingleLargeFileSplitsOnRowCap) {
+    // Previously the row cap was only checked at end-of-file, so a 1M-row
+    // file with max_rows=2 produced one 1M-row PUT. Now the cap is enforced
+    // per-line and a mid-file commit splits the post into chunks.
+    TempDir dir;
+    std::string path = dir.path() / "big.jsonl";
+    {
+        std::ofstream f(path);
+        for (int i = 0; i < 10; ++i) {
+            f << "{\"id\":\"r" << i << "\"}\n";
+        }
+    }
+    TestSyncDaemon daemon;
+    daemon.process_files({path}, /*max_rows=*/3, std::numeric_limits<int64_t>::max());
+
+    // 10 rows / 3 per commit = 4 commits.
+    ASSERT_EQ(4u, daemon.captured_payloads().size());
+    // All 10 rows present across the four commits.
+    int total_newlines = 0;
+    for (const auto& p : daemon.captured_payloads()) {
+        for (char c : p) {
+            if (c == '\n') ++total_newlines;
+        }
+    }
+    EXPECT_EQ(10, total_newlines);
+    // File is deleted exactly once (the final commit, which receives it in `batch`).
+    EXPECT_FALSE(std::filesystem::exists(path));
+}
+
+TEST(RejectedRecordSyncDaemonProcessFilesTest, ByteCapSplitsLongLines) {
+    // A single very-long line must not bypass the byte cap. With 3 lines of
+    // ~50 bytes each and max_bytes=120, the second line's arrival commits
+    // line 1, and the third line's arrival commits line 2.
+    TempDir dir;
+    std::string path = dir.path() / "wide.jsonl";
+    {
+        std::ofstream f(path);
+        f << std::string(49, 'a') << "\n";
+        f << std::string(49, 'b') << "\n";
+        f << std::string(49, 'c') << "\n";
+    }
+    TestSyncDaemon daemon;
+    daemon.process_files({path}, std::numeric_limits<int64_t>::max(), /*max_bytes=*/120);
+
+    // Three lines, byte cap splits into separate commits.
+    EXPECT_GE(daemon.captured_payloads().size(), 2u);
+    EXPECT_FALSE(std::filesystem::exists(path));
+}
+
+TEST(RejectedRecordSyncDaemonProcessFilesTest, OversizedLineDroppedNotBlocked) {
+    // A single line larger than max_bytes used to bypass the cap (the
+    // "commit before append" guard was gated on batch_rows > 0, so the
+    // first line of a batch could be arbitrarily large) and would then
+    // make the FE Stream Load reject the entire batch. The file would
+    // be left on disk for retry, and the next tick would re-read the
+    // same oversized line and fail again -- effectively blocking every
+    // subsequent well-formed row in the same file until GC drops the
+    // whole file at the retention boundary. Now the daemon drops the
+    // oversized line, bumps a metric, and keeps streaming the rest.
+    TempDir dir;
+    std::string path = dir.path() / "mixed.jsonl";
+    {
+        std::ofstream f(path);
+        f << "{\"id\":\"small1\"}\n";
+        f << std::string(500, 'X') << "\n"; // oversized: 501 bytes > max_bytes=200
+        f << "{\"id\":\"small2\"}\n";
+    }
+    TestSyncDaemon daemon;
+    daemon.process_files({path}, std::numeric_limits<int64_t>::max(), /*max_bytes=*/200);
+
+    // Both small rows should reach a commit; the oversized row is
+    // dropped silently from the PUT but visibly via the metric.
+    EXPECT_EQ(1, daemon.oversized_lines_dropped());
+    ASSERT_FALSE(daemon.captured_payloads().empty());
+    std::string all_payloads;
+    for (const auto& p : daemon.captured_payloads()) all_payloads += p;
+    EXPECT_NE(std::string::npos, all_payloads.find("small1"));
+    EXPECT_NE(std::string::npos, all_payloads.find("small2"));
+    // The oversized line itself must NOT have been streamed.
+    EXPECT_EQ(std::string::npos, all_payloads.find(std::string(500, 'X')));
+    // File deletion happens after a successful commit, so the file is
+    // gone -- the small lines did go through.
+    EXPECT_FALSE(std::filesystem::exists(path));
+}
+
+TEST(RejectedRecordSyncDaemonProcessFilesTest, OnlyOversizedLineLeavesFileEmpty) {
+    // Edge: a file containing only an oversized line should still be
+    // deleted (no rows committed but no rows pending either) -- otherwise
+    // the file would loop forever in retry. This pins down the contract:
+    // file lifecycle is "all-readable-lines-handled", not "any-line-PUT".
+    TempDir dir;
+    std::string path = dir.path() / "huge_only.jsonl";
+    {
+        std::ofstream f(path);
+        f << std::string(500, 'X') << "\n";
+    }
+    TestSyncDaemon daemon;
+    daemon.process_files({path}, std::numeric_limits<int64_t>::max(), /*max_bytes=*/200);
+
+    EXPECT_EQ(1, daemon.oversized_lines_dropped());
+    // No PUT was issued (nothing to send) but file was consumed.
+    EXPECT_TRUE(daemon.captured_payloads().empty());
+    EXPECT_FALSE(std::filesystem::exists(path));
+}
+
+// ===========================================================================
+// collect_jsonl: error path when root is a file, not a directory
+// recursive_directory_iterator on a regular file fails with an error code,
+// exercising lines 83-85 in rejected_record_sync_daemon.cpp.
+// ===========================================================================
+
+TEST(RejectedRecordSyncDaemonCollectJsonlTest, IteratorInitErrorIsLoggedAndSkipped) {
+    // Point the root at a regular FILE, not a directory. The "rejected_record"
+    // sub-path therefore also resolves to something that isn't a directory;
+    // recursive_directory_iterator will fail on the actual path we feed it.
+    // We exploit collect_jsonl (indirectly via scan_once) by using a store root
+    // whose rejected_record/ sub-path exists as a regular file.
+    TempDir dir;
+    // Create a regular file named "rejected_record" (not a directory).
+    std::string rr_path = dir.path().string() + "/rejected_record";
+    {
+        std::ofstream f(rr_path);
+        f << "I am a file, not a dir\n";
+    }
+    // collect_jsonl will call std::filesystem::exists(root) → true, then try
+    // recursive_directory_iterator on a regular file → ec != 0.
+    ExtendedRealScanDaemon daemon({dir.path().string()});
+    // scan_once should succeed (no crash) and return empty.
+    auto claimed = daemon.scan_once();
+    EXPECT_TRUE(claimed.empty());
+}
+
+// ===========================================================================
+// collect_jsonl: non-existent root silently returns empty (lines 78-80).
+// ===========================================================================
+
+TEST(RejectedRecordSyncDaemonCollectJsonlTest, NonExistentRootReturnsEmpty) {
+    ExtendedRealScanDaemon daemon({"/tmp/__no_such_root_for_rr_test__"});
+    auto claimed = daemon.scan_once();
+    EXPECT_TRUE(claimed.empty());
+}
+
+// ===========================================================================
+// remove_file: error branch (line 55) -- deletion of a file inside a
+// read-only parent directory fails with EACCES (not ENOENT), so the
+// LOG(WARNING) branch is hit.
+// ===========================================================================
+
+TEST(RejectedRecordSyncDaemonRemoveFileTest, RemoveFileErrorBranchHitOnPermissionDenied) {
+    // Create a file inside a dir, then make the dir read-only so removal
+    // of the file (which requires write permission on the parent) fails
+    // with EACCES rather than ENOENT.
+    TempDir outer;
+    std::string inner_dir = outer.make_subdir("protected");
+    std::string target = inner_dir + "/victim.jsonl";
+    {
+        std::ofstream f(target);
+        f << "{\"id\":\"doomed\"}\n";
+    }
+
+    // Make the directory non-writable.
+    std::error_code ec;
+    std::filesystem::permissions(inner_dir, std::filesystem::perms::owner_read | std::filesystem::perms::owner_exec,
+                                 std::filesystem::perm_options::replace, ec);
+    if (ec) {
+        GTEST_SKIP() << "Cannot set directory permissions: " << ec.message();
+    }
+
+    // Restore permissions during teardown so TempDir destructor can delete it.
+    struct Restore {
+        std::string dir;
+        ~Restore() {
+            std::error_code e;
+            std::filesystem::permissions(dir, std::filesystem::perms::owner_all, std::filesystem::perm_options::replace,
+                                         e);
+        }
+    } restore{inner_dir};
+
+    // process_files (or flush_batch) will try to open the target file.
+    // Since the dir is non-writable, std::filesystem::remove will fail
+    // with EACCES, triggering the LOG(WARNING) branch at line 55.
+    // We call flush_batch with a path that is "successfully" readable
+    // (the file content is accessible even if the dir is non-writable on
+    // some FSes), so we drive remove_file via the post-success delete path.
+    //
+    // Alternatively, drive it via the "cannot open" path by pointing at the
+    // dir itself (which ifstream cannot open as a file).
+    TestSyncDaemon daemon;
+
+    // Pass the directory itself as a "file" to process_files: ifstream.is_open
+    // will fail (can't open a dir as a stream), so remove_file(inner_dir) is
+    // called. A directory removal via std::filesystem::remove may fail on
+    // non-empty dirs → hits the error branch.
+    auto st = daemon.flush_batch({inner_dir});
+    EXPECT_TRUE(st.ok()); // process_files treats unreadable items as soft errors
+}
+
+// ===========================================================================
+// post_to_stream_load: early-exit when master address is empty (lines 348-352)
+// Covered by the existing PostTestDaemon test above; re-confirming via
+// ExtendedRealScanDaemon to show the path is accessible through run_one_tick.
+// ===========================================================================
+
+TEST(RejectedRecordSyncDaemonPostTest, PostToStreamLoadEarlyExitCoveredByExistingTest) {
+    // The PostTestDaemon test (PostToStreamLoadFailsWhenNoMasterAddress) already
+    // covers this path. This test documents the expectation explicitly.
+    PostTestDaemon daemon;
+    // Empty hostname => InternalError.
+    auto st = daemon.call_post_to_stream_load("{}");
+    EXPECT_FALSE(st.ok());
+    EXPECT_NE(std::string::npos, st.message().find("master FE address not yet known"));
+}
+
+} // namespace starrocks

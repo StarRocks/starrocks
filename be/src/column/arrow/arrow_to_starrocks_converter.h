@@ -37,7 +37,14 @@ namespace starrocks {
 struct ConvertFuncTree;
 
 struct ArrowConvertContext {
-    using ErrorReporter = std::function<void(const std::string& reason, const std::string& raw_data)>;
+    // `row_offset_in_array`:
+    //   -1   -> no row offset available; downstream consumers (e.g. the
+    //           Parquet rejected-records anchor) omit `row_in_file`.
+    //   >= 0 -> row index relative to the RecordBatch start. The Parquet
+    //           scanner adds `current_batch_first_row_in_file` to derive
+    //           an absolute row index in the source file.
+    using ErrorReporter =
+            std::function<void(const std::string& reason, const std::string& raw_data, int64_t row_offset_in_array)>;
 
     std::string timezone;
     std::string current_file;
@@ -45,6 +52,25 @@ struct ArrowConvertContext {
     size_t current_type_length = 0;
     int error_message_counter = 0;
     ErrorReporter report_error_message = nullptr;
+
+    // --- Parquet rejected-record anchor fields ---
+    //
+    // These let `_statistics_.rejected_records.source_info` carry a stable
+    // pointer back to the offending row in the source Parquet file, so a
+    // future `parquet_read_rows()` TVF can rehydrate the full row on
+    // demand. They are scoped to the Broker-Load Parquet scanner (the
+    // only path that populates them); Arrow Flight and other users leave
+    // them at -1 and the reporter omits them from the emitted anchor.
+    //
+    // current_batch_first_row_in_file: absolute row number in the
+    //     Parquet file where the RecordBatch currently being converted
+    //     starts. ParquetScanner updates this before pulling each batch.
+    // file_size / file_mtime_ms: snapshotted when the scanner opens the
+    //     file. Included in the anchor so the TVF can fail-closed when
+    //     the file has been modified since rejection was recorded.
+    int64_t current_batch_first_row_in_file = -1;
+    int64_t file_size = -1;
+    int64_t file_mtime_ms = -1;
 
     void set_current_column(std::string_view column_name, const TypeDescriptor& type) {
         current_column_name = std::string(column_name);

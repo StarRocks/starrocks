@@ -71,6 +71,8 @@ import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
+import org.apache.commons.lang3.reflect.FieldUtils;
+import org.apache.commons.lang3.reflect.MethodUtils;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -108,26 +110,26 @@ public class ColocateTableBalancerTest {
     public static void beforeClass() throws Exception {
         new MockUp<ColocateTableBalancer>() {
             @Mock
-            protected void runAfterCatalogReady() {
-                System.out.println("Mocked ColocateTableBalancer.runAfterCatalogReady() called");
+            protected void runAfterLeaseValid() {
+                System.out.println("Mocked ColocateTableBalancer.runAfterLeaseValid() called");
             }
         };
         new MockUp<SystemHandler>() {
             @Mock
-            protected void runAfterCatalogReady() {
-                System.out.println("Mocked SystemHandler.runAfterCatalogReady() called");
+            protected void runAfterLeaseValid() {
+                System.out.println("Mocked SystemHandler.runAfterLeaseValid() called");
             }
         };
         new MockUp<RoutineLoadTaskScheduler>() {
             @Mock
-            protected void runAfterCatalogReady() {
+            protected void runAfterLeaseValid() {
                 // the interval is 0, so skip log printing to prevent too many logs
             }
         };
         new MockUp<TabletChecker>() {
             @Mock
-            protected void runAfterCatalogReady() {
-                System.out.println("Mocked TabletChecker.runAfterCatalogReady() called");
+            protected void runAfterLeaseValid() {
+                System.out.println("Mocked TabletChecker.runAfterLeaseValid() called");
             }
         };
 
@@ -1101,5 +1103,25 @@ public class ColocateTableBalancerTest {
         System.out.println("after sleep, time: " + System.currentTimeMillis()
                     + "alive backend is: " + infoService.getBackendIds(true));
         Assertions.assertTrue(balancer.isSystemStable(infoService));
+    }
+
+    @Test
+    public void testOnStoppedResetsStabilityWatermarks() throws Exception {
+        // aliveBackendIds and systemStableStartTime are leader-session watermarks used to gate
+        // colocate balancing on cluster stability. After demotion the next leader must
+        // re-observe BE liveness and re-time the stability window from scratch.
+        ColocateTableBalancer balancer = ColocateTableBalancer.getInstance();
+
+        FieldUtils.writeField(balancer, "aliveBackendIds",
+                new HashSet<>(Arrays.asList(7L, 8L)), true);
+        FieldUtils.writeField(balancer, "systemStableStartTime", 123456789L, true);
+
+        MethodUtils.invokeMethod(balancer, true, "onStopped");
+
+        @SuppressWarnings("unchecked")
+        Set<Long> aliveBackendIds = (Set<Long>) FieldUtils.readField(balancer, "aliveBackendIds", true);
+        long systemStableStartTime = (long) FieldUtils.readField(balancer, "systemStableStartTime", true);
+        Assertions.assertTrue(aliveBackendIds.isEmpty(), "aliveBackendIds must be reset on demotion");
+        Assertions.assertEquals(-1L, systemStableStartTime, "systemStableStartTime must be reset on demotion");
     }
 }

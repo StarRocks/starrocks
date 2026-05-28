@@ -14,7 +14,7 @@
 
 #include "formats/parquet/parquet_pos_reader.h"
 
-#include "storage/range.h"
+#include "storage/primitive/range.h"
 #include "types/datum.h"
 
 namespace starrocks::parquet {

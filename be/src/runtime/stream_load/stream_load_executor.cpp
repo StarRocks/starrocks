@@ -46,15 +46,16 @@
 #include "common/status.h"
 #include "common/statusor.h"
 #include "common/system/master_info.h"
+#include "common/util/thrift_client_cache.h"
 #include "gen_cpp/FrontendService.h"
-#include "runtime/client_cache.h"
+#include "gutil/walltime.h"
+#include "platform/thrift_rpc_helper.h"
 #include "runtime/exec_env.h"
 #include "runtime/fragment_mgr.h"
 #include "runtime/message_body_sink.h"
 #include "runtime/plan_fragment_executor.h"
 #include "runtime/stream_load/stream_load_context.h"
 #include "runtime/stream_load/stream_load_metrics.h"
-#include "runtime/thrift_rpc_helper.h"
 #include "storage/non_retryable_load_errors.h"
 
 namespace starrocks {
@@ -146,10 +147,12 @@ Status StreamLoadExecutor::execute_plan_fragment(StreamLoadContext* ctx) {
                     ctx->error_url = to_load_error_http_path(executor->runtime_state()->get_error_log_file_path());
                 }
 
-                if (!executor->runtime_state()->get_rejected_record_file_path().empty()) {
-                    ctx->rejected_record_path = fmt::format("{}:{}", BackendOptions::get_localBackend().host,
-                                                            executor->runtime_state()->get_rejected_record_file_path());
-                }
+                // The legacy tab-delimited rejected-record file was removed;
+                // ctx->rejected_record_path is never populated anymore. The
+                // StreamLoadContext response JSON still carries the field
+                // for backward compatibility but it will always be empty.
+                // Clients should query `_statistics_.rejected_records` by
+                // Label or txn_id to retrieve rejected rows.
 
                 if (ctx->unref()) {
                     delete ctx;

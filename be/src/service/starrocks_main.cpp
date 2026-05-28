@@ -32,7 +32,6 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include <gperftools/malloc_extension.h>
 #include <sys/file.h>
 #include <unistd.h>
 
@@ -45,12 +44,8 @@
 #include <thrift/TOutput.h>
 
 #ifndef __APPLE__
-#include <aws/core/Aws.h>
-
-#include "fs/s3/poco_http_client_factory.h"
+#include "fs/s3/aws_sdk_guard.h"
 #endif
-
-#include <boost/algorithm/string.hpp>
 
 #include "agent/agent_server.h"
 #include "agent/heartbeat_server.h"
@@ -71,6 +66,7 @@
 #include "exec/pipeline/query_context.h"
 #include "formats/orc/lzo_decompressor_registration.h"
 #include "fs/fs_provider_bootstrap.h"
+#include "platform/store_path.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
 #include "runtime/heartbeat_flags.h"
@@ -78,7 +74,6 @@
 #include "runtime/memory/roaring_hook.h"
 #include "service/daemon.h"
 #include "service/service.h"
-#include "storage/options.h"
 #include "storage/storage_engine.h"
 #include "util/logging.h"
 
@@ -101,27 +96,6 @@ static void thrift_output(const char* x) {
     LOG(WARNING) << "thrift internal message: " << x;
 }
 } // namespace starrocks
-
-#ifndef __APPLE__
-static Aws::Utils::Logging::LogLevel parse_aws_sdk_log_level(const std::string& s) {
-    Aws::Utils::Logging::LogLevel levels[] = {
-            Aws::Utils::Logging::LogLevel::Off,   Aws::Utils::Logging::LogLevel::Fatal,
-            Aws::Utils::Logging::LogLevel::Error, Aws::Utils::Logging::LogLevel::Warn,
-            Aws::Utils::Logging::LogLevel::Info,  Aws::Utils::Logging::LogLevel::Debug,
-            Aws::Utils::Logging::LogLevel::Trace,
-    };
-    std::string slevel = boost::algorithm::to_upper_copy(s);
-    Aws::Utils::Logging::LogLevel level = Aws::Utils::Logging::LogLevel::Warn;
-    for (auto& idx : levels) {
-        auto s = Aws::Utils::Logging::GetLogLevelName(idx);
-        if (s == slevel) {
-            level = idx;
-            break;
-        }
-    }
-    return level;
-}
-#endif
 
 extern int meta_tool_main(int argc, char** argv);
 
@@ -226,22 +200,7 @@ int main(int argc, char** argv) {
     }
 
 #ifndef __APPLE__
-    Aws::SDKOptions aws_sdk_options;
-    // it is already initialized beforehead
-    aws_sdk_options.httpOptions.initAndCleanupCurl = false;
-    if (starrocks::config::aws_sdk_logging_trace_enabled) {
-        auto level = parse_aws_sdk_log_level(starrocks::config::aws_sdk_logging_trace_level);
-        std::cerr << "enable aws sdk logging trace. log level = " << Aws::Utils::Logging::GetLogLevelName(level)
-                  << "\n";
-        aws_sdk_options.loggingOptions.logLevel = level;
-    }
-    if (starrocks::config::aws_sdk_enable_compliant_rfc3986_encoding) {
-        aws_sdk_options.httpOptions.compliantRfc3986Encoding = true;
-    }
-    Aws::InitAPI(aws_sdk_options);
-    if (starrocks::config::enable_poco_client_for_aws_sdk) {
-        Aws::Http::SetHttpClientFactory(std::make_shared<starrocks::poco::PocoHttpClientFactory>());
-    }
+    starrocks::AwsSdkGuard aws_sdk_guard;
 #endif
 
     EXIT_IF_ERROR(starrocks::fs::install_builtin_file_system_providers());
@@ -281,7 +240,7 @@ int main(int argc, char** argv) {
     }
 
     // Add logger for thrift internal.
-    apache::thrift::GlobalOutput.setOutputFunction(starrocks::thrift_output);
+    apache::thrift::TOutput::instance().setOutputFunction(starrocks::thrift_output);
 
     // cn need to support all ops for cloudnative table, so just start_be
     starrocks::start_be(paths, as_cn);
@@ -290,10 +249,6 @@ int main(int argc, char** argv) {
         LOG(INFO) << "BE is shutting down, will exit quickly";
         exit(0);
     }
-
-#ifndef __APPLE__
-    Aws::ShutdownAPI(aws_sdk_options);
-#endif
 
     return 0;
 }

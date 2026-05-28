@@ -161,7 +161,8 @@ Status LakeSnapshotLoader::upload(const ::starrocks::UploadSnapshotsRequest* req
     // 2. get broker client
     std::unique_ptr<BrokerServiceConnection> client;
     Status status = Status::OK();
-    client = std::make_unique<BrokerServiceConnection>(_env->broker_client_cache(), address, 10000, &status);
+    client = std::make_unique<BrokerServiceConnection>(_env->rpc_services().broker_client_cache, address, 10000,
+                                                       &status);
     if (!status.ok()) {
         std::stringstream ss;
         ss << "failed to get broker client. "
@@ -260,7 +261,8 @@ Status LakeSnapshotLoader::restore(const ::starrocks::RestoreSnapshotsRequest* r
     // 1. Get broker client
     std::unique_ptr<BrokerServiceConnection> client;
     std::vector<TNetworkAddress> broker_addrs;
-    client = std::make_unique<BrokerServiceConnection>(_env->broker_client_cache(), address, 10000, &status);
+    client = std::make_unique<BrokerServiceConnection>(_env->rpc_services().broker_client_cache, address, 10000,
+                                                       &status);
     if (!status.ok()) {
         std::stringstream ss;
         ss << "failed to get broker client. "

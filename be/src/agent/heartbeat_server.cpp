@@ -298,14 +298,13 @@ StatusOr<HeartbeatServer::CmpResult> HeartbeatServer::compare_master_info(const 
     return kUnchanged;
 }
 
-StatusOr<std::unique_ptr<ThriftServer>> create_heartbeat_server(ExecEnv* exec_env, uint32_t server_port,
+StatusOr<std::unique_ptr<ThriftServer>> create_heartbeat_server(MetricRegistry* metrics, uint32_t server_port,
                                                                 uint32_t worker_thread_num) {
     auto* heartbeat_server = new HeartbeatServer();
     heartbeat_server->init_cluster_id_or_die();
 
     std::shared_ptr<HeartbeatServer> handler(heartbeat_server);
     std::shared_ptr<TProcessor> server_processor(new HeartbeatServiceProcessor(handler));
-    return std::make_unique<ThriftServer>("heartbeat", server_processor, server_port, exec_env->metrics(),
-                                          worker_thread_num);
+    return std::make_unique<ThriftServer>("heartbeat", server_processor, server_port, metrics, worker_thread_num);
 }
 } // namespace starrocks

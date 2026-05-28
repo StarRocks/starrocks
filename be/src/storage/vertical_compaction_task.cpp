@@ -18,14 +18,16 @@
 
 #include "base/debug/trace.h"
 #include "base/time/time.h"
+#include "column/chunk_factory.h"
+#include "column/chunk_schema_helper.h"
 #include "column/schema.h"
 #include "common/config_compaction_fwd.h"
 #include "common/config_exec_fwd.h"
 #include "runtime/current_thread.h"
+#include "storage/base/row_source_mask.h"
 #include "storage/chunk_helper.h"
 #include "storage/compaction_utils.h"
 #include "storage/olap_common.h"
-#include "storage/row_source_mask.h"
 #include "storage/rowset/column_reader.h"
 #include "storage/rowset/rowset.h"
 #include "storage/rowset/rowset_writer.h"
@@ -195,8 +197,8 @@ StatusOr<size_t> VerticalCompactionTask::_compact_data(bool is_key, int32_t chun
                                                        std::vector<RowSourceMask>* source_masks) {
     DCHECK(reader);
     size_t output_rows = 0;
-    auto chunk = ChunkHelper::new_chunk(schema, chunk_size);
-    auto char_field_indexes = ChunkHelper::get_char_field_indexes(schema);
+    auto chunk = ChunkFactory::new_chunk(schema, chunk_size);
+    auto char_field_indexes = ChunkSchemaHelper::get_char_field_indexes(schema);
 
     Status status = Status::OK();
     size_t column_group_del_filtered_rows = 0;

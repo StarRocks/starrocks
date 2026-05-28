@@ -35,13 +35,13 @@
 #include "exprs/expr_context.h"
 #include "gutil/strings/fastmem.h"
 #include "gutil/strings/join.h"
+#include "platform/thrift_rpc_helper.h"
 #include "runtime/current_thread.h"
 #include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
 #include "runtime/global_dict/fragment_dict_state.h"
 #include "runtime/load_fail_point.h"
 #include "runtime/runtime_state.h"
-#include "runtime/thrift_rpc_helper.h"
 #include "serde/protobuf_serde.h"
 
 namespace starrocks {
@@ -1275,7 +1275,9 @@ IndexChannel::~IndexChannel() {
 
 Status IndexChannel::init(RuntimeState* state, const std::vector<PTabletWithPartition>& tablets, bool is_incremental) {
     {
+        TEST_SYNC_POINT("IndexChannel::init::before_lock");
         std::unique_lock<std::shared_mutex> lock(_node_channels_mutex);
+        TEST_SYNC_POINT("IndexChannel::init::after_lock");
         for (const auto& tablet : tablets) {
             auto* location = _parent->_location->find_tablet(tablet.tablet_id());
             if (location == nullptr) {

@@ -15,7 +15,7 @@
 #pragma once
 
 #include "storage/olap_common.h"
-#include "storage/range.h"
+#include "storage/primitive/range.h"
 
 namespace starrocks {
 

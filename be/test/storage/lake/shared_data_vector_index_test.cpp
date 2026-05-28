@@ -17,11 +17,13 @@
 #include "base/testutil/assert.h"
 #include "column/array_column.h"
 #include "column/chunk.h"
+#include "column/chunk_factory.h"
 #include "column/fixed_length_column.h"
 #include "column/nullable_column.h"
 #include "common/config_vector_index_fwd.h"
 #include "fs/fs_factory.h"
 #include "fs/fs_util.h"
+#include "gutil/walltime.h"
 #include "storage/chunk_helper.h"
 #include "storage/index/index_descriptor.h"
 #include "storage/index/vector/vector_index_reader.h"
@@ -311,7 +313,7 @@ protected:
 
     ChunkUniquePtr build_chunk(const TabletSchemaCSPtr& tablet_schema, int num_rows) {
         auto schema = ChunkHelper::convert_schema(tablet_schema);
-        auto chunk = ChunkHelper::new_chunk(schema, num_rows);
+        auto chunk = ChunkFactory::new_chunk(schema, num_rows);
         for (int i = 0; i < num_rows; ++i) {
             chunk->get_column_raw_ptr_by_index(0)->append_datum(Datum(static_cast<int32_t>(i)));
             DatumArray arr;
@@ -478,7 +480,7 @@ TEST_F(SharedDataTabletWriterVITest, test_segment_writer_vi_fallback_to_index_de
 
     constexpr int kRows = 3;
     auto schema = ChunkHelper::convert_schema(tablet_schema);
-    auto chunk = ChunkHelper::new_chunk(schema, kRows);
+    auto chunk = ChunkFactory::new_chunk(schema, kRows);
     for (int i = 0; i < kRows; ++i) {
         chunk->get_column_raw_ptr_by_index(0)->append_datum(Datum(static_cast<int32_t>(i)));
         DatumArray arr;
@@ -619,7 +621,7 @@ TEST_F(SharedDataTabletWriterVITest, test_segment_writer_skip_vector_index_no_vi
 
     constexpr int kRows = 4;
     auto schema = ChunkHelper::convert_schema(tablet_schema);
-    auto chunk = ChunkHelper::new_chunk(schema, kRows);
+    auto chunk = ChunkFactory::new_chunk(schema, kRows);
     for (int i = 0; i < kRows; ++i) {
         chunk->get_column_raw_ptr_by_index(0)->append_datum(Datum(static_cast<int32_t>(i)));
         DatumArray arr;
@@ -680,7 +682,7 @@ TEST_F(SharedDataTabletWriterVITest, test_segment_writer_no_vi_column_has_vector
     ASSERT_OK(writer->init());
 
     auto schema = ChunkHelper::convert_schema(tablet_schema);
-    auto chunk = ChunkHelper::new_chunk(schema, 3);
+    auto chunk = ChunkFactory::new_chunk(schema, 3);
     for (int i = 0; i < 3; ++i) {
         chunk->get_column_raw_ptr_by_index(0)->append_datum(Datum(static_cast<int32_t>(i)));
         chunk->get_column_raw_ptr_by_index(1)->append_datum(Datum(static_cast<int32_t>(i * 10)));

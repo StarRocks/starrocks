@@ -69,7 +69,7 @@ public:
     void close(RuntimeState* statue) override;
 
     Status set_scan_ranges(const std::vector<TScanRangeParams>& scan_ranges) override;
-    StatusOr<pipeline::MorselQueuePtr> convert_scan_range_to_morsel_queue(
+    StatusOr<pipeline::MorselQueueBuilderPtr> convert_scan_range_to_morsel_queue_builder(
             const std::vector<TScanRangeParams>& scan_ranges, int node_id, int32_t pipeline_dop,
             bool enable_tablet_internal_parallel, TTabletInternalParallelMode::type tablet_internal_parallel_mode,
             size_t num_total_scan_ranges) override;

@@ -56,6 +56,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;
@@ -75,8 +76,10 @@ public class CachingHiveMetastore extends CachingMetastore implements IHiveMetas
 
     private final boolean enableListNameCache;
     protected final IHiveMetastore metastore;
+    private final Executor partitionStatsCacheExecutor;
 
     private final Map<DatabaseTableName, Long> lastAccessTimeMap;
+    private final Set<DatabaseTableName> refreshingPartitionStatsTables;
 
     // eg: HivePartitionValue -> List("year=2022/month=10", "year=2022/month=11")
     protected LoadingCache<HivePartitionValue, List<String>> partitionKeysCache;
@@ -146,8 +149,10 @@ public class CachingHiveMetastore extends CachingMetastore implements IHiveMetas
             Optional<AvroSchemaResolver> avroSchemaResolver) {
         super(executor, expireAfterWriteSec, refreshIntervalSec, maxSize);
         this.metastore = metastore;
+        this.partitionStatsCacheExecutor = executor;
         this.enableListNameCache = enableListNamesCache;
         this.lastAccessTimeMap = Maps.newConcurrentMap();
+        this.refreshingPartitionStatsTables = ConcurrentHashMap.newKeySet();
         this.avroSchemaResolver = avroSchemaResolver;
 
         // The list names interface of hive metastore latency is very low, so we default to pull the latest every time.
@@ -189,12 +194,13 @@ public class CachingHiveMetastore extends CachingMetastore implements IHiveMetas
 
         avroSchemaCache = newCacheBuilder(expireAfterWriteSec, NEVER_REFRESH, maxSize).build();
 
-        Caffeine<Object, Object> builder = Caffeine.newBuilder().maximumSize(maxSize).executor(executor);
+        // Partition stats refresh is driven exclusively by refreshTable() (background
+        // metadata daemon or explicit REFRESH EXTERNAL TABLE); per-key refreshAfterWrite
+        // on top of that amplifies HMS load on large partitioned tables.
+        Caffeine<Object, Object> builder = Caffeine.newBuilder().maximumSize(maxSize)
+                .executor(partitionStatsCacheExecutor);
         if (expireAfterWriteSec > 0) {
             builder.expireAfterWrite(expireAfterWriteSec, TimeUnit.SECONDS);
-        }
-        if (refreshIntervalSec > 0) {
-            builder.refreshAfterWrite(refreshIntervalSec, TimeUnit.SECONDS);
         }
         partitionStatsCache = builder.buildAsync(new PartitionStatisticsLoader(this));
     }
@@ -589,12 +595,7 @@ public class CachingHiveMetastore extends CachingMetastore implements IHiveMetas
             refreshPartitionNames = refreshPartitions(presentPartitionNames, updatedPartitionKeys,
                     this::loadPartitionsByNames, partitionCache);
             if (Config.enable_refresh_hive_partitions_statistics) {
-                partitionStatsCache.synchronous().invalidateAll(presentPartitionStatistics);
-                List<HivePartitionName> needToRefresh = presentPartitionStatistics.stream()
-                        .filter(x -> x.getPartitionNames().isPresent()
-                                && updatedPartitionKeys.contains(x.getPartitionNames().get()))
-                        .toList();
-                partitionStatsCache.getAll(needToRefresh);
+                refreshPartitionStatisticsAsync(databaseTableName, presentPartitionStatistics);
             }
         }
         return refreshPartitionNames;
@@ -622,6 +623,28 @@ public class CachingHiveMetastore extends CachingMetastore implements IHiveMetas
         lastAccessTimeMap.keySet().removeIf(tableName -> !(cachedTableNames.contains(tableName)));
         LOG.info("Refresh table {}.{} in background", hiveDbName, hiveTblName);
         return refreshPartitionNames;
+    }
+
+    private void refreshPartitionStatisticsAsync(DatabaseTableName databaseTableName,
+                                                 List<HivePartitionName> presentPartitionStatistics) {
+        if (presentPartitionStatistics.isEmpty() || !refreshingPartitionStatsTables.add(databaseTableName)) {
+            return;
+        }
+
+        CompletableFuture.runAsync(() -> {
+            for (int i = 0; i < presentPartitionStatistics.size(); i += Config.max_hive_partitions_per_rpc) {
+                List<HivePartitionName> partsToFetch = presentPartitionStatistics.subList(
+                        i, Math.min(i + Config.max_hive_partitions_per_rpc, presentPartitionStatistics.size()));
+                Map<HivePartitionName, HivePartitionStats> updatedPartitionStats =
+                        loadPartitionsStatistics(partsToFetch);
+                partitionStatsCache.synchronous().putAll(updatedPartitionStats);
+            }
+        }, partitionStatsCacheExecutor).whenComplete((ignored, throwable) -> {
+            refreshingPartitionStatsTables.remove(databaseTableName);
+            if (throwable != null) {
+                LOG.warn("Failed to refresh partition statistics for {}", databaseTableName, throwable);
+            }
+        });
     }
 
     private <T> List<HivePartitionName> refreshPartitions(List<HivePartitionName> presentInCache,

@@ -19,7 +19,7 @@
 #include <vector>
 
 #include "common/status.h"
-#include "runtime/client_cache.h"
+#include "common/util/thrift_client_cache.h"
 
 namespace starrocks {
 

@@ -21,9 +21,9 @@
 #include "common/object_pool.h"
 #include "common/status.h"
 #include "common/statusor.h"
+#include "compute_env/sorting/merge.h"
+#include "compute_env/sorting/sorting.h"
 #include "exec/sort_exec_exprs.h"
-#include "exec/sorting/merge.h"
-#include "exec/sorting/sorting.h"
 #include "runtime/runtime_state.h"
 #include "testutil/exprs_test_helper.h"
 
@@ -84,12 +84,14 @@ TEST(MergeCascadeTest, merge_cursor_test) {
 
         size_t chunk_size = 4096;
         auto l = chunk->clone_unique();
-        l->mutable_columns()[0]->append_datum(Datum(1));
-        l->mutable_columns()[0]->assign(chunk_size, 0);
+        auto* l_col = l->get_column_by_index(0)->as_mutable_raw_ptr();
+        l_col->append_datum(Datum(1));
+        l_col->assign(chunk_size, 0);
 
         auto r = chunk->clone_unique();
-        r->mutable_columns()[0]->append_datum(Datum(9999));
-        r->mutable_columns()[0]->assign(chunk_size, 0);
+        auto* r_col = r->get_column_by_index(0)->as_mutable_raw_ptr();
+        r_col->append_datum(Datum(9999));
+        r_col->assign(chunk_size, 0);
 
         l_chunk_channel.emplace(l->clone_unique());
         r_chunk_channel.emplace(r->clone_unique());
@@ -132,12 +134,14 @@ TEST(MergeCascadeTest, merge_cursor_test) {
 
         size_t chunk_size = 4096;
         auto l = chunk->clone_unique();
-        l->mutable_columns()[0]->append_datum(Datum(1));
-        l->mutable_columns()[0]->assign(chunk_size, 0);
+        auto* l_col = l->get_column_by_index(0)->as_mutable_raw_ptr();
+        l_col->append_datum(Datum(1));
+        l_col->assign(chunk_size, 0);
 
         auto r = chunk->clone_unique();
-        r->mutable_columns()[0]->append_datum(Datum(1));
-        r->mutable_columns()[0]->assign(chunk_size, 0);
+        auto* r_col = r->get_column_by_index(0)->as_mutable_raw_ptr();
+        r_col->append_datum(Datum(1));
+        r_col->assign(chunk_size, 0);
 
         l_chunk_channel.emplace(l->clone_unique());
         r_chunk_channel.emplace(r->clone_unique());
@@ -198,14 +202,14 @@ TEST(MergeCascadeTest, merge_sorted_chunks) {
         {
             auto l0 = chunk->clone_unique();
             for (size_t i = 0; i < chunk_size; ++i) {
-                l0->mutable_columns()[0]->append_datum(Datum((int)(i * 2)));
+                l0->columns()[0]->as_mutable_ptr()->append_datum(Datum((int)(i * 2)));
             }
             MergedRun lrun0;
             ASSIGN_OR_ASSERT_FAIL(lrun0, MergedRun::build(std::move(l0), sort_expr));
 
             auto l1 = chunk->clone_unique();
             for (size_t i = 0; i < chunk_size; ++i) {
-                l1->mutable_columns()[0]->append_datum(Datum((int)(i * 2 + 4096)));
+                l1->columns()[0]->as_mutable_ptr()->append_datum(Datum((int)(i * 2 + 4096)));
             }
             MergedRun lrun1;
             ASSIGN_OR_ASSERT_FAIL(lrun1, MergedRun::build(std::move(l1), sort_expr));
@@ -218,7 +222,7 @@ TEST(MergeCascadeTest, merge_sorted_chunks) {
         {
             right = chunk->clone_unique();
             for (size_t i = 0; i < chunk_size; ++i) {
-                right->mutable_columns()[0]->append_datum(Datum((int)(i * 2 + 1)));
+                right->columns()[0]->as_mutable_ptr()->append_datum(Datum((int)(i * 2 + 1)));
             }
         }
 

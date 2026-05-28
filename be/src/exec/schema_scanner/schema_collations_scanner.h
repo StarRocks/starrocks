@@ -23,12 +23,6 @@ namespace starrocks {
 
 class SchemaCollationsScanner : public SchemaScanner {
 public:
-    SchemaCollationsScanner();
-    ~SchemaCollationsScanner() override;
-
-    Status get_next(ChunkPtr* chunk, bool* eos) override;
-
-private:
     struct CollationStruct {
         const char* name;
         const char* charset;
@@ -36,8 +30,22 @@ private:
         const char* is_default;
         const char* is_compile;
         int64_t sortlen;
+        const char* pad_attribute;
     };
 
+    // The static set of collations advertised by StarRocks, terminated by a
+    // sentinel row whose `name` is nullptr. Other system-table scanners read
+    // this same array so they stay consistent with COLLATIONS (in particular
+    // COLLATION_CHARACTER_SET_APPLICABILITY, which is defined in MySQL as a
+    // view derived from COLLATIONS).
+    static const CollationStruct* collations();
+
+    SchemaCollationsScanner();
+    ~SchemaCollationsScanner() override;
+
+    Status get_next(ChunkPtr* chunk, bool* eos) override;
+
+private:
     Status fill_chunk(ChunkPtr* chunk);
 
     int _index{0};

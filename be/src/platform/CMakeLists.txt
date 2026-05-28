@@ -19,11 +19,17 @@ set(EXECUTABLE_OUTPUT_PATH "${BUILD_DIR}/src/platform")
 
 set(PLATFORM_FILES
   download_util.cpp
+  platform_env.cpp
+  platform_metrics.cpp
+  python/env.cpp
+  store_path.cpp
+  thrift_rpc_helper.cpp
   udf_downloader.cpp
+  user_function_cache.cpp
 )
 
 ADD_BE_LIB(Platform
     ${PLATFORM_FILES}
 )
 
-target_link_libraries(Platform PUBLIC HttpCore FSCore IOCore Common Base Gutil StarRocksGen)
+target_link_libraries(Platform PUBLIC HttpCore FSCore IO Common Base Gutil StarRocksGen)

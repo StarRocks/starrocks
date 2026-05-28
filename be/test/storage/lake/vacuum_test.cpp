@@ -2358,6 +2358,39 @@ TEST_P(LakeVacuumTest, test_datafile_gc) {
     EXPECT_TRUE(file_exist("0000000000022222_a542395a-bff5-48a7-a3a7-2ed05691b58c.sst"));
 }
 
+// Regression guard for path_datafile_gc: both load_spill/ (legacy) and
+// load_spill_txns/ (active flat layout) must be skipped, otherwise datafile_gc
+// would mistake live spill files for orphans and delete them. Reclamation of
+// these subtrees is the exclusive responsibility of vacuum_load_spill.
+TEST_P(LakeVacuumTest, test_datafile_gc_skips_load_spill_dirs) {
+    // Plant a file under each spill subtree. Names are deliberately unrecognized
+    // by the lake data-file naming convention so that, were the skip logic to
+    // regress, datafile_gc would happily classify them as orphans.
+    auto legacy_file = join_path(kTestDir, "load_spill/some_load_uuid/data.bin");
+    auto flat_file = join_path(kTestDir, "load_spill_txns/100_aaaa_bbbb_0");
+    {
+        auto dir = legacy_file.substr(0, legacy_file.find_last_of('/'));
+        ASSERT_OK(FileSystem::Default()->create_dir_recursive(dir));
+        ASSIGN_OR_ABORT(auto f, FileSystem::Default()->new_writable_file(legacy_file));
+        ASSERT_OK(f->close());
+    }
+    {
+        auto dir = flat_file.substr(0, flat_file.find_last_of('/'));
+        ASSERT_OK(FileSystem::Default()->create_dir_recursive(dir));
+        ASSIGN_OR_ABORT(auto f, FileSystem::Default()->new_writable_file(flat_file));
+        ASSERT_OK(f->close());
+    }
+
+    // Run datafile_gc with do_delete=true and a 0-second expiry so anything
+    // not skipped becomes a deletion candidate.
+    ASSERT_OK(datafile_gc(kTestDir, /*audit_file_path=*/"", /*expired_seconds=*/0, /*do_delete=*/true));
+
+    auto legacy_st = FileSystem::Default()->path_exists(legacy_file);
+    auto flat_st = FileSystem::Default()->path_exists(flat_file);
+    ASSERT_TRUE(legacy_st.ok()) << "datafile_gc must not touch legacy load_spill/, got: " << legacy_st;
+    ASSERT_TRUE(flat_st.ok()) << "datafile_gc must not touch flat load_spill_txns/, got: " << flat_st;
+}
+
 TEST_P(LakeVacuumTest, test_datafile_gc_with_bundle_metadata) {
     WritableFileOptions options;
     options.mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE;
@@ -5097,6 +5130,199 @@ TEST_P(LakeVacuumTest, test_delete_range_distribution_tablets_skip_shared_orphan
         // Metadata file should be deleted
         EXPECT_FALSE(file_exist(tablet_metadata_filename(7000, 3)));
     }
+}
+
+// ============================================================================
+// vacuum_load_spill (flat-layout) tests
+// ----------------------------------------------------------------------------
+// All tests below operate on raw files under <kTestDir>/load_spill_txns/ (flat
+// layout) and <kTestDir>/load_spill/ (legacy). They do not go through
+// LoadSpillBlockManager — vacuum_load_spill only cares about file names and
+// directory layout, so we synthesize files directly to keep tests focused.
+// ============================================================================
+
+namespace {
+
+// Create an empty file at |full_path|. Parent directories are created lazily.
+void create_flat_spill_file(const std::string& full_path) {
+    auto dir = full_path.substr(0, full_path.find_last_of('/'));
+    ASSERT_OK(FileSystem::Default()->create_dir_recursive(dir));
+    ASSIGN_OR_ABORT(auto f, FileSystem::Default()->new_writable_file(full_path));
+    ASSERT_OK(f->close());
+}
+
+bool path_exists(const std::string& full_path) {
+    auto st = FileSystem::Default()->path_exists(full_path);
+    CHECK(st.ok() || st.is_not_found()) << st;
+    return st.ok();
+}
+
+} // namespace
+
+// A flat file whose hex-encoded txn_id < min_active_txn_id is reclaimed.
+TEST_P(LakeVacuumTest, vacuum_load_spill_flat_parses_valid_name) {
+    auto txns_dir = join_path(kTestDir, "load_spill_txns");
+    // 0x100 = 256, well below min_active_txn_id (1000) below.
+    auto victim = join_path(txns_dir, "100_aaaa_bbbb_0");
+    create_flat_spill_file(victim);
+    ASSERT_TRUE(path_exists(victim));
+
+    int64_t deleted = 0;
+    ASSERT_OK(vacuum_load_spill(kTestDir, /*min_active_txn_id=*/1000,
+                                /*cleanup_legacy_load_spill=*/false, &deleted));
+    ExecEnv::GetInstance()->delete_file_thread_pool()->wait();
+    EXPECT_FALSE(path_exists(victim));
+    EXPECT_EQ(1, deleted);
+}
+
+// A flat file whose hex-encoded txn_id >= min_active_txn_id is retained.
+TEST_P(LakeVacuumTest, vacuum_load_spill_flat_keeps_active_txn) {
+    auto txns_dir = join_path(kTestDir, "load_spill_txns");
+    // 0x3e8 = 1000, exactly equal to min_active_txn_id below — must be retained.
+    auto active = join_path(txns_dir, "3e8_aaaa_bbbb_0");
+    create_flat_spill_file(active);
+
+    int64_t deleted = 0;
+    ASSERT_OK(vacuum_load_spill(kTestDir, /*min_active_txn_id=*/1000,
+                                /*cleanup_legacy_load_spill=*/false, &deleted));
+    EXPECT_TRUE(path_exists(active));
+    EXPECT_EQ(0, deleted);
+}
+
+// A residual sub-directory under flat load_spill_txns/ is left untouched
+// (defensive guard against accidental deletion of an unexpected layout).
+TEST_P(LakeVacuumTest, vacuum_load_spill_flat_skips_subdirectory) {
+    auto txns_dir = join_path(kTestDir, "load_spill_txns");
+    // Nested file so the parent appears as a directory in iterate_dir2.
+    auto nested = join_path(txns_dir, "stray_subdir/100_aaaa_bbbb_0");
+    create_flat_spill_file(nested);
+
+    int64_t deleted = 0;
+    ASSERT_OK(vacuum_load_spill(kTestDir, /*min_active_txn_id=*/INT64_MAX,
+                                /*cleanup_legacy_load_spill=*/false, &deleted));
+    // Sub-directory must not be auto-removed.
+    EXPECT_TRUE(path_exists(nested));
+    EXPECT_EQ(0, deleted);
+}
+
+// A file whose name does NOT match "<hex>_..." is skipped (not deleted).
+TEST_P(LakeVacuumTest, vacuum_load_spill_flat_skips_unparseable_name) {
+    auto txns_dir = join_path(kTestDir, "load_spill_txns");
+    auto bad1 = join_path(txns_dir, "_leading_underscore_0");          // sep == 0
+    auto bad2 = join_path(txns_dir, "noseparator");                    // no '_'
+    auto bad3 = join_path(txns_dir, "0123456789abcdef0_too_long_hex"); // sep > 16
+    create_flat_spill_file(bad1);
+    create_flat_spill_file(bad2);
+    create_flat_spill_file(bad3);
+
+    int64_t deleted = 0;
+    ASSERT_OK(vacuum_load_spill(kTestDir, /*min_active_txn_id=*/INT64_MAX,
+                                /*cleanup_legacy_load_spill=*/false, &deleted));
+    EXPECT_TRUE(path_exists(bad1));
+    EXPECT_TRUE(path_exists(bad2));
+    EXPECT_TRUE(path_exists(bad3));
+    EXPECT_EQ(0, deleted);
+}
+
+// Threshold semantics is strict less-than: txn_id == min_active_txn_id is kept,
+// txn_id == min_active_txn_id - 1 is deleted.
+TEST_P(LakeVacuumTest, vacuum_load_spill_flat_threshold_strict_less_than) {
+    auto txns_dir = join_path(kTestDir, "load_spill_txns");
+    auto kept = join_path(txns_dir, "64_a_b_0");   // 0x64 = 100
+    auto victim = join_path(txns_dir, "63_a_b_0"); // 0x63 = 99
+    create_flat_spill_file(kept);
+    create_flat_spill_file(victim);
+
+    int64_t deleted = 0;
+    ASSERT_OK(vacuum_load_spill(kTestDir, /*min_active_txn_id=*/100,
+                                /*cleanup_legacy_load_spill=*/false, &deleted));
+    ExecEnv::GetInstance()->delete_file_thread_pool()->wait();
+    EXPECT_TRUE(path_exists(kept));
+    EXPECT_FALSE(path_exists(victim));
+    EXPECT_EQ(1, deleted);
+}
+
+// Legacy <root>/load_spill/ tree is left untouched when
+// cleanup_legacy_load_spill = false (default).
+TEST_P(LakeVacuumTest, vacuum_load_spill_legacy_skipped_by_default) {
+    auto legacy_dir = join_path(kTestDir, "load_spill");
+    auto legacy_file = join_path(legacy_dir, "some_load_uuid/data.bin");
+    create_flat_spill_file(legacy_file);
+
+    int64_t deleted = 0;
+    ASSERT_OK(vacuum_load_spill(kTestDir, /*min_active_txn_id=*/INT64_MAX,
+                                /*cleanup_legacy_load_spill=*/false, &deleted));
+    EXPECT_TRUE(path_exists(legacy_file));
+    EXPECT_EQ(0, deleted);
+}
+
+// Legacy tree is fully reclaimed in one shot (delete_dir_recursive) when
+// cleanup_legacy_load_spill = true, regardless of min_active_txn_id (the legacy
+// layout has no txn_id metadata). The deleted-files counter is incremented by 1
+// logical unit — the recursive delete does not surface a per-file count.
+TEST_P(LakeVacuumTest, vacuum_load_spill_legacy_cleanup_when_optin) {
+    auto legacy_dir = join_path(kTestDir, "load_spill");
+    auto legacy_subdir = join_path(legacy_dir, "load_uuid_a");
+    auto legacy_file = join_path(legacy_subdir, "data.bin");
+    auto legacy_topfile = join_path(legacy_dir, "stray_topfile.bin");
+    create_flat_spill_file(legacy_file);
+    create_flat_spill_file(legacy_topfile);
+
+    int64_t deleted = 0;
+    ASSERT_OK(vacuum_load_spill(kTestDir, /*min_active_txn_id=*/INT64_MAX,
+                                /*cleanup_legacy_load_spill=*/true, &deleted));
+    EXPECT_FALSE(path_exists(legacy_file));
+    EXPECT_FALSE(path_exists(legacy_subdir));
+    EXPECT_FALSE(path_exists(legacy_topfile));
+    EXPECT_FALSE(path_exists(legacy_dir));
+    EXPECT_EQ(1, deleted); // one logical unit for the recursive subtree delete
+}
+
+// vacuum is idempotent / no-op when neither directory exists.
+TEST_P(LakeVacuumTest, vacuum_load_spill_idempotent_on_missing_dir) {
+    // Neither <kTestDir>/load_spill_txns nor <kTestDir>/load_spill is created.
+    int64_t deleted = 42; // sentinel — must remain non-decreasing
+    ASSERT_OK(vacuum_load_spill(kTestDir, /*min_active_txn_id=*/1000,
+                                /*cleanup_legacy_load_spill=*/true, &deleted));
+    EXPECT_EQ(42, deleted);
+
+    // Calling twice on an empty tree must still succeed.
+    ASSERT_OK(vacuum_load_spill(kTestDir, /*min_active_txn_id=*/1000,
+                                /*cleanup_legacy_load_spill=*/true, &deleted));
+    EXPECT_EQ(42, deleted);
+}
+
+// |*deleted_files| accumulates across both layouts in a single call. The legacy
+// subtree contributes 1 logical unit (one delete_dir_recursive call), regardless
+// of how many files lived underneath.
+TEST_P(LakeVacuumTest, vacuum_load_spill_increments_deleted_files_counter) {
+    auto txns_dir = join_path(kTestDir, "load_spill_txns");
+    auto legacy_dir = join_path(kTestDir, "load_spill");
+    create_flat_spill_file(join_path(txns_dir, "1_a_b_0"));
+    create_flat_spill_file(join_path(txns_dir, "2_a_b_0"));
+    create_flat_spill_file(join_path(legacy_dir, "uuid_a/data.bin"));
+
+    int64_t deleted = 100; // pre-existing counter — must accumulate, not reset
+    ASSERT_OK(vacuum_load_spill(kTestDir, /*min_active_txn_id=*/INT64_MAX,
+                                /*cleanup_legacy_load_spill=*/true, &deleted));
+    // 2 flat files + 1 legacy-subtree logical unit = 3 deletions, on top of 100.
+    EXPECT_EQ(103, deleted);
+}
+
+// Various invalid hex prefixes are skipped (txn_id <= 0, parse failure).
+TEST_P(LakeVacuumTest, vacuum_load_spill_handles_invalid_hex_prefix) {
+    auto txns_dir = join_path(kTestDir, "load_spill_txns");
+    auto zero_txn = join_path(txns_dir, "0_a_b_0");   // txn_id == 0 → skip
+    auto non_hex = join_path(txns_dir, "ghij_a_b_0"); // not hex → parse fail
+    create_flat_spill_file(zero_txn);
+    create_flat_spill_file(non_hex);
+
+    int64_t deleted = 0;
+    ASSERT_OK(vacuum_load_spill(kTestDir, /*min_active_txn_id=*/INT64_MAX,
+                                /*cleanup_legacy_load_spill=*/false, &deleted));
+    EXPECT_TRUE(path_exists(zero_txn));
+    EXPECT_TRUE(path_exists(non_hex));
+    EXPECT_EQ(0, deleted);
 }
 
 } // namespace starrocks::lake

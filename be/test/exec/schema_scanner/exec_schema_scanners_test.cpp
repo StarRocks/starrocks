@@ -20,6 +20,7 @@
 
 #include "column/column_helper.h"
 #include "exec/schema_scanner/schema_charsets_scanner.h"
+#include "exec/schema_scanner/schema_collation_character_set_applicability_scanner.h"
 #include "exec/schema_scanner/schema_collations_scanner.h"
 #include "exec/schema_scanner/schema_column_filler.h"
 #include "exec/schema_scanner/schema_dummy_scanner.h"
@@ -92,13 +93,14 @@ TEST(ExecSchemaScannersTest, CollationsScannerReturnsStaticCollationRow) {
     SchemaCollationsScanner scanner;
     ObjectPool pool;
     auto slots = init_scanner(&scanner, &pool);
-    ASSERT_EQ(6, slots.size());
+    ASSERT_EQ(7, slots.size());
     EXPECT_EQ("COLLATION_NAME", slots[0]->col_name());
     EXPECT_EQ("CHARACTER_SET_NAME", slots[1]->col_name());
     EXPECT_EQ("ID", slots[2]->col_name());
     EXPECT_EQ("IS_DEFAULT", slots[3]->col_name());
     EXPECT_EQ("IS_COMPILED", slots[4]->col_name());
     EXPECT_EQ("SORTLEN", slots[5]->col_name());
+    EXPECT_EQ("PAD_ATTRIBUTE", slots[6]->col_name());
 
     auto chunk = create_chunk(slots);
     bool eos = false;
@@ -106,7 +108,29 @@ TEST(ExecSchemaScannersTest, CollationsScannerReturnsStaticCollationRow) {
     ASSERT_TRUE(st.ok()) << st.to_string();
     EXPECT_FALSE(eos);
     ASSERT_EQ(1, chunk->num_rows());
-    EXPECT_EQ("['utf8_general_ci', 'utf8', 33, 'Yes', 'Yes', 1]", chunk->debug_row(0));
+    EXPECT_EQ("['utf8_general_ci', 'utf8', 33, 'Yes', 'Yes', 1, 'PAD SPACE']", chunk->debug_row(0));
+
+    chunk->reset();
+    st = scanner.get_next(&chunk, &eos);
+    ASSERT_TRUE(st.ok()) << st.to_string();
+    EXPECT_TRUE(eos);
+}
+
+TEST(ExecSchemaScannersTest, CollationCharacterSetApplicabilityScannerMirrorsCollations) {
+    SchemaCollationCharacterSetApplicabilityScanner scanner;
+    ObjectPool pool;
+    auto slots = init_scanner(&scanner, &pool);
+    ASSERT_EQ(2, slots.size());
+    EXPECT_EQ("COLLATION_NAME", slots[0]->col_name());
+    EXPECT_EQ("CHARACTER_SET_NAME", slots[1]->col_name());
+
+    auto chunk = create_chunk(slots);
+    bool eos = false;
+    auto st = scanner.get_next(&chunk, &eos);
+    ASSERT_TRUE(st.ok()) << st.to_string();
+    EXPECT_FALSE(eos);
+    ASSERT_EQ(1, chunk->num_rows());
+    EXPECT_EQ("['utf8_general_ci', 'utf8']", chunk->debug_row(0));
 
     chunk->reset();
     st = scanner.get_next(&chunk, &eos);
@@ -125,9 +149,10 @@ TEST(ExecSchemaScannersTest, DescriptorOnlyScannersExposeStableSchemas) {
 
     SchemaStatisticsScanner statistics;
     auto statistics_slots = init_scanner(&statistics, &pool);
-    ASSERT_EQ(17, statistics_slots.size());
+    ASSERT_EQ(18, statistics_slots.size());
     EXPECT_EQ("TABLE_CATALOG", statistics_slots.front()->col_name());
     EXPECT_TRUE(statistics_slots.front()->is_nullable());
+    EXPECT_EQ("IS_VISIBLE", statistics_slots[16]->col_name());
     EXPECT_EQ("EXPRESSION", statistics_slots.back()->col_name());
 
     SchemaTriggersScanner triggers;

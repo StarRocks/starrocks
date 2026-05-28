@@ -18,8 +18,8 @@ set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/runtime")
 set(EXECUTABLE_OUTPUT_PATH "${BUILD_DIR}/src/runtime")
 
 set(RUNTIME_CORE_FILES
-    client_cache.cpp
     current_thread.cpp
+    chunk_helper.cpp
     descriptors.cpp
     runtime_state.cpp
     mem_tracker.cpp
@@ -31,9 +31,7 @@ set(RUNTIME_CORE_FILES
     runtime_filter_cache.cpp
     bucket_aware_partition.cpp
     query_statistics.cpp
-    record_batch_queue.cpp
     runtime_metrics.cpp
-    thrift_rpc_helper.cpp
     stream_load/stream_load_metrics.cpp
     global_dict/decoder.cpp
     global_dict/miscs.cpp
@@ -63,25 +61,40 @@ target_link_libraries(RuntimeCore PRIVATE
     StarRocksGen
 )
 
+set(RUNTIME_ENV_FILES
+    env/global_env.cpp
+    env/global_thread_pools.cpp
+    env/java/java_env.cpp
+)
+
+ADD_BE_LIB(RuntimeEnv
+    ${RUNTIME_ENV_FILES}
+)
+
+target_link_libraries(RuntimeEnv PUBLIC
+    Platform
+    RuntimeCore
+    Types
+    Common
+    Base
+    Gutil
+    StarRocksGen
+)
+
 set(RUNTIME_FILES
     broker_mgr.cpp
-    buffer_control_block.cpp
-    local_pass_through_buffer.cpp
     lookup_stream_mgr.cpp
-    data_stream_mgr.cpp
-    sender_queue.cpp
     descriptors_ext.cpp
     exec_env.cpp
-    user_function_cache.cpp
     jdbc_driver_manager.cpp
     plan_fragment_executor.cpp
-    result_buffer_mgr.cpp
     runtime_state_helper.cpp
+    rejected_record_writer.cpp
+    rejected_record_sync_daemon.cpp
     fragment_mgr.cpp
     load_path_mgr.cpp
     dummy_load_path_mgr.cpp
     agg_state_desc.cpp
-    data_stream_recvr.cpp
     load_channel_mgr.cpp
     load_channel.cpp
     local_tablets_channel.cpp
@@ -101,10 +114,7 @@ set(RUNTIME_FILES
     routine_load/data_consumer_pool.cpp
     routine_load/routine_load_task_executor.cpp
     small_file_mgr.cpp
-    result_queue_mgr.cpp
     external_scan_context_mgr.cpp
-    chunk_cursor.cpp
-    sorted_chunks_merger.cpp
     tablets_channel.cpp
     runtime_filter_worker.cpp
     runtime_filter_serde.cpp
@@ -122,4 +132,5 @@ ADD_BE_LIB(Runtime
     ${RUNTIME_FILES}
     )
 
-target_link_libraries(Runtime PUBLIC RuntimeCore ExecCore ExecSinkCore ExecSortingCore Platform)
+target_link_libraries(Runtime PUBLIC RuntimeEnv RuntimeCore ComputeEnv ExecPrimitive ExecSinkCore Platform)
+target_link_libraries(Runtime PRIVATE ConnectorBuiltinRegistry)

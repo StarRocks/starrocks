@@ -114,7 +114,7 @@ SET GLOBAL wait_timeout = 3600;
 
 ## 这个 BE 日志是什么意思？"tcmalloc: large alloc xxxxxxxx bytes"
 
-发生了大内存分配请求，通常由大查询引起。检查 `be.INFO` 中的相应 `query_id` 以定位 SQL。
+这是历史分配器的大内存申请诊断日志。发生了大内存分配请求，通常由大查询引起。检查 `be.INFO` 中的相应 `query_id` 以定位 SQL，并结合 `/mem_tracker` 和 `/memz` 查看当前内存使用情况。
 
 ## 添加节点后，tablet 迁移会导致磁盘 I/O 波动吗？
 

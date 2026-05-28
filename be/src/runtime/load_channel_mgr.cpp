@@ -45,6 +45,7 @@
 #include "common/thread/thread.h"
 #include "fs/key_cache.h"
 #include "gutil/strings/substitute.h"
+#include "platform/platform_env.h"
 #include "runtime/closure_guard.h"
 #include "runtime/exec_env.h"
 #include "runtime/load_channel.h"
@@ -219,8 +220,9 @@ void LoadChannelMgr::_open(LoadChannelOpenContext open_context) {
             auto job_mem_tracker = std::make_unique<MemTracker>(job_max_memory, load_id.to_string(), _mem_tracker);
 
             auto* exec_env = ExecEnv::GetInstance();
+            auto* platform_env = PlatformEnv::GetInstance();
             channel = std::make_shared<LoadChannel>(this, _lake_tablet_manager, exec_env->diagnose_daemon(),
-                                                    exec_env->brpc_stub_cache(), load_id, txn_id,
+                                                    platform_env->brpc_stub_cache(), load_id, txn_id,
                                                     request.txn_trace_parent(), job_timeout_s,
                                                     std::move(job_mem_tracker), _metrics, _table_metrics_mgr);
             if (request.has_load_channel_profile_config()) {

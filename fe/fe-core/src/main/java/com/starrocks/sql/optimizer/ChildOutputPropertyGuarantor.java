@@ -248,6 +248,10 @@ public class ChildOutputPropertyGuarantor extends PropertyDeriverBase<Void, Expr
 
         requiredChildrenProperties.set(childIndex, newChildInputProperty);
         childrenOutputProperties.set(childIndex, newChildInputProperty);
+        // Publish the enforcer into childrenBestExprList; downstream enforcements
+        // (transToBucketShuffleJoin) read this list directly and need the converted
+        // child whose lowestCostTable contains the new hash output property.
+        childrenBestExprList.set(childIndex, pair.first);
         return pair.first;
     }
 

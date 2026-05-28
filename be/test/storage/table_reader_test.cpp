@@ -21,11 +21,14 @@
 #include <memory>
 
 #include "base/testutil/assert.h"
+#include "column/chunk_factory.h"
 #include "column/datum_tuple.h"
 #include "column/vectorized_fwd.h"
 #include "gutil/strings/substitute.h"
+#include "gutil/walltime.h"
 #include "runtime/descriptor_helper.h"
 #include "storage/chunk_helper.h"
+#include "storage/primitive/union_iterator.h"
 #include "storage/rowset/rowset_factory.h"
 #include "storage/rowset/rowset_options.h"
 #include "storage/rowset/rowset_writer.h"
@@ -35,7 +38,6 @@
 #include "storage/storage_engine.h"
 #include "storage/tablet.h"
 #include "storage/tablet_manager.h"
-#include "storage/union_iterator.h"
 #include "storage/update_manager.h"
 
 namespace starrocks {
@@ -71,13 +73,13 @@ public:
         std::unique_ptr<RowsetWriter> writer;
         EXPECT_TRUE(RowsetFactory::create_rowset_writer(writer_context, &writer).ok());
         auto schema = ChunkHelper::convert_schema(tablet->tablet_schema());
-        auto chunk = ChunkHelper::new_chunk(schema, data.size());
-        auto cols = chunk->mutable_columns();
+        auto chunk = ChunkFactory::new_chunk(schema, data.size());
+        auto cols = chunk->columns();
         for (int pos = start_pos; pos < end_pos; pos++) {
             const DatumTuple& row = data[pos];
             DatumTuple tmp_row;
             for (size_t i = 0; i < row.size(); i++) {
-                cols[i]->append_datum(row.get(i));
+                cols[i]->as_mutable_ptr()->append_datum(row.get(i));
             }
         }
         CHECK_OK(writer->flush_chunk(*chunk));
@@ -199,7 +201,7 @@ void collect_chunk_iterator_result(StatusOr<ChunkIteratorPtr>& status_or, Chunk&
         ASSERT_TRUE(status_or.status().is_end_of_file());
     }
     ChunkIteratorPtr iterator = status_or.value();
-    ChunkPtr chunk = ChunkHelper::new_chunk(iterator->schema(), 2);
+    ChunkPtr chunk = ChunkFactory::new_chunk(iterator->schema(), 2);
     Status status = iterator->get_next(chunk.get());
     result.reset();
     while (status.ok()) {
@@ -260,9 +262,9 @@ TEST_F(TableReaderTest, test_basic_read) {
     EXPECT_TRUE(table_reader->init(params).ok());
 
     // 3. verify multi_get
-    ChunkPtr key_chunk = ChunkHelper::new_chunk(_key_schema, 10);
+    ChunkPtr key_chunk = ChunkFactory::new_chunk(_key_schema, 10);
     std::vector<bool> expected_found;
-    ChunkPtr expected_value_chunk = ChunkHelper::new_chunk(_value_schema, 10);
+    ChunkPtr expected_value_chunk = ChunkFactory::new_chunk(_value_schema, 10);
 
     // key (1, 1, 2), value (2, 1)
     build_multi_get_request(rows[1], key_chunk.get(), expected_found, expected_value_chunk.get());
@@ -286,7 +288,7 @@ TEST_F(TableReaderTest, test_basic_read) {
     expected_found.emplace_back(false);
 
     std::vector<bool> found;
-    const ChunkPtr& value_chunk = ChunkHelper::new_chunk(_value_schema, 10);
+    const ChunkPtr& value_chunk = ChunkFactory::new_chunk(_value_schema, 10);
     Status status = table_reader->multi_get(*key_chunk, {"v1", "v2"}, found, *value_chunk);
     ASSERT_OK(status);
     ASSERT_EQ(expected_found.size(), found.size());
@@ -299,8 +301,8 @@ TEST_F(TableReaderTest, test_basic_read) {
     Schema scan_key_schema = ChunkHelper::convert_schema(_tablets[0]->tablet_schema(), {0, 1});
     Schema scan_value_schema = ChunkHelper::convert_schema(_tablets[0]->tablet_schema(), {2, 3, 4});
 
-    const ChunkPtr& expect_scan_result = ChunkHelper::new_chunk(scan_value_schema, 0);
-    const ChunkPtr& scan_result = ChunkHelper::new_chunk(scan_value_schema, 0);
+    const ChunkPtr& expect_scan_result = ChunkFactory::new_chunk(scan_value_schema, 0);
+    const ChunkPtr& scan_result = ChunkFactory::new_chunk(scan_value_schema, 0);
     std::vector<const ColumnPredicate*> predicates;
 
     // scan prefix key (1, 1)

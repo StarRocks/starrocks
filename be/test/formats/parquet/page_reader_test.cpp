@@ -18,13 +18,13 @@
 
 #include <iostream>
 
+#include "cache/scan/shared_buffered_input_stream.h"
 #include "common/util/thrift_util.h"
 #include "exec/hdfs_scanner/hdfs_scanner.h"
 #include "formats/parquet/column_reader.h"
 #include "fs/fs_memory.h"
 #include "gen_cpp/parquet_types.h"
-#include "io/core/string_input_stream.h"
-#include "io/shared_buffered_input_stream.h"
+#include "io/string_input_stream.h"
 namespace starrocks::parquet {
 
 class ParquetPageReaderTest : public testing::Test {
@@ -76,7 +76,7 @@ TEST_F(ParquetPageReaderTest, Normal) {
 
     RandomAccessFile file(std::make_shared<io::StringInputStream>(std::move(buffer)), "string-file");
 
-    io::SharedBufferedInputStream stream(file.stream(), file.filename(), file.get_size().value());
+    SharedBufferedInputStream stream(file.stream(), file.filename(), file.get_size().value());
 
     ColumnReaderOptions opts;
     opts.stats = &stats;
@@ -145,7 +145,7 @@ TEST_F(ParquetPageReaderTest, ExtraBytes) {
 
     RandomAccessFile file(std::make_shared<io::StringInputStream>(std::move(buffer)), "string-file");
 
-    io::SharedBufferedInputStream stream(file.stream(), file.filename(), file.get_size().value());
+    SharedBufferedInputStream stream(file.stream(), file.filename(), file.get_size().value());
 
     ColumnReaderOptions opts;
     opts.stats = &stats;

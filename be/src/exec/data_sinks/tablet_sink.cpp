@@ -66,13 +66,13 @@
 #include "gutil/strings/fastmem.h"
 #include "gutil/strings/join.h"
 #include "gutil/strings/substitute.h"
+#include "platform/thrift_rpc_helper.h"
 #include "runtime/current_thread.h"
 #include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
 #include "runtime/runtime_state_helper.h"
 #include "runtime/stream_load/stream_load_metrics.h"
-#include "runtime/thrift_rpc_helper.h"
 #include "serde/protobuf_serde.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_manager.h"
@@ -127,6 +127,14 @@ Status OlapTableSink::init(const TDataSink& t_sink, RuntimeState* state) {
     }
     if (table_sink.__isset.db_name) {
         state->set_db(table_sink.db_name);
+    }
+    if (table_sink.__isset.table_name) {
+        // Stash destination table on RuntimeState so RejectedRecordWriter
+        // can stamp rows with the correct target_table. Must happen before
+        // any rejection site fires; OlapTableSink::init() runs during
+        // fragment init so both this and the scanner's subsequent
+        // rejections see the populated value.
+        state->set_table_name(table_sink.table_name);
     }
     state->set_txn_id(table_sink.txn_id);
     if (table_sink.__isset.label) {

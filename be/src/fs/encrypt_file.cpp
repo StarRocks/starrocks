@@ -30,7 +30,7 @@
 #include "base/utility/defer_op.h"
 #include "fs/encrypt_file.h"
 #include "gutil/endian.h"
-#include "io/core/input_stream.h"
+#include "io/input_stream.h"
 
 namespace starrocks {
 

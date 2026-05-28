@@ -20,9 +20,9 @@
 #include "base/hash/hash_std.hpp"
 #include "base/time/time.h"
 #include "base/uid_util.h"
+#include "compute_env/pipeline/driver_limiter.h"
 #include "exec/exec_node.h"
 #include "exec/pipeline/adaptive/adaptive_dop_param.h"
-#include "exec/pipeline/driver_limiter.h"
 #include "exec/pipeline/group_execution/execution_group_fwd.h"
 #include "exec/pipeline/pipeline.h"
 #include "exec/pipeline/pipeline_fwd.h"
@@ -38,7 +38,7 @@
 #include "runtime/profile_report_worker.h"
 #include "runtime/runtime_filter_worker.h"
 #include "runtime/runtime_state.h"
-#include "storage/predicate_tree_params.h"
+#include "storage/primitive/predicate_tree_params.h"
 
 namespace starrocks {
 

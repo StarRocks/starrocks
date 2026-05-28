@@ -17,7 +17,8 @@
 namespace starrocks {
 
 class ExecEnv;
+class GlobalEnv;
 
-void register_config_update_hooks(ExecEnv* exec_env);
+void register_config_update_hooks(ExecEnv* exec_env, const GlobalEnv& global_env);
 
 } // namespace starrocks

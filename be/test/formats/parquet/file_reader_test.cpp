@@ -25,6 +25,7 @@
 #include "cache/disk_cache/starcache_engine.h"
 #include "cache/disk_cache/test_cache_utils.h"
 #include "cache/mem_cache/lrucache_engine.h"
+#include "cache/scan/shared_buffered_input_stream.h"
 #include "column/column_access_path.h"
 #include "column/column_helper.h"
 #include "column/fixed_length_column.h"
@@ -47,7 +48,6 @@
 #include "formats/parquet/parquet_test_util/util.h"
 #include "formats/parquet/parquet_ut_base.h"
 #include "fs/fs.h"
-#include "io/shared_buffered_input_stream.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/global_dict/fragment_dict_state.h"
 #include "runtime/mem_tracker.h"
@@ -1265,9 +1265,9 @@ TEST_F(FileReaderTest, TestFilterFile) {
 TEST_F(FileReaderTest, TestGetNextDictFilter) {
     auto file = _create_file(_file2_path);
     std::shared_ptr<io::SeekableInputStream> input_stream = file->stream();
-    std::shared_ptr<io::SharedBufferedInputStream> shared_buffered_input_stream =
-            std::make_shared<io::SharedBufferedInputStream>(input_stream, file->filename(),
-                                                            std::filesystem::file_size(_file2_path));
+    std::shared_ptr<SharedBufferedInputStream> shared_buffered_input_stream =
+            std::make_shared<SharedBufferedInputStream>(input_stream, file->filename(),
+                                                        std::filesystem::file_size(_file2_path));
 
     auto wrap_file = std::make_unique<RandomAccessFile>(shared_buffered_input_stream, file->filename());
 
@@ -1461,7 +1461,7 @@ TEST_F(FileReaderTest, TestReadArray2dColumn) {
     ASSERT_TRUE(status.ok());
 
     EXPECT_EQ(file_reader->row_group_size(), 1);
-    std::vector<io::SharedBufferedInputStream::IORange> ranges;
+    std::vector<SharedBufferedInputStream::IORange> ranges;
     int64_t end_offset = 0;
     file_reader->_row_group_readers[0]->collect_io_ranges(&ranges, &end_offset);
 
@@ -1510,7 +1510,7 @@ TEST_F(FileReaderTest, TestReadMapCharKeyColumn) {
     ASSERT_TRUE(status.ok()) << status.message();
 
     EXPECT_EQ(file_reader->row_group_size(), 1);
-    std::vector<io::SharedBufferedInputStream::IORange> ranges;
+    std::vector<SharedBufferedInputStream::IORange> ranges;
     int64_t end_offset = 0;
     file_reader->_row_group_readers[0]->collect_io_ranges(&ranges, &end_offset);
 
@@ -1541,7 +1541,7 @@ TEST_F(FileReaderTest, TestReadMapColumn) {
     ASSERT_TRUE(status.ok());
 
     EXPECT_EQ(file_reader->row_group_size(), 1);
-    std::vector<io::SharedBufferedInputStream::IORange> ranges;
+    std::vector<SharedBufferedInputStream::IORange> ranges;
     int64_t end_offset = 0;
     file_reader->_row_group_readers[0]->collect_io_ranges(&ranges, &end_offset);
 
@@ -1594,7 +1594,7 @@ TEST_F(FileReaderTest, TestReadStruct) {
     ASSERT_TRUE(status.ok());
 
     EXPECT_EQ(file_reader->row_group_size(), 1);
-    std::vector<io::SharedBufferedInputStream::IORange> ranges;
+    std::vector<SharedBufferedInputStream::IORange> ranges;
     int64_t end_offset = 0;
     file_reader->_row_group_readers[0]->collect_io_ranges(&ranges, &end_offset);
 
@@ -1642,7 +1642,7 @@ TEST_F(FileReaderTest, TestReadStructSubField) {
     ASSERT_TRUE(status.ok());
 
     EXPECT_EQ(file_reader->row_group_size(), 1);
-    std::vector<io::SharedBufferedInputStream::IORange> ranges;
+    std::vector<SharedBufferedInputStream::IORange> ranges;
     int64_t end_offset = 0;
     file_reader->_row_group_readers[0]->collect_io_ranges(&ranges, &end_offset);
 
@@ -1828,7 +1828,7 @@ TEST_F(FileReaderTest, TestReadMapColumnWithPartialMaterialize) {
 
     EXPECT_EQ(file_reader->row_group_size(), 1);
 
-    std::vector<io::SharedBufferedInputStream::IORange> ranges;
+    std::vector<SharedBufferedInputStream::IORange> ranges;
     int64_t end_offset = 0;
     file_reader->_row_group_readers[0]->collect_io_ranges(&ranges, &end_offset);
 
@@ -4352,7 +4352,7 @@ TEST_F(FileReaderTest, test_read_variant) {
     ASSERT_TRUE(status.ok()) << "Failed to initialize file reader: " << status.message();
 
     EXPECT_EQ(file_reader->row_group_size(), 1);
-    std::vector<io::SharedBufferedInputStream::IORange> ranges;
+    std::vector<SharedBufferedInputStream::IORange> ranges;
     int64_t end_offset = 0;
     file_reader->_row_group_readers[0]->collect_io_ranges(&ranges, &end_offset);
 

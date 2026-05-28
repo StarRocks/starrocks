@@ -70,9 +70,10 @@
 #include "fs/encrypt_file.h"
 #include "gutil/cpu.h"
 #include "jemalloc/jemalloc.h"
+#include "platform/platform_metrics.h"
+#include "platform/user_function_cache.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_metrics.h"
-#include "runtime/user_function_cache.h"
 #include "service/backend_metrics_initializer.h"
 #include "service/mem_hook.h"
 #include "storage/storage_engine.h"
@@ -111,8 +112,8 @@ void calculate_metrics(Daemon* daemon, ProcessMetricsRegistry* process_metrics_r
             last_ts = MonotonicSeconds();
             lst_push_bytes = StorageMetrics::instance()->push_request_write_bytes.value();
             lst_query_bytes = QueryScanMetrics::instance()->query_scan_bytes.value();
-            SystemMetrics::instance()->get_disks_io_time(&lst_disks_io_time);
-            SystemMetrics::instance()->get_network_traffic(&lst_net_send_bytes, &lst_net_receive_bytes);
+            PlatformMetrics::instance()->get_disks_io_time(&lst_disks_io_time);
+            PlatformMetrics::instance()->get_network_traffic(&lst_net_send_bytes, &lst_net_receive_bytes);
         } else {
             int64_t current_ts = MonotonicSeconds();
             long interval = (current_ts - last_ts);
@@ -132,19 +133,19 @@ void calculate_metrics(Daemon* daemon, ProcessMetricsRegistry* process_metrics_r
 
             // 3. max disk io util.
             RuntimeMetrics::instance()->max_disk_io_util_percent.set_value(
-                    SystemMetrics::instance()->get_max_io_util(lst_disks_io_time, 15));
+                    PlatformMetrics::instance()->get_max_io_util(lst_disks_io_time, 15));
             // Update lst map.
-            SystemMetrics::instance()->get_disks_io_time(&lst_disks_io_time);
+            PlatformMetrics::instance()->get_disks_io_time(&lst_disks_io_time);
 
             // 4. max network traffic.
             int64_t max_send = 0;
             int64_t max_receive = 0;
-            SystemMetrics::instance()->get_max_net_traffic(lst_net_send_bytes, lst_net_receive_bytes, 15, &max_send,
-                                                           &max_receive);
+            PlatformMetrics::instance()->get_max_net_traffic(lst_net_send_bytes, lst_net_receive_bytes, 15, &max_send,
+                                                             &max_receive);
             RuntimeMetrics::instance()->max_network_send_bytes_rate.set_value(max_send);
             RuntimeMetrics::instance()->max_network_receive_bytes_rate.set_value(max_receive);
             // update lst map
-            SystemMetrics::instance()->get_network_traffic(&lst_net_send_bytes, &lst_net_receive_bytes);
+            PlatformMetrics::instance()->get_network_traffic(&lst_net_send_bytes, &lst_net_receive_bytes);
         }
 
         LOG(INFO) << dump_memory_tracker();

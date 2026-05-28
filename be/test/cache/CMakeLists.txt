@@ -24,6 +24,7 @@ set(CACHE_TEST_FILES
     datacache_utils_test.cpp
     mem_cache/lrucache_engine_test.cpp
     mem_cache/page_cache_test.cpp
+    scan/shared_buffered_input_stream_test.cpp
 )
 
 if ("${WITH_STARCACHE}" STREQUAL "ON")
@@ -32,6 +33,7 @@ if ("${WITH_STARCACHE}" STREQUAL "ON")
         disk_cache/starcache_engine_test.cpp
         disk_space_monitor_test.cpp
         peer_cache_test.cpp
+        scan/cache_input_stream_test.cpp
     )
 endif()
 
@@ -42,6 +44,7 @@ set(CACHE_TEST_LINK_LIBS
 list(APPEND CACHE_TEST_LINK_LIBS
     RuntimeCore
     FSCore
+    IO
     Common
     Base
     Gutil

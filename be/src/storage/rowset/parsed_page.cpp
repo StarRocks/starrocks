@@ -44,6 +44,7 @@
 #include "base/format.h"
 #include "base/simd/simd.h"
 #include "base/string/faststring.h"
+#include "base/utility/alignment.h"
 #include "column/append_with_mask.h"
 #include "column/nullable_column.h"
 #include "common/config_rowset_fwd.h"

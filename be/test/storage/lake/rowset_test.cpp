@@ -23,6 +23,7 @@
 #include "base/utility/defer_op.h"
 #include "column/binary_column.h"
 #include "column/chunk.h"
+#include "column/chunk_factory.h"
 #include "column/fixed_length_column.h"
 #include "column/schema.h"
 #include "column/vectorized_fwd.h"
@@ -447,7 +448,7 @@ static size_t count_rows_from_iters(const std::vector<ChunkIteratorPtr>& iters, 
     for (const auto& it : iters) {
         CHECK(it->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS).ok());
         CHECK(it->init_output_schema(std::unordered_set<uint32_t>()).ok());
-        auto chunk = ChunkHelper::new_chunk(it->schema(), chunk_size);
+        auto chunk = ChunkFactory::new_chunk(it->schema(), chunk_size);
         while (true) {
             chunk->reset();
             auto st = it->get_next(chunk.get());
@@ -719,7 +720,7 @@ TEST_F(LakeRowsetTest, test_tablet_range_multi_column_range_pruning) {
     for (const auto& it : iters) {
         ASSERT_OK(it->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS));
         ASSERT_OK(it->init_output_schema(std::unordered_set<uint32_t>()));
-        auto out_chunk = ChunkHelper::new_chunk(it->schema(), 16);
+        auto out_chunk = ChunkFactory::new_chunk(it->schema(), 16);
         while (true) {
             out_chunk->reset();
             auto st = it->get_next(out_chunk.get());

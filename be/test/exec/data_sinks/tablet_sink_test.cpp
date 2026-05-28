@@ -28,12 +28,12 @@
 #include "common/config_scan_io_fwd.h"
 #include "exec/tablet_info.h"
 #include "runtime/base_load_path_mgr.h"
+#include "runtime/chunk_helper.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
 #include "runtime/global_dict/fragment_dict_state.h"
 #include "runtime/runtime_state.h"
-#include "storage/chunk_helper.h"
 #include "types/decimalv2_value.h"
 
 namespace starrocks {
@@ -103,7 +103,7 @@ protected:
         table_sink.db_id = _db_id;
         table_sink.db_name = "test";
         table_sink.table_id = _table_id;
-        table_sink.table_name = "test";
+        table_sink.__set_table_name("test");
         table_sink.txn_id = _txn_id;
         table_sink.num_replicas = 1;
         table_sink.keys_type = TKeysType::DUP_KEYS;
@@ -230,7 +230,7 @@ protected:
         DescriptorTbl* desc_tbl = nullptr;
         auto sink = _setup_sink(runtime_state, desc_tbl);
 
-        ChunkPtr chunk(ChunkHelper::new_chunk(desc_tbl->get_tuple_descriptor(0)->slots(), num_rows).release());
+        ChunkPtr chunk(RuntimeChunkHelper::new_chunk(desc_tbl->get_tuple_descriptor(0)->slots(), num_rows).release());
         _fill_chunk_base_data(chunk, desc_tbl->get_tuple_descriptor(0)->slots(), num_rows, test_type);
 
         auto* slot = desc_tbl->get_tuple_descriptor(0)->slots()[slot_index];

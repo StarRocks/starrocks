@@ -42,6 +42,7 @@
 #include "http/http_channel.h"
 #include "http/http_request.h"
 #include "http/http_status.h"
+#include "runtime/env/global_env.h"
 #include "runtime/exec_env.h"
 #include "runtime/mem_tracker.h"
 #include "storage/task/engine_checksum_task.h"
@@ -103,7 +104,7 @@ void ChecksumAction::handle(HttpRequest* req) {
 }
 
 int64_t ChecksumAction::_do_checksum(int64_t tablet_id, int64_t version) {
-    MemTracker* mem_tracker = GlobalEnv::GetInstance()->consistency_mem_tracker();
+    MemTracker* mem_tracker = _global_env.consistency_mem_tracker();
     Status check_limit_st = mem_tracker->check_mem_limit("Start consistency check.");
     if (!check_limit_st.ok()) {
         LOG(WARNING) << "checksum failed: " << check_limit_st.message();

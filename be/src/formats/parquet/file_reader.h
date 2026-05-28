@@ -21,6 +21,7 @@
 #include <vector>
 
 #include "cache/disk_cache/block_cache.h"
+#include "cache/scan/shared_buffered_input_stream.h"
 #include "column/vectorized_fwd.h"
 #include "common/status.h"
 #include "common/statusor.h"
@@ -28,7 +29,6 @@
 #include "formats/parquet/meta_helper.h"
 #include "formats/parquet/metadata.h"
 #include "gen_cpp/parquet_types.h"
-#include "io/shared_buffered_input_stream.h"
 #include "storage/runtime_range_pruner.hpp"
 
 namespace tparquet {
@@ -43,9 +43,6 @@ struct HdfsScannerContext;
 class BlockCache;
 class SlotDescriptor;
 
-namespace io {
-class SharedBufferedInputStream;
-} // namespace io
 namespace parquet {
 struct ParquetField;
 } // namespace parquet
@@ -72,7 +69,7 @@ class FileReader {
 public:
     FileReader(int chunk_size, RandomAccessFile* file, size_t file_size,
                const DataCacheOptions& datacache_options = DataCacheOptions(),
-               io::SharedBufferedInputStream* sb_stream = nullptr, SkipRowsContextPtr skipRowsContext = nullptr);
+               SharedBufferedInputStream* sb_stream = nullptr, SkipRowsContextPtr skipRowsContext = nullptr);
     ~FileReader();
 
     Status init(HdfsScannerContext* scanner_ctx);
@@ -81,7 +78,7 @@ public:
 
     const FileMetaData* get_file_metadata();
 
-    Status collect_scan_io_ranges(std::vector<io::SharedBufferedInputStream::IORange>* io_ranges);
+    Status collect_scan_io_ranges(std::vector<SharedBufferedInputStream::IORange>* io_ranges);
 
     size_t row_group_size() const { return _row_group_size; }
 
@@ -130,7 +127,7 @@ private:
     // not exist column conjuncts eval false, file can be skipped
     bool _is_file_filtered = false;
     HdfsScannerContext* _scanner_ctx = nullptr;
-    io::SharedBufferedInputStream* _sb_stream = nullptr;
+    SharedBufferedInputStream* _sb_stream = nullptr;
     GroupReaderParam _group_reader_param;
     std::shared_ptr<MetaHelper> _meta_helper = nullptr;
     SkipRowsContextPtr _skip_rows_ctx = nullptr;

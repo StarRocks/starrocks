@@ -252,6 +252,13 @@
         "pk_index_parallel_execution_threadpool_size",
         "put_combined_txn_log_thread_pool_num_max",
         "python_envs",
+        "enable_rejected_record_sync",
+        "rejected_record_local_retention_hours",
+        "rejected_record_sync_interval_sec",
+        "rejected_record_sync_max_backoff_sec",
+        "rejected_record_sync_max_batch_bytes",
+        "rejected_record_sync_max_batch_rows",
+        "rejected_record_sync_post_timeout_sec",
         "query_cache_capacity",
         "query_max_memory_limit_percent",
         "query_pool_spill_mem_limit_threshold",
@@ -265,6 +272,7 @@
         "transaction_publish_version_worker_count",
         "try_release_resource_before_core_dump",
         "udf_thread_pool_size",
+        "jvm_call_thread_pool_size",
         "update_memory_limit_percent"
       ]
     },
@@ -877,6 +885,7 @@
         "transaction_publish_version_thread_pool_idle_time_ms",
         "transaction_publish_version_thread_pool_num_min",
         "replication_threads",
+        "lake_replication_file_copy_threads",
         "max_batch_publish_latency_ms",
         "wait_apply_time",
         "enable_drop_tablet_if_unfinished_txn"

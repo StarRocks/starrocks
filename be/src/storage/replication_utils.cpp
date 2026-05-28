@@ -26,6 +26,7 @@
 #include "base/network/network_util.h"
 #include "base/string/string_parser.hpp"
 #include "common/system/backend_options.h"
+#include "common/util/thrift_client_cache.h"
 #include "fs/fs.h"
 #include "fs/fs_util.h"
 #include "gen_cpp/BackendService.h"
@@ -34,9 +35,8 @@
 #include "gutil/strings/stringpiece.h"
 #include "gutil/strings/substitute.h"
 #include "http/http_client.h"
-#include "runtime/client_cache.h"
+#include "platform/thrift_rpc_helper.h"
 #include "runtime/exec_env.h"
-#include "runtime/thrift_rpc_helper.h"
 
 namespace starrocks {
 

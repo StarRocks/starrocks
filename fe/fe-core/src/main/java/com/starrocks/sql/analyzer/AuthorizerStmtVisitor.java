@@ -66,6 +66,7 @@ import com.starrocks.sql.ast.AdminShowConfigStmt;
 import com.starrocks.sql.ast.AdminShowReplicaDistributionStmt;
 import com.starrocks.sql.ast.AdminShowReplicaStatusStmt;
 import com.starrocks.sql.ast.AdminShowTabletStatusStmt;
+import com.starrocks.sql.ast.AdminSkipCommittedTransactionStmt;
 import com.starrocks.sql.ast.AlterCatalogStmt;
 import com.starrocks.sql.ast.AlterClause;
 import com.starrocks.sql.ast.AlterDatabaseQuotaStmt;
@@ -2312,6 +2313,20 @@ public class AuthorizerStmtVisitor implements AstVisitorExtendInterface<Void, Co
     }
 
     @Override
+    public Void visitAdminSkipCommittedTransactionStatement(AdminSkipCommittedTransactionStmt statement,
+                                                              ConnectContext context) {
+        try {
+            Authorizer.checkSystemAction(context, PrivilegeType.OPERATE);
+        } catch (AccessDeniedException e) {
+            AccessDeniedException.reportAccessDenied(
+                    InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
+                    context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                    PrivilegeType.OPERATE.name(), ObjectType.SYSTEM.name(), null);
+        }
+        return null;
+    }
+
+    @Override
     public Void visitAdminCheckTabletsStatement(AdminCheckTabletsStmt statement, ConnectContext context) {
         try {
             Authorizer.checkSystemAction(context, PrivilegeType.OPERATE);
@@ -2545,19 +2560,22 @@ public class AuthorizerStmtVisitor implements AstVisitorExtendInterface<Void, Co
         if (!statement.containsExternalCatalog()) {
             List<TableRef> tableRefs = statement.getTableRefs();
             List<FunctionRef> functionRefs = statement.getFnRefs();
-            if (tableRefs.isEmpty() && functionRefs.isEmpty()) {
+            if (tableRefs.isEmpty() && functionRefs.isEmpty()
+                    && !statement.allTable() && !statement.allMV()
+                    && !statement.allView() && !statement.allFunction()) {
                 String dBName = statement.getDbName();
                 throw new SemanticException("Database: %s is empty", dBName);
             }
 
-            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(statement.getDbName());
+            String resolvedDbName = statement.getDbName();
+            if (resolvedDbName == null) {
+                resolvedDbName = context.getDatabase();
+            }
+            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(resolvedDbName);
+            final String dbNameForRefs = resolvedDbName;
             tableRefs.forEach(tableRef -> {
-                String dbName = statement.getDbName();
-                if (dbName == null) {
-                    dbName = context.getDatabase();
-                }
                 String tblName = tableRef.getTableName();
-                TableName tableName = new TableName(context.getCurrentCatalog(), dbName, tblName);
+                TableName tableName = new TableName(context.getCurrentCatalog(), dbNameForRefs, tblName);
 
                 try {
                     Authorizer.checkTableAction(context, tableName, PrivilegeType.EXPORT);
@@ -2568,6 +2586,10 @@ public class AuthorizerStmtVisitor implements AstVisitorExtendInterface<Void, Co
                             PrivilegeType.EXPORT.name(), ObjectType.TABLE.name(), tableName.getTbl());
                 }
             });
+
+            if (db == null && (!functionRefs.isEmpty() || statement.allFunction())) {
+                throw new SemanticException("Database: " + resolvedDbName + " does not exist");
+            }
 
             functionRefs.forEach(functionRef -> {
                 String functionName = functionRef.getFunctionName();
@@ -2581,10 +2603,23 @@ public class AuthorizerStmtVisitor implements AstVisitorExtendInterface<Void, Co
                         AccessDeniedException.reportAccessDenied(
                                 InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
                                 context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
-                                PrivilegeType.DROP.name(), ObjectType.FUNCTION.name(), fn.getSignature());
+                                PrivilegeType.USAGE.name(), ObjectType.FUNCTION.name(), fn.getSignature());
                     }
                 }
             });
+
+            if (statement.allFunction()) {
+                for (Function fn : db.getFunctions()) {
+                    try {
+                        Authorizer.checkFunctionAction(context, db, fn, PrivilegeType.USAGE);
+                    } catch (AccessDeniedException e) {
+                        AccessDeniedException.reportAccessDenied(
+                                InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
+                                context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                                PrivilegeType.USAGE.name(), ObjectType.FUNCTION.name(), fn.getSignature());
+                    }
+                }
+            }
         } else {
             List<CatalogRef> externalCatalogs = statement.getExternalCatalogRefs();
             externalCatalogs.forEach(externalCatalog -> {

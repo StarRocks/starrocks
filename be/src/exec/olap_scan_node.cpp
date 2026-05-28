@@ -22,6 +22,7 @@
 
 #include "base/utility/defer_op.h"
 #include "column/chunk.h"
+#include "column/chunk_factory.h"
 #include "column/column.h"
 #include "column/column_access_path.h"
 #include "column/column_helper.h"
@@ -35,10 +36,11 @@
 #include "exec/pipeline/noop_sink_operator.h"
 #include "exec/pipeline/pipeline_builder.h"
 #include "exec/pipeline/scan/chunk_buffer_limiter.h"
-#include "exec/pipeline/scan/morsel.h"
+#include "exec/pipeline/scan/olap_fixed_morsel_queue_builder.h"
 #include "exec/pipeline/scan/olap_scan_operator.h"
 #include "exec/pipeline/scan/olap_scan_prepare_operator.h"
 #include "exec/pipeline/scan/scan_morsel.h"
+#include "exec/pipeline/scan/split_morsel_queue_builder.h"
 #include "exprs/column_access_path_resolver.h"
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
@@ -52,7 +54,8 @@
 #include "runtime/exec_env.h"
 #include "runtime/global_dict/fragment_dict_state.h"
 #include "storage/chunk_helper.h"
-#include "storage/olap_common.h"
+#include "storage/primitive/storage_ids.h"
+#include "storage/primitive/storage_version.h"
 #include "storage/rowset/rowset.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet.h"
@@ -165,6 +168,7 @@ Status OlapScanNode::prepare(RuntimeState* state) {
         return Status::InternalError("Failed to get tuple descriptor.");
     }
     _runtime_profile->add_info_string("Table", _tuple_desc->table_desc()->name());
+    _runtime_profile->add_info_string("Database", _tuple_desc->table_desc()->database());
     if (_olap_scan_node.__isset.rollup_name) {
         _runtime_profile->add_info_string("Rollup", _olap_scan_node.rollup_name);
     }
@@ -312,7 +316,7 @@ OlapScanNode::~OlapScanNode() {
 void OlapScanNode::_fill_chunk_pool(int count) {
     const size_t capacity = runtime_state()->chunk_size();
     for (int i = 0; i < count; i++) {
-        ChunkPtr chunk(ChunkHelper::new_chunk_pooled(*_chunk_schema, capacity));
+        ChunkPtr chunk(ChunkFactory::new_chunk_pooled(*_chunk_schema, capacity));
         {
             std::lock_guard<std::mutex> l(_mtx);
             _chunk_pool.push(std::move(chunk));
@@ -439,7 +443,7 @@ Status OlapScanNode::set_scan_ranges(const std::vector<TScanRangeParams>& scan_r
     return Status::OK();
 }
 
-StatusOr<pipeline::MorselQueuePtr> OlapScanNode::convert_scan_range_to_morsel_queue(
+StatusOr<pipeline::MorselQueueBuilderPtr> OlapScanNode::convert_scan_range_to_morsel_queue_builder(
         const std::vector<TScanRangeParams>& scan_ranges, int node_id, int32_t pipeline_dop,
         bool enable_tablet_internal_parallel, TTabletInternalParallelMode::type tablet_internal_parallel_mode,
         size_t num_total_scan_ranges) {
@@ -481,12 +485,12 @@ StatusOr<pipeline::MorselQueuePtr> OlapScanNode::convert_scan_range_to_morsel_qu
 
     // None tablet to read shouldn't use tablet internal parallel.
     if (morsels.empty()) {
-        return std::make_unique<pipeline::FixedMorselQueue>(std::move(morsels));
+        return pipeline::make_olap_fixed_morsel_queue_builder(std::move(morsels));
     }
 
     // Disable by the session variable shouldn't use tablet internal parallel.
     if (!enable_tablet_internal_parallel) {
-        return std::make_unique<pipeline::FixedMorselQueue>(std::move(morsels));
+        return pipeline::make_olap_fixed_morsel_queue_builder(std::move(morsels));
     }
 
     int64_t scan_dop;
@@ -495,16 +499,16 @@ StatusOr<pipeline::MorselQueuePtr> OlapScanNode::convert_scan_range_to_morsel_qu
                      _could_tablet_internal_parallel(pruned_scan_ranges, pipeline_dop, num_total_scan_ranges,
                                                      tablet_internal_parallel_mode, &scan_dop, &splitted_scan_rows));
     if (!could) {
-        return std::make_unique<pipeline::FixedMorselQueue>(std::move(morsels));
+        return pipeline::make_olap_fixed_morsel_queue_builder(std::move(morsels));
     }
 
     // Split tablet physically.
     ASSIGN_OR_RETURN(bool ok, _could_split_tablet_physically(pruned_scan_ranges));
     if (ok) {
-        return std::make_unique<pipeline::PhysicalSplitMorselQueue>(std::move(morsels), scan_dop, splitted_scan_rows);
+        return pipeline::make_physical_split_morsel_queue_builder(std::move(morsels), scan_dop, splitted_scan_rows);
     }
 
-    return std::make_unique<pipeline::LogicalSplitMorselQueue>(std::move(morsels), scan_dop, splitted_scan_rows);
+    return pipeline::make_logical_split_morsel_queue_builder(std::move(morsels), scan_dop, splitted_scan_rows);
 }
 
 StatusOr<bool> OlapScanNode::_could_tablet_internal_parallel(

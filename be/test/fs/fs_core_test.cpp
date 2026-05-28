@@ -20,7 +20,7 @@
 #include "common/config_local_io_fwd.h"
 #include "fs/fs.h"
 #include "fs/fs_factory.h"
-#include "io/core/array_input_stream.h"
+#include "io/array_input_stream.h"
 
 namespace starrocks {
 

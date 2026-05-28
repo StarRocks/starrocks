@@ -18,8 +18,8 @@
 #include "common/system/master_info.h"
 #include "exec/schema_scanner/schema_column_filler.h"
 #include "gutil/strings/substitute.h"
-#include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
+#include "runtime/service_contexts.h"
 #include "types/logical_type.h"
 
 namespace starrocks {
@@ -72,7 +72,8 @@ Status SchemaBeMetricsScanner::start(RuntimeState* state) {
     _be_id = o_id.has_value() ? o_id.value() : -1;
     _infos.clear();
     SchemaCoreMetricsVisitor visitor(_infos);
-    if (auto* metrics = state->exec_env()->metrics(); metrics != nullptr) {
+    auto* services = state->query_execution_services();
+    if (auto* metrics = services == nullptr ? nullptr : services->process_metrics; metrics != nullptr) {
         metrics->collect(&visitor);
     }
     _cur_idx = 0;

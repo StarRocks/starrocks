@@ -136,6 +136,7 @@ import com.starrocks.load.pipe.PipeFileRecord;
 import com.starrocks.load.pipe.PipeId;
 import com.starrocks.load.pipe.PipeManager;
 import com.starrocks.load.pipe.filelist.RepoAccessor;
+import com.starrocks.load.rejected.RejectedRecordsTable;
 import com.starrocks.load.routineload.RoutineLoadJob;
 import com.starrocks.load.routineload.RoutineLoadMgr;
 import com.starrocks.load.streamload.AbstractStreamLoadTask;
@@ -161,9 +162,12 @@ import com.starrocks.qe.QueryStatisticsInfo;
 import com.starrocks.qe.scheduler.Coordinator;
 import com.starrocks.qe.scheduler.slot.LogicalSlot;
 import com.starrocks.qe.scheduler.warehouse.WarehouseQueryQueueMetrics;
+import com.starrocks.rpc.ThriftConnectionPool;
+import com.starrocks.rpc.ThriftRPCRequestExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
 import com.starrocks.server.MetadataMgr;
+import com.starrocks.server.NodeMgr;
 import com.starrocks.server.TemporaryTableMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.service.arrow.flight.sql.ArrowFlightSqlConnectContext;
@@ -565,8 +569,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                 }
 
                 try {
-                    tbl = metadataMgr.getBasicTable(context, catalogName, params.db, tableName,
-                            Config.enable_external_catalog_information_schema_tables_access_full_metadata);
+                    tbl = metadataMgr.getBasicTable(context, catalogName, params.db, tableName);
                 } catch (Exception e) {
                     LOG.warn(e.getMessage(), e);
                 }
@@ -792,19 +795,56 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     @Override
     public TGetProfileResponse getQueryProfile(TGetProfileRequest params) throws TException {
         LOG.debug("get query profile request: {}", params);
-        List<String> queryIds = params.query_id;
+        boolean isRequestAllFrontend = params == null || !params.isSetIs_request_all_frontend()
+                || params.isIs_request_all_frontend();
+        List<String> queryIds = params == null ? null : params.getQuery_id();
         TGetProfileResponse result = new TGetProfileResponse();
         if (queryIds != null) {
             for (String queryId : queryIds) {
                 String profile = ProfileManager.getInstance().getProfile(queryId);
-                if (profile != null && !profile.isEmpty()) {
-                    result.addToQuery_result(profile);
-                } else {
-                    result.addToQuery_result("");
+                if ((profile == null || profile.isEmpty()) && isRequestAllFrontend) {
+                    profile = getProfileFromOtherFEs(queryId);
                 }
+                result.addToQuery_result(Strings.nullToEmpty(profile));
             }
         }
         return result;
+    }
+
+    private String getProfileFromOtherFEs(String queryId) {
+        NodeMgr nodeMgr = GlobalStateMgr.getCurrentState().getNodeMgr();
+        List<Frontend> frontends = nodeMgr.getOtherFrontends()
+                .stream()
+                .filter(Frontend::isAlive)
+                .collect(Collectors.toList());
+
+        for (Frontend frontend : frontends) {
+
+            try {
+                TGetProfileRequest request = new TGetProfileRequest();
+                List<String> queryIds = Lists.newArrayList(queryId);
+                request.setQuery_id(queryIds);
+                request.setIs_request_all_frontend(false);
+
+                TNetworkAddress thriftAddress = new TNetworkAddress(frontend.getHost(), frontend.getRpcPort());
+                TGetProfileResponse response = ThriftRPCRequestExecutor.call(
+                        ThriftConnectionPool.frontendPool,
+                        thriftAddress,
+                        client -> client.getQueryProfile(request));
+
+                if (response.isSetQuery_result() && !response.getQuery_result().isEmpty()) {
+                    String profile = response.getQuery_result().get(0);
+                    if (profile != null && !profile.isEmpty()) {
+                        LOG.debug("Found profile for query {} on remote FE {}", queryId, frontend.getHost());
+                        return profile;
+                    }
+                }
+            } catch (TException e) {
+                LOG.warn("Failed to get profile for query {} from FE {}", queryId, frontend.getHost(), e);
+            }
+        }
+
+        return null;
     }
 
     @Override
@@ -861,21 +901,24 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         Database db = metadataMgr.getDb(context, catalogName, params.db);
 
         if (db != null) {
-            Locker locker = new Locker();
+            Table table = metadataMgr.getTable(context, catalogName, params.db, params.table_name);
+            if (table == null) {
+                return result;
+            }
             try {
-                locker.lockDatabase(db.getId(), LockType.READ);
-                Table table = metadataMgr.getTable(context, catalogName, params.db, params.table_name);
-                if (table == null) {
-                    return result;
-                }
-                try {
-                    Authorizer.checkAnyActionOnTableLikeObject(context, params.db, table);
-                } catch (AccessDeniedException e) {
-                    return result;
-                }
+                Authorizer.checkAnyActionOnTableLikeObject(context, params.db, table);
+            } catch (AccessDeniedException e) {
+                return result;
+            }
+            // Only the target table's schema is read, so an intensive
+            // IS-on-db + READ-on-table lock is sufficient; it lets concurrent
+            // DDL/ALTER on other tables in the same db proceed.
+            Locker locker = new Locker();
+            locker.lockTableWithIntensiveDbLock(db.getId(), table.getId(), LockType.READ);
+            try {
                 setColumnDesc(columns, table, limit, false, params.db, params.table_name);
             } finally {
-                locker.unLockDatabase(db.getId(), LockType.READ);
+                locker.unLockTableWithIntensiveDbLock(db.getId(), table.getId(), LockType.READ);
             }
         }
         return result;
@@ -897,24 +940,26 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             }
             Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(fullName);
             if (db != null) {
-                Locker locker = new Locker();
                 for (String tableName : db.getTableNamesViewWithLock()) {
+                    Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tableName);
+                    if (table == null) {
+                        continue;
+                    }
+
                     try {
-                        locker.lockDatabase(db.getId(), LockType.READ);
-                        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tableName);
-                        if (table == null) {
-                            continue;
-                        }
+                        Authorizer.checkAnyActionOnTableLikeObject(context, fullName, table);
+                    } catch (AccessDeniedException e) {
+                        continue;
+                    }
 
-                        try {
-                            Authorizer.checkAnyActionOnTableLikeObject(context, fullName, table);
-                        } catch (AccessDeniedException e) {
-                            continue;
-                        }
-
+                    // Per-table schema read: lock only this table (IS-on-db + READ-on-table)
+                    // instead of the whole db, so DDL/ALTER on other tables is not blocked.
+                    Locker locker = new Locker();
+                    locker.lockTableWithIntensiveDbLock(db.getId(), table.getId(), LockType.READ);
+                    try {
                         reachLimit = setColumnDesc(columns, table, limit, true, fullName, tableName);
                     } finally {
-                        locker.unLockDatabase(db.getId(), LockType.READ);
+                        locker.unLockTableWithIntensiveDbLock(db.getId(), table.getId(), LockType.READ);
                     }
                     if (reachLimit) {
                         return;
@@ -1138,6 +1183,32 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                     "Access denied; you need (at least one of) the INSERT privilege(s) for this operation");
         }
         return currentUser;
+    }
+
+    // Cluster-internal trust bypass for system-table loads driven by BE
+    // daemons (currently the rejected_records sync daemon). When the
+    // request carries an `internal_token` that matches the FE cluster
+    // token AND the target is the rejected_records system table, we
+    // dispatch the load as ROOT without checking the caller's password
+    // or INSERT privilege. The same model is used by
+    // {@link com.starrocks.http.rest.LoadAction#tryInternalTokenBypass}
+    // for the HTTP entry; this thrift entry mirrors it. Returns false
+    // for any other table or any other token value -- never opens up a
+    // privilege escalation path for non-system tables.
+    //
+    // Package-private for testability (FrontendServiceImplTest exercises
+    // each fall-through branch directly rather than through the full
+    // requestMergeCommit RPC).
+    boolean isAuthorizedByInternalToken(String token, String db, String tbl) {
+        if (token == null || token.isEmpty()) {
+            return false;
+        }
+        if (!RejectedRecordsTable.DATABASE_NAME.equals(db)
+                || !RejectedRecordsTable.TABLE_NAME.equals(tbl)) {
+            return false;
+        }
+        String expected = GlobalStateMgr.getCurrentState().getNodeMgr().getToken();
+        return expected != null && !expected.isEmpty() && expected.equals(token);
     }
 
     private boolean checkIsInternalLoad(String user, String passwd, String db, String tbl,
@@ -1662,8 +1733,13 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             if (table == null) {
                 throw new StarRocksException(String.format("unknown table [%s.%s]", request.getDb(), request.getTbl()));
             }
-            UserIdentity userIdentity = checkPasswordAndLoadPriv(request.getUser(), request.getPasswd(), request.getDb(),
-                    request.getTbl(), request.getUser_ip());
+            UserIdentity userIdentity;
+            if (isAuthorizedByInternalToken(request.getInternal_token(), request.getDb(), request.getTbl())) {
+                userIdentity = UserIdentity.ROOT;
+            } else {
+                userIdentity = checkPasswordAndLoadPriv(request.getUser(), request.getPasswd(), request.getDb(),
+                        request.getTbl(), request.getUser_ip());
+            }
             TableId tableId = new TableId(request.getDb(), request.getTbl());
             StreamLoadKvParams params = new StreamLoadKvParams(request.getParams());
             RequestLoadResult loadResult = GlobalStateMgr.getCurrentState().getBatchWriteMgr().requestLoad(
@@ -1991,13 +2067,16 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             p.setImmutable(true);
 
             List<PhysicalPartition> mutablePartitions;
+            // Reads sub-partitions of one known table; intensive table READ
+            // (IS-on-db + READ-on-table) is enough. Acquire before try so a
+            // failed acquire does not trigger an unlock of an unheld lock.
+            locker.lockTableWithIntensiveDbLock(db.getId(), tableId, LockType.READ);
             try {
-                locker.lockDatabase(db.getId(), LockType.READ);
                 mutablePartitions = partition.getSubPartitions().stream()
                         .filter(physicalPartition -> !physicalPartition.isImmutable())
                         .collect(Collectors.toList());
             } finally {
-                locker.unLockDatabase(db.getId(), LockType.READ);
+                locker.unLockTableWithIntensiveDbLock(db.getId(), tableId, LockType.READ);
             }
             if (mutablePartitions.size() <= 0) {
                 GlobalStateMgr.getCurrentState().getLocalMetastore()
@@ -2014,8 +2093,8 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             }
 
             long mutablePartitionNum = 0;
+            locker.lockTableWithIntensiveDbLock(db.getId(), tableId, LockType.READ);
             try {
-                locker.lockDatabase(db.getId(), LockType.READ);
                 for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
                     if (physicalPartition.isImmutable()) {
                         continue;
@@ -2031,7 +2110,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                     buildTablets(physicalPartition, tablets, olapTable, computeResource, txnState);
                 }
             } finally {
-                locker.unLockDatabase(db.getId(), LockType.READ);
+                locker.unLockTableWithIntensiveDbLock(db.getId(), tableId, LockType.READ);
             }
         }
         result.setPartitions(partitions);

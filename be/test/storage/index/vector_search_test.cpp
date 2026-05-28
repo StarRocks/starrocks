@@ -28,6 +28,7 @@
 #include "base/utility/defer_op.h"
 #include "column/array_column.h"
 #include "column/chunk.h"
+#include "column/chunk_factory.h"
 #include "column/column_helper.h"
 #include "column/fixed_length_column.h"
 #include "column/nullable_column.h"
@@ -37,6 +38,7 @@
 #include "fs/fs_memory.h"
 #include "gen_cpp/tablet_schema.pb.h"
 #include "gutil/casts.h"
+#include "gutil/walltime.h"
 #include "runtime/mem_pool.h"
 #include "storage/chunk_helper.h"
 #include "storage/index/index_descriptor.h"
@@ -45,7 +47,7 @@
 #include "storage/index/vector/vector_index_reader.h"
 #include "storage/index/vector/vector_index_reader_factory.h"
 #include "storage/index/vector/vector_index_writer.h"
-#include "storage/index/vector/vector_search_option.h"
+#include "storage/primitive/vector_search_option.h"
 #include "storage/rowset/bitmap_index_reader.h"
 #include "storage/rowset/bitmap_index_writer.h"
 #include "storage/rowset/segment.h"
@@ -447,16 +449,16 @@ protected:
         opts.num_rows_per_block = 100;
         SegmentWriter writer(std::move(wfile), 0, write_schema, opts);
 
-        auto chunk = ChunkHelper::new_chunk(ChunkHelper::convert_schema(write_schema), ids.size());
+        auto chunk = ChunkFactory::new_chunk(ChunkHelper::convert_schema(write_schema), ids.size());
         for (auto id : ids) {
-            chunk->mutable_columns()[0]->append_datum(Datum(id));
+            chunk->columns()[0]->as_mutable_ptr()->append_datum(Datum(id));
         }
         for (const auto& vec : vectors) {
             DatumArray arr;
             for (float v : vec) {
                 arr.emplace_back(Datum(v));
             }
-            chunk->mutable_columns()[1]->append_datum(Datum(arr));
+            chunk->columns()[1]->as_mutable_ptr()->append_datum(Datum(arr));
         }
 
         RETURN_IF_ERROR(writer.init());
@@ -539,7 +541,7 @@ TEST_F(BruteForceVectorFallbackTest, test_brute_force_l2_distance_fallback) {
     ASSERT_OK(chunk_iter->init_output_schema({}));
 
     // The output schema includes the distance virtual column appended by brute-force path
-    auto chunk = ChunkHelper::new_chunk(chunk_iter->output_schema(), 1024);
+    auto chunk = ChunkFactory::new_chunk(chunk_iter->output_schema(), 1024);
     std::vector<uint32_t> rowids;
     auto st = chunk_iter->get_next(chunk.get(), &rowids);
 
@@ -614,7 +616,7 @@ TEST_F(BruteForceVectorFallbackTest, test_brute_force_vector_column_not_pruned) 
     auto chunk_iter = new_segment_iterator(segment, read_schema, seg_opts);
     ASSERT_TRUE(chunk_iter != nullptr);
 
-    auto chunk = ChunkHelper::new_chunk(chunk_iter->output_schema(), 1024);
+    auto chunk = ChunkFactory::new_chunk(chunk_iter->output_schema(), 1024);
     std::vector<uint32_t> rowids;
     auto st = chunk_iter->get_next(chunk.get(), &rowids);
 
@@ -674,7 +676,7 @@ TEST_F(BruteForceVectorFallbackTest, test_brute_force_with_vector_range_filter) 
     auto chunk_iter = new_segment_iterator(segment, read_schema, seg_opts);
     ASSERT_TRUE(chunk_iter != nullptr);
 
-    auto chunk = ChunkHelper::new_chunk(chunk_iter->output_schema(), 1024);
+    auto chunk = ChunkFactory::new_chunk(chunk_iter->output_schema(), 1024);
     std::vector<uint32_t> rowids;
     auto st = chunk_iter->get_next(chunk.get(), &rowids);
 
@@ -793,7 +795,7 @@ TEST_F(BruteForceVectorFallbackTest, test_brute_force_cosine_similarity) {
 
     auto chunk_iter = new_segment_iterator(segment, read_schema, seg_opts);
     ASSERT_OK(chunk_iter->init_output_schema({}));
-    auto chunk = ChunkHelper::new_chunk(chunk_iter->output_schema(), 1024);
+    auto chunk = ChunkFactory::new_chunk(chunk_iter->output_schema(), 1024);
     std::vector<uint32_t> rowids;
     ASSERT_OK(chunk_iter->get_next(chunk.get(), &rowids));
     ASSERT_EQ(chunk->num_rows(), 3);
@@ -837,7 +839,7 @@ TEST_F(BruteForceVectorFallbackTest, test_brute_force_unsupported_metric_disable
 
     auto chunk_iter = new_segment_iterator(segment, read_schema, seg_opts);
     ASSERT_OK(chunk_iter->init_output_schema({}));
-    auto chunk = ChunkHelper::new_chunk(chunk_iter->output_schema(), 1024);
+    auto chunk = ChunkFactory::new_chunk(chunk_iter->output_schema(), 1024);
     std::vector<uint32_t> rowids;
     auto st = chunk_iter->get_next(chunk.get(), &rowids);
     // Distance column is intentionally NOT produced — fallback was disabled.
@@ -876,7 +878,7 @@ TEST_F(BruteForceVectorFallbackTest, test_brute_force_dim_mismatch_truncates) {
 
     auto chunk_iter = new_segment_iterator(segment, read_schema, seg_opts);
     ASSERT_OK(chunk_iter->init_output_schema({}));
-    auto chunk = ChunkHelper::new_chunk(chunk_iter->output_schema(), 1024);
+    auto chunk = ChunkFactory::new_chunk(chunk_iter->output_schema(), 1024);
     std::vector<uint32_t> rowids;
     ASSERT_OK(chunk_iter->get_next(chunk.get(), &rowids));
     ASSERT_EQ(chunk->num_rows(), 2);
@@ -890,6 +892,140 @@ TEST_F(BruteForceVectorFallbackTest, test_brute_force_dim_mismatch_truncates) {
     EXPECT_FLOAT_EQ(distances->get_data()[0], 0.0f);
     EXPECT_FLOAT_EQ(distances->get_data()[1], 0.0f);
     chunk_iter->close();
+}
+
+// Production-shape test for the defensive ladder in _compute_brute_force_distances:
+// FE plan pruned v from the read schema (lazy-mat HNSW + SELECT id), and .vi is
+// missing, so _setup_brute_force_fallback re-adds v to BE's _schema; v lives in
+// _dict_chunk only, not in the output chunk. The lookup must take the _dict_chunk
+// branch and never return InternalError.
+TEST_F(BruteForceVectorFallbackTest, test_brute_force_with_lazy_mat_pruned_embedding) {
+    std::vector<int64_t> ids = {1, 2, 3};
+    std::vector<std::vector<float>> vectors = {
+            {0.0f, 0.0f, 0.0f}, // dist to [1,1,1] = 3
+            {1.0f, 1.0f, 1.0f}, // dist to [1,1,1] = 0
+            {2.0f, 2.0f, 2.0f}, // dist to [1,1,1] = 3
+    };
+    ASSIGN_OR_ABORT(auto segment, write_segment(ids, vectors));
+
+    // Confirm the segment has a real .vi expectation (footer does NOT skip_vector_index);
+    // the brute-force path here is the runtime-NotFound branch, not the footer-hint
+    // branch. This pins down which fallback we're testing.
+    ASSERT_FALSE(segment->skip_vector_index());
+
+    auto schema = build_read_schema_with_vector_index();
+    OlapReaderStatistics stats;
+    SegmentReadOptions seg_opts;
+    seg_opts.fs = _fs;
+    seg_opts.stats = &stats;
+    seg_opts.tablet_schema = schema;
+    auto opt = make_vector_search_opt(/*slot_id=*/100, schema->num_columns(), {1.0f, 1.0f, 1.0f});
+    seg_opts.use_vector_index = true;
+    seg_opts.vector_search_option = opt;
+
+    // Read schema with ONLY id — this models the FE plan after lazy-mat has pruned
+    // the embedding column from the scan output (HNSW + SELECT id pattern). The
+    // vector column does NOT appear in the read schema we hand to the iterator.
+    Schema lazy_mat_read_schema;
+    auto id_field = std::make_shared<Field>(0, "id", get_type_info(TYPE_BIGINT), false);
+    id_field->set_uid(0);
+    lazy_mat_read_schema.append(id_field);
+
+    auto chunk_iter = new_segment_iterator(segment, lazy_mat_read_schema, seg_opts);
+    // Freeze the output schema BEFORE the iterator's lazy init runs. This is the
+    // production shape: TabletReader / OlapChunkSource pins output_schema early,
+    // so _setup_brute_force_fallback's late _schema mutation cannot flow back into
+    // the output chunk — exactly the condition under which the defensive ladder
+    // matters.
+    ASSERT_OK(chunk_iter->init_output_schema({}));
+
+    auto chunk = ChunkFactory::new_chunk(chunk_iter->output_schema(), 1024);
+    std::vector<uint32_t> rowids;
+    auto st = chunk_iter->get_next(chunk.get(), &rowids);
+
+    // Must NOT be the defensive InternalError branch — the brute-force path's
+    // _dict_chunk must have the embedding column for the distance computation
+    // to succeed. A regression that leaves _dict_chunk without v would surface
+    // as a non-OK status here.
+    ASSERT_OK(st);
+
+    ASSERT_EQ(chunk->num_rows(), 3);
+
+    // Critical: the output chunk has ONLY id + distance, NOT the embedding.
+    // The embedding was read into _dict_chunk internally, consumed by the distance
+    // kernel, and dropped before emit. A regression that propagates v to the
+    // output (e.g. removes the FE-pruned schema's restriction) would fail here.
+    ASSERT_EQ(chunk->num_columns(), 2);
+
+    // L2 distances against [1,1,1]:
+    //   id=1 vec=[0,0,0] -> 1+1+1 = 3
+    //   id=2 vec=[1,1,1] -> 0
+    //   id=3 vec=[2,2,2] -> 1+1+1 = 3
+    auto dist_col = chunk->get_column_by_slot_id(opt->vector_slot_id);
+    ASSERT_NE(dist_col, nullptr);
+    const auto* distances = down_cast<const FloatColumn*>(dist_col.get());
+    ASSERT_EQ(distances->size(), 3);
+    EXPECT_FLOAT_EQ(distances->get_data()[0], 3.0f);
+    EXPECT_FLOAT_EQ(distances->get_data()[1], 0.0f);
+    EXPECT_FLOAT_EQ(distances->get_data()[2], 3.0f);
+
+    chunk_iter->close();
+}
+
+// Direct unit tests for resolve_brute_force_vector_column. The "missing in both" branch is
+// unreachable from production iteration (use_brute_force=true together with FE-pruned output
+// implies _setup_brute_force_fallback added v to _schema, so _dict_chunk holds it), so the
+// resolver's defensive InternalError is covered here instead — both to lift coverage and to
+// pin the corruption guard against future regressions in the iterator.
+namespace {
+
+ChunkPtr make_chunk_with_cid(ColumnId cid) {
+    ChunkPtr chunk = std::make_shared<Chunk>();
+    ColumnPtr col = Int32Column::create();
+    chunk->append_column(col, cid, /*is_column_id=*/true);
+    return chunk;
+}
+
+} // namespace
+
+TEST(ResolveBruteForceVectorColumnTest, prefers_output_chunk_when_present) {
+    // Both chunks carry cid=7. Production semantics: when FE keeps v eager, _build_final_chunk
+    // swaps v into the output chunk and the resolver must take that copy (not _dict_chunk's).
+    auto chunk = make_chunk_with_cid(7);
+    auto dict_chunk = make_chunk_with_cid(7);
+    ASSIGN_OR_ABORT(auto col, resolve_brute_force_vector_column(chunk.get(), dict_chunk.get(), 7));
+    EXPECT_EQ(col.get(), chunk->get_column_by_id(7).get());
+    EXPECT_NE(col.get(), dict_chunk->get_column_by_id(7).get());
+}
+
+TEST(ResolveBruteForceVectorColumnTest, falls_back_to_dict_chunk_when_pruned_from_output) {
+    // Output chunk does not carry v (FE pruned it after lazy-mat), _dict_chunk does (BE
+    // re-added v in _setup_brute_force_fallback). Resolver must take the _dict_chunk copy.
+    ChunkPtr chunk = std::make_shared<Chunk>();
+    auto dict_chunk = make_chunk_with_cid(7);
+    ASSIGN_OR_ABORT(auto col, resolve_brute_force_vector_column(chunk.get(), dict_chunk.get(), 7));
+    EXPECT_EQ(col.get(), dict_chunk->get_column_by_id(7).get());
+}
+
+TEST(ResolveBruteForceVectorColumnTest, internal_error_when_missing_in_both) {
+    // Both chunks lack the cid. Defensive branch must return InternalError rather than
+    // letting Chunk::get_column_by_id default-insert and return _columns[0].
+    ChunkPtr chunk = std::make_shared<Chunk>();
+    ChunkPtr dict_chunk = std::make_shared<Chunk>();
+    auto st = resolve_brute_force_vector_column(chunk.get(), dict_chunk.get(), 42);
+    ASSERT_FALSE(st.ok());
+    EXPECT_TRUE(st.status().is_internal_error());
+    EXPECT_NE(st.status().to_string().find("vector column 42 missing"), std::string::npos);
+    EXPECT_NE(st.status().to_string().find("late-materialization"), std::string::npos);
+}
+
+TEST(ResolveBruteForceVectorColumnTest, internal_error_when_dict_chunk_is_null) {
+    // _context->_dict_chunk is a ChunkPtr; .get() returns nullptr if it was never set up.
+    // Resolver must not dereference and must take the InternalError path.
+    ChunkPtr chunk = std::make_shared<Chunk>();
+    auto st = resolve_brute_force_vector_column(chunk.get(), /*dict_chunk=*/nullptr, 42);
+    ASSERT_FALSE(st.ok());
+    EXPECT_TRUE(st.status().is_internal_error());
 }
 
 } // namespace starrocks

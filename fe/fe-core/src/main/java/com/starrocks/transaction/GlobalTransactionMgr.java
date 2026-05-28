@@ -560,6 +560,52 @@ public class GlobalTransactionMgr implements MemoryTrackable {
         dbTransactionMgr.abortTransaction(label, reason);
     }
 
+    /**
+     * Mark a COMMITTED but publish-stuck transaction as a no-op publish. See
+     * {@link DatabaseTransactionMgr#markCommittedTransactionAsNoOpPublish(long, String)}
+     * for full semantics and constraints (operator-only, requires
+     * file_bundling=true, load + compaction txns only in phase 1).
+     *
+     * <p>This entry locates the owning db by scanning all per-db txn managers,
+     * so the caller only needs the global txn id.
+     */
+    public void markCommittedTransactionAsNoOpPublish(long transactionId, String reason)
+            throws StarRocksException {
+        if (!Config.enable_admin_skip_committed_txn) {
+            throw new StarRocksException(
+                    "ADMIN SKIP COMMITTED TRANSACTION is disabled. "
+                            + "Set FE config enable_admin_skip_committed_txn=true to enable it. "
+                            + "This is an operator-only escape hatch that discards transaction data; "
+                            + "disable it again immediately after recovery.");
+        }
+        DatabaseTransactionMgr owningMgr = null;
+        for (DatabaseTransactionMgr dbTransactionMgr : dbIdToDatabaseTransactionMgrs.values()) {
+            // getTransactionState() returns null for "txn not in this DB" — that case
+            // is handled naturally by the null-check below. The try/catch here is
+            // narrowed to actual runtime exceptions and logs them so a buggy per-db
+            // mgr can't silently mask the txn id we're looking for as "not found"
+            // without leaving any trace.
+            TransactionState state = null;
+            try {
+                state = dbTransactionMgr.getTransactionState(transactionId);
+            } catch (RuntimeException e) {
+                LOG.warn("ADMIN SKIP COMMITTED TRANSACTION: per-db txn lookup for txn {} on db {} "
+                        + "threw unexpected exception; skipping", transactionId,
+                        dbTransactionMgr.getDbId(), e);
+            }
+            if (state != null) {
+                owningMgr = dbTransactionMgr;
+                break;
+            }
+        }
+        if (owningMgr == null) {
+            throw new StarRocksException(
+                    "transaction " + transactionId + " not found in any database; "
+                            + "it may have been finished or never existed");
+        }
+        owningMgr.markCommittedTransactionAsNoOpPublish(transactionId, reason);
+    }
+
     public TransactionStateSnapshot getTxnState(Database db, long transactionId) throws StarRocksException {
         DatabaseTransactionMgr dbTransactionMgr = getDatabaseTransactionMgr(db.getId());
         return dbTransactionMgr.getTxnState(transactionId);

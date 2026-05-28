@@ -25,8 +25,11 @@
 #include "base/format.h"
 #include "base/simd/simd.h"
 #include "base/utility/defer_op.h"
+#include "cache/scan/shared_buffered_input_stream.h"
 #include "column/array_column.h"
 #include "column/chunk.h"
+#include "column/chunk_factory.h"
+#include "column/chunk_schema_helper.h"
 #include "column/column_helper.h"
 #include "column/datum_tuple.h"
 #include "common/config_exec_fwd.h"
@@ -40,10 +43,9 @@
 #include "glog/logging.h"
 #include "gutil/casts.h"
 #include "gutil/stl_util.h"
-#include "io/shared_buffered_input_stream.h"
+#include "runtime/chunk_helper.h"
 #include "segment_options.h"
 #include "storage/chunk_helper.h"
-#include "storage/chunk_iterator.h"
 #include "storage/column_expr_predicate.h"
 #include "storage/column_or_predicate.h"
 #include "storage/column_predicate.h"
@@ -55,16 +57,17 @@
 #include "storage/index/vector/tenann/tenann_index_utils.h"
 #include "storage/index/vector/vector_index_reader.h"
 #include "storage/index/vector/vector_index_reader_factory.h"
-#include "storage/index/vector/vector_search_option.h"
 #include "storage/lake/filenames.h"
 #include "storage/lake/update_manager.h"
-#include "storage/projection_iterator.h"
-#include "storage/range.h"
+#include "storage/primitive/chunk_iterator.h"
+#include "storage/primitive/projection_iterator.h"
+#include "storage/primitive/range.h"
+#include "storage/primitive/rowid_types.h"
+#include "storage/primitive/vector_search_option.h"
 #include "storage/roaring2range.h"
 #include "storage/rowset/bitmap_index_evaluator.h"
 #include "storage/rowset/bitmap_index_reader.h"
 #include "storage/rowset/column_decoder.h"
-#include "storage/rowset/common.h"
 #include "storage/rowset/data_sample.h"
 #include "storage/rowset/default_value_column_iterator.h"
 #include "storage/rowset/dictcode_column_iterator.h"
@@ -1403,8 +1406,8 @@ Status SegmentIterator::_init_column_iterator_by_cid(const ColumnId cid, const C
             _segment->lake_tablet_manager() != nullptr) {
             ASSIGN_OR_RETURN(auto file_size, rfile->get_size());
             auto shared_buffered_input_stream =
-                    std::make_unique<io::SharedBufferedInputStream>(rfile->stream(), _segment->file_name(), file_size);
-            auto options = io::SharedBufferedInputStream::CoalesceOptions{
+                    std::make_unique<SharedBufferedInputStream>(rfile->stream(), _segment->file_name(), file_size);
+            auto options = SharedBufferedInputStream::CoalesceOptions{
                     .max_dist_size = config::io_coalesce_read_max_distance_size,
                     .max_buffer_size = config::io_coalesce_read_max_buffer_size};
             shared_buffered_input_stream->set_coalesce_options(options);
@@ -1432,7 +1435,7 @@ Status SegmentIterator::_init_column_iterator_by_cid(const ColumnId cid, const C
 template <bool check_global_dict>
 Status SegmentIterator::_init_column_iterators(const Schema& schema) {
     SCOPED_RAW_TIMER(&_opts.stats->column_iterator_init_ns);
-    const size_t n = std::max<size_t>(1 + ChunkHelper::max_column_id(schema), _column_iterators.size());
+    const size_t n = std::max<size_t>(1 + ChunkSchemaHelper::max_column_id(schema), _column_iterators.size());
     _column_iterators.resize(n);
     if constexpr (check_global_dict) {
         _column_decoders.resize(n);
@@ -1983,7 +1986,7 @@ Status SegmentIterator::_lookup_ordinal(const SeekTuple& key, bool lower, rowid_
     }
 
     // binary search to find the exact key
-    ChunkPtr chunk = ChunkHelper::new_chunk(key.schema(), 1);
+    ChunkPtr chunk = ChunkFactory::new_chunk(key.schema(), 1);
     if (lower) {
         while (start < end) {
             chunk->reset();
@@ -2038,7 +2041,7 @@ Status SegmentIterator::_lookup_ordinal(const Slice& index_key, const Schema& sh
     }
 
     // binary search to find the exact key
-    ChunkPtr chunk = ChunkHelper::new_chunk(short_key_schema, 1);
+    ChunkPtr chunk = ChunkFactory::new_chunk(short_key_schema, 1);
     if (lower) {
         while (start < end) {
             chunk->reset();
@@ -2211,6 +2214,26 @@ Status SegmentIterator::do_get_next(Chunk* chunk, vector<uint64_t>* rssid_rowids
         }
     }
     return st;
+}
+
+StatusOr<ColumnPtr> resolve_brute_force_vector_column(const Chunk* chunk, const Chunk* dict_chunk,
+                                                      ColumnId vec_col_id) {
+    if (chunk != nullptr && chunk->is_cid_exist(vec_col_id)) {
+        return chunk->get_column_by_id(vec_col_id);
+    }
+    if (dict_chunk != nullptr && dict_chunk->is_cid_exist(vec_col_id)) {
+        return dict_chunk->get_column_by_id(vec_col_id);
+    }
+    // Chunk::get_column_by_id with a missing cid default-inserts into the internal index map
+    // and returns _columns[0]. Downcasting that arbitrary column to ArrayColumn in
+    // _compute_brute_force_distances would corrupt memory and crash in a release build. Fail
+    // loudly instead — this indicates that the planner's late-materialization pruning let
+    // through a query without keeping the embedding column eager, despite VectorIndexReadiness
+    // reporting the index as ready.
+    return Status::InternalError(
+            strings::Substitute("brute-force vector fallback: vector column $0 missing in both output chunk "
+                                "and _dict_chunk; late-materialization pruned a column that the BE still needs",
+                                vec_col_id));
 }
 
 Status SegmentIterator::_do_get_next(Chunk* result, vector<rowid_t>* rowid) {
@@ -2403,8 +2426,8 @@ Status SegmentIterator::_do_get_next(Chunk* result, vector<rowid_t>* rowid) {
         // Either way, the distance column is appended to `chunk`, which always has
         // the planner-allocated distance slot.
         auto vec_col_id = _vector_index_ctx->vector_data_column_id;
-        ColumnPtr vector_column = chunk->is_cid_exist(vec_col_id) ? chunk->get_column_by_id(vec_col_id)
-                                                                  : _context->_dict_chunk->get_column_by_id(vec_col_id);
+        ASSIGN_OR_RETURN(ColumnPtr vector_column,
+                         resolve_brute_force_vector_column(chunk, _context->_dict_chunk.get(), vec_col_id));
         DCHECK_EQ(vector_column->size(), chunk->num_rows())
                 << "brute-force vector column row count must match chunk; row alignment was lost";
         if (UNLIKELY(vector_column->size() != chunk->num_rows())) {
@@ -2752,13 +2775,13 @@ Status SegmentIterator::_switch_context(ScanContext* to) {
     }
 
     if (to->_read_chunk == nullptr) {
-        ASSIGN_OR_RETURN(to->_read_chunk, ChunkHelper::new_chunk_checked(to->_read_schema, _reserve_chunk_size));
+        ASSIGN_OR_RETURN(to->_read_chunk, RuntimeChunkHelper::new_chunk_checked(to->_read_schema, _reserve_chunk_size));
     }
 
     if (to->_has_dict_column) {
         if (to->_dict_chunk == nullptr) {
             ASSIGN_OR_RETURN(to->_dict_chunk,
-                             ChunkHelper::new_chunk_checked(to->_dict_decode_schema, _reserve_chunk_size));
+                             RuntimeChunkHelper::new_chunk_checked(to->_dict_decode_schema, _reserve_chunk_size));
         }
     } else {
         to->_dict_chunk = to->_read_chunk;
@@ -2793,13 +2816,15 @@ Status SegmentIterator::_switch_context(ScanContext* to) {
                 output_schema_idx++;
             }
         }
-        ASSIGN_OR_RETURN(to->_final_chunk, ChunkHelper::new_chunk_checked(final_chunk_schema, _reserve_chunk_size));
+        ASSIGN_OR_RETURN(to->_final_chunk,
+                         RuntimeChunkHelper::new_chunk_checked(final_chunk_schema, _reserve_chunk_size));
     } else {
-        ASSIGN_OR_RETURN(to->_final_chunk, ChunkHelper::new_chunk_checked(this->output_schema(), _reserve_chunk_size));
+        ASSIGN_OR_RETURN(to->_final_chunk,
+                         RuntimeChunkHelper::new_chunk_checked(this->output_schema(), _reserve_chunk_size));
     }
     if (to->_has_force_dict_encode) {
         ASSIGN_OR_RETURN(to->_adapt_global_dict_chunk,
-                         ChunkHelper::new_chunk_checked(this->output_schema(), _reserve_chunk_size));
+                         RuntimeChunkHelper::new_chunk_checked(this->output_schema(), _reserve_chunk_size));
     } else {
         to->_adapt_global_dict_chunk = to->_final_chunk;
     }
@@ -3409,7 +3434,7 @@ Status SegmentIterator::_decode_dict_codes(ScanContext* ctx) {
 }
 
 Status SegmentIterator::_check_low_cardinality_optimization() {
-    _predicate_need_rewrite.resize(1 + ChunkHelper::max_column_id(_schema), false);
+    _predicate_need_rewrite.resize(1 + ChunkSchemaHelper::max_column_id(_schema), false);
     const size_t n = _opts.pred_tree.num_columns();
     for (size_t i = 0; i < n; i++) {
         const FieldPtr& field = _schema.field(i);
@@ -3654,7 +3679,7 @@ Status SegmentIterator::_init_inverted_index_iterators() {
         _inverted_index_ctx = std::make_unique<InvertedIndexContext>();
     }
 
-    _inverted_index_ctx->inverted_index_iterators.resize(ChunkHelper::max_column_id(_schema) + 1, nullptr);
+    _inverted_index_ctx->inverted_index_iterators.resize(ChunkSchemaHelper::max_column_id(_schema) + 1, nullptr);
     std::unordered_map<ColumnId, ColumnUID> cid_2_ucid;
 
     for (const auto& field : _schema.fields()) {

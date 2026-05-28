@@ -41,6 +41,7 @@
 #include "base/string/slice.h" // for Slice
 #include "column/append_with_mask.h"
 #include "column/binary_column.h"
+#include "column/chunk_factory.h"
 #include "column/column_helper.h"
 #include "column/nullable_column.h"
 #include "column/raw_data_visitor.h"
@@ -49,8 +50,9 @@
 #include "gutil/strings/substitute.h" // for Substitute
 #include "storage/chunk_helper.h"
 #include "storage/column_predicate.h"
-#include "storage/range.h"
+#include "storage/primitive/range.h"
 #include "storage/rowset/bitshuffle_page.h"
+#include "storage/rowset/common.h"
 #include "types/logical_type.h"
 
 namespace starrocks {
@@ -242,7 +244,7 @@ Status BinaryDictPageDecoder<Type>::next_batch(const SparseRange<>& range, Colum
     DCHECK(_parsed);
     DCHECK(_dict_decoder != nullptr) << "dict decoder pointer is nullptr";
     if (_vec_code_buf == nullptr) {
-        _vec_code_buf = ChunkHelper::column_from_field_type(TYPE_INT, false);
+        _vec_code_buf = ChunkFactory::column_from_field_type(TYPE_INT, false);
     }
     _vec_code_buf->resize(0);
     _vec_code_buf->reserve(range.span_size());
@@ -345,7 +347,7 @@ Status BinaryDictPageDecoder<Type>::next_batch_with_filter(
 
     // Step 2: Read dictionary codes for the range (we must do this regardless of dict selection)
     if (_vec_code_buf == nullptr) {
-        _vec_code_buf = ChunkHelper::column_from_field_type(TYPE_INT, false);
+        _vec_code_buf = ChunkFactory::column_from_field_type(TYPE_INT, false);
     }
     _vec_code_buf->resize(0);
     _vec_code_buf->reserve(num_rows);
@@ -399,7 +401,7 @@ Status BinaryDictPageDecoder<Type>::read_by_rowids(const ordinal_t first_ordinal
         return Status::OK();
     }
     if (_vec_code_buf == nullptr) {
-        _vec_code_buf = ChunkHelper::column_from_field_type(TYPE_INT, false);
+        _vec_code_buf = ChunkFactory::column_from_field_type(TYPE_INT, false);
     }
     _vec_code_buf->resize(0);
     _vec_code_buf->reserve(*count);

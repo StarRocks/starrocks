@@ -14,12 +14,12 @@
 
 #include "exec/hdfs_scanner/cache_select_scanner.h"
 
+#include "cache/scan/shared_buffered_input_stream.h"
 #include "common/config_scan_io_fwd.h"
 #include "formats/orc/orc_chunk_reader.h"
 #include "formats/orc/orc_input_stream.h"
 #include "formats/parquet/file_reader.h"
 #include "fs/fs.h"
-#include "io/shared_buffered_input_stream.h"
 
 namespace starrocks {
 
@@ -184,7 +184,7 @@ Status CacheSelectScanner::_fetch_parquet() {
 
     RETURN_IF_ERROR(reader->init(&_scanner_ctx));
 
-    std::vector<io::SharedBufferedInputStream::IORange> io_ranges{};
+    std::vector<SharedBufferedInputStream::IORange> io_ranges{};
     RETURN_IF_ERROR(reader->collect_scan_io_ranges(&io_ranges));
 
     std::vector<DiskRange> disk_ranges{};
@@ -237,8 +237,8 @@ Status CacheSelectScanner::_write_entire_file(const std::string& file_path, size
     options.fs_stats = &_fs_stats;
     options.app_stats = &_app_stats;
 
-    std::shared_ptr<io::SharedBufferedInputStream> shared_buffered_input_stream;
-    std::shared_ptr<io::CacheInputStream> cache_input_stream;
+    std::shared_ptr<SharedBufferedInputStream> shared_buffered_input_stream;
+    std::shared_ptr<CacheInputStream> cache_input_stream;
     ASSIGN_OR_RETURN(auto dummy_file,
                      create_random_access_file(shared_buffered_input_stream, cache_input_stream, options));
 
@@ -248,22 +248,21 @@ Status CacheSelectScanner::_write_entire_file(const std::string& file_path, size
     return _write_disk_ranges(shared_buffered_input_stream, cache_input_stream, disk_ranges);
 }
 
-Status CacheSelectScanner::_write_disk_ranges(std::shared_ptr<io::SharedBufferedInputStream>& shared_input_stream,
-                                              std::shared_ptr<io::CacheInputStream>& cache_input_stream,
+Status CacheSelectScanner::_write_disk_ranges(std::shared_ptr<SharedBufferedInputStream>& shared_input_stream,
+                                              std::shared_ptr<CacheInputStream>& cache_input_stream,
                                               const std::vector<DiskRange>& disk_ranges) {
     std::vector<DiskRange> merged_disk_ranges{};
     DiskRangeHelper::merge_adjacent_disk_ranges(disk_ranges, config::io_coalesce_read_max_distance_size,
                                                 config::io_coalesce_read_max_buffer_size, merged_disk_ranges);
 
-    std::vector<io::SharedBufferedInputStream::IORange> io_ranges{};
+    std::vector<SharedBufferedInputStream::IORange> io_ranges{};
     io_ranges.reserve(merged_disk_ranges.size());
     for (const DiskRange& disk_range : merged_disk_ranges) {
         io_ranges.emplace_back(disk_range.offset(), disk_range.length());
     }
     RETURN_IF_ERROR(shared_input_stream->set_io_ranges(io_ranges));
 
-    io::CacheSelectInputStream* cache_select_input_stream =
-            down_cast<io::CacheSelectInputStream*>(cache_input_stream.get());
+    CacheSelectInputStream* cache_select_input_stream = down_cast<CacheSelectInputStream*>(cache_input_stream.get());
 
     for (const DiskRange& merged_disk_range : merged_disk_ranges) {
         RETURN_IF_ERROR(

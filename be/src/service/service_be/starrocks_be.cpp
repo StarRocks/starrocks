@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include <gperftools/malloc_extension.h>
 #include <unistd.h>
 
 #if defined(LEAK_SANITIZER)
@@ -33,6 +32,7 @@
 #include "common/process_exit.h"
 #include "common/status.h"
 #include "common/system/backend_options.h"
+#include "connector/connector_bootstrap.h"
 #include "fs/s3/poco_common.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
@@ -50,7 +50,7 @@
 #include "cache/datacache_metrics.h"
 #include "common/system/mem_info.h"
 #include "common/util/thrift_server.h"
-#include "runtime/thrift_rpc_helper.h"
+#include "platform/platform_env.h"
 #include "staros_integration/staros_worker_runtime.h"
 #include "storage/storage_engine.h"
 #include "util/logging.h"
@@ -71,6 +71,7 @@ namespace starrocks {
 
 StorageEngine* init_storage_engine(GlobalEnv* global_env, std::vector<StorePath> paths, bool as_cn,
                                    TableMetricsManager* table_metrics_mgr) {
+    DCHECK(global_env != nullptr);
     // Init and open storage engine.
     EngineOptions options;
     options.store_paths = std::move(paths);
@@ -116,6 +117,10 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
     EXIT_IF_ERROR(global_env->init(process_metrics_registry->root_registry()));
     LOG(INFO) << process_name << " start step " << start_step++ << ": global env init successfully";
 
+    auto* platform_env = PlatformEnv::GetInstance();
+    EXIT_IF_ERROR(platform_env->init(process_metrics_registry->root_registry()));
+    LOG(INFO) << process_name << " start step " << start_step++ << ": platform env init successfully";
+
     // cache env should be initialized before init_storage_engine,
     // because apply task is triggered in init_storage_engine and needs cache env.
 #ifndef __APPLE__
@@ -141,11 +146,12 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
     LOG(INFO) << process_name << " start step " << start_step++ << ": storage engine init successfully";
 
     auto* exec_env = ExecEnv::GetInstance();
-    EXIT_IF_ERROR(exec_env->init(paths, process_metrics_registry, as_cn));
+    EXIT_IF_ERROR(connector::bootstrap_builtin_connectors());
+    EXIT_IF_ERROR(exec_env->init(paths, process_metrics_registry, global_env, as_cn));
     LOG(INFO) << process_name << " start step " << start_step++ << ": exec env init successfully";
 
 #if !defined(__APPLE__) && defined(WITH_STARCACHE)
-    cache_env->attach_peer_cache_stub_cache(exec_env->brpc_stub_cache());
+    cache_env->attach_peer_cache_stub_cache(platform_env->brpc_stub_cache());
     LOG(INFO) << process_name << " start step " << start_step++ << ": peer cache BRPC stub cache attached successfully";
 #endif
 
@@ -176,19 +182,13 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
     DataCacheMetrics::instance()->enable_update_hook(use_same_datacache_instance);
 #endif
 
-    // set up thrift client before providing any service to the external
-    // because these services may use thrift client, for example, stream
-    // load will send thrift rpc to FE after http server is started
-    ThriftRpcHelper::setup(
-            {exec_env->client_cache(), exec_env->frontend_client_cache(), exec_env->broker_client_cache()});
-
     // Start thrift server
     int thrift_port = config::be_port;
     if (as_cn && config::thrift_port != 0) {
         thrift_port = config::thrift_port;
         LOG(WARNING) << "'thrift_port' is deprecated, please update be.conf to use 'be_port' instead!";
     }
-    auto thrift_server = BackendService::create(exec_env, thrift_port);
+    auto thrift_server = BackendService::create(exec_env, process_metrics_registry->root_registry(), thrift_port);
 
     if (auto status = thrift_server->start(); !status.ok()) {
         LOG(ERROR) << "Fail to start BackendService thrift server on port " << thrift_port << ": " << status;
@@ -264,11 +264,11 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
 
     // Start HTTP server
 #ifndef __APPLE__
-    auto http_server = std::make_unique<HttpServiceBE>(cache_env, exec_env, process_metrics_registry,
+    auto http_server = std::make_unique<HttpServiceBE>(cache_env, exec_env, *global_env, process_metrics_registry,
                                                        config::be_http_port, config::be_http_num_workers);
 #else
     // On macOS, pass nullptr for cache_env
-    auto http_server = std::make_unique<HttpServiceBE>(nullptr, exec_env, process_metrics_registry,
+    auto http_server = std::make_unique<HttpServiceBE>(nullptr, exec_env, *global_env, process_metrics_registry,
                                                        config::be_http_port, config::be_http_num_workers);
 #endif
     if (auto status = http_server->start(); !status.ok()) {
@@ -293,7 +293,7 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
 
     // Start heartbeat server
     std::unique_ptr<ThriftServer> heartbeat_server;
-    if (auto ret = create_heartbeat_server(exec_env, config::heartbeat_service_port,
+    if (auto ret = create_heartbeat_server(process_metrics_registry->root_registry(), config::heartbeat_service_port,
                                            config::heartbeat_service_thread_count);
         !ret.ok()) {
         LOG(ERROR) << process_name << " heartbeat server did not start correctly, exiting: " << ret.status().message();
@@ -374,6 +374,9 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
 
     exec_env->destroy();
     LOG(INFO) << process_name << " exit step " << exit_step++ << ": exec env destroy successfully";
+
+    platform_env->destroy();
+    LOG(INFO) << process_name << " exit step " << exit_step++ << ": platform env destroy successfully";
 
     delete storage_engine;
 

@@ -51,10 +51,10 @@
 #include "common/status.h"
 #include "common/statusor.h"
 #include "common/thread/priority_thread_pool.hpp"
+#include "formats/io/async_flush_output_stream.h"
 #include "formats/parquet/chunk_writer.h"
 #include "fs/fs_fwd.h"
 #include "gen_cpp/Types_types.h"
-#include "io/async_flush_output_stream.h"
 #include "runtime/runtime_fwd.h"
 #include "types/type_descriptor.h"
 
@@ -104,7 +104,7 @@ private:
 
 class AsyncParquetOutputStream : public arrow::io::OutputStream {
 public:
-    AsyncParquetOutputStream(io::AsyncFlushOutputStream* stream);
+    AsyncParquetOutputStream(formats::AsyncFlushOutputStream* stream);
 
     ~AsyncParquetOutputStream() override = default;
 
@@ -119,7 +119,7 @@ public:
     bool closed() const override { return _is_closed; };
 
 private:
-    io::AsyncFlushOutputStream* _stream;
+    formats::AsyncFlushOutputStream* _stream;
     bool _is_closed = false;
 };
 

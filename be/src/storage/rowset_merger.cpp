@@ -19,21 +19,23 @@
 
 #include "base/utility/pretty_printer.h"
 #include "column/binary_column.h"
+#include "column/chunk_factory.h"
+#include "column/chunk_schema_helper.h"
 #include "column/column_helper.h"
 #include "column/raw_data_visitor.h"
 #include "common/config_compaction_fwd.h"
 #include "common/config_exec_fwd.h"
 #include "gutil/stl_util.h"
+#include "storage/base/merge_iterator.h"
 #include "storage/chunk_helper.h"
-#include "storage/empty_iterator.h"
-#include "storage/merge_iterator.h"
 #include "storage/primary_key_encoder.h"
+#include "storage/primitive/empty_iterator.h"
+#include "storage/primitive/union_iterator.h"
 #include "storage/rowset/column_reader.h"
 #include "storage/rowset/rowset_options.h"
 #include "storage/rowset/rowset_writer.h"
 #include "storage/storage_metrics.h"
 #include "storage/tablet.h"
-#include "storage/union_iterator.h"
 
 namespace starrocks {
 
@@ -376,7 +378,7 @@ private:
                 return res.status();
             }
             entry.rowset_seg_id = rowset->rowset_meta()->get_rowset_seg_id();
-            entry.chunk = ChunkHelper::new_chunk(schema, _chunk_size);
+            entry.chunk = ChunkFactory::new_chunk(schema, _chunk_size);
             entry.need_rssid_rowids = config::enable_light_pk_compaction_publish;
             if (res.value().empty()) {
                 entry.segment_itr = new_empty_iterator(schema, _chunk_size);
@@ -413,7 +415,7 @@ private:
             }
         }
 
-        auto char_field_indexes = ChunkHelper::get_char_field_indexes(schema);
+        auto char_field_indexes = ChunkSchemaHelper::get_char_field_indexes(schema);
 
         vector<uint32_t> column_indexes;
         std::unique_ptr<vector<RowSourceMask>> source_masks;
@@ -422,7 +424,7 @@ private:
             column_indexes = tablet_schema->sort_key_idxes();
         }
 
-        auto chunk = ChunkHelper::new_chunk(schema, _chunk_size);
+        auto chunk = ChunkFactory::new_chunk(schema, _chunk_size);
         vector<uint64_t> rssid_rowids;
         while (true) {
             chunk->reset();
@@ -579,8 +581,8 @@ private:
             std::shared_ptr<ChunkIterator> iter = new_mask_merge_iterator(iterators, mask_buffer.get());
             RETURN_IF_ERROR(iter->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS));
 
-            auto chunk = ChunkHelper::new_chunk(schema, _chunk_size);
-            auto char_field_indexes = ChunkHelper::get_char_field_indexes(schema);
+            auto chunk = ChunkFactory::new_chunk(schema, _chunk_size);
+            auto char_field_indexes = ChunkSchemaHelper::get_char_field_indexes(schema);
 
             while (true) {
                 chunk->reset();

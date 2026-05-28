@@ -15,8 +15,8 @@
 #include "exprs/utility_functions.h"
 
 #include "column/column_visitor_adapter.h"
+#include "common/util/thrift_client_cache.h"
 #include "gen_cpp/FrontendService_types.h"
-#include "runtime/client_cache.h"
 
 #ifdef __SSE4_2__
 #include <emmintrin.h>
@@ -34,6 +34,7 @@
 #include "base/network/network_util.h"
 #include "base/time/monotime.h"
 #include "base/time/time.h"
+#include "base/uid_util.h"
 #include "base/uuid/uuid_generator.h"
 #include "column/binary_column.h"
 #include "column/column_builder.h"
@@ -46,8 +47,8 @@
 #include "exec/pipeline/fragment_context.h"
 #include "exprs/function_context.h"
 #include "gutil/casts.h"
+#include "platform/thrift_rpc_helper.h"
 #include "runtime/runtime_state.h"
-#include "runtime/thrift_rpc_helper.h"
 #include "storage/key_coder.h"
 #include "storage/primary_key_encoder.h"
 #include "types/logical_type.h"
@@ -95,6 +96,15 @@ StatusOr<ColumnPtr> UtilityFunctions::last_query_id(FunctionContext* context, co
     } else {
         return ColumnHelper::create_const_null_column(1);
     }
+}
+
+StatusOr<ColumnPtr> UtilityFunctions::query_id(FunctionContext* context, const Columns& columns) {
+    starrocks::RuntimeState* state = context->state();
+    const TUniqueId& id = state->query_id();
+    if (id.hi == 0 && id.lo == 0) {
+        return ColumnHelper::create_const_null_column(1);
+    }
+    return ColumnHelper::create_const_column<TYPE_VARCHAR>(print_id(id), 1);
 }
 
 // UUID fixed 33 bytes.

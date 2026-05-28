@@ -24,6 +24,7 @@
 #include "base/uid_util.h"
 #include "base/utility/defer_op.h"
 #include "column/chunk.h"
+#include "column/chunk_factory.h"
 #include "column/fixed_length_column.h"
 #include "column/schema.h"
 #include "common/config_ingest_fwd.h"
@@ -32,6 +33,7 @@
 #include "fs/fs_factory.h"
 #include "fs/fs_util.h"
 #include "gen_cpp/internal_service.pb.h"
+#include "platform/platform_env.h"
 #include "runtime/exec_env.h"
 #include "runtime/load_channel.h"
 #include "runtime/load_channel_mgr.h"
@@ -199,10 +201,10 @@ protected:
         CHECK_OK(_tablet_manager->put_tablet_metadata(*new_tablet_metadata(10089)));
 
         auto load_mem_tracker = std::make_unique<MemTracker>(-1, "", _mem_tracker.get());
-        _load_channel = std::make_shared<LoadChannel>(_load_channel_mgr.get(), _tablet_manager.get(),
-                                                      ExecEnv::GetInstance()->diagnose_daemon(),
-                                                      ExecEnv::GetInstance()->brpc_stub_cache(), UniqueId::gen_uid(),
-                                                      next_id(), string(), 1000, std::move(load_mem_tracker));
+        _load_channel = std::make_shared<LoadChannel>(
+                _load_channel_mgr.get(), _tablet_manager.get(), ExecEnv::GetInstance()->diagnose_daemon(),
+                PlatformEnv::GetInstance()->brpc_stub_cache(), UniqueId::gen_uid(), next_id(), string(), 1000,
+                std::move(load_mem_tracker));
         TabletsChannelKey key{UniqueId::gen_uid().to_proto(), 0, kIndexId};
         _tablets_channel = new_lake_tablets_channel(_load_channel.get(), _tablet_manager.get(), key,
                                                     _load_channel->mem_tracker(), _root_profile.get());
@@ -231,9 +233,9 @@ protected:
         opts.chunk_size = 1024;
 
         ASSIGN_OR_ABORT(auto seg_iter, seg->new_iterator(*_schema, opts));
-        auto read_chunk_ptr = ChunkHelper::new_chunk(*_schema, 1024);
+        auto read_chunk_ptr = ChunkFactory::new_chunk(*_schema, 1024);
         while (true) {
-            auto tmp_chunk = ChunkHelper::new_chunk(*_schema, 1024);
+            auto tmp_chunk = ChunkFactory::new_chunk(*_schema, 1024);
             auto st = seg_iter->get_next(tmp_chunk.get());
             if (st.is_end_of_file()) {
                 break;

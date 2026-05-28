@@ -40,3 +40,5 @@ set(UTIL_FILES
 ADD_BE_LIB(Util
     ${UTIL_FILES}
 )
+
+target_link_libraries(Util PUBLIC RuntimeEnv)

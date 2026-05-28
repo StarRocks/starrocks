@@ -12,7 +12,8 @@ sidebar_position: 0.9
 ## 構文
 
 ```Haskell
-cast (input as type)
+cast(input as type)
+input :: type
 ```
 
 ## パラメータ
@@ -58,7 +59,25 @@ cast (input as type)
     +-------------------+
 ```
 
-例 2: 入力を ARRAY に変換
+例 2: `::` 短縮記法による同等の変換
+
+```Plain Text
+    select '9.5'::DECIMAL(10,2);
+    select NULL::INT;
+    select 1::BIGINT;
+    select '5'::INT::STRING;       -- チェーン変換
+    select (1 + 2)::DECIMAL(10,2); -- 括弧付きの式
+```
+
+`::` は `CAST(input AS type)` と等価であり、StarRocks の CAST セマンティクスを使用します。
+
+:::warning
+
+ビューまたはマテリアライズドビューの DDL で `::` を使用した場合、保存された元の定義に `::` が含まれることがあります。このような定義は、`::` 短縮構文を解析できない古い StarRocks バージョンやツールとは下位互換性がありません。
+
+:::
+
+例 3: 入力を ARRAY に変換
 
 ```Plain Text
     -- 文字列を ARRAY<ANY> に変換
@@ -115,7 +134,7 @@ cast (input as type)
     +--------------------------------------------------------------+
 ```
 
-例 3: ロード中のデータ変換
+例 4: ロード中のデータ変換
 
 ```bash
     curl --location-trusted -u <username>:<password> -T ~/user_data/bigint \

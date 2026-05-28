@@ -21,6 +21,7 @@
 #include "agent/publish_version.h"
 #include "base/path/file_util.h"
 #include "base/testutil/assert.h"
+#include "column/chunk_factory.h"
 #include "column/column_helper.h"
 #include "common/config_storage_fwd.h"
 #include "exec/pipeline/query_context.h"
@@ -28,8 +29,9 @@
 #include "gtest/gtest.h"
 #include "storage/chunk_helper.h"
 #include "storage/delta_writer.h"
-#include "storage/empty_iterator.h"
 #include "storage/options.h"
+#include "storage/primitive/empty_iterator.h"
+#include "storage/primitive/union_iterator.h"
 #include "storage/rowset/rowset_factory.h"
 #include "storage/rowset/rowset_writer.h"
 #include "storage/rowset/rowset_writer_context.h"
@@ -38,7 +40,6 @@
 #include "storage/tablet_meta.h"
 #include "storage/tablet_reader.h"
 #include "storage/txn_manager.h"
-#include "storage/union_iterator.h"
 #include "storage/update_manager.h"
 
 namespace starrocks {
@@ -118,24 +119,24 @@ public:
             return *writer->build();
         }
         auto schema = ChunkHelper::convert_schema(tablet->tablet_schema());
-        auto chunk = ChunkHelper::new_chunk(schema, keys.size());
-        auto cols = chunk->mutable_columns();
+        auto chunk = ChunkFactory::new_chunk(schema, keys.size());
+        auto cols = chunk->columns();
         for (int64_t key : keys) {
             if (schema.num_key_fields() == 1) {
-                cols[0]->append_datum(Datum(key));
+                cols[0]->as_mutable_ptr()->append_datum(Datum(key));
             } else {
-                cols[0]->append_datum(Datum(key));
+                cols[0]->as_mutable_ptr()->append_datum(Datum(key));
                 string v = fmt::to_string(key * 234234342345);
-                cols[1]->append_datum(Datum(Slice(v)));
-                cols[2]->append_datum(Datum((int32_t)key));
+                cols[1]->as_mutable_ptr()->append_datum(Datum(Slice(v)));
+                cols[2]->as_mutable_ptr()->append_datum(Datum((int32_t)key));
             }
             int vcol_start = schema.num_key_fields();
-            cols[vcol_start]->append_datum(Datum((int16_t)(key % 100 + 1)));
+            cols[vcol_start]->as_mutable_ptr()->append_datum(Datum((int16_t)(key % 100 + 1)));
             if (cols[vcol_start + 1]->is_binary()) {
                 string v = fmt::to_string(key % 1000 + 2);
-                cols[vcol_start + 1]->append_datum(Datum(Slice(v)));
+                cols[vcol_start + 1]->as_mutable_ptr()->append_datum(Datum(Slice(v)));
             } else {
-                cols[vcol_start + 1]->append_datum(Datum((int32_t)(key % 1000 + 2)));
+                cols[vcol_start + 1]->as_mutable_ptr()->append_datum(Datum((int32_t)(key % 1000 + 2)));
             }
         }
         if (one_delete == nullptr && !keys.empty()) {
@@ -197,7 +198,7 @@ static ChunkIteratorPtr create_tablet_iterator(TabletReader& reader, Schema& sch
 }
 
 static ssize_t read_until_eof(const ChunkIteratorPtr& iter) {
-    auto chunk = ChunkHelper::new_chunk(iter->schema(), 100);
+    auto chunk = ChunkFactory::new_chunk(iter->schema(), 100);
     size_t count = 0;
     while (true) {
         auto st = iter->get_next(chunk.get());

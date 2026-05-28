@@ -57,7 +57,7 @@
 #ifndef __APPLE__
 #include "storage/index/inverted/clucene/clucene_plugin.h"
 #endif
-#include "runtime/thrift_rpc_helper.h"
+#include "platform/thrift_rpc_helper.h"
 #include "storage/snapshot_manager.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet.h"
@@ -78,7 +78,7 @@ inline const std::string& client_id(ExecEnv* env, const TNetworkAddress& addr) {
 }
 #else
 inline BrokerServiceClientCache* client_cache(ExecEnv* env) {
-    return env->broker_client_cache();
+    return env->rpc_services().broker_client_cache;
 }
 
 inline const std::string& client_id(ExecEnv* env, const TNetworkAddress& addr) {

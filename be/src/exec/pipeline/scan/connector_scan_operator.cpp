@@ -23,6 +23,8 @@
 #include "exec/pipeline/scan/balanced_chunk_buffer.h"
 #include "exec/pipeline/scan/scan_morsel.h"
 #include "exprs/expr_executor.h"
+#include "gutil/casts.h"
+#include "gutil/walltime.h"
 #include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
 #include "runtime/global_dict/parser.h"

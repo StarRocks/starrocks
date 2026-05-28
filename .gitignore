@@ -107,6 +107,7 @@ CMakeLists.txt
 .clangd
 .cursor/
 .codex/
+.codex
 .worktrees/
 handbook/plans/local/
 
@@ -114,3 +115,4 @@ _codeql_detected_source_root
 test/.venv
 
 .lycheecache
+memory/

@@ -19,6 +19,7 @@ import com.google.common.collect.Lists;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionName;
 import com.starrocks.catalog.FunctionSet;
+import com.starrocks.planner.FragmentNormalizer;
 import com.starrocks.planner.SlotDescriptor;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.ast.AssertNumRowsElement;
@@ -235,29 +236,46 @@ public final class ExprToThrift {
     }
 
     public static TAnalyticWindow analyticWindowToThrift(AnalyticWindow window) {
+        return analyticWindowToThrift(window, ExprToThrift::treeToThrift);
+    }
+
+    public static TAnalyticWindow analyticWindowToNormalForm(AnalyticWindow window, FragmentNormalizer normalizer) {
+        return analyticWindowToThrift(window, expr -> ExprToNormalFormVisitor.treeToNormalForm(expr, normalizer));
+    }
+
+    private static TAnalyticWindow analyticWindowToThrift(AnalyticWindow window,
+                                                          java.util.function.Function<Expr, TExpr> exprSerializer) {
         Preconditions.checkNotNull(window, "Analytic window should not be null when converting to thrift");
         TAnalyticWindow result = new TAnalyticWindow(analyticWindowTypeToThrift(window.getType()));
         AnalyticWindowBoundary leftBoundary = window.getLeftBoundary();
         if (leftBoundary.getBoundaryType() != AnalyticWindowBoundary.BoundaryType.UNBOUNDED_PRECEDING) {
-            result.setWindow_start(analyticWindowBoundaryToThrift(leftBoundary, window.getType()));
+            result.setWindow_start(analyticWindowBoundaryToThrift(leftBoundary, window.getType(),
+                    exprSerializer));
         }
         AnalyticWindowBoundary rightBoundary = window.getRightBoundary();
         Preconditions.checkNotNull(rightBoundary, "Right boundary must be set before converting to thrift");
         if (rightBoundary.getBoundaryType() != AnalyticWindowBoundary.BoundaryType.UNBOUNDED_FOLLOWING) {
-            result.setWindow_end(analyticWindowBoundaryToThrift(rightBoundary, window.getType()));
+            result.setWindow_end(analyticWindowBoundaryToThrift(rightBoundary, window.getType(),
+                    exprSerializer));
         }
         return result;
     }
 
     private static TAnalyticWindowBoundary analyticWindowBoundaryToThrift(AnalyticWindowBoundary boundary,
-                                                                          AnalyticWindow.Type windowType) {
+                                                                          AnalyticWindow.Type windowType,
+                                                                          java.util.function.Function<Expr, TExpr> exprSerializer) {
         TAnalyticWindowBoundary result = new TAnalyticWindowBoundary(
                 analyticWindowBoundaryTypeToThrift(boundary.getBoundaryType()));
         if (boundary.getBoundaryType().isOffset() && windowType == AnalyticWindow.Type.ROWS) {
             Preconditions.checkNotNull(boundary.getOffsetValue(), "Offset value is required for ROWS window");
             result.setRows_offset_value(boundary.getOffsetValue().longValue());
         }
-        // TODO: range windows need range_offset_predicate
+        if (boundary.getBoundaryType().isOffset() && windowType == AnalyticWindow.Type.RANGE) {
+            Preconditions.checkNotNull(boundary.getExpr(), "Offset expression is required for RANGE window");
+            Expr rangeBoundaryExpr = Preconditions.checkNotNull(boundary.getAnalyzedRangeBoundaryExpr(),
+                    "Analyzed RANGE boundary expression is required for RANGE offset window");
+            result.setRange_boundary_expr(exprSerializer.apply(rangeBoundaryExpr));
+        }
         return result;
     }
 

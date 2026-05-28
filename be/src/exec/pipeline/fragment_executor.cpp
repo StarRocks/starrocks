@@ -24,6 +24,9 @@
 #include "common/config_exec_flow_fwd.h"
 #include "common/config_exec_fwd.h"
 #include "common/runtime_profile.h"
+#include "compute_env/compute_env.h"
+#include "compute_env/data_stream/data_stream_mgr.h"
+#include "compute_env/pipeline/driver_limiter.h"
 #include "exec/capture_version_node.h"
 #include "exec/cross_join_node.h"
 #include "exec/data_sinks/data_stream_sender.h"
@@ -50,7 +53,6 @@
 #include "gutil/casts.h"
 #include "gutil/map_util.h"
 #include "runtime/batch_write/batch_write_mgr.h"
-#include "runtime/data_stream_mgr.h"
 #include "runtime/descriptors.h"
 #include "runtime/descriptors_ext.h"
 #include "runtime/exec_env.h"
@@ -793,7 +795,7 @@ Status FragmentExecutor::_prepare_pipeline_driver(ExecEnv* exec_env, const Unifi
         all_support_event_scheduler = all_support_event_scheduler && !runtime_state->enable_wait_dependent_event();
         if (all_support_event_scheduler) {
             _fragment_ctx->init_event_scheduler();
-            RETURN_IF_ERROR(_fragment_ctx->set_pipeline_timer(exec_env->pipeline_timer()));
+            RETURN_IF_ERROR(_fragment_ctx->set_pipeline_timer(exec_env->compute_env()->pipeline_timer()));
         }
     }
     runtime_state->set_enable_event_scheduler(_fragment_ctx->enable_event_scheduler());
@@ -827,7 +829,8 @@ Status FragmentExecutor::_prepare_pipeline_driver(ExecEnv* exec_env, const Unifi
     }
 
     // Acquire driver token to avoid overload
-    ASSIGN_OR_RETURN(auto driver_token, exec_env->driver_limiter()->try_acquire(_fragment_ctx->total_dop()));
+    ASSIGN_OR_RETURN(auto driver_token,
+                     exec_env->compute_env()->driver_limiter()->try_acquire(_fragment_ctx->total_dop()));
     _fragment_ctx->set_driver_token(std::move(driver_token));
 
     return Status::OK();
@@ -902,7 +905,7 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
         int64_t process_mem_bytes = GlobalEnv::GetInstance()->process_mem_tracker()->consumption();
         size_t num_process_drivers = 0;
     } profiler;
-    profiler.num_process_drivers = exec_env->driver_limiter()->num_total_drivers();
+    profiler.num_process_drivers = exec_env->compute_env()->driver_limiter()->num_total_drivers();
 
     DeferOp defer([this, &request, &prepare_success, &profiler]() {
         if (prepare_success) {

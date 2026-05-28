@@ -58,11 +58,11 @@ import java.util.Set;
  *
  * <p>Leader-state is gated at the manager level: {@code TabletReshardJobMgr} is only started
  * inside {@code GlobalStateMgr.startLeaderOnlyDaemonThreads}, so the checker never runs on a
- * brand-new follower. For the demoted-leader edge case, the per-RPC
- * {@link GlobalStateMgr#isLeaderWorkAdmissionOpen() admission} check inside
- * {@link SplitTabletJobFactory#forColocateAlignment} (and inside {@link
- * ColocateTableIndex#markAllGroupsWithSameColocateGroupIdStable}'s journal write) is the
- * safety net.
+ * brand-new follower. For the demoted-leader edge case, the alignment job's StarOS shard
+ * creation is journal-first (runs in {@link SplitTabletJob#runPendingJob} after the job is
+ * persisted), and the journal write inside {@link
+ * ColocateTableIndex#markAllGroupsWithSameColocateGroupIdStable} is admission-gated — these
+ * together prevent shard-leak on demotion.
  *
  * <h3>What a cycle does</h3>
  * Iterates every unstable range-colocate {@code colocateGroupId}; for each peer {@link
@@ -203,12 +203,17 @@ public class ColocateChecker {
         // aligned against expectedRanges.
         Map<Long, Map<Long, Map<Long, List<TabletRange>>>> alignmentMap = new HashMap<>();
         boolean alignedSoFar = true;
-        List<Column> sortKeyColumns = MetaUtils.getRangeDistributionColumns(table);
 
         try (AutoCloseableLock lock = new AutoCloseableLock(db.getId(), table.getId(), LockType.READ)) {
             for (PhysicalPartition physicalPartition : table.getPhysicalPartitions()) {
                 for (MaterializedIndex index :
                         physicalPartition.getLatestMaterializedIndices(IndexExtState.VISIBLE)) {
+                    // Each visible index (base + every rollup/MV) can have its own sort-key arity.
+                    // Using the base index's sort key for an MV with a shorter prefix would compute
+                    // boundaries the MV's tablets can never align with — alignment iteration would
+                    // livelock. Resolve per-index here (E1). Use getMetaId() (not getId()) — the
+                    // physical id changes after reshard while metaId is stable.
+                    List<Column> sortKeyColumns = MetaUtils.getRangeDistributionColumns(table, index.getMetaId());
                     if (RangeColocateScanDispatch.isTabletRangesAligned(
                             index, sortKeyColumns, expectedRanges, colocateColumnCount)) {
                         continue;
@@ -236,16 +241,9 @@ public class ColocateChecker {
             return alignedSoFar;
         }
 
-        // Re-validate leader admission immediately before the side-effecting factory call:
-        // forColocateAlignment creates StarOS shards BEFORE addTabletReshardJob writes the
-        // admission-guarded journal record. If demotion started since the cycle began,
-        // proceeding would leak external shards.
-        if (!GlobalStateMgr.getCurrentState().isLeaderWorkAdmissionOpen()) {
-            LOG.info("leader admission closed before submitting alignment job for {}.{}, "
-                            + "deferring to next cycle", db.getFullName(), table.getName());
-            return false;
-        }
-
+        // The factory now only builds local state and journals the job; the StarOS shard
+        // creation runs in SplitTabletJob.runPendingJob (after the journal write), so a
+        // leader demotion at this point cannot leak external shards.
         TabletReshardJob job = SplitTabletJobFactory.forColocateAlignment(db, table, alignmentMap);
         GlobalStateMgr.getCurrentState().getTabletReshardJobMgr().addTabletReshardJob(job);
         LOG.info("submitted SplitTabletJob {} for table {}.{} covering {} partitions",

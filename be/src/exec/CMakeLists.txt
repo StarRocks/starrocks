@@ -20,20 +20,36 @@ set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/exec")
 # where to put generated binaries
 set(EXECUTABLE_OUTPUT_PATH "${BUILD_DIR}/src/exec")
 
-set(EXEC_CORE_FILES
+set(EXEC_PRIMITIVE_FILES
     exec_node.cpp
     runtime_filter/runtime_filter_descriptor.cpp
     runtime_filter/runtime_filter_probe.cpp
     runtime_filter/runtime_filter_probe_wait.cpp
     runtime_filter/runtime_filter_registry.cpp
     runtime_filter/runtime_filter_helper.cpp
+    pipeline/operator.cpp
+    pipeline/scan/dynamic_morsel_queue.cpp
+    pipeline/scan/fixed_morsel_queue.cpp
+    pipeline/scan/morsel_queue.cpp
+    pipeline/scan/scan_morsel.cpp
+    query_cache/ticket_checker.cpp
 )
 
-ADD_BE_LIB(ExecCore
-    ${EXEC_CORE_FILES}
+ADD_BE_LIB(ExecPrimitive
+    ${EXEC_PRIMITIVE_FILES}
 )
 
-target_link_libraries(ExecCore PUBLIC ExprCore RuntimeCore)
+target_link_libraries(ExecPrimitive PUBLIC
+    ExprCore
+    RuntimeCore
+    ChunkCore
+    ColumnCore
+    Types
+    Common
+    Base
+    Gutil
+    StarRocksGen
+)
 
 set(EXEC_SINK_CORE_FILES
     data_sink.cpp
@@ -60,7 +76,7 @@ ADD_BE_LIB(SpillCore
     ${SPILL_CORE_FILES}
 )
 
-target_link_libraries(SpillCore PUBLIC RuntimeCore FSCore IOCore Common Base Gutil StarRocksGen)
+target_link_libraries(SpillCore PUBLIC RuntimeCore FSCore IO Common Base Gutil StarRocksGen)
 
 set(EXEC_SCHEMA_SCANNER_CORE_FILES
     schema_scanner.cpp
@@ -87,6 +103,7 @@ set(EXEC_SCHEMA_SCANNER_FILES
     schema_scanner/schema_be_configs_scanner.cpp
     schema_scanner/schema_be_threads_scanner.cpp
     schema_scanner/schema_charsets_scanner.cpp
+    schema_scanner/schema_collation_character_set_applicability_scanner.cpp
     schema_scanner/schema_collations_scanner.cpp
     schema_scanner/schema_dummy_scanner.cpp
     schema_scanner/schema_events_scanner.cpp
@@ -100,32 +117,6 @@ ADD_BE_LIB(ExecSchemaScanners
 
 target_link_libraries(ExecSchemaScanners PUBLIC
     ExecSchemaScannerCore
-    RuntimeCore
-    ChunkCore
-    ColumnCore
-    Types
-    Common
-    Base
-    Gutil
-    StarRocksGen
-)
-
-set(EXEC_SORTING_CORE_FILES
-    sorting/compare_column.cpp
-    sorting/merge.cpp
-    sorting/merge_cascade.cpp
-    sorting/merge_column.cpp
-    sorting/sort_column.cpp
-    sorting/sort_cursor.cpp
-    sorting/sort_permute.cpp
-)
-
-ADD_BE_LIB(ExecSortingCore
-    ${EXEC_SORTING_CORE_FILES}
-)
-
-target_link_libraries(ExecSortingCore PUBLIC
-    ExprCore
     RuntimeCore
     ChunkCore
     ColumnCore
@@ -152,7 +143,7 @@ ADD_BE_LIB(ExecJoinCore
 )
 
 target_link_libraries(ExecJoinCore PUBLIC
-    ExecSortingCore
+    ComputeEnv
     ExprCore
     Serde
     RuntimeCore
@@ -177,10 +168,6 @@ endif()
 # Staged pipeline compatibility groups. These source lists are not final clean
 # module boundaries yet; keep them named by intended ownership so later
 # cycle-cut leaves can promote them into real targets incrementally.
-set(PIPELINE_PRIMITIVES_SRCS
-    pipeline/operator.cpp
-)
-
 set(PIPELINE_GRAPH_SRCS
     pipeline/pipeline.cpp
     pipeline/group_execution/execution_group.cpp
@@ -195,14 +182,13 @@ set(PIPELINE_RUNTIME_SRCS
     pipeline/pipeline_driver.cpp
     pipeline/audit_statistics_reporter.cpp
     pipeline/exec_state_reporter.cpp
-    pipeline/driver_limiter.cpp
     pipeline/fragment_context.cpp
     pipeline/query_context.cpp
     pipeline/operator_factory.cpp
     pipeline/source_operator.cpp
     pipeline/schedule/timeout_tasks.cpp
     pipeline/schedule/event_scheduler.cpp
-    pipeline/schedule/observer.cpp
+    pipeline/schedule/pipeline_driver_observer.cpp
     pipeline/runtime_filter_types.cpp
     workgroup/pipeline_executor_set.cpp
     workgroup/pipeline_executor_set_manager.cpp
@@ -237,8 +223,13 @@ set(PIPELINE_OPERATORS_BATCH_SRCS
     pipeline/scan/glm_manager.cpp
     pipeline/scan/balanced_chunk_buffer.cpp
     pipeline/scan/chunk_source.cpp
+    pipeline/scan/bucket_sequence_morsel_queue.cpp
+    pipeline/scan/olap_dynamic_morsel_queue.cpp
+    pipeline/scan/olap_fixed_morsel_queue.cpp
     pipeline/scan/morsel.cpp
-    pipeline/scan/scan_morsel.cpp
+    pipeline/scan/morsel_queue_factory.cpp
+    pipeline/scan/olap_morsel_queue.cpp
+    pipeline/scan/split_morsel_queue.cpp
     pipeline/scan/split_scan_morsel.cpp
     pipeline/scan/scan_operator.cpp
     pipeline/scan/olap_chunk_source.cpp
@@ -330,7 +321,6 @@ set(PIPELINE_EXTENSIONS_SRCS
     query_cache/cache_manager.cpp
     query_cache/lane_arbiter.cpp
     query_cache/conjugate_operator.cpp
-    query_cache/ticket_checker.cpp
     spill/spill_components.cpp
     spill/executor.cpp
     spill/spiller.cpp
@@ -360,14 +350,7 @@ set(EXEC_NON_PIPELINE_FILES
     olap_common.cpp
     tablet_info.cpp
     write_combined_txn_log.cpp
-    mysql_scanner.cpp
-    benchmark_scanner.cpp
     cache_stats_scanner.cpp
-    es/es_predicate.cpp
-    es/es_scan_reader.cpp
-    es/es_scroll_query.cpp
-    es/es_query_builder.cpp
-    es/es_scroll_parser.cpp
     local_file_writer.cpp
     plain_text_builder.cpp
     agg_runtime_filter_builder.cpp
@@ -492,7 +475,6 @@ set(EXEC_NON_PIPELINE_FILES
     jdbc/type_checker.cpp
     jdbc/type_checker_manager.cpp
     jdbc/type_checker_xml_loader.cpp
-    sorting/merge_path.cpp
     connector_scan_node.cpp
     workgroup/work_group.cpp
     workgroup/mem_tracker_manager.cpp
@@ -536,23 +518,6 @@ set(EXEC_DATA_SINK_FILES
     data_sinks/variable_result_writer.cpp
 )
 
-ADD_BE_LIB(PipelinePrimitives
-    ${PIPELINE_PRIMITIVES_SRCS}
-)
-
-target_link_libraries(PipelinePrimitives PUBLIC
-    ExecCore
-    ExprCore
-    RuntimeCore
-    ChunkCore
-    ColumnCore
-    Types
-    Common
-    Base
-    Gutil
-    StarRocksGen
-)
-
 # `pipeline/aggregate/aggregate_operators.cpp` intentionally includes the
 # aggregate operator implementation .cpp files to control template
 # instantiation. Do not add those implementation files separately here.
@@ -587,4 +552,5 @@ ADD_BE_LIB(Exec
     $<TARGET_OBJECTS:pipeline_extensions_exec_objs>
 )
 
-target_link_libraries(Exec PUBLIC PipelinePrimitives ExecSinkCore ExecCore SpillCore ExecSchemaScannerCore ExecSchemaScanners ExecSortingCore ExecJoinCore)
+target_link_libraries(Exec PUBLIC ExecPrimitive ExecSinkCore SpillCore ExecSchemaScannerCore ExecSchemaScanners ExecJoinCore RuntimeEnv ComputeEnv Cache)
+target_link_libraries(Exec PRIVATE FormatsIO Platform)

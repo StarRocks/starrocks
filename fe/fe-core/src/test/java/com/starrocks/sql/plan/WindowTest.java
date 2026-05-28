@@ -1885,9 +1885,10 @@ public class WindowTest extends PlanTestBase {
         List<AnalyticEvalNode> analyticNodes = new ArrayList<>();
         execPlan.getTopFragment().getPlanRoot().collect(AnalyticEvalNode.class, analyticNodes);
         Assertions.assertFalse(analyticNodes.isEmpty());
-        Assertions.assertEquals(analyticNodes.get(0).getAnalyticFnCalls().size(), 2);
-        Assertions.assertTrue(analyticNodes.get(0).getAnalyticFnCalls().get(0).getIgnoreNulls());
-        Assertions.assertFalse(analyticNodes.get(0).getAnalyticFnCalls().get(1).getIgnoreNulls());
+        // The default ORDER BY window is RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW.
+        // Normal first_value can be rewritten to ROWS, but first_value IGNORE NULLS must keep RANGE
+        // because peer rows can change the first non-null value. They therefore should not merge.
+        Assertions.assertEquals(1, analyticNodes.get(0).getAnalyticFnCalls().size());
     }
 
     @Test
@@ -1902,6 +1903,44 @@ public class WindowTest extends PlanTestBase {
         List<AnalyticEvalNode> analyticNodes = new ArrayList<>();
         execPlan.getTopFragment().getPlanRoot().collect(AnalyticEvalNode.class, analyticNodes);
         Assertions.assertFalse(analyticNodes.isEmpty());
+    }
+
+    @Test
+    public void testFirstLastValueRangeOffsetNotRewriteToRows() throws Exception {
+        String firstValueSql = "select first_value(v3) over(" +
+                "partition by v1 order by v2 range between 10 preceding and current row) from t0";
+        String firstValuePlan = getFragmentPlan(firstValueSql);
+        assertContains(firstValuePlan, "window: RANGE BETWEEN 10 PRECEDING AND CURRENT ROW");
+
+        String lastValueSql = "select last_value(v3) over(" +
+                "partition by v1 order by v2 range between current row and 10 following) from t0";
+        String lastValuePlan = getFragmentPlan(lastValueSql);
+        assertContains(lastValuePlan, "window: RANGE BETWEEN CURRENT ROW AND 10 FOLLOWING");
+    }
+
+    @Test
+    public void testFirstLastValueRangeRewriteToRowsOnlyWhenEquivalent() throws Exception {
+        String firstValuePlan = getFragmentPlan(
+                "select first_value(v3) over(partition by v1 order by v2) from t0");
+        assertContains(firstValuePlan, "window: ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW");
+
+        String lastValuePlan = getFragmentPlan(
+                "select last_value(v3) over(partition by v1 order by v2) from t0");
+        assertContains(lastValuePlan, "window: RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW");
+
+        String firstValueIgnoreNullsPlan = getFragmentPlan(
+                "select first_value(v3 ignore nulls) over(partition by v1 order by v2) from t0");
+        assertContains(firstValueIgnoreNullsPlan, "window: RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW");
+
+        String currentRowPeerFramePlan = getFragmentPlan(
+                "select first_value(v3) over(" +
+                        "partition by v1 order by v2 range between current row and current row) from t0");
+        assertContains(currentRowPeerFramePlan, "window: RANGE BETWEEN CURRENT ROW AND CURRENT ROW");
+
+        String fullPartitionPlan = getFragmentPlan(
+                "select last_value(v3 ignore nulls) over(" +
+                        "partition by v1 order by v2 range between unbounded preceding and unbounded following) from t0");
+        assertContains(fullPartitionPlan, "window: ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING");
     }
 
     @Test

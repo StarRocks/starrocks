@@ -14,12 +14,12 @@
 
 #include "exec/pipeline/sink/olap_table_sink_operator.h"
 
+#include "compute_env/result/buffer_control_block.h"
+#include "compute_env/result/result_buffer_mgr.h"
 #include "exec/data_sinks/tablet_sink.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/pipeline_driver_executor.h"
 #include "exec/workgroup/work_group.h"
-#include "runtime/buffer_control_block.h"
-#include "runtime/result_buffer_mgr.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks::pipeline {

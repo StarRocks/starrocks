@@ -16,14 +16,14 @@
 
 #include "base/phmap/phmap.h"
 #include "column/column.h"
+#include "compute_env/sorting/sort_permute.h"
 #include "exec/pipeline/fetch_task.h"
 #include "exec/pipeline/lookup/tablet_adaptor.h"
-#include "exec/sorting/sort_permute.h"
 #include "gen_cpp/internal_service.pb.h"
 #include "runtime/descriptors_fwd.h"
 #include "runtime/runtime_fwd.h"
-#include "storage/range.h"
-#include "storage/rowset/common.h"
+#include "storage/primitive/range.h"
+#include "storage/primitive/rowid_types.h"
 
 namespace starrocks::pipeline {
 

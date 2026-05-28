@@ -17,6 +17,7 @@ package com.starrocks.authorization.ranger.hive;
 import com.google.common.collect.Maps;
 import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.authorization.PrivilegeType;
+import com.starrocks.authorization.RejectedRecordsRowAccessPolicy;
 import com.starrocks.authorization.ranger.RangerAccessController;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.TableName;
@@ -110,6 +111,14 @@ public class RangerHiveAccessController extends RangerAccessController {
 
     @Override
     public Expr getRowAccessPolicy(ConnectContext context, TableName tableName) {
+        // Ranger-Hive governs Hive-catalog tables, not the internal
+        // `_statistics_.rejected_records`. The helper's catalog guard
+        // means this call is a cheap no-op for Hive tables; the branch
+        // is defensive against future clusters that mount `_statistics_`
+        // through a Hive-like controller.
+        if (RejectedRecordsRowAccessPolicy.matches(tableName)) {
+            return RejectedRecordsRowAccessPolicy.buildPolicy(context, tableName);
+        }
         return getRowAccessExpression(RangerHiveResource.builder()
                 .setDatabase(tableName.getDb())
                 .setTable(tableName.getTbl())

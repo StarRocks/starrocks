@@ -14,6 +14,21 @@
 
 set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/formats")
 
+ADD_BE_LIB(FormatsIO
+        io/async_flush_output_stream.cpp
+        io/formatted_output_stream_file.cpp
+        )
+
+target_link_libraries(FormatsIO PUBLIC
+        RuntimeCore
+        FSCore
+        Types
+        Common
+        Base
+        Gutil
+        StarRocksGen
+)
+
 ADD_BE_LIB(Formats
         csv/array_converter.cpp
         csv/array_reader.cpp
@@ -97,5 +112,7 @@ ADD_BE_LIB(Formats
         disk_range.hpp
         file_writer.cpp
         )
+
+target_link_libraries(Formats PUBLIC FormatsIO Cache)
 
 add_subdirectory(orc/apache-orc)

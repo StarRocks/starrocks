@@ -30,6 +30,7 @@
 #include "runtime/descriptors_ext.h"
 #include "runtime/runtime_state.h"
 #include "runtime/service_contexts.h"
+#include "types/logical_type.h"
 
 namespace starrocks {
 
@@ -397,17 +398,36 @@ Status IcebergTableSink::create_row_delta_sink_context(
     }
 
     // Determine column layout indices:
-    //   [_file, _pos, data_col1, ..., data_colN, op_code]
+    //   ROW_DELTA_UPDATE: [_file, _pos, data_col1, ..., data_colN]
+    //   ROW_DELTA_MIXED:  [_file, _pos, data_col1, ..., data_colN, op_code]
     // No partition prefix — partition columns are part of data_cols (full table schema).
     const size_t total_slots = slots.size();
     const int32_t data_column_start = 2; // after _file and _pos
-    const int32_t op_code_index = static_cast<int32_t>(total_slots - 1);
-    const int32_t data_column_count = op_code_index - data_column_start;
-
-    if (data_column_count < 0 || data_column_start > op_code_index) {
+    if (!t_iceberg_sink.__isset.write_mode) {
+        return Status::InternalError("Iceberg row delta sink requires write_mode");
+    }
+    const auto write_mode = t_iceberg_sink.write_mode;
+    if (write_mode != TIcebergWriteMode::ROW_DELTA_UPDATE && write_mode != TIcebergWriteMode::ROW_DELTA_MIXED) {
         return Status::InternalError(
-                fmt::format("Invalid row delta column layout: total_slots={}, data_column_start={}", total_slots,
-                            data_column_start));
+                fmt::format("Invalid Iceberg row delta write_mode: {}", static_cast<int>(write_mode)));
+    }
+    const bool has_routing_column = write_mode == TIcebergWriteMode::ROW_DELTA_MIXED;
+    const int32_t op_code_index = has_routing_column ? static_cast<int32_t>(total_slots) - 1 : -1;
+    const int32_t data_column_end =
+            has_routing_column ? static_cast<int32_t>(total_slots) - 1 : static_cast<int32_t>(total_slots);
+
+    if (data_column_end <= data_column_start) {
+        return Status::InternalError(
+                fmt::format("Iceberg row delta layout has no data columns: total_slots={}, data_column_start={}, "
+                            "write_mode={}",
+                            total_slots, data_column_start, static_cast<int>(write_mode)));
+    }
+
+    if (has_routing_column) {
+        if (slots[op_code_index]->type().type != TYPE_TINYINT) {
+            return Status::InternalError(fmt::format("Iceberg row delta op column must be TINYINT, actual={}",
+                                                     type_to_string(slots[op_code_index]->type().type)));
+        }
     }
 
     // --- Create delete sub-context ---
@@ -441,12 +461,15 @@ Status IcebergTableSink::create_row_delta_sink_context(
     // Configure partition columns for delete context
     delete_sink_ctx->partition_column_names = iceberg_table_desc->partition_column_names();
 
-    // Build column name → slot reference map from all columns (except op_code).
+    // Build column name → slot reference map from all columns (except mixed-mode op_code).
     // IcebergDeleteSink::add() uses this to locate _file/_pos by slot_id,
     // and update_partition_expr_slot_refs_by_map() uses it to bind partition exprs.
     // Since we pass the full original chunk to sub-sinks (not sub-chunks),
     // all slot_ids are available at runtime.
-    for (int32_t i = 0; i < op_code_index; ++i) {
+    for (int32_t i = 0; i < static_cast<int32_t>(total_slots); ++i) {
+        if (i == op_code_index) {
+            continue;
+        }
         const auto* slot = slots[i];
         const auto& expr = output_exprs[i];
         for (const auto& node : expr.nodes) {
@@ -472,9 +495,10 @@ Status IcebergTableSink::create_row_delta_sink_context(
         data_sink_ctx->max_file_size = t_iceberg_sink.target_max_file_size;
     }
 
-    // Data output_exprs: columns from data_column_start to op_code_index-1
+    // Data output_exprs: data columns only; mixed-mode op_code is private to the
+    // composite row-delta sink and must not be written into data files.
     std::vector<TExpr> data_output_exprs(output_exprs.begin() + data_column_start,
-                                         output_exprs.begin() + op_code_index);
+                                         output_exprs.begin() + data_column_end);
     data_sink_ctx->column_evaluators = ColumnExprEvaluator::from_exprs(data_output_exprs, runtime_state);
 
     size_t num_data_evaluators = data_sink_ctx->column_evaluators.size();
@@ -499,9 +523,10 @@ Status IcebergTableSink::create_row_delta_sink_context(
     data_sink_ctx->fragment_context = fragment_ctx;
 
     // Create a data-only tuple descriptor for the data sub-sink.
-    // The full row-delta tuple includes _file, _pos, data_cols, op_code, but the data
-    // writer only has evaluators for data_cols. SpillPartitionChunkWriter sizes merged
-    // chunks from tuple_desc->slots().size(), so the full tuple causes out-of-bounds.
+    // The full row-delta tuple includes _file, _pos, data_cols and optionally op_code,
+    // but the data writer only has evaluators for data_cols. SpillPartitionChunkWriter
+    // sizes merged chunks from tuple_desc->slots().size(), so the full tuple causes
+    // out-of-bounds.
     {
         TSlotDescriptorBuilder slot_builder;
         TTupleDescriptorBuilder tuple_builder;

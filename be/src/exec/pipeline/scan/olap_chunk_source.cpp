@@ -22,6 +22,7 @@
 
 #include "base/string/string_parser.hpp"
 #include "cache/data_cache_hit_rate_counter.hpp"
+#include "column/chunk_factory.h"
 #include "column/column.h"
 #include "column/column_access_path.h"
 #include "column/field.h"
@@ -44,8 +45,10 @@
 #include "exprs/jsonpath.h"
 #include "gen_cpp/Metrics_types.h"
 #include "gen_cpp/RuntimeProfile_types.h"
+#include "gutil/casts.h"
 #include "gutil/map_util.h"
-#include "io/core/io_profiler.h"
+#include "io/io_profiler.h"
+#include "runtime/chunk_helper.h"
 #include "runtime/current_thread.h"
 #include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
@@ -55,10 +58,10 @@
 #include "storage/column_predicate_rewriter.h"
 #include "storage/extends_column_utils.h"
 #include "storage/flat_json_metrics.h"
-#include "storage/index/vector/vector_search_option.h"
 #include "storage/metadata_util.h"
 #include "storage/predicate_parser.h"
-#include "storage/projection_iterator.h"
+#include "storage/primitive/projection_iterator.h"
+#include "storage/primitive/vector_search_option.h"
 #include "storage/runtime_range_pruner.hpp"
 #include "storage/storage_engine.h"
 #include "storage/virtual_column_utils.h"
@@ -109,6 +112,7 @@ Status OlapChunkSource::prepare(RuntimeState* state) {
     _slots = &tuple_desc->slots();
 
     _runtime_profile->add_info_string("Table", tuple_desc->table_desc()->name());
+    _runtime_profile->add_info_string("Database", tuple_desc->table_desc()->database());
     if (thrift_olap_scan_node.__isset.rollup_name) {
         _runtime_profile->add_info_string("Rollup", thrift_olap_scan_node.rollup_name);
     }
@@ -575,6 +579,13 @@ Status OlapChunkSource::_init_olap_reader(RuntimeState* runtime_state) {
     RETURN_IF_ERROR(_extend_schema_by_access_paths());
     ASSIGN_OR_RETURN(_tablet_schema, extend_schema_by_virtual_columns(_tablet_schema, *_slots));
     RETURN_IF_ERROR(_init_global_dicts(&_params));
+    // _init_global_dicts intersects the FE-level dict map with this scan's
+    // materialized tablet schema, so the resulting size counts columns that
+    // will actually flow through the encoded path on this scan instance.
+    if (_params.global_dictmaps != nullptr && !_params.global_dictmaps->empty()) {
+        _runtime_profile->add_info_string("GlobalDictOptApplied", "true");
+        _runtime_profile->add_info_string("GlobalDictAppliedSlots", std::to_string(_params.global_dictmaps->size()));
+    }
     RETURN_IF_ERROR(_init_glm(&_params));
     RETURN_IF_ERROR(_init_unused_output_columns(thrift_olap_scan_node.unused_output_column_name));
     RETURN_IF_ERROR(_init_reader_params(_scan_ctx->key_ranges()));
@@ -629,8 +640,8 @@ Status OlapChunkSource::_init_olap_reader(RuntimeState* runtime_state) {
 }
 
 Status OlapChunkSource::_read_chunk(RuntimeState* state, ChunkPtr* chunk) {
-    ASSIGN_OR_RETURN(auto chunk_ptr,
-                     ChunkHelper::new_chunk_pooled_checked(_prj_iter->output_schema(), _runtime_state->chunk_size()));
+    ASSIGN_OR_RETURN(auto chunk_ptr, RuntimeChunkHelper::new_chunk_pooled_checked(_prj_iter->output_schema(),
+                                                                                  _runtime_state->chunk_size()));
     chunk->reset(chunk_ptr);
     auto scope = IOProfiler::scope(IOProfiler::TAG_QUERY, _tablet->tablet_id());
     return _read_chunk_from_storage(_runtime_state, (*chunk).get());

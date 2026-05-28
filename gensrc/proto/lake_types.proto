@@ -412,6 +412,9 @@ message TxnInfoPB {
     optional bool rebuild_pindex = 6;
     optional int64 gtid = 7 [default=0];
     repeated PUniqueId load_ids = 8;
+    // Placeholder for external cluster snapshot feature.
+    optional bool restore_force_publish = 9; // Txn from snapshot restore, publish directly succeed
+    optional int64 restore_gtid = 10;
     // Number of leading sort-key columns that participate in the table's range
     // colocate group. Only used by tablet split (TXN_TABLET_RESHARD with split
     // direction). 0 (default) = legacy / non-colocate-aware split. BE uses this
@@ -422,6 +425,13 @@ message TxnInfoPB {
     // is table-level metadata: every SplittingTabletInfoPB in one txn would
     // carry the same value.
     optional int32 colocate_column_count = 11;
+    // Admin-issued no-op publish flag. When true, BE bypasses txn-log loading and
+    // apply for this transaction; the publish loop still writes a new tablet
+    // metadata file (so partition visible version advances) but it carries no
+    // data contribution from this txn. Used by ADMIN ABORT COMMITTED TRANSACTION
+    // to unblock a stuck-publish transaction. Only meaningful for load/compaction
+    // txn types in the current implementation; alter is not supported yet.
+    optional bool no_op_publish = 12;
 }
 
 message SplittingTabletInfoPB {
@@ -455,4 +465,16 @@ message ReshardingTabletInfoPB {
     optional SplittingTabletInfoPB splitting_tablet_info = 1;
     optional MergingTabletInfoPB merging_tablet_info = 2;
     optional IdenticalTabletInfoPB identical_tablet_info = 3;
+}
+
+// Placeholder for external cluster snapshot feature.
+message ExternalClusterSnapshotLogPB {
+    optional int64 job_id = 1;
+    optional int64 db_id = 2;
+    optional int64 table_id = 3;
+    optional int64 partition_id = 4;
+    optional int64 physical_partition_id = 5;
+    repeated string delete_data_files = 6;
+    repeated string delete_meta_files = 7;
+    repeated string delete_schema_files = 8;
 }

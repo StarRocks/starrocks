@@ -129,8 +129,9 @@ export OPT_FLAGS="-O3 -DNDEBUG"
 # C flags
 export CFLAGS="${ARM64_FLAGS} ${OPT_FLAGS}"
 
-# C++ flags - use libc++ (not libstdc++)
-export CXXFLAGS="${ARM64_FLAGS} ${OPT_FLAGS} -stdlib=libc++ -std=gnu++20"
+# C++ flags - use libc++ (not libstdc++). The BE C++ standard is owned by
+# be/CMakeLists.txt.
+export CXXFLAGS="${ARM64_FLAGS} ${OPT_FLAGS} -stdlib=libc++"
 
 # Add Homebrew include/lib paths
 export CPPFLAGS="-I${HOMEBREW_PREFIX}/include ${CPPFLAGS:-}"

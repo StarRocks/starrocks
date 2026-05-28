@@ -96,13 +96,20 @@ public class VectorIndexTest extends PlanTestBase {
 
     @Test
     public void testMeetOrderByRequirement() throws Exception {
-        String sql;
-        String plan;
+        // This test asserts the rewrite-stage plan structure (RewriteToVectorPlanRule).
+        // Global lazy-materialize defers/prunes the embedding column for HNSW queries
+        // (see testLazyMaterializationFor* below) which changes the shape of the project
+        // above the scan. Disable it here so the rewrite assertions stay focused.
+        boolean originalLazyMat = connectContext.getSessionVariable().isEnableGlobalLateMaterialization();
+        connectContext.getSessionVariable().setEnableGlobalLateMaterialization(false);
+        try {
+            String sql;
+            String plan;
 
-        // Basic cases.
-        sql = "select c1 from test_cosine " +
-                "order by approx_cosine_similarity([1.1,2.2,3.3,4.4,5.5], c1) desc limit 10";
-        plan = getVerboseExplain(sql);
+            // Basic cases.
+            sql = "select c1 from test_cosine " +
+                    "order by approx_cosine_similarity([1.1,2.2,3.3,4.4,5.5], c1) desc limit 10";
+            plan = getVerboseExplain(sql);
         assertContains(plan, "  2:TOP-N\n" +
                 "  |  order by: [5, FLOAT, false] DESC\n" +
                 "  |  build runtime filters:\n" +
@@ -164,6 +171,9 @@ public class VectorIndexTest extends PlanTestBase {
         assertContains(plan, "     VECTORINDEX: ON\n" +
                 "          IVFPQ: OFF, Distance Column: <6:__vector_approx_cosine_similarity>, LimitK: 10, Order: DESC, " +
                 "Query Vector: [1.1, 2.1, 3.1, 4.1, 5.1], Predicate Range: -1.0");
+        } finally {
+            connectContext.getSessionVariable().setEnableGlobalLateMaterialization(originalLazyMat);
+        }
     }
 
     @Test
@@ -368,17 +378,23 @@ public class VectorIndexTest extends PlanTestBase {
 
     @Test
     public void testRewrite() throws Exception {
-        String sql;
-        String plan;
+        // This test asserts the rewrite-stage plan structure. Disable global lazy-mat
+        // so the assertions stay focused (lazy-mat behavior is covered by
+        // testLazyMaterializationFor* below).
+        boolean originalLazyMat = connectContext.getSessionVariable().isEnableGlobalLateMaterialization();
+        connectContext.getSessionVariable().setEnableGlobalLateMaterialization(false);
+        try {
+            String sql;
+            String plan;
 
-        sql = "select c1, " +
-                "approx_cosine_similarity([1.1,2.2,3.3,4.4,5.5], c1)+1, " +
-                "approx_cosine_similarity([1.1,2.2,3.3,4.4,5.5], c1)+2, " +
-                "cast(approx_cosine_similarity([1.1,2.2,3.3,4.4,5.5], c1) as string), " +
-                "approx_cosine_similarity([1.1,2.2,3.3,4.4,5.5], c2)+2 " +
-                "from test_cosine " +
-                "order by approx_cosine_similarity([1.1,2.2,3.3,4.4,5.5], c1) desc limit 10";
-        plan = getVerboseExplain(sql);
+            sql = "select c1, " +
+                    "approx_cosine_similarity([1.1,2.2,3.3,4.4,5.5], c1)+1, " +
+                    "approx_cosine_similarity([1.1,2.2,3.3,4.4,5.5], c1)+2, " +
+                    "cast(approx_cosine_similarity([1.1,2.2,3.3,4.4,5.5], c1) as string), " +
+                    "approx_cosine_similarity([1.1,2.2,3.3,4.4,5.5], c2)+2 " +
+                    "from test_cosine " +
+                    "order by approx_cosine_similarity([1.1,2.2,3.3,4.4,5.5], c1) desc limit 10";
+            plan = getVerboseExplain(sql);
         assertContains(plan, "  4:Project\n" +
                 "  |  output columns:\n" +
                 "  |  2 <-> [2: c1, ARRAY<FLOAT>, false]\n" +
@@ -423,6 +439,9 @@ public class VectorIndexTest extends PlanTestBase {
                 "     cardinality: 1\n" +
                 "     probe runtime filters:\n" +
                 "     - filter_id = 0, probe_expr = (10: __vector_approx_cosine_similarity)");
+        } finally {
+            connectContext.getSessionVariable().setEnableGlobalLateMaterialization(originalLazyMat);
+        }
     }
 
     @Test
@@ -710,6 +729,76 @@ public class VectorIndexTest extends PlanTestBase {
         assertThatThrownBy(() -> getVerboseExplain(sql))
                 .isInstanceOf(SemanticException.class)
                 .hasMessageContaining("Non-finite float in vector array literal");
+    }
+
+    // Late-materialization behavior for vector queries:
+    //   * HNSW: BE produces the distance via id2distance_map, the rewrite swaps the order-by
+    //     to reference that virtual distance column, so the embedding column can be deferred
+    //     (FetchNode after final TopN) or pruned entirely.
+    //   * IVFPQ: the rule skips the order-by rewrite — TopN evaluates approx_*_distance(v, [...])
+    //     row by row, so v must remain eager at the scan output.
+    @Test
+    public void testLazyMaterializationForHnswSelectDistanceOnly() throws Exception {
+        // Quadrant 1: HNSW + SELECT does not reference embedding c1.
+        // Expected: c1 is pruned entirely from the BE scan output — neither the scan-side
+        // projection nor the FETCH operator references it. The BE only fills the virtual
+        // distance slot via id2distance_map and ships row_id columns up; the FETCH at the
+        // coordinator fetches only the small c0 column for the K survivors.
+        boolean originalLazyMat = connectContext.getSessionVariable().isEnableGlobalLateMaterialization();
+        connectContext.getSessionVariable().setEnableGlobalLateMaterialization(true);
+        try {
+            String sql = "select c0, approx_cosine_similarity([1.1,2.2,3.3,4.4,5.5], c1) as score "
+                    + "from test.test_cosine order by score desc limit 10";
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "VECTORINDEX: ON");
+            assertContains(plan, "IVFPQ: OFF");
+            // The FETCH operator's lookup descriptor for table test_cosine should reference
+            // c0 but not c1.
+            assertContains(plan, "<slot 1> => c0");
+            assertNotContains(plan, "=> c1");
+        } finally {
+            connectContext.getSessionVariable().setEnableGlobalLateMaterialization(originalLazyMat);
+        }
+    }
+
+    @Test
+    public void testLazyMaterializationForHnswSelectEmbedding() throws Exception {
+        // Quadrant 2: HNSW + SELECT v explicitly. The embedding c1 is in the projection so
+        // global lazy-mat defers it to the FETCH operator above the final TopN, which reads
+        // only the K survivors' rows of c1 via row-id lookup.
+        boolean originalLazyMat = connectContext.getSessionVariable().isEnableGlobalLateMaterialization();
+        connectContext.getSessionVariable().setEnableGlobalLateMaterialization(true);
+        try {
+            String sql = "select c1, approx_cosine_similarity([1.1,2.2,3.3,4.4,5.5], c1) as score "
+                    + "from test.test_cosine order by score desc limit 10";
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "VECTORINDEX: ON");
+            assertContains(plan, "IVFPQ: OFF");
+            // c1 must appear as a FETCH lookup target — not in the scan-side projection.
+            assertContains(plan, "FETCH");
+            assertContains(plan, "=> c1");
+        } finally {
+            connectContext.getSessionVariable().setEnableGlobalLateMaterialization(originalLazyMat);
+        }
+    }
+
+    @Test
+    public void testLazyMaterializationForIvfpqKeepsEmbeddingEager() throws Exception {
+        // IVFPQ: the rule skipped the order-by rewrite, the TopN evaluates
+        // approx_*_distance(v, [...]) row by row. The embedding c1 must remain eager at scan
+        // output. No FETCH should appear in the plan (everything stays eager).
+        boolean originalLazyMat = connectContext.getSessionVariable().isEnableGlobalLateMaterialization();
+        connectContext.getSessionVariable().setEnableGlobalLateMaterialization(true);
+        try {
+            String sql = "select c0, approx_l2_distance([1.1,2.2,3.3,4.4], c1) as score "
+                    + "from test.test_ivfpq order by score limit 10";
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "VECTORINDEX: ON");
+            assertContains(plan, "IVFPQ: ON");
+            assertNotContains(plan, "FETCH");
+        } finally {
+            connectContext.getSessionVariable().setEnableGlobalLateMaterialization(originalLazyMat);
+        }
     }
 
 }

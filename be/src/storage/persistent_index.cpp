@@ -29,6 +29,7 @@
 #include "base/string/faststring.h"
 #include "base/testutil/sync_point.h"
 #include "base/utility/defer_op.h"
+#include "column/chunk_factory.h"
 #include "column/raw_data_visitor.h"
 #include "common/config_cache_fwd.h"
 #include "common/config_compression_fwd.h"
@@ -39,14 +40,14 @@
 #include "fs/fs_factory.h"
 #include "gutil/strings/escaping.h"
 #include "gutil/strings/substitute.h"
-#include "io/core/io_profiler.h"
+#include "io/io_profiler.h"
 #include "runtime/current_thread.h"
 #include "storage/chunk_helper.h"
-#include "storage/chunk_iterator.h"
 #include "storage/persistent_index_parallel_publish_context.h"
 #include "storage/persistent_index_tablet_loader.h"
 #include "storage/primary_key_dump.h"
 #include "storage/primary_key_encoder.h"
+#include "storage/primitive/chunk_iterator.h"
 #include "storage/rowset/rowset.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet.h"
@@ -3493,7 +3494,7 @@ Status PersistentIndex::_insert_rowsets(TabletLoader* loader, const Schema& pkey
     std::vector<uint32_t> rowids;
     TRY_CATCH_BAD_ALLOC(rowids.reserve(4096));
     ChunkUniquePtr chunk_shared_ptr;
-    TRY_CATCH_BAD_ALLOC(chunk_shared_ptr = ChunkHelper::new_chunk(pkey_schema, 4096));
+    TRY_CATCH_BAD_ALLOC(chunk_shared_ptr = ChunkFactory::new_chunk(pkey_schema, 4096));
     auto chunk = chunk_shared_ptr.get();
     RETURN_IF_ERROR(loader->rowset_iterator(pkey_schema, [&](const std::vector<ChunkIteratorPtr>& itrs,
                                                              uint32_t rowset_id) {

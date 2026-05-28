@@ -20,6 +20,8 @@
 #include "base/testutil/sync_point.h"
 #include "base/utility/defer_op.h"
 #include "base/utility/pretty_printer.h"
+#include "column/chunk_factory.h"
+#include "column/chunk_schema_helper.h"
 #include "common/config_compaction_fwd.h"
 #include "common/config_lake_fwd.h"
 #include "common/config_primary_key_fwd.h"
@@ -28,6 +30,7 @@
 #include "fs/fs_util.h"
 #include "fs/key_cache.h"
 #include "runtime/current_thread.h"
+#include "runtime/env/global_env.h"
 #include "runtime/exec_env.h"
 #include "storage/chunk_helper.h"
 #include "storage/del_vector.h"
@@ -379,8 +382,9 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
     // 2. Process segments in batches. In parallel mode, each batch runs Phase 1 (parallel
     // load+rewrite) then Phase 2 (sequential _do_update), releasing upserts per batch to
     // prevent memory accumulation. In serial mode, batch_size=1 degenerates to original logic.
-    const uint32_t batch_size =
-            use_parallel_partial_update ? ExecEnv::GetInstance()->lake_partial_update_thread_pool()->max_threads() : 1;
+    const uint32_t batch_size = use_parallel_partial_update
+                                        ? GlobalEnv::GetInstance()->lake_partial_update_thread_pool()->max_threads()
+                                        : 1;
 
     for (uint32_t batch_start = 0; batch_start < local_segments; batch_start += batch_size) {
         uint32_t batch_end = std::min(batch_start + batch_size, local_segments);
@@ -394,7 +398,7 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
 
             std::mutex status_mutex;
             Status shared_status;
-            auto token = ExecEnv::GetInstance()->lake_partial_update_thread_pool()->new_token(
+            auto token = GlobalEnv::GetInstance()->lake_partial_update_thread_pool()->new_token(
                     ThreadPool::ExecutionMode::CONCURRENT);
 
             for (uint32_t i = batch_start; i < batch_end; i++) {
@@ -627,7 +631,7 @@ Status UpdateManager::_read_chunk_for_upsert(const TxnLogPB_OpWrite& op_write, c
                                              const std::vector<uint32_t>& insert_rowids,
                                              const std::vector<uint32_t>& update_cids, ChunkPtr* out_chunk) {
     auto full_schema = ChunkHelper::convert_schema(tschema);
-    auto full_chunk = ChunkHelper::new_chunk(full_schema, insert_rowids.size());
+    auto full_chunk = ChunkFactory::new_chunk(full_schema, insert_rowids.size());
 
     {
         FileInfo info;
@@ -695,7 +699,7 @@ Status UpdateManager::_read_chunk_for_upsert(const TxnLogPB_OpWrite& op_write, c
     }
 
     {
-        auto char_indexes = ChunkHelper::get_char_field_indexes(full_schema);
+        auto char_indexes = ChunkSchemaHelper::get_char_field_indexes(full_schema);
         ChunkHelper::padding_char_columns(char_indexes, full_schema, tschema, full_chunk.get());
     }
 
@@ -983,7 +987,7 @@ Status UpdateManager::_do_update(uint32_t rowset_id, int32_t upsert_idx, const S
 
     // Note: Only cloud-native index supports parallel_get/parallel_upsert, local index does not support it
     if (config::enable_pk_index_parallel_execution && is_cloud_native_index) {
-        token = ExecEnv::GetInstance()->pk_index_execution_thread_pool()->new_token(
+        token = GlobalEnv::GetInstance()->pk_index_execution_thread_pool()->new_token(
                 ThreadPool::ExecutionMode::CONCURRENT);
     }
 
@@ -1036,12 +1040,12 @@ Status UpdateManager::_process_single_chunk_update_with_condition(
         RowsetUpdateState::plan_read_by_rssid(old_rowids, &num_default, &old_rowids_by_rssid, &idxes);
         MutableColumns old_columns(1);
         auto old_unordered_column =
-                ChunkHelper::column_from_field_type(tablet_column.type(), tablet_column.is_nullable());
+                ChunkFactory::column_from_field_type(tablet_column.type(), tablet_column.is_nullable());
         old_columns[0] = old_unordered_column->clone_empty();
         // Batch read condition values from all old row locations
         RETURN_IF_ERROR(get_column_values(params, read_column_ids, num_default > 0, old_rowids_by_rssid, &old_columns));
         // Reorder values to match the order of PKs in current chunk (idxes provides mapping)
-        auto old_column = ChunkHelper::column_from_field_type(tablet_column.type(), tablet_column.is_nullable());
+        auto old_column = ChunkFactory::column_from_field_type(tablet_column.type(), tablet_column.is_nullable());
         old_column->append_selective(*old_columns[0], idxes.data(), 0, idxes.size());
 
         // STEP 2: Read condition column values from new rows (from SST files)
@@ -1056,7 +1060,7 @@ Status UpdateManager::_process_single_chunk_update_with_condition(
         // Read condition values from SST file for new rows
         // LIMITATION: Only single condition column is supported (not composite conditions)
         MutableColumns new_columns(1);
-        auto new_column = ChunkHelper::column_from_field_type(tablet_column.type(), tablet_column.is_nullable());
+        auto new_column = ChunkFactory::column_from_field_type(tablet_column.type(), tablet_column.is_nullable());
         new_columns[0] = new_column->clone_empty();
         RETURN_IF_ERROR(get_column_values(params, read_column_ids, false, new_rowids_by_rssid, &new_columns));
 
@@ -1122,7 +1126,7 @@ Status UpdateManager::_do_update_with_condition_parallel(const RowsetUpdateState
     // Obtain thread pool token for parallel execution if enabled
     std::unique_ptr<ThreadPoolToken> token;
     if (config::enable_pk_index_parallel_execution) {
-        token = ExecEnv::GetInstance()->pk_index_execution_thread_pool()->new_token(
+        token = GlobalEnv::GetInstance()->pk_index_execution_thread_pool()->new_token(
                 ThreadPool::ExecutionMode::CONCURRENT);
     }
 
@@ -1229,11 +1233,11 @@ static Status process_single_chunk_update_with_condition_no_sst(
     std::vector<uint32_t> idxes;
     RowsetUpdateState::plan_read_by_rssid(old_rowids, &num_default, &old_rowids_by_rssid, &idxes);
     MutableColumns old_columns(1);
-    auto old_unordered_column = ChunkHelper::column_from_field_type(tablet_column.type(), tablet_column.is_nullable());
+    auto old_unordered_column = ChunkFactory::column_from_field_type(tablet_column.type(), tablet_column.is_nullable());
     old_columns[0] = old_unordered_column->clone_empty();
     RETURN_IF_ERROR(
             mgr->get_column_values(params, read_column_ids, num_default > 0, old_rowids_by_rssid, &old_columns));
-    auto old_column = ChunkHelper::column_from_field_type(tablet_column.type(), tablet_column.is_nullable());
+    auto old_column = ChunkFactory::column_from_field_type(tablet_column.type(), tablet_column.is_nullable());
     old_column->append_selective(*old_columns[0], idxes.data(), 0, idxes.size());
 
     // Read new-row condition values from the freshly-ingested segment; rowid in this segment
@@ -1247,7 +1251,7 @@ static Status process_single_chunk_update_with_condition_no_sst(
     new_rowids_by_rssid[rowset_id + upsert_idx] = std::move(rowids);
     // only support condition update on single column
     MutableColumns new_columns(1);
-    auto new_column = ChunkHelper::column_from_field_type(tablet_column.type(), tablet_column.is_nullable());
+    auto new_column = ChunkFactory::column_from_field_type(tablet_column.type(), tablet_column.is_nullable());
     new_columns[0] = new_column->clone_empty();
     RETURN_IF_ERROR(mgr->get_column_values(params, read_column_ids, false, new_rowids_by_rssid, &new_columns));
 
@@ -1307,7 +1311,7 @@ Status UpdateManager::_do_update_with_condition(const RowsetUpdateStateParams& p
 
     std::unique_ptr<ThreadPoolToken> token;
     if (config::enable_pk_index_parallel_execution) {
-        token = ExecEnv::GetInstance()->lake_partial_update_thread_pool()->new_token(
+        token = GlobalEnv::GetInstance()->lake_partial_update_thread_pool()->new_token(
                 ThreadPool::ExecutionMode::CONCURRENT);
     }
 
@@ -1515,7 +1519,7 @@ Status UpdateManager::batch_get_rss_rowids_from_pkindex(int64_t tablet_id, int64
         TRACE_COUNTER_INCREMENT("pcu_load_update_state_cnt", pk_iters.size());
         std::unique_ptr<ThreadPoolToken> token;
         if (config::enable_pk_index_parallel_execution) {
-            token = ExecEnv::GetInstance()->pk_index_execution_thread_pool()->new_token(
+            token = GlobalEnv::GetInstance()->pk_index_execution_thread_pool()->new_token(
                     ThreadPool::ExecutionMode::CONCURRENT);
         }
         TRACE_COUNTER_SCOPE_LATENCY_US("pcu_prepare_partial_update_states_us");

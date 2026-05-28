@@ -540,6 +540,7 @@ public class CreateLakeTableTest {
                 "\"datacache.enable\" = \"true\",\n" +
                 "\"enable_async_write_back\" = \"false\",\n" +
                 "\"file_bundling\" = \"true\",\n" +
+                "\"light_weight_tablet_creation\" = \"false\",\n" +
                 "\"partition_retention_condition\" = \"dt > current_date() - interval 1 month\",\n" +
                 "\"replication_num\" = \"1\",\n" +
                 "\"storage_volume\" = \"builtin_storage_volume\"\n" +
@@ -806,5 +807,58 @@ public class CreateLakeTableTest {
         TBatchGetTabletMetadataResponse batchResp = impl.getTabletMetadata(batchReq);
         Assertions.assertEquals(TStatusCode.NOT_IMPLEMENTED_ERROR, batchResp.getStatus().getStatus_code());
         Assertions.assertFalse(batchResp.isSetResponses());
+    }
+
+    @Test
+    public void testLightWeightTabletCreation() throws Exception {
+        boolean saved = Config.lake_enable_light_weight_tablet_creation;
+        try {
+            // Config.lake_enable_light_weight_tablet_creation = true: new tables default to light-weight.
+            Config.lake_enable_light_weight_tablet_creation = true;
+            ExceptionChecker.expectThrowsNoException(() -> createTable(
+                    "create table lake_test.light_weight_default\n" +
+                            "(c0 int, c1 string)\n" +
+                            "duplicate key(c0)\n" +
+                            "distributed by hash(c0) buckets 2"));
+            Assertions.assertTrue(getLakeTable("lake_test", "light_weight_default").isLightWeightTabletCreation());
+
+            // Explicit false overrides the cluster default.
+            ExceptionChecker.expectThrowsNoException(() -> createTable(
+                    "create table lake_test.light_weight_false\n" +
+                            "(c0 int, c1 string)\n" +
+                            "duplicate key(c0)\n" +
+                            "distributed by hash(c0) buckets 2\n" +
+                            "properties('light_weight_tablet_creation' = 'false')"));
+            Assertions.assertFalse(getLakeTable("lake_test", "light_weight_false").isLightWeightTabletCreation());
+
+            // Config off: new tables default to non-light-weight.
+            Config.lake_enable_light_weight_tablet_creation = false;
+            ExceptionChecker.expectThrowsNoException(() -> createTable(
+                    "create table lake_test.light_weight_config_off\n" +
+                            "(c0 int, c1 string)\n" +
+                            "duplicate key(c0)\n" +
+                            "distributed by hash(c0) buckets 2"));
+            Assertions.assertFalse(getLakeTable("lake_test", "light_weight_config_off").isLightWeightTabletCreation());
+
+            // Explicit true overrides the cluster default.
+            ExceptionChecker.expectThrowsNoException(() -> createTable(
+                    "create table lake_test.light_weight_true\n" +
+                            "(c0 int, c1 string)\n" +
+                            "duplicate key(c0)\n" +
+                            "distributed by hash(c0) buckets 2\n" +
+                            "properties('light_weight_tablet_creation' = 'true')"));
+            Assertions.assertTrue(getLakeTable("lake_test", "light_weight_true").isLightWeightTabletCreation());
+
+            // SHOW CREATE TABLE surfaces the property.
+            String sql = "show create table lake_test.light_weight_true";
+            ShowCreateTableStmt showCreateTableStmt =
+                    (ShowCreateTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+            ShowResultSet resultSet = ShowExecutor.execute(showCreateTableStmt, connectContext);
+            List<List<String>> result = resultSet.getResultRows();
+            Assertions.assertFalse(result.isEmpty());
+            Assertions.assertTrue(result.get(0).get(1).contains("\"light_weight_tablet_creation\" = \"true\""));
+        } finally {
+            Config.lake_enable_light_weight_tablet_creation = saved;
+        }
     }
 }

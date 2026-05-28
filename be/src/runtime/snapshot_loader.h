@@ -23,8 +23,8 @@
 #include <vector>
 
 #include "common/status.h"
+#include "common/util/thrift_client_cache.h"
 #include "gen_cpp/Types_types.h"
-#include "runtime/client_cache.h"
 #include "storage/tablet.h"
 
 namespace starrocks {

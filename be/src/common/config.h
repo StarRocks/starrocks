@@ -39,7 +39,7 @@
 namespace starrocks::config {
 // Enable cow optimization for column operations, used to avoid the overhead of reference counting when accessing
 // columns.
-CONF_mBool(enable_cow_optimization, "true");
+CONF_mBool(enable_cow_optimization, "false");
 // The diagnose level for cow optimization, 0 means no diagnose, 1 means diagnose when use_count > 1, 2 means
 // diagnose when use_count > 2.
 CONF_Int32(cow_optimization_diagnose_level, "0");
@@ -221,6 +221,12 @@ CONF_mInt32(lake_replication_max_file_copy_retry, "3");
 // Minimum number of files required to enable parallel copy in lake-to-lake replication.
 // Set to 0 to force disable parallel copy.
 CONF_mInt32(lake_replication_parallel_copy_min_file_count, "2");
+// Number of threads in the dedicated thread pool for per-file copy in lake-to-lake replication.
+// 0 means cpu_cores * 4 (matches replication_threads default semantics); negative means -value * cpu_cores.
+// This pool is intentionally separate from the agent-task replicate_snapshot pool so that per-file
+// copy sub-tasks can be awaited from the outer task without tripping the thread-pool self-deadlock
+// guard. The pool is built once at startup; CN restart is required to change its size.
+CONF_Int32(lake_replication_file_copy_threads, "0");
 
 // The log dir.
 CONF_String(sys_log_dir, "${STARROCKS_HOME}/log");
@@ -284,6 +290,8 @@ CONF_mInt32(scanner_thread_pool_thread_num, "48");
 // Number of olap/external scanner thread pool size.
 CONF_Int32(scanner_thread_pool_queue_size, "102400");
 CONF_Int32(udf_thread_pool_size, "1");
+// Number of threads for internal JVM calls that must run on pthreads.
+CONF_Int32(jvm_call_thread_pool_size, "1");
 // Port on which to run StarRocks test backend.
 CONF_Int32(port, "20001");
 // Default thrift client connect timeout(in seconds).
@@ -547,6 +555,50 @@ CONF_Int32(arrow_flight_port, "-1");
 CONF_Int64(load_data_reserve_hours, "4");
 // log error log will be removed after this time
 CONF_mInt64(load_error_log_reserve_hours, "48");
+
+// --- Rejected records sync daemon (Phase 3 of the rejected_records feature) ---
+// How often the RejectedRecordSyncDaemon wakes up to scan local JSON Lines
+// files produced by RejectedRecordWriter. A tick that finds no new files is
+// a no-op; batches are flushed either when a tick picks up files or when a
+// single scan accumulates more than `rejected_record_sync_max_batch_rows`
+// rows worth of records.
+CONF_mInt32(rejected_record_sync_interval_sec, "30");
+// Upper bound on rows included in one merge-commit Stream Load batch. The
+// daemon splits larger backlogs across consecutive ticks rather than
+// attempting a single oversized transaction. The row cap is enforced
+// line-by-line inside a file, so a single giant file won't blow past
+// the limit.
+CONF_mInt32(rejected_record_sync_max_batch_rows, "10000");
+// Byte cap on the accumulated Stream Load payload. When the read-and-
+// concat loop crosses this threshold it commits the current batch and
+// starts a fresh payload, which prevents a load with very wide rows or
+// very long error messages from producing an HTTP PUT body big enough
+// to OOM the BE / FE / intermediate proxies. 32 MiB matches the FE's
+// default streaming_load_max_mb.
+CONF_mInt64(rejected_record_sync_max_batch_bytes, "33554432");
+// Upper bound on the tick interval when post_to_stream_load has been
+// failing persistently. The daemon doubles its sleep after every
+// failure until this cap is reached, then stays there until a tick
+// succeeds. Useful for the common outage pattern where the FE is down
+// for minutes-to-hours and the default 30s interval would otherwise
+// keep pounding the dead endpoint and spamming WARN logs.
+CONF_mInt32(rejected_record_sync_max_backoff_sec, "600");
+// How long the daemon keeps unsyncable local files around before garbage
+// collecting them. Sync failures (FE down, auth error, table missing) keep
+// the files for re-sync; anything older than this is discarded so a
+// misconfigured cluster cannot slowly fill the store path.
+CONF_mInt32(rejected_record_local_retention_hours, "24");
+// Kill switch for the daemon. Defaults to false during the phased rollout
+// so clusters that upgrade to a Phase 3 binary do not start shipping
+// rejected records into _statistics_.rejected_records until the operator
+// has verified the table exists and set log_rejected_record_num > 0 on
+// targeted loads.
+CONF_mBool(enable_rejected_record_sync, "false");
+// Maximum time the daemon waits for the FE Stream Load endpoint per post.
+// Default is deliberately longer than the default load timeout because
+// merge-commit batches synchronously across multiple BEs and may sit in
+// the FE-side commit queue briefly.
+CONF_mInt32(rejected_record_sync_post_timeout_sec, "60");
 // Whether to execute load channel RPC requests asynchronously, that is,
 // to run RPCs in a separate thread pool instead of within BRPC workers
 CONF_mBool(enable_load_channel_rpc_async, "true");

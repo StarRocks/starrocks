@@ -90,6 +90,12 @@ Status IcebergRowDeltaSink::add(const ChunkPtr& chunk) {
         return Status::OK();
     }
 
+    if (_op_code_index < 0) {
+        RETURN_IF_ERROR(_delete_sink->add(chunk));
+        RETURN_IF_ERROR(_data_sink->add(chunk));
+        return Status::OK();
+    }
+
     auto op_code_column = chunk->get_column_by_index(_op_code_index);
     const auto* op_codes = ColumnHelper::get_data_column(op_code_column.get());
     const auto* op_code_data = down_cast<const FixedLengthColumn<int8_t>*>(op_codes)->get_data().data();
@@ -117,8 +123,8 @@ Status IcebergRowDeltaSink::add(const ChunkPtr& chunk) {
         }
     }
 
-    // Fast path: when all rows have the same op_code (common for pure UPDATE where
-    // every row is OP_UPDATE), pass the original chunk directly without copying.
+    // Fast path: when all mixed-mode rows have the same op_code, pass the
+    // original chunk directly without copying.
     bool all_to_delete = (_delete_rows.size() == num_rows);
     bool all_to_data = (_data_rows.size() == num_rows);
 

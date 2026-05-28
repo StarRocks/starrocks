@@ -27,13 +27,9 @@ src/service/internal_service.cpp
 src/service/service_be/arrow_flight_sql_service.cpp
 src/service/service_be/lake_service.cpp
 src/service/service_be/starrocks_be.cpp
-src/storage/lake/column_mode_partial_update_handler.cpp
 src/storage/lake/compaction_policy.cpp
-src/storage/lake/lake_persistent_index.cpp
 src/storage/lake/local_pk_index_manager.cpp
 src/storage/lake/metacache.cpp
-src/storage/lake/rowset.cpp
-src/storage/lake/tablet_reader.cpp
 src/storage/lake/tablet_reshard.cpp
 src/storage/lake/transactions.cpp
 src/storage/lake/update_manager.cpp
@@ -46,8 +42,6 @@ src/storage/push_utils.cpp
 src/storage/replication_utils.cpp
 src/storage/rowset/json_column_iterator.cpp
 src/storage/schema_change_utils.cpp
-src/storage/segment_replicate_executor.cpp
-src/storage/table_reader.cpp
 src/storage/task/engine_alter_tablet_task.cpp
 src/storage/task/engine_batch_load_task.cpp
 src/udf/java/utils.cpp

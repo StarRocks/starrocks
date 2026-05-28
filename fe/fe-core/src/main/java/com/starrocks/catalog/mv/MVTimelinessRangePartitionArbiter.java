@@ -79,6 +79,9 @@ public final class MVTimelinessRangePartitionArbiter extends MVTimelinessArbiter
         try (Timer ignored = Tracers.watchScope("CollectBaseTableUpdatePartitionNames")) {
             baseChangedPartitionNames = collectBaseTableUpdatePartitionNames(refBaseTablePartitionColumns,
                     mvTimelinessInfo);
+            if (baseChangedPartitionNames == null) {
+                return MvUpdateInfo.fullRefresh(mv);
+            }
         }
 
         // collect all ref base table's partition range map

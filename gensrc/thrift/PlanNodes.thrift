@@ -197,6 +197,8 @@ struct TBrokerRangeDesc {
     14: optional Types.TCompressionType compression_type
     // CDC envelope format
     15: optional TEnvelopeType envelope
+    // last modification time of the file in milliseconds (epoch), for rejected-record anchors
+    16: optional i64 modification_time
 }
 
 enum TObjectStoreType {
@@ -1054,8 +1056,9 @@ enum TAnalyticWindowBoundaryType {
 struct TAnalyticWindowBoundary {
   1: required TAnalyticWindowBoundaryType type
 
-  // Predicate that checks: child tuple '<=' buffered tuple + offset for the orderby expr
-  2: optional Exprs.TExpr range_offset_predicate
+  // Boundary key expression for RANGE windows with PRECEDING/FOLLOWING offsets,
+  // evaluated on the current row. This is not a predicate.
+  2: optional Exprs.TExpr range_boundary_expr
 
   // Offset from the current row for ROWS windows.
   3: optional i64 rows_offset_value
@@ -1122,6 +1125,9 @@ struct TAnalyticNode {
   // For profile attributes' printing: `Partition Keys` `Aggregate Functions`
   10: optional string sql_partition_keys
   11: optional string sql_aggregate_functions
+  // ORDER BY directions corresponding to order_by_exprs.
+  // true means ASC, false means DESC.
+  12: optional list<bool> order_by_is_asc
 
   20: optional bool has_outer_join_child
   21: optional bool use_hash_based_partition
@@ -1324,6 +1330,9 @@ struct THdfsScanNode {
     27: optional i64 scan_node_id
 
     28: optional list<TColumnAccessPath> column_access_paths
+
+    // database name it scans, used to disambiguate same-named tables across databases
+    29: optional string database_name
 }
 
 struct TProjectNode {

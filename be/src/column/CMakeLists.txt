@@ -59,6 +59,8 @@ ADD_BE_LIB(ColumnCore
 target_link_libraries(ColumnCore PRIVATE arrow)
 
 ADD_BE_LIB(ChunkCore
+        chunk_factory.cpp
+        chunk_schema_helper.cpp
         field.cpp
         schema.cpp
         chunk.cpp

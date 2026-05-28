@@ -15,8 +15,8 @@
 #pragma once
 
 #include "column/vectorized_fwd.h"
+#include "compute_env/sorting/merge.h"
 #include "exec/chunks_sorter.h"
-#include "exec/sorting/merge.h"
 
 namespace starrocks {
 class ExprContext;

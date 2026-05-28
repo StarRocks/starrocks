@@ -224,6 +224,18 @@ If you want to activate the roles assigned to you in a session, use the [SET ROL
 
 Used for MySQL client compatibility. No practical usage.
 
+### avro_use_jni_reader
+
+* **Scope**: Session
+* **Description**: Controls whether StarRocks uses the JNI-based Avro reader when scanning Avro data from external catalogs such as Hive. When enabled (`true`), StarRocks uses the JNI reader. When disabled (`false`), StarRocks uses the native Avro reader. This option is mainly used as a compatibility fallback. Because the default value is `false`, StarRocks uses the native Avro reader by default.
+
+  Current notes:
+  - The native Avro reader and the JNI reader are now aligned for `CHAR(n)` semantics. See [#73579](https://github.com/StarRocks/starrocks/pull/73579) for the alignment change, so the native and JNI behaviors are currently consistent on this point.
+  - The native Avro reader currently supports only `null`, `deflate`, and `snappy`, and does not support other codecs such as `bzip2`. If you need to process a codec that is unsupported by the native reader, manually enable the JNI reader.
+* **Default**: `false`
+* **Data Type**: boolean
+* **Introduced in**: v4.1.1
+
 ### big_query_profile_threshold
 
 * **Description**: Used to set the threshold for big queries. When the session variable `enable_profile` is set to `false` and the amount of time taken by a query exceeds the threshold specified by the variable `big_query_profile_threshold`, a profile is generated for that query.
@@ -1093,6 +1105,12 @@ If a Join (other than Broadcast Join and Replicated Join) has multiple equi-join
 * **Default**: true
 * **Introduced in**: v2.3
 
+### enable_tablet_pre_split
+
+* **Description**: Per-session opt-out for Sample-Based Tablet Pre-Split. Defaults to `true` so the FE Config gates (`enable_tablet_pre_split_for_*`) remain the primary on/off switch. Set this to `false` for a session whose load you want to leave undisturbed. Both the matching Config flag and this session variable must be `true` for pre-split to run.
+* **Default**: true
+* **Introduced in**: v4.1.0
+
 ### enable_topn_runtime_filter
 
 * **Description**: Whether to enable TopN Runtime Filter. If this feature is enabled, a runtime filter will be dynamically constructed for ORDER BY LIMIT queries and pushed down to the scan for filtering.
@@ -1508,9 +1526,9 @@ Used for compatibility with MySQL JDBC versions 8.0.16 and above. No practical u
 
 * **Description**: The metadata retrieval strategy of Iceberg Catalog. For more information, see [Iceberg Catalog metadata retrieval strategy](../data_source/catalog/iceberg/iceberg_catalog.md#appendix-periodic-metadata-refresh-strategy). Valid values:
   * `auto`: The system will automatically select the retrieval plan.
-  * `local`: Use the local cache plan.
-  * `distributed`: Use the distributed plan.
-* **Default**: auto
+  * `local`: The FE parses Iceberg manifest files locally and streams scan ranges to BEs incrementally as manifests are processed. This avoids collecting all splits before execution begins, reducing memory usage and first-byte latency.
+  * `distributed`: Manifest parsing is offloaded to multiple BEs in parallel. The FE must wait for all BEs to finish before delivering any scan ranges, which can cause high memory usage and long wait times on large tables with many manifest files. Prefer this only if FE CPU is a bottleneck and the table has a very large number of manifests.
+* **Default**: local (changed from `auto` in v3.5; with incremental scan range delivery enabled by default since v3.5, `local` mode provides lower memory usage and lower latency than `distributed` for most workloads)
 * **Introduced in**: v3.3.3
 
 #### enable_iceberg_column_statistics

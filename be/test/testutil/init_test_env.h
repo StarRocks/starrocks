@@ -27,14 +27,16 @@
 #include "common/system/cpu_info.h"
 #include "common/system/disk_info.h"
 #include "common/system/mem_info.h"
+#include "connector/connector_bootstrap.h"
 #include "exec/pipeline/query_context.h"
 #include "fs/fs_provider_bootstrap.h"
 #include "gtest/gtest.h"
+#include "platform/platform_env.h"
+#include "platform/user_function_cache.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
 #include "runtime/mem_tracker.h"
 #include "runtime/memory/mem_chunk_allocator.h"
-#include "runtime/user_function_cache.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/options.h"
 #include "storage/storage_engine.h"
@@ -92,6 +94,9 @@ int init_test_env(int argc, char** argv) {
     config::disable_storage_page_cache = true;
     auto st = global_env->init(process_metrics_registry->root_registry());
     CHECK(st.ok()) << st;
+    auto* platform_env = PlatformEnv::GetInstance();
+    st = platform_env->init(process_metrics_registry->root_registry());
+    CHECK(st.ok()) << st;
 
     auto compaction_mem_tracker = std::make_unique<MemTracker>();
     auto update_mem_tracker = std::make_unique<MemTracker>();
@@ -130,7 +135,9 @@ int init_test_env(int argc, char** argv) {
     CHECK(st.ok()) << st;
 
     auto* exec_env = ExecEnv::GetInstance();
-    st = exec_env->init(paths, process_metrics_registry);
+    st = connector::bootstrap_builtin_connectors();
+    CHECK(st.ok()) << st;
+    st = exec_env->init(paths, process_metrics_registry, global_env);
     CHECK(st.ok()) << st;
 
     int r = RUN_ALL_TESTS();
@@ -151,6 +158,7 @@ int init_test_env(int argc, char** argv) {
 #endif
     delete engine;
     exec_env->destroy();
+    platform_env->destroy();
     cache_env->destroy();
     global_env->stop();
 

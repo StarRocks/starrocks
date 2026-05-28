@@ -46,7 +46,12 @@ public class DefaultExpr implements GsonPreProcessable, GsonPostProcessable {
     @SerializedName("expr")
     private String expr;
 
-    private final boolean hasArguments;
+    // StarRocks Gson skips fields without @SerializedName (see HiddenAnnotationExclusionStrategy).
+    // Without persistence this flag flipped to false after FE restart / edit-log replay, which made
+    // isEmptyDefaultTimeFunction misclassify "current_timestamp(N)" as the empty form and silently
+    // dropped its precision argument.
+    @SerializedName("hasArguments")
+    private boolean hasArguments;
 
     @SerializedName("serializedExpr")
     private String serializedExpr;
@@ -104,6 +109,15 @@ public class DefaultExpr implements GsonPreProcessable, GsonPostProcessable {
                 exprObject = SqlParser.parseSqlToExpr(serializedExpr, SqlModeHelper.MODE_DEFAULT);
             } catch (Exception e) {
                 LOG.warn("Failed to restore expr object from SQL: {}", serializedExpr, e);
+            }
+        }
+        // Backfill hasArguments for columns persisted before the @SerializedName annotation existed:
+        // the field deserialized to the primitive default false. The argument list is observable from
+        // the expr string itself - a valid time-function default with a non-empty paren means args.
+        if (!hasArguments && expr != null) {
+            String trimmed = expr.trim();
+            if (isValidDefaultTimeFunction(trimmed) && !trimmed.endsWith("()")) {
+                hasArguments = true;
             }
         }
     }

@@ -75,7 +75,6 @@ import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.LeaderDaemon;
 import com.starrocks.common.util.NetUtils;
-import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.datacache.DataCacheMetrics;
@@ -564,7 +563,7 @@ public class ReportHandler extends LeaderDaemon implements MemoryTrackable {
         Backend reportBackend = currentSystemInfo.getBackend(backendId);
         if (reportBackend != null) {
             BackendStatus backendStatus = reportBackend.getBackendStatus();
-            backendStatus.lastSuccessReportTabletsTime = TimeUtils.longToTimeString(start);
+            backendStatus.lastSuccessReportTabletsTimeMs = start;
         }
 
         long cost = System.currentTimeMillis() - start;
@@ -1150,6 +1149,34 @@ public class ReportHandler extends LeaderDaemon implements MemoryTrackable {
                     LOG.debug("delete tablet {} in partition {} of table {} in db {} from meta. backend[{}]",
                             tabletId, partitionId, tableId, dbId, backendId);
 
+                    // Fast path: skip the heavy db/table/partition/index walk when the BE's report
+                    // is already stale and the disk is still online. Order matters:
+                    //   1. Check the version first — cheap, single counter read. The common
+                    //      non-stale case pays only this and exits the fast path immediately
+                    //      (no probe, no map lookup).
+                    //   2. Only when stale, probe TabletInvertedIndex for the replica. The probe
+                    //      is opportunistic: if it positively identifies an ONLINE disk for the
+                    //      backend we skip immediately; otherwise (probe missing, disk null/offline)
+                    //      we fall through to the authoritative catalog walk below — the inverted
+                    //      index is not the source of truth (e.g. RestoreJob adds replicas to the
+                    //      tablet with updateInvertedIndex=false), so a probe miss must NOT short
+                    //      circuit deletion / setBad handling.
+                    long currentBackendReportVersion = GlobalStateMgr.getCurrentState().getNodeMgr()
+                            .getClusterInfo().getBackendReportVersion(backendId);
+                    if (backendReportVersion < currentBackendReportVersion) {
+                        Replica probeReplica = invertedIndex.getReplica(tabletId, backendId);
+                        if (probeReplica != null) {
+                            DiskInfo probeDiskInfo = hashToDiskInfo.get(probeReplica.getPathHash());
+                            if (probeDiskInfo != null
+                                    && probeDiskInfo.getState() == DiskInfo.DiskState.ONLINE) {
+                                LOG.warn("report Version from be: {} is outdated, report version in request: {}, "
+                                                + "latest report version: {}, ignore tablet: {}",
+                                        backendId, backendReportVersion, currentBackendReportVersion, tabletId);
+                                continue;
+                            }
+                        }
+                    }
+
                     OlapTable olapTable = (OlapTable) globalStateMgr.getLocalMetastore().getTableIncludeRecycleBin(db, tableId);
                     if (olapTable == null) {
                         continue;
@@ -1189,21 +1216,9 @@ public class ReportHandler extends LeaderDaemon implements MemoryTrackable {
                         continue;
                     }
 
-                    long currentBackendReportVersion =
-                            GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendReportVersion(backendId);
                     DiskInfo diskInfo = hashToDiskInfo.get(replica.getPathHash());
-
-                    // Only check reportVersion when the disk is online,
-                    // as there will be no tablet changes on an unavailable disk
-                    if (diskInfo != null
-                            && diskInfo.getState() == DiskInfo.DiskState.ONLINE
-                            && backendReportVersion < currentBackendReportVersion) {
-                        LOG.warn("report Version from be: {} is outdated, report version in request: {}, " +
-                                        "latest report version: {}, ignore tablet: {}",
-                                backendId, backendReportVersion, currentBackendReportVersion, tabletId);
-                        continue;
-                    } else if (diskInfo == null) {
-                        LOG.warn("disk of path hash {} dose not exist, delete tablet {} on backend {} from meta",
+                    if (diskInfo == null) {
+                        LOG.warn("disk of path hash {} does not exist, delete tablet {} on backend {} from meta",
                                 replica.getPathHash(), tabletId, backendId);
                     } else if (diskInfo.getState() != DiskInfo.DiskState.ONLINE) {
                         LOG.warn("disk of path hash {} not available, delete tablet {} on backend {} from meta",
@@ -1471,8 +1486,8 @@ public class ReportHandler extends LeaderDaemon implements MemoryTrackable {
         long maxLastSuccessReportTabletsTime = -1L;
 
         for (Backend be : backends) {
-            long lastSuccessReportTabletsTime = TimeUtils.timeStringToLong(be.getBackendStatus().lastSuccessReportTabletsTime);
-            maxLastSuccessReportTabletsTime = Math.max(maxLastSuccessReportTabletsTime, lastSuccessReportTabletsTime);
+            maxLastSuccessReportTabletsTime = Math.max(
+                    maxLastSuccessReportTabletsTime, be.getBackendStatus().lastSuccessReportTabletsTimeMs);
         }
 
         Locker locker = new Locker();
