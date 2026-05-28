@@ -1,0 +1,57 @@
+name: Nix Flake
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - ".github/workflows/nix-flake.yml"
+      - "build-support/build_helpers.sh"
+      - "build-support/darwin_build_env.sh"
+      - "flake.lock"
+      - "flake.nix"
+      - "nix/**"
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/nix-flake.yml"
+      - "build-support/build_helpers.sh"
+      - "build-support/darwin_build_env.sh"
+      - "flake.lock"
+      - "flake.nix"
+      - "nix/**"
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: ${{ matrix.system }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - system: x86_64-linux
+            runner: ubuntu-24.04
+          - system: aarch64-linux
+            runner: ubuntu-24.04-arm
+          - system: aarch64-darwin
+            runner: macos-14
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install Nix
+        uses: DeterminateSystems/nix-installer-action@v22
+        with:
+          determinate: false
+          extra-conf: |
+            experimental-features = nix-command flakes
+
+      - name: Check flake
+        run: nix flake check --print-build-logs
+
+      - name: Check development shell
+        run: nix develop --command starrocks-build-env --print

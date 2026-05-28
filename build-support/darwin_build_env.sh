@@ -37,6 +37,21 @@ detect_parallelism() {
     echo "${cpu_count}"
 }
 
+require_nix_root() {
+    local name="$1"
+    local value="${!name:-}"
+
+    if [[ -z "${value}" ]]; then
+        log_error "${name} must be set for Nix-based macOS builds"
+        return 1
+    fi
+
+    if [[ ! -d "${value}" ]]; then
+        log_error "${name} points to a missing directory: ${value}"
+        return 1
+    fi
+}
+
 # ============================================================================
 # BASIC PATHS
 # ============================================================================
@@ -65,38 +80,55 @@ if [[ "$(uname -m)" != "arm64" ]]; then
 fi
 
 # Check Homebrew
-if ! command -v brew >/dev/null 2>&1; then
-    log_error "Homebrew is not installed. Please install it from https://brew.sh"
-    return 1
+STARROCKS_USE_NIX_DEPS="${STARROCKS_USE_NIX_DEPS:-0}"
+if [[ "${STARROCKS_USE_NIX_DEPS}" != "1" ]]; then
+    if ! command -v brew >/dev/null 2>&1; then
+        log_error "Homebrew is not installed. Please install it from https://brew.sh"
+        return 1
+    fi
 fi
 
 # ============================================================================
 # HOMEBREW CONFIGURATION
 # ============================================================================
-export HOMEBREW_PREFIX="/opt/homebrew"
-export HOMEBREW_NO_AUTO_UPDATE=1  # Speed up builds
+if [[ "${STARROCKS_USE_NIX_DEPS}" == "1" ]]; then
+    export HOMEBREW_PREFIX="${HOMEBREW_PREFIX:-}"
+else
+    export HOMEBREW_PREFIX="/opt/homebrew"
+    export HOMEBREW_NO_AUTO_UPDATE=1  # Speed up builds
 
-# Add Homebrew to PATH if not already there
-if [[ ":$PATH:" != *":$HOMEBREW_PREFIX/bin:"* ]]; then
-    export PATH="$HOMEBREW_PREFIX/bin:$HOMEBREW_PREFIX/sbin:$PATH"
+    # Add Homebrew to PATH if not already there
+    if [[ ":$PATH:" != *":$HOMEBREW_PREFIX/bin:"* ]]; then
+        export PATH="$HOMEBREW_PREFIX/bin:$HOMEBREW_PREFIX/sbin:$PATH"
+    fi
 fi
 
 # ============================================================================
 # COMPILER CONFIGURATION
 # ============================================================================
-# Use Homebrew LLVM for consistent C++17 support
-export LLVM_HOME="$HOMEBREW_PREFIX/opt/llvm"
+if [[ "${STARROCKS_USE_NIX_DEPS}" == "1" ]]; then
+    export LLVM_HOME="${STARROCKS_LLVM_HOME:-${LLVM_HOME:-}}"
+    require_nix_root LLVM_HOME || return 1
+    export CC="${CC:-${LLVM_HOME}/bin/clang}"
+    export CXX="${CXX:-${LLVM_HOME}/bin/clang++}"
+    export AR="${AR:-${LLVM_HOME}/bin/llvm-ar}"
+    export RANLIB="${RANLIB:-${LLVM_HOME}/bin/llvm-ranlib}"
+    export STRIP="${STRIP:-${LLVM_HOME}/bin/llvm-strip}"
+else
+    # Use Homebrew LLVM for consistent C++17 support
+    export LLVM_HOME="$HOMEBREW_PREFIX/opt/llvm"
 
-if [[ ! -d "$LLVM_HOME" ]]; then
-    log_error "LLVM not found at $LLVM_HOME. Please run: brew install llvm"
-    return 1
+    if [[ ! -d "$LLVM_HOME" ]]; then
+        log_error "LLVM not found at $LLVM_HOME. Please run: brew install llvm"
+        return 1
+    fi
+
+    export CC="$LLVM_HOME/bin/clang"
+    export CXX="$LLVM_HOME/bin/clang++"
+    export AR="$LLVM_HOME/bin/llvm-ar"
+    export RANLIB="$LLVM_HOME/bin/llvm-ranlib"
+    export STRIP="$LLVM_HOME/bin/llvm-strip"
 fi
-
-export CC="$LLVM_HOME/bin/clang"
-export CXX="$LLVM_HOME/bin/clang++"
-export AR="$LLVM_HOME/bin/llvm-ar"
-export RANLIB="$LLVM_HOME/bin/llvm-ranlib"
-export STRIP="$LLVM_HOME/bin/llvm-strip"
 
 # StarRocks-specific compiler environment variables
 export STARROCKS_GCC_HOME="$LLVM_HOME"
@@ -134,8 +166,10 @@ export CFLAGS="${ARM64_FLAGS} ${OPT_FLAGS}"
 export CXXFLAGS="${ARM64_FLAGS} ${OPT_FLAGS} -stdlib=libc++"
 
 # Add Homebrew include/lib paths
-export CPPFLAGS="-I${HOMEBREW_PREFIX}/include ${CPPFLAGS:-}"
-export LDFLAGS="-L${HOMEBREW_PREFIX}/lib ${LDFLAGS:-}"
+if [[ "${STARROCKS_USE_NIX_DEPS}" != "1" ]]; then
+    export CPPFLAGS="-I${HOMEBREW_PREFIX}/include ${CPPFLAGS:-}"
+    export LDFLAGS="-L${HOMEBREW_PREFIX}/lib ${LDFLAGS:-}"
+fi
 
 # ============================================================================
 # BUILD OPTIMIZATION
@@ -157,7 +191,11 @@ log_info "Parallel jobs: $PARALLEL"
 # ============================================================================
 
 # OpenSSL (keg-only in Homebrew)
-export OPENSSL_ROOT_DIR="$HOMEBREW_PREFIX/opt/openssl@3"
+if [[ "${STARROCKS_USE_NIX_DEPS}" == "1" ]]; then
+    require_nix_root OPENSSL_ROOT_DIR || return 1
+else
+    export OPENSSL_ROOT_DIR="$HOMEBREW_PREFIX/opt/openssl@3"
+fi
 if [[ -d "$OPENSSL_ROOT_DIR" ]]; then
     export PKG_CONFIG_PATH="$OPENSSL_ROOT_DIR/lib/pkgconfig:${PKG_CONFIG_PATH:-}"
     export CPPFLAGS="-I$OPENSSL_ROOT_DIR/include $CPPFLAGS"
@@ -167,7 +205,11 @@ else
 fi
 
 # cURL (keg-only in Homebrew)
-export CURL_ROOT="$HOMEBREW_PREFIX/opt/curl"
+if [[ "${STARROCKS_USE_NIX_DEPS}" == "1" ]]; then
+    require_nix_root CURL_ROOT || return 1
+else
+    export CURL_ROOT="$HOMEBREW_PREFIX/opt/curl"
+fi
 if [[ -d "$CURL_ROOT" ]]; then
     export PKG_CONFIG_PATH="$CURL_ROOT/lib/pkgconfig:${PKG_CONFIG_PATH:-}"
     export CPPFLAGS="-I$CURL_ROOT/include $CPPFLAGS"
@@ -175,7 +217,11 @@ if [[ -d "$CURL_ROOT" ]]; then
 fi
 
 # ICU4C (keg-only in Homebrew)
-export ICU_ROOT="$HOMEBREW_PREFIX/opt/icu4c"
+if [[ "${STARROCKS_USE_NIX_DEPS}" == "1" ]]; then
+    require_nix_root ICU_ROOT || return 1
+else
+    export ICU_ROOT="$HOMEBREW_PREFIX/opt/icu4c"
+fi
 if [[ -d "$ICU_ROOT" ]]; then
     export PKG_CONFIG_PATH="$ICU_ROOT/lib/pkgconfig:${PKG_CONFIG_PATH:-}"
     export CPPFLAGS="-I$ICU_ROOT/include $CPPFLAGS"
