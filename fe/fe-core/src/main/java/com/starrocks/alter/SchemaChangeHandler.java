@@ -3536,4 +3536,32 @@ public class SchemaChangeHandler extends AlterHandler {
                 && oriColumn.isAllowNull() == modColumn.isAllowNull()
                 && oriColumn.isHidden() == modColumn.isHidden();
     }
+
+    /**
+     * Reject the operation if the named column belongs to the range-
+     * distribution sort-key column set of the given index.
+     *
+     * Range-distribution tablet boundaries are stored as 1:1 copies of the
+     * base values, and any ADD/DROP/MODIFY that changes the column set or
+     * type/semantics of those columns invalidates the stored boundary
+     * interpretation — even if no row physically moves.
+     */
+    private static void rejectIfTouchesRangeSortKey(
+            OlapTable olapTable, long indexMetaId,
+            String operation, String colName) throws DdlException {
+        if (!olapTable.isRangeDistribution()) {
+            return;
+        }
+        List<Column> rangeSortCols =
+                MetaUtils.getRangeDistributionColumns(olapTable, indexMetaId);
+        boolean hit = rangeSortCols.stream()
+                .anyMatch(c -> c.getName().equalsIgnoreCase(colName));
+        if (hit) {
+            throw new DdlException(operation +
+                " on a range-distribution sort-key column is not supported, " +
+                "because it would change the column set or type/semantics " +
+                "that the existing range tablet boundary values were " +
+                "recorded under. Column: " + colName);
+        }
+    }
 }
