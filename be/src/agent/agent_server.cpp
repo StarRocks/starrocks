@@ -594,11 +594,10 @@ void AgentServer::Impl::submit_tasks(TAgentResult& agent_result, const std::vect
                         submit_log += std::to_string(signature) + ",";
                     }
                     queue_len = register_pair.second;
-                    ret_st = pool->submit_func(std::bind(
-                            run_replicate_snapshot_task,
-                            std::make_shared<ReplicateSnapshotAgentTaskRequest>(*task, task->replicate_snapshot_req,
-                                                                                time(nullptr)),
-                            _exec_env, replicate_file_pool));
+                    ret_st = pool->submit_func(std::bind(run_replicate_snapshot_task,
+                                                         std::make_shared<ReplicateSnapshotAgentTaskRequest>(
+                                                                 *task, task->replicate_snapshot_req, time(nullptr)),
+                                                         _exec_env, replicate_file_pool));
                     if (!ret_st.ok()) {
                         LOG(WARNING) << "fail to submit task. reason: " << ret_st.message() << ", task: " << task;
                     }
