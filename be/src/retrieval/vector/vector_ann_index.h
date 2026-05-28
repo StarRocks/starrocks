@@ -17,10 +17,9 @@
 #include <cstdint>
 #include <map>
 #include <memory>
+#include <roaring/roaring.hh>
 #include <string>
 #include <vector>
-
-#include <roaring/roaring.hh>
 
 #include "common/status.h"
 
