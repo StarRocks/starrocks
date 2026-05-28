@@ -36,8 +36,6 @@ CREATE MATERIALIZED VIEW test_mv1
 REFRESH DEFERRED MANUAL 
 AS SELECT k1, k2, k3, k4, k5, k6, k7, k8, k9, k10, k11, k12, k13 FROM t1;
 
-admin set frontend config("enable_active_materialized_view_schema_strict_check"="false");
-
 -- alter column: k13
 ALTER TABLE t1 MODIFY COLUMN k13 decimal(32, 10);
 function: wait_alter_table_finish()
@@ -57,4 +55,3 @@ INSERT INTO t1 VALUES
 SELECT * FROM test_mv1 ORDER BY k1;
 
 DROP TABLE t1;
-admin set frontend config("enable_active_materialized_view_schema_strict_check"="false");

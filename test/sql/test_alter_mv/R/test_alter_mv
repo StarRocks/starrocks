@@ -61,9 +61,6 @@ REFRESH DEFERRED MANUAL
 AS SELECT k1, k2, k3, k4, k5, k6, k7, k8, k9, k10, k11, k12, k13 FROM t1;
 -- result:
 -- !result
-admin set frontend config("enable_active_materialized_view_schema_strict_check"="false");
--- result:
--- !result
 ALTER TABLE t1 MODIFY COLUMN k13 decimal(32, 10);
 -- result:
 -- !result
@@ -116,8 +113,5 @@ SELECT * FROM test_mv1 ORDER BY k1;
 2020-10-24	2020-10-25 12:12:12	k3	k4	0	1	2	3	4	5	1.1	1.12	2.889000000
 -- !result
 DROP TABLE t1;
--- result:
--- !result
-admin set frontend config("enable_active_materialized_view_schema_strict_check"="false");
 -- result:
 -- !result
