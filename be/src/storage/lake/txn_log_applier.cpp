@@ -478,6 +478,7 @@ private:
     // in `TxnLogApplier.init`, because we have to build primary index after apply `schema_change_log` finish.
     Status prepare_primary_index() {
         if (_index_entry == nullptr) {
+            TRACE_COUNTER_SCOPE_LATENCY_US("prepare_primary_index_us");
             ASSIGN_OR_RETURN(_index_entry, _tablet.update_mgr()->prepare_primary_index(
                                                    _metadata, &_builder, _base_version, _new_version, _guard));
             // Reset publish SST stats so we only count SSTs flushed during this publish session

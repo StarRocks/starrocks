@@ -32,6 +32,7 @@
 #include "storage/lake/txn_log_applier.h"
 #include "storage/lake/update_manager.h"
 #include "storage/lake/vacuum.h" // delete_files_async
+#include "util/trace.h"
 
 namespace {
 
@@ -205,11 +206,14 @@ StatusOr<TabletMetadataPtr> publish_version(TabletManager* tablet_mgr, const Pub
         return new_metadata;
     }
 
-    if (!acquire_publish_tablet(tablet_info.get_tablet_id_in_metadata())) {
-        return Status::ResourceBusy(
-                fmt::format("The previous publish version task for tablet {} has not finished. You can ignore this "
-                            "error and the task will retry later.",
-                            tablet_info.get_tablet_id_in_metadata()));
+    {
+        TRACE_COUNTER_SCOPE_LATENCY_US("publish_tablet_lock_wait_us");
+        if (!acquire_publish_tablet(tablet_info.get_tablet_id_in_metadata())) {
+            return Status::ResourceBusy(
+                    fmt::format("The previous publish version task for tablet {} has not finished. You can ignore "
+                                "this error and the task will retry later.",
+                                tablet_info.get_tablet_id_in_metadata()));
+        }
     }
     DeferOp remove_tablet_txn([&] { release_publish_tablet(tablet_info.get_tablet_id_in_metadata()); });
 
@@ -239,7 +243,11 @@ StatusOr<TabletMetadataPtr> publish_version(TabletManager* tablet_mgr, const Pub
     if (has_no_op_publish_in_batch) {
         tablet_mgr->metacache()->erase(new_metadata_path);
     }
-    auto cached_new_metadata = tablet_mgr->metacache()->lookup_tablet_metadata(new_metadata_path);
+    std::shared_ptr<const TabletMetadataPB> cached_new_metadata;
+    {
+        TRACE_COUNTER_SCOPE_LATENCY_US("metadata_cache_lookup_us");
+        cached_new_metadata = tablet_mgr->metacache()->lookup_tablet_metadata(new_metadata_path);
+    }
     if (cached_new_metadata != nullptr && !has_no_op_publish_in_batch) {
         // The retries may be caused by some tablets failing to publish in a partition
         // set the following log as debug log to prevent excessive logging
@@ -277,8 +285,12 @@ StatusOr<TabletMetadataPtr> publish_version(TabletManager* tablet_mgr, const Pub
     }
 
     // Read base version metadata
-    auto base_metadata_or =
-            tablet_mgr->get_tablet_metadata(tablet_info.get_tablet_id_in_metadata(), base_version, false);
+    StatusOr<TabletMetadataPtr> base_metadata_or;
+    {
+        TRACE_COUNTER_SCOPE_LATENCY_US("base_metadata_fetch_us");
+        base_metadata_or =
+                tablet_mgr->get_tablet_metadata(tablet_info.get_tablet_id_in_metadata(), base_version, false);
+    }
     if (base_metadata_or.status().is_not_found()) {
         return new_version_metadata_or_error(base_metadata_or.status());
     }
@@ -325,7 +337,10 @@ StatusOr<TabletMetadataPtr> publish_version(TabletManager* tablet_mgr, const Pub
             ignore_txn_log = true;
             LOG(INFO) << "txn " << txns[i].txn_id() << " marked as no-op publish on tablet " << tablet_info;
         } else {
-            txn_log_st = load_txn_log(tablet_mgr, tablet_info.get_tablet_ids_in_txn_logs(), txns[i]);
+            {
+                TRACE_COUNTER_SCOPE_LATENCY_US("load_txn_log_us");
+                txn_log_st = load_txn_log(tablet_mgr, tablet_info.get_tablet_ids_in_txn_logs(), txns[i]);
+            }
 
             if (txn_log_st.status().is_not_found()) {
                 if (i == 0) {

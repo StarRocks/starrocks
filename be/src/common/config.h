@@ -490,6 +490,13 @@ CONF_mInt64(pk_index_parallel_execution_min_rows, "16384");
 CONF_mInt32(pk_index_parallel_execution_threadpool_max_threads, "0");
 // The queue size for pk index parallel get threadpool in shared-data mode.
 CONF_mInt32(pk_index_parallel_execution_threadpool_size, "1048576");
+// Sequential read-ahead buffer size (bytes) for the .lcrm rows-mapper file
+// consumed during light COMPACTION publish. The body of an .lcrm is `row_count * 8`
+// bytes; remote-storage reads of small per-segment slices each pay a hundreds-of-ms
+// RPC roundtrip, so collapsing them into a few larger sequential reads slashes the
+// publish-side tail. 100 MiB covers ~13 M rows per read which is enough for almost
+// any single compaction; bound it for memory safety under heavy concurrency.
+CONF_mInt64(lake_rows_mapper_read_buf_bytes, "104857600");
 // Skip the parallel two-phase prefetch in LakePersistentIndex::load_dels when the update
 // mem tracker is already past this percent (0-100) of its limit. In that regime the function
 // falls back to a single-pass loop that holds only one decoded del-file column at a time,

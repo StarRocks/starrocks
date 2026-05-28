@@ -146,9 +146,49 @@ Status RowsMapperIterator::next_values(size_t fetch_cnt, std::vector<uint64_t>* 
                                              _pos, fetch_cnt, _row_count));
     }
     rssid_rowids->resize(fetch_cnt);
-    RETURN_IF_ERROR(_rfile->read_at_fully(_pos * EACH_ROW_SIZE, rssid_rowids->data(), fetch_cnt * EACH_ROW_SIZE));
+
+    // Read-ahead path: serve from `_buf` whenever the requested slice fits inside
+    // the currently-buffered window [_buf_pos, _buf_pos + _buf.size()/EACH_ROW_SIZE).
+    // For huge single fetches that exceed the buffer's capacity, fall through to
+    // the original direct read_at_fully so behaviour stays correct under any tuning.
+    const size_t need_bytes = fetch_cnt * EACH_ROW_SIZE;
+    if (need_bytes > _buf.size() && need_bytes > static_cast<size_t>(config::lake_rows_mapper_read_buf_bytes)) {
+        // Caller requested more than one buffer's worth in a single call — bypass
+        // the buffer to avoid serving a partial slice. Rare in practice (per-segment
+        // fetches are bounded by segment row count).
+        RETURN_IF_ERROR(_rfile->read_at_fully(_pos * EACH_ROW_SIZE, rssid_rowids->data(), need_bytes));
+    } else {
+        // Check whether the requested range lies fully inside the current buffer;
+        // refill if not (also covers the first call where _buf is empty).
+        const uint64_t buf_end_row = _buf_pos + _buf.size() / EACH_ROW_SIZE;
+        if (_buf.empty() || _pos < _buf_pos || _pos + fetch_cnt > buf_end_row) {
+            RETURN_IF_ERROR(_refill_buf());
+        }
+        const size_t off_in_buf = (_pos - _buf_pos) * EACH_ROW_SIZE;
+        memcpy(rssid_rowids->data(), _buf.data() + off_in_buf, need_bytes);
+    }
+
     _current_checksum = crc32c::Extend(_current_checksum, (const char*)rssid_rowids->data(), rssid_rowids->size() * 8);
     _pos += fetch_cnt;
+    return Status::OK();
+}
+
+Status RowsMapperIterator::_refill_buf() {
+    // Refill aligned at `_pos`. Reading from `_pos` rather than the previous buffer's
+    // end is harmless given the sequential access pattern (_pos only ever advances)
+    // and is robust if the caller ever skips a range.
+    const uint64_t remaining_rows = _row_count - _pos;
+    const uint64_t buf_rows = std::min(remaining_rows, static_cast<uint64_t>(config::lake_rows_mapper_read_buf_bytes) /
+                                                               EACH_ROW_SIZE);
+    if (buf_rows == 0) {
+        _buf.clear();
+        _buf_pos = _pos;
+        return Status::OK();
+    }
+    const size_t read_bytes = buf_rows * EACH_ROW_SIZE;
+    _buf.resize(read_bytes);
+    RETURN_IF_ERROR(_rfile->read_at_fully(_pos * EACH_ROW_SIZE, _buf.data(), read_bytes));
+    _buf_pos = _pos;
     return Status::OK();
 }
 

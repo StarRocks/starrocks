@@ -25,6 +25,8 @@
 #include "storage/primary_key_encoder.h"
 #include "storage/rows_mapper.h"
 #include "storage/tablet_schema.h"
+#include "util/defer_op.h"
+#include "util/time.h"
 
 namespace starrocks {
 
@@ -162,7 +164,15 @@ Status PrimaryKeyCompactionConflictResolver::execute_without_update_index() {
     // init rows mapper iter
     ASSIGN_OR_RETURN(auto filename, filename());
     RowsMapperIterator mapper_iter;
-    RETURN_IF_ERROR(mapper_iter.open(filename));
+    {
+        TRACE_COUNTER_SCOPE_LATENCY_US("compact_mapper_open_us");
+        RETURN_IF_ERROR(mapper_iter.open(filename));
+    }
+
+    // Accumulate mapper next_values() latency across all per-segment reads (the call
+    // itself sits inside a tight loop, so a per-call scope guard is too noisy).
+    int64_t mapper_read_us_accum = 0;
+    DeferOp emit_mapper_read([&] { TRACE_COUNTER_INCREMENT("compact_mapper_read_us", mapper_read_us_accum); });
 
     // 1. iterate all segment in output rowset
     RETURN_IF_ERROR(segment_iterator(
@@ -174,7 +184,11 @@ Status PrimaryKeyCompactionConflictResolver::execute_without_update_index() {
                     // 2. get input rssid & rowids, so we can generate delvec
                     vector<uint32_t> tmp_deletes;
                     std::vector<uint64_t> rssid_rowids;
-                    RETURN_IF_ERROR(mapper_iter.next_values(segments[segment_id]->num_rows(), &rssid_rowids));
+                    {
+                        const int64_t t0 = MonotonicMicros();
+                        RETURN_IF_ERROR(mapper_iter.next_values(segments[segment_id]->num_rows(), &rssid_rowids));
+                        mapper_read_us_accum += MonotonicMicros() - t0;
+                    }
                     DCHECK(segments[segment_id]->num_rows() == rssid_rowids.size());
                     for (int i = 0; i < rssid_rowids.size(); i++) {
                         const uint32_t rssid = rssid_rowids[i] >> 32;

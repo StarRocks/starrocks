@@ -83,6 +83,15 @@ private:
     inline static const size_t EACH_ROW_SIZE = 8; // 8 bytes
 
 private:
+    // Refill `_buf` starting from offset `_pos * EACH_ROW_SIZE`.
+    // Reads min(remaining_body_bytes, config::lake_rows_mapper_read_buf_bytes) at once.
+    // Why: When `.lcrm` files live on remote storage (S3/HDFS), each `read_at_fully`
+    // costs ~hundreds of ms of RPC roundtrip — small per-segment reads turn into a
+    // multi-second tail in COMPACTION publish. A bounded read-ahead buffer collapses
+    // the N small remote reads into ⌈body_size / buf_size⌉ large sequential reads.
+    Status _refill_buf();
+
+private:
     std::unique_ptr<RandomAccessFile> _rfile;
     uint64_t _row_count = 0;
     // Point to the next position that we want to read
@@ -90,6 +99,11 @@ private:
     // Current checksum and expected checksum, will check if mismatch when iterator end
     uint32_t _expected_checksum = 0;
     uint32_t _current_checksum = 0;
+    // Sequential read-ahead buffer (sized by `config::lake_rows_mapper_read_buf_bytes`).
+    // Holds [_buf_pos, _buf_pos + _buf.size() / EACH_ROW_SIZE) rows.
+    std::string _buf;
+    // Row index at which `_buf` starts (i.e. the row corresponding to byte 0 of `_buf`).
+    uint64_t _buf_pos = 0;
 };
 
 // rows mapper file's name for lake table
