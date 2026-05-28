@@ -18,6 +18,7 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.PaimonPartitionKey;
 import com.starrocks.catalog.PaimonTable;
 import com.starrocks.catalog.PaimonView;
 import com.starrocks.catalog.PartitionKey;
@@ -241,6 +242,11 @@ public class PaimonMetadata implements ConnectorMetadata {
             }
         } catch (Catalog.TableNotExistException e) {
             LOG.error("Failed to update partition info of paimon table {}.{}.", databaseName, tableName, e);
+        } catch (Exception e) {
+            LOG.error("Failed to update partition info of paimon table {}.{}.", databaseName, tableName, e);
+            throw new StarRocksConnectorException(
+                    String.format("Failed to update partition info of paimon table %s.%s: %s",
+                            databaseName, tableName, e.getMessage()), e);
         }
     }
 
@@ -265,7 +271,8 @@ public class PaimonMetadata implements ConnectorMetadata {
         for (int i = 0; i < partitionValues.length; i++) {
             String column = partitionColumnNames.get(i);
             String value = partitionValues[i].trim();
-            if (partitionColumnTypes.get(i) instanceof DateType && partitionLegacyName) {
+            if (partitionColumnTypes.get(i) instanceof DateType && partitionLegacyName
+                    && !PaimonPartitionKey.PARTITION_NULL_VALUES.contains(value)) {
                 value = DateTimeUtils.formatDate(Integer.parseInt(value));
             }
             sb.append(column).append("=").append(value);

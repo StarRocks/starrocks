@@ -19,12 +19,15 @@ import com.google.common.collect.ImmutableList;
 import java.util.List;
 
 public class PaimonPartitionKey extends PartitionKey implements NullablePartitionKey {
+    public static final List<String> PARTITION_NULL_VALUES =
+            ImmutableList.of("__DEFAULT_PARTITION__", "null");
+
     public PaimonPartitionKey() {
         super();
     }
 
     @Override
     public List<String> nullPartitionValueList() {
-        return ImmutableList.of("__DEFAULT_PARTITION__", "null");
+        return PARTITION_NULL_VALUES;
     }
 }
