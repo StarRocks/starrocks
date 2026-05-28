@@ -261,6 +261,7 @@ set(EXEC_FILES
         ./http/metrics_action_test.cpp
         ./http/stream_load_test.cpp
         ./http/transaction_stream_load_test.cpp
+        ./http/action/pprof_actions_test.cpp
         ./http/action/proc_profile_e2e_test.cpp
         ./io/compressed_input_stream_test.cpp
         ./io/s3_output_stream_test.cpp
@@ -326,6 +327,7 @@ set(EXEC_FILES
         ./service/service_metrics_test.cpp
         ./service/service_be/arrow_flight_call_header_utils_test.cpp
         ./service/service_be/internal_service_test.cpp
+        ./udf/python/env_test.cpp
         ./udf/java/java_native_method_test.cpp
         ./udf/java/java_data_converter_test.cpp
         ./udf/java/java_udf_test.cpp
