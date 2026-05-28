@@ -164,10 +164,7 @@ Status PrimaryKeyCompactionConflictResolver::execute_without_update_index() {
     // init rows mapper iter
     ASSIGN_OR_RETURN(auto filename, filename());
     RowsMapperIterator mapper_iter;
-    {
-        TRACE_COUNTER_SCOPE_LATENCY_US("compact_mapper_open_us");
-        RETURN_IF_ERROR(mapper_iter.open(filename));
-    }
+    RETURN_IF_ERROR(mapper_iter.open(filename));
 
     // Accumulate mapper next_values() latency across all per-segment reads (the call
     // itself sits inside a tight loop, so a per-call scope guard is too noisy).

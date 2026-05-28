@@ -23,7 +23,6 @@
 #include "storage/lake/update_manager.h"
 #include "storage/rows_mapper.h"
 #include "storage/tablet_schema.h"
-#include "util/trace.h"
 
 namespace starrocks::lake {
 
@@ -72,23 +71,15 @@ Status LakePrimaryKeyCompactionConflictResolver::segment_iterator(
                                    const std::function<void(uint32_t, const DelVectorPtr&, uint32_t)>&)>& handler) {
     OlapReaderStatistics stats;
     auto pkey_schema = generate_pkey_schema();
-    std::vector<ChunkIteratorPtr> segment_iters;
-    {
-        TRACE_COUNTER_SCOPE_LATENCY_US("compact_load_output_segments_us");
-        ASSIGN_OR_RETURN(segment_iters, _rowset->get_each_segment_iterator(pkey_schema, false, &stats));
-    }
+    ASSIGN_OR_RETURN(auto segment_iters, _rowset->get_each_segment_iterator(pkey_schema, false, &stats));
     RETURN_ERROR_IF_FALSE(segment_iters.size() == _rowset->num_segments());
     // init delvec loader
     LakeIOOptions lake_io_opts{.fill_data_cache = true, .skip_disk_cache = false};
 
     // Cache the base-version metadata once so per-rssid delvec loads skip get_tablet_metadata
     // and its TabletMetadataPB deep copy (hot when one compaction merges hundreds of rowsets).
-    TabletMetadataPtr base_metadata;
-    {
-        TRACE_COUNTER_SCOPE_LATENCY_US("compact_resolver_base_meta_us");
-        ASSIGN_OR_RETURN(base_metadata,
-                         _tablet_mgr->get_tablet_metadata(_rowset->tablet_id(), _base_version, true /* fill_cache */));
-    }
+    ASSIGN_OR_RETURN(auto base_metadata,
+                     _tablet_mgr->get_tablet_metadata(_rowset->tablet_id(), _base_version, true /* fill_cache */));
     auto delvec_loader = std::make_unique<LakeDelvecLoader>(_tablet_mgr, _builder, true /* fill cache */, lake_io_opts,
                                                             std::move(base_metadata));
     // init params
@@ -110,21 +101,14 @@ Status LakePrimaryKeyCompactionConflictResolver::segment_iterator(
                                    const std::function<void(uint32_t, const DelVectorPtr&, uint32_t)>&)>& handler) {
     // load all segments
     std::vector<SegmentPtr> segments;
-    {
-        TRACE_COUNTER_SCOPE_LATENCY_US("compact_load_output_segments_us");
-        RETURN_IF_ERROR(_rowset->load_segments(&segments, true /* file cache*/));
-    }
+    RETURN_IF_ERROR(_rowset->load_segments(&segments, true /* file cache*/));
     RETURN_ERROR_IF_FALSE(segments.size() == _rowset->num_segments());
     // init delvec loader
     LakeIOOptions lake_io_opts{.fill_data_cache = true, .skip_disk_cache = false};
 
     // See the overload above: cache base-version metadata once to skip per-rssid deep copy.
-    TabletMetadataPtr base_metadata;
-    {
-        TRACE_COUNTER_SCOPE_LATENCY_US("compact_resolver_base_meta_us");
-        ASSIGN_OR_RETURN(base_metadata,
-                         _tablet_mgr->get_tablet_metadata(_rowset->tablet_id(), _base_version, true /* fill_cache */));
-    }
+    ASSIGN_OR_RETURN(auto base_metadata,
+                     _tablet_mgr->get_tablet_metadata(_rowset->tablet_id(), _base_version, true /* fill_cache */));
     auto delvec_loader = std::make_unique<LakeDelvecLoader>(_tablet_mgr, _builder, true /* fill cache */, lake_io_opts,
                                                             std::move(base_metadata));
     // init params

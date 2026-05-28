@@ -659,7 +659,6 @@ Status MetaFileBuilder::_finalize_delvec(int64_t version, int64_t txn_id) {
 
     // 3. write to delvec file
     if (_buf.size() > 0) {
-        TRACE_COUNTER_SCOPE_LATENCY_US("finalize_delvec_write_us");
         TEST_SYNC_POINT_CALLBACK("MetaFileBuilder::_finalize_delvec", &_buf);
         auto delvec_file_name = gen_delvec_filename(txn_id);
         auto delvec_file_path = _tablet.delvec_location(delvec_file_name);
@@ -736,8 +735,7 @@ Status MetaFileBuilder::finalize(int64_t txn_id, bool skip_write_tablet_metadata
         // Put metadata into cache only.
         (void)_tablet.tablet_mgr()->cache_tablet_metadata(_tablet_meta);
     } else {
-        // Persist the updated tablet metadata — typically an OSS PUT
-        TRACE_COUNTER_SCOPE_LATENCY_US("tablet_metadata_write_us");
+        // Persist the updated tablet metadata
         RETURN_IF_ERROR(_tablet.put_metadata(_tablet_meta));
     }
 
