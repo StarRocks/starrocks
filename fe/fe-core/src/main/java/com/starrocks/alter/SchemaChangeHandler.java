@@ -2434,6 +2434,7 @@ public class SchemaChangeHandler extends AlterHandler {
             boolean enableFileBundling = false;
             TTabletMetaType metaType = TTabletMetaType.ENABLE_PERSISTENT_INDEX;
             String compactionStrategy = "";
+            FlatJsonConfig flatJsonConfig = null;
             if (properties.containsKey(PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX)) {
                 enablePersistentIndex = PropertyAnalyzer.analyzeBooleanProp(properties,
                         PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX, false);
@@ -2514,16 +2515,34 @@ public class SchemaChangeHandler extends AlterHandler {
                 return null;
             } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_CLOUD_NATIVE_FAST_SCHEMA_EVOLUTION_V2)) {
                 return processAlterCloudNativeFastSchemaEvolutionV2Property(db, olapTable, properties).orElse(null);
+            } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_ENABLE)
+                    || properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_NULL_FACTOR)
+                    || properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_SPARSITY_FACTOR)
+                    || properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_COLUMN_MAX)) {
+                FlatJsonConfig newConfig = olapTable.containsFlatJsonConfig()
+                        ? new FlatJsonConfig(olapTable.getFlatJsonConfig())
+                        : new FlatJsonConfig();
+                newConfig.buildFromProperties(properties);
+                newConfig.incVersion();
+                metaType = TTabletMetaType.FLAT_JSON_CONFIG;
+                flatJsonConfig = newConfig;
             } else {
                 throw new DdlException("does not support alter " + properties.entrySet().iterator().next().getKey() +
                         " in shared_data mode");
             }
 
             long timeoutSecond = PropertyAnalyzer.analyzeTimeout(properties, Config.alter_table_timeout_second);
-            alterMetaJob = new LakeTableAlterMetaJob(GlobalStateMgr.getCurrentState().getNextId(),
-                    db.getId(),
-                    olapTable.getId(), olapTable.getName(), timeoutSecond * 1000 /* should be ms*/,
-                    metaType, enablePersistentIndex, persistentIndexType, enableFileBundling, compactionStrategy);
+            if (metaType == TTabletMetaType.FLAT_JSON_CONFIG) {
+                alterMetaJob = new LakeTableAlterMetaJob(GlobalStateMgr.getCurrentState().getNextId(),
+                        db.getId(),
+                        olapTable.getId(), olapTable.getName(), timeoutSecond * 1000 /* should be ms*/,
+                        flatJsonConfig);
+            } else {
+                alterMetaJob = new LakeTableAlterMetaJob(GlobalStateMgr.getCurrentState().getNextId(),
+                        db.getId(),
+                        olapTable.getId(), olapTable.getName(), timeoutSecond * 1000 /* should be ms*/,
+                        metaType, enablePersistentIndex, persistentIndexType, enableFileBundling, compactionStrategy);
+            }
         } else {
             // shouldn't happen
             throw new DdlException("only support alter enable_persistent_index in shared_data mode");

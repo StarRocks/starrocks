@@ -27,6 +27,7 @@
 #include "gutil/strings/substitute.h"
 #include "runtime/current_thread.h"
 #include "runtime/runtime_state.h"
+#include "storage/primitive/flat_json_config.h"
 #include "storage/chunk_helper.h"
 #include "storage/lake/add_index_schema_change.h"
 #include "storage/lake/delta_writer.h"
@@ -573,6 +574,12 @@ Status SchemaChangeHandler::do_process_update_tablet_meta(const TTabletMetaInfo&
                                                            ? CompactionStrategyPB::DEFAULT
                                                            : CompactionStrategyPB::REAL_TIME;
         metadata_update_info->set_compaction_strategy(compaction_strategy);
+    }
+
+    if (tablet_meta_info.__isset.flat_json_config) {
+        FlatJsonConfig cfg;
+        cfg.update(tablet_meta_info.flat_json_config);
+        cfg.to_pb(metadata_update_info->mutable_flat_json_config());
     }
 
     RETURN_IF_ERROR(tablet.put_txn_log(std::move(txn_log)));

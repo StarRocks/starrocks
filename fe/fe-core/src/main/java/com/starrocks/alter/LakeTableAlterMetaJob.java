@@ -16,6 +16,7 @@ package com.starrocks.alter;
 
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.FlatJsonConfig;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PhysicalPartition;
@@ -42,6 +43,9 @@ public class LakeTableAlterMetaJob extends LakeTableAlterMetaJobBase {
     @SerializedName(value = "compactionStrategy")
     private String compactionStrategy;
 
+    @SerializedName(value = "flatJsonConfig")
+    private FlatJsonConfig flatJsonConfig;
+
     // for deserialization
     public LakeTableAlterMetaJob() {
         super(JobType.SCHEMA_CHANGE);
@@ -67,6 +71,13 @@ public class LakeTableAlterMetaJob extends LakeTableAlterMetaJobBase {
         this.compactionStrategy = compactionStrategy;
     }
 
+    public LakeTableAlterMetaJob(long jobId, long dbId, long tableId, String tableName,
+                                 long timeoutMs, FlatJsonConfig flatJsonConfig) {
+        super(jobId, JobType.SCHEMA_CHANGE, dbId, tableId, tableName, timeoutMs);
+        this.metaType = TTabletMetaType.FLAT_JSON_CONFIG;
+        this.flatJsonConfig = flatJsonConfig;
+    }
+
     protected LakeTableAlterMetaJob(LakeTableAlterMetaJob job) {
         super(job);
         this.metaType = job.metaType;
@@ -74,6 +85,7 @@ public class LakeTableAlterMetaJob extends LakeTableAlterMetaJobBase {
         this.persistentIndexType = job.persistentIndexType;
         this.enableFileBundling = job.enableFileBundling;
         this.compactionStrategy = job.compactionStrategy;
+        this.flatJsonConfig = job.flatJsonConfig == null ? null : new FlatJsonConfig(job.flatJsonConfig);
     }
 
     @Override
@@ -90,6 +102,10 @@ public class LakeTableAlterMetaJob extends LakeTableAlterMetaJobBase {
         if (metaType == TTabletMetaType.COMPACTION_STRATEGY) {
             return TabletMetadataUpdateAgentTaskFactory.createUpdateCompactionStrategyTask(nodeId, tablets,
                         compactionStrategy);
+        }
+        if (metaType == TTabletMetaType.FLAT_JSON_CONFIG) {
+            return TabletMetadataUpdateAgentTaskFactory.createFlatJsonConfigUpdateTask(nodeId, tablets,
+                        flatJsonConfig);
         }
         return null;
     }
@@ -123,6 +139,9 @@ public class LakeTableAlterMetaJob extends LakeTableAlterMetaJobBase {
                     String.valueOf(compactionStrategy));
             table.getTableProperty().buildCompactionStrategy();
         }
+        if (metaType == TTabletMetaType.FLAT_JSON_CONFIG && flatJsonConfig != null) {
+            table.setFlatJsonConfig(flatJsonConfig);
+        }
     }
 
     @Override
@@ -133,6 +152,7 @@ public class LakeTableAlterMetaJob extends LakeTableAlterMetaJobBase {
         this.persistentIndexType = other.persistentIndexType;
         this.enableFileBundling = other.enableFileBundling;
         this.compactionStrategy = other.compactionStrategy;
+        this.flatJsonConfig = other.flatJsonConfig;
     }
 
     @Override

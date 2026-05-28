@@ -30,7 +30,7 @@
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
 #include "runtime/snapshot_loader.h"
-#include "storage/flat_json_config.h"
+#include "storage/primitive/flat_json_config.h"
 #include "storage/lake/replication_txn_manager.h"
 #include "storage/lake/schema_change.h"
 #include "storage/lake/tablet_manager.h"
