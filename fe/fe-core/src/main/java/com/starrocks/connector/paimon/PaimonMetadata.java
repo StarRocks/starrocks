@@ -242,11 +242,6 @@ public class PaimonMetadata implements ConnectorMetadata {
             }
         } catch (Catalog.TableNotExistException e) {
             LOG.error("Failed to update partition info of paimon table {}.{}.", databaseName, tableName, e);
-        } catch (Exception e) {
-            LOG.error("Failed to update partition info of paimon table {}.{}.", databaseName, tableName, e);
-            throw new StarRocksConnectorException(
-                    String.format("Failed to update partition info of paimon table %s.%s: %s",
-                            databaseName, tableName, e.getMessage()), e);
         }
     }
 
