@@ -4147,8 +4147,7 @@ protected:
         // Build slot descriptors. Slot id <-> column id mapping mirrors LakePartialUpdateTestBase.
         _slots.emplace_back(0, "c0", TypeDescriptor{LogicalType::TYPE_INT});
         _slots.emplace_back(1, "v_int", TypeDescriptor{LogicalType::TYPE_INT});
-        _slots.emplace_back(2, "v_arr",
-                            TypeDescriptor::create_array_type(TypeDescriptor{LogicalType::TYPE_INT}));
+        _slots.emplace_back(2, "v_arr", TypeDescriptor::create_array_type(TypeDescriptor{LogicalType::TYPE_INT}));
 
         _slot_pointers_full.emplace_back(&_slots[0]);
         _slot_pointers_full.emplace_back(&_slots[1]);
@@ -4229,10 +4228,14 @@ protected:
         int c0_idx = -1, v_int_idx = -1, v_arr_idx = -1, c_new_idx = -1;
         for (size_t i = 0; i < tablet_schema->num_columns(); i++) {
             const auto& name = tablet_schema->column(i).name();
-            if (name == "c0") c0_idx = static_cast<int>(i);
-            else if (name == "v_int") v_int_idx = static_cast<int>(i);
-            else if (name == "v_arr") v_arr_idx = static_cast<int>(i);
-            else c_new_idx = static_cast<int>(i);
+            if (name == "c0")
+                c0_idx = static_cast<int>(i);
+            else if (name == "v_int")
+                v_int_idx = static_cast<int>(i);
+            else if (name == "v_arr")
+                v_arr_idx = static_cast<int>(i);
+            else
+                c_new_idx = static_cast<int>(i);
         }
         ASSERT_EQ(c0_idx, 0);
         ASSERT_EQ(c_new_idx, 1);
@@ -4290,10 +4293,14 @@ protected:
         int c0_idx = -1, c_new_idx = -1, v_int_idx = -1, v_arr_idx = -1;
         for (size_t i = 0; i < tablet_schema->num_columns(); i++) {
             const auto& name = tablet_schema->column(i).name();
-            if (name == "c0") c0_idx = static_cast<int>(i);
-            else if (name == "v_int") v_int_idx = static_cast<int>(i);
-            else if (name == "v_arr") v_arr_idx = static_cast<int>(i);
-            else c_new_idx = static_cast<int>(i);
+            if (name == "c0")
+                c0_idx = static_cast<int>(i);
+            else if (name == "v_int")
+                v_int_idx = static_cast<int>(i);
+            else if (name == "v_arr")
+                v_arr_idx = static_cast<int>(i);
+            else
+                c_new_idx = static_cast<int>(i);
         }
         ASSERT_EQ(c0_idx, 0);
         ASSERT_EQ(c_new_idx, 1);
@@ -4369,17 +4376,16 @@ TEST_F(LakePcuSchemaDriftTest, WriteThenAddColumnAfterPublish_ArrayCrashRegressi
         auto chunk = make_partial_chunk_v_arr(kChunkSize, /*scale=*/100);
         std::vector<uint32_t> indexes(kChunkSize);
         std::iota(indexes.begin(), indexes.end(), 0);
-        ASSIGN_OR_ABORT(auto delta_writer,
-                        DeltaWriterBuilder()
-                                .set_tablet_manager(_tablet_mgr.get())
-                                .set_tablet_id(tablet_id)
-                                .set_txn_id(pcu_txn_id)
-                                .set_partition_id(_partition_id)
-                                .set_mem_tracker(_mem_tracker.get())
-                                .set_schema_id(_tablet_schema->id())
-                                .set_slot_descriptors(&_slot_pointers_v_arr)
-                                .set_partial_update_mode(PartialUpdateMode::COLUMN_UPDATE_MODE)
-                                .build());
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(pcu_txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .set_slot_descriptors(&_slot_pointers_v_arr)
+                                                   .set_partial_update_mode(PartialUpdateMode::COLUMN_UPDATE_MODE)
+                                                   .build());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(chunk, indexes.data(), indexes.size()));
         ASSERT_OK(delta_writer->finish_with_txnlog());
@@ -4445,17 +4451,16 @@ TEST_F(LakePcuSchemaDriftTest, WriteThenAddColumnAfterPublish_FixedLengthDriftIs
         auto chunk = make_partial_chunk_v_int(kChunkSize, /*delta=*/200);
         std::vector<uint32_t> indexes(kChunkSize);
         std::iota(indexes.begin(), indexes.end(), 0);
-        ASSIGN_OR_ABORT(auto delta_writer,
-                        DeltaWriterBuilder()
-                                .set_tablet_manager(_tablet_mgr.get())
-                                .set_tablet_id(tablet_id)
-                                .set_txn_id(pcu_txn_id)
-                                .set_partition_id(_partition_id)
-                                .set_mem_tracker(_mem_tracker.get())
-                                .set_schema_id(_tablet_schema->id())
-                                .set_slot_descriptors(&_slot_pointers_v_int)
-                                .set_partial_update_mode(PartialUpdateMode::COLUMN_UPDATE_MODE)
-                                .build());
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(pcu_txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .set_slot_descriptors(&_slot_pointers_v_int)
+                                                   .set_partial_update_mode(PartialUpdateMode::COLUMN_UPDATE_MODE)
+                                                   .build());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(chunk, indexes.data(), indexes.size()));
         ASSERT_OK(delta_writer->finish_with_txnlog());
@@ -4536,18 +4541,17 @@ TEST_F(LakePcuSchemaDriftTest, ConditionalUpdateAfterAddColumn) {
         std::vector<uint32_t> indexes(kChunkSize);
         std::iota(indexes.begin(), indexes.end(), 0);
 
-        ASSIGN_OR_ABORT(auto delta_writer,
-                        DeltaWriterBuilder()
-                                .set_tablet_manager(_tablet_mgr.get())
-                                .set_tablet_id(tablet_id)
-                                .set_txn_id(pcu_txn_id)
-                                .set_partition_id(_partition_id)
-                                .set_mem_tracker(_mem_tracker.get())
-                                .set_schema_id(_tablet_schema->id())
-                                .set_slot_descriptors(&_slot_pointers_v_int)
-                                .set_partial_update_mode(PartialUpdateMode::COLUMN_UPDATE_MODE)
-                                .set_merge_condition("v_int")
-                                .build());
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(pcu_txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .set_slot_descriptors(&_slot_pointers_v_int)
+                                                   .set_partial_update_mode(PartialUpdateMode::COLUMN_UPDATE_MODE)
+                                                   .set_merge_condition("v_int")
+                                                   .build());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(chunk, indexes.data(), indexes.size()));
         ASSERT_OK(delta_writer->finish_with_txnlog());
@@ -4584,8 +4588,10 @@ TEST_F(LakePcuSchemaDriftTest, ConditionalUpdateAfterAddColumn) {
         auto chunk = ChunkFactory::new_chunk(*sch, 128);
         int c0_idx = -1, v_int_idx = -1;
         for (size_t i = 0; i < ts->num_columns(); i++) {
-            if (ts->column(i).name() == "c0") c0_idx = static_cast<int>(i);
-            else if (ts->column(i).name() == "v_int") v_int_idx = static_cast<int>(i);
+            if (ts->column(i).name() == "c0")
+                c0_idx = static_cast<int>(i);
+            else if (ts->column(i).name() == "v_int")
+                v_int_idx = static_cast<int>(i);
         }
         ASSERT_GE(c0_idx, 0);
         ASSERT_GE(v_int_idx, 0);
@@ -4647,17 +4653,16 @@ TEST_F(LakePcuSchemaDriftTest, WriteThenDropTargetColumn_ReturnsInternalError) {
         auto chunk = make_partial_chunk_v_arr(kChunkSize, 100);
         std::vector<uint32_t> indexes(kChunkSize);
         std::iota(indexes.begin(), indexes.end(), 0);
-        ASSIGN_OR_ABORT(auto delta_writer,
-                        DeltaWriterBuilder()
-                                .set_tablet_manager(_tablet_mgr.get())
-                                .set_tablet_id(tablet_id)
-                                .set_txn_id(pcu_txn_id)
-                                .set_partition_id(_partition_id)
-                                .set_mem_tracker(_mem_tracker.get())
-                                .set_schema_id(_tablet_schema->id())
-                                .set_slot_descriptors(&_slot_pointers_v_arr)
-                                .set_partial_update_mode(PartialUpdateMode::COLUMN_UPDATE_MODE)
-                                .build());
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(pcu_txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .set_slot_descriptors(&_slot_pointers_v_arr)
+                                                   .set_partial_update_mode(PartialUpdateMode::COLUMN_UPDATE_MODE)
+                                                   .build());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(chunk, indexes.data(), indexes.size()));
         ASSERT_OK(delta_writer->finish_with_txnlog());

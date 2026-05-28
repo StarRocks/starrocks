@@ -366,9 +366,9 @@ Status ColumnModePartialUpdateHandler::execute(const RowsetUpdateStateParams& pa
         unique_update_column_ids.push_back(uid);
 
         if (cid != static_cast<ColumnId>(txn_meta.partial_update_column_ids(i))) {
-            LOG(INFO) << "lake pcu schema drift detected: tablet=" << params.tablet->tablet_id()
-                      << " uid=" << uid << " frozen_cid=" << txn_meta.partial_update_column_ids(i)
-                      << " current_cid=" << cid << " schema_id=" << params.tablet_schema->id();
+            LOG(INFO) << "lake pcu schema drift detected: tablet=" << params.tablet->tablet_id() << " uid=" << uid
+                      << " frozen_cid=" << txn_meta.partial_update_column_ids(i) << " current_cid=" << cid
+                      << " schema_id=" << params.tablet_schema->id();
         }
     }
 
