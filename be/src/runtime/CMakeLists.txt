@@ -31,7 +31,6 @@ set(RUNTIME_CORE_FILES
     runtime_filter_cache.cpp
     bucket_aware_partition.cpp
     query_statistics.cpp
-    record_batch_queue.cpp
     runtime_metrics.cpp
     stream_load/stream_load_metrics.cpp
     global_dict/decoder.cpp
@@ -84,13 +83,11 @@ target_link_libraries(RuntimeEnv PUBLIC
 
 set(RUNTIME_FILES
     broker_mgr.cpp
-    buffer_control_block.cpp
     lookup_stream_mgr.cpp
     descriptors_ext.cpp
     exec_env.cpp
     jdbc_driver_manager.cpp
     plan_fragment_executor.cpp
-    result_buffer_mgr.cpp
     runtime_state_helper.cpp
     rejected_record_writer.cpp
     rejected_record_sync_daemon.cpp
@@ -117,7 +114,6 @@ set(RUNTIME_FILES
     routine_load/data_consumer_pool.cpp
     routine_load/routine_load_task_executor.cpp
     small_file_mgr.cpp
-    result_queue_mgr.cpp
     external_scan_context_mgr.cpp
     tablets_channel.cpp
     runtime_filter_worker.cpp

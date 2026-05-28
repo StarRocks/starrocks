@@ -37,21 +37,21 @@
 #include <memory>
 
 #include "common/config_exec_flow_fwd.h"
+#include "compute_env/result/buffer_control_block.h"
 #include "exprs/expr.h"
 #include "exprs/expr_executor.h"
 #include "exprs/expr_factory.h"
-#include "runtime/buffer_control_block.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
 #ifndef __APPLE__
 #include "exec/data_sinks/file_result_writer.h"
 #endif
 #include "base/uid_util.h"
+#include "compute_env/result/result_buffer_mgr.h"
 #include "exec/data_sinks/mysql_result_writer.h"
 #include "exec/data_sinks/statistic_result_writer.h"
 #include "exec/data_sinks/variable_result_writer.h"
 #include "runtime/mem_tracker.h"
-#include "runtime/result_buffer_mgr.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks {

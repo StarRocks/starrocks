@@ -21,10 +21,10 @@
 #include "base/testutil/assert.h"
 #include "base/uid_util.h"
 #include "column/vectorized_fwd.h"
+#include "compute_env/result/buffer_control_block.h"
 #include "exprs/column_ref.h"
 #include "exprs/expr_context.h"
 #include "exprs/expr_executor.h"
-#include "runtime/buffer_control_block.h"
 #include "runtime/runtime_state.h"
 #include "storage/chunk_helper.h"
 

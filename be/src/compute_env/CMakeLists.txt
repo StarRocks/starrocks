@@ -35,6 +35,10 @@ ADD_BE_LIB(ComputeEnv
     data_stream/sender_queue.cpp
     pipeline/driver_limiter.cpp
     pipeline/observer.cpp
+    result/buffer_control_block.cpp
+    result/record_batch_queue.cpp
+    result/result_buffer_mgr.cpp
+    result/result_queue_mgr.cpp
     ${COMPUTE_ENV_SORTING_FILES}
 )
 

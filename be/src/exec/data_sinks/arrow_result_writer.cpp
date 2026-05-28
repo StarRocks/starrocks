@@ -21,13 +21,13 @@
 #include <util/arrow/starrocks_column_to_arrow.h>
 
 #include "column/const_column.h"
+#include "compute_env/result/buffer_control_block.h"
+#include "compute_env/result/result_buffer_mgr.h"
 #include "exprs/cast_expr.h"
 #include "exprs/expr.h"
 #include "rapidjson/writer.h"
-#include "runtime/buffer_control_block.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
-#include "runtime/result_buffer_mgr.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks {

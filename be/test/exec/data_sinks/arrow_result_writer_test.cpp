@@ -21,10 +21,10 @@
 #include <string>
 
 #include "common/runtime_profile.h"
-#include "runtime/buffer_control_block.h"
+#include "compute_env/result/buffer_control_block.h"
+#include "compute_env/result/result_buffer_mgr.h"
 #include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
-#include "runtime/result_buffer_mgr.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks {

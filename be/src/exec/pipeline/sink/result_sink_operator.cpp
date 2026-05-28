@@ -17,6 +17,8 @@
 #include <arrow/type.h>
 
 #include "common/config_exec_flow_fwd.h"
+#include "compute_env/result/buffer_control_block.h"
+#include "compute_env/result/result_buffer_mgr.h"
 #include "exec/data_sinks/arrow_result_writer.h"
 #include "exec/data_sinks/customized_result_writer.h"
 #include "exec/data_sinks/http_result_writer.h"
@@ -28,10 +30,8 @@
 #include "exprs/expr.h"
 #include "exprs/expr_executor.h"
 #include "exprs/expr_factory.h"
-#include "runtime/buffer_control_block.h"
 #include "runtime/exec_env.h"
 #include "runtime/query_statistics.h"
-#include "runtime/result_buffer_mgr.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks::pipeline {

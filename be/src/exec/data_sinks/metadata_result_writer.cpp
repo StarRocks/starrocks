@@ -19,9 +19,9 @@
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
 #include "common/util/thrift_util.h"
+#include "compute_env/result/buffer_control_block.h"
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
-#include "runtime/buffer_control_block.h"
 
 namespace starrocks {
 

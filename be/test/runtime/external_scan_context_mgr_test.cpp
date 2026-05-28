@@ -39,31 +39,36 @@
 #include <memory>
 
 #include "common/status.h"
+#include "compute_env/compute_env.h"
+#include "compute_env/result/result_queue_mgr.h"
 #include "exec/pipeline/query_context.h"
 #include "runtime/exec_env.h"
 #include "runtime/fragment_mgr.h"
-#include "runtime/result_queue_mgr.h"
 
 namespace starrocks {
 
 class ExternalScanContextMgrTest : public testing::Test {
 public:
-    ExternalScanContextMgrTest() {
-        auto* fragment_mgr = new FragmentMgr(&_exec_env, nullptr);
-        auto* result_queue_mgr = new ResultQueueMgr();
-        auto* query_ctx_mgr = new pipeline::QueryContextManager(5);
-        _exec_env._fragment_mgr = fragment_mgr;
-        _exec_env._result_queue_mgr = result_queue_mgr;
-        _exec_env._query_context_mgr = query_ctx_mgr;
-    }
-    ~ExternalScanContextMgrTest() override {
-        delete _exec_env._fragment_mgr;
-        delete _exec_env._result_queue_mgr;
-        delete _exec_env._query_context_mgr;
-    }
+    ExternalScanContextMgrTest() = default;
+    ~ExternalScanContextMgrTest() override = default;
 
 protected:
-    void SetUp() override {}
+    void SetUp() override {
+        ComputeEnvOptions options;
+        options.max_num_pipeline_drivers = 1;
+        ASSERT_TRUE(_exec_env.compute_env()->init(options).ok());
+        _exec_env._fragment_mgr = new FragmentMgr(&_exec_env, nullptr);
+        _exec_env._query_context_mgr = new pipeline::QueryContextManager(5);
+        _exec_env._refresh_service_contexts();
+    }
+
+    void TearDown() override {
+        delete _exec_env._fragment_mgr;
+        _exec_env._fragment_mgr = nullptr;
+        delete _exec_env._query_context_mgr;
+        _exec_env._query_context_mgr = nullptr;
+        _exec_env.compute_env()->destroy();
+    }
 
 private:
     ExecEnv _exec_env;

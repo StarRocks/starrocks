@@ -17,6 +17,8 @@
 #include <utility>
 
 #include "common/config_exec_flow_fwd.h"
+#include "compute_env/result/buffer_control_block.h"
+#include "compute_env/result/result_buffer_mgr.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/query_context.h"
 #include "exec/pipeline/sink/sink_io_buffer.h"
@@ -25,10 +27,8 @@
 #include "exprs/expr.h"
 #include "exprs/expr_executor.h"
 #include "exprs/expr_factory.h"
-#include "runtime/buffer_control_block.h"
 #include "runtime/exec_env.h"
 #include "runtime/query_statistics.h"
-#include "runtime/result_buffer_mgr.h"
 #include "runtime/runtime_state.h"
 #include "udf/java/utils.h"
 
