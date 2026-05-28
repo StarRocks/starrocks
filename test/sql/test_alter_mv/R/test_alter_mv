@@ -61,6 +61,9 @@ REFRESH DEFERRED MANUAL
 AS SELECT k1, k2, k3, k4, k5, k6, k7, k8, k9, k10, k11, k12, k13 FROM t1;
 -- result:
 -- !result
+admin set frontend config("enable_active_materialized_view_schema_strict_check"="false");
+-- result:
+-- !result
 ALTER TABLE t1 MODIFY COLUMN k13 decimal(32, 10);
 -- result:
 -- !result
