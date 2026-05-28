@@ -16,25 +16,17 @@
 
 #include <gtest/gtest.h>
 
-<<<<<<< HEAD:be/test/exec/tablet_sink_index_channel_test.cpp
-=======
 #include <atomic>
 #include <thread>
 
-#include "base/testutil/assert.h"
-#include "base/testutil/sync_point.h"
-#include "base/utility/defer_op.h"
-#include "common/config_exec_fwd.h"
-#include "common/config_ingest_fwd.h"
-#include "common/util/thrift_util.h"
-#include "exec/data_sinks/tablet_sink.h"
 #include "exec/pipeline/query_context.h"
->>>>>>> 777de828e2 ([BugFix] Fix race condition in TabletSinkSender::_send_chunk_by_node (#73820)):be/test/exec/data_sinks/tablet_sink_index_channel_test.cpp
 #include "exec/tablet_info.h"
 #include "exec/tablet_sink.h"
 #include "runtime/descriptor_helper.h"
 #include "storage/chunk_helper.h"
 #include "testutil/assert.h"
+#include "testutil/sync_point.h"
+#include "util/defer_op.h"
 #include "util/thrift_util.h"
 
 namespace starrocks {
