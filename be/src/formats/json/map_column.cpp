@@ -14,7 +14,7 @@
 
 #include "column/map_column.h"
 
-#include "common/simdjson_util.h"
+#include "util/simdjson_util.h"
 #include "fmt/format.h"
 #include "formats/json/map_column.h"
 #include "formats/json/nullable_column.h"
