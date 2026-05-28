@@ -16,7 +16,10 @@
 
 #include <gtest/gtest.h>
 
+#include <deque>
+#include <future>
 #include <utility>
+#include <vector>
 
 #include "common/status.h"
 #include "fs/fs.h"
@@ -63,9 +66,28 @@ private:
     uint64_t _row_count = 0;
 };
 
-// Iterator for rows mapper file
-// WHY: Streaming read of mapper file to avoid loading entire mapping into memory,
-// which is critical for large compactions (can save GBs of memory).
+// Iterator for rows mapper file.
+//
+// Two operating modes:
+//
+//   (1) Sequential fallback (no `prepare_segments` call): every `next_values`
+//       does a direct `read_at_fully` on the iterator's RAF. Safe and simple
+//       but pays per-call OSS RPC cost.
+//
+//   (2) Pipelined per-segment (after `prepare_segments(segment_row_counts)`):
+//       caller pre-declares every segment's row count. The iterator submits the
+//       first K (= config::lake_rows_mapper_read_parallelism) per-segment reads
+//       to `pk_index_execution_thread_pool` immediately, each on its own
+//       RandomAccessFile so the underlying file class never sees concurrent
+//       access. `next_values(seg_n)` blocks only on the front in-flight chunk,
+//       swaps its owned vector into the caller's `rssid_rowids` (no memcpy),
+//       and submits chunk N+K. This pipelines the caller's per-segment
+//       processing with the still-outstanding remote reads.
+//
+// Memory bound (pipelined mode): K × max(per-segment-chunk-bytes). Scales with
+// segment count: many small segments → small footprint; few huge segments →
+// approaches whole-file footprint.
+//
 class RowsMapperIterator {
 public:
     RowsMapperIterator() = default;
@@ -74,6 +96,13 @@ public:
     // IMPORTANT: Now accepts FileInfo instead of string to support both local and remote storage.
     // For remote storage (S3/HDFS), having file size upfront avoids expensive get_size() calls.
     Status open(const FileInfo& filename);
+    // Switch the iterator into pipelined per-segment mode (optional). Caller
+    // declares every following `next_values(fetch_cnt)` call's `fetch_cnt`
+    // upfront in order. The iterator immediately submits the first
+    // min(K, segments) parallel reads — one per declared segment, each on its
+    // own RandomAccessFile. Sum of `segment_row_counts` must equal the file's
+    // total row count.
+    Status prepare_segments(const std::vector<size_t>& segment_row_counts);
     // get `fetch_cnt` rows and move to next position
     Status next_values(size_t fetch_cnt, std::vector<uint64_t>* rssid_rowids);
     // Must be called when iterator end.
@@ -82,28 +111,41 @@ public:
 private:
     inline static const size_t EACH_ROW_SIZE = 8; // 8 bytes
 
-private:
-    // Refill `_buf` starting from offset `_pos * EACH_ROW_SIZE`.
-    // Reads min(remaining_body_bytes, config::lake_rows_mapper_read_buf_bytes) at once.
-    // Why: When `.lcrm` files live on remote storage (S3/HDFS), each `read_at_fully`
-    // costs ~hundreds of ms of RPC roundtrip — small per-segment reads turn into a
-    // multi-second tail in COMPACTION publish. A bounded read-ahead buffer collapses
-    // the N small remote reads into ⌈body_size / buf_size⌉ large sequential reads.
-    Status _refill_buf();
+    // Submit the read for `_next_to_submit` if there's still a declared segment
+    // remaining. Each submission opens its own RandomAccessFile so concurrent
+    // tasks never touch shared file-class state.
+    Status _maybe_submit_next();
+    // Block on every still-in-flight chunk. Called from the destructor (tasks
+    // hold raw pointers into chunk-owned vectors) and from any error path that
+    // wants to release pending reads cleanly.
+    void _drain_in_flight();
+
+    struct InFlightChunk {
+        size_t segment_idx = 0;
+        size_t row_count = 0;
+        int64_t file_offset = 0;           // byte offset within the file's body
+        std::vector<uint64_t> data;        // owned, sized to row_count; SWAPPED into caller on consume
+        std::unique_ptr<RandomAccessFile> rf; // own RAF — no shared file-class state across tasks
+        std::shared_future<Status> future;
+    };
 
 private:
-    std::unique_ptr<RandomAccessFile> _rfile;
+    std::unique_ptr<RandomAccessFile> _rfile; // sequential-fallback handle; also used for footer reads
+    std::string _path;                         // remembered so per-chunk RAFs can be opened in pipelined mode
     uint64_t _row_count = 0;
     // Point to the next position that we want to read
     uint64_t _pos = 0;
     // Current checksum and expected checksum, will check if mismatch when iterator end
     uint32_t _expected_checksum = 0;
     uint32_t _current_checksum = 0;
-    // Sequential read-ahead buffer (sized by `config::lake_rows_mapper_read_buf_bytes`).
-    // Holds [_buf_pos, _buf_pos + _buf.size() / EACH_ROW_SIZE) rows.
-    std::string _buf;
-    // Row index at which `_buf` starts (i.e. the row corresponding to byte 0 of `_buf`).
-    uint64_t _buf_pos = 0;
+
+    // Pipelined per-segment mode state (populated by `prepare_segments`).
+    std::vector<size_t> _segment_sizes;
+    std::vector<int64_t> _segment_offsets; // byte offset of segment i within the file
+    size_t _next_to_submit = 0;             // next segment index to submit
+    size_t _next_to_serve = 0;              // next segment index to serve via next_values
+    std::deque<InFlightChunk> _in_flight;   // FIFO of in-flight per-segment chunks
+    bool _pipelined = false;                // true after a successful prepare_segments
 };
 
 // rows mapper file's name for lake table

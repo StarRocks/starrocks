@@ -21,9 +21,11 @@
 #include "base/debug/trace.h"
 #include "base/hash/crc32c.h"
 #include "common/config_primary_key_fwd.h"
+#include "common/thread/threadpool.h"
 #include "fs/fs.h"
 #include "fs/fs_factory.h"
 #include "lake/filenames.h"
+#include "runtime/env/global_env.h"
 #include "storage/data_dir.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/storage_engine.h"
@@ -83,6 +85,9 @@ FileInfo RowsMapperBuilder::file_info() const {
 }
 
 RowsMapperIterator::~RowsMapperIterator() {
+    // Background per-segment reads hold raw pointers into chunk-owned vectors
+    // and per-chunk RAFs; wait them out before tearing down state.
+    _drain_in_flight();
     if (_rfile != nullptr) {
         const std::string filename = _rfile->filename();
         _rfile.reset(nullptr);
@@ -106,6 +111,7 @@ RowsMapperIterator::~RowsMapperIterator() {
 
 // Open file
 Status RowsMapperIterator::open(const FileInfo& filename) {
+    _path = filename.path;
     ASSIGN_OR_RETURN(auto fs, FileSystemFactory::CreateSharedFromString(filename.path));
     // The .lcrm rows-mapper file is read exactly once during compaction publish and
     // then never accessed again — caching it locally is pure cache pollution that
@@ -146,6 +152,106 @@ Status RowsMapperIterator::open(const FileInfo& filename) {
     return Status::OK();
 }
 
+Status RowsMapperIterator::prepare_segments(const std::vector<size_t>& segment_row_counts) {
+    // One-shot configuration: must be called before any `next_values`.
+    if (_pos != 0 || _pipelined) {
+        return Status::InternalError("RowsMapperIterator::prepare_segments must be called once, before next_values");
+    }
+    size_t sum = 0;
+    for (auto n : segment_row_counts) sum += n;
+    if (sum != _row_count) {
+        return Status::Corruption(fmt::format(
+                "RowsMapperIterator: declared segment-row-count sum {} != file row count {}", sum, _row_count));
+    }
+    _segment_sizes = segment_row_counts;
+    _segment_offsets.resize(segment_row_counts.size());
+    int64_t offset = 0;
+    for (size_t i = 0; i < segment_row_counts.size(); ++i) {
+        _segment_offsets[i] = offset;
+        offset += static_cast<int64_t>(segment_row_counts[i]) * EACH_ROW_SIZE;
+    }
+    _pipelined = true;
+    _next_to_submit = 0;
+    _next_to_serve = 0;
+
+    // Submit the first K chunks immediately so the caller can pipeline the
+    // per-segment processing of segment_0 against the still-outstanding reads
+    // for segments 1..K-1.
+    const int32_t K = std::max(1, config::lake_rows_mapper_read_parallelism);
+    for (int32_t i = 0; i < K; ++i) {
+        if (_next_to_submit >= _segment_sizes.size()) break;
+        RETURN_IF_ERROR(_maybe_submit_next());
+    }
+    return Status::OK();
+}
+
+Status RowsMapperIterator::_maybe_submit_next() {
+    if (_next_to_submit >= _segment_sizes.size()) return Status::OK();
+    const size_t seg = _next_to_submit++;
+    const size_t row_count = _segment_sizes[seg];
+
+    InFlightChunk chunk;
+    chunk.segment_idx = seg;
+    chunk.row_count = row_count;
+    chunk.file_offset = _segment_offsets[seg];
+
+    if (row_count == 0) {
+        // Empty segment — no read needed. Build a ready future returning OK so the
+        // consumer can still pop it uniformly.
+        std::promise<Status> p;
+        p.set_value(Status::OK());
+        chunk.future = p.get_future().share();
+        _in_flight.push_back(std::move(chunk));
+        return Status::OK();
+    }
+
+    // Each in-flight chunk owns its own RandomAccessFile so concurrent reads never
+    // touch shared file-class state (the underlying starlet wrapper has been
+    // observed to crash under concurrent access on the same handle).
+    ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(_path));
+    RandomAccessFileOptions opts;
+    opts.skip_fill_local_cache = true;
+    ASSIGN_OR_RETURN(chunk.rf, fs->new_random_access_file(opts, _path));
+
+    chunk.data.resize(row_count);
+
+    auto promise = std::make_shared<std::promise<Status>>();
+    chunk.future = promise->get_future().share();
+
+    auto* rf_raw = chunk.rf.get();
+    uint64_t* data_raw = chunk.data.data();
+    const size_t bytes = row_count * EACH_ROW_SIZE;
+    const int64_t off = chunk.file_offset;
+
+    _in_flight.push_back(std::move(chunk));
+
+    auto* pool = GlobalEnv::GetInstance()->pk_index_execution_thread_pool();
+    if (pool == nullptr) {
+        // Pool unavailable — execute inline so the promise is always satisfied.
+        promise->set_value(rf_raw->read_at_fully(off, data_raw, bytes));
+        return Status::OK();
+    }
+    auto submit_st = pool->submit_func([promise, rf_raw, data_raw, off, bytes]() {
+        promise->set_value(rf_raw->read_at_fully(off, data_raw, bytes));
+    });
+    if (!submit_st.ok()) {
+        // submit_func failed — execute inline so the promise still resolves
+        // (otherwise `next_values` would block forever waiting on it).
+        promise->set_value(rf_raw->read_at_fully(off, data_raw, bytes));
+    }
+    return Status::OK();
+}
+
+void RowsMapperIterator::_drain_in_flight() {
+    // Wait on every still-pending chunk. Tasks hold raw pointers into chunk-owned
+    // vectors / RAFs that are about to be destroyed.
+    while (!_in_flight.empty()) {
+        auto& front = _in_flight.front();
+        (void)front.future.get();
+        _in_flight.pop_front();
+    }
+}
+
 Status RowsMapperIterator::next_values(size_t fetch_cnt, std::vector<uint64_t>* rssid_rowids) {
     if (fetch_cnt == 0) {
         // No need to fetch
@@ -155,50 +261,36 @@ Status RowsMapperIterator::next_values(size_t fetch_cnt, std::vector<uint64_t>* 
         return Status::EndOfFile(fmt::format("RowsMapperIterator end of file. position/fetch cnt/row count: {}/{}/{}",
                                              _pos, fetch_cnt, _row_count));
     }
-    rssid_rowids->resize(fetch_cnt);
 
-    // Read-ahead path: serve from `_buf` whenever the requested slice fits inside
-    // the currently-buffered window [_buf_pos, _buf_pos + _buf.size()/EACH_ROW_SIZE).
-    // For huge single fetches that exceed the buffer's capacity, fall through to
-    // the original direct read_at_fully so behaviour stays correct under any tuning.
-    const size_t need_bytes = fetch_cnt * EACH_ROW_SIZE;
-    if (need_bytes > _buf.size() && need_bytes > static_cast<size_t>(config::lake_rows_mapper_read_buf_bytes)) {
-        // Caller requested more than one buffer's worth in a single call — bypass
-        // the buffer to avoid serving a partial slice. Rare in practice (per-segment
-        // fetches are bounded by segment row count).
-        RETURN_IF_ERROR(_rfile->read_at_fully(_pos * EACH_ROW_SIZE, rssid_rowids->data(), need_bytes));
-    } else {
-        // Check whether the requested range lies fully inside the current buffer;
-        // refill if not (also covers the first call where _buf is empty).
-        const uint64_t buf_end_row = _buf_pos + _buf.size() / EACH_ROW_SIZE;
-        if (_buf.empty() || _pos < _buf_pos || _pos + fetch_cnt > buf_end_row) {
-            RETURN_IF_ERROR(_refill_buf());
+    if (_pipelined) {
+        // Pipelined mode: caller must consume segments in the order declared by
+        // prepare_segments, with `fetch_cnt` matching `_segment_sizes[_next_to_serve]`.
+        if (_next_to_serve >= _segment_sizes.size() || fetch_cnt != _segment_sizes[_next_to_serve]) {
+            return Status::InternalError(fmt::format(
+                    "RowsMapperIterator pipelined consume mismatch: next_to_serve={} fetch_cnt={} expected={}",
+                    _next_to_serve, fetch_cnt,
+                    _next_to_serve < _segment_sizes.size() ? _segment_sizes[_next_to_serve] : 0));
         }
-        const size_t off_in_buf = (_pos - _buf_pos) * EACH_ROW_SIZE;
-        memcpy(rssid_rowids->data(), _buf.data() + off_in_buf, need_bytes);
+        // Block on the front chunk only; later chunks keep downloading.
+        auto& front = _in_flight.front();
+        RETURN_IF_ERROR(front.future.get());
+        // O(1) swap — no memcpy. Caller gets ownership of the read data; the
+        // chunk's now-empty vector goes away with `pop_front` below.
+        rssid_rowids->swap(front.data);
+        _in_flight.pop_front();
+        ++_next_to_serve;
+        // Refill the pipeline: one chunk consumed, submit the next-after-K-th
+        // segment so K reads stay in flight (subject to remaining segments).
+        RETURN_IF_ERROR(_maybe_submit_next());
+    } else {
+        // Sequential fallback: single direct read into the caller's buffer.
+        rssid_rowids->resize(fetch_cnt);
+        RETURN_IF_ERROR(_rfile->read_at_fully(static_cast<int64_t>(_pos) * EACH_ROW_SIZE, rssid_rowids->data(),
+                                              fetch_cnt * EACH_ROW_SIZE));
     }
 
     _current_checksum = crc32c::Extend(_current_checksum, (const char*)rssid_rowids->data(), rssid_rowids->size() * 8);
     _pos += fetch_cnt;
-    return Status::OK();
-}
-
-Status RowsMapperIterator::_refill_buf() {
-    // Refill aligned at `_pos`. Reading from `_pos` rather than the previous buffer's
-    // end is harmless given the sequential access pattern (_pos only ever advances)
-    // and is robust if the caller ever skips a range.
-    const uint64_t remaining_rows = _row_count - _pos;
-    const uint64_t buf_rows =
-            std::min(remaining_rows, static_cast<uint64_t>(config::lake_rows_mapper_read_buf_bytes) / EACH_ROW_SIZE);
-    if (buf_rows == 0) {
-        _buf.clear();
-        _buf_pos = _pos;
-        return Status::OK();
-    }
-    const size_t read_bytes = buf_rows * EACH_ROW_SIZE;
-    _buf.resize(read_bytes);
-    RETURN_IF_ERROR(_rfile->read_at_fully(_pos * EACH_ROW_SIZE, _buf.data(), read_bytes));
-    _buf_pos = _pos;
     return Status::OK();
 }
 

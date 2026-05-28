@@ -178,6 +178,17 @@ Status PrimaryKeyCompactionConflictResolver::execute_without_update_index() {
     RETURN_IF_ERROR(segment_iterator(
             [&](const CompactConflictResolveParams& params, const std::vector<std::shared_ptr<Segment>>& segments,
                 const std::function<void(uint32_t, const DelVectorPtr&, uint32_t)>& handle_delvec_result_func) {
+                // Pre-declare every segment's row count so the iterator can fire
+                // up to K parallel per-segment reads (each on its own RAF) and
+                // pipeline our processing of segment N against the still-pending
+                // downloads for segments N+1..N+K-1.
+                std::vector<size_t> per_segment_rows;
+                per_segment_rows.reserve(segments.size());
+                for (const auto& seg : segments) {
+                    per_segment_rows.push_back(seg->num_rows());
+                }
+                RETURN_IF_ERROR(mapper_iter.prepare_segments(per_segment_rows));
+
                 std::map<uint32_t, DelVectorPtr> rssid_to_delvec;
                 for (size_t segment_id = 0; segment_id < segments.size(); segment_id++) {
                     RETURN_IF_ERROR(breakpoint_check());
