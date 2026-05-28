@@ -34,7 +34,11 @@
 
 #include "runtime/load_channel.h"
 
+#include <bthread/bthread.h>
+
+#include <chrono>
 #include <memory>
+#include <random>
 
 #include "base/compression/block_compression.h"
 #include "base/container/lru_cache.h"
@@ -135,6 +139,30 @@ void LoadChannel::open(const LoadChannelOpenContext& open_context) {
 
     _last_updated_time.store(time(nullptr), std::memory_order_relaxed);
     bool is_lake_tablet = request.has_is_lake_tablet() && request.is_lake_tablet();
+
+    // === REPRO ONLY: lottery delay to force per-BE different first-opener ===
+    // Each storage CN picks ONE random "lucky sender_id" at process startup. Only that
+    // sender's lake open is let through unblocked; every other sender sleeps 500ms.
+    // Different CNs roll different randoms via std::random_device → different lucky
+    // senders → different first-opener on each CN → multi-coordinator race → multiple
+    // OlapTableSinks write the same shared-data OSS combined_txn_log → partial file.
+    // NOT for production.
+    {
+        static int32_t lucky_sender = []() {
+            std::random_device rd;
+            std::mt19937 gen(rd());
+            int32_t k = std::uniform_int_distribution<int32_t>(0, 31)(gen);
+            LOG(WARNING) << "[REPRO] lottery lucky_sender = " << k
+                         << " (this CN will only let sender_id==" << k << " open without delay)";
+            return k;
+        }();
+        if (is_lake_tablet && request.has_sender_id() && request.sender_id() != lucky_sender &&
+            request.has_lake_tablet_params() &&
+            request.lake_tablet_params().enable_per_partition_coordinator()) {
+            bthread_usleep(500 * 1000);
+        }
+    }
+    // === END REPRO ===
 
     Status st = Status::OK();
     TabletsChannelKey key(request.id(), request.sink_id(), request.index_id());
