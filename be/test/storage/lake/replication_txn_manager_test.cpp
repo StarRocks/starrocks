@@ -32,6 +32,7 @@
 #include "platform/store_path.h"
 #include "runtime/exec_env.h"
 #include "storage/chunk_helper.h"
+#include "storage/del_file_stream_converter.h"
 #include "storage/delta_column_group.h"
 #include "storage/lake/filenames.h"
 #include "storage/lake/fixed_location_provider.h"
@@ -887,54 +888,95 @@ TEST_F(LakeReplicationTxnManagerStaticFunctionTest, test_prepare_del_transcode_c
     ASSERT_TRUE(ctx_or.ok()) << ctx_or.status();
 }
 
-// check_pk_encoding_compat: non-PK target -> OK.
-TEST_F(LakeReplicationTxnManagerStaticFunctionTest, test_lake_to_lake_compat_non_pk) {
-    auto src = make_non_pk_tablet_metadata(1);
-    auto tgt = make_non_pk_tablet_metadata(2);
-    auto st = lake::LakeReplicationTxnManager::check_pk_encoding_compat(1, 2, src, tgt);
-    EXPECT_TRUE(st.ok()) << st;
+// build_file_converters: V1→V2 on single INT PK produces DelFileStreamConverter for .del files,
+// plain FileStreamConverter for .dat files, and returns nullptr for unknown files.
+TEST_F(LakeReplicationTxnManagerStaticFunctionTest, test_build_file_converters_del_transcode_v1_to_v2) {
+    auto target = make_pk_tablet_metadata(1, PrimaryKeyEncodingTypePB::PK_ENCODING_TYPE_V2, {"INT"});
+    auto source = make_pk_tablet_metadata(2, PrimaryKeyEncodingTypePB::PK_ENCODING_TYPE_V1, {"INT"});
+    auto ctx_or = lake::ReplicationTxnManager::prepare_del_transcode_context(target, source.schema());
+    ASSERT_TRUE(ctx_or.ok()) << ctx_or.status();
+    auto& ctx = ctx_or.value();
+    ASSERT_NE(nullptr, ctx.pkey_schema);
+
+    // Set up minimal environment for build_file_converters
+    std::string test_dir = config::storage_root_path + "/build_file_converters_test";
+    auto location_provider = std::make_shared<lake::FixedLocationProvider>(test_dir);
+    ASSERT_TRUE(FileSystem::Default()->create_dir_recursive(location_provider->segment_root_location(1)).ok());
+    auto update_manager = std::make_unique<lake::UpdateManager>(location_provider, nullptr);
+    auto tablet_manager = std::make_unique<lake::TabletManager>(location_provider, update_manager.get(), 16384);
+
+    TReplicateSnapshotRequest request;
+    request.tablet_id = 1;
+    request.transaction_id = 100;
+    request.src_visible_version = 2;
+
+    std::unordered_map<std::string, std::pair<std::string, FileEncryptionPair>> filename_map;
+    filename_map["src_0.del"] = {lake::gen_del_filename(100), FileEncryptionPair()};
+    filename_map["src_0.dat"] = {lake::gen_segment_filename(100), FileEncryptionPair()};
+
+    std::unordered_map<uint32_t, uint32_t> column_unique_id_map;
+    std::vector<std::string> files_to_delete;
+
+    auto converters = lake::ReplicationTxnManager::build_file_converters(
+            tablet_manager.get(), request, filename_map, column_unique_id_map, files_to_delete, ctx.pkey_schema,
+            ctx.source_encoding, ctx.target_encoding);
+
+    // .del file should produce a DelFileStreamConverter
+    auto del_converter_or = converters("src_0.del", 100);
+    ASSERT_TRUE(del_converter_or.ok()) << del_converter_or.status();
+    ASSERT_NE(nullptr, del_converter_or.value());
+    EXPECT_NE(nullptr, dynamic_cast<DelFileStreamConverter*>(del_converter_or.value().get()));
+
+    // .dat file (no column_unique_id_map) should produce a plain FileStreamConverter
+    auto seg_converter_or = converters("src_0.dat", 200);
+    ASSERT_TRUE(seg_converter_or.ok()) << seg_converter_or.status();
+    ASSERT_NE(nullptr, seg_converter_or.value());
+    EXPECT_EQ(nullptr, dynamic_cast<DelFileStreamConverter*>(seg_converter_or.value().get()));
+
+    // Unknown file should return nullptr
+    auto unknown_or = converters("unknown.sst", 50);
+    ASSERT_TRUE(unknown_or.ok());
+    EXPECT_EQ(nullptr, unknown_or.value());
+
+    (void)fs::remove_all(test_dir);
 }
 
-// check_pk_encoding_compat: matching V2 encoding -> OK.
-TEST_F(LakeReplicationTxnManagerStaticFunctionTest, test_lake_to_lake_compat_same_encoding) {
-    auto src = make_pk_tablet_metadata(1, PrimaryKeyEncodingTypePB::PK_ENCODING_TYPE_V2, {"INT"});
-    auto tgt = make_pk_tablet_metadata(2, PrimaryKeyEncodingTypePB::PK_ENCODING_TYPE_V2, {"INT"});
-    auto st = lake::LakeReplicationTxnManager::check_pk_encoding_compat(1, 2, src, tgt);
-    EXPECT_TRUE(st.ok()) << st;
-}
+// build_file_converters: same encoding produces plain FileStreamConverter for .del files (no transcode).
+TEST_F(LakeReplicationTxnManagerStaticFunctionTest, test_build_file_converters_del_no_transcode_same_encoding) {
+    auto target = make_pk_tablet_metadata(1, PrimaryKeyEncodingTypePB::PK_ENCODING_TYPE_V2, {"INT"});
+    auto source = make_pk_tablet_metadata(2, PrimaryKeyEncodingTypePB::PK_ENCODING_TYPE_V2, {"INT"});
+    auto ctx_or = lake::ReplicationTxnManager::prepare_del_transcode_context(target, source.schema());
+    ASSERT_TRUE(ctx_or.ok()) << ctx_or.status();
+    auto& ctx = ctx_or.value();
 
-// check_pk_encoding_compat: V1 -> V2 on single fixed PK -> NotSupported.
-TEST_F(LakeReplicationTxnManagerStaticFunctionTest, test_lake_to_lake_compat_v1_to_v2_rejected) {
-    auto src = make_pk_tablet_metadata(1, PrimaryKeyEncodingTypePB::PK_ENCODING_TYPE_V1, {"BIGINT"});
-    auto tgt = make_pk_tablet_metadata(2, PrimaryKeyEncodingTypePB::PK_ENCODING_TYPE_V2, {"BIGINT"});
-    auto st = lake::LakeReplicationTxnManager::check_pk_encoding_compat(1, 2, src, tgt);
-    ASSERT_FALSE(st.ok());
-    EXPECT_TRUE(st.is_not_supported()) << st;
-}
+    std::string test_dir = config::storage_root_path + "/build_file_converters_test2";
+    auto location_provider = std::make_shared<lake::FixedLocationProvider>(test_dir);
+    ASSERT_TRUE(FileSystem::Default()->create_dir_recursive(location_provider->segment_root_location(1)).ok());
+    auto update_manager = std::make_unique<lake::UpdateManager>(location_provider, nullptr);
+    auto tablet_manager = std::make_unique<lake::TabletManager>(location_provider, update_manager.get(), 16384);
 
-// check_pk_encoding_compat: V2 -> V1 on single fixed PK -> NotSupported.
-TEST_F(LakeReplicationTxnManagerStaticFunctionTest, test_lake_to_lake_compat_v2_to_v1_rejected) {
-    auto src = make_pk_tablet_metadata(1, PrimaryKeyEncodingTypePB::PK_ENCODING_TYPE_V2, {"INT"});
-    auto tgt = make_pk_tablet_metadata(2, PrimaryKeyEncodingTypePB::PK_ENCODING_TYPE_V1, {"INT"});
-    auto st = lake::LakeReplicationTxnManager::check_pk_encoding_compat(1, 2, src, tgt);
-    ASSERT_FALSE(st.ok());
-    EXPECT_TRUE(st.is_not_supported()) << st;
-}
+    TReplicateSnapshotRequest request;
+    request.tablet_id = 1;
+    request.transaction_id = 100;
+    request.src_visible_version = 2;
 
-// check_pk_encoding_compat: V1 -> V2 on VARCHAR PK -> OK (byte-compatible).
-TEST_F(LakeReplicationTxnManagerStaticFunctionTest, test_lake_to_lake_compat_varchar_pk_allowed) {
-    auto src = make_pk_tablet_metadata(1, PrimaryKeyEncodingTypePB::PK_ENCODING_TYPE_V1, {"VARCHAR"});
-    auto tgt = make_pk_tablet_metadata(2, PrimaryKeyEncodingTypePB::PK_ENCODING_TYPE_V2, {"VARCHAR"});
-    auto st = lake::LakeReplicationTxnManager::check_pk_encoding_compat(1, 2, src, tgt);
-    EXPECT_TRUE(st.ok()) << st;
-}
+    std::unordered_map<std::string, std::pair<std::string, FileEncryptionPair>> filename_map;
+    filename_map["src_0.del"] = {lake::gen_del_filename(100), FileEncryptionPair()};
 
-// check_pk_encoding_compat: V1 -> V2 on composite PK -> OK (byte-compatible).
-TEST_F(LakeReplicationTxnManagerStaticFunctionTest, test_lake_to_lake_compat_composite_pk_allowed) {
-    auto src = make_pk_tablet_metadata(1, PrimaryKeyEncodingTypePB::PK_ENCODING_TYPE_V1, {"INT", "INT"});
-    auto tgt = make_pk_tablet_metadata(2, PrimaryKeyEncodingTypePB::PK_ENCODING_TYPE_V2, {"INT", "INT"});
-    auto st = lake::LakeReplicationTxnManager::check_pk_encoding_compat(1, 2, src, tgt);
-    EXPECT_TRUE(st.ok()) << st;
+    std::unordered_map<uint32_t, uint32_t> column_unique_id_map;
+    std::vector<std::string> files_to_delete;
+
+    auto converters = lake::ReplicationTxnManager::build_file_converters(
+            tablet_manager.get(), request, filename_map, column_unique_id_map, files_to_delete, ctx.pkey_schema,
+            ctx.source_encoding, ctx.target_encoding);
+
+    // Same encoding: .del file should produce a plain FileStreamConverter, not DelFileStreamConverter
+    auto del_converter_or = converters("src_0.del", 100);
+    ASSERT_TRUE(del_converter_or.ok()) << del_converter_or.status();
+    ASSERT_NE(nullptr, del_converter_or.value());
+    EXPECT_EQ(nullptr, dynamic_cast<DelFileStreamConverter*>(del_converter_or.value().get()));
+
+    (void)fs::remove_all(test_dir);
 }
 
 // Test convert_dcg_meta_for_pk: converts DeltaColumnGroupList from snapshot into DeltaColumnGroupMetadataPB
