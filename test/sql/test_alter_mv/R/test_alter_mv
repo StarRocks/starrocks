@@ -118,6 +118,6 @@ SELECT * FROM test_mv1 ORDER BY k1;
 DROP TABLE t1;
 -- result:
 -- !result
-admin set frontend config("enable_active_materialized_view_schema_strict_check"="true");
+admin set frontend config("enable_active_materialized_view_schema_strict_check"="false");
 -- result:
 -- !result
