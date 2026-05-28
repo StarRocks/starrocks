@@ -20,7 +20,7 @@
 #include "common/logging.h"
 #include "common/status.h"
 #include "serde/column_array_serde.h"
-#include "storage/base/storage_path_constants.h"
+#include "storage/primitive/storage_path_constants.h"
 
 namespace starrocks {
 

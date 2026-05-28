@@ -14,8 +14,8 @@
 
 #pragma once
 
+#include "storage/primitive/bitmap_range_iterator.h"
 #include "storage/primitive/range.h"
-#include "storage/rowset/bitmap_range_iterator.h"
 
 namespace starrocks {
 

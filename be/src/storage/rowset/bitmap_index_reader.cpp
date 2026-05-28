@@ -39,7 +39,6 @@
 #include <memory>
 
 #include "base/string/utf8.h"
-#include "bitmap_range_iterator.h"
 #include "column/chunk_factory.h"
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
@@ -48,6 +47,7 @@
 #include "runtime/exec_env.h"
 #include "runtime/mem_tracker.h"
 #include "storage/chunk_helper.h"
+#include "storage/primitive/bitmap_range_iterator.h"
 #include "storage/primitive/range.h"
 #include "storage/types.h"
 

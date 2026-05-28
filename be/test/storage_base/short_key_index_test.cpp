@@ -32,7 +32,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "storage/short_key_index.h"
+#include "storage/base/short_key_index.h"
 
 #include <gtest/gtest.h>
 
