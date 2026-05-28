@@ -4,6 +4,7 @@ keywords: ['FE', 'Coordinator Node','memory', 'OOM', 'JVM', 'troubleshooting', '
 ---
 
 import MetaRecv from '../_assets/best_practices/fe_mem_meta_recv.mdx'
+import MetaRecvStep from '../_assets/best_practices/fe_mem_meta_recv_step.mdx'
 
 # FE / 协调节点内存满问题故障排查
 
@@ -698,7 +699,9 @@ SIMPLE_MAJORITY required 1 replica. But none were active with this master.
 [ConnectScheduler.lambda$printAllRunningQuery$4():339] FE ShutDown! Running Query:SET NAMES utf8, QueryFEAllocatedMemory: 10048
 ```
 
-**处理方法**：增加 FE JVM 内存配置，生产环境建议最低 16GB，后续根据元数据增量进行调整。恢复步骤请参考 [元数据恢复](../administration/Meta_recovery.md) 文档中的步骤 8 和 9。
+**处理方法**：增加 FE JVM 内存配置，生产环境建议最低 16GB，后续根据元数据增量进行调整。
+
+<MetaRecvStep />
 
 ***
 
