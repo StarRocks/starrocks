@@ -32,7 +32,9 @@ import com.starrocks.common.tvr.TvrVersionRange;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.ConnectorMetadataRequestContext;
 import com.starrocks.connector.ConnectorTableInfo;
+import com.starrocks.connector.ConnectorTableVersion;
 import com.starrocks.connector.PartitionInfo;
+import com.starrocks.connector.PointerType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.OptimizerContext;
@@ -61,6 +63,7 @@ import java.nio.file.Files;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.function.Function;
@@ -642,14 +645,29 @@ public class MockIcebergMetadata implements ConnectorMetadata {
 
     // ConnectorMetadata's default returns TvrTableSnapshot.empty(), which leaves the planned scan
     // pinned to the MIN snapshot (0 partitions, no data) -- low-cardinality dict collection and the
-    // group-by min/max rule both then no-op. Mirror getCurrentTvrSnapshot so the scan sees a real
-    // snapshot, as production's IcebergMetadata.getTableVersionRange does.
+    // group-by min/max rule both then no-op. Mirror production's IcebergMetadata.getTableVersionRange:
+    // no bounds -> current snapshot; any bound -> TvrTableDelta so time-travel/delta tests keep the
+    // correct TVR shape. Only VERSION pointers are resolvable here; TEMPORAL would need a snapshot
+    // history that the mock does not carry.
     @Override
     public TvrVersionRange getTableVersionRange(
             String dbName, com.starrocks.catalog.Table table,
-            java.util.Optional<com.starrocks.connector.ConnectorTableVersion> startVersion,
-            java.util.Optional<com.starrocks.connector.ConnectorTableVersion> endVersion) {
-        return getCurrentTvrSnapshot(dbName, table);
+            Optional<ConnectorTableVersion> startVersion,
+            Optional<ConnectorTableVersion> endVersion) {
+        if (startVersion.isEmpty() && endVersion.isEmpty()) {
+            return getCurrentTvrSnapshot(dbName, table);
+        }
+        Optional<Long> start = startVersion.map(MockIcebergMetadata::snapshotIdFromVersion);
+        Optional<Long> end = endVersion.map(MockIcebergMetadata::snapshotIdFromVersion);
+        return TvrTableDelta.of(start, end);
+    }
+
+    private static long snapshotIdFromVersion(ConnectorTableVersion version) {
+        if (version.getPointerType() != PointerType.VERSION) {
+            throw new UnsupportedOperationException(
+                    "MockIcebergMetadata only resolves VERSION pointers; got " + version.getPointerType());
+        }
+        return version.getConstantOperator().getBigint();
     }
 
     public List<TvrTableDeltaTrait> listTableDeltaTraits(String dbName, com.starrocks.catalog.Table table,
