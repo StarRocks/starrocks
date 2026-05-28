@@ -220,6 +220,22 @@ public class IVMAnalyzerTest extends MVIVMIcebergTestBase {
                         + "FROM `iceberg0`.`unpartitioned_db`.`t_numeric` GROUP BY id");
     }
 
+    /** {@code MIN(DECIMAL)} — MIN/MAX state is the value itself; no AVG-style (sum, count) plumbing. */
+    @Test
+    public void testWhitelistAcceptsMinDecimal() throws Exception {
+        assertWhitelistAccepts(
+                "SELECT id, MIN(CAST(c1 AS DECIMAL(10, 2))) "
+                        + "FROM `iceberg0`.`unpartitioned_db`.`t_numeric` GROUP BY id");
+    }
+
+    /** {@code MAX(DECIMAL)} — symmetric to MIN(DECIMAL). */
+    @Test
+    public void testWhitelistAcceptsMaxDecimal() throws Exception {
+        assertWhitelistAccepts(
+                "SELECT id, MAX(CAST(c1 AS DECIMAL(10, 2))) "
+                        + "FROM `iceberg0`.`unpartitioned_db`.`t_numeric` GROUP BY id");
+    }
+
     /** {@code ARRAY_AGG(col)} (single arg) — newly whitelisted entry. */
     @Test
     public void testWhitelistAcceptsArrayAggSingleArg() throws Exception {
