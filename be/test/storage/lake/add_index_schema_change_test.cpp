@@ -572,6 +572,80 @@ TEST_F(AddIndexSchemaChangeTest, idg_backed_bitmap_iterator_smoke) {
     delete iter;
 }
 
+// End-to-end read-side coverage for column_reader.cpp's IDG-backed
+// bloom_filter() path: produce a real .idx file with an NGRAMBF entry via
+// AddIndexSchemaChange, then call ColumnReader::ngram_bloom_filter() with
+// an IDG loader pointing at the entry. Mirrors idg_backed_bitmap_iterator_smoke
+// for the BF flavor — covers the `opts.idg_loader != nullptr` branch in
+// ColumnReader::bloom_filter<false>() that opens the .idx file, parses the
+// footer, loads BloomFilterIndexReader, and constructs the iterator. We
+// pass empty predicates + empty row_ranges so the function just sets up
+// the IDG-backed iterator and returns without actually filtering — that
+// alone exercises lines 540-578 of column_reader.cpp.
+TEST_F(AddIndexSchemaChangeTest, idg_backed_bloom_filter_smoke) {
+    auto base_metadata = create_base_tablet_metadata();
+    auto base_tablet_id = base_metadata->id();
+    CHECK_OK(_tablet_manager->put_tablet_metadata(*base_metadata));
+    auto base_schema = TabletSchema::create(base_metadata->schema());
+    int64_t version = write_one_rowset(base_tablet_id, /*version=*/1, base_schema, /*nrows=*/5);
+
+    // 1. Build NGRAMBF IDG entry on c2 (VARCHAR) via the fast path.
+    auto vt = versioned_at(base_tablet_id, version);
+    const std::string props = R"({"properties":{"gram_num":"3","bloom_filter_fpp":"0.05"}})";
+    std::vector<TabletIndexPB> indexes{make_index(IndexType::NGRAMBF, _c2_uid, /*index_id=*/0, props)};
+    AddIndexSchemaChange sc(_tablet_manager.get(), next_id(), vt, vt, indexes, /*alter_version=*/version);
+    TxnLogPB_OpAddIndex op;
+    ASSERT_OK(sc.run(&op));
+    ASSERT_EQ(1, op.segment_entries_size());
+    const auto& seg_entry = op.segment_entries(0);
+    ASSERT_GT(seg_entry.entry().file_size(), 0);
+
+    // 2. Reload the published metadata and open the segment.
+    auto vt2 = versioned_at(base_tablet_id, version);
+    auto meta = vt2.metadata();
+    ASSERT_TRUE(meta != nullptr && meta->rowsets_size() > 0);
+    const auto& rowset = meta->rowsets(0);
+    ASSERT_GT(rowset.segments_size(), 0);
+    FileInfo seg_fi{.path = _tablet_manager->segment_location(base_tablet_id, rowset.segments(0))};
+    if (rowset.segment_size_size() > 0) seg_fi.size = rowset.segment_size(0);
+    size_t footer_hint = 16 * 1024;
+    ASSIGN_OR_ABORT(auto segment, _tablet_manager->load_segment(seg_fi, /*segment_id=*/0, &footer_hint,
+                                                                LakeIOOptions{.fill_data_cache = false},
+                                                                /*fill_meta_cache=*/true, base_schema));
+    auto* reader_const = segment->column_with_uid(_c2_uid);
+    ASSERT_TRUE(reader_const != nullptr);
+
+    // 3. Wire IDG loader to surface the .idx file we just produced.
+    IndexDeltaGroupEntry entry;
+    entry.index_file = seg_entry.entry().index_file();
+    entry.version = seg_entry.entry().version();
+    entry.keys.push_back({_c2_uid, IndexType::NGRAMBF});
+    auto loader = std::make_shared<StubIdgLoaderForReadPath>(IndexDeltaGroupList{entry});
+
+    OlapReaderStatistics stats;
+    ASSIGN_OR_ABORT(auto fs, FileSystemFactory::CreateSharedFromString(seg_fi.path));
+    ASSIGN_OR_ABORT(auto rfile, fs->new_random_access_file(seg_fi));
+    IndexReadOptions ix_opts;
+    ix_opts.read_file = rfile->stream().get();
+    ix_opts.stats = &stats;
+    ix_opts.use_page_cache = false;
+    ix_opts.idg_loader = loader;
+    ix_opts.tablet_id = base_tablet_id;
+    ix_opts.segment_id = 0;
+    ix_opts.query_version = version;
+    ix_opts.col_unique_id = _c2_uid;
+
+    // 4. Invoke the IDG-backed BF path. Empty predicates + empty row_ranges
+    //    cause the for-loop in the function body to be a no-op, so we don't
+    //    need a real predicate construction; the IDG branch above still
+    //    runs (open .idx, parse footer, load BloomFilterIndexReader,
+    //    construct iterator).
+    std::vector<const ColumnPredicate*> empty_predicates;
+    SparseRange<> empty_ranges;
+    auto* reader = const_cast<ColumnReader*>(reader_const);
+    ASSERT_OK(reader->ngram_bloom_filter(empty_predicates, &empty_ranges, ix_opts));
+}
+
 // Build BITMAP and NGRAMBF together on the same .idx. Both keys end up on
 // the same IndexDeltaGroupEntryPB.
 TEST_F(AddIndexSchemaChangeTest, run_two_indexes_share_idx_file) {
