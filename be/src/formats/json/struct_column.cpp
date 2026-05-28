@@ -15,10 +15,10 @@
 #include "formats/json/struct_column.h"
 
 #include "column/struct_column.h"
-#include "util/simdjson_util.h"
 #include "common/statusor.h"
 #include "formats/json/nullable_column.h"
 #include "gutil/strings/substitute.h"
+#include "util/simdjson_util.h"
 
 namespace starrocks {
 
