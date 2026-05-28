@@ -62,7 +62,25 @@ public class OlapScanLazyMaterializationSupport implements LazyMaterializationSu
                 usedColumns.union(conjunct.getUsedColumns());
             }
         }
-        if (op.getVectorSearchOptions().isEnableUseANN()) {
+        // The embedding column only needs to be eagerly materialized for IVFPQ.
+        // For IVFPQ the rule keeps the original `approx_*_distance(v, [...])`
+        // expression in the order-by (refine pass evaluated row-by-row over raw
+        // v), so v must reach the TopN.
+        //
+        // For HNSW (and any future ANN path that emits a virtual distance column
+        // via id2distance_map), RewriteToVectorPlanRule has already swapped the
+        // order-by to reference the BE-produced distance slot, and v no longer
+        // appears in any predicate / order-by / projection that the scan must
+        // satisfy in line. We let the global lazy-materialize rule decide:
+        //   * SELECT does not reference v  → v is pruned from scan output entirely
+        //     (zero embedding I/O).
+        //   * SELECT references v  → v is deferred and fetched by row id at the
+        //     FetchNode above the final TopN (only K rows hit storage).
+        //
+        // When the .vi file is missing at runtime, BE's _setup_brute_force_fallback
+        // appends v to the BE-internal _schema so distance can be recomputed from
+        // _dict_chunk; v is consumed inside the scan and never propagated up.
+        if (op.getVectorSearchOptions().isUseIVFPQ()) {
             OlapTable table = (OlapTable) op.getTable();
             Set<ColumnId> vectorIndexColumnIds = table.getIndexes().stream()
                     .filter(idx -> idx.getIndexType() == IndexDef.IndexType.VECTOR)
