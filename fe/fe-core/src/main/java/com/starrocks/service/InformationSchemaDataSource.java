@@ -256,45 +256,57 @@ public class InformationSchemaDataSource {
 
         for (String dbName : result.authorizedDbs) {
             Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
-            if (db != null) {
-                Locker locker = new Locker();
-                locker.lockDatabase(db.getId(), LockType.READ);
-                try {
-                    List<Table> allTables = GlobalStateMgr.getCurrentState().getLocalMetastore().getTables(db.getId());
-                    for (Table table : allTables) {
-                        if (tableMatcher != null && !tableMatcher.match(table.getName())) {
-                            continue;
-                        }
-
-                        try {
-                            ConnectContext context = result.buildConnectContext();
-                            Authorizer.checkAnyActionOnTableLikeObject(context, dbName, table);
-                        } catch (AccessDeniedException e) {
-                            LOG.warn("failed to check db: {} table: {} authorization", dbName, table, e);
-                            continue;
-                        }
-
-                        TTableConfigInfo tableConfigInfo = new TTableConfigInfo();
-                        tableConfigInfo.setTable_schema(dbName);
-                        tableConfigInfo.setTable_name(table.getName());
-
-                        if (table.isNativeTableOrMaterializedView() || table.isOlapExternalTable()) {
-                            // OLAP (done)
-                            // OLAP_EXTERNAL (done)
-                            // MATERIALIZED_VIEW (done)
-                            // LAKE (done)
-                            // LAKE_MATERIALIZED_VIEW (done)
-                            genNormalTableConfigInfo(table, tableConfigInfo);
-                        } else if (table.isView()) {
-                            // VIEW (done)
-                            tableConfigInfo.setTable_engine(table.getType().toString());
-                        }
-                        // TODO(cjs): other table type (HIVE, MYSQL, ICEBERG, HUDI, JDBC, ELASTICSEARCH)
-                        tList.add(tableConfigInfo);
-                    }
-                } finally {
-                    locker.unLockDatabase(db.getId(), LockType.READ);
+            if (db == null) {
+                continue;
+            }
+            // Snapshot the table list (getTables returns a concurrent copy), then lock
+            // each table individually instead of holding a DB-wide READ for the whole
+            // walk, so DDL/ALTER on tables not currently being read is not blocked.
+            List<Table> allTables = db.getTables();
+            for (Table table : allTables) {
+                if (tableMatcher != null && !tableMatcher.match(table.getName())) {
+                    continue;
                 }
+
+                try {
+                    ConnectContext context = result.buildConnectContext();
+                    Authorizer.checkAnyActionOnTableLikeObject(context, dbName, table);
+                } catch (AccessDeniedException e) {
+                    LOG.info("failed to check db: {} table: {} authorization", dbName, table, e);
+                    continue;
+                }
+
+                TTableConfigInfo tableConfigInfo = new TTableConfigInfo();
+                tableConfigInfo.setTable_schema(dbName);
+                tableConfigInfo.setTable_name(table.getName());
+
+                if (table.isNativeTableOrMaterializedView() || table.isOlapExternalTable()) {
+                    // OLAP (done)
+                    // OLAP_EXTERNAL (done)
+                    // MATERIALIZED_VIEW (done)
+                    // LAKE (done)
+                    // LAKE_MATERIALIZED_VIEW (done)
+                    // genNormalTableConfigInfo reads per-table internal state, so take a
+                    // table READ (IS-on-db + READ-on-table) only for these types.
+                    Locker locker = new Locker();
+                    locker.lockTableWithIntensiveDbLock(db.getId(), table.getId(), LockType.READ);
+                    try {
+                        // The list above was snapshotted unlocked; skip if a concurrent
+                        // DROP removed the table before we acquired the lock.
+                        if (GlobalStateMgr.getCurrentState().getLocalMetastore()
+                                .getTable(db.getId(), table.getId()) == null) {
+                            continue;
+                        }
+                        genNormalTableConfigInfo(table, tableConfigInfo);
+                    } finally {
+                        locker.unLockTableWithIntensiveDbLock(db.getId(), table.getId(), LockType.READ);
+                    }
+                } else if (table.isView()) {
+                    // VIEW (done)
+                    tableConfigInfo.setTable_engine(table.getType().toString());
+                }
+                // TODO(cjs): other table type (HIVE, MYSQL, ICEBERG, HUDI, JDBC, ELASTICSEARCH)
+                tList.add(tableConfigInfo);
             }
         }
         resp.tables_config_infos = tList;
@@ -411,10 +423,18 @@ public class InformationSchemaDataSource {
             }
             // only olap table/mv or cloud table/mv will reach here;
             // use the same lock level with `SHOW PARTITIONS FROM XXX` to ensure other modification to
-            // partition does not trigger crash
+            // partition does not trigger crash. A table READ (IS-on-db + READ-on-table) is enough:
+            // only this one table's partitions are read.
             Locker locker = new Locker();
-            locker.lockDatabase(ele.dbId, LockType.READ);
+            locker.lockTableWithIntensiveDbLock(ele.dbId, table.getId(), LockType.READ);
             try {
+                // The table was snapshotted without a lock above. Once the intensive lock is
+                // held a concurrent DROP (DB WRITE) is blocked, but it may already have run;
+                // reading partitions of a dropped table is exactly the crash this lock guards
+                // against, so skip it if it is gone.
+                if (GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(ele.dbId, table.getId()) == null) {
+                    continue;
+                }
                 OlapTable olapTable = (OlapTable) table;
                 PartitionInfo tblPartitionInfo = olapTable.getPartitionInfo();
                 // normal partition
@@ -444,7 +464,7 @@ public class InformationSchemaDataSource {
                     break;
                 }
             } finally {
-                locker.unLockDatabase(ele.dbId, LockType.READ);
+                locker.unLockTableWithIntensiveDbLock(ele.dbId, table.getId(), LockType.READ);
             }
         }
         resp.partitions_meta_infos = pList;
@@ -595,12 +615,14 @@ public class InformationSchemaDataSource {
 
             for (BasicTable table : tables) {
                 Locker tableLocker = new Locker();
+                // Acquire before the try so a failed acquire does not trigger an unlock of an
+                // unheld lock in the finally block.
+                boolean nativeOrMv = table.isNativeTableOrMaterializedView();
+                if (nativeOrMv) {
+                    tableLocker.lockTablesWithIntensiveDbLock(db.getId(),
+                            Lists.newArrayList(((OlapTable) table).getId()), LockType.READ);
+                }
                 try {
-                    if (table.isNativeTableOrMaterializedView()) {
-                        tableLocker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(((OlapTable) table).getId()),
-                                LockType.READ);
-                    }
-
                     TTableInfo info = new TTableInfo();
 
                     // refer to https://dev.mysql.com/doc/refman/8.0/en/information-schema-tables-table.html
@@ -642,7 +664,7 @@ public class InformationSchemaDataSource {
                     }
                     infos.add(info);
                 } finally {
-                    if (table.isNativeTableOrMaterializedView()) {
+                    if (nativeOrMv) {
                         tableLocker.unLockTablesWithIntensiveDbLock(db.getId(),
                                 Lists.newArrayList(((OlapTable) table).getId()), LockType.READ);
                     }
@@ -732,8 +754,11 @@ public class InformationSchemaDataSource {
             Database db = metadataMgr.getDb(databaseId);
             if (db != null) {
                 Map<Long, UUID> tableMap = allTables.row(databaseId);
+                // Bounded set of temp tables for this db: lock exactly those tables
+                // (IS-on-db + READ-on-table) instead of a DB-wide READ.
+                List<Long> tableIds = new ArrayList<>(tableMap.keySet());
                 Locker locker = new Locker();
-                locker.lockDatabase(db.getId(), LockType.READ);
+                locker.lockTablesWithIntensiveDbLock(db.getId(), tableIds, LockType.READ);
                 try {
                     for (Map.Entry<Long, UUID> entry : tableMap.entrySet()) {
                         UUID sessionId = entry.getValue();
@@ -775,7 +800,7 @@ public class InformationSchemaDataSource {
                         break;
                     }
                 } finally {
-                    locker.unLockDatabase(db.getId(), LockType.READ);
+                    locker.unLockTablesWithIntensiveDbLock(db.getId(), tableIds, LockType.READ);
                 }
             }
         }
