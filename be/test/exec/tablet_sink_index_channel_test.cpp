@@ -560,7 +560,7 @@ TEST_F(TabletSinkIndexChannelTest, ConcurrentSendAndIncrementalInit) {
 
     // Thread A: send a chunk (which calls _send_chunk_by_node, holding shared lock)
     auto tuple_desc = runtime_state->desc_tbl().get_tuple_descriptor(_desc_tbl.tupleDescriptors[0].id);
-    ChunkUniquePtr chunk = RuntimeChunkHelper::new_chunk(*tuple_desc, 1);
+    ChunkUniquePtr chunk = ChunkHelper::new_chunk(*tuple_desc, 1);
     chunk->get_column_raw_ptr_by_index(0)->append_datum(Datum(1));
     chunk->get_column_raw_ptr_by_index(1)->append_datum(Datum(int64_t(1)));
 
