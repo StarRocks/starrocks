@@ -34,6 +34,8 @@
 
 #include "runtime/load_channel.h"
 
+#include <bthread/bthread.h>
+
 #include <memory>
 
 #include "base/compression/block_compression.h"
@@ -135,6 +137,17 @@ void LoadChannel::open(const LoadChannelOpenContext& open_context) {
 
     _last_updated_time.store(time(nullptr), std::memory_order_relaxed);
     bool is_lake_tablet = request.has_is_lake_tablet() && request.is_lake_tablet();
+
+    // === REPRO ONLY: hardcoded delay to force sender 0 to lose the first-opener race ===
+    // This is NOT for production. It exists solely on the repro branches to make the
+    // lake per-partition coordinator regression fire on every INSERT instead of ~3% of
+    // the time. Remove before merging anywhere.
+    if (is_lake_tablet && request.has_sender_id() && request.sender_id() == 0 &&
+        request.has_lake_tablet_params() &&
+        request.lake_tablet_params().enable_per_partition_coordinator()) {
+        bthread_usleep(50 * 1000);
+    }
+    // === END REPRO ===
 
     Status st = Status::OK();
     TabletsChannelKey key(request.id(), request.sink_id(), request.index_id());
