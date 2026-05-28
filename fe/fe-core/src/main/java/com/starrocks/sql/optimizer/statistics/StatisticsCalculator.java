@@ -644,12 +644,38 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
 
     @Override
     public Void visitLogicalFileScan(LogicalFileScanOperator node, ExpressionContext context) {
-        return computeFileScanNode(node, context, node.getColRefToColumnMetaMap());
+        return computeFileTableScanNode(node, context, node.getTable(), node.getColRefToColumnMetaMap());
     }
 
     @Override
     public Void visitPhysicalFileScan(PhysicalFileScanOperator node, ExpressionContext context) {
-        return computeFileScanNode(node, context, node.getColRefToColumnMetaMap());
+        return computeFileTableScanNode(node, context, node.getTable(), node.getColRefToColumnMetaMap());
+    }
+
+    private Void computeFileTableScanNode(Operator node, ExpressionContext context, Table table,
+                                          Map<ColumnRefOperator, Column> colRefToColumnMetaMap) {
+        List<ColumnRefOperator> requiredColumnRefs = new ArrayList<>(colRefToColumnMetaMap.keySet());
+        List<String> columnNames = requiredColumnRefs.stream()
+                .map(ref -> colRefToColumnMetaMap.get(ref).getName())
+                .collect(Collectors.toList());
+
+        // Use sync loading so the optimizer sees stats immediately without a cache warm-up round.
+        List<ConnectorTableColumnStats> columnStatsList =
+                GlobalStateMgr.getCurrentState().getStatisticStorage()
+                        .getConnectorTableStatisticsSync(table, columnNames);
+
+        Statistics.Builder builder = Statistics.builder();
+        double rowCount = Double.NaN;
+        for (int i = 0; i < requiredColumnRefs.size(); i++) {
+            ConnectorTableColumnStats colStats = columnStatsList.get(i);
+            builder.addColumnStatistic(requiredColumnRefs.get(i), colStats.getColumnStatistic());
+            if (!colStats.isUnknown()) {
+                rowCount = Double.isNaN(rowCount) ? colStats.getRowCount() : Math.max(rowCount, colStats.getRowCount());
+            }
+        }
+        builder.setOutputRowCount(Double.isNaN(rowCount) ? 1 : rowCount);
+        context.setStatistics(builder.build());
+        return visitOperator(node, context);
     }
 
     private Void computeFileScanNode(Operator node, ExpressionContext context,

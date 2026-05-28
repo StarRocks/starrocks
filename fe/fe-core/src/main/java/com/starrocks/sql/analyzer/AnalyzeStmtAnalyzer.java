@@ -226,6 +226,8 @@ public class AnalyzeStmtAnalyzer {
                 statement.setExternal(true);
             } else if (CatalogMgr.ResourceMappingCatalog.isResourceMappingCatalog(analyzeTable.getCatalogName())) {
                 throw new SemanticException("Don't support analyze external table created by resource mapping");
+            } else if (analyzeTable.getType() == Table.TableType.FILE) {
+                statement.setExternal(true);
             }
             return null;
         }

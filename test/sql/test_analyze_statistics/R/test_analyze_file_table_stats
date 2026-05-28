@@ -1,0 +1,61 @@
+-- name: test_analyze_file_table_stats
+shell: ossutil64 mkdir oss://${oss_bucket}/test_analyze_file_table_stats/${uuid0}/ >/dev/null || echo "exit 0" >/dev/null
+-- result:
+0
+
+-- !result
+shell: ossutil64 cp --force ../be/test/exec/test_data/parquet_scanner/dict_two_page.parquet oss://${oss_bucket}/test_analyze_file_table_stats/${uuid0}/dict_two_page.parquet | grep -Pv "(average|elapsed)"
+-- result:
+0
+
+Succeed: Total num: 1, size: 24,270. OK num: 1(upload 1 files).
+-- !result
+CREATE DATABASE test_file_stats_db_${uuid0};
+-- result:
+-- !result
+USE test_file_stats_db_${uuid0};
+-- result:
+-- !result
+CREATE EXTERNAL TABLE file_tbl (
+    seq bigint,
+    f00 string,
+    f01 string,
+    id  string,
+    f03 string,
+    f04 string
+) ENGINE=file
+PROPERTIES (
+    "path"   = "oss://${oss_bucket}/test_analyze_file_table_stats/${uuid0}/dict_two_page.parquet",
+    "format" = "parquet"
+);
+-- result:
+-- !result
+ANALYZE FULL TABLE file_tbl;
+-- result:
+[REGEX]OK
+-- !result
+select count(1) from default_catalog._statistics_.external_column_statistics
+    where catalog_name = 'default_catalog'
+      and db_name      = 'test_file_stats_db_${uuid0}'
+      and table_name   = 'file_tbl';
+-- result:
+6
+-- !result
+LOOP {
+  PROPERTY: {"timeout": 60, "interval": 5, "desc": "wait fe cache stats finished"}
+  result=explain costs select seq from file_tbl;
+  CHECK: re.search(r"cardinality: [1-9][0-9]+", ${result}) != None
+} END LOOP
+LOOP {
+  PROPERTY: {"timeout": 10, "interval": 2, "desc": "check join cardinality > 1 after stats"}
+  result=explain verbose select A.seq, B.seq from file_tbl A join file_tbl B on A.seq = B.seq + 1;
+  CHECK: re.search(r"cardinality: [1-9][0-9]+", ${result}) != None
+} END LOOP
+DROP DATABASE test_file_stats_db_${uuid0};
+-- result:
+-- !result
+shell: ossutil64 rm -rf oss://${oss_bucket}/test_analyze_file_table_stats/${uuid0}/ >/dev/null || echo "exit 0" >/dev/null
+-- result:
+0
+
+-- !result

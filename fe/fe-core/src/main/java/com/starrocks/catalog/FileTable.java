@@ -64,15 +64,33 @@ public class FileTable extends Table {
     @SerializedName(value = "fp")
     private Map<String, String> fileProperties = Maps.newHashMap();
 
+    @SerializedName(value = "dn")
+    private String dbName;
+
     public FileTable() {
         super(TableType.FILE);
     }
 
     public FileTable(long id, String name, List<Column> fullSchema, Map<String, String> properties)
             throws DdlException {
+        this(id, name, null, fullSchema, properties);
+    }
+
+    public FileTable(long id, String name, String dbName, List<Column> fullSchema, Map<String, String> properties)
+            throws DdlException {
         super(id, name, TableType.FILE, fullSchema);
+        this.dbName = dbName;
         this.fileProperties = properties;
         validate(properties);
+    }
+
+    @Override
+    public String getUUID() {
+        // Null-safe: old serialized instances that pre-date this field fall back to the legacy numeric ID.
+        if (dbName == null) {
+            return Long.toString(id);
+        }
+        return String.join(".", InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, dbName, name, Long.toString(id));
     }
 
     private void validate(Map<String, String> properties) throws DdlException {
@@ -214,6 +232,7 @@ public class FileTable extends Table {
     public static class Builder {
         private long id;
         private String tableName;
+        private String dbName;
         private List<Column> fullSchema;
         private Map<String, String> properties = Maps.newHashMap();
 
@@ -230,6 +249,11 @@ public class FileTable extends Table {
             return this;
         }
 
+        public FileTable.Builder setDbName(String dbName) {
+            this.dbName = dbName;
+            return this;
+        }
+
         public FileTable.Builder setFullSchema(List<Column> fullSchema) {
             this.fullSchema = fullSchema;
             return this;
@@ -241,7 +265,7 @@ public class FileTable extends Table {
         }
 
         public FileTable build() throws DdlException {
-            return new FileTable(id, tableName, fullSchema, properties);
+            return new FileTable(id, tableName, dbName, fullSchema, properties);
         }
     }
 }

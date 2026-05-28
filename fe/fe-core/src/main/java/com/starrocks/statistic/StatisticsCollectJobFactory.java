@@ -258,7 +258,10 @@ public class StatisticsCollectJobFactory {
 
         List<String> allPartitionNames = null;
         if (partitionNames == null) {
-            partitionNames = ConnectorPartitionTraits.build(table).getPartitionNames();
+            // FileTable has no partition metadata; treat it as a single unpartitioned segment.
+            partitionNames = table.getType() == Table.TableType.FILE
+                    ? Lists.newArrayList(table.getName())
+                    : ConnectorPartitionTraits.build(table).getPartitionNames();
             allPartitionNames = partitionNames;
         }
         if (analyzeType.equals(StatsConstants.AnalyzeType.SAMPLE)) {
@@ -268,8 +271,11 @@ public class StatisticsCollectJobFactory {
 
             samplePartitionSize = Math.min(samplePartitionSize, partitionNames.size());
             List<String> samplePartitionNames = StatisticUtils.getLatestPartitionsSample(partitionNames, samplePartitionSize);
-            allPartitionNames = allPartitionNames == null ? ConnectorPartitionTraits.build(table).getPartitionNames() :
-                    allPartitionNames;
+            allPartitionNames = allPartitionNames == null
+                    ? (table.getType() == Table.TableType.FILE
+                            ? Lists.newArrayList(table.getName())
+                            : ConnectorPartitionTraits.build(table).getPartitionNames())
+                    : allPartitionNames;
             return new ExternalSampleStatisticsCollectJob(catalogName, db, table, samplePartitionNames, columnNames,
                     columnTypes, analyzeType, scheduleType, properties, allPartitionNames.size());
         }

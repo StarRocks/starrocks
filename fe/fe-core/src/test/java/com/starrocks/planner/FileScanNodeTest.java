@@ -22,19 +22,19 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
-import com.starrocks.load.loadv2.LoadJob;
-import com.starrocks.sql.ast.KeysType;
-import com.starrocks.sql.ast.LoadStmt;
 import com.starrocks.common.Config;
 import com.starrocks.common.ExceptionChecker;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.load.BrokerFileGroup;
+import com.starrocks.load.loadv2.LoadJob;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.BrokerDesc;
 import com.starrocks.sql.ast.DataDescription;
+import com.starrocks.sql.ast.KeysType;
+import com.starrocks.sql.ast.LoadStmt;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TBrokerFileStatus;
@@ -152,7 +152,6 @@ public class FileScanNodeTest {
         fileStatusList.add(new TBrokerFileStatus("hdfs://127.0.0.1:9001/file2", false, 268435400, true));
         fileStatusesList.add(fileStatusList);
 
-        
         DescriptorTable descTable = new DescriptorTable();
         TupleDescriptor tupleDesc = descTable.createTupleDescriptor("DestTableTuple");
         FileScanNode scanNode = new FileScanNode(new PlanNodeId(0), tupleDesc, "FileScanNode", fileStatusesList,
@@ -213,7 +212,6 @@ public class FileScanNodeTest {
         fileStatusList.add(new TBrokerFileStatus("hdfs://127.0.0.1:9001/file4", false, 268435451, false));
         fileStatusesList.add(fileStatusList);
 
-        
         descTable = new DescriptorTable();
         tupleDesc = descTable.createTupleDescriptor("DestTableTuple");
         scanNode = new FileScanNode(new PlanNodeId(0), tupleDesc, "FileScanNode", fileStatusesList, 4,
@@ -266,7 +264,6 @@ public class FileScanNodeTest {
         fileStatusList2.add(new TBrokerFileStatus("hdfs://127.0.0.1:9001/file5", false, 10, true));
         fileStatusesList.add(fileStatusList2);
 
-        
         descTable = new DescriptorTable();
         tupleDesc = descTable.createTupleDescriptor("DestTableTuple");
         scanNode = new FileScanNode(new PlanNodeId(0), tupleDesc, "FileScanNode", fileStatusesList, 5,
@@ -315,7 +312,6 @@ public class FileScanNodeTest {
         fileStatusList.add(new TBrokerFileStatus("hdfs://127.0.0.1:9001/file2", false, 10, false));
         fileStatusesList.add(fileStatusList);
 
-        
         descTable = new DescriptorTable();
         tupleDesc = descTable.createTupleDescriptor("DestTableTuple");
         scanNode = new FileScanNode(new PlanNodeId(0), tupleDesc, "FileScanNode", fileStatusesList, 2,
@@ -349,7 +345,6 @@ public class FileScanNodeTest {
         fileStatusList.add(new TBrokerFileStatus("hdfs://127.0.0.1:9001/file1", false, 0, false));
         fileStatusesList.add(fileStatusList);
 
-        
         descTable = new DescriptorTable();
         tupleDesc = descTable.createTupleDescriptor("DestTableTuple");
         scanNode = new FileScanNode(new PlanNodeId(0), tupleDesc, "FileScanNode", fileStatusesList, 1,
@@ -395,7 +390,7 @@ public class FileScanNodeTest {
         fileStatusList2 = Lists.newArrayList();
         fileStatusList2.add(new TBrokerFileStatus("hdfs://127.0.0.1:9001/file2", false, 1073741824, true));
         fileStatusesList.add(fileStatusList2);
-        
+
         descTable = new DescriptorTable();
         tupleDesc = descTable.createTupleDescriptor("DestTableTuple");
         scanNode = new FileScanNode(new PlanNodeId(0), tupleDesc, "FileScanNode", fileStatusesList, 2,
@@ -445,7 +440,6 @@ public class FileScanNodeTest {
         }
         fileStatusesList.add(fileStatusList);
 
-        
         descTable = new DescriptorTable();
         tupleDesc = descTable.createTupleDescriptor("DestTableTuple");
         scanNode = new FileScanNode(new PlanNodeId(0), tupleDesc, "FileScanNode", fileStatusesList, 2,
@@ -503,7 +497,7 @@ public class FileScanNodeTest {
 
     @Test
     public void testNoFilesFoundOnePath() {
-        
+
         DescriptorTable descTable = new DescriptorTable();
         TupleDescriptor tupleDesc = descTable.createTupleDescriptor("DestTableTuple");
         List<List<TBrokerFileStatus>> fileStatusesList = Lists.newArrayList();
@@ -526,7 +520,7 @@ public class FileScanNodeTest {
 
     @Test
     public void testIllegalColumnSeparator(@Mocked GlobalStateMgr globalStateMgr, @Mocked SystemInfoService systemInfoService,
-                                     @Injectable Database db, @Injectable OlapTable table) {
+                                           @Injectable Database db, @Injectable OlapTable table) {
         new MockUp<RunMode>() {
             @Mock
             public RunMode getCurrentRunMode() {
@@ -566,7 +560,6 @@ public class FileScanNodeTest {
         List<TBrokerFileStatus> fileStatusList = Lists.newArrayList();
         fileStatusesList.add(fileStatusList);
 
-        
         DescriptorTable descTable = new DescriptorTable();
         TupleDescriptor tupleDesc = descTable.createTupleDescriptor("DestTableTuple");
         FileScanNode scanNode = new FileScanNode(new PlanNodeId(0), tupleDesc, "FileScanNode", fileStatusesList,
@@ -576,9 +569,10 @@ public class FileScanNodeTest {
                 "The valid bytes length for 'column separator' is [1, 50]",
                 () -> scanNode.init(descTable));
     }
+
     @Test
     public void testIllegalRowDelimiter(@Mocked GlobalStateMgr globalStateMgr, @Mocked SystemInfoService systemInfoService,
-                                           @Injectable Database db, @Injectable OlapTable table) {
+                                        @Injectable Database db, @Injectable OlapTable table) {
         new MockUp<RunMode>() {
             @Mock
             public RunMode getCurrentRunMode() {
@@ -618,7 +612,6 @@ public class FileScanNodeTest {
         List<TBrokerFileStatus> fileStatusList = Lists.newArrayList();
         fileStatusesList.add(fileStatusList);
 
-        
         DescriptorTable descTable = new DescriptorTable();
         TupleDescriptor tupleDesc = descTable.createTupleDescriptor("DestTableTuple");
         FileScanNode scanNode = new FileScanNode(new PlanNodeId(0), tupleDesc, "FileScanNode", fileStatusesList,

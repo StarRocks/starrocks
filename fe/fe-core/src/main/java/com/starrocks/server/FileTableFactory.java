@@ -45,6 +45,7 @@ public class FileTableFactory implements AbstractTableFactory {
         FileTable.Builder tableBuilder = FileTable.builder()
                 .setId(tableId)
                 .setTableName(tableName)
+                .setDbName(database.getOriginName())
                 .setFullSchema(columns)
                 .setProperties(properties);
 
