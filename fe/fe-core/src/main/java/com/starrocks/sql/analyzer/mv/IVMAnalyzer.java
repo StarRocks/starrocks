@@ -106,13 +106,13 @@ public class IVMAnalyzer {
                     // preserves the typed AggStateDesc on the state_union scalar so the
                     // intermediate (sum, count) tuple keeps its DECIMAL precision/scale.
                     .put(FunctionSet.AVG,                    args -> isFixedOrFloat(args[0]) || args[0].isDecimalV3())
-                    // min/max: numeric, temporal, and string. VARCHAR was unblocked by #73095
-                    // which relaxed state_union's strict type-equality precondition to accept
-                    // compatible string types (VARCHAR(N) vs catalog-normalized VARCHAR(65533)).
+                    // min/max: numeric (incl. DECIMAL), temporal, string. DECIMAL is safe
+                    // because MIN/MAX state is the value itself — no composite (sum, count)
+                    // intermediate like AVG that would need precision-preserving plumbing.
                     .put(FunctionSet.MIN,                    args -> isFixedOrFloat(args[0]) || isTemporal(args[0])
-                                                                    || args[0].isStringType())
+                                                                    || args[0].isStringType() || args[0].isDecimalV3())
                     .put(FunctionSet.MAX,                    args -> isFixedOrFloat(args[0]) || isTemporal(args[0])
-                                                                    || args[0].isStringType())
+                                                                    || args[0].isStringType() || args[0].isDecimalV3())
                     // array_agg: accept single-arg only. ORDER BY in the source query inlines extra
                     // children via FunctionAnalyzer.getAdjustedAnalyzedAggregateFunction, so args.length
                     // exceeds 1 for `array_agg(col ORDER BY key)`. IVM state_union is unordered, so

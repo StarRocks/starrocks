@@ -2,6 +2,7 @@
 -- Verifies the widened IVM aggregate-function whitelist:
 --   * MIN/MAX(VARCHAR) — enabled by #73095 (state_union accepts compatible string types)
 --   * AVG(DECIMAL)     — enabled by #73012 (preserve AggStateDesc on state_union)
+--   * MIN/MAX(DECIMAL) — state is the value itself; no AVG-style (sum, count) plumbing
 --   * ARRAY_AGG(arg)   — single-arg accepted; ORDER BY variant rejected
 -- HLL_UNION / BITMAP_UNION remain rejected (Column.type singleton mutation bug
 -- in the underlying combinator path; deferred to a separate PR).
@@ -58,6 +59,18 @@ AS SELECT k, dt, AVG(d_dec) AS avg_d
    GROUP BY k, dt;
 [UC]REFRESH MATERIALIZED VIEW mv_avg_dec WITH SYNC MODE;
 SELECT k, dt, avg_d FROM mv_avg_dec ORDER BY k, dt;
+
+-- ============================================================
+-- POSITIVE: MIN/MAX(DECIMAL) IVM MV
+-- ============================================================
+CREATE MATERIALIZED VIEW mv_minmax_dec PARTITION BY dt
+REFRESH DEFERRED MANUAL
+PROPERTIES ("refresh_mode" = "incremental")
+AS SELECT k, dt, MIN(d_dec) AS min_d, MAX(d_dec) AS max_d
+   FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1
+   GROUP BY k, dt;
+[UC]REFRESH MATERIALIZED VIEW mv_minmax_dec WITH SYNC MODE;
+SELECT k, dt, min_d, max_d FROM mv_minmax_dec ORDER BY k, dt;
 
 -- ============================================================
 -- POSITIVE: ARRAY_AGG(single arg) IVM MV
