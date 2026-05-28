@@ -125,7 +125,7 @@ private:
 
     struct InFlightChunk {
         size_t segment_idx = 0;
-        size_t row_offset_in_segment = 0;     // first row's offset within its segment (rows)
+        size_t row_offset_in_segment = 0; // first row's offset within its segment (rows)
         size_t row_count = 0;
         int64_t file_offset = 0;              // byte offset within the file's body
         std::vector<uint64_t> data;           // owned; SWAPPED into caller when segment is single-sub-chunk

@@ -174,8 +174,7 @@ Status RowsMapperIterator::prepare_segments(const std::vector<size_t>& segment_r
     // sub-chunks consumes exactly M front entries from _in_flight.
     const int64_t sub_chunk_bytes_cfg =
             std::max<int64_t>(static_cast<int64_t>(EACH_ROW_SIZE), config::lake_rows_mapper_sub_chunk_bytes);
-    const size_t sub_chunk_rows =
-            std::max<size_t>(1, static_cast<size_t>(sub_chunk_bytes_cfg) / EACH_ROW_SIZE);
+    const size_t sub_chunk_rows = std::max<size_t>(1, static_cast<size_t>(sub_chunk_bytes_cfg) / EACH_ROW_SIZE);
 
     _sub_chunks.clear();
     _segment_sub_chunk_begin.assign(segment_row_counts.size() + 1, 0);
@@ -287,8 +286,7 @@ Status RowsMapperIterator::next_values(size_t fetch_cnt, std::vector<uint64_t>* 
     if (_pipelined) {
         // Pipelined mode: caller must consume segments in the order declared by
         // prepare_segments, with `fetch_cnt` matching `_segment_sizes[_next_segment_to_serve]`.
-        if (_next_segment_to_serve >= _segment_sizes.size() ||
-            fetch_cnt != _segment_sizes[_next_segment_to_serve]) {
+        if (_next_segment_to_serve >= _segment_sizes.size() || fetch_cnt != _segment_sizes[_next_segment_to_serve]) {
             return Status::InternalError(fmt::format(
                     "RowsMapperIterator pipelined consume mismatch: next_segment_to_serve={} fetch_cnt={} expected={}",
                     _next_segment_to_serve, fetch_cnt,
