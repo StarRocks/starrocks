@@ -1,0 +1,38 @@
+[package]
+name = "tantivy-binding"
+version = "0.1.0"
+edition = "2021"
+description = "Rust FFI binding crate exposing tantivy to StarRocks BE via a C ABI."
+license = "Apache-2.0"
+publish = false
+
+[lib]
+name = "tantivy_binding"
+crate-type = ["staticlib", "rlib"]
+
+[dependencies]
+# Tantivy is consumed via a relative path into the contrib/ submodule. The
+# depth of "../" hops walks up from this Cargo.toml to the repo root and back
+# down into contrib/tantivy. If you move this crate, update this path.
+#
+#   be/src/storage/index/inverted/tantivy/tantivy-binding/Cargo.toml
+#   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+#   1   2   3       4     5        6       7
+tantivy = { path = "../../../../../../../contrib/tantivy" }
+jieba-rs = "0.7"
+libc = "0.2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[build-dependencies]
+cbindgen = "0.27"
+
+[dev-dependencies]
+tempfile = "3"
+
+[profile.release]
+# Keep panic=unwind to match BE's exception-based runtime; an abort policy
+# would require special handling for cross-FFI panics.
+opt-level = 3
+lto = false
+debug = 1

@@ -834,6 +834,7 @@ include_directories(
     SYSTEM ${THIRDPARTY_DIR}/include/thrift/
     SYSTEM ${THIRDPARTY_DIR}/include/event/
     SYSTEM ${THIRDPARTY_DIR}/llvm/include/
+    SYSTEM ${SRC_DIR}/storage/index/inverted/tantivy/tantivy-binding/include
 )
 
 
@@ -911,6 +912,7 @@ set(STARROCKS_DEPENDENCIES
     clucene-core
     clucene-shared
     clucene-contribs-lib
+    tantivy_binding
     rocksdb
     libs2
     snappy
@@ -1071,6 +1073,7 @@ endif()
 # Set libraries for test
 set (TEST_LINK_LIBS ${STARROCKS_LINK_LIBS}
     ${WL_START_GROUP}
+    tantivy_binding
     gmock
     gtest
     ${WL_END_GROUP}
@@ -1165,6 +1168,9 @@ add_subdirectory(${SRC_DIR}/gutil)
 add_subdirectory(${SRC_DIR}/http)
 add_subdirectory(${SRC_DIR}/io)
 add_subdirectory(${SRC_DIR}/storage)
+# Tantivy FFI binding (Rust → static lib via cargo). Must come after the
+# storage subdir is registered but before targets that link tantivy_binding.
+add_subdirectory(${SRC_DIR}/storage/index/inverted/tantivy)
 add_subdirectory(${SRC_DIR}/runtime)
 add_subdirectory(${SRC_DIR}/serde)
 add_subdirectory(${SRC_DIR}/service)

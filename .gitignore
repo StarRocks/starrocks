@@ -84,6 +84,8 @@ be/src/gen_cpp/opcode
 be/src/thirdparty/starcache/
 be/ut_build_ASAN/
 be/tags
+be/src/storage/index/inverted/tantivy/tantivy-binding/target/
+be/src/storage/index/inverted/tantivy/tantivy-binding/include/tantivy_binding.h
 
 #ignore vscode project file
 .vscode
