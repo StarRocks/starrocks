@@ -3,6 +3,8 @@ displayed_sidebar: docs
 keywords: ['FE', 'Coordinator Node','memory', 'OOM', 'JVM', 'troubleshooting', 'heap']
 ---
 
+import MetaRecv from '../_assets/best_practices/fe_mem_meta_recv.mdx'
+
 # FE / コーディネーターノードのメモリ不足問題のトラブルシューティング
 
 「FEメモリ不足」の問題を防ぎ、迅速に回復し、再発防止のためにできる限り原因を特定します。
@@ -206,7 +208,7 @@ GCログを[https://gceasy.io/](https://gceasy.io/)にアップロードし、**
 
 ### 3. FEプログラムの内部バグによってクラッシュが発生した
 
-この状況はここでの説明の範囲外です。[メタデータの復元](../administration/Meta_recovery.md)ドキュメントを参照してください。
+<MetaRecv />
 
 ### 4. JVMのバグによってFEがクラッシュした
 
