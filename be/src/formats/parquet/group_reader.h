@@ -223,7 +223,7 @@ private:
     const cctz::time_zone& _get_variant_projection_timezone();
 
     Status _create_column_readers();
-    StatusOr<ColumnReaderPtr> _create_reserved_iceberg_column_reader(const SlotDescriptor* slot, int32_t field_id);
+    StatusOr<ColumnReaderPtr> _create_reserved_column_reader(const SlotDescriptor* slot, int32_t field_id);
     StatusOr<Datum> _get_extended_bigint_value(SlotId slot_id) const;
     StatusOr<ColumnReaderPtr> _create_column_reader(const GroupReaderParam::Column& column);
     VariantShreddedReadHints _get_variant_shredded_hints(std::string_view column_name) const;

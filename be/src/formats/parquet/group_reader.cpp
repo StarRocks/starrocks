@@ -814,8 +814,7 @@ StatusOr<size_t> GroupReader::_read_range_round_by_round(const Range<uint64_t>& 
     return hit_count;
 }
 
-StatusOr<ColumnReaderPtr> GroupReader::_create_reserved_iceberg_column_reader(const SlotDescriptor* slot,
-                                                                              int32_t field_id) {
+StatusOr<ColumnReaderPtr> GroupReader::_create_reserved_column_reader(const SlotDescriptor* slot, int32_t field_id) {
     // Try to find the physical column in the Parquet file by Iceberg spec field ID first (canonical),
     // then fall back to column name lookup for compatibility.
     int32_t field_idx = _param.file_metadata->schema().get_field_idx_by_field_id(field_id);
@@ -1059,7 +1058,7 @@ Status GroupReader::_create_column_readers() {
                 // Iceberg v3 row lineage: try physical column first (post-compaction files),
                 // fall back to computed row_id (firstRowId + position) for non-compacted files.
                 ASSIGN_OR_RETURN(auto reader,
-                                 _create_reserved_iceberg_column_reader(slot, HdfsScanner::ICEBERG_ROW_ID_COLUMN_ID));
+                                 _create_reserved_column_reader(slot, HdfsScanner::ICEBERG_ROW_ID_COLUMN_ID));
                 std::optional<int64_t> first_row_id = std::nullopt;
                 if (_param.scan_range != nullptr && _param.scan_range->__isset.first_row_id) {
                     first_row_id = std::optional<int64_t>(_row_group_first_row_id);
@@ -1074,7 +1073,7 @@ Status GroupReader::_create_column_readers() {
                 // Iceberg v3 row lineage: try physical column first (post-compaction files),
                 // fall back to file-level dataSequenceNumber passed via extended_columns from FE.
                 ASSIGN_OR_RETURN(auto reader,
-                                 _create_reserved_iceberg_column_reader(
+                                 _create_reserved_column_reader(
                                          slot, HdfsScanner::ICEBERG_LAST_UPDATED_SEQUENCE_NUMBER_COLUMN_ID));
                 Datum sequence_number = kNullDatum;
                 bool can_use_fallback = false;
@@ -1100,6 +1099,34 @@ Status GroupReader::_create_column_readers() {
                 _column_readers.emplace(slot->id(), std::make_unique<FixedValueColumnReader>(_param.scan_range_id));
             } else if (slot->col_name() == HdfsScanner::ICEBERG_ROW_POSITION) {
                 _column_readers.emplace(slot->id(), std::make_unique<ParquetPosReader>());
+            } else if (slot->col_name() == HdfsScanner::PAIMON_ROW_ID) {
+                ASSIGN_OR_RETURN(auto reader,
+                                 _create_reserved_column_reader(slot, HdfsScanner::PAIMON_ROW_ID_COLUMN_ID));
+                std::optional<int64_t> first_row_id = std::nullopt;
+                if (_param.scan_range != nullptr && _param.scan_range->__isset.first_row_id) {
+                    first_row_id = std::optional<int64_t>(_row_group_first_row_id);
+                }
+                ColumnReaderPtr row_id_reader =
+                        reader != nullptr ? std::make_unique<IcebergRowIdReader>(std::move(reader), first_row_id)
+                                          : std::make_unique<IcebergRowIdReader>(first_row_id);
+                _column_readers.emplace(slot->id(), std::move(row_id_reader));
+            } else if (slot->col_name() == HdfsScanner::PAIMON_SEQUENCE_NUMBER) {
+                ASSIGN_OR_RETURN(auto reader,
+                                 _create_reserved_column_reader(slot, HdfsScanner::PAIMON_SEQUENCE_NUMBER_COLUMN_ID));
+                Datum sequence_number = kNullDatum;
+                bool can_use_fallback = false;
+                auto sequence_number_or = _get_extended_bigint_value(slot->id());
+                if (sequence_number_or.ok()) {
+                    sequence_number = sequence_number_or.value();
+                    can_use_fallback = true;
+                } else if (!sequence_number_or.status().is_not_found()) {
+                    return sequence_number_or.status();
+                }
+                ColumnReaderPtr seq_reader =
+                        reader != nullptr ? std::make_unique<IcebergLastUpdatedSequenceNumberReader>(
+                                                    std::move(reader), can_use_fallback, sequence_number)
+                                          : std::make_unique<IcebergLastUpdatedSequenceNumberReader>(sequence_number);
+                _column_readers.emplace(slot->id(), std::move(seq_reader));
             }
         }
     }
