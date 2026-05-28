@@ -15,6 +15,8 @@
 #include "storage/rows_mapper.h"
 
 #include "base/testutil/assert.h"
+#include "base/utility/defer_op.h"
+#include "common/config_primary_key_fwd.h"
 #include "common/config_storage_fwd.h"
 #include "fs/fs.h"
 #include "fs/fs_factory.h"
@@ -253,6 +255,193 @@ TEST_F(RowsMapperTest, test_crm_file_deleted_on_iterator_destruction) {
 
     // File should be deleted after iterator destruction
     ASSERT_FALSE(fs::path_exist(crm_filename));
+}
+
+// ---------------------------------------------------------------------------
+// Pipelined per-segment / sub-chunk mode tests
+// ---------------------------------------------------------------------------
+
+namespace {
+
+// Build a .crm file with the given per-segment row counts. Returns the FileInfo
+// (with size) so callers can open it without an extra get_size() round-trip.
+FileInfo build_rows_mapper_file(const std::string& path, const std::vector<size_t>& segment_row_counts,
+                                uint64_t rssid_base) {
+    RowsMapperBuilder builder(path);
+    uint64_t row_id = 0;
+    for (size_t seg = 0; seg < segment_row_counts.size(); ++seg) {
+        std::vector<uint64_t> rssid_rowids;
+        const uint64_t rssid = rssid_base + seg;
+        for (size_t i = 0; i < segment_row_counts[seg]; ++i) {
+            rssid_rowids.push_back((rssid << 32) | row_id);
+            ++row_id;
+        }
+        CHECK_OK(builder.append(rssid_rowids));
+    }
+    CHECK_OK(builder.finalize());
+    FileInfo info = builder.file_info();
+    // file_info() returns a basename — switch to the full path the caller used so
+    // the iterator can actually open it.
+    info.path = path;
+    return info;
+}
+
+void verify_segment(const std::vector<uint64_t>& values, size_t expected_count, uint64_t expected_rssid,
+                    uint64_t expected_rowid_start) {
+    ASSERT_EQ(values.size(), expected_count);
+    for (size_t i = 0; i < values.size(); ++i) {
+        ASSERT_EQ(values[i] >> 32, expected_rssid);
+        ASSERT_EQ(values[i] & 0xFFFFFFFFULL, expected_rowid_start + i);
+    }
+}
+
+} // namespace
+
+TEST_F(RowsMapperTest, test_pipelined_single_segment) {
+    const std::string filename = std::string(kTestDirectory) + "pipelined_single.crm";
+    FileInfo info = build_rows_mapper_file(filename, {1000}, /*rssid_base=*/11);
+
+    RowsMapperIterator iterator;
+    ASSERT_OK(iterator.open(info));
+    ASSERT_OK(iterator.prepare_segments({1000}));
+
+    std::vector<uint64_t> values;
+    ASSERT_OK(iterator.next_values(1000, &values));
+    verify_segment(values, 1000, /*rssid=*/11, /*rowid_start=*/0);
+    ASSERT_OK(iterator.status());
+}
+
+TEST_F(RowsMapperTest, test_pipelined_multi_segment) {
+    const std::string filename = std::string(kTestDirectory) + "pipelined_multi.crm";
+    const std::vector<size_t> seg_rows = {300, 700, 200, 800};
+    FileInfo info = build_rows_mapper_file(filename, seg_rows, /*rssid_base=*/100);
+
+    RowsMapperIterator iterator;
+    ASSERT_OK(iterator.open(info));
+    ASSERT_OK(iterator.prepare_segments(seg_rows));
+
+    uint64_t expected_rowid_start = 0;
+    for (size_t seg = 0; seg < seg_rows.size(); ++seg) {
+        std::vector<uint64_t> values;
+        ASSERT_OK(iterator.next_values(seg_rows[seg], &values));
+        verify_segment(values, seg_rows[seg], /*rssid=*/100 + seg, expected_rowid_start);
+        expected_rowid_start += seg_rows[seg];
+    }
+    ASSERT_OK(iterator.status());
+
+    // Past-end consume should EOF.
+    std::vector<uint64_t> trailing;
+    ASSERT_TRUE(iterator.next_values(1, &trailing).is_end_of_file());
+}
+
+TEST_F(RowsMapperTest, test_pipelined_sub_chunking) {
+    // Force sub-chunking by shrinking the sub-chunk byte budget so a single
+    // segment is sliced into multiple sub-chunks. Each row is 8 bytes, so
+    // sub_chunk_bytes=16 → 2 rows per sub-chunk → 500 sub-chunks for a
+    // 1000-row segment.
+    const int64_t saved_sub_chunk = config::lake_rows_mapper_sub_chunk_bytes;
+    const int32_t saved_parallelism = config::lake_rows_mapper_read_parallelism;
+    config::lake_rows_mapper_sub_chunk_bytes = 16;
+    config::lake_rows_mapper_read_parallelism = 4;
+    DeferOp restore([&]() {
+        config::lake_rows_mapper_sub_chunk_bytes = saved_sub_chunk;
+        config::lake_rows_mapper_read_parallelism = saved_parallelism;
+    });
+
+    const std::string filename = std::string(kTestDirectory) + "pipelined_sub_chunking.crm";
+    // Two segments of unequal size, neither a multiple of the sub-chunk row
+    // count, to exercise the trailing-partial-sub-chunk path.
+    const std::vector<size_t> seg_rows = {1001, 503};
+    FileInfo info = build_rows_mapper_file(filename, seg_rows, /*rssid_base=*/7);
+
+    RowsMapperIterator iterator;
+    ASSERT_OK(iterator.open(info));
+    ASSERT_OK(iterator.prepare_segments(seg_rows));
+
+    std::vector<uint64_t> values;
+    ASSERT_OK(iterator.next_values(1001, &values));
+    verify_segment(values, 1001, /*rssid=*/7, /*rowid_start=*/0);
+
+    ASSERT_OK(iterator.next_values(503, &values));
+    verify_segment(values, 503, /*rssid=*/8, /*rowid_start=*/1001);
+
+    ASSERT_OK(iterator.status());
+}
+
+TEST_F(RowsMapperTest, test_pipelined_sum_mismatch_corruption) {
+    const std::string filename = std::string(kTestDirectory) + "pipelined_sum_mismatch.crm";
+    FileInfo info = build_rows_mapper_file(filename, {500}, /*rssid_base=*/11);
+
+    RowsMapperIterator iterator;
+    ASSERT_OK(iterator.open(info));
+    // Declared sum (200+200=400) != file row count (500).
+    auto st = iterator.prepare_segments({200, 200});
+    ASSERT_TRUE(st.is_corruption()) << st;
+}
+
+TEST_F(RowsMapperTest, test_pipelined_after_next_values_fails) {
+    const std::string filename = std::string(kTestDirectory) + "pipelined_after_next.crm";
+    FileInfo info = build_rows_mapper_file(filename, {300}, /*rssid_base=*/11);
+
+    RowsMapperIterator iterator;
+    ASSERT_OK(iterator.open(info));
+
+    // Consume one row in sequential mode before calling prepare_segments.
+    std::vector<uint64_t> values;
+    ASSERT_OK(iterator.next_values(1, &values));
+
+    auto st = iterator.prepare_segments({300});
+    ASSERT_TRUE(st.is_internal_error()) << st;
+}
+
+TEST_F(RowsMapperTest, test_pipelined_called_twice_fails) {
+    const std::string filename = std::string(kTestDirectory) + "pipelined_twice.crm";
+    FileInfo info = build_rows_mapper_file(filename, {300}, /*rssid_base=*/11);
+
+    RowsMapperIterator iterator;
+    ASSERT_OK(iterator.open(info));
+    ASSERT_OK(iterator.prepare_segments({300}));
+
+    auto st = iterator.prepare_segments({300});
+    ASSERT_TRUE(st.is_internal_error()) << st;
+}
+
+TEST_F(RowsMapperTest, test_pipelined_wrong_fetch_size) {
+    const std::string filename = std::string(kTestDirectory) + "pipelined_wrong_fetch.crm";
+    FileInfo info = build_rows_mapper_file(filename, {100, 200}, /*rssid_base=*/5);
+
+    RowsMapperIterator iterator;
+    ASSERT_OK(iterator.open(info));
+    ASSERT_OK(iterator.prepare_segments({100, 200}));
+
+    // First segment is 100 rows; fetching 50 must fail.
+    std::vector<uint64_t> values;
+    auto st = iterator.next_values(50, &values);
+    ASSERT_TRUE(st.is_internal_error()) << st;
+}
+
+TEST_F(RowsMapperTest, test_pipelined_destructor_drains_without_consume) {
+    // Force tiny sub-chunks so there are several in-flight chunks pending when
+    // the iterator goes out of scope without any next_values call. The
+    // destructor must drain them all without crashing.
+    const int64_t saved_sub_chunk = config::lake_rows_mapper_sub_chunk_bytes;
+    const int32_t saved_parallelism = config::lake_rows_mapper_read_parallelism;
+    config::lake_rows_mapper_sub_chunk_bytes = 16;
+    config::lake_rows_mapper_read_parallelism = 8;
+    DeferOp restore([&]() {
+        config::lake_rows_mapper_sub_chunk_bytes = saved_sub_chunk;
+        config::lake_rows_mapper_read_parallelism = saved_parallelism;
+    });
+
+    const std::string filename = std::string(kTestDirectory) + "pipelined_drain_dtor.crm";
+    FileInfo info = build_rows_mapper_file(filename, {64}, /*rssid_base=*/11);
+
+    {
+        RowsMapperIterator iterator;
+        ASSERT_OK(iterator.open(info));
+        ASSERT_OK(iterator.prepare_segments({64}));
+        // Leave with in-flight chunks; destructor must drain cleanly.
+    }
 }
 
 TEST_F(RowsMapperTest, test_crm_file_gc) {

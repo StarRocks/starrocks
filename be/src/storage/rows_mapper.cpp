@@ -230,7 +230,7 @@ Status RowsMapperIterator::_maybe_submit_next() {
     // Each in-flight chunk owns its own RandomAccessFile so concurrent reads never
     // touch shared file-class state (the underlying starlet wrapper has been
     // observed to crash under concurrent access on the same handle).
-    ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(_path));
+    ASSIGN_OR_RETURN(auto fs, FileSystemFactory::CreateSharedFromString(_path));
     RandomAccessFileOptions opts;
     opts.skip_fill_local_cache = true;
     ASSIGN_OR_RETURN(chunk.rf, fs->new_random_access_file(opts, _path));
