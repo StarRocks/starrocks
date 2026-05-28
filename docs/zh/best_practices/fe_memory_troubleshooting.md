@@ -3,6 +3,8 @@ displayed_sidebar: docs
 keywords: ['FE', 'Coordinator Node','memory', 'OOM', 'JVM', 'troubleshooting', 'heap']
 ---
 
+import MetaRecv from '../_assets/best_practices/fe_mem_meta_recv.mdx'
+
 # FE / 协调节点内存满问题故障排查
 
 防止"FE内存已满"问题，快速恢复，并尽可能找出原因以防止再次发生。
@@ -206,7 +208,7 @@ transfer FE type from LEADER to FOLLOWER. exit
 
 ### 3. FE 程序内部 bug 导致崩溃
 
-此情况不在本文讨论范围内。请参考[恢复元数据](../administration/Meta_recovery.md)文档。
+<MetaRecv />
 
 ### 4. JVM bug 导致 FE 崩溃
 
