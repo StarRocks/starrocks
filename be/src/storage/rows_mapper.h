@@ -123,15 +123,15 @@ private:
     struct InFlightChunk {
         size_t segment_idx = 0;
         size_t row_count = 0;
-        int64_t file_offset = 0;           // byte offset within the file's body
-        std::vector<uint64_t> data;        // owned, sized to row_count; SWAPPED into caller on consume
+        int64_t file_offset = 0;              // byte offset within the file's body
+        std::vector<uint64_t> data;           // owned, sized to row_count; SWAPPED into caller on consume
         std::unique_ptr<RandomAccessFile> rf; // own RAF — no shared file-class state across tasks
         std::shared_future<Status> future;
     };
 
 private:
     std::unique_ptr<RandomAccessFile> _rfile; // sequential-fallback handle; also used for footer reads
-    std::string _path;                         // remembered so per-chunk RAFs can be opened in pipelined mode
+    std::string _path;                        // remembered so per-chunk RAFs can be opened in pipelined mode
     uint64_t _row_count = 0;
     // Point to the next position that we want to read
     uint64_t _pos = 0;
@@ -142,10 +142,10 @@ private:
     // Pipelined per-segment mode state (populated by `prepare_segments`).
     std::vector<size_t> _segment_sizes;
     std::vector<int64_t> _segment_offsets; // byte offset of segment i within the file
-    size_t _next_to_submit = 0;             // next segment index to submit
-    size_t _next_to_serve = 0;              // next segment index to serve via next_values
-    std::deque<InFlightChunk> _in_flight;   // FIFO of in-flight per-segment chunks
-    bool _pipelined = false;                // true after a successful prepare_segments
+    size_t _next_to_submit = 0;            // next segment index to submit
+    size_t _next_to_serve = 0;             // next segment index to serve via next_values
+    std::deque<InFlightChunk> _in_flight;  // FIFO of in-flight per-segment chunks
+    bool _pipelined = false;               // true after a successful prepare_segments
 };
 
 // rows mapper file's name for lake table
