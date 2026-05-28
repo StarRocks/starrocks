@@ -253,6 +253,9 @@ public class TabletInvertedIndex implements MemoryTrackable {
         if (GlobalStateMgr.isCheckpointThread()) {
             return;
         }
+        if (tabletIds.isEmpty()) {
+            return;
+        }
         writeLock();
         try {
             for (long tabletId : tabletIds) {
