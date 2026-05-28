@@ -329,6 +329,55 @@ public class MergeIntoAnalyzerIcebergTest {
     }
 
     @Test
+    public void testMergeInsertStarSourceWithDifferentColumnNames() {
+        // INSERT * resolves source columns by NAME. If none of the source
+        // aliases match the target column names, every target column's
+        // SlotRef fails to resolve and analysis errors out.
+        String sql = "MERGE INTO iceberg0.unpartitioned_db.t0_v2 AS t " +
+                "USING (SELECT 1 AS x, 'a' AS y, '2024-01-01' AS z) AS s " +
+                "ON t.id = s.x " +
+                "WHEN NOT MATCHED THEN INSERT *";
+        MergeIntoStmt stmt = parseMerge(sql);
+
+        Exception ex = assertThrows(Exception.class,
+                () -> MergeIntoAnalyzer.analyze(stmt, connectContext));
+        String msg = ex.getMessage() == null ? "" : ex.getMessage().toLowerCase();
+        assertTrue(msg.contains("column") || msg.contains("resolve") || msg.contains("unknown"),
+                "Error should mention unresolved column: " + ex.getMessage());
+    }
+
+    @Test
+    public void testMergeInsertStarSourceMissingTargetColumn() {
+        // Source missing one target column ('date'). INSERT * still expands
+        // SlotRef(s, "date") for the target column; resolution fails.
+        String sql = "MERGE INTO iceberg0.unpartitioned_db.t0_v2 AS t " +
+                "USING (SELECT 1 AS id, 'a' AS data) AS s " +
+                "ON t.id = s.id " +
+                "WHEN NOT MATCHED THEN INSERT *";
+        MergeIntoStmt stmt = parseMerge(sql);
+
+        Exception ex = assertThrows(Exception.class,
+                () -> MergeIntoAnalyzer.analyze(stmt, connectContext));
+        String msg = ex.getMessage() == null ? "" : ex.getMessage().toLowerCase();
+        assertTrue(msg.contains("date") || msg.contains("column") || msg.contains("resolve"),
+                "Error should mention missing column: " + ex.getMessage());
+    }
+
+    @Test
+    public void testMergeInsertStarSourceWithExtraColumns() {
+        // Source has columns beyond the target schema ('bonus'). By-name
+        // resolution simply ignores the extras — analysis must succeed.
+        String sql = "MERGE INTO iceberg0.unpartitioned_db.t0_v2 AS t " +
+                "USING (SELECT 1 AS id, 'a' AS data, '2024-01-01' AS date, 'extra' AS bonus) AS s " +
+                "ON t.id = s.id " +
+                "WHEN NOT MATCHED THEN INSERT *";
+        MergeIntoStmt stmt = parseMerge(sql);
+
+        assertDoesNotThrow(() -> MergeIntoAnalyzer.analyze(stmt, connectContext));
+        assertNotNull(stmt.getQueryStatement());
+    }
+
+    @Test
     public void testMergeSourceSubquery() {
         // Source is a subquery with an alias
         String sql = "MERGE INTO iceberg0.unpartitioned_db.t0_v2 AS t " +

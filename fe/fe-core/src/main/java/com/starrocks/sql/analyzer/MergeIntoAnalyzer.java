@@ -431,7 +431,10 @@ public class MergeIntoAnalyzer {
                                                  Column col, MergeIntoStmt stmt,
                                                  IcebergTable icebergTable) {
         if (insertClause.isStar()) {
-            // INSERT * — reference source column with same name
+            // INSERT * resolves source columns by NAME match against the target
+            // column name (not by position). The source must expose a column whose
+            // name matches each non-hidden target column; otherwise QueryAnalyzer
+            // raises a resolution error on the rewritten SELECT list.
             String sourceQualifier = getInsertStarSourceQualifier(stmt);
             return new SlotRef(new TableName(null, null, sourceQualifier), col.getName());
         }
@@ -509,56 +512,45 @@ public class MergeIntoAnalyzer {
      * </pre>
      */
     private static Expr buildOpCodeCaseExpr(MergeIntoStmt stmt, TableName targetSlotTableName) {
-        Expr targetFileRef = new SlotRef(targetSlotTableName, IcebergTable.FILE_PATH);
-        Expr isMatchedBase = new IsNullPredicate(targetFileRef, true);   // IS NOT NULL
-        Expr isNotMatchedBase = new IsNullPredicate(
-                new SlotRef(targetSlotTableName, IcebergTable.FILE_PATH), false); // IS NULL
-
         List<CaseWhenClause> whenClauses = new ArrayList<>();
-
         for (MergeWhenClause clause : stmt.getWhenClauses()) {
-            if (clause.isMatched()) {
-                // MATCHED clause
-                int opCode;
-                if (clause instanceof MergeWhenMatchedDeleteClause) {
-                    opCode = IcebergRowDeltaSink.OpCode.DELETE.value();
-                } else {
-                    opCode = IcebergRowDeltaSink.OpCode.UPDATE.value();
-                }
-                Expr opCodeLiteral = new IntLiteral(opCode, IntegerType.TINYINT);
-
-                Expr condition = clause.getOptionalCondition();
-                Expr whenExpr;
-                if (condition != null) {
-                    whenExpr = new CompoundPredicate(CompoundPredicate.Operator.AND,
-                            isMatchedBase, condition);
-                } else {
-                    // Unconditional matched — just IS NOT NULL
-                    whenExpr = isMatchedBase;
-                }
-                whenClauses.add(new CaseWhenClause(whenExpr, opCodeLiteral));
-            } else {
-                // NOT MATCHED clause
-                Expr opCodeLiteral = new IntLiteral(
-                        IcebergRowDeltaSink.OpCode.INSERT.value(), IntegerType.TINYINT);
-
-                Expr condition = clause.getOptionalCondition();
-                Expr whenExpr;
-                if (condition != null) {
-                    whenExpr = new CompoundPredicate(CompoundPredicate.Operator.AND,
-                            isNotMatchedBase, condition);
-                } else {
-                    // Unconditional not matched — just IS NULL
-                    whenExpr = isNotMatchedBase;
-                }
-                whenClauses.add(new CaseWhenClause(whenExpr, opCodeLiteral));
-            }
+            whenClauses.add(buildOpCodeClause(clause, targetSlotTableName));
         }
-
         // ELSE 0 (NO_OP) — row matches no WHEN clause, discard
         Expr elseExpr = new IntLiteral(IcebergRowDeltaSink.OpCode.NO_OP.value(), IntegerType.TINYINT);
-
         return new CaseExpr(null, whenClauses, elseExpr);
+    }
+
+    /**
+     * Build one CASE WHEN/THEN entry for a single MERGE WHEN clause.
+     * A fresh Expr subtree is constructed on every call — ExpressionAnalyzer mutates
+     * Expr nodes in place during resolution, so sharing nodes across multiple CASE /
+     * CompoundPredicate parents would produce stale typing on re-visit.
+     */
+    private static CaseWhenClause buildOpCodeClause(MergeWhenClause clause,
+                                                    TableName targetSlotTableName) {
+        Expr basePredicate;
+        int opCode;
+        if (clause.isMatched()) {
+            // target._file IS NOT NULL — row exists in target
+            basePredicate = new IsNullPredicate(
+                    new SlotRef(targetSlotTableName, IcebergTable.FILE_PATH), true);
+            opCode = (clause instanceof MergeWhenMatchedDeleteClause)
+                    ? IcebergRowDeltaSink.OpCode.DELETE.value()
+                    : IcebergRowDeltaSink.OpCode.UPDATE.value();
+        } else {
+            // target._file IS NULL — row absent from target
+            basePredicate = new IsNullPredicate(
+                    new SlotRef(targetSlotTableName, IcebergTable.FILE_PATH), false);
+            opCode = IcebergRowDeltaSink.OpCode.INSERT.value();
+        }
+        Expr opCodeLiteral = new IntLiteral(opCode, IntegerType.TINYINT);
+
+        Expr condition = clause.getOptionalCondition();
+        Expr whenExpr = (condition != null)
+                ? new CompoundPredicate(CompoundPredicate.Operator.AND, basePredicate, condition)
+                : basePredicate;
+        return new CaseWhenClause(whenExpr, opCodeLiteral);
     }
 
     /**

@@ -2721,10 +2721,6 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
         String targetAlias = context.targetAlias != null ? getIdentifierName(context.targetAlias) : null;
         Relation sourceRelation = (Relation) visit(context.relation());
         String sourceAlias = context.sourceAlias != null ? getIdentifierName(context.sourceAlias) : null;
-        // ANTLR is greedy on the inner `(AS? alias)?` slots inside `relationPrimary`,
-        // so sourceAlias is only populated when the source relation's outer form
-        // (parenthesized join / multi-relation) has no inner alias slot. Apply it to
-        // the relation here so QueryAnalyzer's scope resolution sees the alias.
         if (sourceAlias != null && sourceRelation.getAlias() == null) {
             sourceRelation.setAlias(new TableName(null, sourceAlias));
         }
