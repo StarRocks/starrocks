@@ -656,13 +656,60 @@ public class VectorIndexTest extends PlanTestBase {
 
     @Test
     public void testPreparedStatementCastStringArrayEmptyElement() throws Exception {
-        // Trailing comma yields an empty token.
+        // Two adjacent commas yield an empty interior token.
         String sql = "select c1 from test.test_cosine "
                 + "order by approx_cosine_similarity(CAST('[1.1,2.2,,4.4,5.5]' AS ARRAY<FLOAT>), c1) desc "
                 + "limit 10";
         assertThatThrownBy(() -> getVerboseExplain(sql))
                 .isInstanceOf(SemanticException.class)
                 .hasMessageContaining("Empty element in vector array literal");
+    }
+
+    @Test
+    public void testPreparedStatementCastStringArrayTrailingComma() throws Exception {
+        // A comma at the very end of the array must be rejected; otherwise the literal
+        // would be silently truncated to N-1 elements (and could accidentally match dim).
+        String sql = "select c1 from test.test_cosine "
+                + "order by approx_cosine_similarity(CAST('[1.1,2.2,3.3,4.4,5.5,]' AS ARRAY<FLOAT>), c1) desc "
+                + "limit 10";
+        assertThatThrownBy(() -> getVerboseExplain(sql))
+                .isInstanceOf(SemanticException.class)
+                .hasMessageContaining("Trailing comma in vector array literal");
+    }
+
+    @Test
+    public void testPreparedStatementCastStringArrayNaNRejected() throws Exception {
+        // BE cast_expr rejects NaN when casting string -> float; the rewrite path must
+        // do the same so rule-fires vs rule-misses produce identical semantics.
+        String sql = "select c1 from test.test_cosine "
+                + "order by approx_cosine_similarity(CAST('[1.1,NaN,3.3,4.4,5.5]' AS ARRAY<FLOAT>), c1) desc "
+                + "limit 10";
+        assertThatThrownBy(() -> getVerboseExplain(sql))
+                .isInstanceOf(SemanticException.class)
+                .hasMessageContaining("Non-finite float in vector array literal");
+    }
+
+    @Test
+    public void testPreparedStatementCastStringArrayInfinityRejected() throws Exception {
+        String sql = "select c1 from test.test_cosine "
+                + "order by approx_cosine_similarity(CAST('[1.1,Infinity,3.3,4.4,5.5]' AS ARRAY<FLOAT>), c1) desc "
+                + "limit 10";
+        assertThatThrownBy(() -> getVerboseExplain(sql))
+                .isInstanceOf(SemanticException.class)
+                .hasMessageContaining("Non-finite float in vector array literal");
+    }
+
+    @Test
+    public void testPreparedStatementCastStringArrayOverflowRejected() throws Exception {
+        // Double.parseDouble("1e5000") returns Double.POSITIVE_INFINITY, which is the same
+        // overflow path BE rejects. Cover it explicitly so future parseDouble swaps don't
+        // silently re-open the hole.
+        String sql = "select c1 from test.test_cosine "
+                + "order by approx_cosine_similarity(CAST('[1.1,1e5000,3.3,4.4,5.5]' AS ARRAY<FLOAT>), c1) desc "
+                + "limit 10";
+        assertThatThrownBy(() -> getVerboseExplain(sql))
+                .isInstanceOf(SemanticException.class)
+                .hasMessageContaining("Non-finite float in vector array literal");
     }
 
 }

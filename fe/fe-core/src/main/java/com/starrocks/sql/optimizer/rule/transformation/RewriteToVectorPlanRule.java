@@ -451,6 +451,7 @@ public class RewriteToVectorPlanRule extends TransformationRule {
         String body = trimmed.substring(open + 1, close);
         int n = body.length();
         int i = 0;
+        boolean expectAnother = false;
         while (i < n) {
             while (i < n && Character.isWhitespace(body.charAt(i))) {
                 i++;
@@ -466,15 +467,28 @@ public class RewriteToVectorPlanRule extends TransformationRule {
             if (tok.isEmpty()) {
                 throw new SemanticException("Empty element in vector array literal: " + literal);
             }
+            double parsed;
             try {
-                Double.parseDouble(tok); // validate
+                parsed = Double.parseDouble(tok);
             } catch (NumberFormatException e) {
                 throw new SemanticException("Invalid float in vector array literal: '" + tok + "'");
+            }
+            // BE cast_expr rejects NaN/Inf when casting string to float; mirror that here so
+            // `CAST(? AS ARRAY<FLOAT>)` has identical semantics regardless of whether the
+            // rewrite rule fires (cf. be/src/exprs/cast_expr.cpp string -> float).
+            if (!Double.isFinite(parsed)) {
+                throw new SemanticException("Non-finite float in vector array literal: '" + tok + "'");
             }
             out.add(tok);
             if (i < n && body.charAt(i) == ',') {
                 i++;
+                expectAnother = true;
+            } else {
+                expectAnother = false;
             }
+        }
+        if (expectAnother) {
+            throw new SemanticException("Trailing comma in vector array literal: " + literal);
         }
     }
 
