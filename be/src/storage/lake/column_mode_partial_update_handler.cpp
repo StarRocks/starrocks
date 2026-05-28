@@ -344,29 +344,33 @@ Status ColumnModePartialUpdateHandler::execute(const RowsetUpdateStateParams& pa
 
     const auto& txn_meta = params.op_write.txn_meta();
 
+    // cid may shift across schema versions; recompute it from uid against the current
+    // tablet schema. partial_update_column_ids in txn_meta is kept for compatibility only.
+    DCHECK_EQ(txn_meta.partial_update_column_ids_size(), txn_meta.partial_update_column_unique_ids_size());
     std::vector<ColumnId> update_column_ids;
     std::vector<ColumnUID> unique_update_column_ids;
-    for (ColumnId cid : txn_meta.partial_update_column_ids()) {
-        if (cid >= params.tablet_schema->num_key_columns()) {
-            if (!params.tablet_schema->column(cid).is_auto_increment()) {
-                update_column_ids.push_back(cid);
-            }
-        }
-    }
-    for (uint32_t uid : txn_meta.partial_update_column_unique_ids()) {
-        auto cid = params.tablet_schema->field_index(uid);
+    for (int i = 0; i < txn_meta.partial_update_column_unique_ids_size(); ++i) {
+        const uint32_t uid = txn_meta.partial_update_column_unique_ids(i);
+        const auto cid = params.tablet_schema->field_index(uid);
         if (cid == -1) {
             std::string msg = strings::Substitute("column with unique id:$0 does not exist. tablet:$1", uid,
                                                   params.tablet->tablet_id());
             LOG(ERROR) << msg;
             return Status::InternalError(msg);
         }
-        if (!params.tablet_schema->column(cid).is_key() && !params.tablet_schema->column(cid).is_auto_increment()) {
-            unique_update_column_ids.push_back(uid);
+        const auto& col = params.tablet_schema->column(cid);
+        if (col.is_key() || col.is_auto_increment()) {
+            continue;
+        }
+        update_column_ids.push_back(cid);
+        unique_update_column_ids.push_back(uid);
+
+        if (cid != static_cast<ColumnId>(txn_meta.partial_update_column_ids(i))) {
+            LOG(INFO) << "lake pcu schema drift detected: tablet=" << params.tablet->tablet_id()
+                      << " uid=" << uid << " frozen_cid=" << txn_meta.partial_update_column_ids(i)
+                      << " current_cid=" << cid << " schema_id=" << params.tablet_schema->id();
         }
     }
-
-    DCHECK(update_column_ids.size() == unique_update_column_ids.size());
 
     // When condition update is enabled together with column-mode PCU, delta_writer has validated
     // that the condition column is part of the partial column set; we force a single column batch
