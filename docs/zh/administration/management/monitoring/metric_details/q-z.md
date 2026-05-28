@@ -46,6 +46,12 @@ description: "Alphabetical q - z"
 - 单位：-
 - 描述：当前查询缓存使用率。
 
+## `query_coordinator_count`
+
+- 单位：个
+- 类型：瞬时值
+- 描述：当前 FE 上正在协调执行的查询数（即 `QeProcessorImpl.coordinatorMap` 的大小）。反映当前 FE 上活跃执行中的 SQL 数量，不依赖 query queue 是否开启。
+
 ## `query_mem_bytes`
 
 - 单位：字节
