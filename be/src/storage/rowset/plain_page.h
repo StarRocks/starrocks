@@ -39,7 +39,7 @@
 #include "column/column.h"
 #include "column/container_resource.h"
 #include "storage/olap_common.h"
-#include "storage/range.h"
+#include "storage/primitive/range.h"
 #include "storage/rowset/options.h"
 #include "storage/rowset/page_builder.h"
 #include "storage/rowset/page_decoder.h"

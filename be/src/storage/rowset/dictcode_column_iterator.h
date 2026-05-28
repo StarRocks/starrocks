@@ -24,7 +24,7 @@
 #include "runtime/global_dict/config.h"
 #include "runtime/global_dict/dict_column.h"
 #include "runtime/global_dict/types.h"
-#include "storage/range.h"
+#include "storage/primitive/range.h"
 #include "storage/rowset/column_iterator_decorator.h"
 #include "storage/rowset/scalar_column_iterator.h"
 

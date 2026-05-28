@@ -29,6 +29,7 @@
 #include "column/column_helper.h"
 #include "common/config_vector_index_fwd.h"
 #include "fs/fs_memory.h"
+#include "gutil/walltime.h"
 #include "runtime/mem_pool.h"
 #include "storage/index/index_descriptor.h"
 #include "storage/index/vector/tenann/tenann_index_utils.h"

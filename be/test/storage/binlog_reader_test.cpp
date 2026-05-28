@@ -20,6 +20,7 @@
 #include "column/chunk_factory.h"
 #include "column/datum_tuple.h"
 #include "fs/fs_util.h"
+#include "gutil/walltime.h"
 #include "storage/chunk_helper.h"
 #include "storage/rowset/rowset_factory.h"
 #include "storage/rowset/rowset_writer.h"

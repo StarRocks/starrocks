@@ -12,20 +12,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "formats/parquet/parquet_pos_reader.h"
+#pragma once
 
-#include "storage/primitive/range.h"
-#include "types/datum.h"
+#include <cstdint>
 
-namespace starrocks::parquet {
+namespace starrocks {
 
-Status ParquetPosReader::read_range(const Range<uint64_t>& range, const Filter* filter, ColumnPtr& dst) {
-    for (uint64_t i = range.begin(); i < range.end(); ++i) {
-        // Generate position based on the absolute row position in the file.
-        int64_t pos = i;
-        dst->as_mutable_raw_ptr()->append_datum(Datum(pos));
-    }
-    return Status::OK();
-}
+// One segment file could store at most INT32_MAX rows,
+// but due to array type, each column could store more than INT32_MAX values.
+using rowid_t = uint32_t;
+using ordinal_t = uint64_t;
 
-} // namespace starrocks::parquet
+} // namespace starrocks

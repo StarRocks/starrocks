@@ -96,6 +96,7 @@
 #include "storage/tablet_meta_manager.h"
 #include "storage/zone_map_detail.h"
 #include "types/olap_type_infra.h"
+#include "util/logging.h"
 
 using starrocks::DataDir;
 using starrocks::KVStore;

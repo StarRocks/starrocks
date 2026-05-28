@@ -46,7 +46,7 @@
 #include "exec/scan_node.h"
 #include "gutil/stl_util.h"
 #include "gutil/strings/substitute.h"
-#include "storage/olap_tuple.h"
+#include "storage/primitive/olap_tuple.h"
 
 namespace starrocks {
 

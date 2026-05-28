@@ -30,6 +30,7 @@
 #include "common/logging.h"
 #include "common/runtime_profile.h"
 #include "gen_cpp/internal_service.pb.h"
+#include "gutil/walltime.h"
 #include "platform/platform_env.h"
 #include "runtime/exec_env.h"
 #include "runtime/load_channel.h"

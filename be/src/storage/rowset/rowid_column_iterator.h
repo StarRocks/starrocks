@@ -16,9 +16,9 @@
 
 #include "base/container/raw_container.h"
 #include "gutil/casts.h"
-#include "storage/range.h"
+#include "storage/primitive/range.h"
+#include "storage/primitive/rowid_types.h"
 #include "storage/rowset/column_iterator.h"
-#include "storage/rowset/common.h"
 
 namespace starrocks {
 

@@ -27,6 +27,7 @@
 #include "common/config_exec_fwd.h"
 #include "fs/fs_factory.h"
 #include "fs/fs_util.h"
+#include "gutil/walltime.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/descriptors.h"
 #include "runtime/runtime_state.h"

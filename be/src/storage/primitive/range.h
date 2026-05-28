@@ -21,10 +21,10 @@
 #include <vector>
 
 #include "column/vectorized_fwd.h"
+#include "common/logging.h"
 #include "common/memory/column_allocator.h"
-#include "storage/rowset/common.h"
+#include "storage/primitive/rowid_types.h"
 #include "types/datum.h"
-#include "util/logging.h"
 
 namespace starrocks {
 

@@ -26,6 +26,7 @@
 #include "column/chunk_factory.h"
 #include "column/datum_tuple.h"
 #include "gutil/strings/substitute.h"
+#include "gutil/walltime.h"
 #include "runtime/runtime_state.h"
 #include "storage/chunk_helper.h"
 #include "storage/empty_iterator.h"

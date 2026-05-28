@@ -19,6 +19,7 @@
 #include "base/testutil/assert.h"
 #include "fs/fs_factory.h"
 #include "fs/fs_util.h"
+#include "gutil/walltime.h"
 #include "storage/binlog_test_base.h"
 
 namespace starrocks {

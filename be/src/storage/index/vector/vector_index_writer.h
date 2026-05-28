@@ -21,7 +21,7 @@
 #include "column/vectorized_fwd.h"
 #include "common/status.h"
 #include "storage/index/vector/vector_index_builder_factory.h"
-#include "storage/rowset/common.h"
+#include "storage/primitive/rowid_types.h"
 #include "storage/tablet_schema.h"
 #include "types/bitmap_value.h"
 

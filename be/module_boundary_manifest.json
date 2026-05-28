@@ -378,6 +378,30 @@
       "remediation": "Keep RuntimeEnv limited to process-scoped runtime environment resources; move query execution, storage, service, connector, and UDF integration upward."
     },
     {
+      "id": "storageprimitive",
+      "doc_label": "StoragePrimitive",
+      "summary": "Primitive storage contracts and value types shared below ComputeEnv without concrete Storage engine, tablet, rowset, lake, service, or full Exec coupling.",
+      "owned_targets": ["StoragePrimitive"],
+      "owned_roots": ["be/src/storage/primitive"],
+      "allowed_include_prefixes": [
+        "storage/primitive/",
+        "exprs/",
+        "runtime/",
+        "column/",
+        "types/",
+        "common/",
+        "base/",
+        "gutil/",
+        "gen_cpp/"
+      ],
+      "forbidden_include_prefixes": ["storage/", "exec/", "service/", "connector/", "http/", "cache/", "util/"],
+      "forbidden_includes": ["runtime/exec_env.h"],
+      "allowed_target_deps": ["ExprCore", "RuntimeCore", "ChunkCore", "ColumnCore", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
+      "allowed_test_targets": ["storage_primitive_test"],
+      "allowed_test_link_deps": ["StoragePrimitive", "ExprCore", "RuntimeCore", "ChunkCore", "ColumnCore", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
+      "remediation": "Keep StoragePrimitive limited to reusable storage contracts and value types; move concrete storage engine, tablet, rowset, lake, service, connector, and full Exec integration upward."
+    },
+    {
       "id": "computeenv",
       "doc_label": "ComputeEnv",
       "summary": "Shared compute-side BE environment boundary for process-scoped compute resources and pipeline controls below full Exec/Storage and above RuntimeEnv.",
@@ -399,6 +423,7 @@
         "exec/pipeline/scan/dynamic_morsel_queue.h",
         "exec/pipeline/scan/dynamic_morsel_queue_builder.h",
         "exec/pipeline/scan/ticketed_morsel_queue.h",
+        "storage/primitive/",
         "exprs/",
         "serde/",
         "runtime/env/",
@@ -414,7 +439,7 @@
       ],
       "forbidden_include_prefixes": ["exec/", "storage/", "service/", "connector/", "agent/"],
       "forbidden_includes": ["runtime/exec_env.h"],
-      "allowed_target_deps": ["ExecPrimitive", "ExprCore", "Serde", "Util", "RuntimeEnv", "RuntimeCore", "Platform", "ChunkCore", "ColumnCore", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
+      "allowed_target_deps": ["StoragePrimitive", "ExecPrimitive", "ExprCore", "Serde", "Util", "RuntimeEnv", "RuntimeCore", "Platform", "ChunkCore", "ColumnCore", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
       "allowed_test_targets": ["compute_env_test", "compute_env_sorting_test"],
       "allowed_test_link_deps": ["ComputeEnv", "ExprCore", "RuntimeCore", "ChunkCore", "ColumnCore", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
       "remediation": "Keep ComputeEnv limited to process-scoped compute resources, shared compute-side service contracts, stable execution primitives, and reusable compute-side sorting algorithms; move concrete Exec, Storage, Service, Connector, and Agent integration upward."

@@ -17,7 +17,7 @@
 #include <memory>
 
 #include "column/column_access_path.h"
-#include "storage/range.h"
+#include "storage/primitive/range.h"
 #include "storage/rowset/column_iterator.h"
 
 namespace starrocks {

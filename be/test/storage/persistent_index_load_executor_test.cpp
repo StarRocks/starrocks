@@ -23,6 +23,7 @@
 #include "base/testutil/assert.h"
 #include "column/chunk_factory.h"
 #include "common/thread/threadpool.h"
+#include "gutil/walltime.h"
 #include "storage/chunk_helper.h"
 #include "storage/rowset/rowset_factory.h"
 #include "storage/rowset/rowset_options.h"

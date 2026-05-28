@@ -43,7 +43,7 @@
 #include "column/column_access_path.h"
 #include "column/column_builder.h"
 #include "column/json_converter.h"
-#include "storage/range.h"
+#include "storage/primitive/range.h"
 #include "storage/types.h"
 #include "types/datum.h"
 #include "types/decimalv3.h"

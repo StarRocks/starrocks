@@ -43,9 +43,9 @@
 #include "gutil/hash/string_hash.h"
 #include "runtime/mem_pool.h"
 #include "storage/olap_common.h"
-#include "storage/range.h"
+#include "storage/primitive/range.h"
+#include "storage/primitive/rowid_types.h"
 #include "storage/rowset/binary_plain_page.h"
-#include "storage/rowset/common.h"
 #include "storage/rowset/options.h"
 #include "storage/types.h"
 

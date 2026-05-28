@@ -50,8 +50,9 @@
 #include "gutil/strings/substitute.h" // for Substitute
 #include "storage/chunk_helper.h"
 #include "storage/column_predicate.h"
-#include "storage/range.h"
+#include "storage/primitive/range.h"
 #include "storage/rowset/bitshuffle_page.h"
+#include "storage/rowset/common.h"
 #include "types/logical_type.h"
 
 namespace starrocks {

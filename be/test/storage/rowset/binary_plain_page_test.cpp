@@ -49,7 +49,7 @@
 #include "storage/chunk_helper.h"
 #include "storage/column_predicate.h"
 #include "storage/olap_common.h"
-#include "storage/range.h"
+#include "storage/primitive/range.h"
 #include "storage/types.h"
 
 namespace starrocks {

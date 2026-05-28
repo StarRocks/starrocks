@@ -38,6 +38,7 @@
 #include "fs/fs_memory.h"
 #include "gen_cpp/tablet_schema.pb.h"
 #include "gutil/casts.h"
+#include "gutil/walltime.h"
 #include "runtime/mem_pool.h"
 #include "storage/chunk_helper.h"
 #include "storage/index/index_descriptor.h"

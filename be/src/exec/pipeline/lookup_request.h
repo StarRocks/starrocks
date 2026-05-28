@@ -23,9 +23,8 @@
 #include "runtime/descriptors.h"
 #include "runtime/descriptors_fwd.h"
 #include "runtime/runtime_fwd.h"
-#include "runtime/runtime_state.h"
-#include "storage/range.h"
-#include "storage/rowset/common.h"
+#include "storage/primitive/range.h"
+#include "storage/primitive/rowid_types.h"
 
 namespace starrocks::pipeline {
 

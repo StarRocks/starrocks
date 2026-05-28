@@ -21,6 +21,7 @@
 #include "column/raw_data_visitor.h"
 #include "common/config_compaction_fwd.h"
 #include "gutil/strings/substitute.h"
+#include "gutil/walltime.h"
 #include "runtime/global_dict/types.h"
 #include "storage/chunk_helper.h"
 #include "storage/empty_iterator.h"
