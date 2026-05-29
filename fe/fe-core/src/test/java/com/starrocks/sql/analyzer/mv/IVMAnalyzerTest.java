@@ -95,6 +95,30 @@ public class IVMAnalyzerTest extends MVIVMIcebergTestBase {
     }
 
     /**
+     * GROUP BY without aggregates (a DISTINCT-on-keys MV) must yield QUERY_COMPUTED, not
+     * AUTO_INCREMENT — otherwise the MV row-id type disagrees with the refresh plan.
+     */
+    @Test
+    public void testGroupByWithoutAggregateYieldsQueryComputedStrategy() throws Exception {
+        String ddl = "CREATE MATERIALIZED VIEW mv_distinct "
+                + "REFRESH DEFERRED MANUAL "
+                + "PROPERTIES (\"refresh_mode\" = \"incremental\") "
+                + "AS SELECT id FROM `iceberg0`.`unpartitioned_db`.`t0` GROUP BY id";
+
+        CreateMaterializedViewStatement stmt = parseMvDdl(ddl);
+        QueryStatement qs = stmt.getQueryStatement();
+        Analyzer.analyze(qs, connectContext);
+
+        IVMAnalyzer analyzer = new IVMAnalyzer(connectContext, stmt, qs);
+        Optional<IVMAnalyzer.IVMAnalyzeResult> result =
+                analyzer.rewrite(MaterializedView.RefreshMode.INCREMENTAL);
+
+        assertTrue(result.isPresent(), "GROUP BY-only MV query must produce an IVM rewrite result");
+        assertEquals(RowIdStrategy.QUERY_COMPUTED, result.get().rowIdStrategy(),
+                "GROUP BY without aggregate must yield QUERY_COMPUTED, not AUTO_INCREMENT");
+    }
+
+    /**
      * Distinct aggregates must be rejected at IVM analysis time; otherwise incremental
      * refresh would silently produce wrong data (the rewrite drops the DISTINCT flag).
      * MIN/MAX(DISTINCT) is not covered: the analyzer normalizes their DISTINCT away
