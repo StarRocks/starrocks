@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Static Extensions are StarRocks FE’s extension modules that allow you to add new features or optimize existing functionality without modifying the core code."
 ---
 
 # Develop Static Extensions

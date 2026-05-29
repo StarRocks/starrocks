@@ -101,6 +101,9 @@ CMakeLists.txt
 .claude
 CLAUDE.md
 AGENTS.md
+!docs/.claude/
+!docs/.claude/**
+docs/.claude/settings.local.json
 .clangd
 .cursor/
 .codex/

@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "This function is the same as [from_base64](from_base64.md)."
 ---
 
 # base64_decode_string

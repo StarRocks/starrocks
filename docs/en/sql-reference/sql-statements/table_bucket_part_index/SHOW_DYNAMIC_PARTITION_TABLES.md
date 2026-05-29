@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "SHOW DYNAMIC PARTITION TABLES is used to display the status of all the partitioned tables for which dynamic partitioning properties are configured in a database."
 ---
 
 # SHOW DYNAMIC PARTITION TABLES

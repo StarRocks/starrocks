@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "RESUME ROUTINE LOAD resumes a Routine load job."
 ---
 
 # RESUME ROUTINE LOAD

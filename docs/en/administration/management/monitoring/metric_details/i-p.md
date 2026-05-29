@@ -528,4 +528,3 @@ Latency metrics expose percentile series such as `merge_commit_request_latency_9
 
 - Unit: Count
 - Description: Total number of successful and failed Spark Load requests.
-

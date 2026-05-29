@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Aggregates distinct values (including `NULL`) in an ARRAY column into an array (from multiple rows to one row)."
 ---
 
 # array_unique_agg

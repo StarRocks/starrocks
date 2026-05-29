@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "The modulus function that returns the remainder of `dividend` divided by `divisor`."
 ---
 
 # mod

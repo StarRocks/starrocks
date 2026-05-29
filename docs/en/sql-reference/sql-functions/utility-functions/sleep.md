@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Delays the execution of an operation for a specified period of time (in seconds) and returns a BOOLEAN value to indicate whether the sleep is completed without interruption."
 ---
 
 # sleep

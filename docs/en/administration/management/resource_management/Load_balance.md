@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 sidebar_position: 60
+description: "When deploying multiple FE nodes, users can deploy a load balancing layer on top of the FEs to achieve high availability."
 ---
 
 # Load Balancing

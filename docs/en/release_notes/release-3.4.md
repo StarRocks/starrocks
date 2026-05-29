@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "StarRocks 3.4 release notes: Iceberg Time Travel, Python UDFs, vector indexes (IVFPQ/HNSW) for approximate nearest neighbor search, unified expression partitioning, Query Feedback for slow query optimization, SLRU cache eviction, and Dynamic Overwrite for INSERT OVERWRITE."
 ---
 
 # StarRocks version 3.4

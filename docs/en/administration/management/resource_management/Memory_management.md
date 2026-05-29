@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 sidebar_position: 40
+description: "This section briefly introduces memory classification and StarRocks’ methods of managing memory."
 ---
 
 # Memory Management
@@ -11,16 +12,16 @@ This section briefly introduces memory classification and StarRocks’ methods o
 
 Explanation:
 
-|   Metric  | Name | Description |
-| --- | --- | --- |
-|  process   |  Total memory used of BE  | |
-|  query\_pool   |   Memory used by data querying  | Consists of two parts: memory used by the execution layer and memory used by the storage layer.|
-|  load   |  Memory used by data loading    | Generally MemTable|
-|  table_meta   |   Metadata memory | S Schema, Tablet metadata, RowSet metadata, Column metadata, ColumnReader, IndexReader |
-|  compaction   |   Multi-version memory compaction  |  compaction that happens after data import is complete |
-|  snapshot  |   Snapshot memory  | Generally used for clone, little memory usage |
-|  column_pool   |    Column pool memory   | Request to release column cache for accelerated column |
-|  page_cache   |   BE's own PageCache   | The default is off, the user can turn it on by modifying the BE file |
+|   Metric       | Name | Description |
+| -------------- | --- | --- |
+|  `process`     |  Total memory used of BE  | |
+|  `query_pool`  |   Memory used by data querying  | Consists of two parts: memory used by the execution layer and memory used by the storage layer.|
+|  `load`        |  Memory used by data loading    | Generally MemTable|
+|  `table_meta`  |   Metadata memory | S Schema, Tablet metadata, RowSet metadata, Column metadata, ColumnReader, IndexReader |
+|  `compaction`  |   Multi-version memory compaction  |  compaction that happens after data import is complete |
+|  `snapshot`    |   Snapshot memory  | Generally used for clone, little memory usage |
+|  `column_pool` |    Column pool memory   | Request to release column cache for accelerated column |
+|  `page_cache`  |   BE's own PageCache   | The default is off, the user can turn it on by modifying the BE file |
 
 ## Memory-related configuration
 
@@ -47,7 +48,7 @@ Explanation:
 
 ## View memory usage
 
-* **mem\_tracker**
+* **`mem_tracker`**
 
 ~~~ bash
 //View the overall memory statistics
@@ -57,7 +58,7 @@ Explanation:
 <http://be_ip:be_http_port/mem_tracker?type=query_pool&upper_level=3>
 ~~~
 
-* **tcmalloc**
+* **`tcmalloc`**
 
 ~~~ bash
 <http://be_ip:be_http_port/memz>

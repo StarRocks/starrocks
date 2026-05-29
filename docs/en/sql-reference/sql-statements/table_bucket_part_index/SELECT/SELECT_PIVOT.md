@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 sidebar_label: "PIVOT"
+description: "This feature is supported from v3.3 onwards."
 ---
 
 # PIVOT

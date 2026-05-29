@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "`array_flatten` flattens one layer of nested arrays."
 ---
 
 # array_flatten
