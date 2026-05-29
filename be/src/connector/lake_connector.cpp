@@ -592,7 +592,7 @@ Status LakeDataSource::reopen_reader(RuntimeState* /*state*/) {
         return Status::InternalError("lake data source cannot reuse before reader is initialized");
     }
     const auto* split_context = dynamic_cast<const pipeline::LakeSplitContext*>(_split_context);
-    if (split_context == nullptr || !split_context->is_prepared_physical_child()) {
+    if (split_context == nullptr || !split_context->is_prepared_physical_split()) {
         return Status::NotSupported("lake data source reuse requires a prepared physical split");
     }
 
@@ -784,7 +784,7 @@ const pipeline::LakeSplitContext* LakeDataSource::reusable_child_context(pipelin
     }
 
     const auto* split_context = dynamic_cast<const pipeline::LakeSplitContext*>(morsel.get_split_context());
-    if (split_context == nullptr || !split_context->is_prepared_physical_child()) {
+    if (split_context == nullptr || !split_context->is_prepared_physical_split()) {
         return nullptr;
     }
     return split_context;

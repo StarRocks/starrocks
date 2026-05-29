@@ -18,6 +18,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <memory>
+#include <mutex>
 #include <optional>
 #include <unordered_set>
 #include <vector>
@@ -64,8 +65,15 @@ struct PreparedSegmentReadState {
 
     // Rowid equivalents of RowsetReadOptions::ranges and Rowset::tablet_range.
     // Children reuse them to avoid repeating short-key index lookups.
-    std::vector<std::optional<Range<rowid_t>>> seek_range_rowid_ranges;
-    std::optional<Range<rowid_t>> tablet_rowid_range;
+    std::vector<std::optional<Range<rowid_t>>> seek_ranges_rowid_bounds;
+    std::optional<Range<rowid_t>> tablet_range_rowid_bounds;
+
+    // State shared by coarse rowid range tasks and refined rowid range tasks.
+    // Coarse range issuing fields are protected by |coarse_range_lock|.
+    std::mutex coarse_range_lock;
+    SparseRange<> coarse_scan_range;
+    SparseRangeIterator<> coarse_scan_range_iter;
+    SparseRange<> issued_coarse_ranges;
 };
 
 struct PreparedTabletReadState {
