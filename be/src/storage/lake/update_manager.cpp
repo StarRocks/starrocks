@@ -731,8 +731,8 @@ Status UpdateManager::_handle_column_upsert_mode(const TxnLogPB_OpWrite& op_writ
         const uint32_t uid = txn_meta.partial_update_column_unique_ids(i);
         const auto cid = tschema->field_index(uid);
         if (cid == -1) {
-            return Status::InternalError(strings::Substitute(
-                    "column with unique id:$0 does not exist. tablet:$1", uid, tablet->tablet_id()));
+            return Status::InternalError(strings::Substitute("column with unique id:$0 does not exist. tablet:$1", uid,
+                                                             tablet->tablet_id()));
         }
         update_cids.push_back(static_cast<uint32_t>(cid));
     }
