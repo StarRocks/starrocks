@@ -3,9 +3,9 @@
 -- count(col). The bug was that BE's count dispatch picked the
 -- unconditional-increment variant instead of the NULL-skipping one when
 -- the input column was nullable.
-DROP DATABASE IF EXISTS test_count_combine_nullable;
-CREATE DATABASE test_count_combine_nullable;
-USE test_count_combine_nullable;
+DROP DATABASE IF EXISTS test_count_combine_nullable_${uuid0};
+CREATE DATABASE test_count_combine_nullable_${uuid0};
+USE test_count_combine_nullable_${uuid0};
 
 CREATE TABLE t (
     region VARCHAR(8),
@@ -32,4 +32,4 @@ SELECT count_state_merge(count_combine(region)) AS via_combine_nonnull,
        COUNT(region) AS direct_nonnull
 FROM t;
 
-DROP DATABASE test_count_combine_nullable;
+DROP DATABASE test_count_combine_nullable_${uuid0};

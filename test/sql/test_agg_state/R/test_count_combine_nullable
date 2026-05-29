@@ -1,11 +1,11 @@
 -- name: test_count_combine_nullable
-DROP DATABASE IF EXISTS test_count_combine_nullable;
+DROP DATABASE IF EXISTS test_count_combine_nullable_${uuid0};
 -- result:
 -- !result
-CREATE DATABASE test_count_combine_nullable;
+CREATE DATABASE test_count_combine_nullable_${uuid0};
 -- result:
 -- !result
-USE test_count_combine_nullable;
+USE test_count_combine_nullable_${uuid0};
 -- result:
 -- !result
 CREATE TABLE t (
@@ -43,6 +43,6 @@ FROM t;
 -- result:
 5	5
 -- !result
-DROP DATABASE test_count_combine_nullable;
+DROP DATABASE test_count_combine_nullable_${uuid0};
 -- result:
 -- !result
