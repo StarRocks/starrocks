@@ -58,8 +58,10 @@ public:
 
     StatusOr<TFetchDataResultPtrs> process_chunk(Chunk* chunk) override;
 
+protected:
+    void _init_profile() override;
+
 private:
-    // this function is only used in non-pipeline engine
     StatusOr<TFetchDataResultPtr> _process_chunk(Chunk* chunk);
 
     const std::vector<ExprContext*>& _output_expr_ctxs;
@@ -67,6 +69,8 @@ private:
     bool _is_binary_format;
 
     const size_t _max_row_buffer_size = 1024 * 1024 * 1024;
+
+    RuntimeProfile::Counter* _expr_eval_timer = nullptr;
 };
 
 } // namespace starrocks
