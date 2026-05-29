@@ -487,7 +487,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: Long
 - 单位: 毫秒
 - 是否可变: Yes
-- 描述: 同一发射源连续两次"慢锁"告警之间的最小时间间隔（毫秒）。节流作用域随发射所在的锁层不同而不同：在 `LockManager.logSlowLockTrace` 中是**全局**（一个 static 门控覆盖所有 rid）；在 `QueryableReentrantReadWriteLock.lockDetectingSlowLock` 中是**per-instance**（每个锁对象——例如每个 `RoutineLoadJob`——各有一份门控）；在老 `LockUtils` 路径中是**per-Database**（每个 `Database` 的 `SlowLockLogStats`）。任一层在间隔未到时会同时跳过 warn 输出和内部昂贵的快照/抓栈；设置为 `0`（或负数）可禁用门控，每次事件都打。值越大日志越稀，值越小诊断越密。
+- 描述: **L2** 慢锁日志档位的最小时间间隔——一条不含堆栈的完整 lock-info JSON。慢锁日志按三档逐级降级、节流由严到松：**L1** = 完整信息 + 堆栈（`slow_lock_stack_print_interval_ms`），**L2** = 完整信息、无堆栈（本参数），**L3** = 纯文本面包屑（`slow_lock_breadcrumb_every_ms`）。对一次慢锁事件,输出当前节流允许的最高档;选中较高档会同时消耗较低档的窗口,因此总日志量不会超过最松那一档被允许的速率。节流作用域随发射所在的锁层不同:在 `LockManager.logSlowLockTrace` 中是**全局**(一个 static 门控覆盖所有 rid);在 `QueryableReentrantReadWriteLock` 中是**per-instance**(每个锁对象——例如每个 `RoutineLoadJob`——各有一份门控);在老 `LockUtils` 路径中是**per-Database**。设置为 `0`(或负数)可禁用 L2 门控(总是放行)。值越大日志越稀,值越小完整信息诊断越密。
 - 引入版本: v3.2.0
 
 ### `slow_lock_print_stack`
@@ -515,6 +515,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 单位: -
 - 是否可变: Yes
 - 描述: 单条慢锁日志事件中序列化的 waiter 条目数上限。同时作用于 `LockManager.logSlowLockTrace`(`"waiter"` 数组)和 `QueryableReentrantReadWriteLock.getLockInfoToJson`(老 db 锁路径与 `RoutineLoadJob` per-job 锁所用的 `"queuedReaders"` / `"queuedWriters"` 数组)。当实际 waiter 数超过该上限时,前 N 个 waiter 被逐条列出,剩余部分由附加在数组末尾的单条 trailer `{"omitted": "remain M waiters omitted"}` 汇总。用于在极端竞争场景下控制 Gson 序列化开销和日志行长度,同时保留 waiter 总数的诊断信息。设置为 `0`(或负数)可禁用该上限,序列化所有 waiter。
+- 引入版本: v4.1
+
+### `slow_lock_breadcrumb_every_ms`
+
+- 默认值: 1000
+- 类型: Long
+- 单位: 毫秒
+- 是否可变: Yes
+- 描述: **L3** 慢锁日志档位的最小时间间隔——当更丰富的档位(L1 的 `slow_lock_stack_print_interval_ms`、L2 的 `slow_lock_log_every_ms`)都被节流时,输出一条纯文本 warn(无 JSON、无堆栈)。这是三档中最松的一档,也是"永不静默"的底线:一次慢锁事件不会彻底消失。应调得比另两档更小:`slow_lock_breadcrumb_every_ms < slow_lock_log_every_ms < slow_lock_stack_print_interval_ms`。设置为 `0`(或负数)会让面包屑不限速——每个被节流的事件仍留一行。刻意不存在能彻底静默面包屑的取值。作用域规则与其他慢锁节流一致(`LockManager` 全局,`QueryableReentrantReadWriteLock` per-instance)。
 - 引入版本: v4.1
 
 ### `slow_lock_threshold_ms`

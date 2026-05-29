@@ -218,6 +218,20 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static int slow_lock_max_waiter_count_to_log = 30;
 
+    /**
+     * Floor interval in milliseconds for the L3 slow-lock breadcrumb — a single plain-text
+     * warn line (no JSON, no stack) emitted when the richer tiers are throttled, so a slow-lock
+     * event never disappears entirely. This is the loosest of the three slow-lock log throttles
+     * and should be tuned smaller than {@link #slow_lock_log_every_ms} (L2) which in turn is
+     * smaller than {@link #slow_lock_stack_print_interval_ms} (L1):
+     * {@code slow_lock_breadcrumb_every_ms < slow_lock_log_every_ms < slow_lock_stack_print_interval_ms}.
+     * Set to 0 or negative to make the breadcrumb unthrottled (every otherwise-throttled event
+     * still leaves a line). There is intentionally no value that fully silences the breadcrumb —
+     * it is the always-leaves-evidence floor.
+     */
+    @ConfField(mutable = true)
+    public static long slow_lock_breadcrumb_every_ms = 1000L;
+
     @ConfField
     public static String custom_config_dir = "/conf";
 

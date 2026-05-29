@@ -62,7 +62,7 @@ public class QueryableReentrantReadWriteLockSlowLockTest {
     public void testSharedLockDetectingSlowLock() throws Exception {
         new Expectations(lock) {
             {
-                lock.getLockInfoToJson(null);
+                lock.getLockInfoToJson((Thread) any, (SlowLockLogDecision) any);
                 minTimes = 1;
             }
         };
@@ -118,7 +118,7 @@ public class QueryableReentrantReadWriteLockSlowLockTest {
     public void testExclusiveLockDetectingSlowLock() throws Exception {
         new Expectations(lock) {
             {
-                lock.getLockInfoToJson(null);
+                lock.getLockInfoToJson((Thread) any, (SlowLockLogDecision) any);
                 minTimes = 1;
             }
         };
@@ -174,7 +174,7 @@ public class QueryableReentrantReadWriteLockSlowLockTest {
     public void testSharedLockNoSlowLockWhenFast() {
         new Expectations(lock) {
             {
-                lock.getLockInfoToJson(null);
+                lock.getLockInfoToJson((Thread) any, (SlowLockLogDecision) any);
                 maxTimes = 0;
                 minTimes = 0;
             }
@@ -198,7 +198,7 @@ public class QueryableReentrantReadWriteLockSlowLockTest {
     public void testExclusiveLockNoSlowLockWhenFast() {
         new Expectations(lock) {
             {
-                lock.getLockInfoToJson(null);
+                lock.getLockInfoToJson((Thread) any, (SlowLockLogDecision) any);
                 maxTimes = 0;
                 minTimes = 0;
             }
@@ -222,7 +222,7 @@ public class QueryableReentrantReadWriteLockSlowLockTest {
     public void testMultipleReadersDetectSlowLock() throws Exception {
         new Expectations(lock) {
             {
-                lock.getLockInfoToJson(null);
+                lock.getLockInfoToJson((Thread) any, (SlowLockLogDecision) any);
                 minTimes = 2;
             }
         };

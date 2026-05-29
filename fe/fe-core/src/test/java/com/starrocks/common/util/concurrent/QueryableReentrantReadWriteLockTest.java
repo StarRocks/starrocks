@@ -25,12 +25,14 @@ import org.junit.jupiter.api.Test;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.atomic.AtomicLong;
 
 public class QueryableReentrantReadWriteLockTest {
 
     private boolean origPrintStack;
     private long origStackInterval;
     private long origLogEvery;
+    private long origBreadcrumbEvery;
     private int origMaxWaiter;
 
     @BeforeEach
@@ -38,7 +40,13 @@ public class QueryableReentrantReadWriteLockTest {
         origPrintStack = Config.slow_lock_print_stack;
         origStackInterval = Config.slow_lock_stack_print_interval_ms;
         origLogEvery = Config.slow_lock_log_every_ms;
+        origBreadcrumbEvery = Config.slow_lock_breadcrumb_every_ms;
         origMaxWaiter = Config.slow_lock_max_waiter_count_to_log;
+        Config.slow_lock_print_stack = true;
+        Config.slow_lock_stack_print_interval_ms = 30000L;
+        Config.slow_lock_log_every_ms = 3000L;
+        Config.slow_lock_breadcrumb_every_ms = 1000L;
+        Config.slow_lock_max_waiter_count_to_log = 30;
     }
 
     @AfterEach
@@ -46,112 +54,103 @@ public class QueryableReentrantReadWriteLockTest {
         Config.slow_lock_print_stack = origPrintStack;
         Config.slow_lock_stack_print_interval_ms = origStackInterval;
         Config.slow_lock_log_every_ms = origLogEvery;
+        Config.slow_lock_breadcrumb_every_ms = origBreadcrumbEvery;
         Config.slow_lock_max_waiter_count_to_log = origMaxWaiter;
     }
 
+    /** A decision with captureStack=true, produced from fresh gates (L1). */
+    private static SlowLockLogDecision captureDecision() {
+        return SlowLockLogDecision.decide(true, freshGate(), freshGate(), freshGate(), 1_000_000_000L);
+    }
+
+    private static AtomicLong freshGate() {
+        return new AtomicLong(SlowLockLogDecision.GATE_INIT_SENTINEL);
+    }
+
+    // ---- rendering: getLockInfoToJson only reads decision.captureStack ----
+
     @Test
-    public void testGetLockInfoWithExclusiveOwnerIncludesStackWhenEnabled() {
-        Config.slow_lock_print_stack = true;
-        Config.slow_lock_stack_print_interval_ms = 0; // disable throttle
+    public void testExclusiveOwnerIncludesStackWhenCaptureStackTrue() {
+        SlowLockLogDecision capture = captureDecision();
+        Assertions.assertTrue(capture.captureStack, "precondition: decision should capture stack");
 
         QueryableReentrantReadWriteLock lock = new QueryableReentrantReadWriteLock(true);
         lock.exclusiveLock();
         try {
-            JsonObject info = lock.getLockInfoToJson(null);
-            JsonObject holder = info.getAsJsonObject("holderInfo");
+            JsonObject holder = lock.getLockInfoToJson(null, capture).getAsJsonObject("holderInfo");
             Assertions.assertEquals("exclusive", holder.get("status").getAsString());
-            Assertions.assertTrue(holder.has("stack"), "stack should be captured when switch on and not throttled");
+            Assertions.assertTrue(holder.has("stack"));
         } finally {
             lock.exclusiveUnlock();
         }
     }
 
     @Test
-    public void testGetLockInfoWithExclusiveOwnerOmitsStackWhenSwitchOff() {
-        Config.slow_lock_print_stack = false;
-
+    public void testExclusiveOwnerOmitsStackWhenCaptureStackFalse() {
         QueryableReentrantReadWriteLock lock = new QueryableReentrantReadWriteLock(true);
         lock.exclusiveLock();
         try {
-            JsonObject info = lock.getLockInfoToJson(null);
-            JsonObject holder = info.getAsJsonObject("holderInfo");
+            // SUPPRESS carries captureStack=false; rendering must omit the stack field.
+            JsonObject holder = lock.getLockInfoToJson(null, SlowLockLogDecision.SUPPRESS)
+                    .getAsJsonObject("holderInfo");
             Assertions.assertEquals("exclusive", holder.get("status").getAsString());
-            Assertions.assertFalse(holder.has("stack"), "stack must be omitted when slow_lock_print_stack=false");
+            Assertions.assertFalse(holder.has("stack"));
         } finally {
             lock.exclusiveUnlock();
         }
     }
 
     @Test
-    public void testStackGateNotConsumedByEmptySnapshots() {
-        // Regression: LockUtils.lock invokes getLockInfoToJson(null) on every db lock acquire
-        // to capture beforeLockInfo. For an uncontended lock there is no owner and no reader,
-        // so an eager shouldCaptureStack() probe at the top of getLockInfoToJson would burn the
-        // per-instance throttle window on a no-op and starve the next genuine slow-lock warning
-        // of its stack. The lazy probe must NOT consume the gate on such empty snapshots.
-        Config.slow_lock_print_stack = true;
-        Config.slow_lock_stack_print_interval_ms = 60_000L;
-
+    public void testCurrentThreadHolderStackGating() {
         QueryableReentrantReadWriteLock lock = new QueryableReentrantReadWriteLock(true);
+        JsonObject withStack = lock.getLockInfoToJson(Thread.currentThread(), captureDecision())
+                .getAsJsonObject("holderInfo");
+        Assertions.assertTrue(withStack.has("stack"));
 
-        // Many empty snapshots — no owner, no reader. Must not burn the throttle quota.
-        for (int i = 0; i < 10; i++) {
-            JsonObject info = lock.getLockInfoToJson(null);
-            JsonObject holder = info.getAsJsonObject("holderInfo");
-            Assertions.assertEquals("shared", holder.get("status").getAsString());
-            Assertions.assertEquals(0, holder.getAsJsonObject("oldestReader").size(),
-                    "expected empty oldestReader on uncontended lock, got: " + holder);
-        }
-
-        // Now acquire and trigger a real snapshot. Because empty snapshots above did not consume
-        // the gate, the first stack-eligible call must capture stack.
-        lock.exclusiveLock();
-        try {
-            JsonObject info = lock.getLockInfoToJson(null);
-            Assertions.assertTrue(info.getAsJsonObject("holderInfo").has("stack"),
-                    "stack quota must not be burned by no-holder snapshots, got: " + info);
-        } finally {
-            lock.exclusiveUnlock();
-        }
+        JsonObject noStack = lock.getLockInfoToJson(Thread.currentThread(), SlowLockLogDecision.SUPPRESS)
+                .getAsJsonObject("holderInfo");
+        Assertions.assertFalse(noStack.has("stack"));
     }
 
     @Test
-    public void testStackThrottleSuppressesSecondCallWithinWindow() {
-        Config.slow_lock_print_stack = true;
-        Config.slow_lock_stack_print_interval_ms = 60_000L; // 1 min
+    public void testEmptySnapshotRendersNoStackAndDoesNotThrow() {
+        // No owner, no reader. getLockInfoToJson must not touch any gate (it only reads the
+        // decision) and renders an empty oldestReader.
+        QueryableReentrantReadWriteLock lock = new QueryableReentrantReadWriteLock(true);
+        JsonObject holder = lock.getLockInfoToJson(null, captureDecision()).getAsJsonObject("holderInfo");
+        Assertions.assertEquals("shared", holder.get("status").getAsString());
+        Assertions.assertEquals(0, holder.getAsJsonObject("oldestReader").size());
+    }
 
+    // ---- decision integration: decideSlowLockLog touches the per-instance gates ----
+
+    @Test
+    public void testDecideDegradesWithinStackWindow() {
         QueryableReentrantReadWriteLock lock = new QueryableReentrantReadWriteLock(true);
         lock.exclusiveLock();
         try {
-            JsonObject first = lock.getLockInfoToJson(null);
-            Assertions.assertTrue(first.getAsJsonObject("holderInfo").has("stack"),
-                    "first call within an empty window must capture stack");
-            JsonObject second = lock.getLockInfoToJson(null);
-            Assertions.assertFalse(second.getAsJsonObject("holderInfo").has("stack"),
-                    "second call within the throttle window must omit stack");
+            SlowLockLogDecision first = lock.decideSlowLockLog(true);
+            Assertions.assertEquals(SlowLockTier.L1_STACK_INFO, first.tier,
+                    "first event should hit L1");
+            SlowLockLogDecision second = lock.decideSlowLockLog(true);
+            Assertions.assertNotEquals(SlowLockTier.L1_STACK_INFO, second.tier,
+                    "a second event within the stack window must degrade below L1");
         } finally {
             lock.exclusiveUnlock();
         }
     }
 
     @Test
-    public void testPerInstanceThrottleDoesNotStarveOtherLocks() {
-        Config.slow_lock_print_stack = true;
-        Config.slow_lock_stack_print_interval_ms = 60_000L;
-
+    public void testDecidePerInstanceIsolation() {
         QueryableReentrantReadWriteLock lockA = new QueryableReentrantReadWriteLock(true);
         QueryableReentrantReadWriteLock lockB = new QueryableReentrantReadWriteLock(true);
         lockA.exclusiveLock();
         lockB.exclusiveLock();
         try {
-            JsonObject a1 = lockA.getLockInfoToJson(null);
-            JsonObject a2 = lockA.getLockInfoToJson(null);
-            JsonObject b1 = lockB.getLockInfoToJson(null);
-            Assertions.assertTrue(a1.getAsJsonObject("holderInfo").has("stack"));
-            Assertions.assertFalse(a2.getAsJsonObject("holderInfo").has("stack"),
-                    "lockA second call should be throttled");
-            Assertions.assertTrue(b1.getAsJsonObject("holderInfo").has("stack"),
-                    "lockB first call must not be affected by lockA's throttle quota (per-instance scope)");
+            Assertions.assertEquals(SlowLockTier.L1_STACK_INFO, lockA.decideSlowLockLog(true).tier);
+            // lockA consumed its own L1 quota; lockB must be unaffected (per-instance gates).
+            Assertions.assertEquals(SlowLockTier.L1_STACK_INFO, lockB.decideSlowLockLog(true).tier,
+                    "lockB must not be throttled by lockA's quota");
         } finally {
             lockB.exclusiveUnlock();
             lockA.exclusiveUnlock();
@@ -159,27 +158,26 @@ public class QueryableReentrantReadWriteLockTest {
     }
 
     @Test
-    public void testCurrentThreadHolderInfoStackGating() {
-        Config.slow_lock_print_stack = true;
-        Config.slow_lock_stack_print_interval_ms = 0;
-
+    public void testDecideHasHolderFalseDoesNotConsumeStackGate() {
+        // A no-holder decision (which falls to L2) must not burn the per-instance stack gate,
+        // so a subsequent real (hasHolder) event in the same window can still reach L1.
         QueryableReentrantReadWriteLock lock = new QueryableReentrantReadWriteLock(true);
-        JsonObject info = lock.getLockInfoToJson(Thread.currentThread());
-        Assertions.assertTrue(info.getAsJsonObject("holderInfo").has("stack"));
-
-        Config.slow_lock_print_stack = false;
-        JsonObject info2 = lock.getLockInfoToJson(Thread.currentThread());
-        Assertions.assertFalse(info2.getAsJsonObject("holderInfo").has("stack"));
+        SlowLockLogDecision noHolder = lock.decideSlowLockLog(false);
+        Assertions.assertNotEquals(SlowLockTier.L1_STACK_INFO, noHolder.tier,
+                "no holder → not L1");
+        SlowLockLogDecision withHolder = lock.decideSlowLockLog(true);
+        Assertions.assertEquals(SlowLockTier.L1_STACK_INFO, withHolder.tier,
+                "stack gate must still be available — the no-holder call must not have consumed it");
     }
+
+    // ---- waiter cap ----
 
     @Test
     public void testWaiterCapApplied() throws InterruptedException {
-        Config.slow_lock_print_stack = false; // don't care about stacks here
         Config.slow_lock_max_waiter_count_to_log = 3;
 
         QueryableReentrantReadWriteLock lock = new QueryableReentrantReadWriteLock(true);
         lock.exclusiveLock();
-        // Spin up readers that will queue behind the exclusive holder.
         int waiterCount = 6;
         CountDownLatch started = new CountDownLatch(waiterCount);
         List<Thread> waiters = new ArrayList<>();
@@ -194,24 +192,19 @@ public class QueryableReentrantReadWriteLockTest {
                 waiters.add(t);
             }
             started.await();
-            // Give threads a moment to enter the queue.
             long deadlineNs = System.nanoTime() + 2_000_000_000L;
-            while (lock.getQueuedReaderThreads().size() < waiterCount
-                    && System.nanoTime() < deadlineNs) {
+            while (lock.getQueuedReaderThreads().size() < waiterCount && System.nanoTime() < deadlineNs) {
                 Thread.sleep(20);
             }
             Assertions.assertEquals(waiterCount, lock.getQueuedReaderThreads().size(),
                     "test prerequisite: all reader waiters should be queued");
 
-            JsonObject info = lock.getLockInfoToJson(null);
-            JsonArray queued = info.getAsJsonArray("queuedReaders");
-            // 3 listed + 1 omitted trailer
-            Assertions.assertEquals(4, queued.size(),
-                    "expected cap=3 entries + 1 omitted trailer, got: " + queued);
+            JsonArray queued = lock.getLockInfoToJson(null, SlowLockLogDecision.SUPPRESS)
+                    .getAsJsonArray("queuedReaders");
+            Assertions.assertEquals(4, queued.size(), "expected cap=3 entries + 1 omitted trailer, got: " + queued);
             JsonObject trailer = queued.get(3).getAsJsonObject();
             Assertions.assertTrue(trailer.has("omitted"));
-            Assertions.assertEquals("remain 3 waiters omitted",
-                    trailer.get("omitted").getAsString());
+            Assertions.assertEquals("remain 3 waiters omitted", trailer.get("omitted").getAsString());
         } finally {
             lock.exclusiveUnlock();
             for (Thread t : waiters) {
@@ -222,8 +215,7 @@ public class QueryableReentrantReadWriteLockTest {
 
     @Test
     public void testWaiterCapDisabledIncludesAll() throws InterruptedException {
-        Config.slow_lock_print_stack = false;
-        Config.slow_lock_max_waiter_count_to_log = 0; // disable cap
+        Config.slow_lock_max_waiter_count_to_log = 0;
 
         QueryableReentrantReadWriteLock lock = new QueryableReentrantReadWriteLock(true);
         lock.exclusiveLock();
@@ -242,15 +234,13 @@ public class QueryableReentrantReadWriteLockTest {
             }
             started.await();
             long deadlineNs = System.nanoTime() + 2_000_000_000L;
-            while (lock.getQueuedReaderThreads().size() < waiterCount
-                    && System.nanoTime() < deadlineNs) {
+            while (lock.getQueuedReaderThreads().size() < waiterCount && System.nanoTime() < deadlineNs) {
                 Thread.sleep(20);
             }
 
-            JsonObject info = lock.getLockInfoToJson(null);
-            JsonArray queued = info.getAsJsonArray("queuedReaders");
-            Assertions.assertEquals(waiterCount, queued.size(),
-                    "cap=0 must serialize every waiter with no trailer");
+            JsonArray queued = lock.getLockInfoToJson(null, SlowLockLogDecision.SUPPRESS)
+                    .getAsJsonArray("queuedReaders");
+            Assertions.assertEquals(waiterCount, queued.size(), "cap=0 must serialize every waiter with no trailer");
             for (int i = 0; i < queued.size(); i++) {
                 Assertions.assertFalse(queued.get(i).getAsJsonObject().has("omitted"));
             }

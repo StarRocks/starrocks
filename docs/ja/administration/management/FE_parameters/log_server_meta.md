@@ -479,7 +479,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - タイプ：Long
 - 単位：Milliseconds
 - 変更可能：Yes
-- 説明：同一の発信元から連続する「低速ロック」警告の間の最小間隔（ミリ秒）。スコープは警告を発するロック層によって異なります：`LockManager.logSlowLockTrace` では**グローバル**（すべての rid に対する一つの静的ゲート）、`QueryableReentrantReadWriteLock.lockDetectingSlowLock` では**per-instance**（各ロックオブジェクト——例えば各 `RoutineLoadJob`——が独自のゲートを持つ）、レガシー `LockUtils` 経路では**per-Database**（各 `Database` の `SlowLockLogStats`）。どの層でもこの間隔が経過するまでは warn 出力と内部の高コストなスナップショット/スタックキャプチャがまとめてスキップされます。`0`（または負の値）に設定するとゲートが無効になり、すべてのイベントで警告が出力されます。長期的な競合中にログ量を減らすには値を大きく、診断頻度を上げるには小さく設定します。
+- 説明：**L2** 低速ロックログ層（スタックを含まない完全なロック情報 JSON 行）の最小間隔。低速ロックログは 3 つの層に段階的に低下し、コストの高い順に厳しく絞られます：**L1** = 完全情報 + スタック（`slow_lock_stack_print_interval_ms`）、**L2** = 完全情報、スタックなし（本パラメータ）、**L3** = プレーンテキストのパンくず（`slow_lock_breadcrumb_every_ms`）。1 回の低速ロックイベントでは、現在スロットルが許可する最も詳細な層が出力されます。上位層を選ぶと下位層のウィンドウも消費されるため、総ログ量が最も緩い許可層のレートを超えることはありません。スコープは発信層によって異なります：`LockManager.logSlowLockTrace` では**グローバル**（すべての rid に対する一つの静的ゲート）、`QueryableReentrantReadWriteLock` では**per-instance**（各ロックオブジェクト——例えば各 `RoutineLoadJob`——が独自のゲートを持つ）、レガシー `LockUtils` 経路では**per-Database**。`0`（または負の値）に設定すると L2 ゲートが無効になります（常に許可）。長期的な競合中にログ量を減らすには値を大きく、完全情報の診断頻度を上げるには小さく設定します。
 - 導入時期：v3.2.0
 
 ### `slow_lock_print_stack`
@@ -507,6 +507,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 単位：-
 - 変更可能：Yes
 - 説明：単一の低速ロックログイベントでシリアライズされる waiter エントリの最大数。`LockManager.logSlowLockTrace`（`"waiter"` 配列）と `QueryableReentrantReadWriteLock.getLockInfoToJson`（レガシー db ロック経路および `RoutineLoadJob` の per-job ロックで使われる `"queuedReaders"` / `"queuedWriters"` 配列）の両方に適用されます。実際の waiter 数がこの上限を超えると、最初の N 個の waiter のみが個別に列挙され、残りは配列の末尾に追加される単一のトレーラ `{"omitted": "remain M waiters omitted"}` で集約されます。極度の競合シナリオで Gson シリアライゼーションコストとログ行サイズを抑制しつつ、waiter 総数の診断情報を保持します。`0`（または負の値）に設定すると上限を無効化し、すべての waiter をシリアライズします。
+- 導入時期：v4.1
+
+### `slow_lock_breadcrumb_every_ms`
+
+- デフォルト：1000
+- タイプ：Long
+- 単位：Milliseconds
+- 変更可能：Yes
+- 説明：**L3** 低速ロックログ層（より詳細な層 — L1 の `slow_lock_stack_print_interval_ms`、L2 の `slow_lock_log_every_ms` — がスロットルされたときに出力される、単一のプレーンテキスト warn 行。JSON もスタックもなし）の最小間隔。3 層の中で最も緩く、「証拠を必ず残す」床です：低速ロックイベントが完全に消えることはありません。他の 2 つより小さく設定してください：`slow_lock_breadcrumb_every_ms < slow_lock_log_every_ms < slow_lock_stack_print_interval_ms`。`0`（または負の値）に設定するとパンくずは無制限になり、スロットルされたすべてのイベントが行を残します。パンくずを完全に無音化する値は意図的に存在しません。スコープ規則は他の低速ロックスロットルと同じです（`LockManager` はグローバル、`QueryableReentrantReadWriteLock` は per-instance）。
 - 導入時期：v4.1
 
 ### `slow_lock_threshold_ms`

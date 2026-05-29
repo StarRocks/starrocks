@@ -489,7 +489,7 @@ This topic introduces the following types of FE configurations:
 - Type: Long
 - Unit: Milliseconds
 - Is mutable: Yes
-- Description: Minimum interval (in ms) between two consecutive "slow lock" warnings from the same emit source. The throttle scope depends on which lock layer emits the warning: **GLOBAL** in `LockManager.logSlowLockTrace` (one static gate across all rids), **per-instance** in `QueryableReentrantReadWriteLock.lockDetectingSlowLock` (each lock object — e.g. each `RoutineLoadJob` — has its own gate), and **per-Database** in the legacy `LockUtils` path (each `Database`'s `SlowLockLogStats`). In every layer the warn is suppressed (along with the expensive snapshot/stack capture inside it) until this interval has elapsed since the last emit; set to `0` (or negative) to disable the gate and emit every event. Use a larger value to reduce log volume during prolonged contention or a smaller value to get more frequent diagnostics.
+- Description: Minimum interval (in ms) for the **L2** slow-lock log tier — a full lock-info JSON line **without** stack traces. Slow-lock logging degrades across three tiers, throttled progressively (strictest first): **L1** = full info + stacks (`slow_lock_stack_print_interval_ms`), **L2** = full info, no stacks (this parameter), **L3** = a plain-text breadcrumb (`slow_lock_breadcrumb_every_ms`). For one slow-lock event the richest tier whose throttle currently admits is emitted; choosing a higher tier also consumes the looser tiers' windows, so total log volume never exceeds the loosest admitted tier's rate. The throttle scope depends on the emitting layer: **GLOBAL** in `LockManager.logSlowLockTrace` (one static gate across all rids), **per-instance** in `QueryableReentrantReadWriteLock` (each lock object — e.g. each `RoutineLoadJob` — has its own gate), and **per-Database** in the legacy `LockUtils` path. Set to `0` (or negative) to disable the L2 gate (always admit). Use a larger value to reduce log volume during prolonged contention or a smaller value for more frequent full-info diagnostics.
 - Introduced in: v3.2.0
 
 ### `slow_lock_print_stack`
@@ -517,6 +517,15 @@ This topic introduces the following types of FE configurations:
 - Unit: -
 - Is mutable: Yes
 - Description: Maximum number of waiter entries serialized into a single slow-lock log event. Applies to both `LockManager.logSlowLockTrace` (the `"waiter"` array) and `QueryableReentrantReadWriteLock.getLockInfoToJson` (the `"queuedReaders"` / `"queuedWriters"` arrays consumed by the legacy db-lock path and `RoutineLoadJob`'s per-job lock). When the actual waiter count exceeds this cap, the first N waiters are listed individually and the remainder is summarized as a single trailer entry `{"omitted": "remain M waiters omitted"}` appended to the array. Bounds Gson serialization cost and log-line size under extreme contention without losing the count diagnostic. Set to `0` (or negative) to disable the cap and serialize every waiter.
+- Introduced in: v4.1
+
+### `slow_lock_breadcrumb_every_ms`
+
+- Default: 1000
+- Type: Long
+- Unit: Milliseconds
+- Is mutable: Yes
+- Description: Minimum interval for the **L3** slow-lock log tier — a single plain-text warn line (no JSON, no stacks) emitted when the richer tiers (`slow_lock_stack_print_interval_ms` for L1, `slow_lock_log_every_ms` for L2) are throttled. This is the loosest of the three tiers and the always-leaves-evidence floor: a slow-lock event never disappears entirely. Tune it smaller than the other two: `slow_lock_breadcrumb_every_ms < slow_lock_log_every_ms < slow_lock_stack_print_interval_ms`. Set to `0` (or negative) to make the breadcrumb unthrottled — every otherwise-throttled event still leaves a line. There is intentionally no value that fully silences the breadcrumb. Same scope rules as the other slow-lock throttles (GLOBAL in `LockManager`, per-instance in `QueryableReentrantReadWriteLock`).
 - Introduced in: v4.1
 
 ### `slow_lock_threshold_ms`

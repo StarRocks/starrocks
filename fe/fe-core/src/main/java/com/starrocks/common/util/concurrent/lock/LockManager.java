@@ -17,6 +17,7 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import com.starrocks.common.Config;
 import com.starrocks.common.util.LogUtil;
+import com.starrocks.common.util.concurrent.SlowLockLogDecision;
 import com.starrocks.metric.MetricRepo;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -33,24 +34,17 @@ import java.util.concurrent.atomic.AtomicLong;
 public class LockManager {
     private static final Logger LOG = LogManager.getLogger(LockManager.class);
 
-    // "Sufficiently in the past" sentinel so the first event always wins the gate regardless of
-    // where System.nanoTime() anchors its origin (the JLS allows arbitrary origin). The /2
-    // (instead of Long.MIN_VALUE) leaves enough headroom in (monoNowMs - INIT) to avoid
-    // signed-long overflow for any plausible JVM uptime.
-    private static final long GATE_INIT_SENTINEL = Long.MIN_VALUE / 2;
-
-    // Gate for stack-trace capture in slow-lock logs. Thread.getStackTrace involves a JVM
-    // safepoint operation that is expensive when slow-lock events fire frequently in large
-    // clusters. The capture is rate-limited at the event level (all-or-nothing per event)
-    // by Config.slow_lock_stack_print_interval_ms; the warn log itself still fires every event
-    // unless the outer event-level gate (LAST_EVENT_LOG_MS / slow_lock_log_every_ms) suppresses
-    // it first.
-    private static final AtomicLong LAST_STACK_PRINT_MS = new AtomicLong(GATE_INIT_SENTINEL);
-
-    // Outer event-level gate for the whole slow-lock warn (JSON build + LOG.warn). GLOBAL scope
-    // across rids so a hot rid cannot drown out signal from other rids. Controlled by
-    // Config.slow_lock_log_every_ms; <= 0 disables the gate and emits every event.
-    private static final AtomicLong LAST_EVENT_LOG_MS = new AtomicLong(GATE_INIT_SENTINEL);
+    // GLOBAL slow-lock log throttle gates (one set across all rids, so a hot rid cannot drown out
+    // signal from other rids). The three tiers are decided once per event by SlowLockLogDecision:
+    //   LAST_STACK_PRINT_MS  -> L1 (full info + stacks), Config.slow_lock_stack_print_interval_ms
+    //   LAST_EVENT_LOG_MS    -> L2 (full info, no stacks), Config.slow_lock_log_every_ms
+    //   LAST_BREADCRUMB_MS   -> L3 (plain-text breadcrumb), Config.slow_lock_breadcrumb_every_ms
+    // Stack capture (Thread.getStackTrace) triggers a JVM safepoint that is expensive when
+    // slow-lock events fire frequently, which is why L1 is throttled most strictly. All gates
+    // init to GATE_INIT_SENTINEL so the first event always wins regardless of nanoTime origin.
+    private static final AtomicLong LAST_STACK_PRINT_MS = new AtomicLong(SlowLockLogDecision.GATE_INIT_SENTINEL);
+    private static final AtomicLong LAST_EVENT_LOG_MS = new AtomicLong(SlowLockLogDecision.GATE_INIT_SENTINEL);
+    private static final AtomicLong LAST_BREADCRUMB_MS = new AtomicLong(SlowLockLogDecision.GATE_INIT_SENTINEL);
 
     private final int lockTablesSize;
     private final Object[] lockTableMutexes;
@@ -409,24 +403,14 @@ public class LockManager {
     private static final int DEFAULT_STACK_RESERVE_LEVELS = 20;
 
     private void logSlowLockTrace(long rid) {
-        // Outer event-level gate: skip the lock-table snapshot, JSON build, and warn entirely
-        // when we are still inside the slow_lock_log_every_ms window. Uses a monotonic clock so
-        // wall-clock adjustments cannot stretch or short-circuit the interval.
-        long eventInterval = Config.slow_lock_log_every_ms;
-        if (eventInterval > 0) {
-            long monoNowMs = TimeUnit.NANOSECONDS.toMillis(System.nanoTime());
-            long lastEvent = LAST_EVENT_LOG_MS.get();
-            if (monoNowMs - lastEvent < eventInterval
-                    || !LAST_EVENT_LOG_MS.compareAndSet(lastEvent, monoNowMs)) {
-                return;
-            }
-        }
-
         long nowMs = System.currentTimeMillis();
         int lockTableIdx = getLockTableIndex(rid);
         List<LockHolder> owners;
         List<LockHolder> waiters;
 
+        // Snapshot first, decide second. Cloning before touching the throttle gates means an
+        // empty-owners race (a thread woke from slow-wait but the lock was just released) cannot
+        // burn the gate quota.
         synchronized (lockTableMutexes[lockTableIdx]) {
             Map<Long, Lock> lockTable = lockTables[lockTableIdx];
             Lock lock = lockTable.get(rid);
@@ -434,16 +418,24 @@ public class LockManager {
             waiters = lock.cloneWaiters();
         }
 
-        // Stack capture is rate-limited at the event level (all-or-nothing across owners) by
-        // Config.slow_lock_stack_print_interval_ms. The gate is probed lazily on the first
-        // iteration of the owners loop so that the quota is not consumed when owners turns out
-        // to be empty (a race when a thread woke up due to slow-wait but the lock was just
-        // released). nowMs (System.currentTimeMillis) below is kept for user-facing timestamps;
-        // the gate itself uses a monotonic clock so NTP/wall-clock adjustments cannot stretch
-        // or short-circuit the interval.
+        // One tier decision per event (the only place the GLOBAL gates are consumed). hasHolder is
+        // !owners.isEmpty() so an empty snapshot never reaches the L1 stack gate. nowMs
+        // (System.currentTimeMillis) is kept for user-facing timestamps; the gates use a monotonic
+        // clock so wall-clock adjustments cannot stretch or short-circuit the intervals.
+        long monoNowMs = TimeUnit.NANOSECONDS.toMillis(System.nanoTime());
+        SlowLockLogDecision decision = SlowLockLogDecision.decide(
+                !owners.isEmpty(), LAST_STACK_PRINT_MS, LAST_EVENT_LOG_MS, LAST_BREADCRUMB_MS, monoNowMs);
+        if (!decision.shouldLog()) {
+            return;
+        }
+        if (decision.isBreadcrumb()) {
+            // Floor tier: leave evidence cheaply — no JSON, no stacks, no held-time metric.
+            LOG.warn("LockManager detects slow lock (throttled detail): rid={}, owners={}, waiters={}",
+                    rid, owners.size(), waiters.size());
+            return;
+        }
         boolean stackEnabled = Config.slow_lock_print_stack;
-        boolean gateProbed = false;
-        boolean captureStack = false;
+        boolean captureStack = decision.captureStack;
 
         JsonObject ownerInfo = new JsonObject();
         ownerInfo.addProperty("rid", rid);
@@ -466,10 +458,6 @@ public class LockManager {
                 readerInfo.addProperty("queryId", locker.getQueryId().toString());
             }
             readerInfo.addProperty("waitTime", owner.getLockAcquireTimeMs() - locker.getLockRequestTimeMs());
-            if (stackEnabled && !gateProbed) {
-                captureStack = probeStackPrintGate();
-                gateProbed = true;
-            }
             if (captureStack) {
                 readerInfo.add("stack", LogUtil.getStackTraceToJsonArray(
                         locker.getLockerThread(), 0, Short.MAX_VALUE));
@@ -512,23 +500,6 @@ public class LockManager {
 
         MetricRepo.HISTO_SLOW_LOCK_HELD_TIME_MS.update(maxHeldForTimeMs);
         LOG.warn("LockManager detects slow lock : {}", ownerInfo.toString());
-    }
-
-    /**
-     * Probe (and possibly consume) the GLOBAL stack-print throttle for the current slow-lock
-     * event. Returns true when this caller wins the CAS — in which case the same captureStack
-     * decision must be propagated to every owner in the same event so the JSON snapshot is
-     * coherent (no half-captured pictures). Must be called only when there is an actual owner
-     * to dump for, otherwise the throttle window is burned on a no-op.
-     */
-    private static boolean probeStackPrintGate() {
-        long interval = Config.slow_lock_stack_print_interval_ms;
-        if (interval <= 0) {
-            return true;
-        }
-        long monoNowMs = TimeUnit.NANOSECONDS.toMillis(System.nanoTime());
-        long last = LAST_STACK_PRINT_MS.get();
-        return monoNowMs - last >= interval && LAST_STACK_PRINT_MS.compareAndSet(last, monoNowMs);
     }
 
     private Locker checkAndHandleDeadLock(Long rid, Locker locker, LockType lockType) throws DeadlockException {
