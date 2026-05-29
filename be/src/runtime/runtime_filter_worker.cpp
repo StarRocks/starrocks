@@ -30,6 +30,7 @@
 #include "common/thread/thread.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/query_context.h"
+#include "exec/pipeline/query_context_manager.h"
 #include "exec/pipeline/runtime_filter_types.h"
 #include "exec/runtime_filter/runtime_filter_descriptor.h"
 #include "exec/runtime_filter/runtime_filter_registry.h"

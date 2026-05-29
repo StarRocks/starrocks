@@ -20,6 +20,7 @@
 #include "exec/pipeline/group_execution/execution_group_builder.h"
 #include "exec/pipeline/pipeline_driver.h"
 #include "exec/pipeline/query_context.h"
+#include "exec/pipeline/query_context_manager.h"
 #include "exec/workgroup/work_group.h"
 #include "gen_cpp/RuntimeProfile_types.h"
 #include "gtest/gtest.h"

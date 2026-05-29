@@ -67,6 +67,7 @@
 #include "exec/pipeline/lookup_request.h"
 #include "exec/pipeline/pipeline_driver_executor.h"
 #include "exec/pipeline/query_context.h"
+#include "exec/pipeline/query_context_manager.h"
 #include "exec/short_circuit.h"
 #include "exec/workgroup/work_group.h"
 #include "gen_cpp/AgentService_types.h"

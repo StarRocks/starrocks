@@ -57,6 +57,7 @@
 #include "exec/pipeline/pipeline_driver_executor.h"
 #include "exec/pipeline/pipeline_metrics.h"
 #include "exec/pipeline/query_context.h"
+#include "exec/pipeline/query_context_manager.h"
 #include "exec/query_cache/cache_manager.h"
 #include "exec/spill/dir_manager.h"
 #include "exec/spill/global_spill_manager.h"
