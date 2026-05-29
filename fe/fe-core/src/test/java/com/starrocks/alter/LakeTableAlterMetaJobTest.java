@@ -207,22 +207,26 @@ public class LakeTableAlterMetaJobTest {
 
     @Test
     public void testLakePublishVersionWithSkipSingleDispatch() throws Exception {
-        // file_bundling=false → lakePublishVersionWithSkip uses the per-tablet
-        // (non-aggregate) publish_version path.
-        LakeTable single = createTable(connectContext,
-                "CREATE TABLE t_single(c0 INT) PRIMARY KEY(c0) DISTRIBUTED BY HASH(c0) BUCKETS 1 "
-                        + "PROPERTIES('enable_persistent_index'='true', 'file_bundling'='false')");
+        // ENABLE_PERSISTENT_INDEX meta alter → enableFileBundling() is false
+        // and isFileBundling stays false in UT, so lakePublishVersionWithSkip
+        // uses the per-tablet (non-aggregate) publish_version path.
+        LakeTableAlterMetaJob single = new LakeTableAlterMetaJob(GlobalStateMgr.getCurrentState().getNextId(),
+                db.getId(), table.getId(), table.getName(), 60 * 1000, TTabletMetaType.ENABLE_PERSISTENT_INDEX, true,
+                "CLOUD_NATIVE");
         runForceCancelNoOpPublishBody(single, /*expectAggregate=*/ false);
     }
 
     @Test
     public void testLakePublishVersionWithSkipAggregateDispatch() throws Exception {
-        // file_bundling=true → lakePublishVersionWithSkip uses the aggregate
-        // publish_version path (BE expects a single bundle file per partition).
-        LakeTable bundled = createTable(connectContext,
-                "CREATE TABLE t_bundled(c0 INT) PRIMARY KEY(c0) DISTRIBUTED BY HASH(c0) BUCKETS 1 "
-                        + "PROPERTIES('enable_persistent_index'='true', 'file_bundling'='true')");
-        runForceCancelNoOpPublishBody(bundled, /*expectAggregate=*/ true);
+        // ENABLE_FILE_BUNDLING meta alter with enableFileBundling=true makes
+        // enableFileBundling() return true, so lakePublishVersionWithSkip uses
+        // the aggregate publish_version path (BE expects one bundle file per
+        // partition). This is deterministic without depending on isFileBundling,
+        // which is only populated by the normal publish path.
+        LakeTableAlterMetaJob aggregate = new LakeTableAlterMetaJob(GlobalStateMgr.getCurrentState().getNextId(),
+                db.getId(), table.getId(), table.getName(), 60 * 1000, TTabletMetaType.ENABLE_FILE_BUNDLING, true,
+                "CLOUD_NATIVE", /*enableFileBundling=*/ true, "DEFAULT");
+        runForceCancelNoOpPublishBody(aggregate, /*expectAggregate=*/ true);
     }
 
     // Runs the REAL lakePublishVersionWithSkip body (the other force-cancel
@@ -230,11 +234,8 @@ public class LakeTableAlterMetaJobTest {
     // helper builds a TxnInfoPB with noOpPublish=true and dispatches via the
     // expected single-vs-aggregate path so BE's transactions.cpp short-circuit
     // fires and writes V-1 content as V.
-    private void runForceCancelNoOpPublishBody(LakeTable tbl, boolean expectAggregate) throws Exception {
-        LakeTableAlterMetaJob localJob = new LakeTableAlterMetaJob(GlobalStateMgr.getCurrentState().getNextId(),
-                db.getId(), tbl.getId(), tbl.getName(), 60 * 1000, TTabletMetaType.ENABLE_PERSISTENT_INDEX, true,
-                "CLOUD_NATIVE");
-
+    private void runForceCancelNoOpPublishBody(LakeTableAlterMetaJob localJob, boolean expectAggregate)
+            throws Exception {
         java.util.concurrent.atomic.AtomicInteger publishCalls = new java.util.concurrent.atomic.AtomicInteger();
         java.util.concurrent.atomic.AtomicBoolean lastNoOp = new java.util.concurrent.atomic.AtomicBoolean();
         java.util.concurrent.atomic.AtomicBoolean lastAggregate = new java.util.concurrent.atomic.AtomicBoolean();
@@ -260,11 +261,9 @@ public class LakeTableAlterMetaJobTest {
         Assertions.assertTrue(lastNoOp.get(),
                 "TxnInfoPB.noOpPublish must be set so BE short-circuits the txn-log apply");
         Assertions.assertEquals(expectAggregate, lastAggregate.get(),
-                "no-op publish must follow the table's single-vs-aggregate dispatch");
+                "no-op publish must follow the expected single-vs-aggregate dispatch");
         Assertions.assertTrue(localJob.isForceSkippedAtCommitted(),
                 "marker must be set after the no-op publish actually ran");
-
-        db.dropTable(tbl.getName());
     }
 
     @Test
