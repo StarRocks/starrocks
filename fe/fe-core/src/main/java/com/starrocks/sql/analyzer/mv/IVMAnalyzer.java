@@ -44,6 +44,8 @@ import com.starrocks.sql.ast.expression.CaseWhenClause;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.ExprSubstitutionMap;
 import com.starrocks.sql.ast.expression.ExprSubstitutionVisitor;
+import com.starrocks.sql.ast.expression.ExprToSql;
+import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.IsNullPredicate;
 import com.starrocks.sql.ast.expression.LiteralExprFactory;
@@ -262,6 +264,12 @@ public class IVMAnalyzer {
                 CollectionUtils.isNotEmpty(selectRelation.getOrderByExpressions())) {
             throw new SemanticException("IVMAnalyzer does not support order by clause, " +
                     "but got: %s", selectRelation.getOrderBy());
+        }
+        // Aggregate IVM is UPSERT-only: a group crossing the HAVING threshold across
+        // refreshes can't be added/removed, so reject instead of silently miscomputing.
+        if (selectRelation.getHaving() != null && ExprUtils.containsAggregate(selectRelation.getHaving())) {
+            throw new SemanticException("IVMAnalyzer does not support HAVING with aggregate functions, " +
+                    "but got: %s", ExprToSql.toSql(selectRelation.getHaving()));
         }
         boolean isRetractable = checkAggregate(selectRelation);
         Relation innerRelation = selectRelation.getRelation();
