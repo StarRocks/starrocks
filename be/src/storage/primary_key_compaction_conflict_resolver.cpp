@@ -15,6 +15,8 @@
 #include "storage/primary_key_compaction_conflict_resolver.h"
 
 #include "base/debug/trace.h"
+#include "base/time/time.h"
+#include "base/utility/defer_op.h"
 #include "column/chunk_factory.h"
 #include "common/config_exec_fwd.h"
 #include "common/config_primary_key_fwd.h"
@@ -25,8 +27,6 @@
 #include "storage/primary_key_encoder.h"
 #include "storage/rows_mapper.h"
 #include "storage/tablet_schema.h"
-#include "base/time/time.h"
-#include "base/utility/defer_op.h"
 
 namespace starrocks {
 
