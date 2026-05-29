@@ -113,7 +113,7 @@ public final class DefaultPreSplitPipeline implements PreSplitPipeline {
 
     /**
      * Build a pipeline wired with the executors appropriate for {@code loadKind}.
-     * Centralizes the construction so all hooks (D1 INSERT-from-FILES, D2
+     * Centralizes the construction so all hooks (INSERT-from-FILES,
      * Broker Load, future callers) share the same plumbing.
      *
      * <p>Meta tier and data tier are both production for both load kinds:
@@ -122,15 +122,42 @@ public final class DefaultPreSplitPipeline implements PreSplitPipeline {
      * {@link LoadKind#INSERT_FROM_FILES};
      * {@link BrokerLoadRowGroupStatisticsProvider} +
      * {@link BrokerLoadSampleSubqueryExecutor} for {@link LoadKind#BROKER_LOAD}.
+     *
+     * <p><b>Partitioned-table override.</b> When the target table is partitioned
+     * ({@link com.starrocks.catalog.PartitionInfo#isPartitioned()}), the meta
+     * tier is replaced with a no-op that always raises
+     * {@link MetaTierUnavailableException} so the pipeline falls through to the
+     * data tier. The meta tier reads per-column min/max from Parquet row-group
+     * statistics, which is fundamentally lossy when the partition column has an
+     * expression ({@code date_trunc}, {@code time_slice}): the sampler computes
+     * boundaries from row-group stats of the raw column, but the load routes
+     * each row through the expression first, so the boundaries do not align
+     * with the partitions the rows actually land in. The multi-partition flow
+     * relies on per-row partition-value tuples that only the data tier
+     * projects, so meta tier cannot serve the partitioned path even
+     * defensively. Unpartitioned tables retain the meta-tier-first routing.
      */
     public static DefaultPreSplitPipeline forLoadKind(
             Database database, OlapTable table, long oldTabletId, long fileTotalBytes, LoadKind loadKind) {
-        ParquetMetadataSampler metaTierSampler = new ParquetMetadataSampler(
-                rowGroupStatisticsProviderFor(loadKind), Config.tablet_pre_split_meta_tier_overlap_threshold);
+        MetaTierSampler metaTierSampler;
+        if (table.getPartitionInfo().isPartitioned()) {
+            // Partitioned tables: force data tier. Throwing MetaTierUnavailableException
+            // routes the pipeline's fallback to runDataTier without any meta-tier RPC.
+            metaTierSampler = (request, requestedTabletCount) -> {
+                throw new MetaTierUnavailableException(
+                        "partitioned table forces data tier (meta tier per-column min/max "
+                                + "is lossy under expression-based partitioning)");
+            };
+        } else {
+            ParquetMetadataSampler parquetMetadataSampler = new ParquetMetadataSampler(
+                    rowGroupStatisticsProviderFor(loadKind),
+                    Config.tablet_pre_split_meta_tier_overlap_threshold);
+            metaTierSampler = parquetMetadataSampler::tryPlan;
+        }
         Sampler dataTierSampler = new ReservoirSampler(sampleSubqueryExecutorFor(loadKind));
         TabletReshardJobMgr tabletReshardJobManager = GlobalStateMgr.getCurrentState().getTabletReshardJobMgr();
         return new DefaultPreSplitPipeline(
-                metaTierSampler::tryPlan, dataTierSampler, tabletReshardJobManager,
+                metaTierSampler, dataTierSampler, tabletReshardJobManager,
                 database, table, oldTabletId, fileTotalBytes,
                 DEFAULT_POLL_INTERVAL, Clock.systemUTC());
     }

@@ -616,6 +616,15 @@ This topic introduces the following types of FE configurations:
 - Description: Maximum overlap fraction tolerated when Sample-Based Tablet Pre-Split's meta tier (Parquet/ORC row-group metadata) computes boundaries. Above this threshold the cumulative-row count stops being monotone in sorted-min order so meta tier falls back to data tier (row sampling).
 - Introduced in: v4.1.0
 
+### `tablet_pre_split_max_partitions_per_load`
+
+- Default: 32
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: Maximum number of predicted target partitions a single Sample-Based Tablet Pre-Split invocation will operate on. Excess predicted partitions (those with the lowest sample count) are dropped and fall back to runtime auto-create with no pre-split. Bounds hook latency on pathological multi-partition loads. Set to zero or a negative value to disable the cap.
+- Introduced in: v4.1.0
+
 #### Rolling back Sample-Based Tablet Pre-Split
 
 To disable the feature safely before a downgrade or during a production rollback:
@@ -623,6 +632,13 @@ To disable the feature safely before a downgrade or during a production rollback
 1. Set both `enable_tablet_pre_split_for_insert_from_files = false` and `enable_tablet_pre_split_for_broker_load = false`. New loads will skip pre-split immediately.
 2. Wait for in-flight reshard jobs created by pre-split to drain. Monitor with `SHOW TABLET RESHARD JOB`; the rollback is complete once no `RUNNING` or `PENDING` rows remain.
 3. Proceed with the downgrade. The substrate (External-Boundaries Tablet Split) remains available regardless of the pre-split feature flag.
+
+#### Behavioral notes for multi-partition Sample-Based Tablet Pre-Split (P2-a)
+
+The multi-partition path extends Sample-Based Tablet Pre-Split to loads that target many partitions in one statement. Two operational caveats apply:
+
+- **Broker Load triggering-load asymmetry.** The multi-partition pre-split hook fires from `BrokerLoadJob.createLoadingTask` **after** `task.prepare()` has built the load's sink plan against the catalog as it existed at that moment. For Broker Load, pre-created partitions and the post-reshard tablet layout are therefore only visible to **subsequent** loads on the same table — the triggering Broker Load itself runs against the original layout and uses BE runtime auto-create for any partitions it touches. INSERT-from-FILES (where the hook fires before `StatementPlanner.plan()`) is unaffected and benefits in the same load.
+- **Pre-created partition leak on subsequent INSERT failure.** When pre-create succeeds and the triggering INSERT later fails for unrelated reasons (FILES schema mismatch, BE crash, load timeout, etc.), the empty pre-created partitions remain in the catalog. This matches the semantics of `ALTER TABLE ADD PARTITION`, which also leaves a partition behind on subsequent failure. Operators who care can drop the empty partitions manually with `ALTER TABLE ... DROP PARTITION`; in practice empty partitions are cheap and the next retry of the load will reuse them.
 
 #### Production deployment guidance
 
