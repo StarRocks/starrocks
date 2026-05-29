@@ -222,6 +222,11 @@ public class KafkaTaskInfo extends RoutineLoadTaskInfo {
         } else {
             tRoutineLoadTask.setFormat(TFileFormatType.FORMAT_CSV_PLAIN);
         }
+        // Turn on BE-side writer-schema detection only when the job opted in and the configuration can act
+        // on the signal (native avro reader, no jsonpaths); the gate lives in isAvroSchemaEvolutionEnabled.
+        if (routineLoadJob.isAvroSchemaEvolutionEnabled()) {
+            tRoutineLoadTask.setEnable_schema_evolution(true);
+        }
         if (Math.abs(routineLoadJob.getMaxFilterRatio() - 1) > 0.001) {
             tRoutineLoadTask.setMax_filter_ratio(routineLoadJob.getMaxFilterRatio());
         }

@@ -284,6 +284,20 @@ public class ConnectContext {
     // Track if current write is CTAS (Create Table As Select)
     private boolean isCTAS = false;
 
+    // When set, schema change refuses any change that needs a full table rewrite (not fast schema
+    // evolution), throwing AutoHeavySchemaChangeForbiddenException instead of creating a heavy AlterJobV2.
+    // Used by automatic drivers (Avro routine-load schema evolution) to skip and report heavy changes;
+    // off for normal user-issued ALTERs.
+    private boolean forbidAutoHeavySchemaChange = false;
+
+    public boolean isForbidAutoHeavySchemaChange() {
+        return forbidAutoHeavySchemaChange;
+    }
+
+    public void setForbidAutoHeavySchemaChange(boolean forbidAutoHeavySchemaChange) {
+        this.forbidAutoHeavySchemaChange = forbidAutoHeavySchemaChange;
+    }
+
     public void setTxnId(long txnId) {
         this.txnId = txnId;
     }

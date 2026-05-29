@@ -137,6 +137,15 @@ public class CreateRoutineLoadStmt extends DdlStmt {
     // When unset, the FE config enable_routine_load_native_avro_reader supplies the default, resolved
     // once at job creation.
     public static final String AVRO_USE_NATIVE_READER = "avro.use_native_reader";
+    // optional: per-job opt-in to Avro schema evolution. When true, and the native avro reader is active
+    // and no jsonpaths are set, the BE detects writer-schema changes the table does not yet cover and the
+    // FE evolves the table (ADD COLUMN / ADD FIELD / MODIFY) and retries. Defaults to false.
+    public static final String AVRO_ENABLE_SCHEMA_EVOLUTION = "avro.enable_schema_evolution";
+    // optional: when Avro schema evolution is on, whether to auto-apply changes that need a full table
+    // rewrite (heavy AlterJobV2) -- e.g. an int->varchar type change, a decimal grow, or any change on a
+    // non-fast-schema-evolution table. When false, only metadata-only fast changes are auto-applied and a
+    // heavy change pauses the job, naming the ALTER to run manually. Defaults to true.
+    public static final String AVRO_ALLOW_HEAVY_SCHEMA_CHANGE = "avro.schema_evolution_allow_heavy_alter";
 
     // pulsar type properties
     public static final String PULSAR_SERVICE_URL_PROPERTY = "pulsar_service_url";
@@ -176,6 +185,8 @@ public class CreateRoutineLoadStmt extends DdlStmt {
             .add(TASK_TIMEOUT_SECOND)
             .add(PropertyAnalyzer.PROPERTIES_WAREHOUSE)
             .add(AVRO_USE_NATIVE_READER)
+            .add(AVRO_ENABLE_SCHEMA_EVOLUTION)
+            .add(AVRO_ALLOW_HEAVY_SCHEMA_CHANGE)
             .build();
 
     private static final ImmutableSet<String> KAFKA_PROPERTIES_SET = new ImmutableSet.Builder<String>()
@@ -198,6 +209,10 @@ public class CreateRoutineLoadStmt extends DdlStmt {
     // For Avro jobs, resolved at analyze time: the job property if set, otherwise the FE config
     // default. Stays null for non-Avro formats.
     private Boolean useNativeAvroReader;
+    // null = not set by the user; defaults to false (schema evolution is opt-in).
+    private Boolean enableAvroSchemaEvolution;
+    // null = not set by the user; defaults to true (auto-apply heavy schema changes when evolving).
+    private Boolean allowHeavySchemaChange;
     private LabelName labelName;
     private final String tableName;
     private final List<ParseNode> loadPropertyList;
@@ -297,6 +312,14 @@ public class CreateRoutineLoadStmt extends DdlStmt {
 
     public Boolean getUseNativeAvroReader() {
         return useNativeAvroReader;
+    }
+
+    public Boolean getEnableAvroSchemaEvolution() {
+        return enableAvroSchemaEvolution;
+    }
+
+    public Boolean getAllowHeavySchemaChange() {
+        return allowHeavySchemaChange;
     }
 
     public long getTaskConsumeSecond() {
@@ -638,6 +661,12 @@ public class CreateRoutineLoadStmt extends DdlStmt {
                 useNativeAvroReader = Util.getBooleanPropertyOrDefault(jobProperties.get(AVRO_USE_NATIVE_READER),
                         Config.enable_routine_load_native_avro_reader,
                         AVRO_USE_NATIVE_READER + " should be a boolean");
+                enableAvroSchemaEvolution = Util.getBooleanPropertyOrDefault(
+                        jobProperties.get(AVRO_ENABLE_SCHEMA_EVOLUTION), false,
+                        AVRO_ENABLE_SCHEMA_EVOLUTION + " should be a boolean");
+                allowHeavySchemaChange = Util.getBooleanPropertyOrDefault(
+                        jobProperties.get(AVRO_ALLOW_HEAVY_SCHEMA_CHANGE), true,
+                        AVRO_ALLOW_HEAVY_SCHEMA_CHANGE + " should be a boolean");
             } else {
                 throw new StarRocksException("Format type is invalid. format=`" + format + "`");
             }

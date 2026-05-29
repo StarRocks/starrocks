@@ -270,6 +270,31 @@ public class Load {
         return !collectStreamMetaKinds(columnDescs).isEmpty();
     }
 
+    // Column names fed by a stream-metadata function (kafka_offset() etc.) rather than the payload. A writer
+    // field colliding with one of these can't be auto-evolved (the slot is filled by message id, not the
+    // payload), so Avro schema evolution PAUSEs on the clash. Case-insensitive, matching column resolution.
+    public static Set<String> collectStreamMetaColumnNames(List<ImportColumnDesc> columnDescs) {
+        Set<String> names = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
+        if (columnDescs == null) {
+            return names;
+        }
+        for (ImportColumnDesc desc : columnDescs) {
+            Expr expr = desc.getExpr();
+            if (expr == null) {
+                continue;
+            }
+            List<FunctionCallExpr> funcs = Lists.newArrayList();
+            expr.collectAll((Predicate<Expr>) e -> e instanceof FunctionCallExpr, funcs);
+            for (FunctionCallExpr fn : funcs) {
+                if (streamMetaFuncOf(fn) != null) {
+                    names.add(desc.getColumnName());
+                    break;
+                }
+            }
+        }
+        return names;
+    }
+
     // A hidden source column synthesized for one distinct metadata function call, plus its BE binding.
     public static final class StreamMetaBinding {
         public final String hiddenName;

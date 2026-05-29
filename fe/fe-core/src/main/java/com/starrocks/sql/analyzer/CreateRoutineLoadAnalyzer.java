@@ -65,6 +65,17 @@ public class CreateRoutineLoadAnalyzer {
                             : null;
             Load.validateStreamMetaFunctions(metaColumnDescs, statement.getTypeName(), statement.getFormat(),
                     statement.getUseNativeAvroReader());
+            // Schema evolution maps payload fields to columns by name. A plain column list in COLUMNS
+            // pins the loaded column set instead, so an added column would never start loading and the
+            // BE would re-escalate the same schema forever. Expression mappings pin nothing: the
+            // payload columns still come from the live table schema.
+            if (Boolean.TRUE.equals(statement.getEnableAvroSchemaEvolution()) && metaColumnDescs != null
+                    && metaColumnDescs.stream().anyMatch(ImportColumnDesc::isColumn)) {
+                throw new StarRocksException(CreateRoutineLoadStmt.AVRO_ENABLE_SCHEMA_EVOLUTION
+                        + " maps payload fields to columns by name and cannot be combined with an explicit"
+                        + " column list in COLUMNS; use one or the other (expression mappings in COLUMNS"
+                        + " are still allowed)");
+            }
         } catch (StarRocksException e) {
             LOG.error(e.getMessage(), e);
             throw new SemanticException(e.getMessage());

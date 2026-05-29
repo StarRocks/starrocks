@@ -600,6 +600,20 @@ public class KafkaRoutineLoadJobTest {
     }
 
     @Test
+    public void testJobPropertiesToSqlWithAvroSchemaEvolution() {
+        RoutineLoadJob job = new KafkaRoutineLoadJob(1L, "routine_load", 1L, 1L, "127.0.0.1:9020", "topic1");
+        String sql = job.jobPropertiesToSql();
+        Assertions.assertFalse(sql.contains(CreateRoutineLoadStmt.AVRO_ENABLE_SCHEMA_EVOLUTION));
+        Assertions.assertFalse(sql.contains(CreateRoutineLoadStmt.AVRO_ALLOW_HEAVY_SCHEMA_CHANGE));
+
+        Deencapsulation.setField(job, "enableAvroSchemaEvolution", true);
+        Deencapsulation.setField(job, "allowHeavySchemaChange", false);
+        sql = job.jobPropertiesToSql();
+        Assertions.assertTrue(sql.contains("\"" + CreateRoutineLoadStmt.AVRO_ENABLE_SCHEMA_EVOLUTION + "\"=\"true\""));
+        Assertions.assertTrue(sql.contains("\"" + CreateRoutineLoadStmt.AVRO_ALLOW_HEAVY_SCHEMA_CHANGE + "\"=\"false\""));
+    }
+
+    @Test
     public void testGetStatistic() {
         RoutineLoadJob job = new KafkaRoutineLoadJob(1L, "routine_load", 1L, 1L, "127.0.0.1:9020", "topic1");
         Deencapsulation.setField(job, "receivedBytes", 10);

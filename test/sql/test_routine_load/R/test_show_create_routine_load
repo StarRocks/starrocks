@@ -62,6 +62,8 @@ PROPERTIES
 "strip_outer_array"="false",
 "json_root"="",
 "avro.use_native_reader"="false",
+"avro.enable_schema_evolution"="false",
+"avro.schema_evolution_allow_heavy_alter"="true",
 "strict_mode"="false",
 "pause_on_fatal_parse_error"="false",
 "timezone"="Asia/Shanghai",
