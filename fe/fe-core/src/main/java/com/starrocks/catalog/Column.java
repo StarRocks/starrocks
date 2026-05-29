@@ -472,8 +472,13 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
         if (defaultExpr != null && defaultExpr.hasExprObject()) {
             return;
         }
-        if (defaultValue != null) {
-            this.originDefaultValue = defaultValue;
+        // calculatedDefaultValue() resolves a time function (now()/current_timestamp) to its literal,
+        // so a column declared DEFAULT CURRENT_TIMESTAMP freezes the same literal whether it came from
+        // CREATE TABLE or ADD COLUMN. Falls back to the "NULL" sentinel only when the column truly has
+        // no default.
+        String frozen = calculatedDefaultValue();
+        if (frozen != null) {
+            this.originDefaultValue = frozen;
         } else if (isAllowNull) {
             this.originDefaultValue = NULL_ORIGIN_DEFAULT_VALUE;
         }

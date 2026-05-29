@@ -35,9 +35,9 @@ public class ColumnBuilder {
                 columnDef.getComment(),
                 Column.COLUMN_UNIQUE_ID_INIT_VALUE);
         col.setIsAutoIncrement(columnDef.isAutoIncrement());
-        // Freeze the add-time backfill default at column creation. For ADD COLUMN with a time
-        // function (now()/current_timestamp) the ALTER-time value is frozen later in
-        // SchemaChangeHandler and re-frozen there.
+        // Freeze the add-time backfill default at column creation, resolving a time function
+        // (now()/current_timestamp) to its literal so CREATE TABLE and ADD COLUMN behave the same.
+        // SchemaChangeHandler re-freezes after materializing the ALTER-time value for ADD COLUMN.
         col.freezeOriginDefaultValue();
         return col;
     }
