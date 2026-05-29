@@ -141,6 +141,27 @@ public class RangeDistributionGuardTest {
                 "Expected 'range distribution' in: " + exception.getMessage());
     }
 
+    /**
+     * On an AGG range-distribution table, adding a column with no aggregate
+     * function is auto-promoted to a key column by the schema-change handler
+     * (no explicit KEY keyword needed). The guard must catch this path too;
+     * an earlier draft checked isKey() before promotion and let this through.
+     */
+    @Test
+    public void testAddNoAggregateColumnOnAggRangeTableRejected() throws Exception {
+        starRocksAssert.withTable(
+                "create table t_guard_addagg (k1 int, v1 int sum)\n" +
+                "AGGREGATE KEY(k1)\n" +
+                "order by(k1)\n" +
+                "properties('replication_num' = '1');");
+        // No KEY keyword and no aggregate -> AGG promotion turns this into a key.
+        Throwable exception = assertThrows(Throwable.class, () ->
+                starRocksAssert.alterTable(
+                        "alter table t_guard_addagg add column c_promoted int default '0'"));
+        assertTrue(exception.getMessage().toLowerCase(Locale.ROOT).contains("range distribution"),
+                "Expected 'range distribution' in: " + exception.getMessage());
+    }
+
     @Test
     public void testDropSortKeyColumnRejectedOnRangeDistribution() throws Exception {
         // DUP range table: k1, k2 are both sort/key columns.

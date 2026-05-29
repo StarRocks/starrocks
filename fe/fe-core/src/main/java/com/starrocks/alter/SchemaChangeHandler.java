@@ -239,7 +239,6 @@ public class SchemaChangeHandler extends AlterHandler {
                                      Map<Long, LinkedList<Column>> indexMetaIdToSchema,
                                      IntSupplier colUniqueIdSupplier) throws DdlException {
         Column column = buildColumnForAdd(alterClause.getColumnDef(), olapTable);
-        rejectAddingKeyColumnOnRangeDistribution(olapTable, ImmutableList.of(column));
         ColumnPosition columnPos = alterClause.getColPos();
         String targetIndexName = alterClause.getRollupName();
         checkIndexExists(olapTable, targetIndexName);
@@ -276,7 +275,6 @@ public class SchemaChangeHandler extends AlterHandler {
                                       Map<Long, LinkedList<Column>> indexMetaIdToSchema,
                                       IntSupplier colUniqueIdSupplier) throws DdlException {
         List<Column> columns = buildColumnsForAdd(alterClause, olapTable);
-        rejectAddingKeyColumnOnRangeDistribution(olapTable, columns);
         String targetIndexName = alterClause.getRollupName();
         checkIndexExists(olapTable, targetIndexName);
 
@@ -1298,6 +1296,12 @@ public class SchemaChangeHandler extends AlterHandler {
                 newColumn.setAggregationType(AggregateType.NONE, true);
             }
         }
+
+        // Range-distribution guard runs AFTER the keys-type block above,
+        // which may promote a no-aggregate column to KEY on AGG tables
+        // (line ~1276). Checking newColumn.isKey() here sees the final
+        // post-promotion value.
+        rejectAddingKeyColumnOnRangeDistribution(olapTable, ImmutableList.of(newColumn));
 
         // hll must be used in agg_keys
         if (newColumn.getType().isHllType() && KeysType.AGG_KEYS != olapTable.getKeysType()) {
@@ -3586,13 +3590,20 @@ public class SchemaChangeHandler extends AlterHandler {
     }
 
     /**
-     * Reject ADD COLUMN of a key column on a range-distribution table.
+     * Reject ADD COLUMN that would introduce a new key column on a
+     * range-distribution table.
      *
      * On AGG/UNIQUE tables new key columns are appended to the range sort
      * key, and on tables without an explicit ORDER BY the range sort key
      * is derived from the key columns. Either way, adding a key column
      * shifts the column set that the existing range tablet boundary
      * values were recorded under.
+     *
+     * Callers should invoke this AFTER the keys-type block in
+     * addColumnInternal, because that block may promote a no-aggregate
+     * column to KEY on AGG tables. Checking isKey() before promotion
+     * would miss `ALTER TABLE agg_range ADD COLUMN c INT` (no KEY
+     * keyword) and let it corrupt the range sort key.
      */
     private static void rejectAddingKeyColumnOnRangeDistribution(
             OlapTable olapTable, List<Column> columnsToAdd) throws DdlException {
