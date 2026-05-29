@@ -95,6 +95,14 @@ public class AstToSqlTest extends PlanTestBase {
                         "/*+ SET_USER_VARIABLE(@b= (select max(k) from decimal_t), @ a = 1 + 1) */ * from t1, with_t_0",
                 "/*+ set_var(query_timeout = 1) */" +
                         " /*+ SET_USER_VARIABLE(@b= (select max(k) from decimal_t), @ a = 1 + 1) */"));
+        arguments.add(Arguments.of("select trim(leading 'x' from 'xxxbarxxx')", "ltrim_string('xxxbarxxx', 'x')"));
+        arguments.add(Arguments.of("select trim(trailing 'xyz' from 'barxxyzxyz')", "rtrim_string('barxxyzxyz', 'xyz')"));
+        arguments.add(Arguments.of("select trim(both 'x' from 'xxxbarxxx')", "trim_string('xxxbarxxx', 'x')"));
+        arguments.add(Arguments.of("select trim('x' from 'xxxbarxxx')", "trim_string('xxxbarxxx', 'x')"));
+        arguments.add(Arguments.of("select trim(leading from '  bar')", "ltrim('  bar')"));
+        arguments.add(Arguments.of("select trim(both from '  bar  ')", "trim('  bar  ')"));
+        arguments.add(Arguments.of("select trim('  bar  ')", "trim('  bar  ')"));
+        arguments.add(Arguments.of("select leading from (select 1 as leading) t", "leading"));
         return arguments.stream();
     }
 }
