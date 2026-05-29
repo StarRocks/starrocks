@@ -1,8 +1,6 @@
 -- name: test_count_combine_nullable
--- Regression: count_combine(nullable_col) must skip NULL rows just like
--- count(col). The bug was that BE's count dispatch picked the
--- unconditional-increment variant instead of the NULL-skipping one when
--- the input column was nullable.
+-- Regression for the BE count dispatch bug: count_combine(nullable_col) must
+-- skip NULLs like count(col), not count every row like count(*).
 DROP DATABASE IF EXISTS test_count_combine_nullable_${uuid0};
 CREATE DATABASE test_count_combine_nullable_${uuid0};
 USE test_count_combine_nullable_${uuid0};
