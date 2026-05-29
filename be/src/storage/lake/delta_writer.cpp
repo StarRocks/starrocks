@@ -406,11 +406,16 @@ Status DeltaWriterImpl::build_schema_and_writer() {
         RETURN_IF_ERROR(_tablet_writer->open());
         if (should_enable_load_spill()) {
             if (_load_spill_block_mgr == nullptr || !_load_spill_block_mgr->is_initialized()) {
+                // Pass txn_id to LoadSpillBlockManager so that spill files are placed under
+                // the flat layout <tablet_root>/load_spill_txns/<txn_id_hex>_<load_id>_<frag_id>_<seq>,
+                // enabling offline vacuum to reclaim expired entries by comparing the leading
+                // hex txn_id against the cluster-wide min_active_txn_id.
                 _load_spill_block_mgr = std::make_unique<LoadSpillBlockManager>(
                         UniqueId(_load_id).to_thrift(),
                         UniqueId(_tablet_id, _txn_id)
                                 .to_thrift(), // use tablet id + txn id to generate fragment instance id
-                        _tablet_manager->tablet_root_location(_tablet_id), nullptr);
+                        _tablet_manager->tablet_root_location(_tablet_id), nullptr,
+                        /*enable_flat_layout=*/true, _txn_id);
                 RETURN_IF_ERROR(_load_spill_block_mgr->init());
             }
             // Init SpillMemTableSink
@@ -1021,11 +1026,14 @@ void DeltaWriterImpl::release_resources() {
     _tablet_writer.reset();
     _mem_table.reset();
     _mem_table_sink.reset();
-    if (_load_spill_block_mgr != nullptr) {
-        // ignore the return status of clear_parent_path,
-        // because the spill blocks will be cleared by GC later.
-        (void)_load_spill_block_mgr->clear_parent_path();
-    }
+    // Lake spill files moved from per-load directory layout
+    //   <root>/load_spill/<load_id_uuid>/<file>
+    // to flat
+    //   <root>/load_spill_txns/<txn_id_hex>_..._<seq>
+    // vacuum now reclaims by parsing txn_id_hex from the filename, removing
+    // per-load LIST. clear_parent_path() no longer applies (no per-load dir);
+    // deletion is done by TabletInternalParallelMergeTask after a successful
+    // merge, with vacuum_full as the asynchronous fallback for residuals.
     {
         // Take exclusive lock before resetting _flush_token to prevent race with cancel()
         // and get_flush_token(), which may be accessing _flush_token concurrently.

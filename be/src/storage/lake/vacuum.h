@@ -65,6 +65,22 @@ StatusOr<int64_t> garbage_file_check(std::string_view root_location);
 Status vacuum_txn_log(std::string_view root_location, int64_t min_active_txn_id, int64_t* vacuumed_files,
                       int64_t* vacuumed_file_size);
 
+// Reclaim expired load_spill files under |root_location|.
+//
+// Two layouts coexist and are scanned at distinct paths:
+//   - Active flat layout `<root>/load_spill_txns/<txn_id_hex>_..._<seq>`: always scanned.
+//     A file is reclaimable iff its parsed leading hex txn_id < |min_active_txn_id|.
+//     Subdirectories under load_spill_txns/ are unexpected and only logged, never deleted.
+//   - Legacy `<root>/load_spill/<load_id_uuid>/`: scanned only when |cleanup_legacy_load_spill|
+//     is true; in that case the entire subtree is reclaimed in one shot. When false the tree
+//     is skipped (a throttled INFO is logged). See implementation for the safety argument.
+//
+// |*deleted_files|, if non-null, is incremented by the number of flat-layout files reclaimed,
+// plus 1 logical unit when the legacy subtree was recursively reclaimed (the recursive delete
+// does not surface a per-file count).
+Status vacuum_load_spill(std::string_view root_location, int64_t min_active_txn_id, bool cleanup_legacy_load_spill,
+                         int64_t* deleted_files = nullptr);
+
 StatusOr<std::pair<std::list<std::string>, std::list<std::string>>> list_meta_files(
         FileSystem* fs, const std::string& metadata_root_location);
 
