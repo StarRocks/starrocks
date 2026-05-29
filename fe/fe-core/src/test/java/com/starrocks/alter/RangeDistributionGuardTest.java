@@ -25,6 +25,8 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.function.Executable;
 
+import java.util.Locale;
+
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
@@ -78,7 +80,7 @@ public class RangeDistributionGuardTest {
         DdlException exception = assertThrowsDdlException(() ->
                 starRocksAssert.alterTable(
                         "alter table t_guard_rollup add rollup r1(k1, v1)"));
-        assertTrue(exception.getMessage().toLowerCase().contains("range distribution"),
+        assertTrue(exception.getMessage().toLowerCase(Locale.ROOT).contains("range distribution"),
                 "Expected 'range distribution' in: " + exception.getMessage());
     }
 
@@ -89,7 +91,7 @@ public class RangeDistributionGuardTest {
                 starRocksAssert.withMaterializedView(
                         "create materialized view mv_guard_sync as " +
                         "select k1, v1 from t_guard_syncmv"));
-        assertTrue(exception.getMessage().toLowerCase().contains("range distribution"),
+        assertTrue(exception.getMessage().toLowerCase(Locale.ROOT).contains("range distribution"),
                 "Expected 'range distribution' in: " + exception.getMessage());
     }
 
@@ -108,7 +110,7 @@ public class RangeDistributionGuardTest {
         Throwable exception = assertThrows(Throwable.class, () ->
                 starRocksAssert.alterTable(
                         "alter table t_guard_orderby order by (k1)"));
-        assertTrue(exception.getMessage().toLowerCase().contains("range distribution"),
+        assertTrue(exception.getMessage().toLowerCase(Locale.ROOT).contains("range distribution"),
                 "Expected 'range distribution' in: " + exception.getMessage());
     }
 
@@ -123,7 +125,7 @@ public class RangeDistributionGuardTest {
         Throwable exception = assertThrows(Throwable.class, () ->
                 starRocksAssert.alterTable(
                         "alter table t_guard_optimize distributed by hash(k1)"));
-        assertTrue(exception.getMessage().toLowerCase().contains("range distribution"),
+        assertTrue(exception.getMessage().toLowerCase(Locale.ROOT).contains("range distribution"),
                 "Expected 'range distribution' in: " + exception.getMessage());
     }
 
@@ -135,7 +137,7 @@ public class RangeDistributionGuardTest {
         Throwable exception = assertThrows(Throwable.class, () ->
                 starRocksAssert.alterTable(
                         "alter table t_guard_addkey add column k_new int key default '0'"));
-        assertTrue(exception.getMessage().toLowerCase().contains("range distribution"),
+        assertTrue(exception.getMessage().toLowerCase(Locale.ROOT).contains("range distribution"),
                 "Expected 'range distribution' in: " + exception.getMessage());
     }
 
@@ -146,9 +148,9 @@ public class RangeDistributionGuardTest {
         Throwable exception = assertThrows(Throwable.class, () ->
                 starRocksAssert.alterTable(
                         "alter table t_guard_dropsk drop column k2"));
-        assertTrue(exception.getMessage().toLowerCase().contains("range distribution"),
+        assertTrue(exception.getMessage().toLowerCase(Locale.ROOT).contains("range distribution"),
                 "Expected 'range distribution' in: " + exception.getMessage());
-        assertTrue(exception.getMessage().toLowerCase().contains("k2"),
+        assertTrue(exception.getMessage().toLowerCase(Locale.ROOT).contains("k2"),
                 "Expected 'k2' (offending column) in: " + exception.getMessage());
     }
 
@@ -158,9 +160,9 @@ public class RangeDistributionGuardTest {
         Throwable exception = assertThrows(Throwable.class, () ->
                 starRocksAssert.alterTable(
                         "alter table t_guard_modsk modify column k1 bigint"));
-        assertTrue(exception.getMessage().toLowerCase().contains("range distribution"),
+        assertTrue(exception.getMessage().toLowerCase(Locale.ROOT).contains("range distribution"),
                 "Expected 'range distribution' in: " + exception.getMessage());
-        assertTrue(exception.getMessage().toLowerCase().contains("k1"),
+        assertTrue(exception.getMessage().toLowerCase(Locale.ROOT).contains("k1"),
                 "Expected 'k1' (offending column) in: " + exception.getMessage());
     }
 
@@ -175,10 +177,10 @@ public class RangeDistributionGuardTest {
         Throwable exception = assertThrows(Throwable.class, () ->
                 starRocksAssert.alterTable(
                         "alter table t_guard_keyflip modify column v1 int key"));
-        assertTrue(exception.getMessage().toLowerCase().contains("range distribution"),
+        assertTrue(exception.getMessage().toLowerCase(Locale.ROOT).contains("range distribution"),
                 "Expected 'range distribution' in: " + exception.getMessage());
-        assertTrue(exception.getMessage().toLowerCase().contains("keyness")
-                        || exception.getMessage().toLowerCase().contains("key column"),
+        assertTrue(exception.getMessage().toLowerCase(Locale.ROOT).contains("keyness")
+                        || exception.getMessage().toLowerCase(Locale.ROOT).contains("key column"),
                 "Expected keyness/key-column language in: " + exception.getMessage());
     }
 
