@@ -616,6 +616,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: 基于采样的 Tablet 预分裂 meta tier（Parquet/ORC row-group 元数据）计算边界时容忍的最大重叠率。超过该阈值时按最小值排序的累计行数将不再单调，meta tier 会回退到 data tier（行采样）。
 - 引入版本: v4.1.0
 
+### `tablet_pre_split_max_partitions_per_load`
+
+- 默认值: 32
+- 类型: Int
+- 单位: -
+- 是否可变: Yes
+- 描述: 单次基于采样的 Tablet 预分裂调用处理的预测目标分区数上限。超出该上限的预测分区（样本数最少的那部分）会被丢弃，回退到 BE 运行时自动建分区且不做预分裂。用于约束病态多分区导入下钩子的耗时。设为 0 或负值可关闭该上限。
+- 引入版本: v4.1.0
+
 #### 回滚基于采样的 Tablet 预分裂
 
 降级或线上回滚前安全关闭该特性的步骤：
@@ -623,6 +632,13 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 1. 将 `enable_tablet_pre_split_for_insert_from_files = false` 和 `enable_tablet_pre_split_for_broker_load = false` 同时设为 `false`，新导入将立即跳过预分裂。
 2. 等待预分裂创建的在途 reshard 作业排空。用 `SHOW TABLET RESHARD JOB` 监控；当没有 `RUNNING` 或 `PENDING` 行后回滚完成。
 3. 继续降级流程。底层基础设施（External-Boundaries Tablet Split）与预分裂特性开关解耦，无论开关如何都可用。
+
+#### 多分区基于采样的 Tablet 预分裂行为说明（P2-a）
+
+多分区路径将基于采样的 Tablet 预分裂扩展到单条语句命中多个分区的导入场景。两条运维注意事项：
+
+- **Broker Load 触发载入不对称。** 多分区预分裂钩子在 `BrokerLoadJob.createLoadingTask` 中触发，**晚于** `task.prepare()` 构建该次导入的 sink plan（plan 基于当时的 catalog 状态）。因此 Broker Load 路径下，预建分区和分裂后的 tablet 布局只对**后续**针对同一张表的导入可见 —— 触发本次预分裂的 Broker Load 自身仍按原布局运行，命中的分区走 BE 运行时自动建分区。INSERT-from-FILES 钩子在 `StatementPlanner.plan()` 之前触发，因此触发本次预分裂的 INSERT 本身就能受益。
+- **后续 INSERT 失败时的空分区残留。** 当预建成功，但触发本次预建的 INSERT 因不相关原因失败（FILES schema 不匹配、BE 崩溃、导入超时等），空的预建分区会留在 catalog 中。这与 `ALTER TABLE ADD PARTITION` 在后续失败时的语义一致 —— ALTER 同样不会回滚已建分区。介意残留的运维可以用 `ALTER TABLE ... DROP PARTITION` 手动删除；实际上空分区代价很低，下次重试导入时会复用。
 
 #### 生产部署建议
 

@@ -662,8 +662,8 @@ All transaction metrics share the following labels:
 
 - Unit: Count
 - Type: Cumulative
-- Labels: `reason` — the SkipReason enum value (lower-cased), one of `not_range_distribution`, `table_not_normal`, `has_materialized_view_or_rollup`, `unsupported_sort_key`, `metadata_not_resolved`, `multiple_base_index_tablets`, `partition_not_empty`, `disabled_by_config`, `disabled_by_session`.
-- Description: Total Sample-Based Tablet Pre-Split invocations that the FE-side eligibility gate declined before any sampler ran, broken down by the specific reason. Operators can use this counter to attribute "pre-split not running" to a single eligibility branch at a glance.
+- Labels: `reason` — the SkipReason enum value (lower-cased). Per-load values: `not_range_distribution`, `table_not_normal`, `has_materialized_view_or_rollup`, `unsupported_sort_key`, `metadata_not_resolved`, `multiple_base_index_tablets`, `partition_not_empty`, `disabled_by_config`, `disabled_by_session`. Multi-partition (P2-a) per-partition values: `unsupported_partition_column_type` (partition source column type cannot be projected, e.g. STRUCT/ARRAY), `invalid_partition_value` (sampled partition cell can't be formatted into an `AddPartitionClause`, e.g. null in a non-nullable column or unparseable date), `grouper_empty` (every sample row was dropped by the formatter/analyzer), `stale_catalog_state` (partition was seen by the grouper but disappeared before the coordinator re-resolved it under READ lock — concurrent partition drop/replace), `partition_not_eligible_post_create` (the post-pre-create eligibility re-check failed, typically because the partition is non-empty or now has multiple tablets).
+- Description: Total Sample-Based Tablet Pre-Split invocations that the FE-side eligibility gate declined before any sampler ran, broken down by the specific reason. Operators can use this counter to attribute "pre-split not running" to a single eligibility branch at a glance. In the multi-partition (P2-a) path the same counter also records per-partition skip reasons emitted by the grouper and the per-partition re-resolve.
 
 ## `starrocks_fe_tablet_pre_split_sampler_invocations`
 
@@ -675,7 +675,7 @@ All transaction metrics share the following labels:
 
 - Unit: Count
 - Type: Cumulative
-- Labels: `reason` — the post-eligibility failure category (lower-cased SkipReason), one of `sample_failed` (sampler executor threw), `timeout_pre_submit` (sample + plan + build phase exceeded `tablet_pre_split_pre_submit_timeout_seconds`), `submit_failed` (`TabletReshardJobMgr` rejected admission).
+- Labels: `reason` — the post-eligibility failure category (lower-cased SkipReason), one of `sample_failed` (sampler executor threw), `timeout_pre_submit` (sample + plan + build phase exceeded `tablet_pre_split_pre_submit_timeout_seconds`), `submit_failed` (`TabletReshardJobMgr` rejected admission), `pre_create_failed` (multi-partition path: `LocalMetastore.addPartitions` threw while pre-creating a target partition — that one partition is dropped from the combined submit and falls back to BE runtime auto-create; sibling partitions in the same load continue).
 - Description: Total times the sampler attempted but did not produce an admitted reshard job, broken down by reason. Distinct from `tablet_pre_split_eligibility_skipped` (sampler never ran) and from `tablet_pre_split_tier_used` (which records the tier that succeeded). Meta-tier → data-tier fallback alone is not a failure; it is tracked via `tablet_pre_split_tier_used{tier=data_tier}`.
 
 ## `starrocks_fe_tablet_pre_split_tier_used`
@@ -690,6 +690,25 @@ All transaction metrics share the following labels:
 - Unit: Count
 - Type: Histogram
 - Description: Number of boundary tuples produced by the planner per invocation. Equals `effectiveTabletCount - 1` (a K-tablet split needs K-1 cut points).
+
+## `starrocks_fe_tablet_pre_split_partitions_total`
+
+- Unit: Count
+- Type: Cumulative
+- Description: Multi-partition (P2-a) counter. Total predicted target partitions counted by the Sample-Based Tablet Pre-Split coordinator — one increment per `PartitionSamples` entry that survived the grouper. Combined with `tablet_pre_split_partitions_capped` and the `tablet_pre_split_pre_create{result=...}` family this tells operators how many partitions each multi-partition invocation actually acts on. Stays at zero for the single-partition path.
+
+## `starrocks_fe_tablet_pre_split_partitions_capped`
+
+- Unit: Count
+- Type: Cumulative
+- Description: Multi-partition (P2-a) counter. Number of predicted target partitions the grouper dropped because the per-load count exceeded `tablet_pre_split_max_partitions_per_load`. The grouper keeps the partitions with the highest sample counts and drops the lowest-count tail; dropped partitions fall back to BE runtime auto-create with no pre-split. Sustained non-zero values mean the cap is biting — consider raising `tablet_pre_split_max_partitions_per_load` or reducing partition cardinality on the load.
+
+## `starrocks_fe_tablet_pre_split_pre_create`
+
+- Unit: Count
+- Type: Cumulative
+- Labels: `result` — `succeeded` (`LocalMetastore.addPartitions` returned normally — the partition was created or silently deduped), `failed` (`addPartitions` threw, e.g. concurrent ALTER or journal failure; the affected partition falls back to BE runtime auto-create and is also recorded under `tablet_pre_split_sampler_failed{reason=pre_create_failed}`), `already_exists` (the partition was found in the catalog at pre-create time — concurrent loader race; the coordinator reuses the existing partition).
+- Description: Multi-partition (P2-a) counter. Number of partition pre-create attempts the coordinator issued via `LocalMetastore.addPartitions`, broken down by outcome. Total attempts = sum of all three labels. Stays at zero for the single-partition path.
 
 ## `starrocks_fe_tablet_pre_split_pre_submit_wait_ms`
 
