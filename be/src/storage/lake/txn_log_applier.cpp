@@ -535,14 +535,14 @@ private:
                 return Status::OK();
             }
             RETURN_IF_ERROR(prepare_primary_index());
-            RETURN_IF_ERROR(_index_entry->value().apply_opcompaction(*_metadata, op_compaction));
+            RETURN_IF_ERROR(_index_entry->value().apply_opcompaction(_metadata, op_compaction));
             return Status::OK();
         }
         RETURN_IF_ERROR(prepare_primary_index());
 
         // Single output compaction
-        return _tablet.update_mgr()->publish_primary_compaction(op_compaction, txn_id, *_metadata, _tablet,
-                                                                _index_entry, &_builder, _base_version);
+        return _tablet.update_mgr()->publish_primary_compaction(op_compaction, txn_id, _metadata, _tablet, _index_entry,
+                                                                &_builder, _base_version);
     }
 
     // Apply parallel compaction log: process multiple subtask compactions
@@ -575,7 +575,7 @@ private:
             // Reuse publish_primary_compaction for each subtask
             // - Internal conflict check is performed per subtask
             // - Primary index and metadata are updated
-            RETURN_IF_ERROR(_tablet.update_mgr()->publish_primary_compaction(subtask_op, txn_id, *_metadata, _tablet,
+            RETURN_IF_ERROR(_tablet.update_mgr()->publish_primary_compaction(subtask_op, txn_id, _metadata, _tablet,
                                                                              _index_entry, &_builder, _base_version));
         }
 
@@ -594,7 +594,7 @@ private:
             for (const auto& output_sst : op_parallel.output_sstables()) {
                 sst_op.add_output_sstables()->CopyFrom(output_sst);
             }
-            RETURN_IF_ERROR(_index_entry->value().apply_opcompaction(*_metadata, sst_op));
+            RETURN_IF_ERROR(_index_entry->value().apply_opcompaction(_metadata, sst_op));
             _builder.remove_compacted_sst(sst_op);
         }
 

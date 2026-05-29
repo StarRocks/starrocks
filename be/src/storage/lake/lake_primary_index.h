@@ -69,7 +69,7 @@ public:
         _enable_persistent_index = enable_persistent_index;
     }
 
-    Status apply_opcompaction(const TabletMetadata& metadata, const TxnLogPB_OpCompaction& op_compaction);
+    Status apply_opcompaction(const TabletMetadataPtr& metadata, const TxnLogPB_OpCompaction& op_compaction);
 
     Status commit(const TabletMetadataPtr& metadata, MetaFileBuilder* builder);
 

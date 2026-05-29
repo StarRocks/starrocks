@@ -1912,14 +1912,14 @@ bool UpdateManager::_use_light_publish_primary_compaction(TabletManager* mgr,
 }
 
 Status UpdateManager::light_publish_primary_compaction(const TxnLogPB_OpCompaction& op_compaction, int64_t txn_id,
-                                                       const TabletMetadata& metadata, const Tablet& tablet,
+                                                       const TabletMetadataPtr& metadata, const Tablet& tablet,
                                                        IndexEntry* index_entry, MetaFileBuilder* builder,
                                                        int64_t base_version) {
     // 1. init some state
     auto& index = index_entry->value();
     std::vector<uint32_t> input_rowsets_id(op_compaction.input_rowsets().begin(), op_compaction.input_rowsets().end());
     ASSIGN_OR_RETURN(auto tablet_schema, ExecEnv::GetInstance()->lake_tablet_manager()->get_output_rowset_schema(
-                                                 input_rowsets_id, &metadata));
+                                                 input_rowsets_id, metadata.get()));
 
     Rowset output_rowset(tablet.tablet_mgr(), tablet.id(), &op_compaction.output_rowset(), -1 /*unused*/,
                          tablet_schema);
@@ -1931,9 +1931,9 @@ Status UpdateManager::light_publish_primary_compaction(const TxnLogPB_OpCompacti
 
     // 2. update primary index, and generate delete info.
     auto resolver = std::make_unique<LakePrimaryKeyCompactionConflictResolver>(
-            &metadata, &output_rowset, _tablet_mgr, builder, &index, txn_id, base_version, op_compaction.lcrm_file(),
-            &segment_id_to_add_dels, &delvecs);
-    if (op_compaction.ssts_size() > 0 && use_cloud_native_pk_index(metadata)) {
+            metadata.get(), &output_rowset, _tablet_mgr, builder, &index, txn_id, base_version,
+            op_compaction.lcrm_file(), &segment_id_to_add_dels, &delvecs);
+    if (op_compaction.ssts_size() > 0 && use_cloud_native_pk_index(*metadata)) {
         RETURN_IF_ERROR(resolver->execute_without_update_index());
     } else {
         RETURN_IF_ERROR(resolver->execute());
@@ -1945,11 +1945,11 @@ Status UpdateManager::light_publish_primary_compaction(const TxnLogPB_OpCompacti
     // 4. ingest ssts to index
     DCHECK(op_compaction.ssts_size() == 0 || delvecs.size() == op_compaction.ssts_size())
             << "delvecs.size(): " << delvecs.size() << ", op_compaction.ssts_size(): " << op_compaction.ssts_size();
-    for (int i = 0; i < op_compaction.ssts_size() && use_cloud_native_pk_index(metadata); i++) {
-        uint32_t rssid = metadata.next_rowset_id() + get_segment_idx(op_compaction.output_rowset(), i);
+    for (int i = 0; i < op_compaction.ssts_size() && use_cloud_native_pk_index(*metadata); i++) {
+        uint32_t rssid = metadata->next_rowset_id() + get_segment_idx(op_compaction.output_rowset(), i);
         DelvecPagePB delvec_page_pb = builder->delvec_page(rssid);
-        delvec_page_pb.set_version(metadata.version());
-        RETURN_IF_ERROR(index.ingest_sst(op_compaction.ssts(i), op_compaction.sst_ranges(i), rssid, metadata.version(),
+        delvec_page_pb.set_version(metadata->version());
+        RETURN_IF_ERROR(index.ingest_sst(op_compaction.ssts(i), op_compaction.sst_ranges(i), rssid, metadata->version(),
                                          delvec_page_pb, delvecs[i].second));
     }
     _index_cache.update_object_size(index_entry, index.memory_usage());
@@ -1969,20 +1969,20 @@ Status UpdateManager::light_publish_primary_compaction(const TxnLogPB_OpCompacti
 
 DEFINE_FAIL_POINT(hook_publish_primary_key_tablet_compaction);
 Status UpdateManager::publish_primary_compaction(const TxnLogPB_OpCompaction& op_compaction, int64_t txn_id,
-                                                 const TabletMetadata& metadata, const Tablet& tablet,
+                                                 const TabletMetadataPtr& metadata, const Tablet& tablet,
                                                  IndexEntry* index_entry, MetaFileBuilder* builder,
                                                  int64_t base_version) {
     FAIL_POINT_TRIGGER_EXECUTE(hook_publish_primary_key_tablet_compaction, {
         std::vector<uint32_t> input_rowsets_id(op_compaction.input_rowsets().begin(),
                                                op_compaction.input_rowsets().end());
         ASSIGN_OR_RETURN(auto tablet_schema, ExecEnv::GetInstance()->lake_tablet_manager()->get_output_rowset_schema(
-                                                     input_rowsets_id, &metadata));
+                                                     input_rowsets_id, metadata.get()));
         return builder->apply_opcompaction(
                 op_compaction,
                 *std::max_element(op_compaction.input_rowsets().begin(), op_compaction.input_rowsets().end()),
                 tablet_schema->id());
     });
-    if (CompactionUpdateConflictChecker::conflict_check(op_compaction, txn_id, metadata, builder)) {
+    if (CompactionUpdateConflictChecker::conflict_check(op_compaction, txn_id, *metadata, builder)) {
         // conflict happens
         return Status::OK();
     }
@@ -1994,7 +1994,7 @@ Status UpdateManager::publish_primary_compaction(const TxnLogPB_OpCompaction& op
     // 1. iterate output rowset, update primary index and generate delvec
     std::vector<uint32_t> input_rowsets_id(op_compaction.input_rowsets().begin(), op_compaction.input_rowsets().end());
     ASSIGN_OR_RETURN(auto tablet_schema, ExecEnv::GetInstance()->lake_tablet_manager()->get_output_rowset_schema(
-                                                 input_rowsets_id, &metadata));
+                                                 input_rowsets_id, metadata.get()));
     Rowset output_rowset(tablet.tablet_mgr(), tablet.id(), &op_compaction.output_rowset(), -1 /*unused*/,
                          tablet_schema);
     auto compaction_entry = _compaction_cache.get_or_create(cache_key(tablet.id(), txn_id));
@@ -2006,16 +2006,16 @@ Status UpdateManager::publish_primary_compaction(const TxnLogPB_OpCompaction& op
     size_t total_rows = 0;
     vector<std::pair<uint32_t, DelVectorPtr>> delvecs;
     vector<uint32_t> tmp_deletes;
-    const uint32_t rowset_id = metadata.next_rowset_id();
+    const uint32_t rowset_id = metadata->next_rowset_id();
     // get max rowset id in input rowsets
     uint32_t max_rowset_id =
             *std::max_element(op_compaction.input_rowsets().begin(), op_compaction.input_rowsets().end());
     // then get the max src rssid, to solve conflict between write and compaction
-    auto input_rowset = std::find_if(metadata.rowsets().begin(), metadata.rowsets().end(),
+    auto input_rowset = std::find_if(metadata->rowsets().begin(), metadata->rowsets().end(),
                                      [&](const RowsetMetadata& r) { return r.id() == max_rowset_id; });
-    if (input_rowset == metadata.rowsets().end()) {
+    if (input_rowset == metadata->rowsets().end()) {
         LOG(ERROR) << "cannot find input rowset in tablet metadata, rowset_id: " << max_rowset_id
-                   << ", meta : " << metadata.ShortDebugString();
+                   << ", meta : " << metadata->ShortDebugString();
         return Status::InternalError("cannot find input rowset in tablet metadata");
     }
     uint32_t max_src_rssid = max_rowset_id;
@@ -2041,9 +2041,9 @@ Status UpdateManager::publish_primary_compaction(const TxnLogPB_OpCompaction& op
         }
         DelVectorPtr dv = std::make_shared<DelVector>();
         if (tmp_deletes.empty()) {
-            dv->init(metadata.version(), nullptr, 0);
+            dv->init(metadata->version(), nullptr, 0);
         } else {
-            dv->init(metadata.version(), tmp_deletes.data(), tmp_deletes.size());
+            dv->init(metadata->version(), tmp_deletes.data(), tmp_deletes.size());
             total_deletes += tmp_deletes.size();
         }
         segment_id_to_add_dels[rssid] += tmp_deletes.size();
