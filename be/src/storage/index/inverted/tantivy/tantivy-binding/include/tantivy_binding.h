@@ -170,6 +170,26 @@ RustResult tantivy_phrase_match_query(const void *reader,
                                       RustU32Array *out);
 
 /**
+ * MATCH_WILDCARD query: returns rows whose indexed term matches the SQL
+ * `LIKE` / `MATCH` pattern. `%` and `*` are equivalent multi-char
+ * wildcards (matching the shared BE router in
+ * `column_expr_predicate.cpp:has_wildcard`); `_` is treated as a literal.
+ *
+ * `pattern_ptr` / `pattern_len` is the raw user pattern as UTF-8 bytes;
+ * the Rust side translates it into a regex (`like_pattern_to_regex`) and
+ * dispatches to `tantivy::query::RegexQuery`. Null bitmap subtraction
+ * (so empty-string placeholder docs for NULL rows aren't matched by `%`)
+ * is the BE C++ caller's responsibility.
+ *
+ * SAFETY: `reader` and `out` must be non-NULL; `pattern_ptr` may be NULL
+ * only when `pattern_len == 0`.
+ */
+RustResult tantivy_wildcard_query(const void *reader,
+                                  const uint8_t *pattern_ptr,
+                                  uintptr_t pattern_len,
+                                  RustU32Array *out);
+
+/**
  * Release a reader handle. Safe on NULL.
  *
  * SAFETY: `reader` must be NULL or have been returned by
@@ -240,13 +260,6 @@ void tantivy_free_u32_array(RustU32Array array);
 
 /**
  * Release a `RustStringArray` produced by `RustStringArray::from_strings`.
- *
- * The producer leaks a `Box<[*mut c_char]>` (slice exactly `len` long),
- * not a `Vec`, so we MUST reclaim with `Box::from_raw` over the same
- * `slice::from_raw_parts_mut` shape. Reconstructing as
- * `Vec::from_raw_parts(ptr, len, len)` is undefined behavior on jemalloc-style
- * allocators that round small `with_capacity(n)` requests up to a larger
- * capacity — the freed length must match the originally allocated layout.
  *
  * SAFETY: `array` must have been produced by `RustStringArray::from_strings`
  * and not previously freed.

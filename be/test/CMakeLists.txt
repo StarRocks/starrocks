@@ -257,6 +257,7 @@ set(EXEC_FILES
         ./storage/index/compound_index_file_test.cpp
         ./storage/index/inverted_index_plugin_test.cpp
         ./storage/index/inverted/tantivy/tantivy_smoke_test.cpp
+        ./storage/index/inverted/tantivy/tantivy_wildcard_test.cpp
         ./storage/index/inverted/tantivy/tantivy_plugin_test.cpp
         ./storage/index/inverted/tantivy/tantivy_compound_reader_test.cpp
         ./storage/index/inverted/tantivy/random_access_bridge_test.cpp

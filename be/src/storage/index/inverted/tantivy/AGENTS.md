@@ -21,7 +21,8 @@ SQL: SELECT ... WHERE col MATCH_ANY 'fox'
          │
      TantivyInvertedReader::query()                ← C++ plugin
          │  FFI
-     tantivy_match_query() / tantivy_term_query()  ← Rust FFI thunk (unified entry)
+     tantivy_match_query() / tantivy_term_query()
+       / tantivy_wildcard_query()                  ← Rust FFI thunk (unified entry)
          │
      PullDirectory → sr_random_access_read()       ← FFI callback to C++
          │
@@ -231,10 +232,15 @@ INDEX idx (col) USING GIN (
 | `MATCH_ANY 'a b'` | `MATCH_ANY_QUERY` | `tantivy_match_query` | `BooleanQuery(SHOULD)` |
 | `MATCH_ALL 'a b'` | `MATCH_ALL_QUERY` | `tantivy_match_all_query` | `BooleanQuery(MUST)` |
 | `MATCH_PHRASE 'a b'` | `MATCH_PHRASE_QUERY` | `tantivy_phrase_match_query` | `PhraseQuery(slop)` |
+| `LIKE '%x%'` / `MATCH '*x*'` | `MATCH_WILDCARD_QUERY` | `tantivy_wildcard_query` | `RegexQuery` (FST automaton) |
 | `IS NULL` | `query_null` | (no FFI) | Roaring null bitmap sidecar |
 
-All non-`EQUAL` queries first call `tantivy_tokenize` on the C++ side to apply the same analyzer
-chain used at write time.
+All non-`EQUAL` / non-`WILDCARD` queries first call `tantivy_tokenize` on the C++ side to apply
+the same analyzer chain used at write time. `MATCH_WILDCARD_QUERY` does NOT tokenize the pattern;
+the raw user pattern (with `%` / `*` treated as multi-char wildcards) is passed verbatim into the
+Rust translator (`like_pattern_to_regex`) and matched against the field's term dictionary. The
+result has the null bitmap subtracted on the BE C++ side so empty-string placeholder docs (used
+to keep doc-id alignment for NULL rows) don't get hit by `%` / `*`.
 
 ## Testing
 

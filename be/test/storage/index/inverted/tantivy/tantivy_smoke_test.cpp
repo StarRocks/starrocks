@@ -26,6 +26,8 @@
 #include <array>
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
+#include <initializer_list>
 #include <filesystem>
 #include <string>
 #include <vector>
@@ -78,12 +80,15 @@ void build_index(const std::string& index_path, const std::string& field,
     void* writer = cw.value.ptr;
     ASSERT_NE(writer, nullptr);
 
-    std::vector<const char*> ptrs;
-    ptrs.reserve(docs.size());
-    for (const auto& d : docs) ptrs.push_back(d.c_str());
+    std::vector<tb::FFISlice> slices;
+    slices.reserve(docs.size());
+    for (const auto& d : docs) {
+        slices.push_back(tb::FFISlice{
+                reinterpret_cast<const uint8_t*>(d.data()), d.size()});
+    }
 
     {
-        tb::RustResult r = tb::tantivy_index_add_strings_batch(writer, ptrs.data(), ptrs.size());
+        tb::RustResult r = tb::tantivy_index_add_strings_batch(writer, slices.data(), slices.size());
         RustResultGuard g{r};
         ASSERT_TRUE(r.success) << "add_strings_batch: " << (r.error ? r.error : "?");
     }
@@ -111,7 +116,7 @@ TEST(TantivySmoke, RoundTripTermQuery) {
     const std::string field = "title";
     build_index(index_path, field, {"hello world", "tantivy ffi", "starrocks integration"});
 
-    tb::RustResult lr = tb::tantivy_load_index_reader(index_path.c_str(), field.c_str());
+    tb::RustResult lr = tb::tantivy_load_index_reader(index_path.c_str(), field.c_str(), "english");
     RustResultGuard g_lr{lr};
     ASSERT_TRUE(lr.success) << "load_reader: " << (lr.error ? lr.error : "?");
     void* reader = lr.value.ptr;
@@ -120,7 +125,9 @@ TEST(TantivySmoke, RoundTripTermQuery) {
     {
         tb::RustU32Array out{};
         RustU32ArrayGuard g_out{out};
-        tb::RustResult r = tb::tantivy_term_query(reader, "tantivy", &out);
+        const char* term = "tantivy";
+        tb::RustResult r = tb::tantivy_term_query(
+                reader, reinterpret_cast<const uint8_t*>(term), std::strlen(term), &out);
         RustResultGuard g{r};
         ASSERT_TRUE(r.success) << "term_query: " << (r.error ? r.error : "?");
         std::vector<uint32_t> hits = array_to_vector(out);
@@ -131,7 +138,9 @@ TEST(TantivySmoke, RoundTripTermQuery) {
     {
         tb::RustU32Array out{};
         RustU32ArrayGuard g_out{out};
-        tb::RustResult r = tb::tantivy_term_query(reader, "nonexistent_term", &out);
+        const char* term = "nonexistent_term";
+        tb::RustResult r = tb::tantivy_term_query(
+                reader, reinterpret_cast<const uint8_t*>(term), std::strlen(term), &out);
         RustResultGuard g{r};
         ASSERT_TRUE(r.success);
         EXPECT_EQ(out.len, 0u);
@@ -152,17 +161,26 @@ TEST(TantivySmoke, MatchAnyAllPhrase) {
     build_index(index_path, field,
                 {"the quick brown fox", "the lazy brown dog", "quick fox jumps over"});
 
-    tb::RustResult lr = tb::tantivy_load_index_reader(index_path.c_str(), field.c_str());
+    tb::RustResult lr = tb::tantivy_load_index_reader(index_path.c_str(), field.c_str(), "english");
     RustResultGuard g_lr{lr};
     ASSERT_TRUE(lr.success);
     void* reader = lr.value.ptr;
 
+    auto make_slices = [](std::initializer_list<const char*> ts) {
+        std::vector<tb::FFISlice> v;
+        v.reserve(ts.size());
+        for (const char* t : ts) {
+            v.push_back(tb::FFISlice{reinterpret_cast<const uint8_t*>(t), std::strlen(t)});
+        }
+        return v;
+    };
+
     // MATCH_ANY: rows containing 'fox' OR 'dog' → docs 0, 1, 2
     {
-        const char* terms[] = {"fox", "dog"};
+        auto terms = make_slices({"fox", "dog"});
         tb::RustU32Array out{};
         RustU32ArrayGuard g_out{out};
-        tb::RustResult r = tb::tantivy_match_query(reader, terms, 2, &out);
+        tb::RustResult r = tb::tantivy_match_query(reader, terms.data(), terms.size(), &out);
         RustResultGuard g{r};
         ASSERT_TRUE(r.success) << (r.error ? r.error : "?");
         std::vector<uint32_t> hits = array_to_vector(out);
@@ -171,10 +189,10 @@ TEST(TantivySmoke, MatchAnyAllPhrase) {
     }
     // MATCH_ALL: rows containing 'quick' AND 'fox' → docs 0, 2
     {
-        const char* terms[] = {"quick", "fox"};
+        auto terms = make_slices({"quick", "fox"});
         tb::RustU32Array out{};
         RustU32ArrayGuard g_out{out};
-        tb::RustResult r = tb::tantivy_match_all_query(reader, terms, 2, &out);
+        tb::RustResult r = tb::tantivy_match_all_query(reader, terms.data(), terms.size(), &out);
         RustResultGuard g{r};
         ASSERT_TRUE(r.success) << (r.error ? r.error : "?");
         std::vector<uint32_t> hits = array_to_vector(out);
@@ -183,10 +201,11 @@ TEST(TantivySmoke, MatchAnyAllPhrase) {
     }
     // MATCH_PHRASE 'quick brown' (slop=0) → only doc 0
     {
-        const char* terms[] = {"quick", "brown"};
+        auto terms = make_slices({"quick", "brown"});
         tb::RustU32Array out{};
         RustU32ArrayGuard g_out{out};
-        tb::RustResult r = tb::tantivy_phrase_match_query(reader, terms, 2, /*slop=*/0, &out);
+        tb::RustResult r = tb::tantivy_phrase_match_query(reader, terms.data(), terms.size(),
+                                                          /*slop=*/0, &out);
         RustResultGuard g{r};
         ASSERT_TRUE(r.success) << (r.error ? r.error : "?");
         std::vector<uint32_t> hits = array_to_vector(out);
@@ -195,10 +214,11 @@ TEST(TantivySmoke, MatchAnyAllPhrase) {
     }
     // MATCH_PHRASE 'quick fox' (slop=1) → doc 0 (gap 1) and doc 2 (adjacent)
     {
-        const char* terms[] = {"quick", "fox"};
+        auto terms = make_slices({"quick", "fox"});
         tb::RustU32Array out{};
         RustU32ArrayGuard g_out{out};
-        tb::RustResult r = tb::tantivy_phrase_match_query(reader, terms, 2, /*slop=*/1, &out);
+        tb::RustResult r = tb::tantivy_phrase_match_query(reader, terms.data(), terms.size(),
+                                                          /*slop=*/1, &out);
         RustResultGuard g{r};
         ASSERT_TRUE(r.success) << (r.error ? r.error : "?");
         std::vector<uint32_t> hits = array_to_vector(out);
@@ -221,14 +241,16 @@ TEST(TantivySmoke, NullPlaceholdersPreserveAlignment) {
     // Row 0 = "alpha", row 1 = NULL, row 2 = "alpha", row 3 = NULL.
     build_index(index_path, field, {"alpha", "", "alpha", ""});
 
-    tb::RustResult lr = tb::tantivy_load_index_reader(index_path.c_str(), field.c_str());
+    tb::RustResult lr = tb::tantivy_load_index_reader(index_path.c_str(), field.c_str(), "english");
     RustResultGuard g_lr{lr};
     ASSERT_TRUE(lr.success);
     void* reader = lr.value.ptr;
 
     tb::RustU32Array out{};
     RustU32ArrayGuard g_out{out};
-    tb::RustResult r = tb::tantivy_term_query(reader, "alpha", &out);
+    const char* term = "alpha";
+    tb::RustResult r = tb::tantivy_term_query(
+            reader, reinterpret_cast<const uint8_t*>(term), std::strlen(term), &out);
     RustResultGuard g{r};
     ASSERT_TRUE(r.success);
     std::vector<uint32_t> hits = array_to_vector(out);
@@ -259,7 +281,7 @@ TEST(TantivySmoke, UnsupportedTokenizerReportsError) {
     } cleanup{index_path};
 
     tb::RustResult r =
-            tb::tantivy_create_index_writer(index_path.c_str(), "f", "jieba");
+            tb::tantivy_create_index_writer(index_path.c_str(), "f", "definitely_not_a_tokenizer");
     RustResultGuard g{r};
     EXPECT_FALSE(r.success);
     ASSERT_NE(r.error, nullptr);

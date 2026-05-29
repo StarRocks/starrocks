@@ -1286,6 +1286,7 @@ dependencies = [
  "cbindgen",
  "jieba-rs",
  "libc",
+ "regex",
  "serde",
  "serde_json",
  "tantivy",

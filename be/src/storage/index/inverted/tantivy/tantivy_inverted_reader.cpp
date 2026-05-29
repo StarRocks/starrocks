@@ -255,6 +255,19 @@ Status TantivyInvertedReader::_query_impl(void* reader_handle, const void* query
         bit_map->addMany(out.len, out.ptr);
         return Status::OK();
     }
+    case InvertedIndexQueryType::MATCH_WILDCARD_QUERY: {
+        const auto* slice = reinterpret_cast<const Slice*>(query_value);
+        tb::RustU32Array out{};
+        TantivyU32ArrayGuard arr_guard(out);
+        tb::RustResult r = tb::tantivy_wildcard_query(reader_handle,
+                                                       reinterpret_cast<const uint8_t*>(slice->data),
+                                                       slice->size, &out);
+        TantivyResultGuard rg(r);
+        RETURN_IF_ERROR(tantivy_status_from_error(r));
+        bit_map->addMany(out.len, out.ptr);
+        *bit_map -= _null_bitmap;
+        return Status::OK();
+    }
     default:
         return Status::NotSupported("tantivy: unsupported query type " + std::to_string(static_cast<int>(query_type)));
     }

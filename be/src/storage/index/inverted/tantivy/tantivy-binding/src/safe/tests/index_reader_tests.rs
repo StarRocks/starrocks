@@ -102,3 +102,139 @@ fn open_works_with_ram_directory() {
     hits.sort_unstable();
     assert_eq!(hits, vec![0u32, 2u32], "alpha appears in rows 0 and 2");
 }
+
+mod wildcard {
+    use super::*;
+    use crate::safe::index_reader::like_pattern_to_regex;
+
+    #[test]
+    fn pattern_translation_table() {
+        // Empty pattern → None: caller must short-circuit to empty result
+        assert_eq!(like_pattern_to_regex(""), None);
+
+        // Pure wildcards (any of % / *, including consecutive runs) → ".*".
+        for p in ["%", "*", "%%", "**", "%*", "*%", "%%*"] {
+            assert_eq!(
+                like_pattern_to_regex(p),
+                Some(".*".to_string()),
+                "pure wildcard `{p}`"
+            );
+        }
+
+        // RegexQuery is fullmatch on each term, no `^`/`$` anchors —
+        // boundaries are encoded with leading/trailing `.*`.
+        assert_eq!(like_pattern_to_regex("foo"), Some("foo".to_string()));
+        assert_eq!(like_pattern_to_regex("foo%"), Some("foo.*".to_string()));
+        assert_eq!(like_pattern_to_regex("%foo"), Some(".*foo".to_string()));
+        assert_eq!(like_pattern_to_regex("%foo%"), Some(".*foo.*".to_string()));
+
+        // % and * are equivalent.
+        assert_eq!(like_pattern_to_regex("*foo*"), like_pattern_to_regex("%foo%"));
+        assert_eq!(like_pattern_to_regex("foo*"), like_pattern_to_regex("foo%"));
+
+        // Consecutive wildcards collapse.
+        assert_eq!(like_pattern_to_regex("%%foo%%"), Some(".*foo.*".to_string()));
+        assert_eq!(like_pattern_to_regex("%*foo*%"), Some(".*foo.*".to_string()));
+
+        // Multiple literal segments joined by `.*`.
+        assert_eq!(like_pattern_to_regex("foo%bar"), Some("foo.*bar".to_string()));
+        assert_eq!(
+            like_pattern_to_regex("%foo%bar%"),
+            Some(".*foo.*bar.*".to_string())
+        );
+        assert_eq!(
+            like_pattern_to_regex("a%b*c"),
+            Some("a.*b.*c".to_string())
+        );
+
+        // Regex metacharacters in literal segments must be escaped.
+        let r = like_pattern_to_regex("a.b%").unwrap();
+        assert!(r.contains(r"a\.b"), "regex `{r}` must escape `.`");
+        let r = like_pattern_to_regex("(x)%").unwrap();
+        assert!(r.contains(r"\(x\)"), "regex `{r}` must escape parens");
+        let r = like_pattern_to_regex("%a+b%").unwrap();
+        assert!(r.contains(r"a\+b"), "regex `{r}` must escape `+`");
+    }
+
+    /// Build an index where the field is non-tokenized (TOKENIZER_RAW),
+    /// so the term dictionary is the original string verbatim — this
+    /// gives wildcard the parser=none semantics.
+    fn build_raw(values: &[&str]) -> TempDir {
+        let tmp = TempDir::new().expect("tempdir");
+        let mut w = IndexWriterWrapper::create(tmp.path(), "f", "raw").expect("create");
+        w.add_strings_batch(values).expect("add");
+        w.commit().expect("commit");
+        drop(w);
+        tmp
+    }
+
+    #[test]
+    fn wildcard_substring_prefix_suffix() {
+        // doc 0..6 covers literal substring / prefix / suffix variants.
+        let tmp = build_raw(&[
+            "foo",      // 0
+            "foobar",   // 1
+            "barfoo",   // 2
+            "baz",      // 3
+            "afoob",    // 4
+            "FOO",      // 5 — different case, parser=none keeps it as-is
+        ]);
+        let r = IndexReaderWrapper::load(tmp.path(), "f", "raw").expect("load");
+
+        // %foo%: any term containing `foo` (case-sensitive, parser=none).
+        let mut hits = r.wildcard_query("%foo%").expect("substr");
+        hits.sort_unstable();
+        assert_eq!(hits, vec![0u32, 1, 2, 4]);
+
+        // foo%: terms starting with `foo`.
+        let mut hits = r.wildcard_query("foo%").expect("prefix");
+        hits.sort_unstable();
+        assert_eq!(hits, vec![0u32, 1]);
+
+        // %foo: terms ending with `foo`.
+        let mut hits = r.wildcard_query("%foo").expect("suffix");
+        hits.sort_unstable();
+        assert_eq!(hits, vec![0u32, 2]);
+
+        // * is equivalent to %.
+        let mut by_star = r.wildcard_query("*foo*").expect("star substr");
+        let mut by_pct = r.wildcard_query("%foo%").expect("pct substr");
+        by_star.sort_unstable();
+        by_pct.sort_unstable();
+        assert_eq!(by_star, by_pct);
+    }
+
+    #[test]
+    fn wildcard_pure_wildcard_matches_all_terms() {
+        let tmp = build_raw(&["a", "b", "c"]);
+        let r = IndexReaderWrapper::load(tmp.path(), "f", "raw").expect("load");
+
+        let mut hits = r.wildcard_query("%").expect("all via %");
+        hits.sort_unstable();
+        assert_eq!(hits, vec![0u32, 1, 2]);
+
+        let mut hits = r.wildcard_query("*").expect("all via *");
+        hits.sort_unstable();
+        assert_eq!(hits, vec![0u32, 1, 2]);
+
+        // Empty pattern → empty result, no panic.
+        let hits = r.wildcard_query("").expect("empty");
+        assert!(hits.is_empty());
+    }
+
+    #[test]
+    fn wildcard_escapes_regex_metacharacters() {
+        // The literal segment contains `.`, which must NOT act as a regex
+        // any-char. So `a.b` should match `a.b` but not `axb`.
+        let tmp = build_raw(&["a.b", "axb", "ab", "aab"]);
+        let r = IndexReaderWrapper::load(tmp.path(), "f", "raw").expect("load");
+
+        let mut hits = r.wildcard_query("a.b").expect("exact dot");
+        hits.sort_unstable();
+        assert_eq!(hits, vec![0u32], "regex `.` in pattern must be escaped");
+
+        let mut hits = r.wildcard_query("a.b%").expect("dot prefix");
+        hits.sort_unstable();
+        assert_eq!(hits, vec![0u32]);
+    }
+}

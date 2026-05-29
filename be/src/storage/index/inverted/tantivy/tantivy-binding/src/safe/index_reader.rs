@@ -34,7 +34,7 @@ use std::path::Path;
 use tantivy::collector::{Collector, SegmentCollector};
 use tantivy::columnar::Column;
 use tantivy::directory::MmapDirectory;
-use tantivy::query::{BooleanQuery, Occur, PhraseQuery, Query, TermQuery};
+use tantivy::query::{BooleanQuery, Occur, PhraseQuery, Query, RegexQuery, TermQuery};
 use tantivy::schema::{Field, IndexRecordOption};
 use tantivy::{Directory, Index, IndexReader, ReloadPolicy, Score, SegmentOrdinal, SegmentReader, Term};
 
@@ -118,6 +118,21 @@ impl IndexReaderWrapper {
         self.collect_doc_ids(&bq)
     }
 
+    /// MATCH_WILDCARD: SQL `LIKE` / `MATCH` pattern over the term dictionary.
+    /// The match target is the **term dictionary** of the field; on
+    /// tokenized columns this means tokens, not the original text — by
+    /// design, aligning with the builtin GIN wildcard semantics.
+    pub fn wildcard_query(&self, pattern: &str) -> Result<Vec<u32>> {
+        let regex = match like_pattern_to_regex(pattern) {
+            Some(r) => r,
+            None => return Ok(Vec::new()),
+        };
+        let query = RegexQuery::from_pattern(&regex, self.text_field).map_err(|err| {
+            TantivyBindingError::Internal(format!("RegexQueryError: {err}"))
+        })?;
+        self.collect_doc_ids(&query)
+    }
+
     /// MATCH_PHRASE: ordered terms with at most `slop` positional gaps.
     pub fn phrase_query(&self, terms: &[&str], slop: u32) -> Result<Vec<u32>> {
         if terms.is_empty() {
@@ -182,4 +197,73 @@ impl SegmentCollector for RowIdSegmentCollector {
     fn harvest(self) -> Vec<u32> {
         self.ids
     }
+}
+
+/// Translate a SQL `LIKE` / `MATCH` pattern into a regex string suitable
+/// for `tantivy::query::RegexQuery::from_pattern`.
+///
+/// Tantivy's `RegexQuery` matches a term in the field's term dictionary
+/// **iff the regex matches the entire term string** (the underlying
+/// `regex-automata` DFA is run in fullmatch mode), and zero-width anchors
+/// like `^` / `$` are NOT supported. So we encode the SQL `LIKE` semantics
+/// purely with `.*`:
+///
+///   * `%` and `*` are equivalent multi-char wildcards.
+///   * Consecutive wildcards collapse to a single one.
+///   * Literal segments pass through `regex::escape` so SQL literals
+///     containing regex metacharacters (`.`, `+`, `(`, `?`, ...) match
+///     verbatim.
+///   * A pattern that starts with a wildcard prepends `.*`; ending with a
+///     wildcard appends `.*`. Internal wildcards become `.*` between
+///     literal segments.
+///   * A pattern made entirely of wildcards translates to `.*`, matching
+///     every term in the dictionary.
+///   * An empty pattern returns `None`; callers should resolve to an empty
+///     result set without constructing a `RegexQuery`.
+pub(crate) fn like_pattern_to_regex(pattern: &str) -> Option<String> {
+    if pattern.is_empty() {
+        return None;
+    }
+
+    let bytes = pattern.as_bytes();
+    let starts_with_wildcard = matches!(bytes[0], b'%' | b'*');
+    let ends_with_wildcard = matches!(bytes[bytes.len() - 1], b'%' | b'*');
+
+    let mut literals: Vec<&str> = Vec::new();
+    let mut cursor = 0usize;
+    while cursor < bytes.len() {
+        while cursor < bytes.len() && matches!(bytes[cursor], b'%' | b'*') {
+            cursor += 1;
+        }
+        if cursor >= bytes.len() {
+            break;
+        }
+        let start = cursor;
+        while cursor < bytes.len() && !matches!(bytes[cursor], b'%' | b'*') {
+            cursor += 1;
+        }
+        // Safe: split only on ASCII (`%` / `*`); byte range stays on a
+        // UTF-8 boundary.
+        literals.push(&pattern[start..cursor]);
+    }
+
+    if literals.is_empty() {
+        // Pattern is wildcards only.
+        return Some(".*".to_string());
+    }
+
+    let mut regex = String::new();
+    if starts_with_wildcard {
+        regex.push_str(".*");
+    }
+    for (i, lit) in literals.iter().enumerate() {
+        if i > 0 {
+            regex.push_str(".*");
+        }
+        regex.push_str(&regex::escape(lit));
+    }
+    if ends_with_wildcard {
+        regex.push_str(".*");
+    }
+    Some(regex)
 }

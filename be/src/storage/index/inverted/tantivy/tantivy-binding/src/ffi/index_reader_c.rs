@@ -24,6 +24,7 @@
 //!   - tantivy_match_query(reader, terms[], count, *out)
 //!   - tantivy_match_all_query(reader, terms[], count, *out)
 //!   - tantivy_phrase_match_query(reader, terms[], count, slop, *out)
+//!   - tantivy_wildcard_query(reader, pattern, *out)
 //!   - tantivy_free_index_reader(reader)
 //!
 //! On the C++ side the typical use is:
@@ -270,6 +271,41 @@ pub unsafe extern "C" fn tantivy_phrase_match_query(
     out: *mut RustU32Array,
 ) -> RustResult {
     catch_ffi(|| with_query_terms(reader, terms, count, out, |r, t| r.phrase_query(t, slop)))
+}
+
+/// MATCH_WILDCARD query: returns rows whose indexed term matches the SQL
+/// `LIKE` / `MATCH` pattern. `%` and `*` are equivalent multi-char wildcards
+///
+/// SAFETY: `reader` and `out` must be non-NULL; `pattern_ptr` may be NULL
+/// only when `pattern_len == 0`.
+#[no_mangle]
+pub unsafe extern "C" fn tantivy_wildcard_query(
+    reader: *const c_void,
+    pattern_ptr: *const u8,
+    pattern_len: usize,
+    out: *mut RustU32Array,
+) -> RustResult {
+    catch_ffi(|| {
+        if out.is_null() {
+            return RustResult::err("out pointer is NULL");
+        }
+        *out = RustU32Array::EMPTY;
+        let r: &IndexReaderWrapper = match as_ref(reader) {
+            Some(r) => r,
+            None => return RustResult::err("reader is NULL"),
+        };
+        let pattern = match raw_to_str(pattern_ptr, pattern_len) {
+            Ok(s) => s,
+            Err(e) => return RustResult::err(format!("pattern: {e}")),
+        };
+        match r.wildcard_query(pattern) {
+            Ok(ids) => {
+                *out = RustU32Array::from_vec(ids);
+                RustResult::ok_none()
+            }
+            Err(e) => RustResult::err(e.to_string()),
+        }
+    })
 }
 
 /// Release a reader handle. Safe on NULL.
