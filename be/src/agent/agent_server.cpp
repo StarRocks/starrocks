@@ -125,6 +125,8 @@ public:
 
     ThreadPool* get_thread_pool(int type) const;
 
+    ThreadPool* get_lake_replicate_file_thread_pool() const { return _thread_pool_replicate_file.get(); }
+
     void stop_task_worker_pool(TaskWorkerType type) const;
 
     DISALLOW_COPY_AND_MOVE(Impl);
@@ -176,6 +178,10 @@ private:
     std::unique_ptr<ThreadPool> _thread_pool_drop_auto_increment_map;
     std::unique_ptr<ThreadPool> _thread_pool_remote_snapshot;
     std::unique_ptr<ThreadPool> _thread_pool_replicate_snapshot;
+    // Dedicated pool for per-file copy in lake-to-lake replication, sized by
+    // `lake_replication_file_copy_threads`. Kept distinct from `_thread_pool_replicate_snapshot`
+    // so that the outer agent task can wait on per-file sub-tasks without self-deadlock.
+    std::unique_ptr<ThreadPool> _thread_pool_replicate_file;
 
     std::unique_ptr<PushTaskWorkerPool> _push_workers;
     std::unique_ptr<PublishVersionTaskWorkerPool> _publish_version_workers;
@@ -316,6 +322,11 @@ Status AgentServer::Impl::init() {
                 calc_real_num_threads(config::replication_threads, REPLICATION_CPU_CORES_MULTIPLIER),
                 std::numeric_limits<int>::max(), _thread_pool_replicate_snapshot);
 
+        BUILD_DYNAMIC_TASK_THREAD_POOL(
+                replicate_file, 0,
+                calc_real_num_threads(config::lake_replication_file_copy_threads, REPLICATION_CPU_CORES_MULTIPLIER),
+                std::numeric_limits<int>::max(), _thread_pool_replicate_file);
+
         // It is the same code to create workers of each type, so we use a macro
         // to make code to be more readable.
 #ifndef BE_TEST
@@ -370,6 +381,7 @@ void AgentServer::Impl::stop() {
         _thread_pool_clone->shutdown();
         _thread_pool_remote_snapshot->shutdown();
         _thread_pool_replicate_snapshot->shutdown();
+        _thread_pool_replicate_file->shutdown();
 #define STOP_POOL(type, pool_name) pool_name->stop();
 #else
 #define STOP_POOL(type, pool_name)
@@ -621,10 +633,13 @@ void AgentServer::Impl::submit_tasks(TAgentResult& agent_result, const std::vect
             break;
         case TTaskType::REPLICATE_SNAPSHOT: {
             auto* replicate_snapshot_pool = get_thread_pool(TTaskType::REPLICATE_SNAPSHOT);
+            // Per-file copy must run on a distinct pool from the outer agent task pool, otherwise
+            // ThreadPoolToken::wait() inside the task body would trip the self-deadlock guard.
+            auto* replicate_file_pool = _thread_pool_replicate_file.get();
             submit_task_batch<ReplicateSnapshotAgentTaskRequest>(
-                    TTaskType::REPLICATE_SNAPSHOT, all_tasks, replicate_snapshot_pool,
+                    TTaskType::REPLICATE_SNAPSHOT, all_tasks, /*pool=*/replicate_snapshot_pool,
                     &TAgentTaskRequest::replicate_snapshot_req, run_replicate_snapshot_task, &ret_st, _exec_env,
-                    replicate_snapshot_pool);
+                    /*replicate_file_pool=*/replicate_file_pool);
             break;
         }
         case TTaskType::REALTIME_PUSH:
@@ -833,6 +848,10 @@ void AgentServer::update_max_thread_by_type(int type, int new_val) {
 
 ThreadPool* AgentServer::get_thread_pool(int type) const {
     return _impl->get_thread_pool(type);
+}
+
+ThreadPool* AgentServer::get_lake_replicate_file_thread_pool() const {
+    return _impl->get_lake_replicate_file_thread_pool();
 }
 
 void AgentServer::stop_task_worker_pool(TaskWorkerType type) const {

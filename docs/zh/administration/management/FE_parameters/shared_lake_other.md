@@ -496,6 +496,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: 存算分离集群中版本发布任务的最大线程数。
 - 引入版本: v3.2.0
 
+### `slow_publish_partition_log_threshold_ms`
+
+- 默认值: 3000
+- 类型: Long
+- 单位: 毫秒
+- 是否可变: Yes
+- 描述: 该阈值用于控制 `PublishVersionDaemon` 在分区发布耗时超过此值时，以 WARN 级别打印各阶段耗时明细（`executor_queue` + `db_lock_wait` + `fe_prep` + `rpc`）。在线上集群排查发布延迟时，可调小该值以捕获亚秒级抖动；可调大该值以屏蔽常规的、可接受的慢发布。在默认值下行为无变化。
+- 引入版本: v4.2
+
 ### `meta_sync_force_delete_shard_meta`
 
 - 默认值: false

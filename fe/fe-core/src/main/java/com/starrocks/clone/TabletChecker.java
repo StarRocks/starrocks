@@ -1214,6 +1214,26 @@ public class TabletChecker extends LeaderDaemon {
     }
 
     /**
+     * Defensive aliveness check for callers that cannot trust {@code backendsSet} contains only
+     * live BEs — used when {@code tablet_sched_disable_colocate_balance} is on, because the
+     * colocate balance step that maintains the bucket assignment is gated off and dead BEs can
+     * persist. Reuses ColocateTableBalancer's own availability predicate so the BEs we would have
+     * balanced away from (had balance been running) are exactly the BEs we now report as missing —
+     * including the {@code tablet_sched_colocate_be_down_tolerate_time_s} grace window and
+     * decommission handling.
+     */
+    static boolean hasEnoughAliveBackendsInBucketSeq(Set<Long> backendsSet, int replicationNum,
+                                                     SystemInfoService systemInfoService) {
+        int aliveInBucketSeq = 0;
+        for (Long beId : backendsSet) {
+            if (ColocateTableBalancer.checkBackendAvailable(beId, systemInfoService)) {
+                aliveInBucketSeq++;
+            }
+        }
+        return aliveInBucketSeq >= replicationNum;
+    }
+
+    /**
      * Determines whether high availability (HA) should be ensured for replica placement,
      * based on the number of replicas and the required location mapping.
      *

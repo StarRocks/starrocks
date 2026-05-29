@@ -106,13 +106,13 @@ public class IVMAnalyzer {
                     // preserves the typed AggStateDesc on the state_union scalar so the
                     // intermediate (sum, count) tuple keeps its DECIMAL precision/scale.
                     .put(FunctionSet.AVG,                    args -> isFixedOrFloat(args[0]) || args[0].isDecimalV3())
-                    // min/max: numeric, temporal, and string. VARCHAR was unblocked by #73095
-                    // which relaxed state_union's strict type-equality precondition to accept
-                    // compatible string types (VARCHAR(N) vs catalog-normalized VARCHAR(65533)).
+                    // min/max: numeric (incl. DECIMAL), temporal, string. DECIMAL is safe
+                    // because MIN/MAX state is the value itself — no composite (sum, count)
+                    // intermediate like AVG that would need precision-preserving plumbing.
                     .put(FunctionSet.MIN,                    args -> isFixedOrFloat(args[0]) || isTemporal(args[0])
-                                                                    || args[0].isStringType())
+                                                                    || args[0].isStringType() || args[0].isDecimalV3())
                     .put(FunctionSet.MAX,                    args -> isFixedOrFloat(args[0]) || isTemporal(args[0])
-                                                                    || args[0].isStringType())
+                                                                    || args[0].isStringType() || args[0].isDecimalV3())
                     // array_agg: accept single-arg only. ORDER BY in the source query inlines extra
                     // children via FunctionAnalyzer.getAdjustedAnalyzedAggregateFunction, so args.length
                     // exceeds 1 for `array_agg(col ORDER BY key)`. IVM state_union is unordered, so
@@ -313,16 +313,19 @@ public class IVMAnalyzer {
 
     private boolean checkAggregate(SelectRelation selectRelation) throws AnalysisException {
         List<FunctionCallExpr> aggregateExprs = selectRelation.getAggregate();
-        if (CollectionUtils.isEmpty(aggregateExprs)) {
+        List<Expr> groupByExprs = selectRelation.getGroupBy();
+
+        // Gate on GROUP BY, not aggregates: the refresh path (IvmDeltaAggregateRule) keys on
+        // GROUP BY, so a GROUP BY-only query must also get QUERY_COMPUTED row ids here — else the
+        // AUTO_INCREMENT MV it would otherwise build crashes refresh on a row-id type mismatch.
+        if (CollectionUtils.isEmpty(groupByExprs)) {
+            if (CollectionUtils.isNotEmpty(aggregateExprs)) {
+                throw new SemanticException("IVMAnalyzer requires group by expressions for incremental view maintenance.");
+            }
             return false;
         }
 
-        List<Expr> groupByExprs = selectRelation.getGroupBy();
-        if (CollectionUtils.isEmpty(groupByExprs)) {
-            // If there are no group by expressions, we cannot apply IVM optimizations.
-            throw new SemanticException("IVMAnalyzer requires group by expressions for incremental view maintenance.");
-        }
-        // new aggregate functions
+        // getAggregate() is non-null post-analysis, so for no aggregates this loop just no-ops.
         List<IVMAggFunctionInfo> newAggFuncInfos = Lists.newArrayList();
         ExprSubstitutionMap substitutionMap = new ExprSubstitutionMap();
         for (FunctionCallExpr aggFuncExpr : aggregateExprs) {
@@ -338,7 +341,6 @@ public class IVMAnalyzer {
             // are allowed. Unsupported combinations would either fail at refresh time or silently
             // produce wrong data; reject them here so the user sees a clear CREATE-time error.
             checkAggregateFunctionInWhitelist(aggFuncExpr, aggFuncName);
-            // build intermediate aggregate function
             FunctionCallExpr intermediateAggFuncExpr = buildIntermediateAggregateFunc(aggFuncExpr);
             String newAggFuncName = IvmOpUtils.getIvmAggStateColumnName(aggFuncExpr);
 

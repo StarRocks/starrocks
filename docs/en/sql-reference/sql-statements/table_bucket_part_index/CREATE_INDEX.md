@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Creates indexes."
 ---
 
 # CREATE INDEX

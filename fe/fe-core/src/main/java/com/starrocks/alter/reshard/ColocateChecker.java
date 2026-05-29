@@ -203,12 +203,17 @@ public class ColocateChecker {
         // aligned against expectedRanges.
         Map<Long, Map<Long, Map<Long, List<TabletRange>>>> alignmentMap = new HashMap<>();
         boolean alignedSoFar = true;
-        List<Column> sortKeyColumns = MetaUtils.getRangeDistributionColumns(table);
 
         try (AutoCloseableLock lock = new AutoCloseableLock(db.getId(), table.getId(), LockType.READ)) {
             for (PhysicalPartition physicalPartition : table.getPhysicalPartitions()) {
                 for (MaterializedIndex index :
                         physicalPartition.getLatestMaterializedIndices(IndexExtState.VISIBLE)) {
+                    // Each visible index (base + every rollup/MV) can have its own sort-key arity.
+                    // Using the base index's sort key for an MV with a shorter prefix would compute
+                    // boundaries the MV's tablets can never align with — alignment iteration would
+                    // livelock. Resolve per-index here (E1). Use getMetaId() (not getId()) — the
+                    // physical id changes after reshard while metaId is stable.
+                    List<Column> sortKeyColumns = MetaUtils.getRangeDistributionColumns(table, index.getMetaId());
                     if (RangeColocateScanDispatch.isTabletRangesAligned(
                             index, sortKeyColumns, expectedRanges, colocateColumnCount)) {
                         continue;

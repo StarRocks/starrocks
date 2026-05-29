@@ -35,9 +35,9 @@
 #pragma once
 
 #include "common/statusor.h"
+#include "compute_env/data_stream/data_stream_recvr.h"
 #include "exec/exec_node.h"
 #include "exec/sort_exec_exprs.h"
-#include "runtime/data_stream_recvr.h"
 
 namespace starrocks {
 

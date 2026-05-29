@@ -37,7 +37,8 @@
 #include "storage/lake/tablet_range_helper.h"
 #include "storage/lake/tablet_writer.h"
 #include "storage/lake/update_manager.h"
-#include "storage/projection_iterator.h"
+#include "storage/primitive/projection_iterator.h"
+#include "storage/primitive/union_iterator.h"
 #include "storage/rowset/rowid_range_option.h"
 #include "storage/rowset/rowset_options.h"
 #include "storage/rowset/segment.h"
@@ -45,7 +46,6 @@
 #include "storage/rowset/short_key_range_option.h"
 #include "storage/seek_range.h"
 #include "storage/tablet_schema_map.h"
-#include "storage/union_iterator.h"
 #include "types/logical_type.h"
 #include "types/type_descriptor.h"
 
@@ -471,6 +471,23 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_each_segment_iterator(const 
     seg_options.stats = stats;
 
     ASSIGN_OR_RETURN(auto shared_segment_range, get_seek_range());
+
+    // Contract: callers downstream (SegmentPKIterator + LakePrimaryIndex
+    // publish) require each emitted chunk's physical rowids to form a single
+    // contiguous run. The only filter applied below is the optional
+    // tablet_range over a PK-sorted segment, which preserves contiguity. Any
+    // future change adding delete vector, row predicates, runtime filters,
+    // rowid_range_option, or sparse ranges/short_key_ranges would silently
+    // break the downstream `base + i` arithmetic. For delvec-aware reads,
+    // use get_each_segment_iterator_with_delvec instead.
+    DCHECK(seg_options.delvec_loader == nullptr);
+    DCHECK(seg_options.delete_predicates.empty());
+    DCHECK(seg_options.pred_tree.empty());
+    DCHECK(seg_options.pred_tree_for_zone_map.empty());
+    DCHECK(seg_options.runtime_filter_preds.empty());
+    DCHECK(seg_options.rowid_range_option == nullptr);
+    DCHECK(seg_options.ranges.empty());
+    DCHECK(seg_options.short_key_ranges.empty());
 
     for (int i = 0; i < segments.size(); i++) {
         auto& seg_ptr = segments[i];

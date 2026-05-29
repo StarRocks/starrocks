@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "`be_bvars` provides statistical information regarding bRPC."
 ---
 
 # be_bvars

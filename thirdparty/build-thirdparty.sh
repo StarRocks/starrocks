@@ -457,6 +457,14 @@ build_llvm() {
         "LLVMSelectionDAG"
         "LLVMMCParser"
         "LLVMSupport"
+        # LLVM 18 OrcJIT references llvm::findVCToolChain* defined in
+        # WindowsDriver (via COFFVCRuntimeBootstrapper). Required to link
+        # libstarrocks_be even on Linux.
+        "LLVMWindowsDriver"
+        # LLVM 18 split these out of LLVMCodeGen / LLVMipo / pass plugins.
+        "LLVMCodeGenTypes"
+        "LLVMFrontendOffloading"
+        "LLVMHipStdPar"
     )
     if [ "${LLVM_TARGET}" == "X86" ]; then
         LLVM_TARGETS_TO_BUILD+=("LLVMX86Info" "LLVMX86Desc" "LLVMX86CodeGen" "LLVMX86AsmParser" "LLVMX86Disassembler")

@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Converts a Unix timestamp to a DATETIME type value **based on the current time zone settings**."
 ---
 
 # to_datetime

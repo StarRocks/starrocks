@@ -104,7 +104,10 @@ public class PublishVersionDaemon extends LeaderDaemon {
     // each thread under the default configurations
     private static final int PUBLISH_MAX_QUEUE_SIZE = 4096;
 
-    private static final long SLOW_PUBLISH_PARTITION_LOG_THRESHOLD_MS = 3000;
+    // Threshold for slow-publishPartition phase-breakdown WARN. Lives in
+    // Config.slow_publish_partition_log_threshold_ms so it can be tuned at runtime
+    // (ADMIN SET FRONTEND CONFIG) without a restart — handy for narrowing latency
+    // investigations against a live cluster.
 
     // for shared-data, task executor thread will be responsible for sending publish tasks to BE
     // and modify transaction state on FE
@@ -1149,7 +1152,7 @@ public class PublishVersionDaemon extends LeaderDaemon {
                                              long submitTimeMs, long lambdaEntryMs, long lockAcquiredMs,
                                              long rpcStartMs, long rpcEndMs) {
         long totalMs = rpcEndMs - submitTimeMs;
-        if (totalMs < SLOW_PUBLISH_PARTITION_LOG_THRESHOLD_MS) {
+        if (totalMs < Config.slow_publish_partition_log_threshold_ms) {
             return;
         }
         LOG.warn("Slow publishPartition: txn={} partition={} table={}, total={}ms " +

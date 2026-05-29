@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "`session_variables` provides information about session variables."
 ---
 
 # session_variables

@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "The StarRocksWriter plugin allows writing data to StarRocks' destination table."
 ---
 
 # DataX writer

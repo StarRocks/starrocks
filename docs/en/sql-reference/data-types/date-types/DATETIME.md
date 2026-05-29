@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Date and time type."
 ---
 
 import DateTip from '../../../_assets/commonMarkdown/dateTimeTip.mdx'

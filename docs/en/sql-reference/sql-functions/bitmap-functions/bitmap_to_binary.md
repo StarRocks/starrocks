@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Converts Bitmap values to a Binary string."
 ---
 
 # bitmap_to_binary

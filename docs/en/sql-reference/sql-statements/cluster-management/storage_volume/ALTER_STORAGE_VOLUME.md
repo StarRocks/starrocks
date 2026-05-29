@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "ALTER STORAGE VOLUME alters the credential properties, comment, or status (`enabled`) of a storage volume."
 ---
 
 # ALTER STORAGE VOLUME

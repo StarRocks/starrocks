@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 sidebar_position: 10
 keywords: ['materialized', 'view', 'views']
+description: "How to create, use, refresh, and manage asynchronous materialized views in StarRocks for accelerating multi-table join and aggregation queries with transparent query rewrite."
 ---
 
 # Asynchronous materialized views

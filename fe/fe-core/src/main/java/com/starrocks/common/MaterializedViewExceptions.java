@@ -95,6 +95,10 @@ public class MaterializedViewExceptions {
         return "base table schema changed for columns: " + StringUtils.join(columns, ",");
     }
 
+    public static String inactiveReasonForSchemaCheckFailed(String mvName, String detail) {
+        return "base table schema check failed for " + mvName + ": " + detail;
+    }
+
     public static SemanticException reportBaseTableNotExists(String tableName) {
         return new SemanticException(inactiveReasonForBaseTableNotExists(tableName));
     }

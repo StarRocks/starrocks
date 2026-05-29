@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Since v3.1, StarRocks supports generated columns."
 ---
 
 # Generated columns

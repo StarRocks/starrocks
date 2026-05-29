@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "SPARK LOAD preprocesses the imported data through external spark resources, improves the import performance of a large amount of StarRocks data, and saves the computing resources of StarRocks cluster."
 ---
 
 # SPARK LOAD

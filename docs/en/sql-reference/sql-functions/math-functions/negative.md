@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Returns the negative of input `arg`."
 ---
 
 # negative

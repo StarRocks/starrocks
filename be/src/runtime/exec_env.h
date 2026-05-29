@@ -55,6 +55,7 @@ namespace starrocks {
 struct StorePath;
 class AgentServer;
 class BrokerMgr;
+class ComputeEnv;
 class DataStreamMgr;
 class EvHttpServer;
 class ExternalScanContextMgr;
@@ -91,7 +92,6 @@ namespace pipeline {
 class DriverExecutor;
 class QueryContextManager;
 class DriverLimiter;
-class PipelineTimer;
 } // namespace pipeline
 
 namespace lake {
@@ -139,10 +139,10 @@ public:
     ExternalScanContextMgr* external_scan_context_mgr() { return _external_scan_context_mgr; }
     ProcessMetricsRegistry* process_metrics_registry() const { return _process_metrics_registry; }
     TableMetricsManager* table_metrics_mgr() const { return _table_metrics_mgr; }
-    DataStreamMgr* stream_mgr() { return _stream_mgr; }
+    DataStreamMgr* stream_mgr();
     LookUpDispatcherMgr* lookup_dispatcher_mgr() { return _lookup_dispatcher_mgr; }
-    ResultBufferMgr* result_mgr() { return _result_mgr; }
-    ResultQueueMgr* result_queue_mgr() { return _result_queue_mgr; }
+    ResultBufferMgr* result_mgr();
+    ResultQueueMgr* result_queue_mgr();
 
     pipeline::DriverExecutor* wg_driver_executor();
     workgroup::ScanExecutor* scan_executor();
@@ -184,8 +184,7 @@ public:
 
     pipeline::QueryContextManager* query_context_mgr() { return _query_context_mgr; }
 
-    pipeline::DriverLimiter* driver_limiter() { return _driver_limiter; }
-    pipeline::PipelineTimer* pipeline_timer() const { return _pipeline_timer; }
+    ComputeEnv* compute_env() const { return _compute_env.get(); }
 
     int64_t max_executor_threads() const { return _global_env->max_executor_threads(); }
 
@@ -228,14 +227,10 @@ private:
     ExternalScanContextMgr* _external_scan_context_mgr = nullptr;
     ProcessMetricsRegistry* _process_metrics_registry = nullptr;
     TableMetricsManager* _table_metrics_mgr = nullptr;
-    DataStreamMgr* _stream_mgr = nullptr;
-    ResultBufferMgr* _result_mgr = nullptr;
-    ResultQueueMgr* _result_queue_mgr = nullptr;
     FragmentMgr* _fragment_mgr = nullptr;
     pipeline::QueryContextManager* _query_context_mgr = nullptr;
     std::unique_ptr<workgroup::WorkGroupManager> _workgroup_manager;
-    pipeline::DriverLimiter* _driver_limiter = nullptr;
-    pipeline::PipelineTimer* _pipeline_timer = nullptr;
+    std::unique_ptr<ComputeEnv> _compute_env;
 
     BaseLoadPathMgr* _load_path_mgr = nullptr;
     RejectedRecordSyncDaemon* _rejected_record_sync_daemon = nullptr;

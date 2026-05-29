@@ -20,9 +20,9 @@
 #include "column/const_column.h"
 #include "column/nullable_column.h"
 #include "column/struct_column.h"
+#include "storage/primitive/rowid_types.h"
 #include "storage/rowset/column_iterator.h"
 #include "storage/rowset/column_reader.h"
-#include "storage/rowset/common.h"
 #include "storage/rowset/scalar_column_iterator.h"
 
 namespace starrocks {

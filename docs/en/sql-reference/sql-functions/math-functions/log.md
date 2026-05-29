@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Calculates the logarithm of a number to a specified base (or radix)."
 ---
 
 # log

@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "KILL ANALYZE cancels a **running** collection task, including manual and custom automatic tasks."
 ---
 
 # KILL ANALYZE

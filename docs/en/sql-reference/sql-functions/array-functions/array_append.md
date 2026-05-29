@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Adds a new element to the end of the array."
 ---
 
 # array_append

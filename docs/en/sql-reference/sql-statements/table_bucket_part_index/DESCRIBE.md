@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "DESC is used to view table schemas:"
 ---
 
 # DESC
