@@ -164,7 +164,7 @@ public:
     bool has_error() const;
     const char* error_msg() const;
 
-    JavaUDAFUniqueContext* udaf_ctxs();
+    JavaUDAFUniqueContext* udaf_ctxs() { return _jvm_udaf_ctxs.get(); }
 
     void release_mems();
 
@@ -216,6 +216,9 @@ private:
     // If it is not explicitly set externally (e.g. AggFuncBasedValueAggregator),
     // it will point to the internal _mem_usage
     int64_t* _mem_usage_counter = &_mem_usage;
+
+    // UDAF Context
+    std::unique_ptr<JavaUDAFUniqueContext> _jvm_udaf_ctxs;
 
     std::vector<bool> _is_asc_order;
     std::vector<bool> _nulls_first;
